@@ -1,90 +1,48 @@
 -module(quod_quicer).
 -moduledoc """
-QUIC transport backend (quicer / msquic).
+QUIC transport: the listener + dialer, and the **connection authority**.
 
-The QUIC transport: a listener (accepts inbound peers) and a dialer
-(`connect/2`). Registered through gproc as `{transport, node}`.
+It owns the QUIC listener, accepts inbound connections (each handed to a
+`m:quod_conn` process), and serializes outbound connection creation so there is
+**one connection per peer** (no dial race). Streams/links and message delivery
+live in `m:quod_conn` / `m:quod_link`.
 
-## Per-connection handlers
-
-Each accepted/dialed connection is owned by a handler process that
-
-- registers its **name** `{n, l, {peer, PeerId}}` (addressable), and
-- posts its **events** to the property `{p, l, {peer, PeerId}}` (subscribable).
-
-Anything interested in a peer calls `quod_reg:subscribe({peer, PeerId})` and
-then receives, in its mailbox:
+Upper layers use one async call:
 
 ```erlang
-{quod_peer_up,   Peer}
-{quod_message,   Peer, Channel, Payload}
-{quod_peer_down, Peer, Reason}
+quod_quicer:open_link(NodeId, Channel)        %% -> caller gets {link_up, NodeId, Channel, LinkPid}
+quod_link:send(LinkPid, Payload)              %% direct, non-blocking
+%% messages arrive on the gproc property {channel, Channel}
+%% erlang:monitor(LinkPid) -> 'DOWN' is the disconnect
 ```
-
-A *peer* is `#{conn, stream, id => PeerId}`; one bidi stream multiplexes all
-channels via a small length-prefixed frame (see `frame/2`). Channel
-subscription itself is plain gproc via `m:quod_reg` keyed by `{channel, Name}`.
-
-> #### Status {: .warning }
->
-> Starting skeleton. Confirm the exact quicer active-message patterns and the
-> accept/handshake/ownership handoff against quicer's own examples.
 """.
 
 -behaviour(gen_server).
 
--include("quod.hrl").
-
-%% public API
--export([start_link/0, connect/2, send/3, close/1]).
-%% gen_server
+-export([start_link/0, open_link/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
-
--export_type([peer/0, channel/0]).
-
--type peer()    :: #{conn := term(), stream := term(),
-                     id := term(), addr => term()}.
--type channel() :: binary().
-
--ifdef(TEST).
-%% expose private wire framing for unit tests
--export([frame/2, unframe/1]).
--endif.
 
 -define(KEY, {transport, node}).
 -define(IDLE_TIMEOUT_MS, 30000).
+-define(ACCEPTOR_BACKOFF_MS, 500).
 
--record(state, {listener :: quicer:listener_handle() | undefined,
-                port     :: inet:port_number(),
-                alpn     :: string()}).
+-record(state, {listener, port, alpn, self, conns = #{}}).
 
 %% ======================================================================
-%% public API
+%% API
 %% ======================================================================
 
 start_link() ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, [], []).
 
--doc "Dial `Host`:`Port`. Returns an opaque peer whose events appear on `{peer, PeerId}`.".
--spec connect(inet:hostname() | inet:ip_address(), inet:port_number()) ->
-          {ok, peer()} | {error, term()}.
-connect(Host, Port) ->
-    gen_server:call(quod_reg:via(?KEY), {connect, Host, Port}, 10000).
-
--doc "Send `Payload` on `Channel` to a connected peer.".
--spec send(peer(), channel(), iodata()) -> ok | {error, term()}.
-send(#{stream := Stream}, Channel, Payload) ->
-    Frame = frame(Channel, iolist_to_binary(Payload)),
-    case quicer:send(Stream, Frame) of
-        {ok, _Len} -> ok;
-        {error, _} = Err -> Err
-    end.
-
--doc "Close a peer's QUIC connection.".
--spec close(peer()) -> ok.
-close(#{conn := Conn}) ->
-    _ = quicer:close_connection(Conn),
-    ok.
+-doc """
+Open (or reuse) a link to `NodeId = {Host,Port}` for `Channel`. Asynchronous: the
+caller receives `{link_up, NodeId, Channel, LinkPid}` when it is ready (or
+`{link_error, Channel}`).
+""".
+-spec open_link({inet:hostname(), inet:port_number()}, binary()) -> ok.
+open_link(NodeId, Channel) ->
+    gen_server:cast(quod_reg:via(?KEY), {open_link, NodeId, Channel, self()}).
 
 %% ======================================================================
 %% gen_server
@@ -94,33 +52,52 @@ init([]) ->
     process_flag(trap_exit, true),
     Port = env(listen_port, 14567),
     ALPN = env(alpn, "quod"),
+    Self = env(node_id, {"127.0.0.1", Port}),
     ListenOpts =
         [{certfile, env(certfile, "priv/certs/cert.pem")},
          {keyfile,  env(keyfile,  "priv/certs/key.pem")},
          {alpn, [ALPN]},
-         {peer_bidi_stream_count, 64},
+         {peer_bidi_stream_count, 256},
          {idle_timeout_ms, ?IDLE_TIMEOUT_MS}],
     case quicer:listen(Port, ListenOpts) of
         {ok, Listener} ->
-            logger:info("quod: QUIC listening on ~p (alpn ~s)", [Port, ALPN]),
-            _Acceptor = spawn_link(fun() -> acceptor_loop(Listener) end),
-            {ok, #state{listener = Listener, port = Port, alpn = ALPN}};
+            logger:info("quod: QUIC listening on ~p (alpn ~s, node_id ~p)", [Port, ALPN, Self]),
+            _ = spawn_acceptor(Listener, Self),
+            {ok, #state{listener = Listener, port = Port, alpn = ALPN, self = Self}};
         {error, Reason} ->
-            logger:error("quod: QUIC listen failed: ~p", [Reason]),
             {stop, {listen_failed, Reason}}
     end.
 
-handle_call({connect, Host, Port}, _From, State) ->
-    {reply, do_connect(Host, Port, State), State};
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
+%% the connection authority: one connection per peer, created here.
+handle_cast({open_link, NodeId, Channel, ReplyTo}, State) ->
+    case dialable(NodeId) of
+        true ->
+            {ConnPid, State1} = ensure_conn(NodeId, State),
+            quod_conn:open_link(ConnPid, Channel, ReplyTo),
+            {noreply, State1};
+        false ->
+            %% a view id that isn't a dialable {Host, Port} must never reach
+            %% quicer:connect — it would crash this authority. Refuse it.
+            logger:warning("quod: open_link to non-dialable node id ~p dropped", [NodeId]),
+            ReplyTo ! {link_error, Channel},
+            {noreply, State}
+    end;
 handle_cast(_Msg, State) ->
     {noreply, State}.
 
-handle_info({'EXIT', _Pid, Reason}, State = #state{listener = L}) ->
-    logger:warning("quod: acceptor exited (~p), restarting", [Reason]),
-    _ = spawn_link(fun() -> acceptor_loop(L) end),
+handle_info({'DOWN', _Ref, process, Pid, _Reason}, State = #state{conns = Conns}) ->
+    {noreply, State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)}};
+handle_info({'EXIT', _Pid, Reason}, State) when Reason =:= normal; Reason =:= shutdown ->
+    {noreply, State};
+handle_info({'EXIT', _Pid, Reason}, State) ->
+    logger:warning("quod: acceptor exited (~p), restarting in ~bms", [Reason, ?ACCEPTOR_BACKOFF_MS]),
+    _ = erlang:send_after(?ACCEPTOR_BACKOFF_MS, self(), restart_acceptor),
+    {noreply, State};
+handle_info(restart_acceptor, State = #state{listener = L, self = Self}) when L =/= undefined ->
+    _ = spawn_acceptor(L, Self),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -132,127 +109,65 @@ terminate(_Reason, _State) ->
     ok.
 
 %% ======================================================================
-%% dialer
+%% connection authority
 %% ======================================================================
 
-do_connect(Host, Port, #state{alpn = ALPN}) ->
-    ConnOpts = [{alpn, [ALPN]}, {verify, none}, {idle_timeout_ms, ?IDLE_TIMEOUT_MS}],
-    case quicer:connect(Host, Port, ConnOpts, 5000) of
-        {ok, Conn} ->
-            case quicer:start_stream(Conn, [{active, true}]) of
-                {ok, Stream} ->
-                    Peer = #{conn => Conn, stream => Stream,
-                             id => uid(), addr => {Host, Port}},
-                    Handler = spawn(fun() -> start_peer(Peer) end),
-                    _ = quicer:controlling_process(Conn, Handler),
-                    {ok, Peer};
-                {error, _} = Err -> Err
+ensure_conn(NodeId, State = #state{conns = Conns}) ->
+    case maps:get(NodeId, Conns, undefined) of
+        Pid when is_pid(Pid) ->
+            case is_process_alive(Pid) of
+                true  -> {Pid, State};
+                false -> adopt_or_start(NodeId, State)
             end;
-        {error, _} = Err -> Err
+        undefined ->
+            adopt_or_start(NodeId, State)
     end.
 
+%% prefer an already-established connection to this peer — e.g. one the peer
+%% dialed to US, which `m:quod_conn` registers as `{conn, NodeId}` — over dialing
+%% a duplicate. Adopting it (and monitoring it) keeps "one connection per peer".
+adopt_or_start(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) ->
+    case quod_reg:where({conn, NodeId}) of
+        Pid when is_pid(Pid) ->
+            _ = erlang:monitor(process, Pid),
+            {Pid, State#state{conns = maps:put(NodeId, Pid, Conns)}};
+        _ ->
+            start_conn(NodeId, Self, ALPN, State)
+    end.
+
+start_conn({Host, Port} = NodeId, Self, ALPN, State = #state{conns = Conns}) ->
+    ConnOpts = [{alpn, [ALPN]}, {verify, none}, {idle_timeout_ms, ?IDLE_TIMEOUT_MS}],
+    Pid = quod_conn:start_outbound(Host, Port, NodeId, Self, ConnOpts),
+    _ = erlang:monitor(process, Pid),
+    {Pid, State#state{conns = maps:put(NodeId, Pid, Conns)}}.
+
 %% ======================================================================
-%% acceptor + per-connection handler
+%% acceptor
 %% ======================================================================
 
-acceptor_loop(Listener) ->
+spawn_acceptor(Listener, Self) ->
+    spawn_link(fun() -> acceptor_loop(Listener, Self) end).
+
+acceptor_loop(Listener, Self) ->
     case quicer:accept(Listener, [], infinity) of
         {ok, Conn} ->
-            Handler = spawn(fun() -> handle_inbound(Conn) end),
-            _ = quicer:controlling_process(Conn, Handler),
-            acceptor_loop(Listener);
+            ConnProc = quod_conn:start_inbound(Conn, Self),
+            case quicer:controlling_process(Conn, ConnProc) of
+                ok -> ConnProc ! go;
+                _  -> exit(ConnProc, kill)
+            end,
+            acceptor_loop(Listener, Self);
         {error, Reason} ->
-            logger:warning("quod: accept error: ~p", [Reason]),
-            timer:sleep(100),
-            acceptor_loop(Listener)
-    end.
-
-handle_inbound(Conn) ->
-    case quicer:handshake(Conn) of
-        {ok, Conn} ->
-            %% Announce the peer on handshake (so it is discoverable) BEFORE
-            %% blocking on accept_stream, which only returns once the peer
-            %% actually opens a stream by sending.
-            Peer0 = #{conn => Conn, stream => undefined,
-                      id => uid(), addr => peer_addr(Conn)},
-            Key = register_peer(Peer0),
-            case quicer:accept_stream(Conn, [{active, true}]) of
-                {ok, Stream} ->
-                    conn_loop(Peer0#{stream => Stream}, Key);
-                {error, Reason} ->
-                    peer_down(Peer0, Key, Reason)
-            end;
-        {error, Reason} ->
-            logger:warning("quod: handshake failed: ~p", [Reason])
-    end.
-
-%% Outbound peers already hold their stream, so register and loop directly.
-start_peer(Peer) ->
-    conn_loop(Peer, register_peer(Peer)).
-
-%% Register {n,l,{peer,PeerId}} and announce peer-up on {p,l,{peer,PeerId}}.
-register_peer(Peer = #{id := PeerId}) ->
-    Key = {peer, PeerId},
-    _ = quod_reg:reg(Key),
-    _ = quod_reg:publish(Key, ?QUOD_PEER_UP(Peer)),
-    logger:info("quod: peer up ~p", [PeerId]),
-    Key.
-
-conn_loop(Peer = #{conn := Conn, stream := Stream}, Key) ->
-    receive
-        {quic, Data, Stream, _Props} when is_binary(Data) ->
-            {Channel, Payload} = unframe(Data),
-            Msg = ?QUOD_MESSAGE(Peer, Channel, Payload),
-            _ = quod_reg:publish(Key, Msg),                  %% per-peer events
-            _ = quod_reg:publish({channel, Channel}, Msg),   %% per-channel (namespace router)
-            conn_loop(Peer, Key);
-        {quic, peer_send_shutdown, Stream, _} ->
-            conn_loop(Peer, Key);
-        {quic, stream_closed, Stream, _} ->
-            conn_loop(Peer, Key);
-        {quic, closed, Conn, _} ->
-            peer_down(Peer, Key, closed);
-        {quic, transport_shutdown, Conn, Reason} ->
-            peer_down(Peer, Key, Reason);
-        {quic, shutdown, Conn} ->
-            peer_down(Peer, Key, shutdown);
-        Other ->
-            logger:debug("quod: unhandled quic msg: ~p", [Other]),
-            conn_loop(Peer, Key)
-    end.
-
-peer_down(Peer = #{id := PeerId}, Key, Reason) ->
-    logger:info("quod: peer down ~p (~p)", [PeerId, Reason]),
-    _ = quod_reg:publish(Key, ?QUOD_PEER_DOWN(Peer, Reason)),
-    ok.
-
-%% Unique per-connection id. Becomes the remote node's public key once identity
-%% exists; for now a monotonic integer so registrations never collide.
-uid() -> erlang:unique_integer([positive, monotonic]).
-
-%% Best-effort remote address, kept as info on the peer.
-peer_addr(Conn) ->
-    try quicer:peername(Conn) of
-        {ok, Addr} -> Addr;
-        _ -> undefined
-    catch
-        _:_ -> undefined
+            exit({accept_failed, Reason})
     end.
 
 %% ======================================================================
-%% wire framing: <<CLen:16, Channel:CLen/binary, Payload/binary>> so one
-%% stream multiplexes many channels.
-%% ======================================================================
 
--spec frame(binary(), binary()) -> binary().
-frame(Channel, Payload) ->
-    CLen = byte_size(Channel),
-    <<CLen:16/unsigned, Channel/binary, Payload/binary>>.
+%% a node id is dialable only if it is a `{Host, Port}` with a valid port; any
+%% other term (a gossiped binary/atom, a malformed id) must not reach quicer.
+dialable({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
+    is_list(Host) orelse is_binary(Host) orelse is_atom(Host) orelse is_tuple(Host);
+dialable(_) ->
+    false.
 
--spec unframe(binary()) -> {binary(), binary()}.
-unframe(<<CLen:16/unsigned, Rest/binary>>) ->
-    <<Channel:CLen/binary, Payload/binary>> = Rest,
-    {Channel, Payload}.
-
-%% ======================================================================
 env(Key, Default) -> application:get_env(quod, Key, Default).

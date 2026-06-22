@@ -16,16 +16,17 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | --------------------- | ------------------------------------------- |
 | `{transport, node}`   | the QUIC transport gen_server (singleton)   |
 | `{sup, node}`         | the root supervisor                         |
-| `{peer, PeerId}`      | a connected peer's handler (one per peer)   |
+| `{conn, NodeId}`      | a peer connection process (one per peer)    |
+| `{quod_brahms, Ns}`   | a namespace's Brahms statem (one per Ns)    |
 | `{channel, Name}`     | a pub/sub channel (property only, no owner) |
 
 ## Example
 
 ```erlang
-%% an interested process subscribes to peer P's events...
-quod_reg:subscribe({peer, P}),
-%% ...and P's handler posts one:
-quod_reg:publish({peer, P}, {quod_peer_down, Peer, closed}).
+%% an interested process subscribes to a channel's messages...
+quod_reg:subscribe({channel, Ns}),
+%% ...and a link on that channel posts one:
+quod_reg:publish({channel, Ns}, {quod_message, {Peer, self()}, Ns, Payload}).
 ```
 """.
 

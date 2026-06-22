@@ -47,12 +47,15 @@ take_random_test() ->
     [?assert(lists:member(X, L)) || X <- R],
     ?assertEqual(lists:sort(L), lists:sort(take_random(99, L))).  %% N>=len -> all
 
-%% --- reconstruct: limited push reception keeps the old view -------------
+%% --- reconstruct: under attack (Limited) the PUSH contribution is dropped,
+%% but pull + sample still rebuild V (so the sampler keeps healing it). -----
 
-reconstruct_limited_keeps_old_test() ->
-    Old = [p1, p2, p3],
-    ?assertEqual(Old,
-        reconstruct(Old, [x1, x2], [y1], [s1], {7, 7, 2}, 16, self_id, true)).
+reconstruct_limited_drops_push_test() ->
+    V = reconstruct([old], [evil_push], [good_pull], [good_sample],
+                    {1, 1, 1}, 16, self_id, true),
+    ?assertNot(lists:member(evil_push, V)),
+    ?assert(lists:member(good_pull, V)),
+    ?assert(lists:member(good_sample, V)).
 
 %% --- reconstruct: mixes sources, excludes self, bounded, non-empty ------
 
@@ -84,7 +87,7 @@ reconstruct_no_collapse_test() ->
 %% --- wire codec: roundtrip + defensive decode ---------------------------
 
 codec_roundtrip_test() ->
-    Msgs = [{push, <<"n1">>}, {pull_req, {"127.0.0.1", 14567}}, {pull_resp, [a, b]}],
+    Msgs = [{push, <<"n1">>}, {pull_req, {"127.0.0.1", 14567}}, {pull_resp, <<"me">>, [a, b]}],
     [?assertEqual(M, decode(encode(M))) || M <- Msgs].
 
 decode_garbage_is_safe_test() ->

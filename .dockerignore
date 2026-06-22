@@ -1,0 +1,10 @@
+# keep the build context small + reproducible
+_build/
+.git/
+.github/
+*.beam
+erl_crash.dump
+doc/
+priv/certs/*.pem
+.dockerignore
+Dockerfile

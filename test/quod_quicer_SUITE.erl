@@ -95,7 +95,7 @@ non_dialable_node_id(_Config) ->
     true = is_pid(Authority),
     ok = quod_quicer:open_link(<<"not-a-host-port">>, <<"chan-x">>),
     receive
-        {link_error, <<"chan-x">>} -> ok
+        {link_error, <<"not-a-host-port">>, <<"chan-x">>} -> ok
     after 3000 -> ct:fail(no_link_error)
     end,
     %% same pid still registered => the authority survived (did not crash/restart)

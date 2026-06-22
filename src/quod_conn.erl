@@ -76,7 +76,7 @@ open_link(ConnPid, Channel, ReplyTo) ->
 
 %% --- loop ----------------------------------------------------------------
 
-loop(S = #s{conn = Conn, pending = Pending, links = Links}) ->
+loop(S = #s{conn = Conn, peer = Peer, pending = Pending, links = Links}) ->
     receive
         {open_link, Channel, ReplyTo} ->
             loop(handle_open(Channel, ReplyTo, S));
@@ -92,7 +92,7 @@ loop(S = #s{conn = Conn, pending = Pending, links = Links}) ->
             loop(handle_link_up(Channel, RemotePeer, LinkPid, S));
         {'EXIT', LinkPid, _Reason} ->
             loop(S#s{links   = drop_pid(LinkPid, Links),
-                     pending = fail_pending(LinkPid, Pending)});
+                     pending = fail_pending(LinkPid, Peer, Pending)});
         {quic, C, _, _} when C =:= closed; C =:= transport_shutdown;
                              C =:= connection_closed; C =:= shutdown ->
             exit(conn_closed);
@@ -153,11 +153,11 @@ open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self, pending
                         _ ->
                             exit(L, kill),
                             _ = quicer:close_stream(Stream),
-                            ReplyTo ! {link_error, Channel},
+                            ReplyTo ! {link_error, Peer, Channel},
                             S
                     end;
                 {error, _} ->
-                    ReplyTo ! {link_error, Channel},
+                    ReplyTo ! {link_error, Peer, Channel},
                     S
             end
     end.
@@ -175,10 +175,10 @@ notify_waiters(Channel, RemotePeer, LinkPid, Pending) ->
 
 %% a link died: if it was the one opening a pending channel, fail that channel's
 %% waiters (so they are not wedged forever) and drop the entry.
-fail_pending(LinkPid, Pending) ->
+fail_pending(LinkPid, Peer, Pending) ->
     maps:filter(fun(Channel, {Opening, Waiters}) ->
                     case Opening =:= LinkPid of
-                        true  -> _ = [W ! {link_error, Channel} || W <- Waiters], false;
+                        true  -> _ = [W ! {link_error, Peer, Channel} || W <- Waiters], false;
                         false -> true
                     end
                 end, Pending).

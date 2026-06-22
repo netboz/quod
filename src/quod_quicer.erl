@@ -38,7 +38,7 @@ start_link() ->
 -doc """
 Open (or reuse) a link to `NodeId = {Host,Port}` for `Channel`. Asynchronous: the
 caller receives `{link_up, NodeId, Channel, LinkPid}` when it is ready (or
-`{link_error, Channel}`).
+`{link_error, NodeId, Channel}`).
 """.
 -spec open_link({inet:hostname(), inet:port_number()}, binary()) -> ok.
 open_link(NodeId, Channel) ->
@@ -82,7 +82,7 @@ handle_cast({open_link, NodeId, Channel, ReplyTo}, State) ->
             %% a view id that isn't a dialable {Host, Port} must never reach
             %% quicer:connect — it would crash this authority. Refuse it.
             logger:warning("quod: open_link to non-dialable node id ~p dropped", [NodeId]),
-            ReplyTo ! {link_error, Channel},
+            ReplyTo ! {link_error, NodeId, Channel},
             {noreply, State}
     end;
 handle_cast(_Msg, State) ->

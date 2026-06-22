@@ -154,8 +154,8 @@ common(info, {link_up, NodeId, Ns, LinkPid}, D = #d{ns = Ns}) ->
         {false, D1} -> _ = quod_link:close(LinkPid),    %% out of view / already held
                        {keep_state, drop_outbox(NodeId, D1)}
     end;
-common(info, {link_error, _Channel}, D) ->
-    {keep_state, D};                               %% open failed; next round retries
+common(info, {link_error, NodeId, _Channel}, D) ->
+    {keep_state, drop_outbox(NodeId, D)};          %% open failed; clear its buffered send (re-buffered next round if still in view)
 %% a cached link died -> the peer dropped; evict it (pid-matched, so a replacement
 %% link already cached under the same NodeId survives).
 common(info, {'DOWN', _Ref, process, LinkPid, _Reason}, D = #d{conns = Conns}) ->

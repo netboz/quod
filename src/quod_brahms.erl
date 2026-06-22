@@ -150,16 +150,29 @@ collecting(EventType, Event, D) ->
 %% since we own this outbound link.
 common(info, {link_up, NodeId, Ns, LinkPid}, D = #d{ns = Ns}) ->
     case maybe_cache(NodeId, LinkPid, out, D) of
-        {true, D1}  -> {keep_state, D1};               %% cached + flushed
+        {true, D1}  -> {keep_state, D1};               %% cached + flushed (buffer kept)
         {false, D1} -> _ = quod_link:close(LinkPid),    %% out of view / already held
-                       {keep_state, drop_outbox(NodeId, D1)}
+                       {keep_state, D1}                 %% leave the buffer; prune handles ex-view
     end;
 common(info, {link_error, NodeId, _Channel}, D) ->
     {keep_state, drop_outbox(NodeId, D)};          %% open failed; clear its buffered send (re-buffered next round if still in view)
-%% a cached link died -> the peer dropped; evict it (pid-matched, so a replacement
-%% link already cached under the same NodeId survives).
-common(info, {'DOWN', _Ref, process, LinkPid, _Reason}, D = #d{conns = Conns}) ->
-    {keep_state, D#d{conns = maps:filter(fun(_, {P, _, _}) -> P =/= LinkPid end, Conns)}};
+%% a cached link died. Evict it (pid-matched). If a send is still buffered for
+%% that peer and it is still in the view, RE-OPEN now instead of waiting for the
+%% next round tick — the buffer re-flushes on the new link. (Cleared within a
+%% round by the next direct send, so this cannot storm; an idle link with nothing
+%% buffered just dies and waits for the round.)
+common(info, {'DOWN', _Ref, process, LinkPid, _Reason},
+       D = #d{ns = Ns, conns = Conns, view = V, outbox = Outbox}) ->
+    case take_conn(LinkPid, Conns) of
+        {NodeId, Conns1} ->
+            _ = case maps:is_key(NodeId, Outbox) andalso lists:member(NodeId, V) of
+                    true  -> quod_quicer:open_link(NodeId, Ns);
+                    false -> ok
+                end,
+            {keep_state, D#d{conns = Conns1}};
+        error ->
+            {keep_state, D}
+    end;
 common({call, From}, get_view, D) ->
     {keep_state, D, [{reply, From, D#d.view}]};
 common({call, From}, get_sample, D) ->
@@ -341,17 +354,24 @@ cache_inbound(NodeId, LinkPid, D) ->
     D1.
 
 %% a link to NodeId is now up: send any payload buffered while it was opening.
+%% PEEK, don't take — the payload stays buffered so that if this link dies during
+%% the send race it can be re-flushed on a reactively re-opened link. It is
+%% cleared by the next confirmed direct send (send_msg) or a view-prune.
 flush_outbox(NodeId, LinkPid, D = #d{outbox = Outbox}) ->
-    case maps:take(NodeId, Outbox) of
-        {Payload, Outbox1} ->
-            _ = quod_link:send(LinkPid, Payload),
-            D#d{outbox = Outbox1};
-        error ->
-            D
+    case Outbox of
+        #{NodeId := Payload} -> _ = quod_link:send(LinkPid, Payload), D;
+        _                    -> D
     end.
 
 drop_outbox(NodeId, D = #d{outbox = Outbox}) ->
     D#d{outbox = maps:remove(NodeId, Outbox)}.
+
+%% find the NodeId a dead link pid was cached under (and the map without it).
+take_conn(LinkPid, Conns) ->
+    case [N || {N, {P, _, _}} <- maps:to_list(Conns), P =:= LinkPid] of
+        [NodeId | _] -> {NodeId, maps:remove(NodeId, Conns)};
+        []           -> error
+    end.
 
 %% keep only buffered payloads for peers still in the view; skip the rebuild in
 %% the steady state (empty outbox), which is the overwhelmingly common case.
@@ -407,7 +427,7 @@ send_msg(NodeId, Payload, D = #d{ns = Ns, conns = Conns, outbox = Outbox}) ->
     case maps:get(NodeId, Conns, undefined) of
         {LinkPid, _MonRef, _Origin} ->
             _ = quod_link:send(LinkPid, Payload),
-            D;
+            D#d{outbox = maps:remove(NodeId, Outbox)};   %% live link confirmed; drop any buffered copy
         undefined ->
             _ = quod_quicer:open_link(NodeId, Ns),
             D#d{outbox = Outbox#{NodeId => Payload}}

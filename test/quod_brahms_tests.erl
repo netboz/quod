@@ -93,3 +93,46 @@ codec_roundtrip_test() ->
 decode_garbage_is_safe_test() ->
     ?assertEqual(error, decode(<<"not erlang term binary">>)),
     ?assertEqual(error, decode(<<0, 1, 2, 3>>)).
+
+%% --- reactive repair: a cached link dying with a buffered send re-opens NOW ---
+%% (instead of waiting for the next round tick). Drives the real statem with a
+%% stubbed transport authority; a long collect window keeps the round from firing
+%% a second time so the state is deterministic.
+reactive_reopen_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a link death with a buffered send triggers an immediate re-open",
+       fun reactive_reopen/0}]}.
+
+reactive_reopen() ->
+    Parent = self(),
+    %% stub the transport authority: record every open_link cast as {open_link, NodeId, Ns}
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Seed = {"127.0.0.1", 65000},
+    Ns   = <<"ont:reopen">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id    => {"127.0.0.1", 65001},
+                                           seed_peers => [Seed],
+                                           round_ms   => 100,
+                                           collect_ms => 10000,   %% stay in one round
+                                           jitter     => 0.0}),
+    %% round 1: do_round dials the uncached seed and buffers a payload for it
+    receive {open_link, Seed, Ns} -> ok after 3000 -> erlang:error(no_first_open) end,
+    %% the link comes up (brahms caches + monitors FakeLink), then dies while the
+    %% send is still buffered -> the DOWN must re-open immediately
+    FakeLink = spawn(fun() -> receive stop -> ok end end),
+    B ! {link_up, Seed, Ns, FakeLink},
+    timer:sleep(100),
+    FakeLink ! stop,
+    ?assertEqual(ok, receive {open_link, Seed, Ns} -> ok after 3000 -> timeout end),
+    gen_statem:stop(B),
+    exit(Stub, kill).
+
+stub_loop(Parent) ->
+    receive
+        {'$gen_cast', {open_link, NodeId, Channel, _ReplyTo}} ->
+            Parent ! {open_link, NodeId, Channel},
+            stub_loop(Parent);
+        _ ->
+            stub_loop(Parent)
+    end.

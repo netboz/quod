@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.1.0"
+  default     = "0.2.1"
   description = "quod image tag in the cluster registry"
 }
 
@@ -64,12 +64,11 @@ EOT
 
       resources {
         cpu = 500
-        # NOTE: on the 16-core cluster nodes the quicer/msquic datapath
-        # pre-allocates ~2.1 GB of UDP buffer pools at startup (fixed, not
-        # core-scaled; ~75 MB on an 8-core dev box). Until that is tuned down in
-        # quicer, the reserve must clear it or the node is OOM-killed on boot.
-        memory     = 3072
-        memory_max = 3072
+        # Pure-Erlang QUIC: a node sits around ~105 MB (the BEAM port table is
+        # capped via `+Q` in vm.args, so Docker's huge default nofile no longer
+        # preallocates ~1.5 GB). 256 reserve gives comfortable headroom.
+        memory     = 256
+        memory_max = 512
       }
 
       # Informational Consul service (QUIC is UDP, so no TCP health check yet).

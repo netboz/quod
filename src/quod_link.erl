@@ -1,21 +1,22 @@
 -module(quod_link).
 -moduledoc """
-A **link**: one process owning exactly one QUIC stream = one channel to one peer.
+A **link**: one process per (peer, channel) = one QUIC stream's framing.
 
-The first frame on a stream is a **header** naming the opener's node id and the
-channel; subsequent frames are payloads. A link:
+Unlike a NIF stream, a pure-Erlang `quic` connection delivers *all* of its
+streams' data to a single owner (`m:quod_conn`). So a link does **not** own its
+stream — `m:quod_conn` routes inbound bytes for the link's `StreamId` to it as
+`{data, Bin, Fin}`, and the link sends with `quic:send_data/4` directly (any
+process holding the connection pid may send). A link:
 
-- **sends** via `send/2` (a cast — never blocks the caller),
-- **receives** on its own stream (own reassembly buffer) and publishes
-  `{quod_message, {Peer, self()}, Channel, Payload}` to `{channel, Channel}`,
-- **dies** when its stream or connection closes — its death *is* the disconnect
-  signal (whoever holds the pid `erlang:monitor`s it).
-
-Because each stream has its own process, channels are concurrent on the BEAM
-too — no shared receive loop, no shared send path.
+- **frames** an opener's first write as a **header** (`<<NLen:16, NodeId,
+  CLen:16, Channel>>`), then length-prefixed payloads (`<<PLen:32, Payload>>`),
+- **publishes** each payload as `{quod_message, {Peer, self()}, Channel, Payload}`
+  on the gproc property `{channel, Channel}`,
+- **dies** when its stream/connection drops — its death *is* the disconnect
+  signal its holder `erlang:monitor`s.
 """.
 
--export([start_outbound/5, start_inbound/2, send/2, close/1, owned/1]).
+-export([start_outbound/6, start_inbound/3, send/2, close/1]).
 
 -ifdef(TEST).
 -export([header/2, parse_header/1, frame/1, parse/1]).
@@ -24,48 +25,23 @@ too — no shared receive loop, no shared send path.
 -define(HEADER_TIMEOUT_MS, 5000).
 -define(MAX_FRAME_BYTES, (1 bsl 20)).
 
--record(s, {stream, channel, peer, conn, buf = <<>>}).
+-record(s, {conn, sid, channel, peer, buf = <<>>}).
 
 %% --- API -----------------------------------------------------------------
 
--doc "We opened `Stream` to `Peer` for `Channel`; announce `Self` then serve it.".
--spec start_outbound(term(), term(), binary(), term(), pid()) -> pid().
-start_outbound(Stream, Peer, Channel, Self, Conn) ->
+-doc "We opened `Sid` to `Peer` for `Channel`; announce `Self` (the header) then serve it.".
+-spec start_outbound(pid(), non_neg_integer(), term(), binary(), term(), pid()) -> pid().
+start_outbound(Conn, Sid, Peer, Channel, Self, ConnProc) ->
     spawn(fun() ->
-        await_ownership(Stream),
-        _ = quicer:send(Stream, header(Self, Channel)),
-        Conn ! {link_up, Channel, Peer, self()},
-        loop(#s{stream = Stream, channel = Channel, peer = Peer, conn = Conn})
+        _ = quic:send_data(Conn, Sid, header(Self, Channel), false),
+        ConnProc ! {link_up, Channel, Peer, self()},
+        loop(#s{conn = Conn, sid = Sid, channel = Channel, peer = Peer})
     end).
 
--doc "A peer opened `Stream`; read its header to learn (peer, channel), then serve it.".
--spec start_inbound(term(), pid()) -> pid().
-start_inbound(Stream, Conn) ->
-    spawn(fun() ->
-        await_ownership(Stream),
-        case read_header(Stream, <<>>) of
-            {ok, Peer, Channel, Rest} ->
-                Conn ! {link_up, Channel, Peer, self()},
-                %% serve any payload bytes that arrived in the same buffer as the header
-                loop(loop_msgs(Rest, #s{stream = Stream, channel = Channel, peer = Peer, conn = Conn}));
-            _ ->
-                _ = quicer:close_stream(Stream),
-                ok
-        end
-    end).
-
--doc "Signal a freshly spawned link that it now owns its stream (handed off by `m:quod_conn`).".
--spec owned(pid()) -> ok.
-owned(LinkPid) ->
-    LinkPid ! owned,
-    ok.
-
-%% block until the connection has transferred stream ownership to us, then start
-%% receiving — bytes only flow once we are the owner (no handoff race).
-await_ownership(Stream) ->
-    receive owned -> ok after ?HEADER_TIMEOUT_MS -> exit(no_owner) end,
-    _ = quicer:setopt(Stream, active, true),
-    ok.
+-doc "A peer opened `Sid`; read its header (from forwarded data) to learn (peer, channel).".
+-spec start_inbound(pid(), non_neg_integer(), pid()) -> pid().
+start_inbound(Conn, Sid, ConnProc) ->
+    spawn(fun() -> read_header(Conn, Sid, ConnProc, <<>>) end).
 
 -doc "Queue `Payload` to be sent on this link (non-blocking).".
 -spec send(pid(), iodata()) -> ok.
@@ -73,7 +49,7 @@ send(LinkPid, Payload) ->
     LinkPid ! {send, iolist_to_binary(Payload)},
     ok.
 
--doc "Close this link and its stream (its holder's `erlang:monitor` then fires `DOWN`).".
+-doc "Close this link and reset its stream (its holder's `erlang:monitor` then fires `DOWN`).".
 -spec close(pid()) -> ok.
 close(LinkPid) ->
     LinkPid ! close,
@@ -81,23 +57,34 @@ close(LinkPid) ->
 
 %% --- loop ----------------------------------------------------------------
 
-loop(S = #s{stream = Stream}) ->
+%% read the one-shot header out of the inbound byte stream, then serve payloads.
+read_header(Conn, Sid, ConnProc, Acc) ->
     receive
+        {data, Bin, _Fin} ->
+            Buf = <<Acc/binary, Bin/binary>>,
+            case parse_header(Buf) of
+                {ok, Peer, Channel, Rest} ->
+                    ConnProc ! {link_up, Channel, Peer, self()},
+                    loop(loop_msgs(Rest, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer}));
+                error -> exit(bad_header);
+                more  -> read_header(Conn, Sid, ConnProc, Buf)
+            end;
+        close -> exit(normal)
+    after ?HEADER_TIMEOUT_MS -> exit(header_timeout)
+    end.
+
+loop(S = #s{conn = Conn, sid = Sid}) ->
+    receive
+        {data, Bin, _Fin} ->
+            loop(loop_msgs(Bin, S));
         {send, Payload} ->
-            _ = quicer:send(Stream, frame(Payload)),
+            _ = quic:send_data(Conn, Sid, frame(Payload), false),
             loop(S);
         close ->
-            _ = quicer:close_stream(Stream),
+            _ = quic:reset_stream(Conn, Sid, 0),
             exit(normal);
-        {quic, Data, Stream, _} when is_binary(Data) ->
-            loop(loop_msgs(Data, S));
-        {quic, send_complete, Stream, _}       -> loop(S);
-        {quic, peer_send_shutdown, Stream, _}  -> loop(S);
-        {quic, stream_closed, _, _}            -> exit(normal);
-        {quic, closed, _, _}                   -> exit(normal);
-        {quic, transport_shutdown, _, _}       -> exit(normal);
-        {quic, shutdown, _, _}                 -> exit(normal);
-        _Other -> loop(S)
+        _Other ->
+            loop(S)
     end.
 
 %% append bytes, publish every complete payload frame, keep the remainder
@@ -120,23 +107,7 @@ header(NodeId, Channel) ->
     NB = term_to_binary(NodeId, [deterministic]),
     <<(byte_size(NB)):16, NB/binary, (byte_size(Channel)):16, Channel/binary>>.
 
-read_header(Stream, Acc) ->
-    receive
-        {quic, Data, Stream, _} when is_binary(Data) ->
-            Buf = <<Acc/binary, Data/binary>>,
-            case parse_header(Buf) of
-                {ok, _, _, _} = Ok -> Ok;
-                error             -> error;
-                more              -> read_header(Stream, Buf)
-            end;
-        close -> error;   %% asked to shut down before the header arrived
-        {quic, C, _, _} when C =:= closed; C =:= shutdown; C =:= transport_shutdown -> error
-    after ?HEADER_TIMEOUT_MS -> error
-    end.
-
-%% decode one header from a buffer: {ok, NodeId, Channel, Rest} | more | error.
-%% NLen/CLen are 16-bit, so a complete header is <= ~131 KB; an incomplete one is
-%% bounded by read_header's timeout — no separate size cap is needed here.
+%% {ok, NodeId, Channel, Rest} | more | error
 parse_header(<<NLen:16, NB:NLen/binary, CLen:16, Channel:CLen/binary, Rest/binary>>) ->
     try {ok, binary_to_term(NB, [safe]), Channel, Rest}
     catch _:_ -> error end;

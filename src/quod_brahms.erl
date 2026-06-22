@@ -166,7 +166,7 @@ common(info, {'DOWN', _Ref, process, LinkPid, _Reason},
     case take_conn(LinkPid, Conns) of
         {NodeId, Conns1} ->
             _ = case maps:is_key(NodeId, Outbox) andalso lists:member(NodeId, V) of
-                    true  -> quod_quicer:open_link(NodeId, Ns);
+                    true  -> quod_quic:open_link(NodeId, Ns);
                     false -> ok
                 end,
             {keep_state, D#d{conns = Conns1}};
@@ -429,6 +429,6 @@ send_msg(NodeId, Payload, D = #d{ns = Ns, conns = Conns, outbox = Outbox}) ->
             _ = quod_link:send(LinkPid, Payload),
             D#d{outbox = maps:remove(NodeId, Outbox)};   %% live link confirmed; drop any buffered copy
         undefined ->
-            _ = quod_quicer:open_link(NodeId, Ns),
+            _ = quod_quic:open_link(NodeId, Ns),
             D#d{outbox = Outbox#{NodeId => Payload}}
     end.

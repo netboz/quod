@@ -1,20 +1,29 @@
--module(quod_quicer).
+-module(quod_quic).
 -moduledoc """
-QUIC transport: the listener + dialer, and the **connection authority**.
+QUIC transport over the pure-Erlang `quic` library: the **server** + dialer and
+the **connection authority**.
 
-It owns the QUIC listener, accepts inbound connections (each handed to a
-`m:quod_conn` process), and serializes outbound connection creation so there is
-**one connection per peer** (no dial race). Streams/links and message delivery
-live in `m:quod_conn` / `m:quod_link`.
+It starts the `quic` server (each accepted connection is handed to a
+`m:quod_conn` owner via `connection_handler`), and serializes outbound
+connection creation so there is **one connection per peer** (no dial race).
+Streams/links and message delivery live in `m:quod_conn` / `m:quod_link`.
 
 Upper layers use one async call:
 
 ```erlang
-quod_quicer:open_link(NodeId, Channel)        %% -> caller gets {link_up, NodeId, Channel, LinkPid}
+quod_quic:open_link(NodeId, Channel)        %% -> caller gets {link_up, NodeId, Channel, LinkPid}
 quod_link:send(LinkPid, Payload)              %% direct, non-blocking
 %% messages arrive on the gproc property {channel, Channel}
 %% erlang:monitor(LinkPid) -> 'DOWN' is the disconnect
 ```
+
+> #### Why pure Erlang {: .info }
+>
+> `quic` is a process-per-connection pure-Erlang stack — no `quicer`/msquic NIF,
+> so no C toolchain or from-source build, and a small, predictable image. (The
+> per-node footprint is governed by the BEAM, not the QUIC backend: cap the port
+> table with `+Q` in vm.args or a container's huge default `nofile` preallocates
+> ~1.5 GB of `port_table`.)
 """.
 
 -behaviour(gen_server).
@@ -23,10 +32,9 @@ quod_link:send(LinkPid, Payload)              %% direct, non-blocking
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(KEY, {transport, node}).
--define(IDLE_TIMEOUT_MS, 30000).
--define(ACCEPTOR_BACKOFF_MS, 500).
+-define(SERVER, quod_quic).
 
--record(state, {listener, port, alpn, self, conns = #{}}).
+-record(state, {self, alpn, conns = #{}}).
 
 %% ======================================================================
 %% API
@@ -51,19 +59,17 @@ open_link(NodeId, Channel) ->
 init([]) ->
     process_flag(trap_exit, true),
     Port = env(listen_port, 14567),
-    ALPN = env(alpn, "quod"),
+    ALPN = [to_bin(env(alpn, "quod"))],
     Self = env(node_id, {"127.0.0.1", Port}),
-    ListenOpts =
-        [{certfile, env(certfile, "priv/certs/cert.pem")},
-         {keyfile,  env(keyfile,  "priv/certs/key.pem")},
-         {alpn, [ALPN]},
-         {peer_bidi_stream_count, 256},
-         {idle_timeout_ms, ?IDLE_TIMEOUT_MS}],
-    case quicer:listen(Port, ListenOpts) of
-        {ok, Listener} ->
-            logger:info("quod: QUIC listening on ~p (alpn ~s, node_id ~p)", [Port, ALPN, Self]),
-            _ = spawn_acceptor(Listener, Self),
-            {ok, #state{listener = Listener, port = Port, alpn = ALPN, self = Self}};
+    Cert = load_cert(env(certfile, "priv/certs/cert.pem")),
+    Key  = load_key(env(keyfile, "priv/certs/key.pem")),
+    Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
+    ServerOpts = #{cert => Cert, key => Key, alpn => ALPN, connection_handler => Handler},
+    case quic:start_server(?SERVER, Port, ServerOpts) of
+        {ok, _} ->
+            logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, node_id ~p)",
+                        [Port, hd(ALPN), Self]),
+            {ok, #state{self = Self, alpn = ALPN}};
         {error, Reason} ->
             {stop, {listen_failed, Reason}}
     end.
@@ -79,8 +85,6 @@ handle_cast({open_link, NodeId, Channel, ReplyTo}, State) ->
             quod_conn:open_link(ConnPid, Channel, ReplyTo),
             {noreply, State1};
         false ->
-            %% a view id that isn't a dialable {Host, Port} must never reach
-            %% quicer:connect — it would crash this authority. Refuse it.
             logger:warning("quod: open_link to non-dialable node id ~p dropped", [NodeId]),
             ReplyTo ! {link_error, NodeId, Channel},
             {noreply, State}
@@ -90,22 +94,11 @@ handle_cast(_Msg, State) ->
 
 handle_info({'DOWN', _Ref, process, Pid, _Reason}, State = #state{conns = Conns}) ->
     {noreply, State#state{conns = maps:filter(fun(_, P) -> P =/= Pid end, Conns)}};
-handle_info({'EXIT', _Pid, Reason}, State) when Reason =:= normal; Reason =:= shutdown ->
-    {noreply, State};
-handle_info({'EXIT', _Pid, Reason}, State) ->
-    logger:warning("quod: acceptor exited (~p), restarting in ~bms", [Reason, ?ACCEPTOR_BACKOFF_MS]),
-    _ = erlang:send_after(?ACCEPTOR_BACKOFF_MS, self(), restart_acceptor),
-    {noreply, State};
-handle_info(restart_acceptor, State = #state{listener = L, self = Self}) when L =/= undefined ->
-    _ = spawn_acceptor(L, Self),
-    {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
 
-terminate(_Reason, #state{listener = L}) when L =/= undefined ->
-    _ = quicer:close_listener(L),
-    ok;
 terminate(_Reason, _State) ->
+    _ = quic:stop_server(?SERVER),
     ok.
 
 %% ======================================================================
@@ -123,9 +116,8 @@ ensure_conn(NodeId, State = #state{conns = Conns}) ->
             adopt_or_start(NodeId, State)
     end.
 
-%% prefer an already-established connection to this peer — e.g. one the peer
-%% dialed to US, which `m:quod_conn` registers as `{conn, NodeId}` — over dialing
-%% a duplicate. Adopting it (and monitoring it) keeps "one connection per peer".
+%% prefer an already-established connection to this peer (e.g. one it dialed to
+%% US, registered as `{conn, NodeId}`) over dialing a duplicate.
 adopt_or_start(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) ->
     case quod_reg:where({conn, NodeId}) of
         Pid when is_pid(Pid) ->
@@ -136,38 +128,33 @@ adopt_or_start(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) 
     end.
 
 start_conn({Host, Port} = NodeId, Self, ALPN, State = #state{conns = Conns}) ->
-    ConnOpts = [{alpn, [ALPN]}, {verify, none}, {idle_timeout_ms, ?IDLE_TIMEOUT_MS}],
-    Pid = quod_conn:start_outbound(Host, Port, NodeId, Self, ConnOpts),
+    Pid = quod_conn:start_outbound(Host, Port, NodeId, Self, ALPN),
     _ = erlang:monitor(process, Pid),
     {Pid, State#state{conns = maps:put(NodeId, Pid, Conns)}}.
 
 %% ======================================================================
-%% acceptor
+%% helpers
 %% ======================================================================
 
-spawn_acceptor(Listener, Self) ->
-    spawn_link(fun() -> acceptor_loop(Listener, Self) end).
-
-acceptor_loop(Listener, Self) ->
-    case quicer:accept(Listener, [], infinity) of
-        {ok, Conn} ->
-            ConnProc = quod_conn:start_inbound(Conn, Self),
-            case quicer:controlling_process(Conn, ConnProc) of
-                ok -> ConnProc ! go;
-                _  -> exit(ConnProc, kill)
-            end,
-            acceptor_loop(Listener, Self);
-        {error, Reason} ->
-            exit({accept_failed, Reason})
-    end.
-
-%% ======================================================================
-
-%% a node id is dialable only if it is a `{Host, Port}` with a valid port; any
-%% other term (a gossiped binary/atom, a malformed id) must not reach quicer.
+%% a node id is dialable only if it is a `{Host, Port}` with a valid port.
 dialable({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
     is_list(Host) orelse is_binary(Host) orelse is_atom(Host) orelse is_tuple(Host);
 dialable(_) ->
     false.
+
+%% certs: load the PEM file -> DER cert / decoded key term (what `quic` expects).
+load_cert(File) ->
+    {ok, Pem} = file:read_file(File),
+    [Der | _] = [D || {'Certificate', D, _} <- public_key:pem_decode(Pem)],
+    Der.
+
+load_key(File) ->
+    {ok, Pem} = file:read_file(File),
+    [{Type, Der, _} | _] = [E || {T, _, _} = E <- public_key:pem_decode(Pem), T =/= 'Certificate'],
+    public_key:der_decode(Type, Der).
+
+to_bin(B) when is_binary(B) -> B;
+to_bin(L) when is_list(L)   -> list_to_binary(L);
+to_bin(A) when is_atom(A)   -> atom_to_binary(A, utf8).
 
 env(Key, Default) -> application:get_env(quod, Key, Default).

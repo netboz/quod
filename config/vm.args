@@ -6,3 +6,11 @@
 +sbwt very_short
 +sbwtdcpu very_short
 +sbwtdio very_short
+
+## Max-ports cap. With +Q unset the BEAM sizes its port table from the
+## container's open-file limit (ulimit -n). Container runtimes default nofile
+## to ~1e9, pinning the table at 2^27 slots and PREALLOCATING ~1.5 GiB of
+## port_table even on a node that uses a handful of ports (the entire "2 GB"
+## footprint we chased — confirmed via erlang:system_info(allocated_areas)).
+## 65536 is ample (one stream per peer per namespace) and shrinks it to KB.
++Q 65536

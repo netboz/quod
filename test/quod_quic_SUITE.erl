@@ -1,4 +1,4 @@
--module(quod_quicer_SUITE).
+-module(quod_quic_SUITE).
 -moduledoc """
 Integration test for the QUIC transport over a real loopback connection: a node
 opens a link to itself, and a framed payload is pushed across a real QUIC stream
@@ -27,7 +27,7 @@ init_per_suite(Config) ->
     true = filelib:is_regular(Cert) andalso filelib:is_regular(Key),
 
     {ok, _} = application:ensure_all_started(gproc),
-    {ok, _} = application:ensure_all_started(quicer),
+    {ok, _} = application:ensure_all_started(quic),
     application:load(quod),
     application:set_env(quod, listen_port, ?PORT),
     application:set_env(quod, node_id, ?SELF),
@@ -42,7 +42,7 @@ end_per_suite(_Config) ->
 
 %% Opening a link to our own listener over loopback yields a usable link pid.
 open_link_succeeds(_Config) ->
-    ok = quod_quicer:open_link(?SELF, <<"chan-a">>),
+    ok = quod_quic:open_link(?SELF, <<"chan-a">>),
     receive
         {link_up, ?SELF, <<"chan-a">>, LinkPid} when is_pid(LinkPid) -> ok
     after 5000 ->
@@ -53,7 +53,7 @@ open_link_succeeds(_Config) ->
 %% published on the channel property as {quod_message, {Peer, _}, Channel, _}.
 message_roundtrip(_Config) ->
     true = quod_reg:subscribe({channel, <<"chan-b">>}),
-    ok = quod_quicer:open_link(?SELF, <<"chan-b">>),
+    ok = quod_quic:open_link(?SELF, <<"chan-b">>),
     LinkPid = receive
                   {link_up, ?SELF, <<"chan-b">>, L} -> L
               after 5000 -> ct:fail(no_link_up)
@@ -69,7 +69,7 @@ message_roundtrip(_Config) ->
 %% on the *outbound* link — proving a peer pair needs only one stream per channel.
 bidirectional_reuse(_Config) ->
     true = quod_reg:subscribe({channel, <<"chan-c">>}),
-    ok = quod_quicer:open_link(?SELF, <<"chan-c">>),
+    ok = quod_quic:open_link(?SELF, <<"chan-c">>),
     OutLink = receive
                   {link_up, ?SELF, <<"chan-c">>, L} -> L
               after 5000 -> ct:fail(no_link_up)
@@ -93,7 +93,7 @@ bidirectional_reuse(_Config) ->
 non_dialable_node_id(_Config) ->
     Authority = quod_reg:where({transport, node}),
     true = is_pid(Authority),
-    ok = quod_quicer:open_link(<<"not-a-host-port">>, <<"chan-x">>),
+    ok = quod_quic:open_link(<<"not-a-host-port">>, <<"chan-x">>),
     receive
         {link_error, <<"not-a-host-port">>, <<"chan-x">>} -> ok
     after 3000 -> ct:fail(no_link_error)

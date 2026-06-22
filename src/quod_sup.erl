@@ -19,8 +19,8 @@ init([]) ->
                  intensity => 10,
                  period => 10},
     ChildSpecs =
-        [#{id => quod_quicer,
-           start => {quod_quicer, start_link, []},
+        [#{id => quod_quic,
+           start => {quod_quic, start_link, []},
            type => worker},
          #{id => quod_brahms_sup,
            start => {quod_brahms_sup, start_link, []},

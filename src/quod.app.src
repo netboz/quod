@@ -10,7 +10,7 @@
     sasl,
     crypto,        %% quod_brahms_sampler: HMAC-SHA256 + strong_rand_bytes
     gproc,
-    quicer,
+    quic,
     erlog
    ]},
   {env,

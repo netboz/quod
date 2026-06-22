@@ -6,4 +6,4 @@ childspecs_test() ->
     {ok, {SupFlags, ChildSpecs}} = quod_sup:init([]),
     ?assertMatch(#{strategy := one_for_one}, SupFlags),
     ?assertEqual(ok, supervisor:check_childspecs(ChildSpecs)),
-    ?assert(lists:any(fun(#{id := Id}) -> Id =:= quod_quicer end, ChildSpecs)).
+    ?assert(lists:any(fun(#{id := Id}) -> Id =:= quod_quic end, ChildSpecs)).

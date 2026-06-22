@@ -1,71 +1,57 @@
 -module(quod_conn).
 -moduledoc """
-A **connection**: one process per peer, owning the QUIC connection and spawning
-one `m:quod_link` process per stream.
+A **connection**: one process per peer, **owning** one pure-Erlang `quic`
+connection and routing its streams to `m:quod_link` processes.
 
-- **outbound** (`start_outbound/5`): dials, then on `{open_link, Channel, _}`
-  opens a stream and starts an outbound link.
-- **inbound** (`start_inbound/2`): owns an accepted connection; each peer-opened
-  stream becomes an inbound link, whose header reveals the peer's node id (the
-  identity handshake).
+The `quic` owner model delivers every stream's events to this one process, so
+`quod_conn` is the demux point: `{quic, Conn, {stream_data, StreamId, Bin, Fin}}`
+is forwarded to the link registered for `StreamId` (a peer-opened stream gets a
+fresh inbound link on first sight). It opens outbound streams on `{open_link,
+Channel, _}` and learns an inbound peer's node id from the link's header.
 
-Either side may open streams, so **both** directions arm
-`quicer:async_accept_stream/2` and serve peer-opened streams.
-
-Streams are opened/accepted **passive** and handed to their link via
-`quicer:controlling_process/2`; only once the link owns the stream does it go
-active (`quod_link:owned/1`), so no inbound bytes are delivered to the wrong
-process. Link processes are **linked** to the connection, so when the connection
-dies every link dies with it — and each link's death is the disconnect signal
-its holder monitors.
+Links are **linked** to the connection, so when the connection drops every link
+dies with it — and each link's death is the disconnect signal its holder
+monitors.
 """.
 
 -export([start_outbound/5, start_inbound/2, open_link/3]).
 
--record(s, {conn, self, peer = undefined, pending = #{}, links = #{}}).
+-record(s, {conn, self, peer = undefined,
+            streams = #{},   %% StreamId => LinkPid   (for routing inbound data)
+            chans   = #{},   %% Channel  => LinkPid   (for reuse/dedup)
+            pending = #{}}). %% Channel  => {StreamId, [ReplyTo]} (outbound opens in flight)
 
--define(HANDSHAKE_TIMEOUT_MS, 5000).
+-define(CONNECT_TIMEOUT_MS, 5000).
 
 %% --- API -----------------------------------------------------------------
 
--doc "Dial `Host:Port` (known node id `Peer`), then serve link requests.".
--spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), list()) -> pid().
-start_outbound(Host, Port, Peer, Self, ConnOpts) ->
+-doc "Dial `Host:Port` (known node id `Peer`), become the connection owner, serve links.".
+-spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), [binary()]) -> pid().
+start_outbound(Host, Port, Peer, Self, ALPN) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
-        %% quicer:connect/4 yields {ok, Conn}, {ok, Conn, CertChain}, {error, R}
-        %% or the 3-tuple {error, transport_down, Props} (peer unreachable). A bad
-        %% dial is normal — Brahms retries next round — so log, never crash.
-        case quicer:connect(Host, Port, ConnOpts, ?HANDSHAKE_TIMEOUT_MS) of
-            {ok, Conn}       -> serve_outbound(Conn, Self, Peer);
-            {ok, Conn, _Crt} -> serve_outbound(Conn, Self, Peer);
-            Error ->
-                logger:warning("quod: connect ~p:~p failed: ~p", [Host, Port, Error])
+        case quic:connect(Host, Port, #{verify => false, alpn => ALPN}, self()) of
+            {ok, Conn} ->
+                receive
+                    {quic, Conn, {connected, _}} ->
+                        _ = reg_conn(Peer),
+                        loop(#s{conn = Conn, self = Self, peer = Peer});
+                    {quic, Conn, {closed, R}} ->
+                        logger:warning("quod: connect ~p:~p closed: ~p", [Host, Port, R])
+                after ?CONNECT_TIMEOUT_MS ->
+                    logger:warning("quod: connect ~p:~p timed out", [Host, Port])
+                end;
+            {error, Reason} ->
+                logger:warning("quod: connect ~p:~p failed: ~p", [Host, Port, Reason])
         end
     end).
 
-serve_outbound(Conn, Self, Peer) ->
-    _ = reg_conn(Peer),
-    arm(Conn),
-    loop(#s{conn = Conn, self = Self, peer = Peer}).
-
--doc """
-Own an accepted connection `Conn`; learn the peer from its first inbound link.
-Waits for a `go` message so the acceptor can transfer ownership before we touch
-the connection (handshake-handoff race).
-""".
--spec start_inbound(term(), term()) -> pid().
+-doc "Own an accepted connection `Conn` (the `quic` listener transfers ownership to us).".
+-spec start_inbound(pid(), term()) -> pid().
 start_inbound(Conn, Self) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
-        receive go -> ok after ?HANDSHAKE_TIMEOUT_MS -> exit(no_go) end,
-        case quicer:handshake(Conn) of
-            {ok, Conn} ->
-                arm(Conn),
-                loop(#s{conn = Conn, self = Self});
-            Error ->
-                logger:warning("quod: inbound handshake failed: ~p", [Error])
-        end
+        loop(#s{conn = Conn, self = Self})
     end).
 
 -doc "Ask this connection to open (or reuse) a link for `Channel`, replying to `ReplyTo`.".
@@ -76,38 +62,87 @@ open_link(ConnPid, Channel, ReplyTo) ->
 
 %% --- loop ----------------------------------------------------------------
 
-loop(S = #s{conn = Conn, peer = Peer, pending = Pending, links = Links}) ->
+loop(S = #s{conn = Conn}) ->
     receive
         {open_link, Channel, ReplyTo} ->
             loop(handle_open(Channel, ReplyTo, S));
-        {quic, new_stream, Stream, _} ->
-            L = quod_link:start_inbound(Stream, self()),
-            S1 = case quicer:controlling_process(Stream, L) of
-                     ok -> link(L), quod_link:owned(L), S;
-                     _  -> exit(L, kill), _ = quicer:close_stream(Stream), S
-                 end,
-            arm(Conn),                                     %% re-arm for the next stream
+        {quic, Conn, {stream_data, Sid, Data, Fin}} ->
+            loop(route_data(Sid, Data, Fin, S));
+        {quic, Conn, {stream_opened, Sid}} ->
+            {_, S1} = ensure_link(Sid, S),       %% pre-create the inbound link
             loop(S1);
+        {quic, Conn, {stream_reset, Sid, _}} ->
+            loop(drop_stream(Sid, S));
+        {quic, Conn, {closed, _}} ->
+            exit(conn_closed);
+        {quic, Conn, {transport_error, _, _}} ->
+            exit(conn_closed);
+        {quic, Conn, _Other} ->                  %% connected, send_ready, timer, ...
+            loop(S);
         {link_up, Channel, RemotePeer, LinkPid} ->
             loop(handle_link_up(Channel, RemotePeer, LinkPid, S));
         {'EXIT', LinkPid, _Reason} ->
-            loop(S#s{links   = drop_pid(LinkPid, Links),
-                     pending = fail_pending(LinkPid, Peer, Pending)});
-        {quic, C, _, _} when C =:= closed; C =:= transport_shutdown;
-                             C =:= connection_closed; C =:= shutdown ->
-            exit(conn_closed);
+            loop(drop_link(LinkPid, S));
         _Other ->
             loop(S)
     end.
 
-%% a link finished opening. Enforce ONE link per channel: keep a live existing
-%% link and close the colliding newcomer, otherwise adopt the new link.
-handle_link_up(Channel, RemotePeer, LinkPid, S = #s{links = Links, pending = Pending}) ->
-    case maps:get(Channel, Links, undefined) of
+%% route inbound bytes to the link owning StreamId (spawning an inbound link the
+%% first time we see a peer-opened stream).
+route_data(Sid, Data, Fin, S) ->
+    {LinkPid, S1} = ensure_link(Sid, S),
+    LinkPid ! {data, Data, Fin},
+    S1.
+
+ensure_link(Sid, S = #s{streams = Streams, conn = Conn}) ->
+    case maps:get(Sid, Streams, undefined) of
+        undefined ->
+            L = quod_link:start_inbound(Conn, Sid, self()),
+            link(L),
+            {L, S#s{streams = Streams#{Sid => L}}};
+        LinkPid ->
+            {LinkPid, S}
+    end.
+
+%% open (or reuse) an outbound stream for Channel; ReplyTo is told when it is up.
+handle_open(Channel, ReplyTo, S = #s{peer = Peer, chans = Chans, pending = Pending}) ->
+    case maps:get(Channel, Chans, undefined) of
+        LinkPid when is_pid(LinkPid) ->
+            case is_process_alive(LinkPid) of
+                true  -> ReplyTo ! {link_up, Peer, Channel, LinkPid}, S;   %% reuse
+                false -> open_new(Channel, ReplyTo, S#s{chans = maps:remove(Channel, Chans)})
+            end;
+        undefined ->
+            case maps:is_key(Channel, Pending) of
+                true ->
+                    Pending1 = maps:update_with(Channel, fun({Sid, W}) -> {Sid, [ReplyTo | W]} end, Pending),
+                    S#s{pending = Pending1};
+                false ->
+                    open_new(Channel, ReplyTo, S)
+            end
+    end.
+
+open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self,
+                                  streams = Streams, pending = Pending}) ->
+    case quic:open_stream(Conn) of
+        {ok, Sid} ->
+            L = quod_link:start_outbound(Conn, Sid, Peer, Channel, Self, self()),
+            link(L),
+            S#s{streams = Streams#{Sid => L},
+                pending = Pending#{Channel => {Sid, [ReplyTo]}}};
+        {error, _} ->
+            ReplyTo ! {link_error, Peer, Channel},
+            S
+    end.
+
+%% a link finished its header handshake: learn the peer, cache by channel, and
+%% tell every waiter. (One link per channel; a colliding newcomer is closed.)
+handle_link_up(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending}) ->
+    case maps:get(Channel, Chans, undefined) of
         Existing when is_pid(Existing), Existing =/= LinkPid ->
             case is_process_alive(Existing) of
                 true ->
-                    _ = quod_link:close(LinkPid),          %% duplicate stream -> drop newcomer
+                    _ = quod_link:close(LinkPid),     %% one link per channel; drop the newcomer
                     notify_waiters(Channel, RemotePeer, Existing, Pending),
                     S#s{pending = maps:remove(Channel, Pending)};
                 false ->
@@ -117,80 +152,44 @@ handle_link_up(Channel, RemotePeer, LinkPid, S = #s{links = Links, pending = Pen
             adopt_link(Channel, RemotePeer, LinkPid, S)
     end.
 
-adopt_link(Channel, RemotePeer, LinkPid, S = #s{links = Links, pending = Pending}) ->
+adopt_link(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending}) ->
     S1 = ensure_peer(RemotePeer, S),
     notify_waiters(Channel, RemotePeer, LinkPid, Pending),
-    S1#s{links   = Links#{Channel => LinkPid},
+    S1#s{chans   = Chans#{Channel => LinkPid},
          pending = maps:remove(Channel, Pending)}.
-
-%% open (or reuse) an outbound stream for Channel; ReplyTo is told when it is up.
-handle_open(Channel, ReplyTo, S = #s{peer = Peer, links = Links}) ->
-    case maps:get(Channel, Links, undefined) of
-        LinkPid when is_pid(LinkPid) ->
-            case is_process_alive(LinkPid) of
-                true  -> ReplyTo ! {link_up, Peer, Channel, LinkPid}, S;   %% reuse
-                false -> open_new(Channel, ReplyTo, S#s{links = maps:remove(Channel, Links)})
-            end;
-        undefined ->
-            open_new(Channel, ReplyTo, S)
-    end.
-
-open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self, pending = Pending}) ->
-    case maps:is_key(Channel, Pending) of
-        true ->
-            %% a stream for this channel is already opening; wait on it.
-            Pending1 = maps:update_with(Channel, fun({Lp, Ws}) -> {Lp, [ReplyTo | Ws]} end, Pending),
-            S#s{pending = Pending1};
-        false ->
-            case quicer:start_stream(Conn, [{active, false}]) of
-                {ok, Stream} ->
-                    L = quod_link:start_outbound(Stream, Peer, Channel, Self, self()),
-                    case quicer:controlling_process(Stream, L) of
-                        ok ->
-                            link(L),
-                            quod_link:owned(L),
-                            S#s{pending = Pending#{Channel => {L, [ReplyTo]}}};
-                        _ ->
-                            exit(L, kill),
-                            _ = quicer:close_stream(Stream),
-                            ReplyTo ! {link_error, Peer, Channel},
-                            S
-                    end;
-                {error, _} ->
-                    ReplyTo ! {link_error, Peer, Channel},
-                    S
-            end
-    end.
 
 %% --- helpers -------------------------------------------------------------
 
-%% tell every waiter queued for Channel which link came up.
 notify_waiters(Channel, RemotePeer, LinkPid, Pending) ->
     Waiters = case maps:get(Channel, Pending, undefined) of
-                  {_Opening, Ws} -> Ws;
-                  undefined      -> []
+                  {_Sid, Ws} -> Ws;
+                  undefined  -> []
               end,
     _ = [W ! {link_up, RemotePeer, Channel, LinkPid} || W <- Waiters],
     ok.
 
-%% a link died: if it was the one opening a pending channel, fail that channel's
-%% waiters (so they are not wedged forever) and drop the entry.
-fail_pending(LinkPid, Peer, Pending) ->
-    maps:filter(fun(Channel, {Opening, Waiters}) ->
-                    case Opening =:= LinkPid of
+%% a peer reset a stream -> kill the link serving it.
+drop_stream(Sid, S = #s{streams = Streams}) ->
+    case maps:get(Sid, Streams, undefined) of
+        undefined -> S;
+        LinkPid   -> _ = quod_link:close(LinkPid), S
+    end.
+
+%% a link died -> drop it from both indexes, and fail any pending waiters on it.
+drop_link(LinkPid, S = #s{streams = Streams, chans = Chans, pending = Pending, peer = Peer}) ->
+    S#s{streams = maps:filter(fun(_, P) -> P =/= LinkPid end, Streams),
+        chans   = maps:filter(fun(_, P) -> P =/= LinkPid end, Chans),
+        pending = fail_pending(LinkPid, Peer, Streams, Pending)}.
+
+%% if the dead link was the one opening a pending channel, fail its waiters.
+fail_pending(LinkPid, Peer, Streams, Pending) ->
+    DeadSids = [Sid || {Sid, P} <- maps:to_list(Streams), P =:= LinkPid],
+    maps:filter(fun(Channel, {Sid, Waiters}) ->
+                    case lists:member(Sid, DeadSids) of
                         true  -> _ = [W ! {link_error, Peer, Channel} || W <- Waiters], false;
                         false -> true
                     end
                 end, Pending).
-
-drop_pid(LinkPid, Links) ->
-    maps:filter(fun(_, P) -> P =/= LinkPid end, Links).
-
-%% arm reception of the next peer-opened stream; it is delivered passive so the
-%% owning link controls when bytes start flowing.
-arm(Conn) ->
-    _ = quicer:async_accept_stream(Conn, #{active => false}),
-    ok.
 
 ensure_peer(RemotePeer, S = #s{peer = undefined}) ->
     _ = reg_conn(RemotePeer),
@@ -198,7 +197,6 @@ ensure_peer(RemotePeer, S = #s{peer = undefined}) ->
 ensure_peer(_RemotePeer, S) ->
     S.
 
-%% best-effort {conn, Peer} registration for reuse (a duplicate from a
-%% simultaneous inbound+outbound just isn't the registered alias — both work).
+%% best-effort {conn, Peer} registration for reuse.
 reg_conn(Peer) ->
     try quod_reg:reg({conn, Peer}) catch _:_ -> ok end.

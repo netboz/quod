@@ -150,8 +150,8 @@ collecting(EventType, Event, D) ->
 %% since we own this outbound link.
 common(info, {link_up, NodeId, Ns, LinkPid}, D = #d{ns = Ns}) ->
     case maybe_cache(NodeId, LinkPid, out, D) of
-        {true, D1}  -> {keep_state, flush_outbox(NodeId, LinkPid, D1)};
-        {false, D1} -> _ = quod_link:close(LinkPid),
+        {true, D1}  -> {keep_state, D1};               %% cached + flushed
+        {false, D1} -> _ = quod_link:close(LinkPid),    %% out of view / already held
                        {keep_state, drop_outbox(NodeId, D1)}
     end;
 common(info, {link_error, _Channel}, D) ->
@@ -239,7 +239,7 @@ reconstruct_and_update(D = #d{counts = {L1, L2, L3}, cfg = Cfg, self = Self, vie
                        maps:get(view_size, Cfg), Self, Limited),
     D#d{view = NewV,
         conns  = prune_conns(NewV, Conns),
-        outbox = maps:with(NewV, D#d.outbox),          %% don't queue for ex-view peers
+        outbox = prune_outbox(NewV, D#d.outbox),       %% don't queue for ex-view peers
         vpush = [], vpull = [], pushes = 0, pulled = []}.
 
 %% ======================================================================
@@ -337,10 +337,8 @@ partition(L1, L2, V) ->
 %% it; when we don't cache it (already hold one) we just leave it serving.
 %% Keyed by the peer's announced node id (v1 trusts the announced identity).
 cache_inbound(NodeId, LinkPid, D) ->
-    case maybe_cache(NodeId, LinkPid, in, D) of
-        {true, D1}  -> flush_outbox(NodeId, LinkPid, D1);  %% bidi link -> flush queued sends
-        {false, D1} -> D1
-    end.
+    {_Cached, D1} = maybe_cache(NodeId, LinkPid, in, D),  %% caches + flushes if fresh
+    D1.
 
 %% a link to NodeId is now up: send any payload buffered while it was opening.
 flush_outbox(NodeId, LinkPid, D = #d{outbox = Outbox}) ->
@@ -355,14 +353,22 @@ flush_outbox(NodeId, LinkPid, D = #d{outbox = Outbox}) ->
 drop_outbox(NodeId, D = #d{outbox = Outbox}) ->
     D#d{outbox = maps:remove(NodeId, Outbox)}.
 
+%% keep only buffered payloads for peers still in the view; skip the rebuild in
+%% the steady state (empty outbox), which is the overwhelmingly common case.
+prune_outbox(_NewV, Outbox) when map_size(Outbox) =:= 0 -> Outbox;
+prune_outbox(NewV, Outbox) -> maps:with(NewV, Outbox).
+
 %% cache LinkPid (origin `out` = we opened it, `in` = peer opened it) under NodeId
 %% with a monitor, iff the peer is in the view and we don't already hold a link.
 %% The cheap maps:is_key check runs first to short-circuit the common cached case.
+%% On a fresh cache, flush anything buffered while the link was opening (so both
+%% callers get that for free — no repeated cache-then-flush dance).
 maybe_cache(NodeId, LinkPid, Origin, D = #d{view = V, conns = Conns}) ->
     case (not maps:is_key(NodeId, Conns)) andalso lists:member(NodeId, V) of
         true ->
             MonRef = erlang:monitor(process, LinkPid),
-            {true, D#d{conns = Conns#{NodeId => {LinkPid, MonRef, Origin}}}};
+            D1 = D#d{conns = Conns#{NodeId => {LinkPid, MonRef, Origin}}},
+            {true, flush_outbox(NodeId, LinkPid, D1)};
         false ->
             {false, D}
     end.
@@ -389,9 +395,14 @@ round_delay(Cfg) ->
 
 %% Payload is already an encoded message binary. A cached link -> direct
 %% (non-blocking) send. Otherwise open one ASYNCHRONOUSLY (retried each round) and
-%% buffer the latest payload so it is flushed the instant the link comes up — no
-%% dropped round. Push/pull_req are content-invariant, so keeping only the latest
-%% per peer bounds the buffer to the view size with no staleness.
+%% buffer the latest payload so it is flushed the instant the link comes up.
+%%
+%% This fully recovers PUSH (the sampler heals from any received id, any round). A
+%% buffered PULL_REQ only helps if the link comes up within this round's collect
+%% window — a later flush still warms the link, but its pull_resp arrives after
+%% `pulled` is reset and is dropped as unsolicited. Push/pull_req are
+%% content-invariant, so keeping only the latest per peer bounds the buffer to the
+%% view size with no staleness.
 send_msg(NodeId, Payload, D = #d{ns = Ns, conns = Conns, outbox = Outbox}) ->
     case maps:get(NodeId, Conns, undefined) of
         {LinkPid, _MonRef, _Origin} ->

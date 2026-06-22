@@ -63,6 +63,7 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
             view    = [] :: [term()],
             sampler :: quod_brahms_sampler:sampler(),
             conns   = #{} :: #{term() => {pid(), reference(), out | in}},  %% NodeId => {LinkPid, MonRef, Origin}
+            outbox  = #{} :: #{term() => binary()},  %% latest payload queued for a link being opened
             vpush   = [] :: [term()],
             vpull   = [] :: [term()],
             pushes  = 0  :: non_neg_integer(),
@@ -149,8 +150,9 @@ collecting(EventType, Event, D) ->
 %% since we own this outbound link.
 common(info, {link_up, NodeId, Ns, LinkPid}, D = #d{ns = Ns}) ->
     case maybe_cache(NodeId, LinkPid, out, D) of
-        {true, D1}  -> {keep_state, D1};
-        {false, D1} -> _ = quod_link:close(LinkPid), {keep_state, D1}
+        {true, D1}  -> {keep_state, flush_outbox(NodeId, LinkPid, D1)};
+        {false, D1} -> _ = quod_link:close(LinkPid),
+                       {keep_state, drop_outbox(NodeId, D1)}
     end;
 common(info, {link_error, _Channel}, D) ->
     {keep_state, D};                               %% open failed; next round retries
@@ -236,7 +238,8 @@ reconstruct_and_update(D = #d{counts = {L1, L2, L3}, cfg = Cfg, self = Self, vie
     NewV = reconstruct(OldV, Vpush, Vpull, Sampled, {L1, L2, L3},
                        maps:get(view_size, Cfg), Self, Limited),
     D#d{view = NewV,
-        conns = prune_conns(NewV, Conns),
+        conns  = prune_conns(NewV, Conns),
+        outbox = maps:with(NewV, D#d.outbox),          %% don't queue for ex-view peers
         vpush = [], vpull = [], pushes = 0, pulled = []}.
 
 %% ======================================================================
@@ -334,8 +337,23 @@ partition(L1, L2, V) ->
 %% it; when we don't cache it (already hold one) we just leave it serving.
 %% Keyed by the peer's announced node id (v1 trusts the announced identity).
 cache_inbound(NodeId, LinkPid, D) ->
-    {_Cached, D1} = maybe_cache(NodeId, LinkPid, in, D),
-    D1.
+    case maybe_cache(NodeId, LinkPid, in, D) of
+        {true, D1}  -> flush_outbox(NodeId, LinkPid, D1);  %% bidi link -> flush queued sends
+        {false, D1} -> D1
+    end.
+
+%% a link to NodeId is now up: send any payload buffered while it was opening.
+flush_outbox(NodeId, LinkPid, D = #d{outbox = Outbox}) ->
+    case maps:take(NodeId, Outbox) of
+        {Payload, Outbox1} ->
+            _ = quod_link:send(LinkPid, Payload),
+            D#d{outbox = Outbox1};
+        error ->
+            D
+    end.
+
+drop_outbox(NodeId, D = #d{outbox = Outbox}) ->
+    D#d{outbox = maps:remove(NodeId, Outbox)}.
 
 %% cache LinkPid (origin `out` = we opened it, `in` = peer opened it) under NodeId
 %% with a monitor, iff the peer is in the view and we don't already hold a link.
@@ -370,15 +388,16 @@ round_delay(Cfg) ->
     Base + round((rand:uniform() * 2 - 1) * Base * J).
 
 %% Payload is already an encoded message binary. A cached link -> direct
-%% (non-blocking) send; otherwise open one ASYNCHRONOUSLY and drop this round's
-%% payload (gossip is periodic — the next round reaches the peer once it is up,
-%% and `{link_up, ...}` caches the link in the meantime).
-send_msg(NodeId, Payload, D = #d{ns = Ns, conns = Conns}) ->
+%% (non-blocking) send. Otherwise open one ASYNCHRONOUSLY (retried each round) and
+%% buffer the latest payload so it is flushed the instant the link comes up — no
+%% dropped round. Push/pull_req are content-invariant, so keeping only the latest
+%% per peer bounds the buffer to the view size with no staleness.
+send_msg(NodeId, Payload, D = #d{ns = Ns, conns = Conns, outbox = Outbox}) ->
     case maps:get(NodeId, Conns, undefined) of
         {LinkPid, _MonRef, _Origin} ->
             _ = quod_link:send(LinkPid, Payload),
             D;
         undefined ->
             _ = quod_quicer:open_link(NodeId, Ns),
-            D
+            D#d{outbox = Outbox#{NodeId => Payload}}
     end.

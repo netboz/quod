@@ -33,15 +33,21 @@ its holder monitors.
 start_outbound(Host, Port, Peer, Self, ConnOpts) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
+        %% quicer:connect/4 yields {ok, Conn}, {ok, Conn, CertChain}, {error, R}
+        %% or the 3-tuple {error, transport_down, Props} (peer unreachable). A bad
+        %% dial is normal — Brahms retries next round — so log, never crash.
         case quicer:connect(Host, Port, ConnOpts, ?HANDSHAKE_TIMEOUT_MS) of
-            {ok, Conn} ->
-                _ = reg_conn(Peer),
-                arm(Conn),
-                loop(#s{conn = Conn, self = Self, peer = Peer});
-            {error, Reason} ->
-                logger:warning("quod: connect ~p:~p failed: ~p", [Host, Port, Reason])
+            {ok, Conn}       -> serve_outbound(Conn, Self, Peer);
+            {ok, Conn, _Crt} -> serve_outbound(Conn, Self, Peer);
+            Error ->
+                logger:warning("quod: connect ~p:~p failed: ~p", [Host, Port, Error])
         end
     end).
+
+serve_outbound(Conn, Self, Peer) ->
+    _ = reg_conn(Peer),
+    arm(Conn),
+    loop(#s{conn = Conn, self = Self, peer = Peer}).
 
 -doc """
 Own an accepted connection `Conn`; learn the peer from its first inbound link.
@@ -57,8 +63,8 @@ start_inbound(Conn, Self) ->
             {ok, Conn} ->
                 arm(Conn),
                 loop(#s{conn = Conn, self = Self});
-            {error, Reason} ->
-                logger:warning("quod: inbound handshake failed: ~p", [Reason])
+            Error ->
+                logger:warning("quod: inbound handshake failed: ~p", [Error])
         end
     end).
 

@@ -4,10 +4,10 @@
 %% --- pure key constructors -----------------------------------------------
 
 name_test() ->
-    ?assertEqual({n, l, {peer, foo}}, quod_reg:name({peer, foo})).
+    ?assertEqual({n, l, {conn, foo}}, quod_reg:name({conn, foo})).
 
 prop_test() ->
-    ?assertEqual({p, l, {peer, foo}}, quod_reg:prop({peer, foo})).
+    ?assertEqual({p, l, {conn, foo}}, quod_reg:prop({conn, foo})).
 
 via_test() ->
     ?assertEqual({via, gproc, {n, l, {transport, node}}},
@@ -40,7 +40,7 @@ unsubscribe_stops() ->
     receive nope -> erlang:error(should_not_arrive) after 100 -> ok end.
 
 where_finds() ->
-    K = {peer, {127, 0, 0, 1}},
+    K = {conn, {"127.0.0.1", 14567}},
     Self = self(),
     true = quod_reg:reg(K),
     ?assertEqual(Self, quod_reg:where(K)),

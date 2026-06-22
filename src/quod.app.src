@@ -1,0 +1,25 @@
+{application, quod,
+ [{description, "Quod - a Prolog/Brahms P2P node over QUIC"},
+  {vsn, "0.1.0"},
+  %% processes register through gproc (via tuples), not local names.
+  {registered, []},
+  {mod, {quod_app, []}},
+  {applications,
+   [kernel,
+    stdlib,
+    sasl,
+    gproc,
+    quicer,
+    erlog
+   ]},
+  {env,
+   [{listen_port, 14567},
+    {alpn, "quod"},
+    {certfile, "priv/certs/cert.pem"},
+    {keyfile, "priv/certs/key.pem"},
+    {seed_peers, []}
+   ]},
+  {modules, []},
+  {licenses, ["AGPL-3.0-or-later"]},
+  {links, []}
+ ]}.

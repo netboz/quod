@@ -1,0 +1,8 @@
+-name quod@127.0.0.1
+-setcookie quod_dev_cookie
+
++K true
++A 16
++sbwt very_short
++sbwtdcpu very_short
++sbwtdio very_short

@@ -1,15 +1,27 @@
 {"1.2.0",
-[{<<"erlog">>,
+[{<<"accept">>,{pkg,<<"accept">>,<<"0.3.7">>},1},
+ {<<"erlog">>,
   {git,"https://github.com/netboz/erlog.git",
        {ref,"e0bcbec2af5a47b8e8a0b2d98277992968a23f48"}},
   0},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.1">>},0},
+ {<<"prometheus">>,{pkg,<<"prometheus">>,<<"4.11.0">>},0},
+ {<<"prometheus_httpd">>,{pkg,<<"prometheus_httpd">>,<<"2.1.15">>},0},
+ {<<"quantile_estimator">>,{pkg,<<"quantile_estimator">>,<<"0.2.1">>},1},
  {<<"quic">>,{pkg,<<"quic">>,<<"1.6.5">>},0}]}.
 [
 {pkg_hash,[
+ {<<"accept">>, <<"CD6E34A2D7E28CA38B2D3CB233734CA0C221EFBC1F171F91FEC5F162CC2D18DA">>},
  {<<"gproc">>, <<"F1DF0364423539CF0B80E8201C8B1839E229E5F9B3CCB944C5834626998F5B8C">>},
+ {<<"prometheus">>, <<"B95F8DE8530F541BD95951E18E355A840003672E5EDA4788C5FA6183406BA29A">>},
+ {<<"prometheus_httpd">>, <<"8F767D819A5D36275EAB9264AFF40D87279151646776069BF69FBDBBD562BD75">>},
+ {<<"quantile_estimator">>, <<"EF50A361F11B5F26B5F16D0696E46A9E4661756492C981F7B2229EF42FF1CD15">>},
  {<<"quic">>, <<"28B7D49C1732B2DE3861701BB03AE7798537240552370AC49F0D139D2EA8F621">>}]},
 {pkg_hash_ext,[
+ {<<"accept">>, <<"CA69388943F5DAD2E7232A5478F16086E3C872F48E32B88B378E1885A59F5649">>},
  {<<"gproc">>, <<"905088E32E72127ED9466F0BAC0D8E65704CA5E73EE5A62CB073C3117916D507">>},
+ {<<"prometheus">>, <<"719862351AABF4DF7079B05DC085D2BBCBE3AC0AC3009E956671B1D5AB88247D">>},
+ {<<"prometheus_httpd">>, <<"67736D000745184D5013C58A63E947821AB90CB9320BC2E6AE5D3061C6FFE039">>},
+ {<<"quantile_estimator">>, <<"282A8A323CA2A845C9E6F787D166348F776C1D4A41EDE63046D72D422E3DA946">>},
  {<<"quic">>, <<"DE1A88972C33201A50D1A17C8C4A14528BD1D8F25EF705897D680AE312D0AA78">>}]}
 ].

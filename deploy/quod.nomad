@@ -36,6 +36,9 @@ job "quod" {
       port "p2p" {
         static = 14567
       }
+      port "metrics" {
+        static = 14568
+      }
     }
 
     task "quod" {
@@ -45,7 +48,7 @@ job "quod" {
         image        = "192.168.1.11:5000/quod:${var.image_tag}"
         force_pull   = true
         network_mode = "host"
-        ports        = ["p2p"]
+        ports        = ["p2p", "metrics"]
       }
 
       # node_id is this node's own dialable address; seeds are all three nodes
@@ -71,11 +74,24 @@ EOT
         memory_max = 512
       }
 
-      # Informational Consul service (QUIC is UDP, so no TCP health check yet).
+      # QUIC p2p (UDP — no TCP check); liveness comes from the metrics endpoint.
       service {
         name = "quod"
         port = "p2p"
         tags = ["quod", "brahms", "quic", "p2p"]
+      }
+
+      service {
+        name = "quod-metrics"
+        port = "metrics"
+        tags = ["quod", "metrics", "prometheus"]
+
+        check {
+          type     = "http"
+          path     = "/metrics"
+          interval = "15s"
+          timeout  = "3s"
+        }
       }
 
       kill_signal  = "SIGTERM"

@@ -24,7 +24,10 @@ init([]) ->
            type => worker},
          #{id => quod_brahms_sup,
            start => {quod_brahms_sup, start_link, []},
-           type => supervisor}
+           type => supervisor},
+         #{id => quod_metrics,
+           start => {quod_metrics, start_link, []},
+           type => worker}
          %% TODO: quod_tendermint, quod_prolog ...
         ],
     {ok, {SupFlags, ChildSpecs}}.

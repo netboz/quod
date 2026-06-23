@@ -34,7 +34,7 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
 
 -behaviour(gen_statem).
 
--export([start_namespace/2, start_link/2, view/1, sample/1]).
+-export([start_namespace/2, start_link/2, view/1, sample/1, stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([idle/3, collecting/3]).
 
@@ -64,6 +64,7 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
             sampler :: quod_brahms_sampler:sampler(),
             conns   = #{} :: #{term() => {pid(), reference(), out | in}},  %% NodeId => {LinkPid, MonRef, Origin}
             outbox  = #{} :: #{term() => binary()},  %% latest payload queued for a link being opened
+            rounds  = 0  :: non_neg_integer(),   %% rounds driven (for metrics)
             vpush   = [] :: [term()],
             vpull   = [] :: [term()],
             pushes  = 0  :: non_neg_integer(),
@@ -93,6 +94,19 @@ view(Ns) -> call(Ns, get_view).
 -doc "Current uniform sample of namespace `Ns` (degrades to `[]`).".
 -spec sample(binary()) -> [term()].
 sample(Ns) -> call(Ns, get_sample).
+
+-doc "Counters for namespace `Ns`: view/sample sizes, live links, rounds driven.".
+-spec stats(binary()) -> #{view => non_neg_integer(), sample => non_neg_integer(),
+                           conns => non_neg_integer(), rounds => non_neg_integer()} | undefined.
+stats(Ns) ->
+    try gen_statem:call(quod_reg:via({quod_brahms, Ns}), get_stats, 1000)
+    catch exit:_ -> undefined
+    end.
+
+-doc "All namespaces with a running Brahms statem on this node.".
+-spec namespaces() -> [binary()].
+namespaces() ->
+    gproc:select([{{{n, l, {quod_brahms, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 call(Ns, Req) ->
     try gen_statem:call(quod_reg:via({quod_brahms, Ns}), Req, 1000)
@@ -177,6 +191,12 @@ common({call, From}, get_view, D) ->
     {keep_state, D, [{reply, From, D#d.view}]};
 common({call, From}, get_sample, D) ->
     {keep_state, D, [{reply, From, quod_brahms_sampler:sample(D#d.sampler)}]};
+common({call, From}, get_stats, D) ->
+    Stats = #{view   => length(D#d.view),
+              sample => length(quod_brahms_sampler:sample(D#d.sampler)),
+              conns  => map_size(D#d.conns),
+              rounds => D#d.rounds},
+    {keep_state, D, [{reply, From, Stats}]};
 common(info, {quod_message, _, _OtherNs, _}, D) ->
     {keep_state, D};                               %% another namespace
 common(_ET, _E, D) ->
@@ -198,7 +218,7 @@ do_round(D = #d{self = Self, view = V, counts = {L1, L2, _}}) ->
     PullBin = encode({pull_req, Self}),
     D1 = lists:foldl(fun(T, A) -> send_msg(T, PushBin, A) end, D, Push),
     D2 = lists:foldl(fun(T, A) -> send_msg(T, PullBin, A) end, D1, Pull),
-    D2#d{vpush = [], vpull = [], pushes = 0, pulled = Pull}.
+    D2#d{vpush = [], vpull = [], pushes = 0, pulled = Pull, rounds = D#d.rounds + 1}.
 
 handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_BYTES ->
     D;                                             %% oversized gossip -> drop

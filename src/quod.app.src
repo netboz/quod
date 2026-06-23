@@ -11,7 +11,9 @@
     crypto,        %% quod_brahms_sampler: HMAC-SHA256 + strong_rand_bytes
     gproc,
     quic,
-    erlog
+    erlog,
+    prometheus,
+    prometheus_httpd
    ]},
   {env,
    [{listen_port, 14567},

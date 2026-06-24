@@ -14,6 +14,19 @@ process holding the connection pid may send). A link:
   on the gproc property `{channel, Channel}`,
 - **dies** when its stream/connection drops — its death *is* the disconnect
   signal its holder `erlang:monitor`s.
+
+## Liveness handshake (`link_up` requires a peer ACK)
+
+Over a connectionless (UDP/QUIC) transport a *send* is **not** proof the peer is
+alive — a dead peer's connection lingers and a write to it silently succeeds (this
+is the SWIM rule: only a received reply proves liveness). So the **opener does not
+declare `link_up` until the peer ACKs its header**: it writes the header, then
+waits for the peer's first frame (an empty ACK frame the peer emits as soon as it
+reads the header). No ACK within `?ACK_TIMEOUT_MS` ⇒ the link **dies** and its
+holder gets `link_error` (never a phantom `link_up`). The receiver, having read the
+header, already has proof the opener exists, so it `link_up`s immediately *and*
+sends the ACK back. This makes a link to a dead/unreachable peer fail to come up,
+so the membership layer's probe correctly evicts it.
 """.
 
 -export([start_outbound/6, start_inbound/3, send/2, close/1]).
@@ -23,20 +36,44 @@ process holding the connection pid may send). A link:
 -endif.
 
 -define(HEADER_TIMEOUT_MS, 5000).
+-define(ACK_TIMEOUT_MS, 5000).   %% opener waits this long for the peer's ACK before failing the link
 -define(MAX_FRAME_BYTES, (1 bsl 20)).
 
 -record(s, {conn, sid, channel, peer, buf = <<>>}).
 
 %% --- API -----------------------------------------------------------------
 
--doc "We opened `Sid` to `Peer` for `Channel`; announce `Self` (the header) then serve it.".
+-doc """
+We opened `Sid` to `Peer` for `Channel`; announce `Self` (the header), then wait
+for the peer's ACK before declaring `link_up`. No ACK ⇒ the link dies (`link_error`
+to the holder) — a write alone is never treated as liveness.
+""".
 -spec start_outbound(pid(), non_neg_integer(), term(), binary(), term(), pid()) -> pid().
 start_outbound(Conn, Sid, Peer, Channel, Self, ConnProc) ->
     spawn(fun() ->
         _ = quic:send_data(Conn, Sid, header(Self, Channel), false),
-        ConnProc ! {link_up, Channel, Peer, self()},
-        loop(#s{conn = Conn, sid = Sid, channel = Channel, peer = Peer})
+        await_ack(ConnProc, <<>>, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer})
     end).
+
+%% Wait for the peer's first frame (its ACK that it read our header and is alive)
+%% before announcing link_up. The ACK is consumed here; any frames already past it
+%% are real payloads and are published. No ACK within the timeout ⇒ exit so the
+%% holder sees `link_error` (quod_conn fail_pending), NOT a phantom link_up.
+await_ack(ConnProc, Acc, S = #s{channel = Channel, peer = Peer}) ->
+    receive
+        {data, Bin, _Fin} ->
+            Buf = <<Acc/binary, Bin/binary>>,
+            case parse(Buf) of
+                {error, oversized} -> exit({frame_too_large, Channel});
+                {[], _}            -> await_ack(ConnProc, Buf, S);   %% ACK frame still partial
+                {[_Ack | Msgs], Rest} ->
+                    ConnProc ! {link_up, Channel, Peer, self()},
+                    _ = [publish(Peer, Channel, P) || P <- Msgs],
+                    loop(S#s{buf = Rest})
+            end;
+        close -> exit(normal)
+    after ?ACK_TIMEOUT_MS -> exit(no_ack)
+    end.
 
 -doc "A peer opened `Sid`; read its header (from forwarded data) to learn (peer, channel).".
 -spec start_inbound(pid(), non_neg_integer(), pid()) -> pid().
@@ -64,6 +101,9 @@ read_header(Conn, Sid, ConnProc, Acc) ->
             Buf = <<Acc/binary, Bin/binary>>,
             case parse_header(Buf) of
                 {ok, Peer, Channel, Rest} ->
+                    %% we hold proof the opener exists (its header); ACK it so its
+                    %% outbound link can come up, then serve normally.
+                    _ = quic:send_data(Conn, Sid, ack_frame(), false),
                     ConnProc ! {link_up, Channel, Peer, self()},
                     loop(loop_msgs(Rest, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer}));
                 error -> exit(bad_header);
@@ -115,6 +155,11 @@ parse_header(_Buf) -> more.
 
 %% payload frame: <<PLen:32, Payload>>
 frame(Payload) -> <<(byte_size(Payload)):32, Payload/binary>>.
+
+%% the liveness ACK: an empty (zero-length) frame the receiver sends back as soon
+%% as it has read the opener's header. The opener consumes the FIRST frame it
+%% receives as the ACK; real payloads are never empty, so there is no ambiguity.
+ack_frame() -> frame(<<>>).
 
 parse(Bin) -> parse(Bin, []).
 parse(<<PLen:32, _/binary>>, _Acc) when PLen > ?MAX_FRAME_BYTES -> {error, oversized};

@@ -2,7 +2,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -import(quod_brahms, [split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3,
-                      due_probes/3, probe_candidates/4, prune_tombstones/3]).
+                      due_probes/3, probe_candidates/4, prune_tombstones/3, gossip_targets/3,
+                      stale_conns/4]).
 
 -define(CFG, #{view_size => 16, alpha => 0.45, beta => 0.45, gamma => 0.10}).
 
@@ -37,6 +38,40 @@ reconstruct_prioritizes_candidates_test() ->
     V = reconstruct(OldV, Push, Pull, Smpl, {1, 1, 1}, 3, self_id, false),
     ?assertEqual(3, length(V)),
     [?assert(lists:member(Z, V)) || Z <- [<<"z1">>, <<"z2">>, <<"z3">>]].
+
+%% --- gossip_targets: push AND pull are non-empty even for tiny views -----
+%% Regression for the small-network starvation bug: the old disjoint slice gave an
+%% EMPTY pull set whenever |V| =< L1 (so a 3-node cluster never pulled). Canonical
+%% Brahms picks push/pull independently, so both are non-empty whenever V is.
+gossip_targets_small_view_pulls_test() ->
+    {Push2, Pull2} = gossip_targets(7, 7, [a, b]),       %% |V|=2 <= L1=7
+    ?assertEqual([a, b], lists:sort(Push2)),
+    ?assertEqual([a, b], lists:sort(Pull2)),             %% pull NOT empty
+    {Push1, Pull1} = gossip_targets(7, 7, [a]),          %% single peer
+    ?assertEqual([a], Push1),
+    ?assertEqual([a], Pull1).
+
+%% at scale each set is bounded by its quota and drawn from V (overlap allowed).
+gossip_targets_bounded_test() ->
+    V = lists:seq(1, 16),
+    {Push, Pull} = gossip_targets(7, 7, V),
+    ?assertEqual(7, length(Push)),
+    ?assertEqual(7, length(Pull)),
+    [?assert(lists:member(X, V)) || X <- Push ++ Pull].
+
+%% --- liveness: stale_conns returns cached peers silent >= idle rounds -------
+%% Liveness is recency of RECEIPT, not holding a link. A cached peer we haven't
+%% heard from in conn_idle_rounds is "stale" and gets its link expired (then the
+%% probe path re-validates). A never-heard peer (default 0) is stale once R hits
+%% the idle window.
+stale_conns_test() ->
+    Conns = #{a => link_a, b => link_b, c => link_c},   %% values irrelevant; only keys used
+    LH    = #{a => 10, b => 5},                          %% c never heard from
+    %% R=12, idle=6: a (age 2) fresh; b (age 7) stale; c (age 12 via default 0) stale
+    ?assertEqual([b, c], lists:sort(stale_conns(Conns, LH, 12, 6))),
+    ?assertEqual([],     stale_conns(#{a => l}, #{a => 10}, 12, 6)),   %% all fresh
+    ?assertEqual([a],    stale_conns(#{a => l}, #{}, 6, 6)),           %% never-heard, at window
+    ?assertEqual([],     stale_conns(#{a => l}, #{}, 5, 6)).           %% never-heard, before window
 
 %% --- take_random: bounded, distinct, subset -----------------------------
 
@@ -84,6 +119,18 @@ reconstruct_excludes_self_test() ->
 reconstruct_no_collapse_test() ->
     Old = [o1, o2],
     ?assertEqual(Old, reconstruct(Old, [], [], [], {7, 7, 2}, 16, self_id, false)).
+
+%% --- reconstruct: stale OLD-view ids are NOT recycled into the new view -----
+%% Regression for the view-inflation bug. Canonical Brahms rebuilds V ONLY from
+%% this round's {push, pull, sample}; the old impl padded V up to view_size from
+%% `Sampled ++ OldV`, recycling dead ids forever. With non-empty push/pull/sample,
+%% OldV ids absent from all three must NOT appear in the new view — so on a small
+%% network V tracks the live (gossiped) set instead of inflating.
+reconstruct_excludes_oldv_test() ->
+    OldV = [stale1, stale2, stale3, stale4, stale5],   %% none of these are gossiped this round
+    V = reconstruct(OldV, [live_a], [live_b], [live_c], {7, 7, 2}, 16, self_id, false),
+    [?assertNot(lists:member(S, V)) || S <- OldV],
+    ?assertEqual([live_a, live_b, live_c], lists:sort(V)).
 
 %% --- wire codec: roundtrip + defensive decode ---------------------------
 
@@ -280,3 +327,135 @@ link_error_does_not_evict() ->
     ?assert(lists:member(Peer, quod_brahms:sample(Ns))),   %% sampler slot NOT reset
     ?assertEqual(0, maps:get(evictions, quod_brahms:stats(Ns))),
     gen_statem:stop(B).
+
+%% --- Fix B: a push received while IDLE is still admitted to V ------------
+%% Pushes are unsolicited and mostly arrive OUTSIDE our short collect window. With a
+%% tiny collect_ms (almost always idle) and probing off (so nothing is evicted), a
+%% peer announced only via push must still reach the view — exercising the idle-push
+%% accumulation path. (Membership is also supported via the sampler, so this guards
+%% the codepath rather than discriminating push-pool vs sampler.)
+idle_push_admitted_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a push delivered while idle puts the pushed id into the view",
+       fun idle_push_admitted/0}]}.
+
+idle_push_admitted() ->
+    Parent = self(),
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Seed = {"127.0.0.1", 65033},
+    Ns   = <<"ont:idlepush">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id      => {"127.0.0.1", 65034},
+                                           seed_peers   => [Seed],
+                                           round_ms     => 80,
+                                           collect_ms   => 5,     %% ~6% collecting, ~94% idle
+                                           jitter       => 0.0,
+                                           probe_fanout => 0}),   %% no probing -> no eviction
+    %% a NEW peer announces itself via push, repeatedly across rounds; the tiny
+    %% collect window means these land in idle almost every time.
+    New      = {"127.0.0.1", 65035},
+    FakeLink = spawn(fun() -> receive stop -> ok end end),
+    [begin
+         B ! {quod_message, {New, FakeLink}, Ns, encode({push, New})},
+         timer:sleep(15)
+     end || _ <- lists:seq(1, 12)],
+    ?assertEqual(ok, wait_until(fun() -> lists:member(New, quod_brahms:view(Ns)) end, 30, 40)),
+    FakeLink ! stop,
+    gen_statem:stop(B),
+    exit(Stub, kill).
+
+%% --- liveness: a dead peer we hold a LIVE cached link to is still evicted ----
+%% The 30->3 regression. Over UDP a departed peer's link never dies (DOWN never
+%% fires), so it lingers in `conns` and the old detector treated "in conns" as
+%% "alive" and never probed it -> view never converged. Now expire_stale_conns
+%% drops the silent link, the probe path re-dials (fails), and it is evicted.
+%% Crucially we keep FakeLink ALIVE the whole time, so the eviction CANNOT be from
+%% a link DOWN — it must come from the silence/expire/probe path.
+stale_link_peer_evicted_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a dead peer with a still-alive cached link is expired then probe-evicted",
+       fun stale_link_peer_evicted/0}]}.
+
+stale_link_peer_evicted() ->
+    Parent = self(),
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Dead = {"127.0.0.1", 65061},
+    Ns   = <<"ont:staleconn">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id          => {"127.0.0.1", 65062},
+                                           seed_peers       => [Dead],
+                                           round_ms         => 60,
+                                           collect_ms       => 8,
+                                           jitter           => 0.0,
+                                           conn_idle_rounds => 1,
+                                           probe_rounds     => 1,
+                                           probe_fanout     => 5,
+                                           tombstone_rounds => 100}),
+    %% One inbound message from Dead caches its (still-alive) link in `conns` and
+    %% stamps last_heard — exactly the warm-but-doomed link from the scale test.
+    FakeLink = spawn(fun() -> receive stop -> ok end end),
+    B ! {quod_message, {Dead, FakeLink}, Ns, encode({push, Dead})},
+    ?assertEqual(ok, wait_until(fun() ->
+                                    lists:member(Dead, quod_brahms:view(Ns)) andalso
+                                    is_process_alive(FakeLink)
+                                end, 20, 30)),
+    %% Now Dead goes silent (we send NO more messages from it) but FakeLink stays
+    %% alive. It must still be evicted from view AND sample within a few rounds.
+    ?assertEqual(ok, wait_until(fun() ->
+                                    not lists:member(Dead, quod_brahms:view(Ns)) andalso
+                                    not lists:member(Dead, quod_brahms:sample(Ns))
+                                end, 60, 60)),
+    ?assert(is_process_alive(FakeLink)),                 %% eviction was NOT from a link DOWN
+    ?assertMatch(#{evictions := E} when E >= 1, quod_brahms:stats(Ns)),
+    FakeLink ! stop,
+    gen_statem:stop(B),
+    exit(Stub, kill).
+
+%% --- tombstone refresh: re-gossip keeps a dead id out PAST tombstone_rounds -----
+%% The mass-departure convergence fix. tombstone_rounds is SHORT (3) here, and a
+%% live third party re-gossips the dead id continuously for far more than 3 rounds.
+%% WITHOUT refresh the tombstone would lapse after 3 rounds, the next push would
+%% re-admit the dead id, and it would be re-probed + re-evicted (evictions climb) --
+%% the churn the scale test exhibited. WITH refresh the tombstone is re-stamped on
+%% every re-sighting, so the id stays out and evictions stay put.
+tombstone_refresh_keeps_dead_out_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"re-gossip refreshes a tombstone so a dead id stays out past tombstone_rounds",
+       fun tombstone_refresh_keeps_dead_out/0}]}.
+
+tombstone_refresh_keeps_dead_out() ->
+    Parent = self(),
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Dead = {"127.0.0.1", 65071},
+    Ns   = <<"ont:tombrefresh">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id          => {"127.0.0.1", 65072},
+                                           seed_peers       => [Dead],
+                                           round_ms         => 40,
+                                           collect_ms       => 8,
+                                           jitter           => 0.0,
+                                           probe_rounds     => 1,
+                                           probe_fanout     => 5,
+                                           tombstone_rounds => 3}),   %% SHORT: would lapse fast
+    %% the dead seed is probed, unanswered, evicted + tombstoned
+    ?assertEqual(ok, wait_until(fun() -> not lists:member(Dead, quod_brahms:sample(Ns)) end, 40, 60)),
+    #{evictions := E0} = quod_brahms:stats(Ns),
+    ?assert(E0 >= 1),
+    %% a LIVE third party re-gossips Dead for ~1.5s (~37 rounds >> tombstone_rounds=3).
+    %% Each push must refresh the tombstone so Dead is NEVER re-admitted -> no new evictions.
+    Live     = {"127.0.0.1", 65073},
+    FakeLink = spawn(fun() -> receive stop -> ok end end),
+    [begin
+         B ! {quod_message, {Live, FakeLink}, Ns, encode({push, Dead})},
+         timer:sleep(40)
+     end || _ <- lists:seq(1, 37)],
+    timer:sleep(150),
+    ?assertNot(lists:member(Dead, quod_brahms:view(Ns))),
+    ?assertNot(lists:member(Dead, quod_brahms:sample(Ns))),
+    ?assertEqual(E0, maps:get(evictions, quod_brahms:stats(Ns))),   %% refresh kept it out: no re-eviction
+    FakeLink ! stop,
+    gen_statem:stop(B),
+    exit(Stub, kill).

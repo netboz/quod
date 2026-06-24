@@ -9,12 +9,13 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
-         non_dialable_node_id/1]).
+         non_dialable_node_id/1, unacked_stream_no_link_up/1]).
 
 -define(PORT, 14599).
 -define(SELF, {"127.0.0.1", ?PORT}).
 
-all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialable_node_id].
+all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialable_node_id,
+          unacked_stream_no_link_up].
 
 init_per_suite(Config) ->
     %% self-contained dev cert for the QUIC listener (TLS 1.3 is mandatory)
@@ -34,7 +35,7 @@ init_per_suite(Config) ->
     application:set_env(quod, certfile, Cert),
     application:set_env(quod, keyfile, Key),
     {ok, _} = application:ensure_all_started(quod),
-    Config.
+    [{cert_der, load_cert(Cert)}, {key_term, load_key(Key)} | Config].
 
 end_per_suite(_Config) ->
     _ = application:stop(quod),
@@ -87,6 +88,41 @@ bidirectional_reuse(_Config) ->
     after 5000 ->
         ct:fail(no_pong)
     end.
+
+%% A peer that completes the QUIC handshake but never ACKs the opened stream must
+%% NOT produce a link_up — the opener gets link_error after the ack timeout. This is
+%% the liveness ACK: a connection alone is not a live link; only the peer's ack is.
+%% (A revert to optimistic link_up would make this test see link_up and fail.)
+unacked_stream_no_link_up(Config) ->
+    CertDer = ?config(cert_der, Config),
+    KeyTerm = ?config(key_term, Config),
+    %% raw QUIC server that completes handshakes but whose owner ignores every
+    %% stream event (so it never sends the ack frame quod_link expects).
+    Handler = fun(_Conn) -> {ok, spawn(fun Ignore() -> receive _ -> Ignore() end end)} end,
+    {ok, _} = quic:start_server(raw_noack, 14598,
+                                #{cert => CertDer, key => KeyTerm,
+                                  alpn => [<<"quod">>], connection_handler => Handler}),
+    Dead = {"127.0.0.1", 14598},
+    try
+        ok = quod_quic:open_link(Dead, <<"chan-noack">>),
+        receive
+            {link_up, Dead, <<"chan-noack">>, _} -> ct:fail(unexpected_link_up_without_ack);
+            {link_error, Dead, <<"chan-noack">>} -> ok
+        after 9000 -> ct:fail(no_link_error)     %% ack timeout is 5s -> link_error well within 9s
+        end
+    after
+        _ = quic:stop_server(raw_noack)
+    end.
+
+load_cert(File) ->
+    {ok, Pem} = file:read_file(File),
+    [Der | _] = [D || {'Certificate', D, _} <- public_key:pem_decode(Pem)],
+    Der.
+
+load_key(File) ->
+    {ok, Pem} = file:read_file(File),
+    [{Type, Der, _} | _] = [E || {T, _, _} = E <- public_key:pem_decode(Pem), T =/= 'Certificate'],
+    public_key:der_decode(Type, Der).
 
 %% A view id that is not a dialable {Host, Port} must be refused with link_error,
 %% NOT crash the transport authority (it would take down every connection).

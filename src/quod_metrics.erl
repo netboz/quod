@@ -13,6 +13,8 @@ labelled by `namespace`:
 | `quod_brahms_sample_size{namespace}` | size of the uniform sample |
 | `quod_brahms_links{namespace}` | live cached links to peers |
 | `quod_brahms_rounds{namespace}` | rounds driven so far |
+| `quod_brahms_evictions{namespace}` | dead peers evicted by sample validation (cumulative) |
+| `quod_brahms_tombstones{namespace}` | current tombstone entries (bounded; drains to 0) |
 """.
 
 -behaviour(gen_server).
@@ -62,15 +64,19 @@ declare() ->
     _ = G(quod_brahms_sample_size, "Brahms uniform sample size per namespace"),
     _ = G(quod_brahms_links,       "Live cached links to peers per namespace"),
     _ = G(quod_brahms_rounds,      "Brahms rounds driven per namespace"),
+    _ = G(quod_brahms_evictions,   "Dead peers evicted by sample validation per namespace (cumulative)"),
+    _ = G(quod_brahms_tombstones,  "Current tombstone entries per namespace (bounded; drains to 0)"),
     ok.
 
 refresh_ns(Ns) ->
     case quod_brahms:stats(Ns) of
-        #{view := V, sample := S, conns := C, rounds := R} ->
+        #{view := V, sample := S, conns := C, rounds := R, evictions := E, tombstones := T} ->
             _ = prometheus_gauge:set(quod_brahms_view_size,   [Ns], V),
             _ = prometheus_gauge:set(quod_brahms_sample_size, [Ns], S),
             _ = prometheus_gauge:set(quod_brahms_links,       [Ns], C),
             _ = prometheus_gauge:set(quod_brahms_rounds,      [Ns], R),
+            _ = prometheus_gauge:set(quod_brahms_evictions,   [Ns], E),
+            _ = prometheus_gauge:set(quod_brahms_tombstones,  [Ns], T),
             ok;
         _ ->
             ok

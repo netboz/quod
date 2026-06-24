@@ -54,5 +54,13 @@ RUN mkdir -p /opt/quod/certs \
 
 EXPOSE 14567/udp
 
+# The distributed-Erlang node name in vm.args is `${QUOD_DIST_NAME}`, substituted
+# from the OS env at boot (RELX_REPLACE_OS_VARS). It must be unique per host so
+# co-located, host-networked nodes don't collide on the shared EPMD; Nomad sets
+# QUOD_DIST_NAME=quod_<p2p-port>@<ip> per alloc. The default keeps a lone
+# `docker run` working.
+ENV RELX_REPLACE_OS_VARS=true \
+    QUOD_DIST_NAME=quod@127.0.0.1
+
 ENTRYPOINT ["/opt/quod/bin/quod"]
 CMD ["foreground"]

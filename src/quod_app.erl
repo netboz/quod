@@ -6,12 +6,17 @@ Maps deployment environment variables onto the application config so a node can
 be configured from its orchestrator (Nomad, compose, ...) without a custom
 `sys.config`:
 
-| env var          | effect                                                        |
-| ---------------- | ------------------------------------------------------------- |
-| `QUOD_PORT`      | QUIC `listen_port` (and the port of this node's `node_id`)    |
-| `QUOD_NODE_IP`   | sets `node_id = {QUOD_NODE_IP, QUOD_PORT}` — the dialable id  |
-| `QUOD_NAMESPACE` | ontology namespace to join on boot                            |
-| `QUOD_SEEDS`     | space/comma-separated `ip:port` bootstrap peers               |
+| env var             | effect                                                     |
+| ------------------- | ---------------------------------------------------------- |
+| `QUOD_PORT`         | QUIC `listen_port` (and the port of this node's `node_id`) |
+| `QUOD_METRICS_PORT` | Prometheus `/metrics` port (default 14568)                 |
+| `QUOD_NODE_IP`      | sets `node_id = {QUOD_NODE_IP, QUOD_PORT}` — the dialable id|
+| `QUOD_NAMESPACE`    | ontology namespace to join on boot                         |
+| `QUOD_SEEDS`        | space/comma-separated `ip:port` bootstrap peers            |
+
+`QUOD_PORT`/`QUOD_METRICS_PORT` are read independently, so a node can bind a
+dynamic listener (e.g. Nomad's `NOMAD_PORT_*`) and still expose metrics — this is
+how multiple nodes co-locate on one host (see `deploy/quod.nomad`).
 
 `node_id` MUST be the address peers dial this node at (see `m:quod_brahms`), so
 in a cluster it is the node's own IP and the static listener port. With no env
@@ -36,6 +41,9 @@ stop(_State) ->
 apply_env() ->
     Port = env_int("QUOD_PORT", application:get_env(quod, listen_port, 14567)),
     application:set_env(quod, listen_port, Port),
+    MetricsPort = env_int("QUOD_METRICS_PORT",
+                          application:get_env(quod, metrics_port, 14568)),
+    application:set_env(quod, metrics_port, MetricsPort),
     case os:getenv("QUOD_NODE_IP") of
         false -> ok;
         ""    -> ok;

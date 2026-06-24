@@ -1,4 +1,11 @@
--name quod@127.0.0.1
+## Distributed-Erlang node name. quod does NOT cluster over Erlang distribution
+## (all peering is QUIC), but relx's boot script REQUIRES a -name/-sname, and a
+## host-shared EPMD means the name MUST be unique per host. Nomad sets
+## QUOD_DIST_NAME=quod_<p2p-port>@<ip> (RELX_REPLACE_OS_VARS substitutes it at
+## boot); the Dockerfile ENV default (quod@127.0.0.1) guarantees a valid,
+## non-empty name on any plain `docker run`, so the var is never empty in
+## practice. Outside the image you must export QUOD_DIST_NAME yourself.
+-name ${QUOD_DIST_NAME}
 -setcookie quod_dev_cookie
 
 +K true

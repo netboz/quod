@@ -37,12 +37,12 @@ start_outbound(Host, Port, Peer, Self, ALPN) ->
                         _ = reg_conn(Peer),
                         loop(#s{conn = Conn, self = Self, peer = Peer});
                     {quic, Conn, {closed, R}} ->
-                        logger:warning("quod: connect ~p:~p closed: ~p", [Host, Port, R])
+                        logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R])
                 after ?CONNECT_TIMEOUT_MS ->
-                    logger:warning("quod: connect ~p:~p timed out", [Host, Port])
+                    logger:debug("quod: connect ~p:~p timed out", [Host, Port])
                 end;
             {error, Reason} ->
-                logger:warning("quod: connect ~p:~p failed: ~p", [Host, Port, Reason])
+                logger:debug("quod: connect ~p:~p failed: ~p", [Host, Port, Reason])
         end
     end).
 
@@ -73,10 +73,16 @@ loop(S = #s{conn = Conn}) ->
             loop(S1);
         {quic, Conn, {stream_reset, Sid, _}} ->
             loop(drop_stream(Sid, S));
+        %% Tear down with `{shutdown, _}`, not a raw `conn_closed`: `quic_connection`
+        %% is a `gen_statem` linked to us, so a non-normal/non-shutdown exit
+        %% propagated down that link is logged as a CRASH REPORT (the "crash" noise
+        %% on every connection drop). `{shutdown, _}` still propagates — the
+        %% connection and every link die exactly as before, holders still get their
+        %% `DOWN` — but OTP treats it as an intentional stop, so nothing is logged.
         {quic, Conn, {closed, _}} ->
-            exit(conn_closed);
+            exit({shutdown, conn_closed});
         {quic, Conn, {transport_error, _, _}} ->
-            exit(conn_closed);
+            exit({shutdown, conn_closed});
         {quic, Conn, _Other} ->                  %% connected, send_ready, timer, ...
             loop(S);
         {link_up, Channel, RemotePeer, LinkPid} ->

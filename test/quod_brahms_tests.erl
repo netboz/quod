@@ -1,7 +1,8 @@
 -module(quod_brahms_tests).
 -include_lib("eunit/include/eunit.hrl").
 
--import(quod_brahms, [split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3]).
+-import(quod_brahms, [split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3,
+                      due_probes/3, probe_candidates/4, prune_tombstones/3]).
 
 -define(CFG, #{view_size => 16, alpha => 0.45, beta => 0.45, gamma => 0.10}).
 
@@ -136,3 +137,146 @@ stub_loop(Parent) ->
         _ ->
             stub_loop(Parent)
     end.
+
+%% --- sample validation: due-probe selection (pure) ----------------------
+%% A probe is "due" once it has been outstanding for >= probe_rounds rounds.
+due_probes_test() ->
+    Probing = #{a => 1, b => 3, c => 5},
+    ?assertEqual([a, b], lists:sort(due_probes(Probing, 5, 2))),  %% c sent this round -> not due
+    ?assertEqual([], due_probes(Probing, 5, 6)),                  %% none old enough
+    ?assertEqual([a, b, c], lists:sort(due_probes(Probing, 5, 0))).
+
+%% --- sample validation: probe candidate selection (pure) ----------------
+%% Only COLD sampled ids: not self, not already linked, not already probing.
+probe_candidates_test() ->
+    Sample  = [a, b, c, a, self_id],     %% multiset with a dup + self
+    Conns   = #{b => {self(), make_ref(), out}},
+    Probing = #{c => 4},
+    ?assertEqual([a], probe_candidates(Sample, Conns, Probing, self_id)),
+    %% nothing cold -> nothing to probe
+    ?assertEqual([], probe_candidates([self_id], #{}, #{}, self_id)),
+    %% the pool is view ++ sample: an id present only via the VIEW (never won a
+    %% sampler slot) is still a candidate, so dead view members get evicted too.
+    ?assertEqual([viewonly], probe_candidates([viewonly], #{}, #{}, self_id)).
+
+%% --- sample validation: an unanswered probe evicts the dead sample ------
+%% Drive the real statem with a stub transport. The lone seed never answers a
+%% probe, so within a couple of rounds it must be evicted from BOTH the view and
+%% the sample (its sampler slot reset). This is the Brahms failure detector.
+probe_evicts_dead_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a sampled peer that never answers a probe is evicted + its slot reset",
+       fun probe_evicts_dead/0}]}.
+
+probe_evicts_dead() ->
+    Parent = self(),
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Dead = {"127.0.0.1", 65055},
+    Ns   = <<"ont:probe">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id      => {"127.0.0.1", 65056},
+                                           seed_peers   => [Dead],
+                                           round_ms     => 50,
+                                           collect_ms   => 10,
+                                           jitter       => 0.0,
+                                           probe_rounds => 1,
+                                           probe_fanout => 5}),
+    %% it probes the dead seed (open_link) and, getting no link_up, evicts it
+    ?assertEqual(ok, receive {open_link, Dead, Ns} -> ok after 2000 -> timeout end),
+    ?assertEqual(ok, wait_until(fun() ->
+                                    not lists:member(Dead, quod_brahms:view(Ns)) andalso
+                                    not lists:member(Dead, quod_brahms:sample(Ns))
+                                end, 50, 60)),
+    %% prove the removal was an EVICTION (probe path), not reconstruct churn
+    ?assertMatch(#{evictions := E} when E >= 1, quod_brahms:stats(Ns)),
+    gen_statem:stop(B),
+    exit(Stub, kill).
+
+wait_until(_F, _Ms, 0) -> timeout;
+wait_until(F, Ms, N) ->
+    case F() of
+        true  -> ok;
+        false -> timer:sleep(Ms), wait_until(F, Ms, N - 1)
+    end.
+
+%% --- tombstones: expiry (pure) ------------------------------------------
+%% Keep ids younger than tombstone_rounds; drop the rest (age = now - stamped).
+prune_tombstones_test() ->
+    T = #{a => 1, b => 5, c => 9},
+    ?assertEqual(#{c => 9}, prune_tombstones(T, 10, 5)),    %% a age9, b age5 expire; c age1 stays
+    ?assertEqual(T,         prune_tombstones(T, 10, 100)),  %% none old enough
+    ?assertEqual(#{},       prune_tombstones(T, 100, 5)).   %% all expired
+
+%% --- tombstones: a re-gossiped dead id is NOT re-admitted ----------------
+%% After the detector evicts the dead seed, a LIVE third party keeps pushing the
+%% dead id back; the tombstone must keep it out (only the id itself could refute).
+tombstone_blocks_readmission_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a tombstoned dead id re-gossiped by a live peer stays out of view+sample",
+       fun tombstone_blocks_readmission/0}]}.
+
+tombstone_blocks_readmission() ->
+    Parent = self(),
+    Stub = spawn(fun() -> true = quod_reg:reg({transport, node}), stub_loop(Parent) end),
+    Dead = {"127.0.0.1", 65077},
+    Ns   = <<"ont:tomb">>,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id          => {"127.0.0.1", 65078},
+                                           seed_peers       => [Dead],
+                                           round_ms         => 50,
+                                           collect_ms       => 10,
+                                           jitter           => 0.0,
+                                           probe_rounds     => 1,
+                                           probe_fanout     => 5,
+                                           tombstone_rounds => 100}),
+    %% the dead seed is probed, unanswered, evicted (and tombstoned)
+    ?assertEqual(ok, receive {open_link, Dead, Ns} -> ok after 2000 -> timeout end),
+    ?assertEqual(ok, wait_until(fun() -> not lists:member(Dead, quod_brahms:sample(Ns)) end, 50, 60)),
+    #{evictions := E0} = quod_brahms:stats(Ns),
+    ?assert(E0 >= 1),                                   %% the one real eviction happened
+    %% a live third party re-gossips the dead id via push -> must be ignored
+    Live     = {"127.0.0.1", 65079},
+    FakeLink = spawn(fun() -> receive stop -> ok end end),
+    [B ! {quod_message, {Live, FakeLink}, Ns, encode({push, Dead})} || _ <- lists:seq(1, 8)],
+    timer:sleep(250),
+    ?assertNot(lists:member(Dead, quod_brahms:sample(Ns))),
+    ?assertNot(lists:member(Dead, quod_brahms:view(Ns))),
+    %% the differential check: WITHOUT the tombstone the pushed id would re-enter
+    %% the sampler, be re-probed, and re-evicted within these rounds -> evictions
+    %% would climb. A stable counter proves the tombstone blocked re-admission.
+    ?assertEqual(E0, maps:get(evictions, quod_brahms:stats(Ns))),
+    FakeLink ! stop,
+    gen_statem:stop(B),
+    exit(Stub, kill).
+
+%% --- link_error must NOT evict (only the probe-timeout path may) ----------
+%% link_error fires on TRANSIENT stream-open failures over a live connection, not
+%% just on a dead peer, so it must never evict/tombstone. Eviction is the probe
+%% path's job alone. (Regression test for the link_error -> mark_dead bug.)
+link_error_does_not_evict_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a link_error leaves the peer in view+sample and does not bump evictions",
+       fun link_error_does_not_evict/0}]}.
+
+link_error_does_not_evict() ->
+    Peer = {"127.0.0.1", 65091},
+    Ns   = <<"ont:linkerr">>,
+    %% round_ms huge so NO round (hence no probe, no transport call) fires during
+    %% the test: the only thing that could evict is the link_error we inject.
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id    => {"127.0.0.1", 65092},
+                                           seed_peers => [Peer],
+                                           round_ms   => 3600000,
+                                           collect_ms => 10,
+                                           jitter     => 0.0}),
+    ?assert(lists:member(Peer, quod_brahms:view(Ns))),     %% seed present at boot
+    ?assert(lists:member(Peer, quod_brahms:sample(Ns))),
+    B ! {link_error, Peer, Ns},                            %% transient open failure
+    timer:sleep(100),
+    ?assert(lists:member(Peer, quod_brahms:view(Ns))),     %% NOT evicted
+    ?assert(lists:member(Peer, quod_brahms:sample(Ns))),   %% sampler slot NOT reset
+    ?assertEqual(0, maps:get(evictions, quod_brahms:stats(Ns))),
+    gen_statem:stop(B).

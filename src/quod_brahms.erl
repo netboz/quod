@@ -27,9 +27,41 @@ responses and **reconstructs** `V` from `α·ℓ` pushes, `β·ℓ` pulls, and `
 Each cached link to a view peer is `erlang:monitor`ed; its `DOWN` *is* the
 disconnect signal and evicts the peer at once (see `m:quod_link`).
 
+## Sample validation (failure detector)
+
+The min-wise sampler is **sticky** by design — a sampled id is retained until a
+lower-hash id beats it — so a sampled node that dies (or, with dynamic ports,
+restarts under a *new* id) would otherwise be re-dialed forever. Brahms closes
+this with **sample validation**: each round we probe a few sampled ids whose
+liveness is unknown (`probe_fanout` ids that are in the sample but not currently
+linked) by opening a link to them. An id that does **not** come up within
+`probe_rounds` is declared dead — every sampler slot holding it is
+**reset to a fresh key** (`quod_brahms_sampler:invalidate/2`) and it is evicted
+from `V`. A `link_up` (or any message from the peer) is the liveness proof. This
+is the eviction half of the sampler's guarantee; without it, the very stickiness
+that makes the sample attack-resistant would pin dead ids in place.
+
+### Tombstones (beyond Brahms — SWIM-style)
+
+Resetting our sample removes a dead id from *us*, but a peer that hasn't evicted
+it yet re-gossips it back, so it re-enters, is re-probed, and is re-evicted —
+wasteful churn until the whole fleet converges. Brahms does not address this (its
+analysis is asymptotic; it only guarantees convergence). We borrow the **SWIM**
+idea: a just-evicted id is **tombstoned** for `tombstone_rounds` and refused
+re-admission from *third-party* gossip (push / pull bodies) during that window.
+Only a **direct message that announces the id as its own sender** lifts the
+tombstone (SWIM **refutation**). As everywhere in v1, this trusts the *announced*
+node id — the gossip layer does not yet verify identity (see
+`m:quod_brahms_sampler`'s sybil caveat) — so refutation is only as strong as that
+announced identity; an authenticated-identity layer would tighten it. The
+eviction it guards is sound w.r.t. Brahms: the detector evicts only on a probe
+unanswered for `probe_rounds`, which a live node clears well within, so a live id
+is evicted (and tombstoned) only on a rare timing miss, and that self-heals the
+moment it next contacts us.
+
 > #### Deferred {: .info }
 >
-> v1 has no probe-based eviction; PUSH uses reliable streams. Those come later.
+> PUSH uses reliable streams; that optimisation comes later.
 """.
 
 -behaviour(gen_statem).
@@ -39,7 +71,8 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
 -export([idle/3, collecting/3]).
 
 -ifdef(TEST).
--export([split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3]).
+-export([split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3,
+         due_probes/3, probe_candidates/4, prune_tombstones/3]).
 -endif.
 
 -define(DEFAULTS,
@@ -50,6 +83,14 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
           sample_size => 32,     %% sampler slots K
           round_ms    => 5000,
           collect_ms  => 1500,
+          probe_fanout => 5,     %% cold ids liveness-probed per round (higher drains a churn backlog faster)
+          probe_rounds => 2,     %% rounds to await a probe answer before evicting
+          %% A just-evicted id is refused re-admission for this many rounds. It MUST
+          %% exceed the backlog-drain time (~(view_size + sample_size) / probe_fanout
+          %% rounds, ~10 here) with margin — otherwise, after a mass departure, an
+          %% evicted id's tombstone expires before every peer has stopped gossiping
+          %% it, so it re-circulates and re-evicts (non-converging churn).
+          tombstone_rounds => 60,
           jitter      => 0.2}).
 
 -define(MAX_GOSSIP_BYTES, 65536).  %% drop oversized gossip payloads before decode
@@ -64,7 +105,10 @@ disconnect signal and evicts the peer at once (see `m:quod_link`).
             sampler :: quod_brahms_sampler:sampler(),
             conns   = #{} :: #{term() => {pid(), reference(), out | in}},  %% NodeId => {LinkPid, MonRef, Origin}
             outbox  = #{} :: #{term() => binary()},  %% latest payload queued for a link being opened
+            probing = #{} :: #{term() => non_neg_integer()},  %% NodeId => round the liveness probe was sent
             rounds  = 0  :: non_neg_integer(),   %% rounds driven (for metrics)
+            evictions = 0 :: non_neg_integer(),  %% dead peers evicted by sample validation (metrics)
+            tombstones = #{} :: #{term() => non_neg_integer()},  %% evicted id => round; refuse re-admission (SWIM-style)
             vpush   = [] :: [term()],
             vpull   = [] :: [term()],
             pushes  = 0  :: non_neg_integer(),
@@ -97,7 +141,9 @@ sample(Ns) -> call(Ns, get_sample).
 
 -doc "Counters for namespace `Ns`: view/sample sizes, live links, rounds driven.".
 -spec stats(binary()) -> #{view => non_neg_integer(), sample => non_neg_integer(),
-                           conns => non_neg_integer(), rounds => non_neg_integer()} | undefined.
+                           conns => non_neg_integer(), rounds => non_neg_integer(),
+                           evictions => non_neg_integer(),
+                           tombstones => non_neg_integer()} | undefined.
 stats(Ns) ->
     try gen_statem:call(quod_reg:via({quod_brahms, Ns}), get_stats, 1000)
     catch exit:_ -> undefined
@@ -162,14 +208,22 @@ collecting(EventType, Event, D) ->
 %% a link we opened is ready: cache it (with a monitor) while its peer is in the
 %% view; if it is not needed (out of view, or we already hold one) close it,
 %% since we own this outbound link.
-common(info, {link_up, NodeId, Ns, LinkPid}, D = #d{ns = Ns}) ->
+common(info, {link_up, NodeId, Ns, LinkPid}, D0 = #d{ns = Ns}) ->
+    D = clear_probe(NodeId, D0),                        %% it came up -> proven alive
     case maybe_cache(NodeId, LinkPid, out, D) of
         {true, D1}  -> {keep_state, D1};               %% cached + flushed (buffer kept)
         {false, D1} -> _ = quod_link:close(LinkPid),    %% out of view / already held
                        {keep_state, D1}                 %% leave the buffer; prune handles ex-view
     end;
-common(info, {link_error, NodeId, _Channel}, D) ->
-    {keep_state, drop_outbox(NodeId, D)};          %% open failed; clear its buffered send (re-buffered next round if still in view)
+common(info, {link_error, NodeId, Ns}, D = #d{ns = Ns, outbox = Outbox}) ->
+    %% A failed open is NOT proof of death: link_error also fires on TRANSIENT
+    %% stream-open failures over a live connection (m:quod_conn — open_stream
+    %% {error,_}, fail_pending), not just on a non-dialable id. So we do NOT evict
+    %% here; we only clear the buffered send (retried next round). Eviction is
+    %% decided solely by the probe-timeout path (resolve_probes), which grants a
+    %% probe_rounds grace — and a genuinely dead id we probed stays in `probing`
+    %% and is evicted there even though its link_error already arrived.
+    {keep_state, D#d{outbox = maps:remove(NodeId, Outbox)}};
 %% a cached link died. Evict it (pid-matched). If a send is still buffered for
 %% that peer and it is still in the view, RE-OPEN now instead of waiting for the
 %% next round tick — the buffer re-flushes on the new link. (Cleared within a
@@ -192,10 +246,12 @@ common({call, From}, get_view, D) ->
 common({call, From}, get_sample, D) ->
     {keep_state, D, [{reply, From, quod_brahms_sampler:sample(D#d.sampler)}]};
 common({call, From}, get_stats, D) ->
-    Stats = #{view   => length(D#d.view),
-              sample => length(quod_brahms_sampler:sample(D#d.sampler)),
-              conns  => map_size(D#d.conns),
-              rounds => D#d.rounds},
+    Stats = #{view       => length(D#d.view),
+              sample     => length(quod_brahms_sampler:sample(D#d.sampler)),
+              conns      => map_size(D#d.conns),
+              rounds     => D#d.rounds,
+              evictions  => D#d.evictions,
+              tombstones => map_size(D#d.tombstones)},
     {keep_state, D, [{reply, From, Stats}]};
 common(info, {quod_message, _, _OtherNs, _}, D) ->
     {keep_state, D};                               %% another namespace
@@ -212,24 +268,38 @@ terminate(_Reason, _State, #d{ns = Ns}) ->
 %% round
 %% ======================================================================
 
-do_round(D = #d{self = Self, view = V, counts = {L1, L2, _}}) ->
+do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg}) ->
+    R = D0#d.rounds + 1,
+    D = D0#d{rounds = R,
+             tombstones = prune_tombstones(D0#d.tombstones, R, maps:get(tombstone_rounds, Cfg))},
     {Push, Pull} = partition(L1, L2, V),           %% disjoint target sets
     PushBin = encode({push, Self}),                %% encode once, fan out
     PullBin = encode({pull_req, Self}),
     D1 = lists:foldl(fun(T, A) -> send_msg(T, PushBin, A) end, D, Push),
     D2 = lists:foldl(fun(T, A) -> send_msg(T, PullBin, A) end, D1, Pull),
-    D2#d{vpush = [], vpull = [], pushes = 0, pulled = Pull, rounds = D#d.rounds + 1}.
+    %% Brahms sample validation: retire probes that went unanswered (evict +
+    %% reset sampler), then probe a fresh batch of cold sampled ids.
+    D3 = resolve_probes(D2),
+    D4 = start_probes(D3),
+    D4#d{vpush = [], vpull = [], pushes = 0, pulled = Pull}.
 
 handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_BYTES ->
     D;                                             %% oversized gossip -> drop
 handle_inbound({RemoteNodeId, ReplyLink}, Payload, Mode, D0 = #d{self = Self, counts = {_, L2, _}}) ->
     %% a peer's link is bidirectional: cache it for our own sends so a peer pair
-    %% shares ONE stream per channel (no separate dial-back).
-    D = cache_inbound(RemoteNodeId, ReplyLink, D0),
+    %% shares ONE stream per channel (no separate dial-back). Hearing from a peer
+    %% is also liveness proof: it answers any in-flight probe AND lifts any
+    %% tombstone on the SENDER (SWIM refutation — only the node itself can prove
+    %% it is alive; third-party gossip below cannot resurrect a tombstoned id).
+    D = untombstone(RemoteNodeId,
+                    clear_probe(RemoteNodeId, cache_inbound(RemoteNodeId, ReplyLink, D0))),
     case decode(Payload) of
         {push, Id} when Id =/= Self ->
-            D1 = observe(Id, D),                   %% sampler sees every received id
-            case Mode of collecting -> accumulate_push(Id, D1); idle -> D1 end;
+            case tombstoned(Id, D) of
+                true  -> D;                        %% a tombstoned (dead) id, re-gossiped -> ignore
+                false -> D1 = observe(Id, D),      %% sampler sees every received id
+                         case Mode of collecting -> accumulate_push(Id, D1); idle -> D1 end
+            end;
         {pull_req, From} when From =/= Self ->
             reply_view(ReplyLink, D),              %% answer on the inbound link
             observe(From, D);
@@ -237,7 +307,8 @@ handle_inbound({RemoteNodeId, ReplyLink}, Payload, Mode, D0 = #d{self = Self, co
             %% accept only a response we solicited this round
             case lists:member(From, D#d.pulled) of
                 true ->
-                    Clean = clean_resp(Ids, L2, Self),
+                    %% drop tombstoned ids the responder is still re-gossiping
+                    Clean = [I || I <- clean_resp(Ids, L2, Self), not tombstoned(I, D)],
                     D1 = observe_all(Clean, D),
                     case Mode of collecting -> accumulate_pull(Clean, D1); idle -> D1 end;
                 false ->
@@ -383,9 +454,6 @@ flush_outbox(NodeId, LinkPid, D = #d{outbox = Outbox}) ->
         _                    -> D
     end.
 
-drop_outbox(NodeId, D = #d{outbox = Outbox}) ->
-    D#d{outbox = maps:remove(NodeId, Outbox)}.
-
 %% find the NodeId a dead link pid was cached under (and the map without it).
 take_conn(LinkPid, Conns) ->
     case [N || {N, {P, _, _}} <- maps:to_list(Conns), P =:= LinkPid] of
@@ -427,6 +495,106 @@ prune_conns(NewV, Conns) ->
                             false
                     end
                 end, Conns).
+
+%% ======================================================================
+%% Brahms sample validation (failure detector)
+%% ======================================================================
+
+%% Probe a fresh batch of COLD sampled ids — sampled, but not currently linked
+%% and not already under probe. Opening a link is the probe; its `link_up` (or
+%% any message from the peer) is the answer. We remember the round each probe
+%% was sent so `resolve_probes/1` can time it out.
+start_probes(D = #d{ns = Ns, view = V, sampler = S, conns = Conns, probing = Pr,
+                    self = Self, rounds = R, cfg = Cfg, tombstones = Tomb}) ->
+    Fanout = maps:get(probe_fanout, Cfg),
+    %% Probe unlinked ids from BOTH the view and the sample. A dead id can sit in
+    %% V (kept by reconstruct's filler / re-gossiped by peers that haven't evicted
+    %% it) without ever winning a sampler slot; probing the sample alone would
+    %% never evict it, so it would be re-dialed forever. Probing view members not
+    %% in `conns` closes that — the probe_rounds grace still spares a live peer
+    %% that is merely slow to connect. Tombstoned ids are never probed (mark_dead
+    %% already reset their sampler slots; this guards any re-entry race).
+    Pool   = V ++ quod_brahms_sampler:sample(S),
+    Cands  = [N || N <- probe_candidates(Pool, Conns, Pr, Self),
+                   not maps:is_key(N, Tomb)],
+    lists:foldl(fun(NodeId, A) ->
+                    _ = quod_quic:open_link(NodeId, Ns),
+                    A#d{probing = (A#d.probing)#{NodeId => R}}
+                end, D, take(Fanout, shuffle(Cands))).
+
+%% Retire probes still unanswered after `probe_rounds`: a peer that meanwhile
+%% linked (in `conns`) answered late and lives; the rest are declared dead.
+resolve_probes(D = #d{probing = Pr, rounds = R, cfg = Cfg}) ->
+    ProbeRounds = maps:get(probe_rounds, Cfg),
+    lists:foldl(fun(NodeId, A) ->
+                    case maps:is_key(NodeId, A#d.conns) of
+                        true  -> clear_probe(NodeId, A);   %% answered late -> alive
+                        false -> mark_dead(NodeId, A)      %% no answer -> dead
+                    end
+                end, D, due_probes(Pr, R, ProbeRounds)).
+
+%% A sampled/view id failed liveness: reset every sampler slot holding it (a
+%% fresh key, exactly Brahms' sampler reset), drop it from V, stop probing it,
+%% and tear down any link we still cache for it. Idempotent.
+mark_dead(NodeId, D = #d{ns = Ns, view = V, sampler = S, probing = Pr,
+                         conns = Conns, outbox = Outbox}) ->
+    Conns1 = case maps:take(NodeId, Conns) of
+                 {{LinkPid, MonRef, Origin}, C} ->
+                     _ = erlang:demonitor(MonRef, [flush]),
+                     _ = case Origin of out -> quod_link:close(LinkPid); in -> ok end,
+                     C;
+                 error -> Conns
+             end,
+    is_map_key(NodeId, Pr) andalso
+        logger:info("quod[~s]: evicting unreachable peer ~p (sampler reset)", [Ns, NodeId]),
+    D#d{sampler = quod_brahms_sampler:invalidate(NodeId, S),
+        view    = V -- [NodeId],
+        probing = maps:remove(NodeId, Pr),
+        conns   = Conns1,
+        outbox  = maps:remove(NodeId, Outbox),
+        evictions = D#d.evictions + 1,
+        tombstones = (D#d.tombstones)#{NodeId => D#d.rounds}}.   %% refuse re-admission for a while
+
+clear_probe(NodeId, D = #d{probing = Pr}) ->
+    case maps:is_key(NodeId, Pr) of
+        true  -> D#d{probing = maps:remove(NodeId, Pr)};
+        false -> D
+    end.
+
+%% probes sent at least `ProbeRounds` rounds ago and still open (pure/testable).
+-spec due_probes(#{term() => non_neg_integer()}, non_neg_integer(), pos_integer()) -> [term()].
+due_probes(Probing, CurRound, ProbeRounds) ->
+    [NodeId || {NodeId, Sent} <- maps:to_list(Probing), CurRound - Sent >= ProbeRounds].
+
+%% From a `Pool` of candidate ids (the view ++ the sample), keep those whose
+%% liveness is unknown: not self, not already linked (those are proven alive), not
+%% already under probe. Covers both sticky dead samples AND dead view members that
+%% never won a sampler slot (pure/testable).
+-spec probe_candidates([term()], #{term() => _}, #{term() => _}, term()) -> [term()].
+probe_candidates(Pool, Conns, Probing, Self) ->
+    [NodeId || NodeId <- udedup(Pool),
+               NodeId =/= Self,
+               not maps:is_key(NodeId, Conns),
+               not maps:is_key(NodeId, Probing)].
+
+%% --- tombstones (SWIM-style; refuse re-admission of a just-evicted id) ---
+
+tombstoned(Id, #d{tombstones = T}) -> maps:is_key(Id, T).
+
+%% a direct message from a tombstoned id proves it alive -> lift the tombstone.
+untombstone(Id, D = #d{tombstones = T}) ->
+    case maps:is_key(Id, T) of
+        true  -> D#d{tombstones = maps:remove(Id, T)};
+        false -> D
+    end.
+
+%% drop tombstones older than TombRounds — long enough for the eviction to reach
+%% the whole fleet, short enough that a legitimately reused id is not blocked for
+%% good (pure/testable).
+-spec prune_tombstones(#{term() => non_neg_integer()}, non_neg_integer(), pos_integer()) ->
+          #{term() => non_neg_integer()}.
+prune_tombstones(T, CurRound, TombRounds) ->
+    maps:filter(fun(_Id, Stamped) -> CurRound - Stamped < TombRounds end, T).
 
 round_delay(Cfg) ->
     Base = maps:get(round_ms, Cfg),

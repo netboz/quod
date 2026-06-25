@@ -66,10 +66,11 @@ await_ack(ConnProc, Acc, S = #s{channel = Channel, peer = Peer}) ->
             case parse(Buf) of
                 {error, oversized} -> exit({frame_too_large, Channel});
                 {[], _}            -> await_ack(ConnProc, Buf, S);   %% ACK frame still partial
-                {[_Ack | Msgs], Rest} ->
+                {[<<>> | Msgs], Rest} ->                            %% first frame MUST be the empty ACK
                     ConnProc ! {link_up, Channel, Peer, self()},
                     _ = [publish(Peer, Channel, P) || P <- Msgs],
-                    loop(S#s{buf = Rest})
+                    loop(S#s{buf = Rest});
+                {[_NonEmpty | _], _} -> exit(unexpected_first_frame) %% not an ACK -> fail the link
             end;
         close -> exit(normal)
     after ?ACK_TIMEOUT_MS -> exit(no_ack)

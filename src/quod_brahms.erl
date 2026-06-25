@@ -548,18 +548,26 @@ maybe_cache(NodeId, LinkPid, Origin, D = #d{view = V, conns = Conns}) ->
             {false, D}
     end.
 
-%% drop links for ids no longer in the view: demonitor (so their DOWN is
-%% swallowed), and close ONLY links we own (origin `out`); inbound links are
-%% closed by their owning `m:quod_conn`, not by us. O(n) via a membership set.
+%% Tear down one cached link: demonitor (so its DOWN is swallowed) and close it.
+%% `Dead` distinguishes the two callers: a DEATH path (mark_dead / drop_conn) closes
+%% the link regardless of origin — an `in` link left open lingers in `m:quod_conn`'s
+%% chans and gets reused on the next dial with a phantom `link_up` (no ACK). A mere
+%% view-churn prune spares `in` links (the peer may still be alive and owns the link).
+teardown_conn({LinkPid, MonRef, Origin}, Dead) ->
+    _ = erlang:demonitor(MonRef, [flush]),
+    _ = case Dead orelse Origin =:= out of
+            true  -> quod_link:close(LinkPid);
+            false -> ok
+        end.
+
+%% drop links for ids no longer in the view (view churn — the peer may be alive, so
+%% we spare its `in` link). O(n) via a membership set.
 prune_conns(NewV, Conns) ->
     Keep = maps:from_keys(NewV, []),
-    maps:filter(fun(K, {LinkPid, MonRef, Origin}) ->
+    maps:filter(fun(K, ConnVal) ->
                     case maps:is_key(K, Keep) of
-                        true -> true;
-                        false ->
-                            _ = erlang:demonitor(MonRef, [flush]),
-                            _ = case Origin of out -> quod_link:close(LinkPid); in -> ok end,
-                            false
+                        true  -> true;
+                        false -> _ = teardown_conn(ConnVal, false), false
                     end
                 end, Conns).
 
@@ -608,17 +616,8 @@ resolve_probes(D = #d{probing = Pr, rounds = R, cfg = Cfg}) ->
 mark_dead(NodeId, D = #d{ns = Ns, view = V, sampler = S, probing = Pr,
                          conns = Conns, outbox = Outbox, last_heard = LH}) ->
     Conns1 = case maps:take(NodeId, Conns) of
-                 {{LinkPid, MonRef, _Origin}, C} ->
-                     _ = erlang:demonitor(MonRef, [flush]),
-                     %% This is a DEATH path: close the cached link regardless of origin
-                     %% (resets only this channel's stream). An `in` link left open would
-                     %% stay in m:quod_conn's chans and be REUSED on the next dial, firing
-                     %% a phantom `link_up` (no ACK) that clears the probe and keeps a dead
-                     %% peer alive — unlike prune_conns, which spares `in` links for peers
-                     %% that may still be alive (mere view churn).
-                     _ = quod_link:close(LinkPid),
-                     C;
-                 error -> Conns
+                 {ConnVal, C} -> _ = teardown_conn(ConnVal, true), C;   %% death path: close any origin
+                 error        -> Conns
              end,
     is_map_key(NodeId, Pr) andalso
         logger:info("quod[~s]: evicting unreachable peer ~p (sampler reset)", [Ns, NodeId]),
@@ -663,19 +662,15 @@ expire_stale_conns(D = #d{conns = Conns, last_heard = LH, rounds = R, cfg = Cfg}
 stale_conns(Conns, LastHeard, R, IdleRounds) ->
     [N || N <- maps:keys(Conns), R - maps:get(N, LastHeard, 0) >= IdleRounds].
 
-%% drop a cached link but leave the peer in V/sample (the probe path re-validates):
-%% demonitor (swallow its DOWN) and close the link REGARDLESS of origin. Closing an
-%% `in` link too (it resets only this channel's stream) is required so the link does
-%% not linger in m:quod_conn's chans and get REUSED on the next dial with a phantom
-%% `link_up` (no ACK) — which would clear the probe and keep a dead peer alive. A
-%% live-but-quiet peer simply re-establishes (with the ACK) on its next contact.
+%% drop a cached link but leave the peer in V/sample (the probe path re-validates).
+%% A death path: teardown_conn closes the link regardless of origin (so it cannot
+%% linger in m:quod_conn and be reused with a phantom no-ACK `link_up`). A live-but-
+%% quiet peer simply re-establishes (with the ACK) on its next contact.
 drop_conn(NodeId, D = #d{conns = Conns, last_heard = LH}) ->
     case maps:take(NodeId, Conns) of
-        {{LinkPid, MonRef, _Origin}, C} ->
-            _ = erlang:demonitor(MonRef, [flush]),
-            _ = quod_link:close(LinkPid),
-            D#d{conns = C, last_heard = maps:remove(NodeId, LH)};
-        error -> D
+        {ConnVal, C} -> _ = teardown_conn(ConnVal, true),
+                        D#d{conns = C, last_heard = maps:remove(NodeId, LH)};
+        error        -> D
     end.
 
 %% probes sent at least `ProbeRounds` rounds ago and still open (pure/testable).

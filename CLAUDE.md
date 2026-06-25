@@ -1,6 +1,6 @@
 # quod — notes for Claude
 
-A Prolog/Brahms P2P node over QUIC (`quicer`), no broker. See `README.md`.
+A Prolog/Brahms P2P node over QUIC (pure-Erlang `quic`, no NIF), no broker. See `README.md`.
 
 ## `AI:` markers
 

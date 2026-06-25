@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.4.18"
+  default     = "0.4.19"
   description = "quod image tag in the cluster registry"
 }
 

@@ -425,7 +425,15 @@ split_counts(Cfg) ->
     L  = maps:get(view_size, Cfg),
     L1 = round(maps:get(alpha, Cfg) * L),
     L2 = round(maps:get(beta, Cfg) * L),
-    {L1, L2, max(1, L - L1 - L2)}.
+    L3 = max(1, L - L1 - L2),
+    %% Rounding (or alpha+beta near 1) can push L1+L2 past the view budget, leaving
+    %% L1+L2+L3 > L; reconstruct then take(L, ...)-truncates the tail, which is always
+    %% the sample R — silently dropping the sampler's GUARANTEED >=1 slot. Shrink the
+    %% push/pull counts (push kept first) so the three sum to exactly L with L3 intact.
+    case L1 + L2 + L3 =< L of
+        true  -> {L1, L2, L3};
+        false -> Budget = L - L3, L1c = min(L1, Budget), {L1c, Budget - L1c, L3}
+    end.
 
 %% cap a pull response to the pull quota and strip self.
 clean_resp(Ids, L2, Self) ->
@@ -600,9 +608,15 @@ resolve_probes(D = #d{probing = Pr, rounds = R, cfg = Cfg}) ->
 mark_dead(NodeId, D = #d{ns = Ns, view = V, sampler = S, probing = Pr,
                          conns = Conns, outbox = Outbox, last_heard = LH}) ->
     Conns1 = case maps:take(NodeId, Conns) of
-                 {{LinkPid, MonRef, Origin}, C} ->
+                 {{LinkPid, MonRef, _Origin}, C} ->
                      _ = erlang:demonitor(MonRef, [flush]),
-                     _ = case Origin of out -> quod_link:close(LinkPid); in -> ok end,
+                     %% This is a DEATH path: close the cached link regardless of origin
+                     %% (resets only this channel's stream). An `in` link left open would
+                     %% stay in m:quod_conn's chans and be REUSED on the next dial, firing
+                     %% a phantom `link_up` (no ACK) that clears the probe and keeps a dead
+                     %% peer alive — unlike prune_conns, which spares `in` links for peers
+                     %% that may still be alive (mere view churn).
+                     _ = quod_link:close(LinkPid),
                      C;
                  error -> Conns
              end,
@@ -650,12 +664,16 @@ stale_conns(Conns, LastHeard, R, IdleRounds) ->
     [N || N <- maps:keys(Conns), R - maps:get(N, LastHeard, 0) >= IdleRounds].
 
 %% drop a cached link but leave the peer in V/sample (the probe path re-validates):
-%% demonitor (swallow its DOWN) and close only links we own (`out`).
+%% demonitor (swallow its DOWN) and close the link REGARDLESS of origin. Closing an
+%% `in` link too (it resets only this channel's stream) is required so the link does
+%% not linger in m:quod_conn's chans and get REUSED on the next dial with a phantom
+%% `link_up` (no ACK) — which would clear the probe and keep a dead peer alive. A
+%% live-but-quiet peer simply re-establishes (with the ACK) on its next contact.
 drop_conn(NodeId, D = #d{conns = Conns, last_heard = LH}) ->
     case maps:take(NodeId, Conns) of
-        {{LinkPid, MonRef, Origin}, C} ->
+        {{LinkPid, MonRef, _Origin}, C} ->
             _ = erlang:demonitor(MonRef, [flush]),
-            _ = case Origin of out -> quod_link:close(LinkPid); in -> ok end,
+            _ = quod_link:close(LinkPid),
             D#d{conns = C, last_heard = maps:remove(NodeId, LH)};
         error -> D
     end.

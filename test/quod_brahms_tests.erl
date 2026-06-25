@@ -16,11 +16,17 @@ split_counts_test() ->
     ?assertEqual(7, L2),
     ?assertEqual(2, L3).
 
-%% the sampler must ALWAYS contribute (L3 >= 1), even for configs that would
-%% otherwise starve it (alpha=beta=0.5 -> L3 would be 0 without the guard).
+%% the sampler must ALWAYS contribute (L3 >= 1), AND the three counts must sum to
+%% exactly view_size — else reconstruct's take(L, ...) truncates the tail (the
+%% sample R), dropping the guaranteed slot. Both edge configs below would overshoot
+%% (L1+L2 >= L) without the budget cap in split_counts.
 split_counts_no_starvation_test() ->
-    {_, _, L3} = split_counts(#{view_size => 16, alpha => 0.5, beta => 0.5, gamma => 0.0}),
-    ?assert(L3 >= 1).
+    {L1, L2, L3} = split_counts(#{view_size => 16, alpha => 0.5, beta => 0.5, gamma => 0.0}),
+    ?assert(L3 >= 1),
+    ?assertEqual(16, L1 + L2 + L3),
+    {A1, A2, A3} = split_counts(#{view_size => 16, alpha => 0.49, beta => 0.49, gamma => 0.02}),
+    ?assert(A3 >= 1),
+    ?assertEqual(16, A1 + A2 + A3).
 
 %% --- pull responses are capped (pulls are attacker-controllable too) ----
 

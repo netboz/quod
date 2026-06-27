@@ -67,7 +67,7 @@ await_ack(ConnProc, Acc, S = #s{channel = Channel, peer = Peer}) ->
                 {error, oversized} -> exit({frame_too_large, Channel});
                 {[], _}            -> await_ack(ConnProc, Buf, S);   %% ACK frame still partial
                 {[<<>> | Msgs], Rest} ->                            %% first frame MUST be the empty ACK
-                    ConnProc ! {link_up, Channel, Peer, self()},
+                    ConnProc ! {link_up, Channel, Peer, self(), out},   %% WE opened this stream
                     _ = [publish(Peer, Channel, P) || P <- Msgs],
                     loop(S#s{buf = Rest});
                 {[_NonEmpty | _], _} -> exit(unexpected_first_frame) %% not an ACK -> fail the link
@@ -105,7 +105,7 @@ read_header(Conn, Sid, ConnProc, Acc) ->
                     %% we hold proof the opener exists (its header); ACK it so its
                     %% outbound link can come up, then serve normally.
                     _ = quic:send_data(Conn, Sid, ack_frame(), false),
-                    ConnProc ! {link_up, Channel, Peer, self()},
+                    ConnProc ! {link_up, Channel, Peer, self(), in},   %% the PEER opened this stream
                     loop(loop_msgs(Rest, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer}));
                 error -> exit(bad_header);
                 more  -> read_header(Conn, Sid, ConnProc, Buf)
@@ -119,6 +119,10 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
         {data, Bin, _Fin} ->
             loop(loop_msgs(Bin, S));
         {send, Payload} ->
+            %% Ignore the return: it includes TRANSIENT backpressure ({flow_control_blocked,
+            %% _}, send_queue_full) that must NOT tear the link down — doing so churns links
+            %% under load. A genuinely dead stream/connection kills this (linked) process via
+            %% quod_conn, which is the real disconnect signal.
             _ = quic:send_data(Conn, Sid, frame(Payload), false),
             loop(S);
         close ->

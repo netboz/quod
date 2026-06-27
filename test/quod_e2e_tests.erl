@@ -74,7 +74,9 @@ t_write_read({_Dir, Ns, Cfg}) ->
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         %% an unknown predicate fails (does not crash) — unknown=fail
         ?assertEqual(fail, rp(Ns, {grandparent, tom, {'Y'}})),
-        ?assertMatch(#{commit_index := 1, last_applied := 1, appends := 1, is_leader := true},
+        %% index 1 is the durable genesis {add, self} config entry, so the first write
+        %% commits at index 2 (the committee now survives restart — see quod_log).
+        ?assertMatch(#{commit_index := 2, last_applied := 2, appends := 1, is_leader := true},
                      quod_log:stats(Ns))
     end.
 
@@ -89,7 +91,8 @@ t_restart_reload({_Dir, Ns, Cfg}) ->
         _Pid2 = start_ns(Ns, Cfg),
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         ?assertMatch({ok, [#{'P' := ann}], _}, rp(Ns, {parent, {'P'}, eve})),
-        ?assertMatch(#{commit_index := 2, last_applied := 2}, quod_log:stats(Ns))
+        %% genesis config @1 + two writes @2,@3
+        ?assertMatch(#{commit_index := 3, last_applied := 3}, quod_log:stats(Ns))
     end.
 
 %% quod_prolog crashes alone (rest_for_one restarts only it); the rebuild handshake

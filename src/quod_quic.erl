@@ -105,25 +105,20 @@ terminate(_Reason, _State) ->
 %% connection authority
 %% ======================================================================
 
-ensure_conn(NodeId, State = #state{conns = Conns}) ->
+%% Reuse OUR OWN outbound connection to this peer, or dial a fresh one. We deliberately
+%% do NOT adopt a connection the peer dialed to us: a stream we open on an adopted
+%% (peer-initiated) connection is *server-initiated* (QUIC stream ids 1,5,9…), the
+%% lesser-tested path with its own flow-control limits. Always being the client for our
+%% own outgoing streams keeps us on the proven client-initiated path. The cost is one
+%% connection per direction (two per pair) instead of a shared one — cheap and reliable.
+ensure_conn(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) ->
     case maps:get(NodeId, Conns, undefined) of
         Pid when is_pid(Pid) ->
             case is_process_alive(Pid) of
                 true  -> {Pid, State};
-                false -> adopt_or_start(NodeId, State)
+                false -> start_conn(NodeId, Self, ALPN, State)
             end;
         undefined ->
-            adopt_or_start(NodeId, State)
-    end.
-
-%% prefer an already-established connection to this peer (e.g. one it dialed to
-%% US, registered as `{conn, NodeId}`) over dialing a duplicate.
-adopt_or_start(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) ->
-    case quod_reg:where({conn, NodeId}) of
-        Pid when is_pid(Pid) ->
-            _ = erlang:monitor(process, Pid),
-            {Pid, State#state{conns = maps:put(NodeId, Pid, Conns)}};
-        _ ->
             start_conn(NodeId, Self, ALPN, State)
     end.
 

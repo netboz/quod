@@ -54,11 +54,18 @@ prove(TargetNs, Goal, CallerNs) ->
                catch exit:_ -> fail end
     end.
 
--doc "Apply a committed block (called by `quod_log`, strictly in index order).".
--spec apply_block(binary(), pos_integer(), #change{} | noop) ->
-        ok | {reject, conflict} | {behind, log_index()}.
+-doc """
+Apply a committed entry (called by `quod_log`, strictly in index order). **Async (cast)
+on purpose:** `quod_log` calls this while it may itself be the target of a synchronous
+`quod_log:append` from this very process (the write path). A synchronous `apply_block`
+would close that call cycle into a deadlock (each waits on the other). As a cast,
+`quod_log` never blocks on us, so it stays free to service `append`. The OCC verdict is
+delivered straight to the parked client here; a forward gap asks `quod_log` to re-drive.
+""".
+-spec apply_block(binary(), pos_integer(),
+                  #change{} | noop | {add, server_id()} | {remove, server_id()}) -> ok.
 apply_block(Ns, Index, Change) ->
-    gen_server:call(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}, infinity).
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 
 -doc "Signal that the initial rebuild is complete and proves may be served.".
 -spec mark_ready(binary()) -> ok.
@@ -100,9 +107,6 @@ handle_call({prove, Goal, CallerNs}, From, S) ->
             submit_write(From, Bindings, Diff, ReadSet, CallerNs, S)
     end;
 
-handle_call({apply_block, Index, Change}, _From, S) ->
-    apply_committed(Index, Change, S);
-
 handle_call(get_stats, _From, S) ->
     {reply, #{applied   => S#s.applied,  applies => S#s.applies,
               rejects   => S#s.rejects,  proves  => S#s.proves,
@@ -110,6 +114,8 @@ handle_call(get_stats, _From, S) ->
 
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
+handle_cast({apply_block, Index, Change}, S) ->
+    {noreply, apply_committed(Index, Change, S)};
 handle_cast(mark_ready, S) -> {noreply, S#s{ready = true}};
 handle_cast(_Msg, S)       -> {noreply, S}.
 
@@ -170,6 +176,7 @@ submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when Call
         {ok, _Index}                       -> {noreply, S1};
         {error, not_in_charge, unavailable} -> {noreply, S1};   %% ambiguous — TTL/apply resolves
         {error, not_in_charge, Hint}       -> {reply, {error, {not_leader, Hint}}, unpark(Tx, S1)};
+        {error, busy}                      -> {reply, {error, busy}, unpark(Tx, S1)};  %% backpressure: retry
         Other                              -> {reply, {error, Other}, unpark(Tx, S1)}
     end;
 submit_write(_From, _B, _D, _R, _CallerNs, S) ->
@@ -179,28 +186,33 @@ submit_write(_From, _B, _D, _R, _CallerNs, S) ->
 %%% apply (deterministic; identical on every member)
 %%%===================================================================
 
+%% Each clause returns the new #s{}. Index is the committed entry's log index; entries
+%% arrive in order on the (FIFO) cast channel from quod_log.
+%%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
 apply_committed(Index, _Change, S = #s{applied = A}) when Index =< A ->
-    {reply, ok, S};
-%% A forward gap: this member is behind what quod_log thinks. Don't crash — report
-%% the real applied index so quod_log resyncs and re-drives from there.
-apply_committed(Index, _Change, S = #s{applied = A}) when Index > A + 1 ->
-    {reply, {behind, A}, S};
+    S;
+%% Forward gap: quod_log is ahead of us (we restarted, or missed a cast). Don't apply out
+%% of order — ask quod_log to re-drive from the snapshot so we receive a contiguous run.
+apply_committed(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
+    _ = try quod_log:rebuild(Ns) catch _:_ -> ok end,
+    S;
 apply_committed(Index, noop, S) ->                          %% Index == applied+1
-    {reply, ok, S#s{applied = Index}};
+    S#s{applied = Index};
+apply_committed(Index, {Op, _Node}, S) when Op =:= add; Op =:= remove ->
+    %% a committee (config) change: nothing for the fact engine, but advance the cursor
+    %% in lockstep with quod_log so the next block isn't seen as a gap.
+    S#s{applied = Index};
 apply_committed(Index, #change{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,
     case quod_diff:validate(RC, M, R) of
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
-                         S#s{est = Est1, applied = Index, applies = S#s.applies + 1}),
-            {reply, ok, S1};
+            release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                    S#s{est = Est1, applied = Index, applies = S#s.applies + 1});
         {conflict, _F} ->
-            S1 = release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
-                         S#s{applied = Index,
-                             rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1}),
-            {reply, {reject, conflict}, S1}
+            release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
+                    S#s{applied = Index, rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
     end.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel

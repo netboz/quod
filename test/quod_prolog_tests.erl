@@ -73,10 +73,12 @@ t_apply_and_read({Ns, _}) ->
 t_occ_reject({Ns, _}) ->
     fun() ->
         ok = quod_prolog:apply_block(Ns, 1, change(Ns, diff_for({parent, tom, bob}), #{})),
-        %% a change whose read-set expects a stale hash of parent/2 → rejected at apply
+        %% a change whose read-set expects a stale hash of parent/2 → rejected at apply.
+        %% apply_block is an async cast (returns ok); the OCC reject is observed by its
+        %% EFFECT — the block changes no facts (sibling/1 stays absent). The apply_block cast
+        %% is FIFO-ordered before the following prove call, so the effect is visible.
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
-        ?assertEqual({reject, conflict}, quod_prolog:apply_block(Ns, 2, Stale)),
-        %% the rejected block changed no facts — sibling/1 is absent
+        ok = quod_prolog:apply_block(Ns, 2, Stale),
         ?assertEqual(fail, quod_prolog:prove(Ns, {sibling, x}, Ns)),
         %% a non-stale read-set (parent/2 matches its real hash) commits fine
         M = real_hash(Ns, {parent, 2}),

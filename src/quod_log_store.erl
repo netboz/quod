@@ -122,9 +122,12 @@ write_meta(#store{dir = Dir}, Term, VotedFor) ->
     ok = file:datasync(Fd),
     ok = file:close(Fd),
     ok = file:rename(Tmp, Path),
-    %% REVIEW(M2): a directory fsync after the rename (rename durability across a
-    %% power-cut) is required once real elections exist — a lost vote could permit a
-    %% double-vote. At 1-voter there is no contested vote; rename is atomic on POSIX.
+    %% M2: fsync the CONTAINING DIRECTORY after the rename. On POSIX the rename is
+    %% atomic but the directory entry pointing at the new inode is durable only after
+    %% the dir is fsync'd — without this a power-cut can lose a just-granted vote and
+    %% let a restarted member double-vote in one term (review #9). 1-voter never has a
+    %% contested vote, but real elections (M2) do.
+    ok = sync_dir(Dir),
     ok.
 
 %%%===================================================================
@@ -190,12 +193,20 @@ read_at(#store{log_fd = Fd, idx = Idx}, Index) ->
             end
     end.
 
--doc "Read entries `From..To` (clamped to the live tail), in index order.".
+-doc """
+Read entries `From..To` (clamped to the live tail), in index order. The live log
+is contiguous, so a missing index in range is corruption, not an empty slot:
+`read_range` raises rather than silently returning a short list (review #27).
+""".
 -spec read_range(handle(), pos_integer(), log_index()) -> {ok, [#entry{}]}.
 read_range(_S, From, To) when From > To -> {ok, []};
 read_range(S = #store{last_index = LI}, From, To0) ->
     To = min(To0, LI),
-    {ok, [E || I <- lists:seq(From, To), {ok, E} <- [read_at(S, I)]]}.
+    Es = [case read_at(S, I) of
+              {ok, E}   -> E;
+              not_found -> error({log_gap, I, From, To})
+          end || I <- lists:seq(From, To)],
+    {ok, Es}.
 
 -doc "`{LastIndex, LastTerm}` of the live tail (or the snapshot point if empty).".
 -spec last(handle()) -> {log_index(), term_no()}.
@@ -274,10 +285,21 @@ scan_log(Fd, Off, Idx, LastI, LastT) ->
                     case unframe(<<Hdr/binary, Payload/binary>>) of
                         {ok, P, _} ->
                             #entry{index = I, term = T} = binary_to_term(P),
-                            Next = Off + ?HDR_BYTES + Len,
-                            scan_log(Fd, Next, Idx#{I => {Off, Len, T}}, I, T);
-                        {error, _} ->
-                            trim(Fd, Off, Idx, LastI, LastT)   %% bad CRC: torn tail
+                            %% M2 (review #13): the frame is CRC-valid, but a valid frame at
+                            %% the wrong index (a non-contiguous or out-of-order entry) means
+                            %% the segment is corrupt from here on — trim it as a torn tail
+                            %% rather than building an index with a gap/dup. The first live
+                            %% entry (empty Idx) is accepted as-is so a future compacted log
+                            %% starting above 1 still loads.
+                            case map_size(Idx) =:= 0 orelse I =:= LastI + 1 of
+                                true ->
+                                    Next = Off + ?HDR_BYTES + Len,
+                                    scan_log(Fd, Next, Idx#{I => {Off, Len, T}}, I, T);
+                                false ->
+                                    trim_or_fail(Fd, Off, Len, Idx, LastI, LastT, {discontinuity, I})
+                            end;
+                        {error, Reason} ->
+                            trim_or_fail(Fd, Off, Len, Idx, LastI, LastT, Reason)   %% bad CRC
                     end;
                 _ ->
                     trim(Fd, Off, Idx, LastI, LastT)           %% short payload: torn tail
@@ -293,6 +315,27 @@ trim(Fd, Off, Idx, LastI, LastT) ->
     ok = file:truncate(Fd),
     ok = file:datasync(Fd),
     {Idx, LastI, LastT, Off}.
+
+%% A frame at `Off` failed its integrity/contiguity check. A crash mid-append can only
+%% damage the FINAL frame, so if a well-formed frame appears anywhere AFTER this one, this
+%% is mid-log corruption (bit-rot), not a torn tail: FAIL-STOP rather than silently
+%% truncating — discarding the valid entries after the corrupt point would lose
+%% durably-committed data and could let the node re-append divergent indices peers already
+%% hold (review #8). We SCAN the tail for the magic instead of trusting this frame's (also
+%% suspect) length field, so a corrupt length can't make the peek miss the next frame
+%% (review #13). A coincidental magic in payload bytes only over-triggers fail-stop on a
+%% genuine torn tail — conservative (recover from peers), never data loss.
+trim_or_fail(Fd, Off, _Len, Idx, LastI, LastT, Reason) ->
+    {ok, Size} = file:position(Fd, eof),
+    From = Off + 4,   %% skip this frame's own magic
+    case From < Size andalso file:pread(Fd, From, Size - From) of
+        {ok, Tail} ->
+            case binary:match(Tail, <<?MAGIC:32>>) of
+                nomatch -> trim(Fd, Off, Idx, LastI, LastT);            %% nothing follows ⇒ torn tail
+                _       -> error({log_corruption, Reason, Off})         %% a frame follows ⇒ interior
+            end;
+        _ -> trim(Fd, Off, Idx, LastI, LastT)                          %% at EOF ⇒ torn tail
+    end.
 
 assert_contiguous(LastI, Entries) ->
     Want = lists:seq(LastI + 1, LastI + length(Entries)),
@@ -342,4 +385,19 @@ atomic_write(Path, Bytes) ->
     ok = file:datasync(Fd),
     ok = file:close(Fd),
     ok = file:rename(Tmp, Path),
+    ok = sync_dir(filename:dirname(Path)),
     ok.
+
+%% Fsync the directory so a tmp+rename is durable across a power-cut (POSIX: the
+%% rename's new dirent is not durable until the directory inode is synced). Best
+%% effort — some platforms refuse to open a dir for sync; a failure there must not
+%% mask the (already-synced) file write.
+sync_dir(Dir) ->
+    case file:open(Dir, [read, raw]) of
+        {ok, DirFd} ->
+            _ = file:datasync(DirFd),
+            _ = file:close(DirFd),
+            ok;
+        {error, _} ->
+            ok
+    end.

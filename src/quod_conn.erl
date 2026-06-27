@@ -17,8 +17,8 @@ monitors.
 -export([start_outbound/5, start_inbound/2, open_link/3]).
 
 -record(s, {conn, self, peer = undefined,
-            streams = #{},   %% StreamId => LinkPid   (for routing inbound data)
-            chans   = #{},   %% Channel  => LinkPid   (for reuse/dedup)
+            streams = #{},   %% StreamId => LinkPid   (every link, for routing inbound data)
+            chans   = #{},   %% Channel  => LinkPid   (our OUTBOUND links only, for send reuse/dedup)
             pending = #{}}). %% Channel  => {StreamId, [ReplyTo]} (outbound opens in flight)
 
 -define(CONNECT_TIMEOUT_MS, 5000).
@@ -34,17 +34,32 @@ start_outbound(Host, Port, Peer, Self, ALPN) ->
             {ok, Conn} ->
                 receive
                     {quic, Conn, {connected, _}} ->
-                        _ = reg_conn(Peer),
                         loop(#s{conn = Conn, self = Self, peer = Peer});
                     {quic, Conn, {closed, R}} ->
-                        logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R])
+                        logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R]),
+                        fail_queued_opens(Peer)
                 after ?CONNECT_TIMEOUT_MS ->
-                    logger:debug("quod: connect ~p:~p timed out", [Host, Port])
+                    logger:debug("quod: connect ~p:~p timed out", [Host, Port]),
+                    fail_queued_opens(Peer)
                 end;
             {error, Reason} ->
-                logger:debug("quod: connect ~p:~p failed: ~p", [Host, Port, Reason])
+                logger:debug("quod: connect ~p:~p failed: ~p", [Host, Port, Reason]),
+                fail_queued_opens(Peer)
         end
     end).
+
+%% A connection that never comes up (timeout / closed / connect error) would otherwise
+%% leave its already-queued {open_link, Channel, ReplyTo} requests with no answer — the
+%% waiter (e.g. quod_log) gets neither link_up nor link_error and re-buffers forever.
+%% Drain the mailbox and reply link_error so the dial fast-fails. (Brief settle so a
+%% just-cast open_link races in.)
+fail_queued_opens(Peer) ->
+    receive
+        {open_link, Channel, ReplyTo} ->
+            ReplyTo ! {link_error, Peer, Channel},
+            fail_queued_opens(Peer)
+    after 50 -> ok
+    end.
 
 -doc "Own an accepted connection `Conn` (the `quic` listener transfers ownership to us).".
 -spec start_inbound(pid(), term()) -> pid().
@@ -85,8 +100,8 @@ loop(S = #s{conn = Conn}) ->
             exit({shutdown, conn_closed});
         {quic, Conn, _Other} ->                  %% connected, send_ready, timer, ...
             loop(S);
-        {link_up, Channel, RemotePeer, LinkPid} ->
-            loop(handle_link_up(Channel, RemotePeer, LinkPid, S));
+        {link_up, Channel, RemotePeer, LinkPid, Origin} ->
+            loop(handle_link_up(Channel, RemotePeer, LinkPid, Origin, S));
         {'EXIT', LinkPid, _Reason} ->
             loop(drop_link(LinkPid, S));
         _Other ->
@@ -141,14 +156,21 @@ open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self,
             S
     end.
 
-%% a link finished its header handshake: learn the peer, cache by channel, and
-%% tell every waiter. (One link per channel; a colliding newcomer is closed.)
-handle_link_up(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending}) ->
+%% A link finished its header handshake. We cache only the links WE opened (`out`) in
+%% `chans` — those are the ones `handle_open` reuses for our sends. An inbound link
+%% (`in`, a stream the peer opened) is NEVER cached for sending: we reply on our own
+%% outbound stream instead, because sending "backwards" on a peer's stream silently
+%% stops delivering across role changes with no DOWN (the phantom-link bug). An inbound
+%% link still routes received data (via `streams`); here it only teaches us the peer id
+%% so future dials adopt this connection.
+handle_link_up(_Channel, RemotePeer, _LinkPid, in, S) ->
+    ensure_peer(RemotePeer, S);
+handle_link_up(Channel, RemotePeer, LinkPid, out, S = #s{chans = Chans, pending = Pending}) ->
     case maps:get(Channel, Chans, undefined) of
         Existing when is_pid(Existing), Existing =/= LinkPid ->
             case is_process_alive(Existing) of
                 true ->
-                    _ = quod_link:close(LinkPid),     %% one link per channel; drop the newcomer
+                    _ = quod_link:close(LinkPid),     %% one outbound link per channel; drop the newcomer
                     notify_waiters(Channel, RemotePeer, Existing, Pending),
                     S#s{pending = maps:remove(Channel, Pending)};
                 false ->
@@ -197,12 +219,9 @@ fail_pending(LinkPid, Peer, Streams, Pending) ->
                     end
                 end, Pending).
 
-ensure_peer(RemotePeer, S = #s{peer = undefined}) ->
-    _ = reg_conn(RemotePeer),
-    S#s{peer = RemotePeer};
-ensure_peer(_RemotePeer, S) ->
-    S.
-
-%% best-effort {conn, Peer} registration for reuse.
-reg_conn(Peer) ->
-    try quod_reg:reg({conn, Peer}) catch _:_ -> ok end.
+%% Learn (once) which peer this connection serves — used to tag link_up / link_error and
+%% to address sends. We no longer register a {conn, Peer} gproc name: connection adoption
+%% was removed (each node dials its own outbound conn, never adopts a peer's), so nothing
+%% reads it and a second registration for a mutually-dialed pair only clashed silently.
+ensure_peer(RemotePeer, S = #s{peer = undefined}) -> S#s{peer = RemotePeer};
+ensure_peer(_RemotePeer, S)                       -> S.

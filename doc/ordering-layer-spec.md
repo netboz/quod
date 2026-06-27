@@ -665,12 +665,21 @@ re-wrap of `data`; the concatenation of its chunk parts is exactly `encode(#inst
 ### 2.4 Encoding / decoding
 
 ```erlang
-encode(Msg) -> term_to_binary(Msg).
-decode(Bin) -> try binary_to_term(Bin, [safe]) of T -> T catch _:_ -> error end.
+encode(Msg)        -> term_to_binary(Msg).
+decode(Bin)        -> try binary_to_term(Bin, [safe]) of T -> T catch _:_ -> error end.
+decode_record(Bin) -> try binary_to_term(Bin)        of T -> T catch _:_ -> error end.
 ```
 
-`[safe]` is mandatory: it refuses unknown atoms/fun/pid/port refs. Every record is a tagged tuple; dispatch
-is a pattern match with a final `_ -> D` drop clause.
+The wire **envelope** (`{raft|raft_chunk, Ns, ...}`) holds only known atoms + binaries, so it decodes with
+**`[safe]`** (`decode/1`) — refusing unknown atoms / fun / pid / port. But the **inner record** is an
+`#append_entries{}` carrying a `#change{}` whose diff is arbitrary Prolog clauses — i.e. atoms the receiver
+*has not seen yet* (the fact's own functor/args). `[safe]` would refuse those legitimately-new atoms and drop
+every fact-bearing block, so a follower could never learn a new fact (it only learns the atom by applying it
+— chicken-and-egg). The inner record therefore decodes **without `[safe]`** (`decode_record/1`), bounded by
+the `?MAX_RAFT_BYTES` size cap. This is sound for Phase 1's **trusted single-operator committee**; the later
+identity/BFT layer re-tightens it with signed, schema-validated changes. (Original spec said `[safe]` was
+mandatory everywhere — corrected here: it cannot be, for the application payload.) Every record is a tagged
+tuple; dispatch is a pattern match with a final `_ -> D` drop clause.
 
 ### 2.5 Max payload, chunking & reassembly
 

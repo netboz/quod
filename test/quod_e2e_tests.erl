@@ -75,9 +75,9 @@ t_write_read({_Dir, Ns, Cfg}) ->
         %% an unknown predicate fails (does not crash) — unknown=fail
         ?assertEqual(fail, rp(Ns, {grandparent, tom, {'Y'}})),
         %% index 1 is the durable genesis {add, self} config entry, so the first write
-        %% commits at index 2 (the committee now survives restart — see quod_log).
+        %% commits at index 2 (the committee now survives restart — see quod_ledger).
         ?assertMatch(#{commit_index := 2, last_applied := 2, appends := 1, is_leader := true},
-                     quod_log:stats(Ns))
+                     quod_ledger:stats(Ns))
     end.
 
 t_restart_reload({_Dir, Ns, Cfg}) ->
@@ -86,17 +86,17 @@ t_restart_reload({_Dir, Ns, Cfg}) ->
         {ok, _, _} = rp(Ns, {assertz, {parent, tom, bob}}),
         {ok, _, _} = rp(Ns, {assertz, {parent, ann, eve}}),
         stop_ns(Pid1),
-        %% restart with the SAME data_dir: quod_log reloads the block list from disk,
+        %% restart with the SAME data_dir: quod_ledger reloads the block list from disk,
         %% quod_prolog rebuilds a fresh kb by replaying it
         _Pid2 = start_ns(Ns, Cfg),
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         ?assertMatch({ok, [#{'P' := ann}], _}, rp(Ns, {parent, {'P'}, eve})),
         %% genesis config @1 + two writes @2,@3
-        ?assertMatch(#{commit_index := 3, last_applied := 3}, quod_log:stats(Ns))
+        ?assertMatch(#{commit_index := 3, last_applied := 3}, quod_ledger:stats(Ns))
     end.
 
 %% quod_prolog crashes alone (rest_for_one restarts only it); the rebuild handshake
-%% must refill the kb from quod_log's committed log without an apply_gap crash.
+%% must refill the kb from quod_ledger's committed log without an apply_gap crash.
 t_prolog_restart_rebuild({_Dir, Ns, Cfg}) ->
     fun() ->
         _Pid = start_ns(Ns, Cfg),
@@ -105,7 +105,7 @@ t_prolog_restart_rebuild({_Dir, Ns, Cfg}) ->
         Old = quod_reg:where({quod_prolog, Ns}),
         exit(Old, kill),
         _New = wait_new_pid({quod_prolog, Ns}, Old),
-        %% facts survive via rebuild from quod_log (which never restarted)
+        %% facts survive via rebuild from quod_ledger (which never restarted)
         ?assertMatch({ok, [#{}], _}, rp(Ns, {item, sword})),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {item, shield})),
         ?assertEqual(fail, rp(Ns, {item, bow}))

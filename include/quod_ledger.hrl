@@ -1,6 +1,6 @@
-%%% include/quod_log.hrl
+%%% include/quod_ledger.hrl
 %%% Canonical types + records for the quod ordering/content layer
-%%% (`quod_log`, `quod_prolog`, `quod_log_store`, and their tests).
+%%% (`quod_ledger`, `quod_prolog`, `quod_ledger_store`, and their tests).
 %%% Defined ONCE here and `-include`d everywhere — the single source of truth.
 %%% See doc/ordering-layer-spec.md.
 -ifndef(QUOD_LOG_HRL).
@@ -21,19 +21,19 @@
 %% The committed change record.
 %% `author`/`sig` are RESERVED for signing (identity readiness): Phase 1 sets
 %% author = self node id and sig = none, and verification is a pass-through stub.
--record(change, {tx_id      :: binary(),            %% unique per transaction (ulid)
+-record(transaction, {tx_id      :: binary(),            %% unique per transaction (ulid)
                  caller_ns  :: binary(),            %% emitting ontology (CallerNs)
                  diff       :: [op()],              %% concrete asserts/retracts
                  read_check :: read_check(),        %% what the proof relied on (OCC)
                  author     :: server_id(),         %% who submitted it (Phase 1: node id; later: pubkey())
                  sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none in Phase 1
 
-%% A Raft log entry. `data` is a #change{} for `block` entries, the atom `noop`
+%% A Raft log entry. `data` is a #transaction{} for `block` entries, the atom `noop`
 %% for the election marker, or a membership op for `config` entries.
 -record(entry, {index :: log_index(),
                 term  :: term_no(),
                 kind  :: block | config,
-                data  :: #change{} | noop | {add, server_id()} | {remove, server_id()}}).
+                data  :: #transaction{} | noop | {add, server_id()} | {remove, server_id()}}).
 
 %% --- the six Raft RPC records (snake_case fields) ---
 -record(request_vote,         {term           :: term_no(),

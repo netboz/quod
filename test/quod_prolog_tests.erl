@@ -1,7 +1,7 @@
 -module(quod_prolog_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_log.hrl").
+-include("quod_ledger.hrl").
 
 %%%===================================================================
 %%% fixtures
@@ -11,7 +11,7 @@ setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"test:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
     {ok, Pid} = quod_prolog:start_link(Ns, #{node_id => {"127.0.0.1", 5000}}),
-    %% no quod_log in these isolated tests — simulate the rebuild handshake completing
+    %% no quod_ledger in these isolated tests — simulate the rebuild handshake completing
     ok = quod_prolog:mark_ready(Ns),
     {Ns, Pid}.
 
@@ -41,7 +41,7 @@ diff_for(Fact) ->
     Diff.
 
 change(Ns, Diff, RC) ->
-    #change{tx_id = integer_to_binary(erlang:unique_integer([positive])),
+    #transaction{tx_id = integer_to_binary(erlang:unique_integer([positive])),
             caller_ns = Ns, diff = Diff, read_check = RC,
             author = {"127.0.0.1", 5000}, sig = none}.
 

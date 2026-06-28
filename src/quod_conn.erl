@@ -50,7 +50,7 @@ start_outbound(Host, Port, Peer, Self, ALPN) ->
 
 %% A connection that never comes up (timeout / closed / connect error) would otherwise
 %% leave its already-queued {open_link, Channel, ReplyTo} requests with no answer — the
-%% waiter (e.g. quod_log) gets neither link_up nor link_error and re-buffers forever.
+%% waiter (e.g. quod_ledger) gets neither link_up nor link_error and re-buffers forever.
 %% Drain the mailbox and reply link_error so the dial fast-fails. (Brief settle so a
 %% just-cast open_link races in.)
 fail_queued_opens(Peer) ->

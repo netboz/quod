@@ -1,13 +1,13 @@
-# Ordering layer — Phase 1 build spec (`quod_log` / `quod_prolog`)
+# Ordering layer — Phase 1 build spec (`quod_ledger` / `quod_prolog`)
 
 This document is the single, unified Phase-1 build spec for quod's ordering/content layer, realizing
 `doc/content-layer-design.md` §13. The decisions it fixes: a **hand-rolled lean Raft** over `quod_link`
 streams (channel `{log, Ns}`), with **no Erlang distribution**; **one committee (one Raft group) per
 namespace**; a **full, durable, browsable block list** kept committee-only in this first cut; and an MVP
 scope of **own-namespace writes + cross-namespace reads** (foreign writes, BFT, and read-copy fan-out are
-out of scope). `quod_log` is the per-namespace Raft `gen_statem` that orders and replicates blocks;
+out of scope). `quod_ledger` is the per-namespace Raft `gen_statem` that orders and replicates blocks;
 `quod_prolog` is its sibling `gen_server` that deterministically applies committed blocks and serves
-proofs. Both live under a two-level supervision tree (`quod_ns_sup` → `quod_ns` → `{quod_log, quod_prolog}`).
+proofs. Both live under a two-level supervision tree (`quod_ns_sup` → `quod_ns` → `{quod_ledger, quod_prolog}`).
 
 ## Module map
 
@@ -18,33 +18,33 @@ quod_sup (one_for_one)
 │   └── quod_brahms (per Ns)
 ├── quod_ns_sup     (simple_one_for_one)    THIS spec — subtree root, {quod_ns_sup, node}
 │   └── quod_ns     (per Ns, rest_for_one)  {quod_ns, Ns}
-│       ├── quod_log    (Ns)                {quod_log, Ns}     Raft committee member
+│       ├── quod_ledger    (Ns)                {quod_ledger, Ns}     Raft committee member
 │       └── quod_prolog (Ns)                {quod_prolog, Ns}  fact store + prove engine
 └── quod_metrics
 ```
 
-- **`quod_log`** — `gen_statem`, one per namespace; orders + agrees on blocks; owns the durable log.
+- **`quod_ledger`** — `gen_statem`, one per namespace; orders + agrees on blocks; owns the durable log.
 - **`quod_prolog`** — `gen_server`, one per namespace; applies committed blocks; serves `prove`.
-- **`quod_log_store`** — library module (no process); on-disk persistence for `quod_log`.
+- **`quod_ledger_store`** — library module (no process); on-disk persistence for `quod_ledger`.
 - **`quod_diff`** — pure library; differ write-set (op-log) + per-functor read-set hashes.
-- **`quod_ns`** — per-Ns `rest_for_one` sub-supervisor over `{quod_log, quod_prolog}`.
+- **`quod_ns`** — per-Ns `rest_for_one` sub-supervisor over `{quod_ledger, quod_prolog}`.
 - **`quod_ns_sup`** — `simple_one_for_one` parent of `quod_ns` instances.
 
 **Channel:** `term_to_binary({log, Ns}, [deterministic])` everywhere (the single wire channel, distinct
 from Brahms's `{channel, Ns}`).
 
-**Reg keys:** `{quod_ns_sup, node}`, `{quod_ns, Ns}`, `{quod_log, Ns}`, `{quod_prolog, Ns}`, plus the
+**Reg keys:** `{quod_ns_sup, node}`, `{quod_ns, Ns}`, `{quod_ledger, Ns}`, `{quod_prolog, Ns}`, plus the
 channel property `{channel, term_to_binary({log, Ns}, [deterministic])}`.
 
-**Shared header `include/quod_log.hrl`** is the single source of truth for `term_no()`, `log_index()`,
-`server_id()`, `clause()`, `op()`, `read_check()`, `#entry{}`, `#change{}`, and the six Raft RPC records.
-`include/quod_log_store.hrl` `-include`s it and defines only the private `#store{}`/`handle()`.
+**Shared header `include/quod_ledger.hrl`** is the single source of truth for `term_no()`, `log_index()`,
+`server_id()`, `clause()`, `op()`, `read_check()`, `#entry{}`, `#transaction{}`, and the six Raft RPC records.
+`include/quod_ledger_store.hrl` `-include`s it and defines only the private `#store{}`/`handle()`.
 
 ## Table of contents
 
-1. [`quod_log` state machine](#1-quod_log-state-machine)
+1. [`quod_ledger` state machine](#1-quod_ledger-state-machine)
 2. [Wire protocol over `quod_link`](#2-wire-protocol-over-quod_link)
-3. [Persistence (`quod_log_store`)](#3-persistence-quod_log_store)
+3. [Persistence (`quod_ledger_store`)](#3-persistence-quod_ledger_store)
 4. [`quod_prolog` apply + prove](#4-quod_prolog-apply--prove)
 5. [`quod_ns_sup` lifecycle + membership](#5-quod_ns_sup-lifecycle--membership)
 6. [Build order + test plan](#6-build-order--test-plan)
@@ -52,13 +52,13 @@ channel property `{channel, term_to_binary({log, Ns}, [deterministic])}`.
 
 ---
 
-## Shared header `include/quod_log.hrl` (canonical types + records)
+## Shared header `include/quod_ledger.hrl` (canonical types + records)
 
-Every type and record below is defined **once**, here, and `-include`d by `quod_log`, `quod_log_store`
+Every type and record below is defined **once**, here, and `-include`d by `quod_ledger`, `quod_ledger_store`
 (transitively), `quod_prolog`, and tests. Field names are snake_case throughout.
 
 ```erlang
-%% include/quod_log.hrl
+%% include/quod_ledger.hrl
 -type term_no()   :: non_neg_integer().      %% Raft Term, starts 0
 -type log_index() :: non_neg_integer().      %% 0 = empty-log / snapshot sentinel; entries 1..N
 -type server_id() :: {inet:hostname(), inet:port_number()}.   %% == Brahms NodeId == {Host,Port}
@@ -77,18 +77,18 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 %% `author`/`sig` are RESERVED for signing (identity readiness, see below): Phase 1
 %% sets author = self node id, sig = none, and verification is a pass-through stub.
 %% Reserving them now keeps the wire + on-disk format stable when signing turns on.
--record(change, {tx_id      :: binary(),            %% unique per transaction (ulid)
+-record(transaction, {tx_id      :: binary(),            %% unique per transaction (ulid)
                  caller_ns  :: binary(),            %% CallerNs (#5), first-class (#2)
                  diff       :: [op()],              %% concrete asserts/retracts (#25)
                  read_check :: read_check(),        %% what the proof relied on (#24)
                  author     :: server_id(),         %% who submitted it (Phase 1: node id; later: pubkey())
                  sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none in Phase 1
 
-%% Raft log entry (§E.0). `data` is a #change{} for blocks (or `noop` for the election marker).
+%% Raft log entry (§E.0). `data` is a #transaction{} for blocks (or `noop` for the election marker).
 -record(entry, {index :: log_index(),
                 term  :: term_no(),
                 kind  :: block | config,
-                data  :: #change{} | noop | {add, server_id()} | {remove, server_id()}}).
+                data  :: #transaction{} | noop | {add, server_id()} | {remove, server_id()}}).
 
 %% the six Raft RPC records — exact fields (snake_case)
 -record(request_vote,        {term           :: term_no(),
@@ -127,10 +127,10 @@ survive a lying member. The real identity will be a **keypair** (a public key as
 with), exactly as onbrater did. To avoid a painful format migration, Phase 1 **reserves the slots and leaves
 them empty**:
 
-- **`#change.author` / `#change.sig`** — every change will eventually be signed by its submitter over its
+- **`#transaction.author` / `#transaction.sig`** — every change will eventually be signed by its submitter over its
   canonical bytes (`term_to_binary({tx_id, caller_ns, diff, read_check}, [deterministic])`). Phase 1 sets
   `author = self` (the node id), `sig = none`, and `verify_change/2` is a pass-through stub that always
-  succeeds. Each `#change{}` build site (e.g. §4.5) sets `author = self`; `sig` defaults to `none`. The
+  succeeds. Each `#transaction{}` build site (e.g. §4.5) sets `author = self`; `sig` defaults to `none`. The
   byte-size guard and `tx_id` correlation are unaffected.
 - **Identity vs. address.** Later, `server_id()` becomes a **`pubkey()`**, and `{Host, Port}` is demoted to
   "where you dial it," bound to the key by a signed **admission record** (onbrater's `peer_admitted(NodeId,
@@ -148,9 +148,9 @@ not the record shapes.
 
 ---
 
-## 1. `quod_log` state machine
+## 1. `quod_ledger` state machine
 
-> **Module:** `/home/yan/src/quod/src/quod_log.erl` — one `gen_statem` per ontology namespace, the committee
+> **Module:** `/home/yan/src/quod/src/quod_ledger.erl` — one `gen_statem` per ontology namespace, the committee
 > member that orders and agrees on blocks. Hand-rolled lean Raft over `quod_link` streams on channel
 > `term_to_binary({log, Ns}, [deterministic])`, no Erlang distribution. It is the `append`/replicate side;
 > `quod_prolog` is the `apply`/prove side, driven by this module's commit→apply loop.
@@ -159,11 +159,11 @@ not the record shapes.
 
 1. **`server_id() = NodeId = {Host, Port}`** is the committee-member id used as `voted_for`/`leader_id`/
    `candidate_id` and as map keys — the `quod_quic` NodeId, the only stable channel-addressable id.
-2. **Durability is delegated to `quod_log_store`** (§3). Every fsync-ordering rule is expressed as "call
-   `quod_log_store:*` and only on its `ok`/`{ok, Store1}` return send the network reply / count toward
+2. **Durability is delegated to `quod_ledger_store`** (§3). Every fsync-ordering rule is expressed as "call
+   `quod_ledger_store:*` and only on its `ok`/`{ok, Store1}` return send the network reply / count toward
    commit." The handle is threaded through `#d.store`.
-3. **`Block` payload is opaque to `quod_log`.** The application command is a `#change{}` (§ shared header);
-   `quod_log` carries it as `#entry.data` for `kind=block` and never inspects it. The election no-op is the
+3. **`Block` payload is opaque to `quod_ledger`.** The application command is a `#transaction{}` (§ shared header);
+   `quod_ledger` carries it as `#entry.data` for `kind=block` and never inspects it. The election no-op is the
    one `block` entry whose `data` is the atom `noop`.
 4. **`config` re-derivation is a whole-log fold** (`derive_committee/1`) on every append/truncate touching a
    config entry. Cheap at committee sizes 1/3/5.
@@ -176,14 +176,14 @@ not the record shapes.
 ### 1.2 Behaviour, exports, callback_mode
 
 ```erlang
--module(quod_log).
+-module(quod_ledger).
 -moduledoc """
 Per-namespace lean **Raft** committee member: orders and replicates the
 ontology's block list over the dedicated `{log, Ns}` `quod_link` channel.
 One `gen_statem` per ontology. States `follower` | `candidate` | `leader`.
 """.
 -behaviour(gen_statem).
--include("quod_log.hrl").
+-include("quod_ledger.hrl").
 
 %% API
 -export([start_link/2,
@@ -204,7 +204,7 @@ One `gen_statem` per ontology. States `follower` | `candidate` | `leader`.
 callback_mode() -> [state_functions].
 ```
 
-`start_namespace/2` does **not** live on `quod_log` — it lives on `quod_ns_sup` (§5). `quod_log:start_link/2`
+`start_namespace/2` does **not** live on `quod_ledger` — it lives on `quod_ns_sup` (§5). `quod_ledger:start_link/2`
 is invoked by `quod_ns`.
 
 Each state is `Name(EventType, Event, D)` with a catch-all delegating to a shared `common/3`:
@@ -228,7 +228,7 @@ leader(EventType, Event, D)    -> common(EventType, Event, D).
     outbox  = #{} :: #{server_id() => [binary()]},   %% per-peer FIFO queued while a link opens
     rx      = #{} :: #{server_id() => #rx{}},        %% per-peer chunk reassembly (§2)
 
-    %% ================= PERSISTED (fsync via quod_log_store before reply) =======
+    %% ================= PERSISTED (fsync via quod_ledger_store before reply) =======
     cur_term  = 0    :: term_no(),
     voted_for = none :: server_id() | none,
     log       = []   :: [#entry{}],            %% index 1..N, no gaps — IS the durable block list
@@ -247,7 +247,7 @@ leader(EventType, Event, D)    -> common(EventType, Event, D).
     pending      = #{} :: #{log_index() => gen_statem:from()}, %% client appends awaiting commit
 
     %% ---- handle + metrics ----
-    store     :: quod_log_store:handle(),
+    store     :: quod_ledger_store:handle(),
     elections = 0 :: non_neg_integer(),
     appends   = 0 :: non_neg_integer(),
     commits   = 0 :: non_neg_integer(),
@@ -294,7 +294,7 @@ init({Ns, Config}) ->
             Chan    = term_to_binary({log, Ns}, [deterministic]),
             DataDir = maps:get(data_dir, Cfg),
             quod_reg:subscribe({channel, Chan}),
-            {ok, Store} = quod_log_store:open(Ns, DataDir),
+            {ok, Store} = quod_ledger_store:open(Ns, DataDir),
             D0 = #d{ns = Ns, self = Self, cfg = Cfg, chan = Chan, store = Store},
             D1 = load_or_bootstrap(D0, Cfg),          %% durable reload OR founding config
             D2 = open_committee_links(D1),
@@ -305,7 +305,7 @@ init({Ns, Config}) ->
 
 `load_or_bootstrap/2`:
 
-- **Restart path (#29):** `quod_log_store:load(Store)` returns `#{cur_term, voted_for, log, snap_idx,
+- **Restart path (#29):** `quod_ledger_store:load(Store)` returns `#{cur_term, voted_for, log, snap_idx,
   snap_term, snap_cfg, snap_data}` → populate the PERSISTED fields. Committee is `derive_committee/1`.
 - **Founding path (`mode=create`, 1-voter, #18):** store empty AND `committee ∈ {[], [Self]}`. Seed a
   committed `kind=config {add, Self}` (equivalently `snap_cfg = [Self]` with empty log), durable. Yields
@@ -343,7 +343,7 @@ and never an election timer. `state_timeout` auto-cancels on any state transitio
    ```erlang
    up_to_date(CandT, CandI, MyT, MyI) -> CandT > MyT orelse (CandT =:= MyT andalso CandI >= MyI).
    ```
-4. **If granting:** `D1 = D#d{voted_for = RV.candidate_id}`, `quod_log_store:write_meta(Store, cur_term,
+4. **If granting:** `D1 = D#d{voted_for = RV.candidate_id}`, `quod_ledger_store:write_meta(Store, cur_term,
    candidate_id)` — durable — then reply `vote_granted=true`, re-arm election timer, `{next_state, follower,
    D1', [election_timeout(D1')]}`.
 5. Else reply `vote_granted=false`.
@@ -370,7 +370,7 @@ true}`; if `count(true votes incl. self) >= quorum(D)` → **become leader** (§
 5. **Truncate + append** (`truncate_append/2`, pure): same-index-different-term existing entry → drop it and
    the tail, append the suffix; same-index-same-term → skip (idempotent, **never truncate on a match**); no
    entry → append. If any touched entry is `kind=config` → re-derive committee, set/clear `cfg_uncommitted`.
-   `quod_log_store:append(Store, NewEntries)` — durable — before replying `success=true`. On a truncation,
+   `quod_ledger_store:append(Store, NewEntries)` — durable — before replying `success=true`. On a truncation,
    **fail any `pending` From at an index > commit_index** with `{error, not_in_charge, leader_id}`.
 6. **Advance commit:** if `AE.leader_commit > commit_index`, set `commit_index := min(leader_commit,
    index_of_last_NEW_entry)`, then drive apply (§1.10).
@@ -414,7 +414,7 @@ derive_committee(D))` (a removed server does not start elections):
 ```erlang
 T1 = cur_term + 1,
 D1 = D#d{cur_term = T1, voted_for = self, votes = #{self => true}, leader_id = none},
-ok = quod_log_store:write_meta(Store, T1, self),     %% DURABLE before any RPC
+ok = quod_ledger_store:write_meta(Store, T1, self),     %% DURABLE before any RPC
 broadcast RequestVote{term=T1, candidate_id=self,
                       last_log_index=last_log_index(D1), last_log_term=last_log_term(D1)},
 {next_state, candidate, D1#d{elections = elections+1}, [election_timeout(D1)]}
@@ -435,7 +435,7 @@ D1 = D#d{next_index = Next, match_index = Match, leader_id = self, votes = #{}},
 I  = LLI + 1,
 E  = #entry{index = I, term = cur_term, kind = block, data = noop},
 D2 = D1#d{log = D1#d.log ++ [E]},
-{ok, Store1} = quod_log_store:append(D2#d.store, [E]),
+{ok, Store1} = quod_ledger_store:append(D2#d.store, [E]),
 D3 = case quorum(D2) of 1 -> advance_commit(D2#d{store=Store1}); _ -> D2#d{store=Store1} end,
 {next_state, leader, D3, [replicate_now, heartbeat_timeout(D3)]}
 ```
@@ -482,7 +482,7 @@ apply_committed(D = #d{last_applied = LA}) ->
 `apply_block/3` is a **synchronous `gen_server:call`** into `quod_prolog`, returning `ok | {reject,
 conflict}`. The OCC read-set re-check happens at apply on **every** member; because every member re-checks
 deterministically against the same converged KB at the same index, the verdict is identical everywhere.
-`quod_log` surfaces the verdict to the parked client:
+`quod_ledger` surfaces the verdict to the parked client:
 
 ```erlang
 reply_pending(I, Verdict, D) ->
@@ -509,11 +509,11 @@ drop_departed(_, D) -> D.
 ### 1.11 The `append` API + membership-change entries
 
 ```erlang
--spec append(binary(), #change{}) ->
+-spec append(binary(), #transaction{}) ->
     {ok, BlockIndex :: log_index()} | {error, not_in_charge, Hint :: server_id() | none}
   | {error, conflict_retry} | {error, busy}.
 append(Ns, Change) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), {append, Change}, 5000)
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), {append, Change}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
 ```
 
@@ -526,7 +526,7 @@ leader({call, From}, {append, Change}, D) ->
         false ->
             I  = last_log_index(D) + 1,
             E  = #entry{index = I, term = D#d.cur_term, kind = block, data = Change},
-            {ok, Store1} = quod_log_store:append(D#d.store, [E]),   %% DURABLE before counting own log
+            {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),   %% DURABLE before counting own log
             D1 = D#d{log = D#d.log ++ [E], store = Store1,
                      appends = D#d.appends + 1,
                      pending = (D#d.pending)#{I => From}},          %% From replied from apply step
@@ -548,8 +548,8 @@ step (§1.10) so the reply reflects the OCC verdict. On leader step-down, fail a
 **Membership change** (`kind=config`, one at a time):
 
 ```erlang
-add_member(Ns, Node)    -> gen_statem:call(quod_reg:via({quod_log, Ns}), {add_member, Node}, 5000).
-remove_member(Ns, Node) -> gen_statem:call(quod_reg:via({quod_log, Ns}), {remove_member, Node}, 5000).
+add_member(Ns, Node)    -> gen_statem:call(quod_reg:via({quod_ledger, Ns}), {add_member, Node}, 5000).
+remove_member(Ns, Node) -> gen_statem:call(quod_reg:via({quod_ledger, Ns}), {remove_member, Node}, 5000).
 
 leader({call, From}, {Op, Node}, D) when Op =:= add_member; Op =:= remove_member ->
     case D#d.cfg_uncommitted of
@@ -558,7 +558,7 @@ leader({call, From}, {Op, Node}, D) when Op =:= add_member; Op =:= remove_member
             Data = case Op of add_member -> {add, Node}; remove_member -> {remove, Node} end,
             I  = last_log_index(D) + 1,
             E  = #entry{index = I, term = D#d.cur_term, kind = config, data = Data},
-            {ok, Store1} = quod_log_store:append(D#d.store, [E]),
+            {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
             D1 = D#d{log = D#d.log ++ [E], store = Store1, cfg_uncommitted = true},
             D2 = D1#d{next_index = ensure_peer(Node, D1)},   %% adopt-on-append
             D3 = open_committee_links(D2),
@@ -576,7 +576,7 @@ leader({call, From}, {Op, Node}, D) when Op =:= add_member; Op =:= remove_member
 
 ```erlang
 committee(Ns) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), get_committee, 1000) catch exit:_ -> [] end.
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), get_committee, 1000) catch exit:_ -> [] end.
 
 derive_committee(#d{snap_cfg = Base, log = Log}) ->
     lists:foldl(fun(#entry{kind = config, data = {add, S}}, Acc)    -> [S | Acc -- [S]];
@@ -607,7 +607,7 @@ serves paged browsing.
 
 `logger:info("quod[~s]: <msg>", [Ns | Args])`; `catch exit:_` around `gen_statem:call`; `[safe]`
 size-capped decode; side-effect returns ignored with `_ =`; `stats/1` returns one snake_case key set (§1.14);
-`terminate/3` does `quod_reg:unsubscribe({channel, Chan})` in a `catch` plus `quod_log_store:close(Store)`.
+`terminate/3` does `quod_reg:unsubscribe({channel, Chan})` in a `catch` plus `quod_ledger_store:close(Store)`.
 
 ### 1.14 `stats/1`
 
@@ -616,7 +616,7 @@ safe):
 
 ```erlang
 stats(Ns) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), get_stats, 1000) catch exit:_ -> undefined end.
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), get_stats, 1000) catch exit:_ -> undefined end.
 
 %% get_stats reply:
 #{cur_term => T, commit_index => C, last_applied => A, log_len => L,
@@ -630,7 +630,7 @@ stats(Ns) ->
 
 ## 2. Wire protocol over `quod_link`
 
-This is the transport/codec layer of `quod_log`: record shapes (shared header), encoding, chunking, link
+This is the transport/codec layer of `quod_ledger`: record shapes (shared header), encoding, chunking, link
 bookkeeping, and the three transport operations.
 
 ### 2.1 Channel
@@ -643,12 +643,12 @@ quod_reg:subscribe({channel, Chan}),
 `[deterministic]` is mandatory: `quod_quic:open_link/2` and `quod_reg:subscribe/1` key on the binary; a
 non-deterministic encoding would split the channel across nodes/OTP versions. `terminate/3` mirrors with
 `quod_reg:unsubscribe({channel, Chan})` in `catch _:_ -> ok`. `{channel, Chan}` (a binary-keyed gproc
-property) and `{quod_log, Ns}` (a gproc name) do not collide.
+property) and `{quod_ledger, Ns}` (a gproc name) do not collide.
 
 ### 2.2 Records & types
 
-`server_id()`, `term_no()`, `log_index()`, `clause()`, `op()`, `read_check()`, `#entry{}`, `#change{}`, and
-the six RPC records live in `include/quod_log.hrl` (§ shared header), `-include`d at the top of `quod_log.erl`
+`server_id()`, `term_no()`, `log_index()`, `clause()`, `op()`, `read_check()`, `#entry{}`, `#transaction{}`, and
+the six RPC records live in `include/quod_ledger.hrl` (§ shared header), `-include`d at the top of `quod_ledger.erl`
 **before** `#d{}`/`#rx{}` so `server_id()`/`#entry{}` are in scope. `install_snapshot.data` is an
 already-serialized `binary()`; the whole record is `encode/1`'d once like any other record (no separate
 re-wrap of `data`; the concatenation of its chunk parts is exactly `encode(#install_snapshot{})`).
@@ -672,7 +672,7 @@ decode_record(Bin) -> try binary_to_term(Bin)        of T -> T catch _:_ -> erro
 
 The wire **envelope** (`{raft|raft_chunk, Ns, ...}`) holds only known atoms + binaries, so it decodes with
 **`[safe]`** (`decode/1`) — refusing unknown atoms / fun / pid / port. But the **inner record** is an
-`#append_entries{}` carrying a `#change{}` whose diff is arbitrary Prolog clauses — i.e. atoms the receiver
+`#append_entries{}` carrying a `#transaction{}` whose diff is arbitrary Prolog clauses — i.e. atoms the receiver
 *has not seen yet* (the fact's own functor/args). `[safe]` would refuse those legitimately-new atoms and drop
 every fact-bearing block, so a follower could never learn a new fact (it only learns the atom by applying it
 — chicken-and-egg). The inner record therefore decodes **without `[safe]`** (`decode_record/1`), bounded by
@@ -730,7 +730,7 @@ per-peer outbox FIFO in order**. On `{link_error, M, Chan}` drop the queued fram
 the next heartbeat). On `{'DOWN', Ref, ...}` drop the conn. All in `common/3`, matching on `Chan`.
 
 > **Outbox divergence from Brahms (load-bearing):** Brahms's outbox is last-wins single-payload. Raft RPCs
-> are not last-wins, so `quod_log`'s outbox is a **per-peer FIFO list** flushed in order on `link_up`.
+> are not last-wins, so `quod_ledger`'s outbox is a **per-peer FIFO list** flushed in order on `link_up`.
 
 **(b) Send to ONE member (unicast)** — the only natural primitive:
 
@@ -802,16 +802,16 @@ dispatch_record(Peer, Bin, D) ->
 ### 2.7 Separation from Brahms
 
 Distinct channel (`{channel, term_to_binary({log, Ns}, [deterministic])}` vs `{channel, Ns}`), distinct reg
-name (`{quod_log, Ns}` vs `{quod_brahms, Ns}`), distinct envelope tags (`{raft, ...}`/`{raft_chunk, ...}` vs
+name (`{quod_ledger, Ns}` vs `{quod_brahms, Ns}`), distinct envelope tags (`{raft, ...}`/`{raft_chunk, ...}` vs
 gossip tuples). One `quod_link` per channel per connection → the `{log, Ns}` and Brahms streams are
 independent on the same QUIC connection.
 
 ---
 
-## 3. Persistence (`quod_log_store`)
+## 3. Persistence (`quod_ledger_store`)
 
-`quod_log_store` is the only quod code that touches disk. A **plain library module** (no process, no reg, no
-supervisor child), called synchronously in-line from inside the `quod_log` `gen_statem` callbacks so an
+`quod_ledger_store` is the only quod code that touches disk. A **plain library module** (no process, no reg, no
+supervisor child), called synchronously in-line from inside the `quod_ledger` `gen_statem` callbacks so an
 fsync provably completes before the triggering network reply leaves. It holds no state beyond an opaque
 handle threaded through `#d.store`.
 
@@ -836,12 +836,12 @@ format change.
 
 ### 3.2 The store handle
 
-`include/quod_log_store.hrl` `-include`s `quod_log.hrl` (so `#entry{}` is the shared definition — **not**
+`include/quod_ledger_store.hrl` `-include`s `quod_ledger.hrl` (so `#entry{}` is the shared definition — **not**
 redefined here) and defines only the private store record + opaque handle type:
 
 ```erlang
-%% include/quod_log_store.hrl
--include("quod_log.hrl").
+%% include/quod_ledger_store.hrl
+-include("quod_ledger.hrl").
 
 -record(store, {dir         :: file:filename_all(),
                 ns          :: binary(),
@@ -887,7 +887,7 @@ Payload = term_to_binary(Term, [deterministic])
 ### 3.4 Public API (handle-threaded)
 
 All functions are synchronous and complete their required fsync before returning. A write that cannot fsync
-raises (crashing the `quod_log` statem → supervisor restart → clean cold boot) — the one place the
+raises (crashing the `quod_ledger` statem → supervisor restart → clean cold boot) — the one place the
 "never crash on transient failure" convention is deliberately inverted.
 
 ```erlang
@@ -901,7 +901,7 @@ raises (crashing the `quod_log` statem → supervisor restart → clean cold boo
 
 -spec append(handle(), [#entry{}]) -> {ok, handle()}.
 %%   Contiguous indices == last_index+1.. ; seek to base_offset, write frames+idx, single LOG datasync
-%%   per batch, advance last_index/last_term/base_offset. Returns before quod_log counts own log (§10.2/10.3).
+%%   per batch, advance last_index/last_term/base_offset. Returns before quod_ledger counts own log (§10.2/10.3).
 -spec truncate_from(handle(), Index :: pos_integer()) -> {ok, handle()}.
 %%   Delete entry Index and after; file:truncate log+idx, datasync, recompute. Never <= snap_index.
 
@@ -919,13 +919,13 @@ raises (crashing the `quod_log` statem → supervisor restart → clean cold boo
 ```
 
 `load/1` is a convenience over `read_meta`/`read_snapshot`/scan returning `#{cur_term, voted_for, log,
-snap_idx, snap_term, snap_cfg, snap_data}` for `quod_log:init/1`.
+snap_idx, snap_term, snap_cfg, snap_data}` for `quod_ledger:init/1`.
 
 ### 3.5 Cold-boot reload sequence
 
-Called once from `quod_log:init({Ns, Config})`:
+Called once from `quod_ledger:init({Ns, Config})`:
 
-1. `DataDir = maps:get(data_dir, Cfg)`; `{ok, Store0} = quod_log_store:open(Ns, DataDir)`. Inside `open/2`:
+1. `DataDir = maps:get(data_dir, Cfg)`; `{ok, Store0} = quod_ledger_store:open(Ns, DataDir)`. Inside `open/2`:
    a. `filelib:ensure_path/1` the namespace dir.
    b. Open `log.NNNN`/`.idx` `[read, write, raw, binary]`; scan the idx; `base_offset` = log file size.
    c. **Torn-tail recovery:** if the final frame's `Len`+`CRC` don't fully fit/check, seek to the last good
@@ -941,7 +941,7 @@ Called once from `quod_log:init({Ns, Config})`:
    index order, *appended* not just committed); `next_index`/`match_index` empty until an election win.
 5. Enter `follower` with a randomized election timeout. A 1-member committee self-elects on the first
    timeout.
-6. Brand-new namespace: no files → empty store, `read_meta` gives `{0, none}`, `quod_log` appends the
+6. Brand-new namespace: no files → empty store, `read_meta` gives `{0, none}`, `quod_ledger` appends the
    genesis `{add, self}` config (create mode).
 
 ### 3.6 Browsability (full-history read path)
@@ -950,7 +950,7 @@ Called once from `quod_log:init({Ns, Config})`:
 -spec history(Ns :: binary(), From :: pos_integer(), Count :: pos_integer())
         -> {ok, [#entry{}], NextFrom :: pos_integer() | done} | {error, term()}.
 history(Ns, From, Count) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), {history, From, Count}, 1000)
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), {history, From, Count}, 1000)
     catch exit:_ -> {error, unavailable} end.
 ```
 
@@ -975,15 +975,15 @@ History is committee-only in the first cut; read-copies hold current facts only.
 ## 4. `quod_prolog` apply + prove
 
 `quod_prolog` is the per-namespace fact engine: it owns the committed erlog KB for one ontology, applies
-committed blocks from `quod_log` in log order, and serves proofs. It **serialises writes**; read-only proofs
+committed blocks from `quod_ledger` in log order, and serves proofs. It **serialises writes**; read-only proofs
 run on copy-on-write overlays alongside, never blocking the writer (#22, #26). One per ontology.
 
 ### 4.1 Module, records
 
 ```erlang
 -module(quod_prolog).
--behaviour(gen_server).   %% one writer-serialiser per Ns; no protocol states (those live in quod_log)
--include("quod_log.hrl").
+-behaviour(gen_server).   %% one writer-serialiser per Ns; no protocol states (those live in quod_ledger)
+-include("quod_ledger.hrl").
 ```
 
 erlog stack reused from bbsvx: `quod_erlog_db_differ → quod_erlog_db_local_prove → quod_erlog_db_ets`
@@ -1011,7 +1011,7 @@ writes, #10).
 -type write_ctx() :: {From :: gen_server:from(), Effects :: [term()]}.
 ```
 
-`#change{}` and the `op()`/`read_check()`/`clause()` types come from the shared header. `read_check` values
+`#transaction{}` and the `op()`/`read_check()`/`clause()` types come from the shared header. `read_check` values
 are `phash2` integers per `{Functor, Arity}` (per-predicate granularity — same-functor different-fact
 changes cause accepted false conflicts; per-fact granularity deferred).
 
@@ -1029,9 +1029,9 @@ namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1
                     max_diff_bytes => 1048576}).
 ```
 
-Child of `quod_ns` (`rest_for_one`, after `quod_log`). `init({Ns, Config})` merges `?DEFAULTS`, validates,
+Child of `quod_ns` (`rest_for_one`, after `quod_ledger`). `init({Ns, Config})` merges `?DEFAULTS`, validates,
 and rebuilds the KB (§4.6) before answering proves. `quod_prolog` does not subscribe to any channel; it
-receives committed blocks via direct call from `quod_log`.
+receives committed blocks via direct call from `quod_ledger`.
 
 ### 4.3 Serving `prove` — copy-on-write overlays, no writer blocking
 
@@ -1090,19 +1090,19 @@ serialisation point is the mailbox; `apply` is the only mutator of the committed
 
 ### 4.4 `apply_block` — deterministic OCC apply (#23, #25)
 
-`quod_log`, once a block is committed, calls `quod_prolog` **in log-index order**:
+`quod_ledger`, once a block is committed, calls `quod_prolog` **in log-index order**:
 
 ```erlang
--spec apply_block(Ns :: binary(), Index :: pos_integer(), Change :: #change{} | noop)
+-spec apply_block(Ns :: binary(), Index :: pos_integer(), Change :: #transaction{} | noop)
         -> ok | {reject, conflict}.
 apply_block(Ns, Index, Change) ->
     gen_server:call(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}, infinity).
 ```
 
-`apply_block/3` is a **synchronous call**. To avoid the `quod_prolog`↔`quod_log` deadlock, `quod_log:append`
+`apply_block/3` is a **synchronous call**. To avoid the `quod_prolog`↔`quod_ledger` deadlock, `quod_ledger:append`
 from `quod_prolog` returns at **append/replication-accept** (not commit); the final OCC/commit verdict
 reaches the original prove caller via `quod_prolog`'s own `apply_block` handler correlating by `tx_id`. So
-`quod_prolog` is never blocked in `gen_server:call(quod_log, append)` while needing to service
+`quod_prolog` is never blocked in `gen_server:call(quod_ledger, append)` while needing to service
 `apply_block`.
 
 `handle_call({apply_block, Index, Change}, _From, S)` runs the pure engine step, replies the verdict
@@ -1113,7 +1113,7 @@ synchronously, updates `kb`, releases any parked write for the `tx_id`, bumps me
 apply(Index, noop, #kb{applied = A} = KB) ->
     Index =:= A + 1 orelse error({apply_out_of_order, Index, A}),
     {ok, KB#kb{applied = Index}};
-apply(Index, #change{read_check = ReadCheck, diff = Diff}, #kb{est = Est, applied = A} = KB) ->
+apply(Index, #transaction{read_check = ReadCheck, diff = Diff}, #kb{est = Est, applied = A} = KB) ->
     Index =:= A + 1 orelse error({apply_out_of_order, Index, A}),   %% log order is the contract (#13)
     case validate_read_set(ReadCheck, Est) of
         ok ->
@@ -1133,15 +1133,15 @@ apply(Index, #change{read_check = ReadCheck, diff = Diff}, #kb{est = Est, applie
   retry (§4.5); other members no-op. Because every member runs `apply` over the same committed prefix, the
   verdict is identical everywhere — accept/reject is itself part of the replicated state machine.
 
-### 4.5 Building a `#change{}` and submitting it (effects-after-commit)
+### 4.5 Building a `#transaction{}` and submitting it (effects-after-commit)
 
 A would-be writer (own-ns `prove` whose worker produced `Changes =/= []`) becomes a transaction. `From`
 stays parked; nothing is replied until the block applies on this node.
 
 1. Proof already ran on the staging overlay, capturing `Changes`, `ReadSet`, `Effects`.
-2. Build a `#change{}`:
+2. Build a `#transaction{}`:
    ```erlang
-   Change = #change{tx_id      = ulid:generate(),
+   Change = #transaction{tx_id      = ulid:generate(),
                     caller_ns  = CallerNs,
                     diff       = normalize_ops(Changes),   %% local_prove ops -> [op()] by content
                     read_check = ReadSet}
@@ -1150,7 +1150,7 @@ stays parked; nothing is replied until the block applies on this node.
    `byte_size(term_to_binary(Change)) =< max_diff_bytes`; over-size → `{error, change_too_large}`, drop.
 3. **Park `{From, Effects}` in `parked` under `tx_id`, then submit:**
    ```erlang
-   case quod_log:append(S#s.ns, Change) of
+   case quod_ledger:append(S#s.ns, Change) of
        {ok, _BlockIndex}            -> ok;   %% accepted into the log (replication-accept)
        {error, not_in_charge, Hint} -> {error, {not_leader, Hint}};  %% reply now, unpark
        {error, conflict_retry}      -> {retry, conflict};            %% leader fast-fail (optional)
@@ -1164,25 +1164,25 @@ stays parked; nothing is replied until the block applies on this node.
    - applied → reply `{ok, Bindings, HeightRead}` to the parked `From` **and** fire the deferred `Effects`.
    - rejected → reply `{retry, conflict}`; discard `Effects`.
    Remove the `tx_id` entry either way. On other members the block has no parked entry, so `apply_block` just
-   mutates the KB. `quod_log` tags each applied block with its `#change.tx_id` for the correlation.
+   mutates the KB. `quod_ledger` tags each applied block with its `#transaction.tx_id` for the correlation.
 
 ### 4.6 Rebuild on start — replay the log / snapshot (#20, #29, #13)
 
 `init/1` builds the committed KB **from the log**, never from a separately-persisted fact store, via the
-`quod_log:replay/1` handshake (the safe direction: the log is authoritative; prolog rebuilds from it, never
+`quod_ledger:replay/1` handshake (the safe direction: the log is authoritative; prolog rebuilds from it, never
 vice-versa):
 
 ```erlang
 build_kb(Ns) ->
     {ok, Base} = erlog_int:new(quod_erlog_db_differ, {fresh_ets(Ns), quod_erlog_db_ets}),
     Est0 = load_builtins(Base),
-    case quod_log:snapshot(Ns) of
+    case quod_ledger:snapshot(Ns) of
         {ok, SnapIndex, SnapData} -> {SnapIndex, seed_from_snapshot(SnapData, Est0)};
         none                      -> {0, Est0}
     end.
 ```
 
-Then, on `init`, `quod_prolog` synchronously calls `quod_log:replay(Ns)`, which resets `quod_log`'s
+Then, on `init`, `quod_prolog` synchronously calls `quod_ledger:replay(Ns)`, which resets `quod_ledger`'s
 `last_applied := snap_idx` (and hands snapshot data if any) and **re-drives `apply_block/3` over `snap_idx+1
 .. commit_index`** into the fresh prolog, before any prove is answered. This is what makes a **lone
 `quod_prolog` crash** recover: without the reset, the surviving log (already at `last_applied =
@@ -1217,9 +1217,9 @@ handle_call(get_stats, _From, S) ->
 | Foreign-ns write (`CallerNs =/= TargetNs`, `Changes =/= []`) | `{error, foreign_write_unsupported}` (#10). |
 | `apply_block` out of order | `error({apply_out_of_order, ...})`, sub-sup restarts and rebuilds from the log. |
 | OCC conflict at apply | `{reject, conflict}`: facts unchanged, `applied` advances, `rejects++`; submitter gets `{retry, conflict}`; effects discarded. |
-| Over-size `#change{}` | reject before `quod_log:append`, `{error, change_too_large}`. |
+| Over-size `#transaction{}` | reject before `quod_ledger:append`, `{error, change_too_large}`. |
 | Not the leader on submit | `{error, not_in_charge, Hint}` → `{error, {not_leader, Hint}}`, unpark. |
-| 1-voter committee | transparent: `quod_log` commits on local fsync, then `apply_block` fires as in N-voter. |
+| 1-voter committee | transparent: `quod_ledger` commits on local fsync, then `apply_block` fires as in N-voter. |
 | Restart mid-flight write | a parked write whose block had not committed is lost; caller times out (`call_ms`) and re-proves. A committed block is replayed in §4.6; only the deferred external effect is lost (at-most-once). |
 
 ---
@@ -1265,10 +1265,10 @@ init([]) ->
 
 ### 5.2 `quod_ns` — per-namespace sub-supervisor (`src/quod_ns.erl`)
 
-The unit of **fate-sharing**. Registers `{quod_ns, Ns}`, supervises `quod_log` then `quod_prolog` with
+The unit of **fate-sharing**. Registers `{quod_ns, Ns}`, supervises `quod_ledger` then `quod_prolog` with
 **`rest_for_one`**.
 
-**Authoritative direction:** the durable log rebuilds the kb; the kb never rebuilds the log. If `quod_log`
+**Authoritative direction:** the durable log rebuilds the kb; the kb never rebuilds the log. If `quod_ledger`
 crashes, `rest_for_one` restarts it **and then** `quod_prolog`, which rebuilds from the disk-reloaded log; if
 `quod_prolog` crashes alone, only it restarts and rebuilds from the log's committed prefix via the §4.6
 replay handshake.
@@ -1284,7 +1284,7 @@ start_link(Ns, Config) -> supervisor:start_link(quod_reg:via({quod_ns, Ns}), ?MO
 init({Ns, Config}) ->
     Flags = #{strategy => rest_for_one, intensity => 10, period => 10},
     Children =
-        [#{id => quod_log,    start => {quod_log, start_link, [Ns, Config]},
+        [#{id => quod_ledger,    start => {quod_ledger, start_link, [Ns, Config]},
            restart => permanent, type => worker},
          #{id => quod_prolog, start => {quod_prolog, start_link, [Ns, Config]},
            restart => permanent, type => worker}],
@@ -1294,18 +1294,18 @@ init({Ns, Config}) ->
 Children are `permanent` within the sub-sup; the sub-sup is `transient` under `quod_ns_sup` (a clean
 `stop_namespace` is not auto-restarted; a crash is).
 
-### 5.3 `quod_log` ⇄ `quod_prolog` apply coupling
+### 5.3 `quod_ledger` ⇄ `quod_prolog` apply coupling
 
-The coupling is the Raft apply loop (§1.10): for each committed `kind=block`, `quod_log` calls
+The coupling is the Raft apply loop (§1.10): for each committed `kind=block`, `quod_ledger` calls
 `quod_prolog:apply_block(Ns, Index, Change) -> ok | {reject, conflict}` **strictly in index order**. It is a
 synchronous call; the OCC read-set re-check runs at apply on every member (§4.4) — the verdict is
 deterministic and identical everywhere, so this reconciles "apply re-checks" (#23) with determinism (#25).
 `kind=config` entries carry **no `read_check`** and are not read-validated.
 
-**Rebuild handshake:** on `quod_prolog:init/1` (empty kb), it calls `quod_log:replay(Ns) -> {ok, AppliedUpTo}`
+**Rebuild handshake:** on `quod_prolog:init/1` (empty kb), it calls `quod_ledger:replay(Ns) -> {ok, AppliedUpTo}`
 which resets `last_applied := snap_idx` (seeding from snapshot data if present) and re-drives `apply_block/3`
 over `snap_idx+1 .. commit_index` before any prove is answered (§4.6). The same handshake covers the
-`quod_log`-crash path (prolog restarts after it).
+`quod_ledger`-crash path (prolog restarts after it).
 
 ### 5.4 Routing `prove(TargetNs, Goal, CallerNs)`
 
@@ -1317,7 +1317,7 @@ read or any write.
 
 ### 5.5 Committee write path: `append` / `apply`
 
-`quod_log:append(Ns, #change{}) -> {ok, BlockIndex} | {error, not_in_charge, Hint} | {error, conflict_retry}
+`quod_ledger:append(Ns, #transaction{}) -> {ok, BlockIndex} | {error, not_in_charge, Hint} | {error, conflict_retry}
 | {error, busy}` (§1.11). A non-leader replies `{error, not_in_charge, Hint}` (last-known leader). On the
 leader: append a `kind=block` entry, replicate, commit once a majority holds it, then the apply loop pushes
 it into every member's `quod_prolog` (which runs the OCC re-check at apply, surfacing `{error,
@@ -1331,12 +1331,12 @@ path. The distinction is safety-critical: `create` bootstraps a 1-voter committe
 must **never** bootstrap a committee, **never** arm an election timer, and **never** self-elect until a real
 committee's leader has added it.
 
-**Create (genesis, 1-voter, #18):** `quod_log` finds no durable state and `mode=create` → bootstraps a single
+**Create (genesis, 1-voter, #18):** `quod_ledger` finds no durable state and `mode=create` → bootstraps a single
 committed `kind=config {add, self}` (1-voter committee), fsync'd. On election timeout it self-elects (quorum
 1), becomes leader, is immediately writable — same code paths. Growth to 3/5 is the same code, one config
 change at a time (#19, §1.11).
 
-**Join:** `quod_log` finds no durable state and `mode=join` → passive learner (empty log, no genesis config,
+**Join:** `quod_ledger` finds no durable state and `mode=join` → passive learner (empty log, no genesis config,
 election timer **not** armed). Then:
 
 1. **Discover via Brahms** (discovery only, #28): `quod_brahms:view(Ns)` / `quod_brahms:sample(Ns)` (both
@@ -1358,7 +1358,7 @@ removing itself stays leader until the removal commits (under the new config exc
 and its `quod_ns` subtree is torn down via `stop_namespace/1` (clean terminate, not auto-restarted). A
 removed server stops/disarms its election timer once it observes its own committed removal. A crash (not a
 removal) is fine (#29): the committee continues at reduced size; the crashed node's `quod_ns` restarts
-(transient → on crash), `quod_log` reloads and catches up; membership is unchanged.
+(transient → on crash), `quod_ledger` reloads and catches up; membership is unchanged.
 
 ### 5.8 `quod_reg` keys
 
@@ -1368,7 +1368,7 @@ Add four rows to the `quod_reg` moduledoc key table (no code change):
 | ----- | ---------- |
 | `{quod_ns_sup, node}` | per-namespace content subtree root supervisor (singleton) |
 | `{quod_ns, Ns}` | a namespace's content sub-supervisor |
-| `{quod_log, Ns}` | a namespace's Raft committee member / log statem |
+| `{quod_ledger, Ns}` | a namespace's Raft committee member / log statem |
 | `{quod_prolog, Ns}` | a namespace's Prolog fact store + prove engine |
 
 Channel property: `{channel, term_to_binary({log, Ns}, [deterministic])}` — distinct from Brahms's
@@ -1377,7 +1377,7 @@ Channel property: `{channel, term_to_binary({log, Ns}, [deterministic])}` — di
 ### 5.9 Integration with `quod_brahms` and `quod_app` boot
 
 **`quod_brahms` — discovery only (#28).** Never started/stopped/restarted or read on the create path; only
-`quod_log`'s join path reads `quod_brahms:view/1` / `sample/1`, then filters against the in-log committee.
+`quod_ledger`'s join path reads `quod_brahms:view/1` / `sample/1`, then filters against the in-log committee.
 
 **`quod_sup` wiring:** replace the `%% TODO` line (`quod_sup.erl:31`) with:
 
@@ -1428,18 +1428,18 @@ milestone is demonstrable on its own and depends only on earlier ones.
 
 | module | role | reg key | started by |
 | ------ | ---- | ------- | ---------- |
-| `quod_log` | per-Ns Raft committee member; owns the durable log | `{quod_log, Ns}` | `quod_ns` |
+| `quod_ledger` | per-Ns Raft committee member; owns the durable log | `{quod_ledger, Ns}` | `quod_ns` |
 | `quod_prolog` | per-Ns facts engine: `apply`/`prove` | `{quod_prolog, Ns}` | `quod_ns` |
-| `quod_log_store` | on-disk persistence helper (library) | — | — |
+| `quod_ledger_store` | on-disk persistence helper (library) | — | — |
 | `quod_diff` | pure differ: write-set op-log + read-set hashes | — | — |
 | `quod_ns` | per-Ns `rest_for_one` sub-sup | `{quod_ns, Ns}` | `quod_ns_sup` |
 | `quod_ns_sup` | `simple_one_for_one` parent of `quod_ns` | `{quod_ns_sup, node}` | `quod_sup` |
 
-Shared types/records live in `include/quod_log.hrl` (§ shared header) and `include/quod_log_store.hrl`
+Shared types/records live in `include/quod_ledger.hrl` (§ shared header) and `include/quod_ledger_store.hrl`
 (§3.2). `#d{}` (§1.3) is the Raft `gen_statem` state.
 
 > **Channel-match hazard (mandatory).** Brahms matches inbound `{quod_message, _, Ns, _}` / `{link_up, _, Ns,
-> _}` on `Ns`. `quod_log` uses `Chan = term_to_binary({log, Ns}, [deterministic])`, so **every** `quod_log`
+> _}` on `Ns`. `quod_ledger` uses `Chan = term_to_binary({log, Ns}, [deterministic])`, so **every** `quod_ledger`
 > receive/link clause MUST bind/guard on `Chan`, not `Ns`. A verbatim copy from brahms that matches on `Ns`
 > would silently drop every Raft message.
 
@@ -1453,7 +1453,7 @@ on the next heartbeat.
 
 **Build:**
 
-1. **`quod_log_store`** (§3) — `open/2`, `load/1`, `write_meta/3`, `append/2`, `truncate_from/2`,
+1. **`quod_ledger_store`** (§3) — `open/2`, `load/1`, `write_meta/3`, `append/2`, `truncate_from/2`,
    `write_snapshot/5`, plus the readers. Every mutating call fsyncs before returning; one fsync per
    `append/2` batch. (Single-chunk snapshots; chunking not built.)
 2. **`quod_diff`** (pure, `-ifdef(TEST)` exported): `functor_hash(Functor, Arity, Clauses) -> integer()`,
@@ -1463,7 +1463,7 @@ on the next heartbeat.
    `apply/3`. `prove/3` runs against the local converged KB, returns bindings (not auto-asserted, #6),
    classifies after execution (#8); empty diff ⇒ read (no append); non-empty ⇒ transaction. Effects deferred
    until after commit (#11).
-4. **`quod_log` gen_statem** (§1): `init/1` (load durable, reconstruct volatile, subscribe on `Chan`, arm
+4. **`quod_ledger` gen_statem** (§1): `init/1` (load durable, reconstruct volatile, subscribe on `Chan`, arm
    election timer); brand-new-Ns create bootstrap (`{add, self}`); `append/2` (`{error, conflict_retry}` =
    OCC reject, `{error, busy}` = M5 backpressure); append path (leader, 1-voter: fsync, park `From`, commit
    on local fsync); apply loop (reply parked `From` from the apply step per OCC verdict; fail `pending` on
@@ -1478,7 +1478,7 @@ changes no facts (#14).
 
 **Goal:** a real N=3 committee over loopback QUIC. No change to M1's commit/apply/persist paths (#18).
 
-**Build (extends `quod_log` only):** link management to peers (§2.6 — match on `Chan`); `send_rpc` unicast +
+**Build (extends `quod_ledger` only):** link management to peers (§2.6 — match on `Chan`); `send_rpc` unicast +
 encode-once broadcast; receiving RPCs with the size-guard-before-decode and `[safe]` decode; RequestVote
 (§1.6); AppendEntries (§1.7, fsync appended entries before `success`, fail `pending` above a truncation);
 leader replication + commit with the mandatory current-term guard (§1.10); election & step-down mechanics
@@ -1510,7 +1510,7 @@ appends throughout, then 5→3 including a leader removing itself with clean fai
 
 ### 6.6 M5 — metrics + backpressure
 
-`quod_log:stats/1` (§1.14, one snake_case key set); `quod_metrics` gauges (partial-match consumer);
+`quod_ledger:stats/1` (§1.14, one snake_case key set); `quod_metrics` gauges (partial-match consumer);
 backpressure (`max_pending` → `{error, busy}`; `max_batch` kept under `?CHUNK_BYTES`/1 MiB). CP availability:
 under partition the quorum-less side cannot append, surfaced as `{error, not_in_charge, _}`, not a crash.
 
@@ -1521,11 +1521,11 @@ under partition the quorum-less side cannot append, surfaced as `{error, not_in_
 
 **eunit (pure):** `quod_diff_tests` (op ordering #3; content-only order-independent `functor_hash` #1/#4;
 `apply_ops` determinism #25). `quod_prolog` apply re-check (matching read_check ⇒ `{ok, _}`; changed functor
-hash ⇒ `{reject, conflict}` #14/#23; determinism #25). `quod_log` pure helpers: `quorum/1` (1/3/5 → 1/2/3);
+hash ⇒ `{reject, conflict}` #14/#23; determinism #25). `quod_ledger` pure helpers: `quorum/1` (1/3/5 → 1/2/3);
 `term_at/2` incl. snapshot sentinel and index-0; the election-restriction truth-table (§1.6); the
 **commit-rule current-term-guard** (refuses to commit a prior-term entry even at full replication; commits it
 only once a current-term entry above it commits — Figure 8); the AppendEntries truncate-vs-skip decision incl.
-the **idempotent same-term-skip that must NOT truncate on a delayed/duplicate RPC**. `quod_log_store`
+the **idempotent same-term-skip that must NOT truncate on a delayed/duplicate RPC**. `quod_ledger_store`
 round-trip + **durability ordering** (each mutating call returns only after fsync).
 
 **Common Test over loopback QUIC:**
@@ -1543,14 +1543,14 @@ round-trip + **durability ordering** (each mutating call returns only after fsyn
    delta catch-up.
 5. `raft_membership_SUITE` (M4): 3→5 with the second `add_member` blocked until the first commits; 5→3;
    leader-removes-itself; no two-leader window.
-6. `occ_conflict_SUITE`: A `prove`s a `#change{}` with a non-empty `read_check`; before A's `append` commits,
+6. `occ_conflict_SUITE`: A `prove`s a `#transaction{}` with a non-empty `read_check`; before A's `append` commits,
    B mutates a functor in A's `read_check`; A's `apply_block` re-checks at its write's log position, rejects,
    A's caller gets `{error, conflict_retry}` and retries — committed KB reflects B then A's retry in log
    order. Negative: a disjoint `read_check` commits without abort. Per-predicate granularity: a same-functor
    different-fact change still aborts (accepted MVP false conflict #4).
 
 **Cross-cutting:** committed prefixes identical across members; `last_applied` monotone, never a different
-entry at the same index; no `quod_log` crash on transient link drops (`{'DOWN', ...}` handled in `common/3`);
+entry at the same index; no `quod_ledger` crash on transient link drops (`{'DOWN', ...}` handled in `common/3`);
 no `pending` `From` left without a reply after its index commits, is truncated, or its leader steps down.
 
 ---
@@ -1564,7 +1564,7 @@ Out of scope (each has a design home, deferred):
 - **Byzantine (BFT) agreement** — the committee runs Raft (crash-fault) only (#30); a BFT recipe under the
   same `append`/`apply` interface is later (#31).
 - **Cryptographic identity & signing** — Phase 1 runs single-operator with `server_id() = {Host, Port}` and
-  a keypair generated-but-unused; `#change.author`/`#change.sig` slots are reserved and verification is
+  a keypair generated-but-unused; `#transaction.author`/`#transaction.sig` slots are reserved and verification is
   stubbed (see *Identity & signing readiness*). Real identity (`pubkey()` replaces `{Host, Port}` + signed
   admission record), signed changes, and BFT block commit certificates come with the survive-lies work.
 - **Read-copies fan-out / the three read tiers** (#22) — Phase 1 reads hit a committee member's converged KB
@@ -1590,6 +1590,6 @@ Open questions to resolve before/during build:
 - Default `data_dir` and whether per-namespace dirs are base64url-encoded (assumed yes; flag for review).
 - Whether `QUOD_NAMESPACE` doubles as both the Brahms membership id and the content namespace id (assumed
   yes for MVP; add `QUOD_CONTENT_NAMESPACE` if they ever diverge).
-- Whether the leader keeps an optional pre-append OCC fast-fail (`quod_log:append` returning `{error,
+- Whether the leader keeps an optional pre-append OCC fast-fail (`quod_ledger:append` returning `{error,
   conflict_retry}` before replication) in addition to the authoritative apply-time gate, or relies solely on
   apply-time rejection.

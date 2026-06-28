@@ -8,15 +8,15 @@ Pure helpers over the committed erlog database for the content layer.
   apply-time OCC re-check uses it too, so producer and validator agree exactly.
 - `validate/3` — re-check a read-set against the committed db: `ok` if every
   predicate still hashes to the recorded value, else `{conflict, Functor}`.
-- `apply_ops/2` — apply a `#change.diff` (`[op()]`) to the committed erlog state,
+- `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
   with content-identity dedup (asserting an identical fact is a no-op; retract is
   by content).
 
-`op()` and `clause()` are defined in `quod_log.hrl`; `#est{}`/`#db{}` in
+`op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
 `erlog_int.hrl`.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
--include("quod_log.hrl").
+-include("quod_ledger.hrl").
 
 -export([functor_hash/3, validate/3, apply_ops/2]).
 

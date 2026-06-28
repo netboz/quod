@@ -136,7 +136,7 @@ leader_failover(Config) ->
 %%% helpers
 %%%===================================================================
 
-status(Peer) -> peer:call(Peer, quod_log, status, [?NS]).
+status(Peer) -> peer:call(Peer, quod_ledger, status, [?NS]).
 role(Peer)   -> maps:get(role, status(Peer), undefined).
 
 %% Submit a write, the way a real client does: find the current leader, try it, and

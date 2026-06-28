@@ -17,26 +17,26 @@ e2e test didn't exercise.
    branch; `fail`/`error`/`EXIT` leaked one table each → eventual `system_limit`
    crash. The bare `catch` also hid crashes. → `try/after` cleanup on all paths;
    narrowed catch.
-2. **[FIXED] `quod_prolog.erl:164` + `quod_log.erl:190` — `apply_gap` crash on a
+2. **[FIXED] `quod_prolog.erl:164` + `quod_ledger.erl:190` — `apply_gap` crash on a
    prolog-only restart with a concurrent write.** A new append's `apply_block(N+1)`
    could hit a fresh kb (`applied=0`) before the async rebuild reset the cursor →
    `error({apply_gap})`, and `apply_loop` had no `try/catch` so it crashed
-   `quod_log` too. → readiness gate + `apply_block` returns `{behind, Applied}` and
+   `quod_ledger` too. → readiness gate + `apply_block` returns `{behind, Applied}` and
    `apply_loop` resyncs instead of crashing.
 3. **[FIXED] `quod_prolog.erl:80` — `prove` served before rebuild completes.**
    Rebuild was a best-effort async cast with no readiness gate → a `prove` in the
    restart window ran against an empty kb. Spec §4.6 requires rebuild before serving
-   proves. → `ready` flag; `quod_log` signals `mark_ready` after catch-up; `prove`
+   proves. → `ready` flag; `quod_ledger` signals `mark_ready` after catch-up; `prove`
    returns `{error, rebuilding}` until then (this also removes a rebuild-vs-write
    deadlock).
 4. **[FIXED] `quod_prolog.erl:144` — a write "fails" but takes effect.** A 5s append
-   timeout replied `{error,…}` *without parking*, but `quod_log` could still
+   timeout replied `{error,…}` *without parking*, but `quod_ledger` could still
    commit+apply. → park before submit; keep parked on an ambiguous timeout; a
    per-tx TTL delivers the verdict or a clean `{error, timeout}`.
 5. **[FIXED] `quod_prolog.erl:173` — parked caller never replied.** If the block
    never reached `apply_block`, `From` hung to its 35s client timeout (no TTL). →
    per-tx TTL eviction (same mechanism as #4).
-6. **[FIXED] `quod_log.erl:190` — `commits` counted rejected blocks; no `try/catch`
+6. **[FIXED] `quod_ledger.erl:190` — `commits` counted rejected blocks; no `try/catch`
    around `apply_block`.** Verdict was discarded and `commits` bumped
    unconditionally. → bump only on `ok`; resync on `{behind,_}`; guard the call.
 
@@ -54,7 +54,7 @@ e2e test didn't exercise.
 
 ## Robustness — mostly M2-coupled
 
-9. **[M2] `quod_log_store.erl:119` — `write_meta` omits the post-rename dir-fsync.**
+9. **[M2] `quod_ledger_store.erl:119` — `write_meta` omits the post-rename dir-fsync.**
    A power-cut can lose a vote → double-vote risk. Only matters once M2 has *real
    elections* (1-voter never has a contested vote).
 10. **[FIXED] `quod_prolog.erl:204` — global atom per namespace + named-table restart
@@ -62,12 +62,12 @@ e2e test didn't exercise.
     race on rapid restart). → switched the committed kb to **`erlog_db_dict`**
     (functional, threaded through `#s.est`): no per-namespace named ETS table and no
     global atom at all.
-11. **[M2] `quod_log.erl:147` — `become_leader` skips the Figure-8 `noop` block.**
+11. **[M2] `quod_ledger.erl:147` — `become_leader` skips the Figure-8 `noop` block.**
     Benign at 1-voter (no prior-term uncommitted entries); **required** for M2's
     multi-voter commit guard. Goes in with the real election path.
 12. **[FIXED] `quod_metrics.erl:94` — raw binary `Ns` as a prometheus label.** A
     non-printable namespace breaks `/metrics`. → label is a safe string.
-13. **[M2] `quod_log_store.erl:282` — `scan_log` trusts CRC-valid frames without
+13. **[M2] `quod_ledger_store.erl:282` — `scan_log` trusts CRC-valid frames without
     checking index contiguity/monotonicity.** Defensive; low stakes at 1-voter.
 14. **[M2] `quod_erlog_db_local_prove.erl:91` — `new/1` drops `assert_hooks`/
     `retract_hooks` on the wrapped `out_db`.** No hooks are configured in M1; latent
@@ -78,7 +78,7 @@ e2e test didn't exercise.
 
 ## Efficiency — fine at M1 scale, **M2**
 
-16. **[M2] `quod_log.erl:115` — in-memory `#d.log` duplicates the store's index; the
+16. **[M2] `quod_ledger.erl:115` — in-memory `#d.log` duplicates the store's index; the
     hot path is O(n²)** (`++`/`lists:last`/`keyfind` per op). Rework when logs grow
     (the store already has an O(1) index).
 17. **[M2] `quod_erlog_db_local_prove.erl:113` — `assertz` `++` is O(M²)** for M
@@ -92,14 +92,14 @@ e2e test didn't exercise.
 19. **[FIXED] `quod_prolog.erl:59` — dead `replay_reset/2`** (left after the rebuild
     fix). Removed.
 20. **[FIXED] `quod_prolog.erl:149` — dead `{error,conflict_retry}`/`{error,busy}`
-    clauses** in `submit_write`; `quod_log:append` never returns those. Removed.
+    clauses** in `submit_write`; `quod_ledger:append` never returns those. Removed.
 21. **[FIXED] `quod_prolog.erl:89` — `proves` counter not bumped on the `{error,_}`
     branch nor on writes.** → counted consistently.
 22. **[FIXED] `quod_diff.erl:80` — `clause_present/5` + `find_tag/5` are the same
     scan.** → `clause_present` defined in terms of `find_tag`.
 23. **[FIXED] `quod_diff.erl:52` — `functor_of/1` re-implements `erlog_int:functor/1`**
     (already exported, same shape). → call erlog's.
-24. **[FIXED] `quod_log_store.erl:243` — hand-rolled URL-safe base64.** → OTP native
+24. **[FIXED] `quod_ledger_store.erl:243` — hand-rolled URL-safe base64.** → OTP native
     `base64:encode(_, #{mode => urlsafe, padding => false})`.
 
 ## By design / accepted
@@ -110,5 +110,5 @@ e2e test didn't exercise.
 26. **[NOTE] `quod_erlog_db_local_prove.erl:68` — `functor_ops` collapses
     asserta/assertz order + duplicate multiplicity.** Correct for the content-identity
     (set) semantics quod uses for facts; if rule *ordering* ever matters, revisit (M2).
-27. **[M2] `quod_log_store.erl:197` — `read_range` silently drops a missing index** (a
+27. **[M2] `quod_ledger_store.erl:197` — `read_range` silently drops a missing index** (a
     gap fails the generator). Add gap detection with the contiguity check (#13).

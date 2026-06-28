@@ -1,4 +1,4 @@
--module(quod_log).
+-module(quod_ledger).
 -moduledoc """
 Per-namespace lean **Raft** committee member: orders and replicates the ontology's
 block list (the durable history) over the dedicated `{log, Ns}` `quod_link` channel,
@@ -18,7 +18,7 @@ gossips. See `doc/ordering-layer-spec.md` §1–§2.
 
 ## append → commit → apply is deadlock-free (load-bearing)
 
-`quod_prolog:submit_write` calls `quod_log:append/2` synchronously, and this module's
+`quod_prolog:submit_write` calls `quod_ledger:append/2` synchronously, and this module's
 apply step calls **back** into `quod_prolog:apply_block/3` synchronously. To avoid the
 two blocking on each other, `append/2`'s `From` is parked in `pending` and replied
 `{ok, Index}` the instant the entry **commits** (a majority holds it) — *not* at apply
@@ -37,7 +37,7 @@ Every receive/link clause guards on `Chan = term_to_binary({log, Ns}, [determini
 here would steal/own the wrong stream.
 """.
 -behaviour(gen_statem).
--include("quod_log.hrl").
+-include("quod_ledger.hrl").
 
 %% API
 -export([start_link/2, append/2, rebuild/1, status/1, committee/1, stats/1, namespaces/0]).
@@ -81,10 +81,10 @@ here would steal/own the wrong stream.
             conns   = #{} :: #{server_id() => {pid(), reference()}},  %% our OUTBOUND links
             outbox  = #{} :: #{server_id() => [binary()]},   %% per-peer FIFO while a link opens
             rx      = #{} :: #{server_id() => #rx{}},
-            store   :: quod_log_store:handle() | undefined,
+            store   :: quod_ledger_store:handle() | undefined,
             role    = follower :: follower | candidate | leader,
 
-            %% ---- PERSISTED (fsync via quod_log_store before reply) ----
+            %% ---- PERSISTED (fsync via quod_ledger_store before reply) ----
             cur_term  = 0    :: term_no(),
             voted_for = none :: server_id() | none,
             log       = []   :: [#entry{}],       %% indices snap_idx+1 .. N — the durable block list
@@ -115,28 +115,28 @@ callback_mode() -> [state_functions].
 %%%===================================================================
 
 start_link(Ns, Config) ->
-    gen_statem:start_link(quod_reg:via({quod_log, Ns}), ?MODULE, {Ns, Config}, []).
+    gen_statem:start_link(quod_reg:via({quod_ledger, Ns}), ?MODULE, {Ns, Config}, []).
 
 -doc "Submit a change. Blocks until the entry commits ({ok, Index}) or this node loses leadership.".
--spec append(binary(), #change{}) ->
+-spec append(binary(), #transaction{}) ->
         {ok, log_index()} | {error, busy}
       | {error, not_in_charge, server_id() | none | unavailable}.
 append(Ns, Change) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), {append, Change}, 5000)
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), {append, Change}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
 
 -doc "Ask the log to (re)drive committed blocks into a freshly-started `quod_prolog`.".
 -spec rebuild(binary()) -> ok.
-rebuild(Ns) -> gen_statem:cast(quod_reg:via({quod_log, Ns}), rebuild).
+rebuild(Ns) -> gen_statem:cast(quod_reg:via({quod_ledger, Ns}), rebuild).
 
 status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
 
-namespaces() -> gproc:select([{{{n, l, {quod_log, '$1'}}, '_', '_'}, [], ['$1']}]).
+namespaces() -> gproc:select([{{{n, l, {quod_ledger, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 call(Ns, Req, Default) ->
-    try gen_statem:call(quod_reg:via({quod_log, Ns}), Req, 1000) catch exit:_ -> Default end.
+    try gen_statem:call(quod_reg:via({quod_ledger, Ns}), Req, 1000) catch exit:_ -> Default end.
 
 %%%===================================================================
 %%% init
@@ -151,7 +151,7 @@ init({Ns, Config}) ->
             Chan    = term_to_binary({log, Ns}, [deterministic]),
             DataDir = data_dir(Cfg),
             quod_reg:subscribe({channel, Chan}),
-            {ok, Store} = quod_log_store:open(Ns, DataDir),
+            {ok, Store} = quod_ledger_store:open(Ns, DataDir),
             D0 = #d{ns = Ns, self = Self, cfg = Cfg, chan = Chan, store = Store},
             D1 = load_or_bootstrap(D0, Cfg, Store),
             D2 = D1#d{commit_index = D1#d.snap_idx, last_applied = D1#d.snap_idx},
@@ -170,7 +170,7 @@ init({Ns, Config}) ->
 %% Restart reloads durable state; a brand-new namespace seeds its committee from
 %% Config (create) — `[]` ⇒ self-only 1-voter, a list ⇒ multi-member bootstrap.
 load_or_bootstrap(D0, Cfg, Store) ->
-    L = quod_log_store:load(Store),
+    L = quod_ledger_store:load(Store),
     Log     = maps:get(log, L),
     SnapCfg = maps:get(snap_cfg, L),
     Term    = maps:get(cur_term, L),
@@ -204,7 +204,7 @@ load_or_bootstrap(D0, Cfg, Store) ->
 bootstrap_committee(Committee, D = #d{store = Store}) ->
     Entries = [#entry{index = I, term = 0, kind = config, data = {add, M}}
                || {I, M} <- lists:zip(lists:seq(1, length(Committee)), Committee)],
-    {ok, Store1} = quod_log_store:append(Store, Entries),
+    {ok, Store1} = quod_ledger_store:append(Store, Entries),
     with_log(Entries, D#d{store = Store1}).
 
 valid_cfg(Config, Cfg) ->
@@ -299,7 +299,7 @@ terminate(_Reason, _State, #d{chan = Chan, store = Store}) ->
     _ = try quod_reg:unsubscribe({channel, Chan}) catch _:_ -> ok end,
     _ = case Store of
             undefined -> ok;
-            _         -> try quod_log_store:close(Store) catch _:_ -> ok end
+            _         -> try quod_ledger_store:close(Store) catch _:_ -> ok end
         end,
     ok.
 
@@ -312,7 +312,7 @@ start_election(D = #d{store = Store}) ->
         false -> {keep_state, D};   %% removed member (M4): don't contest, stay passive
         true ->
             T1 = D#d.cur_term + 1,
-            ok = quod_log_store:write_meta(Store, T1, D#d.self),   %% DURABLE before any RPC
+            ok = quod_ledger_store:write_meta(Store, T1, D#d.self),   %% DURABLE before any RPC
             D1 = D#d{cur_term = T1, voted_for = D#d.self, votes = #{D#d.self => true},
                      role = candidate, leader_id = none, elections = D#d.elections + 1,
                      next_index = #{}, match_index = #{}},
@@ -342,7 +342,7 @@ become_leader(D) ->
             %% write (Figure-8). It commits via the same advance_commit rule.
             I  = LLI + 1,
             E  = #entry{index = I, term = D#d.cur_term, kind = block, data = noop},
-            {ok, Store1} = quod_log_store:append(D1#d.store, [E]),
+            {ok, Store1} = quod_ledger_store:append(D1#d.store, [E]),
             D2 = with_log(D1#d.log ++ [E], D1#d{store = Store1}),
             {next_state, leader, D2, [{next_event, internal, replicate}, heartbeat_timeout(D2)]}
     end.
@@ -350,7 +350,7 @@ become_leader(D) ->
 %% Lost authority (saw a higher term): persist the new term with no vote, drop volatile
 %% leader state, and fail any in-flight client appends so their callers can retry.
 step_down(NewTerm, D) ->
-    ok = quod_log_store:write_meta(D#d.store, NewTerm, none),
+    ok = quod_ledger_store:write_meta(D#d.store, NewTerm, none),
     D1 = fail_pending(D, none),
     D1#d{cur_term = NewTerm, voted_for = none, role = follower, leader_id = none,
          votes = #{}, next_index = #{}, match_index = #{}}.
@@ -395,7 +395,7 @@ handle_request_vote(Peer, RV, _State, D) ->   %% RvT == cur_term
 decide_vote(#request_vote{candidate_id = Cand, last_log_index = CLI, last_log_term = CLT}, D) ->
     case (D#d.voted_for =:= none orelse D#d.voted_for =:= Cand)
          andalso up_to_date(CLT, CLI, last_log_term(D), last_log_index(D)) of
-        true  -> ok = quod_log_store:write_meta(D#d.store, D#d.cur_term, Cand),
+        true  -> ok = quod_ledger_store:write_meta(D#d.store, D#d.cur_term, Cand),
                  {true, D#d{voted_for = Cand}};
         false -> {false, D}
     end.
@@ -457,11 +457,11 @@ apply_ae_entries(#append_entries{entries = Entries}, D) ->
     case Action of
         noop -> D;
         {append, New} ->
-            {ok, Store1} = quod_log_store:append(D#d.store, New),
+            {ok, Store1} = quod_ledger_store:append(D#d.store, New),
             with_log(NewLog, D#d{store = Store1});
         {truncate_append, I, New} ->
-            {ok, Store1} = quod_log_store:truncate_from(D#d.store, I),
-            {ok, Store2} = quod_log_store:append(Store1, New),
+            {ok, Store1} = quod_ledger_store:truncate_from(D#d.store, I),
+            {ok, Store2} = quod_ledger_store:append(Store1, New),
             %% truncation dropped an uncommitted tail: fail any client append parked there.
             fail_pending_above(D#d.commit_index, with_log(NewLog, D#d{store = Store2}))
     end.
@@ -528,7 +528,7 @@ handle_client_append(From, Change, D) ->
         false ->
             I = last_log_index(D) + 1,
             E = #entry{index = I, term = D#d.cur_term, kind = block, data = Change},
-            {ok, Store1} = quod_log_store:append(D#d.store, [E]),   %% DURABLE before counting own log
+            {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),   %% DURABLE before counting own log
             D1 = with_log(D#d.log ++ [E],
                           D#d{store = Store1, appends = D#d.appends + 1,
                               pending = (D#d.pending)#{I => From}}),
@@ -788,7 +788,7 @@ encode(Msg) -> term_to_binary(Msg).
 
 %% The wire ENVELOPE ({raft|raft_chunk, Ns, ...}) carries only known atoms + binaries,
 %% so `[safe]` guards it (refuses unknown atoms / fun / pid). The inner RECORD, though,
-%% is an `#append_entries{}` carrying a `#change{}` whose diff holds arbitrary Prolog
+%% is an `#append_entries{}` carrying a `#transaction{}` whose diff holds arbitrary Prolog
 %% clauses — i.e. atoms the receiver has not seen yet (the fact's own functor/args). With
 %% `[safe]` those legitimately-new atoms are refused and every fact-bearing AppendEntries
 %% is dropped, so a follower can never apply a new fact (it only learns the atom by

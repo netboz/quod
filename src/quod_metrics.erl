@@ -47,7 +47,7 @@ handle_cast(_Msg, State)        -> {noreply, State}.
 
 handle_info(refresh, State) ->
     _ = [refresh_ns(Ns)        || Ns <- quod_brahms:namespaces()],
-    _ = [refresh_log_ns(Ns)    || Ns <- quod_log:namespaces()],
+    _ = [refresh_log_ns(Ns)    || Ns <- quod_ledger:namespaces()],
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     erlang:send_after(?REFRESH_MS, self(), refresh),
     {noreply, State};
@@ -70,16 +70,16 @@ declare() ->
     _ = G(quod_brahms_evictions,   "Dead peers evicted by sample validation per namespace (cumulative)"),
     _ = G(quod_brahms_tombstones,  "Current tombstone entries per namespace (bounded; drains to 0)"),
     _ = G(quod_brahms_estimated_n, "Estimated network size n-hat per namespace (KMV; exact below k)"),
-    %% ordering layer (m:quod_log) + fact engine (m:quod_prolog), per namespace
-    _ = G(quod_log_term,           "Raft current term"),
-    _ = G(quod_log_commit_index,   "Highest committed block index"),
-    _ = G(quod_log_last_applied,   "Highest applied block index"),
-    _ = G(quod_log_log_len,        "In-memory log length"),
-    _ = G(quod_log_committee_size, "Committee size"),
-    _ = G(quod_log_is_leader,      "1 if this node is the namespace leader"),
-    _ = G(quod_log_appends,        "Appends accepted (cumulative)"),
-    _ = G(quod_log_commits,        "Blocks committed + applied (cumulative)"),
-    _ = G(quod_log_elections,      "Elections won (cumulative)"),
+    %% ordering layer (m:quod_ledger) + fact engine (m:quod_prolog), per namespace
+    _ = G(quod_ledger_term,           "Raft current term"),
+    _ = G(quod_ledger_commit_index,   "Highest committed block index"),
+    _ = G(quod_ledger_last_applied,   "Highest applied block index"),
+    _ = G(quod_ledger_log_len,        "In-memory log length"),
+    _ = G(quod_ledger_committee_size, "Committee size"),
+    _ = G(quod_ledger_is_leader,      "1 if this node is the namespace leader"),
+    _ = G(quod_ledger_appends,        "Appends accepted (cumulative)"),
+    _ = G(quod_ledger_commits,        "Blocks committed + applied (cumulative)"),
+    _ = G(quod_ledger_elections,      "Elections won (cumulative)"),
     _ = G(quod_prolog_applied,     "Highest applied block index (fact engine)"),
     _ = G(quod_prolog_applies,     "Blocks applied to the kb (cumulative)"),
     _ = G(quod_prolog_rejects,     "Blocks rejected by the apply-time OCC check (cumulative)"),
@@ -104,20 +104,20 @@ refresh_ns(Ns) ->
     end.
 
 refresh_log_ns(Ns) ->
-    case quod_log:stats(Ns) of
+    case quod_ledger:stats(Ns) of
         #{cur_term := T, commit_index := CI, last_applied := LA, log_len := LL,
           committee_size := CS, is_leader := IL, appends := AP, commits := CM,
           elections := EL} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
-            _ = S(quod_log_term,           T),
-            _ = S(quod_log_commit_index,   CI),
-            _ = S(quod_log_last_applied,   LA),
-            _ = S(quod_log_log_len,        LL),
-            _ = S(quod_log_committee_size, CS),
-            _ = S(quod_log_is_leader,      bool01(IL)),
-            _ = S(quod_log_appends,        AP),
-            _ = S(quod_log_commits,        CM),
-            _ = S(quod_log_elections,      EL),
+            _ = S(quod_ledger_term,           T),
+            _ = S(quod_ledger_commit_index,   CI),
+            _ = S(quod_ledger_last_applied,   LA),
+            _ = S(quod_ledger_log_len,        LL),
+            _ = S(quod_ledger_committee_size, CS),
+            _ = S(quod_ledger_is_leader,      bool01(IL)),
+            _ = S(quod_ledger_appends,        AP),
+            _ = S(quod_ledger_commits,        CM),
+            _ = S(quod_ledger_elections,      EL),
             ok;
         _ -> ok
     end.

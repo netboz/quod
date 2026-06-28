@@ -1,10 +1,10 @@
--module(quod_log_store).
+-module(quod_ledger_store).
 -moduledoc """
 Durable on-disk store for one namespace's Raft log — the **block list**.
 
 This is the only quod code that touches disk. It is a plain library (no process,
 no registration): every function is synchronous and completes its required `fsync`
-before returning, and the handle is threaded by the caller (`quod_log`). See
+before returning, and the handle is threaded by the caller (`quod_ledger`). See
 `doc/ordering-layer-spec.md` §3.
 
 Layout, under `DataDir/<base64url(Ns)>/`:
@@ -24,7 +24,7 @@ acknowledged.
 Snapshots/compaction are deferred to milestone M3; the snapshot API is present but
 `read_snapshot/1` returns `none` until then.
 """.
--include("quod_log.hrl").
+-include("quod_ledger.hrl").
 
 -export([open/2, close/1, load/1,
          read_meta/1, write_meta/3,
@@ -72,7 +72,7 @@ open(Ns, DataDir) ->
 close(#store{log_fd = Fd}) -> _ = file:close(Fd), ok.
 
 -doc """
-Reload everything needed to reconstruct `quod_log`'s durable state: the persisted
+Reload everything needed to reconstruct `quod_ledger`'s durable state: the persisted
 term/vote, the full log (from `snap_index+1` up), and the snapshot metadata.
 """.
 -spec load(handle()) -> #{cur_term  := term_no(),
@@ -110,7 +110,7 @@ read_meta(#store{dir = Dir}) ->
 
 -doc """
 Persist `{Term, VotedFor}` atomically (tmp + datasync + rename). MUST complete
-before `quod_log` grants a vote or replies at a bumped term.
+before `quod_ledger` grants a vote or replies at a bumped term.
 """.
 -spec write_meta(handle(), term_no(), server_id() | none) -> ok.
 write_meta(#store{dir = Dir}, Term, VotedFor) ->
@@ -137,7 +137,7 @@ write_meta(#store{dir = Dir}, Term, VotedFor) ->
 -doc """
 Append contiguous entries (indices `last_index+1 ..`). One `datasync` for the
 batch; returns only after it completes (the entries are durable before
-`quod_log` counts them toward commit).
+`quod_ledger` counts them toward commit).
 """.
 -spec append(handle(), [#entry{}]) -> {ok, handle()}.
 append(S, []) -> {ok, S};

@@ -826,7 +826,7 @@ quod_sup
 ├── quod_quic                    (transport — unchanged)
 ├── quod_brahms_sup → quod_brahms per Ns   (discovery / the crowd — unchanged)
 └── quod_ns_sup     → per-ontology subtree                       ← NEW
-        ├── quod_log    (Ns)   committee member: order + agree on blocks
+        ├── quod_ledger    (Ns)   committee member: order + agree on blocks
         └── quod_prolog (Ns)   the facts: apply blocks, answer proves
 ```
 
@@ -835,7 +835,7 @@ quod_sup
   so the two don't get stuck behind each other.
 - **Brahms finds candidates; the committee list (in the ontology) is the
   authoritative one** (§12 #8).
-- New `quod_reg` names: `{quod_log, Ns}`, `{quod_prolog, Ns}`.
+- New `quod_reg` names: `{quod_ledger, Ns}`, `{quod_prolog, Ns}`.
 - A member that restarts reloads its own on-disk history and/or **catches up from
   the others**. Losing one member is fine — that's the point of having several.
 

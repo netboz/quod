@@ -2,84 +2,141 @@
 -moduledoc """
 quod application entry point.
 
-Maps deployment environment variables onto the application config so a node can
-be configured from its orchestrator (Nomad, compose, ...) without a custom
-`sys.config`:
+Configuration is a **HOCON file** (`config/quod.conf`, or wherever `QUOD_CONF`
+points; a release ships `priv/quod.conf`). The file is the primary source; OS
+environment variables prefixed `QUOD_` override individual keys, using `__` to
+descend the path — e.g. `QUOD_CONTENT__MODE=join` overrides `content.mode`,
+`QUOD_NODE__PORT=15000` overrides `node.port`. See `m:quod_schema` for the shape.
 
-| env var             | effect                                                     |
-| ------------------- | ---------------------------------------------------------- |
-| `QUOD_PORT`         | QUIC `listen_port` (and the port of this node's `node_id`) |
-| `QUOD_METRICS_PORT` | Prometheus `/metrics` port (default 14568)                 |
-| `QUOD_NODE_IP`      | sets `node_id = {QUOD_NODE_IP, QUOD_PORT}` — the dialable id|
-| `QUOD_NAMESPACE`    | ontology namespace to join on boot                         |
-| `QUOD_SEEDS`        | space/comma-separated `ip:port` bootstrap peers            |
-
-`QUOD_PORT`/`QUOD_METRICS_PORT` are read independently, so a node can bind a
-dynamic listener (e.g. Nomad's `NOMAD_PORT_*`) and still expose metrics — this is
-how multiple nodes co-locate on one host (see `deploy/quod.nomad`).
-
-`node_id` MUST be the address peers dial this node at (see `m:quod_brahms`), so
-in a cluster it is the node's own IP and the static listener port. With no env
-vars set the node behaves exactly as before (loopback defaults, no auto-join).
+`load_config/0` bridges the file onto the `application` env the transport reads
+(`listen_port`, `metrics_port`, `node_id`) and returns the `content` section, which
+drives Brahms membership and the content namespace this node founds (`create`) or
+joins. **With no config file present, the app starts in legacy mode** — `sys.config`
+/ `application:set_env` drive the transport and no content namespace is auto-started
+(this is what the multi-node test SUITE relies on).
 """.
 
 -behaviour(application).
 
 -export([start/2, stop/1]).
+-ifdef(TEST).
+-export([build_ns_config/1, load_config/0]).
+-endif.
 
 start(_StartType, _StartArgs) ->
-    ok = apply_env(),
+    Content   = load_config(),
     {ok, Sup} = quod_sup:start_link(),
-    ok = maybe_join(),
+    ok = maybe_join(Content),
+    ok = maybe_start_ns(Content),
     {ok, Sup}.
 
 stop(_State) ->
     ok.
 
-%% --- env -> config (must run BEFORE the transport starts) ----------------
+%% --- config: HOCON file primary, QUOD_ env vars override individual keys -----
 
-apply_env() ->
-    Port = env_int("QUOD_PORT", application:get_env(quod, listen_port, 14567)),
+%% Returns the `content` config map, or `none` when no config file is present
+%% (legacy mode — see the moduledoc).
+load_config() ->
+    case conf_path() of
+        none -> none;
+        Path ->
+            os:putenv("HOCON_ENV_OVERRIDE_PREFIX", "QUOD_"),
+            {ok, Raw} = hocon:load(Path),
+            Cfg = hocon_tconf:check_plain(quod_schema, Raw,
+                                          #{atom_key => true, apply_override_envs => true}),
+            apply_transport_env(Cfg),
+            maps:get(content, Cfg)
+    end.
+
+%% Bridge HOCON `node`/`metrics` onto the application env the transport reads.
+apply_transport_env(Cfg) ->
+    Node = maps:get(node, Cfg),
+    Ip   = binary_to_list(maps:get(ip, Node)),
+    Port = maps:get(port, Node),
     application:set_env(quod, listen_port, Port),
-    MetricsPort = env_int("QUOD_METRICS_PORT",
-                          application:get_env(quod, metrics_port, 14568)),
-    application:set_env(quod, metrics_port, MetricsPort),
-    case os:getenv("QUOD_NODE_IP") of
-        false -> ok;
-        ""    -> ok;
-        IP    -> application:set_env(quod, node_id, {IP, Port})
+    application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
+    application:set_env(quod, node_id, {Ip, Port}),
+    ok.
+
+conf_path() ->
+    case os:getenv("QUOD_CONF") of
+        P when is_list(P), P =/= "" -> regular_or_none(P);
+        _ -> regular_or_none(filename:join(code:priv_dir(quod), "quod.conf"))
+    end.
+
+regular_or_none(Path) ->
+    case filelib:is_regular(Path) of
+        true  -> Path;
+        false -> none
+    end.
+
+%% --- Brahms membership (when a content namespace is configured) --------------
+
+maybe_join(none) -> ok;
+maybe_join(Content) ->
+    Ns    = maps:get(namespace, Content),
+    Self  = application:get_env(quod, node_id, default_node_id()),
+    Seeds = content_seeds(Content),
+    case quod_brahms:start_namespace(Ns, #{node_id => Self, seed_peers => Seeds}) of
+        {ok, _} ->
+            logger:info("quod[~s]: brahms up as ~p (~b seed(s))", [Ns, Self, length(Seeds)]);
+        Error ->
+            logger:error("quod[~s]: brahms start failed: ~p", [Ns, Error])
     end,
     ok.
 
-%% --- optional namespace join (AFTER the supervisor is up) ----------------
+%% --- content namespace (create founds + serves root; create failure is fatal) -
 
-maybe_join() ->
-    case os:getenv("QUOD_NAMESPACE") of
-        false -> ok;
-        ""    -> ok;
-        NsStr ->
-            Ns    = list_to_binary(NsStr),
-            Self  = application:get_env(quod, node_id, default_node_id()),
-            Seeds = parse_seeds(os:getenv("QUOD_SEEDS")),
-            case quod_brahms:start_namespace(Ns, #{node_id => Self, seed_peers => Seeds}) of
-                {ok, _} ->
-                    logger:info("quod: joined namespace ~s as ~p (~b seed(s))",
-                                [NsStr, Self, length(Seeds)]);
-                Error ->
-                    logger:error("quod: could not join namespace ~s: ~p", [NsStr, Error])
-            end,
-            ok
+maybe_start_ns(none) -> ok;
+maybe_start_ns(Content) ->
+    {Ns, NsCfg} = build_ns_config(Content),
+    Mode = maps:get(mode, NsCfg),
+    case quod_ns_sup:start_namespace(Ns, NsCfg) of
+        {ok, _} ->
+            logger:info("quod[~s]: content namespace up (mode=~p)", [Ns, Mode]);
+        {error, {already_started, _}} ->
+            ok;
+        Error when Mode =:= create ->
+            %% Founding the network failed (e.g. a bad genesis .pl). A node with no
+            %% root is useless — stop the app rather than run half-born.
+            error({content_namespace_create_failed, Ns, Error});
+        Error ->
+            logger:error("quod[~s]: content namespace start failed: ~p", [Ns, Error])
+    end,
+    ok.
+
+%% Build the per-namespace config map for quod_ns_sup:start_namespace/2.
+build_ns_config(Content) ->
+    Ns   = maps:get(namespace, Content),
+    Self = application:get_env(quod, node_id, default_node_id()),
+    Base = #{node_id    => Self,
+             mode       => maps:get(mode, Content),
+             seed_peers => content_seeds(Content)},
+    {Ns, with_genesis_file(Content, with_data_dir(Content, Base))}.
+
+with_data_dir(Content, Base) ->
+    case maps:get(data_dir, Content, <<>>) of
+        <<>> -> Base;
+        Dir  -> Base#{data_dir => binary_to_list(Dir)}
     end.
+
+with_genesis_file(Content, Base) ->
+    case maps:get(genesis_file, Content, <<>>) of
+        <<>> -> Base;
+        Rel  -> Base#{genesis_file => filename:join(code:priv_dir(quod), binary_to_list(Rel))}
+    end.
+
+content_seeds(Content) ->
+    lists:filtermap(fun parse_seed/1, maps:get(seeds, Content, [])).
 
 default_node_id() ->
     {"127.0.0.1", application:get_env(quod, listen_port, 14567)}.
 
-%% --- helpers -------------------------------------------------------------
+%% --- helpers -----------------------------------------------------------------
 
-%% "1.2.3.4:5678 5.6.7.8:5678" (or comma/newline separated) -> [{Host, Port}]
-parse_seeds(false) -> [];
-parse_seeds(Str)   -> lists:filtermap(fun parse_seed/1, string:lexemes(Str, " ,\t\n")).
-
+%% a HOCON seed entry `<<"host:port">>` -> {Host, Port}
+parse_seed(Bin) when is_binary(Bin) -> parse_seed(binary_to_list(Bin));
 parse_seed(Tok) ->
     case string:split(Tok, ":", trailing) of
         [Host, PortStr] when Host =/= "" ->
@@ -89,14 +146,4 @@ parse_seed(Tok) ->
             end;
         _ ->
             false
-    end.
-
-env_int(Var, Default) ->
-    case os:getenv(Var) of
-        false -> Default;
-        Str   ->
-            case string:to_integer(Str) of
-                {N, _} when is_integer(N) -> N;
-                _                         -> Default
-            end
     end.

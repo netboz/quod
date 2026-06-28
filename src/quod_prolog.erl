@@ -22,6 +22,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include("quod_ledger.hrl").
 
 -export([start_link/2, prove/3, apply_block/3, mark_ready/1, stats/1, namespaces/0]).
+-export([genesis_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000}).
@@ -235,6 +236,47 @@ unpark(Tx, S = #s{parked = P}) ->
 %%%===================================================================
 %%% kb construction
 %%%===================================================================
+
+-doc """
+Build the genesis write-set from a `.pl` file.
+
+Reads the file with the erlog parser, then turns each clause into a write-set `op()`
+in the SAME compiled form the live write path produces — so the genesis commits and
+replays through the normal apply path. erlog's `assertz` compiles the body
+(`well_form_body`, yielding `{Body, HasCut}`); we capture the result with the
+`m:quod_erlog_db_local_prove` overlay, exactly as `run_proof/2` does for a live
+write. Hand-building `{Head, true}` would store a malformed clause and crash on the
+first prove — the body must be the compiled form, not raw `true`.
+
+Used at create only: the founder calls this once and commits the result into the
+ledger as the genesis block. A missing/unparseable file throws `{genesis_failed, _}`,
+which `quod_ledger:init/1` turns into `{stop, _}` (fail-fast — a node with no root is
+useless).
+""".
+-spec genesis_diff(file:filename()) -> [op()].
+genesis_diff(File) ->
+    Terms = read_genesis_terms(File),
+    W0 = quod_erlog_db_local_prove:wrap_state(build_kb(), #{read_set => false}),
+    try
+        WN = lists:foldl(
+               fun(T, W) ->
+                   case erlog_int:prove_goal({assertz, T}, W) of
+                       {succeed, W1} -> W1;
+                       Other         -> throw({genesis_failed, {assert, T, Other}})
+                   end
+               end, W0, Terms),
+        quod_erlog_db_local_prove:get_local_changes((WN#est.db)#db.ref)
+    after
+        quod_erlog_db_local_prove:cleanup_read_set(W0)
+    end.
+
+read_genesis_terms(File) ->
+    Res = try erlog_io:read_file(File) catch C0:E0 -> {caught, C0, E0} end,
+    case Res of
+        {ok, Terms}     -> Terms;
+        {error, Reason} -> throw({genesis_failed, {read_file, File, Reason}});
+        {caught, C, E}  -> throw({genesis_failed, {parse, File, {C, E}}})
+    end.
 
 build_kb() ->
     %% erlog:new/2 loads bips + lists + dcg; #est{} is element 3 of #erlog{vs, est}.

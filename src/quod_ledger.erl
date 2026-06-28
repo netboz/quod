@@ -153,19 +153,26 @@ init({Ns, Config}) ->
             quod_reg:subscribe({channel, Chan}),
             {ok, Store} = quod_ledger_store:open(Ns, DataDir),
             D0 = #d{ns = Ns, self = Self, cfg = Cfg, chan = Chan, store = Store},
-            D1 = load_or_bootstrap(D0, Cfg, Store),
-            D2 = D1#d{commit_index = D1#d.snap_idx, last_applied = D1#d.snap_idx},
-            %% Links form on demand: a node dials a peer the first time it sends to it
-            %% (send_raft) and replies on its OWN outbound link, never on the peer's
-            %% inbound stream. So every committee member can reach every other — any node
-            %% can win an election and lead (full Raft symmetry).
-            Actions = case derive_committee(D2) of
-                          []  -> [];                                  %% join passive learner (M4)
-                          [_] -> [{next_event, internal, bootstrap}]; %% sole member: lead now (M1 parity)
-                          _   -> [election_timeout(D2)]               %% contest the election
-                      end,
-            {ok, follower, D2, Actions}
+            %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
+            try load_or_bootstrap(D0, Cfg, Store) of
+                D1 -> init_ready(D1)
+            catch
+                throw:{genesis_failed, _} = Reason -> {stop, Reason}
+            end
     end.
+
+init_ready(D1) ->
+    D2 = D1#d{commit_index = D1#d.snap_idx, last_applied = D1#d.snap_idx},
+    %% Links form on demand: a node dials a peer the first time it sends to it
+    %% (send_raft) and replies on its OWN outbound link, never on the peer's inbound
+    %% stream. So every committee member can reach every other — any node can win an
+    %% election and lead (full Raft symmetry).
+    Actions = case derive_committee(D2) of
+                  []  -> [];                                  %% join passive learner (M4)
+                  [_] -> [{next_event, internal, bootstrap}]; %% sole member: lead now (M1 parity)
+                  _   -> [election_timeout(D2)]               %% contest the election
+              end,
+    {ok, follower, D2, Actions}.
 
 %% Restart reloads durable state; a brand-new namespace seeds its committee from
 %% Config (create) — `[]` ⇒ self-only 1-voter, a list ⇒ multi-member bootstrap.
@@ -191,7 +198,8 @@ load_or_bootstrap(D0, Cfg, Store) ->
                                     []   -> [D#d.self];                         %% founding 1-voter
                                     List -> lists:usort([D#d.self | List])      %% multi-member bootstrap
                                 end,
-                    bootstrap_committee(Committee, D)
+                    D1 = bootstrap_committee(Committee, D),
+                    bootstrap_genesis(Cfg, D1)
             end
     end.
 
@@ -206,6 +214,30 @@ bootstrap_committee(Committee, D = #d{store = Store}) ->
                || {I, M} <- lists:zip(lists:seq(1, length(Committee)), Committee)],
     {ok, Store1} = quod_ledger_store:append(Store, Entries),
     with_log(Entries, D#d{store = Store1}).
+
+%% On create only, the founder commits the genesis ontology content (read ONCE from the
+%% configured `.pl`) as a block right after the committee config — so it lives in the
+%% replicated ledger and joiners sync it (they never read the `.pl`). No `genesis_file`
+%% ⇒ no-op (M1/M2 tests, or a namespace whose content arrives by sync). A bad/missing
+%% file is FATAL: throw ⇒ `init/1` returns `{stop, _}` ⇒ the app stops (a node with no
+%% root is useless). The genesis tx_id is deterministic so multi-founder logs stay
+%% byte-identical.
+bootstrap_genesis(Cfg, D = #d{ns = Ns, self = Self, store = Store}) ->
+    case maps:get(genesis_file, Cfg, undefined) of
+        undefined -> D;
+        <<>>      -> D;
+        ""        -> D;
+        File ->
+            %% quod_prolog compiles the .pl into write-set ops in the on-disk clause
+            %% form (erlog's body compilation); a bad file throws {genesis_failed,_}.
+            Tx = #transaction{tx_id = <<"genesis:", Ns/binary>>, caller_ns = Ns,
+                              diff = quod_prolog:genesis_diff(File), read_check = #{},
+                              author = Self, sig = none},
+            I  = last_log_index(D) + 1,
+            E  = #entry{index = I, term = 0, kind = block, data = Tx},
+            {ok, Store1} = quod_ledger_store:append(Store, [E]),
+            with_log(D#d.log ++ [E], D#d{store = Store1})
+    end.
 
 valid_cfg(Config, Cfg) ->
     HB        = maps:get(heartbeat_ms, Cfg),

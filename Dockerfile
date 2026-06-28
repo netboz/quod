@@ -25,9 +25,10 @@ RUN mkdir -p src \
     && rm -rf src _build/prod/lib/quod
 
 # App + release (bundled ERTS, no Erlang needed at runtime).
-COPY config/ config/
-COPY priv/   priv/
-COPY src/    src/
+COPY config/  config/
+COPY include/ include/
+COPY priv/    priv/
+COPY src/     src/
 RUN rebar3 as prod release
 
 # ---- runtime ---------------------------------------------------------------

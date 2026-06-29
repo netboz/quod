@@ -11,10 +11,16 @@ gossips. See `doc/ordering-layer-spec.md` §1–§2.
 
 - **M1** — the single-voter degenerate case: a sole-member committee wins instantly,
   commits each append on its local `fsync`, applies in order. No networking.
-- **M2** (this layer) — a real N=3 committee over loopback QUIC: RequestVote +
+- **M2** — a real N=3 committee over loopback QUIC: RequestVote +
   AppendEntries on the `{log, Ns}` channel, randomized elections, leader replication,
   and the multi-voter commit rule with the mandatory **Figure-8 current-term guard**.
   The commit/apply/persist core from M1 is unchanged (#18).
+- **Join** (this layer) — a `mode=join` node grows the committee: it dials a contact
+  (`#join_request{}`), the leader proves the `can_join` admission rule and admits it as a
+  non-voting **learner** (`{add_learner}`), the existing AppendEntries back-up loop catches
+  it up, and once it reaches its target the leader **promotes** it to a voter (`{promote}`)
+  under the full single-server safety gate (one config change in flight + a current-term
+  commit). Voters = the quorum/election set; learners receive entries but never vote.
 
 ## append → commit → apply is deadlock-free (load-bearing)
 
@@ -48,17 +54,20 @@ here would steal/own the wrong stream.
 
 -ifdef(TEST).
 -export([last_log_index/1, last_log_term/1, term_at/2, quorum/1, derive_committee/1,
-         up_to_date/4, advance_commit/1, truncate_append/2, encode/1, decode/1,
-         mk_d/1, commit_index/1]).
+         derive_learners/1, learner_target/2, voter_peers/1, repl_peers/1, cfg_uncommitted/1,
+         has_current_term_commit/1, valid_server_id/1, committed_view/1, evict_one/1, up_to_date/4,
+         advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1]).
 -endif.
 
 -define(DEFAULTS,
         #{node_id      => undefined,  %% own NodeId {Host,Port}; REQUIRED
-          mode         => create,     %% create | join (join is M4: passive learner)
+          mode         => create,     %% create | join (join ⇒ a fresh node syncs via the join driver)
           committee    => [],         %% bootstrap committee; [] ⇒ self-only 1-voter (#18)
+          seed_peers   => [],         %% contact endpoints a `join` node dials to join + sync
           heartbeat_ms => 150,        %% leader→peers AppendEntries cadence (<< election)
           election_ms  => 1000,       %% base election timeout; randomized to [T, 2T]
           election_jit => 1.0,
+          join_ms      => 1000,       %% join-driver retry cadence (a joiner re-asks until admitted)
           max_batch    => 256,        %% max #entries per AppendEntries
           max_pending  => 1024,       %% backpressure cap on in-flight client appends
           data_dir     => undefined}).
@@ -67,6 +76,11 @@ here would steal/own the wrong stream.
 -define(MAX_RAFT_BYTES,     65536).        %% reassembled cap for non-snapshot msgs
 -define(MAX_SNAPSHOT_BYTES, (64 bsl 20)).  %% reassembly hard cap (snapshots land in M3)
 -define(AE_BATCH_BYTES,     (?CHUNK_BYTES - 8192)).  %% entry-bytes budget per AE (room for AE/envelope; keeps it single-frame)
+
+%% Hostile-network resource caps on the join path (an unadmitted node can flood these).
+-define(MAX_CONTACTS,        64).   %% joiner: cap on the contact list (redirects can't grow it unbounded)
+-define(MAX_PENDING_JOINERS, 256).  %% leader/follower: cap on remembered joiners — REFUSE beyond, never evict
+-define(MAX_ADMITTING,       16).   %% leader: cap on concurrent can_join proofs in flight
 
 %% per-peer chunk reassembly (at most one in-flight message per peer; in-order channel)
 -record(rx, {msg_id :: reference(),
@@ -103,6 +117,13 @@ here would steal/own the wrong stream.
             leader_id    = none :: server_id() | none,
             pending      = #{}  :: #{log_index() => gen_statem:from()},  %% client appends awaiting commit
             prolog_ready = false :: boolean(),   %% have we told quod_prolog its kb is caught up?
+
+            %% ---- membership growth (join path) ----
+            contacts        = []  :: [server_id()],  %% seed endpoints a `join` node dials to join+sync
+            pending_joiners = #{}  :: #{server_id() => map()},  %% leader: joiners seen, so we can dial them back
+            admitting       = #{}  :: #{server_id() => reference()},  %% leader: joiner => monitor ref of its in-flight admission proof
+            %% (the promote target is DERIVED from the log by learner_target/2 — never a
+            %% volatile note, so a restarted/newly-elected leader never strands a learner.)
 
             %% ---- counters ----
             elections = 0, appends = 0, commits = 0,
@@ -168,11 +189,20 @@ init_ready(D1) ->
     %% stream. So every committee member can reach every other — any node can win an
     %% election and lead (full Raft symmetry).
     Actions = case derive_committee(D2) of
-                  []  -> [];                                  %% join passive learner (M4)
-                  [_] -> [{next_event, internal, bootstrap}]; %% sole member: lead now (M1 parity)
+                  []  -> maybe_join_driver(D2);               %% no voters yet: a fresh joiner asks to join
+                  [_] -> [{next_event, internal, bootstrap}]; %% sole voter: lead now (M1 parity)
                   _   -> [election_timeout(D2)]               %% contest the election
               end,
     {ok, follower, D2, Actions}.
+
+%% A `join`-mode node with no durable state and a contact list drives the join handshake:
+%% it (re)asks a contact to be admitted, on a timer, until it appears in its own committee.
+%% Anything else (a founder, a restart with state) returns no action here.
+maybe_join_driver(D) ->
+    case maps:get(mode, D#d.cfg) =:= join andalso D#d.contacts =/= [] of
+        true  -> [join_timeout(D)];
+        false -> []
+    end.
 
 %% Restart reloads durable state; a brand-new namespace seeds its committee from
 %% Config (create) — `[]` ⇒ self-only 1-voter, a list ⇒ multi-member bootstrap.
@@ -186,13 +216,14 @@ load_or_bootstrap(D0, Cfg, Store) ->
                            voted_for = maps:get(voted_for, L),
                            snap_idx  = SnapIdx,
                            snap_term = maps:get(snap_term, L),
-                           snap_cfg  = SnapCfg}),
+                           snap_cfg  = SnapCfg,
+                           contacts  = maps:get(seed_peers, Cfg, [])}),
     HasDurable = (Log =/= []) orelse (Term =/= 0) orelse (SnapIdx =/= 0) orelse (SnapCfg =/= []),
     case HasDurable of
-        true  -> D;   %% restart: committee derived from snap_cfg + log
+        true  -> D;   %% restart: committee derived from snap_cfg + log; replay catches the rest up
         false ->
             case maps:get(mode, Cfg) of
-                join -> D;   %% passive learner: empty committee, no election (M4)
+                join -> D;   %% fresh joiner: empty committee, join driver armed in init_ready
                 _    ->
                     Committee = case maps:get(committee, Cfg) of
                                     []   -> [D#d.self];                         %% founding 1-voter
@@ -261,6 +292,9 @@ election_ms(Cfg) ->
     T + round(rand:uniform() * J * T).
 election_timeout(#d{cfg = Cfg})  -> {state_timeout, election_ms(Cfg), election}.
 heartbeat_timeout(#d{cfg = Cfg}) -> {state_timeout, maps:get(heartbeat_ms, Cfg), heartbeat}.
+%% A NAMED generic timeout (independent of the election state_timeout, and not cancelled
+%% by state changes) so the join driver can keep retrying while the node is a follower.
+join_timeout(#d{cfg = Cfg}) -> {{timeout, join}, maps:get(join_ms, Cfg, 1000), join_tick}.
 
 %%%===================================================================
 %%% states
@@ -297,6 +331,15 @@ leader(EventType, Event, D) -> common(EventType, Event, D).
 
 common(internal, run_apply, D) ->
     {keep_state, maybe_mark_ready(apply_committed(D))};
+common({timeout, join}, join_tick, D) ->
+    %% joiner: ask every known contact to admit us, until we are a COMMITTED member (then stop —
+    %% the leader drives catch-up + promotion from here via AppendEntries). The committed view is
+    %% load-bearing: stopping on a merely-tentative {add_learner,Self} that a new leader later
+    %% truncates would strand us (we'd have stopped asking). Committed entries are never undone.
+    case is_member(D#d.self, committed_view(D)) of
+        true  -> {keep_state, D};
+        false -> {keep_state, send_join_requests(D), [join_timeout(D)]}
+    end;
 common(cast, rebuild, D) ->
     %% a freshly-(re)started quod_prolog: re-drive committed blocks (async apply_block casts,
     %% in log order) from the snapshot point, then mark it ready ONLY once its kb is caught
@@ -308,18 +351,23 @@ common(cast, rebuild, D) ->
     D1 = apply_committed(D#d{last_applied = D#d.snap_idx, prolog_ready = false}),
     {keep_state, maybe_mark_ready(D1)};
 common(info, {link_up, Peer, Chan, LinkPid}, D = #d{chan = Chan}) ->
-    case (not maps:is_key(Peer, D#d.conns)) andalso lists:member(Peer, derive_committee(D)) of
+    case (not maps:is_key(Peer, D#d.conns)) andalso link_allowed(Peer, D) of
         true  -> Ref = erlang:monitor(process, LinkPid),
                  D1 = D#d{conns = (D#d.conns)#{Peer => {LinkPid, Ref}}},
                  {keep_state, flush_outbox(Peer, LinkPid, D1)};
-        false -> _ = quod_link:close(LinkPid),   %% out of committee / already linked
+        false -> _ = quod_link:close(LinkPid),   %% not a member/contact/joiner, or already linked
                  {keep_state, D}
     end;
+common(info, {join_decision, J, Allowed}, D) ->
+    handle_join_decision(J, Allowed, D);   %% an admission helper reported its verdict
 common(info, {link_error, Peer, Chan}, D = #d{chan = Chan}) ->
     %% a failed open: drop the buffered frames; Raft re-sends fresh on the next heartbeat.
     {keep_state, D#d{outbox = maps:remove(Peer, D#d.outbox)}};
-common(info, {'DOWN', _Ref, process, LinkPid, _Reason}, D) ->
-    {keep_state, drop_conn_by_pid(LinkPid, D)};
+common(info, {'DOWN', Ref, process, LinkPid, _Reason}, D) ->
+    %% either a tracked link pid died (drop the conn) or an admission helper died without
+    %% reporting (free its marker so the joiner can retry). Both are by-ref / by-pid no-ops if
+    %% it's the other kind, so we apply both.
+    {keep_state, drop_admitting_by_ref(Ref, drop_conn_by_pid(LinkPid, D))};
 common(info, {quod_message, _, _OtherChan, _}, D) ->
     {keep_state, D};   %% another channel (Brahms / another namespace's log)
 common({call, From}, get_status, D)    -> {keep_state, D, [{reply, From, status_map(D)}]};
@@ -358,8 +406,8 @@ start_election(D = #d{store = Store}) ->
 
 become_leader(D) ->
     LLI   = last_log_index(D),
-    Next  = maps:from_list([{P, LLI + 1} || P <- peers(D)]),
-    Match = maps:from_list([{P, 0}       || P <- peers(D)]),
+    Next  = maps:from_list([{P, LLI + 1} || P <- repl_peers(D)]),
+    Match = maps:from_list([{P, 0}       || P <- repl_peers(D)]),
     D1 = D#d{role = leader, leader_id = D#d.self, next_index = Next, match_index = Match, votes = #{}},
     logger:info("quod[~s]: leader at term ~p (committee ~p)", [D#d.ns, D#d.cur_term, derive_committee(D1)]),
     case quorum(D1) of
@@ -396,7 +444,7 @@ votes_count(#d{votes = V}) -> length([1 || {_, true} <- maps:to_list(V)]).
 broadcast_request_vote(D) ->
     RV = #request_vote{term = D#d.cur_term, candidate_id = D#d.self,
                        last_log_index = last_log_index(D), last_log_term = last_log_term(D)},
-    lists:foldl(fun(P, A) -> send_raft(P, RV, A) end, D, peers(D)).
+    lists:foldl(fun(P, A) -> send_raft(P, RV, A) end, D, voter_peers(D)).
 
 handle_request_vote(Peer, #request_vote{term = RvT}, _State, D = #d{cur_term = CT}) when RvT < CT ->
     {keep_state, send_raft(Peer, #request_vote_reply{term = CT, vote_granted = false}, D)};
@@ -536,19 +584,238 @@ handle_ae_reply(Peer, Reply = #append_entries_reply{term = RT}, leader, D = #d{c
         true ->
             MI = Reply#append_entries_reply.match_index,
             Match1 = (D#d.match_index)#{Peer => max(maps:get(Peer, D#d.match_index, 0), MI)},
-            Next1  = (D#d.next_index)#{Peer => MI + 1},
-            D1 = ack_pending(advance_commit(D#d{match_index = Match1, next_index = Next1})),
-            D2 = case maps:get(Peer, Next1) =< last_log_index(D1) of
-                     true  -> replicate_to(Peer, D1);   %% pipeline the next batch
-                     false -> D1
-                 end,
-            {keep_state, D2, [{next_event, internal, run_apply}]};
+            D1   = ack_pending(advance_commit(D#d{match_index = Match1,
+                                                  next_index = (D#d.next_index)#{Peer => MI + 1}})),
+            LLI0 = last_log_index(D1),
+            D2   = maybe_promote_learner(Peer, D1),       %% a caught-up learner ⇒ append {promote}
+            %% read next_index from D2 (post-promote), not a pre-promote snapshot: append_promote
+            %% doesn't touch next_index today, but reading the live map is the honest source.
+            D3   = case maps:get(Peer, D2#d.next_index) =< last_log_index(D2) of
+                       true  -> replicate_to(Peer, D2);   %% pipeline the next batch
+                       false -> D2
+                   end,
+            %% a promote just appended a config entry: fan the new voter set out at once
+            %% (so the joiner adopts its vote) rather than waiting for the next heartbeat.
+            Extra = case last_log_index(D3) > LLI0 of true -> [{next_event, internal, replicate}]; false -> [] end,
+            {keep_state, D3, [{next_event, internal, run_apply} | Extra]};
         false ->
             NextV = max(D#d.snap_idx + 1, Reply#append_entries_reply.match_index + 1),
             D1 = D#d{next_index = (D#d.next_index)#{Peer => NextV}},
             {keep_state, replicate_to(Peer, D1)}   %% back up and retry
     end;
 handle_ae_reply(_Peer, _Reply, _State, D) -> {keep_state, D}.   %% stale / not leader
+
+%%%===================================================================
+%%% join / membership growth (learner → catch-up → promote)
+%%%===================================================================
+
+%% Joiner side: ask every known contact to admit us. send_raft dials a contact on demand;
+%% link_allowed/2 permits the link because the contact is in #d.contacts.
+send_join_requests(D = #d{self = Self}) ->
+    Req = #join_request{joiner = Self, pubkey = none, args = #{}},
+    lists:foldl(fun(C, A) -> send_raft(C, Req, A) end, D, D#d.contacts).
+
+%% A join_request arrives from a node the network has NOT accepted yet — an outsider. Validate
+%% its `joiner` is a well-formed {Host, Port} BEFORE anything trusts it: a malformed id would
+%% otherwise function_clause in the admission path and crash the ledger (a one-packet,
+%% repeatable leader DoS). Bad request ⇒ silently dropped; well-formed ⇒ dispatched as before.
+handle_join_request(State, Peer, Req = #join_request{joiner = J}, D) ->
+    case valid_server_id(J) of
+        true  -> dispatch_join_request(State, Peer, Req, D);
+        false -> {keep_state, D}
+    end.
+
+%% Leader: admit a new joiner as a non-voting learner (after proving the admission rule),
+%% unless it is already a member. Remembering it in pending_joiners lets us dial it back.
+%% The admission proof runs in a HELPER process (start_admission), NOT inline: a scoped prove
+%% may legitimately be slow (backtracking, cross-ontology reads), and this gen_statem also
+%% owns the heartbeat — it must never block on unbounded work or it would stop heartbeating
+%% and be voted out. The verdict returns as a {join_decision, ...} message.
+dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK}, D) ->
+    case is_member(J, D) of
+        true  -> {keep_state, send_raft(J, #join_reply{result = already_member}, D)};
+        false ->
+            %% REFUSE-beyond-cap (never evict): evicting would let a flood push a real in-progress
+            %% joiner out of pending_joiners → out of link_allowed → the leader can't dial it back
+            %% → its promotion stalls. Refusing new strangers pins every in-progress joiner.
+            case maps:is_key(J, D#d.pending_joiners)
+                 orelse maps:size(D#d.pending_joiners) < ?MAX_PENDING_JOINERS of
+                false -> {keep_state, D};   %% table full of strangers: drop — no state, no link-allow
+                true  ->
+                    %% store `#{}`, NOT attacker-supplied args (unused — can_join uses the pubkey):
+                    %% never retain attacker terms.
+                    D1 = D#d{pending_joiners = (D#d.pending_joiners)#{J => #{}}},
+                    case maps:is_key(J, D1#d.admitting) of
+                        true  -> {keep_state, D1};   %% a proof for J is already running
+                        false ->
+                            %% cap concurrent proofs (each spawns a process + a can_join prove);
+                            %% past the cap J retries next tick and gets a slot as the ≤N drain.
+                            case maps:size(D1#d.admitting) < ?MAX_ADMITTING of
+                                true  -> {keep_state, start_admission(J, PK, D1)};
+                                false -> {keep_state, D1}
+                            end
+                    end
+            end
+    end;
+%% Not the leader: point the joiner at the leader we know (it retries there next tick). The
+%% redirect reply dials J back, which needs J in pending_joiners for link_allowed. Unlike the
+%% leader branch, a follower has nothing to PIN here (it doesn't admit) — its pending_joiners is
+%% only transient permission to dial a redirect. So EVICT-to-make-room when full (memory still
+%% bounded by the cap; an evicted entry's joiner simply re-asks), rather than refuse — else a
+%% flood would silently stop the follower from redirecting any new (legit) joiner to the leader.
+dispatch_join_request(_State, _Peer, #join_request{joiner = J}, D) ->
+    PJ0 = D#d.pending_joiners,
+    PJ1 = case maps:is_key(J, PJ0) orelse maps:size(PJ0) < ?MAX_PENDING_JOINERS of
+              true  -> PJ0;
+              false -> evict_one(PJ0)
+          end,
+    D1 = D#d{pending_joiners = PJ1#{J => #{}}},
+    {keep_state, send_raft(J, #join_reply{result = {redirect, D#d.leader_id}}, D1)}.
+
+%% Drop one (arbitrary) entry to make room — only for the follower's transient redirect table.
+%% maps:iterator/next picks one without materialising all keys.
+evict_one(M) ->
+    case maps:next(maps:iterator(M)) of
+        none          -> M;
+        {K, _V, _Itr} -> maps:remove(K, M)
+    end.
+
+%% Hand the (possibly slow) admission proof to a throwaway helper and return at once, so the
+%% leader keeps heartbeating. The helper proves can_join and messages the yes/no verdict back;
+%% `admitting` marks J in-flight (by the helper's MONITOR ref) so a retrying joiner doesn't spawn
+%% a second proof. spawn_monitor (not bare spawn) so that if the helper is KILLED before it
+%% reports, the `DOWN` frees the marker — else a dead helper would wedge J out forever.
+start_admission(J, PK, D = #d{ns = Ns}) ->
+    Self = self(),
+    {_Pid, Ref} = spawn_monitor(fun() -> Self ! {join_decision, J, allowed_to_join(J, PK, Ns)} end),
+    D#d{admitting = (D#d.admitting)#{J => Ref}}.
+
+%% The helper's verdict arrived. Clear the marker (demonitor with flush — eats the helper's
+%% impending normal-exit DOWN), then admit/refuse — but only if we are STILL the leader and J
+%% hasn't become a member meanwhile (a stale verdict after step-down or a duplicate is dropped).
+handle_join_decision(J, Allowed, D0) ->
+    _ = case maps:get(J, D0#d.admitting, undefined) of
+            R when is_reference(R) -> erlang:demonitor(R, [flush]);
+            _                      -> ok
+        end,
+    D = D0#d{admitting = maps:remove(J, D0#d.admitting)},
+    case D#d.role =:= leader andalso not is_member(J, D) of
+        false -> {keep_state, D};
+        true  ->
+            case Allowed of
+                true  -> admit_learner(J, D);
+                false ->
+                    %% Send a best-effort denial, then DROP J from pending_joiners: a denied node
+                    %% never becomes a member, so it would otherwise sit there forever — a flood of
+                    %% distinct denied ids would fill the cap and block real joiners. The reply is
+                    %% informational only (the joiner retries on its own timer regardless).
+                    D1 = send_raft(J, #join_reply{result = {denied, can_join_failed}}, D),
+                    {keep_state, D1#d{pending_joiners = maps:remove(J, D1#d.pending_joiners)}}
+            end
+    end.
+
+%% An admission helper died WITHOUT reporting (killed mid-proof): drop its `admitting` marker so
+%% the joiner can retry. A normal completion never reaches here — handle_join_decision demonitors
+%% with [flush] first. (A normal-exit DOWN that races ahead is harmless: it only clears a marker
+%% the imminent join_decision would clear anyway.)
+drop_admitting_by_ref(Ref, D = #d{admitting = A}) ->
+    D#d{admitting = maps:filter(fun(_J, R) -> R =/= Ref end, A)}.
+
+%% A well-formed node id: a {Host, Port} with a string/binary host and an in-range port.
+valid_server_id({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
+    is_list(Host) orelse is_binary(Host);
+valid_server_id(_) -> false.
+
+%% Joiner side: react to the leader's disposition — but ONLY while we are still joining (not yet a
+%% COMMITTED member). An established voter/learner/leader ignores join_replies entirely: it must
+%% never take a stranger's word for who the leader is (a leader trusting a forged redirect about
+%% its own leadership is the hostile-net hole). The real membership state arrives via the
+%% replicated config entries; replies only steer who a *joining* node asks next.
+%% (Authenticating a redirect — vs. merely bounding it — is the signing layer's job; until then a
+%% redirect is bounded only by the MAX_CONTACTS cap below.)
+handle_join_reply(Peer, Reply, D) ->
+    case is_member(D#d.self, committed_view(D)) of
+        true  -> {keep_state, D};   %% already a committed member: the join handshake is over
+        false -> handle_join_reply_active(Peer, Reply, D)
+    end.
+
+handle_join_reply_active(_Peer, #join_reply{result = {redirect, none}}, D) ->
+    {keep_state, D};   %% contact has no leader yet — keep asking on the join timer
+handle_join_reply_active(_Peer, #join_reply{result = {redirect, Leader}}, D) ->
+    %% follow the hint, but REFUSE-beyond-cap so a redirect flood can't grow contacts unbounded
+    %% (contacts feeds both the dial fan-out and link_allowed/2). Config seeds are never evicted.
+    Known = lists:member(Leader, D#d.contacts),
+    case valid_server_id(Leader) andalso (Known orelse length(D#d.contacts) < ?MAX_CONTACTS) of
+        true  -> {keep_state, D#d{leader_id = Leader, contacts = lists:usort([Leader | D#d.contacts])}};
+        false -> {keep_state, D}
+    end;
+handle_join_reply_active(_Peer, #join_reply{result = {denied, Reason}}, D) ->
+    logger:warning("quod[~s]: join denied (~p) — will retry", [D#d.ns, Reason]),
+    {keep_state, D};   %% the admission rule may change; the join timer keeps retrying
+handle_join_reply_active(_Peer, #join_reply{result = _Admitted}, D) ->
+    {keep_state, D}.   %% learner_admitted / already_member: AppendEntries drives catch-up + promote
+
+%% Append a non-voting {add_learner, J} config entry and adopt it on append: J enters the
+%% replication set at once (so the next heartbeat catches it up from the start of the log).
+%% The promote target — the index J must reach — IS the index of this entry, recovered from
+%% the log on demand by learner_target/2 (never a volatile note, so it survives a leader
+%% change). A sole founder (quorum 1) commits the entry here, which also gives the leader the
+%% current-term commit the promote gate later requires.
+admit_learner(J, D) ->
+    I  = last_log_index(D) + 1,
+    E  = #entry{index = I, term = D#d.cur_term, kind = config, data = {add_learner, J}},
+    {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
+    D1 = with_log(D#d.log ++ [E],
+                  D#d{store = Store1,
+                      %% J is now a learner ⇒ covered by membership in link_allowed; drop it from
+                      %% pending_joiners so the anti-flood table only holds not-yet-admitted joiners.
+                      pending_joiners = maps:remove(J, D#d.pending_joiners),
+                      next_index  = (D#d.next_index)#{J => D#d.snap_idx + 1},  %% fresh log ⇒ send from the start
+                      match_index = (D#d.match_index)#{J => 0}}),
+    D2 = case quorum(D1) of 1 -> ack_pending(advance_commit(D1)); _ -> D1 end,
+    logger:info("quod[~s]: admitted learner ~p (promote at index ~p)", [D#d.ns, J, I]),
+    D3 = send_raft(J, #join_reply{result = learner_admitted}, D2),
+    {keep_state, D3, [{next_event, internal, replicate}, {next_event, internal, run_apply}]}.
+
+%% A learner that has caught up to its target is promoted to a voter — but only under the
+%% full single-server safety gate: no config change already in flight, AND a current-term
+%% commit exists (else the published cross-term membership bug can lose a committed entry).
+%% The target is DERIVED from the log (learner_target/2), so a restarted or newly-elected
+%% leader recovers it and never strands a half-admitted learner.
+maybe_promote_learner(Peer, D) ->
+    case learner_target(Peer, D) of
+        none   -> D;   %% not a pending learner (a voter, or already promoted/removed)
+        Target ->
+            Reached = maps:get(Peer, D#d.match_index, 0) >= Target,
+            case Reached andalso (not cfg_uncommitted(D)) andalso has_current_term_commit(D) of
+                true  -> append_promote(Peer, D);
+                false -> D
+            end
+    end.
+
+append_promote(Peer, D) ->
+    I  = last_log_index(D) + 1,
+    E  = #entry{index = I, term = D#d.cur_term, kind = config, data = {promote, Peer}},
+    {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
+    D1 = with_log(D#d.log ++ [E],
+                  D#d{store = Store1,
+                      pending_joiners = maps:remove(Peer, D#d.pending_joiners)}),
+    logger:info("quod[~s]: promoted ~p to voter (committee ~p)", [D#d.ns, Peer, derive_committee(D1)]),
+    %% Now a voter: quorum may grow, so the promote commits once the new voter acks it (a
+    %% 2-node committee needs both). The 1-voter branch only fires if the set didn't grow.
+    case quorum(D1) of 1 -> ack_pending(advance_commit(D1)); _ -> D1 end.
+
+%% The ontology's admission rule, proved against the committed kb. Default-open `can_join`
+%% lives in the root genesis; a false/unknown rule (or an engine not yet ready) denies and
+%% the joiner retries. Identity/signature-gated admission is a later milestone — the joiner
+%% id + advertised pubkey are passed now so only the rule body changes.
+%% Runs in the helper process (start_admission), so a long prove never blocks the leader.
+allowed_to_join({Host, Port}, PK, Ns) ->
+    Goal = {can_join, Ns, [Host, Port], PK},
+    case quod_prolog:prove(Ns, Goal, Ns) of   %% prove catches exits itself, returning fail
+        {ok, [_ | _], _} -> true;
+        _                -> false
+    end.
 
 %%%===================================================================
 %%% client append + commit + apply
@@ -575,8 +842,8 @@ handle_client_append(From, Change, D) ->
 %% current-term entry above it commits). Self always counts toward the majority.
 advance_commit(D = #d{commit_index = C, cur_term = CT, match_index = MI}) ->
     LLI    = last_log_index(D),
-    Peers  = peers(D),     %% committee + quorum are invariant within the call — derive once,
-    Quorum = quorum(D),    %% not once per index (each derive_committee is a full log fold)
+    Peers  = voter_peers(D),  %% commit majority is over VOTERS only (a learner's match_index
+    Quorum = quorum(D),       %% never counts); invariant within the call — derive once
     Ns = [N || N <- lists:seq(C + 1, LLI),
                (1 + length([P || P <- Peers, maps:get(P, MI, 0) >= N])) >= Quorum,
                term_at(N, D) =:= CT],
@@ -650,7 +917,7 @@ caught_up(D) ->
 %%% replication loop (leader)
 %%%===================================================================
 
-replicate(D) -> lists:foldl(fun replicate_to/2, D, peers(D)).
+replicate(D) -> lists:foldl(fun replicate_to/2, D, repl_peers(D)).
 
 replicate_to(P, D) ->
     NextI   = maps:get(P, D#d.next_index, last_log_index(D) + 1),
@@ -736,6 +1003,8 @@ route(State, Peer, #request_vote{} = M, D)         -> handle_request_vote(Peer, 
 route(State, Peer, #request_vote_reply{} = M, D)   -> handle_vote_reply(Peer, M, State, D);
 route(State, Peer, #append_entries{} = M, D)       -> handle_append_entries(Peer, M, State, D);
 route(State, Peer, #append_entries_reply{} = M, D) -> handle_ae_reply(Peer, M, State, D);
+route(State, Peer, #join_request{} = M, D)         -> handle_join_request(State, Peer, M, D);
+route(_State, Peer, #join_reply{} = M, D)          -> handle_join_reply(Peer, M, D);
 route(_State, _Peer, _Other, D)                    -> {keep_state, D}.   %% install_snapshot etc: M3
 
 %% A corrupt/hostile peer can send Seq/Total that pass framing but are out of range; reject
@@ -885,14 +1154,75 @@ term_at_or_zero(I, D) -> case term_at(I, D) of undefined -> 0; T -> T end.
 up_to_date(CandT, CandI, MyT, MyI) ->
     CandT > MyT orelse (CandT =:= MyT andalso CandI >= MyI).
 
+%% The VOTERS — the consensus quorum + election set. `{add}` seeds a founding voter,
+%% `{promote}` turns a learner into one, `{remove}` drops a member. `{add_learner}` does
+%% NOT add a voter. snap_cfg (the committee as of a snapshot) is voters-only.
 derive_committee(#d{snap_cfg = Base, log = Log}) ->
-    lists:foldl(fun(#entry{kind = config, data = {add, S}}, Acc)    -> [S | Acc -- [S]];
-                   (#entry{kind = config, data = {remove, S}}, Acc) -> Acc -- [S];
+    lists:foldl(fun(#entry{kind = config, data = {add, S}}, Acc)     -> [S | Acc -- [S]];
+                   (#entry{kind = config, data = {promote, S}}, Acc) -> [S | Acc -- [S]];
+                   (#entry{kind = config, data = {remove, S}}, Acc)  -> Acc -- [S];
                    (_, Acc) -> Acc
                 end, Base, Log).
 
-peers(D)  -> derive_committee(D) -- [D#d.self].
-quorum(D) -> (length(derive_committee(D)) div 2) + 1.
+%% The LEARNERS — non-voting members the leader replicates to so they can catch up
+%% before promotion. `{add_learner}` admits one; `{promote}`/`{remove}` removes it from
+%% the learner set. Learners live only in the live log (snapshotting them is M3).
+derive_learners(#d{log = Log}) ->
+    lists:foldl(fun(#entry{kind = config, data = {add_learner, S}}, Acc) -> [S | Acc -- [S]];
+                   (#entry{kind = config, data = {promote, S}}, Acc)     -> Acc -- [S];
+                   (#entry{kind = config, data = {remove, S}}, Acc)      -> Acc -- [S];
+                   (_, Acc) -> Acc
+                end, [], Log).
+
+%% A #d view whose log is only the COMMITTED (locked-in) prefix — entries at or below
+%% commit_index. snap_cfg is committed by construction, so derive_committee/derive_learners over
+%% this view yield the COMMITTED voter/learner sets. A committed membership entry is never
+%% truncated, so a joiner that appears here is permanently in — the safe point to stop asking
+%% (join_tick) and the boundary past which it ignores join_replies.
+committed_view(D = #d{log = Log, commit_index = CI}) ->
+    D#d{log = [E || E <- Log, E#entry.index =< CI]}.
+
+%% The catch-up index a pending learner must reach before it can be promoted = the index of
+%% its {add_learner} entry, cleared by a later {promote}/{remove}. DERIVED from the log (not
+%% a volatile per-leader note) so a new or restarted leader recomputes every pending
+%% learner's target and never strands one. `none` ⇒ Peer is not a pending learner (an
+%% ordinary voter, or already promoted/removed).
+learner_target(Peer, #d{log = Log}) ->
+    lists:foldl(fun(#entry{kind = config, data = {add_learner, S}, index = I}, _) when S =:= Peer -> I;
+                   (#entry{kind = config, data = {promote, S}}, _) when S =:= Peer -> none;
+                   (#entry{kind = config, data = {remove, S}}, _)  when S =:= Peer -> none;
+                   (_, Acc) -> Acc
+                end, none, Log).
+
+%% Replication targets (AppendEntries / next_index) = voters ∪ learners, minus self.
+repl_peers(D)  -> (derive_committee(D) ++ derive_learners(D)) -- [D#d.self].
+%% Vote + commit-majority peers = voters only, minus self. A learner never votes and its
+%% match_index never counts toward the commit majority (that is what "non-voting" means).
+voter_peers(D) -> derive_committee(D) -- [D#d.self].
+quorum(D)      -> (length(derive_committee(D)) div 2) + 1.
+
+is_voter(Node, D)  -> lists:member(Node, derive_committee(D)).
+is_member(Node, D) -> is_voter(Node, D) orelse lists:member(Node, derive_learners(D)).
+
+%% A node may keep an inbound/outbound {log,Ns} link iff it is a current member (voter or
+%% learner), a configured contact (a joiner reaching its seed), or a pending joiner (so the
+%% leader can dial it back to admit/redirect). Anyone else is closed — links are scoped.
+link_allowed(Peer, D) ->
+    is_member(Peer, D)
+        orelse lists:member(Peer, D#d.contacts)
+        orelse maps:is_key(Peer, D#d.pending_joiners).
+
+%% A config change is "uncommitted / in flight" iff some config entry sits above the
+%% commit index. Derived (not a flag) so it is always exact: one membership change at a
+%% time, and the gate below can never read a stale value.
+cfg_uncommitted(#d{log = Log, commit_index = CI}) ->
+    lists:any(fun(#entry{kind = config, index = I}) -> I > CI; (_) -> false end, Log).
+
+%% The leader has committed an entry in its CURRENT term (its election no-op, or — for a
+%% sole founder that skipped the no-op — the just-committed {add_learner}). Mandatory gate
+%% before any voting-set change (promote/remove): the published single-server membership
+%% bug needs both this AND one-change-at-a-time. (Adding a non-voting learner needs neither.)
+has_current_term_commit(D) -> term_at_or_zero(D#d.commit_index, D) =:= D#d.cur_term.
 
 %%%===================================================================
 %%% misc

@@ -63,8 +63,7 @@ would close that call cycle into a deadlock (each waits on the other). As a cast
 `quod_ledger` never blocks on us, so it stays free to service `append`. The OCC verdict is
 delivered straight to the parked client here; a forward gap asks `quod_ledger` to re-drive.
 """.
--spec apply_block(binary(), pos_integer(),
-                  #transaction{} | noop | {add, server_id()} | {remove, server_id()}) -> ok.
+-spec apply_block(binary(), pos_integer(), #transaction{} | noop | member_op()) -> ok.
 apply_block(Ns, Index, Change) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 
@@ -200,9 +199,11 @@ apply_committed(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1
     S;
 apply_committed(Index, noop, S) ->                          %% Index == applied+1
     S#s{applied = Index};
-apply_committed(Index, {Op, _Node}, S) when Op =:= add; Op =:= remove ->
-    %% a committee (config) change: nothing for the fact engine, but advance the cursor
-    %% in lockstep with quod_ledger so the next block isn't seen as a gap.
+apply_committed(Index, {Op, _Node}, S)
+  when Op =:= add; Op =:= remove; Op =:= add_learner; Op =:= promote ->
+    %% a committee (config) change — add/remove a voter, admit a learner, or promote one:
+    %% nothing for the fact engine, but advance the cursor in lockstep with quod_ledger so
+    %% the next block isn't seen as a gap.
     S#s{applied = Index};
 apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,

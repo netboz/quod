@@ -29,11 +29,17 @@
                  sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none in Phase 1
 
 %% A Raft log entry. `data` is a #transaction{} for `block` entries, the atom `noop`
-%% for the election marker, or a membership op for `config` entries.
+%% for the election marker, or a membership op for `config` entries. The membership ops:
+%% `{add, S}` seeds a founding voter; `{add_learner, S}` admits a non-voting catch-up
+%% member; `{promote, S}` turns a learner into a voter; `{remove, S}` drops a member.
+-type member_op() :: {add,         server_id()}
+                   | {add_learner, server_id()}
+                   | {promote,     server_id()}
+                   | {remove,      server_id()}.
 -record(entry, {index :: log_index(),
                 term  :: term_no(),
                 kind  :: block | config,
-                data  :: #transaction{} | noop | {add, server_id()} | {remove, server_id()}}).
+                data  :: #transaction{} | noop | member_op()}).
 
 %% --- the six Raft RPC records (snake_case fields) ---
 -record(request_vote,         {term           :: term_no(),
@@ -58,5 +64,18 @@
                                config              :: [server_id()],
                                data                :: binary()}).
 -record(install_snapshot_reply, {term :: term_no()}).
+
+%% --- join handshake (membership growth; rides the same {log, Ns} channel) ---
+%% A fresh node (mode=join) unicasts #join_request{} to a contact; the leader admits it
+%% as a non-voting learner ({add_learner}) after proving `can_join`, then catches it up
+%% and promotes it. `pubkey` is RESERVED (none in Phase 1) so signed admission slots in
+%% later with no shape change. #join_reply{} carries the leader's disposition; the actual
+%% membership state reaches the joiner through the replicated config entries (AppendEntries).
+-record(join_request, {joiner :: server_id(),
+                       pubkey = none :: pubkey() | none,
+                       args   = #{}  :: map()}).
+-record(join_reply,   {result :: learner_admitted | already_member
+                                | {redirect, server_id() | none}
+                                | {denied, term()}}).
 
 -endif.

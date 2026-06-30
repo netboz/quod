@@ -34,9 +34,13 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | `quod_reg` | gproc nomenclature (`{conn,NodeId}`, `{channel,Ns}`, `{quod_brahms,Ns}`, …) |
 | `quod_app` | env-driven boot (config from the orchestrator) |
 
-**Identity.** A node is a `NodeId = {Host, Port}` — the address peers dial it at.
-The first frame on a stream is a header announcing the opener's `NodeId` +
-channel. (v1 trusts the announced identity; crypto identity is deferred.)
+**Identity.** A node's id is its **Ed25519 public key** (`node_id`), generated on first
+boot and persisted; the address `{Host, Port}` is demoted to a resolvable routing hint.
+The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}` + channel,
+and **mutual TLS** binds the connection to that key (`quic:peercert/1` must match the
+claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
+addresses (it reads the `Addr` from the header). *(No-identity/test boots use the address
+as the id, transitionally.)* Per-message/block signing + quorum certificates are Phase B.
 
 **Message contract.** A consumer of channel `Ns`:
 
@@ -110,5 +114,5 @@ in the image) — no CSI volume.
   boot, Docker/Nomad deploy. Verified full-mesh on a 3-node cluster (~100 MB/node).
 - **Next:** the application layer — wire `erlog` so a namespace's gossip carries
   **ontology facts / distributed Prolog queries**, not just node ids.
-- **Deferred:** probe-based eviction (failure detector), crypto identity
-  (replace the announced `{Host,Port}`), PUSH over QUIC datagrams.
+- **Deferred:** PUSH over QUIC datagrams; per-block quorum certificates + signed
+  changes (Phase B); Brahms gossiping the address hint (sparse-seed move-survival).

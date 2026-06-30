@@ -544,13 +544,13 @@ assumes the ordering layer (§6). Until that exists, a local per-node monotonic
 index is fine for a dev/single-operator cluster — flag it, don't pretend it's
 cluster-wide.
 
-**Identity stance (review).** §2/§5/§6 invoke signatures, ACL, and signed
-attestation, but quod today is `NodeId = {Host, Port}` and **trusts the announced
-identity** (README). So Phase 1 runs in a declared **single-operator trust model
-with signing stubbed**: the *interfaces* (signed entries, ACL hooks, attestation)
-are present but no-ops, swappable once a node keypair lands. ACL-enforced foreign
-writes (§5) and quorum attestation (§6) are **gated on identity** and are not real
-until then (§12).
+**Identity stance.** *Updated (identity milestone A.3, 2026-06-30):* a node's `node_id`
+is now its **Ed25519 pubkey** (the address is a routing hint), and connections are bound
+to that key via **mutual TLS** — the keypair lands, so identity is no longer stubbed. Still
+**stubbed until Phase B**: per-change **signatures** (`#transaction.sig`), the per-block
+**quorum certificate**, and signed attestation. So ACL-enforced foreign writes (§5) and
+quorum attestation (§6) — which need *signed* changes, not just an authenticated transport
+— remain gated on Phase B (§12). The single-operator trust model holds in the interim.
 
 ---
 
@@ -635,10 +635,11 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    for conserved resources; define the coupling protocol (deferred to Phase 4, but
    the motivating example needs it).
 
-4. **Identity / signing is assumed but absent.** quod is `NodeId={Host,Port}`,
-   trusted. Phase 1 declares a single-operator trust model with signing stubbed;
-   ACL-enforced foreign writes (§5) and attestation (§6) are gated on a node
-   keypair landing (§9).
+4. **Identity landed (A.3); signing is Phase B.** `node_id` is the node's Ed25519
+   **pubkey** and connections are bound to it via mutual TLS. Still pending:
+   per-change **signatures** + the per-block **quorum certificate**, so ACL-enforced
+   foreign writes (§5) and attestation (§6) — which need *signed* changes — remain
+   gated on Phase B (§9).
 
 5. **No "fast *and* agreed" lane.** Instance/gameplay facts are high-rate *and*
    need agreement, so they pay full ordering latency and can't use the lossy

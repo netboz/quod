@@ -61,8 +61,9 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 %% include/quod_ledger.hrl
 -type term_no()   :: non_neg_integer().      %% Raft Term, starts 0
 -type log_index() :: non_neg_integer().      %% 0 = empty-log / snapshot sentinel; entries 1..N
--type server_id() :: {inet:hostname(), inet:port_number()}.   %% == Brahms NodeId == {Host,Port}
--type pubkey()    :: binary().               %% Ed25519 public key — the REAL identity (later; see below)
+-type pubkey()    :: binary().               %% Ed25519 public key (32 bytes)
+-type node_id()   :: pubkey().               %% a node's STABLE identity == its pubkey (built; A.3)
+-type endpoint()  :: {inet:hostname(), inet:port_number()}.   %% where a node is dialed (a routing hint)
 
 %% a Prolog clause; identity is content only (#1)
 -type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
@@ -119,32 +120,37 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 `quod_diff:functor_hash/3` and compared by `quod_prolog`'s OCC re-check. Producer and validator use the
 same integer representation.
 
-### Identity & signing readiness (reserved, stubbed in Phase 1)
+### Identity & signing readiness
 
-Today a committee member's identity *is* its address (`server_id() = {Host, Port}`). That is fine inside one
-trusted operator's cluster, but it cannot prove who a computer is, make the history tamper-evident, or
-survive a lying member. The real identity will be a **keypair** (a public key as the name, a secret to sign
-with), exactly as onbrater did. To avoid a painful format migration, Phase 1 **reserves the slots and leaves
-them empty**:
+> **Updated (identity milestone A.3, 2026-06-30).** Identity is now the node's **Ed25519
+> pubkey** (`node_id()`), not its address. The bullets below describe the model as built; the
+> signing half (`#transaction.sig`, quorum certificates) is Phase B, still pending.
 
-- **`#transaction.author` / `#transaction.sig`** — every change will eventually be signed by its submitter over its
-  canonical bytes (`term_to_binary({tx_id, caller_ns, diff, read_check}, [deterministic])`). Phase 1 sets
-  `author = self` (the node id), `sig = none`, and `verify_change/2` is a pass-through stub that always
-  succeeds. Each `#transaction{}` build site (e.g. §4.5) sets `author = self`; `sig` defaults to `none`. The
-  byte-size guard and `tx_id` correlation are unaffected.
-- **Identity vs. address.** Later, `server_id()` becomes a **`pubkey()`**, and `{Host, Port}` is demoted to
-  "where you dial it," bound to the key by a signed **admission record** (onbrater's `peer_admitted(NodeId,
-  Host, Port, Pubkey)`). Committee config entries (`{add, ServerId}`) and `voted_for`/`leader_id` then carry
-  the key, not the address. This is a `server_id()`-type swap plus an address-lookup table — not a record
-  reshape, because the slots already exist.
-- **Block-level proof (BFT only).** Surviving lies *additionally* needs each committed block to carry the
-  quorum's signatures (a commit certificate). That is a later `#entry{}` field, **not** reserved now: plain
-  crash-fault Raft never uses it, and it appears only with the Byzantine protocol.
+A committee member's identity is its **pubkey** (`node_id() = pubkey()`), generated on first boot
+and persisted; the address `{Host, Port}` (`endpoint()`) is demoted to "where you dial it" — a
+routing hint resolved on connect. This survives a host move (the durable membership is pubkey-only)
+and lets **mutual TLS** prove who a node is.
 
-**What Phase 1 builds:** a node keypair is generated at boot and persisted, but **not used** — `sign/2` and
-`verify_change/2` are pass-through stubs. This keeps the single-operator build simple while making the wire
-and disk formats forward-compatible: turning signing on later changes the stubs and the `server_id()` type,
-not the record shapes.
+- **`#transaction.author` / `#transaction.sig`** — `author` is the submitting node's pubkey (set at
+  every `#transaction{}` build site). `sig` is the Ed25519 signature over the canonical bytes
+  `term_to_binary({tx_id, caller_ns, diff, read_check}, [deterministic])` — **still `none` until
+  Phase B**; `verify_change/2` is a pass-through stub until then. The byte-size guard and `tx_id`
+  correlation are unaffected.
+- **Identity vs. address (built).** `node_id()` is the `pubkey()`; `{Host, Port}` is an `endpoint()`
+  hint. Committee config entries (`{add, NodeId}`) and `voted_for`/`leader_id` carry the **key**, not
+  the address. The address is learned from the authenticated link header (`{Pubkey, Addr}`) into a
+  resolver cache (`quod_quic`), and a redirect resolves the leader's key → endpoint. (We did **not**
+  adopt onbrater's `peer_admitted/4` recorded admission fact — the address stays a volatile hint;
+  Brahms gossiping `{pubkey, addr}` for sparse-seed topologies is a later refinement.)
+- **Block-level proof (commit certificate).** A subscriber verifying a *relayed* block (P2 epidemic
+  dissemination) needs each committed block to carry the quorum's signatures. **Phase B** adds it (a
+  per-entry quorum certificate + a verify API) — superseding the earlier "BFT-only, not reserved"
+  framing; full per-voter Byzantine validation is still a later milestone.
+
+**What identity built (A.3) vs. Phase B:** the node keypair is generated at boot, persisted, and **used**
+— it is the `node_id` and the mutual-TLS cert, and the transport binds the proven peer pubkey. Still
+**stubbed until Phase B**: `#transaction.sig` (`none`) and `verify_change/2` (pass-through), and the
+per-block quorum certificate. The no-identity/test path keeps using the address as the id transitionally.
 
 ---
 
@@ -157,8 +163,9 @@ not the record shapes.
 
 ### 1.1 Assumptions
 
-1. **`server_id() = NodeId = {Host, Port}`** is the committee-member id used as `voted_for`/`leader_id`/
-   `candidate_id` and as map keys — the `quod_quic` NodeId, the only stable channel-addressable id.
+1. **`node_id() = pubkey()`** is the committee-member id used as `voted_for`/`leader_id`/`candidate_id`
+   and as map keys (its address `endpoint()` is a resolvable hint). *(A.3: was `{Host, Port}`; the
+   no-identity/test path still uses an endpoint as the id transitionally.)*
 2. **Durability is delegated to `quod_ledger_store`** (§3). Every fsync-ordering rule is expressed as "call
    `quod_ledger_store:*` and only on its `ok`/`{ok, Store1}` return send the network reply / count toward
    commit." The handle is threaded through `#d.store`.

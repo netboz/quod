@@ -51,10 +51,12 @@ analysis is asymptotic; it only guarantees convergence). We borrow the **SWIM**
 idea: a just-evicted id is **tombstoned** for `tombstone_rounds` and refused
 re-admission from *third-party* gossip (push / pull bodies) during that window.
 Only a **direct message that announces the id as its own sender** lifts the
-tombstone (SWIM **refutation**). As everywhere in v1, this trusts the *announced*
-node id — the gossip layer does not yet verify identity (see
-`m:quod_brahms_sampler`'s sybil caveat) — so refutation is only as strong as that
-announced identity; an authenticated-identity layer would tighten it. The
+tombstone (SWIM **refutation**). Brahms identifies peers by their **address** (the `Addr`
+half of the link header) and trusts it as-announced — the gossip layer does not verify
+identity (see `m:quod_brahms_sampler`'s sybil caveat), so refutation is only as strong as
+that announced address. (The committee/ledger layer DOES authenticate — it binds the
+header's pubkey to `quic:peercert/1` — but Brahms discovery deliberately stays
+address-based; gossiping the authenticated pubkey is a later refinement.) The
 eviction it guards is sound w.r.t. Brahms: the detector evicts only on a probe
 unanswered for `probe_rounds`, which a live node clears well within, so a live id
 is evicted (and tombstoned) only on a rare timing miss, and that self-heals the
@@ -505,7 +507,7 @@ gossip_targets(L1, L2, V) ->
 %% cache a peer's (bidirectional) inbound link for our own sends. It is owned by
 %% `m:quod_conn` (origin `in`), so on eviction we drop+demonitor but DON'T close
 %% it; when we don't cache it (already hold one) we just leave it serving.
-%% Keyed by the peer's announced node id (v1 trusts the announced identity).
+%% Keyed by the peer's announced address (Brahms is address-based; it trusts the announced addr).
 cache_inbound(NodeId, LinkPid, D) ->
     {_Cached, D1} = maybe_cache(NodeId, LinkPid, in, D),  %% caches + flushes if fresh
     D1.

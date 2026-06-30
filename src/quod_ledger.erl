@@ -60,7 +60,7 @@ here would steal/own the wrong stream.
 -endif.
 
 -define(DEFAULTS,
-        #{node_id      => undefined,  %% own NodeId {Host,Port}; REQUIRED
+        #{node_id      => undefined,  %% own node_id = our pubkey (an endpoint on no-identity boots); REQUIRED
           mode         => create,     %% create | join (join ⇒ a fresh node syncs via the join driver)
           role         => member,     %% member (voter joiner) | replica (permanent non-voting read-copy)
           committee    => [],         %% bootstrap committee; [] ⇒ self-only 1-voter (#18)

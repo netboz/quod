@@ -28,7 +28,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000}).
 
 -record(s, {ns        :: binary(),
-            self      :: server_id(),
+            self      :: node_id(),
             est       :: tuple(),                 %% committed erlog #est{} (unknown=fail)
             ready     = false :: boolean(),       %% true once the initial rebuild has run
             ttl       = 30000 :: pos_integer(),

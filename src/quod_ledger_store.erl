@@ -76,11 +76,11 @@ Reload everything needed to reconstruct `quod_ledger`'s durable state: the persi
 term/vote, the full log (from `snap_index+1` up), and the snapshot metadata.
 """.
 -spec load(handle()) -> #{cur_term  := term_no(),
-                          voted_for := server_id() | none,
+                          voted_for := node_id() | none,
                           log       := [#entry{}],
                           snap_idx  := log_index(),
                           snap_term := term_no(),
-                          snap_cfg  := [server_id()],
+                          snap_cfg  := [node_id()],
                           snap_data := term() | none}.
 load(S = #store{snap_index = SnapI, last_index = LastI}) ->
     {Term, VotedFor} = read_meta(S),
@@ -95,7 +95,7 @@ load(S = #store{snap_index = SnapI, last_index = LastI}) ->
 %%%===================================================================
 
 -doc "The persisted `{cur_term, voted_for}`; `{0, none}` for a fresh namespace.".
--spec read_meta(handle()) -> {term_no(), server_id() | none}.
+-spec read_meta(handle()) -> {term_no(), node_id() | none}.
 read_meta(#store{dir = Dir}) ->
     case file:read_file(filename:join(Dir, "meta.term")) of
         {ok, Bin} ->
@@ -112,7 +112,7 @@ read_meta(#store{dir = Dir}) ->
 Persist `{Term, VotedFor}` atomically (tmp + datasync + rename). MUST complete
 before `quod_ledger` grants a vote or replies at a bumped term.
 """.
--spec write_meta(handle(), term_no(), server_id() | none) -> ok.
+-spec write_meta(handle(), term_no(), node_id() | none) -> ok.
 write_meta(#store{dir = Dir}, Term, VotedFor) ->
     Path = filename:join(Dir, "meta.term"),
     Tmp  = Path ++ ".tmp",
@@ -228,21 +228,21 @@ term_at(#store{idx = Idx}, Index) ->
 
 -doc "Latest snapshot payload, or `none` (no snapshots are written before M3).".
 -spec read_snapshot(handle()) ->
-        none | {ok, log_index(), term_no(), [server_id()], term()}.
+        none | {ok, log_index(), term_no(), [node_id()], term()}.
 read_snapshot(#store{snap_index = 0}) -> none;
 read_snapshot(S = #store{snap_index = I, snap_term = T}) ->
     {Data, Cfg} = read_snapshot_payload(S),
     {ok, I, T, Cfg, Data}.
 
 -doc "Write a snapshot file atomically. (Exercised from M3; present for the API.)".
--spec write_snapshot(handle(), log_index(), term_no(), [server_id()], term()) -> {ok, handle()}.
+-spec write_snapshot(handle(), log_index(), term_no(), [node_id()], term()) -> {ok, handle()}.
 write_snapshot(S = #store{dir = Dir}, LastIdx, LastTerm, Config, Data) ->
     Base = filename:join(Dir, snap_name(LastIdx, LastTerm)),
     ok = atomic_write(Base, frame(term_to_binary({Config, Data}, [deterministic]))),
     {ok, S#store{snap_index = LastIdx, snap_term = LastTerm}}.
 
 -doc "Install a leader snapshot then drop the live log. (M3.)".
--spec install_snapshot(handle(), log_index(), term_no(), [server_id()], term()) -> {ok, handle()}.
+-spec install_snapshot(handle(), log_index(), term_no(), [node_id()], term()) -> {ok, handle()}.
 install_snapshot(_S, _LastIdx, _LastTerm, _Config, _Data) ->
     error(not_implemented_m3).
 

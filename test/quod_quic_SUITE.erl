@@ -9,13 +9,14 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
-         non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1]).
+         non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1,
+         resolve_and_dial_by_pubkey/1]).
 
 -define(PORT, 14599).
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialable_node_id,
-          unacked_stream_no_link_up, dialer_presents_cert].
+          unacked_stream_no_link_up, dialer_presents_cert, resolve_and_dial_by_pubkey].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -150,6 +151,18 @@ peercert_retry(Conn, N) ->
     case quic:peercert(Conn) of
         {ok, _} = R -> R;
         _           -> timer:sleep(50), peercert_retry(Conn, N - 1)
+    end.
+
+%% A PUBKEY target (the production id form) is resolved to an endpoint via a learned hint,
+%% then dialed — the resolver path end to end through the real transport. (We map a fresh
+%% pubkey to our own loopback listener so the dial connects.)
+resolve_and_dial_by_pubkey(_Config) ->
+    PK = crypto:strong_rand_bytes(32),
+    ok = quod_quic:learn(PK, ?SELF),
+    ok = quod_quic:open_link(PK, <<"chan-pk">>),
+    receive
+        {link_up, PK, <<"chan-pk">>, LinkPid} when is_pid(LinkPid) -> ok
+    after 5000 -> ct:fail(no_link_up_by_pubkey)
     end.
 
 %% A view id that is not a dialable {Host, Port} must be refused with link_error,

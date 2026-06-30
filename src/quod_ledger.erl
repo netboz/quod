@@ -55,7 +55,7 @@ here would steal/own the wrong stream.
 -ifdef(TEST).
 -export([last_log_index/1, last_log_term/1, term_at/2, quorum/1, derive_committee/1,
          derive_learners/1, learner_target/2, voter_peers/1, repl_peers/1, cfg_uncommitted/1,
-         has_current_term_commit/1, valid_server_id/1, committed_view/1, evict_one/1, up_to_date/4,
+         has_current_term_commit/1, valid_node_id/1, committed_view/1, evict_one/1, up_to_date/4,
          advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1]).
 -endif.
 
@@ -90,39 +90,40 @@ here would steal/own the wrong stream.
              bytes  :: non_neg_integer()}).
 
 -record(d, {ns      :: binary(),
-            self    :: server_id(),
+            self    :: node_id(),
             cfg     :: map(),
             chan    :: binary(),                 %% term_to_binary({log, Ns}, [deterministic])
-            conns   = #{} :: #{server_id() => {pid(), reference()}},  %% our OUTBOUND links
-            outbox  = #{} :: #{server_id() => [binary()]},   %% per-peer FIFO while a link opens
-            rx      = #{} :: #{server_id() => #rx{}},
+            %% keyed by the SEND TARGET: a member's node_id (pubkey) or a bootstrap seed's endpoint.
+            conns   = #{} :: #{node_id() | endpoint() => {pid(), reference()}},  %% our OUTBOUND links
+            outbox  = #{} :: #{node_id() | endpoint() => [binary()]},   %% per-peer FIFO while a link opens
+            rx      = #{} :: #{node_id() => #rx{}},   %% reassembly is per-member (only members chunk)
             store   :: quod_ledger_store:handle() | undefined,
             role    = follower :: follower | candidate | leader,
 
             %% ---- PERSISTED (fsync via quod_ledger_store before reply) ----
             cur_term  = 0    :: term_no(),
-            voted_for = none :: server_id() | none,
+            voted_for = none :: node_id() | none,
             log       = []   :: [#entry{}],       %% indices snap_idx+1 .. N — the durable block list
             snap_idx  = 0    :: log_index(),
             snap_term = 0    :: term_no(),
-            snap_cfg  = []   :: [server_id()],    %% committee as of the snapshot / bootstrap
+            snap_cfg  = []   :: [node_id()],    %% committee as of the snapshot / bootstrap
 
             %% ---- VOLATILE (reconstructed on restart) ----
             last_idx  = 0    :: log_index(),      %% cached tail of `log` (= snap_idx if empty): keeps
             last_term = 0    :: term_no(),        %% last_log_index/term O(1) instead of lists:last per call
             commit_index = 0    :: log_index(),
             last_applied = 0    :: log_index(),
-            next_index   = #{}  :: #{server_id() => log_index()},   %% leader only
-            match_index  = #{}  :: #{server_id() => log_index()},   %% leader only
-            votes        = #{}  :: #{server_id() => boolean()},     %% candidate: votes this term
-            leader_id    = none :: server_id() | none,
+            next_index   = #{}  :: #{node_id() => log_index()},   %% leader only
+            match_index  = #{}  :: #{node_id() => log_index()},   %% leader only
+            votes        = #{}  :: #{node_id() => boolean()},     %% candidate: votes this term
+            leader_id    = none :: node_id() | none,
             pending      = #{}  :: #{log_index() => gen_statem:from()},  %% client appends awaiting commit
             prolog_ready = false :: boolean(),   %% have we told quod_prolog its kb is caught up?
 
             %% ---- membership growth (join path) ----
-            contacts        = []  :: [server_id()],  %% seed endpoints a `join` node dials to join+sync
-            pending_joiners = #{}  :: #{server_id() => map()},  %% leader: joiners seen, so we can dial them back
-            admitting       = #{}  :: #{server_id() => reference()},  %% leader: joiner => monitor ref of its in-flight admission proof
+            contacts        = []  :: [endpoint()],  %% seed endpoints a `join` node dials to join+sync
+            pending_joiners = #{}  :: #{node_id() => map()},  %% leader: joiners seen, so we can dial them back
+            admitting       = #{}  :: #{node_id() => reference()},  %% leader: joiner => monitor ref of its in-flight admission proof
             %% (the promote target is DERIVED from the log by learner_target/2 — never a
             %% volatile note, so a restarted/newly-elected leader never strands a learner.)
 
@@ -142,7 +143,7 @@ start_link(Ns, Config) ->
 -doc "Submit a change. Blocks until the entry commits ({ok, Index}) or this node loses leadership.".
 -spec append(binary(), #transaction{}) ->
         {ok, log_index()} | {error, busy}
-      | {error, not_in_charge, server_id() | none | unavailable}.
+      | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_ledger, Ns}), {append, Change}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
@@ -305,14 +306,14 @@ follower(state_timeout, election, D) -> start_election(D);
 follower(internal, bootstrap, D)     -> start_election(D);   %% 1-voter: lead now
 follower({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, D#d.leader_id}}]};
-follower(info, {quod_message, {Peer, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
-    inbound(follower, Peer, Payload, D);
+follower(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
+    inbound(follower, Peer, Payload, D);   %% Peer = the sender's node_id (header pubkey); addr ignored
 follower(EventType, Event, D) -> common(EventType, Event, D).
 
 candidate(state_timeout, election, D) -> start_election(D);   %% no majority yet: retry
 candidate({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, none}}]};
-candidate(info, {quod_message, {Peer, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
+candidate(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(candidate, Peer, Payload, D);
 candidate(EventType, Event, D) -> common(EventType, Event, D).
 
@@ -322,7 +323,7 @@ leader(internal, replicate, D) ->
     {keep_state, replicate(D)};
 leader({call, From}, {append, Change}, D) ->
     handle_client_append(From, Change, D);
-leader(info, {quod_message, {Peer, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
+leader(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(leader, Peer, Payload, D);
 leader(EventType, Event, D) -> common(EventType, Event, D).
 
@@ -613,16 +614,18 @@ handle_ae_reply(_Peer, _Reply, _State, D) -> {keep_state, D}.   %% stale / not l
 %% Joiner side: ask every known contact to admit us. send_raft dials a contact on demand;
 %% link_allowed/2 permits the link because the contact is in #d.contacts.
 send_join_requests(D = #d{self = Self, cfg = Cfg}) ->
+    %% `joiner = Self` (our node_id/pubkey); the leader binds it to our TLS-authenticated pubkey.
     %% advertise our role so the leader admits us on the right track (voter joiner vs read-replica).
-    Req = #join_request{joiner = Self, pubkey = none, args = #{as => maps:get(role, Cfg, member)}},
+    Req = #join_request{joiner = Self, args = #{as => maps:get(role, Cfg, member)}},
     lists:foldl(fun(C, A) -> send_raft(C, Req, A) end, D, D#d.contacts).
 
-%% A join_request arrives from a node the network has NOT accepted yet — an outsider. Validate
-%% its `joiner` is a well-formed {Host, Port} BEFORE anything trusts it: a malformed id would
-%% otherwise function_clause in the admission path and crash the ledger (a one-packet,
-%% repeatable leader DoS). Bad request ⇒ silently dropped; well-formed ⇒ dispatched as before.
+%% A join_request arrives from a node the network has NOT accepted yet — an outsider. Two guards
+%% before anything trusts it: (1) `joiner` is a well-formed node_id (a malformed id would otherwise
+%% function_clause in the admission path — a one-packet leader DoS); (2) **possession** — the claimed
+%% `joiner` MUST equal `Peer`, the connection's TLS-authenticated sender pubkey, so a node can only
+%% ask to join AS ITSELF (closes deferred §1). Bad request ⇒ silently dropped.
 handle_join_request(State, Peer, Req = #join_request{joiner = J}, D) ->
-    case valid_server_id(J) of
+    case valid_node_id(J) andalso J =:= Peer of
         true  -> dispatch_join_request(State, Peer, Req, D);
         false -> {keep_state, D}
     end.
@@ -633,7 +636,7 @@ handle_join_request(State, Peer, Req = #join_request{joiner = J}, D) ->
 %% may legitimately be slow (backtracking, cross-ontology reads), and this gen_statem also
 %% owns the heartbeat — it must never block on unbounded work or it would stop heartbeating
 %% and be voted out. The verdict returns as a {join_decision, ...} message.
-dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK, args = Args}, D) ->
+dispatch_join_request(leader, _Peer, #join_request{joiner = J, args = Args}, D) ->
     case is_member(J, D) of
         true  -> {keep_state, send_raft(J, #join_reply{result = already_member}, D)};
         false ->
@@ -653,7 +656,7 @@ dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK, args
                             %% cap concurrent proofs (each spawns a process + a can_join prove);
                             %% past the cap J retries next tick and gets a slot as the ≤N drain.
                             case maps:size(D1#d.admitting) < ?MAX_ADMITTING of
-                                true  -> {keep_state, start_admission(J, PK, D1)};
+                                true  -> {keep_state, start_admission(J, D1)};
                                 false -> {keep_state, D1}
                             end
                     end
@@ -672,7 +675,14 @@ dispatch_join_request(_State, _Peer, #join_request{joiner = J}, D) ->
               false -> evict_one(PJ0)
           end,
     D1 = D#d{pending_joiners = PJ1#{J => #{}}},
-    {keep_state, send_raft(J, #join_reply{result = {redirect, D#d.leader_id}}, D1)}.
+    %% the joiner dials an ENDPOINT, so resolve the leader's node_id → its address (or `none`
+    %% if we don't know the leader / its address yet — the joiner keeps asking on its timer).
+    {keep_state, send_raft(J, #join_reply{result = {redirect, leader_endpoint(D)}}, D1)}.
+
+%% Resolve the known leader's node_id to a dialable endpoint for a redirect (none if unknown).
+leader_endpoint(#d{leader_id = none}) -> none;
+leader_endpoint(#d{leader_id = L}) ->
+    case quod_quic:resolve(L) of {ok, Ep} -> Ep; error -> none end.
 
 %% Drop one (arbitrary) entry to make room — only for the follower's transient redirect table.
 %% maps:iterator/next picks one without materialising all keys.
@@ -687,9 +697,9 @@ evict_one(M) ->
 %% `admitting` marks J in-flight (by the helper's MONITOR ref) so a retrying joiner doesn't spawn
 %% a second proof. spawn_monitor (not bare spawn) so that if the helper is KILLED before it
 %% reports, the `DOWN` frees the marker — else a dead helper would wedge J out forever.
-start_admission(J, PK, D = #d{ns = Ns}) ->
+start_admission(J, D = #d{ns = Ns}) ->
     Self = self(),
-    {_Pid, Ref} = spawn_monitor(fun() -> Self ! {join_decision, J, allowed_to_join(J, PK, Ns)} end),
+    {_Pid, Ref} = spawn_monitor(fun() -> Self ! {join_decision, J, allowed_to_join(J, Ns)} end),
     D#d{admitting = (D#d.admitting)#{J => Ref}}.
 
 %% The helper's verdict arrived. Clear the marker (demonitor with flush — eats the helper's
@@ -723,10 +733,15 @@ handle_join_decision(J, Allowed, D0) ->
 drop_admitting_by_ref(Ref, D = #d{admitting = A}) ->
     D#d{admitting = maps:filter(fun(_J, R) -> R =/= Ref end, A)}.
 
-%% A well-formed node id: a {Host, Port} with a string/binary host and an in-range port.
-valid_server_id({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
+%% A well-formed node id: a 32-byte Ed25519 pubkey, OR (the no-identity/test path, transitional)
+%% a dialable endpoint. Guards the join path so a malformed id can't crash the leader.
+valid_node_id(Id) when is_binary(Id), byte_size(Id) =:= 32 -> true;
+valid_node_id(Id) -> valid_endpoint(Id).
+
+%% A dialable endpoint: a {Host, Port} with a string/binary host and an in-range port.
+valid_endpoint({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
     is_list(Host) orelse is_binary(Host);
-valid_server_id(_) -> false.
+valid_endpoint(_) -> false.
 
 %% Route an approved joiner to the voter-track (learner→promote) or the read-replica track,
 %% per the role tag we recorded (validated to member|replica) when its request arrived.
@@ -761,11 +776,15 @@ handle_join_reply(Peer, Reply, D) ->
 handle_join_reply_active(_Peer, #join_reply{result = {redirect, none}}, D) ->
     {keep_state, D};   %% contact has no leader yet — keep asking on the join timer
 handle_join_reply_active(_Peer, #join_reply{result = {redirect, Leader}}, D) ->
-    %% follow the hint, but REFUSE-beyond-cap so a redirect flood can't grow contacts unbounded
-    %% (contacts feeds both the dial fan-out and link_allowed/2). Config seeds are never evicted.
+    %% `Leader` is an ENDPOINT (the leader's resolved address). Follow the hint, but
+    %% REFUSE-beyond-cap so a redirect flood can't grow contacts unbounded (contacts feeds both the
+    %% dial fan-out and link_allowed/2). Config seeds are never evicted.
     Known = lists:member(Leader, D#d.contacts),
-    case valid_server_id(Leader) andalso (Known orelse length(D#d.contacts) < ?MAX_CONTACTS) of
-        true  -> {keep_state, D#d{leader_id = Leader, contacts = lists:usort([Leader | D#d.contacts])}};
+    %% Add the leader's endpoint to `contacts` so the joiner dials it next tick. We do NOT set
+    %% `leader_id` (that is a node_id/pubkey, learned from the committed config once admitted) —
+    %% the redirect only tells us WHERE to ask, not the leader's identity.
+    case valid_endpoint(Leader) andalso (Known orelse length(D#d.contacts) < ?MAX_CONTACTS) of
+        true  -> {keep_state, D#d{contacts = lists:usort([Leader | D#d.contacts])}};
         false -> {keep_state, D}
     end;
 handle_join_reply_active(_Peer, #join_reply{result = {denied, Reason}}, D) ->
@@ -828,15 +847,21 @@ append_promote(Peer, D) ->
 
 %% The ontology's admission rule, proved against the committed kb. Default-open `can_join`
 %% lives in the root genesis; a false/unknown rule (or an engine not yet ready) denies and
-%% the joiner retries. Identity/signature-gated admission is a later milestone — the joiner
-%% id + advertised pubkey are passed now so only the rule body changes.
+%% the joiner retries. `Joiner` is the joiner's node_id (its pubkey — already proven via the
+%% possession bind), so an ontology can narrow `can_join` to a pubkey allowlist.
 %% Runs in the helper process (start_admission), so a long prove never blocks the leader.
-allowed_to_join({Host, Port}, PK, Ns) ->
-    Goal = {can_join, Ns, [Host, Port], PK},
+allowed_to_join(Joiner, Ns) ->
+    Goal = {can_join, Ns, joiner_term(Joiner), none},
     case quod_prolog:prove(Ns, Goal, Ns) of   %% prove catches exits itself, returning fail
         {ok, [_ | _], _} -> true;
         _                -> false
     end.
+
+%% Make the joiner id a Prolog-safe term: a pubkey is a binary (fine); an endpoint id is
+%% passed as the LIST `[Host, Port]`, never the `{Host, Port}` tuple — erlog reads a tuple as
+%% a compound term whose functor must be a callable atom, and a string host is not (crash).
+joiner_term({Host, Port}) -> [Host, Port];
+joiner_term(Pubkey)       -> Pubkey.
 
 %%%===================================================================
 %%% client append + commit + apply

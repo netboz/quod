@@ -35,13 +35,12 @@ Gated on it:
 
 ## 2. Transport hardening (hostile-net)
 
-- **Mutual TLS is opportunistic, not mandatory** (`quod_quic` server `verify => true`). The TLS 1.3
-  CertificateRequest is sent, but a peer that presents an **empty** client cert still completes the
-  handshake (`quic` sets `peer_cert = undefined`) — so `verify => true` *requests* but does not
-  *require* a client cert. Harmless while `node_id = {Host,Port}`; **the identity bind (A.3) must
-  reject a connection with no/invalid `peercert`** — the link header's claimed pubkey must equal
-  `quic:peercert/1`'s — else an unauthenticated peer is admitted at the transport layer. → the
-  peercert bind in `quod_conn` (lands with `node_id = pubkey`).
+- **Mutual TLS is opportunistic at the lib level, but quod now binds it.** `verify => true` only
+  *requests* a client cert (an empty cert still completes the handshake, `peer_cert = undefined`).
+  **Closed in A.3:** `quod_conn:bind_ok/2` rejects an inbound connection whose link-header pubkey is a
+  real 32-byte key but whose `quic:peercert/1` is missing or mismatched — so an unauthenticated /
+  impersonating peer can't speak on a pubkey identity. *Still open:* the bind is skipped for non-pubkey
+  (no-identity/test) ids, so it only bites once a node has a real keypair (the production path).
 - **PEM-fallback badmatch on a missing cert file** (`quod_quic:identity_certkey/0` →
   `load_cert`/`load_key`). When the identity env (`identity_cert`/`identity_key`) is absent, the
   fallback does `{ok, Pem} = file:read_file(certfile)`, which **badmatches if the file is missing**

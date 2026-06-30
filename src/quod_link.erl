@@ -105,6 +105,7 @@ read_header(Conn, Sid, ConnProc, Acc) ->
                     %% we hold proof the opener exists (its header); ACK it so its
                     %% outbound link can come up, then serve normally.
                     _ = quic:send_data(Conn, Sid, ack_frame(), false),
+                    learn_hint(Peer),                                  %% header reveals pubkey => addr
                     ConnProc ! {link_up, Channel, Peer, self(), in},   %% the PEER opened this stream
                     loop(loop_msgs(Rest, #s{conn = Conn, sid = Sid, channel = Channel, peer = Peer}));
                 error -> exit(bad_header);
@@ -145,9 +146,16 @@ publish(Peer, Channel, Payload) ->
     _ = quod_reg:publish({channel, Channel}, {quod_message, {Peer, self()}, Channel, Payload}),
     ok.
 
+%% The header announces `{Pubkey, Addr}`; when the pubkey is a real key, record the
+%% `Pubkey => Addr` resolution hint so dials-by-pubkey can find this peer.
+learn_hint({Pubkey, Addr}) when is_binary(Pubkey) -> _ = quod_quic:learn(Pubkey, Addr), ok;
+learn_hint(_)                                     -> ok.
+
 %% --- wire ----------------------------------------------------------------
 
-%% header: <<NLen:16, NodeId, CLen:16, Channel>>  (one, at stream open)
+%% header: <<NLen:16, NodeId, CLen:16, Channel>>  (one, at stream open). NodeId is the
+%% sender's transport identity `{Pubkey, Addr}`: the receiver binds the pubkey to the
+%% connection's `peercert` and learns `Pubkey => Addr` for resolution.
 header(NodeId, Channel) ->
     NB = term_to_binary(NodeId, [deterministic]),
     <<(byte_size(NB)):16, NB/binary, (byte_size(Channel)):16, Channel/binary>>.

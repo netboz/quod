@@ -211,8 +211,10 @@ idle(state_timeout, tick, D0) ->
     D1 = do_round(D0),
     {next_state, collecting, D1,
      [{state_timeout, maps:get(collect_ms, D1#d.cfg), close}]};
-idle(info, {quod_message, Peer, Ns, Payload}, D = #d{ns = Ns}) ->
-    {keep_state, handle_inbound(Peer, Payload, idle, D)};
+%% Brahms is ADDRESS-based: the header announces `{Pubkey, Addr}`, so take the Addr as the
+%% peer id (its node_id/pubkey is the ledger's concern). ReplyLink is the inbound link pid.
+idle(info, {quod_message, {{_Pubkey, Addr}, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
+    {keep_state, handle_inbound({Addr, ReplyLink}, Payload, idle, D)};
 idle(EventType, Event, D) ->
     common(EventType, Event, D).
 
@@ -220,8 +222,8 @@ idle(EventType, Event, D) ->
 collecting(state_timeout, close, D0) ->
     D1 = reconstruct_and_update(D0),
     {next_state, idle, D1, [{state_timeout, round_delay(D1#d.cfg), tick}]};
-collecting(info, {quod_message, Peer, Ns, Payload}, D = #d{ns = Ns}) ->
-    {keep_state, handle_inbound(Peer, Payload, collecting, D)};
+collecting(info, {quod_message, {{_Pubkey, Addr}, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
+    {keep_state, handle_inbound({Addr, ReplyLink}, Payload, collecting, D)};
 collecting(EventType, Event, D) ->
     common(EventType, Event, D).
 

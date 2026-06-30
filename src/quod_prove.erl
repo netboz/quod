@@ -34,11 +34,13 @@ remote reads on a hostile network arrive with the identity milestone.
                                        %% A prove result above this is unsupported (chunking is future).
 
 -record(s, {ns       :: binary(),
-            self     :: server_id(),
+            self     :: node_id(),
             chan     :: binary(),                      %% term_to_binary({prove, Ns}, [deterministic])
-            contacts = []  :: [server_id()],           %% default responder candidates (seed peers)
-            conns    = #{} :: #{server_id() => {pid(), reference()}},  %% our OUTBOUND links
-            outbox   = #{} :: #{server_id() => [binary()]},            %% per-peer FIFO while a link opens
+            contacts = []  :: [endpoint()],          %% default responder candidates (seed endpoints)
+            %% keyed by the send TARGET: a contact endpoint (client→responder) or a reader's
+            %% node_id/pubkey (responder→reader).
+            conns    = #{} :: #{node_id() | endpoint() => {pid(), reference()}},  %% our OUTBOUND links
+            outbox   = #{} :: #{node_id() | endpoint() => [binary()]},   %% per-peer FIFO while a link opens
             pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId => {From, TRef}
             inflight = 0   :: non_neg_integer()}).      %% responder: live prove workers
 
@@ -55,7 +57,7 @@ start_link(Ns, Config) ->
 remote(Ns, Goal, CallerNs, MinHeight) -> remote(Ns, Goal, CallerNs, MinHeight, undefined).
 
 -doc "As `remote/4` but against an explicit contact Replica/Member `{Host, Port}`.".
--spec remote(binary(), term(), binary(), log_index(), server_id() | undefined) ->
+-spec remote(binary(), term(), binary(), log_index(), endpoint() | undefined) ->
         {ok, [map()], log_index()} | fail | {stale, log_index()} | {error, term()}.
 remote(Ns, Goal, CallerNs, MinHeight, Contact) ->
     case quod_reg:where({quod_prove, Ns}) of
@@ -102,8 +104,8 @@ handle_info({link_error, Peer, Chan}, S = #s{chan = Chan}) ->
     {noreply, S#s{outbox = maps:remove(Peer, S#s.outbox)}};
 handle_info({'DOWN', _Ref, process, LinkPid, _Reason}, S) ->
     {noreply, drop_conn(LinkPid, S)};
-handle_info({quod_message, {Peer, _In}, Chan, Payload}, S = #s{chan = Chan}) ->
-    {noreply, inbound(Peer, Payload, S)};
+handle_info({quod_message, {{Peer, _Addr}, _In}, Chan, Payload}, S = #s{chan = Chan}) ->
+    {noreply, inbound(Peer, Payload, S)};   %% Peer = the reader's node_id (header pubkey)
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
 handle_info({req_timeout, ReqId}, S) ->
     case maps:take(ReqId, S#s.pending) of

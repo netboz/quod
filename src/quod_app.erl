@@ -144,10 +144,14 @@ maybe_start_ns(Content) ->
     end,
     ok.
 
-%% Build the per-namespace config map for quod_ns_sup:start_namespace/2.
+%% Build the per-namespace config map for quod_ns_sup:start_namespace/2. The ledger's
+%% `node_id` is the node's PUBKEY (from `apply_identity`) — its stable identity; the address
+%% is only a seed/hint (`seed_peers`, the link header). With no identity it falls back to the
+%% address (the legacy/test path). Brahms keeps using the address (see `maybe_join`).
 build_ns_config(Content) ->
     Ns   = maps:get(namespace, Content),
-    Self = application:get_env(quod, node_id, default_node_id()),
+    Self = application:get_env(quod, node_pubkey,
+                               application:get_env(quod, node_id, default_node_id())),
     Base = #{node_id    => Self,
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),

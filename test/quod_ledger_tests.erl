@@ -179,16 +179,17 @@ remove_drops_both_test() ->
     ?assertEqual([], quod_ledger:derive_learners(D)).
 
 %% A join_request from an un-accepted outsider must not crash the leader: only a well-formed
-%% {Host, Port} id is processed; anything else is rejected at the door.
-valid_server_id_test() ->
-    ?assert(quod_ledger:valid_server_id({"127.0.0.1", 14567})),
-    ?assert(quod_ledger:valid_server_id({<<"host">>, 1})),
-    ?assertNot(quod_ledger:valid_server_id(<<"not-a-tuple">>)),
-    ?assertNot(quod_ledger:valid_server_id({"h", 1, 2})),       %% wrong arity
-    ?assertNot(quod_ledger:valid_server_id({"h", 0})),          %% port out of range
-    ?assertNot(quod_ledger:valid_server_id({"h", 70000})),      %% port out of range
-    ?assertNot(quod_ledger:valid_server_id({123, 14567})),      %% host not a string/binary
-    ?assertNot(quod_ledger:valid_server_id(an_atom)).
+%% node id (a 32-byte pubkey, or — legacy/test path — an endpoint) is processed.
+valid_node_id_test() ->
+    ?assert(quod_ledger:valid_node_id(crypto:strong_rand_bytes(32))),  %% a 32-byte pubkey
+    ?assert(quod_ledger:valid_node_id({"127.0.0.1", 14567})),          %% legacy/test endpoint id
+    ?assert(quod_ledger:valid_node_id({<<"host">>, 1})),
+    ?assertNot(quod_ledger:valid_node_id(<<"not-32-bytes">>)),         %% binary but wrong length
+    ?assertNot(quod_ledger:valid_node_id({"h", 1, 2})),                %% wrong arity
+    ?assertNot(quod_ledger:valid_node_id({"h", 0})),                   %% port out of range
+    ?assertNot(quod_ledger:valid_node_id({"h", 70000})),               %% port out of range
+    ?assertNot(quod_ledger:valid_node_id({123, 14567})),               %% host not a string/binary
+    ?assertNot(quod_ledger:valid_node_id(an_atom)).
 
 %% The promote target is recovered from the LOG alone (no volatile state), so a freshly
 %% built #d — as a restarted or newly-elected leader has — still knows each pending learner's

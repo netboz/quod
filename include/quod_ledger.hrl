@@ -8,8 +8,14 @@
 
 -type term_no()   :: non_neg_integer().      %% Raft term, starts at 0
 -type log_index() :: non_neg_integer().      %% 0 = empty-log / snapshot sentinel; entries are 1..N
--type server_id() :: {inet:hostname(), inet:port_number()}.   %% == Brahms NodeId == {Host, Port}
--type pubkey()    :: binary().               %% Ed25519 public key — the REAL identity (later; see spec)
+-type pubkey()    :: binary().               %% Ed25519 public key (32 bytes)
+-type endpoint()  :: {inet:hostname(), inet:port_number()}.   %% where a node is dialed — a routing hint
+%% A node's STABLE identity is its pubkey. (Transitional: the no-identity/test path still uses an
+%% `endpoint()` as the id, so `node_id()` admits both until those suites migrate to keypairs.)
+-type node_id()   :: pubkey() | endpoint().
+%% Identity is the `node_id()` (the pubkey); `endpoint()` is only "where it is now" (a seed/contact/
+%% redirect target, resolved on connect). Membership entries are node_id-only, so a host move never
+%% rewrites the durable log; the address travels as a hint (gossip / the link header).
 
 %% A Prolog clause; identity is its content only (Head + Body).
 -type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
@@ -18,15 +24,14 @@
 %% The read-set: one content hash per predicate {Functor, Arity}.
 -type read_check() :: #{ {Functor :: atom(), Arity :: non_neg_integer()} => integer() }.
 
-%% The committed change record.
-%% `author`/`sig` are RESERVED for signing (identity readiness): Phase 1 sets
-%% author = self node id and sig = none, and verification is a pass-through stub.
+%% The committed change record. `sig` is RESERVED for signing (Phase B): it stays `none`
+%% until node-author signatures land; `author` is the submitting node's pubkey.
 -record(transaction, {tx_id      :: binary(),            %% unique per transaction (ulid)
                  caller_ns  :: binary(),            %% emitting ontology (CallerNs)
                  diff       :: [op()],              %% concrete asserts/retracts
                  read_check :: read_check(),        %% what the proof relied on (OCC)
-                 author     :: server_id(),         %% who submitted it (Phase 1: node id; later: pubkey())
-                 sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none in Phase 1
+                 author     :: node_id(),           %% submitting node's pubkey
+                 sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
 
 %% A Raft log entry. `data` is a #transaction{} for `block` entries, the atom `noop`
 %% for the election marker, or a membership op for `config` entries. The membership ops:
@@ -34,11 +39,11 @@
 %% (to be promoted); `{add_replica, S}` admits a PERMANENT non-voting full-copy replica (a read
 %% replica — fed like a learner but never promoted); `{promote, S}` turns a learner into a
 %% voter; `{remove, S}` drops a member.
--type member_op() :: {add,         server_id()}
-                   | {add_learner, server_id()}
-                   | {add_replica, server_id()}
-                   | {promote,     server_id()}
-                   | {remove,      server_id()}.
+-type member_op() :: {add,         node_id()}
+                   | {add_learner, node_id()}
+                   | {add_replica, node_id()}
+                   | {promote,     node_id()}
+                   | {remove,      node_id()}.
 -record(entry, {index :: log_index(),
                 term  :: term_no(),
                 kind  :: block | config,
@@ -46,13 +51,13 @@
 
 %% --- the six Raft RPC records (snake_case fields) ---
 -record(request_vote,         {term           :: term_no(),
-                               candidate_id   :: server_id(),
+                               candidate_id   :: node_id(),
                                last_log_index :: log_index(),
                                last_log_term  :: term_no()}).
 -record(request_vote_reply,   {term         :: term_no(),
                                vote_granted :: boolean()}).
 -record(append_entries,       {term           :: term_no(),
-                               leader_id      :: server_id(),
+                               leader_id      :: node_id(),
                                prev_log_index :: log_index(),
                                prev_log_term  :: term_no(),
                                entries        :: [#entry{}],   %% [] for a heartbeat
@@ -61,24 +66,24 @@
                                success     :: boolean(),
                                match_index :: log_index()}).   %% success: matched idx; fail: conflict hint
 -record(install_snapshot,     {term                :: term_no(),
-                               leader_id           :: server_id(),
+                               leader_id           :: node_id(),
                                last_included_index :: log_index(),
                                last_included_term  :: term_no(),
-                               config              :: [server_id()],
+                               config              :: [node_id()],
                                data                :: binary()}).
 -record(install_snapshot_reply, {term :: term_no()}).
 
 %% --- join handshake (membership growth; rides the same {log, Ns} channel) ---
-%% A fresh node (mode=join) unicasts #join_request{} to a contact; the leader admits it
-%% as a non-voting learner ({add_learner}) after proving `can_join`, then catches it up
-%% and promotes it. `pubkey` is RESERVED (none in Phase 1) so signed admission slots in
-%% later with no shape change. #join_reply{} carries the leader's disposition; the actual
-%% membership state reaches the joiner through the replicated config entries (AppendEntries).
--record(join_request, {joiner :: server_id(),
-                       pubkey = none :: pubkey() | none,
+%% A fresh node (mode=join) unicasts #join_request{} to a contact (an endpoint); the leader
+%% admits it as a non-voting learner ({add_learner}) after proving `can_join`, then catches it
+%% up and promotes it. `joiner` is the joiner's PUBKEY (its node_id), bound by the leader to the
+%% connection's TLS-authenticated pubkey before admission (the possession gate). A `{redirect, _}`
+%% carries the leader's ENDPOINT (a resolved address) so the joiner can dial it; the membership
+%% itself reaches the joiner through the replicated config entries (AppendEntries).
+-record(join_request, {joiner :: node_id(),
                        args   = #{}  :: map()}).
 -record(join_reply,   {result :: learner_admitted | already_member
-                                | {redirect, server_id() | none}
+                                | {redirect, endpoint() | none}
                                 | {denied, term()}}).
 
 -endif.

@@ -171,8 +171,18 @@ open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self,
 %% stops delivering across role changes with no DOWN (the phantom-link bug). An inbound
 %% link still routes received data (via `streams`); here it only teaches us the peer id
 %% so future dials adopt this connection.
-handle_link_up(_Channel, RemotePeer, _LinkPid, in, S) ->
-    ensure_peer(RemotePeer, S);
+handle_link_up(_Channel, RemotePeer, _LinkPid, in, S = #s{conn = Conn}) ->
+    %% Identity bind: a peer dialed US (we are the TLS server, verify=>true), so its header
+    %% claims a pubkey AND mutual TLS proved one via `quic:peercert/1`. They must match — else
+    %% the peer is lying about who it is, or presented no cert. Drop the whole connection. (A
+    %% non-pubkey id — the no-identity/test path — has nothing to bind, so it is allowed.)
+    case bind_ok(RemotePeer, Conn) of
+        ok ->
+            ensure_peer(RemotePeer, S);
+        {fail, Reason} ->
+            logger:warning("quod: dropping inbound connection — peer identity ~p", [Reason]),
+            exit({shutdown, {peer_identity, Reason}})
+    end;
 handle_link_up(Channel, RemotePeer, LinkPid, out, S = #s{chans = Chans, pending = Pending}) ->
     case maps:get(Channel, Chans, undefined) of
         Existing when is_pid(Existing), Existing =/= LinkPid ->
@@ -233,3 +243,17 @@ fail_pending(LinkPid, Peer, Streams, Pending) ->
 %% reads it and a second registration for a mutually-dialed pair only clashed silently.
 ensure_peer(RemotePeer, S = #s{peer = undefined}) -> S#s{peer = RemotePeer};
 ensure_peer(_RemotePeer, S)                       -> S.
+
+%% The header's claimed pubkey must equal the TLS-proven peer cert's pubkey. A 32-byte
+%% binary id ⇒ a real identity, enforced; any other id (the no-identity/test path) ⇒ skip.
+bind_ok({Pubkey, _Addr}, Conn) when is_binary(Pubkey), byte_size(Pubkey) =:= 32 ->
+    case quic:peercert(Conn) of
+        {ok, Der} ->
+            case quod_identity:pubkey_of_cert(Der) of
+                {ok, Pubkey} -> ok;
+                {ok, _Other} -> {fail, pubkey_mismatch};
+                error        -> {fail, bad_peer_cert}
+            end;
+        {error, _} -> {fail, no_peercert}
+    end;
+bind_ok(_RemotePeer, _Conn) -> ok.

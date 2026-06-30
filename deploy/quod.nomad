@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.7"
-  description = "quod image tag in the cluster registry. 0.6.7 = identity A.4 review fixes (mutual-TLS assertion test, suite env cleanup; deferred.md: peercert-bind + PEM-fallback notes)."
+  default     = "0.6.8"
+  description = "quod image tag in the cluster registry. 0.6.8 = identity A.3 KEYSTONE: node_id = pubkey (address demoted to a resolvable hint; resolver cache + peercert bind; Brahms stays address-based)."
 }
 
 # ============================================================================

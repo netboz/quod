@@ -15,10 +15,11 @@ variable "image_tag" {
 #   NON-voting full-copy replica ({add_replica}, never promoted), serves reads
 #   locally. Reads never touch consensus.
 #
-# Each group binds static p2p 14567 (host net) and gets a DISTINCT Erlang node
-# name (integer suffix per group) — two quod VMs sharing a host would otherwise
-# collide on the per-host name `quod_14567@<ip>`. distinct_hosts then keeps the
-# static p2p port one-per-host.
+# Each group binds a DISTINCT static p2p/metrics port (root 14567/8, join 14569/70,
+# replica 14571/2) so MULTIPLE quod nodes can share a host — the node's identity is
+# its Ed25519 pubkey (not its address), so the port is just where it listens. No
+# distinct_hosts pinning: Nomad may bin-pack several nodes onto one host. Seeds come
+# from Nomad service discovery (`service "quod"` → each node's actual ip:port).
 #
 # Volumes pre-created (wipe + recreate on a clean re-found — greenfield, no
 # backward compat):
@@ -146,8 +147,8 @@ EOT
 
     network {
       mode = "host"
-      port "p2p"     { static = 14567 }
-      port "metrics" { static = 14568 }
+      port "p2p"     { static = 14569 }
+      port "metrics" { static = 14570 }
     }
 
     volume "quod-data" {
@@ -178,9 +179,9 @@ EOT
         data = <<-EOT
 node {
   ip   = "{{ env "attr.unique.network.ip-address" }}"
-  port = 14567
+  port = 14569
 }
-metrics { port = 14568 }
+metrics { port = 14570 }
 content {
   namespace = "quod:root"
   mode      = join
@@ -195,7 +196,7 @@ EOT
       template {
         data = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
-QUOD_DIST_NAME=quod_14567_1@{{ env "attr.unique.network.ip-address" }}
+QUOD_DIST_NAME=quod_14569_1@{{ env "attr.unique.network.ip-address" }}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true
@@ -250,8 +251,8 @@ EOT
 
     network {
       mode = "host"
-      port "p2p"     { static = 14567 }
-      port "metrics" { static = 14568 }
+      port "p2p"     { static = 14571 }
+      port "metrics" { static = 14572 }
     }
 
     volume "quod-data" {
@@ -282,9 +283,9 @@ EOT
         data = <<-EOT
 node {
   ip   = "{{ env "attr.unique.network.ip-address" }}"
-  port = 14567
+  port = 14571
 }
-metrics { port = 14568 }
+metrics { port = 14572 }
 content {
   namespace = "quod:root"
   mode      = join
@@ -300,7 +301,7 @@ EOT
       template {
         data = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
-QUOD_DIST_NAME=quod_14567_2@{{ env "attr.unique.network.ip-address" }}
+QUOD_DIST_NAME=quod_14571_2@{{ env "attr.unique.network.ip-address" }}
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true

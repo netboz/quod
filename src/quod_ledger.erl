@@ -50,7 +50,7 @@ here would steal/own the wrong stream.
 %% gen_statem
 -export([init/1, callback_mode/0, terminate/3]).
 %% states
--export([follower/3, candidate/3, leader/3]).
+-export([follower/3, pre_vote/3, candidate/3, leader/3]).
 
 -ifdef(TEST).
 -export([last_log_index/1, last_log_term/1, term_at/2, quorum/1, derive_committee/1,
@@ -98,7 +98,7 @@ here would steal/own the wrong stream.
             outbox  = #{} :: #{node_id() | endpoint() => [binary()]},   %% per-peer FIFO while a link opens
             rx      = #{} :: #{node_id() => #rx{}},   %% reassembly is per-member (only members chunk)
             store   :: quod_ledger_store:handle() | undefined,
-            role    = follower :: follower | candidate | leader,
+            role    = follower :: follower | pre_vote | candidate | leader,
 
             %% ---- PERSISTED (fsync via quod_ledger_store before reply) ----
             cur_term  = 0    :: term_no(),
@@ -115,7 +115,8 @@ here would steal/own the wrong stream.
             last_applied = 0    :: log_index(),
             next_index   = #{}  :: #{node_id() => log_index()},   %% leader only
             match_index  = #{}  :: #{node_id() => log_index()},   %% leader only
-            votes        = #{}  :: #{node_id() => boolean()},     %% candidate: votes this term
+            votes        = #{}  :: #{node_id() => boolean()},     %% (pre-)candidate: votes/pre-votes this round
+            pre_vote_token = undefined :: reference() | undefined, %% pre-candidate: current pre-vote round's token
             leader_id    = none :: node_id() | none,
             pending      = #{}  :: #{log_index() => gen_statem:from()},  %% client appends awaiting commit
             prolog_ready = false :: boolean(),   %% have we told quod_prolog its kb is caught up?
@@ -302,15 +303,24 @@ join_timeout(#d{cfg = Cfg}) -> {{timeout, join}, maps:get(join_ms, Cfg, 1000), j
 %%% states
 %%%===================================================================
 
-follower(state_timeout, election, D) -> start_election(D);
-follower(internal, bootstrap, D)     -> start_election(D);   %% 1-voter: lead now
+follower(state_timeout, election, D) -> start_pre_vote(D);    %% trial election first (no term bump)
+follower(internal, bootstrap, D)     -> start_election(D);    %% 1-voter: lead now (no contest)
 follower({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, D#d.leader_id}}]};
 follower(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(follower, Peer, Payload, D);   %% Peer = the sender's node_id (header pubkey); addr ignored
 follower(EventType, Event, D) -> common(EventType, Event, D).
 
-candidate(state_timeout, election, D) -> start_election(D);   %% no majority yet: retry
+%% Pre-candidate: ran a trial election, awaiting pre-votes. A timeout re-runs the trial at
+%% the SAME term (the anti-storm invariant: no quorum ⇒ no term bump, ever).
+pre_vote(state_timeout, election, D) -> start_pre_vote(D);
+pre_vote({call, From}, {append, _}, D) ->
+    {keep_state, D, [{reply, From, {error, not_in_charge, none}}]};
+pre_vote(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
+    inbound(pre_vote, Peer, Payload, D);
+pre_vote(EventType, Event, D) -> common(EventType, Event, D).
+
+candidate(state_timeout, election, D) -> start_pre_vote(D);   %% no majority: fall back to a trial (no bump)
 candidate({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, none}}]};
 candidate(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
@@ -389,6 +399,24 @@ terminate(_Reason, _State, #d{chan = Chan, store = Store}) ->
 %%% election: follower/candidate → candidate → leader
 %%%===================================================================
 
+%% Begin a PRE-VOTE round (Ra-style): a trial election at the CURRENT term that persists
+%% nothing and changes no term. We promote to a real election ONLY if a quorum says it would
+%% vote for us — so a node that can't reach a quorum (cold cache, partition, a dead peer)
+%% never inflates its term. This is the fix for the 2-voter full-restart election storm.
+start_pre_vote(D) ->
+    case lists:member(D#d.self, derive_committee(D)) of
+        false -> {keep_state, D};   %% removed member (M4): don't contest, stay passive
+        true ->
+            Token = make_ref(),
+            D1 = D#d{role = pre_vote, leader_id = none, pre_vote_token = Token,
+                     votes = #{D#d.self => true}, next_index = #{}, match_index = #{}},
+            D2 = broadcast_pre_vote(D1, Token),
+            case votes_count(D2) >= quorum(D2) of
+                true  -> start_election(D2);   %% quorum 1 (sole voter): go straight to a real election
+                false -> {next_state, pre_vote, D2, [election_timeout(D2)]}
+            end
+    end.
+
 start_election(D = #d{store = Store}) ->
     case lists:member(D#d.self, derive_committee(D)) of
         false -> {keep_state, D};   %% removed member (M4): don't contest, stay passive
@@ -396,8 +424,8 @@ start_election(D = #d{store = Store}) ->
             T1 = D#d.cur_term + 1,
             ok = quod_ledger_store:write_meta(Store, T1, D#d.self),   %% DURABLE before any RPC
             D1 = D#d{cur_term = T1, voted_for = D#d.self, votes = #{D#d.self => true},
-                     role = candidate, leader_id = none, elections = D#d.elections + 1,
-                     next_index = #{}, match_index = #{}},
+                     role = candidate, leader_id = none, pre_vote_token = undefined,
+                     elections = D#d.elections + 1, next_index = #{}, match_index = #{}},
             logger:info("quod[~s]: election at term ~p", [D#d.ns, T1]),
             D2 = broadcast_request_vote(D1),
             case votes_count(D2) >= quorum(D2) of
@@ -435,13 +463,18 @@ step_down(NewTerm, D) ->
     ok = quod_ledger_store:write_meta(D#d.store, NewTerm, none),
     D1 = fail_pending(D, none),
     D1#d{cur_term = NewTerm, voted_for = none, role = follower, leader_id = none,
-         votes = #{}, next_index = #{}, match_index = #{}}.
+         votes = #{}, pre_vote_token = undefined, next_index = #{}, match_index = #{}}.
 
 votes_count(#d{votes = V}) -> length([1 || {_, true} <- maps:to_list(V)]).
 
 %%%===================================================================
 %%% RequestVote
 %%%===================================================================
+
+broadcast_pre_vote(D, Token) ->
+    PV = #pre_vote{term = D#d.cur_term, token = Token, candidate_id = D#d.self,
+                   last_log_index = last_log_index(D), last_log_term = last_log_term(D)},
+    lists:foldl(fun(P, A) -> send_raft(P, PV, A) end, D, voter_peers(D)).
 
 broadcast_request_vote(D) ->
     RV = #request_vote{term = D#d.cur_term, candidate_id = D#d.self,
@@ -493,6 +526,36 @@ handle_vote_reply(Peer, #request_vote_reply{term = RT, vote_granted = true}, can
         false -> {keep_state, D1}
     end;
 handle_vote_reply(_Peer, _Reply, _State, D) -> {keep_state, D}.   %% stale / not candidate / denied
+
+%%%===================================================================
+%%% PreVote (the trial election that bounds the term)
+%%%===================================================================
+
+%% Grant a pre-vote iff the pre-candidate is not behind us AND its log is at least as up to
+%% date. Unlike a real vote it checks NEITHER `voted_for` NOR persists anything, and never
+%% changes our term/state — a pre-vote carries no authority, so two peers can each grant the
+%% other (this is what breaks the symmetric 2-node tie). A node that already self-voted in a
+%% real election still grants here. We do NOT reset our own election timer on granting (only a
+%% real AppendEntries from a leader does), so whoever's timer fires first still gets to run.
+handle_pre_vote(Peer, #pre_vote{term = PvT, token = Token,
+                                last_log_index = CLI, last_log_term = CLT}, _State,
+                D = #d{cur_term = CT}) ->
+    Grant = PvT >= CT andalso up_to_date(CLT, CLI, last_log_term(D), last_log_index(D)),
+    {keep_state, send_raft(Peer, #pre_vote_reply{term = CT, token = Token, vote_granted = Grant}, D)}.
+
+%% A pre-vote reply for OUR CURRENT round (matched by token — a term can host many rounds, so
+%% the term alone can't distinguish them). On a quorum, run the REAL election (start_election
+%% bumps + persists the term and broadcasts request_vote). A pre-vote reply never steps us down
+%% or moves our term: pre-votes carry no authority, so a stale/here-higher reply is just dropped.
+handle_pre_vote_reply(Peer, #pre_vote_reply{token = Token, vote_granted = true}, pre_vote,
+                      D = #d{pre_vote_token = Token}) ->
+    D1 = D#d{votes = (D#d.votes)#{Peer => true}},
+    case votes_count(D1) >= quorum(D1) of
+        true  -> start_election(D1);
+        false -> {keep_state, D1}
+    end;
+handle_pre_vote_reply(_Peer, _Reply, _State, D) ->
+    {keep_state, D}.   %% stale token / not pre-voting / denied
 
 %%%===================================================================
 %%% AppendEntries
@@ -1045,6 +1108,8 @@ dispatch_record(State, Peer, Bin, Max, D) ->
             end
     end.
 
+route(State, Peer, #pre_vote{} = M, D)             -> handle_pre_vote(Peer, M, State, D);
+route(State, Peer, #pre_vote_reply{} = M, D)       -> handle_pre_vote_reply(Peer, M, State, D);
 route(State, Peer, #request_vote{} = M, D)         -> handle_request_vote(Peer, M, State, D);
 route(State, Peer, #request_vote_reply{} = M, D)   -> handle_vote_reply(Peer, M, State, D);
 route(State, Peer, #append_entries{} = M, D)       -> handle_append_entries(Peer, M, State, D);

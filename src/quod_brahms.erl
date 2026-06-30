@@ -203,7 +203,13 @@ init({Ns, Config}) ->
             D = #d{ns = Ns, self = Self, cfg = Cfg, counts = Counts,
                    push_limit = PushLimit, pull_limit = PullLimit,
                    view = Seeds, sampler = Sampler, nest = Nest},
-            {ok, idle, D, [{state_timeout, round_delay(Cfg), tick}]};
+            %% First round fires FAST (not after a full round_ms): its seed dials exchange
+            %% link headers that warm the ledger's pubkey->addr resolver cache, so a node
+            %% that just (re)started can resolve and reach its committee in ~1 RTT instead
+            %% of waiting ~round_ms. Steady-state cadence resumes from the next round. With
+            %% pre-vote a cold cache no longer storms — this just shrinks the leaderless
+            %% window on a full restart from ~round_ms to ~sub-second.
+            {ok, idle, D, [{state_timeout, first_round_delay(Cfg), tick}]};
         {error, Reason} ->
             {stop, {bad_config, Reason}}
     end.
@@ -734,6 +740,13 @@ round_delay(Cfg) ->
     Base = maps:get(round_ms, Cfg),
     J    = maps:get(jitter, Cfg),
     Base + round((rand:uniform() * 2 - 1) * Base * J).
+
+%% The FIRST round after boot: a short, lightly-jittered delay (not a full round_ms) so seed
+%% links — and the resolver-cache hints their headers carry — come up promptly. Jittered to
+%% avoid a thundering herd when a whole cluster restarts at once. Never longer than a normal
+%% round (for a tiny test round_ms).
+first_round_delay(Cfg) ->
+    min(maps:get(round_ms, Cfg), 200 + rand:uniform(200)).
 
 %% Payload is already an encoded message binary. A cached link -> direct
 %% (non-blocking) send. Otherwise open one ASYNCHRONOUSLY (retried each round) and

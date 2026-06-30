@@ -49,7 +49,22 @@
                 kind  :: block | config,
                 data  :: #transaction{} | noop | member_op()}).
 
-%% --- the six Raft RPC records (snake_case fields) ---
+%% --- the Raft RPC records (snake_case fields) ---
+%% Pre-vote (Ra-style, per the Raft thesis §9.6): a NON-BINDING trial election a node runs
+%% before a real one. It carries the node's CURRENT term (not term+1) and a fresh `token`
+%% correlating reply↔round (pre-votes never bump the term, so a term can host many rounds).
+%% A peer grants iff the pre-candidate's log is up to date and it is not behind — WITHOUT
+%% checking `voted_for` and WITHOUT persisting anything (so both peers can grant each other,
+%% which breaks the symmetric 2-node tie). The real election (request_vote) runs only once a
+%% quorum pre-votes, so an unreachable node never inflates its term. See quod_ledger.
+-record(pre_vote,             {term           :: term_no(),
+                               token          :: reference(),
+                               candidate_id   :: node_id(),
+                               last_log_index :: log_index(),
+                               last_log_term  :: term_no()}).
+-record(pre_vote_reply,       {term         :: term_no(),
+                               token        :: reference(),
+                               vote_granted :: boolean()}).
 -record(request_vote,         {term           :: term_no(),
                                candidate_id   :: node_id(),
                                last_log_index :: log_index(),

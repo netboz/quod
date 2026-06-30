@@ -39,17 +39,11 @@ defaults_test() ->
 
 boot_identity_test() ->
     _ = application:load(quod),
-    U   = integer_to_list(erlang:unique_integer([positive])),
-    Dir = filename:join("/tmp", "quod_boot_id_" ++ U),
-    ok  = filelib:ensure_dir(filename:join(Dir, "x")),
-    Conf = ["node { ip = \"127.0.0.1\", port = 14999 }\n",
-            "content { namespace = \"bootid:", U, "\", mode = join, "
-            "data_dir = \"", Dir, "\" }\n"],
-    ConfPath = filename:join(Dir, "quod.conf"),
-    ok = file:write_file(ConfPath, Conf),
-    os:putenv("QUOD_CONF", ConfPath),
-    [application:unset_env(quod, K) || K <- [node_pubkey, identity_cert, identity_key]],
+    Dir = tmp_dir(),
     try
+        ConfPath = write_boot_conf(Dir, ""),    %% no explicit identity.dir ⇒ <data_dir>/identity
+        os:putenv("QUOD_CONF", ConfPath),
+        clear_identity_env(),
         _ = quod_app:load_config(),
         {ok, Pub} = application:get_env(quod, node_pubkey),
         ?assertEqual(32, byte_size(Pub)),
@@ -57,10 +51,31 @@ boot_identity_test() ->
         ?assert(filelib:is_regular(filename:join([Dir, "identity", "node.key"]))),
         {ok, Cert} = application:get_env(quod, identity_cert),
         ?assertEqual({ok, Pub}, quod_identity:pubkey_of_cert(Cert)),
-        ?assertMatch({ok, _}, application:get_env(quod, identity_key))
+        ?assertMatch({ok, _}, application:get_env(quod, identity_key)),
+        %% load-or-create: a SECOND boot reloads the SAME identity (durability — the
+        %% whole point of persisting node.key), it does NOT regenerate.
+        clear_identity_env(),
+        _ = quod_app:load_config(),
+        ?assertEqual({ok, Pub}, application:get_env(quod, node_pubkey))
     after
-        os:unsetenv("QUOD_CONF"),
-        [application:unset_env(quod, K) || K <- [node_pubkey, identity_cert, identity_key]],
+        reset_boot_env(),
+        _ = file:del_dir_r(Dir)
+    end.
+
+%% An explicit `identity { dir = ... }` wins over the <data_dir>/identity default.
+identity_dir_override_test() ->
+    _ = application:load(quod),
+    Dir   = tmp_dir(),
+    IdDir = filename:join(Dir, "custom_id"),
+    try
+        ConfPath = write_boot_conf(Dir, IdDir),
+        os:putenv("QUOD_CONF", ConfPath),
+        clear_identity_env(),
+        _ = quod_app:load_config(),
+        ?assert(filelib:is_regular(filename:join(IdDir, "node.key"))),
+        ?assertNot(filelib:is_regular(filename:join([Dir, "identity", "node.key"])))
+    after
+        reset_boot_env(),
         _ = file:del_dir_r(Dir)
     end.
 
@@ -88,3 +103,32 @@ env_override_test_() ->
      end}.
 
 deep(Map, Path) -> lists:foldl(fun(K, M) -> maps:get(K, M) end, Map, Path).
+
+%% --- boot-test helpers ---------------------------------------------------
+
+tmp_dir() ->
+    filename:join("/tmp", "quod_boot_id_" ++ integer_to_list(erlang:unique_integer([positive]))).
+
+%% Write a minimal HOCON config into Dir (with content.data_dir = Dir). IdDir = "" omits
+%% the identity block (default resolution); a non-empty IdDir pins `identity.dir`.
+write_boot_conf(Dir, IdDir) ->
+    ok = filelib:ensure_dir(filename:join(Dir, "x")),
+    U  = filename:basename(Dir),
+    IdBlock = case IdDir of "" -> ""; _ -> ["identity { dir = \"", IdDir, "\" }\n"] end,
+    Conf = ["node { ip = \"127.0.0.1\", port = 14999 }\n",
+            IdBlock,
+            "content { namespace = \"bootid:", U, "\", data_dir = \"", Dir, "\" }\n"],
+    ConfPath = filename:join(Dir, "quod.conf"),
+    ok = file:write_file(ConfPath, Conf),
+    ConfPath.
+
+clear_identity_env() ->
+    _ = [application:unset_env(quod, K) || K <- [node_pubkey, identity_cert, identity_key]],
+    ok.
+
+%% load_config sets HOCON_ENV_OVERRIDE_PREFIX globally — unset it (and QUOD_CONF + the
+%% identity env) so the boot tests don't leak state into the rest of the eunit VM.
+reset_boot_env() ->
+    os:unsetenv("QUOD_CONF"),
+    os:unsetenv("HOCON_ENV_OVERRIDE_PREFIX"),
+    clear_identity_env().

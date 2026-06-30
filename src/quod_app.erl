@@ -11,9 +11,11 @@ descend the path — e.g. `QUOD_CONTENT__MODE=join` overrides `content.mode`,
 `load_config/0` bridges the file onto the `application` env the transport reads
 (`listen_port`, `metrics_port`, `node_id`) and returns the `content` section, which
 drives Brahms membership and the content namespace this node founds (`create`) or
-joins. **With no config file present, the app starts in legacy mode** — `sys.config`
-/ `application:set_env` drive the transport and no content namespace is auto-started
-(this is what the multi-node test SUITE relies on).
+joins. It also **load-or-creates the node's Ed25519 identity** (a side effect:
+persists `node.key` under the identity dir and sets `node_pubkey`/`identity_cert`/
+`identity_key`). **With no config file present, the app starts in legacy mode** —
+`sys.config` / `application:set_env` drive the transport, no content namespace is
+auto-started, and no identity is minted (this is what the multi-node test SUITE relies on).
 """.
 
 -behaviour(application).
@@ -63,21 +65,26 @@ apply_identity(Cfg) ->
             application:set_env(quod, identity_key, Key),
             logger:info("quod: node identity ~s (~s)", [quod_identity:short(Pub), Dir]);
         {error, Reason} ->
+            %% Fatal — a node with no identity is useless. Log first (like every other
+            %% boot failure) so the operator sees a quod-tagged line, not just the crash.
+            logger:error("quod: node identity load/create failed in ~s: ~p", [Dir, Reason]),
             error({identity_failed, Reason})
     end.
 
-%% `identity.dir` if set, else `<content.data_dir>/identity` (share the ledger's durable
-%% volume), else the quod_ledger user_cache default — so identity survives a host move.
+%% `identity.dir` if set, else `<data_dir>/identity` — i.e. INSIDE the same dir the ledger
+%% resolves (`data_dir/1`), so identity always shares the ledger's durability domain and
+%% survives a host move. Both fall back to the same `<user_cache>/quod/data` default.
 identity_dir(Cfg) ->
     case maps:get(dir, maps:get(identity, Cfg, #{}), <<>>) of
-        <<>> -> default_identity_dir(Cfg);
+        <<>> -> filename:join(content_data_dir(Cfg), "identity");
         Dir  -> binary_to_list(Dir)
     end.
 
-default_identity_dir(Cfg) ->
+%% The resolved content data dir (mirrors quod_ledger:data_dir/1's default).
+content_data_dir(Cfg) ->
     case maps:get(data_dir, maps:get(content, Cfg, #{}), <<>>) of
-        <<>>     -> filename:join(filename:basedir(user_cache, "quod"), "identity");
-        DataDir  -> filename:join(binary_to_list(DataDir), "identity")
+        <<>>    -> filename:join(filename:basedir(user_cache, "quod"), "data");
+        DataDir -> binary_to_list(DataDir)
     end.
 
 %% Bridge HOCON `node`/`metrics` onto the application env the transport reads.

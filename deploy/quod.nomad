@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.4"
-  description = "quod image tag in the cluster registry. 0.6.4 = identity A.2: boot generates/loads the node identity (identity {} config; node_pubkey/cert/key in env)."
+  default     = "0.6.5"
+  description = "quod image tag in the cluster registry. 0.6.5 = identity A.2 review fixes (identity dir co-located under data_dir; boot-test isolation; failure log)."
 }
 
 # ============================================================================

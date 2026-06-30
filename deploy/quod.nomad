@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.2"
-  description = "quod image tag in the cluster registry. 0.6.2 = join-hardening + reader-tier P1 (read-replicas + remote-read)."
+  default     = "0.6.3"
+  description = "quod image tag in the cluster registry. 0.6.3 = identity milestone A.1: quod_identity (per-node Ed25519 keypair + self-signed cert, load-or-create)."
 }
 
 # ============================================================================

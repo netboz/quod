@@ -9,13 +9,13 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
-         non_dialable_node_id/1, unacked_stream_no_link_up/1]).
+         non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1]).
 
 -define(PORT, 14599).
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialable_node_id,
-          unacked_stream_no_link_up].
+          unacked_stream_no_link_up, dialer_presents_cert].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -23,7 +23,7 @@ init_per_suite(Config) ->
     application:load(quod),
     %% the node's per-node Ed25519 identity cert — the production transport cert that
     %% quod_quic presents and verifies under mutual TLS (verify => true).
-    KP   = quod_identity:generate(),
+    {Pub, _} = KP = quod_identity:generate(),
     Cert = quod_identity:mint_cert(KP),
     Key  = quod_identity:key_term(KP),
     application:set_env(quod, listen_port, ?PORT),
@@ -31,10 +31,14 @@ init_per_suite(Config) ->
     application:set_env(quod, identity_cert, Cert),
     application:set_env(quod, identity_key, Key),
     {ok, _} = application:ensure_all_started(quod),
-    [{cert_der, Cert}, {key_term, Key} | Config].
+    [{cert_der, Cert}, {key_term, Key}, {self_pubkey, Pub} | Config].
 
 end_per_suite(_Config) ->
     _ = application:stop(quod),
+    %% this suite runs the app IN the CT node (not a peer), so unset the env it set
+    %% to avoid leaking a stale cert/port into any later same-node suite.
+    _ = [application:unset_env(quod, K)
+         || K <- [listen_port, node_id, identity_cert, identity_key]],
     ok.
 
 %% Opening a link to our own listener over loopback yields a usable link pid.
@@ -108,6 +112,44 @@ unacked_stream_no_link_up(Config) ->
         end
     after
         _ = quic:stop_server(raw_noack)
+    end.
+
+%% Mutual TLS: when quod_quic dials a peer it PRESENTS its own identity cert, which a
+%% verify=>true server reads via quic:peercert/1 — proving the dialer authenticates
+%% itself (not just verify=>false). The recovered pubkey is the node's identity key.
+%% (Guards against a regression that drops the client cert or flips verify off.)
+dialer_presents_cert(Config) ->
+    SelfPub = ?config(self_pubkey, Config),
+    CertDer = ?config(cert_der, Config),
+    KeyTerm = ?config(key_term, Config),
+    Test = self(),
+    %% a verify=>true server (like quod_quic's own) that hands us each accepted Conn so
+    %% we can inspect the client cert it received.
+    Handler = fun(Conn) -> Test ! {srv_conn, Conn},
+                           {ok, spawn(fun Ignore() -> receive _ -> Ignore() end end)} end,
+    {ok, _} = quic:start_server(verify_srv, 14597,
+                                #{cert => CertDer, key => KeyTerm, verify => true,
+                                  alpn => [<<"quod">>], connection_handler => Handler}),
+    Peer = {"127.0.0.1", 14597},
+    try
+        %% the link won't come up (the server ignores the stream) — we only need the
+        %% handshake, where our client cert is presented + verified.
+        ok = quod_quic:open_link(Peer, <<"chan-mtls">>),
+        SConn = receive {srv_conn, C} -> C after 5000 -> ct:fail(no_server_conn) end,
+        {ok, PeerCert} = peercert_retry(SConn, 40),
+        case quod_identity:pubkey_of_cert(PeerCert) of
+            {ok, SelfPub} -> ok;
+            Other         -> ct:fail({peercert_pubkey_mismatch, Other})
+        end
+    after
+        _ = quic:stop_server(verify_srv)
+    end.
+
+peercert_retry(Conn, 0) -> quic:peercert(Conn);
+peercert_retry(Conn, N) ->
+    case quic:peercert(Conn) of
+        {ok, _} = R -> R;
+        _           -> timer:sleep(50), peercert_retry(Conn, N - 1)
     end.
 
 %% A view id that is not a dialable {Host, Port} must be refused with link_error,

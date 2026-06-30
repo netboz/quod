@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.6"
-  description = "quod image tag in the cluster registry. 0.6.6 = identity A.4: transport mutual TLS (per-node Ed25519 identity cert, verify=>true accept, dialer presents its cert)."
+  default     = "0.6.7"
+  description = "quod image tag in the cluster registry. 0.6.7 = identity A.4 review fixes (mutual-TLS assertion test, suite env cleanup; deferred.md: peercert-bind + PEM-fallback notes)."
 }
 
 # ============================================================================

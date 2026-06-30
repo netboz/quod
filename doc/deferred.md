@@ -35,6 +35,19 @@ Gated on it:
 
 ## 2. Transport hardening (hostile-net)
 
+- **Mutual TLS is opportunistic, not mandatory** (`quod_quic` server `verify => true`). The TLS 1.3
+  CertificateRequest is sent, but a peer that presents an **empty** client cert still completes the
+  handshake (`quic` sets `peer_cert = undefined`) — so `verify => true` *requests* but does not
+  *require* a client cert. Harmless while `node_id = {Host,Port}`; **the identity bind (A.3) must
+  reject a connection with no/invalid `peercert`** — the link header's claimed pubkey must equal
+  `quic:peercert/1`'s — else an unauthenticated peer is admitted at the transport layer. → the
+  peercert bind in `quod_conn` (lands with `node_id = pubkey`).
+- **PEM-fallback badmatch on a missing cert file** (`quod_quic:identity_certkey/0` →
+  `load_cert`/`load_key`). When the identity env (`identity_cert`/`identity_key`) is absent, the
+  fallback does `{ok, Pem} = file:read_file(certfile)`, which **badmatches if the file is missing**
+  and crashes the transport's `init/1` at boot. Pre-existing (the old code loaded the PEM
+  unconditionally) and now *less* reachable; make it a clean fail-fast error once the legacy/test
+  PEM path is retired (the production boot always sets the identity env via `quod_app:apply_identity`).
 - **Non-`[safe]` decode** (`quod_ledger:decode_record`, `quod_prove:inbound`). Any on-channel speaker
   can deliver arbitrary terms (atom-table growth). Deliberate so fact atoms decode; closed by
   signed/validated payloads (§1). Size-bounded: `quod_prove` caps frames at 1 MiB, `quod_ledger` at

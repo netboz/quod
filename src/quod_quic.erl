@@ -147,8 +147,10 @@ dialable(_) ->
 %% app env by `quod_app:apply_identity` (DER cert + `#'ECPrivateKey'{}` key). Legacy/test
 %% boots with no identity fall back to a PEM file pair (`certfile`/`keyfile`).
 identity_certkey() ->
+    %% get_env yields the bare atom `undefined` when unset, so an absent key misses the
+    %% `{ok, _}` pattern and falls to the PEM fallback (no guard needed).
     case {application:get_env(quod, identity_cert), application:get_env(quod, identity_key)} of
-        {{ok, Cert}, {ok, Key}} when Cert =/= undefined, Key =/= undefined ->
+        {{ok, Cert}, {ok, Key}} ->
             {Cert, Key};
         _ ->
             {load_cert(env(certfile, "priv/certs/cert.pem")),

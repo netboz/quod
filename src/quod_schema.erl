@@ -39,6 +39,7 @@ fields(content) ->
     %% is read once by the founder at create; `data_dir = ""` ⇒ quod_ledger's default.
     [ {namespace,    hoconsc:mk(binary(), #{default => <<"quod:root">>})}
     , {mode,         hoconsc:mk(hoconsc:enum([create, join]), #{default => create})}
+    , {role,         hoconsc:mk(hoconsc:enum([member, replica]), #{default => member})}
     , {genesis_file, hoconsc:mk(binary(), #{default => <<"ontologies/quod_root.pl">>})}
     , {data_dir,     hoconsc:mk(binary(), #{default => <<"">>})}
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}

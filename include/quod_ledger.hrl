@@ -30,10 +30,13 @@
 
 %% A Raft log entry. `data` is a #transaction{} for `block` entries, the atom `noop`
 %% for the election marker, or a membership op for `config` entries. The membership ops:
-%% `{add, S}` seeds a founding voter; `{add_learner, S}` admits a non-voting catch-up
-%% member; `{promote, S}` turns a learner into a voter; `{remove, S}` drops a member.
+%% `{add, S}` seeds a founding voter; `{add_learner, S}` admits a non-voting catch-up member
+%% (to be promoted); `{add_replica, S}` admits a PERMANENT non-voting full-copy replica (a read
+%% replica — fed like a learner but never promoted); `{promote, S}` turns a learner into a
+%% voter; `{remove, S}` drops a member.
 -type member_op() :: {add,         server_id()}
                    | {add_learner, server_id()}
+                   | {add_replica, server_id()}
                    | {promote,     server_id()}
                    | {remove,      server_id()}.
 -record(entry, {index :: log_index(),

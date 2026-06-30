@@ -256,6 +256,18 @@ committed_view_membership_test() ->
             quod_ledger:mk_d(#{self => ?B, snap_cfg => [], log => Log, commit_index => 2})),
     ?assertEqual([?B], quod_ledger:derive_learners(DCy)).
 
+%% A read-replica ({add_replica}) is a non-voting member: replicated to (in derive_learners /
+%% repl_peers), NOT a voter (excluded from derive_committee / quorum), and NEVER promoted
+%% (learner_target returns none, so maybe_promote_learner no-ops).
+add_replica_is_nonvoting_never_promoted_test() ->
+    Log = [cfg(1, 0, {add, ?A}), cfg(2, 1, {add_replica, ?B})],
+    D = quod_ledger:mk_d(#{self => ?A, snap_cfg => [], log => Log}),
+    ?assertEqual([?A], quod_ledger:derive_committee(D)),     %% B is NOT a voter
+    ?assertEqual([?B], quod_ledger:derive_learners(D)),      %% B IS replicated to
+    ?assertEqual([?B], quod_ledger:repl_peers(D)),           %% the leader feeds B
+    ?assertEqual(none, quod_ledger:learner_target(?B, D)),   %% B is never promoted
+    ?assertEqual(1, quod_ledger:quorum(D)).                  %% B doesn't move quorum
+
 %% Anti-drift property (issue 9, kept two folds): the replication set is ALWAYS exactly the
 %% union of voters and learners, minus self — so the two separate folds can never silently drift.
 repl_peers_is_voters_union_learners_test() ->

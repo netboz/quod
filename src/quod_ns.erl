@@ -19,8 +19,12 @@ start_link(Ns, Config) ->
 init({Ns, Config}) ->
     Flags = #{strategy => rest_for_one, intensity => 10, period => 10},
     Children =
-        [#{id => quod_ledger,    start => {quod_ledger,    start_link, [Ns, Config]},
+        [#{id => quod_ledger, start => {quod_ledger, start_link, [Ns, Config]},
            restart => permanent, type => worker},
          #{id => quod_prolog, start => {quod_prolog, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% remote-READ endpoint ({prove, Ns} channel): serves reads to non-committee nodes from
+         %% this node's committed kb. Last in the rest_for_one chain — depends on quod_prolog.
+         #{id => quod_prove,  start => {quod_prove,  start_link, [Ns, Config]},
            restart => permanent, type => worker}],
     {ok, {Flags, Children}}.

@@ -21,7 +21,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, prove/3, apply_block/3, mark_ready/1, stats/1, namespaces/0]).
+-export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, stats/1, namespaces/0]).
 -export([genesis_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -53,6 +53,24 @@ prove(TargetNs, Goal, CallerNs) ->
         undefined -> {error, no_such_namespace};
         Pid -> try gen_server:call(Pid, {prove, Goal, CallerNs}, 35000)
                catch exit:_ -> fail end
+    end.
+
+-doc "Read-only prove: like `prove/3` but a write goal is refused (`{error, read_only}`).".
+-spec prove_ro(binary(), term(), binary()) ->
+        {ok, [map()], log_index()} | {error, term()} | fail.
+prove_ro(TargetNs, Goal, CallerNs) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Pid -> try gen_server:call(Pid, {prove_ro, Goal, CallerNs}, 35000)
+               catch exit:_ -> fail end
+    end.
+
+-doc "The committed log index this kb has applied (the freshness height for a read).".
+-spec applied(binary()) -> log_index().
+applied(Ns) ->
+    case quod_reg:where({quod_prolog, Ns}) of
+        undefined -> 0;
+        _Pid      -> maps:get(applied, stats(Ns), 0)
     end.
 
 -doc """
@@ -105,6 +123,19 @@ handle_call({prove, Goal, CallerNs}, From, S) ->
             {reply, {ok, [Bindings], S#s.applied}, bump_proves(S)};
         {ok, Bindings, Diff, ReadSet} ->                   %% a write
             submit_write(From, Bindings, Diff, ReadSet, CallerNs, S)
+    end;
+%% Read-only prove (the remote-read path): identical to a read, but a goal that stages a WRITE
+%% is REFUSED ({error, read_only}) instead of submitted — a remote reader can never write through
+%% a Member's responder. Reads carry the committed height they were proved at (the freshness
+%% contract). Gated on readiness like {prove}.
+handle_call({prove_ro, _G, _C}, _From, S = #s{ready = false}) ->
+    {reply, {error, rebuilding}, S};
+handle_call({prove_ro, Goal, _CallerNs}, _From, S) ->
+    case run_proof(Goal, S) of
+        fail                         -> {reply, fail, bump_proves(S)};
+        {error, _} = E               -> {reply, E, bump_proves(S)};
+        {ok, Bindings, [], _ReadSet} -> {reply, {ok, [Bindings], S#s.applied}, bump_proves(S)};
+        {ok, _Bindings, _Diff, _RS}  -> {reply, {error, read_only}, bump_proves(S)}
     end;
 
 handle_call(get_stats, _From, S) ->
@@ -200,10 +231,10 @@ apply_committed(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1
 apply_committed(Index, noop, S) ->                          %% Index == applied+1
     S#s{applied = Index};
 apply_committed(Index, {Op, _Node}, S)
-  when Op =:= add; Op =:= remove; Op =:= add_learner; Op =:= promote ->
-    %% a committee (config) change — add/remove a voter, admit a learner, or promote one:
-    %% nothing for the fact engine, but advance the cursor in lockstep with quod_ledger so
-    %% the next block isn't seen as a gap.
+  when Op =:= add; Op =:= remove; Op =:= add_learner; Op =:= add_replica; Op =:= promote ->
+    %% a membership (config) change — add/remove a voter, admit a learner or read-replica, or
+    %% promote one: nothing for the fact engine, but advance the cursor in lockstep with
+    %% quod_ledger so the next block isn't seen as a gap.
     S#s{applied = Index};
 apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,

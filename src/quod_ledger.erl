@@ -62,6 +62,7 @@ here would steal/own the wrong stream.
 -define(DEFAULTS,
         #{node_id      => undefined,  %% own NodeId {Host,Port}; REQUIRED
           mode         => create,     %% create | join (join ⇒ a fresh node syncs via the join driver)
+          role         => member,     %% member (voter joiner) | replica (permanent non-voting read-copy)
           committee    => [],         %% bootstrap committee; [] ⇒ self-only 1-voter (#18)
           seed_peers   => [],         %% contact endpoints a `join` node dials to join + sync
           heartbeat_ms => 150,        %% leader→peers AppendEntries cadence (<< election)
@@ -611,8 +612,9 @@ handle_ae_reply(_Peer, _Reply, _State, D) -> {keep_state, D}.   %% stale / not l
 
 %% Joiner side: ask every known contact to admit us. send_raft dials a contact on demand;
 %% link_allowed/2 permits the link because the contact is in #d.contacts.
-send_join_requests(D = #d{self = Self}) ->
-    Req = #join_request{joiner = Self, pubkey = none, args = #{}},
+send_join_requests(D = #d{self = Self, cfg = Cfg}) ->
+    %% advertise our role so the leader admits us on the right track (voter joiner vs read-replica).
+    Req = #join_request{joiner = Self, pubkey = none, args = #{as => maps:get(role, Cfg, member)}},
     lists:foldl(fun(C, A) -> send_raft(C, Req, A) end, D, D#d.contacts).
 
 %% A join_request arrives from a node the network has NOT accepted yet — an outsider. Validate
@@ -631,7 +633,7 @@ handle_join_request(State, Peer, Req = #join_request{joiner = J}, D) ->
 %% may legitimately be slow (backtracking, cross-ontology reads), and this gen_statem also
 %% owns the heartbeat — it must never block on unbounded work or it would stop heartbeating
 %% and be voted out. The verdict returns as a {join_decision, ...} message.
-dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK}, D) ->
+dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK, args = Args}, D) ->
     case is_member(J, D) of
         true  -> {keep_state, send_raft(J, #join_reply{result = already_member}, D)};
         false ->
@@ -642,9 +644,9 @@ dispatch_join_request(leader, _Peer, #join_request{joiner = J, pubkey = PK}, D) 
                  orelse maps:size(D#d.pending_joiners) < ?MAX_PENDING_JOINERS of
                 false -> {keep_state, D};   %% table full of strangers: drop — no state, no link-allow
                 true  ->
-                    %% store `#{}`, NOT attacker-supplied args (unused — can_join uses the pubkey):
-                    %% never retain attacker terms.
-                    D1 = D#d{pending_joiners = (D#d.pending_joiners)#{J => #{}}},
+                    %% store ONLY the validated role tag (member|replica) — NOT arbitrary args;
+                    %% never retain attacker terms. The tag decides voter-track vs read-replica.
+                    D1 = D#d{pending_joiners = (D#d.pending_joiners)#{J => #{as => join_as(Args)}}},
                     case maps:is_key(J, D1#d.admitting) of
                         true  -> {keep_state, D1};   %% a proof for J is already running
                         false ->
@@ -703,7 +705,7 @@ handle_join_decision(J, Allowed, D0) ->
         false -> {keep_state, D};
         true  ->
             case Allowed of
-                true  -> admit_learner(J, D);
+                true  -> admit(J, D);
                 false ->
                     %% Send a best-effort denial, then DROP J from pending_joiners: a denied node
                     %% never becomes a member, so it would otherwise sit there forever — a flood of
@@ -725,6 +727,23 @@ drop_admitting_by_ref(Ref, D = #d{admitting = A}) ->
 valid_server_id({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
     is_list(Host) orelse is_binary(Host);
 valid_server_id(_) -> false.
+
+%% Route an approved joiner to the voter-track (learner→promote) or the read-replica track,
+%% per the role tag we recorded (validated to member|replica) when its request arrived.
+admit(J, D) ->
+    case maps:get(as, maps:get(J, D#d.pending_joiners, #{}), member) of
+        replica -> admit_replica(J, D);
+        _       -> admit_learner(J, D)
+    end.
+
+%% The validated role tag from a join_request's args — ONLY the atom `replica` or `member`,
+%% never any other attacker-supplied key/term. `args` is typed map() but arrives over a
+%% non-[safe] decode, so a hostile message could carry a non-map — maps:get throws, we default.
+join_as(Args) ->
+    try maps:get(as, Args, member) of
+        replica -> replica;
+        _       -> member
+    catch _:_ -> member end.
 
 %% Joiner side: react to the leader's disposition — but ONLY while we are still joining (not yet a
 %% COMMITTED member). An established voter/learner/leader ignores join_replies entirely: it must
@@ -755,25 +774,27 @@ handle_join_reply_active(_Peer, #join_reply{result = {denied, Reason}}, D) ->
 handle_join_reply_active(_Peer, #join_reply{result = _Admitted}, D) ->
     {keep_state, D}.   %% learner_admitted / already_member: AppendEntries drives catch-up + promote
 
-%% Append a non-voting {add_learner, J} config entry and adopt it on append: J enters the
-%% replication set at once (so the next heartbeat catches it up from the start of the log).
-%% The promote target — the index J must reach — IS the index of this entry, recovered from
-%% the log on demand by learner_target/2 (never a volatile note, so it survives a leader
-%% change). A sole founder (quorum 1) commits the entry here, which also gives the leader the
-%% current-term commit the promote gate later requires.
-admit_learner(J, D) ->
+%% Admit a non-voting member J. `{add_learner, J}` = a joiner to be promoted once caught up;
+%% `{add_replica, J}` = a permanent read-replica that is never promoted (learner_target/2 returns
+%% `none` for it). Both: adopt-on-append (J enters the replication set at once, caught up from the
+%% start of the log via the existing back-up loop). A sole founder (quorum 1) commits the entry
+%% here, which also gives the leader the current-term commit the promote gate later requires.
+admit_learner(J, D) -> admit_nonvoter(J, {add_learner, J}, D).
+admit_replica(J, D) -> admit_nonvoter(J, {add_replica, J}, D).
+
+admit_nonvoter(J, Op, D) ->
     I  = last_log_index(D) + 1,
-    E  = #entry{index = I, term = D#d.cur_term, kind = config, data = {add_learner, J}},
+    E  = #entry{index = I, term = D#d.cur_term, kind = config, data = Op},
     {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
     D1 = with_log(D#d.log ++ [E],
                   D#d{store = Store1,
-                      %% J is now a learner ⇒ covered by membership in link_allowed; drop it from
+                      %% J is now a member ⇒ covered by membership in link_allowed; drop it from
                       %% pending_joiners so the anti-flood table only holds not-yet-admitted joiners.
                       pending_joiners = maps:remove(J, D#d.pending_joiners),
                       next_index  = (D#d.next_index)#{J => D#d.snap_idx + 1},  %% fresh log ⇒ send from the start
                       match_index = (D#d.match_index)#{J => 0}}),
     D2 = case quorum(D1) of 1 -> ack_pending(advance_commit(D1)); _ -> D1 end,
-    logger:info("quod[~s]: admitted learner ~p (promote at index ~p)", [D#d.ns, J, I]),
+    logger:info("quod[~s]: admitted ~p as ~p (index ~p)", [D#d.ns, J, element(1, Op), I]),
     D3 = send_raft(J, #join_reply{result = learner_admitted}, D2),
     {keep_state, D3, [{next_event, internal, replicate}, {next_event, internal, run_apply}]}.
 
@@ -1167,8 +1188,14 @@ derive_committee(#d{snap_cfg = Base, log = Log}) ->
 %% The LEARNERS — non-voting members the leader replicates to so they can catch up
 %% before promotion. `{add_learner}` admits one; `{promote}`/`{remove}` removes it from
 %% the learner set. Learners live only in the live log (snapshotting them is M3).
+%% Learners AND read-replicas — both are non-voting members the leader replicates to (so
+%% repl_peers feeds them + link_allowed admits them). The difference is only promotion:
+%% an {add_learner} has a learner_target and is promoted once caught up; an {add_replica} has
+%% none and stays a non-voting full-copy replica forever (learner_target/2 returns `none` for
+%% it, so maybe_promote_learner no-ops — no change to the promote gate).
 derive_learners(#d{log = Log}) ->
     lists:foldl(fun(#entry{kind = config, data = {add_learner, S}}, Acc) -> [S | Acc -- [S]];
+                   (#entry{kind = config, data = {add_replica, S}}, Acc) -> [S | Acc -- [S]];
                    (#entry{kind = config, data = {promote, S}}, Acc)     -> Acc -- [S];
                    (#entry{kind = config, data = {remove, S}}, Acc)      -> Acc -- [S];
                    (_, Acc) -> Acc

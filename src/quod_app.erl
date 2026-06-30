@@ -112,6 +112,7 @@ build_ns_config(Content) ->
     Self = application:get_env(quod, node_id, default_node_id()),
     Base = #{node_id    => Self,
              mode       => maps:get(mode, Content),
+             role       => maps:get(role, Content, member),
              seed_peers => content_seeds(Content)},
     {Ns, with_genesis_file(Content, with_data_dir(Content, Base))}.
 

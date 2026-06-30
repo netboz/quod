@@ -34,7 +34,7 @@ quod_link:send(LinkPid, Payload)              %% direct, non-blocking
 -define(KEY, {transport, node}).
 -define(SERVER, quod_quic).
 
--record(state, {self, alpn, conns = #{}}).
+-record(state, {self, alpn, cert, key, conns = #{}}).
 
 %% ======================================================================
 %% API
@@ -61,15 +61,20 @@ init([]) ->
     Port = env(listen_port, 14567),
     ALPN = [to_bin(env(alpn, "quod"))],
     Self = env(node_id, {"127.0.0.1", Port}),
-    Cert = load_cert(env(certfile, "priv/certs/cert.pem")),
-    Key  = load_key(env(keyfile, "priv/certs/key.pem")),
+    {Cert, Key} = identity_certkey(),
     Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
-    ServerOpts = #{cert => Cert, key => Key, alpn => ALPN, connection_handler => Handler},
+    %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
+    %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
+    %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
+    %% used as the node identity from A.3). We present our own cert when dialing too
+    %% (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
+    ServerOpts = #{cert => Cert, key => Key, verify => true, alpn => ALPN,
+                   connection_handler => Handler},
     case quic:start_server(?SERVER, Port, ServerOpts) of
         {ok, _} ->
             logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, node_id ~p)",
                         [Port, hd(ALPN), Self]),
-            {ok, #state{self = Self, alpn = ALPN}};
+            {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
         {error, Reason} ->
             {stop, {listen_failed, Reason}}
     end.
@@ -111,19 +116,20 @@ terminate(_Reason, _State) ->
 %% lesser-tested path with its own flow-control limits. Always being the client for our
 %% own outgoing streams keeps us on the proven client-initiated path. The cost is one
 %% connection per direction (two per pair) instead of a shared one — cheap and reliable.
-ensure_conn(NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN}) ->
+ensure_conn(NodeId, State = #state{conns = Conns}) ->
     case maps:get(NodeId, Conns, undefined) of
         Pid when is_pid(Pid) ->
             case is_process_alive(Pid) of
                 true  -> {Pid, State};
-                false -> start_conn(NodeId, Self, ALPN, State)
+                false -> start_conn(NodeId, State)
             end;
         undefined ->
-            start_conn(NodeId, Self, ALPN, State)
+            start_conn(NodeId, State)
     end.
 
-start_conn({Host, Port} = NodeId, Self, ALPN, State = #state{conns = Conns}) ->
-    Pid = quod_conn:start_outbound(Host, Port, NodeId, Self, ALPN),
+start_conn({Host, Port} = NodeId, State = #state{conns = Conns, self = Self, alpn = ALPN,
+                                                 cert = Cert, key = Key}) ->
+    Pid = quod_conn:start_outbound(Host, Port, NodeId, Self, ALPN, Cert, Key),
     _ = erlang:monitor(process, Pid),
     {Pid, State#state{conns = maps:put(NodeId, Pid, Conns)}}.
 
@@ -136,6 +142,18 @@ dialable({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535 ->
     is_list(Host) orelse is_binary(Host) orelse is_atom(Host) orelse is_tuple(Host);
 dialable(_) ->
     false.
+
+%% The node's transport cert+key. Production: the per-node Ed25519 identity, set in the
+%% app env by `quod_app:apply_identity` (DER cert + `#'ECPrivateKey'{}` key). Legacy/test
+%% boots with no identity fall back to a PEM file pair (`certfile`/`keyfile`).
+identity_certkey() ->
+    case {application:get_env(quod, identity_cert), application:get_env(quod, identity_key)} of
+        {{ok, Cert}, {ok, Key}} when Cert =/= undefined, Key =/= undefined ->
+            {Cert, Key};
+        _ ->
+            {load_cert(env(certfile, "priv/certs/cert.pem")),
+             load_key(env(keyfile, "priv/certs/key.pem"))}
+    end.
 
 %% certs: load the PEM file -> DER cert / decoded key term (what `quic` expects).
 load_cert(File) ->

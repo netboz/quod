@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.5"
-  description = "quod image tag in the cluster registry. 0.6.5 = identity A.2 review fixes (identity dir co-located under data_dir; boot-test isolation; failure log)."
+  default     = "0.6.6"
+  description = "quod image tag in the cluster registry. 0.6.6 = identity A.4: transport mutual TLS (per-node Ed25519 identity cert, verify=>true accept, dialer presents its cert)."
 }
 
 # ============================================================================

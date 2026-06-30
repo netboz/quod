@@ -18,24 +18,20 @@ all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialab
           unacked_stream_no_link_up].
 
 init_per_suite(Config) ->
-    %% self-contained dev cert for the QUIC listener (TLS 1.3 is mandatory)
-    CertDir = filename:join(?config(priv_dir, Config), "certs"),
-    ok = filelib:ensure_dir(filename:join(CertDir, "x")),
-    Cert = filename:join(CertDir, "cert.pem"),
-    Key  = filename:join(CertDir, "key.pem"),
-    _ = os:cmd("openssl req -x509 -newkey rsa:2048 -nodes -keyout " ++ Key ++
-               " -out " ++ Cert ++ " -days 1 -subj /CN=quod-test 2>&1"),
-    true = filelib:is_regular(Cert) andalso filelib:is_regular(Key),
-
     {ok, _} = application:ensure_all_started(gproc),
     {ok, _} = application:ensure_all_started(quic),
     application:load(quod),
+    %% the node's per-node Ed25519 identity cert — the production transport cert that
+    %% quod_quic presents and verifies under mutual TLS (verify => true).
+    KP   = quod_identity:generate(),
+    Cert = quod_identity:mint_cert(KP),
+    Key  = quod_identity:key_term(KP),
     application:set_env(quod, listen_port, ?PORT),
     application:set_env(quod, node_id, ?SELF),
-    application:set_env(quod, certfile, Cert),
-    application:set_env(quod, keyfile, Key),
+    application:set_env(quod, identity_cert, Cert),
+    application:set_env(quod, identity_key, Key),
     {ok, _} = application:ensure_all_started(quod),
-    [{cert_der, load_cert(Cert)}, {key_term, load_key(Key)} | Config].
+    [{cert_der, Cert}, {key_term, Key} | Config].
 
 end_per_suite(_Config) ->
     _ = application:stop(quod),
@@ -113,16 +109,6 @@ unacked_stream_no_link_up(Config) ->
     after
         _ = quic:stop_server(raw_noack)
     end.
-
-load_cert(File) ->
-    {ok, Pem} = file:read_file(File),
-    [Der | _] = [D || {'Certificate', D, _} <- public_key:pem_decode(Pem)],
-    Der.
-
-load_key(File) ->
-    {ok, Pem} = file:read_file(File),
-    [{Type, Der, _} | _] = [E || {T, _, _} = E <- public_key:pem_decode(Pem), T =/= 'Certificate'],
-    public_key:der_decode(Type, Der).
 
 %% A view id that is not a dialable {Host, Port} must be refused with link_error,
 %% NOT crash the transport authority (it would take down every connection).

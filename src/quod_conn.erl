@@ -14,7 +14,7 @@ dies with it — and each link's death is the disconnect signal its holder
 monitors.
 """.
 
--export([start_outbound/5, start_inbound/2, open_link/3]).
+-export([start_outbound/7, start_inbound/2, open_link/3]).
 
 -record(s, {conn, self, peer = undefined,
             streams = #{},   %% StreamId => LinkPid   (every link, for routing inbound data)
@@ -25,12 +25,20 @@ monitors.
 
 %% --- API -----------------------------------------------------------------
 
--doc "Dial `Host:Port` (known node id `Peer`), become the connection owner, serve links.".
--spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), [binary()]) -> pid().
-start_outbound(Host, Port, Peer, Self, ALPN) ->
+-doc """
+Dial `Host:Port` (known node id `Peer`), become the connection owner, serve links.
+We present our own `Cert`/`Key` so the peer (the TLS server) can authenticate us via
+mutual TLS. `verify => false` skips validating the *peer's* self-signed server cert (no
+CA chain); the peer authenticates US, and we authenticate it when it dials back — every
+directed pair is server-verifies-client.
+""".
+-spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), [binary()],
+                     term(), term()) -> pid().
+start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
-        case quic:connect(Host, Port, #{verify => false, alpn => ALPN}, self()) of
+        case quic:connect(Host, Port, #{verify => false, cert => Cert, key => Key,
+                                        alpn => ALPN}, self()) of
             {ok, Conn} ->
                 receive
                     {quic, Conn, {connected, _}} ->

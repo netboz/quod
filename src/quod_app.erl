@@ -46,7 +46,38 @@ load_config() ->
             Cfg = hocon_tconf:check_plain(quod_schema, Raw,
                                           #{atom_key => true, apply_override_envs => true}),
             apply_transport_env(Cfg),
+            apply_identity(Cfg),
             maps:get(content, Cfg)
+    end.
+
+%% Load-or-create the node's Ed25519 identity and expose it in the application env
+%% (`node_pubkey`, the DER `identity_cert`, the `identity_key`). The pubkey becomes the
+%% `node_id` and the cert/key drive transport mutual TLS (wired in later steps). A node
+%% with no identity is useless, so a failure here is fatal — fail-fast like genesis.
+apply_identity(Cfg) ->
+    Dir = identity_dir(Cfg),
+    case quod_identity:ensure(Dir) of
+        {ok, #{pubkey := Pub, cert := Cert, key := Key}} ->
+            application:set_env(quod, node_pubkey, Pub),
+            application:set_env(quod, identity_cert, Cert),
+            application:set_env(quod, identity_key, Key),
+            logger:info("quod: node identity ~s (~s)", [quod_identity:short(Pub), Dir]);
+        {error, Reason} ->
+            error({identity_failed, Reason})
+    end.
+
+%% `identity.dir` if set, else `<content.data_dir>/identity` (share the ledger's durable
+%% volume), else the quod_ledger user_cache default — so identity survives a host move.
+identity_dir(Cfg) ->
+    case maps:get(dir, maps:get(identity, Cfg, #{}), <<>>) of
+        <<>> -> default_identity_dir(Cfg);
+        Dir  -> binary_to_list(Dir)
+    end.
+
+default_identity_dir(Cfg) ->
+    case maps:get(data_dir, maps:get(content, Cfg, #{}), <<>>) of
+        <<>>     -> filename:join(filename:basedir(user_cache, "quod"), "identity");
+        DataDir  -> filename:join(binary_to_list(DataDir), "identity")
     end.
 
 %% Bridge HOCON `node`/`metrics` onto the application env the transport reads.

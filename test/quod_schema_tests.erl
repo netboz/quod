@@ -30,9 +30,39 @@ defaults_test() ->
     ?assertEqual(<<"127.0.0.1">>, deep(C, [node, ip])),
     ?assertEqual(14567,           deep(C, [node, port])),
     ?assertEqual(14568,           deep(C, [metrics, port])),
+    ?assertEqual(<<"">>,          deep(C, [identity, dir])),
     ?assertEqual(create,          deep(C, [content, mode])),
     ?assertEqual(<<"ontologies/quod_root.pl">>, deep(C, [content, genesis_file])),
     ?assertEqual([],              deep(C, [content, seeds])).
+
+%% --- boot wiring: load_config generates + exposes the node identity ------
+
+boot_identity_test() ->
+    _ = application:load(quod),
+    U   = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_boot_id_" ++ U),
+    ok  = filelib:ensure_dir(filename:join(Dir, "x")),
+    Conf = ["node { ip = \"127.0.0.1\", port = 14999 }\n",
+            "content { namespace = \"bootid:", U, "\", mode = join, "
+            "data_dir = \"", Dir, "\" }\n"],
+    ConfPath = filename:join(Dir, "quod.conf"),
+    ok = file:write_file(ConfPath, Conf),
+    os:putenv("QUOD_CONF", ConfPath),
+    [application:unset_env(quod, K) || K <- [node_pubkey, identity_cert, identity_key]],
+    try
+        _ = quod_app:load_config(),
+        {ok, Pub} = application:get_env(quod, node_pubkey),
+        ?assertEqual(32, byte_size(Pub)),
+        %% the keypair was persisted under <data_dir>/identity, and the cert carries it
+        ?assert(filelib:is_regular(filename:join([Dir, "identity", "node.key"]))),
+        {ok, Cert} = application:get_env(quod, identity_cert),
+        ?assertEqual({ok, Pub}, quod_identity:pubkey_of_cert(Cert)),
+        ?assertMatch({ok, _}, application:get_env(quod, identity_key))
+    after
+        os:unsetenv("QUOD_CONF"),
+        [application:unset_env(quod, K) || K <- [node_pubkey, identity_cert, identity_key]],
+        _ = file:del_dir_r(Dir)
+    end.
 
 %% --- env overrides individual keys, file stays primary -------------------
 

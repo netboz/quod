@@ -22,9 +22,10 @@ namespace() -> quod.
 %% Each root defaults to `#{}` so an absent block falls back to its field defaults
 %% (a config with no `node {}` still yields node.ip/port defaults).
 roots() ->
-    [ {node,    hoconsc:mk(hoconsc:ref(?MODULE, node),    #{default => #{}})}
-    , {metrics, hoconsc:mk(hoconsc:ref(?MODULE, metrics), #{default => #{}})}
-    , {content, hoconsc:mk(hoconsc:ref(?MODULE, content), #{default => #{}})}
+    [ {node,     hoconsc:mk(hoconsc:ref(?MODULE, node),     #{default => #{}})}
+    , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
+    , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
+    , {content,  hoconsc:mk(hoconsc:ref(?MODULE, content),  #{default => #{}})}
     ].
 
 fields(node) ->
@@ -33,6 +34,12 @@ fields(node) ->
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}
+    ];
+fields(identity) ->
+    %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first
+    %% boot and persisted under `dir`. `dir = ""` ⇒ `<content.data_dir>/identity` (or the
+    %% quod_ledger user_cache default), so identity shares the ledger's durability domain.
+    [ {dir, hoconsc:mk(binary(), #{default => <<"">>})}
     ];
 fields(content) ->
     %% A node founds (create) or joins one content namespace at boot. `genesis_file`

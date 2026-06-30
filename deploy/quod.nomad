@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.3"
-  description = "quod image tag in the cluster registry. 0.6.3 = identity milestone A.1: quod_identity (per-node Ed25519 keypair + self-signed cert, load-or-create)."
+  default     = "0.6.4"
+  description = "quod image tag in the cluster registry. 0.6.4 = identity A.2: boot generates/loads the node identity (identity {} config; node_pubkey/cert/key in env)."
 }
 
 # ============================================================================

@@ -38,7 +38,8 @@ variable "voters" {
 #   nomad volume create deploy/volumes/quod-root.hcl
 #   nomad volume create deploy/volumes/quod-replica.hcl
 #   for i in $(seq 0 5); do
-#     sed "s/quod-join\[0\]/quod-join[$i]/" deploy/volumes/quod-join.hcl | nomad volume create -
+#     sed "s/quod-join\[0\]/quod-join[$i]/; s/quod-join-0/quod-join-$i/" \
+#       deploy/volumes/quod-join.hcl | nomad volume create -   # id AND name unique per index
 #   done
 # ============================================================================
 job "quod" {

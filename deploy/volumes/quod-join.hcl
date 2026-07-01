@@ -1,15 +1,17 @@
-## CSI Ceph RBD volume for the quod JOINER alloc (the second committee member).
+## CSI Ceph RBD volume TEMPLATE for the quod-join group (the joiner voters).
 ##
-## Same Ceph cluster / pool / user as quod-root.hcl — a per-node durable ledger for
-## the joining node. On first boot /quod/data is empty + content.mode=join ⇒ the node
-## dials the founder (seeds), is admitted as a learner, syncs the genesis + history,
-## and is promoted to a voter. Every later boot finds durable state ⇒ replay + catch
-## up the delta (never re-join from scratch). Separate volume from the founder's so
-## each member keeps its own copy of the replicated ledger.
+## The quod-join group is count=var.voters with per_alloc=true, so it claims one volume
+## per alloc: quod-join[0], quod-join[1], … quod-join[N-1]. This file declares index 0;
+## create the rest by substituting the index (greenfield — wipe + recreate on a re-found):
+##   for i in $(seq 0 5); do
+##     sed "s/quod-join\[0\]/quod-join[$i]/" deploy/volumes/quod-join.hcl | \
+##       NOMAD_ADDR=http://192.168.1.10:4646 nomad volume create -
+##   done
 ##
-## Create with:
-##   NOMAD_ADDR=http://192.168.1.10:4646 \
-##     nomad volume create deploy/volumes/quod-join.hcl
+## Same Ceph cluster / pool / user as quod-root.hcl — a per-node durable ledger. On first
+## boot /quod/data is empty + content.mode=join ⇒ the node dials the committee (seeds), is
+## admitted as a learner, syncs genesis + history, and is promoted to a voter. Every later
+## boot finds durable state ⇒ replay + catch up the delta (never re-join from scratch).
 
 id        = "quod-join[0]"
 name      = "quod-join"

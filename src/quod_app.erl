@@ -91,8 +91,12 @@ content_data_dir(Cfg) ->
 apply_transport_env(Cfg) ->
     Node = maps:get(node, Cfg),
     Ip   = binary_to_list(maps:get(ip, Node)),
-    Port = maps:get(port, Node),
-    application:set_env(quod, listen_port, Port),
+    Port = maps:get(port, Node),                          %% advertised (header hint / peers dial)
+    Bind = case maps:get(bind_port, Node, 0) of           %% local QUIC bind; may differ under bridge+portmap
+               0 -> Port;
+               B -> B
+           end,
+    application:set_env(quod, listen_port, Bind),
     application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
     application:set_env(quod, node_id, {Ip, Port}),
     ok.

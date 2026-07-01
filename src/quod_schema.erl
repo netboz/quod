@@ -29,8 +29,13 @@ roots() ->
     ].
 
 fields(node) ->
-    [ {ip,   hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
-    , {port, hoconsc:mk(integer(), #{default => 14567})}
+    %% `port` is the ADVERTISED p2p endpoint (what peers dial + the link-header hint).
+    %% `bind_port` is where QUIC actually LISTENS locally; 0 ⇒ same as `port`. They differ
+    %% only under bridge networking + portmap, where the container binds a fixed internal
+    %% port while advertising the dynamic HOST port Nomad mapped to it (see deploy/quod.nomad).
+    [ {ip,        hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
+    , {port,      hoconsc:mk(integer(), #{default => 14567})}
+    , {bind_port, hoconsc:mk(integer(), #{default => 0})}
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}

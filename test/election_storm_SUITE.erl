@@ -27,6 +27,7 @@ These run the **pubkey identity path** (real keypairs), so the resolver cache is
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([t_isolated_voter_does_not_storm/1, t_cold_cache_converges/1]).
+-import(quod_ct, [eventually/2, stop_all/1, datadir/2]).
 
 -define(NS, <<"quod:root">>).
 %% BRISK timing so a storm (if unfixed) is sharp within a few seconds: a bare candidate
@@ -123,10 +124,6 @@ start_peer(Port, Addr, Pub, Cert, Key) ->
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     Peer.
 
-datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
-
-stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
-
 %%%===================================================================
 %%% query helpers
 %%%===================================================================
@@ -137,10 +134,3 @@ term(Peer)   -> maps:get(term, status(Peer), 0).
 
 one_leader(Peers) ->
     length([leader || P <- Peers, (catch role(P)) =:= leader]) =:= 1.
-
-eventually(_F, Timeout) when Timeout =< 0 -> false;
-eventually(F, Timeout) ->
-    case (catch F()) of
-        true -> true;
-        _    -> timer:sleep(150), eventually(F, Timeout - 150)
-    end.

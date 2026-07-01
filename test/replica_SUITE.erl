@@ -17,6 +17,7 @@ QUIC (OS `peer` nodes, no Erlang distribution).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([t_replica_reads_locally/1, t_remote_read/1]).
+-import(quod_ct, [eventually/2, stop_all/1, match_ok/1, datadir/2]).
 
 -define(NS, <<"quod:root">>).
 -define(TUNING, #{election_ms => 2500, election_jit => 0.4, heartbeat_ms => 150, join_ms => 500}).
@@ -109,9 +110,6 @@ start_bare_node(Port, Cert, Key) ->
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     Peer.
 
-datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
-stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
-
 %%%===================================================================
 %%% query helpers
 %%%===================================================================
@@ -142,13 +140,8 @@ prove(Peer, Goal, N) ->
         R -> R
     end.
 
-match_ok({ok, [_ | _], _}) -> true;
-match_ok(_)                -> false.
 match_remote({ok, [_ | _], _}) -> true;
 match_remote(_)                -> false.
-
-eventually(_F, T) when T =< 0 -> false;
-eventually(F, T) -> case (catch F()) of true -> true; _ -> timer:sleep(150), eventually(F, T - 150) end.
 
 make_cert(Config) ->
     CertDir = filename:join(?config(priv_dir, Config), "certs"),

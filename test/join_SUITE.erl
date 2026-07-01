@@ -22,6 +22,7 @@ Covers the join milestone (`~/.claude/plans/delightful-giggling-reddy.md`):
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([t_join_1_to_2/1, t_join_2_to_3/1, t_join_denied/1]).
+-import(quod_ct, [eventually/2, stop_all/1, match_ok/1, datadir/2]).
 
 -define(NS, <<"quod:root">>).
 %% heartbeat << election so a promoted voter never spuriously elects; brisk join cadence.
@@ -140,11 +141,6 @@ closed_genesis(Config) ->
     ok = file:write_file(F, <<"acl_sovereign('quod:root').\ncan_read(_, _, _).\n">>),
     F.
 
-datadir(Config, Port) ->
-    filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
-
-stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
-
 %%%===================================================================
 %%% query helpers
 %%%===================================================================
@@ -182,15 +178,7 @@ prove(Peer, Goal, N) ->
         R -> R
     end.
 
-match_ok({ok, [_ | _], _}) -> true;
-match_ok(_)                -> false.
-
-eventually(_F, Timeout) when Timeout =< 0 -> false;
-eventually(F, Timeout) ->
-    case (catch F()) of
-        true -> true;
-        _    -> timer:sleep(150), eventually(F, Timeout - 150)
-    end.
+%% (eventually/2, stop_all/1, match_ok/1, datadir/2 are shared — see quod_ct.)
 
 %% self-signed dev cert for the QUIC listeners (TLS 1.3 mandatory), shared by all nodes.
 make_cert(Config) ->

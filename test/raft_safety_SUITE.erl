@@ -18,6 +18,7 @@ yields a new leader that still serves writes; surviving KBs stay identical.
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([elects_single_leader/1, replicates_and_converges/1,
          follower_redirects_append/1, leader_failover/1]).
+-import(quod_ct, [eventually/2, match_ok/1]).
 
 -define(NS, <<"raft:m2">>).
 -define(PORTS, [15810, 15811, 15812]).
@@ -162,9 +163,6 @@ prove(Peer, Goal, N) ->
         R -> R
     end.
 
-match_ok({ok, [_ | _], _}) -> true;
-match_ok(_)                -> false.
-
 %% Wait until exactly one member reports role=leader and the rest agree on its id at
 %% the same term. Returns {LeaderPeer, LeaderId, Term}.
 wait_for_leader(Nodes, Timeout) ->
@@ -198,13 +196,6 @@ settled_leader(Nodes) ->
                 false -> none
             end;
         _ -> none   %% zero or split leaders: not settled
-    end.
-
-eventually(_F, Timeout) when Timeout =< 0 -> false;
-eventually(F, Timeout) ->
-    case (catch F()) of
-        true -> true;
-        _    -> timer:sleep(150), eventually(F, Timeout - 150)
     end.
 
 %% self-signed dev cert for the QUIC listeners (TLS 1.3 mandatory), shared by all nodes.

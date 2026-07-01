@@ -19,6 +19,7 @@ goes pubkey → resolved address.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([t_real_key_committee/1, t_committee_ids_are_pubkeys/1]).
+-import(quod_ct, [eventually/2, stop_all/1, match_ok/1, datadir/2]).
 
 -define(NS, <<"quod:root">>).
 -define(TUNING, #{election_ms => 2500, election_jit => 0.4, heartbeat_ms => 150, join_ms => 500}).
@@ -107,10 +108,6 @@ start_peer(Port, Addr, _Pub, Cert, Key) ->
 
 root_genesis() -> filename:join(code:priv_dir(quod), "ontologies/quod_root.pl").
 
-datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
-
-stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
-
 %%%===================================================================
 %%% query helpers
 %%%===================================================================
@@ -146,12 +143,4 @@ prove(Peer, Goal, N) ->
         R -> R
     end.
 
-match_ok({ok, [_ | _], _}) -> true;
-match_ok(_)                -> false.
-
-eventually(_F, Timeout) when Timeout =< 0 -> false;
-eventually(F, Timeout) ->
-    case (catch F()) of
-        true -> true;
-        _    -> timer:sleep(150), eventually(F, Timeout - 150)
-    end.
+%% (eventually/2, stop_all/1, match_ok/1, datadir/2 are shared — see quod_ct.)

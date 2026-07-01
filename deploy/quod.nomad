@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.9"
-  description = "quod image tag in the cluster registry. 0.6.9 = pre-vote (Ra-style trial election: an unreachable voter never inflates its term ⇒ no full-restart election storm) + fast Brahms first round (warms the resolver cache in ~1 RTT) + a THIRD voter (3-voter committee, quorum 2, tolerates one node down)."
+  default     = "0.6.10"
+  description = "quod image tag in the cluster registry. 0.6.10 = pre-vote review fixes: leader-stickiness (a voter that still follows a live leader refuses pre-votes ⇒ a flapping node can't depose a healthy leader, Raft thesis §9.6) + hardened storm/failover tests. 0.6.9 = pre-vote (an unreachable voter never inflates its term ⇒ no full-restart election storm) + fast Brahms first round + a THIRD voter (quorum 2, tolerates one node down)."
 }
 
 # ============================================================================

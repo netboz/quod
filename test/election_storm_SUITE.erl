@@ -56,9 +56,15 @@ t_isolated_voter_does_not_storm(Config) ->
     {Pub2, _Seed2} = quod_identity:generate(),     %% committee peer that is never started
     {Peer, _, _} = start_voter(15870, {Pub1, Seed1}, [Pub1, Pub2], Config),
     timer:sleep(3000),     %% at this tuning a bare candidate would re-elect ~8-12 times
-    T = term(Peer),
-    ct:pal("election_storm: isolated voter term after 3s = ~p (bound ~p)", [T, ?ISOLATED_BOUND]),
-    ?assertNotEqual(leader, role(Peer)),   %% can't lead — no quorum
+    %% Fail CLOSED: prove the node is ALIVE and reporting a REAL state before trusting the term
+    %% bound — term/role default to 0/undefined on a failed peer:call (a wedged/dead ledger would
+    %% otherwise pass the bound spuriously). A present `term` key means the gen_statem answered.
+    S = status(Peer),
+    ?assert(is_map(S) andalso maps:is_key(term, S)),
+    Role = maps:get(role, S),
+    ?assert(lists:member(Role, [follower, pre_vote, candidate])),   %% alive + contesting, never leader
+    T = maps:get(term, S),
+    ct:pal("election_storm: isolated voter after 3s = term ~p role ~p (bound ~p)", [T, Role, ?ISOLATED_BOUND]),
     ?assert(T =< ?ISOLATED_BOUND),         %% the guard: MUST NOT inflate its term while unreachable
     stop_all([Peer]).
 

@@ -49,6 +49,35 @@ up_to_date_test() ->
     ?assertNot(quod_ledger:up_to_date(2, 4, 2, 5)).     %% equal term, shorter log loses
 
 %%%===================================================================
+%%% pre-vote grant decision: leader-stickiness + not-behind + up-to-date
+%%% pre_vote_grant(PvT, CandLastIdx, CandLastTerm, D)
+%%%===================================================================
+
+%% Leaderless (leader_id = none) + not behind + up-to-date log ⇒ GRANT.
+pre_vote_grant_leaderless_test() ->
+    D = quod_ledger:mk_d(#{cur_term => 5, leader_id => none, log => [ent(1, 5)]}),
+    ?assert(quod_ledger:pre_vote_grant(5, 1, 5, D)),   %% pre-vote at our term, equal log
+    ?assert(quod_ledger:pre_vote_grant(6, 1, 5, D)).   %% a higher pre-vote term is fine too
+
+%% Leader-stickiness (Raft thesis §9.6): while we still follow a leader (leader_id =/= none) we
+%% REFUSE every pre-vote — even a clearly-ahead pre-candidate — so a flapping voter cannot depose
+%% a leader the majority still reaches. This is the disruption guard the fix adds.
+pre_vote_grant_leader_sticky_test() ->
+    D = quod_ledger:mk_d(#{cur_term => 5, leader_id => ?A, log => [ent(1, 5)]}),
+    ?assertNot(quod_ledger:pre_vote_grant(5, 1, 5, D)),   %% up-to-date peer, but we have a leader
+    ?assertNot(quod_ledger:pre_vote_grant(9, 9, 9, D)).   %% even a strictly-ahead peer is refused
+
+%% A pre-candidate BEHIND our term is refused (leaderless).
+pre_vote_grant_behind_term_test() ->
+    D = quod_ledger:mk_d(#{cur_term => 5, leader_id => none, log => [ent(1, 5)]}),
+    ?assertNot(quod_ledger:pre_vote_grant(4, 1, 5, D)).
+
+%% A pre-candidate with a less-up-to-date log is refused (leaderless, term ok).
+pre_vote_grant_stale_log_test() ->
+    D = quod_ledger:mk_d(#{cur_term => 5, leader_id => none, log => [ent(1, 5), ent(2, 5)]}),
+    ?assertNot(quod_ledger:pre_vote_grant(5, 1, 5, D)).   %% our last is {2,5}; candidate {1,5} is shorter
+
+%%%===================================================================
 %%% term_at / last_log_*
 %%%===================================================================
 

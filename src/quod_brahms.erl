@@ -409,7 +409,7 @@ reconstruct_and_update(D = #d{counts = {L1, L2, L3}, cfg = Cfg, self = Self, vie
 %% pure logic (unit-tested)
 %% ======================================================================
 
-valid_cfg(Config, #{alpha := A, beta := B, gamma := G,
+valid_cfg(Config, #{alpha := A, beta := B, gamma := G, round_ms := RM,
                     view_size := VS, sample_size := SS}) ->
     Sum  = A + B + G,
     %% validate the user-supplied limits (when present); the defaults that init
@@ -417,6 +417,7 @@ valid_cfg(Config, #{alpha := A, beta := B, gamma := G,
     PuLBad = is_map_key(push_limit, Config) andalso not valid_limit(maps:get(push_limit, Config)),
     PlLBad = is_map_key(pull_limit, Config) andalso not valid_limit(maps:get(pull_limit, Config)),
     if not is_map_key(node_id, Config)             -> {error, missing_node_id};
+       not (is_integer(RM) andalso RM > 0)         -> {error, {bad_round_ms, RM}};  %% 0 ⇒ tick busy-loop
        not (is_integer(VS) andalso VS > 0)         -> {error, {bad_view_size, VS}};
        not (is_integer(SS) andalso SS > 0)         -> {error, {bad_sample_size, SS}};
        PuLBad                                      -> {error, bad_push_limit};

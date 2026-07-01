@@ -56,7 +56,8 @@ here would steal/own the wrong stream.
 -export([last_log_index/1, last_log_term/1, term_at/2, quorum/1, derive_committee/1,
          derive_learners/1, learner_target/2, voter_peers/1, repl_peers/1, cfg_uncommitted/1,
          has_current_term_commit/1, valid_node_id/1, committed_view/1, evict_one/1, up_to_date/4,
-         advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1]).
+         advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1,
+         pre_vote_grant/4]).
 -endif.
 
 -define(DEFAULTS,
@@ -409,7 +410,7 @@ start_pre_vote(D) ->
         true ->
             Token = make_ref(),
             D1 = D#d{role = pre_vote, leader_id = none, pre_vote_token = Token,
-                     votes = #{D#d.self => true}, next_index = #{}, match_index = #{}},
+                     votes = #{D#d.self => true}},   %% next_index/match_index are leader-only (become_leader rebuilds)
             D2 = broadcast_pre_vote(D1, Token),
             case votes_count(D2) >= quorum(D2) of
                 true  -> start_election(D2);   %% quorum 1 (sole voter): go straight to a real election
@@ -474,12 +475,17 @@ votes_count(#d{votes = V}) -> length([1 || {_, true} <- maps:to_list(V)]).
 broadcast_pre_vote(D, Token) ->
     PV = #pre_vote{term = D#d.cur_term, token = Token, candidate_id = D#d.self,
                    last_log_index = last_log_index(D), last_log_term = last_log_term(D)},
-    lists:foldl(fun(P, A) -> send_raft(P, PV, A) end, D, voter_peers(D)).
+    broadcast_to_voters(PV, D).
 
 broadcast_request_vote(D) ->
     RV = #request_vote{term = D#d.cur_term, candidate_id = D#d.self,
                        last_log_index = last_log_index(D), last_log_term = last_log_term(D)},
-    lists:foldl(fun(P, A) -> send_raft(P, RV, A) end, D, voter_peers(D)).
+    broadcast_to_voters(RV, D).
+
+%% Fan a vote-class RPC (#pre_vote / #request_vote) out to every OTHER voter, each on our own
+%% outbound link (never a peer's inbound stream — see send_raft).
+broadcast_to_voters(Record, D) ->
+    lists:foldl(fun(P, A) -> send_raft(P, Record, A) end, D, voter_peers(D)).
 
 handle_request_vote(Peer, #request_vote{term = RvT}, _State, D = #d{cur_term = CT}) when RvT < CT ->
     {keep_state, send_raft(Peer, #request_vote_reply{term = CT, vote_granted = false}, D)};
@@ -531,17 +537,28 @@ handle_vote_reply(_Peer, _Reply, _State, D) -> {keep_state, D}.   %% stale / not
 %%% PreVote (the trial election that bounds the term)
 %%%===================================================================
 
-%% Grant a pre-vote iff the pre-candidate is not behind us AND its log is at least as up to
-%% date. Unlike a real vote it checks NEITHER `voted_for` NOR persists anything, and never
-%% changes our term/state — a pre-vote carries no authority, so two peers can each grant the
-%% other (this is what breaks the symmetric 2-node tie). A node that already self-voted in a
-%% real election still grants here. We do NOT reset our own election timer on granting (only a
-%% real AppendEntries from a leader does), so whoever's timer fires first still gets to run.
 handle_pre_vote(Peer, #pre_vote{term = PvT, token = Token,
-                                last_log_index = CLI, last_log_term = CLT}, _State,
-                D = #d{cur_term = CT}) ->
-    Grant = PvT >= CT andalso up_to_date(CLT, CLI, last_log_term(D), last_log_index(D)),
-    {keep_state, send_raft(Peer, #pre_vote_reply{term = CT, token = Token, vote_granted = Grant}, D)}.
+                                last_log_index = CLI, last_log_term = CLT}, _State, D) ->
+    Grant = pre_vote_grant(PvT, CLI, CLT, D),
+    {keep_state,
+     send_raft(Peer, #pre_vote_reply{term = D#d.cur_term, token = Token, vote_granted = Grant}, D)}.
+
+%% Decide a pre-vote (pure). Grant iff ALL of:
+%%   1. We don't currently follow a live leader (`leader_id =:= none`) — the Raft-thesis §9.6
+%%      leader-stickiness guard. `leader_id` is set by a leader's AppendEntries and cleared only
+%%      when our OWN election timer fires (start_pre_vote/start_election) or we step down. So while
+%%      a majority still hears the leader, a single flapping voter that times out cannot collect
+%%      pre-votes to depose it — this is the disruption pre-vote exists to prevent (a cold-started
+%%      node has leader_id = none, so real elections still start; a healthy leader is protected).
+%%   2. The pre-candidate is not behind us (`PvT >= cur_term`).
+%%   3. Its log is at least as up to date.
+%% Unlike a real vote it checks NEITHER `voted_for` NOR persists anything, and never changes our
+%% term/state — a pre-vote carries no authority, so two leaderless peers can each grant the other
+%% (this is what breaks the symmetric 2-node tie).
+pre_vote_grant(PvT, CLI, CLT, D) ->
+    D#d.leader_id =:= none
+        andalso PvT >= D#d.cur_term
+        andalso up_to_date(CLT, CLI, last_log_term(D), last_log_index(D)).
 
 %% A pre-vote reply for OUR CURRENT round (matched by token — a term can host many rounds, so
 %% the term alone can't distinguish them). On a quorum, run the REAL election (start_election
@@ -568,7 +585,8 @@ handle_append_entries(_Peer, #append_entries{term = AeT}, leader, D = #d{cur_ter
 handle_append_entries(Peer, AE = #append_entries{term = AeT}, _State, D = #d{cur_term = CT}) ->
     %% AeT > CT, or AeT == CT and we are follower/candidate: recognize this leader.
     D0 = case AeT > CT of true -> step_down(AeT, D); false -> D end,
-    D1 = D0#d{leader_id = AE#append_entries.leader_id, role = follower, votes = #{}},
+    D1 = D0#d{leader_id = AE#append_entries.leader_id, role = follower, votes = #{},
+              pre_vote_token = undefined},
     case ae_consistent(AE, D1) of
         ok ->
             D2 = apply_ae_entries(AE, D1),
@@ -1376,6 +1394,7 @@ mk_d(Opts) ->
            snap_term    = maps:get(snap_term, Opts, 0),
            snap_cfg     = maps:get(snap_cfg, Opts, []),
            commit_index = maps:get(commit_index, Opts, 0),
+           leader_id    = maps:get(leader_id, Opts, none),
            match_index  = maps:get(match_index, Opts, #{})},
     with_log(maps:get(log, Opts, []), D).   %% sets log + the cached tail (last_idx/last_term)
 

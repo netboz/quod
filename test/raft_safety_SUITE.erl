@@ -82,7 +82,9 @@ elects_single_leader(Config) ->
     {_LeaderPeer, LeaderId, Term} = wait_for_leader(Nodes, 15000),
     Roles = [role(Peer) || {Peer, _} <- Nodes],
     ?assertEqual(1, length([leader || leader <- Roles])),
-    ?assertEqual(2, length([follower || follower <- Roles])),
+    %% the other two are non-leaders (followers, given the leader-agreement gate above; written as
+    %% =/= leader so the transient `pre_vote` role can't make this brittle).
+    ?assertEqual(2, length([R || R <- Roles, R =/= leader])),
     %% every member agrees on the term and the leader's identity
     [ begin
           S = status(Peer),

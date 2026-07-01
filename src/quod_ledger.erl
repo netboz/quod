@@ -99,7 +99,8 @@ here would steal/own the wrong stream.
             outbox  = #{} :: #{node_id() | endpoint() => [binary()]},   %% per-peer FIFO while a link opens
             rx      = #{} :: #{node_id() => #rx{}},   %% reassembly is per-member (only members chunk)
             store   :: quod_ledger_store:handle() | undefined,
-            role    = follower :: follower | pre_vote | candidate | leader,
+            %% NB: our role is the gen_statem state (follower|pre_vote|candidate|leader) — there is
+            %% no `role` field; status/stats read the state name threaded through common/4.
 
             %% ---- PERSISTED (fsync via quod_ledger_store before reply) ----
             cur_term  = 0    :: term_no(),
@@ -310,7 +311,7 @@ follower({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, D#d.leader_id}}]};
 follower(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(follower, Peer, Payload, D);   %% Peer = the sender's node_id (header pubkey); addr ignored
-follower(EventType, Event, D) -> common(EventType, Event, D).
+follower(EventType, Event, D) -> common(follower, EventType, Event, D).
 
 %% Pre-candidate: ran a trial election, awaiting pre-votes. A timeout re-runs the trial at
 %% the SAME term (the anti-storm invariant: no quorum ⇒ no term bump, ever).
@@ -319,14 +320,14 @@ pre_vote({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, none}}]};
 pre_vote(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(pre_vote, Peer, Payload, D);
-pre_vote(EventType, Event, D) -> common(EventType, Event, D).
+pre_vote(EventType, Event, D) -> common(pre_vote, EventType, Event, D).
 
 candidate(state_timeout, election, D) -> start_pre_vote(D);   %% no majority: fall back to a trial (no bump)
 candidate({call, From}, {append, _}, D) ->
     {keep_state, D, [{reply, From, {error, not_in_charge, none}}]};
 candidate(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(candidate, Peer, Payload, D);
-candidate(EventType, Event, D) -> common(EventType, Event, D).
+candidate(EventType, Event, D) -> common(candidate, EventType, Event, D).
 
 leader(state_timeout, heartbeat, D) ->
     {keep_state, replicate(D), [heartbeat_timeout(D)]};
@@ -336,15 +337,15 @@ leader({call, From}, {append, Change}, D) ->
     handle_client_append(From, Change, D);
 leader(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, D = #d{chan = Chan}) ->
     inbound(leader, Peer, Payload, D);
-leader(EventType, Event, D) -> common(EventType, Event, D).
+leader(EventType, Event, D) -> common(leader, EventType, Event, D).
 
 %%%===================================================================
 %%% shared
 %%%===================================================================
 
-common(internal, run_apply, D) ->
+common(_State, internal, run_apply, D) ->
     {keep_state, maybe_mark_ready(apply_committed(D))};
-common({timeout, join}, join_tick, D) ->
+common(_State, {timeout, join}, join_tick, D) ->
     %% joiner: ask every known contact to admit us, until we are a COMMITTED member (then stop —
     %% the leader drives catch-up + promotion from here via AppendEntries). The committed view is
     %% load-bearing: stopping on a merely-tentative {add_learner,Self} that a new leader later
@@ -353,7 +354,7 @@ common({timeout, join}, join_tick, D) ->
         true  -> {keep_state, D};
         false -> {keep_state, send_join_requests(D), [join_timeout(D)]}
     end;
-common(cast, rebuild, D) ->
+common(_State, cast, rebuild, D) ->
     %% a freshly-(re)started quod_prolog: re-drive committed blocks (async apply_block casts,
     %% in log order) from the snapshot point, then mark it ready ONLY once its kb is caught
     %% up to a re-learned commit point (maybe_mark_ready). The mark_ready cast rides the SAME
@@ -363,7 +364,7 @@ common(cast, rebuild, D) ->
     %% correctly deferred until then (m2-review #3).
     D1 = apply_committed(D#d{last_applied = D#d.snap_idx, prolog_ready = false}),
     {keep_state, maybe_mark_ready(D1)};
-common(info, {link_up, Peer, Chan, LinkPid}, D = #d{chan = Chan}) ->
+common(_State, info, {link_up, Peer, Chan, LinkPid}, D = #d{chan = Chan}) ->
     case (not maps:is_key(Peer, D#d.conns)) andalso link_allowed(Peer, D) of
         true  -> Ref = erlang:monitor(process, LinkPid),
                  D1 = D#d{conns = (D#d.conns)#{Peer => {LinkPid, Ref}}},
@@ -371,22 +372,22 @@ common(info, {link_up, Peer, Chan, LinkPid}, D = #d{chan = Chan}) ->
         false -> _ = quod_link:close(LinkPid),   %% not a member/contact/joiner, or already linked
                  {keep_state, D}
     end;
-common(info, {join_decision, J, Allowed}, D) ->
-    handle_join_decision(J, Allowed, D);   %% an admission helper reported its verdict
-common(info, {link_error, Peer, Chan}, D = #d{chan = Chan}) ->
+common(State, info, {join_decision, J, Allowed}, D) ->
+    handle_join_decision(State, J, Allowed, D);   %% an admission helper reported its verdict
+common(_State, info, {link_error, Peer, Chan}, D = #d{chan = Chan}) ->
     %% a failed open: drop the buffered frames; Raft re-sends fresh on the next heartbeat.
     {keep_state, D#d{outbox = maps:remove(Peer, D#d.outbox)}};
-common(info, {'DOWN', Ref, process, LinkPid, _Reason}, D) ->
+common(_State, info, {'DOWN', Ref, process, LinkPid, _Reason}, D) ->
     %% either a tracked link pid died (drop the conn) or an admission helper died without
     %% reporting (free its marker so the joiner can retry). Both are by-ref / by-pid no-ops if
     %% it's the other kind, so we apply both.
     {keep_state, drop_admitting_by_ref(Ref, drop_conn_by_pid(LinkPid, D))};
-common(info, {quod_message, _, _OtherChan, _}, D) ->
+common(_State, info, {quod_message, _, _OtherChan, _}, D) ->
     {keep_state, D};   %% another channel (Brahms / another namespace's log)
-common({call, From}, get_status, D)    -> {keep_state, D, [{reply, From, status_map(D)}]};
-common({call, From}, get_committee, D) -> {keep_state, D, [{reply, From, derive_committee(D)}]};
-common({call, From}, get_stats, D)     -> {keep_state, D, [{reply, From, stats_map(D)}]};
-common(_EventType, _Event, D) -> {keep_state, D}.
+common(State, {call, From}, get_status, D)     -> {keep_state, D, [{reply, From, status_map(State, D)}]};
+common(_State, {call, From}, get_committee, D) -> {keep_state, D, [{reply, From, derive_committee(D)}]};
+common(State, {call, From}, get_stats, D)      -> {keep_state, D, [{reply, From, stats_map(State, D)}]};
+common(_State, _EventType, _Event, D) -> {keep_state, D}.
 
 terminate(_Reason, _State, #d{chan = Chan, store = Store}) ->
     _ = try quod_reg:unsubscribe({channel, Chan}) catch _:_ -> ok end,
@@ -409,7 +410,7 @@ start_pre_vote(D) ->
         false -> {keep_state, D};   %% removed member (M4): don't contest, stay passive
         true ->
             Token = make_ref(),
-            D1 = D#d{role = pre_vote, leader_id = none, pre_vote_token = Token,
+            D1 = D#d{leader_id = none, pre_vote_token = Token,
                      votes = #{D#d.self => true}},   %% next_index/match_index are leader-only (become_leader rebuilds)
             D2 = broadcast_pre_vote(D1, Token),
             case votes_count(D2) >= quorum(D2) of
@@ -425,7 +426,7 @@ start_election(D = #d{store = Store}) ->
             T1 = D#d.cur_term + 1,
             ok = quod_ledger_store:write_meta(Store, T1, D#d.self),   %% DURABLE before any RPC
             D1 = D#d{cur_term = T1, voted_for = D#d.self, votes = #{D#d.self => true},
-                     role = candidate, leader_id = none, pre_vote_token = undefined,
+                     leader_id = none, pre_vote_token = undefined,
                      elections = D#d.elections + 1, next_index = #{}, match_index = #{}},
             logger:info("quod[~s]: election at term ~p", [D#d.ns, T1]),
             D2 = broadcast_request_vote(D1),
@@ -439,7 +440,7 @@ become_leader(D) ->
     LLI   = last_log_index(D),
     Next  = maps:from_list([{P, LLI + 1} || P <- repl_peers(D)]),
     Match = maps:from_list([{P, 0}       || P <- repl_peers(D)]),
-    D1 = D#d{role = leader, leader_id = D#d.self, next_index = Next, match_index = Match, votes = #{}},
+    D1 = D#d{leader_id = D#d.self, next_index = Next, match_index = Match, votes = #{}},
     logger:info("quod[~s]: leader at term ~p (committee ~p)", [D#d.ns, D#d.cur_term, derive_committee(D1)]),
     case quorum(D1) of
         1 ->
@@ -463,7 +464,7 @@ become_leader(D) ->
 step_down(NewTerm, D) ->
     ok = quod_ledger_store:write_meta(D#d.store, NewTerm, none),
     D1 = fail_pending(D, none),
-    D1#d{cur_term = NewTerm, voted_for = none, role = follower, leader_id = none,
+    D1#d{cur_term = NewTerm, voted_for = none, leader_id = none,
          votes = #{}, pre_vote_token = undefined, next_index = #{}, match_index = #{}}.
 
 votes_count(#d{votes = V}) -> length([1 || {_, true} <- maps:to_list(V)]).
@@ -585,7 +586,7 @@ handle_append_entries(_Peer, #append_entries{term = AeT}, leader, D = #d{cur_ter
 handle_append_entries(Peer, AE = #append_entries{term = AeT}, _State, D = #d{cur_term = CT}) ->
     %% AeT > CT, or AeT == CT and we are follower/candidate: recognize this leader.
     D0 = case AeT > CT of true -> step_down(AeT, D); false -> D end,
-    D1 = D0#d{leader_id = AE#append_entries.leader_id, role = follower, votes = #{},
+    D1 = D0#d{leader_id = AE#append_entries.leader_id, votes = #{},
               pre_vote_token = undefined},
     case ae_consistent(AE, D1) of
         ok ->
@@ -786,13 +787,13 @@ start_admission(J, D = #d{ns = Ns}) ->
 %% The helper's verdict arrived. Clear the marker (demonitor with flush — eats the helper's
 %% impending normal-exit DOWN), then admit/refuse — but only if we are STILL the leader and J
 %% hasn't become a member meanwhile (a stale verdict after step-down or a duplicate is dropped).
-handle_join_decision(J, Allowed, D0) ->
+handle_join_decision(State, J, Allowed, D0) ->
     _ = case maps:get(J, D0#d.admitting, undefined) of
             R when is_reference(R) -> erlang:demonitor(R, [flush]);
             _                      -> ok
         end,
     D = D0#d{admitting = maps:remove(J, D0#d.admitting)},
-    case D#d.role =:= leader andalso not is_member(J, D) of
+    case State =:= leader andalso not is_member(J, D) of
         false -> {keep_state, D};
         true  ->
             case Allowed of
@@ -1369,15 +1370,18 @@ data_dir(Cfg) ->
         Dir       -> Dir
     end.
 
-status_map(D) ->
-    #{role => D#d.role, term => D#d.cur_term, leader => D#d.leader_id,
+%% `State` is the gen_statem state name (follower|pre_vote|candidate|leader) — the single
+%% source of truth for our role; there is no separate `role` field to keep in sync. (It's
+%% emitted under the `role` map key, the status/stats API's name for it.)
+status_map(State, D) ->
+    #{role => State, term => D#d.cur_term, leader => D#d.leader_id,
       commit_index => D#d.commit_index, last_applied => D#d.last_applied}.
 
-stats_map(D) ->
+stats_map(State, D) ->
     #{cur_term => D#d.cur_term, commit_index => D#d.commit_index,
       last_applied => D#d.last_applied, log_len => length(D#d.log),
       committee_size => length(derive_committee(D)),
-      is_leader => (D#d.role =:= leader), role => D#d.role,
+      is_leader => (State =:= leader), role => State,
       elections => D#d.elections, appends => D#d.appends, commits => D#d.commits,
       pending_appends => maps:size(D#d.pending), snapshots_installed => 0,
       msgs_sent => D#d.msgs_sent, msgs_recv => D#d.msgs_recv,

@@ -43,12 +43,12 @@ fields(metrics) ->
 fields(identity) ->
     %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first
     %% boot and persisted under `dir`. `dir = ""` ⇒ `<content.data_dir>/identity` (or the
-    %% quod_ledger user_cache default), so identity shares the ledger's durability domain.
+    %% quod_simplex user_cache default), so identity shares the ledger's durability domain.
     [ {dir, hoconsc:mk(binary(), #{default => <<"">>})}
     ];
 fields(content) ->
     %% A node founds (create) or joins one content namespace at boot. `genesis_file`
-    %% is read once by the founder at create; `data_dir = ""` ⇒ quod_ledger's default.
+    %% is read once by the founder at create; `data_dir = ""` ⇒ quod_simplex's default.
     [ {namespace,    hoconsc:mk(binary(), #{default => <<"quod:root">>})}
     , {mode,         hoconsc:mk(hoconsc:enum([create, join]), #{default => create})}
     , {role,         hoconsc:mk(hoconsc:enum([member, replica]), #{default => member})}

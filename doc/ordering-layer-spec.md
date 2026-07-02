@@ -1,5 +1,12 @@
 # Ordering layer — Phase 1 build spec (`quod_ledger` / `quod_prolog`)
 
+> **⚠ SUPERSEDED (2026-07-02).** This is the Phase-1 build spec for the hand-rolled **Raft** ordering
+> layer (`quod_ledger`), which has since been **removed**. quod's consensus is now a hand-rolled
+> **DispersedSimplex** BFT (`quod_simplex`); the authoritative sources are `doc/simplex_extended.pdf`
+> (§2 = the spec) and the module docs (`quod_simplex`, `quod_ledger_store`, `quod_prolog`). §§3–4 below
+> (the durable store + the `quod_prolog` apply/prove pipeline) remain broadly accurate; §§1–2 and the
+> M1–M5 build plan describe the **retired Raft protocol** and are kept only as a historical record.
+
 This document is the single, unified Phase-1 build spec for quod's ordering/content layer, realizing
 `doc/content-layer-design.md` §13. The decisions it fixes: a **hand-rolled lean Raft** over `quod_link`
 streams (channel `{log, Ns}`), with **no Erlang distribution**; **one committee (one Raft group) per

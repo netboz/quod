@@ -1,7 +1,7 @@
 -module(quod_simplex).
 -moduledoc """
 Per-namespace **DispersedSimplex** Byzantine consensus — quod's ordering layer,
-replacing the earlier hand-rolled Raft (`quod_ledger`). One consensus instance per
+replacing the earlier hand-rolled Raft ledger. One consensus instance per
 namespace; the committee is the namespace's validator set (`peer_admitted` facts,
 epoch-frozen). See the approved plan and `doc/simplex_extended.pdf` (§2 = the spec).
 
@@ -230,8 +230,13 @@ callback_mode() -> [state_functions].
 start_link(Ns, Config) ->
     gen_statem:start_link(quod_reg:via({quod_simplex, Ns}), ?MODULE, {Ns, Config}, []).
 
--doc "Submit a change. Blocks until the block commits (`{ok, Slot}`). At N=1 that is its own fsync.".
--spec append(binary(), #transaction{}) -> {ok, slot()} | {error, not_in_charge, unavailable}.
+-doc """
+Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is its own fsync. The error
+arms are the stable consensus-append contract `quod_prolog` handles and Stage 2 fulfils — at N=1 only
+`{error, not_in_charge, unavailable}` (this process unreachable) actually occurs.
+""".
+-spec append(binary(), #transaction{}) ->
+        {ok, slot()} | {error, busy} | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}), {append, Change}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.

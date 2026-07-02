@@ -11,7 +11,7 @@ setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"test:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
     {ok, Pid} = quod_prolog:start_link(Ns, #{node_id => {"127.0.0.1", 5000}}),
-    %% no quod_ledger in these isolated tests — simulate the rebuild handshake completing
+    %% no quod_simplex in these isolated tests — simulate the rebuild handshake completing
     ok = quod_prolog:mark_ready(Ns),
     {Ns, Pid}.
 

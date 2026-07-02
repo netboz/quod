@@ -1,5 +1,10 @@
 # Identity / signing milestone — kickoff brief
 
+> **Superseded (2026-07-02).** This milestone was **absorbed into the DispersedSimplex consensus
+> milestone** — Ed25519 signing is exactly what Simplex votes/certs need. Node keypairs
+> (`node_id` = pubkey), `sign/2`/`verify/3`, mutual TLS, and the commit-cert core have since landed; see
+> `doc/simplex_extended.pdf` and the `quod_simplex` / `quod_identity` module docs. Kept for context.
+
 > Paste the **Kickoff prompt** below into a fresh chat to start this milestone. Everything under it
 > is the brief that prompt points at. Work happens in **plan mode** first — Yan reviews and comments
 > the design before any code is written.

@@ -1,5 +1,9 @@
 # M1 content-layer — code review findings
 
+> **Historical record.** Dated findings from the **M1** review of the *Raft* content layer
+> (`quod_ledger`), since replaced by the **DispersedSimplex** consensus (`quod_simplex`). Kept as-is;
+> module/protocol names below refer to the retired Raft implementation.
+
 Max-effort multi-agent review (2026-06-26) of the M1 content layer: 72 candidates →
 **29 verified** (22 CONFIRMED, 7 PLAUSIBLE). This is the complete record. Status
 key: **[FIXED]** addressed this session · **[M2]** pinned for the M2 pass (an

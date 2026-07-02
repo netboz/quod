@@ -182,28 +182,30 @@ mechanism is a small **committee**.
 
 ### The committee
 
-Each ontology is run by a small group of computers — say 3 or 5 — that holds it and
+Each ontology is run by a small group of computers — say 4 or 7 — that holds it and
 agrees on every change.
 
 - One member is **in charge** at a time. It takes incoming changes, bundles each
   into a numbered record — a **block** — and sends that block to the others. A block
-  becomes official once **more than half** the committee has written it down.
-- If the one in charge dies or goes quiet, the others **pick a new one among
-  themselves** in a second or two. No human involved.
+  becomes official once **more than two-thirds** of the committee has signed off on it.
+- If the one in charge stalls or goes quiet, the others **agree to skip it** and move
+  on to the next, in a second or two. No human involved.
 
-Why "more than half"? Because any two "more than half" groups must share at least
-one computer — and that shared computer won't write down two conflicting blocks. So
-the committee can never end up agreeing to two different versions of history. That's
-the whole safety argument, in one sentence.
+Why "more than two-thirds"? Because any two "more than two-thirds" groups overlap by
+enough that they always share at least one **honest** computer — and an honest
+computer won't sign two conflicting blocks. So even if some members are actively
+lying, the committee can never agree to two different versions of history. That's the
+whole safety argument, in one sentence.
 
 The clever part: a committee of **one computer** is just "one computer in charge" —
-the simple setup you'd run on your laptop. Grow the *same* committee to 3 or 5 and it
-survives some members dying, with no change to the code. So "simple now" and "robust
-later" aren't two designs — they're one design, sized to taste.
+the simple setup you'd run on your laptop. Grow the *same* committee to 4 or 7 and it
+survives some members dying **or lying**, with no change to the code. So "simple now"
+and "robust later" aren't two designs — they're one design, sized to taste.
 
-*(For the curious: this is a streamlined version of Raft, a standard agreement
-recipe used by many databases. We build our own lean version rather than add a large
-piece of outside software.)*
+*(For the curious: this is a streamlined **Byzantine** agreement recipe called
+**DispersedSimplex** — the modern family payment networks use, which keeps agreeing
+even if some members are not just offline but actively lying. We build our own lean
+version rather than add a large piece of outside software.)*
 
 ### Who sits on the committee is part of the ontology
 

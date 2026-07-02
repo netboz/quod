@@ -1,8 +1,7 @@
 %%% include/quod_ledger.hrl
-%%% Canonical types + records for the quod ordering/content layer
-%%% (`quod_ledger`, `quod_prolog`, `quod_ledger_store`, and their tests).
+%%% Canonical types + records for the quod content/ordering layer
+%%% (`quod_simplex` consensus, `quod_prolog` fact engine, `quod_ledger_store`, and their tests).
 %%% Defined ONCE here and `-include`d everywhere — the single source of truth.
-%%% See doc/ordering-layer-spec.md.
 -ifndef(QUOD_LOG_HRL).
 -define(QUOD_LOG_HRL, true).
 
@@ -79,55 +78,5 @@
                slot       :: slot(),
                block_hash :: binary() | none,
                sigs       :: [{node_id(), binary()}]}).
-
-%% --- the Raft RPC records (snake_case fields) ---
-%% Pre-vote (Ra-style, per the Raft thesis §9.6): a non-binding trial election run before a real
-%% one. It carries the node's CURRENT term (not term+1); the `token` is a fresh `make_ref()` that
-%% correlates a reply to its round (pre-votes never bump the term, so one term hosts many rounds
-%% and the token — not the term — is the round id). The grant rule + why it bounds the term and
-%% protects a live leader live in `quod_ledger:pre_vote_grant/4` and `start_pre_vote/1`.
--record(pre_vote,             {term           :: term_no(),
-                               token          :: reference(),
-                               candidate_id   :: node_id(),
-                               last_log_index :: log_index(),
-                               last_log_term  :: term_no()}).
--record(pre_vote_reply,       {term         :: term_no(),
-                               token        :: reference(),
-                               vote_granted :: boolean()}).
--record(request_vote,         {term           :: term_no(),
-                               candidate_id   :: node_id(),
-                               last_log_index :: log_index(),
-                               last_log_term  :: term_no()}).
--record(request_vote_reply,   {term         :: term_no(),
-                               vote_granted :: boolean()}).
--record(append_entries,       {term           :: term_no(),
-                               leader_id      :: node_id(),
-                               prev_log_index :: log_index(),
-                               prev_log_term  :: term_no(),
-                               entries        :: [#entry{}],   %% [] for a heartbeat
-                               leader_commit  :: log_index()}).
--record(append_entries_reply, {term        :: term_no(),
-                               success     :: boolean(),
-                               match_index :: log_index()}).   %% success: matched idx; fail: conflict hint
--record(install_snapshot,     {term                :: term_no(),
-                               leader_id           :: node_id(),
-                               last_included_index :: log_index(),
-                               last_included_term  :: term_no(),
-                               config              :: [node_id()],
-                               data                :: binary()}).
--record(install_snapshot_reply, {term :: term_no()}).
-
-%% --- join handshake (membership growth; rides the same {log, Ns} channel) ---
-%% A fresh node (mode=join) unicasts #join_request{} to a contact (an endpoint); the leader
-%% admits it as a non-voting learner ({add_learner}) after proving `can_join`, then catches it
-%% up and promotes it. `joiner` is the joiner's PUBKEY (its node_id), bound by the leader to the
-%% connection's TLS-authenticated pubkey before admission (the possession gate). A `{redirect, _}`
-%% carries the leader's ENDPOINT (a resolved address) so the joiner can dial it; the membership
-%% itself reaches the joiner through the replicated config entries (AppendEntries).
--record(join_request, {joiner :: node_id(),
-                       args   = #{}  :: map()}).
--record(join_reply,   {result :: learner_admitted | already_member
-                                | {redirect, endpoint() | none}
-                                | {denied, term()}}).
 
 -endif.

@@ -8,30 +8,25 @@ When you close an item, delete it from this file. When you defer something durin
 
 ---
 
-## 1. Identity / signing milestone — the big gate
+## 1. Identity / signing — mostly landed (DispersedSimplex milestone)
 
-The next major milestone. Today `server_id() = {Host, Port}` (spoofable), `#transaction.author`/`sig`
-are reserved but `sig = none`, and there are no commit certificates. Until nodes have keypairs and
-messages/blocks are signed, several hostile-network defenses can only be **bounded, not closed**.
+Node keypairs (`node_id` = Ed25519 **pubkey**, A.3), Ed25519 `sign/2` + `verify/3`, mutual TLS bound to
+the pubkey (A.4), and the per-block **commit certificate** (a bag of ⅔ signatures — `quod_simplex`'s pure
+core) have landed with the DispersedSimplex milestone (consensus plan + `doc/simplex_extended.pdf`).
+`#transaction.author` carries the submitter's pubkey; `#transaction.sig` is still `none`
+(transaction-author signing rides Stage 2). Remaining, gated:
 
-Gated on it:
-
-- **Redirect authentication (join path).** A joiner acts on any `{redirect, X}` reply. Only a signed
-  `#join_reply` bound to a proven leader key closes it. *Bounded now:* only a not-yet-committed
-  member reacts, and `contacts` is capped (`?MAX_CONTACTS`). → `quod_ledger:handle_join_reply`.
-- **Pubkey-possession gate before `can_join`.** An unauthenticated joiner still triggers a `can_join`
-  proof. Require it to prove possession of its advertised `pubkey` first. *Bounded now:* concurrent
-  proofs capped at `?MAX_ADMITTING`. → `quod_ledger:start_admission`.
-- **`can_replicate` policy.** A full-copy read-replica holds *every* fact, so admitting one is a
-  **confidentiality** decision for access-controlled ontologies. Root is public, so reusing
-  `can_join` is fine today; add a `can_replicate` rule before replicating private ontologies.
-  → `quod_ledger:admit_replica`.
-- **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any
-  node (reads are open; content is gated per-clause by `can_read`). A hostile network can flood links
-  and proofs. *Bounded now:* `?MAX_INFLIGHT` proofs, `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
-- **Signed blocks + per-block quorum certificate.** Required for the **P2 epidemic dissemination**
-  (§4): a subscriber must verify a *relayed* change without trusting the relay. Re-tighten the
-  non-`[safe]` decode for any block accepted from a relay.
+- **Signed blocks + relayed-commit verification.** Required for **P2 epidemic dissemination** (§4): a
+  subscriber must verify a *relayed* block against its commit cert without trusting the relay. The cert
+  machinery exists (`quod_simplex:verify_cert/2`); wiring it into the P2 feed and re-tightening the
+  non-`[safe]` decode for relayed blocks is the remaining work.
+- **Membership-path hardening.** Redirect authentication, a pubkey-possession gate before `can_join`,
+  and a `can_replicate` policy for private read-replicas were bounded-but-open in the (now-removed) Raft
+  join path. They return — closed by design — when DispersedSimplex rebuilds membership admission + join
+  in **Stage 3** (see the plan); they are NOT carried forward from the deleted `quod_ledger` code.
+- **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any node
+  (reads are open; content is gated per-clause by `can_read`). *Bounded now:* `?MAX_INFLIGHT` proofs,
+  `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
 
 ## 2. Transport hardening (hostile-net)
 
@@ -47,39 +42,42 @@ Gated on it:
   and crashes the transport's `init/1` at boot. Pre-existing (the old code loaded the PEM
   unconditionally) and now *less* reachable; make it a clean fail-fast error once the legacy/test
   PEM path is retired (the production boot always sets the identity env via `quod_app:apply_identity`).
-- **Non-`[safe]` decode** (`quod_ledger:decode_record`, `quod_prove:inbound`). Any on-channel speaker
-  can deliver arbitrary terms (atom-table growth). Deliberate so fact atoms decode; closed by
-  signed/validated payloads (§1). Size-bounded: `quod_prove` caps frames at 1 MiB, `quod_ledger` at
-  ~`?CHUNK_BYTES`.
-- **Per-peer reassembly heap** (`quod_ledger` chunk reassembly). Spoofed peers each start an
-  incomplete chunked message → up to N×64 MiB buffered. Needs a per-message timeout / a cap on
-  concurrent reassemblies.
-- **`quod_prove` large results.** A prove result > 1 MiB (`?MAX_FRAME_BYTES`) is dropped — no
-  app-level chunking. Add chunking (like `quod_ledger`'s) if large read results are ever needed.
+- **Non-`[safe]` decode** (`quod_prove:inbound`; and the DispersedSimplex `{log, Ns}` transport once it
+  lands in Stage 2). Any on-channel speaker can deliver arbitrary terms (atom-table growth). Deliberate
+  so fact atoms decode; closed by signed/validated payloads (§1). Size-bounded: `quod_prove` caps frames
+  at 1 MiB.
+- **Per-peer reassembly heap** (chunk reassembly on the consensus `{log, Ns}` channel — reintroduced with
+  the Stage-2 transport). Spoofed peers each start an incomplete chunked message → unbounded buffering.
+  Needs a per-message timeout / a cap on concurrent reassemblies. (The removed Raft transport had this
+  gap; carry the fix into `quod_simplex`'s Stage-2 wire.)
+- **`quod_prove` large results.** A prove result > 1 MiB (`?MAX_FRAME_BYTES`) is dropped — no app-level
+  chunking. Add chunking if large read results are ever needed.
 - **`quod_prove` outbox on `link_error`.** A buffered read is dropped and the caller times out (5 s)
   then can retry. Intended eventual behavior; an app-level retry/backoff in `remote/5` would fail
   faster.
 
-## 3. Raft membership (M3 / M4 fast-follows)
+## 3. Consensus + membership (DispersedSimplex stages)
 
-- **`remove_member` / leader-removes-itself** (symmetric M4). **When it lands:** restart the join
-  driver on loss of committed membership — a committed `{remove, Self}` would otherwise strand a node
-  that already stopped asking (the join driver stops at committed-membership).
-- **Snapshot / compaction / InstallSnapshot** (M3 heavy half). Only needed once history is trimmed;
-  nothing compacts yet (`snap_idx = 0` always).
-- **Ra-style round-based promotion.** quod promotes a learner once its `match_index` reaches a fixed
-  target (its admission index); Ra (rabbitmq/ra) promotes only if a replication *round* completes
-  within an election timeout — avoids promoting a node that will perpetually lag a busy committee.
-  Fine for low-write ontologies; revisit at high write rates.
-- **Brahms-candidate discovery for joiners.** Joiners use the operator seed list as the contact path;
-  Brahms `view`/`sample`-based discovery is a later refinement.
+The Raft ordering layer (`quod_ledger`) has been **replaced** by a hand-rolled DispersedSimplex BFT
+(`quod_simplex`) — consensus plan + `doc/simplex_extended.pdf`. The Raft-specific deferrals that lived
+here (Ra-style round-based promotion, `InstallSnapshot`, `remove_member`, Brahms-candidate join
+discovery) are **retired with the Raft code**; the equivalent capabilities are re-planned as Simplex
+stages, not carried forward:
+
+- **Multi-validator BFT** — real ⅔ support/commit/complaint certs, the complaint timer + commit guard,
+  epoch validator set from `peer_admitted`, over the `{log, Ns}` transport. Stage 2.
+- **Membership admission + join + trustless catch-up** — `can_join` → `peer_admitted`, epochs, and a
+  joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert** (never trusts
+  the server). Stage 3. Absorbs the old `remove_member` / join-driver / candidate-discovery concerns.
+- **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
+  store keeps the full block archive).
 
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.
 
-- **Identity / signing** (§1) — the gate for everything below (can't safely gossip unsigned blocks to
-  untrusted nodes).
+- **Relayed-block verification** (§1) — the remaining gate below: safely gossiping blocks to untrusted
+  nodes needs each relayed block verified against its commit cert (the signing itself has landed).
 - **P2 — epidemic dissemination.** Push-pull gossip + anti-entropy over the per-namespace Brahms
   overlay (Replicas/Subscribers join it); every block carries + is verified against its quorum
   certificate before re-push. Scales the change feed past the leader-star.

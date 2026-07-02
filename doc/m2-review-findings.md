@@ -1,5 +1,9 @@
 # M2 content-layer — code review findings
 
+> **Historical record.** Dated findings from the **M2** review of the *Raft* ordering layer
+> (`quod_ledger` — elections + replication), since replaced by the **DispersedSimplex** consensus
+> (`quod_simplex`). Kept as-is; module/protocol names below refer to the retired Raft implementation.
+
 Max-effort adversarial multi-agent review (2026-06-27) of the **M2** ordering layer
 (per-namespace Raft committee over loopback QUIC: election + replication, driving
 committed blocks into `quod_prolog`). 11 candidates → **8 confirmed** (3 rejected).

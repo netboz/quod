@@ -80,8 +80,8 @@ t_create_root({_Dir, Ns, Content}) ->
         %% the default-open can_read/3 rule unifies with anything
         ?assertMatch({ok, [#{}], _}, rp(Ns, {can_read, foo, bar, baz})),
         %% index 1 = founding {add,self} config; index 2 = the genesis content block
-        ?assertMatch(#{commit_index := 2, last_applied := 2, is_leader := true},
-                     quod_ledger:stats(Ns))
+        ?assertMatch(#{committed := 2, last_applied := 2},
+                     quod_simplex:stats(Ns))
     end.
 
 t_create_root_restart({_Dir, Ns, Content}) ->
@@ -89,13 +89,13 @@ t_create_root_restart({_Dir, Ns, Content}) ->
         {Ns, NsCfg} = quod_app:build_ns_config(Content),
         Pid1 = start_ns(Ns, NsCfg),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})),
-        #{commit_index := CI1} = quod_ledger:stats(Ns),
+        #{committed := CI1} = quod_simplex:stats(Ns),
         stop_ns(Pid1),
         %% restart from the same data_dir is a JOIN: replay the local ledger (the
         %% genesis is already there) — do NOT re-read the .pl, do NOT re-create.
         _Pid2 = start_ns(Ns, NsCfg),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})),
-        #{commit_index := CI2} = quod_ledger:stats(Ns),
+        #{committed := CI2} = quod_simplex:stats(Ns),
         ?assertEqual(CI1, CI2)   %% no extra genesis block appended
     end.
 
@@ -103,7 +103,7 @@ t_genesis_failure({_Dir, Ns, Content}) ->
     fun() ->
         Bad = Content#{genesis_file => <<"ontologies/does_not_exist.pl">>},
         {Ns, NsCfg} = quod_app:build_ns_config(Bad),
-        %% quod_ledger init returns {stop, {genesis_failed, _}} ⇒ the sub-sup fails to
+        %% quod_simplex init returns {stop, {genesis_failed, _}} ⇒ the sub-sup fails to
         %% start (fail-fast). Run it in a trap-exit helper so the failed supervisor's
         %% link doesn't take down the eunit test process.
         ?assertMatch({error, _}, start_link_isolated(Ns, NsCfg))

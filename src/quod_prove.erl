@@ -1,11 +1,11 @@
 -module(quod_prove).
 -moduledoc """
 Per-namespace **remote-read** endpoint — the path by which a node that is NOT on a namespace's
-Raft committee reads it without going through consensus (the Subscriber/Neither read path of the
+consensus committee reads it without going through consensus (the Subscriber/Neither read path of the
 reader/subscriber layer).
 
 Two halves in one `gen_server`, riding a dedicated **`{prove, Ns}`** `quod_link` channel (separate
-from `quod_ledger`'s `{log, Ns}` — the channel-match hazard):
+from `quod_simplex`'s `{log, Ns}` — the channel-match hazard):
 
 - **Responder** (on a Member/Replica that holds the kb): serves a `{prove_req, ...}` against the
   local committed kb via `quod_prolog:prove_ro/3` (READ-ONLY — a write goal is refused, so a remote
@@ -19,7 +19,7 @@ Reads are eventual / bounded-stale; `MinHeight` gives read-your-writes — a res
 height is below `MinHeight` replies `stale` so the caller retries a fresher peer.
 
 **Trust (P1):** reads are open (content is gated per-clause by `can_read`); the inner record decodes
-without `[safe]` — same trusted-fleet posture as `quod_ledger` today. Authenticated/​rate-limited
+without `[safe]` — same trusted-fleet posture as `quod_simplex` today. Authenticated/​rate-limited
 remote reads on a hostile network arrive with the identity milestone.
 """.
 -behaviour(gen_server).

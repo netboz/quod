@@ -80,7 +80,7 @@ identity_dir(Cfg) ->
         Dir  -> binary_to_list(Dir)
     end.
 
-%% The resolved content data dir (mirrors quod_ledger:data_dir/1's default).
+%% The resolved content data dir (mirrors quod_simplex/quod_ledger_store's data_dir default).
 content_data_dir(Cfg) ->
     case maps:get(data_dir, maps:get(content, Cfg, #{}), <<>>) of
         <<>>    -> filename:join(filename:basedir(user_cache, "quod"), "data");

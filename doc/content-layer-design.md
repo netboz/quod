@@ -5,6 +5,13 @@
 membership + transport (Brahms + QUIC). Today quod is *all* membership; this
 document is the plan for making the mesh carry the actual ontology.
 
+> **Update (2026-07-02):** the consensus choice recorded below (§6, §12, §13 — "hand-roll a lean
+> **Raft**") has since been **superseded**. quod's ordering layer is now a hand-rolled **DispersedSimplex**
+> BFT (`quod_simplex`, which replaced the removed `quod_ledger`) — see the consensus plan and
+> `doc/simplex_extended.pdf`. The per-namespace committee / block-list / apply framing here still holds;
+> read "Raft" as "DispersedSimplex" and `quod_ledger` as `quod_simplex`. §13's own "Make the agreement
+> stronger later — same interface" is exactly the move that landed.
+
 This is a thinking document, not a spec. It records the decisions we reached and
 the questions still open. Inspiration is taken from onia (Architecture-H),
 `bbsvx`, and `onbrater`, but deliberately **simpler and broker-free**.
@@ -565,7 +572,7 @@ quorum attestation (§6) — which need *signed* changes, not just an authentica
    stubbed (§9), and its hardest dependency — the ordered log itself — is
    **undesigned** (§6/§12) and must be designed before this ships. The genuinely
    distributed, useful-to-onia milestone is the *end of Phase 2*, not Phase 1.
-   (The ordered log is now **sketched in §13** — per-namespace Raft.)
+   (The ordered log is now **sketched in §13** — per-namespace DispersedSimplex.)
 2. **Inter-ontology graph** — index cross-ontology reads; read-set-driven
    notification; remote `::` over QUIC streams (replace `scope_ws`);
    argument-position `::` (the link-following clauses of §4).
@@ -827,7 +834,7 @@ quod_sup
 ├── quod_quic                    (transport — unchanged)
 ├── quod_brahms_sup → quod_brahms per Ns   (discovery / the crowd — unchanged)
 └── quod_ns_sup     → per-ontology subtree                       ← NEW
-        ├── quod_ledger    (Ns)   committee member: order + agree on blocks
+        ├── quod_simplex   (Ns)   committee member: order + agree on blocks
         └── quod_prolog (Ns)   the facts: apply blocks, answer proves
 ```
 
@@ -836,7 +843,7 @@ quod_sup
   so the two don't get stuck behind each other.
 - **Brahms finds candidates; the committee list (in the ontology) is the
   authoritative one** (§12 #8).
-- New `quod_reg` names: `{quod_ledger, Ns}`, `{quod_prolog, Ns}`.
+- New `quod_reg` names: `{quod_simplex, Ns}`, `{quod_prolog, Ns}`.
 - A member that restarts reloads its own on-disk history and/or **catches up from
   the others**. Losing one member is fine — that's the point of having several.
 

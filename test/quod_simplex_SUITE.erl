@@ -1,0 +1,145 @@
+-module(quod_simplex_SUITE).
+-moduledoc """
+Single-validator (N=1) integration tests for the `quod_simplex` consensus `gen_statem`: a founder
+bootstraps its committee + genesis, `append/2` commits and durably persists each block (the sole
+validator IS the `⅔` quorum), and a restart REPLAYS the durable log — recovering the height and the
+validator set from disk. No `quod_prolog` is started, so these pin the consensus/persistence layer in
+isolation; the apply→KB→prove path is covered end-to-end once `quod_prolog` is rewired to this module.
+The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUITE`.
+""".
+-include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
+
+-export([all/0, init_per_testcase/2, end_per_testcase/2]).
+-export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
+         t_restart_replays/1, t_status_stats/1, t_multi_member_rejected/1]).
+
+all() ->
+    [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
+     t_restart_replays, t_status_stats, t_multi_member_rejected].
+
+init_per_testcase(_TC, Cfg) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U   = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_simplex_" ++ U),
+    Ns  = list_to_binary("simplex:" ++ U),
+    {Pub, _Seed} = quod_identity:generate(),
+    Base = #{node_id => Pub, data_dir => Dir},   %% the store wants a string path, not a binary
+    [{ns, Ns}, {dir, Dir}, {node_id, Pub}, {base_cfg, Base} | Cfg].
+
+end_per_testcase(_TC, Cfg) ->
+    _ = stop(?config(ns, Cfg)),
+    _ = file:del_dir_r(?config(dir, Cfg)),
+    ok.
+
+%%%===================================================================
+%%% tests
+%%%===================================================================
+
+%% A sole founder (no explicit committee) seeds a 1-validator committee: one `{add, self}` config
+%% entry at slot 1, and nothing else.
+t_founder_bootstrap(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    ?assertEqual([Self], quod_simplex:committee(Ns)),
+    St = quod_simplex:status(Ns),
+    ?assertEqual([Self], maps:get(committee, St)),
+    ?assertEqual(1, maps:get(slot, St)),
+    ?assertEqual(1, maps:get(committed, St)).
+
+%% On create the founder commits the genesis `.pl` content as a block right after the committee:
+%% slot 1 = the `{add, self}` committee entry, slot 2 = the genesis content block. Read the block
+%% back off disk to confirm it actually holds the genesis transaction with a non-empty diff (not an
+%% empty/wrong block that would still bump the height).
+t_genesis_seeds_content(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    _ = start(Cfg, #{genesis_file => File}),
+    St = quod_simplex:status(Ns),
+    ?assertEqual(2, maps:get(slot, St)),
+    ?assertEqual(2, maps:get(committed, St)),
+    {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
+    try
+        {ok, #entry{kind = block, data = Tx}} = quod_ledger_store:read_at(Store, 2),
+        ?assertMatch(#transaction{tx_id = <<"genesis:", _/binary>>}, Tx),
+        ?assert(length(Tx#transaction.diff) >= 1)
+    after quod_ledger_store:close(Store) end.
+
+%% Stage 1 is single-validator: a founder config carrying co-founders (a multi-member committee) is
+%% rejected at init rather than silently mis-committed by the N=1 fast path. (Lifted in Stage 2.)
+t_multi_member_rejected(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    {P2, _} = quod_identity:generate(),
+    C  = maps:merge(?config(base_cfg, Cfg), #{committee => [P2]}),
+    ?assertMatch({error, {bad_config, {multi_validator_unsupported_stage1, 1}}},
+                 start_isolated(Ns, C)).
+
+%% Each append commits (N=1: on its own fsync) and advances the height by one.
+t_append_commits_and_persists(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),   %% slot 1 = committee
+    ?assertEqual({ok, 3}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),
+    St = quod_simplex:status(Ns),
+    ?assertEqual(3, maps:get(slot, St)),
+    ?assertEqual(3, maps:get(committed, St)).
+
+%% A restart reloads the durable log: the height and the committee are recovered from disk (the
+%% blocks themselves are NOT kept in memory — the store is the archive).
+t_restart_replays(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
+    ?assertEqual({ok, 3}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),
+    stop(Ns),
+    _ = start(Cfg, #{}),                       %% durable state present ⇒ from_durable, not bootstrap
+    St = quod_simplex:status(Ns),
+    ?assertEqual(3, maps:get(slot, St)),
+    ?assertEqual(3, maps:get(committed, St)),
+    ?assertEqual([Self], quod_simplex:committee(Ns)).
+
+t_status_stats(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    _ = quod_simplex:append(Ns, tx(Ns, Self, <<"a">>)),
+    S = quod_simplex:stats(Ns),
+    ?assertEqual(1, maps:get(appends, S)),
+    ?assertEqual(1, maps:get(committee_size, S)),
+    ?assertEqual(2, maps:get(slot, S)),
+    ?assertEqual(2, maps:get(committed, S)).
+
+%%%===================================================================
+%%% helpers
+%%%===================================================================
+
+start(Cfg, Extra) ->
+    Ns = ?config(ns, Cfg),
+    {ok, Pid} = quod_simplex:start_link(Ns, maps:merge(?config(base_cfg, Cfg), Extra)),
+    unlink(Pid),
+    Pid.
+
+%% Start in a trap-exit helper so an init that returns {stop,_} can't take down the test process via
+%% the start_link link (mirrors quod_create_root_tests' start_link_isolated).
+start_isolated(Ns, C) ->
+    Parent = self(),
+    spawn(fun() ->
+              process_flag(trap_exit, true),
+              Parent ! {start_result, (catch quod_simplex:start_link(Ns, C))}
+          end),
+    receive {start_result, R} -> R after 5000 -> {error, timeout} end.
+
+%% gen_statem:stop is a synchronous, clean shutdown that RUNS terminate/3 (closing the store) —
+%% unlike exit(Pid, shutdown) on a non-trapping gen_statem, which would skip terminate entirely.
+stop(Ns) ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined -> ok;
+        Pid       -> _ = catch gen_statem:stop(Pid, shutdown, 5000), ok
+    end.
+
+tx(Ns, Author, Id) ->
+    #transaction{tx_id = Id, caller_ns = Ns, diff = [], read_check = #{}, author = Author, sig = none}.

@@ -57,7 +57,7 @@ here would steal/own the wrong stream.
          derive_learners/1, learner_target/2, voter_peers/1, repl_peers/1, cfg_uncommitted/1,
          has_current_term_commit/1, valid_node_id/1, committed_view/1, evict_one/1, up_to_date/4,
          advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1,
-         pre_vote_grant/4]).
+         pre_vote_grant/4, grow_log/2]).
 -endif.
 
 -define(DEFAULTS,
@@ -113,6 +113,8 @@ here would steal/own the wrong stream.
             %% ---- VOLATILE (reconstructed on restart) ----
             last_idx  = 0    :: log_index(),      %% cached tail of `log` (= snap_idx if empty): keeps
             last_term = 0    :: term_no(),        %% last_log_index/term O(1) instead of lists:last per call
+            committee = []   :: [node_id()],      %% cached derive_committee(snap_cfg,log) — refreshed in with_log
+            learners  = []   :: [node_id()],      %% cached derive_learners(log)          — refreshed in with_log
             commit_index = 0    :: log_index(),
             last_applied = 0    :: log_index(),
             next_index   = #{}  :: #{node_id() => log_index()},   %% leader only
@@ -272,7 +274,7 @@ bootstrap_genesis(Cfg, D = #d{ns = Ns, self = Self, store = Store}) ->
             I  = last_log_index(D) + 1,
             E  = #entry{index = I, term = 0, kind = block, data = Tx},
             {ok, Store1} = quod_ledger_store:append(Store, [E]),
-            with_log(D#d.log ++ [E], D#d{store = Store1})
+            grow_log([E], D#d{store = Store1})
     end.
 
 valid_cfg(Config, Cfg) ->
@@ -455,7 +457,7 @@ become_leader(D) ->
             I  = LLI + 1,
             E  = #entry{index = I, term = D#d.cur_term, kind = block, data = noop},
             {ok, Store1} = quod_ledger_store:append(D1#d.store, [E]),
-            D2 = with_log(D1#d.log ++ [E], D1#d{store = Store1}),
+            D2 = grow_log([E], D1#d{store = Store1}),
             {next_state, leader, D2, [{next_event, internal, replicate}, heartbeat_timeout(D2)]}
     end.
 
@@ -622,7 +624,7 @@ apply_ae_entries(#append_entries{entries = Entries}, D) ->
         noop -> D;
         {append, New} ->
             {ok, Store1} = quod_ledger_store:append(D#d.store, New),
-            with_log(NewLog, D#d{store = Store1});
+            grow_onto(NewLog, New, D#d{store = Store1});   %% reuse truncate_append's NewLog
         {truncate_append, I, New} ->
             {ok, Store1} = quod_ledger_store:truncate_from(D#d.store, I),
             {ok, Store2} = quod_ledger_store:append(Store1, New),
@@ -887,7 +889,7 @@ admit_nonvoter(J, Op, D) ->
     I  = last_log_index(D) + 1,
     E  = #entry{index = I, term = D#d.cur_term, kind = config, data = Op},
     {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
-    D1 = with_log(D#d.log ++ [E],
+    D1 = grow_log([E],
                   D#d{store = Store1,
                       %% J is now a member ⇒ covered by membership in link_allowed; drop it from
                       %% pending_joiners so the anti-flood table only holds not-yet-admitted joiners.
@@ -919,7 +921,7 @@ append_promote(Peer, D) ->
     I  = last_log_index(D) + 1,
     E  = #entry{index = I, term = D#d.cur_term, kind = config, data = {promote, Peer}},
     {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),
-    D1 = with_log(D#d.log ++ [E],
+    D1 = grow_log([E],
                   D#d{store = Store1,
                       pending_joiners = maps:remove(Peer, D#d.pending_joiners)}),
     logger:info("quod[~s]: promoted ~p to voter (committee ~p)", [D#d.ns, Peer, derive_committee(D1)]),
@@ -956,7 +958,7 @@ handle_client_append(From, Change, D) ->
             I = last_log_index(D) + 1,
             E = #entry{index = I, term = D#d.cur_term, kind = block, data = Change},
             {ok, Store1} = quod_ledger_store:append(D#d.store, [E]),   %% DURABLE before counting own log
-            D1 = with_log(D#d.log ++ [E],
+            D1 = grow_log([E],
                           D#d{store = Store1, appends = D#d.appends + 1,
                               pending = (D#d.pending)#{I => From}}),
             %% From is replied {ok, I} from the commit step (1-voter commits here; multi-voter
@@ -1256,14 +1258,37 @@ drop_conn_by_pid(LinkPid, D = #d{conns = Conns}) ->
 %%% log + committee helpers
 %%%===================================================================
 
-%% Replace #d.log and refresh the cached tail (index/term) in one place, so every
-%% last_log_index/last_log_term read is O(1). All log mutations MUST go through this.
+%% The log's derived caches — tail (index/term) + committee/learner sets — are kept O(1) to
+%% read (quorum/voter_peers/repl_peers fire several times per raft message). Two updaters, both
+%% funnelling through the SAME per-entry delta (apply_cfg_committee/apply_cfg_learners) so they
+%% can never disagree:
+%%   * grow_log/2 — APPEND entries, applying each one's membership delta INCREMENTALLY. The hot
+%%     path: a content assert/retract is a `block` entry whose delta is a no-op, so an ordinary
+%%     KB write never folds the committee — only a rare `config` entry touches it. O(|new|).
+%%   * with_log/2 — REPLACE the whole log and RE-FOLD the caches from scratch. Only the rare
+%%     non-append shapes: recovery/seed, truncation, committed_view. Correct-by-construction.
+%% with_log/2, grow_log/2 and committed_view/1 are the ONLY setters of #d.log. `committee` also
+%% depends on snap_cfg — safe because snap_cfg is set once at init immediately before a with_log;
+%% a future M3 snapshot-install that changes snap_cfg MUST likewise re-run with_log.
+tail_of([],  D) -> {D#d.snap_idx, D#d.snap_term};
+tail_of(Log, _) -> E = lists:last(Log), {E#entry.index, E#entry.term}.
+
 with_log(Log, D) ->
-    {LI, LT} = case Log of
-                   []  -> {D#d.snap_idx, D#d.snap_term};
-                   _   -> E = lists:last(Log), {E#entry.index, E#entry.term}
-               end,
-    D#d{log = Log, last_idx = LI, last_term = LT}.
+    {LI, LT} = tail_of(Log, D),
+    D#d{log = Log, last_idx = LI, last_term = LT,
+        committee = committee_of(D#d.snap_cfg, Log), learners = learners_of(Log)}.
+
+grow_log(New, D) -> grow_onto(D#d.log ++ New, New, D).
+
+%% Grow to an ALREADY-appended log (New = the just-appended suffix, Log = D#d.log ++ New).
+%% Lets a caller that already built `Log` (apply_ae's {append,New}, from truncate_append) skip
+%% a second `++` of the whole log. assert_caches still checks Log against a fresh fold.
+grow_onto(Log, New, D) ->
+    {LI, LT} = tail_of(Log, D),
+    assert_caches(
+      D#d{log = Log, last_idx = LI, last_term = LT,
+          committee = lists:foldl(fun apply_cfg_committee/2, D#d.committee, New),
+          learners  = lists:foldl(fun apply_cfg_learners/2,  D#d.learners,  New)}).
 
 last_log_index(#d{last_idx = LI})  -> LI.
 
@@ -1284,31 +1309,46 @@ term_at_or_zero(I, D) -> case term_at(I, D) of undefined -> 0; T -> T end.
 up_to_date(CandT, CandI, MyT, MyI) ->
     CandT > MyT orelse (CandT =:= MyT andalso CandI >= MyI).
 
-%% The VOTERS — the consensus quorum + election set. `{add}` seeds a founding voter,
-%% `{promote}` turns a learner into one, `{remove}` drops a member. `{add_learner}` does
-%% NOT add a voter. snap_cfg (the committee as of a snapshot) is voters-only.
-derive_committee(#d{snap_cfg = Base, log = Log}) ->
-    lists:foldl(fun(#entry{kind = config, data = {add, S}}, Acc)     -> [S | Acc -- [S]];
-                   (#entry{kind = config, data = {promote, S}}, Acc) -> [S | Acc -- [S]];
-                   (#entry{kind = config, data = {remove, S}}, Acc)  -> Acc -- [S];
-                   (_, Acc) -> Acc
-                end, Base, Log).
+%% VOTERS / LEARNERS — O(1) reads of the caches (maintained by grow_log/with_log).
+derive_committee(#d{committee = C}) -> C.
+derive_learners(#d{learners = L})   -> L.
 
-%% The LEARNERS — non-voting members the leader replicates to so they can catch up
-%% before promotion. `{add_learner}` admits one; `{promote}`/`{remove}` removes it from
-%% the learner set. Learners live only in the live log (snapshotting them is M3).
-%% Learners AND read-replicas — both are non-voting members the leader replicates to (so
-%% repl_peers feeds them + link_allowed admits them). The difference is only promotion:
-%% an {add_learner} has a learner_target and is promoted once caught up; an {add_replica} has
-%% none and stays a non-voting full-copy replica forever (learner_target/2 returns `none` for
-%% it, so maybe_promote_learner no-ops — no change to the promote gate).
-derive_learners(#d{log = Log}) ->
-    lists:foldl(fun(#entry{kind = config, data = {add_learner, S}}, Acc) -> [S | Acc -- [S]];
-                   (#entry{kind = config, data = {add_replica, S}}, Acc) -> [S | Acc -- [S]];
-                   (#entry{kind = config, data = {promote, S}}, Acc)     -> Acc -- [S];
-                   (#entry{kind = config, data = {remove, S}}, Acc)      -> Acc -- [S];
-                   (_, Acc) -> Acc
-                end, [], Log).
+%% The per-entry membership delta — THE single definition of how one config entry moves the
+%% voter/learner sets, used by BOTH grow_log (incremental) and committee_of/learners_of (bulk
+%% fold), so the two paths can never diverge. A non-config entry is a no-op — that is why an
+%% ordinary content append never disturbs the committee.
+%% VOTERS: `{add}` seeds a founding voter, `{promote}` turns a learner into one, `{remove}`
+%% drops a member; `{add_learner}` does NOT add a voter (snap_cfg, voters-only, seeds the fold).
+apply_cfg_committee(#entry{kind = config, data = {add, S}},     C) -> [S | C -- [S]];
+apply_cfg_committee(#entry{kind = config, data = {promote, S}}, C) -> [S | C -- [S]];
+apply_cfg_committee(#entry{kind = config, data = {remove, S}},  C) -> C -- [S];
+apply_cfg_committee(_, C) -> C.
+
+%% LEARNERS: non-voting members the leader replicates to so they catch up before promotion.
+%% `{add_learner}` admits one; `{promote}`/`{remove}` removes it. `{add_replica}` is a PERMANENT
+%% non-voting full-copy replica (fed like a learner, never promoted — learner_target/2 returns
+%% `none` for it). Learners live only in the live log (snapshotting them is M3).
+apply_cfg_learners(#entry{kind = config, data = {add_learner, S}}, L) -> [S | L -- [S]];
+apply_cfg_learners(#entry{kind = config, data = {add_replica, S}}, L) -> [S | L -- [S]];
+apply_cfg_learners(#entry{kind = config, data = {promote, S}},     L) -> L -- [S];
+apply_cfg_learners(#entry{kind = config, data = {remove, S}},      L) -> L -- [S];
+apply_cfg_learners(_, L) -> L.
+
+%% Bulk folds over the same per-entry deltas — the recovery/seed/truncate path + the TEST guard.
+committee_of(Base, Log) -> lists:foldl(fun apply_cfg_committee/2, Base, Log).
+learners_of(Log)        -> lists:foldl(fun apply_cfg_learners/2, [], Log).
+
+-ifdef(TEST).
+%% Invariant: the incrementally-maintained caches ALWAYS equal a fresh bulk fold of
+%% (snap_cfg, log). Any path that grows the log without applying the right delta trips this in
+%% CI. Set-equality via sort (the `[S | Acc -- [S]]` dedup can reorder). Compiled out of prod.
+assert_caches(D) ->
+    true = lists:sort(D#d.committee) =:= lists:sort(committee_of(D#d.snap_cfg, D#d.log)),
+    true = lists:sort(D#d.learners)  =:= lists:sort(learners_of(D#d.log)),
+    D.
+-else.
+assert_caches(D) -> D.
+-endif.
 
 %% A #d view whose log is only the COMMITTED (locked-in) prefix — entries at or below
 %% commit_index. snap_cfg is committed by construction, so derive_committee/derive_learners over
@@ -1316,7 +1356,11 @@ derive_learners(#d{log = Log}) ->
 %% truncated, so a joiner that appears here is permanently in — the safe point to stop asking
 %% (join_tick) and the boundary past which it ignores join_replies.
 committed_view(D = #d{log = Log, commit_index = CI}) ->
-    D#d{log = [E || E <- Log, E#entry.index =< CI]}.
+    %% via with_log so the committee/learner (and tail) caches match the filtered log — this
+    %% throwaway view is only fed to is_member, and with_log is the one place that keeps them
+    %% consistent (a direct `D#d{log=...}` would leave the cached committee reflecting the
+    %% FULL log, wrongly reporting a not-yet-committed joiner as a member here).
+    with_log([E || E <- Log, E#entry.index =< CI], D).
 
 %% The catch-up index a pending learner must reach before it can be promoted = the index of
 %% its {add_learner} entry, cleared by a later {promote}/{remove}. DERIVED from the log (not
@@ -1400,7 +1444,7 @@ mk_d(Opts) ->
            commit_index = maps:get(commit_index, Opts, 0),
            leader_id    = maps:get(leader_id, Opts, none),
            match_index  = maps:get(match_index, Opts, #{})},
-    with_log(maps:get(log, Opts, []), D).   %% sets log + the cached tail (last_idx/last_term)
+    with_log(maps:get(log, Opts, []), D).   %% sets log + the caches (tail + committee/learners)
 
 commit_index(#d{commit_index = C}) -> C.
 -endif.

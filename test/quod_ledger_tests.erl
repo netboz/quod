@@ -36,6 +36,30 @@ derive_committee_add_remove_test() ->
     D = quod_ledger:mk_d(#{snap_cfg => [], log => Log}),
     ?assertEqual([?A, ?C], lists:sort(quod_ledger:derive_committee(D))).
 
+%% grow_log maintains the committee/learner caches INCREMENTALLY (block entries no-op; only
+%% config entries move the sets). The result must equal a fresh fold — and grow_log's own
+%% assert_caches guard (TEST builds) checks that on EVERY call, so this passing also proves the
+%% guard held for each step. Exercises the single-append path and the batch (apply_ae) path.
+grow_log_incremental_test() ->
+    Cfg = fun(I, Op) -> #entry{index = I, term = 1, kind = config, data = Op} end,
+    Seq = [ent(1, 1),                    %% content block — committee unchanged
+           Cfg(2, {add, ?A}),
+           Cfg(3, {add_learner, ?B}),
+           Cfg(4, {promote, ?B}),        %% B: learner -> voter (moves between both sets)
+           ent(5, 1),                    %% another block
+           Cfg(6, {add, ?C}),
+           Cfg(7, {remove, ?A})],        %% end: voters {B,C}, learners {}
+    %% single-append path (one grow_log per entry)
+    D1 = lists:foldl(fun(E, D) -> quod_ledger:grow_log([E], D) end,
+                     quod_ledger:mk_d(#{snap_cfg => []}), Seq),
+    ?assertEqual([?B, ?C], lists:sort(quod_ledger:derive_committee(D1))),
+    ?assertEqual([],       quod_ledger:derive_learners(D1)),
+    %% batch path (whole sequence in one grow_log) — same result
+    D2 = quod_ledger:grow_log(Seq, quod_ledger:mk_d(#{snap_cfg => []})),
+    ?assertEqual(lists:sort(quod_ledger:derive_committee(D1)),
+                 lists:sort(quod_ledger:derive_committee(D2))),
+    ?assertEqual(quod_ledger:derive_learners(D1), quod_ledger:derive_learners(D2)).
+
 %%%===================================================================
 %%% election restriction (up_to_date/4)
 %%%===================================================================

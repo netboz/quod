@@ -57,7 +57,7 @@ here would steal/own the wrong stream.
          derive_learners/1, learner_target/2, voter_peers/1, repl_peers/1, cfg_uncommitted/1,
          has_current_term_commit/1, valid_node_id/1, committed_view/1, evict_one/1, up_to_date/4,
          advance_commit/1, truncate_append/2, encode/1, decode/1, mk_d/1, commit_index/1,
-         pre_vote_grant/4, grow_log/2]).
+         pre_vote_grant/4, grow_log/2, entry_at/2, log_from/3]).
 -endif.
 
 -define(DEFAULTS,
@@ -1064,15 +1064,29 @@ replicate_to(P, D) ->
 %% never exercises the chunk path (which is reserved for M3 snapshots), so a catch-up of
 %% many entries — or a steady stream of fact-bearing blocks — can't build an oversized
 %% AE that would otherwise be chunked and dropped at the receiver (stalling replication).
-log_from(From, Max, D = #d{log = Log, snap_idx = SI}) ->
+log_from(From, Max, D) ->
     case From > last_log_index(D) of
         true  -> [];   %% caught-up peer / heartbeat: no entries, no traversal (the common case)
-        false ->
-            %% the log is contiguous snap_idx+1..N, so skip straight to From rather than
-            %% scanning from the head, then cap by count and by encoded bytes.
-            Window = lists:sublist(nthtail_safe(From - (SI + 1), Log), Max),
-            take_under_bytes(Window, ?AE_BATCH_BYTES)
+        false -> take_under_bytes(window_at(From, Max, D), ?AE_BATCH_BYTES)
     end.
+
+%% Up to Max entries starting at From: sliced from the in-memory tail if From is within it, else
+%% read from the durable store (a lagging follower whose next_index predates the tail). The log is
+%% contiguous mem_floor..N, so skip straight to From rather than scanning from the head; the caller
+%% then caps by encoded bytes.
+window_at(From, Max, D = #d{log = Log}) ->
+    case From >= mem_floor(D) of
+        true  -> lists:sublist(nthtail_safe(From - mem_floor(D), Log), Max);
+        false -> store_range(D#d.store, From, min(From + Max - 1, last_log_index(D)))
+    end.
+
+store_range(undefined, _From, _To) -> [];
+store_range(Store, From, To) -> {ok, Es} = quod_ledger_store:read_range(Store, From, To), Es.
+
+%% Lowest index currently held in `log` (snap_idx+1 when the log is empty). Today the log is the
+%% whole snap_idx+1..N, so this is snap_idx+1; in the tip-only model it becomes commit_index+1.
+mem_floor(#d{log = [#entry{index = I} | _]}) -> I;
+mem_floor(#d{snap_idx = SI})                 -> SI + 1.
 
 %% lists:nthtail that returns [] instead of crashing if N exceeds the list length.
 nthtail_safe(N, L) when N =< 0 -> L;
@@ -1294,15 +1308,33 @@ last_log_index(#d{last_idx = LI})  -> LI.
 
 last_log_term(#d{last_term = LT}) -> LT.
 
-entry_at(I, #d{log = Log}) -> lists:keyfind(I, #entry.index, Log).
+%% Entry at index I: the in-memory tail first, else the durable store — below the tail an entry
+%% lives only on disk (once the committed prefix is dropped from `log`). `false` = absent
+%% everywhere. Pure unit tests keep the whole log in memory, so `store = undefined` is never hit.
+entry_at(I, #d{log = Log, store = Store}) ->
+    case lists:keyfind(I, #entry.index, Log) of
+        #entry{} = E -> E;
+        false        -> store_entry_at(Store, I)
+    end.
+
+store_entry_at(undefined, _I) -> false;
+store_entry_at(Store, I) ->
+    case quod_ledger_store:read_at(Store, I) of
+        {ok, E}   -> E;
+        not_found -> false
+    end.
 
 term_at(0, _D)                              -> 0;
 term_at(I, #d{snap_idx = I, snap_term = T}) -> T;
-term_at(I, D) ->
-    case entry_at(I, D) of
+term_at(I, #d{log = Log, store = Store}) ->
+    %% memory tail, else the store's index map — a term lookup, NOT a file read.
+    case lists:keyfind(I, #entry.index, Log) of
         #entry{term = T} -> T;
-        false            -> undefined
+        false            -> store_term_at(Store, I)
     end.
+
+store_term_at(undefined, _I) -> undefined;
+store_term_at(Store, I)      -> quod_ledger_store:term_at(Store, I).
 
 term_at_or_zero(I, D) -> case term_at(I, D) of undefined -> 0; T -> T end.
 
@@ -1436,7 +1468,8 @@ stats_map(State, D) ->
 %% fields the pure functions read are settable; the rest take their record defaults.
 mk_d(Opts) ->
     Self = maps:get(self, Opts, {"h", 0}),
-    D = #d{ns = <<"t">>, self = Self, cfg = ?DEFAULTS, chan = <<>>, store = undefined,
+    D = #d{ns = <<"t">>, self = Self, cfg = ?DEFAULTS, chan = <<>>,
+           store        = maps:get(store, Opts, undefined),
            cur_term     = maps:get(cur_term, Opts, 0),
            snap_idx     = maps:get(snap_idx, Opts, 0),
            snap_term    = maps:get(snap_term, Opts, 0),

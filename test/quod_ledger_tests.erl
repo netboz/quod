@@ -162,6 +162,37 @@ truncate_append_heartbeat_test() ->
     ?assertEqual({[ent(1, 1)], noop}, quod_ledger:truncate_append(D, [])).
 
 %%%===================================================================
+%%% disk-fallback reads: entry_at / term_at / log_from route below the
+%%% in-memory tail to the durable store (a real quod_ledger_store on disk)
+%%%===================================================================
+
+disk_fallback_reads_test() ->
+    Dir = filename:join("/tmp", "quod_ledger_disk_" ++ integer_to_list(erlang:unique_integer([positive]))),
+    {ok, S0} = quod_ledger_store:open(<<"t">>, Dir),
+    {ok, S1} = quod_ledger_store:append(S0, [ent(I, 1) || I <- lists:seq(1, 5)]),
+    try
+        %% #d holds ONLY the tip (indices 4,5) in memory; 1..3 live solely on disk.
+        D = quod_ledger:mk_d(#{log => [ent(4, 1), ent(5, 1)], snap_idx => 0,
+                               commit_index => 3, store => S1}),
+        %% entry_at: memory for the tail, the store below it, false when absent everywhere.
+        ?assertEqual(ent(5, 1), quod_ledger:entry_at(5, D)),
+        ?assertEqual(ent(2, 1), quod_ledger:entry_at(2, D)),
+        ?assertEqual(false,     quod_ledger:entry_at(99, D)),
+        %% term_at: memory, then the store's index map (no file read), then undefined.
+        ?assertEqual(1,         quod_ledger:term_at(5, D)),
+        ?assertEqual(1,         quod_ledger:term_at(2, D)),
+        ?assertEqual(undefined, quod_ledger:term_at(99, D)),
+        %% log_from: a From within the tail slices memory; a From below it reads the store.
+        ?assertEqual([4, 5],          idxs(quod_ledger:log_from(4, 10, D))),
+        ?assertEqual([1, 2, 3, 4, 5], idxs(quod_ledger:log_from(1, 10, D)))
+    after
+        quod_ledger_store:close(S1),
+        _ = os:cmd("rm -rf " ++ Dir)
+    end.
+
+idxs(Entries) -> [I || #entry{index = I} <- Entries].
+
+%%%===================================================================
 %%% commit rule + Figure-8 current-term guard (advance_commit/1)
 %%%===================================================================
 

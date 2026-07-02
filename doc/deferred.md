@@ -72,6 +72,22 @@ stages, not carried forward:
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive).
 
+**Stage 2b requirements carried from the 2a review** (all unreachable at N=1 — they bite only once the
+async `{log, Ns}` transport lands, but Stage 2b MUST implement them as it wires it):
+
+- **Contiguous commit-apply.** Commit certs can arrive out of slot order across messages; buffer them so
+  `commit_block` never persists a gap (`quod_ledger_store:append` enforces contiguity → a gap crashes the
+  gen_statem). `detect_commits` already emits slot-ordered events *within* one `settle`; the cross-message
+  case is the open half.
+- **Proposed-slot latch.** Derive the next slot from the in-flight tip, not `S#s.slot` (committed height),
+  and de-collide `#s.pending` — else two concurrent appends reuse one slot: the leader equivocates (two
+  support shares for one slot) and the first parked caller's `From` is overwritten and hangs to timeout.
+- **`may_commit/2` guard.** Wire it with the complaint path — a validator must not issue a commit share
+  for a slot it has complained (the load-bearing commit-vs-complaint mutual exclusion).
+- **Implicit predecessor commit** (spec §2.3.3) — committing a block implicitly commits its whole
+  predecessor prefix; needed once 2b pipelines (a slot can commit via a successor's commit cert).
+- **3-node loopback CT** (`simplex_SUITE`) — needs OS-peer QUIC like the deleted `raft_safety_SUITE`.
+
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.

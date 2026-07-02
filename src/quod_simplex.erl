@@ -23,11 +23,13 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 > #### Status {: .info }
 >
-> **Stage 1 (here):** the pure consensus core (quorum math, share signing, certificate
-> formation/verification, the commit guards) **plus** the per-namespace `gen_statem` for the
-> **single-validator (N=1)** case — propose → commit (the sole validator IS the `⅔` quorum) → apply →
-> persist, single-node parity with the former Raft founder. **Stage 2 (next):** the real `⅔` share/cert
-> collection, the `Δ_timeout` complaint timer, and the `quod_link` transport for a multi-node committee.
+> **Stage 2a (here):** the pure consensus core (quorum math, share signing, certificate
+> formation/verification, the commit guards), the **consensus engine** (§2.3 certificate pool + complete
+> block tree), and the per-namespace `gen_statem` that drives every commit through the engine. At the
+> **single validator (N=1)** case each `⅔` quorum self-satisfies, so an append commits synchronously:
+> propose → support cert (notarize) → commit cert → apply → persist. **Stage 2b (next):** the `{log, Ns}`
+> transport for a multi-node committee, the `Δ_timeout` complaint timer + the `may_commit` guard, and
+> epoch validators from `peer_admitted`.
 """.
 
 -include("quod_ledger.hrl").
@@ -44,6 +46,15 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, append/2, rebuild/1, status/1, committee/1, stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
+
+-ifdef(TEST).
+%% consensus-engine surface driven by eunit (the #eng record is otherwise private)
+-export([eng_new/2, eng_offer/2, eng_prune/2, leader/2, eng_tree/1, eng_committed/1]).
+-endif.
+
+%% A node's SIGNING identity: the subset of `t:quod_identity:identity/0` consensus needs (pubkey +
+%% private key), without the TLS cert. `make_share/4` signs with `key`; the share's signer is `pubkey`.
+-type signer() :: #{pubkey := node_id(), key := quod_identity:key_term()}.
 
 %%%===================================================================
 %%% quorum
@@ -85,11 +96,10 @@ tag(complaint) -> $X.
 %%% shares
 %%%===================================================================
 
--doc "Build and Ed25519-sign one share of `Kind` for `Slot`/`BlockHash` with this node's identity.".
--spec make_share(support | commit | complaint, slot(), binary() | none, quod_identity:identity()) ->
-          #share{}.
-make_share(Kind, Slot, BlockHash, #{pubkey := Pub} = Id) ->
-    Sig = quod_identity:sign(share_bytes(Kind, Slot, BlockHash), Id),
+-doc "Build and Ed25519-sign one share of `Kind` for `Slot`/`BlockHash` with this node's signing key.".
+-spec make_share(support | commit | complaint, slot(), binary() | none, signer()) -> #share{}.
+make_share(Kind, Slot, BlockHash, #{pubkey := Pub, key := Key}) ->
+    Sig = quod_identity:sign(share_bytes(Kind, Slot, BlockHash), Key),
     #share{kind = Kind, slot = Slot, block_hash = BlockHash, signer = Pub, sig = Sig}.
 
 -doc """
@@ -193,30 +203,198 @@ may_complain(Slot, CommittedSlots) ->
     not lists:member(Slot, CommittedSlots).
 
 %%%===================================================================
-%%% gen_statem — the per-namespace consensus process (Stage 1: N=1)
+%%% consensus engine — certificate pool + complete block tree (§2.3)
 %%%===================================================================
 %%
-%% One process per namespace, one logical state (`running`) — Simplex validators are
-%% symmetric (no follower/candidate/leader roles; "leader for slot v" is a function of the
-%% slot, not a process state). At N=1 the sole validator IS the quorum, so a block commits
-%% the instant it is durable: no shares, certs, complaint timer, or transport yet — those
-%% are Stage 2. The durable block list lives in `quod_ledger_store`; this process keeps only
-%% the derived height + validator set, never the blocks (KB = projection, store = archive).
+%% One node's local protocol view, threaded functionally by the gen_statem. It ingests proposed
+%% blocks, signature shares, and certificates; maintains the `⅔`-certificate **pool** (§2.3.1) and the
+%% complete **block tree** (§2.3.2); and emits the events the driver acts on. Pure + deterministic — no
+%% clock, no transport (the gen_statem owns those). Stage 2a uses **direct dispersal**: a proposal
+%% carries the whole block, so a block joins the tree on (support cert + parent present) — no erasure
+%% fragment decode (that is Stage 4). The pool's distinct-signer `⅔` check reuses `form_cert/5`.
+%%
+%% Events: `{broadcast, Cert}` (a cert we just formed or first learned — re-disseminate),
+%% `{notarized, Block}` (a block joined the tree), `{committed, Slot, Block}` (a block is final → apply).
+
+-record(eng, {validators   :: [node_id()],
+              base     = 0   :: slot(),                                %% durable committed floor: slots =<
+                                                                       %% base are final (in the store) and
+                                                                       %% pruned from the maps below; a
+                                                                       %% commit advances it (eng_prune/2)
+              blocks   = #{} :: #{binary() => #block{}},               %% block_hash => proposed block
+              shares   = #{} :: #{share_key() => #{node_id() => #share{}}},
+              certs    = #{} :: #{share_key() => #cert{}},
+              tree     = #{} :: #{slot() => #block{}},                 %% notarized blocks (in-flight window)
+              committed = #{} :: #{slot() => #block{}}}).              %% committed (final) in-flight blocks
+
+-type share_key() :: {support | commit | complaint, slot(), binary() | none}.
+-type eng_event() :: {broadcast, #cert{}} | {notarized, #block{}} | {committed, slot(), #block{}}.
+
+-doc """
+A fresh engine for a validator set (the epoch-frozen committee), with `Base` = the durable committed
+floor (the last slot already final in the store). Blocks `=< Base` are treated as committed history so a
+new proposal's parent resolves without the engine holding the whole chain.
+""".
+-spec eng_new([node_id()], slot()) -> #eng{}.
+eng_new(Validators, Base) ->
+    #eng{validators = Validators, base = Base}.
+
+-doc """
+Offer one protocol object to the engine; returns the updated engine + the events it produced. This is
+the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a peer's), or a relayed
+`{cert, C}`. Invalid shares/certs (bad signature, non-validator signer, malformed) are dropped.
+""".
+-spec eng_offer({block, #block{}} | {share, #share{}} | {cert, #cert{}}, #eng{}) ->
+          {#eng{}, [eng_event()]}.
+%% Anything for an already-final slot (`=< base`) is stale — a replay or a peer relaying an old cert —
+%% and must be dropped: it is pruned from the maps, so re-admitting it would re-notarize/re-commit a
+%% committed slot (and drive a non-contiguous store append).
+eng_offer({block, #block{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
+eng_offer({share, #share{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
+eng_offer({cert,  #cert{slot = Sl}},  #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
+eng_offer({block, #block{} = B}, Eng) ->
+    settle(Eng#eng{blocks = (Eng#eng.blocks)#{block_hash(B) => B}});
+eng_offer({share, #share{signer = Signer} = Sh}, Eng) ->
+    case verify_share(Sh) andalso lists:member(Signer, Eng#eng.validators) of
+        false -> {Eng, []};                       %% junk / outsider: ignore
+        true  -> ingest_share(Sh, Eng)
+    end;
+eng_offer({cert, #cert{} = C}, Eng) ->
+    Key = cert_key(C),
+    case (not maps:is_key(Key, Eng#eng.certs)) andalso verify_cert(C, Eng#eng.validators) of
+        false -> settle(Eng);                     %% already have it, or invalid
+        true  -> {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => C}}),
+                 {Eng1, [{broadcast, C} | Evs]}   %% relay a newly-learned cert once (§2.3.1)
+    end.
+
+%% Add a verified share to its (kind, slot, block) bucket; if that reaches the `⅔` quorum for the first
+%% time, form the cert and re-disseminate it, then settle the tree/commits.
+ingest_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh, Eng) ->
+    Key    = {K, Sl, BH},
+    Bucket = maps:get(Key, Eng#eng.shares, #{}),
+    Eng1   = Eng#eng{shares = (Eng#eng.shares)#{Key => Bucket#{Signer => Sh}}},
+    case maps:is_key(Key, Eng1#eng.certs) of
+        true  -> settle(Eng1);                    %% cert already formed for this key
+        false ->
+            Shares = maps:values(maps:get(Key, Eng1#eng.shares)),
+            case form_cert(K, Sl, BH, Shares, Eng1#eng.validators) of
+                {ok, Cert}            -> {Eng2, Evs} = settle(Eng1#eng{certs = (Eng1#eng.certs)#{Key => Cert}}),
+                                         {Eng2, [{broadcast, Cert} | Evs]};
+                {error, insufficient} -> {Eng1, []}
+            end
+    end.
+
+cert_key(#cert{kind = K, slot = Sl, block_hash = BH}) -> {K, Sl, BH}.
+
+%% Recompute the tree then the commits to a fixpoint — a newly-notarized block can enable its child's
+%% notarization — returning the newly-notarized + newly-committed events in order.
+settle(Eng) -> settle(Eng, []).
+settle(Eng, Acc) ->
+    case grow_tree(Eng) of
+        {Eng1, [_ | _] = New} -> settle(Eng1, Acc ++ New);
+        {Eng1, []}            -> {Eng2, Commits} = detect_commits(Eng1),
+                                 {Eng2, Acc ++ Commits}
+    end.
+
+%% Add every block that now has a support cert AND whose parent is in the tree (or is genesis) AND
+%% whose payload we hold — one pass (settle/2 loops it to a fixpoint).
+grow_tree(Eng = #eng{certs = Certs, tree = Tree}) ->
+    Ready = lists:filtermap(
+              fun({{support, Sl, BH}, _Cert}) ->
+                      case (not maps:is_key(Sl, Tree)) andalso block_for(BH, Eng) of
+                          #block{} = B -> case parent_ok(B, Eng) of true -> {true, B}; false -> false end;
+                          _            -> false
+                      end;
+                 (_) -> false
+              end, maps:to_list(Certs)),
+    case lists:keysort(#block.slot, Ready) of   %% slot-ascending, so parents are handed over before children
+        [] -> {Eng, []};
+        Sorted -> Tree1 = lists:foldl(fun(B, T) -> T#{B#block.slot => B} end, Tree, Sorted),
+                  {Eng#eng{tree = Tree1}, [{notarized, B} || B <- Sorted]}
+    end.
+
+%% A block is committed once it is in the tree AND the pool has a commit cert for it (block-bound:
+%% the commit cert names this block, so the proof is self-contained). Emitted in slot order so the
+%% driver's contiguous store append never sees a gap within a single settle.
+detect_commits(Eng = #eng{certs = Certs, tree = Tree, committed = Committed}) ->
+    New = lists:sort(lists:filtermap(
+            fun({{commit, Sl, BH}, _Cert}) ->
+                    case (not maps:is_key(Sl, Committed)) andalso maps:get(Sl, Tree, undefined) of
+                        #block{} = B -> case block_hash(B) =:= BH of true -> {true, {Sl, B}}; false -> false end;
+                        _            -> false
+                    end;
+               (_) -> false
+            end, maps:to_list(Certs))),
+    Committed1 = lists:foldl(fun({Sl, B}, C) -> C#{Sl => B} end, Committed, New),
+    {Eng#eng{committed = Committed1}, [{committed, Sl, B} || {Sl, B} <- New]}.
+
+block_for(BH, #eng{blocks = Blocks}) -> maps:get(BH, Blocks, undefined).
+
+%% A block may join the tree once its parent is already committed history (`=< base`, includes genesis
+%% at 0) or is itself notarized in the in-flight tree.
+parent_ok(#block{parent = P}, #eng{base = Base, tree = Tree}) ->
+    P =< Base orelse maps:is_key(P, Tree).
+
+-doc """
+Advance the engine past a durably-committed slot: raise `base` and DROP every block/share/cert/tree/
+committed entry at or below `Committed` — those slots are now final history in the store, so keeping
+them would grow the maps without bound (and a later proposal's parent resolves via `base`, not the
+pruned tree). Called by the driver right after it persists a committed block.
+""".
+-spec eng_prune(slot(), #eng{}) -> #eng{}.
+eng_prune(Committed, Eng = #eng{base = Base}) ->
+    Above = fun(Sl) -> Sl > Committed end,
+    Eng#eng{base      = max(Committed, Base),
+            blocks    = maps:filter(fun(_BH, #block{slot = Sl}) -> Above(Sl) end, Eng#eng.blocks),
+            shares    = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.shares),
+            certs     = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.certs),
+            tree      = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree),
+            committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed)}.
+
+-doc """
+The deterministic leader (proposer) for a slot. Stage 2a uses a **fixed** leader — the lowest-pubkey
+validator — so the write path stays simple (propose on the leader, redirect elsewhere). Per-slot
+rotation (`slot rem N`) + the forwarding it needs land in Stage 2b with the complaint timer.
+""".
+-spec leader(slot(), [node_id()]) -> node_id().
+leader(_Slot, Validators) -> hd(lists:sort(Validators)).
+
+-ifdef(TEST).
+eng_tree(#eng{tree = T})           -> T.           %% slot => notarized #block{}
+eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
+-endif.
+
+%%%===================================================================
+%%% gen_statem — the per-namespace consensus process
+%%%===================================================================
+%%
+%% One process per namespace, one logical state (`running`) — Simplex validators are symmetric (no
+%% follower/candidate/leader roles; "leader for slot v" is a function of the slot). Every commit runs
+%% through the consensus engine (§2.3 pool + tree): the leader proposes a block; validators sign support
+%% shares → a `⅔` support cert notarizes it → they sign commit shares → a `⅔` commit cert commits it →
+%% apply + persist. At N=1 the sole validator IS the `⅔` quorum, so each step self-satisfies instantly
+%% (the append commits synchronously). The durable block list lives in `quod_ledger_store`; this process
+%% keeps only the in-flight engine window + the derived height + validator set (KB = projection).
+%%
+%% Stage 2a (here): the engine drives commit for N=1 (unified path). The `{log, Ns}` transport for a
+%% multi-node committee, the complaint timer, and epoch validators are the following sub-increments.
 
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
-          committee    => [],          %% Stage 1 is single-validator; a non-empty committee is rejected (Stage 2)
+          committee    => [],          %% co-founders (a non-empty set = multi-validator, gated until 2b)
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
           data_dir     => undefined}).
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
+            id           :: signer() | undefined,    %% signing identity (pubkey + private key)
             store        :: quod_ledger_store:handle() | undefined,
+            eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
             validators   = [] :: [node_id()],        %% epoch-frozen committee (self-only at N=1)
-            slot         = 0  :: slot(),             %% height: index of the last block
-            committed    = 0  :: slot(),             %% highest committed slot (== slot at N=1; Stage 2
-                                                     %% lets it lag `slot` for not-yet-committed blocks)
+            slot         = 0  :: slot(),             %% height: index of the last committed block
+            committed    = 0  :: slot(),             %% highest committed slot (== slot: commits are in order)
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
+            pending  = #{} :: #{slot() => gen_statem:from()},  %% client appends parked until their commit
             prolog_ready = false :: boolean(),
             appends = 0  :: non_neg_integer(),
             commits = 0  :: non_neg_integer()}).
@@ -263,16 +441,31 @@ init({Ns, Config}) ->
     case valid_cfg(Config, Cfg) of
         {error, Reason} -> {stop, {bad_config, Reason}};
         ok ->
-            Self    = maps:get(node_id, Cfg),
-            DataDir = data_dir(Cfg),
-            {ok, Store} = quod_ledger_store:open(Ns, DataDir),
-            S0 = #s{ns = Ns, self = Self, store = Store},
-            %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
-            try load_or_bootstrap(S0, Cfg) of
-                S1 -> {ok, running, S1#s{committed = S1#s.slot, last_applied = 0}}
-            catch
-                throw:{genesis_failed, _} = Reason -> {stop, Reason}
+            case signing_key(Cfg) of
+                undefined -> {stop, {bad_config, no_signing_key}};   %% a consensus node must be able to sign
+                Key       -> init_store(Ns, Cfg, #{pubkey => maps:get(node_id, Cfg), key => Key})
             end
+    end.
+
+init_store(Ns, Cfg, Id) ->
+    {ok, Store} = quod_ledger_store:open(Ns, data_dir(Cfg)),
+    S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store},
+    %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
+    try load_or_bootstrap(S0, Cfg) of
+        S1 ->
+            Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
+            Eng = eng_new(S1#s.validators, Committed),
+            {ok, running, S1#s{committed = Committed, last_applied = 0, eng = Eng}}
+    catch
+        throw:{genesis_failed, _} = Reason -> {stop, Reason}
+    end.
+
+%% The private key this node signs shares with: from the config (tests inject it) or the app env
+%% (production — `quod_app:apply_identity` sets `identity_key`). `undefined` ⇒ a misconfigured node.
+signing_key(Cfg) ->
+    case maps:get(identity, Cfg, undefined) of
+        #{key := K} -> K;
+        _           -> application:get_env(quod, identity_key, undefined)
     end.
 
 %% Restart reloads durable state (re-fold the committee from the on-disk config entries + take the
@@ -334,28 +527,74 @@ terminate(_Reason, _State, #s{store = Store}) ->
     ok.
 
 %%%===================================================================
-%%% append → commit → apply
+%%% append (propose) → engine → commit → apply
 %%%===================================================================
 
-handle_append(From, Change, S = #s{store = Store}) ->
-    I  = S#s.slot + 1,
-    E  = #entry{index = I, term = 0, kind = block, data = Change},
-    {ok, Store1} = quod_ledger_store:append(Store, [E]),   %% durable before we ack the commit
-    %% N=1: the sole validator is the `⅔` quorum, so the block commits on its own fsync. Ack {ok, I}
-    %% at commit; the OCC verdict still reaches the prove-client via quod_prolog's own park/release.
-    S1 = apply_live(I, Change, S#s{store = Store1, slot = I, committed = I, appends = S#s.appends + 1}),
-    {keep_state, maybe_mark_ready(S1), [{reply, From, {ok, I}}]}.
+%% A client change enters consensus here. Only the slot's leader may propose; anyone else redirects.
+%% The leader builds the block, feeds it + its own support share to the engine, and parks the caller
+%% until that block commits. At N=1 the engine reaches commit synchronously, so the ack is immediate;
+%% with peers (2b) the commit cert arrives later and `commit_block/3` acks then.
+handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl, id = Id}) ->
+    Next = Sl + 1,
+    case leader(Next, Vs) of
+        Self ->
+            Block = #block{slot = Next, parent = Sl, payload = [Change]},
+            S1    = S#s{pending = (S#s.pending)#{Next => From}, appends = S#s.appends + 1},
+            %% propose: offer the block + our own support share (2b also broadcasts both to peers)
+            {keep_state, engine_step([{block, Block},
+                                      {share, make_share(support, Next, block_hash(Block), Id)}], S1)};
+        Leader ->
+            {keep_state, S, [{reply, From, {error, not_in_charge, Leader}}]}
+    end.
+
+%% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
+%% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
+engine_step(Items, S) ->
+    {Eng1, Events} = lists:foldl(fun(It, {E, Evs}) ->
+                                     {E1, Es} = eng_offer(It, E),
+                                     {E1, Evs ++ Es}
+                                 end, {S#s.eng, []}, Items),
+    apply_events(Events, S#s{eng = Eng1}).
+
+apply_events([], S)             -> S;
+apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
+
+%% N=1 has no peers, so a formed cert has nowhere to go; the `{log, Ns}` broadcast lands in 2b.
+apply_event({broadcast, _Cert}, S) ->
+    S;
+%% A block was notarized: sign + feed our commit share (2a has no complaint path, so we always commit).
+apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id}) ->
+    engine_step([{share, make_share(commit, Sl, block_hash(Block), Id)}], S);
+%% A block is final: persist + apply + advance the height + ack the parked caller.
+apply_event({committed, Slot, Block}, S) ->
+    commit_block(Slot, Block, S).
+
+%% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
+%% and reply `{ok, Slot}` to the parked caller. Payload is a single change in 2a.
+commit_block(Slot, #block{payload = [Change]}, S = #s{store = Store}) ->
+    E = #entry{index = Slot, term = 0, kind = block, data = Change},
+    {ok, Store1} = quod_ledger_store:append(Store, [E]),
+    S1 = S#s{store = Store1, slot = Slot, committed = Slot, commits = S#s.commits + 1,
+             eng = eng_prune(Slot, S#s.eng)},   %% this slot is durable now — drop it from the in-flight pool
+    maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
+
+%% Reply `{ok, Slot}` to the caller parked on this slot (only the proposing node has one).
+ack_pending(Slot, S = #s{pending = P}) ->
+    case maps:take(Slot, P) of
+        {From, P1} -> _ = gen_statem:reply(From, {ok, Slot}), S#s{pending = P1};
+        error      -> S
+    end.
 
 %% Apply a freshly-committed block using the IN-HAND payload — no read-back of what we just wrote.
-%% Only when quod_prolog is up AND we are contiguous (last_applied == I-1); otherwise leave it and
+%% Only when quod_prolog is up AND we are contiguous (last_applied == Slot-1); otherwise leave it and
 %% let the rebuild handshake re-drive the gap from the store (apply_committed/1).
-apply_live(I, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= I - 1 ->
+apply_live(Slot, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
-        _         -> _ = safe_apply_block(Ns, I, Change),   %% async cast (breaks the append<->apply deadlock)
-                     S#s{last_applied = I, commits = S#s.commits + 1}
+        _         -> _ = safe_apply_block(Ns, Slot, Change),   %% async cast (breaks the append<->apply deadlock)
+                     S#s{last_applied = Slot}
     end;
-apply_live(_I, _Change, S) -> S.
+apply_live(_Slot, _Change, S) -> S.
 
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — reading each from the store
 %% (the rebuild path; this process keeps no in-memory log). Deferred if quod_prolog is not up yet.
@@ -372,7 +611,7 @@ apply_loop(S = #s{ns = Ns, store = Store, last_applied = LA}) ->
     I = LA + 1,
     {ok, #entry{data = Data}} = quod_ledger_store:read_at(Store, I),
     _ = safe_apply_block(Ns, I, Data),
-    apply_loop(S#s{last_applied = I, commits = S#s.commits + 1}).
+    apply_loop(S#s{last_applied = I}).   %% re-applying already-counted commits (rebuild) — don't recount
 
 safe_apply_block(Ns, I, Data) ->
     try quod_prolog:apply_block(Ns, I, Data) catch _:_ -> ok end.
@@ -399,9 +638,9 @@ committee_of(Base, Log) ->
                    (_, V) -> V
                 end, Base, Log).
 
-%% Stage 1 is strictly single-validator: a non-empty `committee` (co-founders) needs the multi-node
-%% consensus that lands in Stage 2, so it is rejected here rather than silently mis-committed by the
-%% N=1 fast path (which has no quorum/cert check).
+%% The single-validator gate: multi-node consensus needs the `{log, Ns}` transport that lands in Stage
+%% 2b, so a non-empty `committee` (co-founders) is rejected until then. (The commit itself already runs
+%% through the engine's `⅔` quorum/cert path even at N=1 — there is no fast path to mis-commit through.)
 valid_cfg(Config, Cfg) ->
     case maps:get(node_id, Config, undefined) of
         undefined -> {error, missing_node_id};

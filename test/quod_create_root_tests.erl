@@ -12,6 +12,11 @@ setup() ->
     U   = integer_to_list(erlang:unique_integer([positive])),
     Dir = filename:join("/tmp", "quod_create_root_" ++ U),
     Ns  = list_to_binary("createroot:" ++ U),
+    %% Establish a node identity in the app env, exactly as quod_app:apply_identity does at boot —
+    %% build_ns_config reads node_pubkey and consensus signs shares with identity_key.
+    {Pub, Seed} = quod_identity:generate(),
+    application:set_env(quod, node_pubkey, Pub),
+    application:set_env(quod, identity_key, quod_identity:key_term({Pub, Seed})),
     Content = #{namespace    => Ns,
                 mode         => create,
                 genesis_file => <<"ontologies/quod_root.pl">>,
@@ -24,6 +29,8 @@ cleanup({Dir, Ns, _}) ->
         undefined -> ok;
         Pid       -> stop_ns(Pid)
     end,
+    application:unset_env(quod, node_pubkey),
+    application:unset_env(quod, identity_key),
     _ = file:del_dir_r(Dir),
     ok.
 

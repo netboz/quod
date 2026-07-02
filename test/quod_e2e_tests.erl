@@ -12,7 +12,9 @@ setup() ->
     U   = integer_to_list(erlang:unique_integer([positive])),
     Dir = filename:join("/tmp", "quod_e2e_" ++ U),
     Ns  = list_to_binary("e2e:" ++ U),
-    Cfg = #{node_id => {"127.0.0.1", 5000}, data_dir => Dir, mode => create},
+    {Pub, Seed} = quod_identity:generate(),   %% consensus signs shares now — a real keypair is required
+    Id  = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    Cfg = #{node_id => Pub, identity => Id, data_dir => Dir, mode => create},
     {Dir, Ns, Cfg}.
 
 cleanup({Dir, Ns, _Cfg}) ->

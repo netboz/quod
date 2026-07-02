@@ -197,9 +197,123 @@ verify_cert_caps_sigs_test() ->
     ?assertNot(quod_simplex:verify_cert(#cert{kind = support, slot = 1, block_hash = H, sigs = Bloat}, Vals)).
 
 %%%===================================================================
+%%% consensus engine — certificate pool + block tree (§2.3)
+%%%===================================================================
+
+%% N=4 (quorum 3): a block notarizes at the 3rd support share, commits at the 3rd commit share.
+eng_notarize_then_commit_test() ->
+    C = committee(4),
+    B = blk(1),
+    E0 = quod_simplex:eng_new(pubs(C), 0),
+    {E1, _} = quod_simplex:eng_offer({block, B}, E0),
+    {E2, Ev2} = feed_shares(supports(B, C, 2), E1),        %% 2 < quorum 3
+    ?assertNot(lists:member({notarized, B}, Ev2)),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_tree(E2))),
+    {E3, Ev3} = feed_shares(supports(B, C, 3) -- supports(B, C, 2), E2),   %% the 3rd share
+    ?assert(lists:member({notarized, B}, Ev3)),
+    ?assertEqual(B, maps:get(1, quod_simplex:eng_tree(E3))),
+    {E4, Ev4} = feed_shares(commits(B, C, 3), E3),
+    ?assert(lists:member({committed, 1, B}, Ev4)),
+    ?assertEqual(B, maps:get(1, quod_simplex:eng_committed(E4))).
+
+%% N=1 (quorum 1): the sole validator's own shares notarize + commit instantly (the degenerate case).
+eng_sole_validator_test() ->
+    C = committee(1),
+    B = blk(1),
+    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(pubs(C), 0)),
+    {E2, Ev2} = feed_shares(supports(B, C, 1), E1),
+    ?assert(lists:member({notarized, B}, Ev2)),
+    {_E3, Ev3} = feed_shares(commits(B, C, 1), E2),
+    ?assert(lists:member({committed, 1, B}, Ev3)).
+
+%% A block whose parent is not yet notarized WAITS, then rides in on the parent's settle (fixpoint).
+eng_parent_ordering_test() ->
+    C = committee(4),
+    B1 = blk(1), B2 = blk(2),                              %% B2's parent is slot 1
+    E0 = quod_simplex:eng_new(pubs(C), 0),
+    {E1, _}   = quod_simplex:eng_offer({block, B2}, E0),
+    {E2, Ev2} = feed_shares(supports(B2, C, 3), E1),       %% B2 fully supported BEFORE B1
+    ?assertNot(lists:member({notarized, B2}, Ev2)),
+    ?assertNot(maps:is_key(2, quod_simplex:eng_tree(E2))),
+    {E3, _}   = quod_simplex:eng_offer({block, B1}, E2),
+    {E4, Ev4} = feed_shares(supports(B1, C, 3), E3),
+    ?assert(lists:member({notarized, B1}, Ev4)),
+    ?assert(lists:member({notarized, B2}, Ev4)),           %% B2 notarizes on the SAME settle as B1
+    ?assert(maps:is_key(2, quod_simplex:eng_tree(E4))).
+
+%% A support share from a non-validator does not count toward the quorum.
+eng_rejects_outsider_test() ->
+    C = committee(4),
+    {_, Outsider} = id(),
+    B = blk(1),
+    {E1, _}    = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(pubs(C), 0)),
+    Bad = quod_simplex:make_share(support, 1, quod_simplex:block_hash(B), Outsider),
+    {E2, Ev2}  = feed_shares(supports(B, C, 2) ++ [Bad], E1),   %% 2 valid + 1 outsider
+    ?assertNot(lists:member({notarized, B}, Ev2)),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_tree(E2))).
+
+%% A cert learned from a peer is added + re-disseminated ONCE (never twice), and notarizes the block.
+eng_relays_cert_once_test() ->
+    C = committee(4),
+    B = blk(1),
+    {ok, SC} = quod_simplex:form_cert(support, 1, quod_simplex:block_hash(B), supports(B, C, 3), pubs(C)),
+    {E1, _}   = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(pubs(C), 0)),
+    {E2, Ev2} = quod_simplex:eng_offer({cert, SC}, E1),
+    ?assert(lists:member({broadcast, SC}, Ev2)),
+    ?assert(lists:member({notarized, B}, Ev2)),
+    {_E3, Ev3} = quod_simplex:eng_offer({cert, SC}, E2),
+    ?assertEqual([], [X || {broadcast, _} = X <- Ev3]).     %% not re-broadcast
+
+%% The Stage-2a leader is fixed (lowest pubkey) and order-independent across nodes.
+eng_leader_fixed_test() ->
+    Ps = pubs(committee(4)),
+    L  = quod_simplex:leader(1, Ps),
+    ?assertEqual(L, quod_simplex:leader(9, Ps)),            %% fixed: same for every slot (2a)
+    ?assertEqual(L, quod_simplex:leader(1, lists:reverse(Ps))),   %% order-independent
+    ?assertEqual(lists:min(Ps), L).
+
+%% Pruning a committed slot advances `base` and drops it from every map (the memory-leak fix), and a
+%% stale share/cert/block for an already-final slot (`=< base`) is then ignored.
+eng_prune_test() ->
+    C = committee(4),
+    B1 = blk(1), B2 = blk(2),
+    {E1, _} = quod_simplex:eng_offer({block, B1}, quod_simplex:eng_new(pubs(C), 0)),
+    {E2, _} = quod_simplex:eng_offer({block, B2}, E1),
+    {E3, _} = feed_shares(supports(B1, C, 3) ++ supports(B2, C, 3), E2),
+    {E4, _} = feed_shares(commits(B1, C, 3) ++ commits(B2, C, 3), E3),
+    ?assert(maps:is_key(1, quod_simplex:eng_committed(E4))),
+    ?assert(maps:is_key(2, quod_simplex:eng_committed(E4))),
+    %% prune past slot 1: slot 1 is dropped from tree + committed; slot 2 is retained
+    E5 = quod_simplex:eng_prune(1, E4),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_tree(E5))),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_committed(E5))),
+    ?assert(maps:is_key(2, quod_simplex:eng_tree(E5))),
+    %% a stale support share for the pruned slot 1 (=< base) is ignored — no event, no state change
+    {E6, Ev6} = quod_simplex:eng_offer({share, hd(supports(B1, C, 1))}, E5),
+    ?assertEqual([], Ev6),
+    ?assertEqual(quod_simplex:eng_committed(E5), quod_simplex:eng_committed(E6)).
+
+%%%===================================================================
 %%% helpers
 %%%===================================================================
 
 take(N, L) -> lists:sublist(L, N).
 
 flip1(<<B, Rest/binary>>) -> <<(B bxor 1), Rest/binary>>.
+
+%% a committee of N validators as [{Pubkey, IdentityMap}]; pubs/1 = just the node_ids
+committee(N) -> [id() || _ <- lists:seq(1, N)].
+pubs(C)      -> [P || {P, _} <- C].
+
+%% support/commit shares for block B from the first K committee members
+supports(B, C, K) -> [quod_simplex:make_share(support, B#block.slot, quod_simplex:block_hash(B), Id)
+                      || {_, Id} <- take(K, C)].
+commits(B, C, K)  -> [quod_simplex:make_share(commit, B#block.slot, quod_simplex:block_hash(B), Id)
+                      || {_, Id} <- take(K, C)].
+
+%% offer each share to the engine in turn, accumulating all emitted events
+feed_shares(Shares, Eng) ->
+    lists:foldl(fun(S, {E, Evs}) ->
+                    {E1, Es} = quod_simplex:eng_offer({share, S}, E),
+                    {E1, Evs ++ Es}
+                end, {Eng, []}, Shares).

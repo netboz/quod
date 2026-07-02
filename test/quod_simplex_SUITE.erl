@@ -24,8 +24,9 @@ init_per_testcase(_TC, Cfg) ->
     U   = integer_to_list(erlang:unique_integer([positive])),
     Dir = filename:join("/tmp", "quod_simplex_" ++ U),
     Ns  = list_to_binary("simplex:" ++ U),
-    {Pub, _Seed} = quod_identity:generate(),
-    Base = #{node_id => Pub, data_dir => Dir},   %% the store wants a string path, not a binary
+    {Pub, Seed} = quod_identity:generate(),
+    Id = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},   %% signing identity for shares
+    Base = #{node_id => Pub, identity => Id, data_dir => Dir},   %% the store wants a string path, not a binary
     [{ns, Ns}, {dir, Dir}, {node_id, Pub}, {base_cfg, Base} | Cfg].
 
 end_per_testcase(_TC, Cfg) ->

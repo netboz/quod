@@ -49,6 +49,37 @@
                 kind  :: block | config,
                 data  :: #transaction{} | noop | member_op()}).
 
+%% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
+%% A slot is a consensus height: the leader for slot v proposes one block; validators support
+%% (notarize) then commit (finalize) it, or complain (skip) v. No block-hash chaining — slot
+%% numbers + certificates carry the order (§2, "hash chaining turns out to be unnecessary").
+-type slot() :: non_neg_integer().               %% 0 = genesis; blocks are 1..N
+
+%% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction, a
+%% membership op, or `noop`). `parent` is the previous committed slot it extends (0 = genesis).
+-record(block, {slot    :: slot(),
+                parent  :: slot(),
+                payload :: [#transaction{} | member_op() | noop]}).
+
+%% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
+%% `complaint` (timeout→skip the slot). `block_hash` binds a support/commit share to a specific
+%% block (`none` for a complaint — it is slot-only). `signer` = the validator's pubkey (node_id);
+%% `sig` = Ed25519 over the canonical share bytes (`quod_simplex:share_bytes/3`).
+-record(share, {kind       :: support | commit | complaint,
+                slot       :: slot(),
+                block_hash :: binary() | none,
+                signer     :: node_id(),
+                sig        :: binary()}).
+
+%% A quorum certificate = a bag of ≥⅔ `share`s of the SAME (kind, slot, block_hash) from distinct
+%% validators. `sigs` = `[{signer_pubkey, sig}]`. Self-verifying against the known validator set —
+%% this IS the P2 relayed-commit proof: a subscriber verifies a block by its commit cert without
+%% trusting the relay.
+-record(cert, {kind       :: support | commit | complaint,
+               slot       :: slot(),
+               block_hash :: binary() | none,
+               sigs       :: [{node_id(), binary()}]}).
+
 %% --- the Raft RPC records (snake_case fields) ---
 %% Pre-vote (Ra-style, per the Raft thesis §9.6): a non-binding trial election run before a real
 %% one. It carries the node's CURRENT term (not term+1); the `token` is a fresh `make_ref()` that

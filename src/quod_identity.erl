@@ -30,7 +30,8 @@ chain, so a self-signed per-node cert authenticates cleanly.
 
 -include_lib("public_key/include/public_key.hrl").
 
--export([ensure/1, generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1]).
+-export([ensure/1, generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
+         sign/2, verify/3]).
 
 -export_type([pubkey/0, seed/0, keypair/0, key_term/0, identity/0]).
 
@@ -119,6 +120,31 @@ pubkey_of_cert(DER) ->
             end
     catch _:_ -> error
     end.
+
+-doc """
+Ed25519-sign `Msg` (the canonical bytes of a share / block / vote) with this node's
+identity (or a bare `t:key_term/0`). The signature is verified with `verify/3`
+against the signer's public key (== its `node_id`). This is the primitive the
+DispersedSimplex support/commit/complaint shares and the commit certificate are
+built from.
+""".
+-spec sign(iodata(), identity() | key_term()) -> binary().
+sign(Msg, #{key := KeyTerm}) ->
+    sign(Msg, KeyTerm);
+sign(Msg, #'ECPrivateKey'{privateKey = Seed}) ->
+    crypto:sign(eddsa, none, Msg, [Seed, ed25519]).
+
+-doc """
+Verify an Ed25519 `Sig` over `Msg` against `PubKey` (a peer's `node_id`). `false` on
+any malformed input — a certificate aggregates verified shares from *untrusted*
+peers, so a bad signature must be rejected, never crash the verifier.
+""".
+-spec verify(binary(), iodata(), pubkey()) -> boolean().
+verify(Sig, Msg, PubKey) when is_binary(Sig), is_binary(PubKey) ->
+    try crypto:verify(eddsa, none, Msg, Sig, [PubKey, ed25519])
+    catch _:_ -> false end;
+verify(_Sig, _Msg, _PubKey) ->
+    false.
 
 -doc """
 A short, log-readable rendering of a public key: `kp_` + the first 4 bytes as hex

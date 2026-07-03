@@ -35,10 +35,11 @@ quod_link:send(LinkPid, Payload)              %% direct, non-blocking
 -define(SERVER, quod_quic).
 -define(ADDR_CACHE, quod_addr_cache).   %% public ETS: pubkey() => endpoint() (resolution hints)
 
-%% `self` is the transport identity `{Pubkey, Addr}` announced in every link header:
-%% Pubkey = the node's `node_id` (its Ed25519 key, or its address in the no-identity/test
-%% path), Addr = where it listens. The receiver binds the proven peer pubkey to it and learns
-%% Pubkey => Addr for resolution.
+%% `self` is the transport identity `{Pubkey, Addr}` announced in every link header, where the
+%% two slots are DISTINCT: Pubkey = the node's Ed25519 identity (`node_pubkey`; the address
+%% itself in the no-identity/test path), Addr = the advertised `{Host,Port}` peers dial
+%% (`node_addr`, which may differ from the local bind port). The receiver binds the proven peer
+%% pubkey and learns Pubkey => Addr — but only when Addr is a real endpoint (see `learn/2`).
 -record(state, {self, alpn, cert, key, conns = #{}}).
 
 %% ======================================================================
@@ -62,24 +63,34 @@ open_link(Target, Channel) ->
 -doc "Record a `Pubkey => Endpoint` resolution hint (learned from a header / gossip).".
 -spec learn(binary(), {inet:hostname(), inet:port_number()}) -> ok.
 learn(Pubkey, Endpoint) when is_binary(Pubkey) ->
-    _ = ensure_cache(),
-    true = ets:insert(?ADDR_CACHE, {Pubkey, Endpoint}),
-    ok;
+    case is_endpoint(Endpoint) of
+        true  -> _ = ensure_cache(), true = ets:insert(?ADDR_CACHE, {Pubkey, Endpoint}), ok;
+        false -> ok   %% a header claiming a non-endpoint address must NEVER clobber a good hint
+    end;
 learn(_, _) -> ok.   %% non-pubkey id (the test/no-identity path): nothing to resolve
 
 -doc "Resolve a target to a dialable endpoint: an endpoint dials direct; a pubkey via the cache.".
 -spec resolve(term()) -> {ok, {inet:hostname(), inet:port_number()}} | error.
-resolve({Host, Port} = Endpoint) when is_integer(Port), Port > 0, Port =< 65535,
-                                      (is_list(Host) orelse is_binary(Host) orelse
-                                       is_atom(Host) orelse is_tuple(Host)) ->
-    {ok, Endpoint};
-resolve(Pubkey) when is_binary(Pubkey) ->
+resolve(Endpoint) when is_tuple(Endpoint) ->        %% an endpoint dials direct
+    case is_endpoint(Endpoint) of true -> {ok, Endpoint}; false -> error end;
+resolve(Pubkey) when is_binary(Pubkey) ->           %% a pubkey resolves via the hint cache
     try ets:lookup(?ADDR_CACHE, Pubkey) of
-        [{_, Endpoint}] -> {ok, Endpoint};
-        []              -> error
+        [{_, Endpoint}] ->
+            %% never hand a non-endpoint downstream — a corrupt/stale hint is treated as a miss
+            case is_endpoint(Endpoint) of true -> {ok, Endpoint}; false -> error end;
+        [] -> error
     catch error:badarg -> error   %% cache not created yet (transport not started)
     end;
 resolve(_) -> error.
+
+%% A dialable network endpoint: `{Host, Port}` with a valid port and a host that is a hostname
+%% string/binary or an `inet:ip_address()` tuple. The single predicate that keeps a pubkey (or any
+%% non-endpoint) from ever being mistaken for an address (in `learn`/`resolve`). Atom hosts are
+%% deliberately rejected so a header/config `{undefined, Port}` (or any atom) can't pass as an
+%% address and poison the resolver — quod never uses atom hostnames.
+is_endpoint({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535,
+                               (is_list(Host) orelse is_binary(Host) orelse is_tuple(Host)) -> true;
+is_endpoint(_) -> false.
 
 %% ======================================================================
 %% gen_server
@@ -87,31 +98,56 @@ resolve(_) -> error.
 
 init([]) ->
     process_flag(trap_exit, true),
-    Port = env(listen_port, 14567),
-    ALPN = [to_bin(env(alpn, "quod"))],
-    Addr = env(node_addr, env(node_id, {"127.0.0.1", Port})),  %% where we listen (the hint)
-    %% Our node_id: the Ed25519 pubkey (set by quod_app:apply_identity). With no identity
-    %% (legacy/test boots) it is the address — so ids stay {Host,Port} and dial directly.
-    Pubkey = env(node_pubkey, Addr),
-    Self = {Pubkey, Addr},
-    {Cert, Key} = identity_certkey(),
-    _ = ensure_cache(),
-    seed_hints(env(addr_hints, #{})),     %% bootstrap pubkey=>endpoint hints (multi-voter create / CT)
-    Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
-    %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
-    %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
-    %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
-    %% bound to the header's claimed pubkey in `m:quod_conn`). We present our own cert when
-    %% dialing too (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
-    ServerOpts = #{cert => Cert, key => Key, verify => true, alpn => ALPN,
-                   connection_handler => Handler},
-    case quic:start_server(?SERVER, Port, ServerOpts) of
-        {ok, _} ->
-            logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
-                        [Port, hd(ALPN), id_str(Pubkey), Addr]),
-            {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
+    Port    = env(listen_port, 14567),
+    ALPN    = [to_bin(env(alpn, "quod"))],
+    Pubkey0 = env(node_pubkey, undefined),
+    case self_addr(env(node_addr, undefined), Pubkey0, Port) of
         {error, Reason} ->
-            {stop, {listen_failed, Reason}}
+            logger:error("quod: transport init aborted: ~p", [Reason]),
+            {stop, Reason};
+        {ok, Addr} ->
+            %% Identity and reachable address are two SEPARATE inputs. `node_pubkey` is the
+            %% Ed25519 identity; `node_addr` is the advertised {Host,Port} others dial. A keyed
+            %% node's address is deployment-specific (NAT / containers / port-mapping), so it is
+            %% supplied explicitly — never the pubkey, never guessed from the bind port. With no
+            %% identity (legacy/test) the id IS the address, so both slots hold the {Host,Port}.
+            Pubkey = case Pubkey0 of undefined -> Addr; P -> P end,
+            Self   = {Pubkey, Addr},
+            {Cert, Key} = identity_certkey(),
+            _ = ensure_cache(),
+            Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
+            %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
+            %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
+            %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
+            %% bound to the header's claimed pubkey in `m:quod_conn`). We present our own cert when
+            %% dialing too (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
+            ServerOpts = #{cert => Cert, key => Key, verify => true, alpn => ALPN,
+                           connection_handler => Handler},
+            case quic:start_server(?SERVER, Port, ServerOpts) of
+                {ok, _} ->
+                    logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
+                                [Port, hd(ALPN), id_str(Pubkey), Addr]),
+                    {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
+                {error, Reason} ->
+                    {stop, {listen_failed, Reason}}
+            end
+    end.
+
+%% A node's own advertised endpoint. `node_addr` (an explicit {Host,Port}) is the sole source:
+%% a reachable address depends on the deployment and is NEVER derived from the local bind port.
+%% A keyed node (real `node_pubkey`) with no `node_addr` is a misconfiguration — fail loudly at
+%% boot rather than advertise a wrong/placeholder address. Only the no-identity (legacy/test) path
+%% may fall back to loopback:listen_port.
+self_addr(NodeAddr, Pubkey, Port) ->
+    case {NodeAddr, Pubkey} of
+        {Addr, _} when is_tuple(Addr) ->
+            case is_endpoint(Addr) of
+                true  -> {ok, Addr};
+                false -> {error, {bad_node_addr, Addr}}
+            end;
+        {undefined, undefined} -> {ok, {"127.0.0.1", Port}};
+        {undefined, _Keyed}    -> {error, node_addr_required_for_keyed_node};
+        {Other, _}             -> {error, {bad_node_addr, Other}}
     end.
 
 handle_call(_Req, _From, State) ->
@@ -184,10 +220,6 @@ ensure_cache() ->
         undefined -> ets:new(?ADDR_CACHE, [named_table, public, set, {read_concurrency, true}]);
         _         -> ?ADDR_CACHE
     end.
-
-seed_hints(Hints) when is_map(Hints) ->
-    _ = maps:foreach(fun(PK, EP) -> learn(PK, EP) end, Hints), ok;
-seed_hints(_) -> ok.
 
 %% short, log-readable id: a real pubkey via quod_identity, an address shown as-is.
 id_str(Pubkey) when is_binary(Pubkey) -> quod_identity:short(Pubkey);

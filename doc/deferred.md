@@ -55,6 +55,21 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
 - **`quod_prove` outbox on `link_error`.** A buffered read is dropped and the caller times out (5 s)
   then can retry. Intended eventual behavior; an app-level retry/backoff in `remote/5` would fail
   faster.
+- **Resolver cache dies with the transport.** `?ADDR_CACHE` (pubkey→endpoint hints) is owned by the
+  `quod_quic` gen_server with **no `heir`**; a transport crash (it is `permanent` under `one_for_one`)
+  destroys every learned hint and `init` re-seeds nothing (the old `addr_hints` seed hook was removed as
+  dead). Harmless today — the pubkey/address confusion that used to crash the transport is fixed
+  (`is_endpoint/1` guards `learn`+`resolve`, and a keyed node fails fast without `node_addr`) — but any
+  *other* transport crash still forces peers to re-dial in before this node can reach them. Fix when
+  needed: give the ETS table an `heir`, or re-seed on `init` from a persisted/config source.
+- **Cold-start address bootstrap.** A node can only dial a peer by pubkey once that peer's endpoint is in
+  the resolver — populated *only* by inbound link headers (`quod_link:learn_hint`) today. So a node
+  cannot initiate to a peer it has never heard from. Consensus co-founding survives because the
+  leader broadcasts first (everyone learns it, then dials back); the `simplex_SUITE` CT papers over the
+  gap with explicit `quod_quic:learn` pre-seeds. The homogeneous end-state (matches onbrater/onia): the
+  committed `peer_admitted(NodeId,Host,Port,Pubkey)` fact IS the address book, seeded at join by an
+  operator contact list. Lands with **Stage 3** membership; until then, watch it in the multi-node Nomad
+  redeploy (a non-leader that must reach a peer it hasn't received from will stall).
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 

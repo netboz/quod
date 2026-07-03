@@ -28,7 +28,7 @@ init_per_suite(Config) ->
     Cert = quod_identity:mint_cert(KP),
     Key  = quod_identity:key_term(KP),
     application:set_env(quod, listen_port, ?PORT),
-    application:set_env(quod, node_id, ?SELF),
+    application:set_env(quod, node_addr, ?SELF),   %% advertised endpoint (no node_pubkey => no-identity path)
     application:set_env(quod, identity_cert, Cert),
     application:set_env(quod, identity_key, Key),
     {ok, _} = application:ensure_all_started(quod),
@@ -39,7 +39,7 @@ end_per_suite(_Config) ->
     %% this suite runs the app IN the CT node (not a peer), so unset the env it set
     %% to avoid leaking a stale cert/port into any later same-node suite.
     _ = [application:unset_env(quod, K)
-         || K <- [listen_port, node_id, identity_cert, identity_key]],
+         || K <- [listen_port, node_addr, identity_cert, identity_key]],
     ok.
 
 %% Opening a link to our own listener over loopback yields a usable link pid.

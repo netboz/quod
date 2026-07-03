@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.11"
-  description = "quod image tag in the cluster registry. 0.6.11 = onia-pattern deploy: one count=N joiner group + bridge/portmap dynamic host ports (node.bind_port decouples the fixed container listen port from the advertised host port), replacing the copy-pasted per-voter groups. Scaling is now `-var=voters=N`."
+  default     = "0.6.12"
+  description = "quod image tag in the cluster registry. 0.6.12 = transport addressing fix: identity (node_pubkey) and advertised address (node_addr) are separated — quod_quic stops overloading node_id as its address, fails loud if a keyed node has no node_addr, and is_endpoint/1 guards learn/resolve so a bad hint can't poison the resolver; validated by the new 3-node loopback CT (simplex_SUITE)."
 }
 
 variable "voters" {

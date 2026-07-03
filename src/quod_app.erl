@@ -98,7 +98,8 @@ apply_transport_env(Cfg) ->
            end,
     application:set_env(quod, listen_port, Bind),
     application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
-    application:set_env(quod, node_id, {Ip, Port}),
+    application:set_env(quod, node_addr, {Ip, Port}),   %% advertised endpoint the transport announces
+    application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     ok.
 
 conf_path() ->

@@ -264,13 +264,34 @@ eng_relays_cert_once_test() ->
     {_E3, Ev3} = quod_simplex:eng_offer({cert, SC}, E2),
     ?assertEqual([], [X || {broadcast, _} = X <- Ev3]).     %% not re-broadcast
 
-%% The Stage-2a leader is fixed (lowest pubkey) and order-independent across nodes.
-eng_leader_fixed_test() ->
-    Ps = pubs(committee(4)),
-    L  = quod_simplex:leader(1, Ps),
-    ?assertEqual(L, quod_simplex:leader(9, Ps)),            %% fixed: same for every slot (2a)
-    ?assertEqual(L, quod_simplex:leader(1, lists:reverse(Ps))),   %% order-independent
-    ?assertEqual(lists:min(Ps), L).
+%% The Stage-2c leader ROTATES round-robin over the sorted set, order-independently across nodes.
+eng_leader_rotates_test() ->
+    Ps     = pubs(committee(4)),
+    Sorted = lists:sort(Ps),
+    ?assertEqual(lists:min(Ps), quod_simplex:leader(1, Ps)),        %% slot 1 → lowest pubkey
+    ?assertEqual(hd(tl(Sorted)), quod_simplex:leader(2, Ps)),      %% slot 2 → next (rotation)
+    ?assertEqual(quod_simplex:leader(1, Ps), quod_simplex:leader(5, Ps)),   %% wraps at N=4 (1 ≡ 5)
+    ?assertNotEqual(quod_simplex:leader(1, Ps), quod_simplex:leader(2, Ps)),
+    ?assertEqual(quod_simplex:leader(3, Ps),                        %% order-independent (sorts internally)
+                 quod_simplex:leader(3, lists:reverse(Ps))).
+
+%% A ⅔ complaint cert skips the slot: the engine emits {skipped, V} once and re-disseminates the cert.
+eng_complaint_skips_test() ->
+    C   = committee(4),
+    Sh  = [quod_simplex:make_share(complaint, 2, none, Id) || {_, Id} <- take(3, C)],   %% quorum(4)=3
+    E0  = quod_simplex:eng_new(pubs(C), 0),
+    {E1, Ev1} = feed_shares(Sh, E0),
+    ?assert(lists:member({skipped, 2}, Ev1)),
+    ?assert(lists:any(fun({broadcast, #cert{kind = complaint, slot = 2}}) -> true; (_) -> false end, Ev1)),
+    {_E2, Ev2} = feed_shares(Sh, E1),                              %% re-offering does NOT re-skip (deduped)
+    ?assertEqual([], [X || {skipped, _} = X <- Ev2]).
+
+%% The commit/complaint guards are mutually exclusive per slot — the whole safety argument.
+guards_mutual_exclusion_test() ->
+    ?assert(quod_simplex:may_commit(5, [])),
+    ?assertNot(quod_simplex:may_commit(5, [5])),        %% complained 5 ⇒ must not commit it
+    ?assert(quod_simplex:may_complain(5, [])),
+    ?assertNot(quod_simplex:may_complain(5, [5])).      %% commit-signed 5 ⇒ must not complain it
 
 %% Pruning a committed slot advances `base` and drops it from every map (the memory-leak fix), and a
 %% stale share/cert/block for an already-final slot (`=< base`) is then ignored.

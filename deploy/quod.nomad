@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.12"
-  description = "quod image tag in the cluster registry. 0.6.12 = transport addressing fix: identity (node_pubkey) and advertised address (node_addr) are separated — quod_quic stops overloading node_id as its address, fails loud if a keyed node has no node_addr, and is_endpoint/1 guards learn/resolve so a bad hint can't poison the resolver; validated by the new 3-node loopback CT (simplex_SUITE)."
+  default     = "0.6.13"
+  description = "quod image tag in the cluster registry. 0.6.13 = Simplex 2c failover: round-robin per-slot leader, Δ_timeout complaint timer (evidence-gated, no idle-skip), may_commit/may_complain guards, and a ⅔ complaint cert that skips a stuck slot (noop) so the rotated leader proposes next; validated by a 4-node loopback CT (leader_failover). Known gap tracked in doc/deferred.md §3: a leader dying AFTER a bare-quorum notarization can wedge the slot (head advances on the commit cert, not notarization — a Stage-4 fix)."
 }
 
 variable "voters" {

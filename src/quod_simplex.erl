@@ -23,13 +23,13 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 > #### Status {: .info }
 >
-> **Stage 2b (here):** the pure consensus core (quorum math, share signing, certificate
+> **Stage 2c (here):** the pure consensus core (quorum math, share signing, certificate
 > formation/verification, the commit guards), the **consensus engine** (§2.3 certificate pool + complete
-> block tree), and the per-namespace `gen_statem` that drives every commit through the engine **over the
-> `{log, Ns}` transport** — a multi-node committee proposes (fixed lowest-pubkey leader), collects `⅔`
-> support then commit certs, and commits, applying in slot order. At the **single validator (N=1)** case
-> each quorum self-satisfies, so an append commits synchronously. **Next:** the `Δ_timeout` complaint
-> timer + `may_commit` guard (leader failover), leader rotation, epoch validators from `peer_admitted`,
+> block tree), the per-namespace `gen_statem` over the `{log, Ns}` transport, and **failover** — a
+> **round-robin per-slot leader**, the `Δ_timeout` **complaint timer**, the `may_commit`/`may_complain`
+> guards, and a `⅔` **complaint cert** that skips a stuck slot (a `noop` entry) so the rotated leader
+> proposes the next. At **N=1** each quorum self-satisfies, so an append commits synchronously. **Next:**
+> epoch validators + membership/join from `peer_admitted` (Stage 3), stable per-epoch leaders (Stage 4),
 > and per-message retransmit hardening (a dial-retry tick is in; see `doc/deferred.md` §3).
 """.
 
@@ -38,7 +38,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -behaviour(gen_statem).
 
 %% Pure consensus core (also used by the gen_statem below and by the tests).
--export([quorum/1,
+-export([quorum/1, leader/2,
          block_hash/1, share_bytes/3,
          make_share/4, verify_share/1,
          form_cert/5, verify_cert/2,
@@ -50,7 +50,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, leader/2, eng_tree/1, eng_committed/1]).
+-export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
@@ -231,10 +231,12 @@ may_complain(Slot, CommittedSlots) ->
               shares   = #{} :: #{share_key() => #{node_id() => #share{}}},
               certs    = #{} :: #{share_key() => #cert{}},
               tree     = #{} :: #{slot() => #block{}},                 %% notarized blocks (in-flight window)
-              committed = #{} :: #{slot() => #block{}}}).              %% committed (final) in-flight blocks
+              committed = #{} :: #{slot() => #block{}},                %% committed (final) in-flight blocks
+              skipped  = #{} :: #{slot() => true}}).                   %% slots a complaint cert has skipped
 
 -type share_key() :: {support | commit | complaint, slot(), binary() | none}.
--type eng_event() :: {broadcast, #cert{}} | {notarized, #block{}} | {committed, slot(), #block{}}.
+-type eng_event() :: {broadcast, #cert{}} | {notarized, #block{}}
+                   | {committed, slot(), #block{}} | {skipped, slot()}.
 
 -doc """
 A fresh engine for a validator set (the epoch-frozen committee), with `Base` = the durable committed
@@ -299,7 +301,8 @@ settle(Eng, Acc) ->
     case grow_tree(Eng) of
         {Eng1, [_ | _] = New} -> settle(Eng1, Acc ++ New);
         {Eng1, []}            -> {Eng2, Commits} = detect_commits(Eng1),
-                                 {Eng2, Acc ++ Commits}
+                                 {Eng3, Skips}   = detect_complaints(Eng2),
+                                 {Eng3, Acc ++ Commits ++ Skips}
     end.
 
 %% Add every block that now has a support cert AND whose parent is in the tree (or is genesis) AND
@@ -334,6 +337,16 @@ detect_commits(Eng = #eng{certs = Certs, tree = Tree, committed = Committed}) ->
     Committed1 = lists:foldl(fun({Sl, B}, C) -> C#{Sl => B} end, Committed, New),
     {Eng#eng{committed = Committed1}, [{committed, Sl, B} || {Sl, B} <- New]}.
 
+%% A slot is skipped once the pool holds a `⅔` COMPLAINT cert for it (block-free — a complaint binds
+%% only the slot). Emitted once per slot (the `skipped` set dedups); a peer-relayed complaint cert flows
+%% through the same path, so a node that never complained still learns the skip and stays in lockstep.
+%% Safety keeps a slot from being BOTH committed and skipped: an honest party issues at most one of
+%% {commit, complaint} for a slot (the may_commit/may_complain guards), so only one cert can reach `⅔`.
+detect_complaints(Eng = #eng{certs = Certs, skipped = Sk}) ->
+    New = lists:sort([V || {{complaint, V, none}, _} <- maps:to_list(Certs), not maps:is_key(V, Sk)]),
+    Sk1 = lists:foldl(fun(V, M) -> M#{V => true} end, Sk, New),
+    {Eng#eng{skipped = Sk1}, [{skipped, V} || V <- New]}.
+
 block_for(BH, #eng{blocks = Blocks}) -> maps:get(BH, Blocks, undefined).
 
 %% A block may join the tree once its parent is already committed history (`=< base`, includes genesis
@@ -355,15 +368,20 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
             shares    = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.shares),
             certs     = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.certs),
             tree      = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree),
-            committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed)}.
+            committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed),
+            skipped   = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.skipped)}.
 
 -doc """
-The deterministic leader (proposer) for a slot. Stage 2a uses a **fixed** leader — the lowest-pubkey
-validator — so the write path stays simple (propose on the leader, redirect elsewhere). Per-slot
-rotation (`slot rem N`) + the forwarding it needs land in Stage 2b with the complaint timer.
+The deterministic leader (proposer) for a slot: **round-robin** over the sorted validator set,
+`sort(V)[(Slot-1) rem N]`. Every node computes the same leader for a given slot from the same frozen
+set, so a client (or a follower redirect) can reach the right proposer, and a complaint-skip of slot
+`v` moves slot `v+1` to a *different* leader — that rotation IS the failover. `Slot ≥ 1` (genesis is 0).
+Stable per-epoch leaders (keep one leader for K slots) are the Stage-4 optimization; this rotates each slot.
 """.
 -spec leader(slot(), [node_id()]) -> node_id().
-leader(_Slot, Validators) -> hd(lists:sort(Validators)).
+leader(Slot, Validators) ->
+    Sorted = lists:sort(Validators),
+    lists:nth(((Slot - 1) rem length(Sorted)) + 1, Sorted).
 
 -ifdef(TEST).
 eng_tree(#eng{tree = T})           -> T.           %% slot => notarized #block{}
@@ -393,6 +411,8 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
 -define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
+-define(DELTA_MS,   1000).   %% Δ_timeout: a proposed-but-stuck head slot is complained (skipped) after this;
+                             %% must exceed real commit latency (override via app-env `simplex_delta_ms`)
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -407,7 +427,10 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             pending    = #{} :: #{slot() => gen_statem:from()},  %% appends parked until commit (leader)
             proposing  = none :: none | slot(),      %% the leader's in-flight proposed slot (one at a time)
             supported  = #{} :: #{slot() => binary()},  %% slot => block_hash we support-signed (no double-sign)
-            commit_buf = #{} :: #{slot() => #block{}},   %% committed-out-of-order blocks, applied in slot order
+            commit_signed = #{} :: #{slot() => true},    %% slots we commit-signed (⇒ may_complain false: safety)
+            complained    = #{} :: #{slot() => true},    %% slots we complaint-signed (⇒ may_commit false: safety)
+            active_slot   = none :: none | slot(),       %% the head+1 slot the Δ complaint timer is armed for
+            commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => true},                  %% peers with an open_link dial in flight
@@ -426,11 +449,14 @@ start_link(Ns, Config) ->
 
 -doc """
 Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is its own fsync. The error
-arms are the stable consensus-append contract `quod_prolog` handles and Stage 2 fulfils — at N=1 only
-`{error, not_in_charge, unavailable}` (this process unreachable) actually occurs.
+arms are the stable consensus-append contract `quod_prolog` handles: `busy` (a proposal already in
+flight), `not_in_charge` (this node isn't the slot's leader — a redirect hint, or `unavailable` if this
+process is unreachable), and `skipped` (a multi-node committee complaint-skipped our proposed slot →
+retry). At N=1 only the sole-validator commit path runs, so an append just returns `{ok, Slot}`.
 """.
 -spec append(binary(), #transaction{}) ->
-        {ok, slot()} | {error, busy} | {error, not_in_charge, node_id() | none | unavailable}.
+        {ok, slot()} | {error, busy} | {error, skipped}
+      | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}), {append, Change}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
@@ -543,17 +569,21 @@ genesis_entries(Cfg, Ns, Self, K) ->
 %%% running
 %%%===================================================================
 
-running({call, From}, {append, Change}, S) -> handle_append(From, Change, S);
+running({call, From}, {append, Change}, S0) ->
+    {S1, Reply} = handle_append(From, Change, S0),
+    {keep_state, S1, Reply ++ timer_actions(S0, S1)};
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
 running(cast, rebuild, S) ->
     {keep_state, maybe_mark_ready(apply_committed(S#s{last_applied = 0, prolog_ready = false}))};
 %% A peer's consensus message (proposal / share / cert) on our `{log, Ns}` channel. `Peer` is the
-%% sender's authenticated node_id (pubkey); the address is a routing hint we ignore.
-running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S = #s{chan = Chan}) ->
-    case decode(Payload, S#s.ns) of
-        error -> {keep_state, S};
-        Msg   -> {keep_state, dispatch(Peer, Msg, S)}
+%% sender's authenticated node_id (pubkey); the address is a routing hint we ignore. Processing it can
+%% advance/skip the head (arming or cancelling the Δ timer) — `timer_actions/2` reflects that.
+running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
+    case decode(Payload, S0#s.ns) of
+        error -> {keep_state, S0};
+        Msg   -> S1 = dispatch(Peer, Msg, S0),
+                 {keep_state, S1, timer_actions(S0, S1)}
     end;
 running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
 running(info, {link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
@@ -564,6 +594,17 @@ running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
     {keep_state, S#s{dialing = maps:remove(Peer, S#s.dialing)}};
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
+%% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
+%% local client write we couldn't lead). If V is still the stuck head and we haven't commit-signed it,
+%% broadcast our complaint share; a `⅔` complaint cert then skips V. Re-arm while V stays stuck (a
+%% retransmit, over the send-once transport); stop once the head advances (commit or skip).
+running({timeout, complain}, {complain, V}, S0) ->
+    S1 = on_complain_timeout(V, S0),
+    Actions = case S1#s.active_slot of
+                  V -> [{{timeout, complain}, delta_ms(), {complain, V}}];   %% still stuck ⇒ keep pressing
+                  _ -> timer_actions(S0, S1)                                 %% advanced/resolved ⇒ cancel or re-arm
+              end,
+    {keep_state, S1, Actions};
 %% Consensus re-drive: re-dial any peer whose link never came up (its frames are still buffered).
 running({timeout, tick}, tick, S) ->
     {keep_state, redial_pending(S), [tick_timeout()]};
@@ -587,9 +628,14 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 %% A client change enters consensus here. Only the slot's leader may propose; anyone else redirects.
 %% The leader builds the block, feeds it + its own support share to the engine, and parks the caller
 %% until that block commits. At N=1 the engine reaches commit synchronously, so the ack is immediate;
-%% with peers (2b) the commit cert arrives later and `commit_block/3` acks then.
+%% with peers the commit cert arrives later and `commit_block/3` acks then (or a complaint cert skips the
+%% slot and `skip_block/2` nacks the caller `{error,skipped}`).
+%% Returns `{NewState, ReplyActions}` (the caller wraps it + arms/cancels the Δ timer). The leader parks
+%% the caller (no reply — `commit_block`/`skip_block` answers it) and arms the Δ timer on its own
+%% proposal; a non-leader redirects AND arms the Δ timer for this wanted slot — so if the real leader is
+%% dead, its own timer fires and it complains toward a skip (the client-driven activation of §failover).
 handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
-    {keep_state, S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
+    {S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
     Next = Sl + 1,
     case leader(Next, Vs) of
@@ -598,9 +644,9 @@ handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
             S1 = S#s{pending = (S#s.pending)#{Next => From}, proposing = Next, appends = S#s.appends + 1},
             S2 = broadcast({propose, Block}, S1),        %% send the proposal to the committee
             S3 = engine_step([{block, Block}], S2),      %% offer the block to our own engine
-            {keep_state, support_block(Block, S3)};      %% ... and support it (offer + broadcast the share)
+            {arm_complaint(Next, support_block(Block, S3)), []};   %% support it; park the caller; arm Δ
         Leader ->
-            {keep_state, S, [{reply, From, {error, not_in_charge, Leader}}]}
+            {arm_complaint(Next, S), [{reply, From, {error, not_in_charge, Leader}}]}
     end.
 
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
@@ -618,30 +664,64 @@ apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
 %% A newly-formed (or first-learned) cert: disseminate it to the committee (§2.3.1).
 apply_event({broadcast, Cert}, S) ->
     broadcast({cert, Cert}, S);
-%% A block was notarized: sign + emit our commit share — offer it locally AND broadcast it. (2a has no
-%% complaint path, so we always commit; the `may_commit` guard lands with the complaint timer — §3.)
-apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id}) ->
-    Share = make_share(commit, Sl, block_hash(Block), Id),
-    engine_step([{share, Share}], broadcast({share, Share}, S));
-%% A block is final: apply it, in slot order (out-of-order commits are buffered — §3 contiguous apply).
+%% A block was notarized: sign + emit our commit share — UNLESS we already complaint-signed this slot
+%% (`may_commit` guard). Recording `commit_signed[Sl]` makes the symmetric `may_complain` guard hold, so
+%% an honest node contributes to at most one of {commit cert, complaint cert} per slot — the safety rule.
+apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id, complained = Cd}) ->
+    case may_commit(Sl, maps:keys(Cd)) of
+        false -> S;                                    %% already complained Sl ⇒ never commit it
+        true  -> Share = make_share(commit, Sl, block_hash(Block), Id),
+                 engine_step([{share, Share}],
+                             broadcast({share, Share}, S#s{commit_signed = (S#s.commit_signed)#{Sl => true}}))
+    end;
+%% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
 apply_event({committed, Slot, Block}, S) ->
-    commit_contiguous(Slot, Block, S).
+    commit_contiguous(Slot, Block, S);
+%% A slot was complaint-skipped: finalize it as an empty (`noop`) slot, in order — advancing the height
+%% so the rotated leader for the next slot proposes.
+apply_event({skipped, Slot}, S) ->
+    skip_contiguous(Slot, S).
 
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
-%% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. Payload is a single change in 2a.
+%% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
+%% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
 commit_block(Slot, #block{payload = [Change]}, S = #s{store = Store}) ->
     E = #entry{index = Slot, term = 0, kind = block, data = Change},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    S1 = S#s{store = Store1, slot = Slot, commits = S#s.commits + 1,
-             eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
-             proposing = case S#s.proposing of Slot -> none; Other -> Other end,   %% our proposal landed
-             supported = maps:remove(Slot, S#s.supported)},
+    S1 = finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1}),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
+
+%% A complaint cert skipped this slot: persist an empty `noop` entry so the store height (and every
+%% node's) advances contiguously, then nack any caller that had proposed it so the client retries under
+%% the rotated leader. `quod_prolog` applies a `noop` as a pure cursor advance (no fact change).
+skip_block(Slot, S = #s{store = Store}) ->
+    E = #entry{index = Slot, term = 0, kind = block, data = noop},
+    {ok, Store1} = quod_ledger_store:append(Store, [E]),
+    S1 = finalize(Slot, S#s{store = Store1}),
+    maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).
+
+%% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
+%% the proposing latch, and the support/commit/complaint sign-latches (bounded to the in-flight window).
+finalize(Slot, S) ->
+    S#s{slot = Slot,
+        eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
+        proposing     = case S#s.proposing of Slot -> none; Other -> Other end,
+        active_slot   = case S#s.active_slot of Slot -> none; A -> A end,
+        supported     = maps:remove(Slot, S#s.supported),
+        commit_signed = maps:remove(Slot, S#s.commit_signed),
+        complained    = maps:remove(Slot, S#s.complained)}.
 
 %% Reply `{ok, Slot}` to the caller parked on this slot (only the proposing node has one).
 ack_pending(Slot, S = #s{pending = P}) ->
     case maps:take(Slot, P) of
         {From, P1} -> _ = gen_statem:reply(From, {ok, Slot}), S#s{pending = P1};
+        error      -> S
+    end.
+
+%% Its slot was skipped, not committed: tell the parked proposer to retry (the write was never ordered).
+nack_pending(Slot, S = #s{pending = P}) ->
+    case maps:take(Slot, P) of
+        {From, P1} -> _ = gen_statem:reply(From, {error, skipped}), S#s{pending = P1};
         error      -> S
     end.
 
@@ -657,15 +737,19 @@ support_block(#block{slot = Sl} = Block, S = #s{supported = Sup, id = Id}) ->
                              broadcast({share, Share}, S#s{supported = Sup#{Sl => block_hash(Block)}}))
     end.
 
-%% Commit certs can arrive out of slot order over the async transport; buffer the block and apply
-%% strictly in ascending slot order, so the durable store (which enforces contiguity) never sees a gap.
+%% Commit/complaint certs can arrive out of slot order over the async transport; buffer each
+%% finalization (a committed block, or a skip) and apply strictly in ascending slot order, so the
+%% durable store (which enforces contiguity) never sees a gap.
 commit_contiguous(Slot, Block, S) ->
-    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => Block}}).
+    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => {commit, Block}}}).
+skip_contiguous(Slot, S) ->
+    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => skip}}).
 
 drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
     case maps:take(H + 1, Buf) of
-        {Block, Buf1} -> drain_commits(commit_block(H + 1, Block, S#s{commit_buf = Buf1}));
-        error         -> S
+        {{commit, Block}, Buf1} -> drain_commits(commit_block(H + 1, Block, S#s{commit_buf = Buf1}));
+        {skip, Buf1}            -> drain_commits(skip_block(H + 1, S#s{commit_buf = Buf1}));
+        error                   -> S
     end.
 
 %%%===================================================================
@@ -697,11 +781,49 @@ is_hash_or_none(H) -> H =:= none orelse is_binary(H).
 %% we expect — slot = committed+1 extending our committed tip, with a single payload item. This bounds a
 %% Byzantine leader (no jumping ahead / flooding future slots) and means we never support a block on a
 %% chain we cannot verify, nor ever hand a malformed payload to commit_block.
+%% `valid_proposal` is checked FIRST (it pins `Sl =:= H+1 ≥ 1`) so `leader/2` is never evaluated on an
+%% untrusted `Sl` — a crafted `slot=0` would otherwise make `leader(0,_)` do `lists:nth(0,_)` and crash us.
 on_propose(Peer, #block{slot = Sl} = Block, S = #s{validators = Vs}) ->
-    case leader(Sl, Vs) =:= Peer andalso valid_proposal(Block, S) of
-        true  -> support_block(Block, engine_step([{block, Block}], S));
+    case valid_proposal(Block, S) andalso leader(Sl, Vs) =:= Peer of
+        true  -> arm_complaint(Sl, support_block(Block, engine_step([{block, Block}], S)));
         false -> S
     end.
+
+%% The head+1 slot is now an ACTIVE view (a proposal seen, or a local write we couldn't lead): arm the
+%% Δ complaint timer for it. Idempotent per slot (`A =/= V`) so repeat evidence never pushes the deadline
+%% out; only ever `head+1`, so a single named timer suffices. An idle committee acquires no evidence, so
+%% the timer is never armed — the client-driven model never skips a slot nobody wants.
+arm_complaint(V, S = #s{slot = H, active_slot = A}) when V =:= H + 1, A =/= V -> S#s{active_slot = V};
+arm_complaint(_V, S) -> S.
+
+%% Translate an `active_slot` transition into the gen_statem timer action for the named `complain` timer
+%% (unchanged ⇒ leave it running; `none` ⇒ cancel; a slot ⇒ (re)arm for Δ). A named timeout is not
+%% cancelled by unrelated events, so only the head-advancing / arming clauses touch it.
+timer_actions(#s{active_slot = A}, #s{active_slot = A}) -> [];
+timer_actions(_S0, #s{active_slot = none})             -> [{{timeout, complain}, cancel}];
+timer_actions(_S0, #s{active_slot = V})                -> [{{timeout, complain}, delta_ms(), {complain, V}}].
+
+delta_ms() ->
+    case application:get_env(quod, simplex_delta_ms, ?DELTA_MS) of
+        N when is_integer(N), N > 0 -> N;
+        _                           -> ?DELTA_MS   %% a mistyped override must not crash the timer action
+    end.
+
+%% Δ fired: if V is still the stuck head and we may still complain it (haven't commit-signed it), sign +
+%% (re)broadcast our complaint share and offer it to the engine — a `⅔` complaint cert skips V. Latch
+%% `complained[V]` so `may_commit` bars us from ever commit-signing V (the mutual-exclusion safety half).
+on_complain_timeout(V, S = #s{slot = H, id = Id, commit_signed = Cs}) when V =:= H + 1 ->
+    case may_complain(V, maps:keys(Cs)) of
+        false -> S;
+        true  -> Share = make_share(complaint, V, none, Id),
+                 %% latch complained[V] BEFORE offering the share: if our own complaint completes the ⅔
+                 %% cert, engine_step skips V and finalize/2 clears the latch — so the pre-set doesn't
+                 %% leak; and any {notarized,V} inside that same engine_step now sees complained[V] and
+                 %% is barred from a commit share (the mutual-exclusion safety half, self-enforced here).
+                 S1 = S#s{complained = (S#s.complained)#{V => true}},
+                 engine_step([{share, Share}], broadcast({share, Share}, S1))
+    end;
+on_complain_timeout(_V, S) -> S.
 
 valid_proposal(#block{slot = Sl, parent = P, payload = [_]}, #s{slot = H}) -> Sl =:= H + 1 andalso P =:= H;
 valid_proposal(_Block, _S) -> false.

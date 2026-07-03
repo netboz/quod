@@ -79,29 +79,57 @@ here (Ra-style round-based promotion, `InstallSnapshot`, `remove_member`, Brahms
 discovery) are **retired with the Raft code**; the equivalent capabilities are re-planned as Simplex
 stages, not carried forward:
 
-- **Multi-validator BFT** — real ⅔ support/commit/complaint certs, the complaint timer + commit guard,
-  epoch validator set from `peer_admitted`, over the `{log, Ns}` transport. Stage 2.
+- **Multi-validator BFT** — **DONE** (Stage 2b+2c): real ⅔ support/commit/**complaint** certs, the
+  `Δ_timeout` complaint timer, the `may_commit`/`may_complain` guards, **round-robin leader rotation**,
+  and complaint-cert **skip** (a `noop` slot), over the `{log, Ns}` transport. Epoch validator set from
+  `peer_admitted` moves to Stage 3 (it's the membership-change substrate, not needed on a static committee).
 - **Membership admission + join + trustless catch-up** — `can_join` → `peer_admitted`, epochs, and a
   joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert** (never trusts
   the server). Stage 3. Absorbs the old `remove_member` / join-driver / candidate-discovery concerns.
+- **Failover liveness in the client-driven model (Stage 2c follow-ups).** quod has no timed/empty slots
+  (a slot exists only on a client `append`), so a complaint is *evidence-gated*: a node arms its Δ timer
+  only when it proposes a slot, supports a proposal, or gets a local write it can't lead. Consequences,
+  deferred: (a) **f+1 complaint amplification** — a node should join a complaint after seeing `f+1`
+  distinct complaint shares (guarantees ≥1 honest complainer), so a client that reaches only `f+1` nodes
+  (not a full quorum) still triggers a skip; today the client must reach ≥ quorum live nodes. (b)
+  **pending-tx forwarding** — a follower that can't reach the dead leader broadcasts the pending
+  `#transaction` (`{pending,Slot,Change}`) so every live node gets first-party evidence from ONE
+  submission (can't skip an honest-live-leader slot); intersects tx authenticity (`sig=none` today), so
+  parked with Stage-3 signing. (c) **complaint retransmit** — the Δ timer re-arms while a slot stays
+  stuck (retransmits our complaint), but per-*message* retransmit for lost support/commit shares is still
+  send-once + the dial tick (§2 hardening).
+- **Notarized-but-orphaned slot can deadlock (Stage 2c gap — the head advances on the COMMIT cert, not on
+  notarization).** A validator that commit-signs slot `V` can never complain it (`may_complain` uses
+  `commit_signed`), so if `V` gets a bare-quorum *support* cert (notarized) but then the leader dies before
+  a *commit* cert forms, the notarizers are barred from complaining and the non-notarizers are too few to
+  reach a `⅔` complaint cert → `V` can neither commit nor skip, and the head never advances (no recovery
+  even after synchrony resumes — the latches clear only in `finalize`). 2c's failover survives a leader that
+  dies *before* notarizing (the `leader_failover` CT case), but NOT one that dies *after* a bare-quorum
+  notarization (needs a second slow/absent follower, so it's a >f / asynchrony corner, but permanent).
+  Textbook Simplex avoids this by advancing the view on **notarization** and treating finalization (the
+  commit cert) as the deeper guarantee. The real fix is to **decouple head-advance from the commit cert**
+  (advance on the support/notarization cert; keep the commit cert as the relayed-finality proof) — a Stage-4
+  protocol change; until then a mid-round leader crash on a bare quorum can wedge a namespace. The
+  `leader_failover` CT does not cover it (killing the leader *before* it proposes is not the trigger).
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive).
 
-**Stage 2b requirements carried from the 2a review** (all unreachable at N=1 — they bite only once the
-async `{log, Ns}` transport lands, but Stage 2b MUST implement them as it wires it):
+**From the 2a/2b/2c reviews — mostly landed; two remain open:**
 
-- **Contiguous commit-apply.** Commit certs can arrive out of slot order across messages; buffer them so
-  `commit_block` never persists a gap (`quod_ledger_store:append` enforces contiguity → a gap crashes the
-  gen_statem). `detect_commits` already emits slot-ordered events *within* one `settle`; the cross-message
-  case is the open half.
-- **Proposed-slot latch.** Derive the next slot from the in-flight tip, not `S#s.slot` (committed height),
-  and de-collide `#s.pending` — else two concurrent appends reuse one slot: the leader equivocates (two
-  support shares for one slot) and the first parked caller's `From` is overwritten and hangs to timeout.
-- **`may_commit/2` guard.** Wire it with the complaint path — a validator must not issue a commit share
-  for a slot it has complained (the load-bearing commit-vs-complaint mutual exclusion).
-- **Implicit predecessor commit** (spec §2.3.3) — committing a block implicitly commits its whole
-  predecessor prefix; needed once 2b pipelines (a slot can commit via a successor's commit cert).
-- **3-node loopback CT** (`simplex_SUITE`) — needs OS-peer QUIC like the deleted `raft_safety_SUITE`.
+- **Contiguous commit-apply** — **DONE** (2b): `commit_buf`/`drain_commits` buffer out-of-order
+  finalizations and apply strictly in slot order (generalized in 2c to also carry skips), so the store's
+  contiguity check never sees a gap.
+- **Proposed-slot latch** — **DONE** (the non-pipelined `#s.proposing` latch: a second concurrent append
+  gets `{error,busy}`, so a slot is never double-proposed and no parked `From` is overwritten). What's
+  left is only **pipelining** (>1 slot in flight, next slot from the in-flight tip) — a Stage-4 throughput
+  optimization, not a safety gap.
+- **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; `complained`/`commit_signed`
+  latches make commit-vs-complaint mutually exclusive per slot.
+- **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,
+  and `leader_failover` = kill-leader → complaint-skip → rotated-leader-commit).
+- **Implicit predecessor commit** (spec §2.3.3) — STILL OPEN: committing a block implicitly commits its
+  whole predecessor prefix; needed once the pipeline lands (a slot can commit via a successor's commit
+  cert). Today each slot commits only via its own commit cert (`detect_commits`).
 
 ## 4. Reader/subscriber arc — the path to "millions read root"
 

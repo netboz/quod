@@ -207,7 +207,8 @@ submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when Call
         {ok, _Index}                       -> {noreply, S1};
         {error, not_in_charge, unavailable} -> {noreply, S1};   %% ambiguous — TTL/apply resolves
         {error, not_in_charge, Hint}       -> {reply, {error, {not_leader, Hint}}, unpark(Tx, S1)};
-        {error, busy}                      -> {reply, {error, busy}, unpark(Tx, S1)};  %% backpressure: retry
+        {error, busy}                      -> {reply, {error, busy}, unpark(Tx, S1)};   %% backpressure: retry
+        {error, skipped}                   -> {reply, {error, retry}, unpark(Tx, S1)};  %% our slot was skipped: retry
         Other                              -> {reply, {error, Other}, unpark(Tx, S1)}
     end;
 submit_write(_From, _B, _D, _R, _CallerNs, S) ->

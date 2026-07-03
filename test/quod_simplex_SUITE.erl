@@ -13,11 +13,11 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
-         t_restart_replays/1, t_status_stats/1, t_multi_member_rejected/1]).
+         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
-     t_restart_replays, t_status_stats, t_multi_member_rejected].
+     t_restart_replays, t_status_stats, t_multi_member_accepted].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -68,14 +68,15 @@ t_genesis_seeds_content(Cfg) ->
         ?assert(length(Tx#transaction.diff) >= 1)
     after quod_ledger_store:close(Store) end.
 
-%% Stage 1 is single-validator: a founder config carrying co-founders (a multi-member committee) is
-%% rejected at init rather than silently mis-committed by the N=1 fast path. (Lifted in Stage 2.)
-t_multi_member_rejected(Cfg) ->
-    Ns = ?config(ns, Cfg),
+%% Stage 2 ACCEPTS a multi-member committee (co-founders): the founder bootstraps the full validator
+%% set from it. (Reaching a ⅔ quorum needs the peers — that is the multi-node CT; here we just check
+%% the config is accepted and the committee is seeded.)
+t_multi_member_accepted(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
     {P2, _} = quod_identity:generate(),
-    C  = maps:merge(?config(base_cfg, Cfg), #{committee => [P2]}),
-    ?assertMatch({error, {bad_config, {multi_validator_unsupported_stage1, 1}}},
-                 start_isolated(Ns, C)).
+    _ = start(Cfg, #{committee => [P2]}),
+    ?assertEqual(lists:usort([Self, P2]), quod_simplex:committee(Ns)).
 
 %% Each append commits (N=1: on its own fsync) and advances the height by one.
 t_append_commits_and_persists(Cfg) ->
@@ -123,16 +124,6 @@ start(Cfg, Extra) ->
     {ok, Pid} = quod_simplex:start_link(Ns, maps:merge(?config(base_cfg, Cfg), Extra)),
     unlink(Pid),
     Pid.
-
-%% Start in a trap-exit helper so an init that returns {stop,_} can't take down the test process via
-%% the start_link link (mirrors quod_create_root_tests' start_link_isolated).
-start_isolated(Ns, C) ->
-    Parent = self(),
-    spawn(fun() ->
-              process_flag(trap_exit, true),
-              Parent ! {start_result, (catch quod_simplex:start_link(Ns, C))}
-          end),
-    receive {start_result, R} -> R after 5000 -> {error, timeout} end.
 
 %% gen_statem:stop is a synchronous, clean shutdown that RUNS terminate/3 (closing the store) —
 %% unlike exit(Pid, shutdown) on a non-trapping gen_statem, which would skip terminate entirely.

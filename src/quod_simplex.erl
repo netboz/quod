@@ -23,13 +23,14 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 > #### Status {: .info }
 >
-> **Stage 2a (here):** the pure consensus core (quorum math, share signing, certificate
+> **Stage 2b (here):** the pure consensus core (quorum math, share signing, certificate
 > formation/verification, the commit guards), the **consensus engine** (§2.3 certificate pool + complete
-> block tree), and the per-namespace `gen_statem` that drives every commit through the engine. At the
-> **single validator (N=1)** case each `⅔` quorum self-satisfies, so an append commits synchronously:
-> propose → support cert (notarize) → commit cert → apply → persist. **Stage 2b (next):** the `{log, Ns}`
-> transport for a multi-node committee, the `Δ_timeout` complaint timer + the `may_commit` guard, and
-> epoch validators from `peer_admitted`.
+> block tree), and the per-namespace `gen_statem` that drives every commit through the engine **over the
+> `{log, Ns}` transport** — a multi-node committee proposes (fixed lowest-pubkey leader), collects `⅔`
+> support then commit certs, and commits, applying in slot order. At the **single validator (N=1)** case
+> each quorum self-satisfies, so an append commits synchronously. **Next:** the `Δ_timeout` complaint
+> timer + `may_commit` guard (leader failover), leader rotation, epoch validators from `peer_admitted`,
+> and per-message retransmit hardening (a dial-retry tick is in; see `doc/deferred.md` §3).
 """.
 
 -include("quod_ledger.hrl").
@@ -51,6 +52,11 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, leader/2, eng_tree/1, eng_committed/1]).
 -endif.
+
+%% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
+%% #share{} off the wire can carry a non-integer slot etc.); dialyzer trusts the declared field types
+%% and so thinks the false/reject branches are dead — they are not, at runtime.
+-dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1, well_formed_cert/1]}).
 
 %% A node's SIGNING identity: the subset of `t:quod_identity:identity/0` consensus needs (pubkey +
 %% private key), without the TLS cert. `make_share/4` signs with `key`; the share's signer is `pubkey`.
@@ -381,20 +387,30 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
-          committee    => [],          %% co-founders (a non-empty set = multi-validator, gated until 2b)
+          committee    => [],          %% co-founders; `[]` = self-only (N=1), a list = a multi-validator committee
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
           data_dir     => undefined}).
+
+-define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
+-define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
             id           :: signer() | undefined,    %% signing identity (pubkey + private key)
             store        :: quod_ledger_store:handle() | undefined,
             eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
-            validators   = [] :: [node_id()],        %% epoch-frozen committee (self-only at N=1)
-            slot         = 0  :: slot(),             %% height: index of the last committed block
-            committed    = 0  :: slot(),             %% highest committed slot (== slot: commits are in order)
+            chan         :: binary() | undefined,    %% term_to_binary({log, Ns}) — the transport channel
+            validators   = [] :: [node_id()],        %% epoch-frozen committee
+            slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
+                                                     %% strictly in order, so this is also the committed floor)
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
-            pending  = #{} :: #{slot() => gen_statem:from()},  %% client appends parked until their commit
+            pending    = #{} :: #{slot() => gen_statem:from()},  %% appends parked until commit (leader)
+            proposing  = none :: none | slot(),      %% the leader's in-flight proposed slot (one at a time)
+            supported  = #{} :: #{slot() => binary()},  %% slot => block_hash we support-signed (no double-sign)
+            commit_buf = #{} :: #{slot() => #block{}},   %% committed-out-of-order blocks, applied in slot order
+            conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
+            outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
+            dialing    = #{} :: #{node_id() => true},                  %% peers with an open_link dial in flight
             prolog_ready = false :: boolean(),
             appends = 0  :: non_neg_integer(),
             commits = 0  :: non_neg_integer()}).
@@ -449,16 +465,22 @@ init({Ns, Config}) ->
 
 init_store(Ns, Cfg, Id) ->
     {ok, Store} = quod_ledger_store:open(Ns, data_dir(Cfg)),
-    S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store},
+    Chan = term_to_binary({log, Ns}, [deterministic]),   %% the committee's consensus channel
+    quod_reg:subscribe({channel, Chan}),                 %% receive peers' proposals/shares/certs
+    S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store, chan = Chan},
     %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
     try load_or_bootstrap(S0, Cfg) of
         S1 ->
             Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
             Eng = eng_new(S1#s.validators, Committed),
-            {ok, running, S1#s{committed = Committed, last_applied = 0, eng = Eng}}
+            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
+
+%% The consensus re-drive timer: fires every ?TICK_MS to retry dials whose link never came up, so a
+%% transient dial failure at boot can't permanently stall a slot (there is no per-message retransmit).
+tick_timeout() -> {{timeout, tick}, ?TICK_MS, tick}.
 
 %% The private key this node signs shares with: from the config (tests inject it) or the app env
 %% (production — `quod_app:apply_identity` sets `identity_key`). `undefined` ⇒ a misconfigured node.
@@ -482,16 +504,28 @@ load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
         false -> bootstrap(Cfg, S0)
     end.
 
-%% Fresh create (N=1): durably seed the sole validator as an `{add, self}` config entry (slot 1),
-%% plus the genesis content block (slot 2) if a `.pl` is configured. `quod_prolog:genesis_diff/1` is
-%% evaluated FIRST (it may throw `{genesis_failed,_}`) and both entries land in ONE atomic append —
-%% so a bad `.pl` persists NOTHING: init stops and the next boot retries fresh, rather than leaving a
+%% Fresh create: durably seed the founding committee as `{add, M}` config entries (slots 1..K; `[]` ⇒
+%% self-only, a list ⇒ multi-member, deterministic `usort` order so every founder's log is identical),
+%% plus the genesis content block (slot K+1) if a `.pl` is configured. `quod_prolog:genesis_diff/1` is
+%% evaluated FIRST (it may throw `{genesis_failed,_}`) and everything lands in ONE atomic append — so a
+%% bad `.pl` persists NOTHING: init stops and the next boot retries fresh, rather than leaving a
 %% committee-only log that the next boot would mistake for a restart and never re-seed.
+%%
+%% REQUIREMENT for a multi-member CO-FOUNDING committee: every co-founder MUST be configured with the
+%% SAME `committee` AND the SAME `genesis_file` (or all none). Otherwise their genesis logs differ (a
+%% founder with a `.pl` boots at height K+1, one without at K), the height diverges, and the leader's
+%% first proposal never resolves its parent on the shorter nodes → the committee wedges. (In the normal
+%% deploy there is ONE founder + Stage-3 joiners, so this only bites an explicit multi-founder config.)
 bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
-    Committee = [#entry{index = 1, term = 0, kind = config, data = {add, Self}}],
-    Genesis   = genesis_entries(Cfg, Ns, Self, length(Committee)),
-    {ok, Store1} = quod_ledger_store:append(Store, Committee ++ Genesis),
-    S#s{store = Store1, validators = [Self], slot = length(Committee) + length(Genesis)}.
+    Committee = case maps:get(committee, Cfg) of
+                    []      -> [Self];
+                    CoList  -> lists:usort([Self | CoList])
+                end,
+    Configs = [#entry{index = I, term = 0, kind = config, data = {add, M}}
+               || {I, M} <- lists:zip(lists:seq(1, length(Committee)), Committee)],
+    Genesis = genesis_entries(Cfg, Ns, Self, length(Configs)),
+    {ok, Store1} = quod_ledger_store:append(Store, Configs ++ Genesis),
+    S#s{store = Store1, validators = Committee, slot = length(Configs) + length(Genesis)}.
 
 %% The genesis content block at slot `K+1` (or `[]` with no genesis file). Evaluated before
 %% bootstrap/2's single append, so a `genesis_diff/1` throw persists nothing.
@@ -514,12 +548,32 @@ running({call, From}, {append, Change}, S) -> handle_append(From, Change, S);
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
 running(cast, rebuild, S) ->
     {keep_state, maybe_mark_ready(apply_committed(S#s{last_applied = 0, prolog_ready = false}))};
+%% A peer's consensus message (proposal / share / cert) on our `{log, Ns}` channel. `Peer` is the
+%% sender's authenticated node_id (pubkey); the address is a routing hint we ignore.
+running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S = #s{chan = Chan}) ->
+    case decode(Payload, S#s.ns) of
+        error -> {keep_state, S};
+        Msg   -> {keep_state, dispatch(Peer, Msg, S)}
+    end;
+running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
+running(info, {link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
+    {keep_state, handle_link_up(Peer, LinkPid, S)};
+running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
+    %% the dial failed — clear the in-flight marker but KEEP the buffered frames; the tick re-dials
+    %% (consensus emits each propose/share only once, so dropping them would stall the slot forever).
+    {keep_state, S#s{dialing = maps:remove(Peer, S#s.dialing)}};
+running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
+    {keep_state, drop_conn(Pid, S)};
+%% Consensus re-drive: re-dial any peer whose link never came up (its frames are still buffered).
+running({timeout, tick}, tick, S) ->
+    {keep_state, redial_pending(S), [tick_timeout()]};
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
 running({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running(_EventType, _Event, S)             -> {keep_state, S}.
 
-terminate(_Reason, _State, #s{store = Store}) ->
+terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
+    _ = case Chan of undefined -> ok; _ -> catch quod_reg:unsubscribe({channel, Chan}) end,
     _ = case Store of
             undefined -> ok;
             _         -> try quod_ledger_store:close(Store) catch _:_ -> ok end
@@ -534,15 +588,17 @@ terminate(_Reason, _State, #s{store = Store}) ->
 %% The leader builds the block, feeds it + its own support share to the engine, and parks the caller
 %% until that block commits. At N=1 the engine reaches commit synchronously, so the ack is immediate;
 %% with peers (2b) the commit cert arrives later and `commit_block/3` acks then.
-handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl, id = Id}) ->
+handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
+    {keep_state, S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
+handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
     Next = Sl + 1,
     case leader(Next, Vs) of
         Self ->
             Block = #block{slot = Next, parent = Sl, payload = [Change]},
-            S1    = S#s{pending = (S#s.pending)#{Next => From}, appends = S#s.appends + 1},
-            %% propose: offer the block + our own support share (2b also broadcasts both to peers)
-            {keep_state, engine_step([{block, Block},
-                                      {share, make_share(support, Next, block_hash(Block), Id)}], S1)};
+            S1 = S#s{pending = (S#s.pending)#{Next => From}, proposing = Next, appends = S#s.appends + 1},
+            S2 = broadcast({propose, Block}, S1),        %% send the proposal to the committee
+            S3 = engine_step([{block, Block}], S2),      %% offer the block to our own engine
+            {keep_state, support_block(Block, S3)};      %% ... and support it (offer + broadcast the share)
         Leader ->
             {keep_state, S, [{reply, From, {error, not_in_charge, Leader}}]}
     end.
@@ -559,23 +615,27 @@ engine_step(Items, S) ->
 apply_events([], S)             -> S;
 apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
 
-%% N=1 has no peers, so a formed cert has nowhere to go; the `{log, Ns}` broadcast lands in 2b.
-apply_event({broadcast, _Cert}, S) ->
-    S;
-%% A block was notarized: sign + feed our commit share (2a has no complaint path, so we always commit).
+%% A newly-formed (or first-learned) cert: disseminate it to the committee (§2.3.1).
+apply_event({broadcast, Cert}, S) ->
+    broadcast({cert, Cert}, S);
+%% A block was notarized: sign + emit our commit share — offer it locally AND broadcast it. (2a has no
+%% complaint path, so we always commit; the `may_commit` guard lands with the complaint timer — §3.)
 apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id}) ->
-    engine_step([{share, make_share(commit, Sl, block_hash(Block), Id)}], S);
-%% A block is final: persist + apply + advance the height + ack the parked caller.
+    Share = make_share(commit, Sl, block_hash(Block), Id),
+    engine_step([{share, Share}], broadcast({share, Share}, S));
+%% A block is final: apply it, in slot order (out-of-order commits are buffered — §3 contiguous apply).
 apply_event({committed, Slot, Block}, S) ->
-    commit_block(Slot, Block, S).
+    commit_contiguous(Slot, Block, S).
 
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
-%% and reply `{ok, Slot}` to the parked caller. Payload is a single change in 2a.
+%% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. Payload is a single change in 2a.
 commit_block(Slot, #block{payload = [Change]}, S = #s{store = Store}) ->
     E = #entry{index = Slot, term = 0, kind = block, data = Change},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    S1 = S#s{store = Store1, slot = Slot, committed = Slot, commits = S#s.commits + 1,
-             eng = eng_prune(Slot, S#s.eng)},   %% this slot is durable now — drop it from the in-flight pool
+    S1 = S#s{store = Store1, slot = Slot, commits = S#s.commits + 1,
+             eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
+             proposing = case S#s.proposing of Slot -> none; Other -> Other end,   %% our proposal landed
+             supported = maps:remove(Slot, S#s.supported)},
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
 
 %% Reply `{ok, Slot}` to the caller parked on this slot (only the proposing node has one).
@@ -583,6 +643,144 @@ ack_pending(Slot, S = #s{pending = P}) ->
     case maps:take(Slot, P) of
         {From, P1} -> _ = gen_statem:reply(From, {ok, Slot}), S#s{pending = P1};
         error      -> S
+    end.
+
+%% Sign + emit our SUPPORT share for a block — offer it to our engine AND broadcast it — unless the slot
+%% is already committed history, or we already supported a block for this slot (no double-support, the
+%% honest-party one-block-per-slot invariant).
+support_block(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;
+support_block(#block{slot = Sl} = Block, S = #s{supported = Sup, id = Id}) ->
+    case maps:is_key(Sl, Sup) of
+        true  -> S;
+        false -> Share = make_share(support, Sl, block_hash(Block), Id),
+                 engine_step([{share, Share}],
+                             broadcast({share, Share}, S#s{supported = Sup#{Sl => block_hash(Block)}}))
+    end.
+
+%% Commit certs can arrive out of slot order over the async transport; buffer the block and apply
+%% strictly in ascending slot order, so the durable store (which enforces contiguity) never sees a gap.
+commit_contiguous(Slot, Block, S) ->
+    drain_commits(S#s{commit_buf = (S#s.commit_buf)#{Slot => Block}}).
+
+drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
+    case maps:take(H + 1, Buf) of
+        {Block, Buf1} -> drain_commits(commit_block(H + 1, Block, S#s{commit_buf = Buf1}));
+        error         -> S
+    end.
+
+%%%===================================================================
+%%% transport ({log, Ns} channel over quod_link)
+%%%===================================================================
+
+%% Route one inbound consensus message into the engine. A hostile peer can put any term on the wire, so
+%% every message is SHAPE-VALIDATED first — a record with a malformed field (e.g. a non-integer slot)
+%% would otherwise crash the statem downstream (share_bytes packs `Slot:64`). Malformed ⇒ silently dropped.
+dispatch(Peer, {propose, #block{} = B}, S) -> case well_formed_block(B) of true -> on_propose(Peer, B, S); false -> S end;
+dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true -> engine_step([{share, Sh}], S); false -> S end;
+dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
+dispatch(_Peer, _Other, S)                 -> S.
+
+well_formed_block(#block{slot = Sl, parent = P, payload = Pl}) ->
+    is_slot(Sl) andalso is_slot(P) andalso is_list(Pl);
+well_formed_block(_) -> false.
+well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
+    is_kind(K) andalso is_slot(Sl) andalso is_hash_or_none(BH) andalso is_binary(Sg) andalso is_binary(Sig);
+well_formed_share(_) -> false.
+well_formed_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs}) ->
+    is_kind(K) andalso is_slot(Sl) andalso is_hash_or_none(BH) andalso is_list(Sigs);
+well_formed_cert(_) -> false.
+is_slot(X)         -> is_integer(X) andalso X >= 0.
+is_kind(K)         -> K =:= support orelse K =:= commit orelse K =:= complaint.
+is_hash_or_none(H) -> H =:= none orelse is_binary(H).
+
+%% A leader's proposal: accept it only from the slot's actual leader AND only when it is the NEXT block
+%% we expect — slot = committed+1 extending our committed tip, with a single payload item. This bounds a
+%% Byzantine leader (no jumping ahead / flooding future slots) and means we never support a block on a
+%% chain we cannot verify, nor ever hand a malformed payload to commit_block.
+on_propose(Peer, #block{slot = Sl} = Block, S = #s{validators = Vs}) ->
+    case leader(Sl, Vs) =:= Peer andalso valid_proposal(Block, S) of
+        true  -> support_block(Block, engine_step([{block, Block}], S));
+        false -> S
+    end.
+
+valid_proposal(#block{slot = Sl, parent = P, payload = [_]}, #s{slot = H}) -> Sl =:= H + 1 andalso P =:= H;
+valid_proposal(_Block, _S) -> false.
+
+%% Send a consensus message to every OTHER validator, each on our own outbound link.
+broadcast(Msg, S = #s{self = Self, validators = Vs}) ->
+    lists:foldl(fun(P, Acc) -> send(P, Msg, Acc) end, S, Vs -- [Self]).
+
+%% Send to one peer on our outbound link, dialing on demand; frames buffer (bounded) in the outbox until
+%% `link_up` flushes them. We transmit only on our OWN outbound link, never a peer's inbound stream, so
+%% every directed pair stays reachable (mirrors the removed Raft transport). The `dialing` marker keeps
+%% at most one dial in flight per peer (a second `open_link` would register a duplicate waiter).
+send(Peer, Msg, S = #s{ns = Ns, chan = Chan, conns = Conns, outbox = Outbox, dialing = Dialing}) ->
+    Frame = encode(Ns, Msg),
+    case maps:get(Peer, Conns, undefined) of
+        {LinkPid, _Ref} ->
+            _ = quod_link:send(LinkPid, Frame),
+            S;
+        undefined ->
+            Buffered = lists:sublist([Frame | maps:get(Peer, Outbox, [])], ?MAX_OUTBOX),
+            S1 = S#s{outbox = Outbox#{Peer => Buffered}},
+            case maps:is_key(Peer, Dialing) of
+                true  -> S1;                                  %% a dial is already in flight for this peer
+                false -> _ = quod_quic:open_link(Peer, Chan),
+                         S1#s{dialing = Dialing#{Peer => true}}
+            end
+    end.
+
+%% Re-drive (tick): re-dial every peer with buffered frames but no live link and no dial in flight — the
+%% recovery path for a dial that failed (its `dialing` marker was cleared by `link_error`, its frames kept).
+redial_pending(S = #s{conns = Conns, outbox = Outbox, dialing = Dialing, chan = Chan}) ->
+    Pending = [P || P <- maps:keys(Outbox),
+                    not maps:is_key(P, Conns), not maps:is_key(P, Dialing)],
+    lists:foldl(fun(P, Acc) ->
+                    _ = quod_quic:open_link(P, Chan),
+                    Acc#s{dialing = (Acc#s.dialing)#{P => true}}
+                end, S, Pending).
+
+encode(Ns, Msg) -> term_to_binary({sx, Ns, term_to_binary(Msg)}).
+
+%% The envelope is `[safe]` (known atoms only); the inner message carries `#transaction` diffs whose
+%% Prolog atoms the receiver may not have seen yet, so it decodes WITHOUT `[safe]` — the same
+%% trusted-committee posture as the removed Raft transport (bounded by the committee link scope;
+%% doc/deferred.md §2). Returns `error` on anything malformed or for another namespace.
+decode(Payload, Ns) ->
+    try binary_to_term(Payload, [safe]) of
+        {sx, Ns, Inner} -> try binary_to_term(Inner) catch _:_ -> error end;
+        _               -> error
+    catch _:_ -> error end.
+
+%% Our outbound link to a peer opened: adopt it (monitor + flush the outbox), unless we already hold a
+%% LIVE link to it or it is not a committee member (links are scoped to the committee). A stored conn
+%% whose pid is DEAD (its `DOWN` not yet processed) is replaced — never treat a corpse as a live
+%% duplicate and close the newcomer, or the peer could never re-link.
+handle_link_up(Peer, LinkPid, S0 = #s{outbox = Outbox, validators = Vs}) ->
+    S = S0#s{dialing = maps:remove(Peer, S0#s.dialing)},   %% the dial resolved
+    LiveDup = case maps:get(Peer, S#s.conns, undefined) of
+                  {Pid, _Ref} -> is_process_alive(Pid);
+                  undefined   -> false
+              end,
+    case LiveDup orelse (not lists:member(Peer, Vs)) of
+        true  -> _ = quod_link:close(LinkPid), S;
+        false -> S1  = drop_conn_by_peer(Peer, S),         %% demonitor + drop any dead stored conn
+                 Ref = erlang:monitor(process, LinkPid),
+                 _   = [quod_link:send(LinkPid, F) || F <- lists:reverse(maps:get(Peer, Outbox, []))],
+                 S1#s{conns = (S1#s.conns)#{Peer => {LinkPid, Ref}}, outbox = maps:remove(Peer, Outbox)}
+    end.
+
+%% A tracked outbound link died (DOWN): drop it (a later send / the tick re-dials + re-buffers).
+drop_conn(Pid, S = #s{conns = Conns}) ->
+    case [{P, R} || {P, {LP, R}} <- maps:to_list(Conns), LP =:= Pid] of
+        [{Peer, Ref} | _] -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
+        []                -> S
+    end.
+
+drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
+    case maps:get(Peer, Conns, undefined) of
+        {_Pid, Ref} -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
+        undefined   -> S
     end.
 
 %% Apply a freshly-committed block using the IN-HAND payload — no read-back of what we just wrote.
@@ -599,14 +797,14 @@ apply_live(_Slot, _Change, S) -> S.
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — reading each from the store
 %% (the rebuild path; this process keeps no in-memory log). Deferred if quod_prolog is not up yet.
 %% The registry lookup is done ONCE here, not per block.
-apply_committed(S = #s{last_applied = LA, committed = C}) when LA >= C -> S;
+apply_committed(S = #s{last_applied = LA, slot = C}) when LA >= C -> S;
 apply_committed(S = #s{ns = Ns}) ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
         _         -> apply_loop(S)
     end.
 
-apply_loop(S = #s{last_applied = LA, committed = C}) when LA >= C -> S;
+apply_loop(S = #s{last_applied = LA, slot = C}) when LA >= C -> S;
 apply_loop(S = #s{ns = Ns, store = Store, last_applied = LA}) ->
     I = LA + 1,
     {ok, #entry{data = Data}} = quod_ledger_store:read_at(Store, I),
@@ -619,7 +817,7 @@ safe_apply_block(Ns, I, Data) ->
 %% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix
 %% is actually applied, so a (re)started member never answers from a half-built kb.
 maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false}) ->
-    case (quod_reg:where({quod_prolog, Ns}) =/= undefined) andalso (S#s.last_applied >= S#s.committed) of
+    case (quod_reg:where({quod_prolog, Ns}) =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
                  S#s{prolog_ready = true};
         false -> S
@@ -638,18 +836,15 @@ committee_of(Base, Log) ->
                    (_, V) -> V
                 end, Base, Log).
 
-%% The single-validator gate: multi-node consensus needs the `{log, Ns}` transport that lands in Stage
-%% 2b, so a non-empty `committee` (co-founders) is rejected until then. (The commit itself already runs
-%% through the engine's `⅔` quorum/cert path even at N=1 — there is no fast path to mis-commit through.)
+%% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
+%% list of co-founders = a multi-validator committee (the founding validator set is frozen from it).
 valid_cfg(Config, Cfg) ->
     case maps:get(node_id, Config, undefined) of
         undefined -> {error, missing_node_id};
-        _         ->
-            case maps:get(committee, Cfg) of
-                []                -> ok;
-                L when is_list(L) -> {error, {multi_validator_unsupported_stage1, length(L)}};
-                Other             -> {error, {bad_committee, Other}}
-            end
+        _         -> case maps:get(committee, Cfg) of
+                         L when is_list(L) -> ok;
+                         Other             -> {error, {bad_committee, Other}}
+                     end
     end.
 
 data_dir(Cfg) ->
@@ -668,9 +863,9 @@ genesis_file(Cfg) ->
 
 status_map(S) ->
     #{role => validator, committee => S#s.validators, slot => S#s.slot,
-      committed => S#s.committed, last_applied => S#s.last_applied}.
+      committed => S#s.slot, last_applied => S#s.last_applied}.
 
 stats_map(S) ->
-    #{slot => S#s.slot, committed => S#s.committed, last_applied => S#s.last_applied,
+    #{slot => S#s.slot, committed => S#s.slot, last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready}.

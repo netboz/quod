@@ -2,8 +2,11 @@
 -moduledoc """
 Per-namespace **DispersedSimplex** Byzantine consensus — quod's ordering layer,
 replacing the earlier hand-rolled Raft ledger. One consensus instance per
-namespace; the committee is the namespace's validator set (`peer_admitted` facts,
-epoch-frozen). See the approved plan and `doc/simplex_extended.pdf` (§2 = the spec).
+namespace; the committee (validator set) is folded from the log's `config`
+entries — the founding voters at bootstrap, then membership changes as committed
+member-ops (adopted live at the slot boundary; `peer_admitted` KB facts are a
+derived projection — Stage 3). See the approved plan and `doc/simplex_extended.pdf`
+(§2 = the spec).
 
 ## The protocol (per slot `v`)
 
@@ -49,8 +52,9 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
-%% consensus-engine surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1]).
+%% consensus-engine + membership-fold surface driven by eunit (the #eng record is otherwise private)
+-export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1,
+         voters/2, apply_member_op/2]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
@@ -247,6 +251,11 @@ new proposal's parent resolves without the engine holding the whole chain.
 eng_new(Validators, Base) ->
     #eng{validators = Validators, base = Base}.
 
+%% Swap the engine's validator set when a committed member-op changes the committee (`adopt_membership/2`).
+%% Safe at the slot boundary: the just-committed slot is already pruned (`base` raised), so no in-flight
+%% share/cert is re-verified under the new set; the next slot's shares/certs verify against it.
+eng_set_validators(Validators, Eng) -> Eng#eng{validators = Validators}.
+
 -doc """
 Offer one protocol object to the engine; returns the updated engine + the events it produced. This is
 the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a peer's), or a relayed
@@ -420,7 +429,8 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             store        :: quod_ledger_store:handle() | undefined,
             eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
             chan         :: binary() | undefined,    %% term_to_binary({log, Ns}) — the transport channel
-            validators   = [] :: [node_id()],        %% epoch-frozen committee
+            validators   = [] :: [node_id()],        %% the voting committee (folded from `config` entries)
+            nonvoting    = [] :: [node_id()],        %% learners/replicas — admitted, catch up + follow, never vote
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
@@ -454,8 +464,8 @@ flight), `not_in_charge` (this node isn't the slot's leader — a redirect hint,
 process is unreachable), and `skipped` (a multi-node committee complaint-skipped our proposed slot →
 retry). At N=1 only the sole-validator commit path runs, so an append just returns `{ok, Slot}`.
 """.
--spec append(binary(), #transaction{}) ->
-        {ok, slot()} | {error, busy} | {error, skipped}
+-spec append(binary(), #transaction{} | member_op()) ->
+        {ok, slot()} | {error, busy} | {error, skipped} | {error, bad_change}
       | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}), {append, Change}, 5000)
@@ -526,7 +536,8 @@ load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
     Log     = maps:get(log, L),
     case Log =/= [] orelse SnapCfg =/= [] of
         true  -> {LastI, _} = quod_ledger_store:last(Store),
-                 S0#s{validators = committee_of(SnapCfg, Log), slot = LastI};
+                 {V, NV} = voters(SnapCfg, Log),
+                 S0#s{validators = V, nonvoting = NV, slot = LastI};
         false -> bootstrap(Cfg, S0)
     end.
 
@@ -637,6 +648,12 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
     {S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
+    case acceptable_change(Change, S) of
+        false -> {S, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too (not just peers)
+        true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
+    end.
+
+handle_append_leader(From, Change, Self, Vs, Sl, S) ->
     Next = Sl + 1,
     case leader(Next, Vs) of
         Self ->
@@ -686,10 +703,27 @@ apply_event({skipped, Slot}, S) ->
 %% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
 commit_block(Slot, #block{payload = [Change]}, S = #s{store = Store}) ->
-    E = #entry{index = Slot, term = 0, kind = block, data = Change},
+    E = #entry{index = Slot, term = 0, kind = entry_kind(Change), data = Change},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    S1 = finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1}),
+    S1 = adopt_membership(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1})),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
+
+%% Which durable entry kind a committed change persists as: a member-op becomes a `config` entry (so
+%% `voters/2` re-folds it on restart — persisting it as `block` was the restart-forgets-members bug); a
+%% `#transaction` / `noop` is a `block`.
+entry_kind(Change) -> case is_member_op(Change) of true -> config; false -> block end.
+
+%% A committed change updates the LIVE committee at the slot boundary. Safe without epochs because
+%% consensus is strictly non-pipelined: the just-committed slot's certs are already formed + pruned under
+%% the OLD set, the set is a pure function of the committed prefix, and slot+1 is the first slot voted
+%% under the NEW set — so every node crosses the boundary at the same logical point. A member-op folds via
+%% the SAME `apply_member_op/2` as the restart re-fold, so the running set can never drift from a re-fold.
+adopt_membership(Change, S = #s{validators = V, nonvoting = NV, eng = Eng}) ->
+    case is_member_op(Change) of
+        false -> S;
+        true  -> {V1, NV1} = apply_member_op(Change, {V, NV}),
+                 S#s{validators = V1, nonvoting = NV1, eng = eng_set_validators(V1, Eng)}
+    end.
 
 %% A complaint cert skipped this slot: persist an empty `noop` entry so the store height (and every
 %% node's) advances contiguously, then nack any caller that had proposed it so the client retries under
@@ -825,8 +859,32 @@ on_complain_timeout(V, S = #s{slot = H, id = Id, commit_signed = Cs}) when V =:=
     end;
 on_complain_timeout(_V, S) -> S.
 
-valid_proposal(#block{slot = Sl, parent = P, payload = [_]}, #s{slot = H}) -> Sl =:= H + 1 andalso P =:= H;
+valid_proposal(#block{slot = Sl, parent = P, payload = [Change]}, #s{slot = H} = S) ->
+    Sl =:= H + 1 andalso P =:= H andalso acceptable_change(Change, S);
 valid_proposal(_Block, _S) -> false.
+
+%% A change this node will PROPOSE or SUPPORT: a transaction, a `noop`, or a runtime-admissible member-op.
+%% This increment admits ONLY a genuinely NEW non-voting member (`add_learner`/`add_replica` of a node not
+%% already a voter) — additive + quorum-preserving. Voter changes (`add`/`promote`/`remove`) and any op that
+%% would DEMOTE a current voter are rejected on BOTH the leader (`handle_append`) and peer (`on_propose`)
+%% paths — an honest node never proposes or supports one — because they change the quorum, can drop the
+%% committee below its fault budget, or empty it. They land with the live-joiner increment (a committee
+%% min-size floor + quorum-change handling + `can_join`). The founding voter set is seeded at bootstrap,
+%% not through this path, so restricting it here doesn't affect founding.
+acceptable_change(#transaction{}, _S) -> true;
+acceptable_change(noop, _S)           -> true;
+acceptable_change({Op, M}, #s{validators = V}) when (Op =:= add_learner orelse Op =:= add_replica),
+                                                     is_binary(M) ->
+    not lists:member(M, V);   %% a NEW non-voting member — never a current voter (no demotion / no split)
+acceptable_change(_, _) -> false.
+
+%% Is a committed change a membership op (vs a `#transaction` / `noop`)? Drives the durable entry kind and
+%% the live committee update. TOTAL (matches any term) so an out-of-contract change classifies as a plain
+%% block rather than function_clause-crashing the statem — defence-in-depth behind `acceptable_change/2`.
+is_member_op({Op, M}) when is_binary(M),
+                           (Op =:= add orelse Op =:= add_learner orelse Op =:= add_replica
+                            orelse Op =:= promote orelse Op =:= remove) -> true;
+is_member_op(_) -> false.
 
 %% Send a consensus message to every OTHER validator, each on our own outbound link.
 broadcast(Msg, S = #s{self = Self, validators = Vs}) ->
@@ -950,13 +1008,23 @@ maybe_mark_ready(S) -> S.   %% already marked ready
 %%% helpers
 %%%===================================================================
 
-%% The validator set derived from the log's `config` entries (over an optional snapshot base).
-%% Stage 1 only ever produces `{add, M}` (the founding committee); `{promote}`/`{remove}`/learners
-%% land with membership changes (Stage 3) and extend this fold then.
-committee_of(Base, Log) ->
-    lists:foldl(fun(#entry{kind = config, data = {add, M}}, V) -> [M | V -- [M]];
-                   (_, V) -> V
-                end, Base, Log).
+%% The validator set + the non-voting members (learners/replicas), derived from the log's `config`
+%% entries over an optional voter snapshot base. ONE transition function (`apply_member_op/2`) folds the
+%% whole `member_op()` algebra and is used by BOTH this restart re-fold AND the live update on commit
+%% (`adopt_membership/2`) — so the running committee can never drift from what a fresh re-fold would give.
+%% Voters and non-voting are kept DISJOINT (a `{promote}` moves learner→voter; `{remove}` drops from both).
+voters(Base, Log) ->
+    lists:foldl(fun(#entry{kind = config, data = Op}, Acc) -> apply_member_op(Op, Acc);
+                   (_, Acc)                                 -> Acc
+                end, {Base, []}, Log).
+
+apply_member_op({add,         M}, {V, NV}) -> {addq(M, V), NV -- [M]};
+apply_member_op({promote,     M}, {V, NV}) -> {addq(M, V), NV -- [M]};   %% learner → voter
+apply_member_op({add_learner, M}, {V, NV}) -> {V -- [M], addq(M, NV)};
+apply_member_op({add_replica, M}, {V, NV}) -> {V -- [M], addq(M, NV)};
+apply_member_op({remove,      M}, {V, NV}) -> {V -- [M], NV -- [M]}.
+
+addq(M, L) -> case lists:member(M, L) of true -> L; false -> L ++ [M] end.   %% idempotent add
 
 %% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
 %% list of co-founders = a multi-validator committee (the founding validator set is frozen from it).
@@ -984,7 +1052,7 @@ genesis_file(Cfg) ->
     end.
 
 status_map(S) ->
-    #{role => validator, committee => S#s.validators, slot => S#s.slot,
+    #{role => validator, committee => S#s.validators, nonvoting => S#s.nonvoting, slot => S#s.slot,
       committed => S#s.slot, last_applied => S#s.last_applied}.
 
 stats_map(S) ->

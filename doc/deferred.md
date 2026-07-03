@@ -112,7 +112,11 @@ stages, not carried forward:
   protocol change; until then a mid-round leader crash on a bare quorum can wedge a namespace. The
   `leader_failover` CT does not cover it (killing the leader *before* it proposes is not the trigger).
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
-  store keeps the full block archive).
+  store keeps the full block archive). **When it lands, extend the snapshot committee base to carry the
+  NON-VOTING set too:** `voters/2` seeds the fold as `{snap_cfg, []}` and `quod_ledger_store` snapshots only
+  a `[node_id()]` voter list, so a snapshot restored after a learner/replica was admitted would drop it
+  (unreachable today — `read_snapshot` returns `none`, so the full log re-folds; the `snap_cfg` shape must
+  gain a nonvoting slot before snapshots ship).
 
 **From the 2a/2b/2c reviews — mostly landed; two remain open:**
 

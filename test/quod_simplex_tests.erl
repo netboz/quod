@@ -293,6 +293,32 @@ guards_mutual_exclusion_test() ->
     ?assert(quod_simplex:may_complain(5, [])),
     ?assertNot(quod_simplex:may_complain(5, [5])).      %% commit-signed 5 ⇒ must not complain it
 
+%% The membership fold: all five member-ops fold into DISJOINT {voters, nonvoting}, deduped, blocks ignored.
+voters_fold_test() ->
+    [A, B, C, D] = [P || {P, _} <- committee(4)],
+    Cfg = fun(Op) -> #entry{index = 0, term = 0, kind = config, data = Op} end,
+    Blk = #entry{index = 0, term = 0, kind = block, data = noop},
+    Log = [Cfg({add, A}), Cfg({add, B}), Blk,
+           Cfg({add_learner, C}), Cfg({add_replica, D}),
+           Cfg({add, A}),                 %% duplicate add — idempotent
+           Cfg({promote, C}),             %% learner C → voter
+           Cfg({remove, B})],             %% drop voter B
+    {V, NV} = quod_simplex:voters([], Log),
+    ?assertEqual(lists:sort([A, C]), lists:sort(V)),        %% A + promoted C; B removed
+    ?assertEqual([D], lists:sort(NV)),                     %% D still a replica; C moved to voters
+    ?assertEqual([], [X || X <- V, lists:member(X, NV)]).   %% voters/nonvoting disjoint
+%% (the live adopt_membership path ≡ this restart re-fold is exercised end-to-end by the gen_statem
+%% CT `t_admit_learner_survives_restart`, which asserts `nonvoting` both live (pre-restart) and re-folded.)
+
+%% A learner does NOT change the voting set (hence quorum/leader stay put) — the quorum-trap avoidance.
+learner_preserves_quorum_test() ->
+    [A, B] = [P || {P, _} <- committee(2)],
+    {V0, _}  = quod_simplex:apply_member_op({add, A}, {[], []}),
+    {V1, NV} = quod_simplex:apply_member_op({add_learner, B}, {V0, []}),
+    ?assertEqual(V0, V1),                          %% voters unchanged by a learner
+    ?assertEqual([B], NV),
+    ?assertEqual(quod_simplex:quorum(length(V0)), quod_simplex:quorum(length(V1))).
+
 %% Pruning a committed slot advances `base` and drops it from every map (the memory-leak fix), and a
 %% stale share/cert/block for an already-final slot (`=< base`) is then ignored.
 eng_prune_test() ->

@@ -86,8 +86,10 @@ t_create_root({_Dir, Ns, Content}) ->
                      rp(Ns, {system_ontology, 'quod:root', 'quod_root.pl', [], []})),
         %% the default-open can_read/3 rule unifies with anything
         ?assertMatch({ok, [#{}], _}, rp(Ns, {can_read, foo, bar, baz})),
-        %% index 1 = founding {add,self} config; index 2 = the genesis content block
-        ?assertMatch(#{committed := 2, last_applied := 2},
+        %% the founder is on its own committee, as a peer_admitted fact in the genesis kb
+        ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, {'_'}})),
+        %% ONE genesis block (slot 1): the committee's peer_admitted facts + the root content
+        ?assertMatch(#{committed := 1, last_applied := 1},
                      quod_simplex:stats(Ns))
     end.
 

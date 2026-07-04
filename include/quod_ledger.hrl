@@ -32,21 +32,14 @@
                  author     :: node_id(),           %% submitting node's pubkey
                  sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
 
-%% A Raft log entry. `data` is a #transaction{} for `block` entries, the atom `noop`
-%% for the election marker, or a membership op for `config` entries. The membership ops:
-%% `{add, S}` seeds a founding voter; `{add_learner, S}` admits a non-voting catch-up member
-%% (to be promoted); `{add_replica, S}` admits a PERMANENT non-voting full-copy replica (a read
-%% replica — fed like a learner but never promoted); `{promote, S}` turns a learner into a
-%% voter; `{remove, S}` drops a member.
--type member_op() :: {add,         node_id()}
-                   | {add_learner, node_id()}
-                   | {add_replica, node_id()}
-                   | {promote,     node_id()}
-                   | {remove,      node_id()}.
+%% A committed log entry. `data` is a #transaction{} for a normal committed change, or the atom
+%% `noop` for a complaint-skipped slot. Membership is NOT a distinct entry kind: the committee is
+%% the set of `peer_admitted` facts, changed by ordinary transactions whose diff asserts/retracts
+%% `peer_admitted` (`quod_simplex:committee_from_log/1` derives the validator set from those diffs).
 -record(entry, {index :: log_index(),
                 term  :: term_no(),
-                kind  :: block | config,
-                data  :: #transaction{} | noop | member_op()}).
+                kind  :: block,
+                data  :: #transaction{} | noop}).
 
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support
@@ -54,11 +47,12 @@
 %% numbers + certificates carry the order (§2, "hash chaining turns out to be unnecessary").
 -type slot() :: non_neg_integer().               %% 0 = genesis; blocks are 1..N
 
-%% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction, a
-%% membership op, or `noop`). `parent` is the previous committed slot it extends (0 = genesis).
+%% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction or `noop`;
+%% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
+%% the previous committed slot it extends (0 = genesis).
 -record(block, {slot    :: slot(),
                 parent  :: slot(),
-                payload :: [#transaction{} | member_op() | noop]}).
+                payload :: [#transaction{} | noop]}).
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
 %% `complaint` (timeout→skip the slot). `block_hash` binds a support/commit share to a specific

@@ -6,8 +6,9 @@ with its own `quod_quic` listener on a distinct port and its own Ed25519 identit
 proposal / share / cert / complaint traffic between them is genuine loopback QUIC, exactly the
 deployment shape.
 
-The four co-found the same committee (`mode=create`, `committee` = the four pubkeys, no genesis so their
-logs are byte-identical). The leader for a slot **rotates** round-robin over the sorted set, so tests
+The four co-found the same committee (`mode=create`, `committee` = the four `{pubkey, addr}`; the genesis
+block asserts every co-founder's `peer_admitted` fact, so their logs are byte-identical). The committee is
+derived from those facts. The leader for a slot **rotates** round-robin over the sorted set, so tests
 target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
 `follower_redirects` proves a non-leader redirects; `leader_failover` kills the next slot's leader
 **before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
@@ -35,9 +36,8 @@ all() -> [commits_across_committee, follower_redirects, leader_failover].
 
 init_per_suite(Config) ->
     Keys  = [quod_identity:generate() || _ <- ?PORTS],       %% [{Pubkey, Seed}]
-    Pubs  = [P || {P, _} <- Keys],
     Addrs = [{P, {"127.0.0.1", Port}} || {{P, _}, Port} <- lists:zip(Keys, ?PORTS)],
-    Nodes = [start_member(Port, Key, Pubs, Addrs, Config)
+    Nodes = [start_member(Port, Key, Addrs, Config)
              || {Port, Key} <- lists:zip(?PORTS, Keys)],
     [{nodes, Nodes} | Config].
 
@@ -48,7 +48,7 @@ end_per_suite(Config) ->
 %% Start one validator in its own OS node: its own identity (env), its own QUIC listener on Port, a fast
 %% Δ_timeout, the resolver pre-seeded with every peer's pubkey→addr (so consensus can dial by pubkey),
 %% then the namespace as a co-founder of the shared committee. Returns {Peer, Pubkey}.
-start_member(Port, {Pub, Seed}, Pubs, Addrs, Config) ->
+start_member(Port, {Pub, Seed}, Addrs, Config) ->
     Name = list_to_atom("sx_" ++ integer_to_list(Port)),
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io, args => ["-pa" | code:get_path()]}),
@@ -69,7 +69,10 @@ start_member(Port, {Pub, Seed}, Pubs, Addrs, Config) ->
     DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
     Cfg = #{mode => create, node_id => Pub,
             identity  => #{pubkey => Pub, key => KeyTerm},
-            committee => Pubs -- [Pub],   %% co-founders (bootstrap usorts [Self | this])
+            %% co-founders as {Pubkey, Host, Port} — genesis asserts each one's peer_admitted with its
+            %% address, so every founder's genesis transaction is byte-identical (bootstrap adds Self via
+            %% node_addr). Consensus needs only the pubkeys; the addresses are the dial hint the KB carries.
+            committee => [{Pj, Hj, Pt} || {Pj, {Hj, Pt}} <- Addrs, Pj =/= Pub],
             data_dir  => DataDir},
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),
     {Peer, Pub}.
@@ -81,26 +84,29 @@ start_member(Port, {Pub, Seed}, Pubs, Addrs, Config) ->
 %% A write submitted to a slot's (rotating) leader commits across the whole committee, fact in every KB.
 commits_across_committee(Config) ->
     Nodes = ?config(nodes, Config),
-    %% all four co-founded the same 4-validator committee at height 4 (4 {add,M} entries, no genesis)
-    [ ?assertEqual(4, slot(Peer)) || {Peer, _} <- Nodes ],
-    %% ONE write on the correct rotating leader for slot 5 commits across the committee. Retried because
+    %% all four co-founded the same 4-validator committee via ONE genesis block (slot 1) whose transaction
+    %% asserts every co-founder's peer_admitted fact — byte-identical, so all four start at height 1.
+    [ ?assertEqual(1, slot(Peer)) || {Peer, _} <- Nodes ],
+    %% ONE write on the correct rotating leader for slot 2 commits across the committee. Retried because
     %% quod_prolog answers {error,rebuilding} until its async post-boot replay marks ready; {error,rebuilding}
     %% never reaches consensus, so retrying still yields exactly one committed write (no over-shoot).
-    {L5, _} = leader_peer(5, Config),
-    ?assert(eventually(fun() -> match_ok(prove(L5, {assertz, {capital, france, paris}})) end, 20000)),
-    %% the commit propagates: every node reaches height 5 and reads the fact from its OWN kb
+    {L2, _} = leader_peer(2, Config),
+    ?assert(eventually(fun() -> match_ok(prove(L2, {assertz, {capital, france, paris}})) end, 20000)),
+    %% the commit propagates: every node reaches height 2 and reads the fact from its OWN kb
     [ begin
-          ?assert(eventually(fun() -> slot(Peer) >= 5 end, 15000)),
+          ?assert(eventually(fun() -> slot(Peer) >= 2 end, 15000)),
           ?assert(eventually(fun() -> match_ok(prove(Peer, {capital, france, {'X'}})) end, 10000))
       end || {Peer, _} <- Nodes ],
-    ?assert(eventually(fun() -> lists:usort([slot(Peer) || {Peer, _} <- Nodes]) =:= [5] end, 5000)).
+    ?assert(eventually(fun() -> lists:usort([slot(Peer) || {Peer, _} <- Nodes]) =:= [2] end, 5000)).
 
 %% A write submitted to a non-leader is redirected to the current slot's leader, not silently dropped.
 follower_redirects(Config) ->
     Nodes = ?config(nodes, Config),
-    H = slot(peer1(Nodes)),
-    {LeaderPeer, _} = leader_peer(H + 1, Config),
-    [{FollowerPeer, _} | _] = [N || {P, _} = N <- Nodes, P =/= peer_pub(LeaderPeer, Nodes)],
+    H = synced_height(Nodes),
+    {_LeaderPeer, LeaderPub} = leader_peer(H + 1, Config),
+    %% pick a NON-leader by PUBKEY (element 2) — comparing the peer handle (element 1) would never match
+    %% a pubkey, leaving the leader itself in the candidate set.
+    {FollowerPeer, _} = hd([N || {_, Pub} = N <- Nodes, Pub =/= LeaderPub]),
     ?assertMatch({error, {not_leader, _}}, prove(FollowerPeer, {assertz, {should, not_commit}})).
 
 %% Kill the next slot's leader BEFORE it proposes: the slot cannot commit (no proposer), so the three
@@ -108,7 +114,7 @@ follower_redirects(Config) ->
 %% slot commits the re-submitted write. Proves complaint-timer → skip → rotation → commit end-to-end.
 leader_failover(Config) ->
     Nodes = ?config(nodes, Config),
-    H = slot(peer1(Nodes)),
+    H = synced_height(Nodes),
     V = H + 1,
     {DeadPeer, DeadPub} = leader_peer(V, Config),
     ok   = peer:stop(DeadPeer),
@@ -139,7 +145,13 @@ leader_failover(Config) ->
 
 pubs(Nodes) -> [P || {_, P} <- Nodes].
 peer1(Nodes) -> element(1, hd(Nodes)).
-peer_pub(Peer, Nodes) -> element(2, lists:keyfind(Peer, 1, Nodes)).
+
+%% Wait until EVERY node reports the same committed height, then return it. The committee is quiescent
+%% between the (ordered) tests, so once they agree the height is stable — this avoids picking a leader
+%% off a node that is a beat behind (a non-leader whose own next slot it would still lead).
+synced_height(Nodes) ->
+    ?assert(eventually(fun() -> length(lists:usort([slot(P) || {P, _} <- Nodes])) =:= 1 end, 10000)),
+    slot(peer1(Nodes)).
 
 %% The round-robin leader for a slot — MUST match quod_simplex:leader/2 (sorted set, (Slot-1) rem N).
 leader_for(Slot, Nodes) ->

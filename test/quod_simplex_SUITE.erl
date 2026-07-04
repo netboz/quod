@@ -13,13 +13,11 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
-         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1,
-         t_admit_learner_survives_restart/1, t_membership_gate_rejects/1]).
+         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
-     t_restart_replays, t_status_stats, t_multi_member_accepted,
-     t_admit_learner_survives_restart, t_membership_gate_rejects].
+     t_restart_replays, t_status_stats, t_multi_member_accepted].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -40,8 +38,8 @@ end_per_testcase(_TC, Cfg) ->
 %%% tests
 %%%===================================================================
 
-%% A sole founder (no explicit committee) seeds a 1-validator committee: one `{add, self}` config
-%% entry at slot 1, and nothing else.
+%% A sole founder (no explicit committee) seeds a 1-validator committee: the genesis block (slot 1)
+%% asserts its own `peer_admitted` fact, and the committee is derived from it — `[Self]`.
 t_founder_bootstrap(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
@@ -52,22 +50,22 @@ t_founder_bootstrap(Cfg) ->
     ?assertEqual(1, maps:get(slot, St)),
     ?assertEqual(1, maps:get(committed, St)).
 
-%% On create the founder commits the genesis `.pl` content as a block right after the committee:
-%% slot 1 = the `{add, self}` committee entry, slot 2 = the genesis content block. Read the block
-%% back off disk to confirm it actually holds the genesis transaction with a non-empty diff (not an
-%% empty/wrong block that would still bump the height).
+%% On create the founder commits ONE genesis block (slot 1): the transaction asserts the committee's
+%% `peer_admitted` fact(s) AND the genesis `.pl` content. Read the block back off disk to confirm it holds
+%% the genesis transaction with a non-empty diff (not an empty/wrong block that would still bump the height).
 t_genesis_seeds_content(Cfg) ->
     Ns   = ?config(ns, Cfg),
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     _ = start(Cfg, #{genesis_file => File}),
     St = quod_simplex:status(Ns),
-    ?assertEqual(2, maps:get(slot, St)),
-    ?assertEqual(2, maps:get(committed, St)),
+    ?assertEqual(1, maps:get(slot, St)),
+    ?assertEqual(1, maps:get(committed, St)),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{kind = block, data = Tx}} = quod_ledger_store:read_at(Store, 2),
+        {ok, #entry{kind = block, data = Tx}} = quod_ledger_store:read_at(Store, 1),
         ?assertMatch(#transaction{tx_id = <<"genesis:", _/binary>>}, Tx),
-        ?assert(length(Tx#transaction.diff) >= 1)
+        %% the diff carries at least the founder's peer_admitted fact + the root content
+        ?assert(length(Tx#transaction.diff) >= 2)
     after quod_ledger_store:close(Store) end.
 
 %% Stage 2 ACCEPTS a multi-member committee (co-founders): the founder bootstraps the full validator
@@ -85,7 +83,7 @@ t_append_commits_and_persists(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
     _ = start(Cfg, #{}),
-    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),   %% slot 1 = committee
+    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),   %% slot 1 = genesis
     ?assertEqual({ok, 3}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),
     St = quod_simplex:status(Ns),
     ?assertEqual(3, maps:get(slot, St)),
@@ -116,50 +114,6 @@ t_status_stats(Cfg) ->
     ?assertEqual(1, maps:get(committee_size, S)),
     ?assertEqual(2, maps:get(slot, S)),
     ?assertEqual(2, maps:get(committed, S)).
-
-%% A learner (a non-voting member-op) is admitted, committed at N=1, and SURVIVES restart: the fold
-%% re-reads it from the durable `config` entry. Persisting a member-op as a `block` (the pre-fix bug) would
-%% make the re-fold drop it — so `nonvoting=[LPub]` after restart is the assertion that pins the fix. And
-%% because a learner does not change the voting set, the founder keeps committing at quorum 1 afterward.
-t_admit_learner_survives_restart(Cfg) ->
-    Ns   = ?config(ns, Cfg),
-    Self = ?config(node_id, Cfg),
-    {LPub, _} = quod_identity:generate(),                   %% a fresh learner pubkey (no live process)
-    _ = start(Cfg, #{}),
-    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
-    ?assertEqual({ok, 3}, quod_simplex:append(Ns, {add_learner, LPub})),    %% member-op via append
-    ?assertEqual({ok, 4}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),  %% still commits — quorum stayed 1
-    St = quod_simplex:status(Ns),
-    ?assertEqual([Self],  maps:get(committee, St)),
-    ?assertEqual([LPub],  maps:get(nonvoting, St)),
-    ?assertEqual(4, maps:get(slot, St)),
-    stop(Ns),
-    _ = start(Cfg, #{}),                                    %% restart ⇒ re-fold the committee from disk
-    St2 = quod_simplex:status(Ns),
-    ?assertEqual([Self],  maps:get(committee, St2)),
-    ?assertEqual([LPub],  maps:get(nonvoting, St2)),        %% the learner survived (kind=config re-fold)
-    ?assertEqual(4, maps:get(slot, St2)).
-
-%% The membership gate: this increment admits only a genuinely NEW non-voting member. Voter-changing ops
-%% (add/promote/remove), a demotion (add_learner naming a CURRENT voter), and garbage are rejected with
-%% {error,bad_change} and never commit — so a bad caller / Byzantine leader can't empty, shrink, or pack the
-%% committee (those land with the live-joiner increment). The process stays alive + serving after each reject.
-t_membership_gate_rejects(Cfg) ->
-    Ns   = ?config(ns, Cfg),
-    Self = ?config(node_id, Cfg),
-    {P2, _} = quod_identity:generate(),
-    _ = start(Cfg, #{}),
-    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
-    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, {add, P2})),           %% voter change
-    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, {promote, P2})),       %% voter change
-    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, {remove, Self})),      %% would empty the set
-    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, {add_learner, Self})), %% demote a current voter
-    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, {frobnicate, P2})),    %% garbage (not crashed)
-    St = quod_simplex:status(Ns),                              %% nothing committed: unchanged + still alive
-    ?assertEqual([Self], maps:get(committee, St)),
-    ?assertEqual([],     maps:get(nonvoting, St)),
-    ?assertEqual(2, maps:get(slot, St)),
-    ?assertEqual({ok, 3}, quod_simplex:append(Ns, {add_learner, P2})).   %% a genuinely-new learner still OK
 
 %%%===================================================================
 %%% helpers

@@ -286,6 +286,12 @@ eng_complaint_skips_test() ->
     {_E2, Ev2} = feed_shares(Sh, E1),                              %% re-offering does NOT re-skip (deduped)
     ?assertEqual([], [X || {skipped, _} = X <- Ev2]).
 
+%% An empty committee has no leader — `leader/2` returns `none` (never `rem 0`-crashes) so a committee that
+%% somehow emptied leaves the statem gracefully wedged instead of crash-looping.
+leader_empty_committee_test() ->
+    ?assertEqual(none, quod_simplex:leader(1, [])),
+    ?assertEqual(none, quod_simplex:leader(7, [])).
+
 %% The commit/complaint guards are mutually exclusive per slot — the whole safety argument.
 guards_mutual_exclusion_test() ->
     ?assert(quod_simplex:may_commit(5, [])),
@@ -293,31 +299,29 @@ guards_mutual_exclusion_test() ->
     ?assert(quod_simplex:may_complain(5, [])),
     ?assertNot(quod_simplex:may_complain(5, [5])).      %% commit-signed 5 ⇒ must not complain it
 
-%% The membership fold: all five member-ops fold into DISJOINT {voters, nonvoting}, deduped, blocks ignored.
-voters_fold_test() ->
-    [A, B, C, D] = [P || {P, _} <- committee(4)],
-    Cfg = fun(Op) -> #entry{index = 0, term = 0, kind = config, data = Op} end,
-    Blk = #entry{index = 0, term = 0, kind = block, data = noop},
-    Log = [Cfg({add, A}), Cfg({add, B}), Blk,
-           Cfg({add_learner, C}), Cfg({add_replica, D}),
-           Cfg({add, A}),                 %% duplicate add — idempotent
-           Cfg({promote, C}),             %% learner C → voter
-           Cfg({remove, B})],             %% drop voter B
-    {V, NV} = quod_simplex:voters([], Log),
-    ?assertEqual(lists:sort([A, C]), lists:sort(V)),        %% A + promoted C; B removed
-    ?assertEqual([D], lists:sort(NV)),                     %% D still a replica; C moved to voters
-    ?assertEqual([], [X || X <- V, lists:member(X, NV)]).   %% voters/nonvoting disjoint
-%% (the live adopt_membership path ≡ this restart re-fold is exercised end-to-end by the gen_statem
-%% CT `t_admit_learner_survives_restart`, which asserts `nonvoting` both live (pre-restart) and re-folded.)
+%% The committee projection: a transaction's diff folds into {added, removed} `peer_admitted` pubkeys —
+%% a re-asserted member is idempotent, a non-peer_admitted op is ignored. `apply_committee_delta/2` applies
+%% the delta onto a set, sorted + deduped — the ONE function used by BOTH the boot re-fold AND the live swap
+%% on commit, so the running set can never drift from a fresh re-fold. (The end-to-end fold over a committed
+%% log is exercised by the gen_statem CT `t_restart_replays`.)
+committee_delta_test() ->
+    [A, B, C] = [P || {P, _} <- committee(3)],
+    Tx = tx([pa(A), pa(B), pa(A), rm(B), {assert, {{other, foo}, true}}]),   %% +A +B +A(dup) -B, noise
+    ?assertEqual({[A], [B]}, quod_simplex:committee_delta(Tx)),
+    ?assertEqual([A], quod_simplex:apply_committee_delta(Tx, [])),
+    ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(Tx, [A, C, B])),  %% A dup, C kept, B dropped
+    ?assertEqual({[], []}, quod_simplex:committee_delta(noop)),                 %% a noop carries no change
+    ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(noop, [C, A])).
 
-%% A learner does NOT change the voting set (hence quorum/leader stay put) — the quorum-trap avoidance.
-learner_preserves_quorum_test() ->
+%% Every `peer_admitted` fact is a voter (no non-voting tier): asserting one grows the set and the quorum.
+committee_grows_test() ->
     [A, B] = [P || {P, _} <- committee(2)],
-    {V0, _}  = quod_simplex:apply_member_op({add, A}, {[], []}),
-    {V1, NV} = quod_simplex:apply_member_op({add_learner, B}, {V0, []}),
-    ?assertEqual(V0, V1),                          %% voters unchanged by a learner
-    ?assertEqual([B], NV),
-    ?assertEqual(quod_simplex:quorum(length(V0)), quod_simplex:quorum(length(V1))).
+    V1 = quod_simplex:apply_committee_delta(tx([pa(A)]), []),
+    V2 = quod_simplex:apply_committee_delta(tx([pa(B)]), V1),
+    ?assertEqual([A], V1),
+    ?assertEqual(lists:usort([A, B]), V2),
+    ?assertEqual(1, quod_simplex:quorum(length(V1))),
+    ?assertEqual(2, quod_simplex:quorum(length(V2))).
 
 %% Pruning a committed slot advances `base` and drops it from every map (the memory-leak fix), and a
 %% stale share/cert/block for an already-final slot (`=< base`) is then ignored.
@@ -351,6 +355,12 @@ flip1(<<B, Rest/binary>>) -> <<(B bxor 1), Rest/binary>>.
 %% a committee of N validators as [{Pubkey, IdentityMap}]; pubs/1 = just the node_ids
 committee(N) -> [id() || _ <- lists:seq(1, N)].
 pubs(C)      -> [P || {P, _} <- C].
+
+%% committee-projection fixtures: a transaction whose diff is a list of peer_admitted asserts/retracts
+pa(Pk)  -> {assert,  {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
+rm(Pk)  -> {retract, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
+tx(Ops) -> #transaction{tx_id = <<"t">>, caller_ns = <<"ns">>, diff = Ops,
+                        read_check = #{}, author = <<"a">>, sig = none}.
 
 %% support/commit shares for block B from the first K committee members
 supports(B, C, K) -> [quod_simplex:make_share(support, B#block.slot, quod_simplex:block_hash(B), Id)

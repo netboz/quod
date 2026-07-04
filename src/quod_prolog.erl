@@ -22,7 +22,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include("quod_ledger.hrl").
 
 -export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, stats/1, namespaces/0]).
--export([genesis_diff/1]).
+-export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000}).
@@ -81,7 +81,7 @@ would close that call cycle into a deadlock (each waits on the other). As a cast
 `quod_simplex` never blocks on us, so it stays free to service `append`. The OCC verdict is
 delivered straight to the parked client here; a forward gap asks `quod_simplex` to re-drive.
 """.
--spec apply_block(binary(), pos_integer(), #transaction{} | noop | member_op()) -> ok.
+-spec apply_block(binary(), pos_integer(), #transaction{} | noop) -> ok.
 apply_block(Ns, Index, Change) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 
@@ -101,6 +101,7 @@ namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1
 
 init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
+    put('$quod_ns', Ns),   %% so external predicates (e.g. admit) can recover their namespace in-process
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            ttl = maps:get(park_ttl_ms, Cfg), ready = false},
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
@@ -231,12 +232,6 @@ apply_committed(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1
     S;
 apply_committed(Index, noop, S) ->                          %% Index == applied+1
     S#s{applied = Index};
-apply_committed(Index, {Op, _Node}, S)
-  when Op =:= add; Op =:= remove; Op =:= add_learner; Op =:= add_replica; Op =:= promote ->
-    %% a membership (config) change — add/remove a voter, admit a learner or read-replica, or
-    %% promote one: nothing for the fact engine, but advance the cursor in lockstep with
-    %% quod_simplex so the next block isn't seen as a gap.
-    S#s{applied = Index};
 apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,
     case quod_diff:validate(RC, M, R) of
@@ -247,7 +242,13 @@ apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S
         {conflict, _F} ->
             release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
                     S#s{applied = Index, rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
-    end.
+    end;
+%% Defensive: a committed payload that is neither `noop` nor a `#transaction` (e.g. a stale-format entry on
+%% a cross-version replay) advances the cursor + logs, rather than function_clause-crashing the apply loop
+%% into a restart crash-loop on the same entry.
+apply_committed(Index, Other, S = #s{ns = Ns}) ->
+    logger:warning("quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p", [Ns, Index, Other]),
+    S#s{applied = Index}.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
@@ -271,24 +272,30 @@ unpark(Tx, S = #s{parked = P}) ->
 %%%===================================================================
 
 -doc """
-Build the genesis write-set from a `.pl` file.
+Build the genesis write-set from a `.pl` file — `terms_to_diff(read_terms(File))`.
 
-Reads the file with the erlog parser, then turns each clause into a write-set `op()`
-in the SAME compiled form the live write path produces — so the genesis commits and
-replays through the normal apply path. erlog's `assertz` compiles the body
-(`well_form_body`, yielding `{Body, HasCut}`); we capture the result with the
-`m:quod_erlog_db_local_prove` overlay, exactly as `run_proof/2` does for a live
-write. Hand-building `{Head, true}` would store a malformed clause and crash on the
-first prove — the body must be the compiled form, not raw `true`.
-
-Used at create only: the founder calls this once and commits the result into the
-ledger as the genesis block. A missing/unparseable file throws `{genesis_failed, _}`,
+Used at create only: the founder reads the root `.pl`, and `quod_simplex` prepends the
+founding committee's `peer_admitted/4` facts, compiling both into one genesis
+transaction it commits as slot 1. A missing/unparseable file throws `{genesis_failed, _}`,
 which `quod_simplex:init/1` turns into `{stop, _}` (fail-fast — a node with no root is
 useless).
 """.
 -spec genesis_diff(file:filename()) -> [op()].
-genesis_diff(File) ->
-    Terms = read_genesis_terms(File),
+genesis_diff(File) -> terms_to_diff(read_terms(File)).
+
+-doc """
+Compile a list of Prolog terms (facts or rules) into a write-set of `op()`.
+
+Turns each term into a write-set `op()` in the SAME compiled form the live write path
+produces — so it commits and replays through the normal apply path. erlog's `assertz`
+compiles the body (`well_form_body`, yielding `{Body, HasCut}`); we capture the result
+with the `m:quod_erlog_db_local_prove` overlay, exactly as `run_proof/2` does for a live
+write. Hand-building `{Head, true}` would store a malformed clause and crash on the first
+prove — the body must be the compiled form, not raw `true`. Used to build the genesis
+transaction (the committee's `peer_admitted` facts + the root content).
+""".
+-spec terms_to_diff([term()]) -> [op()].
+terms_to_diff(Terms) ->
     W0 = quod_erlog_db_local_prove:wrap_state(build_kb(), #{read_set => false}),
     try
         WN = lists:foldl(
@@ -303,7 +310,9 @@ genesis_diff(File) ->
         quod_erlog_db_local_prove:cleanup_read_set(W0)
     end.
 
-read_genesis_terms(File) ->
+-doc "Parse a `.pl` file into a list of Prolog terms; a missing/unparseable file throws `{genesis_failed, _}`.".
+-spec read_terms(file:filename()) -> [term()].
+read_terms(File) ->
     Res = try erlog_io:read_file(File) catch C0:E0 -> {caught, C0, E0} end,
     case Res of
         {ok, Terms}     -> Terms;
@@ -320,6 +329,7 @@ build_kb() ->
     %% unknown predicate => fail (not error): a goal over an undefined predicate just
     %% has no solution, rather than crashing.
     {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
-    Est1.
+    %% register the external Erlang predicates (admit/remove — the committee interface).
+    quod_committee_predicates:load(Est1).
 
 tx_id(Self) -> <<(erlang:phash2(Self)):32, (erlang:unique_integer([positive])):64>>.

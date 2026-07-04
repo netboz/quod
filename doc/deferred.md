@@ -20,10 +20,11 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   subscriber must verify a *relayed* block against its commit cert without trusting the relay. The cert
   machinery exists (`quod_simplex:verify_cert/2`); wiring it into the P2 feed and re-tightening the
   non-`[safe]` decode for relayed blocks is the remaining work.
-- **Membership-path hardening.** Redirect authentication, a pubkey-possession gate before `can_join`,
-  and a `can_replicate` policy for private read-replicas were bounded-but-open in the (now-removed) Raft
-  join path. They return — closed by design — when DispersedSimplex rebuilds membership admission + join
-  in **Stage 3** (see the plan); they are NOT carried forward from the deleted `quod_ledger` code.
+- **Membership-path hardening.** Committee admission has since landed (committee = `peer_admitted` facts +
+  `admit`/`remove` external predicates, membership rework Slice 1+2). The HARDENING is the deferred
+  membership-safety work in §3: redirect authentication, a pubkey-possession gate before `can_join`, signed
+  membership transactions, per-node `can_join` re-validation, and a `can_replicate` policy for private
+  read-replicas. NOT carried forward from the deleted `quod_ledger` code.
 - **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any node
   (reads are open; content is gated per-clause by `can_read`). *Bounded now:* `?MAX_INFLIGHT` proofs,
   `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
@@ -81,11 +82,46 @@ stages, not carried forward:
 
 - **Multi-validator BFT** — **DONE** (Stage 2b+2c): real ⅔ support/commit/**complaint** certs, the
   `Δ_timeout` complaint timer, the `may_commit`/`may_complain` guards, **round-robin leader rotation**,
-  and complaint-cert **skip** (a `noop` slot), over the `{log, Ns}` transport. Epoch validator set from
-  `peer_admitted` moves to Stage 3 (it's the membership-change substrate, not needed on a static committee).
-- **Membership admission + join + trustless catch-up** — `can_join` → `peer_admitted`, epochs, and a
-  joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert** (never trusts
-  the server). Stage 3. Absorbs the old `remove_member` / join-driver / candidate-discovery concerns.
+  and complaint-cert **skip** (a `noop` slot), over the `{log, Ns}` transport.
+- **Committee = `peer_admitted` facts + admit/remove — DONE** (membership rework, Slice 1+2): the committee
+  is the set of `peer_admitted/4` facts, derived deterministically from the committed log
+  (`quod_simplex:committee_from_log/1`), swapped in-process at commit (`adopt_committee/2`), and re-folded
+  on restart — no config-fold, no member-op vocabulary (`voters/2`, `member_op()`, `kind=config` deleted).
+  `quod_committee_predicates` provides the `admit(Pubkey,Host,Port)` / `remove(Pubkey)` external Erlang
+  predicates (**prove-before-broadcast**: gate `can_join`, stage the assert/retract; the normal write path
+  commits it — no sync-call from the predicate). Genesis asserts each founder's `peer_admitted`.
+- **Membership SAFETY — Byzantine committee-packing (the #1 open membership gap).** Admission is currently
+  safe only under **trusted/honest submitters**: `can_join` is proved ONLY on the submitting node (peers
+  apply the committed `peer_admitted` diff via OCC without re-proving `can_join`), transaction writes are
+  **unsigned** (`sig=none`), and `acceptable_change(#transaction{})` accepts any membership tx. So a
+  Byzantine/stale submitter can commit an unauthorized `peer_admitted` — packing the committee past the `f`
+  bound, admitting a node `can_join` would reject, or shifting `quorum/1`. Fix (three parts): (a) **re-prove
+  `can_join` on every node** at proposal-validation / apply, dropping a committee-changing block that fails
+  locally; (b) **Phase-B transaction signatures** so only an admitted signer's membership tx is accepted
+  (the write-gate = membership trick from onbrater); (c) a **BFT fault-tolerance floor guard** on committee
+  SHRINK, enforced at the apply/propose gate on **every node** (not just in the `remove_1` predicate) — it
+  must refuse to drop below `3f+1` viability. **Note (code-review 2026-07-04):** the current empty-committee
+  floor lives ONLY inside the `remove_1` predicate, so a **raw `retract(peer_admitted(...))` transaction, or
+  a single tx retracting every member, bypasses it** and empties the validator set; `leader/2 []` then keeps
+  the statem from crashing but the namespace **wedges** unrecoverably. `acceptable_change(#transaction{})`
+  accepting any membership tx is the same gap. The real floor is the per-node re-validation of (a) — the
+  predicate guard is honest-path-only. (`remove`'s retract-by-pattern already keeps the KB and the validator
+  set in lockstep, and the predicate floor now counts distinct pubkeys.) Until this lands, membership is
+  **crash-fault-only**.
+- **Join cold-start + trustless catch-up** — Stage 3: `mode=join` (a node joins knowing only a **contact
+  address**, deleting the co-founder scaffold — the `committee` config + `simplex_SUITE` co-founding
+  setup), and a joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert**
+  (never trusts the server). Genesis trust anchor delivered out-of-band in config (founding keys / genesis
+  hash), never TOFU'd. Absorbs the old `remove_member` / join-driver / candidate-discovery concerns; a
+  non-voting **replica** tier is a further slice (no learner/replica tier exists today).
+- **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from
+  its OWN config, with no parent-hash chain to catch a mismatch (slot 1 is self-committed; consensus starts
+  at slot 2). Mismatched co-founder addresses → divergent `peer_admitted` addresses per KB (the
+  pubkey-committee stays consistent, so consensus is unaffected). `simplex_SUITE` passes matching
+  `{Pk,Host,Port}` so genesis is identical; a real multi-founder deploy must too, or add a genesis-hash
+  cross-check. Also: **`can_join` must stay side-effect-free** — the proof overlay captures every staged
+  assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
+  committed membership transaction network-wide.
 - **Failover liveness in the client-driven model (Stage 2c follow-ups).** quod has no timed/empty slots
   (a slot exists only on a client `append`), so a complaint is *evidence-gated*: a node arms its Δ timer
   only when it proposes a slot, supports a proposal, or gets a local write it can't lead. Consequences,
@@ -112,11 +148,12 @@ stages, not carried forward:
   protocol change; until then a mid-round leader crash on a bare quorum can wedge a namespace. The
   `leader_failover` CT does not cover it (killing the leader *before* it proposes is not the trigger).
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
-  store keeps the full block archive). **When it lands, extend the snapshot committee base to carry the
-  NON-VOTING set too:** `voters/2` seeds the fold as `{snap_cfg, []}` and `quod_ledger_store` snapshots only
-  a `[node_id()]` voter list, so a snapshot restored after a learner/replica was admitted would drop it
-  (unreachable today — `read_snapshot` returns `none`, so the full log re-folds; the `snap_cfg` shape must
-  gain a nonvoting slot before snapshots ship).
+  store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
+  now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log
+  (`quod_simplex:committee_from_log/1`), so a snapshot that truncates the log must carry the `peer_admitted`
+  facts as of the snapshot height (or a committee checkpoint) — otherwise the re-fold drops members.
+  (`quod_ledger_store`'s `snap_cfg`/`read_snapshot` are unused today — `read_snapshot` returns `none`, so
+  the full log always re-folds.) No non-voting tier exists anymore.
 
 **From the 2a/2b/2c reviews — mostly landed; two remain open:**
 

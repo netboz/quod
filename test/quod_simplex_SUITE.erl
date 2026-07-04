@@ -13,11 +13,11 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
-         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1]).
+         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1, t_commit_carries_cert/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
-     t_restart_replays, t_status_stats, t_multi_member_accepted].
+     t_restart_replays, t_status_stats, t_multi_member_accepted, t_commit_carries_cert].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -114,6 +114,27 @@ t_status_stats(Cfg) ->
     ?assertEqual(1, maps:get(committee_size, S)),
     ?assertEqual(2, maps:get(slot, S)),
     ?assertEqual(2, maps:get(committed, S)).
+
+%% Each committed block carries the quorum certificate that finalized it, persisted on the `#entry` — so a
+%% catch-up joiner can trustlessly verify it (Simplex 4 / mode=join). At N=1 the commit cert is the founder's
+%% own single commit share (quorum(1)=1) and verifies against the committee; the self-signed genesis (slot 1)
+%% carries no cert (it is the out-of-band trust anchor).
+t_commit_carries_cert(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
+    {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
+    try
+        {ok, #entry{cert = none}} = quod_ledger_store:read_at(Store, 1),   %% genesis: the anchor, no cert
+        {ok, #entry{data = #transaction{} = Tx, cert = Cert}} = quod_ledger_store:read_at(Store, 2),
+        ?assertMatch(#cert{kind = commit, slot = 2}, Cert),
+        %% the cert BINDS this specific block: its block_hash is over the reconstructed #block{} (a joiner
+        %% recomputes the same hash from the persisted entry to check the cert names THIS block).
+        ?assertEqual(quod_simplex:block_hash(#block{slot = 2, parent = 1, payload = [Tx]}),
+                     Cert#cert.block_hash),
+        ?assert(quod_simplex:verify_cert(Cert, [Self]))                    %% ⅔ (=1) valid sig vs the committee
+    after quod_ledger_store:close(Store) end.
 
 %%%===================================================================
 %%% helpers

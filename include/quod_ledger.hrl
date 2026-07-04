@@ -32,20 +32,12 @@
                  author     :: node_id(),           %% submitting node's pubkey
                  sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
 
-%% A committed log entry. `data` is a #transaction{} for a normal committed change, or the atom
-%% `noop` for a complaint-skipped slot. Membership is NOT a distinct entry kind: the committee is
-%% the set of `peer_admitted` facts, changed by ordinary transactions whose diff asserts/retracts
-%% `peer_admitted` (`quod_simplex:committee_from_log/1` derives the validator set from those diffs).
--record(entry, {index :: log_index(),
-                term  :: term_no(),
-                kind  :: block,
-                data  :: #transaction{} | noop}).
-
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support
 %% (notarize) then commit (finalize) it, or complain (skip) v. No block-hash chaining — slot
 %% numbers + certificates carry the order (§2, "hash chaining turns out to be unnecessary").
--type slot() :: non_neg_integer().               %% 0 = genesis; blocks are 1..N
+-type slot() :: non_neg_integer().               %% 0 = origin sentinel (parent of slot 1); blocks are 1..N
+                                                 %% (the founder's self-signed genesis BLOCK is slot 1)
 
 %% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction or `noop`;
 %% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
@@ -72,5 +64,17 @@
                slot       :: slot(),
                block_hash :: binary() | none,
                sigs       :: [{node_id(), binary()}]}).
+
+%% A committed log entry. `data` is a #transaction{} for a normal committed change, or the atom
+%% `noop` for a complaint-skipped slot. `cert` is the quorum certificate that finalized the slot —
+%% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
+%% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
+%% entry against its `cert` (trustless replay). Membership is NOT a distinct entry kind: the committee
+%% is the set of `peer_admitted` facts (`quod_simplex:committee_from_log/1`).
+-record(entry, {index       :: log_index(),
+                term        :: term_no(),
+                kind        :: block,
+                data        :: #transaction{} | noop,
+                cert = none :: #cert{} | none}).
 
 -endif.

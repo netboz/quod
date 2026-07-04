@@ -257,6 +257,24 @@ eng_new(Validators, Base) ->
 %% share/cert is re-verified under the new set; the next slot's shares/certs verify against it.
 eng_set_validators(Validators, Eng) -> Eng#eng{validators = Validators}.
 
+%% The certificate to PERSIST on a finalized `#entry`, captured before `finalize`→`eng_prune` drops it from
+%% the pool. NOT the raw pool cert: we re-minimise it to the distinct VALID signatures of the committee
+%% AS-OF-this-slot (`eng.validators`, already swapped to the post-slot-N-1 set) — so (a) a peer's padded /
+%% relayed junk signatures can never bake into the append-only log (only ≤ N genuine committee sigs remain),
+%% and (b) the persisted cert verifies against the committee a catch-up joiner reconstructs for this slot.
+%% `none` only if the pool cert lacks a quorum under the current set — a lagging node that finalized under a
+%% STALE committee (the mid-flight committee-change hazard; see doc/deferred.md §3).
+persisted_cert(Kind, Slot, BH, #eng{certs = Certs, validators = Vs}) ->
+    case maps:get({Kind, Slot, BH}, Certs, none) of
+        none            -> none;
+        #cert{sigs = S} ->
+            Min = distinct_valid(S, share_bytes(Kind, Slot, BH), Vs),
+            case length(Min) >= quorum(length(Vs)) of
+                true  -> #cert{kind = Kind, slot = Slot, block_hash = BH, sigs = Min};
+                false -> none
+            end
+    end.
+
 -doc """
 Offer one protocol object to the engine; returns the updated engine + the events it produced. This is
 the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a peer's), or a relayed
@@ -716,8 +734,9 @@ apply_event({skipped, Slot}, S) ->
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
 %% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
-commit_block(Slot, #block{payload = [Change]}, S = #s{store = Store}) ->
-    E = #entry{index = Slot, term = 0, kind = block, data = Change},
+commit_block(Slot, #block{payload = [Change]} = Block, S = #s{store = Store, eng = Eng}) ->
+    Cert = persisted_cert(commit, Slot, block_hash(Block), Eng),   %% minimal, committee-as-of-slot; pre-prune
+    E = #entry{index = Slot, term = 0, kind = block, data = Change, cert = Cert},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1})),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
@@ -739,8 +758,9 @@ adopt_committee(Change, S = #s{validators = V, eng = Eng}) ->
 %% A complaint cert skipped this slot: persist an empty `noop` entry so the store height (and every
 %% node's) advances contiguously, then nack any caller that had proposed it so the client retries under
 %% the rotated leader. `quod_prolog` applies a `noop` as a pure cursor advance (no fact change).
-skip_block(Slot, S = #s{store = Store}) ->
-    E = #entry{index = Slot, term = 0, kind = block, data = noop},
+skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
+    Cert = persisted_cert(complaint, Slot, none, Eng),   %% minimal complaint cert that skipped this slot
+    E = #entry{index = Slot, term = 0, kind = block, data = noop, cert = Cert},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     S1 = finalize(Slot, S#s{store = Store1}),
     maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).

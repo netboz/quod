@@ -108,12 +108,26 @@ stages, not carried forward:
   predicate guard is honest-path-only. (`remove`'s retract-by-pattern already keeps the KB and the validator
   set in lockstep, and the predicate floor now counts distinct pubkeys.) Until this lands, membership is
   **crash-fault-only**.
+- **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04, from the S1 cert-persistence
+  slice).** Because the committee can change on ANY slot (a `peer_admitted` assert/retract) and shares are
+  ingested un-gated by height, a node that is LAGGING across a committee-changing slot N can `form_cert`
+  slot N+1's finalizing cert under the OLD (pre-change) committee's smaller quorum, then finalize N+1 with
+  it. A catch-up joiner reconstructs the committee **as-of** N+1 (the NEW set) and would reject that block
+  (too few sigs). S1 mitigates the *persisted* cert (`persisted_cert/4` re-minimises to the distinct valid
+  sigs of `eng.validators` = the committee-as-of-slot, so a padded/relayed cert can't bake junk into the
+  log and a caught-up node persists a correct minimal cert; a lagging node persists `none`). But the ROOT
+  fix — never *finalize* a slot under a stale committee — is deferred: either re-verify `detect_commits`
+  against the committee-as-of-slot before emitting `{committed}`, or **freeze the validator set per epoch**
+  (the deferred epochs work) so a slot's voting set is unambiguous. Intersects the membership-safety gap
+  above (unsigned, per-slot-mutable membership). Until it lands, catch-up trusts that finalized slots were
+  finalized under the correct committee — safe in a trusted fleet, not Byzantine.
 - **Join cold-start + trustless catch-up** — Stage 3: `mode=join` (a node joins knowing only a **contact
   address**, deleting the co-founder scaffold — the `committee` config + `simplex_SUITE` co-founding
   setup), and a joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert**
   (never trusts the server). Genesis trust anchor delivered out-of-band in config (founding keys / genesis
-  hash), never TOFU'd. Absorbs the old `remove_member` / join-driver / candidate-discovery concerns; a
-  non-voting **replica** tier is a further slice (no learner/replica tier exists today).
+  hash), never TOFU'd. A joiner must special-case slot 1 (`cert=none` — verify against the pinned anchor,
+  never `verify_cert(none,_)`). Absorbs the old `remove_member` / join-driver / candidate-discovery
+  concerns; a non-voting **replica** tier is a further slice (no learner/replica tier exists today).
 - **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from
   its OWN config, with no parent-hash chain to catch a mismatch (slot 1 is self-committed; consensus starts
   at slot 2). Mismatched co-founder addresses → divergent `peer_admitted` addresses per KB (the

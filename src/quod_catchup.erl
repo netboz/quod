@@ -22,7 +22,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3]).
+-export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3, catch_up/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -164,6 +164,69 @@ verify_finalizer(#cert{kind = K, slot = Sl, block_hash = BH} = Cert, K, Sl, BH, 
     end;
 verify_finalizer(_Cert, _K, Sl, _BH, _Committee) ->
     {error, {cert_mismatch, Sl}}.
+
+-doc """
+Drive trustless catch-up to completion for a FRESH joiner: repeatedly FETCH a window of committed entries,
+VERIFY it forward (`verify_forward/3`), and hand the verified entries to SINK (which appends them to the
+local store), threading the committee, until caught up.
+
+`GenesisHash` is the out-of-band-pinned `block_hash` of the genesis block (slot 1) — it pins the genesis's
+FULL content (committee AND root ontology), not merely the derived committee; a genesis that hashes to
+anything else is a forged anchor and catch-up aborts (`{error, bad_anchor}`). `Fetch` and `Sink` are
+injected, so the driver is transport/store-agnostic (and unit-testable):
+- `Fetch(From) -> {ok, [#entry{}], ServerHeight} | {error, term()}` — pull the window at `From` (the server
+  may return FEWER than requested, e.g. under its byte budget; the loop continues from what it got).
+- `Sink([#entry{}]) -> ok | {error, term()}` — append the just-verified, contiguous entries to the local
+  store; an error aborts catch-up cleanly (`{error, {sink, _}}`).
+
+`ServerHeight` is an UNTRUSTED, server-controlled number, used only for termination: the target is the MAX
+height ever reported (`H` may not regress below what was already served), so a contact under-reporting its
+height cannot truncate catch-up into a false "caught up". Returns `{ok, Height}` (caught up) or
+`{error, Reason}` (forged chain / bad anchor / sink failure / fetch failure / a stuck server making no
+progress — the caller should try another contact).
+""".
+-spec catch_up(binary(),
+               fun((pos_integer()) -> {ok, [#entry{}], log_index()} | {error, term()}),
+               fun(([#entry{}]) -> ok | {error, term()})) -> {ok, log_index()} | {error, term()}.
+catch_up(GenesisHash, Fetch, Sink) -> catch_up(GenesisHash, Fetch, Sink, 1, [], 0).
+
+catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
+    case Fetch(From) of
+        {error, R} -> {error, {fetch, R}};
+        {ok, Entries, H} ->
+            Target = max(MaxH, H),   %% untrusted, may regress ⇒ the target is the highest height ever seen
+            case Entries of
+                [] when From > Target -> {ok, Target};        %% nothing at/after the max height ⇒ caught up
+                []                    -> {error, no_progress};  %% empty but more claimed/regressed H ⇒ stuck
+                _ ->
+                    case verify_forward(Committee, From, Entries) of
+                        {error, R} -> {error, {verify, R}};
+                        {ok, Verified, Committee1} ->
+                            case anchor_ok(From, Verified, GenesisHash) of
+                                false -> {error, bad_anchor};
+                                true  ->
+                                    case Sink(Verified) of
+                                        {error, R} -> {error, {sink, R}};
+                                        ok ->
+                                            Next = From + length(Verified),
+                                            case Next > Target of
+                                                true  -> {ok, Target};
+                                                false -> catch_up(GenesisHash, Fetch, Sink, Next, Committee1, Target)
+                                            end
+                                    end
+                            end
+                    end
+            end
+    end.
+
+%% Only the FIRST window (From=1, containing genesis at slot 1) is anchor-checked: the genesis block must
+%% HASH to the pinned genesis hash — pinning its full content (committee AND root ontology), so a server
+%% can't forge a genesis that merely derives the right committee. Later windows are trusted through the
+%% committee threaded from the (anchored) verified prefix.
+anchor_ok(1, [#entry{index = 1, data = GenesisData} | _], GenesisHash) ->
+    quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = [GenesisData]}) =:= GenesisHash;
+anchor_ok(1, _Verified, _GenesisHash) -> false;   %% From=1 but the first entry isn't genesis
+anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window
 
 %%%===================================================================
 %%% gen_server

@@ -71,6 +71,15 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   committed `peer_admitted(NodeId,Host,Port,Pubkey)` fact IS the address book, seeded at join by an
   operator contact list. Lands with **Stage 3** membership; until then, watch it in the multi-node Nomad
   redeploy (a non-leader that must reach a peer it hasn't received from will stall).
+- **`quod_catchup` transport duplicates `quod_prove` (consolidation deferred).** The catch-up SERVER must
+  be a sibling process (off the consensus loop) — that stays — but `quod_catchup`'s per-ns gen_server
+  link/channel/worker plumbing (`send`/`conns`/`outbox`/`link_up`/`inbound`/`pick_contact`) is
+  near-copy-pasted from `quod_prove` (and `data_dir/1` duplicates `quod_simplex:data_dir/1`). Cleaner
+  end-state: make `quod_catchup` a
+  PURE library (`serve_blocks`/`verify_forward`/`catch_up`, no process/channel) and carry block-transfer on
+  `quod_prove`'s existing `{prove, Ns}` transport (a `blocks_req` tag + a `pull`), OR extract the shared
+  transport skeleton into a helper both use. Kept separate for now (one-module-per-endpoint pattern);
+  revisit to remove the duplication.
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 

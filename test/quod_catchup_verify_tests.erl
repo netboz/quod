@@ -143,3 +143,79 @@ committee_shrinks_test() ->
     Chain = [genesis(P5), committed(2, remove_tx(Gone), C5, 4), committed(3, tx(3), C4, 3)],
     {ok, _, Final} = quod_catchup:verify_forward([], 1, Chain),
     ?assertEqual(lists:usort(P5 -- [Gone]), Final).
+
+%%%--- catch_up/3 driver (mocked Fetch/Sink — no transport/store) ---
+
+%% a Fetch serving a pre-built Chain (entries 1..H) in windows of W; From > H ⇒ empty.
+mock_fetch(Chain, W) ->
+    H = length(Chain),
+    fun(From) when From > H -> {ok, [], H};
+       (From)               -> {ok, lists:sublist(Chain, From, W), H}
+    end.
+
+sink() -> put(sink, []), fun(Es) -> put(sink, get(sink) ++ Es), ok end.
+
+%% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
+gen_hash(#entry{index = 1, data = D}) -> quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = [D]}).
+
+%% The driver loops windowed fetches, verifies each, sinks the verified entries in order, and reports the
+%% caught-up height.
+catch_up_happy_test() ->
+    C = committee(4), P = pubs(C), G = genesis(P),
+    Chain = [G, committed(2, tx(2), C, 3), committed(3, tx(3), C, 4)],
+    Sink = sink(),
+    ?assertEqual({ok, 3}, quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
+    ?assertEqual(Chain, get(sink)).                                                          %% all, in order
+
+%% A genesis whose CONTENT (here, committee) differs from the pinned genesis hash is rejected (forged anchor).
+catch_up_bad_anchor_test() ->
+    C = committee(4), Fake = committee(4),
+    Chain = [genesis(pubs(Fake)), committed(2, tx(2), Fake, 3)],
+    ?assertEqual({error, bad_anchor},
+                 quod_catchup:catch_up(gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10), fun(_) -> ok end)).
+
+%% A window that fails verification aborts catch-up, and NOTHING is persisted (the whole window is atomic).
+catch_up_forged_test() ->
+    C = committee(4), Outsiders = committee(4), G = genesis(pubs(C)),
+    Chain = [G, committed(2, tx(2), Outsiders, 3)],
+    Sink = sink(),
+    ?assertMatch({error, {verify, {bad_cert, 2}}},
+                 quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 10), Sink)),
+    ?assertEqual([], get(sink)).   %% the bad window is never sunk
+
+%% A committee change in window 1 is threaded so window 2 verifies against the GROWN set.
+catch_up_committee_change_across_windows_test() ->
+    C4 = committee(4), P4 = pubs(C4), G = genesis(P4),
+    {P5, _} = New = quod_identity:generate(), C5 = C4 ++ [New],
+    B2 = committed(2, admit_tx(P5), C4, 3),   %% grows the committee, in window 1
+    B3 = committed(3, tx(3), C5, 4),           %% window 2, needs the 5-set quorum
+    Sink  = sink(),
+    Fetch = fun(1) -> {ok, [G, B2], 3}; (3) -> {ok, [B3], 3}; (_) -> {ok, [], 3} end,
+    ?assertEqual({ok, 3}, quod_catchup:catch_up(gen_hash(G), Fetch, Sink)),
+    ?assertEqual([G, B2, B3], get(sink)).
+
+%% A contact that REGRESSES its claimed height below what it already served is treated as stalled (the target
+%% is the MAX height seen), not falsely "caught up" — so the joiner fails over instead of truncating.
+catch_up_height_regression_test() ->
+    C = committee(4), P = pubs(C), G = genesis(P), B2 = committed(2, tx(2), C, 3),
+    Fetch = fun(1) -> {ok, [G, B2], 100};   %% claims height 100
+               (_) -> {ok, [], 5}           %% then regresses to 5, mid-catch-up
+            end,
+    ?assertEqual({error, no_progress}, quod_catchup:catch_up(gen_hash(G), Fetch, sink())).
+
+%% A fetch failure surfaces so the caller can try another contact.
+catch_up_fetch_error_test() ->
+    ?assertEqual({error, {fetch, timeout}},
+                 quod_catchup:catch_up(<<0>>, fun(_) -> {error, timeout} end, fun(_) -> ok end)).
+
+%% A sink failure aborts catch-up cleanly (recoverable), not a badmatch crash.
+catch_up_sink_error_test() ->
+    C = committee(4), P = pubs(C), G = genesis(P),
+    Chain = [G, committed(2, tx(2), C, 3)],
+    ?assertEqual({error, {sink, disk_full}},
+                 quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 10), fun(_) -> {error, disk_full} end)).
+
+%% A server that returns empty while claiming more height is stuck — reported, not looped forever.
+catch_up_no_progress_test() ->
+    ?assertEqual({error, no_progress},
+                 quod_catchup:catch_up(<<0>>, fun(_) -> {ok, [], 5} end, fun(_) -> ok end)).

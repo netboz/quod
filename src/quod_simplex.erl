@@ -41,21 +41,21 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 -behaviour(gen_statem).
 
-%% Pure consensus core (also used by the gen_statem below and by the tests).
+%% Pure consensus core (also used by the gen_statem below, the catch-up verifier, and the tests).
 -export([quorum/1, leader/2,
          block_hash/1, share_bytes/3,
          make_share/4, verify_share/1,
          form_cert/5, verify_cert/2,
-         may_commit/2, may_complain/2]).
+         may_commit/2, may_complain/2, well_formed_cert/1,
+         committee_delta/1, apply_committee_delta/2]).   %% committee = projection of peer_admitted facts
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, append/2, rebuild/1, status/1, committee/1, stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
-%% consensus-engine + committee-projection surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1,
-         committee_delta/1, apply_committee_delta/2]).
+%% consensus-engine surface driven by eunit (the #eng record is otherwise private)
+-export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a

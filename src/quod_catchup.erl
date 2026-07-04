@@ -22,7 +22,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, pull/3, pull/4, serve_blocks/4]).
+-export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -98,6 +98,72 @@ cap_bytes([E | Rest], Acc) ->
         true  -> [E | cap_bytes(Rest, Acc1)];
         false -> []
     end.
+
+%%%===================================================================
+%%% trustless forward-verification (the client's trust core)
+%%%===================================================================
+
+-doc """
+Verify a pulled chain **by induction** — the joiner trusts nothing the server sent, only the certificates.
+`Committee0` is the committee AS OF slot `From`; `Entries` MUST be a CONTIGUOUS ascending run starting at
+`From` (a gap, reorder, or non-`#entry{}` element is a forged/incomplete history and is rejected — so a
+malicious server cannot drop a committee-changing block to shift the fold, nor prepend a fake genesis to a
+mid-chain window). For each entry, verify its finalizing certificate against the committee AS-OF-that-slot,
+then fold forward via `apply_committee_delta`. Returns `{ok, Verified, Committee1}` or `{error, Reason}` at
+the first bad entry (which the caller must NOT persist).
+
+Per entry, branching on the CERT kind (not the payload): a **commit** cert finalizes a block — bound to
+`block_hash(#block{slot=I, parent=I-1, payload=[Data]})`, where `Data` is a `#transaction` OR a committed
+`noop` — ; a **complaint** cert (block_hash=none) finalizes a `noop` SKIP (it authorizes no payload, so a
+complaint cert over non-`noop` data is rejected); the genesis block (slot 1) carries **no** cert — it is the
+out-of-band trust anchor, so a genesis-window caller (`From=1`, `Committee0=[]`) MUST separately pin the
+returned `Committee1` / genesis hash against config before trusting it. A malformed cert, a wrong
+`(kind, slot, block_hash)`, or one that fails the `⅔` check against the committee-as-of-slot is rejected.
+""".
+-spec verify_forward([node_id()], pos_integer(), [#entry{}]) ->
+        {ok, [#entry{}], [node_id()]} | {error, term()}.
+verify_forward(Committee0, From, Entries) -> verify_forward(Committee0, From, Entries, []).
+
+verify_forward(Committee, _Next, [], Acc) ->
+    {ok, lists:reverse(Acc), Committee};
+verify_forward(Committee, Next, [#entry{index = Next} = E | Rest], Acc) ->   %% contiguous: index =:= Next
+    case verify_entry(E, Committee) of
+        ok    -> verify_forward(quod_simplex:apply_committee_delta(entry_data(E), Committee),
+                                Next + 1, Rest, [E | Acc]);
+        Error -> Error
+    end;
+verify_forward(_Committee, Next, [#entry{index = I} | _], _Acc) ->
+    {error, {noncontiguous, Next, I}};   %% a gap/reorder — the server dropped or misordered an entry
+verify_forward(_Committee, Next, [_NotAnEntry | _], _Acc) ->
+    {error, {malformed_entry, Next}}.    %% a non-#entry element from a hostile server
+
+entry_data(#entry{data = Data}) -> Data.
+
+%% Verify ONE entry's finalizing cert against the committee-as-of-its-slot. Branch on the CERT kind (not the
+%% payload): a complaint cert finalizes a `noop` SKIP; a commit cert finalizes a block (payload a
+%% #transaction OR a committed `noop`). A complaint cert over non-`noop` data, or any other cert shape, is
+%% rejected — a complaint proves "skip slot I" and authorizes no payload.
+verify_entry(#entry{index = 1, cert = none}, _Committee) ->
+    ok;   %% genesis: the out-of-band trust anchor (caller pins it), not verified by a cert
+verify_entry(#entry{index = I, cert = none}, _Committee) ->
+    {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
+verify_entry(#entry{index = I, data = noop, cert = #cert{kind = complaint} = Cert}, Committee) ->
+    verify_finalizer(Cert, complaint, I, none, Committee);
+verify_entry(#entry{index = I, data = Data, cert = #cert{kind = commit} = Cert}, Committee) ->
+    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [Data]}),
+    verify_finalizer(Cert, commit, I, BH, Committee);
+verify_entry(#entry{index = I}, _Committee) ->
+    {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
+
+%% The cert must be WELL-FORMED (a hostile server can send a #cert with non-list `sigs` that would crash
+%% verify_cert), name exactly this (kind, slot, block_hash), AND carry ⅔ valid sigs of the committee.
+verify_finalizer(#cert{kind = K, slot = Sl, block_hash = BH} = Cert, K, Sl, BH, Committee) ->
+    case quod_simplex:well_formed_cert(Cert) andalso quod_simplex:verify_cert(Cert, Committee) of
+        true  -> ok;
+        false -> {error, {bad_cert, Sl}}
+    end;
+verify_finalizer(_Cert, _K, Sl, _BH, _Committee) ->
+    {error, {cert_mismatch, Sl}}.
 
 %%%===================================================================
 %%% gen_server

@@ -26,7 +26,7 @@ Snapshots/compaction are deferred to milestone M3; the snapshot API is present b
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, close/1, load/1,
+-export([open/2, open_ro/2, close/1, load/1,
          read_meta/1, write_meta/3,
          append/2, truncate_from/2,
          read_at/2, read_range/3, last/1, term_at/2,
@@ -66,6 +66,32 @@ open(Ns, DataDir) ->
     {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, idx = Idx,
                 last_index = LastI, last_term = LastT, base_offset = BaseOff,
                 snap_index = SnapI, snap_term = SnapT}}.
+
+-doc """
+Open a READ-ONLY handle for a concurrent reader (the catch-up server) alongside the live writer. NEVER
+truncates: a torn / short / discontinuous tail — a frame the writer is mid-appending — simply bounds the
+readable index, so the reader sees up to the last complete, CRC-valid, contiguous entry. `read_at`,
+`read_range`, `last` work on it unchanged; do NOT `append`/`truncate_from`/`write_meta` through it. Errors
+if the log does not exist yet.
+""".
+-spec open_ro(binary(), file:filename_all()) -> {ok, handle()} | {error, no_log}.
+open_ro(Ns, DataDir) ->
+    Dir = ns_dir(DataDir, Ns),
+    case file:open(filename:join(Dir, "log.0001"), [read, raw, binary]) of
+        {ok, Fd} ->
+            try
+                {Idx, LastI, LastT, BaseOff} = scan_ro(Fd, 0, #{}, 0, 0),
+                {SnapI, SnapT} = peek_snapshot(Dir),
+                {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, idx = Idx,
+                            last_index = LastI, last_term = LastT, base_offset = BaseOff,
+                            snap_index = SnapI, snap_term = SnapT}}
+            catch C:R ->
+                _ = file:close(Fd),   %% never leak the fd if the scan throws (e.g. a garbage term)
+                {error, {scan_failed, C, R}}
+            end;
+        {error, enoent}  -> {error, no_log};
+        {error, Reason}  -> {error, Reason}   %% emfile/eacces/… ⇒ degrade cleanly (never case_clause)
+    end.
 
 -doc "Close the store's file handle.".
 -spec close(handle()) -> ok.
@@ -315,6 +341,28 @@ trim(Fd, Off, Idx, LastI, LastT) ->
     ok = file:truncate(Fd),
     ok = file:datasync(Fd),
     {Idx, LastI, LastT, Off}.
+
+%% Read-only, NON-TRUNCATING scan (for open_ro): the same framing + contiguity checks as scan_log, but STOP
+%% at the first torn / short / bad-CRC / discontinuous frame — bounding the readable tail — instead of
+%% truncating the file or fail-stopping. A concurrent reader must never mutate the live writer's log.
+scan_ro(Fd, Off, Idx, LastI, LastT) ->
+    case file:pread(Fd, Off, ?HDR_BYTES) of
+        {ok, <<?MAGIC:32, Len:32, _CRC:32>> = Hdr} ->
+            case file:pread(Fd, Off + ?HDR_BYTES, Len) of
+                {ok, Payload} when byte_size(Payload) =:= Len ->
+                    case unframe(<<Hdr/binary, Payload/binary>>) of
+                        {ok, P, _} ->
+                            #entry{index = I, term = T} = binary_to_term(P),
+                            case map_size(Idx) =:= 0 orelse I =:= LastI + 1 of
+                                true  -> scan_ro(Fd, Off + ?HDR_BYTES + Len, Idx#{I => {Off, Len, T}}, I, T);
+                                false -> {Idx, LastI, LastT, Off}   %% discontinuity ⇒ stop
+                            end;
+                        {error, _} -> {Idx, LastI, LastT, Off}       %% bad CRC / torn ⇒ stop
+                    end;
+                _ -> {Idx, LastI, LastT, Off}                        %% short payload ⇒ stop
+            end;
+        _ -> {Idx, LastI, LastT, Off}                                %% eof / short header ⇒ stop
+    end.
 
 %% A frame at `Off` failed its integrity/contiguity check. A crash mid-append can only
 %% damage the FINAL frame, so if a well-formed frame appears anywhere AFTER this one, this

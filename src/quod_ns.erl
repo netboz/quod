@@ -24,7 +24,13 @@ init({Ns, Config}) ->
          #{id => quod_prolog, start => {quod_prolog, start_link, [Ns, Config]},
            restart => permanent, type => worker},
          %% remote-READ endpoint ({prove, Ns} channel): serves reads to non-committee nodes from
-         %% this node's committed kb. Last in the rest_for_one chain — depends on quod_prolog.
+         %% this node's committed kb. Depends on quod_prolog.
          #{id => quod_prove,  start => {quod_prove,  start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% catch-up endpoint ({catchup, Ns} channel): serves the committed block+cert log to a joiner
+         %% from a READ-ONLY store view (it opens its own fd; never touches the writer's handle). Last in
+         %% the rest_for_one chain — it holds no state the others need, so its own crash restarts only
+         %% itself; being last it also re-subscribes harmlessly whenever an earlier sibling restarts.
+         #{id => quod_catchup, start => {quod_catchup, start_link, [Ns, Config]},
            restart => permanent, type => worker}],
     {ok, {Flags, Children}}.

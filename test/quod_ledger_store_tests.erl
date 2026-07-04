@@ -27,6 +27,8 @@ store_test_() ->
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
       fun t_interior_corruption_fail_stops/1,
+      fun t_open_ro_reads/1,
+      fun t_open_ro_non_truncating/1,
       fun t_load/1]}.
 
 %%%===================================================================
@@ -108,6 +110,46 @@ t_truncate_from({Dir, Ns}) ->
         ?assertEqual({3, 2}, quod_ledger_store:last(S4)),
         ?assertEqual(not_found, quod_ledger_store:read_at(S4, 4)),
         ok = quod_ledger_store:close(S4)
+    end.
+
+%% open_ro gives a read-only view of the committed log (the catch-up server's read path).
+t_open_ro_reads({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1)]),
+        ok = quod_ledger_store:close(S1),
+        {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
+        ?assertEqual({3, 1}, quod_ledger_store:last(RO)),
+        ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(RO, 1, 3)),
+        ?assertMatch({ok, #entry{index = 2}}, quod_ledger_store:read_at(RO, 2)),
+        ok = quod_ledger_store:close(RO),
+        ?assertEqual({error, no_log}, quod_ledger_store:open_ro(<<"never:opened">>, Dir))
+    end.
+
+%% open_ro is NON-TRUNCATING: a torn tail (a frame the live writer is mid-appending) bounds the readable
+%% index but the file is NOT mutated — so a concurrent reader can never corrupt the writer's log. (The
+%% writer's own truncating open still trims it.)
+t_open_ro_non_truncating({Dir, Ns}) ->
+    fun() ->
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1)]),
+        ok = quod_ledger_store:close(S1),
+        LogPath   = filename:join([Dir, base64url(Ns), "log.0001"]),
+        ValidSize = filelib:file_size(LogPath),
+        {ok, Fd}  = file:open(LogPath, [read, write, raw, binary]),
+        {ok, _}   = file:position(Fd, eof),
+        ok = file:write(Fd, <<"torn-partial-frame">>),   %% the writer mid-appending a frame
+        ok = file:close(Fd),
+        TornSize = filelib:file_size(LogPath),
+        ?assert(TornSize > ValidSize),
+        {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
+        ?assertEqual({2, 1}, quod_ledger_store:last(RO)),        %% reads up to the last valid entry
+        ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(RO, 1, 2)),
+        ok = quod_ledger_store:close(RO),
+        ?assertEqual(TornSize, filelib:file_size(LogPath)),     %% open_ro left the torn tail (SAFE)
+        {ok, W} = quod_ledger_store:open(Ns, Dir),              %% the writer's open DOES trim it
+        ok = quod_ledger_store:close(W),
+        ?assertEqual(ValidSize, filelib:file_size(LogPath))
     end.
 
 t_torn_tail_recovery({Dir, Ns}) ->

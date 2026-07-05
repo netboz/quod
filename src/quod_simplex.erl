@@ -50,7 +50,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
          committee_delta/1, apply_committee_delta/2]).   %% committee = projection of peer_admitted facts
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
--export([start_link/2, append/2, rebuild/1, status/1, committee/1, stats/1, namespaces/0]).
+-export([start_link/2, append/2, rebuild/1, status/1, committee/1, genesis_hash/1, stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
@@ -435,14 +435,19 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
+          mode         => create,      %% create = found genesis; join = trustlessly catch up from a contact
           committee    => [],          %% co-founders; `[]` = self-only (N=1), a list = a multi-validator committee
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
+          genesis_hash => undefined,   %% join only: the out-of-band-pinned slot-1 block_hash (the trust anchor)
           data_dir     => undefined}).
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
 -define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
 -define(DELTA_MS,   1000).   %% Δ_timeout: a proposed-but-stuck head slot is complained (skipped) after this;
                              %% must exceed real commit latency (override via app-env `simplex_delta_ms`)
+-define(JOIN_KICK_MS, 500).  %% mode=join: delay before (re)trying catch-up, so the catchup sibling is up first
+-define(JOIN_WINDOW,  256).  %% mode=join: entries requested per catch-up fetch (matches the server's block cap)
+-define(SINK_MS,     30000). %% mode=join: budget for one sink window (store append + KB replay) — generous
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -466,6 +471,8 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => true},                  %% peers with an open_link dial in flight
             prolog_ready = false :: boolean(),
+            join         = none :: none | pending | {worker, pid()} | done,  %% mode=join catch-up lifecycle
+            genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
             appends = 0  :: non_neg_integer(),
             commits = 0  :: non_neg_integer()}).
 
@@ -500,6 +507,10 @@ status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
 
+-doc "The `block_hash` of this node's local genesis block (slot 1) — the anchor a joiner must pin (config).".
+-spec genesis_hash(binary()) -> binary() | undefined.
+genesis_hash(Ns) -> call(Ns, get_genesis_hash, undefined).
+
 namespaces() -> gproc:select([{{{n, l, {quod_simplex, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 call(Ns, Req, Default) ->
@@ -530,10 +541,17 @@ init_store(Ns, Cfg, Id) ->
         S1 ->
             Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
             Eng = eng_new(S1#s.validators, Committed),
-            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout()]}
+            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout() | join_actions(S1)]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
+
+%% A fresh `mode=join` node boots UNFOUNDED and must drive catch-up — arm the join kick (deferred so the
+%% catchup sibling, later in the rest_for_one chain, is up first). Every other boot participates immediately.
+join_actions(#s{join = pending}) -> [join_timeout()];
+join_actions(_)                  -> [].
+
+join_timeout() -> {{timeout, join}, ?JOIN_KICK_MS, start_join}.
 
 %% The consensus re-drive timer: fires every ?TICK_MS to retry dials whose link never came up, so a
 %% transient dial failure at boot can't permanently stall a slot (there is no per-message retransmit).
@@ -553,11 +571,21 @@ signing_key(Cfg) ->
 %% this consensus process holds only the validator-set projection. A brand-new namespace is bootstrapped.
 %% Re-folding the committee from the log is the accepted cost of running without a committee checkpoint;
 %% `last/1` gives the height in O(1). Both projections derive from the same committed log, so they can't drift.
+%% Derive the durable state, then decide by mode. A `join` node ALWAYS (re)enters catch-up — from slot 0 when
+%% fresh (unfounded, anchored at genesis) OR RESUMING from a partial prefix left by a crash/restart (`start_join_worker`
+%% resumes at `slot+1`, so a retry never re-appends what is already on disk, and a partial log is never mistaken for
+%% complete — `maybe_mark_ready` stays gated until `join=done`). A fresh `create` node founds genesis; a restarted
+%% `create` node (or an admitted member) just re-derives. Both projections come from the one committed log.
 load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
-    case maps:get(log, quod_ledger_store:load(Store)) of
-        []  -> bootstrap(Cfg, S0);
-        Log -> {LastI, _} = quod_ledger_store:last(Store),
-               S0#s{validators = committee_from_log(Log), slot = LastI}
+    Base = case maps:get(log, quod_ledger_store:load(Store)) of
+               []  -> S0;   %% empty ⇒ unfounded (slot 0)
+               Log -> {LastI, _} = quod_ledger_store:last(Store),
+                      S0#s{validators = committee_from_log(Log), slot = LastI}
+           end,
+    case {maps:get(mode, Cfg), Base#s.slot} of
+        {join,   _} -> Base#s{join = pending, genesis_hash = maps:get(genesis_hash, Cfg)};
+        {create, 0} -> bootstrap(Cfg, Base);   %% fresh founder
+        {create, _} -> Base                    %% restarted founder / admitted member
     end.
 
 %% Fresh create: durably commit ONE genesis block (slot 1) whose transaction asserts each founding
@@ -623,7 +651,11 @@ running(cast, rebuild, S) ->
 %% sender's authenticated node_id (pubkey); the address is a routing hint we ignore. Processing it can
 %% advance/skip the head (arming or cancelling the Δ timer) — `timer_actions/2` reflects that.
 running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
-    case decode(Payload, S0#s.ns) of
+    %% Only a committee member acts on consensus traffic. A node that is still joining, or caught up but
+    %% not (yet) admitted, is a read-only observer — it stays current via catch-up + its KB, never by
+    %% voting — so it drops the committee's propose/share/cert stream (also guards `leader/2` on `[]`).
+    case is_participant(S0) andalso decode(Payload, S0#s.ns) of
+        false -> {keep_state, S0};   %% not a member ⇒ ignore, OR a member that got an undecodable frame
         error -> {keep_state, S0};
         Msg   -> S1 = dispatch(Peer, Msg, S0),
                  {keep_state, S1, timer_actions(S0, S1)}
@@ -635,6 +667,12 @@ running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
     %% the dial failed — clear the in-flight marker but KEEP the buffered frames; the tick re-dials
     %% (consensus emits each propose/share only once, so dropping them would stall the slot forever).
     {keep_state, S#s{dialing = maps:remove(Peer, S#s.dialing)}};
+%% The catch-up worker died while still `{worker,Pid}` — i.e. it CRASHED before casting `{join_done,_}` (a
+%% normal exit always casts first, and that cast, sent before the exit, is processed before this DOWN, flipping
+%% `join` away from `{worker,Pid}` to the generic clause below). Re-arm a retry; `start_join_worker` resumes from
+%% the persisted height, so the retry continues from the prefix already on disk — never re-appending from slot 1.
+running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{join = {worker, Pid}}) ->
+    {keep_state, S#s{join = pending}, [join_timeout()]};
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
 %% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
@@ -651,8 +689,32 @@ running({timeout, complain}, {complain, V}, S0) ->
 %% Consensus re-drive: re-dial any peer whose link never came up (its frames are still buffered).
 running({timeout, tick}, tick, S) ->
     {keep_state, redial_pending(S), [tick_timeout()]};
+%% mode=join: kick trustless catch-up. Wait (re-arm) until the catchup sibling is up, then spawn the worker.
+%% (`valid_cfg` guarantees a `join` node has a binary `genesis_hash`, so there is no anchor-less arm here.)
+running({timeout, join}, start_join, S = #s{join = pending, ns = Ns}) ->
+    case quod_reg:where({quod_catchup, Ns}) of
+        undefined -> {keep_state, S, [join_timeout()]};   %% sibling not up yet — retry shortly
+        _         -> {keep_state, start_join_worker(S)}
+    end;
+running({timeout, join}, start_join, S) ->
+    {keep_state, S};   %% no longer pending (worker running, or already done)
+%% mode=join: the catch-up worker finished. `{ok,Slot≥1}` ⇒ genesis was anchored and the log+KB are caught up
+%% (each window replayed as it landed); re-drive any deferred apply, refresh the engine to the height/committee
+%% reached, mark the KB ready. `{ok,0}` means the contact served an EMPTY log (genesis never anchored) — treat
+%% it like a failure and retry, never declare a read node "done" over nothing.
+running(cast, {join_done, {ok, _H}}, S = #s{join = {worker, _}, slot = Slot}) when Slot >= 1 ->
+    {keep_state, maybe_mark_ready(apply_committed(S#s{join = done, eng = eng_new(S#s.validators, Slot)}))};
+running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
+    logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
+    {keep_state, S#s{join = pending}, [join_timeout()]};
+running(cast, {join_done, _}, S) -> {keep_state, S};   %% stale result (already retried / done)
+%% mode=join: the worker hands each verified, contiguous window here to persist + replay in slot order.
+running({call, From}, {sink_catchup, Es}, S) ->
+    {S1, Reply} = apply_catchup_window(Es, S),
+    {keep_state, S1, [{reply, From, Reply}]};
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
+running({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
 running({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running(_EventType, _Event, S)             -> {keep_state, S}.
 
@@ -680,9 +742,12 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
     {S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
-    case acceptable_change(Change, S) of
-        false -> {S, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too (not just peers)
-        true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
+    case lists:member(Self, Vs) of
+        false -> {S, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
+        true  -> case acceptable_change(Change, S) of
+                     false -> {S, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
+                     true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
+                 end
     end.
 
 handle_append_leader(From, Change, Self, Vs, Sl, S) ->
@@ -1013,13 +1078,65 @@ safe_apply_block(Ns, I, Data) ->
 
 %% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix
 %% is actually applied, so a (re)started member never answers from a half-built kb.
-maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false}) ->
+%% A joiner (join = pending | {worker,_}) must NOT mark its KB ready mid-catch-up: its height only reflects
+%% the windows sunk so far, so a prove would answer from a partial prefix. Only `none` (create / a member)
+%% and `done` (caught up) may go ready.
+maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, join = Join}) when Join =:= none; Join =:= done ->
     case (quod_reg:where({quod_prolog, Ns}) =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
                  S#s{prolog_ready = true};
         false -> S
     end;
-maybe_mark_ready(S) -> S.   %% already marked ready
+maybe_mark_ready(S) -> S.   %% already marked ready, OR still joining (serve proves only once caught up)
+
+%%%===================================================================
+%%% mode=join — trustless catch-up (the joiner side of Simplex 4)
+%%%===================================================================
+
+%% A member of the current committee that may act on live consensus traffic + propose. A node still catching
+%% up (`join = pending | {worker,_}`) is NEVER a participant — even if a catch-up window transiently folds its
+%% OWN pubkey into `validators`, it must stay a read-only observer over its (stale, mid-build) engine until
+%% `join=done` refreshes the engine to the caught-up height. `none` (create / member) and `done` may participate.
+is_participant(#s{join = J}) when J =/= none, J =/= done -> false;
+is_participant(#s{self = Self, validators = Vs})         -> lists:member(Self, Vs).
+
+%% Spawn the (monitored) catch-up worker. It runs the driver loop OFF the statem: pull a window via the
+%% catchup sibling, hand each verified window back to us (`sink_catchup`) to persist + replay, and finally
+%% cast `{join_done, Result}`. Monitored so a crash mid-catch-up re-arms a retry (see the `'DOWN'` clause).
+%% RESUME from the persisted height: `From = slot+1`, `Committee` = the set as of that slot. A fresh joiner
+%% (`slot=0`) starts at `From=1` with `[]`, so slot 1 is anchored against `genesis_hash`; a retry/restart over a
+%% partial prefix resumes past it (no re-append of what is already on disk, no re-anchor of an already-verified prefix).
+start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = Vs}) ->
+    Statem = self(),
+    From   = Slot + 1,
+    {Pid, _Ref} = spawn_monitor(
+        fun() ->
+            Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1) end,
+            Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
+            gen_statem:cast(Statem, {join_done, quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)})
+        end),
+    S#s{join = {worker, Pid}}.
+
+%% Persist a verified, contiguous window (indices `slot+1..`) to the store, fold the committee across it,
+%% and replay it into quod_prolog in slot order (`apply_committed` — the same path a restart-rebuild uses).
+%% A store error aborts the window cleanly (returns `{error, _}` ⇒ the driver fails over); nothing is acked
+%% half-applied. Both projections (validator set, KB) advance together from the one appended log.
+apply_catchup_window([], S) -> {S, ok};
+apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
+    try quod_ledger_store:append(Store, Es) of
+        {ok, Store1} ->
+            Vs1  = committee_fold(Es, Vs),
+            Slot = (lists:last(Es))#entry.index,
+            S1   = maybe_mark_ready(apply_committed(S#s{store = Store1, validators = Vs1, slot = Slot})),
+            {S1, ok}
+    catch _:R -> {S, {error, R}}
+    end.
+
+local_genesis_hash(#s{store = Store}) ->
+    case quod_ledger_store:read_at(Store, 1) of
+        {ok, #entry{data = D}} -> block_hash(#block{slot = 1, parent = 0, payload = [D]});
+        _                      -> undefined
+    end.
 
 %%%===================================================================
 %%% helpers
@@ -1028,8 +1145,13 @@ maybe_mark_ready(S) -> S.   %% already marked ready
 %% The committee = the set of `peer_admitted` pubkeys, derived from the committed log's transaction diffs.
 %% Folds every committed entry's payload through `apply_committee_delta/2` in slot order (a `noop` payload
 %% carries no committee change, so matching `data` alone is total over every `#entry`).
-committee_from_log(Log) ->
-    lists:foldl(fun(#entry{data = Data}, V) -> apply_committee_delta(Data, V) end, [], Log).
+committee_from_log(Log) -> committee_fold(Log, []).
+
+%% Fold a run of committed entries onto a validator set: seed `[]` for a full re-fold (`committee_from_log`),
+%% or the running set for an incremental catch-up window (`apply_catchup_window`). One definition, so the two
+%% callers can never drift.
+committee_fold(Entries, Seed) ->
+    lists:foldl(fun(#entry{data = Data}, V) -> apply_committee_delta(Data, V) end, Seed, Entries).
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). A `#transaction` folds its diff (the validator id is the 4th arg / 5th element
@@ -1052,18 +1174,35 @@ apply_committee_delta(Change, V) ->
 addq(M, L) -> case lists:member(M, L) of true -> L; false -> L ++ [M] end.   %% idempotent add
 
 %% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
-%% list of co-founders = a multi-validator committee (the founding validator set is frozen from it).
+%% list of co-founders = a multi-validator committee (the founding validator set is frozen from it);
+%% `mode` must be create|join, and a `join` node MUST carry the out-of-band `genesis_hash` anchor.
 valid_cfg(Config, Cfg) ->
     case maps:get(node_id, Config, undefined) of
         undefined -> {error, missing_node_id};
-        _         -> case maps:get(committee, Cfg) of
-                         L when is_list(L) ->
-                             case lists:all(fun valid_member/1, L) of
-                                 true  -> ok;
-                                 false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
-                             end;
-                         Other             -> {error, {bad_committee, Other}}
-                     end
+        _         -> valid_committee(Cfg)
+    end.
+
+valid_committee(Cfg) ->
+    case maps:get(committee, Cfg) of
+        L when is_list(L) ->
+            case lists:all(fun valid_member/1, L) of
+                true  -> valid_mode(Cfg);
+                false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
+            end;
+        Other -> {error, {bad_committee, Other}}
+    end.
+
+%% `join` without a genesis-hash anchor would boot unfounded and never be able to verify what it catches up —
+%% fail fast at config time rather than run a silent zombie that reports healthy. A mistyped `mode` must not
+%% fall through to `create` and silently found a divergent genesis.
+valid_mode(Cfg) ->
+    case maps:get(mode, Cfg) of
+        create -> ok;
+        join   -> case maps:get(genesis_hash, Cfg) of
+                      H when is_binary(H) -> ok;
+                      _                   -> {error, join_requires_genesis_hash}
+                  end;
+        Other  -> {error, {bad_mode, Other}}
     end.
 
 %% A committee element is a bare pubkey or a `{Pubkey, Host, Port}` tuple — checked here so `founding/2`'s
@@ -1088,7 +1227,11 @@ genesis_file(Cfg) ->
 
 status_map(S) ->
     #{role => validator, committee => S#s.validators, slot => S#s.slot,
-      committed => S#s.slot, last_applied => S#s.last_applied}.
+      committed => S#s.slot, last_applied => S#s.last_applied, join => join_state(S)}.
+
+%% Normalise the join lifecycle for `status/1`: `none` (create / a member) | `pending` | `catching_up` | `done`.
+join_state(#s{join = {worker, _}}) -> catching_up;
+join_state(#s{join = J})           -> J.
 
 stats_map(S) ->
     #{slot => S#s.slot, committed => S#s.slot, last_applied => S#s.last_applied,

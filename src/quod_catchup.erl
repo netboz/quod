@@ -22,7 +22,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3, catch_up/3]).
+-export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -184,11 +184,22 @@ height ever reported (`H` may not regress below what was already served), so a c
 height cannot truncate catch-up into a false "caught up". Returns `{ok, Height}` (caught up) or
 `{error, Reason}` (forged chain / bad anchor / sink failure / fetch failure / a stuck server making no
 progress — the caller should try another contact).
+
+Use `catch_up/5` to RESUME from a partial prefix already on disk: `From` = `height+1` and `Committee` = the
+committee AS OF `From` (`quod_simplex:committee_from_log/1` over the persisted log). Resuming past slot 1
+skips the genesis anchor (the persisted prefix was already verified when first sunk); a fresh joiner uses
+`catch_up/3` (= `From=1, Committee=[]`) so slot 1 IS anchored against `GenesisHash`.
 """.
 -spec catch_up(binary(),
                fun((pos_integer()) -> {ok, [#entry{}], log_index()} | {error, term()}),
                fun(([#entry{}]) -> ok | {error, term()})) -> {ok, log_index()} | {error, term()}.
 catch_up(GenesisHash, Fetch, Sink) -> catch_up(GenesisHash, Fetch, Sink, 1, [], 0).
+
+-spec catch_up(binary(),
+               fun((pos_integer()) -> {ok, [#entry{}], log_index()} | {error, term()}),
+               fun(([#entry{}]) -> ok | {error, term()}),
+               pos_integer(), [node_id()]) -> {ok, log_index()} | {error, term()}.
+catch_up(GenesisHash, Fetch, Sink, From, Committee) -> catch_up(GenesisHash, Fetch, Sink, From, Committee, 0).
 
 catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
     case Fetch(From) of

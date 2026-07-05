@@ -80,6 +80,18 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   `quod_prove`'s existing `{prove, Ns}` transport (a `blocks_req` tag + a `pull`), OR extract the shared
   transport skeleton into a helper both use. Kept separate for now (one-module-per-endpoint pattern);
   revisit to remove the duplication.
+- **Stale reply-conn to a RESTARTED same-identity peer (`quod_catchup`/`quod_prove`, symmetric transport).**
+  The server replies on its OWN outbound link keyed by the requester's PUBKEY (`send/3` → `conns[Peer]`),
+  and `link_up` REJECTS a fresh inbound link when a conn for that pubkey already exists. So when a peer
+  restarts with the SAME identity (a joiner resuming catch-up after a crash/redeploy), the server keeps
+  replying on the now-dead outbound link and drops the response until that stale conn's `DOWN` fires — which
+  is not prompt if QUIC hasn't detected the peer's death. Net: a restarted joiner pointed at a contact that
+  still holds a stale conn to it cannot complete catch-up until the conn clears (or it tries another contact —
+  multi-contact failover is itself deferred). Observed in `join_SUITE` (the resume test restarts the FOUNDER
+  too, giving a clean transport state, to sidestep it). Real fixes: reply on the request's INBOUND link
+  (`InLink` is already threaded in the `quod_message` tuple — avoids the reverse dial entirely), or evict/replace
+  a stale conn on a new `link_up` for the same peer. Trusted-fleet-safe today (self-heals); harden with the
+  transport consolidation above.
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 
@@ -130,13 +142,42 @@ stages, not carried forward:
   (the deferred epochs work) so a slot's voting set is unambiguous. Intersects the membership-safety gap
   above (unsigned, per-slot-mutable membership). Until it lands, catch-up trusts that finalized slots were
   finalized under the correct committee — safe in a trusted fleet, not Byzantine.
-- **Join cold-start + trustless catch-up** — Stage 3: `mode=join` (a node joins knowing only a **contact
-  address**, deleting the co-founder scaffold — the `committee` config + `simplex_SUITE` co-founding
-  setup), and a joiner that pulls blocks via Brahms sampling and **verifies each block's commit cert**
-  (never trusts the server). Genesis trust anchor delivered out-of-band in config (founding keys / genesis
-  hash), never TOFU'd. A joiner must special-case slot 1 (`cert=none` — verify against the pinned anchor,
-  never `verify_cert(none,_)`). Absorbs the old `remove_member` / join-driver / candidate-discovery
-  concerns; a non-voting **replica** tier is a further slice (no learner/replica tier exists today).
+- **Join cold-start + trustless catch-up** — **DONE (Stage 3 / Simplex 4, S1–S5a):** the machinery
+  (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
+  forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node
+  boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/3` from
+  its seed contacts: pull a window → `verify_forward` each cert against the committee it reconstructs → hand
+  the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
+  advance, until caught up. The genesis (slot 1, `cert=none`) is anchored against the out-of-band-pinned
+  `genesis_hash` (config), never TOFU'd; `quod_simplex:genesis_hash/1` exposes a founder's anchor. A
+  caught-up joiner is a **read-only observer** — not in its own `validators`, so `is_participant/2` drops
+  live consensus traffic and refuses appends (`not_in_charge`). Covered by `join_SUITE` (found N=1 → commit
+  a fact → a `mode=join` node catches up over loopback QUIC → proves the fact from its OWN KB, stays a
+  non-member). **Resume + hardening (from the S5a review, all landed):** a `mode=join` node re-enters catch-up
+  on EVERY boot (empty OR partial log), and `start_join_worker` RESUMES from the persisted height (`slot+1`,
+  committee-as-of-that-slot) — so a crash/redeploy mid-catch-up never re-appends its on-disk prefix (the store's
+  `assert_contiguous` would throw) nor treats a partial log as complete (`maybe_mark_ready` stays gated until
+  `join=done`). `catch_up/5` is the resume entry (skips the genesis anchor past slot 1). `is_participant/1`
+  requires `join ∈ {none,done}` so a window that folds the joiner's OWN pubkey can't flip it live over a stale
+  engine. `{ok,0}` from an empty/lying contact is a retry, not a false "done". `valid_cfg` fail-fasts a bad
+  `mode` or a `join` without a `genesis_hash` anchor (no silent zombie). Covered by `join_SUITE`'s
+  full-namespace-restart resume case. **Still deferred from here:**
+  - **Admission to voter (S5b)** — a caught-up joiner becoming a committee **member** (an existing member
+    proves `admit`, the `peer_admitted` commits, the joiner sees itself in `validators` and starts voting).
+    Today catch-up ends at a read-only node; nothing promotes it.
+  - **HOCON `genesis_hash` plumbing** — the anchor reaches `quod_simplex` via the ns Config, but
+    `quod_schema:fields(content)` has no `genesis_hash` key and `quod_app:build_ns_config` doesn't forward one,
+    so a PRODUCTION `mode=join` node has no way to supply the anchor yet. Guarded (not silent): `valid_cfg`
+    now fail-fasts such a node at boot. No production joiner exists yet (the Nomad job is N=1), so add the
+    schema field + passthrough when the multi-node deploy lands (rides S5b / the N=1→join deploy work).
+  - **The co-founder scaffold STAYS** (decided 2026-07-05, reversing the plan's "delete it"): the `committee`
+    config + `simplex_SUITE` co-founding is the ONLY way to stand up the 4-node BFT **failover** committee,
+    and join can't replace that until it can co-found N≥4 via sequential admissions. Revisit after S5b.
+  - **Read-replica (stay-synced) tier** — a joiner catches up a **snapshot** then goes quiescent; it does
+    NOT follow live commits after `join=done` (as a non-member it drops `{log,Ns}` traffic). A durable
+    non-voting replica that keeps following the feed is the reader-arc work (§4), not built.
+  - **Brahms-sampled contacts** — catch-up pulls from the static `seed_peers` contact list, not a Brahms
+    sample; sampling + multi-contact failover is a hardening slice.
 - **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from
   its OWN config, with no parent-hash chain to catch a mismatch (slot 1 is self-committed; consensus starts
   at slot 2). Mismatched co-founder addresses → divergent `peer_admitted` addresses per KB (the

@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.16"
-  description = "quod image tag in the cluster registry. 0.6.16 = Prometheus metrics buildout (quod_metrics: per-node node_id constant label + namespace/author labels; consensus submit/commit/skip/reject counters + in-flight pending; quod_prolog parked/park_timeouts; feed health; per-tx commit-latency/diff-size histograms + committed-by-author counter via the live {committed,Ns} event) + Grafana dashboard (deploy/grafana). Builds on 0.6.15 block/transaction timestamps. NOTE: 0.6.15's block fields change the genesis hash — coming from an older image (≤0.6.14) MUST re-found (wipe the quod-root/quod-join volumes)."
+  default     = "0.6.17"
+  description = "quod image tag in the cluster registry. 0.6.17 = same node image as 0.6.16 + the quod-brahms membership dashboard organized into the Grafana 'Quod' folder (deploy/grafana/quod-brahms-dashboard.json, provisioned via the loki-stack quod provider). 0.6.16 = Prometheus metrics buildout (quod_metrics: per-node node_id constant label + namespace/author labels; consensus submit/commit/skip/reject counters + in-flight pending; quod_prolog parked/park_timeouts; feed health; per-tx commit-latency/diff-size histograms + committed-by-author counter via the live {committed,Ns} event) + Grafana dashboard (deploy/grafana). Builds on 0.6.15 block/transaction timestamps. NOTE: 0.6.15's block fields change the genesis hash — coming from an older image (≤0.6.14) MUST re-found (wipe the quod-root/quod-join volumes)."
 }
 
 variable "join_count" {

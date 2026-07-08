@@ -56,6 +56,19 @@ ts_acceptable_test() ->
     ?assertNot(quod_simplex:ts_acceptable(future, Last, Now)),
     ?assertNot(quod_simplex:ts_acceptable({0}, Last, Now)).
 
+%% The dialing timeout: a dial marker whose deadline has passed is swept (so the tick re-dials it),
+%% while one still in the future is kept. This is the whole self-heal for a dial that resolves to neither
+%% link_up nor link_error — without it a lost dial pins the peer out of redial_pending forever.
+prune_dials_test() ->
+    Now = 1000,
+    %% keep future deadlines (Now < Deadline); drop expired ones, INCLUDING exactly at the deadline (Now >= Deadline)
+    ?assertEqual(#{a => 1500},
+                 quod_simplex:prune_dials(#{a => 1500, b => 900, c => 1000}, Now)),
+    ?assertEqual(#{}, quod_simplex:prune_dials(#{}, Now)),
+    ?assertEqual(#{}, quod_simplex:prune_dials(#{stuck => 1}, Now)),            %% long-expired ⇒ swept
+    ?assertEqual(#{x => 2000, y => 3000},                                       %% all future ⇒ all kept
+                 quod_simplex:prune_dials(#{x => 2000, y => 3000}, Now)).
+
 %%%===================================================================
 %%% share sign / verify
 %%%===================================================================

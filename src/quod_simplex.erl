@@ -58,7 +58,8 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3]).
+-export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
+         prune_dials/2]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
@@ -447,6 +448,10 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
 -define(TICK_MS,     300).   %% consensus re-drive cadence: re-dial peers whose link never came up (liveness)
+-define(DIAL_TIMEOUT_MS, 15000).  %% presume a dial lost if neither link_up nor link_error arrives within this
+                                  %% long, and sweep its marker so the tick re-dials (guards a conn that dies
+                                  %% mid-handshake); safely exceeds the worst-case legit dial (connect ~5s +
+                                  %% link-ack ~5s, quod_conn), so an in-flight dial is never swept early
 -define(DELTA_MS,   1000).   %% Δ_timeout: a proposed-but-stuck head slot is complained (skipped) after this;
                              %% must exceed real commit latency (override via app-env `simplex_delta_ms`)
 -define(JOIN_KICK_MS, 500).  %% mode=join: delay before (re)trying catch-up, so the catchup sibling is up first
@@ -474,7 +479,7 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
-            dialing    = #{} :: #{node_id() => true},                  %% peers with an open_link dial in flight
+            dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             prolog_ready = false :: boolean(),
             join         = none :: none | pending | {worker, pid()} | done,  %% mode=join catch-up lifecycle
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
@@ -699,9 +704,10 @@ running({timeout, complain}, {complain, V}, S0) ->
                   _ -> timer_actions(S0, S1)                                 %% advanced/resolved ⇒ cancel or re-arm
               end,
     {keep_state, S1, Actions};
-%% Consensus re-drive: re-dial any peer whose link never came up (its frames are still buffered).
+%% Consensus re-drive: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
+%% then re-dial every peer whose link never came up (its frames are still buffered).
 running({timeout, tick}, tick, S) ->
-    {keep_state, redial_pending(S), [tick_timeout()]};
+    {keep_state, redial_pending(sweep_stale_dials(S)), [tick_timeout()]};
 %% mode=join: kick trustless catch-up. Wait (re-arm) until the catchup sibling is up, then spawn the worker.
 %% (`valid_cfg` guarantees a `join` node has a binary `genesis_hash`, so there is no anchor-less arm here.)
 running({timeout, join}, start_join, S = #s{join = pending, ns = Ns}) ->
@@ -1018,7 +1024,7 @@ send(Peer, Msg, S = #s{ns = Ns, chan = Chan, conns = Conns, outbox = Outbox, dia
             case maps:is_key(Peer, Dialing) of
                 true  -> S1;                                  %% a dial is already in flight for this peer
                 false -> _ = quod_quic:open_link(Peer, Chan),
-                         S1#s{dialing = Dialing#{Peer => true}}
+                         S1#s{dialing = Dialing#{Peer => dial_deadline()}}
             end
     end.
 
@@ -1029,8 +1035,27 @@ redial_pending(S = #s{conns = Conns, outbox = Outbox, dialing = Dialing, chan = 
                     not maps:is_key(P, Conns), not maps:is_key(P, Dialing)],
     lists:foldl(fun(P, Acc) ->
                     _ = quod_quic:open_link(P, Chan),
-                    Acc#s{dialing = (Acc#s.dialing)#{P => true}}
+                    Acc#s{dialing = (Acc#s.dialing)#{P => dial_deadline()}}
                 end, S, Pending).
+
+%% The `dialing` marker is normally cleared when the dial resolves (link_up / link_error). A dial that
+%% resolves to NEITHER — its conn process died mid-handshake, or the `open_link` was dropped — would
+%% otherwise pin the peer out of `redial_pending` forever (a permanent one-peer partition). Sweep every
+%% marker past its deadline so the same tick re-dials it; the peer's frames are still in the outbox
+%% (link_error keeps them, and a stuck dial never flushed them), so `redial_pending` picks it back up.
+sweep_stale_dials(S = #s{dialing = Dialing}) ->
+    S#s{dialing = prune_dials(Dialing, erlang:monotonic_time(millisecond))}.
+
+%% pure: keep only the dials whose deadline is still in the future.
+prune_dials(Dialing, Now) ->
+    maps:filter(fun(_Peer, Deadline) -> Now < Deadline end, Dialing).
+
+%% Monotonic-ms deadline after which an unresolved dial is presumed lost. `?DIAL_TIMEOUT_MS` is a FIXED
+%% constant, deliberately not an app-env knob: it must stay above the transport's worst-case dial
+%% resolution (quod_conn connect ~5s + link-ack ~5s) so a legitimately in-flight dial is never swept
+%% early. A too-short value would sweep a LIVE dial and re-open it (a second waiter on the same link,
+%% resolving to a self-closing duplicate link_up), so the timeout is intentionally not tunable down.
+dial_deadline() -> erlang:monotonic_time(millisecond) + ?DIAL_TIMEOUT_MS.
 
 encode(Ns, Msg) -> term_to_binary({sx, Ns, term_to_binary(Msg)}).
 

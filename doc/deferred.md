@@ -78,14 +78,32 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   the connection owns the link lifecycle). `quod_prove`, `quod_catchup`, and `quod_feed` each dropped their
   link bookkeeping and just call `send/3`; peer-random selection reuses `quod_brahms:take_random/2` (promoted
   to public). Endpoints that must monitor the link themselves (Brahms, consensus) keep `open_link/2`.
-- **Stale reply-conn to a RESTARTED same-identity peer — narrowed, now a single transport concern.**
-  The old per-endpoint bug (`quod_catchup`/`quod_prove` `link_up` REJECTING a fresh inbound link when a conn
-  for that pubkey existed, so a restarted peer's responses went to the dead link) is GONE with the migration —
-  those modules no longer manage links. What remains is one central case: `quod_quic:ensure_conn/3` reuses a
-  cached connection keyed by pubkey while its process is `is_process_alive`, so if a peer restarts at a NEW
-  address before the old conn's `DOWN` fires, a reply can still go to the stale conn until it clears. Fix in
-  ONE place now (evict/replace the cached conn when the resolver learns a new address for the pubkey, or reply
-  on the request's inbound link). Trusted-fleet-safe today (self-heals on `DOWN`).
+- **Restarted-peer feed lag (~1–3 min) — DIAGNOSED; self-heals, fast-drop deferred.**
+  A peer that restarts — even at the SAME address (a Nomad task restart keeps the port) — is not delivered to
+  for ~1–3 min (reproduced: the reconnected node sits at its pre-restart slot while the founder climbs, then
+  snaps forward). Root cause, verified against the vendored `quic` 1.6.5: `quod_quic:ensure_conn/3` reuses a
+  cached conn while its process is `is_process_alive`, and that process only exits on the transport `{closed}`;
+  but the idle timeout NEVER fires because this `quic` resets `last_activity` on every **send** (contra RFC 9000
+  §10.1, `quic_connection.erl:3550`) and quod's Brahms (~5 s) + feed keep sending into the dead conn. So the
+  stale outbound lingers until Brahms `mark_dead` (~50 s: `conn_idle_rounds 8` + `probe_rounds 2`) stops the
+  sends and the idle timer finally drains (~30 s) — i.e. it DOES self-heal in ~80 s, just slowly. The
+  **consensus** side is already robust independently: `quod_simplex` now sweeps a dial that never resolved
+  (neither `link_up` nor `link_error`) after a fixed ~15 s so the tick re-dials — no stuck-dial partition. **REJECTED** as the fast-drop for the feed: keepalive (resets `last_activity`, keeps
+  the dead conn alive forever); stable `reset_secret` (a no-op in this lib — the peer never caches a reset
+  token: empty `peer_cid_pool`, `NEW_CONNECTION_ID` never issued proactively, seq-0 reset-token TP unencoded);
+  and a `quod_brahms:mark_dead/2` → `quod_quic:drop_peer/1` hook that force-kills the cached conn (patched the
+  transport to paper over the missing consensus backstop — wrong altitude, and force-killing a mid-handshake
+  dial reintroduced the stuck-dial partition; the dialing sweep above is the right fix). **Clean fast-drop, if
+  wanted later:** align the vendored `quic` idle-timer with RFC §10.1 (a black-holed conn then drains in ~30 s
+  without waiting on Brahms) — a shared-library change, gate behind tests.
+- **Stream prioritization for signaling (RFC 9218) — deferred.** quod already gives each channel its own QUIC
+  stream (`{log}` consensus, `{feed}` dissemination, `{catchup}`, Brahms), so loss-induced head-of-line
+  blocking between them is already avoided. But all streams on one connection share ONE congestion window, so
+  under heavy feed load consensus signaling contends for bandwidth. The `quic` lib supports
+  `quic:set_stream_priority/4` (RFC 9218 urgency 0–7) but quod doesn't use it — mark `{log}`/`{catchup}`
+  high-urgency and `{feed}` lower so votes preempt bulk dissemination under congestion. (Bandwidth is also
+  partly isolated today by the accidental two-conns-per-peer split — consensus by pubkey, feed by address; the
+  clean end-state is ONE connection per peer + prioritization.)
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 

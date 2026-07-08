@@ -24,12 +24,13 @@
 
 %% The committed change record. `sig` is RESERVED for signing (Phase B): it stays `none`
 %% until node-author signatures land; `author` is the submitting node's pubkey.
--record(transaction, {tx_id      :: binary(),            %% unique per transaction (ulid)
-                 caller_ns  :: binary(),            %% emitting ontology (CallerNs)
-                 diff       :: [op()],              %% concrete asserts/retracts
-                 read_check :: read_check(),        %% what the proof relied on (OCC)
-                 author     :: node_id(),           %% submitting node's pubkey
-                 sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
+-record(transaction, {tx_id      :: binary(),            %% unique per transaction (node-hash ++ unique counter; NOT time-ordered)
+                 caller_ns    :: binary(),            %% emitting ontology (CallerNs)
+                 diff         :: [op()],              %% concrete asserts/retracts
+                 read_check   :: read_check(),        %% what the proof relied on (OCC)
+                 author       :: node_id(),           %% submitting node's pubkey
+                 submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
+                 sig = none   :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
 
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support
@@ -41,9 +42,16 @@
 %% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction or `noop`;
 %% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
 %% the previous committed slot it extends (0 = genesis).
--record(block, {slot    :: slot(),
-                parent  :: slot(),
-                payload :: [#transaction{} | noop]}).
+%% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
+%% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is hashed with the rest of the block
+%% (`block_hash/1` hashes the whole record), so a committed block's timestamp is covered by its cert. The
+%% leader sets it monotonic (≥ the parent block's timestamp); validators reject a proposal that goes
+%% backwards. 0 = genesis/origin (kept deterministic so co-founders agree). Future hardening: a
+%% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
+-record(block, {slot      :: slot(),
+                parent    :: slot(),
+                payload   :: [#transaction{} | noop],
+                timestamp = 0 :: non_neg_integer()}).
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
 %% `complaint` (timeout→skip the slot). `block_hash` binds a support/commit share to a specific
@@ -69,10 +77,13 @@
 %% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
 %% entry against its `cert` (trustless replay). Membership is NOT a distinct entry kind: the committee
-%% is the set of `peer_admitted` facts (`quod_simplex:committee_from_log/1`). `index` doubles as the
+%% is the set of `peer_admitted` facts (`quod_simplex:log_projection/2`). `index` doubles as the
 %% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
                 data        :: #transaction{} | noop,
+                timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's `timestamp` — quod stores no header, so
+                                                    %% catch-up rebuilds `#block{...}` from the entry and needs this to
+                                                    %% reproduce the block_hash. 0 for a `noop` skip (no block) / genesis.
                 cert = none :: #cert{} | none}).
 
 -endif.

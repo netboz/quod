@@ -201,7 +201,8 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when CallerNs =:= Ns ->
     Tx     = tx_id(S#s.self),
     Change = #transaction{tx_id = Tx, caller_ns = CallerNs, diff = Diff,
-                     read_check = ReadSet, author = S#s.self, sig = none},
+                     read_check = ReadSet, author = S#s.self,
+                     submitted_at = quod_time:now_ms(), sig = none},
     TRef   = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
     S1     = S#s{parked = (S#s.parked)#{Tx => {From, [Bindings], S#s.applied, TRef}}},
     case quod_simplex:append(Ns, Change) of

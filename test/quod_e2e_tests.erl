@@ -1,5 +1,6 @@
 -module(quod_e2e_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 
 %%%===================================================================
 %%% single-node end-to-end: prove(write) -> commit -> apply -> read,
@@ -68,7 +69,7 @@ wait_new_pid(Key, OldPid, N) ->
 %%% tests
 %%%===================================================================
 
-t_write_read({_Dir, Ns, Cfg}) ->
+t_write_read({Dir, Ns, Cfg}) ->
     fun() ->
         _Pid = start_ns(Ns, Cfg),
         %% a write goes prove -> stage -> append -> commit -> apply -> reply
@@ -79,7 +80,13 @@ t_write_read({_Dir, Ns, Cfg}) ->
         %% index 1 is the durable genesis {add, self} config entry, so the first write
         %% commits at index 2 (the committee now survives restart — see quod_simplex).
         ?assertMatch(#{committed := 2, last_applied := 2, appends := 1},
-                     quod_simplex:stats(Ns))
+                     quod_simplex:stats(Ns)),
+        %% the write flowed through submit_write, which stamps the client submit time on the tx
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        try
+            {ok, #entry{data = #transaction{submitted_at = Sub}}} = quod_ledger_store:read_at(Store, 2),
+            ?assert(Sub > 0)
+        after quod_ledger_store:close(Store) end
     end.
 
 t_restart_reload({_Dir, Ns, Cfg}) ->

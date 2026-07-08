@@ -111,7 +111,8 @@ then fold forward via `apply_committee_delta`. Returns `{ok, Verified, Committee
 the first bad entry (which the caller must NOT persist).
 
 Per entry, branching on the CERT kind (not the payload): a **commit** cert finalizes a block — bound to
-`block_hash(#block{slot=I, parent=I-1, payload=[Data]})`, where `Data` is a `#transaction` OR a committed
+`block_hash(#block{slot=I, parent=I-1, payload=[Data], timestamp=Ts})` (the entry mirrors the block's
+`timestamp`, since quod stores no header to re-derive it from), where `Data` is a `#transaction` OR a committed
 `noop` — ; a **complaint** cert (block_hash=none) finalizes a `noop` SKIP (it authorizes no payload, so a
 complaint cert over non-`noop` data is rejected); the genesis block (slot 1) carries **no** cert — it is the
 out-of-band trust anchor, so a genesis-window caller (`From=1`, `Committee0=[]`) MUST separately pin the
@@ -147,8 +148,8 @@ verify_entry(#entry{index = I, cert = none}, _Committee) ->
     {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
 verify_entry(#entry{index = I, data = noop, cert = #cert{kind = complaint} = Cert}, Committee) ->
     verify_finalizer(Cert, complaint, I, none, Committee);
-verify_entry(#entry{index = I, data = Data, cert = #cert{kind = commit} = Cert}, Committee) ->
-    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [Data]}),
+verify_entry(#entry{index = I, cert = #cert{kind = commit} = Cert} = E, Committee) ->
+    BH = quod_simplex:block_hash(quod_simplex:block_from_entry(E)),
     verify_finalizer(Cert, commit, I, BH, Committee);
 verify_entry(#entry{index = I}, _Committee) ->
     {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
@@ -184,7 +185,7 @@ height cannot truncate catch-up into a false "caught up". Returns `{ok, Height}`
 progress — the caller should try another contact).
 
 Use `catch_up/5` to RESUME from a partial prefix already on disk: `From` = `height+1` and `Committee` = the
-committee AS OF `From` (`quod_simplex:committee_from_log/1` over the persisted log). Resuming past slot 1
+committee AS OF `From` (`quod_simplex:log_projection/2` over the persisted log). Resuming past slot 1
 skips the genesis anchor (the persisted prefix was already verified when first sunk); a fresh joiner uses
 `catch_up/3` (= `From=1, Committee=[]`) so slot 1 IS anchored against `GenesisHash`.
 """.
@@ -232,8 +233,8 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
 %% HASH to the pinned genesis hash — pinning its full content (committee AND root ontology), so a server
 %% can't forge a genesis that merely derives the right committee. Later windows are trusted through the
 %% committee threaded from the (anchored) verified prefix.
-anchor_ok(1, [#entry{index = 1, data = GenesisData} | _], GenesisHash) ->
-    quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = [GenesisData]}) =:= GenesisHash;
+anchor_ok(1, [#entry{index = 1} = E | _], GenesisHash) ->
+    quod_simplex:block_hash(quod_simplex:block_from_entry(E)) =:= GenesisHash;
 anchor_ok(1, _Verified, _GenesisHash) -> false;   %% From=1 but the first entry isn't genesis
 anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window
 

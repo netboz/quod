@@ -30,6 +30,14 @@ committed(I, D, C, K) ->
 %% a leader committed an empty (noop) BLOCK — a COMMIT cert bound to the noop block, NOT a complaint.
 committed_noop(I, C, K) -> committed(I, noop, C, K).
 
+%% like committed/4 but with an explicit (nonzero) block time on BOTH the hashed block and the entry —
+%% exercises the timestamp threading that committed/4 leaves at the 0 default.
+committed_at(I, D, Ts, C, K) ->
+    BH     = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [D], timestamp = Ts}),
+    Shares = [quod_simplex:make_share(commit, I, BH, signer(M)) || M <- lists:sublist(C, K)],
+    {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
+    #entry{index = I, data = D, timestamp = Ts, cert = Cert}.
+
 %% a complaint-SKIPPED slot I with a COMPLAINT cert (block_hash=none) signed by the first K of C.
 skipped(I, C, K) ->
     Shares = [quod_simplex:make_share(complaint, I, none, signer(M)) || M <- lists:sublist(C, K)],
@@ -58,6 +66,18 @@ skip_test() ->
     C = committee(4), P = pubs(C),
     ?assertMatch({ok, [_, _, _], _},
                  quod_catchup:verify_forward([], 1, [genesis(P), skipped(2, C, 3), committed(3, tx(3), C, 3)])).
+
+%% Nonzero block timestamps ride inside the cert-bound hash: a chain with real timestamps verifies, and an
+%% entry whose stored timestamp differs from the one its cert signed is rejected on block_hash reconstruction.
+timestamped_test() ->
+    C = committee(4), P = pubs(C),
+    Good = [genesis(P), committed_at(2, tx(2), 1750000000000, C, 3),
+                        committed_at(3, tx(3), 1750000000500, C, 4)],
+    ?assertMatch({ok, [_, _, _], _}, quod_catchup:verify_forward([], 1, Good)),
+    %% tamper the stored timestamp while keeping the cert (signed over the original Ts) ⇒ block_hash mismatch
+    [G, E2, E3] = Good,
+    ?assertMatch({error, _},
+                 quod_catchup:verify_forward([], 1, [G, E2#entry{timestamp = 1750000009999}, E3])).
 
 %% A committed noop BLOCK (a COMMIT cert, not a complaint) is accepted — a leader may propose an empty block.
 committed_noop_block_test() ->

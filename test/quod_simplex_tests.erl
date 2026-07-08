@@ -36,6 +36,27 @@ block_hash_deterministic_test() ->
     ?assertNotEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(6))).
 
 %%%===================================================================
+%%% block-timestamp acceptance (the valid_proposal monotonic + future + type gate)
+%%%===================================================================
+
+%% Ts must be a non-negative integer, ≥ the parent block time, and ≤ Now + skew. This is the whole
+%% Byzantine-timestamp defence, so pin every branch directly (valid_proposal wires it to the live clock).
+ts_acceptable_test() ->
+    Now  = quod_time:now_ms(),
+    Last = Now - 1000,
+    ?assert(quod_simplex:ts_acceptable(Now, Last, Now)),          %% normal: monotonic + within skew
+    ?assert(quod_simplex:ts_acceptable(Last, Last, Now)),         %% equal to parent is allowed
+    ?assertNot(quod_simplex:ts_acceptable(Last - 1, Last, Now)),  %% backwards ⇒ rejected
+    ?assertNot(quod_simplex:ts_acceptable(Now + 3 * 60 * 60 * 1000, Last, Now)),  %% >2h future ⇒ rejected
+    %% non-integer terms must NOT slip through. A FLOAT is the load-bearing case: numbers compare by
+    %% VALUE, so the range check alone would accept Now+0.5 — ONLY the is_integer guard rejects it. The
+    %% others (binary/atom/tuple) sort above every integer in term order, so the upper bound also stops them.
+    ?assertNot(quod_simplex:ts_acceptable(Now + 0.5, Last, Now)),
+    ?assertNot(quod_simplex:ts_acceptable(<<"x">>, Last, Now)),
+    ?assertNot(quod_simplex:ts_acceptable(future, Last, Now)),
+    ?assertNot(quod_simplex:ts_acceptable({0}, Last, Now)).
+
+%%%===================================================================
 %%% share sign / verify
 %%%===================================================================
 

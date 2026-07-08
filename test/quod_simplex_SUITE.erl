@@ -87,7 +87,15 @@ t_append_commits_and_persists(Cfg) ->
     ?assertEqual({ok, 3}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),
     St = quod_simplex:status(Ns),
     ?assertEqual(3, maps:get(slot, St)),
-    ?assertEqual(3, maps:get(committed, St)).
+    ?assertEqual(3, maps:get(committed, St)),
+    %% block timestamps are populated + monotonic non-decreasing across slots
+    {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
+    try
+        {ok, #entry{timestamp = T2}} = quod_ledger_store:read_at(Store, 2),
+        {ok, #entry{timestamp = T3}} = quod_ledger_store:read_at(Store, 3),
+        ?assert(T2 > 0),
+        ?assert(T3 >= T2)
+    after quod_ledger_store:close(Store) end.
 
 %% A restart reloads the durable log: the height and the committee are recovered from disk (the
 %% blocks themselves are NOT kept in memory — the store is the archive).
@@ -127,12 +135,12 @@ t_commit_carries_cert(Cfg) ->
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
         {ok, #entry{cert = none}} = quod_ledger_store:read_at(Store, 1),   %% genesis: the anchor, no cert
-        {ok, #entry{data = #transaction{} = Tx, cert = Cert}} = quod_ledger_store:read_at(Store, 2),
+        {ok, #entry{data = #transaction{}, timestamp = Ts, cert = Cert} = E2} = quod_ledger_store:read_at(Store, 2),
         ?assertMatch(#cert{kind = commit, slot = 2}, Cert),
-        %% the cert BINDS this specific block: its block_hash is over the reconstructed #block{} (a joiner
-        %% recomputes the same hash from the persisted entry to check the cert names THIS block).
-        ?assertEqual(quod_simplex:block_hash(#block{slot = 2, parent = 1, payload = [Tx]}),
-                     Cert#cert.block_hash),
+        ?assert(Ts > 0),                              %% leader stamped a real wall-clock block time (not the 0 default)
+        %% the cert BINDS this specific block: block_from_entry/1 rebuilds the exact #block{} (timestamp
+        %% mirrored in the entry) so a joiner recomputes the same hash to check the cert names THIS block.
+        ?assertEqual(quod_simplex:block_hash(quod_simplex:block_from_entry(E2)), Cert#cert.block_hash),
         ?assert(quod_simplex:verify_cert(Cert, [Self]))                    %% ⅔ (=1) valid sig vs the committee
     after quod_ledger_store:close(Store) end.
 

@@ -46,7 +46,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 %% Pure consensus core (also used by the gen_statem below, the catch-up verifier, and the tests).
 -export([quorum/1, leader/2,
-         block_hash/1, share_bytes/3,
+         block_hash/1, block_from_entry/1, share_bytes/3,
          make_share/4, verify_share/1,
          form_cert/5, verify_cert/2,
          may_commit/2, may_complain/2, well_formed_cert/1,
@@ -58,7 +58,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1]).
+-export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
@@ -452,6 +452,7 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 -define(JOIN_KICK_MS, 500).  %% mode=join: delay before (re)trying catch-up, so the catchup sibling is up first
 -define(JOIN_WINDOW,  256).  %% mode=join: entries requested per catch-up fetch (matches the server's block cap)
 -define(SINK_MS,     30000). %% mode=join: budget for one sink window (store append + KB replay) — generous
+-define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -477,6 +478,7 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             prolog_ready = false :: boolean(),
             join         = none :: none | pending | {worker, pid()} | done,  %% mode=join catch-up lifecycle
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
+            last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
             commits = 0  :: non_neg_integer()}).
 
@@ -570,7 +572,8 @@ signing_key(Cfg) ->
     end.
 
 %% Restart reloads durable state: re-derive the committee by folding the `peer_admitted` asserts/retracts
-%% out of the committed log's transaction diffs (`committee_from_log/1`), and take the last index. The
+%% out of the committed log's transaction diffs (`log_projection/2`, which also recovers the timestamp
+%% floor `last_ts` in the same pass), and take the last index. The
 %% blocks themselves are NOT kept in RAM — the store is the archive, quod_prolog holds the KB projection;
 %% this consensus process holds only the validator-set projection. A brand-new namespace is bootstrapped.
 %% Re-folding the committee from the log is the accepted cost of running without a committee checkpoint;
@@ -584,7 +587,8 @@ load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
     Base = case maps:get(log, quod_ledger_store:load(Store)) of
                []  -> S0;   %% empty ⇒ unfounded (slot 0)
                Log -> LastI = quod_ledger_store:last(Store),
-                      S0#s{validators = committee_from_log(Log), slot = LastI}
+                      {Vs, Ts} = log_projection(Log, {[], 0}),   %% committee + monotonic bound in one pass
+                      S0#s{validators = Vs, slot = LastI, last_ts = Ts}
            end,
     case {maps:get(mode, Cfg), Base#s.slot} of
         {join,   _} -> Base#s{join = pending, genesis_hash = maps:get(genesis_hash, Cfg)};
@@ -758,7 +762,8 @@ handle_append_leader(From, Change, Self, Vs, Sl, S) ->
     Next = Sl + 1,
     case leader(Next, Vs) of
         Self ->
-            Block = #block{slot = Next, parent = Sl, payload = [Change]},
+            Block = #block{slot = Next, parent = Sl, payload = [Change],
+                           timestamp = max(quod_time:now_ms(), S#s.last_ts)},   %% monotonic ≥ parent
             S1 = S#s{pending = (S#s.pending)#{Next => From}, proposing = Next, appends = S#s.appends + 1},
             S2 = broadcast({propose, Block}, S1),        %% send the proposal to the committee
             S3 = engine_step([{block, Block}], S2),      %% offer the block to our own engine
@@ -803,12 +808,13 @@ apply_event({skipped, Slot}, S) ->
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
 %% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
-commit_block(Slot, #block{payload = [Change]} = Block, S = #s{store = Store, eng = Eng}) ->
+commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = #s{store = Store, eng = Eng}) ->
     Cert = persisted_cert(commit, Slot, block_hash(Block), Eng),   %% minimal, committee-as-of-slot; pre-prune
-    E = #entry{index = Slot, data = Change, cert = Cert},
+    E = #entry{index = Slot, data = Change, timestamp = BlockTs, cert = Cert},   %% mirror the block time so catch-up reconstructs the exact block
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
-    S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1})),
+    S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1,
+                                                    last_ts = max(S#s.last_ts, BlockTs)})),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
 
 %% A committed transaction updates the LIVE committee at the slot boundary, IN-PROCESS — by reading the
@@ -900,8 +906,8 @@ dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true
 dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
 dispatch(_Peer, _Other, S)                 -> S.
 
-well_formed_block(#block{slot = Sl, parent = P, payload = Pl}) ->
-    is_slot(Sl) andalso is_slot(P) andalso is_list(Pl);
+well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
+    is_slot(Sl) andalso is_slot(P) andalso is_list(Pl) andalso is_slot(Ts);   %% Ts is a non-neg integer (ms); is_slot IS that predicate
 well_formed_block(_) -> false.
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
     is_kind(K) andalso is_slot(Sl) andalso is_hash_or_none(BH) andalso is_binary(Sg) andalso is_binary(Sig);
@@ -961,9 +967,22 @@ on_complain_timeout(V, S = #s{slot = H, id = Id, commit_signed = Cs}) when V =:=
     end;
 on_complain_timeout(_V, S) -> S.
 
-valid_proposal(#block{slot = Sl, parent = P, payload = [Change]}, #s{slot = H} = S) ->
-    Sl =:= H + 1 andalso P =:= H andalso acceptable_change(Change, S);
+valid_proposal(#block{slot = Sl, parent = P, payload = [Change], timestamp = Ts}, #s{slot = H, last_ts = Last} = S) ->
+    Sl =:= H + 1 andalso P =:= H andalso ts_acceptable(Ts, Last, quod_time:now_ms()) andalso acceptable_change(Change, S);
 valid_proposal(_Block, _S) -> false.
+
+%% A proposed block's `timestamp` is acceptable iff it is a non-negative integer (`well_formed_block`
+%% guarantees this for wire input, but we re-check so the predicate is total + directly testable),
+%% MONOTONIC (≥ the parent block's time `Last`), and not implausibly far in the FUTURE relative to the
+%% verifier's clock (`Now + ?MAX_FUTURE_MS`). Without the future bound, one Byzantine proposal could pin
+%% `last_ts` decades ahead and freeze block-time forever (max/2 at propose never comes back down); cf.
+%% Bitcoin's MAX_FUTURE_BLOCK_TIME (+2h). The skew is deliberately generous to avoid false-rejecting an
+%% honest leader whose clock differs from ours by seconds. Accepted edge: a node whose wall clock is off
+%% by MORE than the bound drops out of voting (it rejects, or is rejected, until it re-syncs) — a bounded,
+%% chain-SAFE degradation of that one outlier, never a halt, since the honest majority still forms quorums.
+-spec ts_acceptable(term(), non_neg_integer(), non_neg_integer()) -> boolean().
+ts_acceptable(Ts, Last, Now) ->
+    is_integer(Ts) andalso Ts >= Last andalso Ts =< Now + ?MAX_FUTURE_MS.
 
 %% A change this node will PROPOSE or SUPPORT: a `#transaction` or a `noop`. Membership changes are now
 %% ordinary transactions whose diff asserts/retracts `peer_admitted` (submitted via a `can_join`-gated
@@ -1140,39 +1159,47 @@ apply_catchup_window([], S) -> {S, ok};
 apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
     try quod_ledger_store:append(Store, Es) of
         {ok, Store1} ->
-            Vs1  = committee_fold(Es, Vs),
+            {Vs1, Ts1} = log_projection(Es, {Vs, S#s.last_ts}),   %% committee + monotonic bound live in one pass
             Slot = (lists:last(Es))#entry.index,
-            S1   = maybe_mark_ready(apply_committed(S#s{store = Store1, validators = Vs1, slot = Slot})),
+            S1   = maybe_mark_ready(apply_committed(S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1})),
             {S1, ok}
     catch _:R -> {S, {error, R}}
     end.
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
-        {ok, #entry{data = D}} -> block_hash(#block{slot = 1, parent = 0, payload = [D]});
-        _                      -> undefined
+        {ok, #entry{} = E} -> block_hash(block_from_entry(E));
+        _                  -> undefined
     end.
 
 %%%===================================================================
 %%% helpers
 %%%===================================================================
 
-%% The committee = the set of `peer_admitted` pubkeys, derived from the committed log's transaction diffs.
-%% Folds every committed entry's payload through `apply_committee_delta/2` in slot order (a `noop` payload
-%% carries no committee change, so matching `data` alone is total over every `#entry`).
-committee_from_log(Log) -> committee_fold(Log, []).
+%% Re-derive the notional #block{} from a persisted #entry{} (quod keeps no block header, so slot/parent
+%% are implicit and the block time is mirrored into the entry). The single reconstruction point — every
+%% cert / genesis-anchor check recomputes `block_hash` through here, so a hash-covered field can only be
+%% added in ONE place. Used by `local_genesis_hash` and `quod_catchup` (verify_entry / anchor_ok).
+-spec block_from_entry(#entry{}) -> #block{}.
+block_from_entry(#entry{index = I, data = D, timestamp = Ts}) ->
+    #block{slot = I, parent = I - 1, payload = [D], timestamp = Ts}.
 
-%% Fold a run of committed entries onto a validator set: seed `[]` for a full re-fold (`committee_from_log`),
-%% or the running set for an incremental catch-up window (`apply_catchup_window`). One definition, so the two
-%% callers can never drift.
-committee_fold(Entries, Seed) ->
-    lists:foldl(fun(#entry{data = Data}, V) -> apply_committee_delta(Data, V) end, Seed, Entries).
+%% ONE pass over a run of committed entries yielding BOTH projections we need from the log: the validator
+%% set (fold `peer_admitted` asserts/retracts through `apply_committee_delta/2`) and the monotonic
+%% timestamp floor (max block time; `noop` skips carry 0 and never lower it). Seed `{[], 0}` for a full
+%% boot re-fold, or `{RunningVs, last_ts}` for an incremental catch-up window — one definition, so the
+%% boot re-derive and the running set/bound can never drift.
+-spec log_projection([#entry{}], {[node_id()], non_neg_integer()}) -> {[node_id()], non_neg_integer()}.
+log_projection(Entries, Seed) ->
+    lists:foldl(fun(#entry{data = Data, timestamp = T}, {V, Ts}) ->
+                    {apply_committee_delta(Data, V), max(T, Ts)}
+                end, Seed, Entries).
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). A `#transaction` folds its diff (the validator id is the 4th arg / 5th element
 %% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or anything else changes nothing. This ONE
 %% function feeds BOTH the live commit-time swap (`adopt_committee/2`) and the boot/restart re-fold
-%% (`committee_from_log/1`), so the running set can never drift from a fresh re-fold.
+%% (`log_projection/2`), so the running set can never drift from a fresh re-fold.
 committee_delta(#transaction{diff = Diff}) -> lists:foldl(fun committee_op/2, {[], []}, Diff);
 committee_delta(_)                         -> {[], []}.
 

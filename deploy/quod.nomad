@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.14"
-  description = "quod image tag in the cluster registry. 0.6.14 = de-Raft cleanup + the reader/dissemination feed (quod_feed: eager-push + anti-entropy over the Brahms overlay, every block QC-verified per hop) + the shared transport send verb (quod_quic:send/3) + mode=join HOCON plumbing (content.genesis_hash). Founder+joiner multi-node is now deployable."
+  default     = "0.6.15"
+  description = "quod image tag in the cluster registry. 0.6.15 = block + transaction timestamps (leader-set commit time on #block/#entry, client submit time on #transaction, monotonic + future-bounded validation) on top of 0.6.14's de-Raft cleanup + dissemination feed (quod_feed) + shared transport send verb (quod_quic:send/3) + mode=join HOCON plumbing. NOTE: the new block fields change the genesis hash — re-found (wipe the quod-root/quod-join volumes) to deploy."
 }
 
 variable "join_count" {

@@ -13,6 +13,7 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
@@ -157,4 +158,5 @@ pub_of(Peer) -> peer:call(Peer, application, get_env, [quod, node_pubkey, undefi
 
 %% A shape-valid #transaction (tx_id, caller_ns, diff, read_check, author, sig) — never committed: the
 %% non-member joiner refuses the append before any consensus step even inspects it.
-dummy_tx() -> {transaction, <<"probe">>, ?NS, [], #{}, <<0:256>>, none}.
+dummy_tx() -> #transaction{tx_id = <<"probe">>, caller_ns = ?NS, diff = [],
+                           read_check = #{}, author = <<0:256>>}.

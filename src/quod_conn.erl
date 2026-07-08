@@ -14,14 +14,16 @@ dies with it — and each link's death is the disconnect signal its holder
 monitors.
 """.
 
--export([start_outbound/7, start_inbound/2, open_link/3]).
+-export([start_outbound/7, start_inbound/2, open_link/3, send/3]).
 
 -record(s, {conn, self, peer = undefined,
             streams = #{},   %% StreamId => LinkPid   (every link, for routing inbound data)
             chans   = #{},   %% Channel  => LinkPid   (our OUTBOUND links only, for send reuse/dedup)
-            pending = #{}}). %% Channel  => {StreamId, [ReplyTo]} (outbound opens in flight)
+            pending = #{},   %% Channel  => {StreamId, [ReplyTo]} (outbound opens in flight)
+            sendq   = #{}}). %% Channel  => [Frame]   (fire-and-forget sends buffered while a link opens)
 
 -define(CONNECT_TIMEOUT_MS, 5000).
+-define(MAX_SENDQ, 1024).   %% per-channel cap on frames buffered while an outbound link opens
 
 %% --- API -----------------------------------------------------------------
 
@@ -83,12 +85,25 @@ open_link(ConnPid, Channel, ReplyTo) ->
     ConnPid ! {open_link, Channel, ReplyTo},
     ok.
 
+-doc """
+Fire-and-forget send of `Frame` on `Channel` over this connection: reuse the live outbound link if there
+is one, else open it and **buffer** `Frame` (FIFO, capped) until the link is ready, flushing on link-up.
+No caller-side link handling — the connection owns the link lifecycle. Callers reach this via
+`quod_quic:send/3`.
+""".
+-spec send(pid(), binary(), binary()) -> ok.
+send(ConnPid, Channel, Frame) ->
+    ConnPid ! {send, Channel, Frame},
+    ok.
+
 %% --- loop ----------------------------------------------------------------
 
 loop(S = #s{conn = Conn}) ->
     receive
         {open_link, Channel, ReplyTo} ->
             loop(handle_open(Channel, ReplyTo, S));
+        {send, Channel, Frame} ->
+            loop(handle_send(Channel, Frame, S));
         {quic, Conn, {stream_data, Sid, Data, Fin}} ->
             loop(route_data(Sid, Data, Fin, S));
         {quic, Conn, {stream_opened, Sid}} ->
@@ -139,7 +154,7 @@ handle_open(Channel, ReplyTo, S = #s{peer = Peer, chans = Chans, pending = Pendi
         LinkPid when is_pid(LinkPid) ->
             case is_process_alive(LinkPid) of
                 true  -> ReplyTo ! {link_up, Peer, Channel, LinkPid}, S;   %% reuse
-                false -> open_new(Channel, ReplyTo, S#s{chans = maps:remove(Channel, Chans)})
+                false -> open_new(Channel, [ReplyTo], S#s{chans = maps:remove(Channel, Chans)})
             end;
         undefined ->
             case maps:is_key(Channel, Pending) of
@@ -147,21 +162,46 @@ handle_open(Channel, ReplyTo, S = #s{peer = Peer, chans = Chans, pending = Pendi
                     Pending1 = maps:update_with(Channel, fun({Sid, W}) -> {Sid, [ReplyTo | W]} end, Pending),
                     S#s{pending = Pending1};
                 false ->
-                    open_new(Channel, ReplyTo, S)
+                    open_new(Channel, [ReplyTo], S)
             end
     end.
 
-open_new(Channel, ReplyTo, S = #s{conn = Conn, peer = Peer, self = Self,
-                                  streams = Streams, pending = Pending}) ->
+%% fire-and-forget send: reuse a live outbound link, else buffer the frame and ensure an open is in
+%% flight (flushed on link-up). No ReplyTo — the caller does not track the link.
+handle_send(Channel, Frame, S = #s{chans = Chans}) ->
+    case maps:get(Channel, Chans, undefined) of
+        LinkPid when is_pid(LinkPid) ->
+            case is_process_alive(LinkPid) of
+                true  -> _ = quod_link:send(LinkPid, Frame), S;
+                false -> buffer_send(Channel, Frame, S#s{chans = maps:remove(Channel, Chans)})
+            end;
+        undefined ->
+            buffer_send(Channel, Frame, S)
+    end.
+
+buffer_send(Channel, Frame, S = #s{pending = Pending, sendq = SendQ}) ->
+    Buf = maps:get(Channel, SendQ, []),
+    S1  = S#s{sendq = SendQ#{Channel => lists:sublist(Buf ++ [Frame], ?MAX_SENDQ)}},
+    case maps:is_key(Channel, Pending) of
+        true  -> S1;                          %% an open is already in flight; flush on link-up
+        false -> open_new(Channel, [], S1)    %% start the open with no link_up waiter (we buffer instead)
+    end.
+
+open_new(Channel, Waiters, S = #s{conn = Conn, peer = Peer, self = Self,
+                                  streams = Streams, pending = Pending, sendq = SendQ}) ->
     case quic:open_stream(Conn) of
         {ok, Sid} ->
             L = quod_link:start_outbound(Conn, Sid, Peer, Channel, Self, self()),
             link(L),
             S#s{streams = Streams#{Sid => L},
-                pending = Pending#{Channel => {Sid, [ReplyTo]}}};
+                pending = Pending#{Channel => {Sid, Waiters}}};
         {error, _} ->
-            ReplyTo ! {link_error, Peer, Channel},
-            S
+            %% The open failed synchronously: notify link_up waiters (open_link callers) with link_error,
+            %% and DROP any fire-and-forget frames buffered for this channel — with no stream and no
+            %% pending entry they would otherwise sit in sendq until a later send retries (fire-and-forget
+            %% callers retry at the app layer). Keeps sendq from orphaning a frame on open failure.
+            _ = [W ! {link_error, Peer, Channel} || W <- Waiters],
+            S#s{sendq = maps:remove(Channel, SendQ)}
     end.
 
 %% A link finished its header handshake. We cache only the links WE opened (`out`) in
@@ -198,11 +238,13 @@ handle_link_up(Channel, RemotePeer, LinkPid, out, S = #s{chans = Chans, pending 
             adopt_link(Channel, RemotePeer, LinkPid, S)
     end.
 
-adopt_link(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending}) ->
+adopt_link(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending, sendq = SendQ}) ->
     S1 = ensure_peer(RemotePeer, S),
     notify_waiters(Channel, RemotePeer, LinkPid, Pending),
+    _ = [quod_link:send(LinkPid, F) || F <- maps:get(Channel, SendQ, [])],   %% flush buffered fire-and-forget sends
     S1#s{chans   = Chans#{Channel => LinkPid},
-         pending = maps:remove(Channel, Pending)}.
+         pending = maps:remove(Channel, Pending),
+         sendq   = maps:remove(Channel, SendQ)}.
 
 %% --- helpers -------------------------------------------------------------
 
@@ -221,11 +263,21 @@ drop_stream(Sid, S = #s{streams = Streams}) ->
         LinkPid   -> _ = quod_link:close(LinkPid), S
     end.
 
-%% a link died -> drop it from both indexes, and fail any pending waiters on it.
-drop_link(LinkPid, S = #s{streams = Streams, chans = Chans, pending = Pending, peer = Peer}) ->
+%% a link died -> drop it from both indexes, fail any pending waiters on it, and discard any frames
+%% buffered for the channel it was opening (their fire-and-forget send is lost; the caller retries).
+drop_link(LinkPid, S = #s{streams = Streams, chans = Chans, pending = Pending, sendq = SendQ, peer = Peer}) ->
+    DeadChans = dead_channels(LinkPid, Streams, Chans, Pending),
     S#s{streams = maps:filter(fun(_, P) -> P =/= LinkPid end, Streams),
         chans   = maps:filter(fun(_, P) -> P =/= LinkPid end, Chans),
-        pending = fail_pending(LinkPid, Peer, Streams, Pending)}.
+        pending = fail_pending(LinkPid, Peer, Streams, Pending),
+        sendq   = maps:without(DeadChans, SendQ)}.
+
+%% The channel(s) served by a dead link: its cached outbound channel plus any channel whose in-flight
+%% open used the link's stream. Their buffered sends can never flush, so they are dropped.
+dead_channels(LinkPid, Streams, Chans, Pending) ->
+    DeadSids = [Sid || {Sid, P} <- maps:to_list(Streams), P =:= LinkPid],
+    [Ch || {Ch, P} <- maps:to_list(Chans), P =:= LinkPid]
+        ++ [Ch || {Ch, {Sid, _}} <- maps:to_list(Pending), lists:member(Sid, DeadSids)].
 
 %% if the dead link was the one opening a pending channel, fail its waiters.
 fail_pending(LinkPid, Peer, Streams, Pending) ->

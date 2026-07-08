@@ -627,7 +627,7 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    order, where the log is persisted. A single sequencer is also a **single point
    of failure, crash-fault-only** (it can equivocate/censor/halt — the faults
    Brahms exists to resist), and "harden to consensus later" is a commit-path
-   rewrite, not a knob. **Sketched in §13** (one Raft group per namespace,
+   rewrite, not a knob. **Sketched in §13** (one committee per namespace,
    1-voter→N, protocol pluggable behind a stable log API).
 
 2. **Read-set is per-predicate, not per-fact.** The ported `differ` hashes a whole
@@ -689,14 +689,14 @@ all are real gaps or decisions owed before building. Roughly in priority order.
 
 **Status: proposed, not finalized.** This is the design for §12 #1 (and it settles
 #6 and #8). Prior art: one small agreement group per shard (TiKV, CockroachDB call
-it *multi-Raft*), the **Raft** recipe for a self-healing group, and **`ra`**
-(RabbitMQ's Raft for Erlang).
+it *multi-committee*), and the BFT quorum-certificate recipe quod adopted —
+**DispersedSimplex** (`doc/simplex_extended.pdf`).
 
 ### One committee per ontology
 
 Each ontology is run by a small **committee** — say 3 or 5 machines — that holds it
-and agrees on every change. ("Committee" is the plain name; in Raft terms it's the
-group.)
+and agrees on every change. ("Committee" is the plain name; in consensus terms it's
+the validator set / agreement group.)
 
 - One member is **in charge** at a time. It takes incoming changes, bundles them
   into the next **block**, and sends that block to the others. A block becomes
@@ -847,18 +847,20 @@ quod_sup
 - A member that restarts reloads its own on-disk history and/or **catches up from
   the others**. Losing one member is fine — that's the point of having several.
 
-### Make the agreement stronger later — same interface
+### The agreement recipe — same interface, crash- or Byzantine-fault
 
-The committee runs the **Raft** recipe to start (survives machines *crashing*). For
-ontologies where members might *lie*, the same interface can sit on a Byzantine
-agreement recipe later — the `apply` side and everything above are unchanged.
-Picked per ontology, by how much the members trust each other.
+The committee runs **DispersedSimplex** BFT (`m:quod_simplex`, `doc/simplex_extended.pdf`): a `⅔`
+quorum of Ed25519 signatures per block, so it survives members that *lie*, not merely *crash* —
+Byzantine safety was built in from the start (the earlier plan to "run Raft first, add BFT later" was
+superseded). The `apply` side and everything above the `append`/`apply` interface are unchanged
+regardless of the recipe, so the ordering layer can still be swapped per ontology without disturbing
+the rest.
 
 ### Still open
 
-- **Hand-roll vs `ra` — _decided: hand-roll a lean Raft over `quod_link`_** (no
-  Erlang distribution, matching how Brahms was built), using `ra` + the Raft paper
-  as reference, not as a dependency.
+- **Hand-roll vs `ra` — _decided: hand-rolled_** — but the hand-rolled recipe is a lean
+  **DispersedSimplex** BFT over `quod_link` streams (channel `{log, Ns}`), not Raft, with no Erlang
+  distribution (matching how Brahms was built). `ra` and the Raft paper were early references only.
 - **Read freshness** — stale-copy-OK (default) vs go-to-committee for the
   guaranteed-latest value.
 - **Read-copies** — who holds a read-only copy of a popular ontology, and how

@@ -69,12 +69,12 @@ moment it next contacts us.
 
 -behaviour(gen_statem).
 
--export([start_namespace/2, start_link/2, view/1, sample/1, stats/1, namespaces/0]).
+-export([start_namespace/2, start_link/2, view/1, sample/1, stats/1, namespaces/0, take_random/2]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([idle/3, collecting/3]).
 
 -ifdef(TEST).
--export([split_counts/1, reconstruct/8, encode/1, decode/1, take_random/2, clean_resp/3,
+-export([split_counts/1, reconstruct/8, encode/1, decode/1, clean_resp/3,
          due_probes/3, probe_candidates/4, prune_tombstones/3, gossip_targets/3, stale_conns/4]).
 -endif.
 
@@ -479,6 +479,11 @@ decode(Bin) ->
     catch _:_ -> error
     end.
 
+-doc """
+Up to `N` elements of `List`, chosen uniformly at random (a shuffle, then take `N`; the whole list,
+shuffled, if it has `≤ N` elements). Shared with the reader/feed tiers (`m:quod_feed`) for unbiased
+peer selection — dedupe first if the input is a multiset (e.g. `sample/1`).
+""".
 -spec take_random(non_neg_integer(), [term()]) -> [term()].
 take_random(N, List) when N >= length(List) -> shuffle(List);
 take_random(N, List) -> take(N, shuffle(List)).

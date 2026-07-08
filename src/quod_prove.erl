@@ -37,10 +37,6 @@ remote reads on a hostile network arrive with the identity milestone.
             self     :: node_id(),
             chan     :: binary(),                      %% term_to_binary({prove, Ns}, [deterministic])
             contacts = []  :: [endpoint()],          %% default responder candidates (seed endpoints)
-            %% keyed by the send TARGET: a contact endpoint (client→responder) or a reader's
-            %% node_id/pubkey (responder→reader).
-            conns    = #{} :: #{node_id() | endpoint() => {pid(), reference()}},  %% our OUTBOUND links
-            outbox   = #{} :: #{node_id() | endpoint() => [binary()]},   %% per-peer FIFO while a link opens
             pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId => {From, TRef}
             inflight = 0   :: non_neg_integer()}).      %% responder: live prove workers
 
@@ -91,19 +87,6 @@ handle_cast({send_resp, Peer, Resp}, S) ->
     {noreply, (send(Peer, Resp, S))#s{inflight = max(0, S#s.inflight - 1)}};
 handle_cast(_Msg, S) -> {noreply, S}.
 
-handle_info({link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
-    case maps:is_key(Peer, S#s.conns) of
-        true  -> _ = quod_link:close(LinkPid), {noreply, S};   %% already linked
-        false ->
-            Ref = erlang:monitor(process, LinkPid),
-            S1  = S#s{conns = (S#s.conns)#{Peer => {LinkPid, Ref}}},
-            _   = [quod_link:send(LinkPid, F) || F <- maps:get(Peer, S1#s.outbox, [])],
-            {noreply, S1#s{outbox = maps:remove(Peer, S1#s.outbox)}}
-    end;
-handle_info({link_error, Peer, Chan}, S = #s{chan = Chan}) ->
-    {noreply, S#s{outbox = maps:remove(Peer, S#s.outbox)}};
-handle_info({'DOWN', _Ref, process, LinkPid, _Reason}, S) ->
-    {noreply, drop_conn(LinkPid, S)};
 handle_info({quod_message, {{Peer, _Addr}, _In}, Chan, Payload}, S = #s{chan = Chan}) ->
     {noreply, inbound(Peer, Payload, S)};   %% Peer = the reader's node_id (header pubkey)
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
@@ -184,26 +167,14 @@ to_result(stale, H)       -> {stale, H};
 to_result({error, R}, _H) -> {error, R}.
 
 %%%===================================================================
-%%% transport (symmetric client: we always send on our OWN outbound link)
+%%% transport
 %%%===================================================================
 
-send(Peer, Term, S = #s{ns = Ns, conns = Conns, outbox = Outbox}) ->
-    Frame = term_to_binary({prove, Ns, term_to_binary(Term)}),
-    case maps:get(Peer, Conns, undefined) of
-        {LinkPid, _Ref} -> _ = quod_link:send(LinkPid, Frame), S;
-        undefined ->
-            Buf = maps:get(Peer, Outbox, []),
-            _ = case Buf of [] -> quod_quic:open_link(Peer, S#s.chan); _ -> ok end,
-            S#s{outbox = Outbox#{Peer => Buf ++ [Frame]}}   %% FIFO: independent reqs/resps, never coalesced
-    end.
-
-drop_conn(LinkPid, S = #s{conns = Conns}) ->
-    case [P || {P, {Pid, _}} <- maps:to_list(Conns), Pid =:= LinkPid] of
-        [Peer | _] -> {_Pid, Ref} = maps:get(Peer, Conns),
-                      _ = erlang:demonitor(Ref, [flush]),
-                      S#s{conns = maps:remove(Peer, Conns)};
-        []         -> S
-    end.
+%% Fire-and-forget send on our {prove, Ns} channel — the transport (`quod_quic:send/3`) owns the link
+%% (dial on demand, buffer until ready, reuse). A dropped frame just times out the request and it retries.
+send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
+    _ = quod_quic:send(Peer, Chan, term_to_binary({prove, Ns, term_to_binary(Term)})),
+    S.
 
 pick_contact(#s{contacts = []})      -> none;
 pick_contact(#s{contacts = [C | _]}) -> C.

@@ -102,6 +102,38 @@ env_override_test_() ->
          ?assertEqual(<<"10.0.0.1">>, deep(C, [node, ip]))
      end}.
 
+%% --- genesis_hash: schema field + build_ns_config hex→binary plumbing ----
+
+genesis_hash_default_test() ->
+    C = check(<<"content { namespace = \"quod:root\" }\n">>),
+    ?assertEqual(<<"">>, deep(C, [content, genesis_hash])).
+
+genesis_hash_parse_test() ->
+    Hex = <<"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff">>,
+    C = check(<<"content { namespace = \"quod:root\", mode = join, genesis_hash = \"",
+                Hex/binary, "\" }\n">>),
+    ?assertEqual(join, deep(C, [content, mode])),
+    ?assertEqual(Hex,  deep(C, [content, genesis_hash])).
+
+%% A mode=join content config with a hex genesis_hash lands in the ns config as the raw 32-byte binary
+%% quod_simplex pins, with mode + seeds forwarded. (genesis_file/data_dir left "" so build_ns_config
+%% doesn't touch code:priv_dir in the eunit VM.)
+build_ns_config_genesis_hash_test() ->
+    Raw = crypto:strong_rand_bytes(32),
+    Content = #{namespace => <<"quod:root">>, mode => join, role => member, seeds => [<<"1.2.3.4:14567">>],
+                genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => binary:encode_hex(Raw)},
+    {<<"quod:root">>, NsCfg} = quod_app:build_ns_config(Content),
+    ?assertEqual(join, maps:get(mode, NsCfg)),
+    ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
+    ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
+
+%% A create node (blank genesis_hash) carries no anchor key at all — quod_simplex needs none.
+build_ns_config_no_genesis_hash_test() ->
+    Content = #{namespace => <<"quod:root">>, mode => create, role => member, seeds => [],
+                genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => <<"">>},
+    {_, NsCfg} = quod_app:build_ns_config(Content),
+    ?assertNot(maps:is_key(genesis_hash, NsCfg)).
+
 deep(Map, Path) -> lists:foldl(fun(K, M) -> maps:get(K, M) end, Map, Path).
 
 %% --- boot-test helpers ---------------------------------------------------

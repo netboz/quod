@@ -16,7 +16,7 @@ signer({P, Seed}) -> #{pubkey => P, key => quod_identity:key_term({P, Seed})}.
 %% slot 1: the self-signed genesis (no cert) asserting each founder's peer_admitted — establishes C1.
 genesis(Pubs) ->
     Diff = [{assert, {{peer_admitted, Pk, undefined, undefined, Pk}, true}} || Pk <- Pubs],
-    #entry{index = 1, term = 0, kind = block, cert = none,
+    #entry{index = 1, cert = none,
            data = #transaction{tx_id = <<"genesis">>, caller_ns = <<"ns">>, diff = Diff,
                                read_check = #{}, author = hd(Pubs), sig = none}}.
 
@@ -25,7 +25,7 @@ committed(I, D, C, K) ->
     BH     = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [D]}),
     Shares = [quod_simplex:make_share(commit, I, BH, signer(M)) || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, term = 0, kind = block, data = D, cert = Cert}.
+    #entry{index = I, data = D, cert = Cert}.
 
 %% a leader committed an empty (noop) BLOCK — a COMMIT cert bound to the noop block, NOT a complaint.
 committed_noop(I, C, K) -> committed(I, noop, C, K).
@@ -34,7 +34,7 @@ committed_noop(I, C, K) -> committed(I, noop, C, K).
 skipped(I, C, K) ->
     Shares = [quod_simplex:make_share(complaint, I, none, signer(M)) || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(complaint, I, none, Shares, pubs(C)),
-    #entry{index = I, term = 0, kind = block, data = noop, cert = Cert}.
+    #entry{index = I, data = noop, cert = Cert}.
 
 tx(I)        -> #transaction{tx_id = integer_to_binary(I), caller_ns = <<"ns">>,
                              diff = [{assert, {{fact, I}, true}}], read_check = #{}, author = <<"a">>, sig = none}.

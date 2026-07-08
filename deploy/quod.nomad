@@ -1,46 +1,54 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.13"
-  description = "quod image tag in the cluster registry. 0.6.13 = Simplex 2c failover: round-robin per-slot leader, Δ_timeout complaint timer (evidence-gated, no idle-skip), may_commit/may_complain guards, and a ⅔ complaint cert that skips a stuck slot (noop) so the rotated leader proposes next; validated by a 4-node loopback CT (leader_failover). Known gap tracked in doc/deferred.md §3: a leader dying AFTER a bare-quorum notarization can wedge the slot (head advances on the commit cert, not notarization — a Stage-4 fix)."
+  default     = "0.6.14"
+  description = "quod image tag in the cluster registry. 0.6.14 = de-Raft cleanup + the reader/dissemination feed (quod_feed: eager-push + anti-entropy over the Brahms overlay, every block QC-verified per hop) + the shared transport send verb (quod_quic:send/3) + mode=join HOCON plumbing (content.genesis_hash). Founder+joiner multi-node is now deployable."
 }
 
-variable "voters" {
+variable "join_count" {
   type        = number
-  default     = 6
-  description = "Number of JOINER voters (besides the single founder). Committee size = 1 + voters. Default 6 ⇒ a 7-voter committee (quorum 4, tolerates 3 down). Scale with `-var=voters=N` once quod-join[0..N-1] volumes are pre-created."
+  default     = 0
+  description = "Number of mode=join follower nodes, beyond the single founder. Default 0: bring up the founder FIRST, read its genesis anchor from the boot log, then deploy joiners with `-var join_count=N -var genesis_hash=<hex>`."
+}
+
+variable "genesis_hash" {
+  type        = string
+  default     = ""
+  description = "The founder's genesis block hash (64-char hex), copied from the founder's boot log line `quod[..]: genesis anchor — pin as content.genesis_hash: <hex>`. REQUIRED when join_count>0: it is the joiner's out-of-band trust anchor — a joiner verifies the whole downloaded history against this one pinned fingerprint, so a wrong/empty value makes it fail-fast (never a silent trust-on-first-use). Leave empty when join_count=0."
 }
 
 # ============================================================================
-# quod — quod:root committee + read tier, onia-pattern deploy (mirrors onia's
-# nomad job + bbsvx's root/client shape).
+# quod — quod:root DispersedSimplex deploy: one founder + optional joiners.
 #
-#  - group "quod-root" (count 1, content.mode=create) founds quod:root + leads a
-#    1-voter committee; joiners discover it via the Consul service `quod`.
-#  - group "quod-join" (count = var.voters, content.mode=join) each joins as a VOTER
-#    (learner→catch-up→promote). Founder + N joiners = an (N+1)-voter committee, grown
-#    LIVE (bumping var.voters admits one more, no re-found). `spread` distributes the
-#    joiners across the compute nodes.
-#  - group "quod-replica" (count 1, content.role=replica) a permanent NON-voting
-#    full-copy read replica. Reads never touch consensus.
+#  - group "quod-root" (count 1, content.mode=create) founds quod:root as a
+#    self-only 1-validator committee, applies its genesis, serves prove, and
+#    LOGS its genesis anchor for joiners to pin.
+#  - group "quod-join" (count var.join_count, content.mode=join) catches up the
+#    founder's committed log TRUSTLESSLY (verifying every block's quorum cert
+#    against the genesis anchor it was handed), then FOLLOWS live commits over
+#    the dissemination feed (quod_feed) as a read-only observer. Discovers the
+#    founder via the `quod` Consul service (p2p seed) and `quod-metrics` (a
+#    `wait-for-root` prestart blocks until the founder's TCP metrics port is up).
 #
-# Networking — bridge + CNI portmap (NOT host mode). QUIC binds a FIXED in-container
-# port (node.bind_port = 14567); Nomad maps a DYNAMIC host port to it and quod ADVERTISES
-# that host port (node.port = ${NOMAD_HOST_PORT_p2p}, NOT ${NOMAD_PORT_p2p} which is the
-# in-container port) as its endpoint — the node's identity is
-# its Ed25519 pubkey, the address is only where it's dialed. So any number of nodes
-# co-locate on one host with NO port collision, and scaling is one number (var.voters)
-# instead of a hand-written static-port group per voter. QUOD_DIST_NAME is left at the
-# image default (quod@127.0.0.1): bridge gives each container its own netns + EPMD, so a
-# per-host-unique name is no longer needed.
+# TWO-PHASE bring-up (the joiner's trust anchor is only known after the founder
+# founds genesis, and must be pinned out-of-band — that is the whole point):
+#   1. nomad job run deploy/quod.nomad                 # founder only (join_count=0)
+#   2. nomad alloc logs <quod-root-alloc> | grep 'genesis anchor'   # copy the hex
+#   3. nomad job run -var join_count=1 -var genesis_hash=<hex> deploy/quod.nomad
+# A post-join write on the founder (e.g. a prove that asserts a fact) then
+# demonstrates the live feed: the joiner picks the new block up over gossip.
 #
-# Volumes — per_alloc CSI ceph RBD; a count=N group claims source[0..N-1]. Pre-create
-# before `nomad job run` (greenfield — wipe + recreate on a re-found, no backward compat):
+# Networking — bridge + CNI portmap (NOT host mode). QUIC binds a FIXED
+# in-container port (node.bind_port = 14567); Nomad maps a DYNAMIC host port and
+# quod ADVERTISES that host port (node.port = ${NOMAD_HOST_PORT_p2p}) as its
+# endpoint — identity is the Ed25519 pubkey, the address is only where it's dialed.
+#
+# Volumes — per_alloc CSI ceph RBD (`quod-root`, `quod-join`). The on-disk block
+# log format changed with the de-Raft cleanup (#entry dropped its Raft term/kind
+# fields), so any volume written by an older image (≤ 0.6.13) MUST be wiped:
+#   nomad job stop -purge quod
+#   nomad volume delete quod-root[0]        # and quod-join[0] if it exists
 #   nomad volume create deploy/volumes/quod-root.hcl
-#   nomad volume create deploy/volumes/quod-replica.hcl
-#   for i in $(seq 0 5); do
-#     sed "s/quod-join\[0\]/quod-join[$i]/; s/quod-join-0/quod-join-$i/" \
-#       deploy/volumes/quod-join.hcl | nomad volume create -   # id AND name unique per index
-#   done
+#   nomad volume create deploy/volumes/quod-join.hcl
 # ============================================================================
 job "quod" {
   datacenters = ["qengho"]
@@ -52,12 +60,15 @@ job "quod" {
     value     = "compute"
   }
 
+  # ==========================================================================
+  # Founder — mode=create. Founds quod:root, logs the genesis anchor.
+  # ==========================================================================
   group "quod-root" {
     count = 1
 
     network {
       mode = "bridge"
-      port "p2p"     { to = 14567 }
+      port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
     }
 
@@ -85,7 +96,7 @@ job "quod" {
       }
 
       template {
-        data = <<-EOT
+        data        = <<-EOT
 node {
   ip        = "{{ env "attr.unique.network.ip-address" }}"
   port      = {{ env "NOMAD_HOST_PORT_p2p" }}
@@ -105,7 +116,7 @@ EOT
       }
 
       template {
-        data = <<-EOT
+        data        = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
@@ -150,8 +161,12 @@ EOT
     }
   }
 
+  # ==========================================================================
+  # Joiners — mode=join. Trustless catch-up + live feed-follow (read-only).
+  # Deployed only when join_count>0 AND genesis_hash is set (see the header).
+  # ==========================================================================
   group "quod-join" {
-    count = var.voters
+    count = var.join_count
 
     spread {
       attribute = "${node.unique.name}"
@@ -159,7 +174,7 @@ EOT
 
     network {
       mode = "bridge"
-      port "p2p"     { to = 14567 }
+      port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
     }
 
@@ -171,101 +186,44 @@ EOT
       per_alloc       = true
     }
 
-    task "quod" {
+    # Block startup until the founder is up. We probe its TCP METRICS port (via the
+    # `quod-metrics` Consul service), NOT the p2p port: p2p is QUIC-over-UDP and a TCP
+    # scan (`nc -z`) can never connect to it — the founder's own QUIC dial + retry is
+    # what validates p2p reachability. A live metrics port means the BEAM booted and the
+    # namespace is up, which is exactly the "founder ready" signal we want to gate on.
+    task "wait-for-root" {
       driver = "docker"
 
-      config {
-        image      = "192.168.1.11:5000/quod:${var.image_tag}"
-        force_pull = true
-        ports      = ["p2p", "metrics"]
-      }
-
-      volume_mount {
-        volume      = "quod-data"
-        destination = "/quod/data"
-        read_only   = false
+      lifecycle {
+        hook    = "prestart"
+        sidecar = false
       }
 
       template {
-        data = <<-EOT
-node {
-  ip        = "{{ env "attr.unique.network.ip-address" }}"
-  port      = {{ env "NOMAD_HOST_PORT_p2p" }}
-  bind_port = 14567
-}
-metrics { port = 14568 }
-content {
-  namespace = "quod:root"
-  mode      = join
-  data_dir  = "/quod/data"
-  seeds     = [{{ range $i, $s := service "quod" }}{{ if $i }}, {{ end }}"{{ .Address }}:{{ .Port }}"{{ end }}]
-}
+        data        = <<-EOT
+{{- range service "quod-metrics" }}
+QUOD_ROOT_HOST={{ .Address }}
+QUOD_ROOT_METRICS_PORT={{ .Port }}
+{{- end }}
 EOT
-        destination = "${NOMAD_TASK_DIR}/quod.conf"
-        change_mode = "restart"
-      }
-
-      template {
-        data = <<-EOT
-QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
-EOT
-        destination = "${NOMAD_TASK_DIR}/env"
+        destination = "${NOMAD_TASK_DIR}/root.env"
         env         = true
         change_mode = "noop"
       }
 
+      config {
+        image   = "alpine:3.19"
+        command = "sh"
+        args = [
+          "-c",
+          "echo \"waiting for quod founder metrics at $${QUOD_ROOT_HOST}:$${QUOD_ROOT_METRICS_PORT}...\"; while [ -z \"$${QUOD_ROOT_HOST}\" ] || ! nc -z -w2 \"$${QUOD_ROOT_HOST}\" \"$${QUOD_ROOT_METRICS_PORT}\" 2>/dev/null; do echo 'founder not ready, sleeping 2s'; sleep 2; done; echo \"founder up, proceeding\""
+        ]
+      }
+
       resources {
-        cpu        = 500
-        memory     = 256
-        memory_max = 512
+        cpu    = 100
+        memory = 32
       }
-
-      service {
-        name = "quod"
-        port = "p2p"
-        tags = ["quod", "content", "quic", "p2p", "joiner"]
-      }
-
-      service {
-        name = "quod-metrics"
-        port = "metrics"
-        tags = ["quod", "metrics", "prometheus", "joiner"]
-
-        check {
-          type     = "http"
-          path     = "/metrics"
-          interval = "15s"
-          timeout  = "3s"
-        }
-      }
-
-      kill_signal  = "SIGTERM"
-      kill_timeout = "30s"
-    }
-
-    restart {
-      attempts = 3
-      interval = "5m"
-      delay    = "15s"
-      mode     = "delay"
-    }
-  }
-
-  group "quod-replica" {
-    count = 1
-
-    network {
-      mode = "bridge"
-      port "p2p"     { to = 14567 }
-      port "metrics" { to = 14568 }
-    }
-
-    volume "quod-data" {
-      type            = "csi"
-      source          = "quod-replica"
-      access_mode     = "single-node-writer"
-      attachment_mode = "file-system"
-      per_alloc       = true
     }
 
     task "quod" {
@@ -284,7 +242,7 @@ EOT
       }
 
       template {
-        data = <<-EOT
+        data        = <<-EOT
 node {
   ip        = "{{ env "attr.unique.network.ip-address" }}"
   port      = {{ env "NOMAD_HOST_PORT_p2p" }}
@@ -292,19 +250,21 @@ node {
 }
 metrics { port = 14568 }
 content {
-  namespace = "quod:root"
-  mode      = join
-  role      = replica
-  data_dir  = "/quod/data"
-  seeds     = [{{ range $i, $s := service "quod" }}{{ if $i }}, {{ end }}"{{ .Address }}:{{ .Port }}"{{ end }}]
+  namespace    = "quod:root"
+  mode         = join
+  data_dir     = "/quod/data"
+{{- range service "quod" }}
+  seeds        = ["{{ .Address }}:{{ .Port }}"]
+{{- end }}
+  genesis_hash = "${var.genesis_hash}"
 }
 EOT
         destination = "${NOMAD_TASK_DIR}/quod.conf"
-        change_mode = "restart"
+        change_mode = "noop"
       }
 
       template {
-        data = <<-EOT
+        data        = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
@@ -319,15 +279,15 @@ EOT
       }
 
       service {
-        name = "quod"
+        name = "quod-join"
         port = "p2p"
-        tags = ["quod", "content", "quic", "p2p", "replica"]
+        tags = ["quod", "content", "quic", "p2p", "join"]
       }
 
       service {
         name = "quod-metrics"
         port = "metrics"
-        tags = ["quod", "metrics", "prometheus", "replica"]
+        tags = ["quod", "metrics", "prometheus", "join"]
 
         check {
           type     = "http"

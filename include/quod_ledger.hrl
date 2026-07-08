@@ -5,8 +5,7 @@
 -ifndef(QUOD_LOG_HRL).
 -define(QUOD_LOG_HRL, true).
 
--type term_no()   :: non_neg_integer().      %% Raft term, starts at 0
--type log_index() :: non_neg_integer().      %% 0 = empty-log / snapshot sentinel; entries are 1..N
+-type log_index() :: non_neg_integer().      %% 0 = empty-log / origin sentinel; entries are 1..N
 -type pubkey()    :: binary().               %% Ed25519 public key (32 bytes)
 -type endpoint()  :: {inet:hostname(), inet:port_number()}.   %% where a node is dialed — a routing hint
 %% A node's STABLE identity is its pubkey. (Transitional: the no-identity/test path still uses an
@@ -70,10 +69,9 @@
 %% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
 %% entry against its `cert` (trustless replay). Membership is NOT a distinct entry kind: the committee
-%% is the set of `peer_admitted` facts (`quod_simplex:committee_from_log/1`).
+%% is the set of `peer_admitted` facts (`quod_simplex:committee_from_log/1`). `index` doubles as the
+%% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
-                term        :: term_no(),
-                kind        :: block,
                 data        :: #transaction{} | noop,
                 cert = none :: #cert{} | none}).
 

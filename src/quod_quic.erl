@@ -8,13 +8,16 @@ It starts the `quic` server (each accepted connection is handed to a
 connection creation so there is **one connection per peer** (no dial race).
 Streams/links and message delivery live in `m:quod_conn` / `m:quod_link`.
 
-Upper layers use one async call:
+Upper layers pick one of two send models:
 
 ```erlang
-quod_quic:open_link(NodeId, Channel)        %% -> caller gets {link_up, NodeId, Channel, LinkPid}
-quod_link:send(LinkPid, Payload)              %% direct, non-blocking
-%% messages arrive on the gproc property {channel, Channel}
+%% (a) fire-and-forget — the transport owns the link; buffers until it is ready:
+quod_quic:send(NodeId, Channel, Frame)        %% non-blocking; no link to track
+%% (b) manage the link yourself (needed for liveness/failover — Brahms, consensus):
+quod_quic:open_link(NodeId, Channel)          %% -> caller gets {link_up, NodeId, Channel, LinkPid}
+quod_link:send(LinkPid, Payload)              %% then send on the LinkPid directly
 %% erlang:monitor(LinkPid) -> 'DOWN' is the disconnect
+%% either way, inbound messages arrive on the gproc property {channel, Channel}
 ```
 
 > #### Why pure Erlang {: .info }
@@ -28,7 +31,7 @@ quod_link:send(LinkPid, Payload)              %% direct, non-blocking
 
 -behaviour(gen_server).
 
--export([start_link/0, open_link/2, learn/2, resolve/1]).
+-export([start_link/0, open_link/2, send/3, learn/2, resolve/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(KEY, {transport, node}).
@@ -59,6 +62,18 @@ not yet known). Asynchronous: the caller receives `{link_up, Target, Channel, Li
 -spec open_link(binary() | {inet:hostname(), inet:port_number()}, binary()) -> ok.
 open_link(Target, Channel) ->
     gen_server:cast(quod_reg:via(?KEY), {open_link, Target, Channel, self()}).
+
+-doc """
+**Fire-and-forget send** of `Frame` to `Target` on `Channel`. Opens (or reuses) the connection + link
+like `open_link/2`, but the caller never sees the link: the connection reuses a live link or **buffers**
+`Frame` until one is ready (`m:quod_conn`). Non-blocking; a resolve/connect failure silently drops the
+frame (the caller relies on its own retry/anti-entropy). This is the send path for endpoints that don't
+need the link lifecycle (`m:quod_prove`, `m:quod_catchup`, `m:quod_feed`); use `open_link/2` when you
+must monitor the link yourself (Brahms, consensus).
+""".
+-spec send(binary() | {inet:hostname(), inet:port_number()}, binary(), binary()) -> ok.
+send(Target, Channel, Frame) ->
+    gen_server:cast(quod_reg:via(?KEY), {send, Target, Channel, Frame}).
 
 -doc "Record a `Pubkey => Endpoint` resolution hint (learned from a header / gossip).".
 -spec learn(binary(), {inet:hostname(), inet:port_number()}) -> ok.
@@ -165,6 +180,19 @@ handle_cast({open_link, Target, Channel, ReplyTo}, State) ->
         error ->
             logger:debug("quod: open_link target ~p unresolved/non-dialable", [Target]),
             ReplyTo ! {link_error, Target, Channel},
+            {noreply, State}
+    end;
+%% fire-and-forget send: resolve + ensure the connection (dialing on demand), then hand the frame to the
+%% conn, which sends on a live link or buffers until one is up. An unresolved target is dropped silently
+%% (no waiter to notify — the caller retries), unlike open_link which owes its caller a link_error.
+handle_cast({send, Target, Channel, Frame}, State) ->
+    case resolve(Target) of
+        {ok, Endpoint} ->
+            {ConnPid, State1} = ensure_conn(Target, Endpoint, State),
+            quod_conn:send(ConnPid, Channel, Frame),
+            {noreply, State1};
+        error ->
+            logger:debug("quod: send target ~p unresolved/non-dialable — dropped", [Target]),
             {noreply, State}
     end;
 handle_cast(_Msg, State) ->

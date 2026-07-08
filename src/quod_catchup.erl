@@ -38,8 +38,6 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
             data_dir :: file:filename_all(),
             contacts = []  :: [endpoint()],             %% seed endpoints a joiner pulls from
-            conns    = #{} :: #{node_id() | endpoint() => {pid(), reference()}},   %% OUTBOUND links
-            outbox   = #{} :: #{node_id() | endpoint() => [binary()]},             %% per-peer FIFO
             pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId=>{From,TRef}
             inflight = 0   :: non_neg_integer()}).       %% server: live read workers
 
@@ -78,7 +76,7 @@ serve_blocks(Ns, DataDir, From0, To) ->
         {error, _} = E -> E;
         {ok, Store}    ->
             try
-                {LastI, _} = quod_ledger_store:last(Store),
+                LastI = quod_ledger_store:last(Store),
                 To1 = lists:min([To, LastI, From + ?MAX_BLOCKS - 1]),
                 {ok, Es} = quod_ledger_store:read_range(Store, From, To1),
                 {ok, cap_bytes(Es, 0), LastI}   %% keep the response within one quod_link frame
@@ -265,19 +263,6 @@ handle_cast({send_resp, Peer, Resp}, S) ->
     {noreply, (send(Peer, Resp, S))#s{inflight = max(0, S#s.inflight - 1)}};
 handle_cast(_Msg, S) -> {noreply, S}.
 
-handle_info({link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
-    case maps:is_key(Peer, S#s.conns) of
-        true  -> _ = quod_link:close(LinkPid), {noreply, S};
-        false ->
-            Ref = erlang:monitor(process, LinkPid),
-            S1  = S#s{conns = (S#s.conns)#{Peer => {LinkPid, Ref}}},
-            _   = [quod_link:send(LinkPid, F) || F <- maps:get(Peer, S1#s.outbox, [])],
-            {noreply, S1#s{outbox = maps:remove(Peer, S1#s.outbox)}}
-    end;
-handle_info({link_error, Peer, Chan}, S = #s{chan = Chan}) ->
-    {noreply, S#s{outbox = maps:remove(Peer, S#s.outbox)}};
-handle_info({'DOWN', _Ref, process, LinkPid, _Reason}, S) ->
-    {noreply, drop_conn(LinkPid, S)};
 handle_info({quod_message, {{Peer, _Addr}, _In}, Chan, Payload}, S = #s{chan = Chan}) ->
     {noreply, inbound(Peer, Payload, S)};
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
@@ -353,26 +338,14 @@ reply_pending(ReqId, Reply, S) ->
     end.
 
 %%%===================================================================
-%%% transport (symmetric: we always send on our OWN outbound link)
+%%% transport
 %%%===================================================================
 
-send(Peer, Term, S = #s{ns = Ns, conns = Conns, outbox = Outbox}) ->
-    Frame = term_to_binary({catchup, Ns, term_to_binary(Term)}),
-    case maps:get(Peer, Conns, undefined) of
-        {LinkPid, _Ref} -> _ = quod_link:send(LinkPid, Frame), S;
-        undefined ->
-            Buf = maps:get(Peer, Outbox, []),
-            _ = case Buf of [] -> quod_quic:open_link(Peer, S#s.chan); _ -> ok end,
-            S#s{outbox = Outbox#{Peer => Buf ++ [Frame]}}
-    end.
-
-drop_conn(LinkPid, S = #s{conns = Conns}) ->
-    case [P || {P, {Pid, _}} <- maps:to_list(Conns), Pid =:= LinkPid] of
-        [Peer | _] -> {_Pid, Ref} = maps:get(Peer, Conns),
-                      _ = erlang:demonitor(Ref, [flush]),
-                      S#s{conns = maps:remove(Peer, Conns)};
-        []         -> S
-    end.
+%% Fire-and-forget send on our {catchup, Ns} channel — the transport (`quod_quic:send/3`) owns the link
+%% (dial on demand, buffer until ready, reuse). A dropped frame just times out the pull and it retries.
+send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
+    _ = quod_quic:send(Peer, Chan, term_to_binary({catchup, Ns, term_to_binary(Term)})),
+    S.
 
 pick_contact(#s{contacts = []})      -> none;
 pick_contact(#s{contacts = [C | _]}) -> C.

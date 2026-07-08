@@ -62,7 +62,7 @@ t_genesis_seeds_content(Cfg) ->
     ?assertEqual(1, maps:get(committed, St)),
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        {ok, #entry{kind = block, data = Tx}} = quod_ledger_store:read_at(Store, 1),
+        {ok, #entry{data = Tx}} = quod_ledger_store:read_at(Store, 1),
         ?assertMatch(#transaction{tx_id = <<"genesis:", _/binary>>}, Tx),
         %% the diff carries at least the founder's peer_admitted fact + the root content
         ?assert(length(Tx#transaction.diff) >= 2)

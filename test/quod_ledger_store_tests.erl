@@ -21,9 +21,7 @@ store_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_empty/1,
       fun t_append_read/1,
-      fun t_meta_roundtrip/1,
       fun t_reopen_persists/1,
-      fun t_truncate_from/1,
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
       fun t_interior_corruption_fail_stops/1,
@@ -35,7 +33,7 @@ store_test_() ->
 %%% helpers
 %%%===================================================================
 
-ent(I, T) -> #entry{index = I, term = T, kind = block, data = chg(I)}.
+ent(I) -> #entry{index = I, data = chg(I)}.
 
 chg(I) ->
     #transaction{tx_id = integer_to_binary(I), caller_ns = <<"onia:peers">>,
@@ -49,77 +47,46 @@ chg(I) ->
 t_empty({Dir, Ns}) ->
     fun() ->
         {ok, S} = quod_ledger_store:open(Ns, Dir),
-        ?assertEqual({0, 0}, quod_ledger_store:last(S)),
+        ?assertEqual(0, quod_ledger_store:last(S)),
         ?assertEqual(not_found, quod_ledger_store:read_at(S, 1)),
-        ?assertEqual({0, none}, quod_ledger_store:read_meta(S)),
-        ?assertEqual(0, quod_ledger_store:term_at(S, 0)),
         ok = quod_ledger_store:close(S)
     end.
 
 t_append_read({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 2)]),
-        ?assertEqual({3, 2}, quod_ledger_store:last(S1)),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
+        ?assertEqual(3, quod_ledger_store:last(S1)),
         {ok, [E1, E2, E3]} = quod_ledger_store:read_range(S1, 1, 3),
         ?assertEqual(1, E1#entry.index),
         ?assertEqual(2, E2#entry.index),
         ?assertEqual(3, E3#entry.index),
-        ?assertEqual(2, quod_ledger_store:term_at(S1, 3)),
-        ?assertEqual(1, quod_ledger_store:term_at(S1, 1)),
-        ?assertEqual(undefined, quod_ledger_store:term_at(S1, 9)),
         {ok, E2b} = quod_ledger_store:read_at(S1, 2),
         ?assertEqual(chg(2), E2b#entry.data),
+        %% a non-contiguous append is rejected (the store is append-only, in slot order)
+        ?assertError({non_contiguous_append, 3, [5]}, quod_ledger_store:append(S1, [ent(5)])),
         ok = quod_ledger_store:close(S1)
-    end.
-
-t_meta_roundtrip({Dir, Ns}) ->
-    fun() ->
-        {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        ok = quod_ledger_store:write_meta(S0, 7, {"10.0.0.2", 5000}),
-        ?assertEqual({7, {"10.0.0.2", 5000}}, quod_ledger_store:read_meta(S0)),
-        ok = quod_ledger_store:write_meta(S0, 8, none),   %% atomic overwrite
-        ?assertEqual({8, none}, quod_ledger_store:read_meta(S0)),
-        ok = quod_ledger_store:close(S0)
     end.
 
 t_reopen_persists({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 3)]),
-        ok = quod_ledger_store:write_meta(S1, 3, {"127.0.0.1", 5000}),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2)]),
         ok = quod_ledger_store:close(S1),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
-        ?assertEqual({2, 3}, quod_ledger_store:last(S2)),
-        ?assertEqual({3, {"127.0.0.1", 5000}}, quod_ledger_store:read_meta(S2)),
+        ?assertEqual(2, quod_ledger_store:last(S2)),
         ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
         ok = quod_ledger_store:close(S2)
     end.
 
-t_truncate_from({Dir, Ns}) ->
-    fun() ->
-        {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1), ent(4, 1)]),
-        {ok, S2} = quod_ledger_store:truncate_from(S1, 3),    %% drop 3,4
-        {ok, S3} = quod_ledger_store:append(S2, [ent(3, 2)]), %% divergent re-append
-        ?assertEqual({3, 2}, quod_ledger_store:last(S3)),
-        ?assertEqual(not_found, quod_ledger_store:read_at(S3, 4)),
-        ?assertEqual(2, quod_ledger_store:term_at(S3, 3)),
-        ok = quod_ledger_store:close(S3),
-        {ok, S4} = quod_ledger_store:open(Ns, Dir),           %% persists across reopen
-        ?assertEqual({3, 2}, quod_ledger_store:last(S4)),
-        ?assertEqual(not_found, quod_ledger_store:read_at(S4, 4)),
-        ok = quod_ledger_store:close(S4)
-    end.
-
-%% open_ro gives a read-only view of the committed log (the catch-up server's read path).
+%% open_ro gives a read-only view of the committed log (the catch-up/feed server's read path).
 t_open_ro_reads({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1)]),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ok = quod_ledger_store:close(S1),
         {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
-        ?assertEqual({3, 1}, quod_ledger_store:last(RO)),
+        ?assertEqual(3, quod_ledger_store:last(RO)),
         ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(RO, 1, 3)),
         ?assertMatch({ok, #entry{index = 2}}, quod_ledger_store:read_at(RO, 2)),
         ok = quod_ledger_store:close(RO),
@@ -132,7 +99,7 @@ t_open_ro_reads({Dir, Ns}) ->
 t_open_ro_non_truncating({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1)]),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2)]),
         ok = quod_ledger_store:close(S1),
         LogPath   = filename:join([Dir, base64url(Ns), "log.0001"]),
         ValidSize = filelib:file_size(LogPath),
@@ -143,7 +110,7 @@ t_open_ro_non_truncating({Dir, Ns}) ->
         TornSize = filelib:file_size(LogPath),
         ?assert(TornSize > ValidSize),
         {ok, RO} = quod_ledger_store:open_ro(Ns, Dir),
-        ?assertEqual({2, 1}, quod_ledger_store:last(RO)),        %% reads up to the last valid entry
+        ?assertEqual(2, quod_ledger_store:last(RO)),             %% reads up to the last valid entry
         ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(RO, 1, 2)),
         ok = quod_ledger_store:close(RO),
         ?assertEqual(TornSize, filelib:file_size(LogPath)),     %% open_ro left the torn tail (SAFE)
@@ -155,7 +122,7 @@ t_open_ro_non_truncating({Dir, Ns}) ->
 t_torn_tail_recovery({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1)]),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ok = quod_ledger_store:close(S1),
         %% simulate a crash mid-append: a partial/garbage tail on the log file
         LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
@@ -164,7 +131,7 @@ t_torn_tail_recovery({Dir, Ns}) ->
         ok = file:write(Fd, <<"torn">>),   %% < a full header → trimmed on reopen
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
-        ?assertEqual({3, 1}, quod_ledger_store:last(S2)),
+        ?assertEqual(3, quod_ledger_store:last(S2)),
         ?assertMatch({ok, [_, _, _]}, quod_ledger_store:read_range(S2, 1, 3)),
         ok = quod_ledger_store:close(S2)
     end.
@@ -174,7 +141,7 @@ t_torn_tail_recovery({Dir, Ns}) ->
 t_torn_tail_bad_crc_trims({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1)]),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ok = quod_ledger_store:close(S1),
         LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
@@ -183,18 +150,18 @@ t_torn_tail_bad_crc_trims({Dir, Ns}) ->
         ok = file:pwrite(Fd, Size - 1, <<(B bxor 16#FF)>>),
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
-        ?assertEqual({2, 1}, quod_ledger_store:last(S2)),  %% frame 3 trimmed, 1 & 2 kept
+        ?assertEqual(2, quod_ledger_store:last(S2)),  %% frame 3 trimmed, 1 & 2 kept
         ?assertMatch({ok, [_, _]}, quod_ledger_store:read_range(S2, 1, 2)),
         ok = quod_ledger_store:close(S2)
     end.
 
 %% A corrupt INTERIOR frame (bad CRC) FOLLOWED by a valid frame is NOT a torn tail — a
 %% crash can only damage the last write — so it is mid-log corruption: open/2 fail-stops
-%% rather than silently discarding the durably-committed entries after it (review #8).
+%% rather than silently discarding the durably-committed entries after it.
 t_interior_corruption_fail_stops({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 1), ent(3, 1)]),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2), ent(3)]),
         ok = quod_ledger_store:close(S1),
         LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
@@ -207,14 +174,10 @@ t_interior_corruption_fail_stops({Dir, Ns}) ->
 t_load({Dir, Ns}) ->
     fun() ->
         {ok, S0} = quod_ledger_store:open(Ns, Dir),
-        {ok, S1} = quod_ledger_store:append(S0, [ent(1, 1), ent(2, 2)]),
-        ok = quod_ledger_store:write_meta(S1, 2, {"127.0.0.1", 5000}),
+        {ok, S1} = quod_ledger_store:append(S0, [ent(1), ent(2)]),
         Loaded = quod_ledger_store:load(S1),
-        ?assertEqual(2, maps:get(cur_term, Loaded)),
-        ?assertEqual({"127.0.0.1", 5000}, maps:get(voted_for, Loaded)),
-        ?assertEqual(2, length(maps:get(log, Loaded))),
-        ?assertEqual(0, maps:get(snap_idx, Loaded)),
-        ?assertEqual(none, maps:get(snap_data, Loaded)),
+        ?assertEqual([1, 2], [E#entry.index || E <- maps:get(log, Loaded)]),
+        ?assertEqual([log], maps:keys(Loaded)),
         ok = quod_ledger_store:close(S1)
     end.
 

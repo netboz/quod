@@ -27,14 +27,17 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 
 > #### Status {: .info }
 >
-> **Stage 2c (here):** the pure consensus core (quorum math, share signing, certificate
+> **Live (through Simplex 5a):** the pure consensus core (quorum math, share signing, certificate
 > formation/verification, the commit guards), the **consensus engine** (§2.3 certificate pool + complete
-> block tree), the per-namespace `gen_statem` over the `{log, Ns}` transport, and **failover** — a
-> **round-robin per-slot leader**, the `Δ_timeout` **complaint timer**, the `may_commit`/`may_complain`
-> guards, and a `⅔` **complaint cert** that skips a stuck slot (a `noop` entry) so the rotated leader
-> proposes the next. At **N=1** each quorum self-satisfies, so an append commits synchronously. **Next:**
-> epoch validators + membership/join from `peer_admitted` (Stage 3), stable per-epoch leaders (Stage 4),
-> and per-message retransmit hardening (a dial-retry tick is in; see `doc/deferred.md` §3).
+> block tree), the per-namespace `gen_statem` over the `{log, Ns}` transport, **failover** (a
+> round-robin per-slot leader, the `Δ_timeout` complaint timer, the `may_commit`/`may_complain` guards,
+> and a `⅔` complaint cert that skips a stuck slot as a `noop`), the **committee = `peer_admitted`
+> facts** derived from the committed log and swapped in-process at the slot boundary, and **`mode=join`
+> trustless catch-up** (a joiner pulls the committed block+cert log, verifies each cert against the
+> committee it reconstructs, and replays into its KB — `m:quod_catchup`). At **N=1** each quorum
+> self-satisfies, so an append commits synchronously. **Next:** self-admit promotion (a caught-up
+> joiner becoming a voter), the reader/feed dissemination tier, and the hardening in `doc/deferred.md`
+> §3 (mid-flight committee-change, per-message retransmit, epoch-frozen validators).
 """.
 
 -include("quod_ledger.hrl").
@@ -430,8 +433,9 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 %% (the append commits synchronously). The durable block list lives in `quod_ledger_store`; this process
 %% keeps only the in-flight engine window + the derived height + validator set (KB = projection).
 %%
-%% Stage 2a (here): the engine drives commit for N=1 (unified path). The `{log, Ns}` transport for a
-%% multi-node committee, the complaint timer, and epoch validators are the following sub-increments.
+%% The engine drives commit uniformly at every N: at N=1 the sole validator IS the ⅔ quorum, so each
+%% step self-satisfies and the append commits synchronously; with peers the same path runs over the
+%% `{log, Ns}` transport, the complaint timer, and the per-slot committee.
 
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
@@ -579,7 +583,7 @@ signing_key(Cfg) ->
 load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
     Base = case maps:get(log, quod_ledger_store:load(Store)) of
                []  -> S0;   %% empty ⇒ unfounded (slot 0)
-               Log -> {LastI, _} = quod_ledger_store:last(Store),
+               Log -> LastI = quod_ledger_store:last(Store),
                       S0#s{validators = committee_from_log(Log), slot = LastI}
            end,
     case {maps:get(mode, Cfg), Base#s.slot} of
@@ -600,7 +604,7 @@ load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
 %% and every founder boots at the same height 1 under the same committee.
 bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     GenesisTx = genesis_tx(Cfg, Ns, Self),
-    E = #entry{index = 1, term = 0, kind = block, data = GenesisTx},
+    E = #entry{index = 1, data = GenesisTx},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     S#s{store = Store1, validators = apply_committee_delta(GenesisTx, []), slot = 1}.
 
@@ -801,8 +805,9 @@ apply_event({skipped, Slot}, S) ->
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
 commit_block(Slot, #block{payload = [Change]} = Block, S = #s{store = Store, eng = Eng}) ->
     Cert = persisted_cert(commit, Slot, block_hash(Block), Eng),   %% minimal, committee-as-of-slot; pre-prune
-    E = #entry{index = Slot, term = 0, kind = block, data = Change, cert = Cert},
+    E = #entry{index = Slot, data = Change, cert = Cert},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
+    publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
     S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1})),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
 
@@ -825,8 +830,9 @@ adopt_committee(Change, S = #s{validators = V, eng = Eng}) ->
 %% the rotated leader. `quod_prolog` applies a `noop` as a pure cursor advance (no fact change).
 skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
     Cert = persisted_cert(complaint, Slot, none, Eng),   %% minimal complaint cert that skipped this slot
-    E = #entry{index = Slot, term = 0, kind = block, data = noop, cert = Cert},
+    E = #entry{index = Slot, data = noop, cert = Cert},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
+    publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
     S1 = finalize(Slot, S#s{store = Store1}),
     maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).
 
@@ -1044,6 +1050,15 @@ drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
         {_Pid, Ref} -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
         undefined   -> S
     end.
+
+%% Post-commit hook for the dissemination feed (`m:quod_feed`): announce a LIVE-finalized entry on the
+%% `{feed_src, Ns}` property so the feed eager-pushes it to the crowd. Called ONLY from commit_block/
+%% skip_block (the live finality points) — never from apply_committed/apply_catchup_window (replay), so
+%% catch-up/rebuild never re-broadcasts history (content-layer-design §14 live-vs-replay). A no-op if no
+%% feed is subscribed. Off the reply path, so it never blocks propose→commit.
+publish_feed(Slot, #entry{} = Entry, #s{ns = Ns}) ->
+    _ = quod_reg:publish({feed_src, Ns}, {committed, Slot, Entry}),
+    ok.
 
 %% Apply a freshly-committed block using the IN-HAND payload — no read-back of what we just wrote.
 %% Only when quod_prolog is up AND we are contiguous (last_applied == Slot-1); otherwise leave it and

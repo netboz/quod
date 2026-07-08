@@ -1,13 +1,16 @@
 -module(quod_ns).
 -moduledoc """
 Per-namespace sub-supervisor — the unit of **fate-sharing** for one ontology's
-content processes. Supervises `quod_simplex` then `quod_prolog` with **`rest_for_one`**.
+content processes. Supervises, with **`rest_for_one`** (in order): `m:quod_simplex`
+(consensus + durable block log), `m:quod_prolog` (the KB projection), `m:quod_prove`
+(remote-read endpoint), `m:quod_catchup` (trustless catch-up endpoint), and
+`m:quod_feed` (the dissemination feed — gossips committed blocks to the crowd).
 
 The durable log rebuilds the kb, never the other way round: if `quod_simplex` crashes,
-`rest_for_one` restarts it *and then* `quod_prolog` (which rebuilds from the
-reloaded log); if `quod_prolog` crashes alone, only it restarts and rebuilds from
-`quod_simplex`'s committed prefix via the rebuild handshake. See
-`doc/ordering-layer-spec.md` §5.2.
+`rest_for_one` restarts it *and then* every sibling after it (`quod_prolog` rebuilds
+from the reloaded log; the read/catch-up endpoints re-subscribe their channels); if a
+later sibling crashes alone, only it — and those after it — restart. `quod_prolog`
+rebuilds from `quod_simplex`'s committed prefix via the rebuild handshake.
 """.
 -behaviour(supervisor).
 -export([start_link/2]).
@@ -32,5 +35,11 @@ init({Ns, Config}) ->
          %% the rest_for_one chain — it holds no state the others need, so its own crash restarts only
          %% itself; being last it also re-subscribes harmlessly whenever an earlier sibling restarts.
          #{id => quod_catchup, start => {quod_catchup, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% dissemination feed ({feed, Ns} channel): push-pull epidemic gossip of committed blocks to the
+         %% non-voting crowd, each block verified against its quorum cert per hop. Last in the chain — it
+         %% depends on the others (reads consensus commits via {feed_src, Ns}, ingests through quod_simplex,
+         %% samples quod_brahms) and holds no state they need, so its crash restarts only itself.
+         #{id => quod_feed, start => {quod_feed, start_link, [Ns, Config]},
            restart => permanent, type => worker}],
     {ok, {Flags, Children}}.

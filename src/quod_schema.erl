@@ -55,4 +55,9 @@ fields(content) ->
     , {genesis_file, hoconsc:mk(binary(), #{default => <<"ontologies/quod_root.pl">>})}
     , {data_dir,     hoconsc:mk(binary(), #{default => <<"">>})}
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}
+      %% `mode=join` REQUIRES this: the out-of-band trust anchor — the founder's genesis
+      %% block hash as a 64-char hex string, copied from the founder's boot log (see
+      %% `quod_app`). Empty for a `create` node. It is what makes catch-up trustless: a
+      %% joiner verifies the whole downloaded history against this one pinned fingerprint.
+    , {genesis_hash, hoconsc:mk(binary(), #{default => <<"">>})}
     ].

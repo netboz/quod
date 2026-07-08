@@ -137,7 +137,8 @@ maybe_start_ns(Content) ->
     Mode = maps:get(mode, NsCfg),
     case quod_ns_sup:start_namespace(Ns, NsCfg) of
         {ok, _} ->
-            logger:info("quod[~s]: content namespace up (mode=~p)", [Ns, Mode]);
+            logger:info("quod[~s]: content namespace up (mode=~p)", [Ns, Mode]),
+            log_genesis_anchor(Ns, Mode);
         {error, {already_started, _}} ->
             ok;
         Error when Mode =:= create ->
@@ -148,6 +149,19 @@ maybe_start_ns(Content) ->
             logger:error("quod[~s]: content namespace start failed: ~p", [Ns, Error])
     end,
     ok.
+
+%% After a founder (create) stands up its namespace, log its genesis block hash — the anchor a mode=join
+%% node must pin in `content.genesis_hash`. Logged at `notice` so it stands out in the boot log: this is
+%% how the operator gets the out-of-band trust anchor to hand to joiners (the one fact a joiner can't
+%% safely download). A join node logs nothing here.
+log_genesis_anchor(Ns, create) ->
+    case quod_simplex:genesis_hash(Ns) of
+        H when is_binary(H) ->
+            logger:notice("quod[~s]: genesis anchor — pin as content.genesis_hash on joiners: ~s",
+                          [Ns, binary:encode_hex(H)]);
+        _ -> ok
+    end;
+log_genesis_anchor(_Ns, _Mode) -> ok.
 
 %% Build the per-namespace config map for quod_ns_sup:start_namespace/2. The ledger's
 %% `node_id` is the node's PUBKEY (from `apply_identity`) — its stable identity; the address
@@ -161,12 +175,24 @@ build_ns_config(Content) ->
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),
              seed_peers => content_seeds(Content)},
-    {Ns, with_genesis_file(Content, with_data_dir(Content, Base))}.
+    {Ns, with_genesis_hash(Content, with_genesis_file(Content, with_data_dir(Content, Base)))}.
 
 with_data_dir(Content, Base) ->
     case maps:get(data_dir, Content, <<>>) of
         <<>> -> Base;
         Dir  -> Base#{data_dir => binary_to_list(Dir)}
+    end.
+
+%% The `mode=join` trust anchor: a 64-char hex string in config (`content.genesis_hash`, copied from the
+%% founder's boot log) decoded to the raw 32-byte block hash `quod_simplex` pins. Absent/blank ⇒ not
+%% forwarded (a `create` node needs none; a `join` node without it is fail-fast'd by `valid_cfg`, which
+%% is the correct loud failure — never a silent TOFU). A malformed hex value is treated as absent.
+with_genesis_hash(Content, Base) ->
+    case maps:get(genesis_hash, Content, <<>>) of
+        <<>> -> Base;
+        Hex  -> try Base#{genesis_hash => binary:decode_hex(Hex)}
+                catch _:_ -> logger:error("quod: content.genesis_hash is not valid hex: ~p", [Hex]), Base
+                end
     end.
 
 with_genesis_file(Content, Base) ->

@@ -71,27 +71,21 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   committed `peer_admitted(NodeId,Host,Port,Pubkey)` fact IS the address book, seeded at join by an
   operator contact list. Lands with **Stage 3** membership; until then, watch it in the multi-node Nomad
   redeploy (a non-leader that must reach a peer it hasn't received from will stall).
-- **`quod_catchup` transport duplicates `quod_prove` (consolidation deferred).** The catch-up SERVER must
-  be a sibling process (off the consensus loop) — that stays — but `quod_catchup`'s per-ns gen_server
-  link/channel/worker plumbing (`send`/`conns`/`outbox`/`link_up`/`inbound`/`pick_contact`) is
-  near-copy-pasted from `quod_prove` (and `data_dir/1` duplicates `quod_simplex:data_dir/1`). Cleaner
-  end-state: make `quod_catchup` a
-  PURE library (`serve_blocks`/`verify_forward`/`catch_up`, no process/channel) and carry block-transfer on
-  `quod_prove`'s existing `{prove, Ns}` transport (a `blocks_req` tag + a `pull`), OR extract the shared
-  transport skeleton into a helper both use. Kept separate for now (one-module-per-endpoint pattern);
-  revisit to remove the duplication.
-- **Stale reply-conn to a RESTARTED same-identity peer (`quod_catchup`/`quod_prove`, symmetric transport).**
-  The server replies on its OWN outbound link keyed by the requester's PUBKEY (`send/3` → `conns[Peer]`),
-  and `link_up` REJECTS a fresh inbound link when a conn for that pubkey already exists. So when a peer
-  restarts with the SAME identity (a joiner resuming catch-up after a crash/redeploy), the server keeps
-  replying on the now-dead outbound link and drops the response until that stale conn's `DOWN` fires — which
-  is not prompt if QUIC hasn't detected the peer's death. Net: a restarted joiner pointed at a contact that
-  still holds a stale conn to it cannot complete catch-up until the conn clears (or it tries another contact —
-  multi-contact failover is itself deferred). Observed in `join_SUITE` (the resume test restarts the FOUNDER
-  too, giving a clean transport state, to sidestep it). Real fixes: reply on the request's INBOUND link
-  (`InLink` is already threaded in the `quod_message` tuple — avoids the reverse dial entirely), or evict/replace
-  a stale conn on a new `link_up` for the same peer. Trusted-fleet-safe today (self-heals); harden with the
-  transport consolidation above.
+- **~~`quod_catchup`/`quod_feed` transport duplicates `quod_prove`~~ — DONE (transport `send` verb).**
+  The copy-pasted per-endpoint `send`/`conns`/`outbox`/`link_up`/`link_error`/`DOWN` skeleton is GONE:
+  the transport now exposes **`quod_quic:send/3`** (fire-and-forget send to a target on a channel), backed
+  by a per-channel frame buffer in `quod_conn` (dial on demand, buffer until the link is up, flush, reuse —
+  the connection owns the link lifecycle). `quod_prove`, `quod_catchup`, and `quod_feed` each dropped their
+  link bookkeeping and just call `send/3`; peer-random selection reuses `quod_brahms:take_random/2` (promoted
+  to public). Endpoints that must monitor the link themselves (Brahms, consensus) keep `open_link/2`.
+- **Stale reply-conn to a RESTARTED same-identity peer — narrowed, now a single transport concern.**
+  The old per-endpoint bug (`quod_catchup`/`quod_prove` `link_up` REJECTING a fresh inbound link when a conn
+  for that pubkey existed, so a restarted peer's responses went to the dead link) is GONE with the migration —
+  those modules no longer manage links. What remains is one central case: `quod_quic:ensure_conn/3` reuses a
+  cached connection keyed by pubkey while its process is `is_process_alive`, so if a peer restarts at a NEW
+  address before the old conn's `DOWN` fires, a reply can still go to the stale conn until it clears. Fix in
+  ONE place now (evict/replace the cached conn when the resolver learns a new address for the pubkey, or reply
+  on the request's inbound link). Trusted-fleet-safe today (self-heals on `DOWN`).
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 
@@ -216,8 +210,11 @@ stages, not carried forward:
   now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log
   (`quod_simplex:committee_from_log/1`), so a snapshot that truncates the log must carry the `peer_admitted`
   facts as of the snapshot height (or a committee checkpoint) — otherwise the re-fold drops members.
-  (`quod_ledger_store`'s `snap_cfg`/`read_snapshot` are unused today — `read_snapshot` returns `none`, so
-  the full log always re-folds.) No non-voting tier exists anymore.
+  (The Raft-shaped snapshot stub — `read_snapshot`/`write_snapshot`/`install_snapshot` + `snap_cfg` —
+  has been **removed** from `quod_ledger_store` along with the rest of the Raft term/vote/truncate
+  machinery; compaction will be built fresh and **committee-aware**, since the Raft `snap_cfg`
+  `[node_id()]` shape was wrong for the `peer_admitted`-derived committee anyway.) No non-voting tier
+  exists yet.
 
 **From the 2a/2b/2c reviews — mostly landed; two remain open:**
 

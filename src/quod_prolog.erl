@@ -35,7 +35,8 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             applied   = 0  :: log_index(),
             %% tx_id => {From, Bindings, HeightRead, TimerRef}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(), reference()}},
-            applies   = 0, rejects = 0, proves = 0, conflicts = 0}).
+            applies   = 0, rejects = 0, proves = 0, conflicts = 0,
+            park_timeouts = 0 :: non_neg_integer()}).   %% parked writes reaped by TTL (verdict never arrived)
 
 %%%===================================================================
 %%% API
@@ -142,7 +143,9 @@ handle_call({prove_ro, Goal, _CallerNs}, _From, S) ->
 handle_call(get_stats, _From, S) ->
     {reply, #{applied   => S#s.applied,  applies => S#s.applies,
               rejects   => S#s.rejects,  proves  => S#s.proves,
-              conflicts => S#s.conflicts}, S};
+              conflicts => S#s.conflicts,
+              parked    => map_size(S#s.parked),        %% in-flight writes awaiting commit (liveness gauge)
+              park_timeouts => S#s.park_timeouts}, S};  %% writes that never committed (reaped)
 
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
@@ -157,7 +160,7 @@ handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
         {{From, _B, _H, _TRef}, P1} ->
             gen_server:reply(From, {error, timeout}),
-            {noreply, S#s{parked = P1}};
+            {noreply, S#s{parked = P1, park_timeouts = S#s.park_timeouts + 1}};
         error -> {noreply, S}
     end;
 handle_info(_Info, S) -> {noreply, S}.

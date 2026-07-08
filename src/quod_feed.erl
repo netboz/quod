@@ -11,7 +11,7 @@ A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, last in the `m
 `rest_for_one` chain (it holds no state the others need). It has two halves:
 
 - **Producer** (a committee Member): on each *live* commit `m:quod_simplex` publishes
-  `{committed, Slot, Entry}` on the `{feed_src, Ns}` property; the feed **eager-pushes** the block to a
+  `{committed, Slot, Entry}` on the `{committed, Ns}` property; the feed **eager-pushes** the block to a
   small fanout of the node's `quod_brahms:view/1` (the Byzantine-resistant `sample/1` is reserved for
   the F2 anti-entropy pull-source selection). Never on the replay/rebuild path, so catching up
   never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay).
@@ -81,7 +81,7 @@ init({Ns, Config}) ->
     Self = maps:get(node_id, Config),
     Chan = term_to_binary({feed, Ns}, [deterministic]),
     quod_reg:subscribe({channel, Chan}),   %% gossiped blocks + digests on {feed, Ns}
-    quod_reg:subscribe({feed_src, Ns}),    %% local live commits from quod_simplex
+    quod_reg:subscribe({committed, Ns}),   %% local live commits from quod_simplex
     arm_anti_entropy(),
     {ok, #s{ns = Ns, self = Self, chan = Chan}}.
 
@@ -116,7 +116,7 @@ handle_info(_Info, S) -> {noreply, S}.
 
 terminate(_Reason, #s{ns = Ns, chan = Chan}) ->
     _ = try quod_reg:unsubscribe({channel, Chan}) catch _:_ -> ok end,
-    _ = try quod_reg:unsubscribe({feed_src, Ns}) catch _:_ -> ok end,
+    _ = try quod_reg:unsubscribe({committed, Ns}) catch _:_ -> ok end,
     ok.
 
 %%%===================================================================

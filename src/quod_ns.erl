@@ -38,7 +38,7 @@ init({Ns, Config}) ->
            restart => permanent, type => worker},
          %% dissemination feed ({feed, Ns} channel): push-pull epidemic gossip of committed blocks to the
          %% non-voting crowd, each block verified against its quorum cert per hop. Last in the chain — it
-         %% depends on the others (reads consensus commits via {feed_src, Ns}, ingests through quod_simplex,
+         %% depends on the others (reads consensus commits via {committed, Ns}, ingests through quod_simplex,
          %% samples quod_brahms) and holds no state they need, so its crash restarts only itself.
          #{id => quod_feed, start => {quod_feed, start_link, [Ns, Config]},
            restart => permanent, type => worker}],

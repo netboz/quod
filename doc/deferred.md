@@ -239,9 +239,27 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 
 - **Relayed-block verification** (§1) — the remaining gate below: safely gossiping blocks to untrusted
   nodes needs each relayed block verified against its commit cert (the signing itself has landed).
-- **P2 — epidemic dissemination.** Push-pull gossip + anti-entropy over the per-namespace Brahms
-  overlay (Replicas/Subscribers join it); every block carries + is verified against its quorum
-  certificate before re-push. Scales the change feed past the leader-star.
+- **P2 — epidemic dissemination — BUILT** (`quod_feed`, 0.6.14): push-pull gossip + anti-entropy over
+  the per-namespace Brahms overlay, every block QC-verified per hop before re-push; commit seam
+  (`quod_simplex` publishes `{committed, Slot, Entry}` on `{committed, Ns}`, live path only); validated
+  on a 7-node Nomad fleet (cold-start catch-up + live feed-follow + a 100-tx burst, zero errors). Open
+  refinements:
+  - **Out-of-order handling — reorder buffer (not drop-and-re-pull).** `quod_feed` currently DROPS a
+    gossiped block ahead of `H+1` (`classify → gap → dropped`) and re-fetches it later via anti-entropy
+    pull — wasteful: it re-downloads a block it already received (the 100-tx burst showed `dropped`
+    83–97 per node, then a bulk re-pull). **Consensus already does the right thing** — `commit_buf` /
+    `drain_commits` buffer out-of-order finalizations and apply in slot order (§3, DONE) — and the feed
+    should mirror it: a **bounded, verify-on-drain reorder buffer** (stash the ahead-block RAW; when the
+    missing prefix arrives, `verify_forward` the now-contiguous run and drain, applying in slot order).
+    Must be **bounded + verified-only-on-drain**: a gossiped ahead-block can't be cert-verified until the
+    committee-as-of-its-slot is known (needs the prefix), so a Byzantine peer must not be able to flood
+    the buffer with fake high-slot blocks. This replaces the current drop-then-re-pull for gap blocks;
+    anti-entropy stays as the backstop for genuinely-missing prefixes.
+  - **Split cert/hash/payload verify-before-decode frame** (§1/§2) — decode the `[safe]` cert+hash,
+    verify against the committee, and only then decode the (non-`[safe]`) payload — so attacker atoms
+    are never interned for an unverified relayed block. Pull windows still bulk-decode.
+  - **IHAVE lazy advertisement** — a per-block "I have slot S" hint so a peer that missed the eager push
+    pulls it before the next anti-entropy round (a push-latency tweak; anti-entropy already covers it).
 - **P3 — bounded-cache subscribers (the millions tier).** Predicate cache (warmup = root schema +
   system-ontology registry) + consume the P2 feed + invalidate touched predicates on *live* commit
   (never replay) + lazy-refetch via remote-prove (P1) on miss.

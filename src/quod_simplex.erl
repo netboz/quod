@@ -480,7 +480,12 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
-            commits = 0  :: non_neg_integer()}).
+            commits = 0  :: non_neg_integer(),
+            submitted  = 0 :: non_neg_integer(),   %% every append attempt (metrics: submit rate)
+            skips      = 0 :: non_neg_integer(),   %% complaint-skipped (noop) slots
+            r_busy     = 0 :: non_neg_integer(),   %% append rejected: a proposal already in flight (backpressure)
+            r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
+            r_bad      = 0 :: non_neg_integer()}). %% append rejected: unacceptable change
 
 callback_mode() -> [state_functions].
 
@@ -649,7 +654,7 @@ self_addr(Cfg) ->
 %%%===================================================================
 
 running({call, From}, {append, Change}, S0) ->
-    {S1, Reply} = handle_append(From, Change, S0),
+    {S1, Reply} = handle_append(From, Change, S0#s{submitted = S0#s.submitted + 1}),
     {keep_state, S1, Reply ++ timer_actions(S0, S1)};
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
@@ -748,12 +753,12 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 %% proposal; a non-leader redirects AND arms the Δ timer for this wanted slot — so if the real leader is
 %% dead, its own timer fires and it complains toward a skip (the client-driven activation of §failover).
 handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
-    {S, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
+    {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
     case lists:member(Self, Vs) of
-        false -> {S, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
+        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
         true  -> case acceptable_change(Change, S) of
-                     false -> {S, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
+                     false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
                      true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
                  end
     end.
@@ -769,7 +774,7 @@ handle_append_leader(From, Change, Self, Vs, Sl, S) ->
             S3 = engine_step([{block, Block}], S2),      %% offer the block to our own engine
             {arm_complaint(Next, support_block(Block, S3)), []};   %% support it; park the caller; arm Δ
         Leader ->
-            {arm_complaint(Next, S), [{reply, From, {error, not_in_charge, Leader}}]}
+            {arm_complaint(Next, S#s{r_redirect = S#s.r_redirect + 1}), [{reply, From, {error, not_in_charge, Leader}}]}
     end.
 
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
@@ -839,7 +844,7 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
     E = #entry{index = Slot, data = noop, cert = Cert},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
-    S1 = finalize(Slot, S#s{store = Store1}),
+    S1 = finalize(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
     maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).
 
 %% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
@@ -1070,13 +1075,14 @@ drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
         undefined   -> S
     end.
 
-%% Post-commit hook for the dissemination feed (`m:quod_feed`): announce a LIVE-finalized entry on the
-%% `{feed_src, Ns}` property so the feed eager-pushes it to the crowd. Called ONLY from commit_block/
-%% skip_block (the live finality points) — never from apply_committed/apply_catchup_window (replay), so
-%% catch-up/rebuild never re-broadcasts history (content-layer-design §14 live-vs-replay). A no-op if no
-%% feed is subscribed. Off the reply path, so it never blocks propose→commit.
+%% Post-commit hook for the LIVE-commit consumers (the dissemination feed `m:quod_feed`, and `m:quod_metrics`
+%% for per-tx observability): announce a LIVE-finalized entry as `{committed, Slot, Entry}` on the
+%% `{committed, Ns}` property. Called ONLY from commit_block/skip_block (the live finality points) — never
+%% from apply_committed/apply_catchup_window (replay), so catch-up/rebuild never re-broadcasts history
+%% (content-layer-design §14 live-vs-replay). A no-op if nobody is subscribed. Off the reply path, so it
+%% never blocks propose→commit.
 publish_feed(Slot, #entry{} = Entry, #s{ns = Ns}) ->
-    _ = quod_reg:publish({feed_src, Ns}, {committed, Slot, Entry}),
+    _ = quod_reg:publish({committed, Ns}, {committed, Slot, Entry}),
     ok.
 
 %% Apply a freshly-committed block using the IN-HAND payload — no read-back of what we just wrote.
@@ -1278,4 +1284,6 @@ join_state(#s{join = J})           -> J.
 stats_map(S) ->
     #{slot => S#s.slot, committed => S#s.slot, last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
-      commits => S#s.commits, prolog_ready => S#s.prolog_ready}.
+      commits => S#s.commits, prolog_ready => S#s.prolog_ready,
+      submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
+      r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad}.

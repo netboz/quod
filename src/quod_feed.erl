@@ -56,7 +56,12 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
             pushed   = 0 :: non_neg_integer(),   %% local commits we originated onto the feed
             ingested = 0 :: non_neg_integer(),   %% gossiped blocks we verified, applied, and relayed
             pulled   = 0 :: non_neg_integer(),   %% anti-entropy pull rounds we started
-            dropped  = 0 :: non_neg_integer()}).  %% duplicate / gap / unverified / non-following
+            %% per-reason drop counters (bump via drop/2). `duplicate` (already have it, loop-suppressed) is
+            %% benign gossip redundancy; `gap` is recovered by anti-entropy; `unverified` (bad cert) is the
+            %% security-relevant one to watch. Pre-seeded to 0 so every reason is a stable metric series.
+            dropped  = #{oversized => 0, non_following => 0, duplicate => 0,
+                         gap => 0, unverified => 0, ingest_busy => 0}
+                       :: #{atom() => non_neg_integer()}}).
 
 %%%===================================================================
 %%% API
@@ -124,7 +129,7 @@ terminate(_Reason, #s{ns = Ns, chan = Chan}) ->
 %%%===================================================================
 
 inbound(_Addr, Payload, S) when byte_size(Payload) > ?MAX_FRAME_BYTES ->
-    S#s{dropped = S#s.dropped + 1};   %% drop oversized BEFORE decode — bound binary_to_term memory
+    drop(oversized, S);   %% drop oversized BEFORE decode — bound binary_to_term memory
 inbound(Addr, Payload, S) ->
     case decode(Payload, S#s.ns) of
         {block, #entry{} = Entry}      -> on_block(Entry, S);
@@ -142,18 +147,27 @@ inbound(Addr, Payload, S) ->
 %% Never applies out of order — a gap is left for anti-entropy (F2).
 on_block(#entry{index = Slot} = Entry, S = #s{ns = Ns, self = Self}) ->
     {Height, Committee, Join} = current(Ns),
-    case follows(Self, Committee, Join, Height) andalso classify(Slot, Height) of
-        next ->
-            case quod_catchup:verify_forward(Committee, Slot, [Entry]) of
-                {ok, [_], _} ->
-                    case ingest(Ns, [Entry], ?INGEST_MS) of
-                        ok         -> eager_push(Entry, S#s{ingested = S#s.ingested + 1});
-                        {error, _} -> S   %% consensus busy/restarting ⇒ drop; anti-entropy re-pulls it
-                    end;
-                {error, _} -> S#s{dropped = S#s.dropped + 1}   %% unverified ⇒ drop, NEVER relay
-            end;
-        _ -> S#s{dropped = S#s.dropped + 1}   %% duplicate / gap / not a following node
+    case follows(Self, Committee, Join, Height) of
+        false -> drop(non_following, S);            %% a voter / mid-catch-up / unfounded node doesn't ingest pushes
+        true  ->
+            case classify(Slot, Height) of
+                duplicate -> drop(duplicate, S);     %% already applied — loop suppression (benign gossip redundancy)
+                gap       -> drop(gap, S);           %% ahead of H+1 — anti-entropy will re-pull the missing prefix
+                next ->
+                    case quod_catchup:verify_forward(Committee, Slot, [Entry]) of
+                        {ok, [_], _} ->
+                            case ingest(Ns, [Entry], ?INGEST_MS) of
+                                ok         -> eager_push(Entry, S#s{ingested = S#s.ingested + 1});
+                                {error, _} -> drop(ingest_busy, S)   %% verified but consensus busy; anti-entropy re-pulls
+                            end;
+                        {error, _} -> drop(unverified, S)   %% bad cert ⇒ drop, NEVER relay (the one to watch)
+                    end
+            end
     end.
+
+%% Bump one per-reason drop counter. Reasons are pre-seeded in #s so the metric series are stable.
+drop(Reason, S = #s{dropped = D}) ->
+    S#s{dropped = maps:update_with(Reason, fun(C) -> C + 1 end, 1, D)}.
 
 %% A node ingests pushed blocks (follows the feed) ONLY when it is a caught-up NON-member observer of a
 %% founded namespace:

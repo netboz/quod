@@ -26,7 +26,8 @@ Two collection paths:
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | fact-engine apply/prove/OCC counts |
 | `quod_prolog_parked{namespace}` | gauge | | writes parked awaiting commit |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | parked writes reaped by TTL (cumulative) |
-| `quod_feed_pushed/ingested/pulled/dropped{namespace}` | gauge | | dissemination health (cumulative) |
+| `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | dissemination health (cumulative) |
+| `quod_feed_dropped{namespace}` | gauge | `reason` | dropped blocks by reason (duplicate/gap/unverified/…) |
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | submit→commit latency per tx |
 | `quod_tx_diff_ops{namespace}` | histogram | | asserts+retracts per committed tx |
 | `quod_tx_committed_total{namespace}` | counter | `author` | committed txs by submitting node |
@@ -128,7 +129,11 @@ declare(NodeId) ->
     _ = G(quod_feed_pushed,   "Local commits originated onto the feed (cumulative)"),
     _ = G(quod_feed_ingested, "Gossiped blocks verified + applied + relayed (cumulative)"),
     _ = G(quod_feed_pulled,   "Anti-entropy pull rounds started (cumulative)"),
-    _ = G(quod_feed_dropped,  "Blocks dropped: duplicate/gap/unverified/non-following (cumulative)"),
+    _ = prometheus_gauge:declare([{name, quod_feed_dropped},
+                                  {help, "Gossiped blocks dropped by reason (cumulative): duplicate = benign loop-"
+                                         "suppressed redundancy, gap = re-pulled by anti-entropy, unverified = bad "
+                                         "cert (the one to watch), non_following/oversized/ingest_busy"},
+                                  {labels, [namespace, reason]}, {constant_labels, CL}]),
     %% per-transaction (LIVE {committed,Ns} event)
     _ = H(quod_tx_commit_latency_ms, "Submit-to-commit latency per transaction (ms)", ?LAT_BUCKETS),
     _ = H(quod_tx_diff_ops,          "Asserts+retracts per committed transaction",    ?DIFF_BUCKETS),
@@ -199,7 +204,9 @@ refresh_feed_ns(Ns) ->
             _ = S(quod_feed_pushed,   PU),
             _ = S(quod_feed_ingested, IN),
             _ = S(quod_feed_pulled,   PL),
-            _ = S(quod_feed_dropped,  DR),
+            _ = maps:foreach(fun(Reason, C) ->
+                                 prometheus_gauge:set(quod_feed_dropped, [label(Ns), atom_to_binary(Reason, utf8)], C)
+                             end, DR),
             ok;
         _ -> ok
     end.

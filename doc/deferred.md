@@ -260,6 +260,13 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
     are never interned for an unverified relayed block. Pull windows still bulk-decode.
   - **IHAVE lazy advertisement** — a per-block "I have slot S" hint so a peer that missed the eager push
     pulls it before the next anti-entropy round (a push-latency tweak; anti-entropy already covers it).
+  - **Adaptive push fanout (scale with network size).** `?PUSH_FANOUT` is a fixed 4, but for reliable
+    epidemic spread the fanout only needs to grow like `ln(N)`. At the current 7-node fleet that means
+    each block is delivered ~3–4× and dropped as `duplicate` (benign but wasteful — see the
+    `quod_feed_dropped{reason=duplicate}` metric); at thousands of nodes a fixed 4 could be too thin.
+    Derive it from the network-size estimate quod already computes — `fanout ≈ clamp(k·ln(n̂), lo, hi)`
+    off the Brahms KMV `estimated_n` — part of the parked "adaptive sizing" bucket (with the Brahms
+    view/sample sizes). Watch `feed_dropped{reason=duplicate}` vs `ingested` to tune `k`.
 - **P3 — bounded-cache subscribers (the millions tier).** Predicate cache (warmup = root schema +
   system-ontology registry) + consume the P2 feed + invalidate touched predicates on *live* commit
   (never replay) + lazy-refetch via remote-prove (P1) on miss.

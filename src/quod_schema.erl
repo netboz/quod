@@ -36,6 +36,12 @@ fields(node) ->
     [ {ip,        hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
     , {port,      hoconsc:mk(integer(), #{default => 14567})}
     , {bind_port, hoconsc:mk(integer(), #{default => 0})}
+    %% QUIC liveness: a peer we haven't heard from for `idle_timeout_ms` is dropped, while
+    %% `keepalive_ms` PINGs probe an otherwise-quiet-but-alive link. Detection ≈ the two summed
+    %% (~2.5s at the defaults). Tuned for a trusted low-RTT LAN; raise both for a lossier/WAN
+    %% path. Keep `keepalive_ms` well below `idle_timeout_ms` (else a healthy link false-closes).
+    , {idle_timeout_ms, hoconsc:mk(integer(), #{default => 2000})}
+    , {keepalive_ms,    hoconsc:mk(integer(), #{default => 500})}
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}

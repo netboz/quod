@@ -39,8 +39,13 @@ directed pair is server-verifies-client.
 start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
-        case quic:connect(Host, Port, #{verify => false, cert => Cert, key => Key,
-                                        alpn => ALPN}, self()) of
+        %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection, from
+        %% config via `quod_quic:liveness_opts/0` — the SAME source the server listener uses, so
+        %% both directions detect symmetrically (the fork's RFC 9000 §10.1 fix makes idle fire even
+        %% while WE keep sending; it enforces each side's own idle timeout, no RFC min negotiation).
+        Opts = maps:merge(#{verify => false, cert => Cert, key => Key, alpn => ALPN},
+                          quod_quic:liveness_opts()),
+        case quic:connect(Host, Port, Opts, self()) of
             {ok, Conn} ->
                 receive
                     {quic, Conn, {connected, _}} ->

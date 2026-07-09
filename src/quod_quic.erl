@@ -31,7 +31,7 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 
 -behaviour(gen_server).
 
--export([start_link/0, open_link/2, send/3, learn/2, resolve/1]).
+-export([start_link/0, open_link/2, send/3, learn/2, resolve/1, liveness_opts/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(KEY, {transport, node}).
@@ -136,8 +136,12 @@ init([]) ->
             %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
             %% bound to the header's claimed pubkey in `m:quod_conn`). We present our own cert when
             %% dialing too (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
-            ServerOpts = #{cert => Cert, key => Key, verify => true, alpn => ALPN,
-                           connection_handler => Handler},
+            %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection,
+            %% from config via `liveness_opts/0`. This quic build enforces each side's OWN
+            %% idle_timeout (no RFC min negotiation), so `quod_conn` dials with the SAME opts
+            %% (both call `liveness_opts/0`) for symmetric detection in both directions.
+            ServerOpts = maps:merge(#{cert => Cert, key => Key, verify => true, alpn => ALPN,
+                                      connection_handler => Handler}, liveness_opts()),
             case quic:start_server(?SERVER, Port, ServerOpts) of
                 {ok, _} ->
                     logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
@@ -283,3 +287,15 @@ to_bin(L) when is_list(L)   -> list_to_binary(L);
 to_bin(A) when is_atom(A)   -> atom_to_binary(A, utf8).
 
 env(Key, Default) -> application:get_env(quod, Key, Default).
+
+-doc """
+QUIC liveness options — `idle_timeout` (drop a peer we haven't heard from) + `keep_alive_interval`
+(PING an otherwise-quiet link) — for fast dead-peer detection. Read from config (`node.idle_timeout_ms`
+/ `node.keepalive_ms`, bridged to app-env by `m:quod_app`). The SINGLE source shared by the server
+listener here and `quod_conn`'s dial, so both directions detect symmetrically (this quic build enforces
+each side's own idle timeout rather than negotiating the RFC min). Detection ≈ the two summed (~2.5s).
+""".
+-spec liveness_opts() -> #{idle_timeout := pos_integer(), keep_alive_interval := pos_integer()}.
+liveness_opts() ->
+    #{idle_timeout        => env(quic_idle_timeout_ms, 2000),
+      keep_alive_interval => env(quic_keepalive_ms, 500)}.

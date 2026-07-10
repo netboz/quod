@@ -51,6 +51,7 @@
         }
       ],
       "title": "Nodes up",
+      "description": "How many nodes are currently running across the whole fleet.",
       "type": "stat"
     },
     {
@@ -103,6 +104,7 @@
         }
       ],
       "title": "Namespaces",
+      "description": "How many distinct ontologies the fleet is currently hosting.",
       "type": "stat"
     },
     {
@@ -150,6 +152,7 @@
         }
       ],
       "title": "View size (peers per node)",
+      "description": "How many peers each node currently knows about for this ontology - its membership 'view'. It should settle to a steady value once the network converges.",
       "type": "timeseries"
     },
     {
@@ -197,6 +200,7 @@
         }
       ],
       "title": "Live links (per node)",
+      "description": "How many peers each node has an open network connection to right now.",
       "type": "timeseries"
     },
     {
@@ -244,6 +248,7 @@
         }
       ],
       "title": "Uniform sample size",
+      "description": "How many peers are in each node's small random sample. Nodes gossip with this sample so every peer is contacted fairly, however it was discovered.",
       "type": "timeseries"
     },
     {
@@ -292,6 +297,7 @@
         }
       ],
       "title": "Gossip rounds / min",
+      "description": "How many peer-gossip rounds each node runs per minute - how often it refreshes who it knows about.",
       "type": "timeseries"
     },
     {
@@ -339,6 +345,7 @@
         }
       ],
       "title": "Evictions / min (dead peers crossed out by sample validation)",
+      "description": "How many unreachable peers each node drops per minute after they fail a reachability check. A low steady rate is normal churn; a spike means peers are disappearing.",
       "type": "timeseries"
     },
     {
@@ -391,6 +398,7 @@
         }
       ],
       "title": "Total evicted (fleet)",
+      "description": "Total unreachable peers dropped across the fleet since the nodes started.",
       "type": "stat"
     },
     {
@@ -437,7 +445,8 @@
           "legendFormat": "{{node}} / {{namespace}}"
         }
       ],
-      "title": "Tombstone entries per node (bounded \u2014 drains to 0)",
+      "title": "Tombstone entries per node (bounded — drains to 0)",
+      "description": "Peers just marked dead and remembered briefly so they are not immediately re-added. Temporary - this should drain back to zero.",
       "type": "timeseries"
     },
     {
@@ -445,7 +454,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "KMV (k-minimum-values) estimate of the live network size, per node (quod_brahms_estimated_n = distinct ids seen in the windowed sketch + self). The dashed reference is the actual fleet size sum(quod_up). A node reading below actual is not observing all peers via recent gossip (the sketch is windowed, unlike the sticky view/sample).",
+      "description": "Each node's estimate of how many nodes are in the whole network, compared with the actual fleet size (the dashed line). A node reading below the actual size is not yet seeing all of its peers through recent gossip.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -528,7 +537,7 @@
           "refId": "B"
         }
       ],
-      "title": "Estimated network size n\u0302 (per node) vs actual",
+      "title": "Estimated network size n̂ (per node) vs actual",
       "type": "timeseries"
     }
   ],
@@ -544,7 +553,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "quod \u2014 Brahms membership",
+  "title": "quod — Brahms membership",
   "uid": "quod-brahms",
   "version": 6
 }

@@ -86,7 +86,7 @@ terminate(_Reason, _State) -> ok.
 %% at declare time rather than threaded through every set/observe/inc. `declare` is idempotent.
 declare(NodeId) ->
     CL = #{node_id => NodeId},
-    _ = prometheus_gauge:declare([{name, quod_up}, {help, "1 while the quod node is up"},
+    _ = prometheus_gauge:declare([{name, quod_up}, {help, "1 while this node is running (0 or missing means it is down)."},
                                   {constant_labels, CL}]),
     G = fun(Name, Help) ->
             prometheus_gauge:declare([{name, Name}, {help, Help}, {labels, [namespace]},
@@ -96,50 +96,51 @@ declare(NodeId) ->
             prometheus_histogram:declare([{name, Name}, {help, Help}, {labels, [namespace]},
                                           {buckets, Buckets}, {constant_labels, CL}])
         end,
-    %% Brahms overlay
-    _ = G(quod_brahms_view_size,   "Brahms view size per namespace"),
-    _ = G(quod_brahms_sample_size, "Brahms uniform sample size per namespace"),
-    _ = G(quod_brahms_links,       "Live cached links to peers per namespace"),
-    _ = G(quod_brahms_rounds,      "Brahms rounds driven per namespace"),
-    _ = G(quod_brahms_evictions,   "Dead peers evicted by sample validation per namespace (cumulative)"),
-    _ = G(quod_brahms_tombstones,  "Current tombstone entries per namespace (bounded; drains to 0)"),
-    _ = G(quod_brahms_estimated_n, "Estimated network size n-hat per namespace (KMV; exact below k)"),
-    %% consensus (m:quod_simplex)
-    _ = G(quod_consensus_slot,            "Height: index of the last block"),
-    _ = G(quod_consensus_committed,       "Highest committed slot"),
-    _ = G(quod_consensus_last_applied,    "Highest applied slot"),
-    _ = G(quod_consensus_committee_size,  "Committee (validator set) size"),
-    _ = G(quod_consensus_appends,         "Appends accepted as leader (cumulative)"),
-    _ = G(quod_consensus_commits,         "Blocks committed + applied (cumulative)"),
-    _ = G(quod_consensus_submitted,       "Append attempts (cumulative)"),
-    _ = G(quod_consensus_skips,           "Complaint-skipped (noop) slots (cumulative)"),
-    _ = G(quod_consensus_pending,         "In-flight appends awaiting commit"),
-    _ = G(quod_consensus_append_busy,     "Appends rejected: a proposal already in flight (cumulative)"),
-    _ = G(quod_consensus_append_redirect, "Appends redirected: not this slot's leader / not a member (cumulative)"),
-    _ = G(quod_consensus_append_bad,      "Appends rejected: unacceptable change (cumulative)"),
-    _ = G(quod_consensus_membership_rejects, "Membership proposals a KB verdict rejected as invalid (cumulative)"),
-    %% fact engine (m:quod_prolog)
-    _ = G(quod_prolog_applied,       "Highest applied block index (fact engine)"),
-    _ = G(quod_prolog_applies,       "Blocks applied to the kb (cumulative)"),
-    _ = G(quod_prolog_rejects,       "Blocks rejected by the apply-time OCC check (cumulative)"),
-    _ = G(quod_prolog_proves,        "Read proofs served (cumulative)"),
-    _ = G(quod_prolog_conflicts,     "OCC conflicts detected (cumulative)"),
-    _ = G(quod_prolog_parked,        "Writes parked awaiting commit"),
-    _ = G(quod_prolog_park_timeouts, "Parked writes reaped by TTL (cumulative)"),
-    %% dissemination feed (m:quod_feed)
-    _ = G(quod_feed_pushed,   "Local commits originated onto the feed (cumulative)"),
-    _ = G(quod_feed_ingested, "Gossiped blocks verified + applied + relayed (cumulative)"),
-    _ = G(quod_feed_pulled,   "Anti-entropy pull rounds started (cumulative)"),
+    %% Peer discovery (how this node finds and tracks other nodes hosting the same ontology)
+    _ = G(quod_brahms_view_size,   "How many peers this node currently knows about for this ontology."),
+    _ = G(quod_brahms_sample_size, "How many of those peers are in this node's small random sample used to gossip fairly."),
+    _ = G(quod_brahms_links,       "How many peers this node currently has an open connection to for this ontology."),
+    _ = G(quod_brahms_rounds,      "How many peer-gossip rounds this node has run for this ontology (running total)."),
+    _ = G(quod_brahms_evictions,   "How many peers this node has dropped after finding them unreachable (running total)."),
+    _ = G(quod_brahms_tombstones,  "Peers just marked dead and remembered briefly so they are not re-added (temporary; returns to 0)."),
+    _ = G(quod_brahms_estimated_n, "This node's estimate of how many nodes are in the whole network for this ontology."),
+    %% Consensus (agreeing on the ordered ledger of changes for this ontology)
+    _ = G(quod_consensus_slot,            "The height of this ontology's ledger: the number of the most recent block."),
+    _ = G(quod_consensus_committed,       "The height of the last block that is final and permanent."),
+    _ = G(quod_consensus_last_applied,    "The height of the last block whose changes have been written into this node's database."),
+    _ = G(quod_consensus_committee_size,  "How many nodes are on the committee that votes on changes to this ontology."),
+    _ = G(quod_consensus_appends,         "How many changes this node has proposed while acting as the leader (running total)."),
+    _ = G(quod_consensus_commits,         "How many blocks have been finalised and applied (running total)."),
+    _ = G(quod_consensus_submitted,       "How many change requests have been submitted at this node (running total)."),
+    _ = G(quod_consensus_skips,           "How many ledger slots were skipped because a leader did not produce a block in time (running total)."),
+    _ = G(quod_consensus_pending,         "How many submitted changes are waiting to be finalised right now."),
+    _ = G(quod_consensus_append_busy,     "Change requests turned away because this node was already busy finalising one (running total)."),
+    _ = G(quod_consensus_append_redirect, "Change requests sent to the wrong node (not the current leader) and redirected (running total)."),
+    _ = G(quod_consensus_append_bad,      "Change requests rejected as malformed or not allowed (running total)."),
+    _ = G(quod_consensus_membership_rejects, "Proposed committee changes (adding or removing a voting node) that this node checked against its own data and rejected as invalid (running total)."),
+    %% Knowledge base (this node's copy of the ontology's facts)
+    _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
+    _ = G(quod_prolog_applies,       "How many blocks have been written into the knowledge base (running total)."),
+    _ = G(quod_prolog_rejects,       "Finalised changes that were not written because the data they relied on had changed in the meantime (running total)."),
+    _ = G(quod_prolog_proves,        "How many read queries this node has answered (running total)."),
+    _ = G(quod_prolog_conflicts,     "How many times a finalised change clashed with newer data and was skipped (running total)."),
+    _ = G(quod_prolog_parked,        "How many write requests are waiting here for their change to be finalised right now."),
+    _ = G(quod_prolog_park_timeouts, "Write requests that gave up waiting because their change never finalised (running total)."),
+    %% Spreading finalised blocks to the wider network (gossip)
+    _ = G(quod_feed_pushed,   "Blocks this node finalised and started spreading to the rest of the network (running total)."),
+    _ = G(quod_feed_ingested, "Blocks received from other nodes, checked, applied, and passed along (running total)."),
+    _ = G(quod_feed_pulled,   "How many times this node asked peers to send blocks it was missing (running total)."),
     _ = prometheus_gauge:declare([{name, quod_feed_dropped},
-                                  {help, "Gossiped blocks dropped by reason (cumulative): duplicate = benign loop-"
-                                         "suppressed redundancy, gap = re-pulled by anti-entropy, unverified = bad "
-                                         "cert (the one to watch), non_following/oversized/ingest_busy"},
+                                  {help, "Blocks received from peers that this node dropped, grouped by reason (running total). "
+                                         "duplicate = already had it (harmless); gap = arrived out of order, fetched again later; "
+                                         "unverified = failed its proof-of-agreement check (the one to watch); "
+                                         "non_following / oversized / ingest_busy = other reasons."},
                                   {labels, [namespace, reason]}, {constant_labels, CL}]),
-    %% per-transaction (LIVE {committed,Ns} event)
-    _ = H(quod_tx_commit_latency_ms, "Submit-to-commit latency per transaction (ms)", ?LAT_BUCKETS),
-    _ = H(quod_tx_diff_ops,          "Asserts+retracts per committed transaction",    ?DIFF_BUCKETS),
+    %% Per-change timing and size
+    _ = H(quod_tx_commit_latency_ms, "How long each change took from being submitted to being finalised, in milliseconds.", ?LAT_BUCKETS),
+    _ = H(quod_tx_diff_ops,          "How many facts each finalised change added or removed.",    ?DIFF_BUCKETS),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
-                                    {help, "Committed transactions by submitting node"},
+                                    {help, "Finalised changes, grouped by the node that submitted them (running total)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
     ok.
 

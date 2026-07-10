@@ -18,37 +18,55 @@ Layout, under `DataDir/<base64url(Ns)>/`:
 
 Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` with
 `Payload = term_to_binary(Entry, [deterministic])` and `CRC = erlang:crc32(Payload)`.
-The in-memory index (`#store.idx`: `index => {Offset, PayloadLen}`) is rebuilt by
-scanning `log.0001` at `open/2`; a truncated final frame (a crash mid-append that
-never `fsync`'d) is detected by the length/CRC check and trimmed, which is safe
-because such an entry was never acknowledged. `open_ro/2` opens a concurrent,
-**non-truncating** read-only view for the catch-up/feed server, bounding the
-readable tail at the last complete contiguous entry.
+Entries are strictly contiguous **from index 1** — a compacted log starting higher is
+deliberately unsupported until compaction lands WITH its committee checkpoint
+(`doc/deferred.md` §3); until then a log not starting at 1 is treated as corruption.
+
+The in-memory index is **sparse**: one 8-byte file offset per `?CP_INTERVAL` entries
+(`#store.cps`, a flat binary, ~32 KB per MILLION slots — the handle's heap cost is
+effectively height-independent, unlike the ~54 B/slot map it replaced), rebuilt by
+scanning `log.0001` at `open/2`. A read seeks to the nearest checkpoint, hops frame
+headers to its target, then **streams** frames through one chunked cursor
+(`next_frame/2`: `?READ_CHUNK`-sized preads, payloads sliced as zero-copy sub-binaries),
+verifying each frame's CRC AND that the decoded entry's index is the one expected — any
+drift (bit-rot, a bad checkpoint) raises `{corrupt_entry, ...}`, never a silently wrong
+block. A frame length over `?MAX_FRAME_BYTES` is rejected before any allocation.
+
+At `open/2` a truncated FINAL frame (a crash mid-append that never `fsync`'d) is
+trimmed, which is safe because such an entry was never acknowledged. Corruption that is
+provably interior (an intact frame follows it) fail-stops, and a real `pread` I/O error
+fail-stops too — committed entries are never silently discarded on either. `open_ro/2`
+opens a concurrent, **non-truncating** read-only view for the catch-up/feed server,
+bounding the readable tail at the last complete contiguous entry.
 
 Snapshots/compaction are deferred (`doc/deferred.md` §3); nothing compacts yet, so
-the full log always reloads.
+the full log always rescans at open.
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, open_ro/2, close/1, load/1,
-         append/2, read_at/2, read_range/3, last/1]).
+-export([open/2, open_ro/2, close/1,
+         append/2, read_at/2, read_range/3, fold/5, last/1]).
 
 -export_type([handle/0]).
 
 -define(MAGIC, 16#915106AA).
--define(HDR_BYTES, 12).   %% Magic:32 ++ Len:32 ++ CRC:32
+-define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
+-define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
+-define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
+-define(MAX_FRAME_BYTES, (64 * 1024 * 1024)).  %% sanity cap on a frame's length field — a corrupted
+                                               %% Len must never drive a giant pread allocation
 
 -record(store, {dir         :: file:filename_all(),
                 ns          :: binary(),
                 log_fd      :: file:io_device(),
-                idx = #{}   :: #{log_index() => {Offset     :: non_neg_integer(),
-                                                 PayloadLen :: non_neg_integer()}},
+                cps = <<>>  :: binary(),          %% sparse index: the K-th 8-byte word is the file
+                                                  %% offset of entry `1 + K*?CP_INTERVAL`
                 last_index  = 0 :: log_index(),
                 base_offset = 0 :: non_neg_integer()}).   %% next append offset (== log file size)
 -opaque handle() :: #store{}.
 
 %%%===================================================================
-%%% open / close / load
+%%% open / close
 %%%===================================================================
 
 -doc "Open (creating if needed) the on-disk store for `Ns` under `DataDir`.".
@@ -58,16 +76,16 @@ open(Ns, DataDir) ->
     ok = filelib:ensure_path(Dir),
     LogPath = filename:join(Dir, "log.0001"),
     {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
-    {Idx, LastI, BaseOff} = scan_log(Fd),
-    {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, idx = Idx,
+    {Cps, LastI, BaseOff} = scan(Fd, trim),
+    {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                 last_index = LastI, base_offset = BaseOff}}.
 
 -doc """
 Open a READ-ONLY handle for a concurrent reader (the catch-up/feed server) alongside the live writer.
 NEVER truncates: a torn / short / discontinuous tail — a frame the writer is mid-appending — simply
 bounds the readable index, so the reader sees up to the last complete, CRC-valid, contiguous entry.
-`read_at`, `read_range`, `last` work on it unchanged; do NOT `append` through it. Errors if the log
-does not exist yet.
+`read_at`, `read_range`, `fold`, `last` work on it unchanged; do NOT `append` through it. Errors if
+the log does not exist yet.
 """.
 -spec open_ro(binary(), file:filename_all()) -> {ok, handle()} | {error, no_log | term()}.
 open_ro(Ns, DataDir) ->
@@ -75,8 +93,8 @@ open_ro(Ns, DataDir) ->
     case file:open(filename:join(Dir, "log.0001"), [read, raw, binary]) of
         {ok, Fd} ->
             try
-                {Idx, LastI, BaseOff} = scan_ro(Fd, 0, #{}, 0),
-                {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, idx = Idx,
+                {Cps, LastI, BaseOff} = scan(Fd, stop),
+                {ok, #store{dir = Dir, ns = Ns, log_fd = Fd, cps = Cps,
                             last_index = LastI, base_offset = BaseOff}}
             catch C:R ->
                 _ = file:close(Fd),   %% never leak the fd if the scan throws (e.g. a garbage term)
@@ -90,12 +108,6 @@ open_ro(Ns, DataDir) ->
 -spec close(handle()) -> ok.
 close(#store{log_fd = Fd}) -> _ = file:close(Fd), ok.
 
--doc "Reload the durable state `m:quod_simplex` rebuilds from: the full committed block log.".
--spec load(handle()) -> #{log := [#entry{}]}.
-load(S = #store{last_index = LastI}) ->
-    {ok, Log} = read_range(S, 1, LastI),
-    #{log => Log}.
-
 %%%===================================================================
 %%% append
 %%%===================================================================
@@ -107,50 +119,72 @@ batch; returns only after it completes (the entries are durable before
 """.
 -spec append(handle(), [#entry{}]) -> {ok, handle()}.
 append(S, []) -> {ok, S};
-append(S = #store{log_fd = Fd, base_offset = Off0, idx = Idx0, last_index = LI0}, Entries) ->
+append(S = #store{log_fd = Fd, base_offset = Off0, cps = Cps0, last_index = LI0}, Entries) ->
     ok = assert_contiguous(LI0, Entries),
-    {Off1, Idx1, LI1} =
+    {Off1, Cps1, LI1} =
         lists:foldl(
-          fun(E = #entry{index = I}, {Off, Idx, _LI}) ->
+          fun(E = #entry{index = I}, {Off, Cps, _LI}) ->
                   Payload = term_to_binary(E, [deterministic]),
                   Frame   = frame(Payload),
                   ok = file:pwrite(Fd, Off, Frame),
-                  {Off + byte_size(Frame), Idx#{I => {Off, byte_size(Payload)}}, I}
-          end, {Off0, Idx0, LI0}, Entries),
+                  {Off + byte_size(Frame), checkpoint(I, Off, Cps), I}
+          end, {Off0, Cps0, LI0}, Entries),
     ok = file:datasync(Fd),
-    {ok, S#store{base_offset = Off1, idx = Idx1, last_index = LI1}}.
+    {ok, S#store{base_offset = Off1, cps = Cps1, last_index = LI1}}.
+
+%% Record entry `I`'s frame offset in the sparse index when it opens a checkpoint stride
+%% (entries are contiguous from 1, so strides begin at 1, 257, 513, …).
+checkpoint(I, Off, Cps) when I rem ?CP_INTERVAL =:= 1 -> <<Cps/binary, Off:64>>;
+checkpoint(_I, _Off, Cps)                             -> Cps.
 
 %%%===================================================================
 %%% reads
 %%%===================================================================
 
--doc "Read the entry at `Index`, verifying its CRC.".
+-doc "Read the entry at `Index`, verifying its CRC and its identity (`#entry.index =:= Index`).".
 -spec read_at(handle(), pos_integer()) -> {ok, #entry{}} | not_found.
-read_at(#store{log_fd = Fd, idx = Idx}, Index) ->
-    case maps:get(Index, Idx, undefined) of
-        undefined -> not_found;
-        {Off, PayloadLen} ->
-            {ok, Frame} = file:pread(Fd, Off, ?HDR_BYTES + PayloadLen),
-            case unframe(Frame) of
-                {ok, Payload, _} -> {ok, binary_to_term(Payload)};
-                {error, R}       -> error({corrupt_entry, Index, R})
-            end
+read_at(#store{last_index = LI}, Index) when Index < 1; Index > LI -> not_found;
+read_at(S, Index) ->
+    {ok, [E]} = read_range(S, Index, Index),
+    {ok, E}.
+
+-doc """
+Read entries `From..To` (clamped to the live tail), in index order — one checkpoint
+seek, then a sequential streamed read. Each entry is CRC- and index-verified; a
+mismatch raises `{corrupt_entry, Index, Why}` rather than ever returning a wrong block.
+""".
+-spec read_range(handle(), pos_integer(), log_index()) -> {ok, [#entry{}]}.
+read_range(S = #store{last_index = LI}, From, To0) ->
+    case min(To0, LI) of
+        To when From > To -> {ok, []};
+        To -> {ok, lists:reverse(fold(S, From, To, fun(E, Acc) -> [E | Acc] end, []))}
     end.
 
 -doc """
-Read entries `From..To` (clamped to the live tail), in index order. The live log
-is contiguous, so a missing index in range is corruption, not an empty slot:
-`read_range` raises rather than silently returning a short list.
+Fold `Fun` over the committed entries `From..To` in index order, STREAMING the log
+through the chunked cursor — bounded memory no matter the range (the boot committee
+re-fold and the KB replay run through here). `To` past the live tail is an ERROR, not a
+silent partial fold: a caller that believes more is committed than the store holds must
+fail loudly (`{fold_beyond_tail, To, Last}`), never act on a truncated view.
 """.
--spec read_range(handle(), pos_integer(), log_index()) -> {ok, [#entry{}]}.
-read_range(_S, From, To) when From > To -> {ok, []};
-read_range(S = #store{last_index = LI}, From, To0) ->
-    To = min(To0, LI),
-    Es = [case read_at(S, I) of
-              {ok, E}   -> E;
-              not_found -> error({log_gap, I, From, To})
-          end || I <- lists:seq(From, To)],
-    {ok, Es}.
+-spec fold(handle(), pos_integer(), log_index(), fun((#entry{}, Acc) -> Acc), Acc) -> Acc
+              when Acc :: term().
+fold(_S, From, To, _Fun, Acc) when From > To -> Acc;
+fold(#store{last_index = LI}, _From, To, _Fun, _Acc) when To > LI ->
+    error({fold_beyond_tail, To, LI});
+fold(S = #store{log_fd = Fd}, From, To, Fun, Acc) ->
+    fold_run(Fd, {locate(S, From), <<>>}, From, To, Fun, Acc).
+
+fold_run(_Fd, _Cur, I, To, _Fun, Acc) when I > To -> Acc;
+fold_run(Fd, Cur, I, To, Fun, Acc) ->
+    case next_frame(Fd, Cur) of
+        {frame, Payload, Cur1} ->
+            case binary_to_term(Payload) of
+                #entry{index = I} = E -> fold_run(Fd, Cur1, I + 1, To, Fun, Fun(E, Acc));
+                #entry{index = J}     -> error({corrupt_entry, I, {wrong_index, J}})
+            end;
+        {stop, Why, At} -> error({corrupt_entry, I, {Why, At}})
+    end.
 
 -doc "The `LastIndex` of the live tail (0 if empty).".
 -spec last(handle()) -> log_index().
@@ -168,84 +202,122 @@ base64url(Bin) ->
 frame(Payload) ->
     <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>.
 
-%% Parse one frame from the head of `Bin`. Returns the payload + the rest, or an
-%% error (bad magic / short / CRC mismatch — i.e. a torn or corrupt frame).
-unframe(<<?MAGIC:32, Len:32, CRC:32, Rest/binary>>) when byte_size(Rest) >= Len ->
-    <<Payload:Len/binary, Tail/binary>> = Rest,
-    case erlang:crc32(Payload) of
-        CRC -> {ok, Payload, Tail};
-        _   -> {error, bad_crc}
-    end;
-unframe(<<?MAGIC:32, _/binary>>) -> {error, short};
-unframe(_)                       -> {error, bad_magic}.
+%% The file offset of entry `I` (the caller has bounds-checked `1 =< I =< last_index`): jump
+%% to the nearest checkpoint at or below `I`, then hop frame headers forward — headers only,
+%% no payload reads. At most `?CP_INTERVAL - 1` hops.
+locate(#store{log_fd = Fd, cps = Cps}, I) ->
+    K = (I - 1) div ?CP_INTERVAL,
+    <<_:K/binary-unit:64, Off:64, _/binary>> = Cps,
+    skip_frames(Fd, Off, (I - 1) rem ?CP_INTERVAL).
 
-%% Scan the whole log from offset 0, building the index. A torn final frame
-%% (incomplete header/payload or bad CRC) is trimmed by truncating the file.
-scan_log(Fd) ->
-    {ok, 0} = file:position(Fd, 0),
-    scan_log(Fd, 0, #{}, 0).
-
-scan_log(Fd, Off, Idx, LastI) ->
+skip_frames(_Fd, Off, 0) -> Off;
+skip_frames(Fd, Off, N) ->
     case file:pread(Fd, Off, ?HDR_BYTES) of
-        eof ->
-            {Idx, LastI, Off};
-        {ok, <<?MAGIC:32, Len:32, _CRC:32>> = Hdr} ->
-            case file:pread(Fd, Off + ?HDR_BYTES, Len) of
-                {ok, Payload} when byte_size(Payload) =:= Len ->
-                    case unframe(<<Hdr/binary, Payload/binary>>) of
-                        {ok, P, _} ->
-                            #entry{index = I} = binary_to_term(P),
-                            %% A CRC-valid frame at the wrong index (non-contiguous / out-of-order)
-                            %% means the segment is corrupt from here on — trim it as a torn tail
-                            %% rather than building an index with a gap/dup. The first live entry
-                            %% (empty Idx) is accepted as-is so a future compacted log starting above
-                            %% 1 still loads.
-                            case map_size(Idx) =:= 0 orelse I =:= LastI + 1 of
-                                true ->
-                                    Next = Off + ?HDR_BYTES + Len,
-                                    scan_log(Fd, Next, Idx#{I => {Off, Len}}, I);
-                                false ->
-                                    trim_or_fail(Fd, Off, Idx, LastI, {discontinuity, I})
-                            end;
-                        {error, Reason} ->
-                            trim_or_fail(Fd, Off, Idx, LastI, Reason)   %% bad CRC
-                    end;
-                _ ->
-                    trim(Fd, Off, Idx, LastI)           %% short payload: torn tail
-            end;
-        {ok, _Partial} ->
-            trim(Fd, Off, Idx, LastI);                  %% short/garbage header
-        {error, _} ->
-            trim(Fd, Off, Idx, LastI)
+        {ok, <<?MAGIC:32, Len:32, _CRC:32>>} when Len =< ?MAX_FRAME_BYTES ->
+            skip_frames(Fd, Off + ?HDR_BYTES + Len, N - 1);
+        Other -> error({corrupt_log, Off, Other})
     end.
 
-trim(Fd, Off, Idx, LastI) ->
+%%%===================================================================
+%%% the frame cursor — every reader walks frames through here
+%%%===================================================================
+
+%% A cursor is `{Off, Buf}`: `Buf` holds the file's bytes starting at absolute offset `Off`
+%% (possibly none/partial; refilled in ?READ_CHUNK slabs, so sequential consumers cost ~one
+%% pread per few hundred frames instead of two per frame). next_frame/2 parses the frame at
+%% the cursor: `{frame, Payload, Cursor'}` with `Payload` a zero-copy sub-binary, or
+%% `{stop, Why, Off}` — `eof` (clean end exactly at Off) | `short` (torn: bytes exist but
+%% not a whole frame) | `bad_magic` | `bad_crc` | `{frame_too_big, Len}` | `{io_error, R}`.
+%% The framing rules live exactly once, here; the scans and reads only dispatch on `Why`.
+next_frame(Fd, {Off, Buf0}) ->
+    case fill(Fd, Off, Buf0, ?HDR_BYTES) of
+        {short, <<>>} -> {stop, eof, Off};
+        {short, _}    -> {stop, short, Off};
+        {io_error, R} -> {stop, {io_error, R}, Off};
+        {ok, Buf1} ->
+            case Buf1 of
+                <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
+                    {stop, {frame_too_big, Len}, Off};
+                <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
+                    case fill(Fd, Off, Buf1, ?HDR_BYTES + Len) of
+                        {short, _}    -> {stop, short, Off};
+                        {io_error, R} -> {stop, {io_error, R}, Off};
+                        {ok, Buf2} ->
+                            <<_:?HDR_BYTES/binary, Payload:Len/binary, Tail/binary>> = Buf2,
+                            case erlang:crc32(Payload) of
+                                CRC -> {frame, Payload, {Off + ?HDR_BYTES + Len, Tail}};
+                                _   -> {stop, bad_crc, Off}
+                            end
+                    end;
+                _ -> {stop, bad_magic, Off}
+            end
+    end.
+
+%% Grow `Buf` (the bytes at `Off`) to at least `Need` bytes with one ?READ_CHUNK-or-bigger
+%% pread. `{short, Buf'}` = the file ends before `Need` bytes (pread returns short only at EOF).
+fill(_Fd, _Off, Buf, Need) when byte_size(Buf) >= Need -> {ok, Buf};
+fill(Fd, Off, Buf, Need) ->
+    case file:pread(Fd, Off + byte_size(Buf), max(?READ_CHUNK, Need - byte_size(Buf))) of
+        {ok, More} ->
+            Buf1 = <<Buf/binary, More/binary>>,
+            case byte_size(Buf1) >= Need of
+                true  -> {ok, Buf1};
+                false -> {short, Buf1}
+            end;
+        eof        -> {short, Buf};
+        {error, R} -> {io_error, R}
+    end.
+
+%%%===================================================================
+%%% the open-time scan (index rebuild + tail recovery)
+%%%===================================================================
+
+%% Walk the whole log from offset 0, rebuilding the sparse checkpoint index and checking
+%% contiguity from index 1. `Mode` decides what a bad tail does: the WRITER (`trim`)
+%% recovers/fail-stops; a READ-ONLY view (`stop`) only bounds itself — it must never
+%% mutate the live writer's file.
+scan(Fd, Mode) -> scan(Fd, {0, <<>>}, <<>>, 0, Mode).
+
+scan(Fd, Cur = {Off, _}, Cps, LastI, Mode) ->
+    case next_frame(Fd, Cur) of
+        {frame, Payload, Cur1} ->
+            #entry{index = I} = binary_to_term(Payload),
+            %% A CRC-valid frame at the wrong index — including a first frame that is not
+            %% index 1 — means the segment is corrupt from here on (see the moduledoc:
+            %% base-above-1 logs are unsupported until compaction lands with its committee
+            %% checkpoint), so it is handled as bad, never silently indexed.
+            case I =:= LastI + 1 of
+                true  -> scan(Fd, Cur1, checkpoint(I, Off, Cps), I, Mode);
+                false -> scan_bad(Fd, Off, Cps, LastI, {discontinuity, I}, Mode)
+            end;
+        {stop, eof, EndOff} -> {Cps, LastI, EndOff};
+        {stop, short, At}   -> scan_torn(Fd, At, Cps, LastI, Mode);
+        {stop, {io_error, R}, At} -> scan_io_error(At, Cps, LastI, R, Mode);
+        {stop, Why, At}     -> scan_bad(Fd, At, Cps, LastI, Why, Mode)   %% bad_magic | bad_crc | frame_too_big
+    end.
+
+%% A SHORT frame (incomplete header/payload at EOF) is the torn tail of a crashed append:
+%% the writer trims it (it was never acknowledged); a reader bounds its view before it.
+scan_torn(Fd, Off, Cps, LastI, trim)  -> trim(Fd, Off, Cps, LastI);
+scan_torn(_Fd, Off, Cps, LastI, stop) -> {Cps, LastI, Off}.
+
+%% A WELL-SIZED but invalid frame (bad magic/CRC, insane length, wrong index): a torn tail
+%% if nothing intact follows, interior corruption (fail-stop) if a frame does — the peek in
+%% trim_or_fail decides. This is what keeps committed entries from being silently discarded.
+scan_bad(Fd, Off, Cps, LastI, Why, trim)   -> trim_or_fail(Fd, Off, Cps, LastI, Why);
+scan_bad(_Fd, Off, Cps, LastI, _Why, stop) -> {Cps, LastI, Off}.
+
+%% A pread I/O ERROR is neither a torn tail nor provable corruption — NEVER truncate on it
+%% (a transient eio must not discard durably-committed entries): the writer's open fails
+%% loudly and the supervisor retries. A read-only view just bounds itself.
+scan_io_error(Off, _Cps, _LastI, R, trim) -> error({log_io_error, Off, R});
+scan_io_error(Off, Cps, LastI, _R, stop)  -> {Cps, LastI, Off}.
+
+trim(Fd, Off, Cps, LastI) ->
     {ok, _} = file:position(Fd, Off),
     ok = file:truncate(Fd),
     ok = file:datasync(Fd),
-    {Idx, LastI, Off}.
-
-%% Read-only, NON-TRUNCATING scan (for open_ro): the same framing + contiguity checks as scan_log, but
-%% STOP at the first torn / short / bad-CRC / discontinuous frame — bounding the readable tail — instead
-%% of truncating the file or fail-stopping. A concurrent reader must never mutate the live writer's log.
-scan_ro(Fd, Off, Idx, LastI) ->
-    case file:pread(Fd, Off, ?HDR_BYTES) of
-        {ok, <<?MAGIC:32, Len:32, _CRC:32>> = Hdr} ->
-            case file:pread(Fd, Off + ?HDR_BYTES, Len) of
-                {ok, Payload} when byte_size(Payload) =:= Len ->
-                    case unframe(<<Hdr/binary, Payload/binary>>) of
-                        {ok, P, _} ->
-                            #entry{index = I} = binary_to_term(P),
-                            case map_size(Idx) =:= 0 orelse I =:= LastI + 1 of
-                                true  -> scan_ro(Fd, Off + ?HDR_BYTES + Len, Idx#{I => {Off, Len}}, I);
-                                false -> {Idx, LastI, Off}   %% discontinuity ⇒ stop
-                            end;
-                        {error, _} -> {Idx, LastI, Off}       %% bad CRC / torn ⇒ stop
-                    end;
-                _ -> {Idx, LastI, Off}                        %% short payload ⇒ stop
-            end;
-        _ -> {Idx, LastI, Off}                                %% eof / short header ⇒ stop
-    end.
+    {Cps, LastI, Off}.
 
 %% A frame at `Off` failed its integrity/contiguity check. A crash mid-append can only
 %% damage the FINAL frame, so if a well-formed frame appears anywhere AFTER this one, this
@@ -256,16 +328,16 @@ scan_ro(Fd, Off, Idx, LastI) ->
 %% length field, so a corrupt length can't make the peek miss the next frame. A coincidental
 %% magic in payload bytes only over-triggers fail-stop on a genuine torn tail — conservative
 %% (recover from peers), never data loss.
-trim_or_fail(Fd, Off, Idx, LastI, Reason) ->
+trim_or_fail(Fd, Off, Cps, LastI, Reason) ->
     {ok, Size} = file:position(Fd, eof),
     From = Off + 4,   %% skip this frame's own magic
     case From < Size andalso file:pread(Fd, From, Size - From) of
         {ok, Tail} ->
             case binary:match(Tail, <<?MAGIC:32>>) of
-                nomatch -> trim(Fd, Off, Idx, LastI);            %% nothing follows ⇒ torn tail
+                nomatch -> trim(Fd, Off, Cps, LastI);            %% nothing follows ⇒ torn tail
                 _       -> error({log_corruption, Reason, Off})  %% a frame follows ⇒ interior
             end;
-        _ -> trim(Fd, Off, Idx, LastI)                          %% at EOF ⇒ torn tail
+        _ -> trim(Fd, Off, Cps, LastI)                          %% at EOF ⇒ torn tail
     end.
 
 assert_contiguous(LastI, Entries) ->

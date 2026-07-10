@@ -457,6 +457,7 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
 -define(JOIN_KICK_MS, 500).  %% mode=join: delay before (re)trying catch-up, so the catchup sibling is up first
 -define(JOIN_WINDOW,  256).  %% mode=join: entries requested per catch-up fetch (matches the server's block cap)
 -define(SINK_MS,     30000). %% mode=join: budget for one sink window (store append + KB replay) — generous
+-define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
 
 -record(s, {ns           :: binary(),
@@ -582,10 +583,10 @@ signing_key(Cfg) ->
     end.
 
 %% Restart reloads durable state: re-derive the committee by folding the `peer_admitted` asserts/retracts
-%% out of the committed log's transaction diffs (`log_projection/2`, which also recovers the timestamp
-%% floor `last_ts` in the same pass), and take the last index. The
-%% blocks themselves are NOT kept in RAM — the store is the archive, quod_prolog holds the KB projection;
-%% this consensus process holds only the validator-set projection. A brand-new namespace is bootstrapped.
+%% out of the committed log's transaction diffs (`log_projection_step/2`, which also recovers the timestamp
+%% floor `last_ts` in the same pass), STREAMED from the store in bounded windows — the log is never
+%% materialized in RAM (the store is the archive, quod_prolog holds the KB projection; this consensus
+%% process holds only the validator-set projection). A brand-new namespace is bootstrapped.
 %% Re-folding the committee from the log is the accepted cost of running without a committee checkpoint;
 %% `last/1` gives the height in O(1). Both projections derive from the same committed log, so they can't drift.
 %% Derive the durable state, then decide by mode. A `join` node ALWAYS (re)enters catch-up — from slot 0 when
@@ -594,11 +595,11 @@ signing_key(Cfg) ->
 %% complete — `maybe_mark_ready` stays gated until `join=done`). A fresh `create` node founds genesis; a restarted
 %% `create` node (or an admitted member) just re-derives. Both projections come from the one committed log.
 load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
-    Base = case maps:get(log, quod_ledger_store:load(Store)) of
-               []  -> S0;   %% empty ⇒ unfounded (slot 0)
-               Log -> LastI = quod_ledger_store:last(Store),
-                      {Vs, Ts} = log_projection(Log, {[], 0}),   %% committee + monotonic bound in one pass
-                      S0#s{validators = Vs, slot = LastI, last_ts = Ts}
+    Base = case quod_ledger_store:last(Store) of
+               0     -> S0;   %% empty ⇒ unfounded (slot 0)
+               LastI -> {Vs, Ts} = quod_ledger_store:fold(Store, 1, LastI,
+                                                          fun log_projection_step/2, {[], 0}),
+                        S0#s{validators = Vs, slot = LastI, last_ts = Ts}
            end,
     case {maps:get(mode, Cfg), Base#s.slot} of
         {join,   _} -> Base#s{join = pending, genesis_hash = maps:get(genesis_hash, Cfg)};
@@ -1121,22 +1122,34 @@ apply_live(Slot, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 
     end;
 apply_live(_Slot, _Change, S) -> S.
 
-%% Apply committed-but-unapplied blocks into quod_prolog, in slot order — reading each from the store
-%% (the rebuild path; this process keeps no in-memory log). Deferred if quod_prolog is not up yet.
-%% The registry lookup is done ONCE here, not per block.
+%% Apply committed-but-unapplied blocks into quod_prolog, in slot order — STREAMED from the store
+%% (the rebuild path; this process keeps no in-memory log, and re-applying already-counted commits
+%% must not recount them). Deferred if quod_prolog is not up yet; the registry lookup is done ONCE
+%% here, not per block. apply_block is a cast by design (see quod_prolog:apply_block/3 — a sync call
+%% would deadlock the live write path), so a long replay would flood quod_prolog's mailbox with the
+%% whole log; every ?APPLY_SYNC_EVERY casts a synchronous no-op (`quod_prolog:sync/1`) drains the
+%% queue — its reply proves every prior cast was consumed, bounding the mailbox to one window.
+%% The barrier is deadlock-safe: apply_committed only runs while the KB is NOT ready
+%% (rebuild/catch-up), and an unready quod_prolog rejects proves, so it can never be parked in an
+%% `append` back into this statem. If quod_prolog dies mid-replay, the barrier exits `noproc`:
+%% stop replaying with last_applied unchanged — its restart casts `rebuild` and re-drives the gap.
 apply_committed(S = #s{last_applied = LA, slot = C}) when LA >= C -> S;
-apply_committed(S = #s{ns = Ns}) ->
+apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}) ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
-        _         -> apply_loop(S)
+        _ ->
+            try
+                _ = quod_ledger_store:fold(Store, LA + 1, C,
+                                           fun(#entry{index = I, data = Data}, N) ->
+                                               _ = safe_apply_block(Ns, I, Data),
+                                               N rem ?APPLY_SYNC_EVERY =:= 0
+                                                   andalso (ok = quod_prolog:sync(Ns)),
+                                               N + 1
+                                           end, 1),
+                S#s{last_applied = C}
+            catch exit:{noproc, _} -> S   %% quod_prolog died mid-replay; its rebuild re-drives
+            end
     end.
-
-apply_loop(S = #s{last_applied = LA, slot = C}) when LA >= C -> S;
-apply_loop(S = #s{ns = Ns, store = Store, last_applied = LA}) ->
-    I = LA + 1,
-    {ok, #entry{data = Data}} = quod_ledger_store:read_at(Store, I),
-    _ = safe_apply_block(Ns, I, Data),
-    apply_loop(S#s{last_applied = I}).   %% re-applying already-counted commits (rebuild) — don't recount
 
 safe_apply_block(Ns, I, Data) ->
     try quod_prolog:apply_block(Ns, I, Data) catch _:_ -> ok end.
@@ -1184,17 +1197,21 @@ start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = V
 
 %% Persist a verified, contiguous window (indices `slot+1..`) to the store, fold the committee across it,
 %% and replay it into quod_prolog in slot order (`apply_committed` — the same path a restart-rebuild uses).
-%% A store error aborts the window cleanly (returns `{error, _}` ⇒ the driver fails over); nothing is acked
-%% half-applied. Both projections (validator set, KB) advance together from the one appended log.
+%% An APPEND error aborts the window cleanly (returns `{error, _}` ⇒ the driver fails over); nothing is
+%% acked half-applied. The try covers ONLY the append: once the window is durable, reverting to the
+%% pre-append state on a later throw would hand the retry a STALE handle whose re-append splices over
+%% live bytes — so a post-append failure (a store read-back error in the replay) crashes the statem
+%% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
+%% Both projections (validator set, KB) advance together from the one appended log.
 apply_catchup_window([], S) -> {S, ok};
 apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
-    try quod_ledger_store:append(Store, Es) of
+    case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
+        {error, _} = Err -> {S, Err};
         {ok, Store1} ->
             {Vs1, Ts1} = log_projection(Es, {Vs, S#s.last_ts}),   %% committee + monotonic bound live in one pass
             Slot = (lists:last(Es))#entry.index,
             S1   = maybe_mark_ready(apply_committed(S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1})),
             {S1, ok}
-    catch _:R -> {S, {error, R}}
     end.
 
 local_genesis_hash(#s{store = Store}) ->
@@ -1218,13 +1235,15 @@ block_from_entry(#entry{index = I, data = D, timestamp = Ts}) ->
 %% ONE pass over a run of committed entries yielding BOTH projections we need from the log: the validator
 %% set (fold `peer_admitted` asserts/retracts through `apply_committee_delta/2`) and the monotonic
 %% timestamp floor (max block time; `noop` skips carry 0 and never lower it). Seed `{[], 0}` for a full
-%% boot re-fold, or `{RunningVs, last_ts}` for an incremental catch-up window — one definition, so the
-%% boot re-derive and the running set/bound can never drift.
+%% boot re-fold (streamed straight off the store via `quod_ledger_store:fold/5` + `log_projection_step/2`),
+%% or `{RunningVs, last_ts}` for an in-hand catch-up window — one step function, so the boot re-derive
+%% and the running set/bound can never drift.
 -spec log_projection([#entry{}], {[node_id()], non_neg_integer()}) -> {[node_id()], non_neg_integer()}.
 log_projection(Entries, Seed) ->
-    lists:foldl(fun(#entry{data = Data, timestamp = T}, {V, Ts}) ->
-                    {apply_committee_delta(Data, V), max(T, Ts)}
-                end, Seed, Entries).
+    lists:foldl(fun log_projection_step/2, Seed, Entries).
+
+log_projection_step(#entry{data = Data, timestamp = T}, {V, Ts}) ->
+    {apply_committee_delta(Data, V), max(T, Ts)}.
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). A `#transaction` folds its diff (the validator id is the 4th arg / 5th element

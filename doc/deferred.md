@@ -93,9 +93,22 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   token: empty `peer_cid_pool`, `NEW_CONNECTION_ID` never issued proactively, seq-0 reset-token TP unencoded);
   and a `quod_brahms:mark_dead/2` → `quod_quic:drop_peer/1` hook that force-kills the cached conn (patched the
   transport to paper over the missing consensus backstop — wrong altitude, and force-killing a mid-handshake
-  dial reintroduced the stuck-dial partition; the dialing sweep above is the right fix). **Clean fast-drop, if
-  wanted later:** align the vendored `quic` idle-timer with RFC §10.1 (a black-holed conn then drains in ~30 s
-  without waiting on Brahms) — a shared-library change, gate behind tests.
+  dial reintroduced the stuck-dial partition; the dialing sweep above is the right fix). **RESOLVED
+  (0.6.20):** exactly this was done. quod now builds against a SHA-pinned fork `netboz/erlang_quic` (from
+  tag 1.6.5, benoitc kept as `upstream`, branch `idle-timer-rfc9000-10.1`) that fixes the RFC 9000 §10.1
+  bug — the idle timer was refreshed on our own **sends** (`last_activity` bumped per send), so a
+  black-holed peer we kept sending to never timed out — plus a keep-alive re-arm fix (it busy-looped once
+  `last_activity` froze) and a lowered keep-alive floor (5000→250 ms). quod sets `node.idle_timeout_ms=2000`
+  / `node.keepalive_ms=500` (config, both ends — no RFC min-negotiation in this build) via one
+  `quod_quic:liveness_opts/0` → **~2.5 s** dead-peer detection (was ~80 s). Verified live: 20- and 30-node
+  fleets under mass churn (batch + mass-departure of up to 15) + ~15 tx/s; `unverified`=0 throughout.
+- **quic fork follow-ups (netboz/erlang_quic) — deferred, non-blocking.** (a) a **process-level black-hole
+  integration test** in the fork (only the pure `send_activity/4` truth-table + the clamp are unit-tested);
+  (b) two RFC §10.1 upstream nits — make the idle-timeout close **silent** (§10.1 forbids a CONNECTION_CLOSE
+  frame) and floor idle at `max(configured, 3×PTO)` in `set_idle_timer`; (c) a **catch-all** clause in
+  `calculate_keep_alive_interval/2` so a non-integer `keep_alive_interval` can't `case_clause`-crash init;
+  (d) consider **upstreaming** the §10.1 fix to benoitc. **Rejected (don't revisit):** a loss/PTO-based
+  DisconnectTimeout — it false-closes a *live* peer when only the return/ACK path drops.
 - **Stream prioritization for signaling (RFC 9218) — deferred.** quod already gives each channel its own QUIC
   stream (`{log}` consensus, `{feed}` dissemination, `{catchup}`, Brahms), so loss-induced head-of-line
   blocking between them is already avoided. But all streams on one connection share ONE congestion window, so
@@ -231,8 +244,11 @@ stages, not carried forward:
   (The Raft-shaped snapshot stub — `read_snapshot`/`write_snapshot`/`install_snapshot` + `snap_cfg` —
   has been **removed** from `quod_ledger_store` along with the rest of the Raft term/vote/truncate
   machinery; compaction will be built fresh and **committee-aware**, since the Raft `snap_cfg`
-  `[node_id()]` shape was wrong for the `peer_admitted`-derived committee anyway.) No non-voting tier
-  exists yet.
+  `[node_id()]` shape was wrong for the `peer_admitted`-derived committee anyway.) Note: the store
+  now deliberately hard-codes **base index 1** (a log starting higher is treated as corruption — the
+  earlier half-support was an untested trap), so compaction must introduce its base marker and the
+  committee checkpoint TOGETHER, plus consumers that read from `first` instead of 1. No non-voting
+  tier exists yet.
 
 **From the 2a/2b/2c reviews — mostly landed; two remain open:**
 
@@ -299,3 +315,39 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   needed: periodic re-seed from Consul.
 - **Rolling-deploy ACK compat** — new-vs-old nodes churn during a rolling upgrade (the link ACK is a
   wire change). Non-issue in dev (redeploy all at once).
+
+## 6. Per-ontology memory density (multi-tenant scaling)
+
+Measured 2026-07-09 on a live founder under ~15 tx/s (one namespace, `quod:root`): per-node **BEAM base
+~27–50 MB** (code/atoms/ETS — amortized across ALL namespaces) + **shared transport ~0.1 MB** (one
+`quod_quic` for all). Per-ONTOLOGY: brahms/feed/catchup are **negligible** (~30–50 KB each); the KB
+(`quod_prolog`) is the namespace's actual data (a test artifact here: 15.5 MB of 38k junk `assertz`
+facts). The consensus ENGINE window is bounded — `finalize/2` prunes the engine window (`eng_prune`)
+AND the per-slot support/commit/complaint sign-latches (the old "unbounded #d.log" is a retired
+Raft-era concern) — but the store handle inside `#s` was not; see below.
+
+- **~~Profile + trim the per-ontology `quod_simplex` footprint~~ — RESOLVED (diagnosed + fixed;
+  live-fleet re-measure rides the next deploy).** The "~6.5 MB post-GC, bounded" reading was wrong on
+  both counts: the fat was `quod_ledger_store`'s in-RAM **per-slot index** (`#store.idx`,
+  `index => {Offset, PayloadLen}`, measured **~54 B/slot**) held inside `#s.store` on the simplex
+  heap — it grew **with height, without bound** (6.5 MB ≈ ~120k slots, i.e. a couple of hours at
+  ~15 tx/s; ~54 MB per million slots, PER NAMESPACE). Fix: the index is now **sparse checkpoints**
+  (one 8-byte offset per 256 entries in a flat binary — ~32 KB per MILLION slots); a read seeks the
+  nearest checkpoint, hops frame headers, then STREAMS frames through one chunked cursor
+  (`next_frame/2`, 256 KiB preads, zero-copy payload slices) — every consumer (KB replay, boot
+  re-fold, catch-up windows) reads sequentially, so the per-slot map bought nothing. `load/1`, which
+  materialized the FULL decoded log at boot for the committee re-fold, is replaced by a streaming
+  `quod_ledger_store:fold/5` shared by the boot re-fold and the KB replay, and the replay drains
+  quod_prolog every 256 casts (`quod_prolog:sync/1` barrier) so a big rebuild can't re-materialize
+  the log in the KB's mailbox either. A max-effort review of the slice then hardened the trust
+  properties: the log is contiguous **from index 1** (a wrong-index head frame — the old First=0
+  sentinel hole — is now corruption, never silently indexed), every streamed frame is CRC- AND
+  index-verified (`{corrupt_entry, ...}` instead of ever returning a wrong block), `fold` past the
+  tail is a loud `{fold_beyond_tail, ...}` (a store/state height mismatch can't silently skip KB
+  replay), a pread I/O error at open fail-stops instead of truncating committed entries, a corrupt
+  frame length can't drive a giant allocation (`?MAX_FRAME_BYTES` cap), and a catch-up window that
+  fails AFTER its durable append crashes fail-loud instead of reverting to a stale handle (no
+  re-append splice). Verified: 181 eunit + 23 CT green, dialyzer clean; a real N=1 founder pumped to
+  slot 20 001 measures **5.9 KB post-GC** (whole `#s` 2.0 KB, store handle 808 B), identical after a
+  restart-from-disk re-fold — the per-ontology consensus footprint is now height-independent
+  (~1 MB at that height before, and growing).

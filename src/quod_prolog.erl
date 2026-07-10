@@ -21,7 +21,8 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, stats/1, namespaces/0]).
+-export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, sync/1,
+         stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -90,6 +91,17 @@ apply_block(Ns, Index, Change) ->
 -spec mark_ready(binary()) -> ok.
 mark_ready(Ns) -> gen_server:cast(quod_reg:via({quod_prolog, Ns}), mark_ready).
 
+-doc """
+Synchronous no-op barrier: returns once every message already in this kb's queue — in
+particular a burst of `apply_block/3` casts — has been consumed. `quod_simplex`'s streamed
+replay calls this every few hundred casts so a long rebuild can't flood the mailbox with
+the whole log (backpressure); the applies themselves must stay casts (see `apply_block/3`).
+Deadlock-safe from the replay: it only runs while this kb is UNREADY, and an unready kb
+refuses proves, so it can never be parked in an `append` back into `quod_simplex`.
+""".
+-spec sync(binary()) -> ok.
+sync(Ns) -> gen_server:call(quod_reg:via({quod_prolog, Ns}), sync, 30000).
+
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
     catch exit:_ -> #{} end.
@@ -146,6 +158,8 @@ handle_call(get_stats, _From, S) ->
               conflicts => S#s.conflicts,
               parked    => map_size(S#s.parked),        %% in-flight writes awaiting commit (liveness gauge)
               park_timeouts => S#s.park_timeouts}, S};  %% writes that never committed (reaped)
+
+handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier (sync/1)
 
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 

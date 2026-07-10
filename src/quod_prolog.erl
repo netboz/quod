@@ -223,12 +223,13 @@ submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when Call
     TRef   = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
     S1     = S#s{parked = (S#s.parked)#{Tx => {From, [Bindings], S#s.applied, TRef}}},
     case quod_simplex:append(Ns, Change) of
-        {ok, _Index}                       -> {noreply, S1};
+        {ok, _Index}                        -> {noreply, S1};
         {error, not_in_charge, unavailable} -> {noreply, S1};   %% ambiguous — TTL/apply resolves
-        {error, not_in_charge, Hint}       -> {reply, {error, {not_leader, Hint}}, unpark(Tx, S1)};
-        {error, busy}                      -> {reply, {error, busy}, unpark(Tx, S1)};   %% backpressure: retry
-        {error, skipped}                   -> {reply, {error, retry}, unpark(Tx, S1)};  %% our slot was skipped: retry
-        Other                              -> {reply, {error, Other}, unpark(Tx, S1)}
+        {error, not_in_charge, Hint}        -> {reply, {error, {not_leader, Hint}}, unpark(Tx, S1)};
+        {error, skipped}                    -> {reply, {error, retry}, unpark(Tx, S1)};   %% our slot was skipped: retry
+        {error, Reason}                     -> {reply, {error, Reason}, unpark(Tx, S1)}    %% busy (backpressure) |
+                                               %% bad_change (consensus gate rejected the shape/floor — not
+                                               %% retryable as-is) | any future flat error: report as-is, no nesting
     end;
 submit_write(_From, _B, _D, _R, _CallerNs, S) ->
     {reply, {error, foreign_write_unsupported}, S}.

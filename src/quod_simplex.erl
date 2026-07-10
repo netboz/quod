@@ -59,13 +59,15 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
-         prune_dials/2]).
+         prune_dials/2, membership_change_ok/2, change_acceptable/2]).
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
 %% #share{} off the wire can carry a non-integer slot etc.); dialyzer trusts the declared field types
 %% and so thinks the false/reject branches are dead — they are not, at runtime.
--dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1, well_formed_cert/1]}).
+-dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1, well_formed_cert/1,
+                             proper_op_list/1]}).   %% rejects an IMPROPER/non-list diff off the wire — the
+                             %% declared `[op()]` type makes dialyzer think the reject branch is dead; it is not
 
 %% A node's SIGNING identity: the subset of `t:quod_identity:identity/0` consensus needs (pubkey +
 %% private key), without the TLS cert. `make_share/4` signs with `key`; the share's signer is `pubkey`.
@@ -996,14 +998,59 @@ valid_proposal(_Block, _S) -> false.
 ts_acceptable(Ts, Last, Now) ->
     is_integer(Ts) andalso Ts >= Last andalso Ts =< Now + ?MAX_FUTURE_MS.
 
-%% A change this node will PROPOSE or SUPPORT: a `#transaction` or a `noop`. Membership changes are now
-%% ordinary transactions whose diff asserts/retracts `peer_admitted` (submitted via a `can_join`-gated
-%% external predicate), so they flow through the transaction arm — no separate member-op vocabulary.
-%% (Re-validating a committee-changing transaction on every node so a Byzantine leader can't pack the
-%% committee is the deferred membership-safety slice.)
-acceptable_change(#transaction{}, _S) -> true;
-acceptable_change(noop, _S)           -> true;
-acceptable_change(_, _)               -> false.
+%% A change this node will PROPOSE or SUPPORT: a `#transaction` with a well-formed (list) diff, or a
+%% `noop`. Membership changes are ordinary transactions whose diff asserts/retracts `peer_admitted`
+%% (submitted via a `can_join`-gated external predicate) — a transaction that TOUCHES the committee
+%% additionally passes the membership gate (`membership_change_ok/2`): shape + never-empty floor,
+%% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
+%% gates a peer's proposal in `valid_proposal` before support-signing) — so an unacceptable membership
+%% change never reaches a support quorum and can never commit. The KB-side `can_join` re-proof is the
+%% next slice; committed history stays cert-trusted (catch-up folds it unconditionally, by design).
+%% A diff that is not a PROPER list is rejected outright: it would crash `committee_delta`'s fold at
+%% commit AND on every restart re-fold — a poison block every node would crash-loop on. (`is_list/1`
+%% is NOT enough: it is `true` for an IMPROPER list like `[Op | junk]`, inspecting only the first cons
+%% cell, and `binary_to_term` on the untrusted `{log,Ns}` wire can decode exactly that — so the guard
+%% must walk the whole spine.)
+acceptable_change(Change, #s{validators = Vs}) -> change_acceptable(Change, Vs).
+
+%% The pure acceptance decision over a validator LIST (exported for eunit; the `#s`-wrapper above is
+%% what the propose/support call sites use).
+change_acceptable(#transaction{diff = Diff} = T, Vs) ->
+    proper_op_list(Diff)
+        andalso (not touches_committee(Diff) orelse membership_change_ok(T, Vs));
+change_acceptable(noop, _Vs) -> true;
+change_acceptable(_, _)      -> false.
+
+%% A diff must be a proper list (walked to `[]`), so the folds/scans over it are total.
+proper_op_list([_ | T]) -> proper_op_list(T);
+proper_op_list([])      -> true;
+proper_op_list(_)       -> false.
+
+%% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
+%% term as an element — the catch-all keeps the scan total.
+touches_committee(Diff) ->
+    lists:any(fun({_K, {{peer_admitted, _, _, _, _}, _}}) -> true;
+                 (_)                                      -> false
+              end, Diff).
+
+%% The membership gate — PURE (no KB access; the `can_join` re-proof rides the next slice): a
+%% committee-changing transaction must be EXACTLY ONE well-formed `peer_admitted` op and must not
+%% empty the committee.
+%%
+%% - ONE op, NOTHING else: kills a mass retract (one tx emptying the set), a mixed
+%%   content+membership diff (which would smuggle content ops onto the membership apply path), and
+%%   matches the honest vocabulary exactly (`admit`/`remove` each stage exactly one op).
+%% - `Id =:= Pk`, binary: the fact's NodeId IS its pubkey (A.3); an op whose Id differs would poison
+%%   the address book while the committee keys on the pubkey (element 5).
+%% - Non-empty result: the wedge guard — an empty committee has no leader (`leader/2` → `none`) and
+%%   the namespace could never commit again. The floor is STEPWISE (4→3→2→1 is legal, one
+%%   quorum-endorsed member per block); the hard `3f+1` Byzantine-tolerance floor is deliberately NOT
+%%   enforced (deferred.md §3(c) stays open — it needs a network-target-f concept).
+membership_change_ok(#transaction{diff = [{Kind, {{peer_admitted, Id, _H, _P, Pk}, _B}}]} = T, Vs)
+  when (Kind =:= assert orelse Kind =:= retract), is_binary(Pk), Id =:= Pk ->
+    apply_committee_delta(T, Vs) =/= [];
+membership_change_ok(#transaction{}, _Vs) ->
+    false.   %% >1 op, mixed with content ops, malformed head, Id =/= Pk, non-binary pubkey
 
 %% Send a consensus message to every OTHER validator, each on our own outbound link.
 broadcast(Msg, S = #s{self = Self, validators = Vs}) ->

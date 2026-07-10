@@ -10,11 +10,12 @@ founder can't commit it), so `remove`'s retract SHAPE is pinned at the predicate
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
--export([t_admit_grows_committee/1, t_cannot_remove_last/1]).
+-export([t_admit_grows_committee/1, t_cannot_remove_last/1, t_gate_rejects_raw_wedge/1]).
 
-all() -> [t_admit_grows_committee, t_cannot_remove_last].
+all() -> [t_admit_grows_committee, t_cannot_remove_last, t_gate_rejects_raw_wedge].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -58,6 +59,30 @@ t_cannot_remove_last(Cfg) ->
     ?assertEqual(fail, rp(Ns, {remove, Self})),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})).   %% still serving proves
+
+%% The consensus gate (Slice A, deferred.md §3 a+c): a RAW membership transaction that bypasses the
+%% admit/remove predicates — the Byzantine-submitter path — is rejected at the leader's own append
+%% seam: a retract that would EMPTY the committee (the permanent-wedge attack), a mixed
+%% content+membership diff, and a non-list diff all get {error, bad_change}; the committee is
+%% unchanged and the namespace still commits afterward (the wedge is impossible).
+t_gate_rejects_raw_wedge(Cfg) ->
+    Ns   = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})),   %% kb ready, genesis applied
+    ?assertEqual([Self], quod_simplex:committee(Ns)),
+    RawTx = fun(Diff) -> #transaction{tx_id = <<"evil">>, caller_ns = Ns, diff = Diff,
+                                      read_check = #{}, author = Self, sig = none} end,
+    WedgeOp = {retract, {{peer_admitted, Self, {'_'}, {'_'}, Self}, true}},
+    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, RawTx([WedgeOp]))),          %% N=1 → 0
+    ?assertEqual({error, bad_change},
+                 quod_simplex:append(Ns, RawTx([WedgeOp, {assert, {{smuggled, x}, true}}]))),  %% mixed
+    ?assertEqual({error, bad_change}, quod_simplex:append(Ns, RawTx(not_a_list))),         %% poison: non-list
+    ?assertEqual({error, bad_change},
+                 quod_simplex:append(Ns, RawTx([{assert, {{x, 1}, true}} | junk]))),       %% poison: improper list
+    ?assert(is_process_alive(quod_reg:where({quod_simplex, Ns}))),   %% the gate REJECTED, never crashed
+    ?assertEqual([Self], quod_simplex:committee(Ns)),                     %% committee untouched
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {assertz, {after_gate, ok}})),    %% namespace still commits
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {after_gate, {'_'}})).
 
 %% Proves are refused ({error,rebuilding}) until the post-boot replay marks the kb ready — retry.
 rp(Ns, Goal) -> rp(Ns, Goal, 300).

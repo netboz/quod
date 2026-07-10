@@ -347,6 +347,42 @@ committee_delta_test() ->
     ?assertEqual({[], []}, quod_simplex:committee_delta(noop)),                 %% a noop carries no change
     ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(noop, [C, A])).
 
+%% Slice A membership gate (deferred.md §3 a+c): a committee-touching transaction must be EXACTLY ONE
+%% well-formed `peer_admitted` op that does not empty the committee — the pure shape + wedge floor,
+%% enforced before a node proposes or supports (the KB-side `can_join` verdict is the next slice).
+membership_gate_test() ->
+    [A, B] = pubs(committee(2)),
+    %% legal single ops
+    ?assert(quod_simplex:membership_change_ok(tx([pa(B)]), [A])),        %% admit one member
+    ?assert(quod_simplex:membership_change_ok(tx([rm(B)]), [A, B])),     %% stepwise shrink: N=2 → 1
+    ?assert(quod_simplex:membership_change_ok(tx([rm(B)]), [A])),        %% non-member retract: shape-legal
+                                                                         %% (the KB verdict rejects it later)
+    %% the wedge: a change that would EMPTY the committee is never acceptable
+    ?assertNot(quod_simplex:membership_change_ok(tx([rm(A)]), [A])),               %% N=1 → 0
+    ?assertNot(quod_simplex:membership_change_ok(tx([rm(A), rm(B)]), [A, B])),     %% mass retract
+    %% shape violations: exactly one op, nothing else, well-formed head, Id =:= Pk, binary pubkey
+    ?assertNot(quod_simplex:membership_change_ok(tx([pa(A), pa(B)]), [])),
+    ?assertNot(quod_simplex:membership_change_ok(
+                 tx([pa(A), {assert, {{other, x}, true}}]), [])),                  %% mixed content+membership
+    ?assertNot(quod_simplex:membership_change_ok(
+                 tx([{assert, {{peer_admitted, <<"not-the-pk">>, undefined, undefined, A}, true}}]), [])),
+    ?assertNot(quod_simplex:membership_change_ok(
+                 tx([{assert, {{peer_admitted, na, undefined, undefined, na}, true}}]), [A])),
+    ?assertNot(quod_simplex:membership_change_ok(tx([{retract, garbage}]), [A])).  %% catch-all is total
+
+%% A non-PROPER-list diff (an improper list `[Op|junk]`, or a non-list) must be rejected, never crash:
+%% `binary_to_term` on the untrusted consensus wire can decode an improper list, and `is_list/1` alone
+%% would let it through (it inspects only the first cons cell) to crash `committee_delta`'s fold. The gate
+%% runs inside the unguarded statem callback, so a crash here is a network-wide DoS.
+membership_gate_improper_list_test() ->
+    [A] = pubs(committee(1)),
+    Improper = tx([{assert, {{other, x}, true}} | 2]),   %% is_list/1 is TRUE for this
+    NonList  = tx(not_a_list),
+    ?assertNot(quod_simplex:change_acceptable(Improper, [A])),
+    ?assertNot(quod_simplex:change_acceptable(NonList, [A])),
+    ?assert(quod_simplex:change_acceptable(tx([{assert, {{ok, x}, true}}]), [A])),   %% proper: fine
+    ?assert(quod_simplex:change_acceptable(noop, [A])).
+
 %% Every `peer_admitted` fact is a voter (no non-voting tier): asserting one grows the set and the quorum.
 committee_grows_test() ->
     [A, B] = [P || {P, _} <- committee(2)],

@@ -44,11 +44,32 @@ end_per_testcase(_TC, Cfg) ->
 t_admit_grows_committee(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
-    {Joiner, _} = quod_identity:generate(),
+    %% pick a Joiner pubkey that sorts AFTER the founder, so the founder (sort position 0) is the round-robin
+    %% leader for the next (odd) slot — the founder therefore PROPOSES, deterministically (see the engine
+    %% check below), rather than redirecting on ~half of runs.
+    Joiner = generate_pubkey_gt(Self),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertMatch({ok, _, _}, rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
-    ?assertEqual(lists:usort([Self, Joiner]), quod_simplex:committee(Ns)),
-    ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, Joiner})).
+    ?assertEqual([Self, Joiner], quod_simplex:committee(Ns)),   %% sorted, Self < Joiner by construction
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, Joiner})),
+    %% the ENGINE adopted the grown committee (quorum is now 2), not just the facts. The founder leads the
+    %% next slot, so it PROPOSES + self-supports: 1 of 2 required, so it cannot notarize with only itself
+    %% present and the committed height FREEZES. If the engine had kept quorum 1 (a mis-fed active set), the
+    %% founder's single self-support would notarize+commit and the height would ADVANCE — so this deterministic
+    %% freeze is the observable proof that active_validators/1 fed the engine the grown set (the adopt path the
+    %% suite otherwise never checks). The write is spawned (it parks unfulfilled) so it doesn't block the test.
+    H = height(Ns),
+    _ = spawn(fun() -> catch quod_prolog:prove(Ns, {assertz, {wont, commit, now}}, Ns) end),
+    timer:sleep(2000),
+    ?assertEqual(H, height(Ns)).
+
+height(Ns) -> maps:get(slot, quod_simplex:status(Ns), -1).
+
+%% a fresh Ed25519 pubkey that sorts strictly after `Lo` (Erlang term order = the order quod_simplex:leader/2
+%% sorts by), so the caller can pin round-robin leadership deterministically.
+generate_pubkey_gt(Lo) ->
+    {P, _} = quod_identity:generate(),
+    case P > Lo of true -> P; false -> generate_pubkey_gt(Lo) end.
 
 %% remove of the sole member is refused (the crash-safe floor): the predicate fails, nothing commits, the
 %% committee is unchanged, and the process is still serving.

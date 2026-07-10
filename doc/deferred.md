@@ -179,6 +179,12 @@ stages, not carried forward:
   (the deferred epochs work) so a slot's voting set is unambiguous. Intersects the membership-safety gap
   above (unsigned, per-slot-mutable membership). Until it lands, catch-up trusts that finalized slots were
   finalized under the correct committee — safe in a trusted fleet, not Byzantine.
+  **Seam in place (0.6.25, Slice D):** the "who votes / leads / disseminates now" reads route through a
+  single function `quod_simplex:active_validators/1` — the **active voting set**, held distinct from the
+  committee **facts** (`#s.validators`). Today it is the IDENTITY over the facts (epoch length 1); the
+  epoch-freezing work adds an epoch snapshot field + boundary detection and rewrites `active_validators/1`
+  to return the set frozen at the epoch's start, so a mid-epoch facts change stops moving the voting set —
+  it does NOT have to re-find the read sites. This is a landing pad, not the fix.
 - **Join cold-start + trustless catch-up** — **DONE (Stage 3 / Simplex 4, S1–S5a):** the machinery
   (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
   forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node

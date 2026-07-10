@@ -255,17 +255,21 @@ may_complain(Slot, CommittedSlots) ->
                    | {committed, slot(), #block{}} | {skipped, slot()}.
 
 -doc """
-A fresh engine for a validator set (the epoch-frozen committee), with `Base` = the durable committed
-floor (the last slot already final in the store). Blocks `=< Base` are treated as committed history so a
-new proposal's parent resolves without the engine holding the whole chain.
+A fresh engine for a validator set (the active voting set — `active_validators/1`; at epoch length 1 that
+is the current committee), with `Base` = the durable committed floor (the last slot already final in the
+store). Blocks `=< Base` are treated as committed history so a new proposal's parent resolves without the
+engine holding the whole chain.
 """.
 -spec eng_new([node_id()], slot()) -> #eng{}.
 eng_new(Validators, Base) ->
     #eng{validators = Validators, base = Base}.
 
-%% Swap the engine's validator set when a committed transaction changes the committee (`adopt_committee/2`).
-%% Safe at the slot boundary: the just-committed slot is already pruned (`base` raised), so no in-flight
-%% share/cert is re-verified under the new set; the next slot's shares/certs verify against it.
+%% Swap the engine's voting set to the ACTIVE validator set (`active_validators/1`) when `adopt_committee/2`
+%% crosses a boundary. Today (epoch length 1) the active set IS the committee facts, so this fires on every
+%% committee-changing commit; under real epochs it fires only at an epoch boundary, and a mid-epoch facts
+%% change leaves the engine's set untouched. Safe at the slot boundary: the just-committed slot is already
+%% pruned (`base` raised), so no in-flight share/cert is re-verified under the new set; the next slot's
+%% shares/certs verify against it.
 eng_set_validators(Validators, Eng) -> Eng#eng{validators = Validators}.
 
 %% The certificate to PERSIST on a finalized `#entry`, captured before `finalize`→`eng_prune` drops it from
@@ -473,8 +477,11 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             store        :: quod_ledger_store:handle() | undefined,
             eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
             chan         :: binary() | undefined,    %% term_to_binary({log, Ns}) — the transport channel
-            validators   = [] :: [node_id()],        %% the voting committee — sorted `peer_admitted` pubkeys,
-                                                     %% derived from the committed log (a projection, in-process)
+            validators   = [] :: [node_id()],        %% the committee FACTS — sorted `peer_admitted` pubkeys,
+                                                     %% the KB projection re-derived from the committed log
+                                                     %% (in-process). The ACTIVE voting set derives from this
+                                                     %% via `active_validators/1` (identity at epoch length 1);
+                                                     %% "who votes now" reads route through THAT, not this field.
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
@@ -568,7 +575,7 @@ init_store(Ns, Cfg, Id) ->
     try load_or_bootstrap(S0, Cfg) of
         S1 ->
             Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
-            Eng = eng_new(S1#s.validators, Committed),
+            Eng = eng_new(active_validators(S1), Committed),   %% seed the engine's voting set (active set)
             {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout() | join_actions(S1)]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
@@ -740,7 +747,8 @@ running({timeout, join}, start_join, S) ->
 %% reached, mark the KB ready. `{ok,0}` means the contact served an EMPTY log (genesis never anchored) — treat
 %% it like a failure and retry, never declare a read node "done" over nothing.
 running(cast, {join_done, {ok, _H}}, S = #s{join = {worker, _}, slot = Slot}) when Slot >= 1 ->
-    {keep_state, maybe_mark_ready(apply_committed(S#s{join = done, eng = eng_new(S#s.validators, Slot)}))};
+    S1 = S#s{join = done},   %% now a participant, so active_validators reflects the caught-up voting set
+    {keep_state, maybe_mark_ready(apply_committed(S1#s{eng = eng_new(active_validators(S1), Slot)}))};
 running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
     logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
     {keep_state, S#s{join = pending}, [join_timeout()]};
@@ -778,8 +786,9 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 %% dead, its own timer fires and it complains toward a skip (the client-driven activation of §failover).
 handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
     {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
-handle_append(From, Change, S = #s{self = Self, validators = Vs, slot = Sl}) ->
-    case lists:member(Self, Vs) of
+handle_append(From, Change, S = #s{self = Self, slot = Sl}) ->
+    Vs = active_validators(S),   %% eligibility + leader selection use the ACTIVE voting set (the floor in
+    case lists:member(Self, Vs) of   %% acceptable_change stays on the facts — see change_acceptable/2)
         false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
         true  -> case acceptable_change(Change, S) of
                      false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
@@ -850,18 +859,22 @@ commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = 
                                                     last_ts = max(S#s.last_ts, BlockTs)})),
     maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
 
-%% A committed transaction updates the LIVE committee at the slot boundary, IN-PROCESS — by reading the
-%% `peer_admitted` asserts/retracts out of the block we just committed. Never from a message or a call: an
-%% outside notification could land after we already began the next slot under the old set, and the nodes
-%% would disagree. Safe without epochs because consensus is strictly non-pipelined: the just-committed
-%% slot's certs are already formed + pruned under the OLD set, the set is a pure function of the committed
-%% prefix, and slot+1 is the first slot voted under the NEW set — so every node crosses the boundary at the
-%% same logical point. The delta folds via the SAME `apply_committee_delta/2` as the restart re-fold, so
-%% the running set can never drift from a fresh re-fold.
+%% A committed transaction advances the committee FACTS (`#s.validators`) at the slot boundary, IN-PROCESS —
+%% by reading the `peer_admitted` asserts/retracts out of the block we just committed. This ALWAYS updates
+%% the facts. The engine's VOTING set is then fed SEPARATELY through the epoch seam (`active_validators/1`):
+%% today (epoch length 1) that is the identity, so the engine adopts the just-updated set and slot+1 is voted
+%% under it, exactly as before; under real epochs a mid-epoch facts change leaves the engine's frozen set
+%% untouched and this engine swap becomes a no-op. Never from a message or a call: an outside notification
+%% could land after we already began the next slot. Safe without epochs because consensus is strictly
+%% non-pipelined: the just-committed slot's certs are already formed + pruned under the OLD set, the facts
+%% are a pure function of the committed prefix, and slot+1 is the first slot voted under the NEW set — so
+%% every node crosses the boundary at the same logical point. The delta folds via the SAME
+%% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
 adopt_committee(Change, S = #s{validators = V, eng = Eng}) ->
     case apply_committee_delta(Change, V) of
-        V  -> S;                                                       %% no `peer_admitted` change
-        V1 -> S#s{validators = V1, eng = eng_set_validators(V1, Eng)}
+        V  -> S;                                    %% no `peer_admitted` change → facts unchanged
+        V1 -> S1 = S#s{validators = V1},            %% FACTS advance
+              S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
 
 %% A complaint cert skipped this slot: persist an empty `noop` entry so the store height (and every
@@ -961,8 +974,8 @@ is_hash_or_none(H) -> H =:= none orelse is_binary(H).
 %% chain we cannot verify, nor ever hand a malformed payload to commit_block.
 %% `valid_proposal` is checked FIRST (it pins `Sl =:= H+1 ≥ 1`) so `leader/2` is never evaluated on an
 %% untrusted `Sl` — a crafted `slot=0` would otherwise make `leader(0,_)` do `lists:nth(0,_)` and crash us.
-on_propose(Peer, #block{slot = Sl} = Block, S = #s{validators = Vs}) ->
-    case valid_proposal(Block, S) andalso leader(Sl, Vs) =:= Peer of
+on_propose(Peer, #block{slot = Sl} = Block, S) ->
+    case valid_proposal(Block, S) andalso leader(Sl, active_validators(S)) =:= Peer of   %% active set leads
         %% Offer the block to the engine (so a peer-formed support cert can still notarize it) and arm Δ
         %% (so an invalid/abstaining node drives the skip) BEFORE deciding support — those must happen on
         %% receipt, not behind the verdict.
@@ -1116,9 +1129,9 @@ membership_change_ok(#transaction{diff = [{Kind, {{peer_admitted, Id, _H, _P, Pk
 membership_change_ok(#transaction{}, _Vs) ->
     false.   %% >1 op, mixed with content ops, malformed head, Id =/= Pk, non-binary pubkey
 
-%% Send a consensus message to every OTHER validator, each on our own outbound link.
-broadcast(Msg, S = #s{self = Self, validators = Vs}) ->
-    lists:foldl(fun(P, Acc) -> send(P, Msg, Acc) end, S, Vs -- [Self]).
+%% Send a consensus message to every OTHER member of the ACTIVE voting set, each on our own outbound link.
+broadcast(Msg, S = #s{self = Self}) ->
+    lists:foldl(fun(P, Acc) -> send(P, Msg, Acc) end, S, active_validators(S) -- [Self]).
 
 %% Send to one peer on our outbound link, dialing on demand; frames buffer (bounded) in the outbox until
 %% `link_up` flushes them. We transmit only on our OWN outbound link, never a peer's inbound stream, so
@@ -1182,16 +1195,16 @@ decode(Payload, Ns) ->
     catch _:_ -> error end.
 
 %% Our outbound link to a peer opened: adopt it (monitor + flush the outbox), unless we already hold a
-%% LIVE link to it or it is not a committee member (links are scoped to the committee). A stored conn
-%% whose pid is DEAD (its `DOWN` not yet processed) is replaced — never treat a corpse as a live
-%% duplicate and close the newcomer, or the peer could never re-link.
-handle_link_up(Peer, LinkPid, S0 = #s{outbox = Outbox, validators = Vs}) ->
+%% LIVE link to it or it is not in the ACTIVE voting set (consensus links are scoped to the active set,
+%% matching `broadcast/2`). A stored conn whose pid is DEAD (its `DOWN` not yet processed) is replaced —
+%% never treat a corpse as a live duplicate and close the newcomer, or the peer could never re-link.
+handle_link_up(Peer, LinkPid, S0 = #s{outbox = Outbox}) ->
     S = S0#s{dialing = maps:remove(Peer, S0#s.dialing)},   %% the dial resolved
     LiveDup = case maps:get(Peer, S#s.conns, undefined) of
                   {Pid, _Ref} -> is_process_alive(Pid);
                   undefined   -> false
               end,
-    case LiveDup orelse (not lists:member(Peer, Vs)) of
+    case LiveDup orelse (not lists:member(Peer, active_validators(S))) of
         true  -> _ = quod_link:close(LinkPid), S;
         false -> S1  = drop_conn_by_peer(Peer, S),         %% demonitor + drop any dead stored conn
                  Ref = erlang:monitor(process, LinkPid),
@@ -1282,12 +1295,12 @@ maybe_mark_ready(S) -> S.   %% already marked ready, OR still joining (serve pro
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
 %%%===================================================================
 
-%% A member of the current committee that may act on live consensus traffic + propose. A node still catching
+%% A member of the ACTIVE voting set that may act on live consensus traffic + propose. A node still catching
 %% up (`join = pending | {worker,_}`) is NEVER a participant — even if a catch-up window transiently folds its
-%% OWN pubkey into `validators`, it must stay a read-only observer over its (stale, mid-build) engine until
+%% OWN pubkey into the facts, it must stay a read-only observer over its (stale, mid-build) engine until
 %% `join=done` refreshes the engine to the caught-up height. `none` (create / member) and `done` may participate.
 is_participant(#s{join = J}) when J =/= none, J =/= done -> false;
-is_participant(#s{self = Self, validators = Vs})         -> lists:member(Self, Vs).
+is_participant(#s{self = Self} = S)                      -> lists:member(Self, active_validators(S)).
 
 %% Spawn the (monitored) catch-up worker. It runs the driver loop OFF the statem: pull a window via the
 %% catchup sibling, hand each verified window back to us (`sink_catchup`) to persist + replay, and finally
@@ -1375,6 +1388,23 @@ apply_committee_delta(Change, V) ->
     lists:usort(lists:foldl(fun addq/2, V, Adds) -- Removes).
 
 addq(M, L) -> case lists:member(M, L) of true -> L; false -> L ++ [M] end.   %% idempotent add
+
+-doc """
+The **active voting set** for consensus right now — the set that signs/verifies shares, forms quorums,
+selects leaders, and receives consensus dissemination. Held deliberately separate from the committee
+**FACTS** (`#s.validators`, the `peer_admitted` projection that changes at EVERY commit): this is the
+**epoch projection** of the committee.
+
+Today epoch length is **1** (every slot is an epoch boundary), so the active set is exactly the current
+facts — this is the **IDENTITY** over `#s.validators`. It exists as the single seam where epoch-frozen
+validators will land (simplex-extended step 1; `doc/deferred.md` §3): every "who votes / leads /
+disseminates now" read routes through here, every "derive / report / floor-check the facts" read stays on
+`#s.validators`. It is a **landing pad**, not the feature — turning on real epochs still adds an epoch
+snapshot field + boundary detection and rewrites this body to return the set frozen at the epoch's start;
+what the seam buys is that those read sites don't have to be hunted down and converted then.
+""".
+-spec active_validators(#s{}) -> [node_id()].
+active_validators(#s{validators = V}) -> V.
 
 %% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
 %% list of co-founders = a multi-validator committee (the founding validator set is frozen from it);

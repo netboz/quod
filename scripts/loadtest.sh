@@ -55,7 +55,10 @@ set -uo pipefail
 : "${UNV_POLL:=3}"                          # unverified-drop poll cadence (< churn cadence: the drop gauge
                                             #   resets on a node restart, so sample it faster than we churn)
 : "${LAG_OK:=50}"                           # final height spread that counts as "reconverged"
-: "${SETTLE_TRIES:=48}"                      # reconvergence patience after load stops (x5s; 48 = 4 min)
+: "${SETTLE_TRIES:=96}"                      # reconvergence patience after load stops (x5s; 96 = 8 min). Catch-up
+                                            #   is CPU-bound and grows with KB size + churn intensity, so a
+                                            #   30-node mass-churn recovery can genuinely take several minutes —
+                                            #   the time-to-reconverge is itself a signal worth watching.
 : "${MIN_ADVANCE:=}"                        # min committed-height gain to prove the load landed (default: DURATION/4)
 : "${SCALE:=1}"                             # 1 = (re)deploy to NODES first; 0 = use the fleet as-is
 

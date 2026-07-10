@@ -11,6 +11,9 @@ Pure helpers over the committed erlog database for the content layer.
 - `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
   with content-identity dedup (asserting an identical fact is a no-op; retract is
   by content).
+- `has_clause/4` — is a specific `{Head, Body}` clause present in the committed db? The
+  content-identity check `apply_ops` uses for retract, exposed for the membership verdict
+  (a `retract(peer_admitted(...))` is only a real removal if that exact clause exists).
 
 `op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
 `erlog_int.hrl`.
@@ -18,7 +21,7 @@ Pure helpers over the committed erlog database for the content layer.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([functor_hash/3, validate/3, apply_ops/2]).
+-export([functor_hash/3, validate/3, apply_ops/2, has_clause/4]).
 
 -doc "Content hash of predicate `F` in the db `Mod:Ref` ({Head,Body} list, tags dropped).".
 -spec functor_hash(module(), term(), term()) -> integer().
@@ -46,6 +49,10 @@ validate(ReadCheck, Mod, Ref) ->
 apply_ops(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
     R1 = lists:foldl(fun(Op, R) -> apply_op(M, R, Op) end, R0, Ops),
     {ok, Est#est{db = Db#db{ref = R1}}}.
+
+-doc "Is the exact `{Head, Body}` clause present in the committed db `Mod:Ref`? (Content identity.)".
+-spec has_clause(module(), term(), term(), term()) -> boolean().
+has_clause(M, R, H, B) -> clause_present(M, R, erlog_int:functor(H), H, B).
 
 %%%===================================================================
 %%% internals

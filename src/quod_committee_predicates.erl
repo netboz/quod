@@ -22,7 +22,7 @@ Registered per-node in `quod_prolog:build_kb/0`, so `admit`/`remove` are identic
 never carried in the log — only their resulting `peer_admitted` diff is.
 """.
 
--export([load/1, admit_3/3, remove_1/3]).
+-export([load/1, admit_3/3, remove_1/3, admitted_pubkeys/1]).
 
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -72,10 +72,19 @@ remove_1(Goal, Next, #est{bs = Bs} = St) ->
 %% in `#est{}`; onia's `self_ns/1` ETS trick does not apply.)
 self_ns() -> get('$quod_ns').
 
-%% The current committee size = the number of DISTINCT peer_admitted pubkeys (element 5 of the fact head),
-%% not the clause count — a pubkey with more than one address fact must not inflate the floor.
-committee_size(#est{db = #db{mod = M, ref = R}}) ->
+%% The current committee size = the number of DISTINCT peer_admitted pubkeys — a pubkey with more than
+%% one address fact must not inflate the floor.
+committee_size(Est) -> length(admitted_pubkeys(Est)).
+
+-doc """
+The DISTINCT `peer_admitted` pubkeys committed in a kb (element 5 of the fact head, sorted) — the
+committee as facts. `quod_prolog`'s membership verdict uses it for the one-fact-per-pubkey invariant
+(reject an `admit` of a pubkey already admitted), which also keeps the KB and the validator-set
+projection in lockstep on retract.
+""".
+-spec admitted_pubkeys(tuple()) -> [binary()].
+admitted_pubkeys(#est{db = #db{mod = M, ref = R}}) ->
     case M:get_procedure(R, {peer_admitted, 4}) of
-        {clauses, Cs} -> length(lists:usort([element(5, H) || {_Tag, H, _Body} <- Cs]));
-        _             -> 0
+        {clauses, Cs} -> lists:usort([element(5, H) || {_Tag, H, _Body} <- Cs]);
+        _             -> []
     end.

@@ -11,7 +11,11 @@ order. One `gen_server` per namespace.
   reaped by a per-tx TTL if the verdict never arrives).
 - **`apply_block/3`** is the deterministic state machine `quod_simplex` drives on every
   member: re-check the read-set against the committed kb (OCC), then apply the diff
-  or reject — identical verdict on every member.
+  or reject — identical verdict on every member. A **committee-changing** transaction
+  (its diff asserts/retracts `peer_admitted`) is the exception: it applies
+  **unconditionally**, skipping OCC, because it was already re-validated against the
+  parent state before the vote (see `request_membership_verdict/5`) — this keeps the kb
+  and `quod_simplex`'s validator-set projection in lockstep.
 
 Proves are gated until an initial **rebuild** completes (`ready`), so a freshly
 (re)started engine never answers from a half-built kb. The kb is built with the
@@ -22,20 +26,31 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include("quod_ledger.hrl").
 
 -export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, sync/1,
-         stats/1, namespaces/0]).
+         request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-ifdef(TEST).
+-export([membership_verdict/2]).   %% the pure verdict over #s.est — driven directly by eunit
+-endif.
 
--define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000}).
+%% The membership-verdict park budget: a verdict parked past the slot's Δ complaint-skip is moot, so this
+%% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
+%% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
+-define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000, validation_ttl_ms => 2000}).
 
 -record(s, {ns        :: binary(),
             self      :: node_id(),
             est       :: tuple(),                 %% committed erlog #est{} (unknown=fail)
             ready     = false :: boolean(),       %% true once the initial rebuild has run
             ttl       = 30000 :: pos_integer(),
+            vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             applied   = 0  :: log_index(),
             %% tx_id => {From, Bindings, HeightRead, TimerRef}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(), reference()}},
+            %% membership verdicts parked until the KB reaches the proposal's parent height (Slot-1),
+            %% then delivered to ReplyTo as {membership_verdict, Tag, Verdict}. Keyed by the unique Tag.
+            %% Tag => {Slot, Change, ReplyTo, TimerRef}
+            validations = #{} :: #{term() => {log_index(), term(), pid(), reference()}},
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
             park_timeouts = 0 :: non_neg_integer()}).   %% parked writes reaped by TTL (verdict never arrived)
 
@@ -102,6 +117,24 @@ refuses proves, so it can never be parked in an `append` back into `quod_simplex
 -spec sync(binary()) -> ok.
 sync(Ns) -> gen_server:call(quod_reg:via({quod_prolog, Ns}), sync, 30000).
 
+-doc """
+Ask this kb to judge a committee-changing `Change` proposed for `Slot`, and deliver the verdict
+ASYNCHRONOUSLY as `{membership_verdict, Tag, valid | {invalid, Reason} | abstain}` to `ReplyTo`.
+
+A **cast** on purpose: the caller is `m:quod_simplex` (a validator's statem), which `quod_prolog`
+sync-calls during a local write (`submit_write` → `quod_simplex:append`) — a sync call back would
+close that into a deadlock. So this never blocks either process; the verdict arrives as a message.
+
+The verdict is judged against the KB **as of the proposal's parent** (`Slot-1`), so every honest node
+reaches the same verdict deterministically: if the kb is already there it is delivered now; if it is
+behind, the request parks until `apply_block` reaches `Slot-1` (or a short fixed TTL — `validation_ttl_ms`,
+on the order of Δ — reaps it to `abstain`); if the kb is already past the slot, the slot resolved without
+us — `abstain`. Re-issuing the same `Tag` supersedes a still-parked request for it.
+""".
+-spec request_membership_verdict(binary(), term(), pos_integer(), pid(), term()) -> ok.
+request_membership_verdict(Ns, Change, Slot, ReplyTo, Tag) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {membership_verdict_req, Change, Slot, ReplyTo, Tag}).
+
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
     catch exit:_ -> #{} end.
@@ -116,7 +149,7 @@ init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
     put('$quod_ns', Ns),   %% so external predicates (e.g. admit) can recover their namespace in-process
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
-           ttl = maps:get(park_ttl_ms, Cfg), ready = false},
+           ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg), ready = false},
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
     %% into this fresh kb; it casts mark_ready when the kb is caught up. Async, so
     %% init does not block on a callback.
@@ -166,6 +199,10 @@ handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 handle_cast({apply_block, Index, Change}, S) ->
     {noreply, apply_committed(Index, Change, S)};
 handle_cast(mark_ready, S) -> {noreply, S#s{ready = true}};
+%% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
+%% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
+handle_cast({membership_verdict_req, Change, Slot, ReplyTo, Tag}, S) ->
+    {noreply, request_verdict(Change, Slot, ReplyTo, Tag, S)};
 handle_cast(_Msg, S)       -> {noreply, S}.
 
 %% A parked write whose verdict never arrived (leader change / lost block): reap it
@@ -175,6 +212,15 @@ handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
         {{From, _B, _H, _TRef}, P1} ->
             gen_server:reply(From, {error, timeout}),
             {noreply, S#s{parked = P1, park_timeouts = S#s.park_timeouts + 1}};
+        error -> {noreply, S}
+    end;
+%% A parked membership verdict whose parent height never arrived in time (the kb is too far behind, or
+%% the slot was skipped before we caught up): reap it and deliver `abstain` so the voter stops waiting.
+handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
+    case maps:take(Tag, V) of
+        {{_Slot, _Change, ReplyTo, _TRef}, V1} ->
+            deliver_verdict(ReplyTo, Tag, abstain),
+            {noreply, S#s{validations = V1}};
         error -> {noreply, S}
     end;
 handle_info(_Info, S) -> {noreply, S}.
@@ -238,20 +284,51 @@ submit_write(_From, _B, _D, _R, _CallerNs, S) ->
 %%% apply (deterministic; identical on every member)
 %%%===================================================================
 
+%% Apply one committed entry, then — in a SHARED tail across every applied-advancing path — resolve any
+%% membership verdict parked for the parent height we just reached. Whether the applied step commits a
+%% tx, skips a `noop`, or logs an unexpected payload, a validation whose parent is that slot must be
+%% answered (and never leak), so `resolve_validations/1` runs once here, keyed on the new `applied`.
+apply_committed(Index, Change, S) ->
+    resolve_validations(apply_step(Index, Change, S)).
+
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
-apply_committed(Index, _Change, S = #s{applied = A}) when Index =< A ->
+apply_step(Index, _Change, S = #s{applied = A}) when Index =< A ->
     S;
 %% Forward gap: quod_simplex is ahead of us (we restarted, or missed a cast). Don't apply out
 %% of order — ask quod_simplex to re-drive from the snapshot so we receive a contiguous run.
-apply_committed(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
+apply_step(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
     S;
-apply_committed(Index, noop, S) ->                          %% Index == applied+1
+apply_step(Index, noop, S) ->                              %% Index == applied+1
     S#s{applied = Index};
-apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
+apply_step(Index, #transaction{tx_id = Tx, diff = Diff} = Change, S) ->
+    %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was
+    %% re-validated against the parent state before the vote (`membership_verdict/2`), so OCC is
+    %% redundant here AND is the source of a real divergence: `quod_simplex:adopt_committee` folds the
+    %% validator set unconditionally at commit, so an OCC-skipped membership diff would leave the KB fact
+    %% behind the validator set. Applying it here keeps the two projections in lockstep. (On a single
+    %% `peer_admitted` op — Slice A guarantees exactly one — apply is idempotent: an already-present
+    %% assert dedups, an absent retract is a no-op.) Content txs keep OCC.
+    case is_membership_change(Change) of
+        true ->
+            {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
+            release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                    S#s{est = Est1, applied = Index, applies = S#s.applies + 1});
+        false ->
+            apply_content(Index, Change, S)
+    end;
+%% Defensive: a committed payload that is neither `noop` nor a `#transaction` (e.g. a stale-format entry on
+%% a cross-version replay) advances the cursor + logs, rather than function_clause-crashing the apply loop
+%% into a restart crash-loop on the same entry.
+apply_step(Index, Other, S = #s{ns = Ns}) ->
+    logger:warning("quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p", [Ns, Index, Other]),
+    S#s{applied = Index}.
+
+%% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
+apply_content(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,
     case quod_diff:validate(RC, M, R) of
         ok ->
@@ -261,13 +338,11 @@ apply_committed(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S
         {conflict, _F} ->
             release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
                     S#s{applied = Index, rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
-    end;
-%% Defensive: a committed payload that is neither `noop` nor a `#transaction` (e.g. a stale-format entry on
-%% a cross-version replay) advances the cursor + logs, rather than function_clause-crashing the apply loop
-%% into a restart crash-loop on the same entry.
-apply_committed(Index, Other, S = #s{ns = Ns}) ->
-    logger:warning("quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p", [Ns, Index, Other]),
-    S#s{applied = Index}.
+    end.
+
+%% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
+%% no process message, so no append<->apply deadlock).
+is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []}.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
@@ -285,6 +360,85 @@ unpark(Tx, S = #s{parked = P}) ->
         {{_From, _B, _H, TRef}, P1} -> _ = erlang:cancel_timer(TRef), S#s{parked = P1};
         error                       -> S
     end.
+
+%%%===================================================================
+%%% membership verdict (the Prolog-side re-check of a committee change)
+%%%===================================================================
+%%
+%% A validator re-judges a proposed committee change against ITS OWN kb before voting, so a committee
+%% is a projection of the `peer_admitted` FACTS on every node — never something a single submitter can
+%% forge. The verdict is pinned to the proposal's PARENT height (`Slot-1`): the same past kb state on
+%% every honest node ⇒ the same verdict, so honest votes never split. Delivered asynchronously (a cast
+%% back), because a synchronous call here would deadlock the append<->apply cycle.
+
+%% A re-issued Tag (a re-proposed slot after a view change) SUPERSEDES any request still parked under it:
+%% drop the stale entry and cancel its timer first, so an orphaned timer can never fire against the new
+%% request and reap it to a premature abstain. The superseded request's `ReplyTo` hears back via the fresh
+%% verdict for the same Tag.
+request_verdict(Change, Slot, ReplyTo, Tag, S0) ->
+    do_request_verdict(Change, Slot, ReplyTo, Tag, supersede_validation(Tag, S0)).
+
+%% Judge `Change` at height `Slot-1`: answer now if the kb is exactly there, park if it is behind, or
+%% abstain if it is already past the slot (which resolved without us — slots are never reused).
+do_request_verdict(Change, Slot, ReplyTo, Tag, S = #s{applied = A}) when A =:= Slot - 1 ->
+    deliver_verdict(ReplyTo, Tag, membership_verdict(Change, S)), S;
+do_request_verdict(Change, Slot, ReplyTo, Tag, S = #s{applied = A, validations = V, vttl = Vttl})
+  when A < Slot - 1 ->
+    TRef = erlang:send_after(Vttl, self(), {validation_timeout, Tag}),
+    S#s{validations = V#{Tag => {Slot, Change, ReplyTo, TRef}}};
+do_request_verdict(_Change, _Slot, ReplyTo, Tag, S) ->   %% applied > Slot-1: too late, the slot is decided
+    deliver_verdict(ReplyTo, Tag, abstain), S.
+
+supersede_validation(Tag, S = #s{validations = V}) ->
+    case maps:take(Tag, V) of
+        {{_Slot, _Change, _ReplyTo, OldTRef}, V1} -> _ = erlang:cancel_timer(OldTRef), S#s{validations = V1};
+        error                                     -> S
+    end.
+
+%% Once the kb reaches a slot, answer every verdict parked for that slot's children (parent == applied).
+%% Judged against the just-advanced `est` (state exactly at the parent height). Cancels each timer.
+resolve_validations(S = #s{applied = A, validations = V}) ->
+    Ready = [{Tag, Rec} || {Tag, {Slot, _, _, _} = Rec} <- maps:to_list(V), Slot =:= A + 1],
+    lists:foldl(
+      fun({Tag, {_Slot, Change, ReplyTo, TRef}}, Acc) ->
+              _ = erlang:cancel_timer(TRef),
+              deliver_verdict(ReplyTo, Tag, membership_verdict(Change, Acc)),
+              Acc#s{validations = maps:remove(Tag, Acc#s.validations)}
+      end, S, Ready).
+
+%% The verdict for the single guaranteed-shape `peer_admitted` op (Slice A's gate ensures exactly one),
+%% judged against `S#s.est` (the parent-height kb):
+%% - assert: reject a pubkey already admitted (the one-fact-per-pubkey invariant that keeps the KB + the
+%%   validator set in lockstep on retract); else re-prove the SAME `can_join` goal `admit_3` staged. A
+%%   `can_join` that stages writes is rejected — it must be side-effect-free, or the overlay would ride
+%%   its ops into the committed diff network-wide.
+%% - retract: valid only if that exact `peer_admitted` clause is present — a fabricated-address retract
+%%   matches nothing, so it can never eject a validator from the set while missing in the KB.
+-spec membership_verdict(term(), #s{}) -> valid | {invalid, term()}.
+membership_verdict(#transaction{diff = [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}]},
+                   S = #s{ns = Ns, est = Est}) ->
+    case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
+        true  -> {invalid, already_admitted};
+        false -> case run_proof({can_join, Ns, [H, P], Pk}, S) of
+                     {ok, _, [], _}    -> valid;
+                     {ok, _, _Diff, _} -> {invalid, can_join_side_effects};
+                     fail              -> {invalid, can_join};
+                     {error, _}        -> {invalid, can_join}
+                 end
+    end;
+membership_verdict(#transaction{diff = [{retract, {{peer_admitted, _Id, _H, _P, _Pk}, _B} = Clause}]},
+                   #s{est = #est{db = #db{mod = M, ref = R}}}) ->
+    {ClauseHead, ClauseBody} = Clause,
+    case quod_diff:has_clause(M, R, ClauseHead, ClauseBody) of
+        true  -> valid;
+        false -> {invalid, no_such_member}
+    end;
+membership_verdict(_Change, _S) ->
+    {invalid, malformed}.   %% Slice A's gate makes this unreachable in production; kept total for tests/robustness
+
+%% Async delivery to the requesting statem (or a test pid) — a plain message so the statem consumes it
+%% as an `info` event and a test just `receive`s the bare tuple.
+deliver_verdict(ReplyTo, Tag, Verdict) -> ReplyTo ! {membership_verdict, Tag, Verdict}, ok.
 
 %%%===================================================================
 %%% kb construction

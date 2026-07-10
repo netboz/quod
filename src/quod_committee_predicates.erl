@@ -15,8 +15,18 @@ the committee stays a pure, deterministic projection of the committed log on eve
 - `remove/1` retracts `peer_admitted` **by pattern** (`peer_admitted(_,_,_,Pubkey)`), so the shipped op
   self-matches the committed fact's actual address — a hand-built op with the wrong address would retract
   from the validator set (keyed on the pubkey) but MISS in the kb (keyed on the whole head), leaving the two
-  projections divergent. It also refuses to remove the **last** member (the crash-safe floor; the full BFT
-  fault-tolerance floor + Byzantine re-validation are a later slice).
+  projections divergent. It also refuses to remove the **last** member.
+
+> #### The predicate checks are honest-path UX, not the safety boundary {: .info }
+>
+> These predicate-level guards (`can_join` in `admit`, the last-member floor in `remove`) run only on the
+> **submitting** node — they give an honest client fast, local feedback. They are NOT the security boundary:
+> a Byzantine submitter that hand-builds a raw `peer_admitted` diff skips them entirely. The authoritative
+> defense is in `m:quod_simplex`, enforced by every validator before it support-signs — the pure shape +
+> never-empty gate (`membership_change_ok/2`) and the per-node KB re-validation
+> (`quod_prolog:request_membership_verdict/5`, which re-proves `can_join` and requires a retract's exact
+> clause to be present). See `doc/deferred.md` §3. (Signed membership authorship — closing committee
+> *packing* — is Phase B.)
 
 Registered per-node in `quod_prolog:build_kb/0`, so `admit`/`remove` are identical on every member and are
 never carried in the log — only their resulting `peer_admitted` diff is.

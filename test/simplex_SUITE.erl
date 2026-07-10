@@ -17,10 +17,12 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
+-include("quod_ledger.hrl").
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([commits_across_committee/1, follower_redirects/1, leader_failover/1]).
+-export([commits_across_committee/1, follower_redirects/1,
+         byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1]).
 
 -define(NS, <<"simplex:2c">>).
 -define(PORTS, [15820, 15821, 15822, 15823]).   %% N=4 ⇒ quorum 3, tolerates 1 down (failover)
@@ -28,7 +30,8 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
                            %% pairwise QUIC links (so a healthy slot never spuriously skips), well below the
                            %% `eventually` budgets (so a genuinely stuck slot still skips fast)
 
-all() -> [commits_across_committee, follower_redirects, leader_failover].
+all() -> [commits_across_committee, follower_redirects,
+          byzantine_retract_rejected, byzantine_admit_rejected, leader_failover].
 
 %%%===================================================================
 %%% suite setup: one 4-node committee, shared across the (ordered) tests
@@ -109,6 +112,31 @@ follower_redirects(Config) ->
     {FollowerPeer, _} = hd([N || {_, Pub} = N <- Nodes, Pub =/= LeaderPub]),
     ?assertMatch({error, {not_leader, _}}, prove(FollowerPeer, {assertz, {should, not_commit}})).
 
+%% A Byzantine leader injects a crafted `{propose, ...}` whose payload is a committee change its OWN
+%% run_proof never gated — the multi-validator membership defense (Slice C). The proposal passes the pure
+%% shape gate (one well-formed peer_admitted op, committee stays non-empty) so it REACHES the KB verdict,
+%% but each honest follower re-judges it against its own kb and REFUSES support, so it can never reach a
+%% notarizing quorum. The slot is complaint-skipped, the committee is unchanged, and the namespace still
+%% commits honest writes.
+%%
+%% Case 1 — a fabricated-address RETRACT of a real founder (the retract-ejection the Slice A review flagged):
+%% the crafted op carries the victim's pubkey but a wrong Host/Port, so it would drop the victim from the
+%% validator-set projection while MISSING in the KB. The verdict's exact-clause check (`has_clause`) rejects
+%% it — no honest support, the slot skips, the committee keeps all four.
+byzantine_retract_rejected(Config) ->
+    Nodes  = ?config(nodes, Config),
+    Victim = element(2, hd(Nodes)),   %% a real founder's pubkey, retracted with a WRONG address
+    Evil   = tx([{retract, {{peer_admitted, Victim, "wrong-host", 9999, Victim}, true}}]),
+    assert_membership_proposal_skipped(Config, Evil).
+
+%% Case 2 — an unauthorized ADMIT of a newcomer the join policy does not allow. This committee co-founds
+%% with no `can_join` clause (no genesis ontology), so admission is fail-closed: the verdict re-proves
+%% `can_join` and it fails, rejecting the admit. No honest support, the slot skips, the committee keeps four.
+byzantine_admit_rejected(Config) ->
+    {NewPub, _} = quod_identity:generate(),
+    Evil = tx([{assert, {{peer_admitted, NewPub, "10.9.9.9", 9000, NewPub}, true}}]),
+    assert_membership_proposal_skipped(Config, Evil).
+
 %% Kill the next slot's leader BEFORE it proposes: the slot cannot commit (no proposer), so the three
 %% live validators complain, a ⅔ complaint cert SKIPS it (a noop), and the rotated leader for the next
 %% slot commits the re-submitted write. Proves complaint-timer → skip → rotation → commit end-to-end.
@@ -142,6 +170,44 @@ leader_failover(Config) ->
 %%%===================================================================
 %%% helpers
 %%%===================================================================
+
+%% Inject `Evil` (a #transaction) as a crafted proposal for the next slot, from the REAL slot leader's
+%% node, and assert every node skips the slot with the committee unchanged and the namespace still live.
+assert_membership_proposal_skipped(Config, Evil) ->
+    Nodes  = ?config(nodes, Config),
+    H      = synced_height(Nodes),
+    V      = H + 1,
+    {LeaderPeer, LeaderPub} = leader_peer(V, Config),
+    Before  = committee(peer1(Nodes)),
+    RejBefore = rejects_total(Nodes),   %% cumulative — assert it GROWS for THIS proposal (not a stale count)
+    %% craft the block for slot V and send it to every follower over the {log, Ns} channel FROM the leader's
+    %% node — authenticated as the leader (so on_propose's leader-check passes), but bypassing the leader's
+    %% own statem (a transport-level send). Timestamp margin keeps it monotonic vs the last committed block.
+    Ts    = erlang:system_time(millisecond) + 1000,
+    Block = #block{slot = V, parent = H, payload = [Evil], timestamp = Ts},
+    Chan  = term_to_binary({log, ?NS}, [deterministic]),
+    Frame = quod_simplex:encode(?NS, {propose, Block}),
+    _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])
+         || {_, Fpub} <- Nodes, Fpub =/= LeaderPub],
+    %% the crafted slot can ONLY be skipped (no honest support) — every node advances past it via a noop
+    [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || {P, _} <- Nodes ],
+    %% the committee is unchanged (the change never committed) and the fleet's reject counter GREW for THIS
+    %% proposal — a delta, not a stale cumulative count from an earlier ordered test (false-green guard)
+    ?assertEqual(Before, committee(peer1(Nodes))),
+    ?assert(eventually(fun() -> rejects_total(Nodes) > RejBefore end, 5000)),
+    %% the namespace is not wedged: the rotated leader for V+1 commits an honest write
+    {L, _} = leader_peer(V + 1, Config),
+    ?assert(eventually(fun() -> match_ok(prove(L, {assertz, {after_byzantine, V}})) end, 20000)),
+    [ ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)) || {P, _} <- Nodes ].
+
+%% a raw #transaction carrying an arbitrary diff (the Byzantine submitter path — no admit/remove predicate)
+tx(Diff) ->
+    #transaction{tx_id = <<"evil">>, caller_ns = ?NS, diff = Diff,
+                 read_check = #{}, author = <<"evil-author">>, sig = none}.
+
+committee(Peer)          -> maps:get(committee, status(Peer), []).
+membership_rejects(Peer) -> maps:get(membership_rejects, peer:call(Peer, quod_simplex, stats, [?NS]), 0).
+rejects_total(Nodes)     -> lists:sum([membership_rejects(P) || {P, _} <- Nodes]).
 
 pubs(Nodes) -> [P || {_, P} <- Nodes].
 peer1(Nodes) -> element(1, hd(Nodes)).

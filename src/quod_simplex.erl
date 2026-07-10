@@ -35,9 +35,13 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 > facts** derived from the committed log and swapped in-process at the slot boundary, and **`mode=join`
 > trustless catch-up** (a joiner pulls the committed block+cert log, verifies each cert against the
 > committee it reconstructs, and replays into its KB — `m:quod_catchup`). At **N=1** each quorum
-> self-satisfies, so an append commits synchronously. **Next:** self-admit promotion (a caught-up
-> joiner becoming a voter), the reader/feed dissemination tier, and the hardening in `doc/deferred.md`
-> §3 (mid-flight committee-change, per-message retransmit, epoch-frozen validators).
+> self-satisfies, so an append commits synchronously. A committee-changing proposal is additionally
+> **re-validated by every validator before support** (`membership_change_ok/2` shape + never-empty gate,
+> then a KB verdict via `quod_prolog:request_membership_verdict/5`), so an unauthorized/malformed change
+> can't gather an honest quorum (`doc/deferred.md` §3 (a)+(c)). **Next:** self-admit promotion (a caught-up
+> joiner becoming a voter), signed membership authorship (Phase B, closing committee-packing), the
+> reader/feed dissemination tier, and the hardening in `doc/deferred.md` §3 (mid-flight committee-change,
+> per-message retransmit, epoch-frozen validators).
 """.
 
 -include("quod_ledger.hrl").
@@ -59,7 +63,8 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
-         prune_dials/2, membership_change_ok/2, change_acceptable/2]).
+         prune_dials/2, membership_change_ok/2, change_acceptable/2,
+         encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
@@ -479,6 +484,9 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             commit_signed = #{} :: #{slot() => true},    %% slots we commit-signed (⇒ may_complain false: safety)
             complained    = #{} :: #{slot() => true},    %% slots we complaint-signed (⇒ may_commit false: safety)
             active_slot   = none :: none | slot(),       %% the head+1 slot the Δ complaint timer is armed for
+            validating = none :: none | {slot(), binary(), #block{}},  %% a peer's membership proposal whose KB
+                                                          %% verdict we await — support is DEFERRED until it lands
+            invalid    = #{} :: #{slot() => true},        %% slots we judged an INVALID membership change (never endorse)
             commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
@@ -493,7 +501,8 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             skips      = 0 :: non_neg_integer(),   %% complaint-skipped (noop) slots
             r_busy     = 0 :: non_neg_integer(),   %% append rejected: a proposal already in flight (backpressure)
             r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
-            r_bad      = 0 :: non_neg_integer()}). %% append rejected: unacceptable change
+            r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
+            membership_rejects = 0 :: non_neg_integer()}). %% membership proposals a KB verdict rejected as invalid
 
 callback_mode() -> [state_functions].
 
@@ -682,6 +691,12 @@ running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S0 = #s{c
                  {keep_state, S1, timer_actions(S0, S1)}
     end;
 running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
+%% A membership verdict from our own quod_prolog (a plain message from `deliver_verdict`): emit or withhold
+%% the deferred support share. The tag echoes the `{Slot, BlockHash}` we requested with, so the verdict binds
+%% to the exact block. Support can advance/skip the head, so reflect that in the Δ timer.
+running(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
+    S1 = on_membership_verdict(Sl, BH, Verdict, S0),
+    {keep_state, S1, timer_actions(S0, S1)};
 running(info, {link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
     {keep_state, handle_link_up(Peer, LinkPid, S)};
 running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
@@ -802,11 +817,15 @@ apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
 apply_event({broadcast, Cert}, S) ->
     broadcast({cert, Cert}, S);
 %% A block was notarized: sign + emit our commit share — UNLESS we already complaint-signed this slot
-%% (`may_commit` guard). Recording `commit_signed[Sl]` makes the symmetric `may_complain` guard hold, so
-%% an honest node contributes to at most one of {commit cert, complaint cert} per slot — the safety rule.
-apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id, complained = Cd}) ->
-    case may_commit(Sl, maps:keys(Cd)) of
-        false -> S;                                    %% already complained Sl ⇒ never commit it
+%% (`may_commit` guard) OR we judged its membership change INVALID (`invalid[Sl]`). Recording
+%% `commit_signed[Sl]` makes the symmetric `may_complain` guard hold, so an honest node contributes to at
+%% most one of {commit cert, complaint cert} per slot — the safety rule. The `invalid` guard is
+%% belt-and-braces: a node that evaluated a membership proposal and rejected it never endorses at ANY phase,
+%% even if the block notarized via others (an absent verdict, by contrast, must NOT bar a commit share — a
+%% support cert already proves ≥ f+1 honest validations).
+apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id, complained = Cd, invalid = Inv}) ->
+    case may_commit(Sl, maps:keys(Cd)) andalso not maps:is_key(Sl, Inv) of
+        false -> S;                                    %% already complained Sl, or judged it invalid ⇒ never commit it
         true  -> Share = make_share(commit, Sl, block_hash(Block), Id),
                  engine_step([{share, Share}],
                              broadcast({share, Share}, S#s{commit_signed = (S#s.commit_signed)#{Sl => true}}))
@@ -857,15 +876,18 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
     maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).
 
 %% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
-%% the proposing latch, and the support/commit/complaint sign-latches (bounded to the in-flight window).
+%% the proposing latch, the support/commit/complaint sign-latches, and the membership validate/invalid
+%% latches (all bounded to the in-flight window).
 finalize(Slot, S) ->
     S#s{slot = Slot,
         eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
         proposing     = case S#s.proposing of Slot -> none; Other -> Other end,
         active_slot   = case S#s.active_slot of Slot -> none; A -> A end,
+        validating    = case S#s.validating of {Slot, _, _} -> none; V -> V end,
         supported     = maps:remove(Slot, S#s.supported),
         commit_signed = maps:remove(Slot, S#s.commit_signed),
-        complained    = maps:remove(Slot, S#s.complained)}.
+        complained    = maps:remove(Slot, S#s.complained),
+        invalid       = maps:remove(Slot, S#s.invalid)}.
 
 %% Reply `{ok, Slot}` to the caller parked on this slot (only the proposing node has one).
 ack_pending(Slot, S = #s{pending = P}) ->
@@ -941,9 +963,48 @@ is_hash_or_none(H) -> H =:= none orelse is_binary(H).
 %% untrusted `Sl` — a crafted `slot=0` would otherwise make `leader(0,_)` do `lists:nth(0,_)` and crash us.
 on_propose(Peer, #block{slot = Sl} = Block, S = #s{validators = Vs}) ->
     case valid_proposal(Block, S) andalso leader(Sl, Vs) =:= Peer of
-        true  -> arm_complaint(Sl, support_block(Block, engine_step([{block, Block}], S)));
+        %% Offer the block to the engine (so a peer-formed support cert can still notarize it) and arm Δ
+        %% (so an invalid/abstaining node drives the skip) BEFORE deciding support — those must happen on
+        %% receipt, not behind the verdict.
+        true  -> support_or_validate(Block, arm_complaint(Sl, engine_step([{block, Block}], S)));
         false -> S
     end.
+
+%% A plain content proposal is supported immediately. A COMMITTEE-changing proposal defers its support
+%% share until this node's own KB judges it (`quod_prolog:request_membership_verdict/5`, pinned to the
+%% proposal's parent height): we record `validating` and support only on a `valid` verdict — so a Byzantine
+%% leader's unauthorized membership change never collects an honest support quorum. (The LEADER supports its
+%% own proposal directly in `handle_append_leader`: its `can_join` proof at propose time IS its validation.)
+%% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
+%% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
+%% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
+support_or_validate(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
+support_or_validate(#block{slot = Sl, payload = [Change]} = Block, S = #s{ns = Ns, validating = Val}) ->
+    case committee_delta(Change) =/= {[], []} of
+        false -> support_block(Block, S);
+        true  -> BH = block_hash(Block),
+                 case Val of
+                     {Sl, BH, _} -> S;   %% already validating this exact block — idempotent, don't re-request
+                     _ -> _ = quod_prolog:request_membership_verdict(Ns, Change, Sl, self(), {Sl, BH}),
+                          S#s{validating = {Sl, BH, Block}}
+                 end
+    end.
+
+%% The KB verdict for a membership proposal we deferred, correlated to the exact block by `{Sl, BH}`: `valid`
+%% ⇒ emit the deferred support share; `invalid` ⇒ latch `invalid[Sl]` (so we never endorse it at any phase —
+%% see `apply_event({notarized,...})`) and count it; `abstain` ⇒ neither (a peer-formed support cert may still
+%% notarize; if enough nodes abstain the slot Δ-skips). A verdict is acted on ONLY if `{Sl, BH}` still matches
+%% what we are validating AND `Sl` is still head+1 — so a stale verdict (slot finalized, or a DIFFERENT block
+%% now validating under leader equivocation) is dropped, never applied to the wrong block.
+on_membership_verdict(Sl, BH, Verdict, S = #s{validating = {Sl, BH, Block}, slot = H}) when Sl =:= H + 1 ->
+    S1 = S#s{validating = none},
+    case Verdict of
+        valid        -> support_block(Block, S1);
+        {invalid, _} -> S1#s{invalid = (S1#s.invalid)#{Sl => true},
+                             membership_rejects = S1#s.membership_rejects + 1};
+        abstain      -> S1
+    end;
+on_membership_verdict(_Sl, _BH, _Verdict, S) -> S.   %% stale / different block / not validating — ignore
 
 %% The head+1 slot is now an ACTIVE view (a proposal seen, or a local write we couldn't lead): arm the
 %% Δ complaint timer for it. Idempotent per slot (`A =/= V`) so repeat evidence never pushes the deadline
@@ -1004,8 +1065,10 @@ ts_acceptable(Ts, Last, Now) ->
 %% additionally passes the membership gate (`membership_change_ok/2`): shape + never-empty floor,
 %% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
 %% gates a peer's proposal in `valid_proposal` before support-signing) — so an unacceptable membership
-%% change never reaches a support quorum and can never commit. The KB-side `can_join` re-proof is the
-%% next slice; committed history stays cert-trusted (catch-up folds it unconditionally, by design).
+%% change never reaches a support quorum and can never commit. This is the PURE shape+floor gate; a peer
+%% that passes it then also defers its support to a KB verdict (`support_or_validate/2` →
+%% `quod_prolog:request_membership_verdict/5`). Committed history stays cert-trusted (catch-up folds it
+%% unconditionally, by design).
 %% A diff that is not a PROPER list is rejected outright: it would crash `committee_delta`'s fold at
 %% commit AND on every restart re-fold — a poison block every node would crash-loop on. (`is_list/1`
 %% is NOT enough: it is `true` for an IMPROPER list like `[Op | junk]`, inspecting only the first cons
@@ -1033,7 +1096,8 @@ touches_committee(Diff) ->
                  (_)                                      -> false
               end, Diff).
 
-%% The membership gate — PURE (no KB access; the `can_join` re-proof rides the next slice): a
+%% The membership gate — PURE (no KB access; the KB `can_join` re-proof is the deferred support in
+%% `support_or_validate/2`): a
 %% committee-changing transaction must be EXACTLY ONE well-formed `peer_admitted` op and must not
 %% empty the committee.
 %%
@@ -1377,4 +1441,5 @@ stats_map(S) ->
       committee_size => length(S#s.validators), appends => S#s.appends,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
       submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
-      r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad}.
+      r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
+      membership_rejects => S#s.membership_rejects}.

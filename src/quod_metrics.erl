@@ -117,6 +117,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_busy,     "Appends rejected: a proposal already in flight (cumulative)"),
     _ = G(quod_consensus_append_redirect, "Appends redirected: not this slot's leader / not a member (cumulative)"),
     _ = G(quod_consensus_append_bad,      "Appends rejected: unacceptable change (cumulative)"),
+    _ = G(quod_consensus_membership_rejects, "Membership proposals a KB verdict rejected as invalid (cumulative)"),
     %% fact engine (m:quod_prolog)
     _ = G(quod_prolog_applied,       "Highest applied block index (fact engine)"),
     _ = G(quod_prolog_applies,       "Blocks applied to the kb (cumulative)"),
@@ -163,7 +164,7 @@ refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of
         #{slot := Sl, committed := CI, last_applied := LA, committee_size := CS,
           appends := AP, commits := CM, submitted := SU, skips := SK, pending := PE,
-          r_busy := RB, r_redirect := RR, r_bad := RD} ->
+          r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
@@ -177,6 +178,7 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_append_busy,     RB),
             _ = S(quod_consensus_append_redirect, RR),
             _ = S(quod_consensus_append_bad,      RD),
+            _ = S(quod_consensus_membership_rejects, MR),
             ok;
         _ -> ok
     end.

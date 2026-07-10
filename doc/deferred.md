@@ -136,24 +136,36 @@ stages, not carried forward:
   `quod_committee_predicates` provides the `admit(Pubkey,Host,Port)` / `remove(Pubkey)` external Erlang
   predicates (**prove-before-broadcast**: gate `can_join`, stage the assert/retract; the normal write path
   commits it — no sync-call from the predicate). Genesis asserts each founder's `peer_admitted`.
-- **Membership SAFETY — Byzantine committee-packing (the #1 open membership gap).** Admission is currently
-  safe only under **trusted/honest submitters**: `can_join` is proved ONLY on the submitting node (peers
-  apply the committed `peer_admitted` diff via OCC without re-proving `can_join`), transaction writes are
-  **unsigned** (`sig=none`), and `acceptable_change(#transaction{})` accepts any membership tx. So a
-  Byzantine/stale submitter can commit an unauthorized `peer_admitted` — packing the committee past the `f`
-  bound, admitting a node `can_join` would reject, or shifting `quorum/1`. Fix (three parts): (a) **re-prove
-  `can_join` on every node** at proposal-validation / apply, dropping a committee-changing block that fails
-  locally; (b) **Phase-B transaction signatures** so only an admitted signer's membership tx is accepted
-  (the write-gate = membership trick from onbrater); (c) a **BFT fault-tolerance floor guard** on committee
-  SHRINK, enforced at the apply/propose gate on **every node** (not just in the `remove_1` predicate) — it
-  must refuse to drop below `3f+1` viability. **Note (code-review 2026-07-04):** the current empty-committee
-  floor lives ONLY inside the `remove_1` predicate, so a **raw `retract(peer_admitted(...))` transaction, or
-  a single tx retracting every member, bypasses it** and empties the validator set; `leader/2 []` then keeps
-  the statem from crashing but the namespace **wedges** unrecoverably. `acceptable_change(#transaction{})`
-  accepting any membership tx is the same gap. The real floor is the per-node re-validation of (a) — the
-  predicate guard is honest-path-only. (`remove`'s retract-by-pattern already keeps the KB and the validator
-  set in lockstep, and the predicate floor now counts distinct pubkeys.) Until this lands, membership is
-  **crash-fault-only**.
+- **Membership SAFETY — per-node re-validation + shrink floor: parts (a)+(c) LANDED (0.6.22–0.6.24,
+  Slices A–C); part (b) signatures still open.** The gate is now at **propose/support time** on EVERY
+  validator (the BFT-native seam), not the honest submitter alone:
+  - **(a) per-node re-validation — DONE.** Every validator re-judges a committee-changing proposal against
+    its OWN kb before support-signing (`quod_prolog:request_membership_verdict/5`, an async cast pinned to
+    the proposal's parent height `Slot-1` so honest nodes reach the same verdict): an assert re-proves
+    `can_join` (rejecting a `can_join` that stages writes, or a pubkey already admitted); a retract requires
+    the exact `peer_admitted` clause present (`quod_diff:has_clause/4`) — which closes the fabricated-address
+    **validator-ejection** (a wrong-`Host`/`Port` retract that would drop a member from `#s.validators` while
+    missing in the KB). A `valid` verdict emits the deferred support share; `invalid` latches `#s.invalid[Sl]`
+    (barred from endorsing at any phase, `membership_rejects` counted) — so an unauthorized change never
+    collects an honest support quorum and is complaint-skipped. **NOT re-validated at apply**: a committed
+    membership tx applies **unconditionally** in the KB (`is_membership_change` → skip OCC), keeping the KB
+    and the validator-set projection in **lockstep** (this replaced the old apply-time-drop idea, which would
+    fork a cert-trusting catch-up joiner). Proven on the 4-node loopback-QUIC committee (`simplex_SUITE`
+    `byzantine_retract_rejected` / `byzantine_admit_rejected`: a crafted proposal from the real leader is
+    refused support, the slot skips, the committee is unchanged, the namespace still commits).
+  - **(c) never-empty floor — DONE (crash-safe, stepwise).** `quod_simplex:membership_change_ok/2` (the pure
+    shape gate, Slice A) enforces: a committee-touching tx is EXACTLY ONE well-formed `peer_admitted` op
+    (`Id =:= Pk`, binary) and must not empty the committee — at BOTH the leader (`handle_append`) and every
+    validator (`valid_proposal`). Kills the raw `retract`-everyone wedge, mass packing/shrinking in one block,
+    op-smuggling, and the `Id≠Pk` address-poison op. The floor is **stepwise never-empty** (4→3→2→1 legal, one
+    quorum-endorsed member per block); the **hard `3f+1` Byzantine-tolerance floor stays OPEN** — it needs a
+    network-target-`f` concept, and with today's default-open `can_join` + `sig=none` a still-admitted member
+    can walk the committee down one endorsed step at a time.
+  - **(b) transaction signatures — STILL OPEN (Phase B).** Writes are unsigned (`sig=none`), so the verdict
+    checks WHAT changes, not WHO authorized it: with default-open `can_join`, committee **packing** (admitting
+    nodes the policy would allow) and authorized-but-unwanted **shrink** are not yet closed — that needs the
+    write-gate = membership signature trick from onbrater. Until (b) lands, membership is Byzantine-safe
+    against *malformed / policy-violating / KB-inconsistent* changes but not against a **forged author**.
 - **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04, from the S1 cert-persistence
   slice).** Because the committee can change on ANY slot (a `peer_admitted` assert/retract) and shares are
   ingested un-gated by height, a node that is LAGGING across a committee-changing slot N can `form_cert`

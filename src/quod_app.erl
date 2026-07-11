@@ -26,13 +26,41 @@ auto-started, and no identity is minted (this is what the multi-node test SUITE 
 -endif.
 
 start(_StartType, _StartArgs) ->
+    ok = quiet_transport_logging(),
     Content   = load_config(),
+    ok = tag_node_logs(),
     {ok, Sup} = quod_sup:start_link(),
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
     {ok, Sup}.
 
 stop(_State) ->
+    ok.
+
+%% Stamp this node's id into the primary logger metadata so every JSON log line
+%% carries `node_id` — the 30-node fleet's warnings become attributable per
+%% instance in Loki (`{job="docker"} |~ "quod\\[quod:" | json | node_id="kp_..."`).
+%% Uses the Ed25519 pubkey short-id (same identity the Prometheus `node_id` label
+%% uses); falls back to the BEAM node name in legacy/test mode where no identity
+%% is minted. Runs after `load_config/0`, which is what sets `node_pubkey`.
+tag_node_logs() ->
+    Id = case application:get_env(quod, node_pubkey) of
+             {ok, Pub} when is_binary(Pub) -> quod_identity:short(Pub);
+             _                             -> atom_to_binary(node(), utf8)
+         end,
+    _ = logger:update_primary_config(#{metadata => #{node_id => Id}}),
+    ok.
+
+%% The pure-Erlang `quic` transport logs one INFO line per received packet
+%% (`short_header_packet`). Under load that floods the default `logger_std_h`
+%% handler faster than its sink drains; the handler's overload protection then
+%% stalls the node's stdout, so genuine warnings/errors never reach the
+%% nomad/docker log files that promtail ships to Loki. Raise the quic
+%% application's log level to `notice` at boot: keep its warnings/errors, drop
+%% the per-packet info/debug torrent. Best-effort — a `{error, {not_loaded,_}}`
+%% (quic somehow not yet loaded) is harmless, so it is ignored.
+quiet_transport_logging() ->
+    _ = logger:set_application_level(quic, notice),
     ok.
 
 %% --- config: HOCON file primary, QUOD_ env vars override individual keys -----

@@ -201,6 +201,14 @@
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 51 },
       "fieldConfig": { "defaults": { "unit": "short", "custom": { "drawStyle": "line", "showPoints": "never" } } },
       "targets": [ { "refId": "A", "expr": "quod_brahms_estimated_n{node_id=~\"$node\", namespace=~\"$namespace\"}", "legendFormat": "n̂ · {{node_id}}/{{namespace}}" } ]
+    },
+    {
+      "type": "logs", "id": 43, "title": "Node logs — warnings & errors (Loki)",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 11, "w": 24, "x": 0, "y": 59 },
+      "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — same id as the $node picker.",
+      "options": { "showTime": true, "wrapLogMessage": true, "enableLogDetails": true, "dedupStrategy": "none", "sortOrder": "Descending" },
+      "targets": [ { "refId": "A", "editorMode": "code", "queryType": "range", "expr": "{job=\"docker\"} |~ \"node_id\" | json | node_id=~\"kp_.+\" | level=~\"warning|error|notice\"" } ]
     }
   ]
 }

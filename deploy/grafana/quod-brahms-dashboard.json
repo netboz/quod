@@ -539,6 +539,44 @@
       ],
       "title": "Estimated network size n̂ (per node) vs actual",
       "type": "timeseries"
+    },
+    {
+      "type": "logs",
+      "title": "Node logs — warnings & errors (Loki)",
+      "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per log event to stdout (quod_log_formatter); promtail ships it under {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — the same id as the $node picker above. Query: {job=\"docker\"} |~ \"node_id\" | json | node_id=~\"kp_.+\" | level=~\"warning|error|notice\".",
+      "datasource": {
+        "type": "loki",
+        "uid": "loki"
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "loki",
+            "uid": "loki"
+          },
+          "editorMode": "code",
+          "queryType": "range",
+          "expr": "{job=\"docker\"} |~ \"node_id\" | json | node_id=~\"kp_.+\" | level=~\"warning|error|notice\""
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": false,
+        "showCommonLabels": false,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": false,
+        "enableLogDetails": true,
+        "dedupStrategy": "none",
+        "sortOrder": "Descending"
+      },
+      "id": 101
     }
   ],
   "refresh": "10s",

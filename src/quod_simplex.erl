@@ -64,7 +64,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
-         prune_dials/2, membership_change_ok/2, change_acceptable/2,
+         prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -510,7 +510,8 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             r_busy     = 0 :: non_neg_integer(),   %% append rejected: a proposal already in flight (backpressure)
             r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
-            membership_rejects = 0 :: non_neg_integer()}). %% membership proposals a KB verdict rejected as invalid
+            membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
+            redrives   = 0 :: non_neg_integer()}).  %% Δ re-fires that re-broadcast our own in-flight proposal
 
 callback_mode() -> [state_functions].
 
@@ -720,9 +721,9 @@ running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{join = {worker, Pid}
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
 %% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
-%% local client write we couldn't lead). If V is still the stuck head and we haven't commit-signed it,
-%% broadcast our complaint share; a `⅔` complaint cert then skips V. Re-arm while V stays stuck (a
-%% retransmit, over the send-once transport); stop once the head advances (commit or skip).
+%% local client write we couldn't lead). The redrive-or-complain decision lives in `on_complain_timeout/2`;
+%% this clause owns only the timer mechanics: re-arm while V stays stuck (the Δ re-fire IS the retransmit
+%% over the send-once transport), stop once the head advances (commit or skip). See on_complain_timeout/2.
 running({timeout, complain}, {complain, V}, S0) ->
     S1 = on_complain_timeout(V, S0),
     Actions = case S1#s.active_slot of
@@ -931,11 +932,21 @@ nack_pending(Slot, S = #s{pending = P}) ->
 %% honest-party one-block-per-slot invariant).
 support_block(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;
 support_block(#block{slot = Sl} = Block, S = #s{supported = Sup, id = Id}) ->
-    case maps:is_key(Sl, Sup) of
-        true  -> S;
-        false -> Share = make_share(support, Sl, block_hash(Block), Id),
-                 engine_step([{share, Share}],
-                             broadcast({share, Share}, S#s{supported = Sup#{Sl => block_hash(Block)}}))
+    case maps:get(Sl, Sup, none) of
+        none -> Share = make_share(support, Sl, block_hash(Block), Id),
+                engine_step([{share, Share}],
+                            broadcast({share, Share}, S#s{supported = Sup#{Sl => block_hash(Block)}}));
+        BH ->
+            case block_hash(Block) of
+                %% The SAME block again = the leader is REDRIVING the stuck slot — which means it is
+                %% missing votes, possibly OURS (our frames to it were lost; the transport is send-once).
+                %% Re-echo our own share(s) for it — deterministic Ed25519 re-signs to identical bytes —
+                %% so a redrive heals both directions. Bounded by the leader's Δ (one echo per re-fire).
+                BH -> Own = [{share, make_share(support, Sl, BH, Id)} |
+                             [{share, make_share(commit, Sl, BH, Id)} || maps:is_key(Sl, S#s.commit_signed)]],
+                      lists:foldl(fun broadcast/2, S, Own);
+                _  -> S   %% a DIFFERENT block for a slot we already signed — equivocation; never double-sign
+            end
     end.
 
 %% Commit/complaint certs can arrive out of slot order over the async transport; buffer each
@@ -961,7 +972,7 @@ drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
 %% every message is SHAPE-VALIDATED first — a record with a malformed field (e.g. a non-integer slot)
 %% would otherwise crash the statem downstream (share_bytes packs `Slot:64`). Malformed ⇒ silently dropped.
 dispatch(Peer, {propose, #block{} = B}, S) -> case well_formed_block(B) of true -> on_propose(Peer, B, S); false -> S end;
-dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true -> engine_step([{share, Sh}], S); false -> S end;
+dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true -> maybe_join_complaint(Sh, engine_step([{share, Sh}], S)); false -> S end;
 dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
 dispatch(_Peer, _Other, S)                 -> S.
 
@@ -1002,15 +1013,25 @@ on_propose(Peer, #block{slot = Sl} = Block, S) ->
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
 support_or_validate(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
+%% Slot already judged INVALID: we never endorse it at any phase, so a REDRIVEN copy must not re-request
+%% a verdict (it would re-prove per Δ and double-count the reject). Checked before hashing — no work.
+support_or_validate(#block{slot = Sl}, S) when is_map_key(Sl, S#s.invalid) -> S;
 support_or_validate(#block{slot = Sl, payload = [Change]} = Block, S = #s{ns = Ns, validating = Val}) ->
     case committee_delta(Change) =/= {[], []} of
         false -> support_block(Block, S);
-        true  -> BH = block_hash(Block),
-                 case Val of
-                     {Sl, BH, _} -> S;   %% already validating this exact block — idempotent, don't re-request
-                     _ -> _ = quod_prolog:request_membership_verdict(Ns, Change, Sl, self(), {Sl, BH}),
-                          S#s{validating = {Sl, BH, Block}}
-                 end
+        true  ->
+            BH = block_hash(Block),
+            case maps:get(Sl, S#s.supported, none) =:= BH of
+                %% judged VALID + support-signed already: a redriven copy takes the plain support path,
+                %% whose duplicate branch re-echoes our share — never a KB re-proof per Δ
+                true  -> support_block(Block, S);
+                false ->
+                    case Val of
+                        {Sl, BH, _} -> S;   %% already validating this exact block — idempotent, don't re-request
+                        _ -> _ = quod_prolog:request_membership_verdict(Ns, Change, Sl, self(), {Sl, BH}),
+                             S#s{validating = {Sl, BH, Block}}
+                    end
+            end
     end.
 
 %% The KB verdict for a membership proposal we deferred, correlated to the exact block by `{Sl, BH}`: `valid`
@@ -1049,10 +1070,89 @@ delta_ms() ->
         _                           -> ?DELTA_MS   %% a mistyped override must not crash the timer action
     end.
 
-%% Δ fired: if V is still the stuck head and we may still complain it (haven't commit-signed it), sign +
-%% (re)broadcast our complaint share and offer it to the engine — a `⅔` complaint cert skips V. Latch
-%% `complained[V]` so `may_commit` bars us from ever commit-signing V (the mutual-exclusion safety half).
-on_complain_timeout(V, S = #s{slot = H, id = Id, commit_signed = Cs}) when V =:= H + 1 ->
+%% Δ fired for the stuck head V. The decision:
+%%
+%% - **A follower complains** (if it hasn't commit-signed V) — its own expired Δ IS the evidence of a
+%%   stall, and its share is what seeds the `f+1` amplification below.
+%% - **The LEADER of its own in-flight proposal REDRIVES instead of giving up.** Complaining would latch
+%%   `complained[V]` and bar our own commit share forever — at the quorum=N committee sizes (2, 3) that
+%%   wedges the slot PERMANENTLY (the promotion race: our proposal reached a member that had not yet
+%%   promoted, was dropped, and nothing retransmits over the send-once transport). So each Δ re-fire
+%%   re-broadcasts the in-flight state (proposal + our shares + pooled certs) — self-healing the moment
+%%   the counterpart can act. The leader JOINS a complaint only on the `f+1` evidence (below) — and if it
+%%   already commit-signed V (so it may never complain), it keeps REDRIVING: retransmitting the pooled
+%%   support cert + its commit share is exactly what heals a follower whose copy was lost.
+on_complain_timeout(V, S = #s{slot = H, commit_signed = Cs}) when V =:= H + 1 ->
+    case leads_inflight(V, S) of
+        false -> complain_slot(V, S);
+        true  -> case complaint_evidence(V, S) andalso may_complain(V, maps:keys(Cs)) of
+                     true  -> complain_slot(V, S);
+                     false -> redrive_slot(V, S)
+                 end
+    end;
+on_complain_timeout(_V, S) -> S.
+
+%% **f+1 complaint amplification** (deferred.md §3, landed with growth): on ingesting a complaint share
+%% for the in-flight head with `f+1` distinct PEER complaints pooled, JOIN the complaint immediately —
+%% don't wait for our own Δ, which may never have armed (a member that never received the proposal holds
+%% no evidence of its own). This is what completes a skip at the quorum=N sizes: the skip cert needs
+%% EVERY member's share there, and a late-promoting member only learns of the stall from the re-broadcast
+%% complaint shares — on arrival it joins, and the cert closes. `complain_slot`'s `may_complain` keeps the
+%% commit/complaint mutual exclusion; `arm_complaint` puts the re-broadcast of our own share on our Δ.
+maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{slot = H}) when V =:= H + 1 ->
+    case (not maps:is_key(V, S#s.complained)) andalso complaint_evidence(V, S) of
+        true  -> arm_complaint(V, complain_slot(V, S));
+        false -> S
+    end;
+maybe_join_complaint(_Share, S) -> S.
+
+%% Are we the leader of V with our own proposal still in flight?
+leads_inflight(V, S = #s{self = Self, proposing = P}) ->
+    P =:= V andalso leader(V, active_validators(S)) =:= Self.
+
+%% `f+1` distinct PEER complaint shares for V in the pool — proof at least one HONEST member wants the
+%% skip (at most `f` Byzantine members exist, and complaint shares are signature-verified + set-checked
+%% at ingest, so an outsider can't manufacture evidence).
+complaint_evidence(V, S = #s{self = Self, eng = #eng{shares = Shares}}) ->
+    Bucket = maps:get({complaint, V, none}, Shares, #{}),
+    complaint_amplified(Self, active_validators(S), Bucket).
+
+%% Pure threshold: at least `f+1` DISTINCT PEER signers (self excluded — our own share isn't independent
+%% evidence). `f` is DERIVED from the quorum rule (`quorum = N − f`), never restated, so this can't drift
+%% from the cert arithmetic. `Bucket` is a `signer => share` map, so distinctness is free.
+complaint_amplified(Self, Validators, Bucket) ->
+    N = length(Validators),
+    map_size(maps:remove(Self, Bucket)) >= (N - quorum(N)) + 1.
+
+%% Re-broadcast slot V's in-flight state: the proposal block (pinned by the hash we support-signed —
+%% `supported[V]`, set with `proposing` and cleared with it in `finalize/2`), our own support/commit
+%% shares (re-signed — Ed25519 is deterministic, so the bytes are identical to the originals), and any
+%% pooled certs. The Δ re-fire IS the retransmit over the send-once transport. Idempotent at every
+%% receiver: duplicate blocks/shares/certs are absorbed by the engine, and a duplicate proposal makes the
+%% receiver RE-ECHO its own shares (see `support_block`) — healing the reverse direction too. Sent only
+%% to peers with a LIVE conn: a peer we cannot reach yet has the original frames in its outbox already
+%% (flushed on link_up); buffering per-Δ duplicates would only bloat it toward the ?MAX_OUTBOX cap.
+redrive_slot(V, S0 = #s{self = Self, id = Id, supported = Sup, commit_signed = Csd, conns = Conns,
+                        eng = Eng = #eng{certs = Certs}}) ->
+    case maps:get(V, Sup, none) of
+        none -> S0;   %% not yet support-signed (mid-propose edge) — nothing to redrive this Δ
+        BH ->
+            case block_for(BH, Eng) of
+                undefined -> S0;
+                Block ->
+                    Own  = [{share, make_share(support, V, BH, Id)} |
+                            [{share, make_share(commit, V, BH, Id)} || maps:is_key(V, Csd)]],
+                    Cs   = [{cert, C} || {{_K, Sl, _B}, C} <- maps:to_list(Certs), Sl =:= V],
+                    Live = [P || P <- active_validators(S0) -- [Self], maps:is_key(P, Conns)],
+                    S1   = S0#s{redrives = S0#s.redrives + 1},
+                    lists:foldl(fun(Msg, Acc) ->
+                                        lists:foldl(fun(P, A) -> send(P, Msg, A) end, Acc, Live)
+                                end, S1, [{propose, Block} | Own ++ Cs])
+            end
+    end.
+
+%% Sign + (re)broadcast our complaint share and offer it to the engine, unless we commit-signed V.
+complain_slot(V, S = #s{id = Id, commit_signed = Cs}) ->
     case may_complain(V, maps:keys(Cs)) of
         false -> S;
         true  -> Share = make_share(complaint, V, none, Id),
@@ -1062,8 +1162,7 @@ on_complain_timeout(V, S = #s{slot = H, id = Id, commit_signed = Cs}) when V =:=
                  %% is barred from a commit share (the mutual-exclusion safety half, self-enforced here).
                  S1 = S#s{complained = (S#s.complained)#{V => true}},
                  engine_step([{share, Share}], broadcast({share, Share}, S1))
-    end;
-on_complain_timeout(_V, S) -> S.
+    end.
 
 valid_proposal(#block{slot = Sl, parent = P, payload = [Change], timestamp = Ts}, #s{slot = H, last_ts = Last} = S) ->
     Sl =:= H + 1 andalso P =:= H andalso ts_acceptable(Ts, Last, quod_time:now_ms()) andalso acceptable_change(Change, S);
@@ -1508,4 +1607,4 @@ stats_map(S) ->
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
       submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
-      membership_rejects => S#s.membership_rejects}.
+      membership_rejects => S#s.membership_rejects, redrives => S#s.redrives}.

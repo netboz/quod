@@ -118,6 +118,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_redirect, "Change requests sent to the wrong node (not the current leader) and redirected (running total)."),
     _ = G(quod_consensus_append_bad,      "Change requests rejected as malformed or not allowed (running total)."),
     _ = G(quod_consensus_membership_rejects, "Proposed committee changes (adding or removing a voting node) that this node checked against its own data and rejected as invalid (running total)."),
+    _ = G(quod_consensus_redrives,        "How many times this node re-sent a proposal it was still waiting on, instead of giving up on it (running total). Climbing steadily means a committee member is not responding."),
     %% Knowledge base (this node's copy of the ontology's facts)
     _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
     _ = G(quod_prolog_applies,       "How many blocks have been written into the knowledge base (running total)."),
@@ -165,7 +166,8 @@ refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of
         #{slot := Sl, committed := CI, last_applied := LA, committee_size := CS,
           appends := AP, commits := CM, submitted := SU, skips := SK, pending := PE,
-          r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR} ->
+          r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
+          redrives := RV} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
@@ -180,6 +182,7 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_append_redirect, RR),
             _ = S(quod_consensus_append_bad,      RD),
             _ = S(quod_consensus_membership_rejects, MR),
+            _ = S(quod_consensus_redrives,        RV),
             ok;
         _ -> ok
     end.

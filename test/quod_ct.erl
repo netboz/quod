@@ -10,7 +10,7 @@ dev cert (`make_cert`, whose CN differs), and the `?NS`-bound query helpers (`st
 `datadir` variants.
 """.
 -include_lib("common_test/include/ct.hrl").
--export([eventually/2, stop_all/1, match_ok/1, datadir/2]).
+-export([eventually/2, stop_all/1, match_ok/1, datadir/2, generate_key_gt/1]).
 
 %% Poll `F` every 150ms until it returns `true` or the budget runs out.
 eventually(_F, Timeout) when Timeout =< 0 -> false;
@@ -29,3 +29,9 @@ match_ok(_)                -> false.
 
 %% A per-port data_dir under the suite's private dir.
 datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
+
+%% A fresh Ed25519 keypair whose pubkey sorts strictly after `Lo` (Erlang term order = the order
+%% quod_simplex:leader/2 sorts by), so a suite can pin round-robin leadership deterministically.
+generate_key_gt(Lo) ->
+    {P, _} = Key = quod_identity:generate(),
+    case P > Lo of true -> Key; false -> generate_key_gt(Lo) end.

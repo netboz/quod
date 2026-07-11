@@ -39,7 +39,11 @@ all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_vo
 %%%===================================================================
 
 init_per_suite(Config) ->
-    [{FPub, _} = FKey, {JPub, _} = JKey] = [quod_identity:generate() || _ <- [f, j]],
+    {FPub, _} = FKey = quod_identity:generate(),
+    %% JPub sorts AFTER FPub, pinning round-robin leadership at N=2: the founder leads odd slots (incl.
+    %% slot 5, the unpaced post-admit write = the promotion race) and the joiner leads even slots (incl.
+    %% slot 6, the promoted-joiner-leads acceptance).
+    {JPub, _} = JKey = quod_ct:generate_key_gt(FPub),
     FAddr = {"127.0.0.1", ?FOUNDER_PORT},
     JAddr = {"127.0.0.1", ?JOINER_PORT},
 
@@ -176,25 +180,26 @@ joiner_promoted_to_voter(Config) ->
 
     %% the founder admits the joiner (slot 4) — `can_join` (root ontology, default-open) gates it.
     ?assertMatch({ok, _, _}, prove(Founder, {admit, JPub, "127.0.0.1", ?JOINER_PORT})),
-    ?assert(eventually(fun() -> slot(Founder) =:= 4 end, 10000)),
 
-    %% the joiner follows the admit over the feed and SELF-PROMOTES: committee, role, height all flip.
+    %% THE PROMOTION RACE, deliberately unpaced: the very next write goes to the founder IMMEDIATELY
+    %% after the admit committed — quorum is now 2 but the joiner has (very likely) not yet seen its own
+    %% admission over the feed, so the founder's slot-5 proposal lands on a node that drops it. Without
+    %% the stuck-head redrive the founder's Δ would self-complain, latch complained[5], and wedge the
+    %% namespace forever; with it, the founder re-broadcasts the in-flight proposal each Δ until the
+    %% joiner promotes and votes. The prove blocks until the commit — its {ok,_,_} IS the assertion.
+    ?assertMatch({ok, _, _}, prove(Founder, {assertz, {promoted, probe, 5}})),
+    ?assert(eventually(fun() -> slot(Founder) =:= 5 andalso slot(Joiner) =:= 5 end, 20000)),
+
+    %% the joiner self-promoted along the way: committee, role, join state all flipped.
     Both = lists:sort([FPub, JPub]),
-    ?assert(eventually(fun() ->
-                           lists:sort(peer:call(Joiner, quod_simplex, committee, [?NS])) =:= Both
-                       end, 30000)),
-    ?assert(eventually(fun() -> maps:get(role, status(Joiner), undefined) =:= validator end, 10000)),
-    ?assertEqual(4, slot(Joiner)),
+    ?assertEqual(Both, lists:sort(peer:call(Joiner, quod_simplex, committee, [?NS]))),
+    ?assertEqual(validator, maps:get(role, status(Joiner))),
     ?assertEqual(done, maps:get(join, status(Joiner))),
     ?assertEqual(Both, lists:sort(peer:call(Founder, quod_simplex, committee, [?NS]))),
 
-    %% N=2: quorum(2)=2 — a commit is only possible if the promoted joiner actually votes. One probe
-    %% write per round-robin leader (slots 5 and 6), so the joiner both FOLLOWS a founder-led slot as a
-    %% voter and LEADS one itself — the milestone's acceptance.
-    Peers = #{FPub => Founder, JPub => Joiner},
-    ok = probe_write(5, Peers, {assertz, {promoted, probe, 5}}),
-    ?assert(eventually(fun() -> slot(Founder) =:= 5 andalso slot(Joiner) =:= 5 end, 20000)),
-    ok = probe_write(6, Peers, {assertz, {promoted, probe, 6}}),
+    %% and it LEADS: slot 6 is the joiner's by round-robin (JPub > FPub by construction), so this write
+    %% commits only if the promoted joiner proposes + leads it — the milestone's acceptance.
+    ?assertMatch({ok, _, _}, prove(Joiner, {assertz, {promoted, probe, 6}})),
     ?assert(eventually(fun() -> slot(Founder) =:= 6 andalso slot(Joiner) =:= 6 end, 20000)),
 
     %% both probes readable on BOTH nodes (committed by the committee, not one side's illusion).
@@ -217,15 +222,6 @@ restart_node(Old, Port, Key, Extra, Config) ->
 founder_cfg() ->
     #{mode => create, committee => [],
       genesis_file => filename:join(code:priv_dir(quod), "ontologies/quod_root.pl")}.
-
-%% Submit a probe write to the member that LEADS `Slot` (round-robin over the sorted committee — must
-%% mirror quod_simplex:leader/2) and require it to commit: at N=2 that needs BOTH members' signatures.
-probe_write(Slot, Peers, Fact) ->
-    Leader = leader_for(Slot, maps:keys(Peers)),
-    ?assertMatch({ok, _, _}, prove(maps:get(Leader, Peers), Fact)),
-    ok.
-
-leader_for(Slot, Pubs) -> lists:nth((Slot - 1) rem length(Pubs) + 1, lists:sort(Pubs)).
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)   -> maps:get(slot, status(Peer), -1).

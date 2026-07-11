@@ -201,6 +201,29 @@ complaint_cert_test() ->
     {ok, C} = quod_simplex:form_cert(complaint, 2, none, Sh, Vals),
     ?assert(quod_simplex:verify_cert(C, Vals)).
 
+%%%===================================================================
+%%% f+1 complaint amplification threshold (Slice B: growth liveness)
+%%%===================================================================
+
+%% The leader of an in-flight slot (and any node ingesting a complaint share) joins a complaint only on
+%% `f+1` distinct PEER complaint shares — enough to guarantee ≥1 HONEST complainer, so a lone Byzantine
+%% can't force a skip, yet a genuine stall still gets amplified. The threshold is DERIVED from quorum/1
+%% (`f = N − quorum(N)`), so it must track the cert arithmetic exactly at every committee size.
+complaint_amplified_threshold_test() ->
+    Bucket = fun(Signers) -> maps:from_list([{S, dummy} || S <- Signers]) end,
+    %% peers are just distinct signer keys; `self` (the atom `me`) is excluded from the count.
+    Vs = fun(N) -> [me | [{peer, I} || I <- lists:seq(1, N - 1)]] end,
+    Peers = fun(K) -> Bucket([{peer, I} || I <- lists:seq(1, K)]) end,
+    Amp = fun(N, K) -> quod_simplex:complaint_amplified(me, Vs(N), Peers(K)) end,
+    %% f+1 by committee size: N=2,3 ⇒ 1 (f=0); N=4,5,6 ⇒ 2 (f=1); N=7 ⇒ 3 (f=2).
+    ?assertNot(Amp(2, 0)), ?assert(Amp(2, 1)),                 %% N=2: one peer suffices
+    ?assertNot(Amp(3, 0)), ?assert(Amp(3, 1)),                 %% N=3: still one (f=0)
+    ?assertNot(Amp(4, 1)), ?assert(Amp(4, 2)),                 %% N=4: needs two (f=1)
+    ?assertNot(Amp(7, 2)), ?assert(Amp(7, 3)),                 %% N=7: needs three (f=2)
+    %% our OWN complaint share is not independent evidence — self is excluded from the count.
+    ?assertNot(quod_simplex:complaint_amplified(me, Vs(2), Bucket([me]))),
+    ?assert(quod_simplex:complaint_amplified(me, Vs(2), Bucket([me, {peer, 1}]))).
+
 %% Malformed shapes are rejected even with a valid signature over their (malformed) bytes.
 share_shape_test() ->
     {_, Id} = id(),

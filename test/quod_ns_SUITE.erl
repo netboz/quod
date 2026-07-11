@@ -47,7 +47,7 @@ t_admit_grows_committee(Cfg) ->
     %% pick a Joiner pubkey that sorts AFTER the founder, so the founder (sort position 0) is the round-robin
     %% leader for the next (odd) slot — the founder therefore PROPOSES, deterministically (see the engine
     %% check below), rather than redirecting on ~half of runs.
-    Joiner = generate_pubkey_gt(Self),
+    {Joiner, _} = quod_ct:generate_key_gt(Self),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertMatch({ok, _, _}, rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
     ?assertEqual([Self, Joiner], quod_simplex:committee(Ns)),   %% sorted, Self < Joiner by construction
@@ -64,12 +64,6 @@ t_admit_grows_committee(Cfg) ->
     ?assertEqual(H, height(Ns)).
 
 height(Ns) -> maps:get(slot, quod_simplex:status(Ns), -1).
-
-%% a fresh Ed25519 pubkey that sorts strictly after `Lo` (Erlang term order = the order quod_simplex:leader/2
-%% sorts by), so the caller can pin round-robin leadership deterministically.
-generate_pubkey_gt(Lo) ->
-    {P, _} = quod_identity:generate(),
-    case P > Lo of true -> P; false -> generate_pubkey_gt(Lo) end.
 
 %% remove of the sole member is refused (the crash-safe floor): the predicate fails, nothing commits, the
 %% committee is unchanged, and the process is still serving.

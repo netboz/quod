@@ -38,10 +38,11 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 > self-satisfies, so an append commits synchronously. A committee-changing proposal is additionally
 > **re-validated by every validator before support** (`membership_change_ok/2` shape + never-empty gate,
 > then a KB verdict via `quod_prolog:request_membership_verdict/5`), so an unauthorized/malformed change
-> can't gather an honest quorum (`doc/deferred.md` §3 (a)+(c)). **Next:** self-admit promotion (a caught-up
-> joiner becoming a voter), signed membership authorship (Phase B, closing committee-packing), the
-> reader/feed dissemination tier, and the hardening in `doc/deferred.md` §3 (mid-flight committee-change,
-> per-message retransmit, epoch-frozen validators).
+> can't gather an honest quorum (`doc/deferred.md` §3 (a)+(c)). A caught-up observer that sees its own
+> `peer_admitted` fact commit **self-promotes to a voter** (`maybe_promote/2` — the committee facts are
+> the reality; the engine/links are projections catching up with them). **Next:** signed membership
+> authorship (Phase B, closing committee-packing), the reader/feed dissemination tier, and the hardening
+> in `doc/deferred.md` §3 (mid-flight committee-change, per-message retransmit, epoch-frozen validators).
 """.
 
 -include("quod_ledger.hrl").
@@ -753,10 +754,17 @@ running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
     logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
     {keep_state, S#s{join = pending}, [join_timeout()]};
 running(cast, {join_done, _}, S) -> {keep_state, S};   %% stale result (already retried / done)
-%% mode=join: the worker hands each verified, contiguous window here to persist + replay in slot order.
+%% mode=join: the catch-up worker — and, once caught up, the feed — hands each verified, contiguous
+%% window here to persist + replay in slot order. Gated by `may_sink/1`: a VOTING participant must never
+%% sink a window (it advances the store past the engine's in-flight slot; the next commit then hits the
+%% store contiguity check and crashes the statem) — reachable exactly when an in-flight anti-entropy pull
+%% crosses our own promotion. The refused puller just ends its run; the member advances via consensus.
 running({call, From}, {sink_catchup, Es}, S) ->
-    {S1, Reply} = apply_catchup_window(Es, S),
-    {keep_state, S1, [{reply, From, Reply}]};
+    case may_sink(S) of
+        true  -> {S1, Reply} = apply_catchup_window(Es, S),
+                 {keep_state, S1, [{reply, From, Reply}]};
+        false -> {keep_state, S, [{reply, From, {error, not_following}}]}
+    end;
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
 running({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
@@ -788,7 +796,9 @@ handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
     {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, slot = Sl}) ->
     Vs = active_validators(S),   %% eligibility + leader selection use the ACTIVE voting set (the floor in
-    case lists:member(Self, Vs) of   %% acceptable_change stays on the facts — see change_acceptable/2)
+    case is_participant(S) of    %% acceptable_change stays on the facts — see change_acceptable/2).
+        %% is_participant, not bare membership: a resuming mid-catch-up node whose on-disk prefix already
+        %% folds its OWN pubkey must not propose over a stale, mid-build engine.
         false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
         true  -> case acceptable_change(Change, S) of
                      false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
@@ -1302,6 +1312,11 @@ maybe_mark_ready(S) -> S.   %% already marked ready, OR still joining (serve pro
 is_participant(#s{join = J}) when J =/= none, J =/= done -> false;
 is_participant(#s{self = Self} = S)                      -> lists:member(Self, active_validators(S)).
 
+%% Who may hand us a catch-up window (`sink_catchup`): the catch-up worker always (it OWNS the store while
+%% joining), otherwise only a non-participant (observer). See the `sink_catchup` clause for the race this closes.
+may_sink(#s{join = {worker, _}}) -> true;
+may_sink(S)                      -> not is_participant(S).
+
 %% Spawn the (monitored) catch-up worker. It runs the driver loop OFF the statem: pull a window via the
 %% catchup sibling, hand each verified window back to us (`sink_catchup`) to persist + replay, and finally
 %% cast `{join_done, Result}`. Monitored so a crash mid-catch-up re-arms a retry (see the `'DOWN'` clause).
@@ -1334,8 +1349,28 @@ apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
         {ok, Store1} ->
             {Vs1, Ts1} = log_projection(Es, {Vs, S#s.last_ts}),   %% committee + monotonic bound live in one pass
             Slot = (lists:last(Es))#entry.index,
-            S1   = maybe_mark_ready(apply_committed(S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1})),
-            {S1, ok}
+            S1   = maybe_promote(S, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
+            {maybe_mark_ready(apply_committed(S1)), ok}
+    end.
+
+%% The projections catching up with the facts (S5b promotion). A window we just sunk folded OUR OWN
+%% `peer_admitted` fact into the committee — the committed fact IS the signal (no announcement, no extra
+%% protocol): re-arm the engine over the caught-up voting set at the new head (set + base together,
+%% exactly like the `join_done` re-arm) and from here `is_participant/1` is true — this node acts on
+%% `{log, Ns}` consensus traffic, supports, commit-signs, and takes its `leader/2` turns. Fires only on
+%% the post-`done` feed path: mid-catch-up both sides are non-participant (the `join` gate above), and
+%% admitted-while-catching-up is covered by the `join_done` handler's own re-arm. Vote-safety holds by
+%% construction — an observer never signed anything, so its first possible share is for a slot strictly
+%% after the admission (one support share per slot, ever). Demotion needs no twin: a removed member
+%% commit-signed its own removal as a member, after which `is_participant/1` is simply false and the
+%% feed re-follows it (quod_feed `follows/4`).
+maybe_promote(S0, S1) ->
+    case {is_participant(S0), is_participant(S1)} of
+        {false, true} ->
+            logger:notice("quod[~s]: admitted to the committee — voter as of slot ~b (committee ~b)",
+                          [S1#s.ns, S1#s.slot, length(active_validators(S1))]),
+            S1#s{eng = eng_new(active_validators(S1), S1#s.slot)};
+        _ -> S1
     end.
 
 local_genesis_hash(#s{store = Store}) ->
@@ -1459,7 +1494,8 @@ genesis_file(Cfg) ->
     end.
 
 status_map(S) ->
-    #{role => validator, committee => S#s.validators, slot => S#s.slot,
+    Role = case is_participant(S) of true -> validator; false -> observer end,
+    #{role => Role, committee => S#s.validators, slot => S#s.slot,
       committed => S#s.slot, last_applied => S#s.last_applied, join => join_state(S)}.
 
 %% Normalise the join lifecycle for `status/1`: `none` (create / a member) | `pending` | `catching_up` | `done`.

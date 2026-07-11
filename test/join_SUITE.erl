@@ -6,7 +6,13 @@ and, given only the founder's seed address and the out-of-band-pinned genesis ha
 committed log** — pulling each block+cert on the dedicated `{catchup, Ns}` channel, verifying every cert
 against the committee it reconstructs (never trusting the server), and replaying each verified block into its
 own KB as it lands. It ends caught up to the founder's height and can `prove` the founder's fact from its OWN
-KB, WITHOUT being a committee member (a read-only observer; admission to voter is the next slice).
+KB, WITHOUT being a committee member (a read-only observer).
+
+The final case is **S5b admission-to-voter**: the founder admits the caught-up observer (one ordinary
+transaction through the normal write path), the observer sees its own `peer_admitted` fact arrive over the
+live feed and **self-promotes to a voter** (`maybe_promote` — the committed fact is the signal), and then
+proves it really votes: probe writes commit at `quorum(2) = 2` under EACH member's leadership, including a
+slot the promoted joiner leads.
 
 Each node is its own OS Erlang node (`peer`, stdio-controlled) with its own `quod_quic` listener and Ed25519
 identity, so the catch-up request/response is genuine loopback QUIC — the deployment shape.
@@ -17,15 +23,16 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([joiner_catches_up/1, joiner_resumes_after_restart/1]).
+-export([joiner_catches_up/1, joiner_resumes_after_restart/1, joiner_promoted_to_voter/1]).
 
 -define(NS, <<"join:s5a">>).
 -define(FOUNDER_PORT, 15840).
 -define(JOINER_PORT,  15841).
 
 %% Ordered: the joiner first catches up (height 2), then — after the founder commits a NEW fact it did NOT
-%% follow live — a restart RESUMES catch-up from its persisted height and picks up the delta.
-all() -> [joiner_catches_up, joiner_resumes_after_restart].
+%% follow live — a restart RESUMES catch-up from its persisted height and picks up the delta; finally the
+%% founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b).
+all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter].
 
 %%%===================================================================
 %%% suite setup: found N=1, commit a fact, then start a mode=join node
@@ -36,9 +43,10 @@ init_per_suite(Config) ->
     FAddr = {"127.0.0.1", ?FOUNDER_PORT},
     JAddr = {"127.0.0.1", ?JOINER_PORT},
 
-    %% 1. the founder: create a self-only (N=1) committee, then commit one fact (slot 2).
-    Founder = start_node(?FOUNDER_PORT, FKey, Config,
-                         #{mode => create, committee => []}),
+    %% 1. the founder: create a self-only (N=1) committee with the REAL root ontology as genesis (it
+    %% carries the default-open `can_join` rule the admission case needs — the production shape), then
+    %% commit one fact (slot 2).
+    Founder = start_node(?FOUNDER_PORT, FKey, Config, founder_cfg()),
     ?assert(eventually(fun() -> slot(Founder) =:= 1 end, 10000)),   %% genesis committed
     ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, france, paris}})) end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),   %% the fact committed
@@ -129,8 +137,7 @@ joiner_resumes_after_restart(Config) ->
     ?assertNot(match_ok(prove(Joiner, {population, france, {'X'}}))),
 
     %% restart both on their SAME data_dirs (founder first so it is serving before the joiner resumes).
-    Founder2 = restart_node(Founder, ?FOUNDER_PORT, ?config(fkey, Config),
-                            #{mode => create, committee => []}, Config),
+    Founder2 = restart_node(Founder, ?FOUNDER_PORT, ?config(fkey, Config), founder_cfg(), Config),
     Joiner2  = restart_node(Joiner, ?JOINER_PORT, ?config(jkey, Config), ?config(jextra, Config), Config),
     ok = peer:call(Founder2, quod_quic, learn, [pub_of(Joiner2), ?config(jaddr, Config)]),
     ok = peer:call(Joiner2,  quod_quic, learn, [?config(fpub, Config), ?config(faddr, Config)]),
@@ -139,7 +146,60 @@ joiner_resumes_after_restart(Config) ->
     ?assert(eventually(fun() -> slot(Joiner2) =:= 3 end, 30000)),    %% joiner RESUMED from 2 to 3
     ?assert(eventually(fun() -> maps:get(join, status(Joiner2), undefined) =:= done end, 30000)),
     ?assert(eventually(fun() -> match_ok(prove(Joiner2, {population, france, {'X'}})) end, 15000)),
-    ?assert(match_ok(prove(Joiner2, {capital, france, {'X'}}))).   %% the pre-restart prefix survived too
+    ?assert(match_ok(prove(Joiner2, {capital, france, {'X'}}))),   %% the pre-restart prefix survived too
+    {save_config, [{founder2, Founder2}, {joiner2, Joiner2}]}.     %% the promotion case runs on these
+
+%% S5b admission-to-voter. The founder ADMITS the caught-up observer — one ordinary transaction through the
+%% normal write path (`admit_3` gates `can_join`, stages the `peer_admitted` assert, consensus commits it).
+%% The observer, following live commits over the feed, applies the block that admits ITSELF: the committed
+%% fact is the signal — `maybe_promote` re-arms its engine over the new committee and `is_participant`
+%% flips. Then the proof that it really votes: at N=2 quorum(2)=2, so NOTHING commits unless BOTH members
+%% sign — two probe writes, one led by each member (round-robin), must both commit and fan out.
+joiner_promoted_to_voter(Config) ->
+    {joiner_resumes_after_restart, Saved} = ?config(saved_config, Config),
+    Founder = ?config(founder2, Saved),
+    Joiner  = ?config(joiner2, Saved),
+    FPub  = ?config(fpub, Config),
+    JPub  = pub_of(Joiner),
+    FAddr = ?config(faddr, Config),
+    JAddr = ?config(jaddr, Config),
+
+    %% the feed needs the per-ns Brahms overlay (production wiring lives in quod_app, which CT bypasses):
+    %% without it the live commit never reaches the observer and the whole path under test is inert.
+    {ok, _} = peer:call(Founder, quod_brahms, start_namespace,
+                        [?NS, #{node_id => FAddr, seed_peers => [JAddr]}]),
+    {ok, _} = peer:call(Joiner, quod_brahms, start_namespace,
+                        [?NS, #{node_id => JAddr, seed_peers => [FAddr]}]),
+
+    %% pre-admit: a caught-up read-only observer.
+    ?assertEqual(observer, maps:get(role, status(Joiner))),
+
+    %% the founder admits the joiner (slot 4) — `can_join` (root ontology, default-open) gates it.
+    ?assertMatch({ok, _, _}, prove(Founder, {admit, JPub, "127.0.0.1", ?JOINER_PORT})),
+    ?assert(eventually(fun() -> slot(Founder) =:= 4 end, 10000)),
+
+    %% the joiner follows the admit over the feed and SELF-PROMOTES: committee, role, height all flip.
+    Both = lists:sort([FPub, JPub]),
+    ?assert(eventually(fun() ->
+                           lists:sort(peer:call(Joiner, quod_simplex, committee, [?NS])) =:= Both
+                       end, 30000)),
+    ?assert(eventually(fun() -> maps:get(role, status(Joiner), undefined) =:= validator end, 10000)),
+    ?assertEqual(4, slot(Joiner)),
+    ?assertEqual(done, maps:get(join, status(Joiner))),
+    ?assertEqual(Both, lists:sort(peer:call(Founder, quod_simplex, committee, [?NS]))),
+
+    %% N=2: quorum(2)=2 — a commit is only possible if the promoted joiner actually votes. One probe
+    %% write per round-robin leader (slots 5 and 6), so the joiner both FOLLOWS a founder-led slot as a
+    %% voter and LEADS one itself — the milestone's acceptance.
+    Peers = #{FPub => Founder, JPub => Joiner},
+    ok = probe_write(5, Peers, {assertz, {promoted, probe, 5}}),
+    ?assert(eventually(fun() -> slot(Founder) =:= 5 andalso slot(Joiner) =:= 5 end, 20000)),
+    ok = probe_write(6, Peers, {assertz, {promoted, probe, 6}}),
+    ?assert(eventually(fun() -> slot(Founder) =:= 6 andalso slot(Joiner) =:= 6 end, 20000)),
+
+    %% both probes readable on BOTH nodes (committed by the committee, not one side's illusion).
+    ?assert(eventually(fun() -> match_ok(prove(Joiner, {promoted, probe, {'X'}})) end, 15000)),
+    ?assert(match_ok(prove(Founder, {promoted, probe, {'X'}}))).
 
 %%%===================================================================
 %%% helpers
@@ -150,6 +210,22 @@ joiner_resumes_after_restart(Config) ->
 restart_node(Old, Port, Key, Extra, Config) ->
     _ = catch peer:stop(Old),
     start_node(Port, Key, Config, Extra).
+
+%% The founder's namespace config: self-only committee, the REAL root ontology as genesis (carries the
+%% default-open `can_join` the admission case gates on). Also used on restart, where the genesis file is
+%% simply unused (non-empty log ⇒ no re-found).
+founder_cfg() ->
+    #{mode => create, committee => [],
+      genesis_file => filename:join(code:priv_dir(quod), "ontologies/quod_root.pl")}.
+
+%% Submit a probe write to the member that LEADS `Slot` (round-robin over the sorted committee — must
+%% mirror quod_simplex:leader/2) and require it to commit: at N=2 that needs BOTH members' signatures.
+probe_write(Slot, Peers, Fact) ->
+    Leader = leader_for(Slot, maps:keys(Peers)),
+    ?assertMatch({ok, _, _}, prove(maps:get(Leader, Peers), Fact)),
+    ok.
+
+leader_for(Slot, Pubs) -> lists:nth((Slot - 1) rem length(Pubs) + 1, lists:sort(Pubs)).
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)   -> maps:get(slot, status(Peer), -1).

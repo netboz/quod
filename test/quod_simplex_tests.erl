@@ -370,6 +370,25 @@ committee_delta_test() ->
     ?assertEqual({[], []}, quod_simplex:committee_delta(noop)),                 %% a noop carries no change
     ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(noop, [C, A])).
 
+%% Slice D dial-hint extractor: the SIBLING of committee_delta yielding each peer_admitted ASSERT's
+%% {Pk, {Host, Port}}. Retracts and noise yield nothing (removal ≠ reachability change); a `noop` (the
+%% skip entries that populate catch-up windows) yields []; last-wins is the map fold's job at the hook.
+admitted_endpoints_test() ->
+    [A, B, _] = [P || {P, _} <- committee(3)],
+    Full = tx([{assert,  {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
+               {retract, {{peer_admitted, B, "10.0.0.2", 9002, B}, true}},   %% retract → not a hint
+               {assert,  {{other, foo}, true}}]),                            %% noise → ignored
+    ?assertEqual([{A, {"10.0.0.1", 9001}}], quod_simplex:admitted_endpoints(Full)),
+    ?assertEqual([], quod_simplex:admitted_endpoints(noop)),                  %% skip entry: no hint, no crash
+    ?assertEqual([], quod_simplex:admitted_endpoints(tx([rm(A)]))),          %% retract-only
+    %% undefined host/port (bare-pubkey genesis members) is EXTRACTED here; is_endpoint drops it at learn.
+    ?assertEqual([{A, {undefined, undefined}}], quod_simplex:admitted_endpoints(tx([pa(A)]))),
+    %% a repeated pubkey yields BOTH assert pairs in order — the maps:from_list at the hook takes last-wins.
+    Dup = tx([{assert, {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
+              {assert, {{peer_admitted, A, "10.0.0.9", 9009, A}, true}}]),
+    ?assertEqual([{A, {"10.0.0.1", 9001}}, {A, {"10.0.0.9", 9009}}], quod_simplex:admitted_endpoints(Dup)),
+    ?assertEqual({"10.0.0.9", 9009}, maps:get(A, maps:from_list(quod_simplex:admitted_endpoints(Dup)))).
+
 %% Slice A membership gate (deferred.md §3 a+c): a committee-touching transaction must be EXACTLY ONE
 %% well-formed `peer_admitted` op that does not empty the committee — the pure shape + wedge floor,
 %% enforced before a node proposes or supports (the KB-side `can_join` verdict is the next slice).

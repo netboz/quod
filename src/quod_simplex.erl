@@ -65,6 +65,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
+         admitted_endpoints/1,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -881,10 +882,15 @@ commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = 
 %% are a pure function of the committed prefix, and slot+1 is the first slot voted under the NEW set — so
 %% every node crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
-adopt_committee(Change, S = #s{validators = V, eng = Eng}) ->
+adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
     case apply_committee_delta(Change, V) of
         V  -> S;                                    %% no `peer_admitted` change → facts unchanged
-        V1 -> S1 = S#s{validators = V1},            %% FACTS advance
+        V1 -> %% learn the fresh admit-fact address (OVERWRITE): the change just passed quorum-many
+              %% peer_ready verdicts, so this address is live NOW — this is the dial hint a member that
+              %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
+              %% next slot. Fires on every member at the live finality point (commit_block).
+              _ = [quod_quic:learn(Pk, Ep) || {Pk, Ep} <- admitted_endpoints(Change), Pk =/= Self],
+              S1 = S#s{validators = V1},            %% FACTS advance
               S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
 
@@ -1278,7 +1284,7 @@ redial_pending(S = #s{conns = Conns, outbox = Outbox, dialing = Dialing, chan = 
 %% marker past its deadline so the same tick re-dials it; the peer's frames are still in the outbox
 %% (link_error keeps them, and a stuck dial never flushed them), so `redial_pending` picks it back up.
 sweep_stale_dials(S = #s{dialing = Dialing}) ->
-    S#s{dialing = prune_dials(Dialing, erlang:monotonic_time(millisecond))}.
+    S#s{dialing = prune_dials(Dialing, quod_time:mono_ms())}.
 
 %% pure: keep only the dials whose deadline is still in the future.
 prune_dials(Dialing, Now) ->
@@ -1289,7 +1295,7 @@ prune_dials(Dialing, Now) ->
 %% resolution (quod_conn connect ~5s + link-ack ~5s) so a legitimately in-flight dial is never swept
 %% early. A too-short value would sweep a LIVE dial and re-open it (a second waiter on the same link,
 %% resolving to a self-closing duplicate link_up), so the timeout is intentionally not tunable down.
-dial_deadline() -> erlang:monotonic_time(millisecond) + ?DIAL_TIMEOUT_MS.
+dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 
 encode(Ns, Msg) -> term_to_binary({sx, Ns, term_to_binary(Msg)}).
 
@@ -1447,10 +1453,31 @@ apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
             {Vs1, Ts1} = log_projection(Es, {Vs, S#s.last_ts}),   %% committee + monotonic bound live in one pass
+            %% only re-walk the window for dial hints when it actually changed the committee — the common
+            %% content-only window (Vs1 =:= Vs) skips the whole flatmap. (A same-window remove+re-add nets
+            %% Vs1 =:= Vs and is skipped — the accepted address-refresh residual; heals via a header hint.)
+            case Vs1 =/= Vs of
+                true  -> learn_member_endpoints(Es, Vs1, S#s.self);   %% dial hints from replayed admit facts
+                false -> ok
+            end,
             Slot = (lists:last(Es))#entry.index,
             S1   = maybe_promote(S, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
             {maybe_mark_ready(apply_committed(S1)), ok}
     end.
+
+%% Learn dial hints from a REPLAYED catch-up window (`learn_if_absent` — historical addresses fill a void,
+%% never clobber a live header hint; polarity verified: the reply-link header teaches the fresh address
+%% before any window is sunk). Filtered to the post-fold committee `Committee` so replaying a long history
+%% never stuffs the resolver with long-removed members' rotted endpoints; `maps:from_list` gives last-wins
+%% within the window (a remove+re-add of one pk learns the re-add). Excludes Self.
+learn_member_endpoints(Es, Committee, Self) ->
+    Eps = maps:from_list(lists:flatmap(fun(#entry{data = D}) -> admitted_endpoints(D) end, Es)),
+    maps:foreach(fun(Pk, Ep) ->
+                     case Pk =/= Self andalso lists:member(Pk, Committee) of
+                         true  -> quod_quic:learn_if_absent(Pk, Ep);
+                         false -> ok
+                     end
+                 end, Eps).
 
 %% The projections catching up with the facts (S5b promotion). A window we just sunk folded OUR OWN
 %% `peer_admitted` fact into the committee — the committed fact IS the signal (no announcement, no extra
@@ -1514,6 +1541,20 @@ committee_delta(_)                         -> {[], []}.
 committee_op({assert,  {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {addq(Pk, A), R -- [Pk]};
 committee_op({retract, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {A -- [Pk], addq(Pk, R)};
 committee_op(_Op, Acc)                                                  -> Acc.
+
+%% The dial hints carried by one committed payload: each `peer_admitted` ASSERT's `{Pk, {Host, Port}}`.
+%% A SIBLING of `committee_op/2` over the same op shape — kept separate so `committee_delta/1` stays the
+%% pure pubkey-set fold its consumers (catch-up induction, is_membership_change, the feed cache, the eunit
+%% contract) key on; widening that to triples to serve a transport side-effect would be the wrong altitude.
+%% Retracts yield nothing: a removal is a membership change, not a reachability change (no unlearn — a
+%% removed member stays a gossiped-with observer). The `_ -> []` clause is REQUIRED, not defensive: a
+%% catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
+%% NB catch-up entries are NOT shape-gated (proper_op_list guards only the live propose/support seams) —
+%% the defense is that every sunk entry is quorum-cert-verified, so a hostile improper diff needs ≥quorum
+%% collusion (the same pre-existing exposure as committee_delta's own fold).
+admitted_endpoints(#transaction{diff = Diff}) when is_list(Diff) ->
+    [{Pk, {H, P}} || {assert, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff];
+admitted_endpoints(_) -> [].
 
 %% Apply a committed payload's committee delta onto a validator set — sorted (deterministic, every node
 %% agrees byte-for-byte) and idempotent (a re-asserted member is a no-op).

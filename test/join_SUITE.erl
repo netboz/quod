@@ -62,8 +62,10 @@ init_per_suite(Config) ->
     ?assert(is_binary(GH)),
 
     %% 3. the joiner: mode=join, the founder as its only seed contact, the pinned genesis hash. It founds
-    %% NOTHING; it catches up. Cross-seed the resolvers so the founder can dial the joiner back with the
-    %% response (the joiner reaches the founder by its seed address).
+    %% NOTHING; it catches up. The explicit cross-seed below is a belt-and-suspenders convenience — the
+    %% founder actually learns the joiner from its inbound catch-up header and the joiner learns the founder
+    %% from the reply header (growth_SUITE proves growth needs ZERO pre-seeding); kept here to keep this
+    %% suite's timing crisp.
     JExtra = #{mode => join, genesis_hash => GH, seed_peers => [FAddr]},
     Joiner = start_node(?JOINER_PORT, JKey, Config, JExtra),
     ok = peer:call(Founder, quod_quic, learn, [JPub, JAddr]),

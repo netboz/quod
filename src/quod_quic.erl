@@ -31,8 +31,11 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 
 -behaviour(gen_server).
 
--export([start_link/0, open_link/2, send/3, learn/2, resolve/1, liveness_opts/0]).
+-export([start_link/0, open_link/2, send/3, learn/2, learn_if_absent/2, resolve/1, liveness_opts/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-ifdef(TEST).
+-export([ensure_cache/0]).   %% tests own the resolver cache themselves (store_hint no longer creates it)
+-endif.
 
 -define(KEY, {transport, node}).
 -define(SERVER, quod_quic).
@@ -75,14 +78,40 @@ must monitor the link yourself (Brahms, consensus).
 send(Target, Channel, Frame) ->
     gen_server:cast(quod_reg:via(?KEY), {send, Target, Channel, Frame}).
 
--doc "Record a `Pubkey => Endpoint` resolution hint (learned from a header / gossip).".
+-doc """
+Record a `Pubkey => Endpoint` resolution hint, **overwriting** any existing one — for LIVE evidence
+(an inbound link header, or a `peer_admitted` fact at the live commit that just passed a quorum of
+readiness verdicts): the newest live sighting is the freshest address.
+""".
 -spec learn(binary(), {inet:hostname(), inet:port_number()}) -> ok.
-learn(Pubkey, Endpoint) when is_binary(Pubkey) ->
+learn(Pubkey, Endpoint) -> store_hint(Pubkey, Endpoint, insert).
+
+-doc """
+Record a `Pubkey => Endpoint` hint only if none exists yet — for HISTORICAL sources (a `peer_admitted`
+fact replayed out of the committed log during catch-up): a replayed address may be stale (member ports
+rot on redeploy), so it must fill a VOID, never clobber a live header hint. Live evidence (`learn/2`)
+always wins.
+""".
+-spec learn_if_absent(binary(), {inet:hostname(), inet:port_number()}) -> ok.
+learn_if_absent(Pubkey, Endpoint) -> store_hint(Pubkey, Endpoint, insert_new).
+
+%% The one hint writer. NEVER creates the cache: the table is owned exclusively by the quod_quic
+%% gen_server (created in init/1), so a hint written from a FOREIGN process (the quod_simplex statem's
+%% learn hooks) can't end up owning a table that then dies with that process. A write before the table
+%% exists (transport still starting / mid-restart) is a fail-closed no-op — `resolve/1` misses and the
+%% caller retries once a header re-teaches the hint (mirrors resolve's own badarg posture).
+store_hint(Pubkey, Endpoint, Op) when is_binary(Pubkey) ->
     case is_endpoint(Endpoint) of
-        true  -> _ = ensure_cache(), true = ets:insert(?ADDR_CACHE, {Pubkey, Endpoint}), ok;
-        false -> ok   %% a header claiming a non-endpoint address must NEVER clobber a good hint
+        true  -> try case Op of
+                         insert     -> ets:insert(?ADDR_CACHE, {Pubkey, Endpoint});
+                         insert_new -> ets:insert_new(?ADDR_CACHE, {Pubkey, Endpoint})
+                     end
+                 catch error:badarg -> false   %% cache not created yet (transport not started)
+                 end,
+                 ok;
+        false -> ok   %% a non-endpoint address must NEVER clobber a good hint
     end;
-learn(_, _) -> ok.   %% non-pubkey id (the test/no-identity path): nothing to resolve
+store_hint(_, _, _) -> ok.   %% non-pubkey id (the test/no-identity path): nothing to resolve
 
 -doc "Resolve a target to a dialable endpoint: an endpoint dials direct; a pubkey via the cache.".
 -spec resolve(term()) -> {ok, {inet:hostname(), inet:port_number()}} | error.

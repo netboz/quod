@@ -76,3 +76,23 @@ readiness_config_test_() ->
       ?_assertEqual(ok, quod_feed:readiness_config_ok(7500)),            %% boundary: window spans exactly 2
       ?_assertMatch({error, _}, quod_feed:readiness_config_ok(7501)),    %% one ms too slow
       ?_assertMatch({error, _}, quod_feed:readiness_config_ok(600000)) ].%% feed_SUITE's runtime push-isolation value
+
+%%%===================================================================
+%%% fold_snapshot/3 — the cached consensus snapshot advance (contiguity-guarded)
+%%%===================================================================
+
+%% A contiguous entry advances height + folds the committee together (the as-of pairing); a `noop` skip
+%% folds the committee to identity; a membership entry folds the delta; a gap resets to `none` (refetch).
+fold_snapshot_test() ->
+    A = <<1>>, B = <<2>>,
+    Admit = #transaction{tx_id = <<"t">>, caller_ns = <<"n">>, author = <<"a">>, sig = none, read_check = #{},
+                         diff = [{assert, {{peer_admitted, B, "h", 1, B}, true}}]},
+    %% contiguous content/noop entry: height advances, committee unchanged
+    ?assertEqual({6, [A], done}, quod_feed:fold_snapshot(6, noop, {5, [A], done})),
+    %% contiguous membership entry: committee folds the admit, height advances
+    ?assertEqual({6, lists:usort([A, B]), done}, quod_feed:fold_snapshot(6, Admit, {5, [A], done})),
+    %% NON-contiguous (gap or behind) → reset to none, so the next use refetches real status [DA#5]
+    ?assertEqual(none, quod_feed:fold_snapshot(8, noop, {5, [A], done})),   %% jumped ahead (feed restarted alone)
+    ?assertEqual(none, quod_feed:fold_snapshot(5, noop, {5, [A], done})),   %% duplicate/behind
+    %% folding onto an unprimed snapshot stays none (primed later by a status call)
+    ?assertEqual(none, quod_feed:fold_snapshot(6, noop, none)).

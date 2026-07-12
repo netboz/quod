@@ -61,16 +61,25 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   destroys every learned hint and `init` re-seeds nothing (the old `addr_hints` seed hook was removed as
   dead). Harmless today — the pubkey/address confusion that used to crash the transport is fixed
   (`is_endpoint/1` guards `learn`+`resolve`, and a keyed node fails fast without `node_addr`) — but any
-  *other* transport crash still forces peers to re-dial in before this node can reach them. Fix when
-  needed: give the ETS table an `heir`, or re-seed on `init` from a persisted/config source.
-- **Cold-start address bootstrap.** A node can only dial a peer by pubkey once that peer's endpoint is in
-  the resolver — populated *only* by inbound link headers (`quod_link:learn_hint`) today. So a node
-  cannot initiate to a peer it has never heard from. Consensus co-founding survives because the
-  leader broadcasts first (everyone learns it, then dials back); the `simplex_SUITE` CT papers over the
-  gap with explicit `quod_quic:learn` pre-seeds. The homogeneous end-state (matches onbrater/onia): the
-  committed `peer_admitted(NodeId,Host,Port,Pubkey)` fact IS the address book, seeded at join by an
-  operator contact list. Lands with **Stage 3** membership; until then, watch it in the multi-node Nomad
-  redeploy (a non-leader that must reach a peer it hasn't received from will stall).
+  *other* transport crash still forces peers to re-dial in before this node can reach them. **The Slice-D
+  admit-fact hints (`learn_addresses`) are re-learned only on NEW commits**, so after a transport crash a
+  quiescent committee's member↔member hints stay lost until the next membership commit (or an inbound
+  header) — the same posture, noted. Also (Slice D, DA#1): `learn`/`learn_if_absent` NEVER create the
+  table (only `init` does), so a hint written from the consensus statem can't end up owning a table that
+  dies with a namespace teardown; a write before the table exists is a fail-closed no-op. Fix when needed:
+  give the ETS table an `heir`, or re-seed on `init` from a persisted/config source.
+- **Cold-start address bootstrap — LANDED as a dial HINT (Slice D), deliberately not an address book.** A
+  node dials a peer by pubkey via the resolver, populated by inbound link headers (`quod_link:learn_hint`)
+  AND now by the committed `peer_admitted` fact's address: `quod_simplex:learn_addresses` learns each
+  admit's `{Pk,{Host,Port}}` at the live commit (`adopt_committee`, OVERWRITE — the fact just passed
+  quorum-many readiness verdicts, it's fresh) and on catch-up replay (`apply_catchup_window`,
+  learn-if-absent — a historical address must fill a void, never clobber a live header hint). This closes
+  the never-met-member hop (at 2→3, member J1 dials brand-new J2 whose address it learned only by folding
+  J2's admit out of the log) — `growth_SUITE` proves 1→4 growth with ZERO resolver pre-seeding. It is a
+  HINT, not an address book: `peer_admitted` addresses ROT on dynamic Nomad host ports (see member address
+  refresh below), and rot-recovery stays Consul seeds + inbound headers + Brahms. The co-founder scaffold
+  still pre-seeds (`bootstrap/2` never learns, since genesis addresses are the co-founders' own config) —
+  so `simplex_SUITE`'s pre-seeds remain correct, not papering over a gap.
 - **~~`quod_catchup`/`quod_feed` transport duplicates `quod_prove`~~ — DONE (transport `send` verb).**
   The copy-pasted per-endpoint `send`/`conns`/`outbox`/`link_up`/`link_error`/`DOWN` skeleton is GONE:
   the transport now exposes **`quod_quic:send/3`** (fire-and-forget send to a target on a channel), backed
@@ -225,6 +234,17 @@ stages, not carried forward:
     a `can_replicate` admission gate, retention, and snapshot bootstrap — the reader-arc work (§4).
   - **Brahms-sampled contacts** — catch-up pulls from the static `seed_peers` contact list, not a Brahms
     sample; sampling + multi-contact failover is a hardening slice.
+  - **Member address refresh (Slice D residual).** The committed log holds exactly ONE address per member —
+    its original admit — because `already_admitted` (the one-fact-per-pubkey verdict, `quod_prolog`) blocks
+    a re-assert, so there is no path to refresh a member's logged `peer_admitted` address. On dynamic Nomad
+    host ports (which change on every reschedule/rolling update) that address ROTS; refresh today = `remove`
+    + re-`admit` (two quorum operations). The Slice-D dial hint is fresh only at the admission moment;
+    afterward rot-recovery is Consul-rendered seeds + inbound headers + Brahms (the live-evidence
+    `learn`-overwrite channel), never the log. **Consider static Nomad ports for committee members** so the
+    logged address stays valid. Sub-residual: a cold replay of a `remove`+re-`add` of the same pubkey across
+    DIFFERENT catch-up windows keeps the FIRST address (learn-if-absent skips the later re-add) — healed by
+    the header-overwrite path on first live contact; harmless (a wrong hint is at worst a failed dial, mTLS
+    binds every connection to the expected pubkey).
 - **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from
   its OWN config, with no parent-hash chain to catch a mismatch (slot 1 is self-committed; consensus starts
   at slot 2). Mismatched co-founder addresses → divergent `peer_admitted` addresses per KB (the

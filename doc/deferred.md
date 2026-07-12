@@ -159,12 +159,14 @@ stages, not carried forward:
     validator (`valid_proposal`). Kills the raw `retract`-everyone wedge, mass packing/shrinking in one block,
     op-smuggling, and the `Id≠Pk` address-poison op. The floor is **stepwise never-empty** (4→3→2→1 legal, one
     quorum-endorsed member per block); the **hard `3f+1` Byzantine-tolerance floor stays OPEN** — it needs a
-    network-target-`f` concept, and with today's default-open `can_join` + `sig=none` a still-admitted member
-    can walk the committee down one endorsed step at a time.
+    network-target-`f` concept, and with today's liveness-only `can_join` (`peer_ready` — any live,
+    caught-up node passes) + `sig=none` a still-admitted member can walk the committee down one endorsed
+    step at a time.
   - **(b) transaction signatures — STILL OPEN (Phase B).** Writes are unsigned (`sig=none`), so the verdict
-    checks WHAT changes, not WHO authorized it: with default-open `can_join`, committee **packing** (admitting
-    nodes the policy would allow) and authorized-but-unwanted **shrink** are not yet closed — that needs the
-    write-gate = membership signature trick from onbrater. Until (b) lands, membership is Byzantine-safe
+    checks WHAT changes, not WHO authorized it: with a liveness-only `can_join` (the `peer_ready` gate
+    checks the candidate is alive and caught up, not that anyone *authorized* it), committee **packing**
+    (admitting nodes the policy would allow) and authorized-but-unwanted **shrink** are not yet closed —
+    that needs the write-gate = membership signature trick from onbrater. Until (b) lands, membership is Byzantine-safe
     against *malformed / policy-violating / KB-inconsistent* changes but not against a **forged author**.
 - **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04, from the S1 cert-persistence
   slice).** Because the committee can change on ANY slot (a `peer_admitted` assert/retract) and shares are
@@ -216,9 +218,11 @@ stages, not carried forward:
   - **The co-founder scaffold STAYS** (decided 2026-07-05, reversing the plan's "delete it"): the `committee`
     config + `simplex_SUITE` co-founding is the ONLY way to stand up the 4-node BFT **failover** committee,
     and join can't replace that until it can co-found N≥4 via sequential admissions. Revisit after S5b.
-  - **Read-replica (stay-synced) tier** — a joiner catches up a **snapshot** then goes quiescent; it does
-    NOT follow live commits after `join=done` (as a non-member it drops `{log,Ns}` traffic). A durable
-    non-voting replica that keeps following the feed is the reader-arc work (§4), not built.
+  - **Read-replica (stay-synced) tier** — a caught-up `join=done` non-member already TRACKS the head off
+    the feed: it drops the consensus `{log,Ns}` traffic (not a voter), but `quod_feed` carries it forward —
+    eager-push when it has a Brahms overlay, and (since the readiness gate) digest→verified-pull off the
+    committee members even without one. What is unbuilt is a durable replica **tier** with its own policy:
+    a `can_replicate` admission gate, retention, and snapshot bootstrap — the reader-arc work (§4).
   - **Brahms-sampled contacts** — catch-up pulls from the static `seed_peers` contact list, not a Brahms
     sample; sampling + multi-contact failover is a hardening slice.
 - **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from

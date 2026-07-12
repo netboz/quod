@@ -2,12 +2,14 @@
 -moduledoc """
 Dissemination feed (F1) integration: **a follower follows live commits over the feed**, on genuine
 loopback QUIC. A founder (`mode=create`, N=1) founds `feed:f1` and commits a fact; a second node
-(`mode=join`) catches up to that height and goes `join=done` (a read-only observer that, on its own,
-does NOT follow live — see `join_SUITE`). Both then join the namespace **Brahms overlay**, and the
-founder commits a NEW fact. Because the follower is already `done` and never re-enters catch-up, the
-only way its height can advance is the **feed**: the founder's `m:quod_feed` eager-pushes the fresh
-block to its overlay view, the follower verifies the block's quorum cert against the committee it
-holds, hands it to `m:quod_simplex`, and advances — proving the committee→crowd push path end to end.
+(`mode=join`) catches up to that height and goes `join=done` (a read-only observer). Both then join the
+namespace **Brahms overlay**, and the founder commits a NEW fact. Because the follower is already `done`
+and never re-enters catch-up — and its digest rounds are pinned far out, so the digest→pull path can't
+recover the block instead — the only way its height can advance is the **eager push**: the founder's
+`m:quod_feed` pushes the fresh block to its overlay view, the follower verifies the block's quorum cert
+against the committee it holds, hands it to `m:quod_simplex`, and advances — proving the committee→crowd
+push path end to end. The second case proves the complementary **digest → verified pull** recovery,
+overlay-less.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
@@ -40,10 +42,15 @@ init_per_suite(Config) ->
     ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),
 
     %% 2. follower: mode=join, catches up to the founder's height (2), then goes quiescent (join=done).
+    %% Pin this pair's digest rounds far out FIRST: `follower_follows_live` proves the eager-PUSH path,
+    %% and a digest round racing the push would recover the block by pull instead — stealing the ingest
+    %% the case asserts (the digest→pull path has its own case below, on its own nodes).
     GH = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
     ?assert(is_binary(GH)),
+    ok = peer:call(Founder, application, set_env, [quod, feed_anti_entropy_ms, 600000]),
     Follower = start_node(?FOLLOWER_PORT, JKey, Config,
                           #{mode => join, genesis_hash => GH, seed_peers => [FAddr]}),
+    ok = peer:call(Follower, application, set_env, [quod, feed_anti_entropy_ms, 600000]),
     ok = peer:call(Founder,  quod_quic, learn, [JPub, JAddr]),
     ok = peer:call(Follower, quod_quic, learn, [FPub, FAddr]),
     ?assert(eventually(fun() -> slot(Follower) =:= 2 end, 30000)),
@@ -91,10 +98,11 @@ follower_follows_live(Config) ->
     FS = peer:call(Follower, quod_feed, stats, [?NS]),
     ?assertMatch(#{ingested := N} when N >= 1, FS).
 
-%% A follower recovers a block it MISSED on the push, purely via anti-entropy. The founder commits the
-%% extra block while NO overlay exists (so the eager-push reaches nobody); only afterwards do the two
-%% join the Brahms overlay. The follower is join=done and never re-runs cold-start catch-up, so the only
-%% path to the missed block is the feed's periodic digest exchange → verified pull. Self-contained nodes.
+%% A follower recovers a block it MISSED on the push, purely via anti-entropy — with NO overlay at all.
+%% The founder commits the extra block while the follower has an empty Brahms view (no eager-push can
+%% reach it); the follower is join=done and never re-runs cold-start catch-up, so the only path to the
+%% missed block is its periodic digest to the COMMITTEE → the founder's ahead-reply → verified pull.
+%% (These are the same digests admission's `peer_ready` gate reads.) Self-contained nodes.
 follower_recovers_gap_via_anti_entropy(Config) ->
     {FPub, _} = FKey = quod_identity:generate(),
     {JPub, _} = JKey = quod_identity:generate(),
@@ -108,23 +116,17 @@ follower_recovers_gap_via_anti_entropy(Config) ->
         GH = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
         F2 = start_node(?AE_FOLLOWER_PORT, JKey, Config, #{mode => join, genesis_hash => GH, seed_peers => [FAddr]}),
         try
+            ok = peer:call(F2, application, set_env, [quod, feed_anti_entropy_ms, 500]),
             ok = peer:call(Founder, quod_quic, learn, [JPub, JAddr]),
             ok = peer:call(F2,      quod_quic, learn, [FPub, FAddr]),
             ?assert(eventually(fun() -> slot(F2) =:= 2 end, 30000)),
             ?assert(eventually(fun() -> maps:get(join, status(F2), undefined) =:= done end, 30000)),
 
-            %% commit the delta with NO overlay up — the eager-push has an empty view and reaches nobody.
+            %% commit the delta — the eager-push has an empty view and reaches nobody; recovery must come
+            %% from the digest exchange alone.
             ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, japan, tokyo}})) end, 20000)),
             ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
-            timer:sleep(1500),
-            ?assertEqual(2, slot(F2)),   %% push missed (no overlay) — the follower is still behind
-
-            %% now both join the overlay; anti-entropy digests must carry the follower from 2 → 3 by pull.
-            ok = peer:call(Founder, application, set_env, [quod, feed_anti_entropy_ms, 500]),
-            ok = peer:call(F2,      application, set_env, [quod, feed_anti_entropy_ms, 500]),
-            {ok, _} = peer:call(Founder, quod_brahms, start_namespace, [?NS, #{node_id => FAddr, seed_peers => [JAddr]}]),
-            {ok, _} = peer:call(F2,      quod_brahms, start_namespace, [?NS, #{node_id => JAddr, seed_peers => [FAddr]}]),
-            ?assert(eventually(fun() -> slot(F2) =:= 3 end, 30000)),          %% recovered via anti-entropy pull
+            ?assert(eventually(fun() -> slot(F2) =:= 3 end, 30000)),          %% recovered via digest → pull
             ?assert(eventually(fun() -> match_ok(prove(F2, {capital, japan, {'X'}})) end, 15000)),
             ?assertNot(lists:member(JPub, peer:call(F2, quod_simplex, committee, [?NS]))),
             FS = peer:call(F2, quod_feed, stats, [?NS]),

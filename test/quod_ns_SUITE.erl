@@ -49,6 +49,12 @@ t_admit_grows_committee(Cfg) ->
     %% check below), rather than redirecting on ~half of runs.
     {Joiner, _} = quod_ct:generate_key_gt(Self),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
+    %% the readiness gate refuses a never-seen candidate...
+    ?assertEqual(fail, rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
+    %% ...so stamp a fresh digest for it in the feed's liveness table, as if it had been feed-following
+    %% (the real end-to-end digest flow is join_SUITE's) — covering BOTH proofs: the submitter's admit
+    %% and the validator's verdict re-proof.
+    true = quod_feed:record_digest(quod_feed:digest_table(Ns), Joiner, 0),
     ?assertMatch({ok, _, _}, rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
     ?assertEqual([Self, Joiner], quod_simplex:committee(Ns)),   %% sorted, Self < Joiner by construction
     ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, Joiner})),

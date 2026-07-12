@@ -147,7 +147,8 @@ namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1
 
 init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
-    put('$quod_ns', Ns),   %% so external predicates (e.g. admit) can recover their namespace in-process
+    put('$quod_ns', Ns),        %% so external predicates (e.g. admit) can recover their namespace in-process
+    put('$quod_applied', 0),    %% ... and the applied height (peer_ready's slack judge; kept current below)
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg), ready = false},
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
@@ -288,8 +289,12 @@ submit_write(_From, _B, _D, _R, _CallerNs, S) ->
 %% membership verdict parked for the parent height we just reached. Whether the applied step commits a
 %% tx, skips a `noop`, or logs an unexpected payload, a validation whose parent is that slot must be
 %% answered (and never leak), so `resolve_validations/1` runs once here, keyed on the new `applied`.
+%% The pdict height mirror is refreshed BEFORE the verdicts resolve — their `can_join` re-proof may read
+%% it through the `peer_ready` external predicate.
 apply_committed(Index, Change, S) ->
-    resolve_validations(apply_step(Index, Change, S)).
+    S1 = apply_step(Index, Change, S),
+    put('$quod_applied', S1#s.applied),
+    resolve_validations(S1).
 
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex.
@@ -411,7 +416,11 @@ resolve_validations(S = #s{applied = A, validations = V}) ->
 %% - assert: reject a pubkey already admitted (the one-fact-per-pubkey invariant that keeps the KB + the
 %%   validator set in lockstep on retract); else re-prove the SAME `can_join` goal `admit_3` staged. A
 %%   `can_join` that stages writes is rejected — it must be side-effect-free, or the overlay would ride
-%%   its ops into the committed diff network-wide.
+%%   its ops into the committed diff network-wide. NB the KB state is pinned to the parent height, but a
+%%   `can_join` rule may also read REALITY through a read-only external predicate (`peer_ready`), and
+%%   there honest validators MAY split (each judges from its own liveness observations). Intentional and
+%%   fail-closed: a support shortfall Δ-skips the slot and the submitter retries — the admit commits only
+%%   once quorum-many validators independently observed the candidate ready.
 %% - retract: valid only if that exact `peer_admitted` clause is present — a fabricated-address retract
 %%   matches nothing, so it can never eject a validator from the set while missing in the KB.
 -spec membership_verdict(term(), #s{}) -> valid | {invalid, term()}.

@@ -35,13 +35,28 @@ scope(Est, Goal) ->
 
 db_ref(#est{db = #db{ref = R}}) -> R.
 
-%% admit(Pub,Host,Port): gate can_join (default-open) then stage the peer_admitted assert (NodeId = Pub).
+%% Run Fun with the readiness environment quod_root.pl's `can_join :- peer_ready(Pk)` reads: the pdict
+%% namespace + applied-height mirror (both primed by quod_prolog:init in the real flow), and Ns's digest
+%% table holding a fresh digest for Pub (as if it had been feed-following) at our own height.
+with_ready(Ns, Pub, Fun) ->
+    put('$quod_ns', Ns),
+    put('$quod_applied', 0),
+    T = ets:new(quod_feed:digest_table(Ns), [named_table, public, set]),
+    true = quod_feed:record_digest(T, Pub, 0),
+    try Fun() after ets:delete(T), erase('$quod_ns'), erase('$quod_applied') end.
+
+%% admit(Pub,Host,Port): gate can_join (peer_ready-gated) then stage the peer_admitted assert (NodeId = Pub).
 admit_stages_peer_admitted_test() ->
-    put('$quod_ns', <<"cp:test">>),
     Pub = <<1, 2, 3>>,
-    Changes = scope(kb([]), {admit, Pub, "10.0.0.9", 9000}),
-    ?assertMatch([{assert, {{peer_admitted, <<1, 2, 3>>, "10.0.0.9", 9000, <<1, 2, 3>>}, _}}], Changes),
-    erase('$quod_ns').
+    Changes = with_ready(<<"cp:test">>, Pub, fun() -> scope(kb([]), {admit, Pub, "10.0.0.9", 9000}) end),
+    ?assertMatch([{assert, {{peer_admitted, <<1, 2, 3>>, "10.0.0.9", 9000, <<1, 2, 3>>}, _}}], Changes).
+
+%% The readiness gate: a candidate with NO fresh digest (dead, cold, or mid-catch-up — it never digests
+%% until join=done) is refused at the rule, so nothing is staged.
+admit_unready_fails_test() ->
+    Ready = <<7>>, Cold = <<8>>,
+    ?assertEqual(fail, with_ready(<<"cp:unready">>, Ready,
+                                  fun() -> scope(kb([]), {admit, Cold, "10.0.0.9", 9000}) end)).
 
 %% admit fails closed with no namespace stashed (self_ns undefined) — never stages a half-formed fact.
 admit_without_ns_fails_test() ->

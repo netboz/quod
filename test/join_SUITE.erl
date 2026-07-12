@@ -12,7 +12,8 @@ The final case is **S5b admission-to-voter**: the founder admits the caught-up o
 transaction through the normal write path), the observer sees its own `peer_admitted` fact arrive over the
 live feed and **self-promotes to a voter** (`maybe_promote` — the committed fact is the signal), and then
 proves it really votes: probe writes commit at `quorum(2) = 2` under EACH member's leadership, including a
-slot the promoted joiner leads.
+slot the promoted joiner leads. The admit passes the **readiness gate** (`can_join :- peer_ready(Pk)`,
+judged from the observer's live feed digests); a never-seen candidate is refused first.
 
 Each node is its own OS Erlang node (`peer`, stdio-controlled) with its own `quod_quic` listener and Ed25519
 identity, so the catch-up request/response is genuine loopback QUIC — the deployment shape.
@@ -29,9 +30,9 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 -define(FOUNDER_PORT, 15840).
 -define(JOINER_PORT,  15841).
 
-%% Ordered: the joiner first catches up (height 2), then — after the founder commits a NEW fact it did NOT
-%% follow live — a restart RESUMES catch-up from its persisted height and picks up the delta; finally the
-%% founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b).
+%% Ordered: the joiner first catches up (height 2), then — after being STOPPED and the founder committing a
+%% NEW fact while it is down — a restart RESUMES catch-up from its persisted height and picks up the delta;
+%% finally the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b).
 all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter].
 
 %%%===================================================================
@@ -48,8 +49,8 @@ init_per_suite(Config) ->
     JAddr = {"127.0.0.1", ?JOINER_PORT},
 
     %% 1. the founder: create a self-only (N=1) committee with the REAL root ontology as genesis (it
-    %% carries the default-open `can_join` rule the admission case needs — the production shape), then
-    %% commit one fact (slot 2).
+    %% carries the `peer_ready`-gated `can_join` rule the admission case gates on — the production
+    %% shape), then commit one fact (slot 2).
     Founder = start_node(?FOUNDER_PORT, FKey, Config, founder_cfg()),
     ?assert(eventually(fun() -> slot(Founder) =:= 1 end, 10000)),   %% genesis committed
     ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, france, paris}})) end, 20000)),
@@ -123,26 +124,26 @@ joiner_catches_up(Config) ->
     %% a write to the non-member joiner is refused (it is not a committee member) — it cannot lead a slot.
     ?assertMatch({error, not_in_charge, none}, peer:call(Joiner, quod_simplex, append, [?NS, dummy_tx()])).
 
-%% A caught-up read-only joiner does NOT follow live commits (it dropped the {log,Ns} stream). After the
-%% founder commits a NEW fact, the joiner stays behind. Then the WHOLE namespace restarts from disk (a fleet
-%% redeploy): the founder re-derives its full log (mode=create, non-empty ⇒ no re-found), and the joiner
-%% RESUMES catch-up from its persisted partial height — never re-appending its on-disk prefix (which would
-%% hit the store's contiguity check), never treating the partial log as complete — reaching the new height
-%% and reading the new fact. Exercises the resume-from-persisted-height path (both create + join on restart).
+%% After the founder commits a NEW fact the joiner never saw, the WHOLE namespace restarts from disk (a
+%% fleet redeploy): the founder re-derives its full log (mode=create, non-empty ⇒ no re-found), and the
+%% joiner RESUMES catch-up from its persisted partial height — never re-appending its on-disk prefix (which
+%% would hit the store's contiguity check), never treating the partial log as complete — reaching the new
+%% height and reading the new fact. Exercises the resume-from-persisted-height path (both create + join on
+%% restart). The joiner is stopped BEFORE the founder's commit: a live caught-up observer now TRACKS the
+%% head without any overlay (its readiness digests to the committee trigger ahead-replies → verified pull),
+%% so the resume-delta only exists while it is down.
 joiner_resumes_after_restart(Config) ->
     Founder = ?config(founder, Config),
     Joiner  = ?config(joiner, Config),
 
-    %% the founder commits a second fact (height 3); the read-only joiner does NOT follow it live.
+    %% take the joiner down, then commit a second fact (height 3) it cannot have seen.
+    ok = peer:stop(Joiner),
     ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {population, france, 67}})) end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
-    timer:sleep(1500),                                   %% give any (wrongly) live-followed commit time to land
-    ?assertEqual(2, slot(Joiner)),                       %% still at the catch-up snapshot — it did not follow live
-    ?assertNot(match_ok(prove(Joiner, {population, france, {'X'}}))),
 
     %% restart both on their SAME data_dirs (founder first so it is serving before the joiner resumes).
     Founder2 = restart_node(Founder, ?FOUNDER_PORT, ?config(fkey, Config), founder_cfg(), Config),
-    Joiner2  = restart_node(Joiner, ?JOINER_PORT, ?config(jkey, Config), ?config(jextra, Config), Config),
+    Joiner2  = start_node(?JOINER_PORT, ?config(jkey, Config), Config, ?config(jextra, Config)),
     ok = peer:call(Founder2, quod_quic, learn, [pub_of(Joiner2), ?config(jaddr, Config)]),
     ok = peer:call(Joiner2,  quod_quic, learn, [?config(fpub, Config), ?config(faddr, Config)]),
 
@@ -178,8 +179,16 @@ joiner_promoted_to_voter(Config) ->
     %% pre-admit: a caught-up read-only observer.
     ?assertEqual(observer, maps:get(role, status(Joiner))),
 
-    %% the founder admits the joiner (slot 4) — `can_join` (root ontology, default-open) gates it.
-    ?assertMatch({ok, _, _}, prove(Founder, {admit, JPub, "127.0.0.1", ?JOINER_PORT})),
+    %% the readiness gate (root ontology: `can_join :- peer_ready(Pk)`) refuses a candidate that has
+    %% never digested — cold, dead, or still mid-catch-up (`follows/4` keeps it silent until join=done).
+    %% A failed proof commits nothing, so slot numbering below is unaffected.
+    {GhostPub, _} = quod_identity:generate(),
+    ?assertEqual(fail, prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
+
+    %% the founder admits the joiner (slot 4) — retried until the joiner's periodic digests (it has been
+    %% feed-following since its restart) register as fresh in the founder's liveness table.
+    ?assert(eventually(fun() -> match_ok(prove(Founder, {admit, JPub, "127.0.0.1", ?JOINER_PORT})) end,
+                       30000)),
 
     %% THE PROMOTION RACE, deliberately unpaced: the very next write goes to the founder IMMEDIATELY
     %% after the admit committed — quorum is now 2 but the joiner has (very likely) not yet seen its own
@@ -217,8 +226,8 @@ restart_node(Old, Port, Key, Extra, Config) ->
     start_node(Port, Key, Config, Extra).
 
 %% The founder's namespace config: self-only committee, the REAL root ontology as genesis (carries the
-%% default-open `can_join` the admission case gates on). Also used on restart, where the genesis file is
-%% simply unused (non-empty log ⇒ no re-found).
+%% `peer_ready`-gated `can_join` the admission case gates on). Also used on restart, where the genesis
+%% file is simply unused (non-empty log ⇒ no re-found).
 founder_cfg() ->
     #{mode => create, committee => [],
       genesis_file => filename:join(code:priv_dir(quod), "ontologies/quod_root.pl")}.

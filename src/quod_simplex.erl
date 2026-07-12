@@ -65,7 +65,7 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
-         admitted_endpoints/1,
+         admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -405,6 +405,17 @@ committed entry at or below `Committed` — those slots are now final history in
 them would grow the maps without bound (and a later proposal's parent resolves via `base`, not the
 pruned tree). Called by the driver right after it persists a committed block.
 """.
+%% Slice E — back out the engine's premature finalize-marking of a slot whose cert is SUB-QUORUM under the
+%% current committee (the weak-cert guard, see `weak_cert_wait/4`): drop the stale cert (the key must be
+%% ABSENT for `ingest_share` to re-form it under the current set) and un-mark it committed/skipped (so
+%% `detect_commits`/`detect_complaints` re-fire once a genuine cert forms). The SHARES stay — the re-form
+%% draws on them. Pure: the engine owns its cert/committed/skipped maps.
+-spec eng_evict_final(commit | complaint, slot(), binary() | none, #eng{}) -> #eng{}.
+eng_evict_final(commit, Slot, BH, Eng = #eng{certs = C, committed = Cm}) ->
+    Eng#eng{certs = maps:remove({commit, Slot, BH}, C), committed = maps:remove(Slot, Cm)};
+eng_evict_final(complaint, Slot, none, Eng = #eng{certs = C, skipped = Sk}) ->
+    Eng#eng{certs = maps:remove({complaint, Slot, none}, C), skipped = maps:remove(Slot, Sk)}.
+
 -spec eng_prune(slot(), #eng{}) -> #eng{}.
 eng_prune(Committed, Eng = #eng{base = Base}) ->
     Above = fun(Sl) -> Sl > Committed end,
@@ -512,7 +523,9 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
-            redrives   = 0 :: non_neg_integer()}).  %% Δ re-fires that re-broadcast our own in-flight proposal
+            redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
+            weak_cert_waits = 0 :: non_neg_integer()}).  %% finalizations refused on a sub-quorum cert (Slice E,
+                                                         %% the stale-cert hazard) — climbing = a laggard waiting
 
 callback_mode() -> [state_functions].
 
@@ -863,13 +876,17 @@ apply_event({skipped, Slot}, S) ->
 %% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
 commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = #s{store = Store, eng = Eng}) ->
-    Cert = persisted_cert(commit, Slot, block_hash(Block), Eng),   %% minimal, committee-as-of-slot; pre-prune
-    E = #entry{index = Slot, data = Change, timestamp = BlockTs, cert = Cert},   %% mirror the block time so catch-up reconstructs the exact block
-    {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
-    S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1,
-                                                    last_ts = max(S#s.last_ts, BlockTs)})),
-    maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1))).
+    BH = block_hash(Block),
+    case persisted_cert(commit, Slot, BH, Eng) of   %% minimal, committee-as-of-slot; pre-prune
+        none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
+        Cert ->
+            E = #entry{index = Slot, data = Change, timestamp = BlockTs, cert = Cert},   %% mirror the block time so catch-up reconstructs the exact block
+            {ok, Store1} = quod_ledger_store:append(Store, [E]),
+            publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
+            S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1,
+                                                            last_ts = max(S#s.last_ts, BlockTs)})),
+            maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1)))
+    end.
 
 %% A committed transaction advances the committee FACTS (`#s.validators`) at the slot boundary, IN-PROCESS —
 %% by reading the `peer_admitted` asserts/retracts out of the block we just committed. This ALWAYS updates
@@ -898,12 +915,34 @@ adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
 %% node's) advances contiguously, then nack any caller that had proposed it so the client retries under
 %% the rotated leader. `quod_prolog` applies a `noop` as a pure cursor advance (no fact change).
 skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
-    Cert = persisted_cert(complaint, Slot, none, Eng),   %% minimal complaint cert that skipped this slot
-    E = #entry{index = Slot, data = noop, cert = Cert},
-    {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
-    S1 = finalize(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
-    maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1))).
+    case persisted_cert(complaint, Slot, none, Eng) of   %% minimal complaint cert that skipped this slot
+        none -> weak_cert_wait(complaint, Slot, none, S);   %% Slice E: don't skip-finalize on a sub-quorum cert
+        Cert ->
+            E = #entry{index = Slot, data = noop, cert = Cert},
+            {ok, Store1} = quod_ledger_store:append(Store, [E]),
+            publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
+            S1 = finalize(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
+            maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1)))
+    end.
+
+%% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
+%% lacks a quorum of signatures from the committee AS-OF-this-slot. This is the mid-flight committee-change /
+%% stale-cert hazard (`doc/deferred.md` §3): a node lagging across a committee change can form a cert under
+%% the OLD (smaller) quorum for a later slot, and finalizing it would locally commit a slot the honest
+%% network (using the NEW, larger quorum) may never commit — forking this node from a catch-up joiner that
+%% reconstructs the committee as-of the slot. So REFUSE to finalize and:
+%%   - EVICT the stale cert from the pool. Load-bearing: `ingest_share` re-forms a cert only when the key is
+%%     ABSENT (`maps:is_key` guard), so without eviction the wait is forever; a re-relayed copy can't
+%%     re-enter because `verify_cert` rejects it under the current quorum.
+%%   - UN-MARK the slot committed/skipped, so `detect_commits`/`detect_complaints` re-fire once a genuine
+%%     cert forms under the current set (the SHARES are kept — the re-form draws on them).
+%% The height does NOT advance and nothing is appended: the node waits at `Slot-1` until either enough
+%% shares under the current set arrive (re-form → re-drive → finalize with a valid cert) or the trustless
+%% catch-up / feed path delivers the properly-committed block. A laggard waiting is correct; a laggard
+%% forking is not. The `commit_buf` entry was already taken by `drain_commits`, so this returns without a
+%% height advance and the drain loop stops — no busy loop.
+weak_cert_wait(Kind, Slot, BH, S) ->
+    S#s{eng = eng_evict_final(Kind, Slot, BH, S#s.eng), weak_cert_waits = S#s.weak_cert_waits + 1}.
 
 %% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
 %% the proposing latch, the support/commit/complaint sign-latches, and the membership validate/invalid
@@ -1648,4 +1687,5 @@ stats_map(S) ->
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
       submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
-      membership_rejects => S#s.membership_rejects, redrives => S#s.redrives}.
+      membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
+      weak_cert_waits => S#s.weak_cert_waits}.

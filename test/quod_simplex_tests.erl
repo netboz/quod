@@ -273,6 +273,34 @@ eng_notarize_then_commit_test() ->
     ?assert(lists:member({committed, 1, B}, Ev4)),
     ?assertEqual(B, maps:get(1, quod_simplex:eng_committed(E4))).
 
+%% Slice E — the weak-cert finalize guard (the mid-flight committee-change / stale-cert hazard). A commit
+%% cert that met quorum under a committee is SUB-QUORUM once the committee grows; finalizing it would fork a
+%% laggard from the honest network. persisted_cert returns none (the trigger the statem refuses on),
+%% eng_evict_final backs out the premature commit-marking, and a fresh share under the grown set re-forms a
+%% genuine cert that re-commits — proving the wait re-drives rather than wedging forever.
+weak_cert_guard_test() ->
+    C5 = committee(5),
+    C4 = take(4, C5),               %% the 4-set is the first 4 of the 5-set (all still members after growth)
+    B  = blk(1),
+    BH = quod_simplex:block_hash(B),
+    E0 = quod_simplex:eng_new(pubs(C4), 0),
+    {E1, _}  = quod_simplex:eng_offer({block, B}, E0),
+    {E2, _}  = feed_shares(supports(B, C4, 3), E1),                         %% notarize under the 4-set
+    {E3, Ev} = feed_shares(commits(B, C4, 3), E2),                          %% commit cert forms (quorum(4)=3)
+    ?assert(lists:member({committed, 1, B}, Ev)),
+    ?assertMatch(#cert{}, quod_simplex:persisted_cert(commit, 1, BH, E3)),  %% valid under the 4-set
+
+    %% the committee grows to 5 (quorum 4): the 3-sig cert is now sub-quorum.
+    E4 = quod_simplex:eng_set_validators(pubs(C5), E3),
+    ?assertEqual(none, quod_simplex:persisted_cert(commit, 1, BH, E4)),     %% THE TRIGGER the statem refuses on
+
+    %% back out the premature commit-marking, then a 4th distinct share under the 5-set re-forms + re-commits.
+    E5 = quod_simplex:eng_evict_final(commit, 1, BH, E4),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_committed(E5))),             %% un-marked ⇒ detect_commits can re-fire
+    {E6, Ev6} = feed_shares(commits(B, C5, 5) -- commits(B, C4, 3), E5),    %% shares from members 4 + 5
+    ?assert(lists:member({committed, 1, B}, Ev6)),                          %% re-committed under the 5-set
+    ?assertMatch(#cert{}, quod_simplex:persisted_cert(commit, 1, BH, E6)).  %% now a genuine 4-sig cert
+
 %% N=1 (quorum 1): the sole validator's own shares notarize + commit instantly (the degenerate case).
 eng_sole_validator_test() ->
     C = committee(1),

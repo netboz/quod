@@ -907,6 +907,13 @@ adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
               %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
               %% next slot. Fires on every member at the live finality point (commit_block).
               _ = [quod_quic:learn(Pk, Ep) || {Pk, Ep} <- admitted_endpoints(Change), Pk =/= Self],
+              %% DEMOTION log-event (pairs with maybe_promote's promotion notice): a member commit-signs its
+              %% own removal as a voter, so it reaches here still a member and observes itself drop out.
+              _ = case lists:member(Self, V) andalso not lists:member(Self, V1) of
+                      true  -> logger:notice("quod[~s]: removed from the committee — now a read-only "
+                                             "observer (committee ~b)", [S#s.ns, length(V1)]);
+                      false -> ok
+                  end,
               S1 = S#s{validators = V1},            %% FACTS advance
               S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
@@ -1688,4 +1695,5 @@ stats_map(S) ->
       submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
-      weak_cert_waits => S#s.weak_cert_waits}.
+      weak_cert_waits => S#s.weak_cert_waits,
+      is_validator => case is_participant(S) of true -> 1; false -> 0 end}.

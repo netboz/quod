@@ -23,11 +23,14 @@ Two collection paths:
 | `quod_consensus_appends/commits/submitted/skips{namespace}` | gauge | | cumulative append/commit/submit/skip counts |
 | `quod_consensus_pending{namespace}` | gauge | | in-flight appends awaiting commit |
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | append rejections by reason (cumulative) |
+| `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node votes on this ontology, 0 if a read-only observer |
+| `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | stuck-proposal re-sends / weak-cert finalize refusals (cumulative) |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | fact-engine apply/prove/OCC counts |
 | `quod_prolog_parked{namespace}` | gauge | | writes parked awaiting commit |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | parked writes reaped by TTL (cumulative) |
 | `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | dissemination health (cumulative) |
 | `quod_feed_dropped{namespace}` | gauge | `reason` | dropped blocks by reason (duplicate/gap/unverified/…) |
+| `quod_feed_digests/fresh_digests{namespace}` | gauge | | peers tracked for liveness / of those, fresh now (admission readiness) |
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | submit→commit latency per tx |
 | `quod_tx_diff_ops{namespace}` | histogram | | asserts+retracts per committed tx |
 | `quod_tx_committed_total{namespace}` | counter | `author` | committed txs by submitting node |
@@ -119,6 +122,8 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_bad,      "Change requests rejected as malformed or not allowed (running total)."),
     _ = G(quod_consensus_membership_rejects, "Proposed committee changes (adding or removing a voting node) that this node checked against its own data and rejected as invalid (running total)."),
     _ = G(quod_consensus_redrives,        "How many times this node re-sent a proposal it was still waiting on, instead of giving up on it (running total). Climbing steadily means a committee member is not responding."),
+    _ = G(quod_consensus_is_validator,    "1 if this node is a voting member of this ontology's committee, 0 if it is a read-only observer."),
+    _ = G(quod_consensus_weak_cert_waits, "How many times this node refused to finalise a block because its proof-of-agreement did not have enough signatures from the current committee, and waited for a valid one instead (running total). Climbing means this node fell behind across a committee change and is waiting to catch up."),
     %% Knowledge base (this node's copy of the ontology's facts)
     _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
     _ = G(quod_prolog_applies,       "How many blocks have been written into the knowledge base (running total)."),
@@ -131,6 +136,8 @@ declare(NodeId) ->
     _ = G(quod_feed_pushed,   "Blocks this node finalised and started spreading to the rest of the network (running total)."),
     _ = G(quod_feed_ingested, "Blocks received from other nodes, checked, applied, and passed along (running total)."),
     _ = G(quod_feed_pulled,   "How many times this node asked peers to send blocks it was missing (running total)."),
+    _ = G(quod_feed_digests,       "How many peers this node currently tracks a liveness heartbeat for (used to decide whether a candidate is alive enough to admit to the committee)."),
+    _ = G(quod_feed_fresh_digests, "How many of those tracked peers sent a heartbeat recently enough to count as alive right now."),
     _ = prometheus_gauge:declare([{name, quod_feed_dropped},
                                   {help, "Blocks received from peers that this node dropped, grouped by reason (running total). "
                                          "duplicate = already had it (harmless); gap = arrived out of order, fetched again later; "
@@ -167,7 +174,7 @@ refresh_log_ns(Ns) ->
         #{slot := Sl, committed := CI, last_applied := LA, committee_size := CS,
           appends := AP, commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
-          redrives := RV} ->
+          redrives := RV, weak_cert_waits := WC, is_validator := IV} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
@@ -183,6 +190,8 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_append_bad,      RD),
             _ = S(quod_consensus_membership_rejects, MR),
             _ = S(quod_consensus_redrives,        RV),
+            _ = S(quod_consensus_is_validator,    IV),
+            _ = S(quod_consensus_weak_cert_waits, WC),
             ok;
         _ -> ok
     end.
@@ -205,11 +214,14 @@ refresh_prolog_ns(Ns) ->
 
 refresh_feed_ns(Ns) ->
     case quod_feed:stats(Ns) of
-        #{pushed := PU, ingested := IN, pulled := PL, dropped := DR} ->
+        #{pushed := PU, ingested := IN, pulled := PL, dropped := DR,
+          digests := DG, fresh_digests := FR} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_feed_pushed,   PU),
             _ = S(quod_feed_ingested, IN),
             _ = S(quod_feed_pulled,   PL),
+            _ = S(quod_feed_digests,       DG),
+            _ = S(quod_feed_fresh_digests, FR),
             _ = maps:foreach(fun(Reason, C) ->
                                  prometheus_gauge:set(quod_feed_dropped, [label(Ns), atom_to_binary(Reason, utf8)], C)
                              end, DR),

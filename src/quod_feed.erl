@@ -151,8 +151,10 @@ start(Ns, Config) ->
     {ok, #s{ns = Ns, self = Self, chan = Chan, digests = Digests}}.
 
 handle_call(get_stats, _From, S) ->
+    {Tracked, Fresh} = digest_counts(S#s.digests),
     {reply, #{pushed => S#s.pushed, ingested => S#s.ingested,
-              pulled => S#s.pulled, dropped => S#s.dropped}, S};
+              pulled => S#s.pulled, dropped => S#s.dropped,
+              digests => Tracked, fresh_digests => Fresh}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 handle_cast(_Msg, S) -> {noreply, S}.
@@ -406,6 +408,15 @@ record_digest(_Table, _NonPubkey, _Height) -> true.
 %% judge's own applied height (a candidate any further behind would join a t=0 quorum mid-catch-up).
 ready(Height, SeenAt, NowMs, JudgeHeight) ->
     NowMs - SeenAt =< ?READY_FRESH_MS andalso Height + ?WINDOW >= JudgeHeight.
+
+%% Observability (metrics): how many peers this node tracks a liveness digest for, and how many of those
+%% are FRESH (digested within ?READY_FRESH_MS) — i.e. how many peers are currently liveness-admittable.
+%% Scans the (small, fleet-sized) table; runs only in the owning feed process on the ~5s stats poll.
+digest_counts(Table) ->
+    Now = quod_time:mono_ms(),
+    ets:foldl(fun({_Pk, _H, SeenAt}, {Sz, Fr}) ->
+                  {Sz + 1, Fr + case Now - SeenAt =< ?READY_FRESH_MS of true -> 1; false -> 0 end}
+              end, {0, 0}, Table).
 
 %% Reconcile the gap by running the SAME trustless catch-up driver used at cold-start, but sourced from a
 %% live sampled peer (`Contact = Addr`) instead of a boot seed: pull a window via quod_catchup, which

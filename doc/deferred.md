@@ -177,20 +177,22 @@ stages, not carried forward:
     (admitting nodes the policy would allow) and authorized-but-unwanted **shrink** are not yet closed —
     that needs the write-gate = membership signature trick from onbrater. Until (b) lands, membership is Byzantine-safe
     against *malformed / policy-violating / KB-inconsistent* changes but not against a **forged author**.
-- **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04, from the S1 cert-persistence
-  slice).** Because the committee can change on ANY slot (a `peer_admitted` assert/retract) and shares are
-  ingested un-gated by height, a node that is LAGGING across a committee-changing slot N can `form_cert`
-  slot N+1's finalizing cert under the OLD (pre-change) committee's smaller quorum, then finalize N+1 with
-  it. A catch-up joiner reconstructs the committee **as-of** N+1 (the NEW set) and would reject that block
-  (too few sigs). S1 mitigates the *persisted* cert (`persisted_cert/4` re-minimises to the distinct valid
-  sigs of `eng.validators` = the committee-as-of-slot, so a padded/relayed cert can't bake junk into the
-  log and a caught-up node persists a correct minimal cert; a lagging node persists `none`). But the ROOT
-  fix — never *finalize* a slot under a stale committee — is deferred: either re-verify `detect_commits`
-  against the committee-as-of-slot before emitting `{committed}`, or **freeze the validator set per epoch**
-  (the deferred epochs work) so a slot's voting set is unambiguous. Intersects the membership-safety gap
-  above (unsigned, per-slot-mutable membership). Until it lands, catch-up trusts that finalized slots were
-  finalized under the correct committee — safe in a trusted fleet, not Byzantine.
-  **Seam in place (0.6.25, Slice D):** the "who votes / leads / disseminates now" reads route through a
+- **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04) — CLOSED for finalization
+  (Slice E, 0.6.34); ROOT epoch fix still deferred.** Because the committee can change on ANY slot (a
+  `peer_admitted` assert/retract) and shares are ingested un-gated by height, a node LAGGING across a
+  committee-changing slot N can `form_cert` slot N+1's finalizing cert under the OLD (pre-change)
+  committee's smaller quorum. A catch-up joiner reconstructs the committee **as-of** N+1 (the NEW set) and
+  would reject that block (too few sigs). S1 minimised the *persisted* cert (`persisted_cert/4` re-minimises
+  to the distinct valid sigs of `eng.validators`; a lagging node computes `none`). **Slice E closes the
+  finalization**: `commit_block`/`skip_block` now REFUSE to finalize when `persisted_cert` returns `none`
+  (sub-quorum under the committee-as-of-slot) — `weak_cert_wait`/`eng_evict_final` evict the stale cert +
+  un-mark the slot, so the node waits for a genuine cert (re-formed under the current set once enough shares
+  arrive, or delivered by trustless catch-up) rather than locally finalizing a slot the honest network may
+  never commit. So a laggard no longer forks. **Still deferred (the ROOT epoch fix):** freezing the
+  validator set per epoch so a slot's voting set is unambiguous end-to-end (Slice E is the finalize-time
+  backstop; epochs would make the hazard unreachable at formation time and let a slot notarize under a
+  known-frozen set). Intersects the membership-safety gap above (unsigned, per-slot-mutable membership).
+  **Seam in place (0.6.25):** the "who votes / leads / disseminates now" reads route through a
   single function `quod_simplex:active_validators/1` — the **active voting set**, held distinct from the
   committee **facts** (`#s.validators`). Today it is the IDENTITY over the facts (epoch length 1); the
   epoch-freezing work adds an epoch snapshot field + boundary detection and rewrites `active_validators/1`
@@ -216,17 +218,21 @@ stages, not carried forward:
   engine. `{ok,0}` from an empty/lying contact is a retry, not a false "done". `valid_cfg` fail-fasts a bad
   `mode` or a `join` without a `genesis_hash` anchor (no silent zombie). Covered by `join_SUITE`'s
   full-namespace-restart resume case. **Still deferred from here:**
-  - **Admission to voter (S5b)** — a caught-up joiner becoming a committee **member** (an existing member
-    proves `admit`, the `peer_admitted` commits, the joiner sees itself in `validators` and starts voting).
-    Today catch-up ends at a read-only node; nothing promotes it.
-  - **HOCON `genesis_hash` plumbing** — the anchor reaches `quod_simplex` via the ns Config, but
-    `quod_schema:fields(content)` has no `genesis_hash` key and `quod_app:build_ns_config` doesn't forward one,
-    so a PRODUCTION `mode=join` node has no way to supply the anchor yet. Guarded (not silent): `valid_cfg`
-    now fail-fasts such a node at boot. No production joiner exists yet (the Nomad job is N=1), so add the
-    schema field + passthrough when the multi-node deploy lands (rides S5b / the N=1→join deploy work).
-  - **The co-founder scaffold STAYS** (decided 2026-07-05, reversing the plan's "delete it"): the `committee`
-    config + `simplex_SUITE` co-founding is the ONLY way to stand up the 4-node BFT **failover** committee,
-    and join can't replace that until it can co-found N≥4 via sequential admissions. Revisit after S5b.
+  - **~~Admission to voter (S5b)~~ — DONE (multi-validator milestone, Slices A–E, 0.6.30–0.6.34).** A
+    caught-up joiner IS promoted to a voting member: an existing member proves `admit`, the `peer_admitted`
+    commits, the joiner sees its own fact arrive over the feed and self-promotes (`maybe_promote`). Slice B
+    added the growth-liveness redrive (the 1→2 promotion race), Slice C the `peer_ready` readiness gate
+    (never admit a dead/lagging node into a quorum=all committee), Slice D the fresh-admission dial hint
+    (a member can reach a brand-new member via the committed address — growth past 2 needs no manual
+    mesh-seed), Slice E the weak-cert finalize guard (a laggard never locally finalizes a slot the honest
+    network may not commit). Proven zero-pre-seed 1→4 in `growth_SUITE`. Live rollout rides Slice F.
+  - **~~HOCON `genesis_hash` plumbing~~ — DONE** (the schema field + `quod_app` passthrough landed; a
+    production `mode=join` node supplies the anchor via config — the Nomad job renders it, see
+    `deploy/quod.nomad`).
+  - **The co-founder scaffold STAYS** (decided 2026-07-05): the `committee` config + `simplex_SUITE`
+    co-founding is the ONLY way to stand up the 4-node BFT **failover** committee in a test, and join can't
+    replace that (a live namespace grows 1→N via sequential admits — `growth_SUITE` — but the failover CT
+    needs an instant N=4). Keep it.
   - **Read-replica (stay-synced) tier** — a caught-up `join=done` non-member already TRACKS the head off
     the feed: it drops the consensus `{log,Ns}` traffic (not a voter), but `quod_feed` carries it forward —
     eager-push when it has a Brahms overlay, and (since the readiness gate) digest→verified-pull off the
@@ -278,6 +284,24 @@ stages, not carried forward:
   (advance on the support/notarization cert; keep the commit cert as the relayed-finality proof) — a Stage-4
   protocol change; until then a mid-round leader crash on a bare quorum can wedge a namespace. The
   `leader_failover` CT does not cover it (killing the leader *before* it proposes is not the trigger).
+- **Vote-latch persistence across restart (Phase B — a blocker before OPEN membership).** The per-slot
+  sign-latches (`supported`/`commit_signed`/`complained`) that enforce the one-share-per-slot safety rule
+  live in RAM (`#s`), so a validator that CRASHES and restarts mid-slot loses them and could re-sign a
+  different block/complaint for the same slot — an equivocation. Bounded today: at `N ≤ 4` a SINGLE
+  crash-equivocator can't fork (its two shares still need a quorum that overlaps an honest party), but TWO
+  simultaneous crash-equivocators can. Safe enough for the trusted fleet (crash-restart is rare and the CSI
+  volume + catch-up re-syncs a restarted node past its in-flight slot before it votes again), but it MUST be
+  closed before open/Byzantine membership: persist the latches (or a per-slot "already-voted" marker)
+  alongside the durable log so a restart refuses to re-sign a slot it already signed. Intersects tx signing
+  (Phase B) and the epoch work.
+- **Member multi-slot gap-fill / founder-stall corner.** A committee member that falls several slots behind
+  the head (missed a run of `{log,Ns}` traffic) relies on the per-message redrive (Slice B) + the dial-tick
+  retransmit to refill — but there is no member-side *bulk* catch-up (a voting member has `may_sink` false,
+  so it can't pull windows through `sink_catchup` the way an observer does). If a member gaps by more than
+  the redrive can refill before the head moves on, it can stall until it's restarted (mode=join resume then
+  bulk-catches-up and re-promotes). Rare on a LAN fleet; the fix is a member-side bounded gap-fill (pull the
+  missing slots' committed blocks+certs without leaving the committee) — a hardening slice after the live
+  N≥4 rollout.
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
   now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log

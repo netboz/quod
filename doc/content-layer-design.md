@@ -713,6 +713,14 @@ thing, dialled by committee size.
 
 ### Who's on the committee is stored in the ontology itself
 
+> **Implemented (multi-validator milestone, 0.6.30–0.6.34).** This design is now live: the committee is
+> the set of `peer_admitted` facts; a machine is admitted by proving `can_join` (the shipped root
+> ontology gates it on `peer_ready`, a read-only external predicate that checks the candidate is alive
+> and caught up); a caught-up observer that sees its own `peer_admitted` fact commit self-promotes to a
+> voting member; a member reaches a brand-new member via the committed address; and a laggard never
+> locally finalizes a slot the honest network may not commit (the weak-cert guard). Growth 1→N is proven
+> zero-pre-seed in `growth_SUITE`. See `doc/deferred.md` §3 and the `m:quod_simplex` module docs.
+
 Committee membership is **facts in the ontology** (as in bbsvx/onia), and a machine
 that wants to join is admitted by **proving a join-predicate** the ontology
 defines. Keep two kinds of change apart:

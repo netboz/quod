@@ -69,12 +69,13 @@ moment it next contacts us.
 
 -behaviour(gen_statem).
 
--export([start_namespace/2, start_link/2, view/1, sample/1, stats/1, namespaces/0, take_random/2]).
+-export([start_namespace/2, start_link/2, view/1, sample/1, stats/1, namespaces/0, take_random/2,
+         sample_contact/2]).
 -export([init/1, callback_mode/0, terminate/3]).
 -export([idle/3, collecting/3]).
 
 -ifdef(TEST).
--export([split_counts/1, reconstruct/8, encode/1, decode/1, clean_resp/3,
+-export([split_counts/1, reconstruct/8, encode/1, decode/1, clean_resp/3, pick_contact/3,
          due_probes/3, probe_candidates/4, prune_tombstones/3, gossip_targets/3, stale_conns/4]).
 -endif.
 
@@ -487,6 +488,60 @@ peer selection — dedupe first if the input is a multiset (e.g. `sample/1`).
 -spec take_random(non_neg_integer(), [term()]) -> [term()].
 take_random(N, List) when N >= length(List) -> shuffle(List);
 take_random(N, List) -> take(N, shuffle(List)).
+
+-doc """
+One download **contact** for `Ns` — the shared contact selection for the pull-shaped clients
+(`m:quod_catchup`, `m:quod_prove`): a uniform pick from the **Byzantine-resistant** Brahms
+`sample/1` (address-based, so it tracks dynamic-port rot), falling back to the static `Seeds` on a
+cold start (sampler empty / Brahms not running for `Ns`), and `none` when both are empty.
+
+Uses `sample/1`, **not** `view/1`: source selection is where an eclipse would bias whom we PULL
+from — and thus what we ACCEPT — so the pull SOURCE must come from the Byzantine-resistant sampler,
+the same choice `m:quod_feed` makes for its anti-entropy pull source.
+
+Both pools are self-filtered against this node's own advertised endpoint (app env `node_addr`) —
+NEVER against the caller's `node_id`: the pull clients' id is their PUBKEY, which no `{Host, Port}`
+seed can ever equal, so a pubkey filter is a silent no-op. An unfiltered seed list is exactly the
+wedge that hit the live fleet: a restarted node with its OWN endpoint at the seed head pulled
+history from itself forever. (The sample is additionally self-free by construction — Brahms never
+gossips itself — so the `node_addr` filter there is belt and suspenders.)
+
+A hostile pick cannot forge: everything pulled through a contact is verified by the caller (cert
+chain / pinned genesis anchor), so a bad contact stalls at most one attempt — callers re-sample per
+attempt to rotate away. Total isolation (`none`) is logged loudly once per episode (per calling
+process), not repeated on every retry.
+""".
+-spec sample_contact(binary(), [{inet:hostname(), inet:port_number()}]) ->
+        {inet:hostname(), inet:port_number()} | none.
+sample_contact(Ns, Seeds) ->
+    SelfAddr = application:get_env(quod, node_addr, undefined),
+    case pick_contact(sample(Ns), Seeds, SelfAddr) of
+        none ->
+            case erlang:put({quod_no_contact, Ns}, true) of
+                true -> ok;   %% already warned this isolation episode (this process)
+                _    -> logger:warning("quod[~s]: no download contact — Brahms sample empty and no "
+                                       "non-self seed (isolated node? seeds=~p node_addr=~p)",
+                                       [Ns, Seeds, SelfAddr])
+            end,
+            none;
+        Peer ->
+            _ = erlang:erase({quod_no_contact, Ns}),   %% recovered — a later episode warns again
+            Peer
+    end.
+
+%% Pure core of sample_contact/2 (unit-tested): prefer a uniform pick from the live sample, else from
+%% the seeds, each deduped and minus the node's own advertised endpoint (`undefined` filters nothing).
+pick_contact(Sampled, Seeds, SelfAddr) ->
+    case pick1(Sampled, SelfAddr) of
+        none -> pick1(Seeds, SelfAddr);
+        Peer -> Peer
+    end.
+
+pick1(Pool, SelfAddr) ->
+    case take_random(1, [P || P <- lists:usort(Pool), P =/= SelfAddr]) of
+        [Peer | _] -> Peer;
+        []         -> none
+    end.
 
 %% ======================================================================
 %% helpers

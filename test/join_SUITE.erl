@@ -8,12 +8,17 @@ against the committee it reconstructs (never trusting the server), and replaying
 own KB as it lands. It ends caught up to the founder's height and can `prove` the founder's fact from its OWN
 KB, WITHOUT being a committee member (a read-only observer).
 
-The final case is **S5b admission-to-voter**: the founder admits the caught-up observer (one ordinary
+Then **S5b admission-to-voter**: the founder admits the caught-up observer (one ordinary
 transaction through the normal write path), the observer sees its own `peer_admitted` fact arrive over the
 live feed and **self-promotes to a voter** (`maybe_promote` — the committed fact is the signal), and then
 proves it really votes: probe writes commit at `quorum(2) = 2` under EACH member's leadership, including a
 slot the promoted joiner leads. The admit passes the **readiness gate** (`can_join :- peer_ready(Pk)`,
 judged from the observer's live feed digests); a never-seen candidate is refused first.
+
+The suite doubles as the **contact-selection regression** (the 2026-07-12 live wedge — a restarted founder
+whose seed head was its OWN endpoint pulled history from itself forever): the joiner's `seed_peers` put its
+own address FIRST (selection must self-filter the seeds against `node_addr`), and the final case starts an
+observer whose seed list is ENTIRELY itself, so catch-up must find its contact in the live Brahms view.
 
 Each node is its own OS Erlang node (`peer`, stdio-controlled) with its own `quod_quic` listener and Ed25519
 identity, so the catch-up request/response is genuine loopback QUIC — the deployment shape.
@@ -24,16 +29,20 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([joiner_catches_up/1, joiner_resumes_after_restart/1, joiner_promoted_to_voter/1]).
+-export([joiner_catches_up/1, joiner_resumes_after_restart/1, joiner_promoted_to_voter/1,
+         self_seeded_joiner_catches_up/1]).
 
 -define(NS, <<"join:s5a">>).
--define(FOUNDER_PORT, 15840).
--define(JOINER_PORT,  15841).
+-define(FOUNDER_PORT,  15840).
+-define(JOINER_PORT,   15841).
+-define(OBSERVER_PORT, 15842).
 
 %% Ordered: the joiner first catches up (height 2), then — after being STOPPED and the founder committing a
 %% NEW fact while it is down — a restart RESUMES catch-up from its persisted height and picks up the delta;
-%% finally the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b).
-all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter].
+%% then the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b); finally a
+%% fresh observer with a USELESS (self-only) seed list catches up via the Brahms view (the wedge regression).
+all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter,
+          self_seeded_joiner_catches_up].
 
 %%%===================================================================
 %%% suite setup: found N=1, commit a fact, then start a mode=join node
@@ -61,12 +70,16 @@ init_per_suite(Config) ->
     GH = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
     ?assert(is_binary(GH)),
 
-    %% 3. the joiner: mode=join, the founder as its only seed contact, the pinned genesis hash. It founds
-    %% NOTHING; it catches up. The explicit cross-seed below is a belt-and-suspenders convenience — the
-    %% founder actually learns the joiner from its inbound catch-up header and the joiner learns the founder
-    %% from the reply header (growth_SUITE proves growth needs ZERO pre-seeding); kept here to keep this
-    %% suite's timing crisp.
-    JExtra = #{mode => join, genesis_hash => GH, seed_peers => [FAddr]},
+    %% 3. the joiner: mode=join, the pinned genesis hash, and a seed list with the joiner's OWN endpoint
+    %% FIRST — the exact live-wedge shape (2026-07-12: the restarted founder's Consul-rendered seeds had
+    %% itself at the head, and the old head-of-list pick pulled history from itself forever). Contact
+    %% selection must self-filter the seeds against `node_addr` (the node's id is its PUBKEY, which never
+    %% equals a {Host, Port} seed) and catch up via the founder; this joiner runs NO Brahms overlay during
+    %% catch-up, so the self-filtered static seeds are the only contact pool — the fallback path under test.
+    %% The explicit cross-learn below is a belt-and-suspenders convenience — the founder actually learns the
+    %% joiner from its inbound catch-up header and the joiner learns the founder from the reply header
+    %% (growth_SUITE proves growth needs ZERO pre-seeding); kept here to keep this suite's timing crisp.
+    JExtra = #{mode => join, genesis_hash => GH, seed_peers => [JAddr, FAddr]},
     Joiner = start_node(?JOINER_PORT, JKey, Config, JExtra),
     ok = peer:call(Founder, quod_quic, learn, [JPub, JAddr]),
     ok = peer:call(Joiner,  quod_quic, learn, [FPub, FAddr]),
@@ -215,7 +228,39 @@ joiner_promoted_to_voter(Config) ->
 
     %% both probes readable on BOTH nodes (committed by the committee, not one side's illusion).
     ?assert(eventually(fun() -> match_ok(prove(Joiner, {promoted, probe, {'X'}})) end, 15000)),
-    ?assert(match_ok(prove(Founder, {promoted, probe, {'X'}}))).
+    ?assert(match_ok(prove(Founder, {promoted, probe, {'X'}}))),
+    {save_config, [{founder2, Founder}, {joiner2, Joiner}]}.   %% the wedge-regression case runs on these
+
+%% THE CONTACT-SELECTION REGRESSION (live wedge, 2026-07-12): a joiner whose static seed list is ENTIRELY
+%% USELESS — its only seed is ITSELF — must still catch up, because the download contact is sampled from
+%% the live Brahms view (self-filtered, gossip-maintained), with the seeds only a cold-start fallback.
+%% The old picker took `seeds[0]` unfiltered on every attempt: this node would have pulled from itself
+%% forever ({error,{fetch,_}} / no_log), permanently wedged in catching_up. The first attempts here DO
+%% fail (Brahms starts just after the namespace ⇒ no view, no usable seed ⇒ {error,no_contact}), which
+%% also exercises the quiet re-sample-on-retry path.
+self_seeded_joiner_catches_up(Config) ->
+    {joiner_promoted_to_voter, Saved} = ?config(saved_config, Config),
+    Founder = ?config(founder2, Saved),
+    FAddr   = ?config(faddr, Config),
+    OKey    = quod_identity:generate(),
+    OAddr   = {"127.0.0.1", ?OBSERVER_PORT},
+    GH      = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
+    Target  = slot(Founder),
+    ?assert(Target >= 6),   %% the full N=2 history (admit + both probes) is what it must pull
+    Obs = start_node(?OBSERVER_PORT, OKey, Config,
+                     #{mode => join, genesis_hash => GH, seed_peers => [OAddr]}),   %% seeds = [SELF] only
+    %% the Brahms overlay is the ONLY usable contact source (production wiring lives in quod_app; CT
+    %% starts it explicitly): its view is seeded with the founder, so sampling must find FAddr there.
+    {ok, _} = peer:call(Obs, quod_brahms, start_namespace,
+                        [?NS, #{node_id => OAddr, seed_peers => [FAddr]}]),
+    try
+        ?assert(eventually(fun() -> slot(Obs) >= Target end, 60000)),
+        ?assert(eventually(fun() -> maps:get(join, status(Obs), undefined) =:= done end, 30000)),
+        %% caught up THROUGH the view-sampled contact: the replayed history is in its OWN KB
+        ?assert(eventually(fun() -> match_ok(prove(Obs, {capital, france, {'X'}})) end, 15000))
+    after
+        catch peer:stop(Obs)
+    end.
 
 %%%===================================================================
 %%% helpers

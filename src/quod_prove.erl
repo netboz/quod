@@ -12,7 +12,9 @@ from `quod_simplex`'s `{log, Ns}` — the channel-match hazard):
   reader can never write through a Member). Each request runs in a worker so a slow prove never
   blocks the endpoint; concurrency is capped (`?MAX_INFLIGHT`) as a hostile-net bound.
 - **Client** (any reader): `remote/4,5` sends a `{prove_req, ...}` to a contact Replica/Member and
-  awaits the `{prove_resp, ...}`.
+  awaits the `{prove_resp, ...}`. With no explicit contact, one is sampled per call from the live,
+  self-filtered Brahms view (static seeds — minus this node's own `node_addr` — as the cold-start
+  fallback; `quod_brahms:sample_contact/2`), so a retry naturally rotates contacts.
 
 **Freshness contract:** the response carries the committed log height the answer was proved at.
 Reads are eventual / bounded-stale; `MinHeight` gives read-your-writes — a responder whose applied
@@ -36,7 +38,7 @@ remote reads on a hostile network arrive with the identity milestone.
 -record(s, {ns       :: binary(),
             self     :: node_id(),
             chan     :: binary(),                      %% term_to_binary({prove, Ns}, [deterministic])
-            contacts = []  :: [endpoint()],          %% default responder candidates (seed endpoints)
+            seeds    = []  :: [endpoint()],          %% static cold-start contacts (sample_contact fallback)
             pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId => {From, TRef}
             inflight = 0   :: non_neg_integer()}).      %% responder: live prove workers
 
@@ -47,7 +49,7 @@ remote reads on a hostile network arrive with the identity milestone.
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_prove, Ns}), ?MODULE, {Ns, Config}, []).
 
--doc "Remote-read `Goal` against `Ns` via a default contact. `MinHeight` = read-your-writes floor.".
+-doc "Remote-read `Goal` against `Ns` via a sampled contact (live Brahms view; seed fallback). `MinHeight` = read-your-writes floor.".
 -spec remote(binary(), term(), binary(), log_index()) ->
         {ok, [map()], log_index()} | fail | {stale, log_index()} | {error, term()}.
 remote(Ns, Goal, CallerNs, MinHeight) -> remote(Ns, Goal, CallerNs, MinHeight, undefined).
@@ -70,10 +72,13 @@ init({Ns, Config}) ->
     Self = maps:get(node_id, Config),
     Chan = term_to_binary({prove, Ns}, [deterministic]),
     quod_reg:subscribe({channel, Chan}),
-    {ok, #s{ns = Ns, self = Self, chan = Chan, contacts = maps:get(seed_peers, Config, [])}}.
+    {ok, #s{ns = Ns, self = Self, chan = Chan, seeds = maps:get(seed_peers, Config, [])}}.
 
-handle_call({remote, Goal, CallerNs, MinHeight, Contact0}, From, S) ->
-    case (case Contact0 of undefined -> pick_contact(S); C -> C end) of
+%% An explicit contact wins (a directed read); otherwise ONE sample from the live Brahms view for
+%% this call (self-filtered seeds as the cold-start fallback). A remote read is one-shot, so
+%% per-call sampling is the rotation — there is no multi-window run to keep a contact sticky for.
+handle_call({remote, Goal, CallerNs, MinHeight, Contact0}, From, S = #s{ns = Ns, seeds = Seeds}) ->
+    case (case Contact0 of undefined -> quod_brahms:sample_contact(Ns, Seeds); C -> C end) of
         none    -> {reply, {error, no_contact}, S};
         Contact ->
             ReqId = make_ref(),
@@ -175,6 +180,3 @@ to_result({error, R}, _H) -> {error, R}.
 send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
     _ = quod_quic:send(Peer, Chan, term_to_binary({prove, Ns, term_to_binary(Term)})),
     S.
-
-pick_contact(#s{contacts = []})      -> none;
-pick_contact(#s{contacts = [C | _]}) -> C.

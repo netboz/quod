@@ -765,6 +765,12 @@ running({timeout, join}, start_join, S) ->
 running(cast, {join_done, {ok, _H}}, S = #s{join = {worker, _}, slot = Slot}) when Slot >= 1 ->
     S1 = S#s{join = done},   %% now a participant, so active_validators reflects the caught-up voting set
     {keep_state, maybe_mark_ready(apply_committed(S1#s{eng = eng_new(active_validators(S1), Slot)}))};
+%% No download contact for this attempt (Brahms view still empty + no usable seed — e.g. Brahms not up
+%% yet, or a truly isolated node). quod_brahms:sample_contact already warned ONCE for the episode; the
+%% ?JOIN_KICK_MS retry would otherwise repeat the generic warning below ~2×/s for as long as the node
+%% stays isolated, so retry quietly.
+running(cast, {join_done, {error, no_contact}}, S = #s{join = {worker, _}}) ->
+    {keep_state, S#s{join = pending}, [join_timeout()]};
 running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
     logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
     {keep_state, S#s{join = pending}, [join_timeout()]};
@@ -1479,9 +1485,18 @@ start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = V
     From   = Slot + 1,
     {Pid, _Ref} = spawn_monitor(
         fun() ->
-            Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1) end,
-            Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
-            gen_statem:cast(Statem, {join_done, quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)})
+            %% ONE contact per attempt (quod_catchup:contact/1 — the live, self-filtered Brahms view;
+            %% seeds as the cold-start fallback), STICKY for every window of this run: re-sampling
+            %% per window would mix different-height servers and trip catch_up's no_progress guard.
+            %% A dead/lying contact just fails this attempt; the retry re-samples (rotates) it away.
+            Result = case quod_catchup:contact(Ns) of
+                         none    -> {error, no_contact};
+                         Contact ->
+                             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1, Contact) end,
+                             Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
+                             quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)
+                     end,
+            gen_statem:cast(Statem, {join_done, Result})
         end),
     S#s{join = {worker, Pid}}.
 

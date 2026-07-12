@@ -202,7 +202,9 @@ stages, not carried forward:
   (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
   forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node
   boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/3` from
-  its seed contacts: pull a window → `verify_forward` each cert against the committee it reconstructs → hand
+  ONE sampled contact per attempt (`quod_catchup:contact/1` — the live, self-filtered Brahms view, static
+  seeds minus the node's own `node_addr` as the cold-start fallback; sticky for the whole run, re-sampled
+  on retry): pull a window → `verify_forward` each cert against the committee it reconstructs → hand
   the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
   advance, until caught up. The genesis (slot 1, `cert=none`) is anchored against the out-of-band-pinned
   `genesis_hash` (config), never TOFU'd; `quod_simplex:genesis_hash/1` exposes a founder's anchor. A
@@ -238,8 +240,6 @@ stages, not carried forward:
     eager-push when it has a Brahms overlay, and (since the readiness gate) digest→verified-pull off the
     committee members even without one. What is unbuilt is a durable replica **tier** with its own policy:
     a `can_replicate` admission gate, retention, and snapshot bootstrap — the reader-arc work (§4).
-  - **Brahms-sampled contacts** — catch-up pulls from the static `seed_peers` contact list, not a Brahms
-    sample; sampling + multi-contact failover is a hardening slice.
   - **Member address refresh (Slice D residual).** The committed log holds exactly ONE address per member —
     its original admit — because `already_admitted` (the one-fact-per-pubkey verdict, `quod_prolog`) blocks
     a re-assert, so there is no path to refresh a member's logged `peer_admitted` address. On dynamic Nomad
@@ -299,9 +299,15 @@ stages, not carried forward:
   retransmit to refill — but there is no member-side *bulk* catch-up (a voting member has `may_sink` false,
   so it can't pull windows through `sink_catchup` the way an observer does). If a member gaps by more than
   the redrive can refill before the head moves on, it can stall until it's restarted (mode=join resume then
-  bulk-catches-up and re-promotes). Rare on a LAN fleet; the fix is a member-side bounded gap-fill (pull the
-  missing slots' committed blocks+certs without leaving the committee) — a hardening slice after the live
-  N≥4 rollout.
+  bulk-catches-up and re-promotes). **Empirically reproducible under sustained load (0.6.36 load+chaos, live
+  qengho fleet):** a churned validator's mode=join catch-up finishes at the head *as of that instant*, but the
+  other members have committed further meanwhile, so it re-promotes already a few slots behind and then stalls
+  as a `join=done` voter (no bulk gap-fill; the missed slots have no live proposer to redrive). Two nodes hit
+  it (`kp_3c2dd6bf` stuck ~5 min at slot 419, `kp_c1740be7` at 1254) — each recovered only on a *further*
+  restart against a then-stable head (which snapped it to the head instantly, confirming catch-up itself is
+  fine). So NOT rare under load; the tighter it churns, the likelier. The fix is a member-side bounded gap-fill
+  (pull the missing slots' committed blocks+certs without leaving the committee — the observer catch-up path
+  works, a voting member just isn't allowed onto it today) — a real hardening slice, prioritise post-rollout.
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
   now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log

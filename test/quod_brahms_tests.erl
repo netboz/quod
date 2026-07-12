@@ -35,6 +35,40 @@ clean_resp_caps_and_strips_self_test() ->
     ?assert(length(clean_resp(Flood, 16, self_id)) =< 16),
     ?assertEqual([a, b], clean_resp([self_id, a, b], 16, self_id)).
 
+%% --- pick_contact: sample_contact/2's pure core (the download-contact pick) ---
+%% Self is filtered by the node's ADDRESS (node_addr) — the pull clients' node_id is their PUBKEY,
+%% which never equals a {Host, Port} seed, so filtering on it would be a silent no-op (the live
+%% self-at-seed-head wedge). The pick is random, so the never-self properties are asserted over
+%% many draws.
+
+-define(SELF,  {"10.0.0.1", 14567}).
+-define(OTHER, {"10.0.0.2", 14567}).
+
+pick_contact_prefers_view_test() ->
+    %% a live view peer wins over the static seeds (the seeds are only the cold-start fallback)
+    ?assertEqual(?OTHER, quod_brahms:pick_contact([?OTHER], [{"10.0.0.9", 1}], ?SELF)).
+
+pick_contact_never_self_test() ->
+    %% self in BOTH pools, alongside a real peer: every draw must return the peer, never self
+    ?assert(lists:all(fun(_) -> quod_brahms:pick_contact([?SELF, ?OTHER], [?SELF], ?SELF) =:= ?OTHER end,
+                      lists:seq(1, 100))),
+    %% THE WEDGE SHAPE: empty view, self at the seed HEAD — must always pick the other seed
+    ?assert(lists:all(fun(_) -> quod_brahms:pick_contact([], [?SELF, ?OTHER], ?SELF) =:= ?OTHER end,
+                      lists:seq(1, 100))).
+
+pick_contact_seed_fallback_test() ->
+    %% empty view (cold start / Brahms not running) falls back to the self-filtered seeds
+    ?assertEqual(?OTHER, quod_brahms:pick_contact([], [?OTHER], ?SELF)).
+
+pick_contact_isolated_test() ->
+    ?assertEqual(none, quod_brahms:pick_contact([], [], ?SELF)),                  %% nothing anywhere
+    ?assertEqual(none, quod_brahms:pick_contact([?SELF], [?SELF], ?SELF)),        %% only ourselves
+    ?assertEqual(none, quod_brahms:pick_contact([], [?SELF, ?SELF], ?SELF)).      %% dup self seeds
+
+pick_contact_no_self_addr_test() ->
+    %% node_addr unset (legacy/test boot): nothing is filtered, the seeds stay usable
+    ?assertEqual(?OTHER, quod_brahms:pick_contact([], [?OTHER], undefined)).
+
 %% --- reconstruct prioritizes the mixed candidates over OldV (no sort bias)
 %% A sort-biased impl (usort + take-smallest) would wrongly fill V with the
 %% low-sorting OldV ids instead of the high-sorting mixed candidates.

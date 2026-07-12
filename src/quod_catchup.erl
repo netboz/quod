@@ -12,9 +12,12 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
   non-truncating** handle opened alongside the live writer, so a slow/large pull never touches the
   consensus `gen_statem` and never corrupts the log. Each request runs in a worker; concurrency + range +
   frame size are bounded (hostile-net + memory caps).
-- **Client** (a joiner): `pull/3,4` requests `[From, To]` from a contact Member and awaits the entries.
-  The caller (`mode=join` init) drives the loop and **verifies each block's cert** against the committee it
-  reconstructs — the server is never trusted (the certificate is the proof).
+- **Client** (a joiner): `contact/1` samples ONE download contact — the live, self-filtered Brahms view
+  first, the static seeds (minus this node's own `node_addr`) as the cold-start fallback
+  (`quod_brahms:sample_contact/2`) — and `pull/4` requests `[From, To]` from it. The contact is STICKY for
+  a whole catch-up run and re-sampled only on the next attempt (see `contact/1`). The caller (`mode=join`
+  init) drives the loop and **verifies each block's cert** against the committee it reconstructs — the
+  server is never trusted (the certificate is the proof).
 
 **Trust (trusted-fleet P1):** the inner record decodes without `[safe]` — same posture as `quod_simplex` /
 `quod_prove`. Trustlessness comes from cert verification at the caller, not from trusting this transport.
@@ -22,7 +25,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, pull/3, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
+-export([start_link/2, contact/1, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -37,7 +40,7 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
             self     :: node_id(),
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
             data_dir :: file:filename_all(),
-            contacts = []  :: [endpoint()],             %% seed endpoints a joiner pulls from
+            seeds    = []  :: [endpoint()],             %% static cold-start contacts (sample_contact fallback)
             pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId=>{From,TRef}
             inflight = 0   :: non_neg_integer()}).       %% server: live read workers
 
@@ -48,13 +51,25 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_catchup, Ns}), ?MODULE, {Ns, Config}, []).
 
--doc "Pull committed entries `[From, To]` from a default seed contact.".
--spec pull(binary(), pos_integer(), log_index()) ->
-        {ok, [#entry{}], log_index()} | {error, term()}.
-pull(Ns, From, To) -> pull(Ns, From, To, undefined).
+-doc """
+Sample ONE download contact for a catch-up run: the live, self-filtered Brahms view of `Ns` first,
+this namespace's static seeds — minus this node's own `node_addr` — as the cold-start fallback
+(`quod_brahms:sample_contact/2`). `none` when the node is isolated (no view, no usable seed).
 
--doc "As `pull/3` but from an explicit contact `{Host, Port}`. Returns the entries + the server's height.".
--spec pull(binary(), pos_integer(), log_index(), endpoint() | undefined) ->
+The caller passes the pick EXPLICITLY to every `pull/4` of the run — ONE contact per attempt,
+re-sampled only on the NEXT attempt: consecutive windows from different-height contacts would trip
+`catch_up`'s `no_progress` guard mid-run (and a run must stay glued to one fully-caught-up contact,
+the shape the 24-joiner/81k-slot cold-join relied on).
+""".
+-spec contact(binary()) -> endpoint() | none.
+contact(Ns) ->
+    case quod_reg:where({quod_catchup, Ns}) of
+        undefined -> none;
+        Pid -> try gen_server:call(Pid, contact, 5000) catch exit:_ -> none end
+    end.
+
+-doc "Pull committed entries `[From, To]` from contact `{Host, Port}` (see `contact/1`). Returns the entries + the server's height.".
+-spec pull(binary(), pos_integer(), log_index(), endpoint()) ->
         {ok, [#entry{}], log_index()} | {error, term()}.
 pull(Ns, From, To, Contact) ->
     case quod_reg:where({quod_catchup, Ns}) of
@@ -247,17 +262,15 @@ init({Ns, Config}) ->
     Chan = term_to_binary({catchup, Ns}, [deterministic]),
     quod_reg:subscribe({channel, Chan}),
     {ok, #s{ns = Ns, self = Self, chan = Chan,
-            data_dir = data_dir(Config), contacts = maps:get(seed_peers, Config, [])}}.
+            data_dir = data_dir(Config), seeds = maps:get(seed_peers, Config, [])}}.
 
-handle_call({pull, From, To, Contact0}, ReplyTo, S) ->
-    case (case Contact0 of undefined -> pick_contact(S); C -> C end) of
-        none    -> {reply, {error, no_contact}, S};
-        Contact ->
-            ReqId = make_ref(),
-            TRef  = erlang:send_after(?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
-            S1    = send(Contact, {blocks_req, ReqId, From, To}, S),
-            {noreply, S1#s{pending = (S1#s.pending)#{ReqId => {ReplyTo, TRef}}}}
-    end;
+handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->
+    {reply, quod_brahms:sample_contact(Ns, Seeds), S};
+handle_call({pull, From, To, Contact}, ReplyTo, S) ->
+    ReqId = make_ref(),
+    TRef  = erlang:send_after(?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
+    S1    = send(Contact, {blocks_req, ReqId, From, To}, S),
+    {noreply, S1#s{pending = (S1#s.pending)#{ReqId => {ReplyTo, TRef}}}};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 handle_cast({send_resp, Peer, Resp}, S) ->
@@ -347,9 +360,6 @@ reply_pending(ReqId, Reply, S) ->
 send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
     _ = quod_quic:send(Peer, Chan, term_to_binary({catchup, Ns, term_to_binary(Term)})),
     S.
-
-pick_contact(#s{contacts = []})      -> none;
-pick_contact(#s{contacts = [C | _]}) -> C.
 
 data_dir(Config) ->
     case maps:get(data_dir, Config, undefined) of

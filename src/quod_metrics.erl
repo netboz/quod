@@ -25,6 +25,7 @@ Two collection paths:
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | append rejections by reason (cumulative) |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node votes on this ontology, 0 if a read-only observer |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | stuck-proposal re-sends / weak-cert finalize refusals (cumulative) |
+| `quod_consensus_ahead_gap{namespace}` | gauge | | committed slots the committee is ahead of this node (0 = caught up; sustained >0 = fell behind the live window) |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | fact-engine apply/prove/OCC counts |
 | `quod_prolog_parked{namespace}` | gauge | | writes parked awaiting commit |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | parked writes reaped by TTL (cumulative) |
@@ -124,6 +125,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_redrives,        "How many times this node re-sent a proposal it was still waiting on, instead of giving up on it (running total). Climbing steadily means a committee member is not responding."),
     _ = G(quod_consensus_is_validator,    "1 if this node is a voting member of this ontology's committee, 0 if it is a read-only observer."),
     _ = G(quod_consensus_weak_cert_waits, "How many times this node refused to finalise a block because its proof-of-agreement did not have enough signatures from the current committee, and waited for a valid one instead (running total). Climbing means this node fell behind across a committee change and is waiting to catch up."),
+    _ = G(quod_consensus_ahead_gap,       "How many committed slots the committee has finalised beyond this node's own height (0 = caught up). A sustained positive value means this node has fallen behind the live window and will fetch the missing blocks to catch back up."),
     %% Knowledge base (this node's copy of the ontology's facts)
     _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
     _ = G(quod_prolog_applies,       "How many blocks have been written into the knowledge base (running total)."),
@@ -174,7 +176,7 @@ refresh_log_ns(Ns) ->
         #{slot := Sl, committed := CI, last_applied := LA, committee_size := CS,
           appends := AP, commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
-          redrives := RV, weak_cert_waits := WC, is_validator := IV} ->
+          redrives := RV, weak_cert_waits := WC, is_validator := IV, ahead_gap := AG} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
@@ -192,6 +194,7 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_redrives,        RV),
             _ = S(quod_consensus_is_validator,    IV),
             _ = S(quod_consensus_weak_cert_waits, WC),
+            _ = S(quod_consensus_ahead_gap,       AG),
             ok;
         _ -> ok
     end.

@@ -39,8 +39,9 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 > **re-validated by every validator before support** (`membership_change_ok/2` shape + never-empty gate,
 > then a KB verdict via `quod_prolog:request_membership_verdict/5`), so an unauthorized/malformed change
 > can't gather an honest quorum (`doc/deferred.md` §3 (a)+(c)). A caught-up observer that sees its own
-> `peer_admitted` fact commit **self-promotes to a voter** (`maybe_promote/2` — the committee facts are
-> the reality; the engine/links are projections catching up with them). **Next:** signed membership
+> `peer_admitted` fact commit **self-promotes to a voter** (the committed fact IS the signal: the engine
+> re-seats over the caught-up voting set — the committee facts are the reality, the engine/links are
+> projections catching up with them). **Next:** signed membership
 > authorship (Phase B, closing committee-packing), the reader/feed dissemination tier, and the hardening
 > in `doc/deferred.md` §3 (mid-flight committee-change, per-message retransmit, epoch-frozen validators).
 """.
@@ -66,6 +67,8 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
+         ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
+         drop_keys_le/2, clear_slot_le/2, clear_validating_le/2,   %% Slice 2: reseat_engine's pruning helpers
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -444,6 +447,12 @@ leader(Slot, Validators) ->
 -ifdef(TEST).
 eng_tree(#eng{tree = T})           -> T.           %% slot => notarized #block{}
 eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
+%% Build an #eng with a given `base` and a list of `{Kind, Slot}` certs planted directly into the pool
+%% (bypassing verify) — for ahead_cert_ceiling/1's pure test only.
+eng_with_certs(Base, KindSlots) ->
+    Certs = maps:from_list([{{K, Sl, <<>>}, #cert{kind = K, slot = Sl, block_hash = <<>>, sigs = []}}
+                            || {K, Sl} <- KindSlots]),
+    #eng{validators = [], base = Base, certs = Certs}.
 -endif.
 
 %%%===================================================================
@@ -513,6 +522,10 @@ eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             prolog_ready = false :: boolean(),
             join         = none :: none | pending | {worker, pid()} | done,  %% mode=join catch-up lifecycle
+            pull         = none :: none | {worker, pid()},   %% a VOTING member's gap-fill worker (single-flight):
+                                                             %% catches a fallen-behind member back up to the head,
+                                                             %% in-process. Temporary — folds into the unified
+                                                             %% `#s.sync` latch at the Slice-4 cutover.
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
@@ -732,6 +745,9 @@ running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
 %% the persisted height, so the retry continues from the prefix already on disk — never re-appending from slot 1.
 running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{join = {worker, Pid}}) ->
     {keep_state, S#s{join = pending}, [join_timeout()]};
+%% a member's gap-fill worker crashed mid-pull — clear the latch; the tick re-arms if still behind.
+running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{pull = {worker, Pid}}) ->
+    {keep_state, S#s{pull = none}};
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
 %% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
@@ -748,7 +764,7 @@ running({timeout, complain}, {complain, V}, S0) ->
 %% Consensus re-drive: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
 %% then re-dial every peer whose link never came up (its frames are still buffered).
 running({timeout, tick}, tick, S) ->
-    {keep_state, redial_pending(sweep_stale_dials(S)), [tick_timeout()]};
+    {keep_state, maybe_arm_pull(redial_pending(sweep_stale_dials(S))), [tick_timeout()]};
 %% mode=join: kick trustless catch-up. Wait (re-arm) until the catchup sibling is up, then spawn the worker.
 %% (`valid_cfg` guarantees a `join` node has a binary `genesis_hash`, so there is no anchor-less arm here.)
 running({timeout, join}, start_join, S = #s{join = pending, ns = Ns}) ->
@@ -764,7 +780,7 @@ running({timeout, join}, start_join, S) ->
 %% it like a failure and retry, never declare a read node "done" over nothing.
 running(cast, {join_done, {ok, _H}}, S = #s{join = {worker, _}, slot = Slot}) when Slot >= 1 ->
     S1 = S#s{join = done},   %% now a participant, so active_validators reflects the caught-up voting set
-    {keep_state, maybe_mark_ready(apply_committed(S1#s{eng = eng_new(active_validators(S1), Slot)}))};
+    {keep_state, maybe_mark_ready(apply_committed(reseat_engine(Slot, S1)))};
 %% No download contact for this attempt (Brahms view still empty + no usable seed — e.g. Brahms not up
 %% yet, or a truly isolated node). quod_brahms:sample_contact already warned ONCE for the episode; the
 %% ?JOIN_KICK_MS retry would otherwise repeat the generic warning below ~2×/s for as long as the node
@@ -775,6 +791,12 @@ running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
     logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
     {keep_state, S#s{join = pending}, [join_timeout()]};
 running(cast, {join_done, _}, S) -> {keep_state, S};   %% stale result (already retried / done)
+%% A VOTING member's gap-fill finished (or errored): clear the single-flight latch. Each window already sank
+%% + re-seated the engine inside `sink_catchup`; here we only release the latch, so `behind/1` re-derives from
+%% the now-advanced head next tick and re-arms if a residual remains (a no_contact/error result likewise just
+%% re-arms next tick — single-flight prevents overlap).
+running(cast, {sync_done, _Result}, S = #s{pull = {worker, _}}) -> {keep_state, S#s{pull = none}};
+running(cast, {sync_done, _}, S)                                -> {keep_state, S};   %% stale (latch cleared)
 %% mode=join: the catch-up worker — and, once caught up, the feed — hands each verified, contiguous
 %% window here to persist + replay in slot order. Gated by `may_sink/1`: a VOTING participant must never
 %% sink a window (it advances the store past the engine's in-flight slot; the next commit then hits the
@@ -782,8 +804,10 @@ running(cast, {join_done, _}, S) -> {keep_state, S};   %% stale result (already 
 %% crosses our own promotion. The refused puller just ends its run; the member advances via consensus.
 running({call, From}, {sink_catchup, Es}, S) ->
     case may_sink(S) of
+        %% `reseat_engine` inside may clear `active_slot`; `timer_actions/2` cancels the stale complain timer
+        %% (a no-op for a joiner/observer, load-bearing when a VOTING member gap-fills — DA review).
         true  -> {S1, Reply} = apply_catchup_window(Es, S),
-                 {keep_state, S1, [{reply, From, Reply}]};
+                 {keep_state, S1, [{reply, From, Reply} | timer_actions(S, S1)]};
         false -> {keep_state, S, [{reply, From, {error, not_following}}]}
     end;
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
@@ -817,10 +841,14 @@ handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
     {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
 handle_append(From, Change, S = #s{self = Self, slot = Sl}) ->
     Vs = active_validators(S),   %% eligibility + leader selection use the ACTIVE voting set (the floor in
-    case is_participant(S) of    %% acceptable_change stays on the facts — see change_acceptable/2).
-        %% is_participant, not bare membership: a resuming mid-catch-up node whose on-disk prefix already
-        %% folds its OWN pubkey must not propose over a stale, mid-build engine.
-        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a committee member (joining/read-only)
+                                 %% acceptable_change stays on the facts — see change_acceptable/2).
+    %% May LEAD iff: a committee member (is_participant — not bare membership: a resuming mid-catch-up node
+    %% whose on-disk prefix folds its OWN pubkey must not propose over a stale engine) AND caught up to the
+    %% head (not gap-filling, no finalizer cert proving the head moved past us — else a behind member would
+    %% propose a FORK of already-committed history). A behind/pulling member redirects; its gap-fill catches
+    %% it up and it resumes leading its turns.
+    case is_participant(S) andalso S#s.pull =:= none andalso not behind(S) of
+        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a member, or behind/pulling
         true  -> case acceptable_change(Change, S) of
                      false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
                      true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
@@ -913,7 +941,7 @@ adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
               %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
               %% next slot. Fires on every member at the live finality point (commit_block).
               _ = [quod_quic:learn(Pk, Ep) || {Pk, Ep} <- admitted_endpoints(Change), Pk =/= Self],
-              %% DEMOTION log-event (pairs with maybe_promote's promotion notice): a member commit-signs its
+              %% DEMOTION log-event (pairs with log_promotion's promotion notice): a member commit-signs its
               %% own removal as a voter, so it reaches here still a member and observes itself drop out.
               _ = case lists:member(Self, V) andalso not lists:member(Self, V1) of
                       true  -> logger:notice("quod[~s]: removed from the committee — now a read-only "
@@ -1462,6 +1490,22 @@ maybe_mark_ready(S) -> S.   %% already marked ready, OR still joining (serve pro
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
 %%%===================================================================
 
+%% The highest slot for which a FINALIZER cert (commit | complaint — the certs that advance the committed
+%% height; a bare support cert only notarizes) sits in the pool ABOVE `base`. A finalizer cert is quorum-signed,
+%% so a single Byzantine node cannot forge one — this is the VERIFIED "the committed head has moved past me"
+%% signal, never a monotone `observed_head` integer a lying peer could poison. Seeded with `base` so an empty
+%% pool yields `base` (no `lists:max([])` crash). See `behind/1`.
+-spec ahead_cert_ceiling(#eng{}) -> slot().
+ahead_cert_ceiling(#eng{certs = Certs, base = Base}) ->
+    lists:max([Base | [Sl || {K, Sl, _BH} <- maps:keys(Certs),
+                             Sl > Base, (K =:= commit orelse K =:= complaint)]]).
+
+%% True iff a finalizer cert proves the committed head is past our next slot (`slot+1`) — i.e. we have fallen
+%% behind the in-flight window and must gap-fill. Recomputed on demand (never a stored latch), so it is
+%% self-correcting: as a pull raises `slot`/`base`, `eng_prune` drops those certs and the ceiling falls.
+-spec behind(#s{}) -> boolean().
+behind(#s{eng = Eng, slot = H}) -> ahead_cert_ceiling(Eng) > H + 1.
+
 %% A member of the ACTIVE voting set that may act on live consensus traffic + propose. A node still catching
 %% up (`join = pending | {worker,_}`) is NEVER a participant — even if a catch-up window transiently folds its
 %% OWN pubkey into the facts, it must stay a read-only observer over its (stale, mid-build) engine until
@@ -1472,6 +1516,7 @@ is_participant(#s{self = Self} = S)                      -> lists:member(Self, a
 %% Who may hand us a catch-up window (`sink_catchup`): the catch-up worker always (it OWNS the store while
 %% joining), otherwise only a non-participant (observer). See the `sink_catchup` clause for the race this closes.
 may_sink(#s{join = {worker, _}}) -> true;
+may_sink(#s{pull = {worker, _}}) -> true;   %% a VOTING member's OWN gap-fill pull owns the store during its run
 may_sink(S)                      -> not is_participant(S).
 
 %% Spawn the (monitored) catch-up worker. It runs the driver loop OFF the statem: pull a window via the
@@ -1500,6 +1545,41 @@ start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = V
         end),
     S#s{join = {worker, Pid}}.
 
+%% A VOTING member's gap-fill: catch up from `slot+1` to the head IN-PROCESS (no restart), on the SAME
+%% trustless `quod_catchup:catch_up/5` a joiner uses — but sourced from a fellow COMMITTEE member (whose
+%% authenticated endpoint the member already holds: a behind member still ingests live `{log}` traffic, so
+%% its resolver is warm) and resuming from the durable prefix (the genesis anchor is already pinned, so
+%% `/5` not `/3`). Single-flight via `#s.pull`; a dead/lying contact just fails this attempt and the tick
+%% re-arms with a fresh committee pick. (Within-run rotation + jitter/backoff land with `#s.sync_arm` in the
+%% Slice-4 cutover — single-flight alone paces this: no re-arm while a pull is in flight.)
+start_sync_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = Vs, self = Self}) ->
+    Statem = self(),
+    From   = Slot + 1,
+    Peers  = active_validators(S) -- [Self],   %% compute here so the closure captures Peers, not the whole #s
+    {Pid, _Ref} = spawn_monitor(
+        fun() ->
+            Result = case quod_brahms:take_random(1, Peers) of
+                         []        -> {error, no_contact};
+                         [Contact] ->
+                             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1, Contact) end,
+                             Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
+                             quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)
+                     end,
+            gen_statem:cast(Statem, {sync_done, Result})
+        end),
+    S#s{pull = {worker, Pid}}.
+
+%% Arm the member gap-fill (called each tick, off the commit hot path): a VOTING member that has fallen
+%% behind the in-flight window pulls the gap, single-flight. A non-member / already-pulling / caught-up node
+%% does nothing. `is_participant` (still `join`-gated here) keeps a boot-time resuming member out until
+%% `join=done`; this only recovers an ALREADY-promoted member that later falls behind — the live bug.
+maybe_arm_pull(S = #s{pull = none}) ->
+    case is_participant(S) andalso behind(S) of
+        true  -> start_sync_worker(S);
+        false -> S
+    end;
+maybe_arm_pull(S) -> S.   %% already pulling — {sync_done}/DOWN clears the latch, tick re-arms if still behind
+
 %% Persist a verified, contiguous window (indices `slot+1..`) to the store, fold the committee across it,
 %% and replay it into quod_prolog in slot order (`apply_committed` — the same path a restart-rebuild uses).
 %% An APPEND error aborts the window cleanly (returns `{error, _}` ⇒ the driver fails over); nothing is
@@ -1509,7 +1589,13 @@ start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = V
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
 apply_catchup_window([], S) -> {S, ok};
-apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
+apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
+    %% Idempotency: the live engine may have committed a prefix of this window while the pull worker was
+    %% fetching it (a VOTING member gap-fills while still ingesting live consensus). Drop the already-present
+    %% prefix so the append stays contiguous instead of failing `assert_contiguous`.
+    case drop_index_le(quod_ledger_store:last(Store), Es0) of
+        []  -> {S, ok};   %% window entirely already-present — nothing new to sink
+        Es  ->
     case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
@@ -1522,9 +1608,20 @@ apply_catchup_window(Es, S = #s{store = Store, validators = Vs}) ->
                 false -> ok
             end,
             Slot = (lists:last(Es))#entry.index,
-            S1   = maybe_promote(S, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
+            %% Re-seat the engine UNCONDITIONALLY at the new head (committee-as-of-new-head + reset every stale
+            %% live-slot latch). For a VOTING member gap-filling this is load-bearing (its engine was pinned to
+            %% the stale head); for a joiner/observer the resets are no-ops. `log_promotion` keeps the S5b
+            %% false->true notice now that the re-seat no longer rides `maybe_promote`. The caller
+            %% (`sink_catchup`) pairs this with `timer_actions/2` so a cleared `active_slot` cancels the timer.
+            S1   = reseat_engine(Slot, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
+            _    = log_promotion(S, S1),
             {maybe_mark_ready(apply_committed(S1)), ok}
+    end
     end.
+
+%% Drop entries whose `#entry.index` is `=< LastI` (already durable) — keep only the genuinely-new tail so a
+%% window that straddles a prefix the live engine committed meanwhile still appends contiguously.
+drop_index_le(LastI, Es) -> [E || E <- Es, E#entry.index > LastI].
 
 %% Learn dial hints from a REPLAYED catch-up window (`learn_if_absent` — historical addresses fill a void,
 %% never clobber a live header hint; polarity verified: the reply-link header teaches the fresh address
@@ -1540,25 +1637,52 @@ learn_member_endpoints(Es, Committee, Self) ->
                      end
                  end, Eps).
 
-%% The projections catching up with the facts (S5b promotion). A window we just sunk folded OUR OWN
-%% `peer_admitted` fact into the committee — the committed fact IS the signal (no announcement, no extra
-%% protocol): re-arm the engine over the caught-up voting set at the new head (set + base together,
-%% exactly like the `join_done` re-arm) and from here `is_participant/1` is true — this node acts on
-%% `{log, Ns}` consensus traffic, supports, commit-signs, and takes its `leader/2` turns. Fires only on
-%% the post-`done` feed path: mid-catch-up both sides are non-participant (the `join` gate above), and
-%% admitted-while-catching-up is covered by the `join_done` handler's own re-arm. Vote-safety holds by
-%% construction — an observer never signed anything, so its first possible share is for a slot strictly
-%% after the admission (one support share per slot, ever). Demotion needs no twin: a removed member
-%% commit-signed its own removal as a member, after which `is_participant/1` is simply false and the
-%% feed re-follows it (quod_feed `follows/4`).
-maybe_promote(S0, S1) ->
+%% Log the S5b promotion NOTICE on the `is_participant` false->true edge — a window we just sunk folded OUR
+%% OWN `peer_admitted` fact into the committee, so from the unconditional `reseat_engine` above this node is
+%% now a voter (acts on `{log, Ns}`, supports, commit-signs, takes its `leader/2` turns). The re-arm itself
+%% is no longer here (it rides the unconditional per-window `reseat_engine`); this only emits the operator
+%% notice, pairing the demotion log in `adopt_committee`. Vote-safety holds by construction — an observer
+%% never signed anything, so its first possible share is for a slot strictly after the admission.
+log_promotion(S0, S1) ->
     case {is_participant(S0), is_participant(S1)} of
         {false, true} ->
             logger:notice("quod[~s]: admitted to the committee — voter as of slot ~b (committee ~b)",
-                          [S1#s.ns, S1#s.slot, length(active_validators(S1))]),
-            S1#s{eng = eng_new(active_validators(S1), S1#s.slot)};
-        _ -> S1
+                          [S1#s.ns, S1#s.slot, length(active_validators(S1))]);
+        _ -> ok
     end.
+
+%% Re-seat the engine to `NewHead` after a catch-up window (or a promotion) advanced the committed height: a
+%% fresh engine over the committee AS-OF the new head, PLUS a reset of every live-slot control latch for slots
+%% `=< NewHead` — those slots are now decided history, so a lingering `proposing`/`active_slot` would wedge the
+%% leader `busy` or redrive a `=< base` slot, and parked appends for filled slots are nacked so the caller
+%% retries. Called from `join_done` and UNCONDITIONALLY from every catch-up window (`apply_catchup_window`),
+%% collapsing the former split re-arm (a `join_done` re-arm + a `maybe_promote` conditional re-arm, both
+%% `eng_new/2` alone). At the join/observer sites the latch resets are no-ops (no live-slot state); they are
+%% load-bearing for a VOTING member gap-filling — the caller (`sink_catchup`) pairs this with `timer_actions/2`
+%% to cancel a stale complain
+%% timer when `active_slot` is cleared here; a no-op at these sites, where `active_slot` is already `none`).
+reseat_engine(NewHead, S) ->
+    nack_pending_le(NewHead,
+      S#s{eng           = eng_new(active_validators(S), NewHead),
+          commit_buf    = drop_keys_le(NewHead, S#s.commit_buf),
+          proposing     = clear_slot_le(NewHead, S#s.proposing),
+          active_slot   = clear_slot_le(NewHead, S#s.active_slot),
+          validating    = clear_validating_le(NewHead, S#s.validating),
+          supported     = drop_keys_le(NewHead, S#s.supported),
+          commit_signed = drop_keys_le(NewHead, S#s.commit_signed),
+          complained    = drop_keys_le(NewHead, S#s.complained),
+          invalid       = drop_keys_le(NewHead, S#s.invalid)}).
+
+drop_keys_le(N, M) -> maps:filter(fun(K, _) -> K > N end, M).
+clear_slot_le(N, Sl) when is_integer(Sl), Sl =< N -> none;
+clear_slot_le(_, Sl)                              -> Sl.
+clear_validating_le(N, {Sl, _, _}) when Sl =< N -> none;
+clear_validating_le(_, V)                       -> V.
+%% nack (reply `{error,skipped}` to) every parked append for a slot `=< NewHead` — those slots committed
+%% while we were behind, so the caller must retry under the new head; keep the rest parked. Reuses the
+%% single-slot `nack_pending/2` so the `{error,skipped}` reply contract lives in exactly one place.
+nack_pending_le(N, S) ->
+    lists:foldl(fun nack_pending/2, S, [Sl || Sl <- maps:keys(S#s.pending), Sl =< N]).
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
@@ -1711,4 +1835,5 @@ stats_map(S) ->
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       weak_cert_waits => S#s.weak_cert_waits,
+      ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.

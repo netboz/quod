@@ -36,6 +36,37 @@ block_hash_deterministic_test() ->
     ?assertNotEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(6))).
 
 %%%===================================================================
+%%% gap detector — ahead_cert_ceiling/1 (Slice 1)
+%%%===================================================================
+
+%% The ceiling is the max FINALIZER (commit|complaint) cert slot above `base`, seeded with `base`.
+ahead_cert_ceiling_test() ->
+    C = fun(Base, KS) -> quod_simplex:ahead_cert_ceiling(quod_simplex:eng_with_certs(Base, KS)) end,
+    ?assertEqual(0, C(0, [])),                                        %% empty pool -> base (no lists:max([]) crash)
+    ?assertEqual(0, C(0, [{support, 9}, {support, 42}])),             %% support certs excluded (only notarize)
+    ?assertEqual(7, C(0, [{commit, 7}, {complaint, 5}, {support, 9}])), %% max over finalizers, ignoring support
+    ?assertEqual(5, C(5, [{commit, 3}, {commit, 5}, {complaint, 4}])), %% certs <= base excluded -> base
+    ?assertEqual(12, C(10, [{commit, 12}, {commit, 8}])).            %% only the above-base finalizer counts
+
+%%%===================================================================
+%%% reseat_engine pruning helpers (Slice 2)
+%%%===================================================================
+
+reseat_prune_helpers_test() ->
+    %% drop every map key <= NewHead, keep the rest
+    ?assertEqual(#{7 => a, 9 => b},
+                 quod_simplex:drop_keys_le(5, #{3 => x, 5 => y, 7 => a, 9 => b})),
+    %% a scalar in-flight slot <= NewHead clears to `none`; a future one survives
+    ?assertEqual(none, quod_simplex:clear_slot_le(5, 5)),
+    ?assertEqual(none, quod_simplex:clear_slot_le(5, 3)),
+    ?assertEqual(8,    quod_simplex:clear_slot_le(5, 8)),
+    ?assertEqual(none, quod_simplex:clear_slot_le(5, none)),   %% already idle
+    %% a pending membership verdict for a slot <= NewHead is stale -> none
+    ?assertEqual(none, quod_simplex:clear_validating_le(5, {4, <<"h">>, blk(4)})),
+    ?assertMatch({8, _, _}, quod_simplex:clear_validating_le(5, {8, <<"h">>, blk(8)})),
+    ?assertEqual(none, quod_simplex:clear_validating_le(5, none)).
+
+%%%===================================================================
 %%% block-timestamp acceptance (the valid_proposal monotonic + future + type gate)
 %%%===================================================================
 

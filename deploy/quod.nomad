@@ -66,9 +66,9 @@ job "quod" {
       per_alloc       = true
     }
 
-    # A bootstrap founder has no peer to wait for. Join-mode allocations wait
-    # until one current node is serving metrics so their rendered seed list is
-    # useful on first boot. Later retries and catch-up remain Quod's job.
+    # The bootstrap allocation has no peer to wait for. It is also allowed to
+    # restart in join mode without a peer: its existing volume is the anchor
+    # source, while new allocation indexes wait for a current member.
     task "wait-for-peer" {
       driver = "docker"
 
@@ -93,7 +93,7 @@ EOT
         command = "sh"
         args = [
           "-c",
-          "if [ -z '${var.genesis_hash}' ]; then echo 'founder bootstrap, no peer required'; exit 0; fi; while :; do unset QUOD_PEER_HOST QUOD_PEER_METRICS_PORT; . \"$NOMAD_TASK_DIR/peer.env\" 2>/dev/null || true; if [ -n \"$QUOD_PEER_HOST\" ] && nc -z -w2 \"$QUOD_PEER_HOST\" \"$QUOD_PEER_METRICS_PORT\" 2>/dev/null; then echo \"peer up at $QUOD_PEER_HOST:$QUOD_PEER_METRICS_PORT\"; exit 0; fi; echo 'peer not ready, sleeping 2s'; sleep 2; done"
+          "if [ -z '${var.genesis_hash}' ] || [ \"$${NOMAD_ALLOC_INDEX:-0}\" = 0 ]; then echo 'bootstrap allocation, no peer required'; exit 0; fi; while :; do unset QUOD_PEER_HOST QUOD_PEER_METRICS_PORT; . \"$NOMAD_TASK_DIR/peer.env\" 2>/dev/null || true; if [ -n \"$QUOD_PEER_HOST\" ] && nc -z -w2 \"$QUOD_PEER_HOST\" \"$QUOD_PEER_METRICS_PORT\" 2>/dev/null; then echo \"peer up at $QUOD_PEER_HOST:$QUOD_PEER_METRICS_PORT\"; exit 0; fi; echo 'peer not ready, sleeping 2s'; sleep 2; done"
         ]
       }
 

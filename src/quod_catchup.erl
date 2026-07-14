@@ -27,6 +27,9 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 
 -export([start_link/2, contact/1, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-ifdef(TEST).
+-export([peer_matches/2]).
+-endif.
 
 -define(REQ_TIMEOUT_MS,  8000).
 -define(MAX_INFLIGHT,    32).            %% server: concurrent read workers (bound a pull-flood)
@@ -41,7 +44,9 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
             data_dir :: file:filename_all(),
             seeds    = []  :: [endpoint()],             %% static cold-start contacts (sample_contact fallback)
-            pending  = #{} :: #{reference() => {gen_server:from(), reference()}},  %% client: ReqId=>{From,TRef}
+            pending  = #{} :: #{reference() =>
+                                  {gen_server:from(), reference(), {bound, node_id()} | unbound}},
+                                      %% client: ReqId=>{From,TRef,ExpectedPeer}
             inflight = 0   :: non_neg_integer()}).       %% server: live read workers
 
 %%%===================================================================
@@ -68,8 +73,8 @@ contact(Ns) ->
         Pid -> try gen_server:call(Pid, contact, 5000) catch exit:_ -> none end
     end.
 
--doc "Pull committed entries `[From, To]` from contact `{Host, Port}` (see `contact/1`). Returns the entries + the server's height.".
--spec pull(binary(), pos_integer(), log_index(), endpoint()) ->
+-doc "Pull committed entries `[From, To]` from a node id or `{Host, Port}` contact. Returns the entries + the server's height.".
+-spec pull(binary(), pos_integer(), log_index(), node_id() | endpoint()) ->
         {ok, [#entry{}], log_index()} | {error, term()}.
 pull(Ns, From, To, Contact) ->
     case quod_reg:where({quod_catchup, Ns}) of
@@ -270,7 +275,8 @@ handle_call({pull, From, To, Contact}, ReplyTo, S) ->
     ReqId = make_ref(),
     TRef  = erlang:send_after(?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
     S1    = send(Contact, {blocks_req, ReqId, From, To}, S),
-    {noreply, S1#s{pending = (S1#s.pending)#{ReqId => {ReplyTo, TRef}}}};
+    ExpectedPeer = expected_peer(Contact),
+    {noreply, S1#s{pending = (S1#s.pending)#{ReqId => {ReplyTo, TRef, ExpectedPeer}}}};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 handle_cast({send_resp, Peer, Resp}, S) ->
@@ -282,8 +288,10 @@ handle_info({quod_message, {{Peer, _Addr}, _In}, Chan, Payload}, S = #s{chan = C
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
 handle_info({req_timeout, ReqId}, S) ->
     case maps:take(ReqId, S#s.pending) of
-        {{From, _TRef}, P1} -> gen_server:reply(From, {error, timeout}), {noreply, S#s{pending = P1}};
-        error               -> {noreply, S}
+        {{From, _TRef, _ExpectedPeer}, P1} ->
+            gen_server:reply(From, {error, timeout}),
+            {noreply, S#s{pending = P1}};
+        error -> {noreply, S}
     end;
 handle_info(_Info, S) -> {noreply, S}.
 
@@ -305,8 +313,8 @@ inbound(Peer, Payload, S) ->
     catch _:_ -> S end.
 
 route(Peer, {blocks_req, ReqId, From, To}, S) -> handle_req(Peer, ReqId, From, To, S);
-route(_Peer, {blocks_resp, ReqId, Entries, Height}, S) -> handle_resp(ReqId, Entries, Height, S);
-route(_Peer, {blocks_err, ReqId}, S) -> handle_err(ReqId, S);
+route(Peer, {blocks_resp, ReqId, Entries, Height}, S) -> handle_resp(Peer, ReqId, Entries, Height, S);
+route(Peer, {blocks_err, ReqId}, S) -> handle_err(Peer, ReqId, S);
 route(_Peer, _Other, S) -> S.
 
 %% Server: read the requested range in a worker (never block the endpoint; concurrency-capped). Over the
@@ -334,22 +342,34 @@ handle_req(Peer, ReqId, From, To, S = #s{ns = Ns, data_dir = Dir}) when is_integ
 handle_req(_Peer, _ReqId, _From, _To, S) -> S.   %% malformed range ⇒ drop
 
 %% Client: match a response to its parked caller.
-handle_resp(ReqId, Entries, Height, S) ->
-    reply_pending(ReqId, {ok, Entries, Height}, S).
+handle_resp(Peer, ReqId, Entries, Height, S) ->
+    reply_pending(Peer, ReqId, {ok, Entries, Height}, S).
 
 %% Client: the server hit a read error (distinct from an empty log) — fail the pull so the caller retries
 %% another contact rather than concluding the namespace is empty.
-handle_err(ReqId, S) ->
-    reply_pending(ReqId, {error, server_error}, S).
+handle_err(Peer, ReqId, S) ->
+    reply_pending(Peer, ReqId, {error, server_error}, S).
 
-reply_pending(ReqId, Reply, S) ->
-    case maps:take(ReqId, S#s.pending) of
-        {{From, TRef}, P1} ->
-            _ = erlang:cancel_timer(TRef),
-            gen_server:reply(From, Reply),
-            S#s{pending = P1};
-        error -> S   %% unknown / already-timed-out ReqId
+reply_pending(Peer, ReqId, Reply, S) ->
+    case maps:get(ReqId, S#s.pending, undefined) of
+        {_From, _TRef, ExpectedPeer} ->
+            case peer_matches(Peer, ExpectedPeer) of
+                false -> S;   %% authenticated response, but not from the node this request targeted
+                true  ->
+                    {{From, TRef, _}, P1} = maps:take(ReqId, S#s.pending),
+                    _ = erlang:cancel_timer(TRef),
+                    gen_server:reply(From, Reply),
+                    S#s{pending = P1}
+            end;
+        undefined -> S   %% unknown / already-timed-out ReqId
     end.
+
+expected_peer(Contact) when is_binary(Contact) -> {bound, Contact};
+expected_peer(_Endpoint) -> unbound.
+
+peer_matches(_Peer, unbound) -> true;
+peer_matches(Peer, {bound, Peer}) -> true;
+peer_matches(_Peer, {bound, _ExpectedPeer}) -> false.
 
 %%%===================================================================
 %%% transport

@@ -51,8 +51,8 @@ admit_stages_peer_admitted_test() ->
     Changes = with_ready(<<"cp:test">>, Pub, fun() -> scope(kb([]), {admit, Pub, "10.0.0.9", 9000}) end),
     ?assertMatch([{assert, {{peer_admitted, <<1, 2, 3>>, "10.0.0.9", 9000, <<1, 2, 3>>}, _}}], Changes).
 
-%% The readiness gate: a candidate with NO fresh digest (dead, cold, or mid-catch-up — it never digests
-%% until join=done) is refused at the rule, so nothing is staged.
+%% The readiness gate: a candidate with NO fresh digest (dead, cold, or mid-recovery — it never digests
+%% until `syncing=false`) is refused at the rule, so nothing is staged.
 admit_unready_fails_test() ->
     Ready = <<7>>, Cold = <<8>>,
     ?assertEqual(fail, with_ready(<<"cp:unready">>, Ready,

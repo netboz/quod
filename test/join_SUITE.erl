@@ -123,9 +123,9 @@ joiner_catches_up(Config) ->
     Founder = ?config(founder, Config),
     Joiner  = ?config(joiner, Config),
 
-    %% it reaches the founder's height (2) purely by catch-up, and reports itself done.
+    %% it reaches the founder's height (2) purely by catch-up, and reports itself settled (not syncing).
     ?assert(eventually(fun() -> slot(Joiner) =:= 2 end, 30000)),
-    ?assert(eventually(fun() -> maps:get(join, status(Joiner), undefined) =:= done end, 30000)),
+    ?assert(eventually(fun() -> maps:get(syncing, status(Joiner), true) =:= false end, 30000)),
 
     %% every cert verified: the joiner's committee is exactly the founder's (folded from the genesis it
     %% anchored), and the joiner is NOT in it — a read-only observer, not a voter.
@@ -164,7 +164,7 @@ joiner_resumes_after_restart(Config) ->
 
     ?assert(eventually(fun() -> slot(Founder2) =:= 3 end, 10000)),   %% founder re-derived its full log
     ?assert(eventually(fun() -> slot(Joiner2) =:= 3 end, 30000)),    %% joiner RESUMED from 2 to 3
-    ?assert(eventually(fun() -> maps:get(join, status(Joiner2), undefined) =:= done end, 30000)),
+    ?assert(eventually(fun() -> maps:get(syncing, status(Joiner2), true) =:= false end, 30000)),
     ?assert(eventually(fun() -> match_ok(prove(Joiner2, {population, france, {'X'}})) end, 15000)),
     ?assert(match_ok(prove(Joiner2, {capital, france, {'X'}}))),   %% the pre-restart prefix survived too
     {save_config, [{founder2, Founder2}, {joiner2, Joiner2}]}.     %% the promotion case runs on these
@@ -195,7 +195,7 @@ joiner_promoted_to_voter(Config) ->
     ?assertEqual(observer, maps:get(role, status(Joiner))),
 
     %% the readiness gate (root ontology: `can_join :- peer_ready(Pk)`) refuses a candidate that has
-    %% never digested — cold, dead, or still mid-catch-up (`follows/4` keeps it silent until join=done).
+    %% never digested — cold, dead, or still mid-catch-up (`follows/4` keeps it silent until it is settled).
     %% A failed proof commits nothing, so slot numbering below is unaffected.
     {GhostPub, _} = quod_identity:generate(),
     ?assertEqual(fail, prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
@@ -214,11 +214,11 @@ joiner_promoted_to_voter(Config) ->
     ?assertMatch({ok, _, _}, prove(Founder, {assertz, {promoted, probe, 5}})),
     ?assert(eventually(fun() -> slot(Founder) =:= 5 andalso slot(Joiner) =:= 5 end, 20000)),
 
-    %% the joiner self-promoted along the way: committee, role, join state all flipped.
+    %% the joiner self-promoted along the way: committee, role, and settled state all flipped.
     Both = lists:sort([FPub, JPub]),
     ?assertEqual(Both, lists:sort(peer:call(Joiner, quod_simplex, committee, [?NS]))),
     ?assertEqual(validator, maps:get(role, status(Joiner))),
-    ?assertEqual(done, maps:get(join, status(Joiner))),
+    ?assertEqual(false, maps:get(syncing, status(Joiner))),
     ?assertEqual(Both, lists:sort(peer:call(Founder, quod_simplex, committee, [?NS]))),
 
     %% and it LEADS: slot 6 is the joiner's by round-robin (JPub > FPub by construction), so this write
@@ -235,7 +235,7 @@ joiner_promoted_to_voter(Config) ->
 %% USELESS — its only seed is ITSELF — must still catch up, because the download contact is sampled from
 %% the live Brahms view (self-filtered, gossip-maintained), with the seeds only a cold-start fallback.
 %% The old picker took `seeds[0]` unfiltered on every attempt: this node would have pulled from itself
-%% forever ({error,{fetch,_}} / no_log), permanently wedged in catching_up. The first attempts here DO
+%% forever ({error,{fetch,_}} / no_log), permanently wedged mid-sync. The first attempts here DO
 %% fail (Brahms starts just after the namespace ⇒ no view, no usable seed ⇒ {error,no_contact}), which
 %% also exercises the quiet re-sample-on-retry path.
 self_seeded_joiner_catches_up(Config) ->
@@ -255,7 +255,7 @@ self_seeded_joiner_catches_up(Config) ->
                         [?NS, #{node_id => OAddr, seed_peers => [FAddr]}]),
     try
         ?assert(eventually(fun() -> slot(Obs) >= Target end, 60000)),
-        ?assert(eventually(fun() -> maps:get(join, status(Obs), undefined) =:= done end, 30000)),
+        ?assert(eventually(fun() -> maps:get(syncing, status(Obs), true) =:= false end, 30000)),
         %% caught up THROUGH the view-sampled contact: the replayed history is in its OWN KB
         ?assert(eventually(fun() -> match_ok(prove(Obs, {capital, france, {'X'}})) end, 15000))
     after

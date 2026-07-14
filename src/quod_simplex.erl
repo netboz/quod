@@ -69,6 +69,9 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
          drop_keys_le/2, clear_slot_le/2, clear_validating_le/2,   %% Slice 2: reseat_engine's pruning helpers
+         is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1,
+         initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
+         recovery_failed/1, may_sink/2, reset_pace/0, test_state/1, test_arm/1, test_sync/1,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -252,6 +255,7 @@ may_complain(Slot, CommittedSlots) ->
               shares   = #{} :: #{share_key() => #{node_id() => #share{}}},
               certs    = #{} :: #{share_key() => #cert{}},
               tree     = #{} :: #{slot() => #block{}},                 %% notarized blocks (in-flight window)
+              tree_hashes = #{} :: #{slot() => binary()},              %% slot => verified key in `blocks`
               committed = #{} :: #{slot() => #block{}},                %% committed (final) in-flight blocks
               skipped  = #{} :: #{slot() => true}}).                   %% slots a complaint cert has skipped
 
@@ -288,7 +292,9 @@ persisted_cert(Kind, Slot, BH, #eng{certs = Certs, validators = Vs}) ->
     case maps:get({Kind, Slot, BH}, Certs, none) of
         none            -> none;
         #cert{sigs = S} ->
-            Min = distinct_valid(S, share_bytes(Kind, Slot, BH), Vs),
+            %% Every cert is sanitized on engine ingress, so signatures are already cryptographically
+            %% verified and unique. A committee transition only requires re-filtering signer membership.
+            Min = [{Signer, Sig} || {Signer, Sig} <- S, lists:member(Signer, Vs)],
             case length(Min) >= quorum(length(Vs)) of
                 true  -> #cert{kind = Kind, slot = Slot, block_hash = BH, sigs = Min};
                 false -> none
@@ -309,34 +315,77 @@ eng_offer({block, #block{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -
 eng_offer({share, #share{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
 eng_offer({cert,  #cert{slot = Sl}},  #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
 eng_offer({block, #block{} = B}, Eng) ->
-    settle(Eng#eng{blocks = (Eng#eng.blocks)#{block_hash(B) => B}});
-eng_offer({share, #share{signer = Signer} = Sh}, Eng) ->
-    case verify_share(Sh) andalso lists:member(Signer, Eng#eng.validators) of
-        false -> {Eng, []};                       %% junk / outsider: ignore
-        true  -> ingest_share(Sh, Eng)
+    eng_offer_hashed(block_hash(B), B, Eng);
+eng_offer({share, #share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh}, Eng) ->
+    Key = {K, Sl, BH},
+    Bucket = maps:get(Key, Eng#eng.shares, #{}),
+    %% Reject outsiders before Ed25519 work. A duplicate is already trusted in the bucket, so do not verify
+    %% it again; it can still trigger re-formation after `weak_cert_wait` evicted a stale old-committee cert.
+    case lists:member(Signer, Eng#eng.validators) of
+        false -> {Eng, []};
+        true  -> case maps:is_key(Signer, Bucket) of
+                     true  -> maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng);
+                     false -> case verify_share(Sh) of
+                                  true  -> ingest_share(Sh, Bucket, Eng);
+                                  false -> {Eng, []}
+                              end
+                 end
     end;
 eng_offer({cert, #cert{} = C}, Eng) ->
     Key = cert_key(C),
-    case (not maps:is_key(Key, Eng#eng.certs)) andalso verify_cert(C, Eng#eng.validators) of
-        false -> settle(Eng);                     %% already have it, or invalid
-        true  -> {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => C}}),
-                 {Eng1, [{broadcast, C} | Evs]}   %% relay a newly-learned cert once (§2.3.1)
+    case maps:is_key(Key, Eng#eng.certs) of
+        true -> {Eng, []};
+        false ->
+            case sanitize_cert(C, Eng#eng.validators) of
+                error -> settle(Eng);
+                {ok, Clean} ->
+                    {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => Clean}}),
+                    {Eng1, [{broadcast, Clean} | Evs]}   %% relay a newly-learned cert once (§2.3.1)
+            end
     end.
+
+%% The state-machine driver already computed the proposal hash for signing. Keep that trusted fast path
+%% private; external users of the pure engine enter through `eng_offer({block,B}, ...)`, which derives it.
+eng_offer_hashed(_BH, #block{slot = Sl}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
+eng_offer_hashed(BH, #block{} = B, Eng) ->
+    settle(Eng#eng{blocks = (Eng#eng.blocks)#{BH => B}}).
 
 %% Add a verified share to its (kind, slot, block) bucket; if that reaches the `⅔` quorum for the first
 %% time, form the cert and re-disseminate it, then settle the tree/commits.
-ingest_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh, Eng) ->
+ingest_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh, Bucket, Eng) ->
     Key    = {K, Sl, BH},
-    Bucket = maps:get(Key, Eng#eng.shares, #{}),
-    Eng1   = Eng#eng{shares = (Eng#eng.shares)#{Key => Bucket#{Signer => Sh}}},
-    case maps:is_key(Key, Eng1#eng.certs) of
-        true  -> settle(Eng1);                    %% cert already formed for this key
-        false ->
-            Shares = maps:values(maps:get(Key, Eng1#eng.shares)),
-            case form_cert(K, Sl, BH, Shares, Eng1#eng.validators) of
-                {ok, Cert}            -> {Eng2, Evs} = settle(Eng1#eng{certs = (Eng1#eng.certs)#{Key => Cert}}),
-                                         {Eng2, [{broadcast, Cert} | Evs]};
-                {error, insufficient} -> {Eng1, []}
+    Bucket1 = Bucket#{Signer => Sh},
+    Eng1   = Eng#eng{shares = (Eng#eng.shares)#{Key => Bucket1}},
+    maybe_form_bucket_cert(K, Sl, BH, Bucket1, Eng1).
+
+maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
+    Key = {K, Sl, BH},
+    %% Crypto trust survives a committee transition; voting eligibility does not. Project the trusted
+    %% bucket onto the CURRENT set so shares cached before a removal cannot satisfy the new quorum.
+    Current = [{P, X} || {P, X} <- maps:to_list(Bucket),
+                         lists:member(P, Eng#eng.validators)],
+    Enough = length(Current) >= quorum(length(Eng#eng.validators)),
+    case {maps:is_key(Key, Eng#eng.certs), Enough} of
+        {true, _} -> settle(Eng);
+        {false, false} -> {Eng, []};
+        {false, true} ->
+            %% Bucket insertion is the trust boundary: every value was verified once and the map key makes
+            %% signers unique. Cert formation is therefore a membership projection, not another crypto pass.
+            Sigs = lists:sort([{P, X#share.sig} || {P, X} <- Current]),
+            Cert = #cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs},
+            {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => Cert}}),
+            {Eng1, [{broadcast, Cert} | Evs]}
+    end.
+
+sanitize_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C, Validators) ->
+    case Validators =/= [] andalso is_list(Sigs) andalso length(Sigs) =< length(Validators)
+         andalso valid_shape(K, BH) of
+        false -> error;
+        true  ->
+            Valid = distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators),
+            case length(Valid) >= quorum(length(Validators)) of
+                true  -> {ok, C#cert{sigs = Valid}};
+                false -> error
             end
     end.
 
@@ -345,39 +394,49 @@ cert_key(#cert{kind = K, slot = Sl, block_hash = BH}) -> {K, Sl, BH}.
 %% Recompute the tree then the commits to a fixpoint — a newly-notarized block can enable its child's
 %% notarization — returning the newly-notarized + newly-committed events in order.
 settle(Eng) -> settle(Eng, []).
-settle(Eng, Acc) ->
+settle(Eng, AccRev) ->
     case grow_tree(Eng) of
-        {Eng1, [_ | _] = New} -> settle(Eng1, Acc ++ New);
+        {Eng1, [_ | _] = New} -> settle(Eng1, lists:reverse(New, AccRev));
         {Eng1, []}            -> {Eng2, Commits} = detect_commits(Eng1),
                                  {Eng3, Skips}   = detect_complaints(Eng2),
-                                 {Eng3, Acc ++ Commits ++ Skips}
+                                 {Eng3, lists:reverse(AccRev, Commits ++ Skips)}
     end.
 
 %% Add every block that now has a support cert AND whose parent is in the tree (or is genesis) AND
 %% whose payload we hold — one pass (settle/2 loops it to a fixpoint).
-grow_tree(Eng = #eng{certs = Certs, tree = Tree}) ->
+grow_tree(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes}) ->
     Ready = lists:filtermap(
               fun({{support, Sl, BH}, _Cert}) ->
                       case (not maps:is_key(Sl, Tree)) andalso block_for(BH, Eng) of
-                          #block{} = B -> case parent_ok(B, Eng) of true -> {true, B}; false -> false end;
+                          #block{} = B -> case parent_ok(B, Eng) of
+                                             true -> {true, {Sl, BH, B}};
+                                             false -> false
+                                         end;
                           _            -> false
                       end;
                  (_) -> false
               end, maps:to_list(Certs)),
-    case lists:keysort(#block.slot, Ready) of   %% slot-ascending, so parents are handed over before children
+    case lists:keysort(1, Ready) of   %% slot-ascending, so parents are handed over before children
         [] -> {Eng, []};
-        Sorted -> Tree1 = lists:foldl(fun(B, T) -> T#{B#block.slot => B} end, Tree, Sorted),
-                  {Eng#eng{tree = Tree1}, [{notarized, B} || B <- Sorted]}
+        Sorted ->
+            Tree1 = lists:foldl(fun({Sl, _BH, B}, T) -> T#{Sl => B} end, Tree, Sorted),
+            Hashes1 = lists:foldl(fun({Sl, BH, _B}, Hs) -> Hs#{Sl => BH} end, Hashes, Sorted),
+            {Eng#eng{tree = Tree1, tree_hashes = Hashes1},
+             [{notarized, B} || {_Sl, _BH, B} <- Sorted]}
     end.
 
 %% A block is committed once it is in the tree AND the pool has a commit cert for it (block-bound:
 %% the commit cert names this block, so the proof is self-contained). Emitted in slot order so the
 %% driver's contiguous store append never sees a gap within a single settle.
-detect_commits(Eng = #eng{certs = Certs, tree = Tree, committed = Committed}) ->
+detect_commits(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes,
+                          committed = Committed}) ->
     New = lists:sort(lists:filtermap(
             fun({{commit, Sl, BH}, _Cert}) ->
                     case (not maps:is_key(Sl, Committed)) andalso maps:get(Sl, Tree, undefined) of
-                        #block{} = B -> case block_hash(B) =:= BH of true -> {true, {Sl, B}}; false -> false end;
+                        #block{} = B -> case maps:get(Sl, Hashes, undefined) =:= BH of
+                                           true -> {true, {Sl, B}};
+                                           false -> false
+                                       end;
                         _            -> false
                     end;
                (_) -> false
@@ -427,6 +486,7 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
             shares    = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.shares),
             certs     = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.certs),
             tree      = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree),
+            tree_hashes = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree_hashes),
             committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed),
             skipped   = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.skipped)}.
 
@@ -487,9 +547,14 @@ eng_with_certs(Base, KindSlots) ->
                                   %% link-ack ~5s, quod_conn), so an in-flight dial is never swept early
 -define(DELTA_MS,   1000).   %% Δ_timeout: a proposed-but-stuck head slot is complained (skipped) after this;
                              %% must exceed real commit latency (override via app-env `simplex_delta_ms`)
--define(JOIN_KICK_MS, 500).  %% mode=join: delay before (re)trying catch-up, so the catchup sibling is up first
--define(JOIN_WINDOW,  256).  %% mode=join: entries requested per catch-up fetch (matches the server's block cap)
--define(SINK_MS,     30000). %% mode=join: budget for one sink window (store append + KB replay) — generous
+-define(SYNC_WINDOW,  256).  %% entries requested per catch-up / gap-fill fetch (matches the server's block cap)
+-define(SINK_MS,     30000). %% budget for one sink window (store append + KB replay) — generous
+-define(TIP_PROBE_MS, 9500). %% one parallel tip round; exceeds quod_catchup's 9s public pull budget
+-define(RECOVERY_FETCHES, 2). %% bound source changes inside one recovery worker (retries resume durably)
+-define(SYNC_HYSTERESIS,  2).  %% ticks the `behind` gap must persist before a heavyweight pull arms (a transient
+                               %% 1-2 slot lag rides the cheap redrive); an `unconfirmed` node bypasses it
+-define(SYNC_BACKOFF_MIN, 3).  %% failure backoff floor (ticks) before re-arming a sync after no_contact/error
+-define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
 
@@ -521,11 +586,14 @@ eng_with_certs(Base, KindSlots) ->
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             prolog_ready = false :: boolean(),
-            join         = none :: none | pending | {worker, pid()} | done,  %% mode=join catch-up lifecycle
-            pull         = none :: none | {worker, pid()},   %% a VOTING member's gap-fill worker (single-flight):
-                                                             %% catches a fallen-behind member back up to the head,
-                                                             %% in-process. Temporary — folds into the unified
-                                                             %% `#s.sync` latch at the Slice-4 cutover.
+            %% Recovery is one explicit state machine. `unconfirmed` means the durable prefix is valid but
+            %% its tip has not been corroborated; `{pulling,Pid}` gives one worker exclusive ownership of
+            %% catch-up ingestion; only `ready` may emit consensus evidence. This single enum cannot
+            %% represent the unsafe combinations the
+            %% former `sync` latch + `confirmed` boolean allowed after a partial or failed pull.
+            sync         = unconfirmed :: unconfirmed | {pulling, pid()} | ready,
+            sync_arm     = {0, 0, 0} :: {non_neg_integer(), non_neg_integer(), non_neg_integer()},
+                                        %% {behind-hysteresis ticks, backoff cooldown ticks, backoff interval ticks}
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
@@ -539,6 +607,23 @@ eng_with_certs(Base, KindSlots) ->
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             weak_cert_waits = 0 :: non_neg_integer()}).  %% finalizations refused on a sub-quorum cert (Slice E,
                                                          %% the stale-cert hazard) — climbing = a laggard waiting
+
+-ifdef(TEST).
+%% Build a minimal #s{} for the Slice-4 gate-predicate eunit (the record is otherwise private). Only the
+%% fields the pure predicates read carry meaning; every other field takes its record default.
+test_state(Overrides) ->
+    maps:fold(fun test_state_set/3, #s{ns = <<"t">>, self = <<"self">>}, Overrides).
+test_state_set(self, V, S)       -> S#s{self = V};
+test_state_set(validators, V, S) -> S#s{validators = V};
+test_state_set(slot, V, S)       -> S#s{slot = V};
+test_state_set(eng, V, S)        -> S#s{eng = V};
+test_state_set(sync, V, S)       -> S#s{sync = V};
+test_state_set(last_applied, V, S) -> S#s{last_applied = V};
+test_state_set(prolog_ready, V, S) -> S#s{prolog_ready = V};
+test_state_set(sync_arm, V, S)   -> S#s{sync_arm = V}.
+test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a state (record is private)
+test_sync(#s{sync = Sy})         -> Sy.
+-endif.
 
 callback_mode() -> [state_functions].
 
@@ -605,17 +690,13 @@ init_store(Ns, Cfg, Id) ->
         S1 ->
             Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
             Eng = eng_new(active_validators(S1), Committed),   %% seed the engine's voting set (active set)
-            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout() | join_actions(S1)]}
+            %% One periodic tick drives everything post-boot: peer redials AND the sync armer (`maybe_arm_sync`)
+            %% that kicks boot-sync/gap-fill. A fresh `mode=join` node boots `unconfirmed`, so `should_sync`
+            %% arms its catch-up at the first tick — no separate join kick.
+            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
-
-%% A fresh `mode=join` node boots UNFOUNDED and must drive catch-up — arm the join kick (deferred so the
-%% catchup sibling, later in the rest_for_one chain, is up first). Every other boot participates immediately.
-join_actions(#s{join = pending}) -> [join_timeout()];
-join_actions(_)                  -> [].
-
-join_timeout() -> {{timeout, join}, ?JOIN_KICK_MS, start_join}.
 
 %% The consensus re-drive timer: fires every ?TICK_MS to retry dials whose link never came up, so a
 %% transient dial failure at boot can't permanently stall a slot (there is no per-message retransmit).
@@ -636,11 +717,16 @@ signing_key(Cfg) ->
 %% process holds only the validator-set projection). A brand-new namespace is bootstrapped.
 %% Re-folding the committee from the log is the accepted cost of running without a committee checkpoint;
 %% `last/1` gives the height in O(1). Both projections derive from the same committed log, so they can't drift.
-%% Derive the durable state, then decide by mode. A `join` node ALWAYS (re)enters catch-up — from slot 0 when
-%% fresh (unfounded, anchored at genesis) OR RESUMING from a partial prefix left by a crash/restart (`start_join_worker`
-%% resumes at `slot+1`, so a retry never re-appends what is already on disk, and a partial log is never mistaken for
-%% complete — `maybe_mark_ready` stays gated until `join=done`). A fresh `create` node founds genesis; a restarted
-%% `create` node (or an admitted member) just re-derives. Both projections come from the one committed log.
+%% Derive the durable state, then decide by mode — `mode` is read HERE ONCE and then discarded (it is boot
+%% config, not running state). `create` founds genesis when fresh (slot 0) or just re-derives on restart;
+%% `join` records the pinned `genesis_hash` anchor and starts UNFOUNDED (slot 0) or RESUMES a partial prefix
+%% (slot≥1) — either way it catches up via the tick's `should_sync` arm (from slot+1, so a retry never
+%% re-appends disk-present bytes, and `maybe_mark_ready` stays gated on recovery reaching `ready`).
+%%
+%% The initial recovery state is seeded PURELY FROM THE FACTS, not the mode: only the sole validator can
+%% trust its head is the tip (`active_validators == [Self]` — nobody else could have moved it). Everyone
+%% else — a co-founder, a joiner, a resuming member — boots `unconfirmed` and runs recovery. So `mode`
+%% leaves zero running-state residual.
 load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
     Base = case quod_ledger_store:last(Store) of
                0     -> S0;   %% empty ⇒ unfounded (slot 0)
@@ -648,10 +734,19 @@ load_or_bootstrap(S0 = #s{store = Store}, Cfg) ->
                                                           fun log_projection_step/2, {[], 0}),
                         S0#s{validators = Vs, slot = LastI, last_ts = Ts}
            end,
-    case {maps:get(mode, Cfg), Base#s.slot} of
-        {join,   _} -> Base#s{join = pending, genesis_hash = maps:get(genesis_hash, Cfg)};
-        {create, 0} -> bootstrap(Cfg, Base);   %% fresh founder
-        {create, _} -> Base                    %% restarted founder / admitted member
+    S1 = case {maps:get(mode, Cfg), Base#s.slot} of
+             {join,   _} -> Base#s{genesis_hash = maps:get(genesis_hash, Cfg)};
+             {create, 0} -> bootstrap(Cfg, Base);   %% fresh founder
+             {create, _} -> Base                    %% restarted founder / admitted member
+         end,
+    S1#s{sync = initial_sync(S1)}.
+
+%% The sole validator is ready immediately because no other node could have committed past its durable head.
+%% Every other shape must corroborate its tip through recovery before it can emit consensus evidence.
+initial_sync(#s{self = Self} = S) ->
+    case active_validators(S) of
+        [Self] -> ready;
+        _      -> unconfirmed
     end.
 
 %% Fresh create: durably commit ONE genesis block (slot 1) whose transaction asserts each founding
@@ -739,15 +834,12 @@ running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
     %% the dial failed — clear the in-flight marker but KEEP the buffered frames; the tick re-dials
     %% (consensus emits each propose/share only once, so dropping them would stall the slot forever).
     {keep_state, S#s{dialing = maps:remove(Peer, S#s.dialing)}};
-%% The catch-up worker died while still `{worker,Pid}` — i.e. it CRASHED before casting `{join_done,_}` (a
-%% normal exit always casts first, and that cast, sent before the exit, is processed before this DOWN, flipping
-%% `join` away from `{worker,Pid}` to the generic clause below). Re-arm a retry; `start_join_worker` resumes from
-%% the persisted height, so the retry continues from the prefix already on disk — never re-appending from slot 1.
-running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{join = {worker, Pid}}) ->
-    {keep_state, S#s{join = pending}, [join_timeout()]};
-%% a member's gap-fill worker crashed mid-pull — clear the latch; the tick re-arms if still behind.
-running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{pull = {worker, Pid}}) ->
-    {keep_state, S#s{pull = none}};
+%% The sync worker CRASHED before casting `{sync_done,_}` (a normal exit always casts first, and that cast,
+%% sent before the exit, is processed before this DOWN — flipping `sync` away from `{pulling,Pid}` to the
+%% generic clause below). Clear the single-flight latch + back off; the tick re-arms if still `should_sync`.
+%% The worker resumes from the persisted height, so a retry continues from the prefix already on disk.
+running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{sync = {pulling, Pid}}) ->
+    {keep_state, recovery_failed(S)};
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
 %% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
@@ -762,48 +854,31 @@ running({timeout, complain}, {complain, V}, S0) ->
               end,
     {keep_state, S1, Actions};
 %% Consensus re-drive: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
-%% then re-dial every peer whose link never came up (its frames are still buffered).
+%% re-dial every peer whose link never came up (its frames are still buffered), AND arm sync — the one
+%% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
 running({timeout, tick}, tick, S) ->
-    {keep_state, maybe_arm_pull(redial_pending(sweep_stale_dials(S))), [tick_timeout()]};
-%% mode=join: kick trustless catch-up. Wait (re-arm) until the catchup sibling is up, then spawn the worker.
-%% (`valid_cfg` guarantees a `join` node has a binary `genesis_hash`, so there is no anchor-less arm here.)
-running({timeout, join}, start_join, S = #s{join = pending, ns = Ns}) ->
-    case quod_reg:where({quod_catchup, Ns}) of
-        undefined -> {keep_state, S, [join_timeout()]};   %% sibling not up yet — retry shortly
-        _         -> {keep_state, start_join_worker(S)}
-    end;
-running({timeout, join}, start_join, S) ->
-    {keep_state, S};   %% no longer pending (worker running, or already done)
-%% mode=join: the catch-up worker finished. `{ok,Slot≥1}` ⇒ genesis was anchored and the log+KB are caught up
-%% (each window replayed as it landed); re-drive any deferred apply, refresh the engine to the height/committee
-%% reached, mark the KB ready. `{ok,0}` means the contact served an EMPTY log (genesis never anchored) — treat
-%% it like a failure and retry, never declare a read node "done" over nothing.
-running(cast, {join_done, {ok, _H}}, S = #s{join = {worker, _}, slot = Slot}) when Slot >= 1 ->
-    S1 = S#s{join = done},   %% now a participant, so active_validators reflects the caught-up voting set
-    {keep_state, maybe_mark_ready(apply_committed(reseat_engine(Slot, S1)))};
-%% No download contact for this attempt (Brahms view still empty + no usable seed — e.g. Brahms not up
-%% yet, or a truly isolated node). quod_brahms:sample_contact already warned ONCE for the episode; the
-%% ?JOIN_KICK_MS retry would otherwise repeat the generic warning below ~2×/s for as long as the node
-%% stays isolated, so retry quietly.
-running(cast, {join_done, {error, no_contact}}, S = #s{join = {worker, _}}) ->
-    {keep_state, S#s{join = pending}, [join_timeout()]};
-running(cast, {join_done, Result}, S = #s{join = {worker, _}}) ->
-    logger:warning("quod[~s]: catch-up attempt inconclusive (~p) — retrying", [S#s.ns, Result]),
-    {keep_state, S#s{join = pending}, [join_timeout()]};
-running(cast, {join_done, _}, S) -> {keep_state, S};   %% stale result (already retried / done)
-%% A VOTING member's gap-fill finished (or errored): clear the single-flight latch. Each window already sank
-%% + re-seated the engine inside `sink_catchup`; here we only release the latch, so `behind/1` re-derives from
-%% the now-advanced head next tick and re-arms if a residual remains (a no_contact/error result likewise just
-%% re-arms next tick — single-flight prevents overlap).
-running(cast, {sync_done, _Result}, S = #s{pull = {worker, _}}) -> {keep_state, S#s{pull = none}};
-running(cast, {sync_done, _}, S)                                -> {keep_state, S};   %% stale (latch cleared)
-%% mode=join: the catch-up worker — and, once caught up, the feed — hands each verified, contiguous
-%% window here to persist + replay in slot order. Gated by `may_sink/1`: a VOTING participant must never
-%% sink a window (it advances the store past the engine's in-flight slot; the next commit then hits the
-%% store contiguity check and crashes the statem) — reachable exactly when an in-flight anti-entropy pull
-%% crosses our own promotion. The refused puller just ends its run; the member advances via consensus.
-running({call, From}, {sink_catchup, Es}, S) ->
-    case may_sink(S) of
+    S1 = maybe_arm_sync(redial_pending(sweep_stale_dials(S))),
+    {keep_state, maybe_mark_ready(S1), [tick_timeout()]};
+%% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
+%% source and observed a certificate quorum at the final local height. Bind completion to the monitored
+%% worker pid and the exact height it corroborated. There is no intermediate state: allowing consensus
+%% ingestion during a hold-down could advance the durable head and then grant readiness to that newer,
+%% uncorroborated height.
+running(cast, {sync_done, Pid, {ready, H}},
+        S = #s{sync = {pulling, Pid}, slot = H}) when H >= 1 ->
+    S1 = S#s{sync = ready, sync_arm = reset_pace()},
+    {keep_state, maybe_mark_ready(apply_committed(S1))};
+%% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
+%% next worker resumes from the resulting height, but no signing capability survives the failure.
+running(cast, {sync_done, Pid, _Result}, S = #s{sync = {pulling, Pid}}) ->
+    {keep_state, recovery_failed(S)};
+running(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from an obsolete worker
+%% The sync worker — and, for an observer, the feed's anti-entropy pull — hands each verified, contiguous
+%% window here to persist + replay in slot order. The caller presents an explicit source capability:
+%% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
+%% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
+running({call, From}, {sink_catchup, Source, Es}, S) ->
+    case may_sink(Source, S) of
         %% `reseat_engine` inside may clear `active_slot`; `timer_actions/2` cancels the stale complain timer
         %% (a no-op for a joiner/observer, load-bearing when a VOTING member gap-fills — DA review).
         true  -> {S1, Reply} = apply_catchup_window(Es, S),
@@ -842,13 +917,14 @@ handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
 handle_append(From, Change, S = #s{self = Self, slot = Sl}) ->
     Vs = active_validators(S),   %% eligibility + leader selection use the ACTIVE voting set (the floor in
                                  %% acceptable_change stays on the facts — see change_acceptable/2).
-    %% May LEAD iff: a committee member (is_participant — not bare membership: a resuming mid-catch-up node
-    %% whose on-disk prefix folds its OWN pubkey must not propose over a stale engine) AND caught up to the
-    %% head (not gap-filling, no finalizer cert proving the head moved past us — else a behind member would
-    %% propose a FORK of already-committed history). A behind/pulling member redirects; its gap-fill catches
-    %% it up and it resumes leading its turns.
-    case is_participant(S) andalso S#s.pull =:= none andalso not behind(S) of
-        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a member, or behind/pulling
+    %% May LEAD iff `may_lead` = is_participant ∧ caught_up: a committee member by FACTS, in `ready`, with
+    %% no finalizer cert proving the head moved past us (`behind`). A resuming member whose on-disk prefix folds
+    %% its OWN pubkey is a participant but remains `unconfirmed` until recovery, so it redirects here (never
+    %% proposes a FORK of already-committed history) and resumes leading once its sync round confirms the tip.
+    %% A `not caught_up` redirect deliberately does NOT arm Δ — a behind member can't judge a slot it hasn't
+    %% reached; only a caught-up NON-leader arms the complaint timer (the leader-branch below).
+    case may_lead(S) of
+        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a member, or not at the tip
         true  -> case acceptable_change(Change, S) of
                      false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
                      true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
@@ -861,10 +937,11 @@ handle_append_leader(From, Change, Self, Vs, Sl, S) ->
         Self ->
             Block = #block{slot = Next, parent = Sl, payload = [Change],
                            timestamp = max(quod_time:now_ms(), S#s.last_ts)},   %% monotonic ≥ parent
+            BH = block_hash(Block),
             S1 = S#s{pending = (S#s.pending)#{Next => From}, proposing = Next, appends = S#s.appends + 1},
             S2 = broadcast({propose, Block}, S1),        %% send the proposal to the committee
-            S3 = engine_step([{block, Block}], S2),      %% offer the block to our own engine
-            {arm_complaint(Next, support_block(Block, S3)), []};   %% support it; park the caller; arm Δ
+            S3 = engine_step([{block, BH, Block}], S2),  %% offer block + its already-computed hash
+            {arm_complaint(Next, support_block(Block, BH, S3)), []};   %% support it; park the caller; arm Δ
         Leader ->
             {arm_complaint(Next, S#s{r_redirect = S#s.r_redirect + 1}), [{reply, From, {error, not_in_charge, Leader}}]}
     end.
@@ -872,11 +949,14 @@ handle_append_leader(From, Change, Self, Vs, Sl, S) ->
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
 %% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
 engine_step(Items, S) ->
-    {Eng1, Events} = lists:foldl(fun(It, {E, Evs}) ->
-                                     {E1, Es} = eng_offer(It, E),
-                                     {E1, Evs ++ Es}
-                                 end, {S#s.eng, []}, Items),
-    apply_events(Events, S#s{eng = Eng1}).
+    {Eng1, EventsRev} = lists:foldl(fun(It, {E, Acc}) ->
+                                        {E1, Es} = offer_engine_item(It, E),
+                                        {E1, lists:reverse(Es, Acc)}
+                                    end, {S#s.eng, []}, Items),
+    apply_events(lists:reverse(EventsRev), S#s{eng = Eng1}).
+
+offer_engine_item({block, BH, #block{} = B}, Eng) -> eng_offer_hashed(BH, B, Eng);
+offer_engine_item(Item, Eng) -> eng_offer(Item, Eng).
 
 apply_events([], S)             -> S;
 apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
@@ -891,12 +971,16 @@ apply_event({broadcast, Cert}, S) ->
 %% belt-and-braces: a node that evaluated a membership proposal and rejected it never endorses at ANY phase,
 %% even if the block notarized via others (an absent verdict, by contrast, must NOT bar a commit share — a
 %% support cert already proves ≥ f+1 honest validations).
-apply_event({notarized, #block{slot = Sl} = Block}, S = #s{id = Id, complained = Cd, invalid = Inv}) ->
+apply_event({notarized, #block{slot = Sl}}, S = #s{complained = Cd, invalid = Inv}) ->
     case may_commit(Sl, maps:keys(Cd)) andalso not maps:is_key(Sl, Inv) of
         false -> S;                                    %% already complained Sl, or judged it invalid ⇒ never commit it
-        true  -> Share = make_share(commit, Sl, block_hash(Block), Id),
-                 engine_step([{share, Share}],
-                             broadcast({share, Share}, S#s{commit_signed = (S#s.commit_signed)#{Sl => true}}))
+        true  -> case own_share(commit, Sl, engine_block_hash(Sl, S), S) of
+                     blocked -> S;
+                     {ok, Share} ->
+                         engine_step([{share, Share}],
+                                     broadcast({share, Share},
+                                               S#s{commit_signed = (S#s.commit_signed)#{Sl => true}}))
+                 end
     end;
 %% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
 apply_event({committed, Slot, Block}, S) ->
@@ -909,8 +993,8 @@ apply_event({skipped, Slot}, S) ->
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
 %% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
 %% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
-commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = #s{store = Store, eng = Eng}) ->
-    BH = block_hash(Block),
+commit_block(Slot, #block{payload = [Change], timestamp = BlockTs}, S = #s{store = Store, eng = Eng}) ->
+    BH = engine_block_hash(Slot, S),
     case persisted_cert(commit, Slot, BH, Eng) of   %% minimal, committee-as-of-slot; pre-prune
         none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
         Cert ->
@@ -921,6 +1005,9 @@ commit_block(Slot, #block{payload = [Change], timestamp = BlockTs} = Block, S = 
                                                             last_ts = max(S#s.last_ts, BlockTs)})),
             maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1)))
     end.
+
+engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
+    maps:get(Slot, Hashes).
 
 %% A committed transaction advances the committee FACTS (`#s.validators`) at the slot boundary, IN-PROCESS —
 %% by reading the `peer_admitted` asserts/retracts out of the block we just committed. This ALWAYS updates
@@ -1016,20 +1103,30 @@ nack_pending(Slot, S = #s{pending = P}) ->
 %% Sign + emit our SUPPORT share for a block — offer it to our engine AND broadcast it — unless the slot
 %% is already committed history, or we already supported a block for this slot (no double-support, the
 %% honest-party one-block-per-slot invariant).
-support_block(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;
-support_block(#block{slot = Sl} = Block, S = #s{supported = Sup, id = Id}) ->
+support_block(Block, BH, S) ->
+    case may_vote(S) of
+        true  -> support_block_ready(Block, BH, S);
+        false -> S
+    end.
+
+support_block_ready(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;
+support_block_ready(#block{slot = Sl}, BH, S = #s{supported = Sup}) ->
     case maps:get(Sl, Sup, none) of
-        none -> Share = make_share(support, Sl, block_hash(Block), Id),
+        none -> {ok, Share} = own_share(support, Sl, BH, S),
                 engine_step([{share, Share}],
-                            broadcast({share, Share}, S#s{supported = Sup#{Sl => block_hash(Block)}}));
-        BH ->
-            case block_hash(Block) of
+                            broadcast({share, Share}, S#s{supported = Sup#{Sl => BH}}));
+        SupportedBH ->
+            case BH of
                 %% The SAME block again = the leader is REDRIVING the stuck slot — which means it is
                 %% missing votes, possibly OURS (our frames to it were lost; the transport is send-once).
                 %% Re-echo our own share(s) for it — deterministic Ed25519 re-signs to identical bytes —
                 %% so a redrive heals both directions. Bounded by the leader's Δ (one echo per re-fire).
-                BH -> Own = [{share, make_share(support, Sl, BH, Id)} |
-                             [{share, make_share(commit, Sl, BH, Id)} || maps:is_key(Sl, S#s.commit_signed)]],
+                SupportedBH -> {ok, Support} = own_share(support, Sl, BH, S),
+                      Commit = case maps:is_key(Sl, S#s.commit_signed) of
+                                   true  -> {ok, Sh} = own_share(commit, Sl, BH, S), [{share, Sh}];
+                                   false -> []
+                               end,
+                      Own = [{share, Support} | Commit],
                       lists:foldl(fun broadcast/2, S, Own);
                 _  -> S   %% a DIFFERENT block for a slot we already signed — equivocation; never double-sign
             end
@@ -1083,10 +1180,14 @@ is_hash_or_none(H) -> H =:= none orelse is_binary(H).
 %% untrusted `Sl` — a crafted `slot=0` would otherwise make `leader(0,_)` do `lists:nth(0,_)` and crash us.
 on_propose(Peer, #block{slot = Sl} = Block, S) ->
     case valid_proposal(Block, S) andalso leader(Sl, active_validators(S)) =:= Peer of   %% active set leads
-        %% Offer the block to the engine (so a peer-formed support cert can still notarize it) and arm Δ
-        %% (so an invalid/abstaining node drives the skip) BEFORE deciding support — those must happen on
-        %% receipt, not behind the verdict.
-        true  -> support_or_validate(Block, arm_complaint(Sl, engine_step([{block, Block}], S)));
+        %% Recovery may ingest the block and certificates as evidence, but only a ready voter starts local
+        %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
+        true  -> BH = block_hash(Block),
+                 S1 = engine_step([{block, BH, Block}], S),
+                 case may_vote(S1) of
+                     true  -> support_or_validate(Block, BH, arm_complaint(Sl, S1));
+                     false -> S1
+                 end;
         false -> S
     end.
 
@@ -1098,19 +1199,19 @@ on_propose(Peer, #block{slot = Sl} = Block, S) ->
 %% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
-support_or_validate(#block{slot = Sl}, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
+support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
 %% Slot already judged INVALID: we never endorse it at any phase, so a REDRIVEN copy must not re-request
 %% a verdict (it would re-prove per Δ and double-count the reject). Checked before hashing — no work.
-support_or_validate(#block{slot = Sl}, S) when is_map_key(Sl, S#s.invalid) -> S;
-support_or_validate(#block{slot = Sl, payload = [Change]} = Block, S = #s{ns = Ns, validating = Val}) ->
+support_or_validate(#block{slot = Sl}, _BH, S) when is_map_key(Sl, S#s.invalid) -> S;
+support_or_validate(#block{slot = Sl, payload = [Change]} = Block, BH,
+                    S = #s{ns = Ns, validating = Val}) ->
     case committee_delta(Change) =/= {[], []} of
-        false -> support_block(Block, S);
+        false -> support_block(Block, BH, S);
         true  ->
-            BH = block_hash(Block),
             case maps:get(Sl, S#s.supported, none) =:= BH of
                 %% judged VALID + support-signed already: a redriven copy takes the plain support path,
                 %% whose duplicate branch re-echoes our share — never a KB re-proof per Δ
-                true  -> support_block(Block, S);
+                true  -> support_block(Block, BH, S);
                 false ->
                     case Val of
                         {Sl, BH, _} -> S;   %% already validating this exact block — idempotent, don't re-request
@@ -1129,7 +1230,7 @@ support_or_validate(#block{slot = Sl, payload = [Change]} = Block, S = #s{ns = N
 on_membership_verdict(Sl, BH, Verdict, S = #s{validating = {Sl, BH, Block}, slot = H}) when Sl =:= H + 1 ->
     S1 = S#s{validating = none},
     case Verdict of
-        valid        -> support_block(Block, S1);
+        valid        -> support_block(Block, BH, S1);
         {invalid, _} -> S1#s{invalid = (S1#s.invalid)#{Sl => true},
                              membership_rejects = S1#s.membership_rejects + 1};
         abstain      -> S1
@@ -1186,7 +1287,8 @@ on_complain_timeout(_V, S) -> S.
 %% complaint shares — on arrival it joins, and the cert closes. `complain_slot`'s `may_complain` keeps the
 %% commit/complaint mutual exclusion; `arm_complaint` puts the re-broadcast of our own share on our Δ.
 maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{slot = H}) when V =:= H + 1 ->
-    case (not maps:is_key(V, S#s.complained)) andalso complaint_evidence(V, S) of
+    case may_vote(S) andalso (not maps:is_key(V, S#s.complained))
+         andalso complaint_evidence(V, S) of
         true  -> arm_complaint(V, complain_slot(V, S));
         false -> S
     end;
@@ -1218,36 +1320,55 @@ complaint_amplified(Self, Validators, Bucket) ->
 %% receiver RE-ECHO its own shares (see `support_block`) — healing the reverse direction too. Sent only
 %% to peers with a LIVE conn: a peer we cannot reach yet has the original frames in its outbox already
 %% (flushed on link_up); buffering per-Δ duplicates would only bloat it toward the ?MAX_OUTBOX cap.
-redrive_slot(V, S0 = #s{self = Self, id = Id, supported = Sup, commit_signed = Csd, conns = Conns,
-                        eng = Eng = #eng{certs = Certs}}) ->
+redrive_slot(V, S) ->
+    case may_vote(S) of
+        true  -> redrive_slot_ready(V, S);
+        false -> S
+    end.
+
+redrive_slot_ready(V, S0 = #s{self = Self, supported = Sup, commit_signed = Csd, conns = Conns,
+                              eng = Eng = #eng{certs = Certs}}) ->
     case maps:get(V, Sup, none) of
         none -> S0;   %% not yet support-signed (mid-propose edge) — nothing to redrive this Δ
         BH ->
             case block_for(BH, Eng) of
                 undefined -> S0;
                 Block ->
-                    Own  = [{share, make_share(support, V, BH, Id)} |
-                            [{share, make_share(commit, V, BH, Id)} || maps:is_key(V, Csd)]],
+                    {ok, Support} = own_share(support, V, BH, S0),
+                    Commit = case maps:is_key(V, Csd) of
+                                 true  -> {ok, Sh} = own_share(commit, V, BH, S0), [{share, Sh}];
+                                 false -> []
+                             end,
+                    Own  = [{share, Support} | Commit],
                     Cs   = [{cert, C} || {{_K, Sl, _B}, C} <- maps:to_list(Certs), Sl =:= V],
                     Live = [P || P <- active_validators(S0) -- [Self], maps:is_key(P, Conns)],
                     S1   = S0#s{redrives = S0#s.redrives + 1},
                     lists:foldl(fun(Msg, Acc) ->
-                                        lists:foldl(fun(P, A) -> send(P, Msg, A) end, Acc, Live)
+                                        Frame = encode(Acc#s.ns, Msg),
+                                        lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Live)
                                 end, S1, [{propose, Block} | Own ++ Cs])
             end
     end.
 
 %% Sign + (re)broadcast our complaint share and offer it to the engine, unless we commit-signed V.
-complain_slot(V, S = #s{id = Id, commit_signed = Cs}) ->
-    case may_complain(V, maps:keys(Cs)) of
+complain_slot(V, S = #s{commit_signed = Cs}) ->
+    case may_vote(S) andalso may_complain(V, maps:keys(Cs)) of
         false -> S;
-        true  -> Share = make_share(complaint, V, none, Id),
+        true  -> {ok, Share} = own_share(complaint, V, none, S),
                  %% latch complained[V] BEFORE offering the share: if our own complaint completes the ⅔
                  %% cert, engine_step skips V and finalize/2 clears the latch — so the pre-set doesn't
                  %% leak; and any {notarized,V} inside that same engine_step now sees complained[V] and
                  %% is barred from a commit share (the mutual-exclusion safety half, self-enforced here).
                  S1 = S#s{complained = (S#s.complained)#{V => true}},
                  engine_step([{share, Share}], broadcast({share, Share}, S1))
+    end.
+
+%% The sole constructor for runtime consensus evidence. Tests and certificate verification use
+%% `make_share/4` directly; the state machine must come through this capability boundary.
+own_share(Kind, Slot, BlockHash, #s{id = Id} = S) ->
+    case may_vote(S) of
+        true  -> {ok, make_share(Kind, Slot, BlockHash, Id)};
+        false -> blocked
     end.
 
 valid_proposal(#block{slot = Sl, parent = P, payload = [Change], timestamp = Ts}, #s{slot = H, last_ts = Last} = S) ->
@@ -1326,14 +1447,15 @@ membership_change_ok(#transaction{}, _Vs) ->
 
 %% Send a consensus message to every OTHER member of the ACTIVE voting set, each on our own outbound link.
 broadcast(Msg, S = #s{self = Self}) ->
-    lists:foldl(fun(P, Acc) -> send(P, Msg, Acc) end, S, active_validators(S) -- [Self]).
+    Frame = encode(S#s.ns, Msg),
+    lists:foldl(fun(P, Acc) -> send_frame(P, Frame, Acc) end,
+                S, active_validators(S) -- [Self]).
 
 %% Send to one peer on our outbound link, dialing on demand; frames buffer (bounded) in the outbox until
 %% `link_up` flushes them. We transmit only on our OWN outbound link, never a peer's inbound stream, so
 %% every directed pair stays reachable (mirrors the removed Raft transport). The `dialing` marker keeps
 %% at most one dial in flight per peer (a second `open_link` would register a duplicate waiter).
-send(Peer, Msg, S = #s{ns = Ns, chan = Chan, conns = Conns, outbox = Outbox, dialing = Dialing}) ->
-    Frame = encode(Ns, Msg),
+send_frame(Peer, Frame, S = #s{chan = Chan, conns = Conns, outbox = Outbox, dialing = Dialing}) ->
     case maps:get(Peer, Conns, undefined) of
         {LinkPid, _Ref} ->
             _ = quod_link:send(LinkPid, Frame),
@@ -1473,18 +1595,18 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}) ->
 safe_apply_block(Ns, I, Data) ->
     try quod_prolog:apply_block(Ns, I, Data) catch _:_ -> ok end.
 
-%% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix
-%% is actually applied, so a (re)started member never answers from a half-built kb.
-%% A joiner (join = pending | {worker,_}) must NOT mark its KB ready mid-catch-up: its height only reflects
-%% the windows sunk so far, so a prove would answer from a partial prefix. Only `none` (create / a member)
-%% and `done` (caught up) may go ready.
-maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, join = Join}) when Join =:= none; Join =:= done ->
+%% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix is
+%% actually applied AND recovery is `ready`, so a node never answers from a half-built or uncorroborated
+%% kb. A joiner/resuming member must NOT mark ready mid-sync: its height only reflects the windows sunk so
+%% far. `prolog_ready` is monotone: a later-behind node keeps serving its
+%% (stale-but-valid) reads while it gap-fills — it never drops back to unready.
+maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, sync = ready}) ->
     case (quod_reg:where({quod_prolog, Ns}) =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
                  S#s{prolog_ready = true};
         false -> S
     end;
-maybe_mark_ready(S) -> S.   %% already marked ready, OR still joining (serve proves only once caught up)
+maybe_mark_ready(S) -> S.   %% already marked ready, or recovery has not reached `ready` yet
 
 %%%===================================================================
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
@@ -1506,79 +1628,240 @@ ahead_cert_ceiling(#eng{certs = Certs, base = Base}) ->
 -spec behind(#s{}) -> boolean().
 behind(#s{eng = Eng, slot = H}) -> ahead_cert_ceiling(Eng) > H + 1.
 
-%% A member of the ACTIVE voting set that may act on live consensus traffic + propose. A node still catching
-%% up (`join = pending | {worker,_}`) is NEVER a participant — even if a catch-up window transiently folds its
-%% OWN pubkey into the facts, it must stay a read-only observer over its (stale, mid-build) engine until
-%% `join=done` refreshes the engine to the caught-up height. `none` (create / member) and `done` may participate.
-is_participant(#s{join = J}) when J =/= none, J =/= done -> false;
-is_participant(#s{self = Self} = S)                      -> lists:member(Self, active_validators(S)).
+%% Facts-only participation: a member of the ACTIVE voting set. A recovering member still ingests verified
+%% traffic so its gap detector can learn, but participation alone grants no signing capability.
+is_participant(#s{self = Self} = S) -> lists:member(Self, active_validators(S)).
 
-%% Who may hand us a catch-up window (`sink_catchup`): the catch-up worker always (it OWNS the store while
-%% joining), otherwise only a non-participant (observer). See the `sink_catchup` clause for the race this closes.
-may_sink(#s{join = {worker, _}}) -> true;
-may_sink(#s{pull = {worker, _}}) -> true;   %% a VOTING member's OWN gap-fill pull owns the store during its run
-may_sink(S)                      -> not is_participant(S).
+%% `ready` is the only recovery state with a corroborated tip. A live finalizer above the local window
+%% revokes the capability immediately, before the paced recovery worker starts.
+caught_up(#s{sync = ready} = S) -> not behind(S);
+caught_up(_S) -> false.
 
-%% Spawn the (monitored) catch-up worker. It runs the driver loop OFF the statem: pull a window via the
-%% catchup sibling, hand each verified window back to us (`sink_catchup`) to persist + replay, and finally
-%% cast `{join_done, Result}`. Monitored so a crash mid-catch-up re-arms a retry (see the `'DOWN'` clause).
-%% RESUME from the persisted height: `From = slot+1`, `Committee` = the set as of that slot. A fresh joiner
-%% (`slot=0`) starts at `From=1` with `[]`, so slot 1 is anchored against `genesis_hash`; a retry/restart over a
-%% partial prefix resumes past it (no re-append of what is already on disk, no re-anchor of an already-verified prefix).
-start_join_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = Vs}) ->
+%% Voting and leading share one capability boundary. Leadership remains a named predicate because callers
+%% express intent, but neither can drift from the recovery policy.
+may_vote(S) -> is_participant(S) andalso caught_up(S).
+may_lead(S) -> may_vote(S).
+
+%% An unconfirmed node always recovers. A ready member recovers when a verified finalizer proves a gap.
+should_sync(#s{sync = unconfirmed}) -> true;
+should_sync(#s{sync = ready} = S) -> behind(S).
+
+%% The feed follows only in the sole settled state, so its puller and recovery can never own ingestion at
+%% the same time.
+syncing(#s{sync = Sy}) -> Sy =/= ready.
+
+%% Catch-up ingestion is capability-based: one monitored recovery worker, or the feed while this node is a
+%% ready observer. There is no state in which both sources are authorized.
+may_sink({recovery, Pid}, #s{sync = {pulling, Pid}}) -> true;
+may_sink(feed, #s{sync = ready} = S) -> not is_participant(S);
+may_sink(_Source, _S) -> false.
+
+%% Spawn the unified recovery coordinator. It owns ingestion for its lifetime, resumes from the current
+%% durable snapshot before each source fetch, and reports `ready` only after the final height is corroborated by
+%% a certificate quorum of the current committee. A raw `{ok, Height}` from one catch-up server is therefore
+%% progress, never authority to vote.
+start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH}) ->
     Statem = self(),
-    From   = Slot + 1,
     {Pid, _Ref} = spawn_monitor(
         fun() ->
-            %% ONE contact per attempt (quod_catchup:contact/1 — the live, self-filtered Brahms view;
-            %% seeds as the cold-start fallback), STICKY for every window of this run: re-sampling
-            %% per window would mix different-height servers and trip catch_up's no_progress guard.
-            %% A dead/lying contact just fails this attempt; the retry re-samples (rotates) it away.
-            Result = case quod_catchup:contact(Ns) of
-                         none    -> {error, no_contact};
-                         Contact ->
-                             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1, Contact) end,
-                             Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
-                             quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)
-                     end,
-            gen_statem:cast(Statem, {join_done, Result})
+            Owner = self(),
+            Sink = fun(Es) ->
+                       gen_statem:call(Statem, {sink_catchup, {recovery, Owner}, Es}, ?SINK_MS)
+                   end,
+            Result = run_recovery(Ns, GH, Statem, Self, Sink),
+            gen_statem:cast(Statem, {sync_done, Owner, Result})
         end),
-    S#s{join = {worker, Pid}}.
+    S#s{sync = {pulling, Pid}}.
 
-%% A VOTING member's gap-fill: catch up from `slot+1` to the head IN-PROCESS (no restart), on the SAME
-%% trustless `quod_catchup:catch_up/5` a joiner uses — but sourced from a fellow COMMITTEE member (whose
-%% authenticated endpoint the member already holds: a behind member still ingests live `{log}` traffic, so
-%% its resolver is warm) and resuming from the durable prefix (the genesis anchor is already pinned, so
-%% `/5` not `/3`). Single-flight via `#s.pull`; a dead/lying contact just fails this attempt and the tick
-%% re-arms with a fresh committee pick. (Within-run rotation + jitter/backoff land with `#s.sync_arm` in the
-%% Slice-4 cutover — single-flight alone paces this: no re-arm while a pull is in flight.)
-start_sync_worker(S = #s{ns = Ns, genesis_hash = GH, slot = Slot, validators = Vs, self = Self}) ->
-    Statem = self(),
-    From   = Slot + 1,
-    Peers  = active_validators(S) -- [Self],   %% compute here so the closure captures Peers, not the whole #s
-    {Pid, _Ref} = spawn_monitor(
-        fun() ->
-            Result = case quod_brahms:take_random(1, Peers) of
-                         []        -> {error, no_contact};
-                         [Contact] ->
-                             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?JOIN_WINDOW - 1, Contact) end,
-                             Sink  = fun(Es) -> gen_statem:call(Statem, {sink_catchup, Es}, ?SINK_MS) end,
-                             quod_catchup:catch_up(GH, Fetch, Sink, From, Vs)
-                     end,
-            gen_statem:cast(Statem, {sync_done, Result})
-        end),
-    S#s{pull = {worker, Pid}}.
+%% Fellow current members minus self, shuffled before each probe round. A behind member normally holds
+%% their authenticated endpoints from live traffic; a fresh observer with no committee instead reaches
+%% the bootstrap-source branch below.
+committee_contacts(Self, Committee) ->
+    Peers = lists:usort(Committee) -- [Self],
+    quod_brahms:take_random(length(Peers), Peers).
 
-%% Arm the member gap-fill (called each tick, off the commit hot path): a VOTING member that has fallen
-%% behind the in-flight window pulls the gap, single-flight. A non-member / already-pulling / caught-up node
-%% does nothing. `is_participant` (still `join`-gated here) keeps a boot-time resuming member out until
-%% `join=done`; this only recovers an ALREADY-promoted member that later falls behind — the live bug.
-maybe_arm_pull(S = #s{pull = none}) ->
-    case is_participant(S) andalso behind(S) of
-        true  -> start_sync_worker(S);
-        false -> S
+%% Recovery has two deliberately separate jobs:
+%%
+%% 1. Probe every current committee peer at `local_height + 1`, in parallel. Empty replies at exactly the
+%%    local height corroborate the tip; non-empty replies merely nominate a source that may be ahead.
+%% 2. If needed, reconcile from ONE nominated source with the normal certificate-verifying catch-up fold,
+%%    then probe the (possibly changed) committee again.
+%%
+%% This avoids both old failure modes: the first stale `{ok, [], H}` can never declare readiness, and cold
+%% startup costs one network timeout rather than `committee_size * timeout`. A bootstrap endpoint may fetch
+%% history but never corroborates a voting member because endpoint requests are not identity-bound.
+run_recovery(Ns, GH, Statem, Self, Sink) ->
+    recover_tip(Ns, GH, Statem, Self, Sink, ?RECOVERY_FETCHES, false).
+
+recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed) ->
+    case recovery_snapshot(Statem) of
+        {ok, From, Committee} when From > 1 ->
+            Height = From - 1,
+            Peers = committee_contacts(Self, Committee),
+            Needed = required_tip_peers(Committee, Self),
+            Probes = probe_tips(Ns, Height, Peers, Needed),
+            Exact = [Peer || {Peer, {ok, [], H}} <- Probes, H =:= Height],
+            case tip_ready(Committee, Self, Exact) of
+                true -> {ready, Height};
+                false ->
+                    Failure = {tip_unconfirmed, Height, length(lists:usort(Exact))},
+                    continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                                      FallbackUsed, ahead_contacts(Probes), Exact, Failure)
+            end;
+        {ok, _From, _Committee} ->
+            continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                              FallbackUsed, [], [], empty_namespace);
+        {error, R} -> {error, {status, R}}
+    end.
+
+%% A voting member contributes its own durable head, so it needs `quorum(N)-1` peer confirmations. An
+%% observer cannot vote and needs only one current member to confirm its read tip. N=1 therefore settles
+%% without network traffic, matching the sole-validator bootstrap rule.
+required_tip_peers(Committee, Self) ->
+    case lists:member(Self, Committee) of
+        true  -> max(0, quorum(length(Committee)) - 1);
+        false -> 1
+    end.
+
+tip_ready(Committee, Self, ExactPeers) ->
+    case lists:member(Self, Committee) of
+        true  -> tip_quorum(Committee, Self, ExactPeers);
+        false -> lists:any(fun(P) -> lists:member(P, Committee) end, ExactPeers)
+    end.
+
+ahead_contacts(Probes) ->
+    lists:usort([Peer || {Peer, {ok, [_ | _], _Height}} <- Probes]).
+
+continue_recovery(_Ns, _GH, _Statem, _Self, _Sink, 0,
+                  _FallbackUsed, _Ahead, _Exact, Failure) ->
+    {error, Failure};
+continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                  FallbackUsed, Ahead, Exact, Failure) ->
+    case recovery_sources(Ns, Ahead, Exact, FallbackUsed) of
+        {[], _} -> {error, Failure};
+        {Sources, FallbackUsed1} ->
+            case try_recovery_sources(Ns, GH, Statem, Sources, Sink) of
+                {ok, _} ->
+                    recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft - 1, FallbackUsed1);
+                {error, _} -> {error, Failure}
+            end
+    end.
+
+%% Only fall back to an unbound Brahms/seed endpoint when no current member supplied even one exact or
+%% ahead response. It can teach us an address and provide verified history; the next identity-bound probe
+%% still decides readiness.
+recovery_sources(_Ns, Ahead, _Exact, FallbackUsed) when Ahead =/= [] ->
+    {Ahead, FallbackUsed};
+recovery_sources(Ns, [], [], false) ->
+    case quod_catchup:contact(Ns) of
+        none    -> {[], true};
+        Contact -> {[Contact], true}
     end;
-maybe_arm_pull(S) -> S.   %% already pulling — {sync_done}/DOWN clears the latch, tick re-arms if still behind
+recovery_sources(_Ns, [], _Exact, FallbackUsed) -> {[], FallbackUsed}.
+
+try_recovery_sources(_Ns, _GH, _Statem, [], _Sink) -> {error, no_source};
+try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink) ->
+    case recovery_snapshot(Statem) of
+        {ok, From, Committee} ->
+            case catch_up_from(Ns, GH, From, Committee, Contact, Sink) of
+                {ok, _} = Ok -> Ok;
+                {error, _}   -> try_recovery_sources(Ns, GH, Statem, Rest, Sink)
+            end;
+        {error, R} -> {error, {status, R}}
+    end.
+
+probe_tips(_Ns, _Height, _Peers, Needed) when Needed =< 0 -> [];
+probe_tips(_Ns, _Height, [], _Needed) -> [];
+probe_tips(Ns, Height, Peers, Needed) ->
+    Parent = self(),
+    Ref = make_ref(),
+    _ = [spawn(fun() ->
+                   Result = try quod_catchup:pull(Ns, Height + 1,
+                                                  Height + ?SYNC_WINDOW, Peer)
+                            catch C:R -> {error, {C, R}}
+                            end,
+                   Parent ! {tip_probe, Ref, Peer, Result}
+               end) || Peer <- Peers],
+    Deadline = quod_time:mono_ms() + ?TIP_PROBE_MS,
+    collect_tip_probes(Ref, Height, length(Peers), Needed, Deadline, 0, []).
+
+collect_tip_probes(_Ref, _Height, 0, _Needed, _Deadline, _ExactN, Acc) ->
+    lists:reverse(Acc);
+collect_tip_probes(_Ref, _Height, _Left, Needed, _Deadline, ExactN, Acc)
+        when ExactN >= Needed ->
+    lists:reverse(Acc);
+collect_tip_probes(Ref, Height, Left, Needed, Deadline, ExactN, Acc) ->
+    Wait = max(0, Deadline - quod_time:mono_ms()),
+    receive
+        {tip_probe, Ref, Peer, Result} ->
+            ExactN1 = case Result of {ok, [], Height} -> ExactN + 1; _ -> ExactN end,
+            collect_tip_probes(Ref, Height, Left - 1, Needed, Deadline,
+                               ExactN1, [{Peer, Result} | Acc])
+    after Wait ->
+        lists:reverse(Acc)
+    end.
+
+recovery_snapshot(Statem) ->
+    try gen_statem:call(Statem, get_status, 5000) of
+        #{slot := H, committee := Committee} when is_integer(H), is_list(Committee) ->
+            {ok, H + 1, Committee};
+        _ -> {error, bad_status}
+    catch exit:R -> {error, R}
+    end.
+
+%% Self's durable head plus distinct, current committee peers at exactly that height must form a quorum.
+%% Lower reports are stale; higher reports are consumed by catch-up and require another round if they were
+%% observed too late for enough earlier contacts to corroborate the new final height.
+tip_quorum([], _Self, _Peers) -> false;
+tip_quorum(Committee, Self, Peers) ->
+    Local = case lists:member(Self, Committee) of true -> [Self]; false -> [] end,
+    Confirmed = lists:usort(Local ++ [P || P <- Peers, lists:member(P, Committee)]),
+    length(Confirmed) >= quorum(length(Committee)).
+
+catch_up_from(Ns, GH, From, Committee, Contact, Sink) ->
+    Fetch = fun(F) -> quod_catchup:pull(Ns, F, F + ?SYNC_WINDOW - 1, Contact) end,
+    quod_catchup:catch_up(GH, Fetch, Sink, From, Committee).
+
+%% The single recovery armer, run each tick off the commit hot path. It owns gap hysteresis and failure
+%% backoff; the recovery enum enforces single flight.
+maybe_arm_sync(S = #s{sync = {pulling, _}}) -> S;
+maybe_arm_sync(S0 = #s{sync = Sy}) when Sy =:= unconfirmed; Sy =:= ready ->
+    S = pace_tick(S0),
+    case should_sync(S) of
+        false -> S#s{sync_arm = reset_pace()};   %% at the tip: clear pacing so a later gap starts fresh
+        true  -> case arm_ready(S) andalso sibling_up(S) of
+                     true  -> start_sync_worker(S);
+                     false -> S
+                 end
+    end.
+
+%% Advance the pacing counters one tick (pure bookkeeping — the arm decision is arm_ready/1): grow the
+%% behind-hysteresis while `behind` (reset otherwise), and count down any active backoff cooldown.
+pace_tick(S = #s{sync_arm = {Hyst, Cool, Int}}) ->
+    Hyst1 = case behind(S) of true -> Hyst + 1; false -> 0 end,
+    S#s{sync_arm = {Hyst1, max(0, Cool - 1), Int}}.
+
+%% Unconfirmed nodes arm immediately once backoff expires; an established node waits for persistent gap
+%% evidence so transient one-slot lag continues to use the cheap consensus redrive.
+arm_ready(#s{sync = Sy, sync_arm = {Hyst, Cool, _Int}}) ->
+    Cool =:= 0 andalso (Sy =:= unconfirmed orelse Hyst >= ?SYNC_HYSTERESIS).
+
+recovery_failed(S) ->
+    S#s{sync = unconfirmed, sync_arm = backoff(S#s.sync_arm)}.
+
+%% Grow the failure backoff: double the interval (floored at ?SYNC_BACKOFF_MIN, capped at ?SYNC_BACKOFF_MAX
+%% ticks), set the cooldown to a ±20%-jittered copy, and reset the hysteresis (a fresh attempt just failed).
+backoff({_Hyst, _Cool, Int}) ->
+    Int1 = min(?SYNC_BACKOFF_MAX, max(?SYNC_BACKOFF_MIN, Int * 2)),
+    {0, jitter_ticks(Int1), Int1}.
+
+reset_pace() -> {0, 0, 0}.
+
+%% ±20% jitter (mirroring quod_feed's), floored at 1 tick — spreads a fleet's retry storms.
+jitter_ticks(N) -> max(1, N - (N div 5) + rand:uniform(2 * (N div 5) + 1) - 1).
+
+%% The catchup sibling (later in the rest_for_one chain) must be up before a worker can pull through it.
+sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 
 %% Persist a verified, contiguous window (indices `slot+1..`) to the store, fold the committee across it,
 %% and replay it into quod_prolog in slot order (`apply_committed` — the same path a restart-rebuild uses).
@@ -1613,9 +1896,9 @@ apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
             %% the stale head); for a joiner/observer the resets are no-ops. `log_promotion` keeps the S5b
             %% false->true notice now that the re-seat no longer rides `maybe_promote`. The caller
             %% (`sink_catchup`) pairs this with `timer_actions/2` so a cleared `active_slot` cancels the timer.
-            S1   = reseat_engine(Slot, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
-            _    = log_promotion(S, S1),
-            {maybe_mark_ready(apply_committed(S1)), ok}
+            S1 = reseat_engine(Slot, S#s{store = Store1, validators = Vs1, slot = Slot, last_ts = Ts1}),
+            S2 = catchup_membership_transition(S, S1),
+            {maybe_mark_ready(apply_committed(S2)), ok}
     end
     end.
 
@@ -1637,30 +1920,30 @@ learn_member_endpoints(Es, Committee, Self) ->
                      end
                  end, Eps).
 
-%% Log the S5b promotion NOTICE on the `is_participant` false->true edge — a window we just sunk folded OUR
-%% OWN `peer_admitted` fact into the committee, so from the unconditional `reseat_engine` above this node is
-%% now a voter (acts on `{log, Ns}`, supports, commit-signs, takes its `leader/2` turns). The re-arm itself
-%% is no longer here (it rides the unconditional per-window `reseat_engine`); this only emits the operator
-%% notice, pairing the demotion log in `adopt_committee`. Vote-safety holds by construction — an observer
-%% never signed anything, so its first possible share is for a slot strictly after the admission.
-log_promotion(S0, S1) ->
+%% A feed window can cross this node's admission. Re-seating updates the committee immediately, but promotion
+%% revokes feed ownership and enters recovery before the first vote. If the node's own recovery worker sank
+%% the admission, keep its `{pulling,Pid}` ownership: that same coordinator will corroborate the new committee.
+catchup_membership_transition(S0, S1) ->
     case {is_participant(S0), is_participant(S1)} of
         {false, true} ->
-            logger:notice("quod[~s]: admitted to the committee — voter as of slot ~b (committee ~b)",
-                          [S1#s.ns, S1#s.slot, length(active_validators(S1))]);
-        _ -> ok
+            logger:notice("quod[~s]: admitted to the committee — recovering at slot ~b (committee ~b)",
+                          [S1#s.ns, S1#s.slot, length(active_validators(S1))]),
+            case S1#s.sync of
+                ready -> S1#s{sync = unconfirmed, sync_arm = reset_pace()};
+                _     -> S1
+            end;
+        _ -> S1
     end.
 
 %% Re-seat the engine to `NewHead` after a catch-up window (or a promotion) advanced the committed height: a
 %% fresh engine over the committee AS-OF the new head, PLUS a reset of every live-slot control latch for slots
 %% `=< NewHead` — those slots are now decided history, so a lingering `proposing`/`active_slot` would wedge the
 %% leader `busy` or redrive a `=< base` slot, and parked appends for filled slots are nacked so the caller
-%% retries. Called from `join_done` and UNCONDITIONALLY from every catch-up window (`apply_catchup_window`),
-%% collapsing the former split re-arm (a `join_done` re-arm + a `maybe_promote` conditional re-arm, both
-%% `eng_new/2` alone). At the join/observer sites the latch resets are no-ops (no live-slot state); they are
-%% load-bearing for a VOTING member gap-filling — the caller (`sink_catchup`) pairs this with `timer_actions/2`
-%% to cancel a stale complain
-%% timer when `active_slot` is cleared here; a no-op at these sites, where `active_slot` is already `none`).
+%% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), collapsing the former
+%% split re-arm (a per-catch-up-completion re-arm + a `maybe_promote` conditional re-arm, both `eng_new/2`). At
+%% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
+%% member gap-filling — the caller (`sink_catchup`) pairs this with `timer_actions/2` to cancel a stale
+%% complain timer when `active_slot` is cleared here (a no-op where `active_slot` is already `none`).
 reseat_engine(NewHead, S) ->
     nack_pending_le(NewHead,
       S#s{eng           = eng_new(active_validators(S), NewHead),
@@ -1821,11 +2104,11 @@ genesis_file(Cfg) ->
 status_map(S) ->
     Role = case is_participant(S) of true -> validator; false -> observer end,
     #{role => Role, committee => S#s.validators, slot => S#s.slot,
-      committed => S#s.slot, last_applied => S#s.last_applied, join => join_state(S)}.
+      committed => S#s.slot, last_applied => S#s.last_applied,
+      syncing => syncing(S), recovery => recovery_phase(S#s.sync)}.
 
-%% Normalise the join lifecycle for `status/1`: `none` (create / a member) | `pending` | `catching_up` | `done`.
-join_state(#s{join = {worker, _}}) -> catching_up;
-join_state(#s{join = J})           -> J.
+recovery_phase({pulling, _}) -> pulling;
+recovery_phase(Phase) -> Phase.
 
 stats_map(S) ->
     #{slot => S#s.slot, committed => S#s.slot, last_applied => S#s.last_applied,
@@ -1836,4 +2119,5 @@ stats_map(S) ->
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       weak_cert_waits => S#s.weak_cert_waits,
       ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
+      syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.

@@ -67,6 +67,134 @@ reseat_prune_helpers_test() ->
     ?assertEqual(none, quod_simplex:clear_validating_le(5, none)).
 
 %%%===================================================================
+%%% Slice 4 — boot-mode / sync / participation gate truth table
+%%%===================================================================
+
+%% Only a sole validator starts ready. Every other facts shape has one unambiguous recovery state.
+initial_sync_test() ->
+    Init = fun(Vs) -> quod_simplex:initial_sync(st(#{self => <<"me">>, validators => Vs})) end,
+    ?assertEqual(ready, Init([<<"me">>])),
+    ?assertEqual(unconfirmed, Init([])),
+    ?assertEqual(unconfirmed, Init([<<"me">>, <<"b">>])),
+    ?assertEqual(unconfirmed, Init([<<"b">>])).
+
+%% is_participant is FACTS-ONLY now — Self ∈ active_validators, with no sync/boot coupling.
+is_participant_test() ->
+    P = fun(Self, Vs) -> quod_simplex:is_participant(st(#{self => Self, validators => Vs})) end,
+    ?assert(P(<<"me">>, [<<"a">>, <<"me">>])),
+    ?assertNot(P(<<"me">>, [<<"a">>, <<"b">>])),   %% observer
+    ?assertNot(P(<<"me">>, [])).                    %% unfounded
+
+%% Only `ready` is caught up; voting and leading share the same participant + recovery capability.
+gate_truth_table_test() ->
+    EngIdle = quod_simplex:eng_with_certs(0, []),                 %% empty pool ⇒ not behind
+    EngBehind = quod_simplex:eng_with_certs(0, [{commit, 20}]),   %% a finalizer cert well past slot+1 ⇒ behind
+    Base = #{self => <<"me">>, validators => [<<"me">>], slot => 2, eng => EngIdle},
+
+    S1 = st(Base#{sync => ready}),
+    ?assert(quod_simplex:caught_up(S1)),
+    ?assert(quod_simplex:may_vote(S1)),
+    ?assert(quod_simplex:may_lead(S1)),
+
+    %% A resuming member remains a participant for ingress, but has no voting capability.
+    S2 = st(Base#{sync => unconfirmed}),
+    ?assert(quod_simplex:is_participant(S2)),
+    ?assertNot(quod_simplex:caught_up(S2)),
+    ?assertNot(quod_simplex:may_vote(S2)),
+    ?assertNot(quod_simplex:may_lead(S2)),
+
+    ?assertNot(quod_simplex:caught_up(st(Base#{sync => {pulling, self()}}))),
+    ?assertNot(quod_simplex:caught_up(st(Base#{sync => ready, eng => EngBehind}))),
+
+    %% A ready observer may serve/follow, but cannot vote or lead.
+    Obs = st(Base#{validators => [<<"a">>], sync => ready}),
+    ?assert(quod_simplex:caught_up(Obs)),
+    ?assertNot(quod_simplex:may_vote(Obs)),
+    ?assertNot(quod_simplex:may_lead(Obs)).
+
+%% Recovery intent and the externally visible syncing flag derive from the same enum.
+should_sync_and_syncing_test() ->
+    EngIdle = quod_simplex:eng_with_certs(0, []),
+    EngBehind = quod_simplex:eng_with_certs(0, [{commit, 20}]),
+    Settled = st(#{sync => ready, slot => 2, eng => EngIdle}),
+    ?assertNot(quod_simplex:should_sync(Settled)),
+    ?assertNot(quod_simplex:syncing(Settled)),
+    Fresh = st(#{sync => unconfirmed, slot => 0, eng => EngIdle}),
+    ?assert(quod_simplex:should_sync(Fresh)),
+    ?assert(quod_simplex:syncing(Fresh)),
+    ?assert(quod_simplex:should_sync(st(#{sync => ready, slot => 2, eng => EngBehind}))),
+    ?assert(quod_simplex:syncing(st(#{sync => {pulling, self()}, slot => 2, eng => EngIdle}))).
+
+%% Success grants readiness only to the exact corroborated height. If consensus advanced while the
+%% completion was in flight, capability is revoked and the next recovery round must confirm the new tip.
+sync_completion_is_height_bound_test() ->
+    Eng = quod_simplex:eng_with_certs(0, []),
+    Base = #{sync => {pulling, self()}, eng => Eng, last_applied => 3, prolog_ready => true},
+    Pulling = st(Base#{slot => 2}),
+    {keep_state, Ready} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Pulling),
+    ?assertEqual(ready, quod_simplex:test_sync(Ready)),
+    Advanced = st(Base#{slot => 3}),
+    {keep_state, Retry} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
+    ?assertEqual(unconfirmed, quod_simplex:test_sync(Retry)).
+
+tip_quorum_test() ->
+    A = <<"a">>, B = <<"b">>, C = <<"c">>, D = <<"d">>, Committee = [A, B, C, D],
+    ?assertNot(quod_simplex:tip_quorum(Committee, A, [B])),
+    ?assert(quod_simplex:tip_quorum(Committee, A, [B, C])),
+    ?assert(quod_simplex:tip_quorum(Committee, A, [B, B, C, <<"outsider">>])),
+    ?assertNot(quod_simplex:tip_quorum(Committee, <<"outsider">>, [A, B])).
+
+recovery_failure_revokes_capability_test() ->
+    Eng = quod_simplex:eng_with_certs(0, []),
+    Pulling = st(#{self => <<"me">>, validators => [<<"me">>], slot => 2,
+                   eng => Eng, sync => {pulling, self()}}),
+    Failed = quod_simplex:recovery_failed(Pulling),
+    ?assertEqual(unconfirmed, quod_simplex:test_sync(Failed)),
+    ?assertNot(quod_simplex:may_vote(Failed)).
+
+sink_ownership_test() ->
+    Other = spawn(fun() -> receive stop -> ok end end),
+    Pulling = st(#{sync => {pulling, self()}}),
+    ?assert(quod_simplex:may_sink({recovery, self()}, Pulling)),
+    ?assertNot(quod_simplex:may_sink({recovery, Other}, Pulling)),
+    ?assertNot(quod_simplex:may_sink(feed, Pulling)),
+    ?assert(quod_simplex:may_sink(feed,
+                                  st(#{self => <<"me">>, validators => [<<"other">>], sync => ready}))),
+    ?assertNot(quod_simplex:may_sink(feed,
+                                     st(#{self => <<"me">>, validators => [<<"me">>], sync => ready}))),
+    Other ! stop.
+
+%% Arm pacing (#s.sync_arm): the behind-hysteresis counter, the backoff cooldown countdown, and the
+%% arm_ready gate / backoff growth.
+sync_arm_pacing_test() ->
+    EngIdle = quod_simplex:eng_with_certs(0, []),
+    EngBehind = quod_simplex:eng_with_certs(0, [{commit, 20}]),
+    Arm = fun(S) -> quod_simplex:test_arm(quod_simplex:pace_tick(S)) end,
+
+    %% pace_tick grows the hysteresis while behind, resets it when not behind, and counts the cooldown down
+    ?assertMatch({1, _, _}, Arm(st(#{slot => 2, eng => EngBehind, sync_arm => {0, 0, 0}}))),
+    ?assertMatch({0, _, _}, Arm(st(#{slot => 2, eng => EngIdle,   sync_arm => {5, 0, 0}}))),
+    ?assertMatch({_, 2, _}, Arm(st(#{slot => 2, eng => EngIdle,   sync_arm => {0, 3, 8}}))),
+
+    %% unconfirmed arms immediately (unless cooling down); ready requires persistent gap evidence
+    ?assert(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {0, 0, 0}}))),
+    ?assertNot(quod_simplex:arm_ready(st(#{sync => unconfirmed, sync_arm => {0, 1, 4}}))),
+    ?assertNot(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {1, 0, 0}}))),
+    ?assert(quod_simplex:arm_ready(st(#{sync => ready, sync_arm => {2, 0, 0}}))),
+
+    %% backoff floors then doubles the interval, resets the hysteresis, and sets a positive jittered cooldown
+    {BH, BC, BI} = quod_simplex:backoff({7, 0, 0}),
+    ?assertEqual(0, BH),
+    ?assert(BI >= 3),                              %% floored at ?SYNC_BACKOFF_MIN
+    ?assert(BC >= 1),                              %% a positive jittered cooldown
+    {_, _, BI2} = quod_simplex:backoff({0, 0, BI}),
+    ?assert(BI2 >= BI andalso BI2 =< 20),          %% grows, capped at ?SYNC_BACKOFF_MAX
+    ?assertEqual({0, 0, 0}, quod_simplex:reset_pace()).
+
+%% minimal-state builder for the pure gate predicates (the #s record is private to quod_simplex)
+st(Overrides) -> quod_simplex:test_state(Overrides).
+
+%%%===================================================================
 %%% block-timestamp acceptance (the valid_proposal monotonic + future + type gate)
 %%%===================================================================
 
@@ -331,6 +459,28 @@ weak_cert_guard_test() ->
     {E6, Ev6} = feed_shares(commits(B, C5, 5) -- commits(B, C4, 3), E5),    %% shares from members 4 + 5
     ?assert(lists:member({committed, 1, B}, Ev6)),                          %% re-committed under the 5-set
     ?assertMatch(#cert{}, quod_simplex:persisted_cert(commit, 1, BH, E6)).  %% now a genuine 4-sig cert
+
+%% Verified shares may stay cached across a committee transition, but a removed signer must stop counting.
+%% Re-offering a current member's duplicate exercises the no-reverify/re-form path: one current + one removed
+%% share is below quorum(3)=3; only after both remaining current members sign may it notarize.
+cached_removed_share_not_counted_test() ->
+    C4 = committee(4),
+    [C1, _Removed, C3, C4th] = C4,
+    C3set = [C1, C3, C4th],
+    B = blk(1),
+    [S1, SRemoved] = supports(B, C4, 2),
+    {E1, _} = quod_simplex:eng_offer({block, B}, quod_simplex:eng_new(pubs(C4), 0)),
+    {E2, _} = feed_shares([S1, SRemoved], E1),
+    E3 = quod_simplex:eng_set_validators(pubs(C3set), E2),
+    {E4, Ev4} = quod_simplex:eng_offer({share, S1}, E3),
+    ?assertNot(lists:member({notarized, B}, Ev4)),
+    ?assertNot(maps:is_key(1, quod_simplex:eng_tree(E4))),
+    [_Same, S3, S4] = supports(B, C3set, 3),
+    {E5, Ev5} = quod_simplex:eng_offer({share, S3}, E4),
+    ?assertNot(lists:member({notarized, B}, Ev5)),
+    {E6, Ev6} = quod_simplex:eng_offer({share, S4}, E5),
+    ?assert(lists:member({notarized, B}, Ev6)),
+    ?assertEqual(B, maps:get(1, quod_simplex:eng_tree(E6))).
 
 %% N=1 (quorum 1): the sole validator's own shares notarize + commit instantly (the degenerate case).
 eng_sole_validator_test() ->

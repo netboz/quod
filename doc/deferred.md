@@ -202,22 +202,25 @@ stages, not carried forward:
   (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
   forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node
   boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/3` from
-  ONE sampled contact per attempt (`quod_catchup:contact/1` — the live, self-filtered Brahms view, static
-  seeds minus the node's own `node_addr` as the cold-start fallback; sticky for the whole run, re-sampled
-  on retry): pull a window → `verify_forward` each cert against the committee it reconstructs → hand
+  a sampled bootstrap contact, then reconciles a member against every available current-committee source:
+  pull a window → `verify_forward` each cert against the committee it reconstructs → hand
   the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
   advance, until caught up. The genesis (slot 1, `cert=none`) is anchored against the out-of-band-pinned
   `genesis_hash` (config), never TOFU'd; `quod_simplex:genesis_hash/1` exposes a founder's anchor. A
   caught-up joiner is a **read-only observer** — not in its own `validators`, so `is_participant/2` drops
   live consensus traffic and refuses appends (`not_in_charge`). Covered by `join_SUITE` (found N=1 → commit
   a fact → a `mode=join` node catches up over loopback QUIC → proves the fact from its OWN KB, stays a
-  non-member). **Resume + hardening (from the S5a review, all landed):** a `mode=join` node re-enters catch-up
-  on EVERY boot (empty OR partial log), and `start_join_worker` RESUMES from the persisted height (`slot+1`,
-  committee-as-of-that-slot) — so a crash/redeploy mid-catch-up never re-appends its on-disk prefix (the store's
-  `assert_contiguous` would throw) nor treats a partial log as complete (`maybe_mark_ready` stays gated until
-  `join=done`). `catch_up/5` is the resume entry (skips the genesis anchor past slot 1). `is_participant/1`
-  requires `join ∈ {none,done}` so a window that folds the joiner's OWN pubkey can't flip it live over a stale
-  engine. `{ok,0}` from an empty/lying contact is a retry, not a false "done". `valid_cfg` fail-fasts a bad
+  non-member). **Resume + hardening (from the S5a review, all landed; re-homed by the Slices 3+4 refactor):** a
+  `mode=join` node re-enters catch-up on EVERY boot (empty OR partial log) via the unified `start_sync_worker`,
+  which RESUMES from the persisted height (`slot+1`, committee-as-of-that-slot) — so a crash/redeploy
+  mid-catch-up never re-appends its on-disk prefix (the store's `assert_contiguous` would throw) nor treats a
+  partial log as complete (`maybe_mark_ready` stays gated on recovery reaching `ready`). `catch_up/5` is the resume entry
+  (skips the genesis anchor past slot 1). `is_participant/1` is now FACTS-ONLY, so a window that folds the
+  joiner's OWN pubkey does flip it to a participant — but the explicit recovery enum remains `unconfirmed` /
+  `pulling` until distinct current-committee observations at the exact final height, together with self, form
+  a certificate quorum. Only `ready` grants `may_vote`/`may_lead`. A raw `{ok,0}` from an empty/stale contact
+  is merely one observation and cannot satisfy that quorum. Committee-targeted catch-up replies are also bound
+  to the authenticated peer queried. `valid_cfg` fail-fasts a bad
   `mode` or a `join` without a `genesis_hash` anchor (no silent zombie). Covered by `join_SUITE`'s
   full-namespace-restart resume case. **Still deferred from here:**
   - **~~Admission to voter (S5b)~~ — DONE (multi-validator milestone, Slices A–E, 0.6.30–0.6.34).** A
@@ -235,8 +238,8 @@ stages, not carried forward:
     co-founding is the ONLY way to stand up the 4-node BFT **failover** committee in a test, and join can't
     replace that (a live namespace grows 1→N via sequential admits — `growth_SUITE` — but the failover CT
     needs an instant N=4). Keep it.
-  - **Read-replica (stay-synced) tier** — a caught-up `join=done` non-member already TRACKS the head off
-    the feed: it drops the consensus `{log,Ns}` traffic (not a voter), but `quod_feed` carries it forward —
+  - **Read-replica (stay-synced) tier** — a caught-up (`ready`, non-`syncing`) non-member already TRACKS
+    the head off the feed: it drops the consensus `{log,Ns}` traffic (not a voter), but `quod_feed` carries it forward —
     eager-push when it has a Brahms overlay, and (since the readiness gate) digest→verified-pull off the
     committee members even without one. What is unbuilt is a durable replica **tier** with its own policy:
     a `can_replicate` admission gate, retention, and snapshot bootstrap — the reader-arc work (§4).
@@ -294,20 +297,24 @@ stages, not carried forward:
   closed before open/Byzantine membership: persist the latches (or a per-slot "already-voted" marker)
   alongside the durable log so a restart refuses to re-sign a slot it already signed. Intersects tx signing
   (Phase B) and the epoch work.
-- **Member multi-slot gap-fill / founder-stall corner.** A committee member that falls several slots behind
-  the head (missed a run of `{log,Ns}` traffic) relies on the per-message redrive (Slice B) + the dial-tick
-  retransmit to refill — but there is no member-side *bulk* catch-up (a voting member has `may_sink` false,
-  so it can't pull windows through `sink_catchup` the way an observer does). If a member gaps by more than
-  the redrive can refill before the head moves on, it can stall until it's restarted (mode=join resume then
-  bulk-catches-up and re-promotes). **Empirically reproducible under sustained load (0.6.36 load+chaos, live
-  qengho fleet):** a churned validator's mode=join catch-up finishes at the head *as of that instant*, but the
-  other members have committed further meanwhile, so it re-promotes already a few slots behind and then stalls
-  as a `join=done` voter (no bulk gap-fill; the missed slots have no live proposer to redrive). Two nodes hit
-  it (`kp_3c2dd6bf` stuck ~5 min at slot 419, `kp_c1740be7` at 1254) — each recovered only on a *further*
-  restart against a then-stable head (which snapped it to the head instantly, confirming catch-up itself is
-  fine). So NOT rare under load; the tighter it churns, the likelier. The fix is a member-side bounded gap-fill
-  (pull the missing slots' committed blocks+certs without leaving the committee — the observer catch-up path
-  works, a voting member just isn't allowed onto it today) — a real hardening slice, prioritise post-rollout.
+- **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
+  0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
+  per-message redrive (Slice B) + dial-tick retransmit to refill, but had no member-side *bulk* catch-up, and
+  the boot-time `join` enum conflated boot-mode / sync-state / participation so a fallen-behind voter couldn't
+  re-enter catch-up in-process. **Empirically reproduced under sustained load (0.6.36 load+chaos, live qengho
+  fleet):** a churned validator's catch-up finished at the head *as of that instant*, the other members
+  committed further meanwhile, and it re-promoted a few slots behind then stalled in the former
+  `join=done` state —
+  `kp_3c2dd6bf` stuck ~5 min at slot 419, `kp_c1740be7` at 1254, each recovering only on a *further* restart.
+  **Fixed** by deleting the `join` enum for three single-owner concerns — boot `mode` (config, read once),
+  one recovery enum (`unconfirmed | {pulling,Pid} | ready`) plus `sync_arm` pacing (driving BOTH
+  boot-sync from base 0 and runtime member gap-fill from slot+1), and facts-only `is_participant`. A behind
+  member now recovers IN-PROCESS on the same trustless path a joiner uses; all runtime share construction
+  routes through `may_vote = is_participant ∧ caught_up`, so it neither leads nor signs while it pulls.
+  Slice 3 shipped the fix on the enum-intact diff and the live
+  loadtest confirmed recovery (over-f churn, no ghost); Slice 4 was the atomic enum cutover. Plan:
+  `~/.claude/plans/serene-churning-pike.md`. Remaining tail: the bounded ahead-buffer (Slice 5) closes the
+  moving-*tail* residual (buffer verified ahead blocks, pull the holes) and the vote-flood cap (Slice 6).
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
   now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log

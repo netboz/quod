@@ -67,3 +67,11 @@ byte_cap_test() ->
     Bytes = lists:sum([byte_size(term_to_binary(E, [deterministic])) || E <- Served]),
     ?assert(Bytes < 1024 * 1024),          %% the served entries fit under quod_link's 1 MiB frame cap
     _ = file:del_dir_r(Dir).
+
+%% Committee pulls are bound to the authenticated node id they targeted. Bootstrap endpoints are
+%% deliberately unbound because discovery does not know the peer id before the first authenticated reply.
+peer_binding_test() ->
+    A = <<"peer-a">>, B = <<"peer-b">>,
+    ?assert(quod_catchup:peer_matches(A, {bound, A})),
+    ?assertNot(quod_catchup:peer_matches(B, {bound, A})),
+    ?assert(quod_catchup:peer_matches(B, unbound)).

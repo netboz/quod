@@ -2,9 +2,9 @@
 -moduledoc """
 Dissemination feed (F1) integration: **a follower follows live commits over the feed**, on genuine
 loopback QUIC. A founder (`mode=create`, N=1) founds `feed:f1` and commits a fact; a second node
-(`mode=join`) catches up to that height and goes `join=done` (a read-only observer). Both then join the
-namespace **Brahms overlay**, and the founder commits a NEW fact. Because the follower is already `done`
-and never re-enters catch-up — and its digest rounds are pinned far out, so the digest→pull path can't
+(`mode=join`) catches up to that height and reaches `ready` (a read-only observer). Both then join the
+namespace **Brahms overlay**, and the founder commits a NEW fact. Because the follower is already settled
+and does not re-enter boot recovery — and its digest rounds are pinned far out, so the digest→pull path can't
 recover the block instead — the only way its height can advance is the **eager push**: the founder's
 `m:quod_feed` pushes the fresh block to its overlay view, the follower verifies the block's quorum cert
 against the committee it holds, hands it to `m:quod_simplex`, and advances — proving the committee→crowd
@@ -41,7 +41,7 @@ init_per_suite(Config) ->
     ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, france, paris}})) end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),
 
-    %% 2. follower: mode=join, catches up to the founder's height (2), then goes quiescent (join=done).
+    %% 2. follower: mode=join, catches up to the founder's height (2), then settles (`syncing=false`).
     %% Pin this pair's digest rounds far out FIRST: `follower_follows_live` proves the eager-PUSH path,
     %% and a digest round racing the push would recover the block by pull instead — stealing the ingest
     %% the case asserts (the digest→pull path has its own case below, on its own nodes).
@@ -54,7 +54,7 @@ init_per_suite(Config) ->
     ok = peer:call(Founder,  quod_quic, learn, [JPub, JAddr]),
     ok = peer:call(Follower, quod_quic, learn, [FPub, FAddr]),
     ?assert(eventually(fun() -> slot(Follower) =:= 2 end, 30000)),
-    ?assert(eventually(fun() -> maps:get(join, status(Follower), undefined) =:= done end, 30000)),
+    ?assert(eventually(fun() -> maps:get(syncing, status(Follower), true) =:= false end, 30000)),
 
     %% 3. both join the namespace Brahms overlay (address-based), seeded to each other. The seed IS the
     %% initial view, so the founder's eager-push reaches the follower without waiting for a gossip round.
@@ -78,17 +78,17 @@ follower_follows_live(Config) ->
 
     %% sanity: the follower is a caught-up NON-member read observer, sitting at the snapshot height.
     ?assertEqual(2, slot(Follower)),
-    ?assertEqual(done, maps:get(join, status(Follower), undefined)),
+    ?assertEqual(false, maps:get(syncing, status(Follower), true)),
     ?assertNot(lists:member(?config(jpub, Config), peer:call(Follower, quod_simplex, committee, [?NS]))),
 
     %% the founder commits a NEW fact (slot 3) — the feed eager-pushes it to the overlay.
     ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, spain, madrid}})) end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
 
-    %% the follower advances to 3 via the FEED (it is join=done and never re-runs catch-up), and the fact
+    %% the follower advances to 3 via the FEED (it is settled and never re-runs boot-sync), and the fact
     %% is readable from its OWN kb — the block was applied, not merely stored.
     ?assert(eventually(fun() -> slot(Follower) =:= 3 end, 30000)),
-    ?assertEqual(done, maps:get(join, status(Follower), undefined)),   %% never dropped back into catch-up
+    ?assertEqual(false, maps:get(syncing, status(Follower), true)),   %% never dropped back into syncing
     ?assert(eventually(fun() -> match_ok(prove(Follower, {capital, spain, {'X'}})) end, 15000)),
 
     %% and it stayed a non-voter — dissemination is read-tier, never promotion.
@@ -100,7 +100,7 @@ follower_follows_live(Config) ->
 
 %% A follower recovers a block it MISSED on the push, purely via anti-entropy — with NO overlay at all.
 %% The founder commits the extra block while the follower has an empty Brahms view (no eager-push can
-%% reach it); the follower is join=done and never re-runs cold-start catch-up, so the only path to the
+%% reach it); the follower is settled and does not re-run cold-start catch-up, so the only path to the
 %% missed block is its periodic digest to the COMMITTEE → the founder's ahead-reply → verified pull.
 %% (These are the same digests admission's `peer_ready` gate reads.) Self-contained nodes.
 follower_recovers_gap_via_anti_entropy(Config) ->
@@ -120,7 +120,7 @@ follower_recovers_gap_via_anti_entropy(Config) ->
             ok = peer:call(Founder, quod_quic, learn, [JPub, JAddr]),
             ok = peer:call(F2,      quod_quic, learn, [FPub, FAddr]),
             ?assert(eventually(fun() -> slot(F2) =:= 2 end, 30000)),
-            ?assert(eventually(fun() -> maps:get(join, status(F2), undefined) =:= done end, 30000)),
+            ?assert(eventually(fun() -> maps:get(syncing, status(F2), true) =:= false end, 30000)),
 
             %% commit the delta — the eager-push has an empty view and reaches nobody; recovery must come
             %% from the digest exchange alone.

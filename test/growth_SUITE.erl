@@ -110,7 +110,7 @@ admit_refused_mid_catchup(Config) ->
 grow_to_two(Config) ->
     Founder = ?config(founder, Config),
     [{J1Peer, J1Pub, J1Port} = J1] = prev_joiners(Config),
-    ?assert(eventually(fun() -> join(J1Peer) =:= done end, 60000)),
+    ?assert(eventually(fun() -> synced(J1Peer) end, 60000)),
     admit(Config, [J1], J1Pub, J1Port),
     ExpectCommittee = lists:sort([?config(fpub, Config), J1Pub]),
     ?assert(eventually(fun() -> committee(Founder) =:= ExpectCommittee end, 20000)),
@@ -127,7 +127,7 @@ grow_to_three(Config) ->
     Prev = prev_joiners(Config),
     J2 = start_joiner(2, Config, #{}),
     {J2Peer, J2Pub, J2Port} = J2,
-    ?assert(eventually(fun() -> join(J2Peer) =:= done end, 60000)),
+    ?assert(eventually(fun() -> synced(J2Peer) end, 60000)),
     Members = [J2 | Prev],
     admit(Config, Members, J2Pub, J2Port),
     ExpectCommittee = member_pubs(Config, Members),
@@ -141,7 +141,7 @@ grow_to_four(Config) ->
     Prev = prev_joiners(Config),
     J3 = start_joiner(3, Config, #{}),
     {J3Peer, J3Pub, J3Port} = J3,
-    ?assert(eventually(fun() -> join(J3Peer) =:= done end, 60000)),
+    ?assert(eventually(fun() -> synced(J3Peer) end, 60000)),
     Members = [J3 | Prev],
     admit(Config, Members, J3Pub, J3Port),
     ExpectCommittee = member_pubs(Config, Members),
@@ -202,7 +202,7 @@ dead_member_removed(Config) ->
     Prev = prev_joiners(Config),
     J4 = start_joiner(4, Config, #{}),
     {J4Peer, J4Pub, J4Port} = J4,
-    ?assert(eventually(fun() -> join(J4Peer) =:= done end, 60000)),
+    ?assert(eventually(fun() -> synced(J4Peer) end, 60000)),
     Five = [J4 | Prev],
     admit(Config, Five, J4Pub, J4Port),
     FivePubs = member_pubs(Config, Five),
@@ -238,7 +238,7 @@ demote_to_observer(Config) ->
     RemainingPubs = member_pubs(Config, Remaining),
     [ ?assert(eventually(fun() -> committee(P) =:= RemainingPubs end, 20000)) || P <- member_peers(Config, Members) ],
     ?assert(eventually(fun() -> role(DemotePeer) =:= observer end, 20000)),
-    ?assert(eventually(fun() -> join(DemotePeer) =:= done end, 20000)),
+    ?assert(eventually(fun() -> synced(DemotePeer) end, 20000)),
     %% the demoted node now FOLLOWS the feed: a fresh write on the remaining committee reaches its KB.
     probe(Config, Remaining, {aftr, demote}),
     ?assert(eventually(fun() -> match_ok(prove(DemotePeer, {aftr, {'X'}})) end, 20000)),
@@ -363,7 +363,7 @@ peer_ready_at(Judge, Pk) ->
 status(Peer)    -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)      -> maps:get(slot, status(Peer), -1).
 role(Peer)      -> maps:get(role, status(Peer), undefined).
-join(Peer)      -> maps:get(join, status(Peer), undefined).
+synced(Peer)    -> maps:get(syncing, status(Peer), true) =:= false.   %% caught up + confirmed the tip
 committee(Peer) -> maps:get(committee, status(Peer), []).
 prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
 

@@ -10,6 +10,7 @@
     sasl,
     crypto,        %% quod_brahms_sampler: HMAC-SHA256 + strong_rand_bytes
     gproc,
+    cowboy,
     quic,
     erlog,
     prometheus,
@@ -17,6 +18,7 @@
    ]},
   {env,
    [{listen_port, 14567},
+    {transactions_port, 14569},
     {alpn, "quod"},
     {certfile, "priv/certs/cert.pem"},
     {keyfile, "priv/certs/key.pem"},

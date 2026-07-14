@@ -30,6 +30,9 @@ init([]) ->
            type => supervisor},
          #{id => quod_metrics,
            start => {quod_metrics, start_link, []},
+           type => worker},
+         #{id => quod_tx_view,
+           start => {quod_tx_view, start_link, []},
            type => worker}
         ],
     {ok, {SupFlags, ChildSpecs}}.

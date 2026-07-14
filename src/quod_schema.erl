@@ -24,6 +24,7 @@ namespace() -> quod.
 roots() ->
     [ {node,     hoconsc:mk(hoconsc:ref(?MODULE, node),     #{default => #{}})}
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
+    , {transactions, hoconsc:mk(hoconsc:ref(?MODULE, transactions), #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
     , {content,  hoconsc:mk(hoconsc:ref(?MODULE, content),  #{default => #{}})}
     ].
@@ -45,6 +46,9 @@ fields(node) ->
     ];
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}
+    ];
+fields(transactions) ->
+    [ {port, hoconsc:mk(integer(), #{default => 14569})}
     ];
 fields(identity) ->
     %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first

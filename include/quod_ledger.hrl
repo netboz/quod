@@ -26,6 +26,8 @@
 %% until node-author signatures land; `author` is the submitting node's pubkey.
 -record(transaction, {tx_id      :: binary(),            %% unique per transaction (node-hash ++ unique counter; NOT time-ordered)
                  caller_ns    :: binary(),            %% emitting ontology (CallerNs)
+                 goal = undefined :: term(),          %% successful Prolog goal that produced this write
+                 result = undefined :: term(),        %% bindings returned by that proof
                  diff         :: [op()],              %% concrete asserts/retracts
                  read_check   :: read_check(),        %% what the proof relied on (OCC)
                  author       :: node_id(),           %% submitting node's pubkey

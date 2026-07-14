@@ -56,6 +56,7 @@ job "quod" {
       mode = "bridge"
       port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
+      port "transactions" { to = 14569 }
     }
 
     volume "quod-data" {
@@ -109,7 +110,7 @@ EOT
       config {
         image      = "${var.image_registry}/quod:${var.image_tag}"
         force_pull = true
-        ports      = ["p2p", "metrics"]
+        ports      = ["p2p", "metrics", "transactions"]
       }
 
       volume_mount {
@@ -126,6 +127,7 @@ node {
   bind_port = 14567
 }
 metrics { port = 14568 }
+transactions { port = 14569 }
 content {
   namespace = "quod:root"
   data_dir  = "/quod/data"
@@ -188,6 +190,19 @@ EOT
           args     = ["-ec", "curl -fsS --max-time 2 http://127.0.0.1:14568/metrics | awk '$1 ~ /^quod_consensus_syncing\\{/ { seen=1; if ($2 != 0) bad=1 } END { exit !(seen && !bad) }'"]
           interval = "5s"
           timeout  = "5s"
+        }
+      }
+
+      service {
+        name = "quod-transactions"
+        port = "transactions"
+        tags = ["quod", "transactions", "web"]
+
+        check {
+          type     = "http"
+          path     = "/health"
+          interval = "15s"
+          timeout  = "3s"
         }
       }
 

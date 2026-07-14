@@ -126,6 +126,7 @@ apply_transport_env(Cfg) ->
            end,
     application:set_env(quod, listen_port, Bind),
     application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
+    application:set_env(quod, transactions_port, maps:get(port, maps:get(transactions, Cfg))),
     application:set_env(quod, node_addr, {Ip, Port}),   %% advertised endpoint the transport announces
     application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     application:set_env(quod, quic_idle_timeout_ms, maps:get(idle_timeout_ms, Node)),  %% dead-peer detection tuning

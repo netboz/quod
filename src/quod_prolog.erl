@@ -172,7 +172,7 @@ handle_call({prove, Goal, CallerNs}, From, S) ->
         {ok, Bindings, [], _ReadSet} ->                    %% a read — nothing committed
             {reply, {ok, [Bindings], S#s.applied}, bump_proves(S)};
         {ok, Bindings, Diff, ReadSet} ->                   %% a write
-            submit_write(From, Bindings, Diff, ReadSet, CallerNs, S)
+            submit_write(From, Goal, Bindings, Diff, ReadSet, CallerNs, S)
     end;
 %% Read-only prove (the remote-read path): identical to a read, but a goal that stages a WRITE
 %% is REFUSED ({error, read_only}) instead of submitted — a remote reader can never write through
@@ -281,9 +281,9 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% then park the caller until ordered apply (or a definite consensus rejection). This
 %% keeps the KB free to prove and apply while consensus runs, without spawning one
 %% blocked helper process for every write.
-submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when CallerNs =:= Ns ->
+submit_write(From, Goal, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when CallerNs =:= Ns ->
     Tx     = tx_id(S#s.self),
-    Change = #transaction{tx_id = Tx, caller_ns = CallerNs, diff = Diff,
+    Change = #transaction{tx_id = Tx, caller_ns = CallerNs, goal = Goal, result = Bindings, diff = Diff,
                      read_check = ReadSet, author = S#s.self,
                      submitted_at = quod_time:now_ms(), sig = none},
     try gen_statem:send_request(quod_reg:via({quod_simplex, Ns}), {append, Change}) of
@@ -298,7 +298,7 @@ submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when Call
         error:badarg ->
             {reply, {error, consensus_unavailable}, S}
     end;
-submit_write(_From, _B, _D, _R, _CallerNs, S) ->
+submit_write(_From, _Goal, _B, _D, _R, _CallerNs, S) ->
     {reply, {error, foreign_write_unsupported}, S}.
 
 append_result(Tx, {ok, _Slot}, S) ->

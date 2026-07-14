@@ -98,21 +98,36 @@ Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 ## Deploy (Docker + Nomad)
 
 ```bash
-docker build -t quod:0.2.1 .                 # multi-stage; cached deps layer
-docker tag quod:0.2.1 <registry>/quod:0.2.1 && docker push <registry>/quod:0.2.1
-nomad job run deploy/quod.nomad              # 3 nodes, host net, static UDP 14567
+TAG=0.6.39
+REGISTRY=192.168.1.11:5000
+docker build -t "$REGISTRY/quod:$TAG" .
+docker push "$REGISTRY/quod:$TAG"
+
+# First deploy only: found the durable root namespace and copy its genesis hash.
+nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
+  -var root_mode=create deploy/quod.nomad
+
+# Subsequent deploys, including adding joiners, use the pinned anchor.
+nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
+  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
 ```
 
-`deploy/quod.nomad` pins one instance per server, host-network, a static UDP
-port (so seeds are predictable), a static seed list (each node filters itself
-out), and a Consul service. quod is **stateless** (in-memory view/sampler, cert
-in the image) — no CSI volume.
+`deploy/quod.nomad` runs one root allocation plus an optional number of join
+allocations on compute-class Nomad clients. Networking uses bridge mode with a
+dynamic host port for QUIC; Consul renders the current `quod` and `quod-join`
+services into each node's seed list. Each allocation has its own CSI-backed
+ledger, and Nomad waits for `/metrics` to report consensus recovery complete
+before advancing the serialized rolling update.
+
+The default `root_mode=join` is intentional. It makes a routine re-deploy fail
+closed until the operator supplies the genesis anchor, instead of allowing a
+wiped root volume to silently create a divergent namespace. Use
+`root_mode=create` only for the initial bootstrap.
 
 ## Status / next steps
 
-- **Done:** pure-Erlang QUIC transport, Brahms membership per namespace, env
-  boot, Docker/Nomad deploy. Verified full-mesh on a 3-node cluster (~100 MB/node).
-- **Next:** the application layer — wire `erlog` so a namespace's gossip carries
-  **ontology facts / distributed Prolog queries**, not just node ids.
-- **Deferred:** PUSH over QUIC datagrams; per-block quorum certificates + signed
-  changes (Phase B); Brahms gossiping the address hint (sparse-seed move-survival).
+- **Done:** pure-Erlang QUIC transport, Brahms membership, Prolog content, the
+  DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
+  member recovery, metrics, and durable Docker/Nomad deployment.
+- **Next:** signed membership authorship, epoch-frozen validator sets, and the
+  durable read-replica policy described in `doc/deferred.md`.

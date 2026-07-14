@@ -38,7 +38,7 @@ FROM debian:trixie-slim AS runtime
 # libssl3: the OTP crypto NIF links libcrypto (quic does TLS 1.3 in Erlang on top
 # of it). libncurses6/libstdc++6: erl run scripts + ERTS. No msquic libs.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libncurses6 libstdc++6 libssl3 ca-certificates openssl \
+        libncurses6 libstdc++6 libssl3 ca-certificates curl openssl \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /opt/quod

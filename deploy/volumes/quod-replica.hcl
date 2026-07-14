@@ -1,9 +1,8 @@
-## CSI Ceph RBD volume for the quod READ-REPLICA alloc (the read tier).
+## CSI Ceph RBD volume reserved for a future quod read-observer alloc.
 ##
-## Same Ceph cluster / pool / user as quod-root.hcl. Holds a permanent NON-voting full-copy
-## replica of quod:root: the node joins via the join path (content.role=replica → {add_replica}),
-## catches up the full durable ledger, and serves reads locally — reads never touch consensus.
-## Per-node durable copy so it replays + catches up across restart/migration.
+## Same Ceph cluster / pool / user as quod-root.hcl. There is no content.role=replica
+## configuration now: all non-members use content.mode=join, recover the durable ledger,
+## and remain read-only until a committed admission makes them voting validators.
 ##
 ## Create with:
 ##   NOMAD_ADDR=http://192.168.1.10:4646 \

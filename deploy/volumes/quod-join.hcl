@@ -5,7 +5,8 @@
 ## BOTH the Nomad `id` AND the CSI `name` must be unique per index — the `name` is what the
 ## CSI plugin provisions the RBD image against, so a shared name dedups all indices onto ONE
 ## image. Create the rest by substituting the index (greenfield — wipe + recreate on a re-found):
-##   for i in $(seq 0 5); do
+##   JOIN_COUNT=7
+##   for i in $(seq 0 $((JOIN_COUNT - 1))); do
 ##     sed "s/quod-join\[0\]/quod-join[$i]/; s/quod-join-0/quod-join-$i/" deploy/volumes/quod-join.hcl | \
 ##       NOMAD_ADDR=http://192.168.1.10:4646 nomad volume create -
 ##   done

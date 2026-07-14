@@ -93,7 +93,7 @@ EOT
         command = "sh"
         args = [
           "-c",
-          "if [ -z '${var.genesis_hash}' ] || [ \"$${NOMAD_ALLOC_INDEX:-0}\" = 0 ]; then echo 'bootstrap allocation, no peer required'; exit 0; fi; while :; do unset QUOD_PEER_HOST QUOD_PEER_METRICS_PORT; . \"$NOMAD_TASK_DIR/peer.env\" 2>/dev/null || true; if [ -n \"$QUOD_PEER_HOST\" ] && nc -z -w2 \"$QUOD_PEER_HOST\" \"$QUOD_PEER_METRICS_PORT\" 2>/dev/null; then echo \"peer up at $QUOD_PEER_HOST:$QUOD_PEER_METRICS_PORT\"; exit 0; fi; echo 'peer not ready, sleeping 2s'; sleep 2; done"
+          "if [ -z '${var.genesis_hash}' ] || [ \"$NOMAD_ALLOC_INDEX\" = 0 ]; then echo 'bootstrap allocation, no peer required'; exit 0; fi; while :; do unset QUOD_PEER_HOST QUOD_PEER_METRICS_PORT; . \"$NOMAD_TASK_DIR/peer.env\" 2>/dev/null || true; if [ -n \"$QUOD_PEER_HOST\" ] && nc -z -w2 \"$QUOD_PEER_HOST\" \"$QUOD_PEER_METRICS_PORT\" 2>/dev/null; then echo \"peer up at $QUOD_PEER_HOST:$QUOD_PEER_METRICS_PORT\"; exit 0; fi; echo 'peer not ready, sleeping 2s'; sleep 2; done"
         ]
       }
 

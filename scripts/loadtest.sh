@@ -365,9 +365,10 @@ burst() {
   mapfile -t vals < <(validators)
   [ "${#vals[@]}" -eq 0 ] && return 0
   # BURST_SIZE concurrent one-shots on EVERY validator: the leader's contend (backpressure /
-  # append_busy), the rest exercise the not_leader redirect path.
+  # append_busy), the rest exercise the not_leader redirect path. Each eval monitors its
+  # children and bounds their lifetime, so stopping the load cannot leave detached submits behind.
   for a in "${vals[@]}"; do
-    QEVAL "$a" "[spawn(fun() -> catch quod_prolog:prove(<<\"$NS\">>, {assertz, {burst, erlang:unique_integer([positive])}}, <<\"$NS\">>) end) || _ <- lists:seq(1, $BURST_SIZE)], ok." >/dev/null &
+    QEVAL "$a" "Ps=[spawn_monitor(fun()->catch quod_prolog:prove(<<\"$NS\">>,{assertz,{burst,erlang:unique_integer([positive])}},<<\"$NS\">>) end)||_<-lists:seq(1,$BURST_SIZE)], D=erlang:monotonic_time(millisecond)+20000, W=fun F([])->ok; F([{P,R}|T])->Left=D-erlang:monotonic_time(millisecond), receive {'DOWN',R,process,P,_}->F(T) after max(0,Left)->lists:foreach(fun({P0,_})->exit(P0,kill) end,[{P,R}|T]),ok end end, W(Ps), ok." >/dev/null &
   done
   wait
   LOG "BURST: $BURST_SIZE concurrent submits x ${#vals[@]} validators"

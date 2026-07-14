@@ -263,7 +263,7 @@ EOT
         command = "sh"
         args = [
           "-c",
-          "while :; do unset QUOD_ROOT_HOST QUOD_ROOT_METRICS_PORT; . \"$${NOMAD_TASK_DIR}/root.env\" 2>/dev/null || true; if [ -n \"$${QUOD_ROOT_HOST:-}\" ] && nc -z -w2 \"$${QUOD_ROOT_HOST}\" \"$${QUOD_ROOT_METRICS_PORT}\" 2>/dev/null; then echo \"founder up at $${QUOD_ROOT_HOST}:$${QUOD_ROOT_METRICS_PORT}, proceeding\"; exit 0; fi; echo 'founder not ready, sleeping 2s'; sleep 2; done"
+          "while :; do unset QUOD_ROOT_HOST QUOD_ROOT_METRICS_PORT; . \"$${NOMAD_TASK_DIR}/root.env\" 2>/dev/null || true; if [ -n \"$${QUOD_ROOT_HOST}\" ] && nc -z -w2 \"$${QUOD_ROOT_HOST}\" \"$${QUOD_ROOT_METRICS_PORT}\" 2>/dev/null; then echo \"founder up at $${QUOD_ROOT_HOST}:$${QUOD_ROOT_METRICS_PORT}, proceeding\"; exit 0; fi; echo 'founder not ready, sleeping 2s'; sleep 2; done"
         ]
       }
 

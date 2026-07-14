@@ -103,7 +103,7 @@ Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 ## Deploy (Docker + Nomad)
 
 ```bash
-TAG=0.6.39
+TAG=0.7.0
 REGISTRY=192.168.1.11:5000
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
@@ -116,6 +116,10 @@ nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
 nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
   -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
 ```
+
+`0.7.0` reads legacy singleton ledger entries, but `0.6.x` cannot replay the new
+batched entries. Quiesce writers during the serialized rolling update. Once a
+`0.7.0` batch commits, roll forward rather than downgrading a node to `0.6.x`.
 
 `deploy/quod.nomad` runs one root allocation plus an optional number of join
 allocations on compute-class Nomad clients. Networking uses bridge mode with a

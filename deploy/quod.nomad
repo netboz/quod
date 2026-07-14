@@ -1,7 +1,7 @@
 variable "image_tag" {
   type        = string
-  default     = "0.6.39"
-  description = "Quod image tag in the cluster registry. 0.6.39 unifies boot and runtime recovery: a node may vote only after quorum-correlated tip recovery, and committee catch-up replies are identity-bound. No ledger or wire-format change; use the serialized rolling update below."
+  default     = "0.7.0"
+  description = "Quod image tag in the cluster registry. 0.7.0 adds canonical transaction batches and depth-one Simplex pipelining. Quiesce writers during the serialized update: 0.7.0 reads legacy singleton entries, but 0.6.x cannot replay a new batched entry."
 }
 
 variable "image_registry" {

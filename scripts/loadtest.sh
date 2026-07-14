@@ -47,7 +47,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.6.39}"                    # current live fleet image
+: "${IMAGE_TAG:=0.7.0}"                     # current live fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=7470BCED0B078D6A2EBBB842E3AA6E0C3A5EBE8544483C073E2264C38DF654D5}"  # live root anchor
 : "${ROOT_MODE:=join}"                      # post-growth end-state; NEVER create on an existing/wiped fleet
@@ -143,7 +143,7 @@ Load and chaos:
 Examples:
   scripts/loadtest.sh --duration 120 --warmup 30 --overf 0
   scripts/loadtest.sh --duration 900 --membership-churn 1
-  scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.6.39
+  scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.7.0
 EOF
 }
 

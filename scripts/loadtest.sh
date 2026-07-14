@@ -393,8 +393,8 @@ burst() {
 # chaos: validator-aware churn
 #==============================================================================
 CHURN_PID=""; VAL_CHURN_PID=""; RANDOM_CHURN_PID=""
-STALLED=0; PRE_STALL_SLOT=0; STALL_LAST_SLOT=0; STALL_OBSERVED=0; CUR_MAX=0
-OVERF_EVENTS=0; OVERF_RECOVERED=0
+STALLED=0; PRE_STALL_SLOT=0; STALL_LAST_SLOT=0; STALL_QUORUM_LOST=0; STALL_OBSERVED=0; CUR_MAX=0
+OVERF_EVENTS=0; OVERF_STALLS_OBSERVED=0; OVERF_RECOVERED=0; OVERF_UNOBSERVED=0
 RANDOM_CHURN_EVENTS=0; RANDOM_OVERF_EVENTS=0
 
 churn_observers() {
@@ -437,7 +437,7 @@ churn_validators() {
   [ "$n" -lt 1 ] && return 0
   pick=$(printf '%s\n' "${ids[@]}" | shuf | head -n "$n")
   if [ "$n" -gt "$F" ]; then
-    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1))
+    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_QUORUM_LOST=0; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1))
     LOG "CHURN(validator, $label): restarting $n/$up [$(echo $pick | tr '\n' ' ')] — expect commit STALL at slot ~$PRE_STALL_SLOT until >=$QUORUM validators return"
   else
     LOG "CHURN(validator, $label): restarting $n/$up [$(echo $pick | tr '\n' ' ')]"
@@ -460,7 +460,7 @@ random_churn() {
   ids=$(printf '%s\n' "$pick" | cut -d: -f1)
   RANDOM_CHURN_EVENTS=$((RANDOM_CHURN_EVENTS + 1))
   if [ "$validator_count" -gt "$F" ]; then
-    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1)); RANDOM_OVERF_EVENTS=$((RANDOM_OVERF_EVENTS + 1))
+    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_QUORUM_LOST=0; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1)); RANDOM_OVERF_EVENTS=$((RANDOM_OVERF_EVENTS + 1))
     label="expected STALL: $validator_count validators > f=$F"
   else
     label="within-f: $validator_count validator(s) <= f=$F"
@@ -566,20 +566,32 @@ accumulate() {   # $1=caught $2=lag $3=unv $4=rej $5=cs_min $6=cs_max $7=wcw
   [ "$6" -gt "$CS_SEEN_MAX" ] && CS_SEEN_MAX=$6
 }
 # A deliberate over-f restart can leave a few already-approved commits in flight.
-# Record recovery only after observing a real height plateau, then a later advance.
-detect_overf_recovery() {   # $1 = current max slot
-  local slot=${1:--1}
+# Only assert a stall/recovery when metrics actually show fewer than quorum-ready
+# validators and then a height plateau. Nomad can complete a fast restart between
+# two full-fleet scrapes; that is an unobserved churn event, not a liveness failure.
+detect_overf_recovery() {   # $1 = current max slot, $2 = ready validators
+  local slot=${1:--1} vals=${2:-0}
   [ "$STALLED" = 1 ] && [ "$slot" -ge 0 ] || return 0
-  if [ "$slot" -gt "$STALL_LAST_SLOT" ]; then
-    if [ "$STALL_OBSERVED" = 1 ]; then
+  if [ "$vals" -lt "$QUORUM" ] && [ "$STALL_QUORUM_LOST" = 0 ]; then
+    STALL_QUORUM_LOST=1
+    LOG "OVER-f quorum loss observed ($vals/$EXP_VALIDATORS ready, quorum=$QUORUM)"
+  fi
+
+  if [ "$STALL_OBSERVED" = 1 ]; then
+    if [ "$vals" -ge "$QUORUM" ] && [ "$slot" -gt "$STALL_LAST_SLOT" ]; then
       LOG "OVER-f RECOVERY: commits resumed (slot $STALL_LAST_SLOT -> $slot) after validators returned"
       STALLED=0; OVERF_RECOVERED=$((OVERF_RECOVERED + 1))
-    else
+    elif [ "$slot" -gt "$STALL_LAST_SLOT" ]; then
       STALL_LAST_SLOT=$slot
     fi
-  else
-    STALL_OBSERVED=1
+  elif [ "$STALL_QUORUM_LOST" = 1 ] && [ "$slot" -le "$STALL_LAST_SLOT" ]; then
+    STALL_OBSERVED=1; OVERF_STALLS_OBSERVED=$((OVERF_STALLS_OBSERVED + 1))
     LOG "OVER-f STALL observed at slot $slot"
+  elif [ "$vals" -ge "$QUORUM" ]; then
+    STALLED=0; OVERF_UNOBSERVED=$((OVERF_UNOBSERVED + 1))
+    LOG "OVER-f churn reconverged before a measurable quorum-loss plateau; not counted as a stall"
+  else
+    STALL_LAST_SLOT=$slot
   fi
 }
 # fast, cheap unverified-only poll from the cached endpoints (shrinks the gauge-reset blind spot)
@@ -647,7 +659,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
   [ "$mx" -ge 0 ] && CUR_MAX=$mx
   start_writers            # ensure-if-missing: self-heal writers after a validator restart
 
-  detect_overf_recovery "$mx"
+  detect_overf_recovery "$mx" "$vals"
 
   LOG "tick $tick: up=$n/$TOTAL ready_validators=$vals/$EXP_VALIDATORS recovering=$recovering slot=$mn..$mx lag=$lag unv=$unv rej=$mr cs=$csmn..$csmx wcw=$wcw"
   for _ in $(seq 1 "$polls"); do sleep "$UNV_POLL"; poll_unverified; done
@@ -668,7 +680,7 @@ for _ in $(seq 1 "$SETTLE_TRIES"); do
   # spuriously. The load has stopped, so a healthy fleet converges to the IDENTICAL head; only a
   # genuinely-stuck validator stays below it (small tolerance absorbs a last-slot timing skew).
   vbehind=$(awk -v h="$mx" '$6==1 && ($9!=0 || $3<0 || h-$3>2){c++} END{print c+0}' "$FLEETFILE")
-  detect_overf_recovery "$mx"   # a >f stall from the last tick(s) recovers HERE, after the window
+  detect_overf_recovery "$mx" "$vals"   # a >f stall from the last tick(s) recovers HERE, after the window
   accumulate "$n" "$lag" "$unv" "$mr" "$csmn" "$csmx" "$wcw"
   LOG "settle: up=$n/$TOTAL ready_validators=$vals/$EXP_VALIDATORS(behind:$vbehind) recovering=$recovering slot=$mn..$mx lag=$lag unv=$unv cs=$csmn..$csmx wcw=$wcw"
   if [ "$n" -eq "$TOTAL" ] && [ "$recovering" -eq 0 ] && [ "$mn" -ge 0 ] && [ "$lag" -le "$LAG_OK" ] && [ "$vals" -eq "$EXP_VALIDATORS" ] && [ "$vbehind" -eq 0 ]; then converged=1; break; fi
@@ -710,8 +722,8 @@ else
 fi
 LOG "weak_cert_waits (drained): $wcw  (peak during chaos: $MAX_WEAK_CERT)"; [ "$wcw" -eq 0 ] || { LOG "  FAIL: weak-cert waits did not drain (a laggard stuck across a committee change)"; FAILED=1; }
 if [ "$OVERF_EVENTS" -gt 0 ]; then
-  LOG "over-f stalls recovered  : $OVERF_RECOVERED / $OVERF_EVENTS";
-  { [ "$OVERF_RECOVERED" -eq "$OVERF_EVENTS" ] && [ "$STALLED" -eq 0 ]; } || { LOG "  FAIL: a deliberate >f stall did not recover"; FAILED=1; }
+  LOG "over-f stalls recovered  : $OVERF_RECOVERED / $OVERF_STALLS_OBSERVED observed ($OVERF_EVENTS churn events, $OVERF_UNOBSERVED unobserved)";
+  { [ "$OVERF_RECOVERED" -eq "$OVERF_STALLS_OBSERVED" ] && [ "$STALLED" -eq 0 ]; } || { LOG "  FAIL: a measured deliberate >f stall did not recover"; FAILED=1; }
 fi
 LOG "random restart events     : $RANDOM_CHURN_EVENTS ($RANDOM_OVERF_EVENTS expected over-f)"
 if [ "$MEMB_RAN" = 1 ]; then

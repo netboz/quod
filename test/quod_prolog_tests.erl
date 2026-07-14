@@ -23,7 +23,8 @@ prolog_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_unknown_fails/1,
       fun t_apply_and_read/1,
-      fun t_occ_reject/1]}.
+      fun t_occ_reject/1,
+      fun t_batch_apply/1]}.
 
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
@@ -104,6 +105,25 @@ t_occ_reject({Ns, _}) ->
         Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => M}),
         ?assertEqual(ok, quod_prolog:apply_block(Ns, 3, Good)),
         ?assertEqual({ok, [#{}], 3}, quod_prolog:prove(Ns, {sibling, y}, Ns))
+    end.
+
+t_batch_apply({Ns, _}) ->
+    fun() ->
+        Parent = change(Ns, diff_for({parent, tom, bob}), #{}),
+        Child = change(Ns, diff_for({child, bob}), #{}),
+        ok = quod_prolog:apply_block(Ns, 1, {batch, [Parent, Child]}),
+        ?assertEqual({ok, [#{}], 1}, quod_prolog:prove(Ns, {parent, tom, bob}, Ns)),
+        ?assertEqual({ok, [#{}], 1}, quod_prolog:prove(Ns, {child, bob}, Ns)),
+        Stats = quod_prolog:stats(Ns),
+        ?assertEqual(1, maps:get(applied, Stats)),
+        ?assertEqual(2, maps:get(applies, Stats)),
+        %% An improper batch is rejected as a whole: no prefix transaction can leak into the KB.
+        Partial = change(Ns, diff_for({must_not_apply, x}), #{}),
+        ok = quod_prolog:apply_block(Ns, 2, {batch, [Partial | bad_tail]}),
+        ?assertEqual(fail, quod_prolog:prove(Ns, {must_not_apply, x}, Ns)),
+        Stats2 = quod_prolog:stats(Ns),
+        ?assertEqual(2, maps:get(applied, Stats2)),
+        ?assertEqual(2, maps:get(applies, Stats2))
     end.
 
 %%%===================================================================

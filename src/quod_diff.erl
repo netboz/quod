@@ -9,11 +9,11 @@ Pure helpers over the committed erlog database for the content layer.
 - `validate/3` — re-check a read-set against the committed db: `ok` if every
   predicate still hashes to the recorded value, else `{conflict, Functor}`.
 - `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
-  with content-identity dedup (asserting an identical fact is a no-op; retract is
-  by content).
-- `has_clause/4` — is a specific `{Head, Body}` clause present in the committed db? The
-  content-identity check `apply_ops` uses for retract, exposed for the membership verdict
-  (a `retract(peer_admitted(...))` is only a real removal if that exact clause exists).
+  normalizing legal source-form bodies to Erlog's durable compiled form, with
+  content-identity dedup (asserting an identical fact is a no-op; retract is by content).
+- `has_clause/4` — is a specific `{Head, Body}` clause present in the committed db? It
+  performs the same body normalization as `apply_ops`, then uses the same content-identity
+  check. The membership verdict uses it to prove that a removal names an exact clause.
 
 `op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
 `erlog_int.hrl`.
@@ -52,13 +52,16 @@ apply_ops(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
 
 -doc "Is the exact `{Head, Body}` clause present in the committed db `Mod:Ref`? (Content identity.)".
 -spec has_clause(module(), term(), term(), term()) -> boolean().
-has_clause(M, R, H, B) -> clause_present(M, R, erlog_int:functor(H), H, B).
+has_clause(M, R, H, B0) ->
+    B = normalize_body(B0),
+    clause_present(M, R, erlog_int:functor(H), H, B).
 
 %%%===================================================================
 %%% internals
 %%%===================================================================
 
-apply_op(M, R, {assert, {H, B}}) ->
+apply_op(M, R, {assert, Clause}) ->
+    {H, B} = normalize_clause(Clause),
     F = erlog_int:functor(H),
     case clause_present(M, R, F, H, B) of
         true  -> R;                                   %% content dedup: no-op
@@ -67,7 +70,8 @@ apply_op(M, R, {assert, {H, B}}) ->
                      error    -> R
                  end
     end;
-apply_op(M, R, {retract, {H, B}}) ->
+apply_op(M, R, {retract, Clause}) ->
+    {H, B} = normalize_clause(Clause),
     F = erlog_int:functor(H),
     case find_tag(M, R, F, H, B) of
         {ok, Tag} -> case M:retract_clause(R, F, Tag) of
@@ -76,6 +80,14 @@ apply_op(M, R, {retract, {H, B}}) ->
                      end;
         none      -> R
     end.
+
+%% Live proofs already emit Erlog's durable `{Code, HasCut}` body. Normalize the
+%% legal source-body form used by legacy/manual transactions so every node stores
+%% and compares the same compiled clause representation.
+normalize_clause({Head, Body}) -> {Head, normalize_body(Body)}.
+
+normalize_body({Code, HasCut} = Body) when is_list(Code), is_boolean(HasCut) -> Body;
+normalize_body(Body) -> erlog_int:well_form_body(Body, false, sture).
 
 clause_present(M, R, F, H, B) ->
     case find_tag(M, R, F, H, B) of {ok, _} -> true; none -> false end.

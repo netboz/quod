@@ -35,6 +35,11 @@ clean_resp_caps_and_strips_self_test() ->
     ?assert(length(clean_resp(Flood, 16, self_id)) =< 16),
     ?assertEqual([a, b], clean_resp([self_id, a, b], 16, self_id)).
 
+improper_pull_response_is_rejected_test() ->
+    %% OTP's is_list/1 accepts this outer cons, while lists:sublist/2 crashes.
+    ?assert(is_list([a | malformed_tail])),
+    ?assertEqual([], clean_resp([a | malformed_tail], 16, self_id)).
+
 %% --- pick_contact: sample_contact/2's pure core (the download-contact pick) ---
 %% Self is filtered by the node's ADDRESS (node_addr) — the pull clients' node_id is their PUBKEY,
 %% which never equals a {Host, Port} seed, so filtering on it would be a silent no-op (the live

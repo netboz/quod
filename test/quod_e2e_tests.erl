@@ -29,6 +29,8 @@ cleanup({Dir, Ns, _Cfg}) ->
 e2e_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_write_read/1,
+      fun t_concurrent_writes_batch/1,
+      fun t_direct_membership_revalidated/1,
       fun t_restart_reload/1,
       fun t_prolog_restart_rebuild/1,
       fun t_failing_proofs_no_ets_leak/1]}.
@@ -84,9 +86,55 @@ t_write_read({Dir, Ns, Cfg}) ->
         %% the write flowed through submit_write, which stamps the client submit time on the tx
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
-            {ok, #entry{data = #transaction{submitted_at = Sub}}} = quod_ledger_store:read_at(Store, 2),
+            {ok, #entry{data = {batch, [#transaction{submitted_at = Sub}]}}} =
+                quod_ledger_store:read_at(Store, 2),
             ?assert(Sub > 0)
         after quod_ledger_store:close(Store) end
+    end.
+
+t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
+    fun() ->
+        _Pid = start_ns(Ns, Cfg),
+        ok = application:set_env(quod, simplex_batch_ms, 75),
+        try
+            %% Wait for the rebuild gate before launching the burst.
+            ?assertMatch({ok, _, 1}, rp(Ns, true)),
+            Parent = self(),
+            Count = 8,
+            _ = [spawn(fun() -> Parent ! {write_result, N,
+                                           quod_prolog:prove(Ns, {assertz, {batch_fact, N}}, Ns)}
+                       end) || N <- lists:seq(1, Count)],
+            Results = [receive {write_result, N, R} -> {N, R} after 5000 -> timeout end
+                       || N <- lists:seq(1, Count)],
+            ?assert(lists:all(fun({_N, {ok, [#{}], 1}}) -> true; (_) -> false end, Results)),
+            {ok, Store} = quod_ledger_store:open(Ns, Dir),
+            try
+                {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+                ?assertEqual(Count, length(Transactions))
+            after quod_ledger_store:close(Store) end,
+            [ ?assertMatch({ok, [#{}], 2}, rp(Ns, {batch_fact, N}))
+              || N <- lists:seq(1, Count) ]
+        after
+            application:unset_env(quod, simplex_batch_ms)
+        end
+    end.
+
+%% Even the local leader rechecks a committee transaction against the parent KB.
+%% This direct call bypasses the normal admit proof, so fail-closed can_join must
+%% reject it; at N=1 the validator's complaint immediately skips the slot.
+t_direct_membership_revalidated({_Dir, Ns, Cfg}) ->
+    fun() ->
+        _Pid = start_ns(Ns, Cfg),
+        ?assertMatch({ok, _, 1}, rp(Ns, true)),
+        {NewMember, _} = quod_identity:generate(),
+        Change = #transaction{
+                    tx_id = <<"direct-membership">>, caller_ns = Ns,
+                    diff = [{assert, {{peer_admitted, NewMember, "127.0.0.1", 9999,
+                                      NewMember}, true}}],
+                    read_check = #{}, author = NewMember, sig = none},
+        ?assertEqual({error, skipped}, quod_simplex:append(Ns, Change)),
+        ?assertEqual(1, length(quod_simplex:committee(Ns))),
+        ?assertMatch(#{slot := 2, membership_rejects := 1}, quod_simplex:stats(Ns))
     end.
 
 t_restart_reload({_Dir, Ns, Cfg}) ->

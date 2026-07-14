@@ -49,24 +49,6 @@ ahead_cert_ceiling_test() ->
     ?assertEqual(12, C(10, [{commit, 12}, {commit, 8}])).            %% only the above-base finalizer counts
 
 %%%===================================================================
-%%% reseat_engine pruning helpers (Slice 2)
-%%%===================================================================
-
-reseat_prune_helpers_test() ->
-    %% drop every map key <= NewHead, keep the rest
-    ?assertEqual(#{7 => a, 9 => b},
-                 quod_simplex:drop_keys_le(5, #{3 => x, 5 => y, 7 => a, 9 => b})),
-    %% a scalar in-flight slot <= NewHead clears to `none`; a future one survives
-    ?assertEqual(none, quod_simplex:clear_slot_le(5, 5)),
-    ?assertEqual(none, quod_simplex:clear_slot_le(5, 3)),
-    ?assertEqual(8,    quod_simplex:clear_slot_le(5, 8)),
-    ?assertEqual(none, quod_simplex:clear_slot_le(5, none)),   %% already idle
-    %% a pending membership verdict for a slot <= NewHead is stale -> none
-    ?assertEqual(none, quod_simplex:clear_validating_le(5, {4, <<"h">>, blk(4)})),
-    ?assertMatch({8, _, _}, quod_simplex:clear_validating_le(5, {8, <<"h">>, blk(8)})),
-    ?assertEqual(none, quod_simplex:clear_validating_le(5, none)).
-
-%%%===================================================================
 %%% Slice 4 — boot-mode / sync / participation gate truth table
 %%%===================================================================
 
@@ -214,6 +196,39 @@ ts_acceptable_test() ->
     ?assertNot(quod_simplex:ts_acceptable(<<"x">>, Last, Now)),
     ?assertNot(quod_simplex:ts_acceptable(future, Last, Now)),
     ?assertNot(quod_simplex:ts_acceptable({0}, Last, Now)).
+
+%% The proposal frontier follows notarization, while the durable frontier follows
+%% commit. Depth one allows H+2 to open over approved H+1, then applies backpressure.
+pipeline_frontier_test() ->
+    Eng = quod_simplex:eng_new([<<"self">>], 5),
+    Open = st(#{self => <<"self">>, validators => [<<"self">>], slot => 5,
+                approved => 5, eng => Eng, sync => ready}),
+    ?assertEqual({ok, 6}, quod_simplex:proposal_slot(Open)),
+    OneAhead = st(#{self => <<"self">>, validators => [<<"self">>], slot => 5,
+                    approved => 6, eng => Eng, sync => ready}),
+    ?assertEqual({ok, 7}, quod_simplex:proposal_slot(OneAhead)),
+    Full = st(#{self => <<"self">>, validators => [<<"self">>], slot => 5,
+                approved => 7, eng => Eng, sync => ready}),
+    ?assertEqual(blocked, quod_simplex:proposal_slot(Full)).
+
+%% Content transactions may batch. A committee transaction is legal only as a
+%% singleton at the committed frontier, making it a pipeline barrier by construction.
+batch_membership_barrier_test() ->
+    [A, B] = pubs(committee(2)),
+    Eng = quod_simplex:eng_new([A, B], 5),
+    S0 = st(#{self => A, validators => [A, B], slot => 5, approved => 5,
+              eng => Eng, sync => ready}),
+    C1 = (tx([{assert, {{fact, one}, true}}]))#transaction{tx_id = <<"one">>},
+    C2 = (tx([{assert, {{fact, two}, true}}]))#transaction{tx_id = <<"two">>},
+    Membership = tx([pa(B)]),
+    ?assert(quod_simplex:acceptable_payload([C1, C2], S0)),
+    ?assertNot(quod_simplex:acceptable_payload([C1, C1], S0)),
+    ?assertNot(quod_simplex:acceptable_payload([C1 | malformed_tail], S0)),
+    ?assert(quod_simplex:acceptable_payload([Membership], S0)),
+    ?assertNot(quod_simplex:acceptable_payload([C1, Membership], S0)),
+    S1 = st(#{self => A, validators => [A, B], slot => 5, approved => 6,
+              eng => Eng, sync => ready}),
+    ?assertNot(quod_simplex:acceptable_payload([Membership], S1)).
 
 %% The dialing timeout: a dial marker whose deadline has passed is swept (so the tick re-dials it),
 %% while one still in the future is kept. This is the whole self-heal for a dial that resolves to neither
@@ -389,7 +404,9 @@ share_shape_test() ->
     H = quod_simplex:block_hash(blk(1)),
     ?assert(quod_simplex:verify_share(quod_simplex:make_share(support, 1, H, Id))),
     ?assertNot(quod_simplex:verify_share(quod_simplex:make_share(complaint, 1, H, Id))),   %% complaint w/ hash
-    ?assertNot(quod_simplex:verify_share(quod_simplex:make_share(support, 1, <<1, 2, 3>>, Id))).  %% short hash
+    ?assertNot(quod_simplex:verify_share(quod_simplex:make_share(support, 1, <<1, 2, 3>>, Id))),  %% short hash
+    Wrapped = (quod_simplex:make_share(support, 1, H, Id))#share{slot = (1 bsl 64) + 1},
+    ?assertNot(quod_simplex:verify_share(Wrapped)).   %% slot encoding must never wrap modulo 2^64
 
 %% A share whose FIELDS claim block H but whose signature is over a DIFFERENT block: form_cert
 %% re-verifies over the cert's canonical bytes, so the liar does not count (proves fields aren't trusted).
@@ -410,7 +427,15 @@ verify_cert_caps_sigs_test() ->
     Vals = [P || {P, _} <- Ids],
     H = quod_simplex:block_hash(blk(1)),
     Bloat = [{P, <<0:512>>} || P <- Vals] ++ [{<<X:256>>, <<0:512>>} || X <- lists:seq(1, 20)],
-    ?assertNot(quod_simplex:verify_cert(#cert{kind = support, slot = 1, block_hash = H, sigs = Bloat}, Vals)).
+    ?assertNot(quod_simplex:verify_cert(#cert{kind = support, slot = 1, block_hash = H, sigs = Bloat}, Vals)),
+    {ok, Good} = quod_simplex:form_cert(support, 1, H, supports(blk(1), Ids, 3), Vals),
+    [First | _] = Good#cert.sigs,
+    Improper = Good#cert{sigs = [First | bad_tail]},
+    ?assertNot(quod_simplex:well_formed_cert(Improper)),
+    ?assertNot(quod_simplex:verify_cert(Improper, Vals)),
+    Wrapped = Good#cert{slot = (1 bsl 64) + 1},
+    ?assertNot(quod_simplex:well_formed_cert(Wrapped)),
+    ?assertNot(quod_simplex:verify_cert(Wrapped, Vals)).
 
 %%%===================================================================
 %%% consensus engine — certificate pool + block tree (§2.3)
@@ -507,6 +532,26 @@ eng_parent_ordering_test() ->
     ?assert(lists:member({notarized, B2}, Ev4)),           %% B2 notarizes on the SAME settle as B1
     ?assert(maps:is_key(2, quod_simplex:eng_tree(E4))).
 
+%% Consensus ordering is pipelined independently of state execution: a child can
+%% notarize and even obtain its own commit certificate while its parent has no commit
+%% certificate yet. The driver buffers finalization and applies slots in order.
+eng_child_finalizes_before_parent_test() ->
+    C = committee(4),
+    B1 = blk(1), B2 = blk(2),
+    E0 = quod_simplex:eng_new(pubs(C), 0),
+    {E1, _} = quod_simplex:eng_offer({block, B1}, E0),
+    {E2, _} = quod_simplex:eng_offer({block, B2}, E1),
+    {E3, _} = feed_shares(supports(B1, C, 3), E2),
+    {E4, _} = feed_shares(supports(B2, C, 3), E3),
+    ?assert(maps:is_key(1, quod_simplex:eng_tree(E4))),
+    ?assert(maps:is_key(2, quod_simplex:eng_tree(E4))),
+    ?assertEqual(#{}, quod_simplex:eng_committed(E4)),
+    {E5, Events} = feed_shares(commits(B2, C, 3), E4),
+    ?assert(lists:member({committed, 1, B1}, Events)),
+    ?assert(lists:member({committed, 2, B2}, Events)),
+    ?assert(maps:is_key(1, quod_simplex:eng_committed(E5))),
+    ?assert(maps:is_key(2, quod_simplex:eng_committed(E5))).
+
 %% A support share from a non-validator does not count toward the quorum.
 eng_rejects_outsider_test() ->
     C = committee(4),
@@ -574,8 +619,10 @@ committee_delta_test() ->
     [A, B, C] = [P || {P, _} <- committee(3)],
     Tx = tx([pa(A), pa(B), pa(A), rm(B), {assert, {{other, foo}, true}}]),   %% +A +B +A(dup) -B, noise
     ?assertEqual({[A], [B]}, quod_simplex:committee_delta(Tx)),
+    ?assertEqual({[A], [B]}, quod_simplex:committee_delta({batch, [Tx]})),
     ?assertEqual([A], quod_simplex:apply_committee_delta(Tx, [])),
     ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(Tx, [A, C, B])),  %% A dup, C kept, B dropped
+    ?assertEqual({[], []}, quod_simplex:committee_delta({batch, [Tx | bad_tail]})),
     ?assertEqual({[], []}, quod_simplex:committee_delta(noop)),                 %% a noop carries no change
     ?assertEqual(lists:usort([A, C]), quod_simplex:apply_committee_delta(noop, [C, A])).
 
@@ -592,6 +639,7 @@ admitted_endpoints_test() ->
     ?assertEqual([], quod_simplex:admitted_endpoints(tx([rm(A)]))),          %% retract-only
     %% undefined host/port (bare-pubkey genesis members) is EXTRACTED here; is_endpoint drops it at learn.
     ?assertEqual([{A, {undefined, undefined}}], quod_simplex:admitted_endpoints(tx([pa(A)]))),
+    ?assertEqual([], quod_simplex:admitted_endpoints({batch, [Full | bad_tail]})),
     %% a repeated pubkey yields BOTH assert pairs in order — the maps:from_list at the hook takes last-wins.
     Dup = tx([{assert, {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
               {assert, {{peer_admitted, A, "10.0.0.9", 9009, A}, true}}]),
@@ -621,18 +669,35 @@ membership_gate_test() ->
                  tx([{assert, {{peer_admitted, na, undefined, undefined, na}, true}}]), [A])),
     ?assertNot(quod_simplex:membership_change_ok(tx([{retract, garbage}]), [A])).  %% catch-all is total
 
-%% A non-PROPER-list diff (an improper list `[Op|junk]`, or a non-list) must be rejected, never crash:
-%% `binary_to_term` on the untrusted consensus wire can decode an improper list, and `is_list/1` alone
-%% would let it through (it inspects only the first cons cell) to crash `committee_delta`'s fold. The gate
-%% runs inside the unguarded statem callback, so a crash here is a network-wide DoS.
+%% A non-PROPER-list diff (an improper list `[Op|junk]`, or a non-list) must be rejected, never crash.
+%% `binary_to_term` on the untrusted consensus wire can decode either shape, and a shallow `[Op | _]`
+%% match would let it through to crash `committee_delta`'s fold during commit/restart.
 membership_gate_improper_list_test() ->
     [A] = pubs(committee(1)),
-    Improper = tx([{assert, {{other, x}, true}} | 2]),   %% is_list/1 is TRUE for this
+    Improper = tx([{assert, {{other, x}, true}} | 2]),
     NonList  = tx(not_a_list),
     ?assertNot(quod_simplex:change_acceptable(Improper, [A])),
     ?assertNot(quod_simplex:change_acceptable(NonList, [A])),
     ?assert(quod_simplex:change_acceptable(tx([{assert, {{ok, x}, true}}]), [A])),   %% proper: fine
-    ?assert(quod_simplex:change_acceptable(noop, [A])).
+    ?assertNot(quod_simplex:change_acceptable(noop, [A])).
+
+%% Every field consumed after consensus has a structural gate before an honest node signs.
+%% In particular, a proper list containing an invalid op used to pass and crash apply_op/3.
+transaction_shape_gate_test() ->
+    [A] = pubs(committee(1)),
+    Good = tx([{assert, {{ok, x}, true}}]),
+    ?assert(quod_simplex:change_acceptable(Good, [A])),
+    ?assertNot(quod_simplex:change_acceptable(Good#transaction{diff = [garbage]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{assert, {42, true}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{diff = [{assert, {{ok, x}, 42}}]}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(Good#transaction{read_check = []}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{read_check = #{{fact, -1} => 0}}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(Good#transaction{tx_id = <<>>}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(Good#transaction{submitted_at = 1.5}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(Good#transaction{sig = unsigned}, [A])).
 
 %% Every `peer_admitted` fact is a voter (no non-voting tier): asserting one grows the set and the quorum.
 committee_grows_test() ->

@@ -19,8 +19,9 @@ Two collection paths:
 | ------ | ---- | ------------ | ------- |
 | `quod_up` | gauge | — | 1 while the node is up |
 | `quod_brahms_*{namespace}` | gauge | | overlay view/sample/links/rounds/evictions/tombstones/n̂ |
-| `quod_consensus_slot/committed/last_applied/committee_size{namespace}` | gauge | | consensus height + committee |
-| `quod_consensus_appends/commits/submitted/skips{namespace}` | gauge | | cumulative append/commit/submit/skip counts |
+| `quod_consensus_slot/committed/approved/last_applied/committee_size{namespace}` | gauge | | consensus frontiers + committee |
+| `quod_consensus_pipeline_gap{namespace}` | gauge | | approved blocks ahead of durable commit (bounded to 2 at depth one) |
+| `quod_consensus_appends/proposals/batched_txs/commits/submitted/skips{namespace}` | gauge | | cumulative transaction/block counts |
 | `quod_consensus_pending{namespace}` | gauge | | in-flight appends awaiting commit |
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | append rejections by reason (cumulative) |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if committee facts include this node; pair with `syncing=0` for voting readiness |
@@ -112,9 +113,13 @@ declare(NodeId) ->
     %% Consensus (agreeing on the ordered ledger of changes for this ontology)
     _ = G(quod_consensus_slot,            "The height of this ontology's ledger: the number of the most recent block."),
     _ = G(quod_consensus_committed,       "The height of the last block that is final and permanent."),
+    _ = G(quod_consensus_approved,        "The height of the last support-certified block that a proposal may extend."),
+    _ = G(quod_consensus_pipeline_gap,    "Support-certified blocks ahead of durable commit. The depth-one pipeline bounds this to 0, 1, or 2."),
     _ = G(quod_consensus_last_applied,    "The height of the last block whose changes have been written into this node's database."),
     _ = G(quod_consensus_committee_size,  "How many nodes are on the committee that votes on changes to this ontology."),
-    _ = G(quod_consensus_appends,         "How many changes this node has proposed while acting as the leader (running total)."),
+    _ = G(quod_consensus_appends,         "How many changes this node has accepted into leader batches (running total)."),
+    _ = G(quod_consensus_proposals,       "How many blocks this node has proposed while acting as leader (running total)."),
+    _ = G(quod_consensus_batched_txs,     "How many transactions those proposed blocks contain (running total). Divide its rate by proposal rate for mean batch size."),
     _ = G(quod_consensus_commits,         "How many blocks have been finalised and applied (running total)."),
     _ = G(quod_consensus_submitted,       "How many change requests have been submitted at this node (running total)."),
     _ = G(quod_consensus_skips,           "How many ledger slots were skipped because a leader did not produce a block in time (running total)."),
@@ -130,7 +135,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_ahead_gap,       "How many committed slots the committee has finalised beyond this node's own height (0 = caught up). A sustained positive value means this node has fallen behind the live window and will fetch the missing blocks to catch back up."),
     %% Knowledge base (this node's copy of the ontology's facts)
     _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
-    _ = G(quod_prolog_applies,       "How many blocks have been written into the knowledge base (running total)."),
+    _ = G(quod_prolog_applies,       "How many finalised transactions have been written into the knowledge base (running total)."),
     _ = G(quod_prolog_rejects,       "Finalised changes that were not written because the data they relied on had changed in the meantime (running total)."),
     _ = G(quod_prolog_proves,        "How many read queries this node has answered (running total)."),
     _ = G(quod_prolog_conflicts,     "How many times a finalised change clashed with newer data and was skipped (running total)."),
@@ -175,17 +180,23 @@ refresh_ns(Ns) ->
 
 refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of
-        #{slot := Sl, committed := CI, last_applied := LA, committee_size := CS,
-          appends := AP, commits := CM, submitted := SU, skips := SK, pending := PE,
+        #{slot := Sl, committed := CI, approved := AV, pipeline_gap := PG,
+          last_applied := LA, committee_size := CS,
+          appends := AP, proposals := PR, batched_txs := BT,
+          commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
           redrives := RV, weak_cert_waits := WC, is_validator := IV, syncing := SY,
           ahead_gap := AG} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
             _ = S(quod_consensus_committed,       CI),
+            _ = S(quod_consensus_approved,        AV),
+            _ = S(quod_consensus_pipeline_gap,    PG),
             _ = S(quod_consensus_last_applied,    LA),
             _ = S(quod_consensus_committee_size,  CS),
             _ = S(quod_consensus_appends,         AP),
+            _ = S(quod_consensus_proposals,       PR),
+            _ = S(quod_consensus_batched_txs,     BT),
             _ = S(quod_consensus_commits,         CM),
             _ = S(quod_consensus_submitted,       SU),
             _ = S(quod_consensus_skips,           SK),
@@ -253,8 +264,17 @@ subscribe_commits(State = #{subs := Subs}) ->
 %% A live-committed entry: observe the per-tx dimensions a scalar counter can't carry. A `noop` skip is not
 %% a transaction. Latency needs both wall-clocks real (submit > 0, commit ≥ submit); a cross-node skew that
 %% would make it negative is dropped rather than recorded as a bogus sample.
-observe_commit(#entry{data = #transaction{caller_ns = Ns, author = Author, diff = Diff,
-                                          submitted_at = Sub}, timestamp = BlockTs}) ->
+observe_commit(#entry{data = Data, timestamp = BlockTs}) ->
+    case quod_ledger:payload(Data) of
+        {ok, Payload} -> lists:foreach(fun(T) -> observe_payload(T, BlockTs) end, Payload);
+        error         -> ok
+    end.
+
+observe_payload(#transaction{} = Transaction, BlockTs) -> observe_transaction(Transaction, BlockTs);
+observe_payload(noop, _BlockTs)                         -> ok.   %% complaint skip, not a transaction
+
+observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff,
+                                  submitted_at = Sub}, BlockTs) ->
     L = label(Ns),
     _ = case is_integer(Sub) andalso Sub > 0 andalso is_integer(BlockTs) andalso BlockTs >= Sub of
             true  -> prometheus_histogram:observe(quod_tx_commit_latency_ms, [L], BlockTs - Sub);
@@ -262,8 +282,7 @@ observe_commit(#entry{data = #transaction{caller_ns = Ns, author = Author, diff 
         end,
     _ = prometheus_histogram:observe(quod_tx_diff_ops, [L], length(Diff)),
     _ = prometheus_counter:inc(quod_tx_committed_total, [L, author_label(Author)]),
-    ok;
-observe_commit(#entry{data = noop}) -> ok.   %% a complaint-skipped slot is not a transaction
+    ok.
 
 %% --- labels --------------------------------------------------------------
 

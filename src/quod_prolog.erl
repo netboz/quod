@@ -45,8 +45,10 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             applied   = 0  :: log_index(),
-            %% tx_id => {From, Bindings, HeightRead, TimerRef}
-            parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(), reference()}},
+            %% tx_id => {From, Bindings, HeightRead, TimerRef, AsyncRequestId | none}
+            parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
+                                               reference(), term()}},
+            requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
             %% membership verdicts parked until the KB reaches the proposal's parent height (Slot-1),
             %% then delivered to ReplyTo as {membership_verdict, Tag, Verdict}. Keyed by the unique Tag.
             %% Tag => {Slot, Change, ReplyTo, TimerRef}
@@ -91,14 +93,13 @@ applied(Ns) ->
     end.
 
 -doc """
-Apply a committed entry (called by `quod_simplex`, strictly in index order). **Async (cast)
-on purpose:** `quod_simplex` calls this while it may itself be the target of a synchronous
-`quod_simplex:append` from this very process (the write path). A synchronous `apply_block`
-would close that call cycle into a deadlock (each waits on the other). As a cast,
-`quod_simplex` never blocks on us, so it stays free to service `append`. The OCC verdict is
-delivered straight to the parked client here; a forward gap asks `quod_simplex` to re-drive.
+Apply a committed entry (called by `quod_simplex`, strictly in index order). This is an async
+cast so durable consensus is not serialized behind proof execution in this process. Write
+submission itself uses OTP asynchronous `gen_statem` requests, so the fact engine can continue
+proving and consuming commits while append calls are outstanding. The OCC verdict is delivered
+straight to the parked client here; a forward gap asks `quod_simplex` to re-drive.
 """.
--spec apply_block(binary(), pos_integer(), #transaction{} | noop) -> ok.
+-spec apply_block(binary(), pos_integer(), #transaction{} | {batch, [#transaction{}]} | noop) -> ok.
 apply_block(Ns, Index, Change) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 
@@ -121,9 +122,9 @@ sync(Ns) -> gen_server:call(quod_reg:via({quod_prolog, Ns}), sync, 30000).
 Ask this kb to judge a committee-changing `Change` proposed for `Slot`, and deliver the verdict
 ASYNCHRONOUSLY as `{membership_verdict, Tag, valid | {invalid, Reason} | abstain}` to `ReplyTo`.
 
-A **cast** on purpose: the caller is `m:quod_simplex` (a validator's statem), which `quod_prolog`
-sync-calls during a local write (`submit_write` → `quod_simplex:append`) — a sync call back would
-close that into a deadlock. So this never blocks either process; the verdict arrives as a message.
+A **cast** on purpose: membership validation can require Prolog work while the consensus statem
+is handling the proposal. Neither process waits synchronously for the other; the verdict returns
+as a correlated message.
 
 The verdict is judged against the KB **as of the proposal's parent** (`Slot-1`), so every honest node
 reaches the same verdict deterministically: if the kb is already there it is delivered now; if it is
@@ -150,6 +151,7 @@ init({Ns, Config}) ->
     put('$quod_ns', Ns),        %% so external predicates (e.g. admit) can recover their namespace in-process
     put('$quod_applied', 0),    %% ... and the applied height (peer_ready's slack judge; kept current below)
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
+           requests = gen_statem:reqids_new(),
            ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg), ready = false},
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
     %% into this fresh kb; it casts mark_ready when the kb is caught up. Async, so
@@ -210,9 +212,10 @@ handle_cast(_Msg, S)       -> {noreply, S}.
 %% so the caller gets a definite answer instead of hanging.
 handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, _B, _H, _TRef}, P1} ->
+        {{From, _B, _H, _TRef, ReqId}, P1} ->
             gen_server:reply(From, {error, timeout}),
-            {noreply, S#s{parked = P1, park_timeouts = S#s.park_timeouts + 1}};
+            {noreply, S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests),
+                          park_timeouts = S#s.park_timeouts + 1}};
         error -> {noreply, S}
     end;
 %% A parked membership verdict whose parent height never arrived in time (the kb is too far behind, or
@@ -224,7 +227,23 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
             {noreply, S#s{validations = V1}};
         error -> {noreply, S}
     end;
-handle_info(_Info, S) -> {noreply, S}.
+%% `send_request/2` gives us a non-blocking gen_statem call without a helper process per
+%% transaction. Responses are matched through the opaque request-id collection and labelled
+%% with their tx id. A successful append still resolves through ordered `apply_block`; only a
+%% definite consensus rejection releases the parked client here.
+handle_info(Info, S = #s{requests = Requests}) ->
+    case gen_statem:check_response(Info, Requests, true) of
+        {{reply, Result}, Tx, Requests1} ->
+            {noreply, append_result(Tx, Result, S#s{requests = Requests1})};
+        {{error, _Reason}, Tx, Requests1} ->
+            %% The server may have committed immediately before exiting. Keep the caller
+            %% parked so replay/apply can still provide the unambiguous result.
+            {noreply, request_completed(Tx, S#s{requests = Requests1})};
+        no_reply ->
+            {noreply, S};
+        no_request ->
+            {noreply, S}
+    end.
 
 terminate(_Reason, _S) -> ok.
 
@@ -258,28 +277,50 @@ bindings_map(_)                         -> #{}.
 
 bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 
-%% MVP: only own-namespace writes. Park the caller (with a TTL), then submit to
-%% quod_simplex; the verdict is delivered via apply_block (correlated by tx_id) or the
-%% TTL fires. Only a *definite* not-leader rejection unparks immediately — a submit
-%% timeout is ambiguous (the block may still commit), so we keep the caller parked.
+%% Only own-namespace writes. Submit with OTP's asynchronous gen_statem request API,
+%% then park the caller until ordered apply (or a definite consensus rejection). This
+%% keeps the KB free to prove and apply while consensus runs, without spawning one
+%% blocked helper process for every write.
 submit_write(From, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when CallerNs =:= Ns ->
     Tx     = tx_id(S#s.self),
     Change = #transaction{tx_id = Tx, caller_ns = CallerNs, diff = Diff,
                      read_check = ReadSet, author = S#s.self,
                      submitted_at = quod_time:now_ms(), sig = none},
-    TRef   = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
-    S1     = S#s{parked = (S#s.parked)#{Tx => {From, [Bindings], S#s.applied, TRef}}},
-    case quod_simplex:append(Ns, Change) of
-        {ok, _Index}                        -> {noreply, S1};
-        {error, not_in_charge, unavailable} -> {noreply, S1};   %% ambiguous — TTL/apply resolves
-        {error, not_in_charge, Hint}        -> {reply, {error, {not_leader, Hint}}, unpark(Tx, S1)};
-        {error, skipped}                    -> {reply, {error, retry}, unpark(Tx, S1)};   %% our slot was skipped: retry
-        {error, Reason}                     -> {reply, {error, Reason}, unpark(Tx, S1)}    %% busy (backpressure) |
-                                               %% bad_change (consensus gate rejected the shape/floor — not
-                                               %% retryable as-is) | any future flat error: report as-is, no nesting
+    try gen_statem:send_request(quod_reg:via({quod_simplex, Ns}), {append, Change}) of
+        ReqId ->
+            Requests1 = gen_statem:reqids_add(ReqId, Tx, S#s.requests),
+            TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
+            S1 = S#s{parked = (S#s.parked)#{Tx =>
+                       {From, [Bindings], S#s.applied, TRef, ReqId}},
+                     requests = Requests1},
+            {noreply, S1}
+    catch
+        error:badarg ->
+            {reply, {error, consensus_unavailable}, S}
     end;
 submit_write(_From, _B, _D, _R, _CallerNs, S) ->
     {reply, {error, foreign_write_unsupported}, S}.
+
+append_result(Tx, {ok, _Slot}, S) ->
+    request_completed(Tx, S);
+append_result(Tx, {error, not_in_charge, unavailable}, S) ->
+    request_completed(Tx, S);   %% ambiguous: a late ordered apply or the parked TTL decides
+append_result(Tx, {error, not_in_charge, Hint}, S) ->
+    reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
+append_result(Tx, {error, skipped}, S) ->
+    reject_parked(Tx, {error, retry}, request_completed(Tx, S));
+append_result(Tx, {error, Reason}, S) ->
+    reject_parked(Tx, {error, Reason}, request_completed(Tx, S));
+append_result(Tx, Other, S) ->
+    reject_parked(Tx, {error, {consensus_reply, Other}}, request_completed(Tx, S)).
+
+request_completed(Tx, S = #s{parked = Parked}) ->
+    case maps:get(Tx, Parked, undefined) of
+        {From, Bindings, Height, TRef, _ReqId} ->
+            S#s{parked = Parked#{Tx => {From, Bindings, Height, TRef, none}}};
+        undefined ->
+            S
+    end.
 
 %%%===================================================================
 %%% apply (deterministic; identical on every member)
@@ -309,7 +350,22 @@ apply_step(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     S;
 apply_step(Index, noop, S) ->                              %% Index == applied+1
     S#s{applied = Index};
-apply_step(Index, #transaction{tx_id = Tx, diff = Diff} = Change, S) ->
+apply_step(Index, #transaction{} = Change, S) ->
+    (apply_transaction(Change, S))#s{applied = Index};
+apply_step(Index, {batch, _} = Batch, S) ->
+    case quod_ledger:payload(Batch) of
+        {ok, Transactions} ->
+            S1 = lists:foldl(fun apply_transaction/2, S, Transactions),
+            S1#s{applied = Index};
+        error ->
+            skip_unexpected(Index, Batch, S)
+    end;
+%% Defensive: a committed payload that is neither `noop`, a transaction, nor a
+%% well-formed batch advances the cursor instead of restart-looping on old/corrupt data.
+apply_step(Index, Other, S) ->
+    skip_unexpected(Index, Other, S).
+
+apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, S) ->
     %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was
     %% re-validated against the parent state before the vote (`membership_verdict/2`), so OCC is
     %% redundant here AND is the source of a real divergence: `quod_simplex:adopt_committee` folds the
@@ -321,28 +377,26 @@ apply_step(Index, #transaction{tx_id = Tx, diff = Diff} = Change, S) ->
         true ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
-                    S#s{est = Est1, applied = Index, applies = S#s.applies + 1});
+                    S#s{est = Est1, applies = S#s.applies + 1});
         false ->
-            apply_content(Index, Change, S)
-    end;
-%% Defensive: a committed payload that is neither `noop` nor a `#transaction` (e.g. a stale-format entry on
-%% a cross-version replay) advances the cursor + logs, rather than function_clause-crashing the apply loop
-%% into a restart crash-loop on the same entry.
-apply_step(Index, Other, S = #s{ns = Ns}) ->
+            apply_content(Change, S)
+    end.
+
+skip_unexpected(Index, Other, S = #s{ns = Ns}) ->
     logger:warning("quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p", [Ns, Index, Other]),
     S#s{applied = Index}.
 
 %% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
-apply_content(Index, #transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
+apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,
     case quod_diff:validate(RC, M, R) of
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
-                    S#s{est = Est1, applied = Index, applies = S#s.applies + 1});
+                    S#s{est = Est1, applies = S#s.applies + 1});
         {conflict, _F} ->
             release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
-                    S#s{applied = Index, rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
+                    S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
     end.
 
 %% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
@@ -353,18 +407,31 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
 release(Tx, ReplyFun, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, B, H, TRef}, P1} ->
+        {{From, B, H, TRef, ReqId}, P1} ->
             _ = erlang:cancel_timer(TRef),
             ReplyFun(From, B, H),
-            S#s{parked = P1};
+            S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests)};
         error -> S
     end.
 
-unpark(Tx, S = #s{parked = P}) ->
-    case maps:take(Tx, P) of
-        {{_From, _B, _H, TRef}, P1} -> _ = erlang:cancel_timer(TRef), S#s{parked = P1};
-        error                       -> S
-    end.
+reject_parked(Tx, Reply, S) ->
+    release(Tx, fun(From, _Bindings, _Height) -> gen_server:reply(From, Reply) end, S).
+
+abandon_request(none, Requests) ->
+    Requests;
+abandon_request(ReqId, Requests) ->
+    %% A zero-time receive consumes an already-arrived reply or deactivates the alias so
+    %% a future reply cannot become an unmatched mailbox message.
+    _ = catch gen_statem:receive_response(ReqId, 0),
+    drop_request(ReqId, Requests).
+
+drop_request(ReqId, Requests) ->
+    lists:foldl(
+      fun({ReqId0, Label}, Acc) when ReqId0 =/= ReqId ->
+              gen_statem:reqids_add(ReqId0, Label, Acc);
+         ({_ReqId0, _Label}, Acc) ->
+              Acc
+      end, gen_statem:reqids_new(), gen_statem:reqids_to_list(Requests)).
 
 %%%===================================================================
 %%% membership verdict (the Prolog-side re-check of a committee change)

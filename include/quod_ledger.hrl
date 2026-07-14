@@ -39,9 +39,12 @@
 -type slot() :: non_neg_integer().               %% 0 = origin sentinel (parent of slot 1); blocks are 1..N
                                                  %% (the founder's self-signed genesis BLOCK is slot 1)
 
-%% A proposed block for a slot. `payload` is a batch of committed changes (a #transaction or `noop`;
+%% A proposed block for a slot. `payload` is a non-empty batch of transactions. `[noop]`
+%% remains in the type only for reconstructing legacy explicitly committed empty blocks;
+%% current proposal validation never accepts it.
 %% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
-%% the previous committed slot it extends (0 = genesis).
+%% the previous APPROVED slot it extends (0 = genesis). It may therefore be newer than the durable
+%% committed head while consensus is pipelined.
 %% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
 %% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is hashed with the rest of the block
 %% (`block_hash/1` hashes the whole record), so a committed block's timestamp is covered by its cert. The
@@ -50,7 +53,7 @@
 %% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
 -record(block, {slot      :: slot(),
                 parent    :: slot(),
-                payload   :: [#transaction{} | noop],
+                payload   :: [#transaction{}] | [noop],
                 timestamp = 0 :: non_neg_integer()}).
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
@@ -72,18 +75,30 @@
                block_hash :: binary() | none,
                sigs       :: [{node_id(), binary()}]}).
 
-%% A committed log entry. `data` is a #transaction{} for a normal committed change, or the atom
-%% `noop` for a complaint-skipped slot. `cert` is the quorum certificate that finalized the slot —
+%% Proof that an approved block was committed implicitly by its immediate child.
+%% `support` binds this entry's exact block; `commit` binds `child`; and the child
+%% names this slot as its parent. With quorum intersection, an honest child-commit
+%% signer only signs after the parent is in its complete block tree. Runtime
+%% pipelining is depth one, so no longer ancestry path is needed.
+-record(implicit_cert, {support :: #cert{},
+                        child   :: #block{},
+                        commit  :: #cert{}}).
+
+%% A committed log entry. `data` is a legacy singleton #transaction{}, a canonical
+%% `{batch, [#transaction{}]}` block payload, or the atom `noop` for a complaint-skipped slot.
+%% New non-genesis blocks are stored as `{batch, Txs}` even when the batch contains one transaction;
+%% accepting the legacy singleton keeps existing stores readable without a migration.
+%% `cert` is the quorum certificate that finalized the slot —
 %% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
 %% entry against its `cert` (trustless replay). Membership is NOT a distinct entry kind: the committee
 %% is the set of `peer_admitted` facts (`quod_simplex:log_projection/2`). `index` doubles as the
 %% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
-                data        :: #transaction{} | noop,
+                data        :: #transaction{} | {batch, [#transaction{}]} | noop,
                 timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's `timestamp` — quod stores no header, so
                                                     %% catch-up rebuilds `#block{...}` from the entry and needs this to
                                                     %% reproduce the block_hash. 0 for a `noop` skip (no block) / genesis.
-                cert = none :: #cert{} | none}).
+                cert = none :: #cert{} | #implicit_cert{} | none}).
 
 -endif.

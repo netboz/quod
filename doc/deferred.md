@@ -16,15 +16,14 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
 `#transaction.author` carries the submitter's pubkey; `#transaction.sig` is still `none`
 (transaction-author signing rides Stage 2). Remaining, gated:
 
-- **Signed blocks + relayed-commit verification.** Required for **P2 epidemic dissemination** (§4): a
-  subscriber must verify a *relayed* block against its commit cert without trusting the relay. The cert
-  machinery exists (`quod_simplex:verify_cert/2`); wiring it into the P2 feed and re-tightening the
-  non-`[safe]` decode for relayed blocks is the remaining work.
+- **Transaction-author signatures.** Blocks and relayed entries already carry quorum finality proofs;
+  `#transaction.sig` is still `none`. Signing the canonical transaction is required before safe
+  follower-to-leader forwarding and before membership can be opened beyond the trusted fleet.
 - **Membership-path hardening.** Committee admission has since landed (committee = `peer_admitted` facts +
   `admit`/`remove` external predicates, membership rework Slice 1+2). The HARDENING is the deferred
-  membership-safety work in §3: redirect authentication, a pubkey-possession gate before `can_join`, signed
-  membership transactions, per-node `can_join` re-validation, and a `can_replicate` policy for private
-  read-replicas. NOT carried forward from the deleted `quod_ledger` code.
+  membership-safety work in §3: a pubkey-possession gate before `can_join`, signed membership
+  transactions, epoch-frozen voting sets, and a `can_replicate` policy for private read-replicas.
+  Per-node `can_join` re-validation is already live.
 - **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any node
   (reads are open; content is gated per-clause by `can_read`). *Bounded now:* `?MAX_INFLIGHT` proofs,
   `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
@@ -140,7 +139,7 @@ stages, not carried forward:
   and complaint-cert **skip** (a `noop` slot), over the `{log, Ns}` transport.
 - **Committee = `peer_admitted` facts + admit/remove — DONE** (membership rework, Slice 1+2): the committee
   is the set of `peer_admitted/4` facts, derived deterministically from the committed log
-  (`quod_simplex:committee_from_log/1`), swapped in-process at commit (`adopt_committee/2`), and re-folded
+  (`quod_simplex:log_projection/2`), swapped in-process at commit (`adopt_committee/2`), and re-folded
   on restart — no config-fold, no member-op vocabulary (`voters/2`, `member_op()`, `kind=config` deleted).
   `quod_committee_predicates` provides the `admit(Pubkey,Host,Port)` / `remove(Pubkey)` external Erlang
   predicates (**prove-before-broadcast**: gate `can_join`, stage the assert/retract; the normal write path
@@ -154,7 +153,7 @@ stages, not carried forward:
     `can_join` (rejecting a `can_join` that stages writes, or a pubkey already admitted); a retract requires
     the exact `peer_admitted` clause present (`quod_diff:has_clause/4`) — which closes the fabricated-address
     **validator-ejection** (a wrong-`Host`/`Port` retract that would drop a member from `#s.validators` while
-    missing in the KB). A `valid` verdict emits the deferred support share; `invalid` latches `#s.invalid[Sl]`
+    missing in the KB). A `valid` verdict emits the deferred support share; `invalid` latches `#round.invalid`
     (barred from endorsing at any phase, `membership_rejects` counted) — so an unauthorized change never
     collects an honest support quorum and is complaint-skipped. **NOT re-validated at apply**: a committed
     membership tx applies **unconditionally** in the KB (`is_membership_change` → skip OCC), keeping the KB
@@ -207,7 +206,7 @@ stages, not carried forward:
   the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
   advance, until caught up. The genesis (slot 1, `cert=none`) is anchored against the out-of-band-pinned
   `genesis_hash` (config), never TOFU'd; `quod_simplex:genesis_hash/1` exposes a founder's anchor. A
-  caught-up joiner is a **read-only observer** — not in its own `validators`, so `is_participant/2` drops
+  caught-up joiner is a **read-only observer** — not in its own `validators`, so `is_participant/1` drops
   live consensus traffic and refuses appends (`not_in_charge`). Covered by `join_SUITE` (found N=1 → commit
   a fact → a `mode=join` node catches up over loopback QUIC → proves the fact from its OWN KB, stays a
   non-member). **Resume + hardening (from the S5a review, all landed; re-homed by the Slices 3+4 refactor):** a
@@ -262,34 +261,15 @@ stages, not carried forward:
   cross-check. Also: **`can_join` must stay side-effect-free** — the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **Failover liveness in the client-driven model (Stage 2c follow-ups).** quod has no timed/empty slots
-  (a slot exists only on a client `append`), so a complaint is *evidence-gated*: a node arms its Δ timer
-  only when it proposes a slot, supports a proposal, or gets a local write it can't lead. Consequences,
-  deferred: (a) **f+1 complaint amplification** — a node should join a complaint after seeing `f+1`
-  distinct complaint shares (guarantees ≥1 honest complainer), so a client that reaches only `f+1` nodes
-  (not a full quorum) still triggers a skip; today the client must reach ≥ quorum live nodes. (b)
-  **pending-tx forwarding** — a follower that can't reach the dead leader broadcasts the pending
-  `#transaction` (`{pending,Slot,Change}`) so every live node gets first-party evidence from ONE
-  submission (can't skip an honest-live-leader slot); intersects tx authenticity (`sig=none` today), so
-  parked with Stage-3 signing. (c) **complaint retransmit** — the Δ timer re-arms while a slot stays
-  stuck (retransmits our complaint), but per-*message* retransmit for lost support/commit shares is still
-  send-once + the dial tick (§2 hardening).
-- **Notarized-but-orphaned slot can deadlock (Stage 2c gap — the head advances on the COMMIT cert, not on
-  notarization).** A validator that commit-signs slot `V` can never complain it (`may_complain` uses
-  `commit_signed`), so if `V` gets a bare-quorum *support* cert (notarized) but then the leader dies before
-  a *commit* cert forms, the notarizers are barred from complaining and the non-notarizers are too few to
-  reach a `⅔` complaint cert → `V` can neither commit nor skip, and the head never advances (no recovery
-  even after synchrony resumes — the latches clear only in `finalize`). 2c's failover survives a leader that
-  dies *before* notarizing (the `leader_failover` CT case), but NOT one that dies *after* a bare-quorum
-  notarization (needs a second slow/absent follower, so it's a >f / asynchrony corner, but permanent).
-  Textbook Simplex avoids this by advancing the view on **notarization** and treating finalization (the
-  commit cert) as the deeper guarantee. The real fix is to **decouple head-advance from the commit cert**
-  (advance on the support/notarization cert; keep the commit cert as the relayed-finality proof) — a Stage-4
-  protocol change; until then a mid-round leader crash on a bare quorum can wedge a namespace. The
-  `leader_failover` CT does not cover it (killing the leader *before* it proposes is not the trigger).
+- **Pending-transaction forwarding remains deferred.** Failover is now evidence-gated and self-healing:
+  `f+1` peer complaints are amplified, complaint/support/commit shares are periodically re-driven, the
+  approved frontier advances on notarization, and a successor commit implicitly finalizes its parent.
+  What is still missing is forwarding a follower's rejected local `#transaction{}` to the actual slot
+  leader. That needs transaction-author signatures first; without them, forwarding would let an
+  intermediary invent client intent. Until then the client follows the leader hint and retries.
 - **Vote-latch persistence across restart (Phase B — a blocker before OPEN membership).** The per-slot
-  sign-latches (`supported`/`commit_signed`/`complained`) that enforce the one-share-per-slot safety rule
-  live in RAM (`#s`), so a validator that CRASHES and restarts mid-slot loses them and could re-sign a
+  vote latches (`#round.supporting`/`commit`/`complaint`) that enforce the one-share-per-slot safety rule
+  live in RAM, so a validator that CRASHES and restarts mid-slot loses them and could re-sign a
   different block/complaint for the same slot — an equivocation. Bounded today: at `N ≤ 4` a SINGLE
   crash-equivocator can't fork (its two shares still need a quorum that overlaps an honest party), but TWO
   simultaneous crash-equivocators can. Safe enough for the trusted fleet (crash-restart is rare and the CSI
@@ -318,7 +298,7 @@ stages, not carried forward:
 - **Snapshot / compaction** — later; nothing compacts yet (apply-and-forget keeps the KB projection, the
   store keeps the full block archive). **When it lands it must preserve the committee:** the validator set is
   now re-derived by folding `peer_admitted` asserts/retracts over the FULL committed log
-  (`quod_simplex:committee_from_log/1`), so a snapshot that truncates the log must carry the `peer_admitted`
+  (`quod_simplex:log_projection/2`), so a snapshot that truncates the log must carry the `peer_admitted`
   facts as of the snapshot height (or a committee checkpoint) — otherwise the re-fold drops members.
   (The Raft-shaped snapshot stub — `read_snapshot`/`write_snapshot`/`install_snapshot` + `snap_cfg` —
   has been **removed** from `quod_ledger_store` along with the rest of the Raft term/vote/truncate
@@ -329,29 +309,31 @@ stages, not carried forward:
   committee checkpoint TOGETHER, plus consumers that read from `first` instead of 1. No non-voting
   tier exists yet.
 
-**From the 2a/2b/2c reviews — mostly landed; two remain open:**
+**From the 2a/2b/2c reviews — landed:**
 
 - **Contiguous commit-apply** — **DONE** (2b): `commit_buf`/`drain_commits` buffer out-of-order
   finalizations and apply strictly in slot order (generalized in 2c to also carry skips), so the store's
   contiguity check never sees a gap.
-- **Proposed-slot latch** — **DONE** (the non-pipelined `#s.proposing` latch: a second concurrent append
-  gets `{error,busy}`, so a slot is never double-proposed and no parked `From` is overwritten). What's
-  left is only **pipelining** (>1 slot in flight, next slot from the in-flight tip) — a Stage-4 throughput
-  optimization, not a safety gap.
-- **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; `complained`/`commit_signed`
-  latches make commit-vs-complaint mutually exclusive per slot.
+- **Proposal window + batching** — **DONE**: explicit `#batch{}`, `#local_proposal{}`, and per-slot
+  `#round{}` state replace the old `proposing`/`pending` field cluster. A short bounded micro-batch shares
+  one block, certificate exchange, and fsync across up to 256 ordered transactions. The approved frontier
+  may open one successor over an uncommitted parent, while the durable frontier still drains in order.
+- **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; each round's complaint/commit
+  latches make the two finalization paths mutually exclusive.
 - **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,
   and `leader_failover` = kill-leader → complaint-skip → rotated-leader-commit).
-- **Implicit predecessor commit** (spec §2.3.3) — STILL OPEN: committing a block implicitly commits its
-  whole predecessor prefix; needed once the pipeline lands (a slot can commit via a successor's commit
-  cert). Today each slot commits only via its own commit cert (`detect_commits`).
+- **Implicit predecessor commit** (spec §2.3.3) — **DONE for the depth-one runtime pipeline.** A child
+  commit finalizes its immediate approved parent. The parent entry persists a self-contained proof
+  (`#implicit_cert{support,parent-child link,child commit}`), and catch-up verifies it independently.
+  Committee-changing blocks remain explicit-finality barriers.
 
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.
 
-- **Relayed-block verification** (§1) — the remaining gate below: safely gossiping blocks to untrusted
-  nodes needs each relayed block verified against its commit cert (the signing itself has landed).
+- **Relayed-block verification** — **DONE:** feed and catch-up verify explicit and implicit finality proofs
+  against the committee reconstructed at each slot before accepting an entry. The remaining hostile-input
+  refinement is split cert/hash verification before decoding arbitrary payload atoms (below).
 - **P2 — epidemic dissemination — BUILT** (`quod_feed`, 0.6.14): push-pull gossip + anti-entropy over
   the per-namespace Brahms overlay, every block QC-verified per hop before re-push; commit seam
   (`quod_simplex` publishes `{committed, Slot, Entry}` on `{committed, Ns}`, live path only); validated

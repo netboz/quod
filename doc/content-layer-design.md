@@ -1,9 +1,9 @@
 # Content Layer Design — Proved Scopes over QUIC
 
-**Status:** design notes, pre-implementation. **Date:** 2026-06-25.
-**Scope:** the ontology/content layer that sits on top of quod's working
-membership + transport (Brahms + QUIC). Today quod is *all* membership; this
-document is the plan for making the mesh carry the actual ontology.
+**Status:** historical design notes; the core content and consensus layers are implemented.
+**Date:** 2026-06-25.
+**Scope:** the reasoning that led to quod's ontology/content layer. For current behavior,
+read `content-layer.md`, `simplex_extended.pdf`, the module documentation, and `deferred.md`.
 
 > **Update (2026-07-02):** the consensus choice recorded below (§6, §12, §13 — "hand-roll a lean
 > **Raft**") has since been **superseded**. quod's ordering layer is now a hand-rolled **DispersedSimplex**
@@ -20,10 +20,8 @@ the questions still open. Inspiration is taken from onia (Architecture-H),
 > whole design. This document is the detailed decisions, trade-offs, and caveats
 > behind it.
 
-> **Reviewed (devil's-advocate + architect).** Several claims below were
-> overstated; they now carry inline *Caveat (review)* notes, and **§12**
-> consolidates the real gaps and the decisions still owed. The biggest: the
-> ordering layer (§6) is *named but not designed* — that is the next design task.
+> **Historical reading note.** Several sections intentionally retain rejected alternatives and the
+> original build sequence. They explain decisions; they are not a status report or implementation spec.
 
 ---
 
@@ -551,17 +549,20 @@ assumes the ordering layer (§6). Until that exists, a local per-node monotonic
 index is fine for a dev/single-operator cluster — flag it, don't pretend it's
 cluster-wide.
 
-**Identity stance.** *Updated (identity milestone A.3, 2026-06-30):* a node's `node_id`
+**Identity stance.** *Updated 2026-07-14:* a node's `node_id`
 is now its **Ed25519 pubkey** (the address is a routing hint), and connections are bound
-to that key via **mutual TLS** — the keypair lands, so identity is no longer stubbed. Still
-**stubbed until Phase B**: per-change **signatures** (`#transaction.sig`), the per-block
-**quorum certificate**, and signed attestation. So ACL-enforced foreign writes (§5) and
-quorum attestation (§6) — which need *signed* changes, not just an authenticated transport
-— remain gated on Phase B (§12). The single-operator trust model holds in the interim.
+to that key via **mutual TLS**. Simplex votes and quorum certificates are Ed25519-signed
+and verified. Still unfinished: per-change **author signatures** (`#transaction.sig`) and
+the authorization policy that consumes them. ACL-enforced foreign writes (§5) and open
+membership therefore remain gated on that work; the trusted-fleet boundary still applies
+to who may request a write.
 
 ---
 
-## 10. Proposed phasing
+## 10. Original proposed phasing (historical)
+
+This sequence predates the running content engine and DispersedSimplex implementation.
+Current gaps and priorities live in `deferred.md`.
 
 1. **Single-node content engine** — wire erlog per namespace (fills the
    `quod_prolog` TODO in `quod_sup.erl`); staged proved-scope proving (port

@@ -143,18 +143,18 @@ abolish_clauses(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F) ->
 get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) ->
     FS = maps:get(F, L, #fstate{}),
     A = FS#fstate.asserta, Z = FS#fstate.assertz,
-    HasLocal = FS =/= #fstate{},
     case FS#fstate.abolished of
-        true  -> clauses_or_undef(A ++ Z);
+        true  -> record_read(RS, F, M, R),
+                 clauses_or_undef(A ++ Z);
         false ->
             case M:get_procedure(R, F) of
                 built_in     -> built_in;
                 {code, _} = C -> C;
                 {clauses, Cs} ->
-                    record_read(RS, HasLocal, F, M, R),
+                    record_read(RS, F, M, R),
                     clauses_or_undef(A ++ filter_retracted(Cs, FS#fstate.retracted) ++ Z);
                 undefined ->
-                    record_read(RS, HasLocal, F, M, R),
+                    record_read(RS, F, M, R),
                     clauses_or_undef(A ++ Z)
             end
     end.
@@ -213,15 +213,13 @@ filter_retracted(Cs, Ret) -> [C || {Tag, _, _} = C <- Cs, not maps:is_key(Tag, R
 clauses_or_undef([]) -> undefined;
 clauses_or_undef(Cs) -> {clauses, Cs}.
 
-%% First-read-wins; skip functors the proof has locally written; share the hash
-%% function with quod_prolog's apply-time validator.
-%% REVIEW(M2): "skip if locally modified" also suppresses the read-dependency for a
-%% functor the proof retracted/abolished, and get_procedure's abolished branch never
-%% records — OCC false-negatives that only bite under concurrency. Revisit with the
-%% per-fact read-set granularity rework (design-doc §12 #2).
-record_read(undefined, _Has, _F, _M, _R) -> ok;
-record_read(_Ets, true, _F, _M, _R)      -> ok;
-record_read(Ets, false, F, M, R) ->
+%% First-read-wins. Local writes change the overlay's visible procedure, but every
+%% interpreted lookup still depends on the committed predicate version underneath it:
+%% a concurrent commit can change which clauses survive a retract/abolish or precede a
+%% local assert. Always capture that original committed hash; write-only operations use
+%% modifiable/2 and never enter this path.
+record_read(undefined, _F, _M, _R) -> ok;
+record_read(Ets, F, M, R) ->
     case ets:member(Ets, F) of
         true  -> ok;
         false -> ets:insert(Ets, {F, quod_diff:functor_hash(M, R, F)}), ok

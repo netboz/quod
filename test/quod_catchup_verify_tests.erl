@@ -27,6 +27,13 @@ committed(I, D, C, K) ->
     {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
     #entry{index = I, data = D, cert = Cert}.
 
+committed_batch(I, Transactions, C, K) ->
+    Data = quod_ledger:data(Transactions),
+    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = Transactions}),
+    Shares = [quod_simplex:make_share(commit, I, BH, signer(M)) || M <- lists:sublist(C, K)],
+    {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
+    #entry{index = I, data = Data, cert = Cert}.
+
 %% a leader committed an empty (noop) BLOCK — a COMMIT cert bound to the noop block, NOT a complaint.
 committed_noop(I, C, K) -> committed(I, noop, C, K).
 
@@ -60,6 +67,39 @@ happy_test() ->
     Chain = [genesis(P), committed(2, tx(2), C, 3), committed(3, tx(3), C, 4)],
     {ok, [_, _, _], Final} = quod_catchup:verify_forward([], 1, Chain),
     ?assertEqual(P, Final).
+
+batch_hash_is_verified_test() ->
+    C = committee(4), P = pubs(C),
+    Batch = committed_batch(2, [tx(20), tx(21)], C, 3),
+    ?assertMatch({ok, [_, _], _},
+                 quod_catchup:verify_forward([], 1, [genesis(P), Batch])),
+    %% Reordering transactions changes the certified block hash.
+    ?assertEqual({error, {cert_mismatch, 2}},
+                 quod_catchup:verify_forward(
+                   [], 1, [genesis(P), Batch#entry{data = quod_ledger:data([tx(21), tx(20)])}])).
+
+implicit_parent_commit_test() ->
+    C = committee(4), P = pubs(C),
+    ParentData = quod_ledger:data([tx(2)]),
+    ParentBlock = #block{slot = 2, parent = 1, payload = [tx(2)]},
+    ParentBH = quod_simplex:block_hash(ParentBlock),
+    SupportShares = [quod_simplex:make_share(support, 2, ParentBH, signer(M))
+                     || M <- lists:sublist(C, 3)],
+    {ok, Support} = quod_simplex:form_cert(support, 2, ParentBH, SupportShares, P),
+    ChildData = quod_ledger:data([tx(3)]),
+    Child = #block{slot = 3, parent = 2, payload = [tx(3)]},
+    ChildBH = quod_simplex:block_hash(Child),
+    CommitShares = [quod_simplex:make_share(commit, 3, ChildBH, signer(M))
+                    || M <- lists:sublist(C, 3)],
+    {ok, Commit} = quod_simplex:form_cert(commit, 3, ChildBH, CommitShares, P),
+    E2 = #entry{index = 2, data = ParentData,
+                cert = #implicit_cert{support = Support, child = Child, commit = Commit}},
+    E3 = #entry{index = 3, data = ChildData, cert = Commit},
+    ?assertMatch({ok, [_, _, _], _},
+                 quod_catchup:verify_forward([], 1, [genesis(P), E2, E3])),
+    ?assertEqual({error, {bad_implicit_cert, 2}},
+                 quod_catchup:verify_forward(
+                   [], 1, [genesis(P), E2#entry{data = quod_ledger:data([tx(99)])}, E3])).
 
 %% A complaint-skipped slot (noop + complaint cert) is accepted between committed blocks.
 skip_test() ->
@@ -113,7 +153,11 @@ cert_mismatch_test() ->
 malformed_cert_rejected_test() ->
     C = committee(4), B2 = committed(2, tx(2), C, 3),
     Bad = B2#entry{cert = (B2#entry.cert)#cert{sigs = not_a_list}},
-    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])).
+    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])),
+    [First | _] = (B2#entry.cert)#cert.sigs,
+    Improper = B2#entry{cert = (B2#entry.cert)#cert{sigs = [First | bad_tail]}},
+    ?assertEqual({error, {bad_cert, 2}},
+                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Improper])).
 
 %% A GAP (a dropped intermediate entry) is rejected — the fold must be complete + contiguous, so a server
 %% cannot omit a committee-changing block to shift verification onto a stale committee.
@@ -128,7 +172,25 @@ noncontiguous_rejected_test() ->
 malformed_entry_rejected_test() ->
     C = committee(4),
     ?assertMatch({error, {malformed_entry, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), {not_an_entry, 2}])).
+                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), {not_an_entry, 2}])),
+    B2 = committed(2, tx(2), C, 3),
+    ?assertEqual({error, {malformed_entry, 2}},
+                 quod_catchup:verify_forward(
+                   [], 1, [genesis(pubs(C)), B2#entry{data = {batch, [tx(2) | bad_tail]}}])),
+    BadTx = (tx(2))#transaction{diff = [not_an_operation]},
+    ?assertEqual({error, {malformed_entry, 2}},
+                 quod_catchup:verify_forward(
+                   [], 1, [genesis(pubs(C)), B2#entry{data = {batch, [BadTx]}}])),
+    ?assertEqual({error, {malformed_entry, 2}},
+                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)) | bad_tail])).
+
+%% Complaint skips have no block timestamp. Letting a certified `noop` carry an arbitrary
+%% value would raise the restart timestamp floor and could freeze future proposals.
+skip_timestamp_must_be_zero_test() ->
+    C = committee(4),
+    Bad = (skipped(2, C, 3))#entry{timestamp = 9999999999999},
+    ?assertEqual({error, {cert_mismatch, 2}},
+                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])).
 
 %% A mid-chain window: the caller threads Committee0 (as of From>1); no genesis in the window.
 midchain_window_test() ->
@@ -227,6 +289,11 @@ catch_up_height_regression_test() ->
 catch_up_fetch_error_test() ->
     ?assertEqual({error, {fetch, timeout}},
                  quod_catchup:catch_up(<<0>>, fun(_) -> {error, timeout} end, fun(_) -> ok end)).
+
+catch_up_malformed_height_test() ->
+    ?assertEqual({error, {fetch, bad_response}},
+                 quod_catchup:catch_up(<<0>>, fun(_) -> {ok, [], not_a_height} end,
+                                       fun(_) -> ok end)).
 
 %% A sink failure aborts catch-up cleanly (recoverable), not a badmatch crash.
 catch_up_sink_error_test() ->

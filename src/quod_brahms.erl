@@ -9,7 +9,7 @@ on channel `Ns`.
 ## A round
 
 `idle` arms a jittered timer; on tick (`do_round/1`) it pushes its own id to
-`α·ℓ` peers of `V` and pulls views from `β·ℓ` **disjoint** peers, then collects
+`α·ℓ` peers of `V` and independently pulls views from `β·ℓ` peers, then collects
 responses and **reconstructs** `V` from `α·ℓ` pushes, `β·ℓ` pulls, and `γ·ℓ`
 (always ≥1) sampler ids.
 
@@ -64,7 +64,7 @@ moment it next contacts us.
 
 > #### Deferred {: .info }
 >
-> PUSH uses reliable streams; that optimisation comes later.
+> Moving PUSH traffic from reliable streams to datagrams remains a transport optimization.
 """.
 
 -behaviour(gen_statem).
@@ -353,7 +353,7 @@ handle_inbound({RemoteNodeId, ReplyLink}, Payload, Mode, D0 = #d{self = Self, co
         {pull_req, From} when From =/= Self ->
             reply_view(ReplyLink, D),              %% answer on the inbound link
             observe(From, D);
-        {pull_resp, From, Ids} when is_list(Ids) ->
+        {pull_resp, From, Ids} ->
             %% accept only a response we solicited this round
             case lists:member(From, D#d.pulled) of
                 true ->
@@ -449,7 +449,16 @@ split_counts(Cfg) ->
 
 %% cap a pull response to the pull quota and strip self.
 clean_resp(Ids, L2, Self) ->
-    [I || I <- take(L2, Ids), I =/= Self].
+    case proper_list(Ids) of
+        true  -> [I || I <- take(L2, Ids), I =/= Self];
+        false -> []
+    end.
+
+%% is_list/1 only checks the outer cons cell on current OTP releases. Wire lists
+%% must be closed before any lists:* function traverses them.
+proper_list([]) -> true;
+proper_list([_ | Rest]) -> proper_list(Rest);
+proper_list(_) -> false.
 
 %% Rebuild V from THIS round's gossip ONLY: `α·ℓ` random pushed ids, `β·ℓ` random
 %% pulled ids, and `γ·ℓ` random sampled ids — the canonical Brahms view-update

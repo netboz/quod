@@ -25,28 +25,23 @@ If slot `v` does not finish before a `Δ_timeout`, a validator broadcasts a **co
 irreversible. Everything is plain **Ed25519**: a certificate is a bag of `⅔` signatures, self-verifying
 against the validator set — which is exactly the P2 relayed-commit proof a subscriber checks.
 
-> #### Status {: .info }
->
-> **Live (through Simplex 5a):** the pure consensus core (quorum math, share signing, certificate
-> formation/verification, the commit guards), the **consensus engine** (§2.3 certificate pool + complete
-> block tree), the per-namespace `gen_statem` over the `{log, Ns}` transport, **failover** (a
-> round-robin per-slot leader, the `Δ_timeout` complaint timer, the `may_commit`/`may_complain` guards,
-> and a `⅔` complaint cert that skips a stuck slot as a `noop`), the **committee = `peer_admitted`
-> facts** derived from the committed log and swapped in-process at the slot boundary, and **`mode=join`
-> trustless catch-up** (a joiner pulls the committed block+cert log, verifies each cert against the
-> committee it reconstructs, and replays into its KB — `m:quod_catchup`). At **N=1** each quorum
-> self-satisfies, so an append commits synchronously. A committee-changing proposal is additionally
-> **re-validated by every validator before support** (`membership_change_ok/2` shape + never-empty gate,
-> then a KB verdict via `quod_prolog:request_membership_verdict/5`), so an unauthorized/malformed change
-> can't gather an honest quorum (`doc/deferred.md` §3 (a)+(c)). A caught-up observer that sees its own
-> `peer_admitted` fact commit **self-promotes to a voter** (the committed fact IS the signal: the engine
-> re-seats over the caught-up voting set — the committee facts are the reality, the engine/links are
-> projections catching up with them). **Next:** signed membership
-> authorship (Phase B, closing committee-packing), the reader/feed dissemination tier, and the hardening
-> in `doc/deferred.md` §3 (mid-flight committee-change, per-message retransmit, epoch-frozen validators).
+The runtime keeps two frontiers: **approved** (support-certified, safe to extend) and
+**committed** (durable and externally visible). Leaders micro-batch ordered transactions
+into one block and may build one child over an uncommitted approved parent. A child commit also
+finalizes its approved parent; catch-up persists and verifies that implicit proof. Committee
+transactions are singleton barriers, so a voting-set change is explicitly committed before
+the next proposal opens.
+
+The same engine handles N=1 and multi-validator namespaces, complaint-certified skips,
+trustless catch-up, observer promotion, live member recovery, and deterministic Prolog apply.
+Every wire transaction is structurally checked before an honest validator signs it. Remaining
+security work, notably transaction-author signatures, vote-latch persistence, and epoch-frozen
+validator sets, is tracked in `doc/deferred.md`.
 """.
 
 -include("quod_ledger.hrl").
+
+-define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/3 signs slots as unsigned 64-bit integers
 
 -behaviour(gen_statem).
 
@@ -55,7 +50,8 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
          block_hash/1, block_from_entry/1, share_bytes/3,
          make_share/4, verify_share/1,
          form_cert/5, verify_cert/2,
-         may_commit/2, may_complain/2, well_formed_cert/1,
+         may_commit/2, may_complain/2, well_formed_block/1, well_formed_cert/1,
+         well_formed_transaction/1,
          committee_delta/1, apply_committee_delta/2]).   %% committee = projection of peer_admitted facts
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
@@ -68,19 +64,20 @@ against the validator set — which is exactly the P2 relayed-commit proof a sub
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
-         drop_keys_le/2, clear_slot_le/2, clear_validating_le/2,   %% Slice 2: reseat_engine's pruning helpers
          is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
          recovery_failed/1, may_sink/2, reset_pace/0, test_state/1, test_arm/1, test_sync/1,
+         proposal_slot/1, acceptable_payload/2,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
 %% These validate records decoded from UNTRUSTED peer input (binary_to_term yields any term, so a
-%% #share{} off the wire can carry a non-integer slot etc.); dialyzer trusts the declared field types
-%% and so thinks the false/reject branches are dead — they are not, at runtime.
+%% typed record can still carry malformed fields at runtime). Dialyzer trusts the declared field types
+%% and consequently marks their reject branches unreachable; weakening the canonical record types would
+%% hide useful mistakes everywhere else.
 -dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1, well_formed_cert/1,
-                             proper_op_list/1]}).   %% rejects an IMPROPER/non-list diff off the wire — the
-                             %% declared `[op()]` type makes dialyzer think the reject branch is dead; it is not
+                             valid_read_check/1, valid_diff/1, committee_transaction/2,
+                             transaction_endpoints/1, proper_signatures/1, proper_list/1]}).
 
 %% A node's SIGNING identity: the subset of `t:quod_identity:identity/0` consensus needs (pubkey +
 %% private key), without the TLS cert. `make_share/4` signs with `key`; the share's signer is `pubkey`.
@@ -114,7 +111,8 @@ signature can never be replayed as a `commit` or `complaint`), the slot, and the
 (empty for a slot-only `complaint`).
 """.
 -spec share_bytes(support | commit | complaint, slot(), binary() | none) -> binary().
-share_bytes(Kind, Slot, BlockHash) ->
+share_bytes(Kind, Slot, BlockHash)
+  when is_integer(Slot), Slot >= 0, Slot =< ?MAX_SLOT ->
     BH = case BlockHash of none -> <<>>; H when is_binary(H) -> H end,
     <<(tag(Kind)):8, Slot:64, BH/binary>>.
 
@@ -140,7 +138,9 @@ before it can be aggregated. (Set-membership is checked separately, in the cert 
 """.
 -spec verify_share(#share{}) -> boolean().
 verify_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer, sig = Sig}) ->
-    valid_shape(K, BH)
+    is_slot(Sl)
+        andalso valid_signer_signature(Signer, Sig)
+        andalso valid_shape(K, BH)
         andalso quod_identity:verify(Sig, share_bytes(K, Sl, BH), Signer).
 
 %% A share/cert is well-formed iff its block_hash matches its kind: a 32-byte block hash binds a
@@ -165,7 +165,7 @@ inflate the count — signers are deduplicated.
 form_cert(_Kind, _Slot, _BlockHash, _Shares, []) ->
     {error, insufficient};                       %% no validators yet ⇒ no quorum (never quorum(0))
 form_cert(Kind, Slot, BlockHash, Shares, Validators) ->
-    case valid_shape(Kind, BlockHash) of
+    case is_slot(Slot) andalso valid_shape(Kind, BlockHash) of
         false -> {error, insufficient};          %% malformed (kind/block_hash mismatch)
         true  ->
             Msg  = share_bytes(Kind, Slot, BlockHash),
@@ -191,13 +191,29 @@ without trusting whoever handed it over.
 %% Reject before any signature work: an empty set has no quorum (never quorum(0)); and a legitimate
 %% cert never carries MORE than |Validators| signatures — capping the length first stops a hostile
 %% relay from forcing thousands of Ed25519 verifications (a CPU-amplification DoS on the trustless path).
-verify_cert(#cert{sigs = Sigs}, Validators)
-  when Validators =:= []; length(Sigs) > length(Validators) ->
-    false;
 verify_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs}, Validators) ->
-    valid_shape(K, BH)
-        andalso length(distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators))
-                >= quorum(length(Validators)).
+    N = length(Validators),
+    N > 0
+        andalso is_slot(Sl)
+        andalso valid_shape(K, BH)
+        andalso bounded_signatures(Sigs, N)
+        andalso length(distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators)) >= quorum(N).
+
+%% A certificate can carry at most one signature per validator. This bounded recursive check both
+%% rejects improper tails before any list BIF can raise and caps hostile crypto work before verification.
+bounded_signatures([], _Remaining) -> true;
+bounded_signatures([{Signer, Sig} | Rest], Remaining) when Remaining > 0 ->
+    valid_signer_signature(Signer, Sig) andalso bounded_signatures(Rest, Remaining - 1);
+bounded_signatures(_MalformedOrTooLong, _Remaining) -> false.
+
+proper_signatures([{Signer, Sig} | Rest]) ->
+    valid_signer_signature(Signer, Sig) andalso proper_signatures(Rest);
+proper_signatures([]) -> true;
+proper_signatures(_)  -> false.
+
+valid_signer_signature(Signer, Sig) ->
+    is_binary(Signer) andalso byte_size(Signer) =:= 32
+        andalso is_binary(Sig) andalso byte_size(Sig) =:= 64.
 
 %% Keep one signature per signer, from validators in the set, whose signature verifies over `Msg`.
 distinct_valid(Sigs, Msg, Validators) ->
@@ -301,6 +317,34 @@ persisted_cert(Kind, Slot, BH, #eng{certs = Certs, validators = Vs}) ->
             end
     end.
 
+persisted_finality(Slot, BH, Eng) ->
+    case persisted_cert(commit, Slot, BH, Eng) of
+        #cert{} = Cert -> Cert;
+        none -> implicit_finality(Slot, BH, Eng)
+    end.
+
+implicit_finality(Slot, BH, Eng = #eng{tree = Tree, tree_hashes = Hashes}) ->
+    case {maps:get(Slot, Tree, undefined), persisted_cert(support, Slot, BH, Eng)} of
+        {#block{payload = Payload}, #cert{} = Support} ->
+            case payload_touches_committee(Payload) of
+                true -> none;   %% committee transitions are explicit-finality barriers
+                false ->
+                    Children = lists:sort(
+                      [{ChildSl, Child, maps:get(ChildSl, Hashes)}
+                       || {ChildSl, #block{parent = Parent} = Child} <- maps:to_list(Tree),
+                          Parent =:= Slot, ChildSl =:= Slot + 1]),
+                    first_implicit_child(Children, Support, Eng)
+            end;
+        _ -> none
+    end.
+
+first_implicit_child([], _Support, _Eng) -> none;
+first_implicit_child([{ChildSl, Child, ChildBH} | Rest], Support, Eng) ->
+    case persisted_cert(commit, ChildSl, ChildBH, Eng) of
+        #cert{} = Commit -> #implicit_cert{support = Support, child = Child, commit = Commit};
+        none -> first_implicit_child(Rest, Support, Eng)
+    end.
+
 -doc """
 Offer one protocol object to the engine; returns the updated engine + the events it produced. This is
 the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a peer's), or a relayed
@@ -378,12 +422,13 @@ maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
     end.
 
 sanitize_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C, Validators) ->
-    case Validators =/= [] andalso is_list(Sigs) andalso length(Sigs) =< length(Validators)
-         andalso valid_shape(K, BH) of
+    N = length(Validators),
+    case N > 0 andalso is_slot(Sl) andalso valid_shape(K, BH)
+         andalso bounded_signatures(Sigs, N) of
         false -> error;
         true  ->
             Valid = distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators),
-            case length(Valid) >= quorum(length(Validators)) of
+            case length(Valid) >= quorum(N) of
                 true  -> {ok, C#cert{sigs = Valid}};
                 false -> error
             end
@@ -425,12 +470,12 @@ grow_tree(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes}) ->
              [{notarized, B} || {_Sl, _BH, B} <- Sorted]}
     end.
 
-%% A block is committed once it is in the tree AND the pool has a commit cert for it (block-bound:
-%% the commit cert names this block, so the proof is self-contained). Emitted in slot order so the
-%% driver's contiguous store append never sees a gap within a single settle.
+%% An explicit commit also commits its immediate approved parent. Runtime pipelining
+%% is bounded to one uncommitted parent, so this single predecessor step is the full
+%% implicit-commit closure. Events remain slot-ordered for the durable drain.
 detect_commits(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes,
                           committed = Committed}) ->
-    New = lists:sort(lists:filtermap(
+    Explicit = lists:filtermap(
             fun({{commit, Sl, BH}, _Cert}) ->
                     case (not maps:is_key(Sl, Committed)) andalso maps:get(Sl, Tree, undefined) of
                         #block{} = B -> case maps:get(Sl, Hashes, undefined) =:= BH of
@@ -440,7 +485,17 @@ detect_commits(Eng = #eng{certs = Certs, tree = Tree, tree_hashes = Hashes,
                         _            -> false
                     end;
                (_) -> false
-            end, maps:to_list(Certs))),
+            end, maps:to_list(Certs)),
+    Implicit = lists:filtermap(
+                 fun({_ChildSl, #block{parent = Parent}}) when Parent > Eng#eng.base ->
+                         case (not maps:is_key(Parent, Committed))
+                              andalso maps:get(Parent, Tree, undefined) of
+                             #block{} = B -> {true, {Parent, B}};
+                             _ -> false
+                         end;
+                    (_) -> false
+                 end, Explicit),
+    New = lists:sort(maps:to_list(maps:from_list(Explicit ++ Implicit))),
     Committed1 = lists:foldl(fun({Sl, B}, C) -> C#{Sl => B} end, Committed, New),
     {Eng#eng{committed = Committed1}, [{committed, Sl, B} || {Sl, B} <- New]}.
 
@@ -557,6 +612,25 @@ eng_with_certs(Base, KindSlots) ->
 -define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
+-define(MAX_BATCH_TXS, 256).                    %% hard count cap; bounds per-block apply work
+-define(MAX_BLOCK_BYTES, (256 * 1024)).         %% an implicit proof may carry one child below the 1 MiB cap
+-define(BATCH_ENVELOPE_BYTES, 6).               %% exact singleton-list ETF overhead beyond term_to_binary(Tx)
+-define(BATCH_MS, 2).                           %% short micro-batch window; configurable with simplex_batch_ms
+-define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
+
+-record(round, {supporting = none :: none | binary(),
+                commit = false :: boolean(),
+                complaint = false :: boolean(),
+                invalid = false :: boolean(),
+                validating = none :: none | binary()}).
+
+-record(batch, {slot :: slot(),
+                parent :: slot(),
+                items_rev = [] :: [{gen_statem:from(), #transaction{}}],
+                bytes = 0 :: non_neg_integer()}).
+
+-record(local_proposal, {hash :: binary(),
+                         waiters = [] :: [gen_statem:from()]}).
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -571,16 +645,12 @@ eng_with_certs(Base, KindSlots) ->
                                                      %% "who votes now" reads route through THAT, not this field.
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
+            approved     = 0  :: slot(),             %% latest notarized/activated slot; proposals extend this
             last_applied = 0  :: slot(),             %% highest slot handed to quod_prolog
-            pending    = #{} :: #{slot() => gen_statem:from()},  %% appends parked until commit (leader)
-            proposing  = none :: none | slot(),      %% the leader's in-flight proposed slot (one at a time)
-            supported  = #{} :: #{slot() => binary()},  %% slot => block_hash we support-signed (no double-sign)
-            commit_signed = #{} :: #{slot() => true},    %% slots we commit-signed (⇒ may_complain false: safety)
-            complained    = #{} :: #{slot() => true},    %% slots we complaint-signed (⇒ may_commit false: safety)
+            collecting = none :: none | #batch{},    %% leader's not-yet-sealed micro-batch
+            local_proposals = #{} :: #{slot() => #local_proposal{}}, %% sealed local blocks + parked callers
+            rounds = #{} :: #{slot() => #round{}},   %% all local vote/validation latches for an in-flight slot
             active_slot   = none :: none | slot(),       %% the head+1 slot the Δ complaint timer is armed for
-            validating = none :: none | {slot(), binary(), #block{}},  %% a peer's membership proposal whose KB
-                                                          %% verdict we await — support is DEFERRED until it lands
-            invalid    = #{} :: #{slot() => true},        %% slots we judged an INVALID membership change (never endorse)
             commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
@@ -597,10 +667,12 @@ eng_with_certs(Base, KindSlots) ->
             genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
+            proposals = 0 :: non_neg_integer(),
+            batched_txs = 0 :: non_neg_integer(),
             commits = 0  :: non_neg_integer(),
             submitted  = 0 :: non_neg_integer(),   %% every append attempt (metrics: submit rate)
             skips      = 0 :: non_neg_integer(),   %% complaint-skipped (noop) slots
-            r_busy     = 0 :: non_neg_integer(),   %% append rejected: a proposal already in flight (backpressure)
+            r_busy     = 0 :: non_neg_integer(),   %% append rejected: batch/pipeline capacity unavailable
             r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
@@ -612,10 +684,17 @@ eng_with_certs(Base, KindSlots) ->
 %% Build a minimal #s{} for the Slice-4 gate-predicate eunit (the record is otherwise private). Only the
 %% fields the pure predicates read carry meaning; every other field takes its record default.
 test_state(Overrides) ->
-    maps:fold(fun test_state_set/3, #s{ns = <<"t">>, self = <<"self">>}, Overrides).
+    S = maps:fold(fun(approved, _V, Acc) -> Acc;
+                     (K, V, Acc) -> test_state_set(K, V, Acc)
+                  end, #s{ns = <<"t">>, self = <<"self">>}, Overrides),
+    case maps:find(approved, Overrides) of
+        {ok, V} -> S#s{approved = V};
+        error   -> S
+    end.
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(validators, V, S) -> S#s{validators = V};
-test_state_set(slot, V, S)       -> S#s{slot = V};
+test_state_set(slot, V, S)       -> S#s{slot = V, approved = V};
+test_state_set(approved, V, S)   -> S#s{approved = V};
 test_state_set(eng, V, S)        -> S#s{eng = V};
 test_state_set(sync, V, S)       -> S#s{sync = V};
 test_state_set(last_applied, V, S) -> S#s{last_applied = V};
@@ -693,7 +772,7 @@ init_store(Ns, Cfg, Id) ->
             %% One periodic tick drives everything post-boot: peer redials AND the sync armer (`maybe_arm_sync`)
             %% that kicks boot-sync/gap-fill. A fresh `mode=join` node boots `unconfirmed`, so `should_sync`
             %% arms its catch-up at the first tick — no separate join kick.
-            {ok, running, S1#s{last_applied = 0, eng = Eng}, [tick_timeout()]}
+            {ok, running, S1#s{last_applied = 0, approved = Committed, eng = Eng}, [tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
@@ -842,6 +921,11 @@ running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{sync = {pulling, Pid
     {keep_state, recovery_failed(S)};
 running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
     {keep_state, drop_conn(Pid, S)};
+%% Seal the current micro-batch. A stale timeout is harmless: flush_batch/2 only
+%% acts when the collecting slot still matches.
+running({timeout, batch}, {flush_batch, V}, S0) ->
+    S1 = flush_batch(V, S0),
+    {keep_state, S1, timer_actions(S0, S1)};
 %% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
 %% local client write we couldn't lead). The redrive-or-complain decision lives in `on_complain_timeout/2`;
 %% this clause owns only the timer mechanics: re-arm while V stays stuck (the Δ re-fire IS the retransmit
@@ -857,7 +941,7 @@ running({timeout, complain}, {complain, V}, S0) ->
 %% re-dial every peer whose link never came up (its frames are still buffered), AND arm sync — the one
 %% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
 running({timeout, tick}, tick, S) ->
-    S1 = maybe_arm_sync(redial_pending(sweep_stale_dials(S))),
+    S1 = maybe_arm_sync(redrive_votes(redial_pending(sweep_stale_dials(S)))),
     {keep_state, maybe_mark_ready(S1), [tick_timeout()]};
 %% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
@@ -903,48 +987,131 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store}) ->
 %%% append (propose) → engine → commit → apply
 %%%===================================================================
 
-%% A client change enters consensus here. Only the slot's leader may propose; anyone else redirects.
-%% The leader builds the block, feeds it + its own support share to the engine, and parks the caller
-%% until that block commits. At N=1 the engine reaches commit synchronously, so the ack is immediate;
-%% with peers the commit cert arrives later and `commit_block/3` acks then (or a complaint cert skips the
-%% slot and `skip_block/2` nacks the caller `{error,skipped}`).
-%% Returns `{NewState, ReplyActions}` (the caller wraps it + arms/cancels the Δ timer). The leader parks
-%% the caller (no reply — `commit_block`/`skip_block` answers it) and arms the Δ timer on its own
-%% proposal; a non-leader redirects AND arms the Δ timer for this wanted slot — so if the real leader is
-%% dead, its own timer fires and it complains toward a skip (the client-driven activation of §failover).
-handle_append(From, _Change, S = #s{proposing = P}) when P =/= none ->
-    {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]};   %% one proposal in flight at a time (non-pipelined)
-handle_append(From, Change, S = #s{self = Self, slot = Sl}) ->
-    Vs = active_validators(S),   %% eligibility + leader selection use the ACTIVE voting set (the floor in
-                                 %% acceptable_change stays on the facts — see change_acceptable/2).
-    %% May LEAD iff `may_lead` = is_participant ∧ caught_up: a committee member by FACTS, in `ready`, with
-    %% no finalizer cert proving the head moved past us (`behind`). A resuming member whose on-disk prefix folds
-    %% its OWN pubkey is a participant but remains `unconfirmed` until recovery, so it redirects here (never
-    %% proposes a FORK of already-committed history) and resumes leading once its sync round confirms the tip.
-    %% A `not caught_up` redirect deliberately does NOT arm Δ — a behind member can't judge a slot it hasn't
-    %% reached; only a caught-up NON-leader arms the complaint timer (the leader-branch below).
+%% Appends collect for a few milliseconds into one block. A sealed proposal owns its
+%% parked callers until commit/skip; the next slot may open as soon as that block is
+%% notarized, even though the durable committed frontier has not caught up yet.
+handle_append(From, Change, S = #s{self = Self}) ->
     case may_lead(S) of
-        false -> {S#s{r_redirect = S#s.r_redirect + 1}, [{reply, From, {error, not_in_charge, none}}]};   %% not a member, or not at the tip
-        true  -> case acceptable_change(Change, S) of
-                     false -> {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};   %% gate the leader's own input too
-                     true  -> handle_append_leader(From, Change, Self, Vs, Sl, S)
-                 end
+        false -> redirect_append(From, none, S);
+        true ->
+            case acceptable_change(Change, S) of
+                false -> reject_append(From, bad_change, S);
+                true ->
+                    case proposal_slot(S) of
+                        blocked -> reject_append(From, busy, S);
+                        {ok, Next} ->
+                            Vs = active_validators(S),
+                            case leader(Next, Vs) of
+                                Self   -> collect_append(From, Change, Next, S);
+                                Leader -> redirect_append(From, Leader, arm_complaint(Next, S))
+                            end
+                    end
+            end
     end.
 
-handle_append_leader(From, Change, Self, Vs, Sl, S) ->
-    Next = Sl + 1,
-    case leader(Next, Vs) of
-        Self ->
-            Block = #block{slot = Next, parent = Sl, payload = [Change],
-                           timestamp = max(quod_time:now_ms(), S#s.last_ts)},   %% monotonic ≥ parent
-            BH = block_hash(Block),
-            S1 = S#s{pending = (S#s.pending)#{Next => From}, proposing = Next, appends = S#s.appends + 1},
-            S2 = broadcast({propose, Block}, S1),        %% send the proposal to the committee
-            S3 = engine_step([{block, BH, Block}], S2),  %% offer block + its already-computed hash
-            {arm_complaint(Next, support_block(Block, BH, S3)), []};   %% support it; park the caller; arm Δ
-        Leader ->
-            {arm_complaint(Next, S#s{r_redirect = S#s.r_redirect + 1}), [{reply, From, {error, not_in_charge, Leader}}]}
+reject_append(From, bad_change, S) ->
+    {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, bad_change}}]};
+reject_append(From, too_large, S) ->
+    {S#s{r_bad = S#s.r_bad + 1}, [{reply, From, {error, too_large}}]};
+reject_append(From, busy, S) ->
+    {S#s{r_busy = S#s.r_busy + 1}, [{reply, From, {error, busy}}]}.
+
+redirect_append(From, Leader, S) ->
+    {S#s{r_redirect = S#s.r_redirect + 1},
+     [{reply, From, {error, not_in_charge, Leader}}]}.
+
+%% A depth-one pipeline permits proposing H+2 after H+1 is approved but before it
+%% commits. It stops there until commit catches up. Membership blocks are barriers,
+%% and a complaint-finalized slot waiting behind an earlier commit is not reopened.
+proposal_slot(S = #s{slot = Committed, approved = Approved, collecting = Collecting,
+                     local_proposals = Local, commit_buf = Buf}) ->
+    Next = Approved + 1,
+    HasBatch = case Collecting of #batch{slot = Next} -> true; _ -> false end,
+    Open = Approved =< Committed + ?PIPELINE_DEPTH
+           andalso (HasBatch orelse not maps:is_key(Next, Local))
+           andalso not maps:is_key(Next, Buf)
+           andalso not membership_barrier(S),
+    case Open of true -> {ok, Next}; false -> blocked end.
+
+collect_append(From, Change, Slot, S = #s{collecting = none}) ->
+    Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
+    case Bytes =< ?MAX_BLOCK_BYTES andalso membership_can_enter(Change, S) of
+        false when Bytes > ?MAX_BLOCK_BYTES -> reject_append(From, too_large, S);
+        false -> reject_append(From, busy, S);
+        true ->
+            Batch = #batch{slot = Slot, parent = S#s.approved,
+                           items_rev = [{From, Change}], bytes = Bytes},
+            S1 = S#s{collecting = Batch, appends = S#s.appends + 1},
+            case is_membership_change(Change) orelse batch_ms() =:= 0 of
+                true  -> {flush_batch(Slot, S1), [{{timeout, batch}, cancel}]};
+                false -> {S1, [{{timeout, batch}, batch_ms(), {flush_batch, Slot}}]}
+            end
+    end;
+collect_append(From, Change, Slot,
+               S = #s{collecting = #batch{slot = Slot, items_rev = Items, bytes = Bytes} = Batch}) ->
+    Added = encoded_change_size(Change),
+    Full = length(Items) >= ?MAX_BATCH_TXS orelse Bytes + Added > ?MAX_BLOCK_BYTES,
+    Duplicate = lists:any(fun({_From, T}) -> T#transaction.tx_id =:= Change#transaction.tx_id end, Items),
+    case {Duplicate, is_membership_change(Change) orelse Full} of
+        {true, _} -> reject_append(From, bad_change, S);
+        {false, true} -> reject_append(From, busy, S);
+        {false, false} ->
+            Batch1 = Batch#batch{items_rev = [{From, Change} | Items], bytes = Bytes + Added},
+            S1 = S#s{collecting = Batch1, appends = S#s.appends + 1},
+            case length(Batch1#batch.items_rev) >= ?MAX_BATCH_TXS of
+                true  -> {flush_batch(Slot, S1), [{{timeout, batch}, cancel}]};
+                false -> {S1, []}
+            end
     end.
+
+flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
+                                              items_rev = ItemsRev}}) ->
+    Items = lists:reverse(ItemsRev),
+    Payload = [Change || {_From, Change} <- Items],
+    case acceptable_payload(Payload, S) of
+        false -> reject_collected_batch(Items, S);
+        true  -> propose_batch(Slot, Parent, Items, Payload, S)
+    end;
+flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
+
+propose_batch(Slot, Parent, Items, Payload, S) ->
+    Waiters = [From || {From, _Change} <- Items],
+    Block = #block{slot = Slot, parent = Parent, payload = Payload,
+                   timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
+    BH = block_hash(Block),
+    Local = #local_proposal{hash = BH, waiters = Waiters},
+    S1 = S#s{collecting = none,
+             local_proposals = (S#s.local_proposals)#{Slot => Local},
+             proposals = S#s.proposals + 1,
+             batched_txs = S#s.batched_txs + length(Payload)},
+    S2 = broadcast({propose, Block}, S1),
+    S3 = engine_step([{block, BH, Block}], S2),
+    arm_complaint(Slot, support_or_validate(Block, BH, S3)).
+
+reject_collected_batch(Items, S) ->
+    _ = [gen_statem:reply(From, {error, bad_change}) || {From, _Change} <- Items],
+    S#s{collecting = none, r_bad = S#s.r_bad + length(Items)}.
+
+encoded_change_size(Change) ->
+    byte_size(term_to_binary(Change, [deterministic])).
+
+batch_ms() ->
+    case application:get_env(quod, simplex_batch_ms, ?BATCH_MS) of
+        N when is_integer(N), N >= 0 -> N;
+        _                            -> ?BATCH_MS
+    end.
+
+membership_can_enter(Change, #s{approved = A, slot = C}) ->
+    not is_membership_change(Change) orelse A =:= C.
+
+membership_barrier(#s{slot = Committed, eng = #eng{tree = Tree}}) ->
+    lists:any(fun({Sl, #block{payload = Payload}}) ->
+                      Sl > Committed andalso payload_touches_committee(Payload)
+              end, maps:to_list(Tree)).
+
+parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
+parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
+    (maps:get(Parent, Tree))#block.timestamp.
 
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
 %% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
@@ -965,21 +1132,22 @@ apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
 apply_event({broadcast, Cert}, S) ->
     broadcast({cert, Cert}, S);
 %% A block was notarized: sign + emit our commit share — UNLESS we already complaint-signed this slot
-%% (`may_commit` guard) OR we judged its membership change INVALID (`invalid[Sl]`). Recording
-%% `commit_signed[Sl]` makes the symmetric `may_complain` guard hold, so an honest node contributes to at
+%% (`may_commit` guard) OR we judged its membership change INVALID (`#round.invalid`). Recording
+%% the round's `commit` latch makes the symmetric `may_complain` guard hold, so an honest node contributes to at
 %% most one of {commit cert, complaint cert} per slot — the safety rule. The `invalid` guard is
 %% belt-and-braces: a node that evaluated a membership proposal and rejected it never endorses at ANY phase,
 %% even if the block notarized via others (an absent verdict, by contrast, must NOT bar a commit share — a
 %% support cert already proves ≥ f+1 honest validations).
-apply_event({notarized, #block{slot = Sl}}, S = #s{complained = Cd, invalid = Inv}) ->
-    case may_commit(Sl, maps:keys(Cd)) andalso not maps:is_key(Sl, Inv) of
-        false -> S;                                    %% already complained Sl, or judged it invalid ⇒ never commit it
+apply_event({notarized, #block{slot = Sl} = Block}, S0) ->
+    S = approve_block(Block, S0),
+    Round = round_state(Sl, S),
+    case may_commit(Sl, complained_slots(S)) andalso not Round#round.invalid of
+        false -> S;
         true  -> case own_share(commit, Sl, engine_block_hash(Sl, S), S) of
                      blocked -> S;
                      {ok, Share} ->
-                         engine_step([{share, Share}],
-                                     broadcast({share, Share},
-                                               S#s{commit_signed = (S#s.commit_signed)#{Sl => true}}))
+                         S1 = put_round(Sl, Round#round{commit = true}, S),
+                         engine_step([{share, Share}], broadcast({share, Share}, S1))
                  end
     end;
 %% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
@@ -988,22 +1156,27 @@ apply_event({committed, Slot, Block}, S) ->
 %% A slot was complaint-skipped: finalize it as an empty (`noop`) slot, in order — advancing the height
 %% so the rotated leader for the next slot proposes.
 apply_event({skipped, Slot}, S) ->
-    skip_contiguous(Slot, S).
+    skip_contiguous(Slot, clear_active(Slot, S)).
+
+approve_block(#block{slot = Sl}, S = #s{approved = Approved}) ->
+    S#s{approved = max(Approved, Sl),
+        active_slot = case S#s.active_slot of Sl -> none; A -> A end}.
 
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
-%% clear the per-slot latches, and reply `{ok, Slot}` to the parked caller. The payload is a single change
-%% (the non-pipelined proposer builds one-change blocks; batching is a later throughput step).
-commit_block(Slot, #block{payload = [Change], timestamp = BlockTs}, S = #s{store = Store, eng = Eng}) ->
+%% clear the per-slot latches, and reply `{ok, Slot}` to every caller in the batch.
+commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store = Store, eng = Eng}) ->
     BH = engine_block_hash(Slot, S),
-    case persisted_cert(commit, Slot, BH, Eng) of   %% minimal, committee-as-of-slot; pre-prune
+    case persisted_finality(Slot, BH, Eng) of
         none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
         Cert ->
-            E = #entry{index = Slot, data = Change, timestamp = BlockTs, cert = Cert},   %% mirror the block time so catch-up reconstructs the exact block
+            Data = quod_ledger:data(Payload),
+            E = #entry{index = Slot, data = Data, timestamp = BlockTs, cert = Cert},
             {ok, Store1} = quod_ledger_store:append(Store, [E]),
             publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
-            S1 = adopt_committee(Change, finalize(Slot, S#s{store = Store1, commits = S#s.commits + 1,
-                                                            last_ts = max(S#s.last_ts, BlockTs)})),
-            maybe_mark_ready(ack_pending(Slot, apply_live(Slot, Change, S1)))
+            S0 = ack_local(Slot, S#s{store = Store1, commits = S#s.commits + 1,
+                                     last_ts = max(S#s.last_ts, BlockTs)}),
+            S1 = adopt_committee(Data, finalize(Slot, S0)),
+            maybe_mark_ready(apply_live(Slot, Data, S1))
     end.
 
 engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
@@ -1012,13 +1185,11 @@ engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
 %% A committed transaction advances the committee FACTS (`#s.validators`) at the slot boundary, IN-PROCESS —
 %% by reading the `peer_admitted` asserts/retracts out of the block we just committed. This ALWAYS updates
 %% the facts. The engine's VOTING set is then fed SEPARATELY through the epoch seam (`active_validators/1`):
-%% today (epoch length 1) that is the identity, so the engine adopts the just-updated set and slot+1 is voted
-%% under it, exactly as before; under real epochs a mid-epoch facts change leaves the engine's frozen set
-%% untouched and this engine swap becomes a no-op. Never from a message or a call: an outside notification
-%% could land after we already began the next slot. Safe without epochs because consensus is strictly
-%% non-pipelined: the just-committed slot's certs are already formed + pruned under the OLD set, the facts
-%% are a pure function of the committed prefix, and slot+1 is the first slot voted under the NEW set — so
-%% every node crosses the boundary at the same logical point. The delta folds via the SAME
+%% today (epoch length 1) that is the identity. Committee blocks are explicit-finality pipeline barriers,
+%% so their certs are formed and pruned under the OLD set before any next-slot proposal can open; slot+1
+%% is the first slot voted under the NEW set. Never update this from an outside message: it could arrive
+%% after the next round had started. The facts are a pure function of the committed prefix and every node
+%% crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
 adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
     case apply_committee_delta(Change, V) of
@@ -1049,8 +1220,10 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
             E = #entry{index = Slot, data = noop, cert = Cert},
             {ok, Store1} = quod_ledger_store:append(Store, [E]),
             publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
-            S1 = finalize(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
-            maybe_mark_ready(apply_live(Slot, noop, nack_pending(Slot, S1)))
+            S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
+            S1 = finalize(Slot, S0),
+            S2 = S1#s{approved = max(S1#s.approved, Slot)},
+            maybe_mark_ready(apply_live(Slot, noop, S2))
     end.
 
 %% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
@@ -1073,32 +1246,44 @@ weak_cert_wait(Kind, Slot, BH, S) ->
     S#s{eng = eng_evict_final(Kind, Slot, BH, S#s.eng), weak_cert_waits = S#s.weak_cert_waits + 1}.
 
 %% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
-%% the proposing latch, the support/commit/complaint sign-latches, and the membership validate/invalid
+%% local proposal, support/commit/complaint latches, and membership validation
 %% latches (all bounded to the in-flight window).
 finalize(Slot, S) ->
     S#s{slot = Slot,
         eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
-        proposing     = case S#s.proposing of Slot -> none; Other -> Other end,
         active_slot   = case S#s.active_slot of Slot -> none; A -> A end,
-        validating    = case S#s.validating of {Slot, _, _} -> none; V -> V end,
-        supported     = maps:remove(Slot, S#s.supported),
-        commit_signed = maps:remove(Slot, S#s.commit_signed),
-        complained    = maps:remove(Slot, S#s.complained),
-        invalid       = maps:remove(Slot, S#s.invalid)}.
+        rounds = maps:remove(Slot, S#s.rounds),
+        local_proposals = maps:remove(Slot, S#s.local_proposals),
+        collecting = clear_collecting_le(Slot, S#s.collecting)}.
 
-%% Reply `{ok, Slot}` to the caller parked on this slot (only the proposing node has one).
-ack_pending(Slot, S = #s{pending = P}) ->
-    case maps:take(Slot, P) of
-        {From, P1} -> _ = gen_statem:reply(From, {ok, Slot}), S#s{pending = P1};
-        error      -> S
+ack_local(Slot, S) -> reply_local(Slot, {ok, Slot}, S).
+nack_local(Slot, S) -> reply_local(Slot, {error, skipped}, S).
+
+reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
+    case maps:take(Slot, Local) of
+        {#local_proposal{waiters = Waiters}, Local1} ->
+            _ = [gen_statem:reply(From, Reply) || From <- Waiters],
+            S#s{local_proposals = Local1};
+        error -> S
     end.
 
-%% Its slot was skipped, not committed: tell the parked proposer to retry (the write was never ordered).
-nack_pending(Slot, S = #s{pending = P}) ->
-    case maps:take(Slot, P) of
-        {From, P1} -> _ = gen_statem:reply(From, {error, skipped}), S#s{pending = P1};
-        error      -> S
-    end.
+clear_collecting_le(Slot, #batch{slot = Sl}) when Sl =< Slot -> none;
+clear_collecting_le(_Slot, Collecting) -> Collecting.
+
+clear_active(Slot, S = #s{active_slot = Slot}) -> S#s{active_slot = none};
+clear_active(_Slot, S) -> S.
+
+round_state(Slot, #s{rounds = Rounds}) ->
+    maps:get(Slot, Rounds, #round{}).
+
+put_round(Slot, Round, S = #s{rounds = Rounds}) ->
+    S#s{rounds = Rounds#{Slot => Round}}.
+
+complained_slots(#s{rounds = Rounds}) ->
+    [Sl || {Sl, #round{complaint = true}} <- maps:to_list(Rounds)].
+
+committed_slots(#s{rounds = Rounds}) ->
+    [Sl || {Sl, #round{commit = true}} <- maps:to_list(Rounds)].
 
 %% Sign + emit our SUPPORT share for a block — offer it to our engine AND broadcast it — unless the slot
 %% is already committed history, or we already supported a block for this slot (no double-support, the
@@ -1110,11 +1295,13 @@ support_block(Block, BH, S) ->
     end.
 
 support_block_ready(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;
-support_block_ready(#block{slot = Sl}, BH, S = #s{supported = Sup}) ->
-    case maps:get(Sl, Sup, none) of
+support_block_ready(#block{slot = Sl}, BH, S) ->
+    Round = round_state(Sl, S),
+    case Round#round.supporting of
         none -> {ok, Share} = own_share(support, Sl, BH, S),
+                S1 = put_round(Sl, Round#round{supporting = BH}, S),
                 engine_step([{share, Share}],
-                            broadcast({share, Share}, S#s{supported = Sup#{Sl => BH}}));
+                            broadcast({share, Share}, S1));
         SupportedBH ->
             case BH of
                 %% The SAME block again = the leader is REDRIVING the stuck slot — which means it is
@@ -1122,7 +1309,7 @@ support_block_ready(#block{slot = Sl}, BH, S = #s{supported = Sup}) ->
                 %% Re-echo our own share(s) for it — deterministic Ed25519 re-signs to identical bytes —
                 %% so a redrive heals both directions. Bounded by the leader's Δ (one echo per re-fire).
                 SupportedBH -> {ok, Support} = own_share(support, Sl, BH, S),
-                      Commit = case maps:is_key(Sl, S#s.commit_signed) of
+                      Commit = case Round#round.commit of
                                    true  -> {ok, Sh} = own_share(commit, Sl, BH, S), [{share, Sh}];
                                    false -> []
                                end,
@@ -1160,30 +1347,38 @@ dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true 
 dispatch(_Peer, _Other, S)                 -> S.
 
 well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
-    is_slot(Sl) andalso is_slot(P) andalso is_list(Pl) andalso is_slot(Ts);   %% Ts is a non-neg integer (ms); is_slot IS that predicate
+    is_slot(Sl) andalso is_slot(P) andalso is_slot(Ts)
+        andalso well_formed_block_payload(Pl);
 well_formed_block(_) -> false.
+
+well_formed_block_payload([noop]) -> true;   %% persisted legacy explicit empty block
+well_formed_block_payload(Pl) ->
+    proper_transaction_list(Pl)
+        andalso length(Pl) =< ?MAX_BATCH_TXS
+        andalso byte_size(term_to_binary(Pl, [deterministic])) =< ?MAX_BLOCK_BYTES
+        andalso lists:all(fun well_formed_transaction/1, Pl)
+        andalso unique_tx_ids(Pl).
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
-    is_kind(K) andalso is_slot(Sl) andalso is_hash_or_none(BH) andalso is_binary(Sg) andalso is_binary(Sig);
+    is_slot(Sl) andalso valid_shape(K, BH) andalso valid_signer_signature(Sg, Sig);
 well_formed_share(_) -> false.
 well_formed_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs}) ->
-    is_kind(K) andalso is_slot(Sl) andalso is_hash_or_none(BH) andalso is_list(Sigs);
+    is_slot(Sl) andalso valid_shape(K, BH) andalso proper_signatures(Sigs);
 well_formed_cert(_) -> false.
-is_slot(X)         -> is_integer(X) andalso X >= 0.
-is_kind(K)         -> K =:= support orelse K =:= commit orelse K =:= complaint.
-is_hash_or_none(H) -> H =:= none orelse is_binary(H).
+is_slot(X) -> is_integer(X) andalso X >= 0 andalso X =< ?MAX_SLOT.
 
-%% A leader's proposal: accept it only from the slot's actual leader AND only when it is the NEXT block
-%% we expect — slot = committed+1 extending our committed tip, with a single payload item. This bounds a
-%% Byzantine leader (no jumping ahead / flooding future slots) and means we never support a block on a
-%% chain we cannot verify, nor ever hand a malformed payload to commit_block.
+%% A leader's proposal: accept it only from the slot's actual leader and at the next APPROVED slot,
+%% extending that approved parent. At most one uncommitted approved parent may be extended,
+%% and the payload is a bounded, structurally valid transaction batch. This prevents future-slot flooding
+%% and ensures commit_block only receives blocks whose full apply shape was checked before voting.
 %% `valid_proposal` is checked FIRST (it pins `Sl =:= H+1 ≥ 1`) so `leader/2` is never evaluated on an
 %% untrusted `Sl` — a crafted `slot=0` would otherwise make `leader(0,_)` do `lists:nth(0,_)` and crash us.
 on_propose(Peer, #block{slot = Sl} = Block, S) ->
-    case valid_proposal(Block, S) andalso leader(Sl, active_validators(S)) =:= Peer of   %% active set leads
+    BH = block_hash(Block),
+    Valid = valid_proposal(Block, S) orelse known_proposal(Sl, BH, S),
+    case Valid andalso leader(Sl, active_validators(S)) =:= Peer of
         %% Recovery may ingest the block and certificates as evidence, but only a ready voter starts local
         %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
-        true  -> BH = block_hash(Block),
-                 S1 = engine_step([{block, BH, Block}], S),
+        true  -> S1 = engine_step([{block, BH, Block}], S),
                  case may_vote(S1) of
                      true  -> support_or_validate(Block, BH, arm_complaint(Sl, S1));
                      false -> S1
@@ -1194,54 +1389,74 @@ on_propose(Peer, #block{slot = Sl} = Block, S) ->
 %% A plain content proposal is supported immediately. A COMMITTEE-changing proposal defers its support
 %% share until this node's own KB judges it (`quod_prolog:request_membership_verdict/5`, pinned to the
 %% proposal's parent height): we record `validating` and support only on a `valid` verdict — so a Byzantine
-%% leader's unauthorized membership change never collects an honest support quorum. (The LEADER supports its
-%% own proposal directly in `handle_append_leader`: its `can_join` proof at propose time IS its validation.)
+%% leader's unauthorized membership change never collects an honest support quorum. Local and remote
+%% proposals use this same path; the asynchronous Prolog/consensus boundary needs no leader exception.
 %% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
 support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
 %% Slot already judged INVALID: we never endorse it at any phase, so a REDRIVEN copy must not re-request
 %% a verdict (it would re-prove per Δ and double-count the reject). Checked before hashing — no work.
-support_or_validate(#block{slot = Sl}, _BH, S) when is_map_key(Sl, S#s.invalid) -> S;
-support_or_validate(#block{slot = Sl, payload = [Change]} = Block, BH,
-                    S = #s{ns = Ns, validating = Val}) ->
-    case committee_delta(Change) =/= {[], []} of
+support_or_validate(#block{slot = Sl}, _BH, S) ->
+    case (round_state(Sl, S))#round.invalid of
+        true -> S;
+        false -> support_or_validate_ready(Sl, _BH, S)
+    end.
+
+support_or_validate_ready(Sl, BH, S) ->
+    #block{payload = Payload} = Block = block_for(BH, S#s.eng),
+    case payload_touches_committee(Payload) of
         false -> support_block(Block, BH, S);
         true  ->
-            case maps:get(Sl, S#s.supported, none) =:= BH of
+            Round = round_state(Sl, S),
+            case Round#round.supporting =:= BH of
                 %% judged VALID + support-signed already: a redriven copy takes the plain support path,
                 %% whose duplicate branch re-echoes our share — never a KB re-proof per Δ
                 true  -> support_block(Block, BH, S);
                 false ->
-                    case Val of
-                        {Sl, BH, _} -> S;   %% already validating this exact block — idempotent, don't re-request
-                        _ -> _ = quod_prolog:request_membership_verdict(Ns, Change, Sl, self(), {Sl, BH}),
-                             S#s{validating = {Sl, BH, Block}}
+                    case Round#round.validating of
+                        BH -> S;
+                        _ -> [Change] = Payload,   %% acceptable_payload makes membership blocks singleton
+                             _ = quod_prolog:request_membership_verdict(S#s.ns, Change, Sl,
+                                                                        self(), {Sl, BH}),
+                             put_round(Sl, Round#round{validating = BH}, S)
                     end
             end
     end.
 
 %% The KB verdict for a membership proposal we deferred, correlated to the exact block by `{Sl, BH}`: `valid`
-%% ⇒ emit the deferred support share; `invalid` ⇒ latch `invalid[Sl]` (so we never endorse it at any phase —
+%% ⇒ emit the deferred support share; `invalid` ⇒ latch `#round.invalid` (so we never endorse it at any phase —
 %% see `apply_event({notarized,...})`) and count it; `abstain` ⇒ neither (a peer-formed support cert may still
 %% notarize; if enough nodes abstain the slot Δ-skips). A verdict is acted on ONLY if `{Sl, BH}` still matches
 %% what we are validating AND `Sl` is still head+1 — so a stale verdict (slot finalized, or a DIFFERENT block
 %% now validating under leader equivocation) is dropped, never applied to the wrong block.
-on_membership_verdict(Sl, BH, Verdict, S = #s{validating = {Sl, BH, Block}, slot = H}) when Sl =:= H + 1 ->
-    S1 = S#s{validating = none},
-    case Verdict of
-        valid        -> support_block(Block, BH, S1);
-        {invalid, _} -> S1#s{invalid = (S1#s.invalid)#{Sl => true},
-                             membership_rejects = S1#s.membership_rejects + 1};
-        abstain      -> S1
+on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= Approved + 1 ->
+    Round = round_state(Sl, S),
+    case Round#round.validating of
+        BH ->
+            S1 = put_round(Sl, Round#round{validating = none}, S),
+            case Verdict of
+                valid        -> case block_for(BH, S1#s.eng) of
+                                    #block{} = Block -> support_block(Block, BH, S1);
+                                    _                -> S1
+                                end;
+                {invalid, _} ->
+                    S2 = put_round(Sl, (round_state(Sl, S1))#round{invalid = true},
+                                   S1#s{membership_rejects = S1#s.membership_rejects + 1}),
+                    complain_slot(Sl, S2);
+                abstain      -> S1
+            end;
+        _ -> S
     end;
-on_membership_verdict(_Sl, _BH, _Verdict, S) -> S.   %% stale / different block / not validating — ignore
+on_membership_verdict(_Sl, _BH, _Verdict, S) -> S.
 
 %% The head+1 slot is now an ACTIVE view (a proposal seen, or a local write we couldn't lead): arm the
 %% Δ complaint timer for it. Idempotent per slot (`A =/= V`) so repeat evidence never pushes the deadline
 %% out; only ever `head+1`, so a single named timer suffices. An idle committee acquires no evidence, so
 %% the timer is never armed — the client-driven model never skips a slot nobody wants.
-arm_complaint(V, S = #s{slot = H, active_slot = A}) when V =:= H + 1, A =/= V -> S#s{active_slot = V};
+arm_complaint(V, S = #s{approved = Approved, active_slot = A})
+        when V =:= Approved + 1, A =/= V ->
+    S#s{active_slot = V};
 arm_complaint(_V, S) -> S.
 
 %% Translate an `active_slot` transition into the gen_statem timer action for the named `complain` timer
@@ -1269,10 +1484,10 @@ delta_ms() ->
 %%   the counterpart can act. The leader JOINS a complaint only on the `f+1` evidence (below) — and if it
 %%   already commit-signed V (so it may never complain), it keeps REDRIVING: retransmitting the pooled
 %%   support cert + its commit share is exactly what heals a follower whose copy was lost.
-on_complain_timeout(V, S = #s{slot = H, commit_signed = Cs}) when V =:= H + 1 ->
+on_complain_timeout(V, S = #s{approved = Approved}) when V =:= Approved + 1 ->
     case leads_inflight(V, S) of
         false -> complain_slot(V, S);
-        true  -> case complaint_evidence(V, S) andalso may_complain(V, maps:keys(Cs)) of
+        true  -> case complaint_evidence(V, S) andalso may_complain(V, committed_slots(S)) of
                      true  -> complain_slot(V, S);
                      false -> redrive_slot(V, S)
                  end
@@ -1286,8 +1501,9 @@ on_complain_timeout(_V, S) -> S.
 %% EVERY member's share there, and a late-promoting member only learns of the stall from the re-broadcast
 %% complaint shares — on arrival it joins, and the cert closes. `complain_slot`'s `may_complain` keeps the
 %% commit/complaint mutual exclusion; `arm_complaint` puts the re-broadcast of our own share on our Δ.
-maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{slot = H}) when V =:= H + 1 ->
-    case may_vote(S) andalso (not maps:is_key(V, S#s.complained))
+maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{approved = Approved})
+        when V =:= Approved + 1 ->
+    case may_vote(S) andalso not (round_state(V, S))#round.complaint
          andalso complaint_evidence(V, S) of
         true  -> arm_complaint(V, complain_slot(V, S));
         false -> S
@@ -1295,8 +1511,8 @@ maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{slot = H}) when 
 maybe_join_complaint(_Share, S) -> S.
 
 %% Are we the leader of V with our own proposal still in flight?
-leads_inflight(V, S = #s{self = Self, proposing = P}) ->
-    P =:= V andalso leader(V, active_validators(S)) =:= Self.
+leads_inflight(V, S = #s{self = Self, local_proposals = Local}) ->
+    maps:is_key(V, Local) andalso leader(V, active_validators(S)) =:= Self.
 
 %% `f+1` distinct PEER complaint shares for V in the pool — proof at least one HONEST member wants the
 %% skip (at most `f` Byzantine members exist, and complaint shares are signature-verified + set-checked
@@ -1312,8 +1528,8 @@ complaint_amplified(Self, Validators, Bucket) ->
     N = length(Validators),
     map_size(maps:remove(Self, Bucket)) >= (N - quorum(N)) + 1.
 
-%% Re-broadcast slot V's in-flight state: the proposal block (pinned by the hash we support-signed —
-%% `supported[V]`, set with `proposing` and cleared with it in `finalize/2`), our own support/commit
+%% Re-broadcast slot V's in-flight state: the local proposal block (pinned by its stored hash
+%% and cleared in `finalize/2`), our own support/commit
 %% shares (re-signed — Ed25519 is deterministic, so the bytes are identical to the originals), and any
 %% pooled certs. The Δ re-fire IS the retransmit over the send-once transport. Idempotent at every
 %% receiver: duplicate blocks/shares/certs are absorbed by the engine, and a duplicate proposal makes the
@@ -1326,40 +1542,82 @@ redrive_slot(V, S) ->
         false -> S
     end.
 
-redrive_slot_ready(V, S0 = #s{self = Self, supported = Sup, commit_signed = Csd, conns = Conns,
-                              eng = Eng = #eng{certs = Certs}}) ->
-    case maps:get(V, Sup, none) of
-        none -> S0;   %% not yet support-signed (mid-propose edge) — nothing to redrive this Δ
-        BH ->
-            case block_for(BH, Eng) of
-                undefined -> S0;
-                Block ->
-                    {ok, Support} = own_share(support, V, BH, S0),
-                    Commit = case maps:is_key(V, Csd) of
-                                 true  -> {ok, Sh} = own_share(commit, V, BH, S0), [{share, Sh}];
-                                 false -> []
-                             end,
-                    Own  = [{share, Support} | Commit],
-                    Cs   = [{cert, C} || {{_K, Sl, _B}, C} <- maps:to_list(Certs), Sl =:= V],
-                    Live = [P || P <- active_validators(S0) -- [Self], maps:is_key(P, Conns)],
-                    S1   = S0#s{redrives = S0#s.redrives + 1},
-                    lists:foldl(fun(Msg, Acc) ->
-                                        Frame = encode(Acc#s.ns, Msg),
-                                        lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Live)
-                                end, S1, [{propose, Block} | Own ++ Cs])
+redrive_slot_ready(V, S0 = #s{local_proposals = Local}) ->
+    case maps:get(V, Local, undefined) of
+        undefined -> S0;
+        #local_proposal{hash = BH} ->
+            case block_for(BH, S0#s.eng) of
+                #block{} = Block -> redrive_local_block(V, Block, BH, S0);
+                _                -> S0
             end
     end.
 
+redrive_local_block(V, Block, BH, S0) ->
+    %% A membership proposal may still be waiting for its local KB verdict. Re-entering
+    %% the common path re-requests only after an abstention; an outstanding request is
+    %% idempotent. The proposal itself is always retransmitted, even before support.
+    S1 = support_or_validate(Block, BH, S0),
+    #s{self = Self, conns = Conns, eng = #eng{certs = Certs}} = S1,
+    Round = round_state(V, S1),
+    Own = case Round#round.supporting =:= BH of
+              true ->
+                  {ok, Support} = own_share(support, V, BH, S1),
+                  Commit = case Round#round.commit of
+                               true  -> {ok, Sh} = own_share(commit, V, BH, S1), [{share, Sh}];
+                               false -> []
+                           end,
+                  [{share, Support} | Commit];
+              false -> []
+          end,
+    Cs   = [{cert, C} || {{_K, Sl, _B}, C} <- maps:to_list(Certs), Sl =:= V],
+    Live = [P || P <- active_validators(S1) -- [Self], maps:is_key(P, Conns)],
+    S2   = S1#s{redrives = S1#s.redrives + 1},
+    lists:foldl(fun(Msg, Acc) ->
+                        Frame = encode(Acc#s.ns, Msg),
+                        lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Live)
+                end, S2, [{propose, Block} | Own ++ Cs]).
+
+%% Reliable channels are built from reconnecting send-once links. Re-emit this
+%% validator's bounded in-flight evidence on the existing tick so notarization can
+%% safely cancel the complaint timer without also cancelling commit liveness. This
+%% covers the important case where the slot leader dies after a bare support quorum:
+%% the remaining notarizers continue exchanging commit shares and finish the slot.
+redrive_votes(S) ->
+    case may_vote(S) of
+        false -> S;
+        true ->
+            lists:foldl(
+              fun({Sl, #round{supporting = BH, commit = Commit, complaint = Complaint}}, Acc0) ->
+                      Evidence0 = case BH of
+                                      none -> [];
+                                      _    -> {ok, Support} = own_share(support, Sl, BH, Acc0),
+                                              [{share, Support}]
+                                  end,
+                      Evidence1 = case Commit andalso BH =/= none of
+                                      true  -> {ok, CommitShare} = own_share(commit, Sl, BH, Acc0),
+                                               [{share, CommitShare} | Evidence0];
+                                      false -> Evidence0
+                                  end,
+                      Evidence = case Complaint of
+                                     true  -> {ok, ComplaintShare} = own_share(complaint, Sl, none, Acc0),
+                                              [{share, ComplaintShare} | Evidence1];
+                                     false -> Evidence1
+                                 end,
+                      lists:foldl(fun broadcast/2, Acc0, Evidence)
+              end, S, [{Sl, R} || {Sl, R} <- maps:to_list(S#s.rounds), Sl > S#s.slot])
+    end.
+
 %% Sign + (re)broadcast our complaint share and offer it to the engine, unless we commit-signed V.
-complain_slot(V, S = #s{commit_signed = Cs}) ->
-    case may_vote(S) andalso may_complain(V, maps:keys(Cs)) of
+complain_slot(V, S) ->
+    case may_vote(S) andalso may_complain(V, committed_slots(S)) of
         false -> S;
         true  -> {ok, Share} = own_share(complaint, V, none, S),
                  %% latch complained[V] BEFORE offering the share: if our own complaint completes the ⅔
                  %% cert, engine_step skips V and finalize/2 clears the latch — so the pre-set doesn't
                  %% leak; and any {notarized,V} inside that same engine_step now sees complained[V] and
                  %% is barred from a commit share (the mutual-exclusion safety half, self-enforced here).
-                 S1 = S#s{complained = (S#s.complained)#{V => true}},
+                 Round = round_state(V, S),
+                 S1 = put_round(V, Round#round{complaint = true}, S),
                  engine_step([{share, Share}], broadcast({share, Share}, S1))
     end.
 
@@ -1371,9 +1629,21 @@ own_share(Kind, Slot, BlockHash, #s{id = Id} = S) ->
         false -> blocked
     end.
 
-valid_proposal(#block{slot = Sl, parent = P, payload = [Change], timestamp = Ts}, #s{slot = H, last_ts = Last} = S) ->
-    Sl =:= H + 1 andalso P =:= H andalso ts_acceptable(Ts, Last, quod_time:now_ms()) andalso acceptable_change(Change, S);
-valid_proposal(_Block, _S) -> false.
+valid_proposal(#block{slot = Sl, parent = P, payload = Payload, timestamp = Ts},
+               #s{slot = Committed, approved = Approved} = S) ->
+    Sl =:= Approved + 1
+        andalso P =:= Approved
+        andalso Approved =< Committed + ?PIPELINE_DEPTH
+        andalso not membership_barrier(S)
+        andalso ts_acceptable(Ts, parent_timestamp(P, S), quod_time:now_ms())
+        andalso acceptable_payload(Payload, S).
+
+%% A leader redrive for an already-supported in-flight block is accepted even after
+%% the approved frontier moved past it. The locally latched hash makes this exact and
+%% cannot authorize a different block for the same slot.
+known_proposal(Sl, BH, S) when Sl > S#s.slot ->
+    (round_state(Sl, S))#round.supporting =:= BH;
+known_proposal(_Sl, _BH, _S) -> false.
 
 %% A proposed block's `timestamp` is acceptable iff it is a non-negative integer (`well_formed_block`
 %% guarantees this for wire input, but we re-check so the predicate is total + directly testable),
@@ -1388,8 +1658,8 @@ valid_proposal(_Block, _S) -> false.
 ts_acceptable(Ts, Last, Now) ->
     is_integer(Ts) andalso Ts >= Last andalso Ts =< Now + ?MAX_FUTURE_MS.
 
-%% A change this node will PROPOSE or SUPPORT: a `#transaction` with a well-formed (list) diff, or a
-%% `noop`. Membership changes are ordinary transactions whose diff asserts/retracts `peer_admitted`
+%% A change this node will PROPOSE or SUPPORT: a fully well-formed `#transaction{}`.
+%% Membership changes are ordinary transactions whose diff asserts/retracts `peer_admitted`
 %% (submitted via a `can_join`-gated external predicate) — a transaction that TOUCHES the committee
 %% additionally passes the membership gate (`membership_change_ok/2`): shape + never-empty floor,
 %% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
@@ -1398,25 +1668,147 @@ ts_acceptable(Ts, Last, Now) ->
 %% that passes it then also defers its support to a KB verdict (`support_or_validate/2` →
 %% `quod_prolog:request_membership_verdict/5`). Committed history stays cert-trusted (catch-up folds it
 %% unconditionally, by design).
-%% A diff that is not a PROPER list is rejected outright: it would crash `committee_delta`'s fold at
-%% commit AND on every restart re-fold — a poison block every node would crash-loop on. (`is_list/1`
-%% is NOT enough: it is `true` for an IMPROPER list like `[Op | junk]`, inspecting only the first cons
-%% cell, and `binary_to_term` on the untrusted `{log,Ns}` wire can decode exactly that — so the guard
-%% must walk the whole spine.)
+%% The whole transaction is checked before voting: identifiers and timestamps have their canonical
+%% shapes, the OCC read-set is a map of predicate hashes, and every diff element is a legal
+%% assert/retract over an Erlog clause. This makes apply/restart a total operation over every block an
+%% honest validator can endorse. The recursive diff check also rejects an improper list such as
+%% `[Op | junk]`, which a shallow cons-cell match would otherwise admit from the untrusted wire.
 acceptable_change(Change, #s{validators = Vs}) -> change_acceptable(Change, Vs).
+
+acceptable_payload([#transaction{} | _] = Payload, S) ->
+    proper_transaction_list(Payload)
+        andalso length(Payload) =< ?MAX_BATCH_TXS
+        andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
+        andalso lists:all(fun(Change) -> acceptable_change(Change, S) end, Payload)
+        andalso unique_tx_ids(Payload)
+        andalso membership_payload_ok(Payload, S);
+acceptable_payload(_Payload, _S) -> false.
+
+proper_transaction_list([#transaction{} | Rest]) -> proper_transaction_list(Rest);
+proper_transaction_list([]) -> true;
+proper_transaction_list(_) -> false.
+
+unique_tx_ids(Payload) ->
+    Ids = [Id || #transaction{tx_id = Id} <- Payload],
+    length(Ids) =:= length(lists:usort(Ids)).
+
+membership_payload_ok(Payload, #s{approved = Approved, slot = Committed}) ->
+    Membership = [T || T <- Payload, is_membership_change(T)],
+    case Membership of
+        []  -> true;
+        [_] -> length(Payload) =:= 1 andalso Approved =:= Committed;
+        _   -> false
+    end.
+
+payload_touches_committee(Payload) ->
+    lists:any(fun is_membership_change/1, Payload).
+
+is_membership_change(Change) -> committee_delta(Change) =/= {[], []}.
 
 %% The pure acceptance decision over a validator LIST (exported for eunit; the `#s`-wrapper above is
 %% what the propose/support call sites use).
-change_acceptable(#transaction{diff = Diff} = T, Vs) ->
-    proper_op_list(Diff)
+change_acceptable(#transaction{tx_id = TxId, caller_ns = CallerNs, diff = Diff,
+                               read_check = ReadCheck, author = Author,
+                               submitted_at = SubmittedAt, sig = Sig} = T, Vs) ->
+    well_formed_transaction_fields(TxId, CallerNs, Diff, ReadCheck, Author, SubmittedAt, Sig)
         andalso (not touches_committee(Diff) orelse membership_change_ok(T, Vs));
-change_acceptable(noop, _Vs) -> true;
 change_acceptable(_, _)      -> false.
 
-%% A diff must be a proper list (walked to `[]`), so the folds/scans over it are total.
-proper_op_list([_ | T]) -> proper_op_list(T);
-proper_op_list([])      -> true;
-proper_op_list(_)       -> false.
+-spec well_formed_transaction(term()) -> boolean().
+well_formed_transaction(#transaction{tx_id = TxId, caller_ns = CallerNs, diff = Diff,
+                                     read_check = ReadCheck, author = Author,
+                                     submitted_at = SubmittedAt, sig = Sig}) ->
+    well_formed_transaction_fields(TxId, CallerNs, Diff, ReadCheck, Author, SubmittedAt, Sig);
+well_formed_transaction(_) -> false.
+
+well_formed_transaction_fields(TxId, CallerNs, Diff, ReadCheck, Author, SubmittedAt, Sig) ->
+    nonempty_binary(TxId)
+        andalso nonempty_binary(CallerNs)
+        andalso nonempty_binary(Author)
+        andalso is_integer(SubmittedAt) andalso SubmittedAt >= 0
+        andalso (Sig =:= none orelse is_binary(Sig))
+        andalso valid_read_check(ReadCheck)
+        andalso valid_diff(Diff).
+
+nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
+
+valid_read_check(ReadCheck) when is_map(ReadCheck) ->
+    maps:fold(
+      fun({Functor, Arity}, Hash, true) ->
+              is_atom(Functor) andalso is_integer(Arity) andalso Arity >= 0
+                  andalso is_integer(Hash) andalso Hash >= 0;
+         (_Key, _Hash, _Acc) ->
+              false
+      end, true, ReadCheck);
+valid_read_check(_) -> false.
+
+%% Walk to `[]` and validate every operation, so both `quod_diff:apply_ops/2` and
+%% the committee projection can consume any accepted diff without a catch-all path.
+valid_diff([Op | Rest]) -> valid_op(Op) andalso valid_diff(Rest);
+valid_diff([]) -> true;
+valid_diff(_) -> false.
+
+valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
+    callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
+valid_op(_) -> false.
+
+callable_head(Head) when is_atom(Head) -> true;
+callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 -> is_atom(element(1, Head));
+callable_head(_) -> false.
+
+%% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Legacy/manual
+%% transactions may carry a legal source body instead; `quod_diff` normalizes that
+%% deterministically before applying it. Validate both representations completely.
+valid_clause_body(Body) -> valid_compiled_body(Body) orelse valid_raw_body(Body).
+
+valid_compiled_body({Code, HasCut}) when is_boolean(HasCut) -> valid_code(Code);
+valid_compiled_body(_) -> false.
+
+valid_code([Instruction | Rest]) -> valid_instruction(Instruction) andalso valid_code(Rest);
+valid_code([]) -> true;
+valid_code(_) -> false.
+
+valid_instruction({{disj}, Left, Right}) ->
+    valid_code(Left) andalso valid_code(Right);
+valid_instruction({{if_then}, Cond, Then, Label}) ->
+    valid_code(Cond) andalso valid_code(Then) andalso valid_code_label(Label);
+valid_instruction({{if_then_else}, Cond, Then, Else, Label}) ->
+    valid_code(Cond) andalso valid_code(Then) andalso valid_code(Else)
+        andalso valid_code_label(Label);
+valid_instruction({{once}, Goal, Label}) ->
+    valid_code(Goal) andalso valid_code_label(Label);
+valid_instruction({{cut}, Label, Last}) ->
+    valid_code_label(Label) andalso is_boolean(Last);
+valid_instruction({call, {Variable}}) ->
+    valid_variable(Variable);
+valid_instruction(Goal) ->
+    callable_head(Goal) andalso valid_stored_term(Goal).
+
+valid_raw_body(Body) -> callable_body(Body) andalso valid_stored_term(Body).
+
+callable_body(Body) when is_atom(Body) -> true;
+callable_body({Variable}) -> valid_variable(Variable);
+callable_body(Body) -> callable_head(Body).
+
+valid_code_label(Label) -> is_atom(Label) orelse (is_integer(Label) andalso Label >= 0).
+valid_variable(Variable) -> is_atom(Variable) orelse (is_integer(Variable) andalso Variable >= 0).
+
+%% Stored clauses use integer variable ids after compilation (`{0}`, `{1}`, ...),
+%% while source terms use atom ids. Erlog's public `is_legal_term/1` only accepts the
+%% latter, so the durable representation needs this small explicit walker.
+valid_stored_term({Variable}) -> valid_variable(Variable);
+valid_stored_term(Term) when is_tuple(Term), tuple_size(Term) >= 2,
+                             is_atom(element(1, Term)) ->
+    valid_tuple_args(Term, 2, tuple_size(Term));
+valid_stored_term([Head | Tail]) ->
+    valid_stored_term(Head) andalso valid_stored_term(Tail);
+valid_stored_term(Term) ->
+    not is_tuple(Term) andalso not (is_list(Term) andalso Term =/= []).
+
+valid_tuple_args(_Term, Index, Size) when Index > Size -> true;
+valid_tuple_args(Term, Index, Size) ->
+    valid_stored_term(element(Index, Term))
+        andalso valid_tuple_args(Term, Index + 1, Size).
 
 %% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
 %% term as an element — the catch-all keeps the scan total.
@@ -1461,13 +1853,21 @@ send_frame(Peer, Frame, S = #s{chan = Chan, conns = Conns, outbox = Outbox, dial
             _ = quod_link:send(LinkPid, Frame),
             S;
         undefined ->
-            Buffered = lists:sublist([Frame | maps:get(Peer, Outbox, [])], ?MAX_OUTBOX),
+            Buffered = buffer_frame(Frame, maps:get(Peer, Outbox, [])),
             S1 = S#s{outbox = Outbox#{Peer => Buffered}},
             case maps:is_key(Peer, Dialing) of
                 true  -> S1;                                  %% a dial is already in flight for this peer
                 false -> _ = quod_quic:open_link(Peer, Chan),
                          S1#s{dialing = Dialing#{Peer => dial_deadline()}}
             end
+    end.
+
+buffer_frame(Frame, Frames) ->
+    %% Periodic vote redrive must leave one recoverable copy for a disconnected peer,
+    %% not fill the bounded outbox with the same signed bytes every tick.
+    case lists:member(Frame, Frames) of
+        true  -> Frames;
+        false -> lists:sublist([Frame | Frames], ?MAX_OUTBOX)
     end.
 
 %% Re-drive (tick): re-dial every peer with buffered frames but no live link and no dial in flight — the
@@ -1499,7 +1899,9 @@ prune_dials(Dialing, Now) ->
 %% resolving to a self-closing duplicate link_up), so the timeout is intentionally not tunable down.
 dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 
-encode(Ns, Msg) -> term_to_binary({sx, Ns, term_to_binary(Msg)}).
+encode(Ns, Msg) ->
+    Inner = term_to_binary(Msg, [deterministic]),
+    term_to_binary({sx, Ns, Inner}, [deterministic]).
 
 %% The envelope is `[safe]` (known atoms only); the inner message carries `#transaction` diffs whose
 %% Prolog atoms the receiver may not have seen yet, so it decodes WITHOUT `[safe]` — the same
@@ -1626,7 +2028,7 @@ ahead_cert_ceiling(#eng{certs = Certs, base = Base}) ->
 %% behind the in-flight window and must gap-fill. Recomputed on demand (never a stored latch), so it is
 %% self-correcting: as a pull raises `slot`/`base`, `eng_prune` drops those certs and the ceiling falls.
 -spec behind(#s{}) -> boolean().
-behind(#s{eng = Eng, slot = H}) -> ahead_cert_ceiling(Eng) > H + 1.
+behind(#s{eng = Eng, approved = Approved}) -> ahead_cert_ceiling(Eng) > Approved + 1.
 
 %% Facts-only participation: a member of the ACTIVE voting set. A recovering member still ingests verified
 %% traffic so its gap detector can learn, but participation alone grants no signing capability.
@@ -1936,40 +2338,39 @@ catchup_membership_transition(S0, S1) ->
     end.
 
 %% Re-seat the engine to `NewHead` after a catch-up window (or a promotion) advanced the committed height: a
-%% fresh engine over the committee AS-OF the new head, PLUS a reset of every live-slot control latch for slots
-%% `=< NewHead` — those slots are now decided history, so a lingering `proposing`/`active_slot` would wedge the
-%% leader `busy` or redrive a `=< base` slot, and parked appends for filled slots are nacked so the caller
+%% fresh engine over the committee AS-OF the new head, PLUS a reset of every volatile consensus window.
+%% Those slots are now decided history, so a lingering local proposal/timer would wedge the leader or
+%% redrive a `=< base` slot; parked appends for discarded slots are nacked so the caller
 %% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), collapsing the former
 %% split re-arm (a per-catch-up-completion re-arm + a `maybe_promote` conditional re-arm, both `eng_new/2`). At
 %% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
 %% member gap-filling — the caller (`sink_catchup`) pairs this with `timer_actions/2` to cancel a stale
 %% complain timer when `active_slot` is cleared here (a no-op where `active_slot` is already `none`).
 reseat_engine(NewHead, S) ->
-    nack_pending_le(NewHead,
-      S#s{eng           = eng_new(active_validators(S), NewHead),
-          commit_buf    = drop_keys_le(NewHead, S#s.commit_buf),
-          proposing     = clear_slot_le(NewHead, S#s.proposing),
-          active_slot   = clear_slot_le(NewHead, S#s.active_slot),
-          validating    = clear_validating_le(NewHead, S#s.validating),
-          supported     = drop_keys_le(NewHead, S#s.supported),
-          commit_signed = drop_keys_le(NewHead, S#s.commit_signed),
-          complained    = drop_keys_le(NewHead, S#s.complained),
-          invalid       = drop_keys_le(NewHead, S#s.invalid)}).
+    S1 = nack_inflight(S),
+    S1#s{eng             = eng_new(active_validators(S1), NewHead),
+          approved        = NewHead,
+          commit_buf      = #{},
+          active_slot     = none,
+          rounds          = #{}}.
 
-drop_keys_le(N, M) -> maps:filter(fun(K, _) -> K > N end, M).
-clear_slot_le(N, Sl) when is_integer(Sl), Sl =< N -> none;
-clear_slot_le(_, Sl)                              -> Sl.
-clear_validating_le(N, {Sl, _, _}) when Sl =< N -> none;
-clear_validating_le(_, V)                       -> V.
-%% nack (reply `{error,skipped}` to) every parked append for a slot `=< NewHead` — those slots committed
-%% while we were behind, so the caller must retry under the new head; keep the rest parked. Reuses the
-%% single-slot `nack_pending/2` so the `{error,skipped}` reply contract lives in exactly one place.
-nack_pending_le(N, S) ->
-    lists:foldl(fun nack_pending/2, S, [Sl || Sl <- maps:keys(S#s.pending), Sl =< N]).
+%% A recovery re-seat intentionally discards the whole volatile consensus window.
+%% Its fresh engine cannot safely retain proposals or votes from the old base.
+nack_inflight(S0 = #s{local_proposals = Local}) ->
+    S1 = lists:foldl(fun nack_local/2, S0, maps:keys(Local)),
+    case S1#s.collecting of
+        #batch{items_rev = Items} ->
+            _ = [gen_statem:reply(From, {error, skipped}) || {From, _} <- Items],
+            S1#s{collecting = none};
+        _ -> S1
+    end.
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
-        {ok, #entry{} = E} -> block_hash(block_from_entry(E));
+        {ok, #entry{} = E} -> case block_from_entry(E) of
+                                  {ok, Block} -> block_hash(Block);
+                                  error       -> undefined
+                              end;
         _                  -> undefined
     end.
 
@@ -1981,9 +2382,15 @@ local_genesis_hash(#s{store = Store}) ->
 %% are implicit and the block time is mirrored into the entry). The single reconstruction point — every
 %% cert / genesis-anchor check recomputes `block_hash` through here, so a hash-covered field can only be
 %% added in ONE place. Used by `local_genesis_hash` and `quod_catchup` (verify_entry / anchor_ok).
--spec block_from_entry(#entry{}) -> #block{}.
-block_from_entry(#entry{index = I, data = D, timestamp = Ts}) ->
-    #block{slot = I, parent = I - 1, payload = [D], timestamp = Ts}.
+-spec block_from_entry(term()) -> {ok, #block{}} | error.
+block_from_entry(#entry{index = I, data = D, timestamp = Ts})
+  when is_integer(I), I >= 1, is_integer(Ts), Ts >= 0 ->
+    case quod_ledger:payload(D) of
+        {ok, Payload} -> {ok, #block{slot = I, parent = I - 1,
+                                    payload = Payload, timestamp = Ts}};
+        error -> error
+    end;
+block_from_entry(_) -> error.
 
 %% ONE pass over a run of committed entries yielding BOTH projections we need from the log: the validator
 %% set (fold `peer_admitted` asserts/retracts through `apply_committee_delta/2`) and the monotonic
@@ -1999,30 +2406,48 @@ log_projection_step(#entry{data = Data, timestamp = T}, {V, Ts}) ->
     {apply_committee_delta(Data, V), max(T, Ts)}.
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
-%% and retracts (removed). A `#transaction` folds its diff (the validator id is the 4th arg / 5th element
-%% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or anything else changes nothing. This ONE
+%% and retracts (removed). Each transaction folds its diff (the validator id is the 4th arg / 5th element
+%% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or malformed payload changes nothing. This ONE
 %% function feeds BOTH the live commit-time swap (`adopt_committee/2`) and the boot/restart re-fold
 %% (`log_projection/2`), so the running set can never drift from a fresh re-fold.
-committee_delta(#transaction{diff = Diff}) -> lists:foldl(fun committee_op/2, {[], []}, Diff);
-committee_delta(_)                         -> {[], []}.
+committee_delta(Change) ->
+    case quod_ledger:payload(Change) of
+        {ok, Transactions} -> lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
+        error              -> {[], []}
+    end.
+
+committee_transaction(#transaction{diff = Diff}, Acc) ->
+    case proper_list(Diff) of
+        true  -> lists:foldl(fun committee_op/2, Acc, Diff);
+        false -> Acc
+    end;
+committee_transaction(noop, Acc) -> Acc.
 
 committee_op({assert,  {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {addq(Pk, A), R -- [Pk]};
 committee_op({retract, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {A -- [Pk], addq(Pk, R)};
 committee_op(_Op, Acc)                                                  -> Acc.
 
 %% The dial hints carried by one committed payload: each `peer_admitted` ASSERT's `{Pk, {Host, Port}}`.
-%% A SIBLING of `committee_op/2` over the same op shape — kept separate so `committee_delta/1` stays the
-%% pure pubkey-set fold its consumers (catch-up induction, is_membership_change, the feed cache, the eunit
-%% contract) key on; widening that to triples to serve a transport side-effect would be the wrong altitude.
+%% Kept separate from the pure pubkey-set fold consumed by catch-up induction and live membership.
 %% Retracts yield nothing: a removal is a membership change, not a reachability change (no unlearn — a
 %% removed member stays a gossiped-with observer). The `_ -> []` clause is REQUIRED, not defensive: a
 %% catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
-%% NB catch-up entries are NOT shape-gated (proper_op_list guards only the live propose/support seams) —
-%% the defense is that every sunk entry is quorum-cert-verified, so a hostile improper diff needs ≥quorum
-%% collusion (the same pre-existing exposure as committee_delta's own fold).
-admitted_endpoints(#transaction{diff = Diff}) when is_list(Diff) ->
-    [{Pk, {H, P}} || {assert, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff];
-admitted_endpoints(_) -> [].
+admitted_endpoints(Change) ->
+    case quod_ledger:payload(Change) of
+        {ok, Transactions} -> lists:flatmap(fun transaction_endpoints/1, Transactions);
+        error              -> []
+    end.
+
+transaction_endpoints(#transaction{diff = Diff}) ->
+    case proper_list(Diff) of
+        true  -> [{Pk, {H, P}} || {assert, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff];
+        false -> []
+    end;
+transaction_endpoints(noop) -> [].
+
+proper_list([_ | Rest]) -> proper_list(Rest);
+proper_list([])         -> true;
+proper_list(_)          -> false.
 
 %% Apply a committed payload's committee delta onto a validator set — sorted (deterministic, every node
 %% agrees byte-for-byte) and idempotent (a re-asserted member is a no-op).
@@ -2060,12 +2485,11 @@ valid_cfg(Config, Cfg) ->
 
 valid_committee(Cfg) ->
     case maps:get(committee, Cfg) of
-        L when is_list(L) ->
-            case lists:all(fun valid_member/1, L) of
+        L ->
+            case proper_list(L) andalso lists:all(fun valid_member/1, L) of
                 true  -> valid_mode(Cfg);
                 false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
-            end;
-        Other -> {error, {bad_committee, Other}}
+            end
     end.
 
 %% `join` without a genesis-hash anchor would boot unfounded and never be able to verify what it catches up —
@@ -2104,20 +2528,26 @@ genesis_file(Cfg) ->
 status_map(S) ->
     Role = case is_participant(S) of true -> validator; false -> observer end,
     #{role => Role, committee => S#s.validators, slot => S#s.slot,
-      committed => S#s.slot, last_applied => S#s.last_applied,
+      committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync)}.
 
 recovery_phase({pulling, _}) -> pulling;
 recovery_phase(Phase) -> Phase.
 
 stats_map(S) ->
-    #{slot => S#s.slot, committed => S#s.slot, last_applied => S#s.last_applied,
+    #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
+      pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
+      proposals => S#s.proposals, batched_txs => S#s.batched_txs,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
-      submitted => S#s.submitted, skips => S#s.skips, pending => map_size(S#s.pending),
+      submitted => S#s.submitted, skips => S#s.skips, pending => pending_count(S),
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       weak_cert_waits => S#s.weak_cert_waits,
       ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
       syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
+
+pending_count(#s{collecting = Collecting, local_proposals = Local}) ->
+    CollectingN = case Collecting of #batch{items_rev = Items} -> length(Items); none -> 0 end,
+    CollectingN + lists:sum([length(P#local_proposal.waiters) || P <- maps:values(Local)]).

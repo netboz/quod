@@ -33,6 +33,10 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | `quod_link` | per-(peer, channel) stream: header handshake + length-prefixed frames |
 | `quod_reg` | gproc nomenclature (`{conn,NodeId}`, `{channel,Ns}`, `{quod_brahms,Ns}`, …) |
 | `quod_app` | env-driven boot (config from the orchestrator) |
+| `quod_simplex` | per-namespace BFT ordering, batching, failover, and recovery |
+| `quod_prolog` | committed Prolog state, optimistic validation, reads, and ordered apply |
+| `quod_ledger_store` | append-only durable block log; one fsync per committed batch |
+| `quod_catchup` / `quod_feed` | verified historical catch-up and live dissemination |
 
 **Identity.** A node's id is its **Ed25519 public key** (`node_id`), generated on first
 boot and persisted; the address `{Host, Port}` is demoted to a resolvable routing hint.
@@ -40,7 +44,8 @@ The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}`
 and **mutual TLS** binds the connection to that key (`quic:peercert/1` must match the
 claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
 addresses (it reads the `Addr` from the header). *(No-identity/test boots use the address
-as the id, transitionally.)* Per-message/block signing + quorum certificates are Phase B.
+as the id, transitionally.)* Consensus shares and finality certificates are signed today;
+individual transaction-author signatures remain deferred.
 
 **Message contract.** A consumer of channel `Ns`:
 
@@ -128,6 +133,7 @@ wiped root volume to silently create a divergent namespace. Use
 
 - **Done:** pure-Erlang QUIC transport, Brahms membership, Prolog content, the
   DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
-  member recovery, metrics, and durable Docker/Nomad deployment.
+  member recovery, bounded transaction micro-batches, depth-one pipelining with
+  implicit predecessor finality, metrics, and durable Docker/Nomad deployment.
 - **Next:** signed membership authorship, epoch-frozen validator sets, and the
   durable read-replica policy described in `doc/deferred.md`.

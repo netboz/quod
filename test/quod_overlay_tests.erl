@@ -72,6 +72,30 @@ validate_conflict_test() ->
     {succeed, _} = erlog_int:prove_goal({assertz, {parent, tom, sue}}, C),
     ?assertEqual({conflict, {parent, 2}}, quod_diff:validate(ReadSet, M, R)).
 
+%% A local write must not hide the committed predicate dependency of a later read.
+%% This is the concurrency-sensitive case: another transaction can change parent/2
+%% between proof and apply even though this overlay has also staged a parent/2 write.
+read_after_local_write_is_tracked_test() ->
+    C = committed([{parent, tom, bob}]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    Ov0 = db_ref(W0),
+    {ok, Ov1} = quod_erlog_db_local_prove:assertz_clause(
+                  Ov0, {parent, 2}, {parent, tom, sue}, true),
+    ?assertMatch({clauses, _}, quod_erlog_db_local_prove:get_procedure(Ov1, {parent, 2})),
+    ?assertEqual([{parent, 2}], maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
+    quod_erlog_db_local_prove:cleanup_read_set(W0).
+
+%% Abolishing changes the local view to empty, but observing that empty view still
+%% depends on the committed predicate that was hidden by the abolish.
+read_after_local_abolish_is_tracked_test() ->
+    C = committed([{parent, tom, bob}]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    Ov0 = db_ref(W0),
+    {ok, Ov1} = quod_erlog_db_local_prove:abolish_clauses(Ov0, {parent, 2}),
+    ?assertEqual(undefined, quod_erlog_db_local_prove:get_procedure(Ov1, {parent, 2})),
+    ?assertEqual([{parent, 2}], maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
+    quod_erlog_db_local_prove:cleanup_read_set(W0).
+
 %%%===================================================================
 %%% a pure read stages nothing (empty write-set)
 %%%===================================================================

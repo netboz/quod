@@ -13,11 +13,13 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
-         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1, t_commit_carries_cert/1]).
+         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1, t_commit_carries_cert/1,
+         t_concurrent_appends_batch/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
-     t_restart_replays, t_status_stats, t_multi_member_accepted, t_commit_carries_cert].
+     t_restart_replays, t_status_stats, t_multi_member_accepted, t_commit_carries_cert,
+     t_concurrent_appends_batch].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -135,14 +137,45 @@ t_commit_carries_cert(Cfg) ->
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
         {ok, #entry{cert = none}} = quod_ledger_store:read_at(Store, 1),   %% genesis: the anchor, no cert
-        {ok, #entry{data = #transaction{}, timestamp = Ts, cert = Cert} = E2} = quod_ledger_store:read_at(Store, 2),
+        {ok, #entry{data = {batch, [#transaction{}]}, timestamp = Ts, cert = Cert} = E2} =
+            quod_ledger_store:read_at(Store, 2),
         ?assertMatch(#cert{kind = commit, slot = 2}, Cert),
         ?assert(Ts > 0),                              %% leader stamped a real wall-clock block time (not the 0 default)
         %% the cert BINDS this specific block: block_from_entry/1 rebuilds the exact #block{} (timestamp
         %% mirrored in the entry) so a joiner recomputes the same hash to check the cert names THIS block.
-        ?assertEqual(quod_simplex:block_hash(quod_simplex:block_from_entry(E2)), Cert#cert.block_hash),
+        {ok, PersistedBlock} = quod_simplex:block_from_entry(E2),
+        ?assertEqual(quod_simplex:block_hash(PersistedBlock), Cert#cert.block_hash),
         ?assert(quod_simplex:verify_cert(Cert, [Self]))                    %% ⅔ (=1) valid sig vs the committee
     after quod_ledger_store:close(Store) end.
+
+%% Concurrent callers are sealed into one consensus slot and all receive that slot's
+%% durable acknowledgement. This is the throughput path the old `proposing` latch rejected.
+t_concurrent_appends_batch(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    Self = ?config(node_id, Cfg),
+    ok = application:set_env(quod, simplex_batch_ms, 50),
+    try
+        _ = start(Cfg, #{}),
+        Parent = self(),
+        Count = 8,
+        _ = [spawn(fun() -> Parent ! {batch_result, N,
+                                      quod_simplex:append(Ns, tx(Ns, Self, integer_to_binary(N)))}
+                   end) || N <- lists:seq(1, Count)],
+        Results = [receive {batch_result, N, Result} -> {N, Result} after 5000 -> timeout end
+                   || N <- lists:seq(1, Count)],
+        ?assertEqual([{N, {ok, 2}} || N <- lists:seq(1, Count)], lists:sort(Results)),
+        {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
+        try
+            {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+            ?assertEqual(Count, length(Transactions))
+        after quod_ledger_store:close(Store) end,
+        Stats = quod_simplex:stats(Ns),
+        ?assertEqual(1, maps:get(proposals, Stats)),
+        ?assertEqual(Count, maps:get(batched_txs, Stats)),
+        ?assertEqual(0, maps:get(pending, Stats))
+    after
+        application:unset_env(quod, simplex_batch_ms)
+    end.
 
 %%%===================================================================
 %%% helpers

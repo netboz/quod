@@ -2,9 +2,10 @@
 
 quod lets many computers share collections of facts and keep them in sync, with no
 central server. This guide explains how, end to end, with no special background
-assumed. The detailed decisions and trade-offs live in a separate document,
-`content-layer-design.md`. The step-by-step plan for building the first part is in
-`ordering-layer-spec.md`.
+assumed. The original decisions and trade-offs are preserved in
+`content-layer-design.md`; `ordering-layer-spec.md` is the superseded Raft plan.
+The current consensus design is `simplex_extended.pdf`, and unfinished work is
+tracked in `deferred.md`.
 
 Two words you'll see throughout:
 
@@ -185,9 +186,12 @@ mechanism is a small **committee**.
 Each ontology is run by a small group of computers — say 4 or 7 — that holds it and
 agrees on every change.
 
-- One member is **in charge** at a time. It takes incoming changes, bundles each
-  into a numbered record — a **block** — and sends that block to the others. A block
+- One member is **in charge** for each numbered slot. It collects a short ordered
+  batch of incoming changes into a **block** and sends that block to the others. A block
   becomes official once **more than two-thirds** of the committee has signed off on it.
+- Once a block has enough first-stage support, the next slot may begin while final
+  signatures for the parent are still arriving. The pipeline is deliberately only one
+  slot deep, and membership changes stop it until they are durably committed.
 - If the one in charge stalls or goes quiet, the others **agree to skip it** and move
   on to the next, in a second or two. No human involved.
 
@@ -279,20 +283,19 @@ own committee — more committees sharing the load, all working at the same time
 
 ---
 
-## 9. Surviving crashes now, surviving lies later
+## 9. Surviving crashes and lies
 
-The committee starts out able to survive computers that **crash** — die, freeze, or
-fall behind. That's the right level of safety inside one trusted operator's cluster,
-and it's the simpler thing to build.
+The committee protocol now handles both computers that **crash** and computers that
+**lie**. Every vote is signed with the member's Ed25519 identity, and a block is final
+only with a certificate containing distinct signatures from more than two-thirds of
+the current committee. With `3f+1` members, this preserves one history while up to `f`
+members are Byzantine.
 
-Some ontologies — ones shared between parties who don't trust each other — will
-eventually need to survive computers that **lie**, sending different stories to
-different members. That's a heavier kind of agreement, but it slots in underneath
-*without changing anything above it*: the way changes are proposed and applied stays
-the same; only the committee's internal way of reaching agreement changes. So each
-ontology can pick its level of trust, and we can add the stronger kind later without
-disturbing the rest. (This is also when real identity and permission checks arrive —
-see section 5.)
+That does not make every write authorized. The network authenticates committee
+members and verifies their votes, but transaction-author signatures and the final
+membership authorization policy are still unfinished. Until those land, deployment
+inside a trusted administrative fleet remains the honest security boundary for who
+may request a write.
 
 ---
 
@@ -360,7 +363,7 @@ section 5.
 - The full change history is kept permanently and is browsable.
 - Reads are served by cheap copies and caches, not the committee, so popular
   ontologies don't bottleneck.
-- Survive crashes first; survive lies later, behind the same interface.
+- Signed Byzantine agreement tolerates crashes and lying committee members.
 - Physics is a separate fast, lossy route.
 
 **Still open (and honestly so):**
@@ -371,9 +374,9 @@ section 5.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.
-- **Identity** — today computers trust each other's stated names; real signatures and
-  permissions come with the survive-lies work. The first build runs in trusted,
-  single-operator mode.
+- **Write authorization** — committee identities and votes are signed, but transaction
+  authors are not yet cryptographically bound to their requests. Membership therefore
+  remains restricted to a trusted administrative fleet.
 - **Reading two ontologies at once** can catch each at a slightly different instant,
   so they may not perfectly line up. We accept that for now.
 - **Notification precision** — today we notify about whole groups of facts at once,
@@ -381,10 +384,12 @@ section 5.
 
 ---
 
-## 13. Where the building starts
+## 13. Where the build stands
 
-The first thing being built is the careful route's foundation: for each ontology,
-the committee that keeps the ordered list of changes, plus the part that applies
-those changes and answers questions. That has a detailed, ready-to-build plan in
-`ordering-layer-spec.md`. Everything else here — cross-ontology links,
-notifications, the physics route, surviving lies — builds on top of it.
+The careful route is running: each ontology has a signed Byzantine committee, a
+durable ordered history, trustless catch-up, deterministic Prolog apply, optimistic
+conflict checks, short transaction batches, and a one-block consensus pipeline.
+`ordering-layer-spec.md` records the superseded Raft design; the current consensus
+implementation and `simplex_extended.pdf` are authoritative. The remaining work is
+tracked in `deferred.md`, especially transaction signatures, epoch-frozen membership,
+cross-ontology writes, and history compaction.

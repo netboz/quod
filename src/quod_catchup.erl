@@ -130,11 +130,11 @@ mid-chain window). For each entry, verify its finalizing certificate against the
 then fold forward via `apply_committee_delta`. Returns `{ok, Verified, Committee1}` or `{error, Reason}` at
 the first bad entry (which the caller must NOT persist).
 
-Per entry, branching on the CERT kind (not the payload): a **commit** cert finalizes a block — bound to
-`block_hash(#block{slot=I, parent=I-1, payload=[Data], timestamp=Ts})` (the entry mirrors the block's
-`timestamp`, since quod stores no header to re-derive it from), where `Data` is a `#transaction` OR a committed
-`noop` — ; a **complaint** cert (block_hash=none) finalizes a `noop` SKIP (it authorizes no payload, so a
-complaint cert over non-`noop` data is rejected); the genesis block (slot 1) carries **no** cert — it is the
+Per entry, branching on the CERT kind (not the payload): an explicit **commit** cert binds the reconstructed
+transaction-batch block; an **implicit** proof binds the parent's support cert and its immediate child's
+commit cert; and a **complaint** cert (block_hash=none) finalizes a canonical `noop` skip (it authorizes no
+payload). Legacy singleton and explicit-empty entries remain readable. The genesis block (slot 1) carries
+**no** cert — it is the
 out-of-band trust anchor, so a genesis-window caller (`From=1`, `Committee0=[]`) MUST separately pin the
 returned `Committee1` / genesis hash against config before trusting it. A malformed cert, a wrong
 `(kind, slot, block_hash)`, or one that fails the `⅔` check against the committee-as-of-slot is rejected.
@@ -154,7 +154,9 @@ verify_forward(Committee, Next, [#entry{index = Next} = E | Rest], Acc) ->   %% 
 verify_forward(_Committee, Next, [#entry{index = I} | _], _Acc) ->
     {error, {noncontiguous, Next, I}};   %% a gap/reorder — the server dropped or misordered an entry
 verify_forward(_Committee, Next, [_NotAnEntry | _], _Acc) ->
-    {error, {malformed_entry, Next}}.    %% a non-#entry element from a hostile server
+    {error, {malformed_entry, Next}};    %% a non-#entry element from a hostile server
+verify_forward(_Committee, Next, _ImproperTail, _Acc) ->
+    {error, {malformed_entry, Next}}.    %% a hostile improper list after an otherwise-valid prefix
 
 entry_data(#entry{data = Data}) -> Data.
 
@@ -162,17 +164,68 @@ entry_data(#entry{data = Data}) -> Data.
 %% payload): a complaint cert finalizes a `noop` SKIP; a commit cert finalizes a block (payload a
 %% #transaction OR a committed `noop`). A complaint cert over non-`noop` data, or any other cert shape, is
 %% rejected — a complaint proves "skip slot I" and authorizes no payload.
-verify_entry(#entry{index = 1, cert = none}, _Committee) ->
-    ok;   %% genesis: the out-of-band trust anchor (caller pins it), not verified by a cert
+verify_entry(#entry{index = 1, cert = none} = E, _Committee) ->
+    case entry_block(E) of
+        {ok, _Block} -> ok;   %% genesis is pinned out of band, but must still be structurally valid
+        error -> {error, {malformed_entry, 1}}
+    end;
 verify_entry(#entry{index = I, cert = none}, _Committee) ->
     {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
-verify_entry(#entry{index = I, data = noop, cert = #cert{kind = complaint} = Cert}, Committee) ->
+verify_entry(#entry{index = I, data = noop, timestamp = 0,
+                    cert = #cert{kind = complaint} = Cert}, Committee) ->
     verify_finalizer(Cert, complaint, I, none, Committee);
+verify_entry(#entry{index = I, cert = #implicit_cert{} = Proof} = E, Committee) ->
+    verify_implicit(E, I, Proof, Committee);
 verify_entry(#entry{index = I, cert = #cert{kind = commit} = Cert} = E, Committee) ->
-    BH = quod_simplex:block_hash(quod_simplex:block_from_entry(E)),
-    verify_finalizer(Cert, commit, I, BH, Committee);
+    case entry_block(E) of
+        {ok, Block} ->
+            BH = quod_simplex:block_hash(Block),
+            verify_finalizer(Cert, commit, I, BH, Committee);
+        error ->
+            {error, {malformed_entry, I}}
+    end;
 verify_entry(#entry{index = I}, _Committee) ->
     {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
+
+verify_implicit(E, I,
+                #implicit_cert{support = Support,
+                               child = #block{slot = ChildSlot, parent = I,
+                                              payload = ChildPayload,
+                                              timestamp = ChildTs} = Child,
+                               commit = Commit}, Committee) when ChildSlot =:= I + 1 ->
+    case {entry_block(E), quod_simplex:well_formed_block(Child)} of
+        {{ok, Parent}, true} ->
+            ParentBH = quod_simplex:block_hash(Parent),
+            ChildBH = quod_simplex:block_hash(Child),
+            StableCommittee = quod_simplex:committee_delta(entry_data(E)) =:= {[], []}
+                              andalso quod_simplex:committee_delta({batch, ChildPayload}) =:= {[], []},
+            case StableCommittee andalso ChildTs >= Parent#block.timestamp of
+                false -> {error, {cert_mismatch, I}};
+                true ->
+                    case verify_finalizer(Support, support, I, ParentBH, Committee) of
+                        ok ->
+                            case verify_finalizer(Commit, commit, ChildSlot, ChildBH, Committee) of
+                                ok -> ok;
+                                {error, _} -> {error, {bad_implicit_cert, I}}
+                            end;
+                        {error, _} -> {error, {bad_implicit_cert, I}}
+                    end
+            end;
+        _ ->
+            {error, {malformed_entry, I}}
+    end;
+verify_implicit(_E, I, _Proof, _Committee) ->
+    {error, {cert_mismatch, I}}.
+
+entry_block(E) ->
+    case quod_simplex:block_from_entry(E) of
+        {ok, #block{} = Block} ->
+            case quod_simplex:well_formed_block(Block) of
+                true  -> {ok, Block};
+                false -> error
+            end;
+        error -> error
+    end.
 
 %% The cert must be WELL-FORMED (a hostile server can send a #cert with non-list `sigs` that would crash
 %% verify_cert), name exactly this (kind, slot, block_hash), AND carry ⅔ valid sigs of the committee.
@@ -223,7 +276,7 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee) -> catch_up(GenesisHash, Fet
 catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
     case Fetch(From) of
         {error, R} -> {error, {fetch, R}};
-        {ok, Entries, H} ->
+        {ok, Entries, H} when is_integer(H), H >= 0 ->
             Target = max(MaxH, H),   %% untrusted, may regress ⇒ the target is the highest height ever seen
             case Entries of
                 [] when From > Target -> {ok, Target};        %% nothing at/after the max height ⇒ caught up
@@ -246,7 +299,9 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
                                     end
                             end
                     end
-            end
+            end;
+        _MalformedResponse ->
+            {error, {fetch, bad_response}}
     end.
 
 %% Only the FIRST window (From=1, containing genesis at slot 1) is anchor-checked: the genesis block must
@@ -254,7 +309,10 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
 %% can't forge a genesis that merely derives the right committee. Later windows are trusted through the
 %% committee threaded from the (anchored) verified prefix.
 anchor_ok(1, [#entry{index = 1} = E | _], GenesisHash) ->
-    quod_simplex:block_hash(quod_simplex:block_from_entry(E)) =:= GenesisHash;
+    case entry_block(E) of
+        {ok, Block} -> quod_simplex:block_hash(Block) =:= GenesisHash;
+        error       -> false
+    end;
 anchor_ok(1, _Verified, _GenesisHash) -> false;   %% From=1 but the first entry isn't genesis
 anchor_ok(_From, _Verified, _GenesisHash) -> true. %% mid-chain window
 

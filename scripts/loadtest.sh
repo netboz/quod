@@ -76,6 +76,8 @@ set -uo pipefail
 : "${VAL_CHURN_PROB:=30}"                   # % chance, each chaos tick, of a validator restart
 : "${OVERF:=1}"                             # 1 = also do deliberate >f (stall+recover) restarts; 0 = only <=f
 : "${OVERF_PROB:=20}"                       # % of validator churn events that go OVER f (f+1 restarted at once)
+: "${RANDOM_CHURN_PROB:=0}"                 # % chance, each tick, of restarting a random mixed validator/observer set
+: "${RANDOM_CHURN_MAX:=0}"                  # largest random restart set; 0 disables mixed random churn
 
 # membership churn under load (OFF by default — mutates the live committee)
 : "${MEMBERSHIP_CHURN:=0}"                  # 1 = run one admit->grow->hold->remove->shrink cycle mid-window
@@ -130,6 +132,8 @@ Load and chaos:
   --val-churn-prob PCT      validator churn probability (VAL_CHURN_PROB)
   --overf 0|1               enable deliberate >f stalls (OVERF)
   --overf-prob PCT          probability of an >f stall (OVERF_PROB)
+  --random-churn-prob PCT   probability of a mixed random restart (RANDOM_CHURN_PROB)
+  --random-churn-max N      largest mixed random restart set; 0 disables it (RANDOM_CHURN_MAX)
   --membership-churn 0|1    mutate membership under load (MEMBERSHIP_CHURN)
   --memb-hold SEC           membership hold time (MEMB_HOLD)
   --unv-poll SEC             unverified-drop poll interval (UNV_POLL)
@@ -142,6 +146,7 @@ Examples:
   scripts/loadtest.sh --duration 120 --warmup 30 --overf 0
   scripts/loadtest.sh --duration 900 --membership-churn 1
   scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.7.1 --genesis-hash <hex>
+  scripts/loadtest.sh --scale 1 --nodes 16 --random-churn-prob 35 --random-churn-max 10
 EOF
 }
 
@@ -183,6 +188,8 @@ parse_args() {
       --val-churn-prob|--val-churn-prob=*) take_value "$@"; VAL_CHURN_PROB=$ARG_VALUE ;;
       --overf|--overf=*) take_value "$@"; OVERF=$ARG_VALUE ;;
       --overf-prob|--overf-prob=*) take_value "$@"; OVERF_PROB=$ARG_VALUE ;;
+      --random-churn-prob|--random-churn-prob=*) take_value "$@"; RANDOM_CHURN_PROB=$ARG_VALUE ;;
+      --random-churn-max|--random-churn-max=*) take_value "$@"; RANDOM_CHURN_MAX=$ARG_VALUE ;;
       --membership-churn|--membership-churn=*) take_value "$@"; MEMBERSHIP_CHURN=$ARG_VALUE ;;
       --memb-hold|--memb-hold=*) take_value "$@"; MEMB_HOLD=$ARG_VALUE ;;
       --unv-poll|--unv-poll=*) take_value "$@"; UNV_POLL=$ARG_VALUE ;;
@@ -210,6 +217,8 @@ validate_config() {
   validate_uint writer-retry-ms "$WRITER_RETRY_MS"
   validate_uint burst-size "$BURST_SIZE"
   validate_uint churn-max "$CHURN_MAX"
+  validate_uint random-churn-prob "$RANDOM_CHURN_PROB"
+  validate_uint random-churn-max "$RANDOM_CHURN_MAX"
   validate_uint unv-poll "$UNV_POLL"
   validate_uint lag-ok "$LAG_OK"
   validate_uint settle-tries "$SETTLE_TRIES"
@@ -217,6 +226,7 @@ validate_config() {
   validate_uint membership-churn "$MEMBERSHIP_CHURN"
   [ "$SCALE" = 0 ] || [ "$SCALE" = 1 ] || die "scale must be 0 or 1, got '$SCALE'"
   [ "$OVERF" = 0 ] || [ "$OVERF" = 1 ] || die "overf must be 0 or 1, got '$OVERF'"
+  [ "$RANDOM_CHURN_PROB" -le 100 ] || die "random-churn-prob must be <=100, got '$RANDOM_CHURN_PROB'"
   if [ "$SCALE" = 1 ]; then
     [ "$NODES" -ge 1 ] || die "scale=1 requires nodes>=1"
     [[ "$GENESIS_HASH" =~ ^[0-9A-Fa-f]{64}$ ]] ||
@@ -322,42 +332,46 @@ start_writers() {   # $1 = "force" to kill+respawn (run once at start); else ens
   return 0
 }
 
-stop_writers() {
-  # Stop on ALL running allocs — the safe superset (a node demoted mid-run by membership
-  # churn may still hold a writer). Kill-then-VERIFY, with retry rounds, because a node that
-  # was mid-restart during a naive stop keeps its (re-ensured) writer: `allocs` lists only
-  # RUNNING allocs, so a momentarily-not-running node gets skipped. A rebooted node has no
-  # writer (ensure stopped when the loop ended), so an unreachable node clears on a later round.
-  local a out left=0 round h1 h2 tries
-  for round in 1 2 3; do
-    left=0
-    while read -r a; do
-      [ -z "$a" ] && continue
-      out=$(QEVAL "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(100), case whereis($WRITER) of undefined -> killed; _ -> alive end end.")
-      case "$out" in
-        *alive*|"") left=$((left + 1));;  # still there, or unreachable (recheck)
-      esac
-    done < <(allocs quod-node)
-    [ "$left" -eq 0 ] && break
-    [ "$round" -lt 3 ] && sleep 5
+kill_writers_once() {
+  # Fan out through the long exec path. Under saturation the short probe can
+  # time out before it reaches the BEAM, leaving an otherwise invisible writer.
+  local a out tmp left=0 pid
+  local -a pids=()
+  tmp=$(mktemp -d)
+  while read -r a; do
+    [ -z "$a" ] && continue
+    ( QEVAL_LONG "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(100), case whereis($WRITER) of undefined -> killed; _ -> alive end end." > "$tmp/$a" 2>&1 ) &
+    pids+=("$!")
+  done < <(allocs quod-node)
+  for pid in "${pids[@]}"; do wait "$pid" || true; done
+  for out in "$tmp"/*; do
+    [ -e "$out" ] || continue
+    case "$(<"$out")" in *gone*|*killed*) ;; *) left=$((left + 1));; esac
   done
-  # BEHAVIORAL verify — the exec pass alone is not trustworthy: a writer on a node that was
-  # momentarily unlisted by `allocs` during churn survives and keeps committing, yet the pass
-  # reports clean. So confirm the LEDGER actually FREEZES; if it is still climbing an orphan
-  # remains anywhere on the fleet — force-kill on every running alloc and re-check.
+  rm -rf "$tmp"
+  printf '%s\n' "$left"
+}
+
+stop_writers() {
+  # Stop on the full current allocation set, then prove the ledger is quiet.
+  # A task can be absent while its allocation restarts, hence repeated rounds.
+  local left round h1 h2 tries
+  for round in 1 2 3 4 5; do
+    left=$(kill_writers_once)
+    [ "$left" -eq 0 ] && break
+    LOG "stop_writers: $left alloc exec probe(s) unresolved; retrying"
+    sleep 3
+  done
   h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=0
-  while [ "${h2:-0}" -gt "${h1:-0}" ] && [ "$tries" -lt 4 ]; do
-    LOG "stop_writers: ledger still advancing ($h1 -> $h2) — orphan writer(s) remain, re-killing"
-    while read -r a; do
-      [ -z "$a" ] && continue
-      QEVAL "$a" "case whereis($WRITER) of undefined -> ok; P -> exit(P,kill), ok end." >/dev/null 2>&1
-    done < <(allocs quod-node)
+  while [ "${h2:-0}" -gt "${h1:-0}" ] && [ "$tries" -lt 6 ]; do
+    LOG "stop_writers: ledger still advancing ($h1 -> $h2) — re-killing current writers"
+    kill_writers_once >/dev/null
     h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=$((tries + 1))
   done
   if [ "${h2:-0}" -le "${h1:-0}" ]; then
     LOG "writers stopped (ledger quiescent at ${h2:-?})"
   else
-    LOG "writers: WARN ledger still advancing ($h1 -> $h2) after re-kills — stop manually: nomad alloc exec -task quod <alloc> /opt/quod/bin/quod eval 'exit(whereis($WRITER),kill).'"
+    LOG "writers: WARN ledger still advancing ($h1 -> $h2) after re-kills"
   fi
 }
 
@@ -378,9 +392,10 @@ burst() {
 #==============================================================================
 # chaos: validator-aware churn
 #==============================================================================
-CHURN_PID=""; VAL_CHURN_PID=""
-STALLED=0; PRE_STALL_SLOT=0; CUR_MAX=0
+CHURN_PID=""; VAL_CHURN_PID=""; RANDOM_CHURN_PID=""
+STALLED=0; PRE_STALL_SLOT=0; STALL_LAST_SLOT=0; STALL_OBSERVED=0; CUR_MAX=0
 OVERF_EVENTS=0; OVERF_RECOVERED=0
+RANDOM_CHURN_EVENTS=0; RANDOM_OVERF_EVENTS=0
 
 churn_observers() {
   if [ -n "$CHURN_PID" ] && kill -0 "$CHURN_PID" 2>/dev/null; then LOG "obs-churn: previous restart still in flight, skipping"; return 0; fi
@@ -397,6 +412,7 @@ churn_observers() {
 
 churn_validators() {
   if [ -n "$VAL_CHURN_PID" ] && kill -0 "$VAL_CHURN_PID" 2>/dev/null; then LOG "val-churn: previous restart still in flight, skipping"; return 0; fi
+  [ "$STALLED" = 0 ] || { LOG "val-churn: waiting for the previous expected stall to recover"; return 0; }
   local ids up n label pick head behind
   mapfile -t ids < <(validators)
   up=${#ids[@]}
@@ -421,13 +437,37 @@ churn_validators() {
   [ "$n" -lt 1 ] && return 0
   pick=$(printf '%s\n' "${ids[@]}" | shuf | head -n "$n")
   if [ "$n" -gt "$F" ]; then
-    PRE_STALL_SLOT=$CUR_MAX; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1))
+    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1))
     LOG "CHURN(validator, $label): restarting $n/$up [$(echo $pick | tr '\n' ' ')] — expect commit STALL at slot ~$PRE_STALL_SLOT until >=$QUORUM validators return"
   else
     LOG "CHURN(validator, $label): restarting $n/$up [$(echo $pick | tr '\n' ' ')]"
   fi
   echo "$pick" | xargs -P "$n" -I{} nomad alloc restart {} >/dev/null 2>&1 &
   VAL_CHURN_PID=$!
+}
+
+random_churn() {
+  [ "$RANDOM_CHURN_MAX" -gt 0 ] || return 0
+  if [ -n "$RANDOM_CHURN_PID" ] && kill -0 "$RANDOM_CHURN_PID" 2>/dev/null; then LOG "random-churn: previous restart still in flight, skipping"; return 0; fi
+  [ "$STALLED" = 0 ] || { LOG "random-churn: waiting for the previous expected stall to recover"; return 0; }
+  local rows n pick validator_count ids label
+  mapfile -t rows < <(awk '$9==0 {print $1 ":" $6}' "$FLEETFILE")
+  [ "${#rows[@]}" -gt 1 ] || return 0
+  n=$((1 + RANDOM % RANDOM_CHURN_MAX))
+  [ "$n" -ge "${#rows[@]}" ] && n=$((${#rows[@]} - 1))
+  pick=$(printf '%s\n' "${rows[@]}" | shuf | head -n "$n")
+  validator_count=$(printf '%s\n' "$pick" | awk -F: '$2==1 {c++} END{print c+0}')
+  ids=$(printf '%s\n' "$pick" | cut -d: -f1)
+  RANDOM_CHURN_EVENTS=$((RANDOM_CHURN_EVENTS + 1))
+  if [ "$validator_count" -gt "$F" ]; then
+    PRE_STALL_SLOT=$CUR_MAX; STALL_LAST_SLOT=$CUR_MAX; STALL_OBSERVED=0; STALLED=1; OVERF_EVENTS=$((OVERF_EVENTS + 1)); RANDOM_OVERF_EVENTS=$((RANDOM_OVERF_EVENTS + 1))
+    label="expected STALL: $validator_count validators > f=$F"
+  else
+    label="within-f: $validator_count validator(s) <= f=$F"
+  fi
+  LOG "CHURN(random): restarting $n mixed node(s), $label"
+  printf '%s\n' "$ids" | xargs -P "$n" -I{} nomad alloc restart {} >/dev/null 2>&1 &
+  RANDOM_CHURN_PID=$!
 }
 
 #==============================================================================
@@ -495,6 +535,7 @@ membership_churn_cycle() {
 # monitor
 #==============================================================================
 WORST_LAG=0; MAX_UNVERIFIED=0; MAX_REJECTS=0; MAX_WEAK_CERT=0
+REJECT_BASELINE=0
 CS_SEEN_MIN=999; CS_SEEN_MAX=0
 BASE_FAILED_ALLOCS=0
 
@@ -515,20 +556,31 @@ snapshot() {
 }
 # fold a snapshot line into the run-wide accumulators (call in the MAIN shell)
 accumulate() {   # $1=caught $2=lag $3=unv $4=rej $5=cs_min $6=cs_max $7=wcw
+  local new_rejects=$(( $4 - REJECT_BASELINE ))
+  [ "$new_rejects" -lt 0 ] && new_rejects=0  # a node restart resets its local gauge
   [ "$1" -ge 2 ] && [ "$2" -gt "$WORST_LAG" ] && WORST_LAG=$2
   [ "$3" -gt "$MAX_UNVERIFIED" ] && MAX_UNVERIFIED=$3
-  [ "$4" -gt "$MAX_REJECTS" ]   && MAX_REJECTS=$4
+  [ "$new_rejects" -gt "$MAX_REJECTS" ] && MAX_REJECTS=$new_rejects
   [ "$7" -gt "$MAX_WEAK_CERT" ] && MAX_WEAK_CERT=$7
   [ "$5" -ge 0 ] && [ "$5" -lt "$CS_SEEN_MIN" ] && CS_SEEN_MIN=$5
   [ "$6" -gt "$CS_SEEN_MAX" ] && CS_SEEN_MAX=$6
 }
-# note an OVER-f stall as recovered once commits advance past where they froze. Called from BOTH the
-# chaos loop AND the settle loop — a >f event in the last tick or two recovers only AFTER the window
-# ends, and if only the chaos loop cleared STALLED the verdict would FAIL a fully-recovered fleet.
+# A deliberate over-f restart can leave a few already-approved commits in flight.
+# Record recovery only after observing a real height plateau, then a later advance.
 detect_overf_recovery() {   # $1 = current max slot
-  [ "$STALLED" = 1 ] && [ "${1:-0}" -ge 0 ] && [ "${1:-0}" -gt "$PRE_STALL_SLOT" ] || return 0
-  LOG "OVER-f RECOVERY: commits resumed (slot $PRE_STALL_SLOT -> $1) after validators returned"
-  STALLED=0; OVERF_RECOVERED=$((OVERF_RECOVERED + 1))
+  local slot=${1:--1}
+  [ "$STALLED" = 1 ] && [ "$slot" -ge 0 ] || return 0
+  if [ "$slot" -gt "$STALL_LAST_SLOT" ]; then
+    if [ "$STALL_OBSERVED" = 1 ]; then
+      LOG "OVER-f RECOVERY: commits resumed (slot $STALL_LAST_SLOT -> $slot) after validators returned"
+      STALLED=0; OVERF_RECOVERED=$((OVERF_RECOVERED + 1))
+    else
+      STALL_LAST_SLOT=$slot
+    fi
+  else
+    STALL_OBSERVED=1
+    LOG "OVER-f STALL observed at slot $slot"
+  fi
 }
 # fast, cheap unverified-only poll from the cached endpoints (shrinks the gauge-reset blind spot)
 poll_unverified() {
@@ -548,7 +600,7 @@ command -v jq >/dev/null || { echo "FATAL: jq required"; exit 1; }
 trap 'echo; LOG "interrupted — stopping writers"; stop_writers; exit 130' INT TERM
 trap 'stop_writers; rm -f "$EPFILE" "$FLEETFILE"' EXIT
 
-LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
+LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
 
 if [ "$SCALE" = "1" ]; then
   LOG "scaling homogeneous job to $NODES nodes..."
@@ -561,7 +613,7 @@ refresh_endpoints; scrape_fleet > "$FLEETFILE"
 
 # discover the fleet shape from reality (fleet-size-agnostic)
 TOTAL=$(awk 'END{print NR}' "$FLEETFILE")
-read -r n0 min0 max0 _ unv0 _ EXP_VALIDATORS csmn0 csmx0 _ recovering0 <<<"$(snapshot)"
+read -r n0 min0 max0 _ unv0 REJECT_BASELINE EXP_VALIDATORS csmn0 csmx0 _ recovering0 <<<"$(snapshot)"
 EXP_COMMITTEE=$csmx0
 F=$(( (EXP_VALIDATORS - 1) / 3 )); QUORUM=$(( EXP_VALIDATORS - F )); OVERF_N=$(( F + 1 ))
 START_VALIDATORS=$(validators | sort | tr '\n' ' ')
@@ -571,6 +623,7 @@ LOG "validators: $START_VALIDATORS"
 [ "$EXP_VALIDATORS" -lt 1 ] && { LOG "FATAL: no validators discovered — is the fleet up?"; exit 1; }
 BASE_FAILED_ALLOCS=$(failed_allocs)
 LOG "failed/lost alloc baseline: $BASE_FAILED_ALLOCS"
+LOG "membership reject baseline: $REJECT_BASELINE"
 
 start_writers force
 
@@ -582,6 +635,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
   [ "$((RANDOM % 100))" -lt "$BURST_PROB" ]     && burst
   [ "$((RANDOM % 100))" -lt "$CHURN_PROB" ]     && churn_observers
   [ "$((RANDOM % 100))" -lt "$VAL_CHURN_PROB" ] && churn_validators
+  [ "$((RANDOM % 100))" -lt "$RANDOM_CHURN_PROB" ] && random_churn
 
   if [ "$MEMBERSHIP_CHURN" = 1 ] && [ "$MEMB_RAN" = 0 ] && [ "$(( $(date +%s) - START_TS ))" -ge "$MEMB_AT" ]; then
     membership_churn_cycle
@@ -602,6 +656,7 @@ done
 LOG "chaos window over — stopping load, waiting for churn to settle + reconvergence..."
 [ -n "$CHURN_PID" ]     && wait "$CHURN_PID" 2>/dev/null
 [ -n "$VAL_CHURN_PID" ] && wait "$VAL_CHURN_PID" 2>/dev/null
+[ -n "$RANDOM_CHURN_PID" ] && wait "$RANDOM_CHURN_PID" 2>/dev/null
 stop_writers
 
 converged=0; n=0; mx=$START_SLOT; vals=$EXP_VALIDATORS; csmn=$EXP_COMMITTEE; csmx=$EXP_COMMITTEE; wcw=0; vbehind=$EXP_VALIDATORS; recovering=$TOTAL
@@ -647,7 +702,7 @@ LOG "committee_size (max seen): $CS_SEEN_MAX (expected $EXP_COMMITTEE), settled 
 if [ "$MEMBERSHIP_CHURN" = 0 ]; then
   { [ "$CS_SEEN_MAX" -eq "$EXP_COMMITTEE" ] && [ "$csmn" -eq "$EXP_COMMITTEE" ] && [ "$csmx" -eq "$EXP_COMMITTEE" ]; } \
     || { LOG "  FAIL: spurious membership change (committee_size drifted)"; FAILED=1; }
-  LOG "membership rejects (max) : $MAX_REJECTS";               [ "$MAX_REJECTS" -eq 0 ]              || { LOG "  FAIL: membership rejects with no membership churn"; FAILED=1; }
+  LOG "membership rejects (new) : $MAX_REJECTS (baseline $REJECT_BASELINE)"; [ "$MAX_REJECTS" -eq 0 ] || { LOG "  FAIL: new membership rejects with no membership churn"; FAILED=1; }
 else
   { [ "$csmn" -eq "$EXP_COMMITTEE" ] && [ "$csmx" -eq "$EXP_COMMITTEE" ]; } \
     || { LOG "  FAIL: committee did not re-form at $EXP_COMMITTEE after membership churn"; FAILED=1; }
@@ -658,6 +713,7 @@ if [ "$OVERF_EVENTS" -gt 0 ]; then
   LOG "over-f stalls recovered  : $OVERF_RECOVERED / $OVERF_EVENTS";
   { [ "$OVERF_RECOVERED" -eq "$OVERF_EVENTS" ] && [ "$STALLED" -eq 0 ]; } || { LOG "  FAIL: a deliberate >f stall did not recover"; FAILED=1; }
 fi
+LOG "random restart events     : $RANDOM_CHURN_EVENTS ($RANDOM_OVERF_EVENTS expected over-f)"
 if [ "$MEMB_RAN" = 1 ]; then
   LOG "membership churn cycle   : $MEMB_RESULT";               [ "$MEMB_RESULT" = pass ]             || { LOG "  FAIL: committee did not re-form/keep committing under membership churn"; FAILED=1; }
 fi

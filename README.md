@@ -118,8 +118,22 @@ nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
 ```
 
 `0.7.0` reads legacy singleton ledger entries, but `0.6.x` cannot replay the new
-batched entries. Quiesce writers during the serialized rolling update. Once a
-`0.7.0` batch commits, roll forward rather than downgrading a node to `0.6.x`.
+batched entries. Quiesce writers during the update. Nomad applies
+`max_parallel` independently to each task group, so hold the root on the old
+image while the join group rolls, then update the root by itself:
+
+```bash
+# Stage 1: all join allocations, one at a time; root remains available.
+nomad job run -var image_tag=0.7.0 -var root_image_tag=0.6.39 \
+  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
+
+# Wait for a successful deployment, then stage 2 updates only the root.
+nomad job run -var image_tag=0.7.0 \
+  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
+```
+
+Once a `0.7.0` batch commits, roll forward rather than downgrading a node to
+`0.6.x`.
 
 `deploy/quod.nomad` runs one root allocation plus an optional number of join
 allocations on compute-class Nomad clients. Networking uses bridge mode with a

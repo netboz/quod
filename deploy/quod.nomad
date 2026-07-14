@@ -10,6 +10,18 @@ variable "image_registry" {
   description = "Registry hostname and port containing the quod image. Override this when deploying outside the home cluster."
 }
 
+variable "root_image_tag" {
+  type        = string
+  default     = ""
+  description = "Optional image-tag override for quod-root. Use it to hold the root on the old version while quod-join rolls first; empty inherits image_tag."
+}
+
+variable "join_image_tag" {
+  type        = string
+  default     = ""
+  description = "Optional image-tag override for quod-join. Empty inherits image_tag. Together with root_image_tag this prevents simultaneous cross-group validator replacement during protocol upgrades."
+}
+
 variable "join_count" {
   type        = number
   default     = 0
@@ -59,6 +71,11 @@ variable "root_mode" {
 # POST-GROWTH REDEPLOY — flip the bootstrap node to a plain member so a volume
 # wipe can never re-found:
 #   nomad job run -var root_mode=join -var genesis_hash=<hex> -var join_count=N deploy/quod.nomad
+# PROTOCOL/STORAGE UPGRADE — `max_parallel` is per task group, not global. Hold
+# root on the old image while every join allocation rolls, wait for that
+# deployment to become healthy, then remove the override so root rolls alone:
+#   nomad job run ... -var image_tag=NEW -var root_image_tag=OLD deploy/quod.nomad
+#   nomad job run ... -var image_tag=NEW deploy/quod.nomad
 #
 # Networking — bridge + CNI portmap (NOT host mode). QUIC binds a FIXED
 # in-container port (node.bind_port = 14567); Nomad maps a DYNAMIC host port and
@@ -107,7 +124,7 @@ job "quod" {
       driver = "docker"
 
       config {
-        image      = "${var.image_registry}/quod:${var.image_tag}"
+        image      = "${var.image_registry}/quod:${var.root_image_tag != "" ? var.root_image_tag : var.image_tag}"
         force_pull = true
         ports      = ["p2p", "metrics"]
       }
@@ -277,7 +294,7 @@ EOT
       driver = "docker"
 
       config {
-        image      = "${var.image_registry}/quod:${var.image_tag}"
+        image      = "${var.image_registry}/quod:${var.join_image_tag != "" ? var.join_image_tag : var.image_tag}"
         force_pull = true
         ports      = ["p2p", "metrics"]
       }

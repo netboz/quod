@@ -233,11 +233,10 @@ EOT
       per_alloc       = true
     }
 
-    # Block startup until the founder is up. We probe its TCP METRICS port (via the
+    # Block startup until a current member is up. We probe its TCP METRICS port (via the
     # `quod-metrics` Consul service), NOT the p2p port: p2p is QUIC-over-UDP and a TCP
-    # scan (`nc -z`) can never connect to it — the founder's own QUIC dial + retry is
-    # what validates p2p reachability. A live metrics port means the BEAM booted and the
-    # namespace is up, which is exactly the "founder ready" signal we want to gate on.
+    # scan (`nc -z`) can never connect to it. A live metrics port means the BEAM booted
+    # and the namespace is up, which is exactly the startup signal we need here.
     task "wait-for-root" {
       driver = "docker"
 
@@ -250,7 +249,7 @@ EOT
       # using `env = true` would freeze an empty first render for the task lifetime.
       template {
         data        = <<-EOT
-{{- range service "quod-metrics" "founder" }}
+{{- range service "quod-metrics" }}
 QUOD_ROOT_HOST={{ .Address }}
 QUOD_ROOT_METRICS_PORT={{ .Port }}
 {{- end }}

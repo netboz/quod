@@ -17,8 +17,9 @@ setup() ->
     %% exactly what a joiner reads back to verify the block.
     Cert = #cert{kind = commit, slot = 5, block_hash = crypto:hash(sha256, <<"blk5">>),
                  sigs = [{<<1, 2, 3>>, <<4, 5, 6>>}]},
-    Es = [#entry{index = I, data = tx(I), cert = none} || I <- lists:seq(1, 4)]
-         ++ [#entry{index = 5, data = tx(5), cert = Cert}],
+    Es = [#entry{index = I, data = quod_ledger:data([tx(I)]), cert = none}
+          || I <- lists:seq(1, 4)]
+         ++ [#entry{index = 5, data = quod_ledger:data([tx(5)]), cert = Cert}],
     {ok, S1} = quod_ledger_store:append(S0, Es),
     ok = quod_ledger_store:close(S1),
     {Dir, Ns, Cert}.
@@ -55,9 +56,10 @@ byte_cap_test() ->
     Big = binary:copy(<<0>>, 200 * 1024),   %% ~200 KiB payload per entry
     {ok, S0} = quod_ledger_store:open(Ns, Dir),
     Es = [#entry{index = I, cert = none,
-                 data = #transaction{tx_id = integer_to_binary(I), caller_ns = Ns,
-                                     diff = [{assert, {{blob, I}, Big}}], read_check = #{},
-                                     author = <<"a">>, sig = none}}
+                 data = quod_ledger:data(
+                          [#transaction{tx_id = integer_to_binary(I), caller_ns = Ns,
+                                        diff = [{assert, {{blob, I}, Big}}], read_check = #{},
+                                        author = <<"a">>, sig = none}])}
           || I <- lists:seq(1, 8)],          %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget
     {ok, S1} = quod_ledger_store:append(S0, Es),
     ok = quod_ledger_store:close(S1),

@@ -133,7 +133,7 @@ the first bad entry (which the caller must NOT persist).
 Per entry, branching on the CERT kind (not the payload): an explicit **commit** cert binds the reconstructed
 transaction-batch block; an **implicit** proof binds the parent's support cert and its immediate child's
 commit cert; and a **complaint** cert (block_hash=none) finalizes a canonical `noop` skip (it authorizes no
-payload). Legacy singleton and explicit-empty entries remain readable. The genesis block (slot 1) carries
+payload). The genesis block (slot 1) uses the same canonical batch encoding and carries
 **no** cert — it is the
 out-of-band trust anchor, so a genesis-window caller (`From=1`, `Committee0=[]`) MUST separately pin the
 returned `Committee1` / genesis hash against config before trusting it. A malformed cert, a wrong

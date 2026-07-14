@@ -11,7 +11,7 @@ also carry a **`namespace`** label.
 
 ## Scrape config (Prometheus, Consul service discovery)
 
-The Nomad job registers `quod-metrics` on every node (founder + joiners). Point
+The Nomad job registers `quod-metrics` on every homogeneous `quod-node` allocation. Point
 Prometheus at Consul and keep the `prometheus`-tagged instances:
 
 ```yaml

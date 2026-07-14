@@ -99,7 +99,7 @@ submission itself uses OTP asynchronous `gen_statem` requests, so the fact engin
 proving and consuming commits while append calls are outstanding. The OCC verdict is delivered
 straight to the parked client here; a forward gap asks `quod_simplex` to re-drive.
 """.
--spec apply_block(binary(), pos_integer(), #transaction{} | {batch, [#transaction{}]} | noop) -> ok.
+-spec apply_block(binary(), pos_integer(), {batch, [#transaction{}]} | noop) -> ok.
 apply_block(Ns, Index, Change) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 
@@ -350,8 +350,6 @@ apply_step(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     S;
 apply_step(Index, noop, S) ->                              %% Index == applied+1
     S#s{applied = Index};
-apply_step(Index, #transaction{} = Change, S) ->
-    (apply_transaction(Change, S))#s{applied = Index};
 apply_step(Index, {batch, _} = Batch, S) ->
     case quod_ledger:payload(Batch) of
         {ok, Transactions} ->

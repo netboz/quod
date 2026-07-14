@@ -16,16 +16,14 @@ signer({P, Seed}) -> #{pubkey => P, key => quod_identity:key_term({P, Seed})}.
 %% slot 1: the self-signed genesis (no cert) asserting each founder's peer_admitted — establishes C1.
 genesis(Pubs) ->
     Diff = [{assert, {{peer_admitted, Pk, undefined, undefined, Pk}, true}} || Pk <- Pubs],
+    Transaction = #transaction{tx_id = <<"genesis">>, caller_ns = <<"ns">>, diff = Diff,
+                               read_check = #{}, author = hd(Pubs), sig = none},
     #entry{index = 1, cert = none,
-           data = #transaction{tx_id = <<"genesis">>, caller_ns = <<"ns">>, diff = Diff,
-                               read_check = #{}, author = hd(Pubs), sig = none}}.
+           data = quod_ledger:data([Transaction])}.
 
 %% a committed block at slot I with data D, its COMMIT cert (bound to the block) signed by the first K of C.
 committed(I, D, C, K) ->
-    BH     = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [D]}),
-    Shares = [quod_simplex:make_share(commit, I, BH, signer(M)) || M <- lists:sublist(C, K)],
-    {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, data = D, cert = Cert}.
+    committed_batch(I, [D], C, K).
 
 committed_batch(I, Transactions, C, K) ->
     Data = quod_ledger:data(Transactions),
@@ -34,16 +32,13 @@ committed_batch(I, Transactions, C, K) ->
     {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
     #entry{index = I, data = Data, cert = Cert}.
 
-%% a leader committed an empty (noop) BLOCK — a COMMIT cert bound to the noop block, NOT a complaint.
-committed_noop(I, C, K) -> committed(I, noop, C, K).
-
 %% like committed/4 but with an explicit (nonzero) block time on BOTH the hashed block and the entry —
 %% exercises the timestamp threading that committed/4 leaves at the 0 default.
 committed_at(I, D, Ts, C, K) ->
     BH     = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [D], timestamp = Ts}),
     Shares = [quod_simplex:make_share(commit, I, BH, signer(M)) || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, data = D, timestamp = Ts, cert = Cert}.
+    #entry{index = I, data = quod_ledger:data([D]), timestamp = Ts, cert = Cert}.
 
 %% a complaint-SKIPPED slot I with a COMPLAINT cert (block_hash=none) signed by the first K of C.
 skipped(I, C, K) ->
@@ -119,16 +114,10 @@ timestamped_test() ->
     ?assertMatch({error, _},
                  quod_catchup:verify_forward([], 1, [G, E2#entry{timestamp = 1750000009999}, E3])).
 
-%% A committed noop BLOCK (a COMMIT cert, not a complaint) is accepted — a leader may propose an empty block.
-committed_noop_block_test() ->
-    C = committee(4), P = pubs(C),
-    ?assertMatch({ok, [_, _, _], _},
-                 quod_catchup:verify_forward([], 1, [genesis(P), committed_noop(2, C, 3), committed(3, tx(3), C, 3)])).
-
 %% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
 complaint_over_tx_rejected_test() ->
     C = committee(4), {X, _} = quod_identity:generate(),
-    Forged = (skipped(2, C, 3))#entry{data = admit_tx(X)},   %% real complaint cert, but a committee-changing tx
+    Forged = (skipped(2, C, 3))#entry{data = quod_ledger:data([admit_tx(X)])},
     ?assertEqual({error, {cert_mismatch, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Forged])).
 
 %% A cert signed by NON-committee members fails the ⅔ check.
@@ -147,7 +136,8 @@ missing_cert_test() ->
 cert_mismatch_test() ->
     C = committee(4), B2 = committed(2, tx(2), C, 3),
     ?assertEqual({error, {cert_mismatch, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), B2#entry{data = tx(99)}])).
+                 quod_catchup:verify_forward(
+                   [], 1, [genesis(pubs(C)), B2#entry{data = quod_ledger:data([tx(99)])}])).
 
 %% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
 malformed_cert_rejected_test() ->
@@ -238,7 +228,9 @@ mock_fetch(Chain, W) ->
 sink() -> put(sink, []), fun(Es) -> put(sink, get(sink) ++ Es), ok end.
 
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
-gen_hash(#entry{index = 1, data = D}) -> quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = [D]}).
+gen_hash(#entry{index = 1, data = D}) ->
+    {ok, Payload} = quod_ledger:payload(D),
+    quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = Payload}).
 
 %% The driver loops windowed fetches, verifies each, sinks the verified entries in order, and reports the
 %% caught-up height.

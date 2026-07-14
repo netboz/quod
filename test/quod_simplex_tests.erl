@@ -14,7 +14,8 @@ id() ->
     {Pub, Seed} = quod_identity:generate(),
     {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}.
 
-blk(Slot) -> #block{slot = Slot, parent = Slot - 1, payload = [noop]}.
+blk(Slot) -> #block{slot = Slot, parent = Slot - 1,
+                    payload = [tx([{assert, {{fact, Slot}, true}}])]}.
 
 %%%===================================================================
 %%% quorum
@@ -34,6 +35,14 @@ quorum_test() ->
 block_hash_deterministic_test() ->
     ?assertEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(5))),
     ?assertNotEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(6))).
+
+canonical_ledger_payload_test() ->
+    Transaction = tx([{assert, {{fact, canonical}, true}}]),
+    Data = quod_ledger:data([Transaction]),
+    ?assertEqual({ok, [Transaction]}, quod_ledger:payload(Data)),
+    ?assertEqual(error, quod_ledger:payload(Transaction)),
+    ?assertEqual(error, quod_ledger:payload(noop)),
+    ?assertEqual(error, quod_simplex:block_from_entry(#entry{index = 1, data = Transaction})).
 
 %%%===================================================================
 %%% gap detector — ahead_cert_ceiling/1 (Slice 1)
@@ -634,17 +643,20 @@ admitted_endpoints_test() ->
     Full = tx([{assert,  {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
                {retract, {{peer_admitted, B, "10.0.0.2", 9002, B}, true}},   %% retract → not a hint
                {assert,  {{other, foo}, true}}]),                            %% noise → ignored
-    ?assertEqual([{A, {"10.0.0.1", 9001}}], quod_simplex:admitted_endpoints(Full)),
+    ?assertEqual([{A, {"10.0.0.1", 9001}}], quod_simplex:admitted_endpoints({batch, [Full]})),
     ?assertEqual([], quod_simplex:admitted_endpoints(noop)),                  %% skip entry: no hint, no crash
-    ?assertEqual([], quod_simplex:admitted_endpoints(tx([rm(A)]))),          %% retract-only
+    ?assertEqual([], quod_simplex:admitted_endpoints({batch, [tx([rm(A)])]})), %% retract-only
     %% undefined host/port (bare-pubkey genesis members) is EXTRACTED here; is_endpoint drops it at learn.
-    ?assertEqual([{A, {undefined, undefined}}], quod_simplex:admitted_endpoints(tx([pa(A)]))),
+    ?assertEqual([{A, {undefined, undefined}}],
+                 quod_simplex:admitted_endpoints({batch, [tx([pa(A)])]})),
     ?assertEqual([], quod_simplex:admitted_endpoints({batch, [Full | bad_tail]})),
     %% a repeated pubkey yields BOTH assert pairs in order — the maps:from_list at the hook takes last-wins.
     Dup = tx([{assert, {{peer_admitted, A, "10.0.0.1", 9001, A}, true}},
               {assert, {{peer_admitted, A, "10.0.0.9", 9009, A}, true}}]),
-    ?assertEqual([{A, {"10.0.0.1", 9001}}, {A, {"10.0.0.9", 9009}}], quod_simplex:admitted_endpoints(Dup)),
-    ?assertEqual({"10.0.0.9", 9009}, maps:get(A, maps:from_list(quod_simplex:admitted_endpoints(Dup)))).
+    ?assertEqual([{A, {"10.0.0.1", 9001}}, {A, {"10.0.0.9", 9009}}],
+                 quod_simplex:admitted_endpoints({batch, [Dup]})),
+    ?assertEqual({"10.0.0.9", 9009},
+                 maps:get(A, maps:from_list(quod_simplex:admitted_endpoints({batch, [Dup]})))).
 
 %% Slice A membership gate (deferred.md §3 a+c): a committee-touching transaction must be EXACTLY ONE
 %% well-formed `peer_admitted` op that does not empty the committee — the pure shape + wedge floor,

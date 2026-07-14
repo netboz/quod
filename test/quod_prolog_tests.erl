@@ -65,6 +65,8 @@ change(Ns, Diff, RC) ->
             caller_ns = Ns, diff = Diff, read_check = RC,
             author = {"127.0.0.1", 5000}, sig = none}.
 
+batch(Transaction) -> {batch, [Transaction]}.
+
 %%%===================================================================
 %%% tests
 %%%===================================================================
@@ -80,30 +82,30 @@ t_unknown_fails({Ns, _}) ->
 
 t_apply_and_read({Ns, _}) ->
     fun() ->
-        ok = quod_prolog:apply_block(Ns, 1, change(Ns, diff_for({parent, tom, bob}), #{})),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
         %% a bound read returns the binding and the height read
         ?assertMatch({ok, [#{'X' := bob}], 1}, quod_prolog:prove(Ns, {parent, tom, {'X'}}, Ns)),
         %% a ground read succeeds with an empty binding set
         ?assertEqual({ok, [#{}], 1}, quod_prolog:prove(Ns, {parent, tom, bob}, Ns)),
         %% a second committed block advances the applied height
-        ok = quod_prolog:apply_block(Ns, 2, change(Ns, diff_for({parent, ann, eve}), #{})),
+        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({parent, ann, eve}), #{}))),
         ?assertMatch({ok, [#{'P' := ann}], 2}, quod_prolog:prove(Ns, {parent, {'P'}, eve}, Ns))
     end.
 
 t_occ_reject({Ns, _}) ->
     fun() ->
-        ok = quod_prolog:apply_block(Ns, 1, change(Ns, diff_for({parent, tom, bob}), #{})),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
         %% a change whose read-set expects a stale hash of parent/2 → rejected at apply.
         %% apply_block is an async cast (returns ok); the OCC reject is observed by its
         %% EFFECT — the block changes no facts (sibling/1 stays absent). The apply_block cast
         %% is FIFO-ordered before the following prove call, so the effect is visible.
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
-        ok = quod_prolog:apply_block(Ns, 2, Stale),
+        ok = quod_prolog:apply_block(Ns, 2, batch(Stale)),
         ?assertEqual(fail, quod_prolog:prove(Ns, {sibling, x}, Ns)),
         %% a non-stale read-set (parent/2 matches its real hash) commits fine
         M = real_hash(Ns, {parent, 2}),
         Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => M}),
-        ?assertEqual(ok, quod_prolog:apply_block(Ns, 3, Good)),
+        ?assertEqual(ok, quod_prolog:apply_block(Ns, 3, batch(Good))),
         ?assertEqual({ok, [#{}], 3}, quod_prolog:prove(Ns, {sibling, y}, Ns))
     end.
 
@@ -147,8 +149,8 @@ verdict(Ns, Change, Slot, Tag) ->
 t_verdict_basic({Ns, _}) ->
     fun() ->
         PkA = <<"pkA">>, PkB = <<"pkB">>,
-        ok = quod_prolog:apply_block(Ns, 1, canjoin_open(Ns)),               %% default-open can_join
-        ok = quod_prolog:apply_block(Ns, 2, mem_assert(Ns, PkA, "ha", 1)),   %% founder (lockstep applies it)
+        ok = quod_prolog:apply_block(Ns, 1, batch(canjoin_open(Ns))),               %% default-open can_join
+        ok = quod_prolog:apply_block(Ns, 2, batch(mem_assert(Ns, PkA, "ha", 1))),   %% founder (lockstep applies it)
         %% applied == 2, so a verdict for Slot 3 (parent 2) is answered now
         ?assertEqual(valid, verdict(Ns, mem_assert(Ns, PkB, "hb", 2), 3, v1)),          %% new member
         ?assertEqual({invalid, already_admitted},
@@ -162,7 +164,7 @@ t_verdict_basic({Ns, _}) ->
 t_verdict_can_join_fail({Ns, _}) ->
     fun() ->
         PkAllowed = <<"pkAllowed">>, PkOther = <<"pkOther">>,
-        ok = quod_prolog:apply_block(Ns, 1, change(Ns, diff_for({can_join, {'A'}, {'B'}, PkAllowed}), #{})),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({can_join, {'A'}, {'B'}, PkAllowed}), #{}))),
         ?assertEqual({invalid, can_join}, verdict(Ns, mem_assert(Ns, PkOther, "h", 1), 2, cf)),
         ?assertEqual(valid, verdict(Ns, mem_assert(Ns, PkAllowed, "h", 1), 2, cok))
     end.
@@ -172,7 +174,7 @@ t_verdict_side_effects({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
         Rule = {':-', {can_join, {'A'}, {'B'}, {'C'}}, {assertz, {sidelog, ok}}},
-        ok = quod_prolog:apply_block(Ns, 1, change(Ns, diff_for(Rule), #{})),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for(Rule), #{}))),
         ?assertEqual({invalid, can_join_side_effects}, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 2, se))
     end.
 
@@ -180,7 +182,7 @@ t_verdict_side_effects({Ns, _}) ->
 t_verdict_lifecycle({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
-        ok = quod_prolog:apply_block(Ns, 1, canjoin_open(Ns)),   %% applied == 1
+        ok = quod_prolog:apply_block(Ns, 1, batch(canjoin_open(Ns))),   %% applied == 1
         %% a verdict for Slot 3 (parent 2 > applied 1) parks — nothing delivered yet
         ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 3, self(), park),
         ?assertEqual(ok, no_verdict(park)),
@@ -199,7 +201,7 @@ t_verdict_lifecycle({Ns, _}) ->
 t_verdict_tag_reuse({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
-        ok = quod_prolog:apply_block(Ns, 1, canjoin_open(Ns)),   %% applied == 1
+        ok = quod_prolog:apply_block(Ns, 1, batch(canjoin_open(Ns))),   %% applied == 1
         %% park Tag `t` for a far slot (parent 8, never reached)
         ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 9, self(), t),
         %% re-issue the SAME Tag for a near slot (parent 2) — supersedes the far one + cancels its timer
@@ -216,18 +218,18 @@ t_verdict_tag_reuse({Ns, _}) ->
 t_lockstep({Ns, _}) ->
     fun() ->
         PkB = <<"pkB">>,
-        ok = quod_prolog:apply_block(Ns, 1, canjoin_open(Ns)),
+        ok = quod_prolog:apply_block(Ns, 1, batch(canjoin_open(Ns))),
         %% membership assert with a DELIBERATELY STALE read_check → still applies
         StaleMem = #{{peer_admitted, 4} => 999999},
         MemTx = (mem_assert(Ns, PkB, "h", 1))#transaction{read_check = StaleMem},
-        ok = quod_prolog:apply_block(Ns, 2, MemTx),
+        ok = quod_prolog:apply_block(Ns, 2, batch(MemTx)),
         %% the fact WAS applied (despite the stale read_check): PkB is now an admitted pubkey, so a fresh
         %% admit of it is rejected as already_admitted — this reads the committee via the same
         %% get_procedure path production uses (a direct prove of peer_admitted is a separate erlog quirk).
         ?assertEqual({invalid, already_admitted}, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 3, lk)),
         %% content tx with an equally-stale read_check → still rejected (widget/z never asserted)
         StaleContent = change(Ns, diff_for({widget, z}), #{{widget, 1} => 12345}),
-        ok = quod_prolog:apply_block(Ns, 3, StaleContent),
+        ok = quod_prolog:apply_block(Ns, 3, batch(StaleContent)),
         ?assertEqual(fail, quod_prolog:prove(Ns, {widget, z}, Ns))
     end.
 

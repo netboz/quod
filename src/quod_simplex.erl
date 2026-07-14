@@ -840,7 +840,7 @@ initial_sync(#s{self = Self} = S) ->
 %% and every founder boots at the same height 1 under the same committee.
 bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     GenesisTx = genesis_tx(Cfg, Ns, Self),
-    E = #entry{index = 1, data = GenesisTx},
+    E = #entry{index = 1, data = quod_ledger:data([GenesisTx])},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     S#s{store = Store1, validators = apply_committee_delta(GenesisTx, []), slot = 1}.
 
@@ -1351,7 +1351,6 @@ well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) -
         andalso well_formed_block_payload(Pl);
 well_formed_block(_) -> false.
 
-well_formed_block_payload([noop]) -> true;   %% persisted legacy explicit empty block
 well_formed_block_payload(Pl) ->
     proper_transaction_list(Pl)
         andalso length(Pl) =< ?MAX_BATCH_TXS
@@ -2410,18 +2409,21 @@ log_projection_step(#entry{data = Data, timestamp = T}, {V, Ts}) ->
 %% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or malformed payload changes nothing. This ONE
 %% function feeds BOTH the live commit-time swap (`adopt_committee/2`) and the boot/restart re-fold
 %% (`log_projection/2`), so the running set can never drift from a fresh re-fold.
-committee_delta(Change) ->
-    case quod_ledger:payload(Change) of
+committee_delta(#transaction{} = Transaction) ->
+    committee_transaction(Transaction, {[], []});
+committee_delta({batch, _} = Batch) ->
+    case quod_ledger:payload(Batch) of
         {ok, Transactions} -> lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
         error              -> {[], []}
-    end.
+    end;
+committee_delta(_) ->
+    {[], []}.
 
 committee_transaction(#transaction{diff = Diff}, Acc) ->
     case proper_list(Diff) of
         true  -> lists:foldl(fun committee_op/2, Acc, Diff);
         false -> Acc
-    end;
-committee_transaction(noop, Acc) -> Acc.
+    end.
 
 committee_op({assert,  {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {addq(Pk, A), R -- [Pk]};
 committee_op({retract, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {A -- [Pk], addq(Pk, R)};
@@ -2432,18 +2434,19 @@ committee_op(_Op, Acc)                                                  -> Acc.
 %% Retracts yield nothing: a removal is a membership change, not a reachability change (no unlearn — a
 %% removed member stays a gossiped-with observer). The `_ -> []` clause is REQUIRED, not defensive: a
 %% catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
-admitted_endpoints(Change) ->
-    case quod_ledger:payload(Change) of
+admitted_endpoints({batch, _} = Batch) ->
+    case quod_ledger:payload(Batch) of
         {ok, Transactions} -> lists:flatmap(fun transaction_endpoints/1, Transactions);
         error              -> []
-    end.
+    end;
+admitted_endpoints(_) ->
+    [].
 
 transaction_endpoints(#transaction{diff = Diff}) ->
     case proper_list(Diff) of
         true  -> [{Pk, {H, P}} || {assert, {{peer_admitted, _Id, H, P, Pk}, _B}} <- Diff];
         false -> []
-    end;
-transaction_endpoints(noop) -> [].
+    end.
 
 proper_list([_ | Rest]) -> proper_list(Rest);
 proper_list([])         -> true;

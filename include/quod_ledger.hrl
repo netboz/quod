@@ -39,9 +39,7 @@
 -type slot() :: non_neg_integer().               %% 0 = origin sentinel (parent of slot 1); blocks are 1..N
                                                  %% (the founder's self-signed genesis BLOCK is slot 1)
 
-%% A proposed block for a slot. `payload` is a non-empty batch of transactions. `[noop]`
-%% remains in the type only for reconstructing legacy explicitly committed empty blocks;
-%% current proposal validation never accepts it.
+%% A proposed block for a slot. `payload` is a non-empty batch of transactions.
 %% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
 %% the previous APPROVED slot it extends (0 = genesis). It may therefore be newer than the durable
 %% committed head while consensus is pipelined.
@@ -53,7 +51,7 @@
 %% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
 -record(block, {slot      :: slot(),
                 parent    :: slot(),
-                payload   :: [#transaction{}] | [noop],
+                payload   :: [#transaction{}],
                 timestamp = 0 :: non_neg_integer()}).
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
@@ -84,10 +82,8 @@
                         child   :: #block{},
                         commit  :: #cert{}}).
 
-%% A committed log entry. `data` is a legacy singleton #transaction{}, a canonical
-%% `{batch, [#transaction{}]}` block payload, or the atom `noop` for a complaint-skipped slot.
-%% New non-genesis blocks are stored as `{batch, Txs}` even when the batch contains one transaction;
-%% accepting the legacy singleton keeps existing stores readable without a migration.
+%% A committed log entry. `data` is a canonical `{batch, [#transaction{}]}` block payload,
+%% or the atom `noop` for a complaint-skipped slot. Genesis uses the same batch format.
 %% `cert` is the quorum certificate that finalized the slot —
 %% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each
@@ -95,7 +91,7 @@
 %% is the set of `peer_admitted` facts (`quod_simplex:log_projection/2`). `index` doubles as the
 %% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
-                data        :: #transaction{} | {batch, [#transaction{}]} | noop,
+                data        :: {batch, [#transaction{}]} | noop,
                 timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's `timestamp` — quod stores no header, so
                                                     %% catch-up rebuilds `#block{...}` from the entry and needs this to
                                                     %% reproduce the block_hash. 0 for a `noop` skip (no block) / genesis.

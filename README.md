@@ -103,49 +103,32 @@ Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 ## Deploy (Docker + Nomad)
 
 ```bash
-TAG=0.7.0
+TAG=0.7.1
 REGISTRY=192.168.1.11:5000
+NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# First deploy only: found the durable root namespace and copy its genesis hash.
-nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var root_mode=create deploy/quod.nomad
+# Provision one clean CSI ledger per allocation.
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  sed "s/quod-node\[0\]/quod-node[$i]/; s/quod-node-0/quod-node-$i/" \
+    deploy/volumes/quod-node.hcl | nomad volume create -
+done
 
-# Subsequent deploys, including adding joiners, use the pinned anchor.
+# No anchor means bootstrap: the jobspec forces one allocation in create mode.
+nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" deploy/quod.nomad
+
+# Copy the logged genesis anchor, then expand the same homogeneous group.
 nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
+  -var node_count="$NODE_COUNT" -var genesis_hash=<hex> deploy/quod.nomad
 ```
 
-`0.7.0` reads legacy singleton ledger entries, but `0.6.x` cannot replay the new
-batched entries. Quiesce writers during the update. Nomad applies
-`max_parallel` independently to each task group, so hold the root on the old
-image while the join group rolls, then update the root by itself:
-
-```bash
-# Stage 1: all join allocations, one at a time; root remains available.
-nomad job run -var image_tag=0.7.0 -var root_image_tag=0.6.39 \
-  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
-
-# Wait for a successful deployment, then stage 2 updates only the root.
-nomad job run -var image_tag=0.7.0 \
-  -var root_mode=join -var join_count=7 -var genesis_hash=<hex> deploy/quod.nomad
-```
-
-Once a `0.7.0` batch commits, roll forward rather than downgrading a node to
-`0.6.x`.
-
-`deploy/quod.nomad` runs one root allocation plus an optional number of join
-allocations on compute-class Nomad clients. Networking uses bridge mode with a
-dynamic host port for QUIC; Consul renders the current `quod` and `quod-join`
-services into each node's seed list. Each allocation has its own CSI-backed
-ledger, and Nomad waits for `/metrics` to report consensus recovery complete
-before advancing the serialized rolling update.
-
-The default `root_mode=join` is intentional. It makes a routine re-deploy fail
-closed until the operator supplies the genesis anchor, instead of allowing a
-wiped root volume to silently create a divergent namespace. Use
-`root_mode=create` only for the initial bootstrap.
+The clean ledger format has no pre-`0.7` compatibility path, so bootstrap it on
+fresh `quod-node` volumes. The founder is only the first event: after the anchor
+is supplied, every allocation belongs to the same `quod-node` task group and
+runs with `mode=join`. A single task group makes `max_parallel=1` fleet-wide.
+Each node has its own CSI-backed ledger, and Nomad waits for consensus recovery
+to complete before advancing a rolling update.
 
 ## Status / next steps
 

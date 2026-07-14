@@ -4,9 +4,8 @@ Canonical conversion between a consensus block payload and the value stored in o
 durable ledger entry.
 
 The log is indexed by consensus slot, not by transaction. A slot may therefore hold
-many transactions, represented on disk as `{batch, Transactions}`. Legacy stores used
-a bare `#transaction{}` for singleton blocks; `payload/1` accepts both shapes so the
-format change needs no rewrite.
+many transactions, represented on disk as `{batch, Transactions}`. Complaint-certified
+skips use the distinct atom `noop` and are not block payloads.
 """.
 
 -include("quod_ledger.hrl").
@@ -17,18 +16,12 @@ format change needs no rewrite.
 data([#transaction{} | _] = Transactions) ->
     {batch, Transactions}.
 
--spec payload(term()) -> {ok, [#transaction{}] | [noop]} | error.
-payload(#transaction{} = Transaction) ->
-    {ok, [Transaction]};
+-spec payload(term()) -> {ok, [#transaction{}]} | error.
 payload({batch, [#transaction{} | _] = Transactions}) ->
     case transaction_list(Transactions) of
         true  -> {ok, Transactions};
         false -> error
     end;
-payload(noop) ->
-    %% Legacy explicit empty blocks stored the same atom as complaint-skipped slots.
-    %% The certificate kind distinguishes the two during catch-up verification.
-    {ok, [noop]};
 payload(_) ->
     error.
 

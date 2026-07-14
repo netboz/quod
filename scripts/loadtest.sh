@@ -47,14 +47,13 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.0}"                     # current live fleet image
+: "${IMAGE_TAG:=0.7.1}"                     # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
-: "${GENESIS_HASH:=7470BCED0B078D6A2EBBB842E3AA6E0C3A5EBE8544483C073E2264C38DF654D5}"  # live root anchor
-: "${ROOT_MODE:=join}"                      # post-growth end-state; NEVER create on an existing/wiped fleet
+: "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
 
 : "${SCALE:=0}"                             # 0 = test the LIVE fleet as-is (default); 1 = (re)deploy to NODES first
-: "${NODES:=0}"                             # only used when SCALE=1 (total = 1 founder + (NODES-1) joiners); 0 => discover
+: "${NODES:=0}"                             # only used when SCALE=1; 0 => discover
 : "${DURATION:=900}"                        # total chaos window, seconds
 : "${WARMUP:=45}"                           # let any cold/restarted node catch up before churn starts, seconds
 
@@ -112,8 +111,7 @@ Fleet and deployment:
   --nodes N                total nodes when scaling (NODES)
   --image-tag TAG          image tag when scaling (IMAGE_TAG)
   --image-registry ADDR    image registry when scaling (IMAGE_REGISTRY)
-  --genesis-hash HEX       pinned root anchor when scaling (GENESIS_HASH)
-  --root-mode MODE         root mode when scaling (ROOT_MODE)
+  --genesis-hash HEX       pinned genesis anchor when scaling (GENESIS_HASH)
   --nomad-file PATH        Nomad job file when scaling (NOMAD_FILE)
 
 Load and chaos:
@@ -143,7 +141,7 @@ Load and chaos:
 Examples:
   scripts/loadtest.sh --duration 120 --warmup 30 --overf 0
   scripts/loadtest.sh --duration 900 --membership-churn 1
-  scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.7.0
+  scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.7.1 --genesis-hash <hex>
 EOF
 }
 
@@ -169,7 +167,6 @@ parse_args() {
       --image-tag|--image-tag=*) take_value "$@"; IMAGE_TAG=$ARG_VALUE ;;
       --image-registry|--image-registry=*) take_value "$@"; IMAGE_REGISTRY=$ARG_VALUE ;;
       --genesis-hash|--genesis-hash=*) take_value "$@"; GENESIS_HASH=$ARG_VALUE ;;
-      --root-mode|--root-mode=*) take_value "$@"; ROOT_MODE=$ARG_VALUE ;;
       --nomad-file|--nomad-file=*) take_value "$@"; NOMAD_FILE=$ARG_VALUE ;;
       --duration|--duration=*) take_value "$@"; DURATION=$ARG_VALUE ;;
       --warmup|--warmup=*) take_value "$@"; WARMUP=$ARG_VALUE ;;
@@ -220,18 +217,22 @@ validate_config() {
   validate_uint membership-churn "$MEMBERSHIP_CHURN"
   [ "$SCALE" = 0 ] || [ "$SCALE" = 1 ] || die "scale must be 0 or 1, got '$SCALE'"
   [ "$OVERF" = 0 ] || [ "$OVERF" = 1 ] || die "overf must be 0 or 1, got '$OVERF'"
+  if [ "$SCALE" = 1 ]; then
+    [ "$NODES" -ge 1 ] || die "scale=1 requires nodes>=1"
+    [[ "$GENESIS_HASH" =~ ^[0-9A-Fa-f]{64}$ ]] ||
+      die "scale=1 requires the current fleet's 64-character genesis hash"
+  fi
 }
 
 # bounded exec into a node's BEAM (never hang the driver on an unresponsive alloc).
-# -task quod is MANDATORY: the quod-join group has a wait-for-root sidecar, so a bare
-# exec is ambiguous; the quod-root group's single task is also named quod, so it is safe.
+# -task quod is mandatory because the homogeneous group also has a prestart peer-wait task.
 QEVAL()      { timeout 25 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
 QEVAL_LONG() { timeout 70 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
 
 #==============================================================================
 # fleet discovery (JSON — no dependence on nomad's human table format / subnet)
 #==============================================================================
-# running alloc IDs for a task group (quod-root|quod-join). Uses the JSON API, NOT the `nomad job status`
+# Running allocation IDs for the homogeneous quod-node task group. Uses the JSON API, not `nomad job status`
 # text table: during churn the human table intermittently drops/mis-lists rows, which made stop_writers'
 # re-kill miss the very validators holding writers (orphans survived + kept advancing the ledger).
 allocs() {
@@ -241,7 +242,7 @@ allocs() {
 
 # "allocid group host:port" for every running alloc's metrics endpoint (parallel, one nomad call each)
 endpoints() {
-  { allocs quod-root; allocs quod-join; } | xargs -P 16 -I{} sh -c '
+  allocs quod-node | xargs -P 16 -I{} sh -c '
     j=$(nomad alloc status -json "$1" 2>/dev/null)
     hp=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"metrics\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
     grp=$(printf "%s" "$j" | jq -r ".TaskGroup" 2>/dev/null)
@@ -287,7 +288,7 @@ fleet_head() { refresh_endpoints; scrape_fleet 2>/dev/null | awk '$3>m{m=$3} END
 
 # classification from the current FLEETFILE
 validators() { awk '$6==1 && $9==0 {print $1}' "$FLEETFILE"; }
-observers()  { awk '$2=="quod-join" && $6==0 && $9==0 {print $1}' "$FLEETFILE"; }
+observers()  { awk '$2=="quod-node" && $6==0 && $9==0 {print $1}' "$FLEETFILE"; }
 
 #==============================================================================
 # load control — a bounded-retry writer per validator (leader-aware)
@@ -336,7 +337,7 @@ stop_writers() {
       case "$out" in
         *alive*|"") left=$((left + 1));;  # still there, or unreachable (recheck)
       esac
-    done < <(allocs quod-root; allocs quod-join)
+    done < <(allocs quod-node)
     [ "$left" -eq 0 ] && break
     [ "$round" -lt 3 ] && sleep 5
   done
@@ -350,7 +351,7 @@ stop_writers() {
     while read -r a; do
       [ -z "$a" ] && continue
       QEVAL "$a" "case whereis($WRITER) of undefined -> ok; P -> exit(P,kill), ok end." >/dev/null 2>&1
-    done < <(allocs quod-root; allocs quod-join)
+    done < <(allocs quod-node)
     h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=$((tries + 1))
   done
   if [ "${h2:-0}" -le "${h1:-0}" ]; then
@@ -463,7 +464,7 @@ membership_churn_cycle() {
   mapfile -t vids < <(validators)
   [ "${#vids[@]}" -lt "$EXP_VALIDATORS" ] && { LOG "MEMB-CHURN: committee not whole (${#vids[@]}/$EXP_VALIDATORS up) — deferring"; return 0; }
   head=$(awk '$3>=0{if($3>m)m=$3}END{print m+0}' "$FLEETFILE")
-  cand=$(awk -v h="$head" '$2=="quod-join" && $6==0 && $9==0 && $3>=0 && (h-$3)<=256 {print $1" "$3}' "$FLEETFILE" | sort -k2 -n | tail -1 | awk '{print $1}')
+  cand=$(awk -v h="$head" '$2=="quod-node" && $6==0 && $9==0 && $3>=0 && (h-$3)<=256 {print $1" "$3}' "$FLEETFILE" | sort -k2 -n | tail -1 | awk '{print $1}')
   [ -z "$cand" ] && { LOG "MEMB-CHURN: no caught-up observer candidate — skipping"; return 0; }
   IFS='|' read -r pk host port <<< "$(cand_pk_addr "$cand")"
   [ -z "$pk" ] && { LOG "MEMB-CHURN: could not read candidate $cand identity — skipping"; return 0; }
@@ -550,10 +551,9 @@ trap 'stop_writers; rm -f "$EPFILE" "$FLEETFILE"' EXIT
 LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
 
 if [ "$SCALE" = "1" ]; then
-  [ "$NODES" -lt 1 ] && { LOG "FATAL: SCALE=1 needs NODES>=1"; exit 1; }
-  LOG "scaling job to $NODES nodes (root_mode=$ROOT_MODE join_count=$((NODES - 1)))..."
-  nomad job run -var image_tag="$IMAGE_TAG" -var image_registry="$IMAGE_REGISTRY" -var root_mode="$ROOT_MODE" \
-    -var join_count=$((NODES - 1)) -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
+  LOG "scaling homogeneous job to $NODES nodes..."
+  nomad job run -var image_tag="$IMAGE_TAG" -var image_registry="$IMAGE_REGISTRY" \
+    -var node_count="$NODES" -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
 fi
 
 LOG "warmup ${WARMUP}s (let any cold/restarted node catch up)..."; sleep "$WARMUP"

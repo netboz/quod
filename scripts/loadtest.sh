@@ -32,10 +32,10 @@
 #     LIVE committee, so it is opt-in and meant to be run supervised.
 #
 #   scripts/loadtest.sh                              # test the LIVE fleet as-is
-#   DURATION=600 scripts/loadtest.sh                 # shorter window
-#   OVERF=0 scripts/loadtest.sh                      # skip the deliberate >f stall
-#   MEMBERSHIP_CHURN=1 scripts/loadtest.sh           # also exercise Slice C/D/E under load
-#   SCALE=1 NODES=8 scripts/loadtest.sh              # (re)deploy to 8 nodes first (root_mode=join)
+#   scripts/loadtest.sh --duration 600               # shorter window
+#   scripts/loadtest.sh --overf 0                    # skip the deliberate >f stall
+#   scripts/loadtest.sh --membership-churn 1         # exercise membership under load
+#   scripts/loadtest.sh --scale 1 --nodes 8          # (re)deploy to 8 nodes first
 #
 # Needs: nomad CLI (NOMAD_ADDR reachable), jq, curl. Run from anywhere in the repo.
 #
@@ -47,8 +47,9 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.6.38}"                    # current live fleet image
-: "${GENESIS_HASH:=7470BCED0B078D6A2EBBB842E3AA6E0C3A5EBE8544483C073E2264C38DF654D5}"  # 0.6.35 anchor
+: "${IMAGE_TAG:=0.6.39}"                    # current live fleet image
+: "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
+: "${GENESIS_HASH:=7470BCED0B078D6A2EBBB842E3AA6E0C3A5EBE8544483C073E2264C38DF654D5}"  # live root anchor
 : "${ROOT_MODE:=join}"                      # post-growth end-state; NEVER create on an existing/wiped fleet
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
 
@@ -92,9 +93,135 @@ set -uo pipefail
 export NOMAD_ADDR
 SELF=$(realpath "$0")                        # absolute path for the parallel scrape re-exec (survives the cd to repo root below)
 WRITER=loadtest_writer                      # registered process name on each validator
-[ -z "$MIN_ADVANCE" ] && MIN_ADVANCE=$(( DURATION / 4 ))
 STAMP() { date +%H:%M:%S; }
 LOG()   { echo "[$(STAMP)] $*"; }
+
+usage() {
+  cat <<'EOF'
+Usage: scripts/loadtest.sh [options]
+
+Runs transaction load and validator/observer chaos against the live Nomad fleet.
+Options override the matching environment variables; environment variables remain
+supported for scripts and CI.
+
+Fleet and deployment:
+  --nomad-addr ADDR       Nomad API address (NOMAD_ADDR)
+  --job NAME               Nomad job name (JOB)
+  --namespace NAME         quod namespace (NS)
+  --scale 0|1              deploy before testing (SCALE)
+  --nodes N                total nodes when scaling (NODES)
+  --image-tag TAG          image tag when scaling (IMAGE_TAG)
+  --image-registry ADDR    image registry when scaling (IMAGE_REGISTRY)
+  --genesis-hash HEX       pinned root anchor when scaling (GENESIS_HASH)
+  --root-mode MODE         root mode when scaling (ROOT_MODE)
+  --nomad-file PATH        Nomad job file when scaling (NOMAD_FILE)
+
+Load and chaos:
+  --duration SEC            active chaos window (DURATION, default: 900)
+  --warmup SEC              pre-test settling time (WARMUP, default: 45)
+  --tick SEC                chaos/log interval (TICK, default: 15)
+  --tx-base-ms MS           writer base delay (TX_BASE_MS)
+  --tx-jitter-ms MS         writer random delay (TX_JITTER_MS)
+  --writer-retries N        retries per write (WRITER_RETRIES)
+  --writer-retry-ms MS      delay between retries (WRITER_RETRY_MS)
+  --burst-prob PCT          burst probability per tick (BURST_PROB)
+  --burst-size N            concurrent writes per burst (BURST_SIZE)
+  --churn-prob PCT          observer churn probability (CHURN_PROB)
+  --churn-max N             maximum observers restarted together (CHURN_MAX)
+  --mass-prob PCT            probability of a mass observer restart (MASS_PROB)
+  --val-churn-prob PCT      validator churn probability (VAL_CHURN_PROB)
+  --overf 0|1               enable deliberate >f stalls (OVERF)
+  --overf-prob PCT          probability of an >f stall (OVERF_PROB)
+  --membership-churn 0|1    mutate membership under load (MEMBERSHIP_CHURN)
+  --memb-hold SEC           membership hold time (MEMB_HOLD)
+  --unv-poll SEC             unverified-drop poll interval (UNV_POLL)
+  --lag-ok N                 allowed final height spread (LAG_OK)
+  --settle-tries N          post-load convergence attempts (SETTLE_TRIES)
+  --min-advance N            required committed-height gain (MIN_ADVANCE)
+  --help                    show this help
+
+Examples:
+  scripts/loadtest.sh --duration 120 --warmup 30 --overf 0
+  scripts/loadtest.sh --duration 900 --membership-churn 1
+  scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.6.39
+EOF
+}
+
+die() { echo "loadtest: $*" >&2; exit 2; }
+
+take_value() {
+  case "$1" in
+    *=*) ARG_VALUE=${1#*=}; ARG_SHIFT=1 ;;
+    *)   [ "$#" -ge 2 ] || die "missing value for $1"
+         ARG_VALUE=$2; ARG_SHIFT=2 ;;
+  esac
+}
+
+parse_args() {
+  while [ "$#" -gt 0 ]; do
+    case "$1" in
+      -h|--help) usage; exit 0 ;;
+      --nomad-addr|--nomad-addr=*) take_value "$@"; NOMAD_ADDR=$ARG_VALUE ;;
+      --job|--job=*) take_value "$@"; JOB=$ARG_VALUE ;;
+      --namespace|--namespace=*) take_value "$@"; NS=$ARG_VALUE ;;
+      --scale|--scale=*) take_value "$@"; SCALE=$ARG_VALUE ;;
+      --nodes|--nodes=*) take_value "$@"; NODES=$ARG_VALUE ;;
+      --image-tag|--image-tag=*) take_value "$@"; IMAGE_TAG=$ARG_VALUE ;;
+      --image-registry|--image-registry=*) take_value "$@"; IMAGE_REGISTRY=$ARG_VALUE ;;
+      --genesis-hash|--genesis-hash=*) take_value "$@"; GENESIS_HASH=$ARG_VALUE ;;
+      --root-mode|--root-mode=*) take_value "$@"; ROOT_MODE=$ARG_VALUE ;;
+      --nomad-file|--nomad-file=*) take_value "$@"; NOMAD_FILE=$ARG_VALUE ;;
+      --duration|--duration=*) take_value "$@"; DURATION=$ARG_VALUE ;;
+      --warmup|--warmup=*) take_value "$@"; WARMUP=$ARG_VALUE ;;
+      --tick|--tick=*) take_value "$@"; TICK=$ARG_VALUE ;;
+      --tx-base-ms|--tx-base-ms=*) take_value "$@"; TX_BASE_MS=$ARG_VALUE ;;
+      --tx-jitter-ms|--tx-jitter-ms=*) take_value "$@"; TX_JITTER_MS=$ARG_VALUE ;;
+      --writer-retries|--writer-retries=*) take_value "$@"; WRITER_RETRIES=$ARG_VALUE ;;
+      --writer-retry-ms|--writer-retry-ms=*) take_value "$@"; WRITER_RETRY_MS=$ARG_VALUE ;;
+      --burst-prob|--burst-prob=*) take_value "$@"; BURST_PROB=$ARG_VALUE ;;
+      --burst-size|--burst-size=*) take_value "$@"; BURST_SIZE=$ARG_VALUE ;;
+      --churn-prob|--churn-prob=*) take_value "$@"; CHURN_PROB=$ARG_VALUE ;;
+      --churn-max|--churn-max=*) take_value "$@"; CHURN_MAX=$ARG_VALUE ;;
+      --mass-prob|--mass-prob=*) take_value "$@"; MASS_PROB=$ARG_VALUE ;;
+      --val-churn-prob|--val-churn-prob=*) take_value "$@"; VAL_CHURN_PROB=$ARG_VALUE ;;
+      --overf|--overf=*) take_value "$@"; OVERF=$ARG_VALUE ;;
+      --overf-prob|--overf-prob=*) take_value "$@"; OVERF_PROB=$ARG_VALUE ;;
+      --membership-churn|--membership-churn=*) take_value "$@"; MEMBERSHIP_CHURN=$ARG_VALUE ;;
+      --memb-hold|--memb-hold=*) take_value "$@"; MEMB_HOLD=$ARG_VALUE ;;
+      --unv-poll|--unv-poll=*) take_value "$@"; UNV_POLL=$ARG_VALUE ;;
+      --lag-ok|--lag-ok=*) take_value "$@"; LAG_OK=$ARG_VALUE ;;
+      --settle-tries|--settle-tries=*) take_value "$@"; SETTLE_TRIES=$ARG_VALUE ;;
+      --min-advance|--min-advance=*) take_value "$@"; MIN_ADVANCE=$ARG_VALUE ;;
+      --) ARG_SHIFT=0; shift; [ "$#" -eq 0 ] || die "unexpected positional argument: $1"; break ;;
+      -*) die "unknown option: $1 (use --help)" ;;
+      *)  die "unexpected positional argument: $1" ;;
+    esac
+    shift "$ARG_SHIFT"
+  done
+}
+
+validate_uint() {
+  [[ "$2" =~ ^[0-9]+$ ]] || die "$1 must be a non-negative integer, got '$2'"
+}
+
+validate_config() {
+  validate_uint duration "$DURATION"
+  validate_uint warmup "$WARMUP"
+  validate_uint tick "$TICK"
+  validate_uint nodes "$NODES"
+  validate_uint writer-retries "$WRITER_RETRIES"
+  validate_uint writer-retry-ms "$WRITER_RETRY_MS"
+  validate_uint burst-size "$BURST_SIZE"
+  validate_uint churn-max "$CHURN_MAX"
+  validate_uint unv-poll "$UNV_POLL"
+  validate_uint lag-ok "$LAG_OK"
+  validate_uint settle-tries "$SETTLE_TRIES"
+  validate_uint min-advance "$MIN_ADVANCE"
+  validate_uint membership-churn "$MEMBERSHIP_CHURN"
+  [ "$SCALE" = 0 ] || [ "$SCALE" = 1 ] || die "scale must be 0 or 1, got '$SCALE'"
+  [ "$OVERF" = 0 ] || [ "$OVERF" = 1 ] || die "overf must be 0 or 1, got '$OVERF'"
+}
+
 # bounded exec into a node's BEAM (never hang the driver on an unresponsive alloc).
 # -task quod is MANDATORY: the quod-join group has a wait-for-root sidecar, so a bare
 # exec is ambiguous; the quod-root group's single task is also named quod, so it is safe.
@@ -145,6 +272,10 @@ scrape_row() {   # arg: "alloc,group,host:port"
 # re-entry hook: parallel scrape workers re-exec THIS script. Must sit AFTER the fn
 # defs and BEFORE any fleet side effect (scale/writer/churn).
 [ "${1:-}" = "_scrape_one" ] && { scrape_row "$2"; exit 0; }
+
+parse_args "$@"
+[ -z "$MIN_ADVANCE" ] && MIN_ADVANCE=$(( DURATION / 4 ))
+validate_config
 
 EPFILE=$(mktemp)                            # alloc->endpoint map:  "alloc group host:port"
 FLEETFILE=$(mktemp)                         # per-tick metrics table (cols above); shared by churn + monitor
@@ -201,8 +332,10 @@ stop_writers() {
     left=0
     while read -r a; do
       [ -z "$a" ] && continue
-      out=$(QEVAL "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(50), case whereis($WRITER) of undefined -> killed; _ -> alive end end.")
-      case "$out" in *alive*|"") left=$((left + 1));; esac   # still there, or unreachable (recheck)
+      out=$(QEVAL "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(100), case whereis($WRITER) of undefined -> killed; _ -> alive end end.")
+      case "$out" in
+        *alive*|"") left=$((left + 1));;  # still there, or unreachable (recheck)
+      esac
     done < <(allocs quod-root; allocs quod-join)
     [ "$left" -eq 0 ] && break
     [ "$round" -lt 3 ] && sleep 5
@@ -214,8 +347,9 @@ stop_writers() {
   h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=0
   while [ "${h2:-0}" -gt "${h1:-0}" ] && [ "$tries" -lt 4 ]; do
     LOG "stop_writers: ledger still advancing ($h1 -> $h2) — orphan writer(s) remain, re-killing"
-    while read -r a; do [ -z "$a" ] && continue
-      QEVAL "$a" "catch exit(whereis($WRITER), kill), ok." >/dev/null 2>&1
+    while read -r a; do
+      [ -z "$a" ] && continue
+      QEVAL "$a" "case whereis($WRITER) of undefined -> ok; P -> exit(P,kill), ok end." >/dev/null 2>&1
     done < <(allocs quod-root; allocs quod-join)
     h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=$((tries + 1))
   done
@@ -360,6 +494,7 @@ membership_churn_cycle() {
 #==============================================================================
 WORST_LAG=0; MAX_UNVERIFIED=0; MAX_REJECTS=0; MAX_WEAK_CERT=0
 CS_SEEN_MIN=999; CS_SEEN_MAX=0
+BASE_FAILED_ALLOCS=0
 
 # aggregate the current FLEETFILE -> "up min max lag unv mr ready_validators cs_min cs_max wcw recovering"
 snapshot() {
@@ -416,7 +551,7 @@ LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_T
 if [ "$SCALE" = "1" ]; then
   [ "$NODES" -lt 1 ] && { LOG "FATAL: SCALE=1 needs NODES>=1"; exit 1; }
   LOG "scaling job to $NODES nodes (root_mode=$ROOT_MODE join_count=$((NODES - 1)))..."
-  nomad job run -var image_tag="$IMAGE_TAG" -var root_mode="$ROOT_MODE" \
+  nomad job run -var image_tag="$IMAGE_TAG" -var image_registry="$IMAGE_REGISTRY" -var root_mode="$ROOT_MODE" \
     -var join_count=$((NODES - 1)) -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
 fi
 
@@ -433,6 +568,8 @@ START_SLOT=$max0; CUR_MAX=$max0
 LOG "fleet: $TOTAL nodes, committee_size=$EXP_COMMITTEE, VALIDATORS=$EXP_VALIDATORS (f=$F quorum=$QUORUM overf_n=$OVERF_N), slot=$min0..$max0"
 LOG "validators: $START_VALIDATORS"
 [ "$EXP_VALIDATORS" -lt 1 ] && { LOG "FATAL: no validators discovered — is the fleet up?"; exit 1; }
+BASE_FAILED_ALLOCS=$(failed_allocs)
+LOG "failed/lost alloc baseline: $BASE_FAILED_ALLOCS"
 
 start_writers force
 
@@ -462,9 +599,9 @@ while [ "$(date +%s)" -lt "$END" ]; do
 done
 
 LOG "chaos window over — stopping load, waiting for churn to settle + reconvergence..."
-stop_writers
 [ -n "$CHURN_PID" ]     && wait "$CHURN_PID" 2>/dev/null
 [ -n "$VAL_CHURN_PID" ] && wait "$VAL_CHURN_PID" 2>/dev/null
+stop_writers
 
 converged=0; n=0; mx=$START_SLOT; vals=$EXP_VALIDATORS; csmn=$EXP_COMMITTEE; csmx=$EXP_COMMITTEE; wcw=0; vbehind=$EXP_VALIDATORS; recovering=$TOTAL
 for _ in $(seq 1 "$SETTLE_TRIES"); do
@@ -489,6 +626,8 @@ END_VALIDATORS=$(validators | sort | tr '\n' ' ')
 #==============================================================================
 FAILED=0
 FAILEDALLOCS=$(failed_allocs)
+NEW_FAILEDALLOCS=$((FAILEDALLOCS - BASE_FAILED_ALLOCS))
+[ "$NEW_FAILEDALLOCS" -lt 0 ] && NEW_FAILEDALLOCS=$FAILEDALLOCS
 ADVANCE=$(( END_SLOT - START_SLOT ))
 echo
 LOG "================= RESULT (N=$EXP_VALIDATORS, f=$F) ================="
@@ -497,7 +636,7 @@ LOG "nodes still recovering  : $recovering";                 [ "$recovering" -eq
 LOG "reconverged (lag<=$LAG_OK)   : $([ "$converged" = 1 ] && echo yes || echo NO)"; [ "$converged" = 1 ] || { LOG "  FAIL: fleet did not reconverge"; FAILED=1; }
 LOG "ledger advanced          : +$ADVANCE (>= $MIN_ADVANCE required)"; [ "$ADVANCE" -ge "$MIN_ADVANCE" ] || { LOG "  FAIL: too few commits (sustained load did not land)"; FAILED=1; }
 LOG "unverified drops (max)   : $MAX_UNVERIFIED";             [ "$MAX_UNVERIFIED" -eq 0 ]            || { LOG "  FAIL: unverified gossip observed (safety!)"; FAILED=1; }
-LOG "failed/lost allocs       : $FAILEDALLOCS";               [ "$FAILEDALLOCS" -eq 0 ]              || { LOG "  FAIL: allocs failed/lost"; FAILED=1; }
+LOG "failed/lost allocs       : $NEW_FAILEDALLOCS new ($FAILEDALLOCS total)"; [ "$NEW_FAILEDALLOCS" -eq 0 ] || { LOG "  FAIL: allocs failed/lost during test"; FAILED=1; }
 # --- N>=4 committee invariants ---
 LOG "validators at end        : $vals / $EXP_VALIDATORS";     [ "$vals" -eq "$EXP_VALIDATORS" ]      || { LOG "  FAIL: not all validators recovered/voting"; FAILED=1; }
 LOG "validators at head       : $([ "$vbehind" -eq 0 ] && echo yes || echo NO)  ($vbehind behind head=$END_SLOT)"; [ "$vbehind" -eq 0 ] || { LOG "  FAIL: validator(s) stuck behind the head after load stopped (member multi-slot gap-fill gap — deferred.md §3)"; FAILED=1; }

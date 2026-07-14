@@ -3,8 +3,8 @@
 # quod node — pure-Erlang QUIC (the `quic` library, no NIF, no msquic).
 # Small image, fast build (no C toolchain, no from-source TLS/QUIC compile).
 #
-# Build:  docker build -t quod:0.7.1 .
-# Run:    docker run --rm -p 14567:14567/udp quod:0.7.1
+# Build:  docker build -t quod:0.7.2 .
+# Run:    docker run --rm -p 14567:14567/udp -p 14569:14569 quod:0.7.2
 
 # ---- builder ---------------------------------------------------------------
 FROM erlang:28 AS builder
@@ -51,9 +51,10 @@ RUN mkdir -p /opt/quod/certs \
          -keyout /opt/quod/certs/key.pem -out /opt/quod/certs/cert.pem \
     && sed -i 's#"priv/certs/cert.pem"#"/opt/quod/certs/cert.pem"#; \
               s#"priv/certs/key.pem"#"/opt/quod/certs/key.pem"#' \
-         /opt/quod/releases/0.7.1/sys.config
+         /opt/quod/releases/0.7.2/sys.config
 
 EXPOSE 14567/udp
+EXPOSE 14569/tcp
 
 # The distributed-Erlang node name in vm.args is `${QUOD_DIST_NAME}`, substituted
 # from the OS env at boot (RELX_REPLACE_OS_VARS). It must be unique per host so

@@ -15,28 +15,28 @@ Two collection paths:
     `{committed, Ns}` commit event (never replay — see `quod_simplex:publish_feed/3`), so they observe
     each finalized transaction exactly once on the committing node.
 
-| metric | type | extra labels | meaning |
-| ------ | ---- | ------------ | ------- |
-| `quod_up` | gauge | — | 1 while the node is up |
-| `quod_brahms_*{namespace}` | gauge | | overlay view/sample/links/rounds/evictions/tombstones/n̂ |
-| `quod_consensus_slot/committed/approved/last_applied/committee_size{namespace}` | gauge | | consensus frontiers + committee |
-| `quod_consensus_pipeline_gap{namespace}` | gauge | | approved blocks ahead of durable commit (bounded to 2 at depth one) |
-| `quod_consensus_appends/proposals/batched_txs/commits/submitted/skips{namespace}` | gauge | | cumulative transaction/block counts |
-| `quod_consensus_pending{namespace}` | gauge | | in-flight appends awaiting commit |
-| `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | append rejections by reason (cumulative) |
-| `quod_consensus_is_validator{namespace}` | gauge | | 1 if committee facts include this node; pair with `syncing=0` for voting readiness |
-| `quod_consensus_syncing{namespace}` | gauge | | 1 until recovery has corroborated the local tip; 0 when settled |
-| `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | stuck-proposal re-sends / weak-cert finalize refusals (cumulative) |
-| `quod_consensus_ahead_gap{namespace}` | gauge | | committed slots the committee is ahead of this node (0 = caught up; sustained >0 = fell behind the live window) |
-| `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | fact-engine apply/prove/OCC counts |
-| `quod_prolog_parked{namespace}` | gauge | | writes parked awaiting commit |
-| `quod_prolog_park_timeouts{namespace}` | gauge | | parked writes reaped by TTL (cumulative) |
-| `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | dissemination health (cumulative) |
-| `quod_feed_dropped{namespace}` | gauge | `reason` | dropped blocks by reason (duplicate/gap/unverified/…) |
-| `quod_feed_digests/fresh_digests{namespace}` | gauge | | peers tracked for liveness / of those, fresh now (admission readiness) |
-| `quod_tx_commit_latency_ms{namespace}` | histogram | | submit→commit latency per tx |
-| `quod_tx_diff_ops{namespace}` | histogram | | asserts+retracts per committed tx |
-| `quod_tx_committed_total{namespace}` | counter | `author` | committed txs by submitting node |
+| metric | type | extra labels | what it means (plain) |
+| ------ | ---- | ------------ | --------------------- |
+| `quod_up` | gauge | | 1 while the node is running |
+| `quod_brahms_*{namespace}` | gauge | | peer discovery: how many other nodes are known / sampled / connected, plus the estimated network size |
+| `quod_consensus_slot/committed/approved/last_applied/committee_size{namespace}` | gauge | | block numbers (newest / final / votable / applied) and how many nodes may vote |
+| `quod_consensus_pipeline_gap{namespace}` | gauge | | blocks with enough votes but not yet final (stays 0-2 by design) |
+| `quod_consensus_appends/proposals/batched_txs/commits/submitted/skips{namespace}` | gauge | | running totals of change and block activity |
+| `quod_consensus_pending{namespace}` | gauge | | change requests waiting to be made final right now |
+| `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | running totals of turned-away change requests, by reason |
+| `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node may vote (it actually votes only when `syncing` is 0) |
+| `quod_consensus_syncing{namespace}` | gauge | | 1 while catching up / confirming the latest block, 0 once up to date |
+| `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
+| `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
+| `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
+| `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
+| `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes that gave up waiting |
+| `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | running totals of blocks spread / received / pulled to fill gaps |
+| `quod_feed_dropped{namespace}` | gauge | `reason` | blocks thrown away, by reason (duplicate / gap / unverified / ...) |
+| `quod_feed_digests/fresh_digests{namespace}` | gauge | | nodes sending 'alive' heartbeats / of those, still fresh |
+| `quod_tx_commit_latency_ms{namespace}` | histogram | | time from handing in a change to it being made final |
+| `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change |
+| `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
 """.
 
 -behaviour(gen_server).
@@ -102,62 +102,62 @@ declare(NodeId) ->
             prometheus_histogram:declare([{name, Name}, {help, Help}, {labels, [namespace]},
                                           {buckets, Buckets}, {constant_labels, CL}])
         end,
-    %% Peer discovery (how this node finds and tracks other nodes hosting the same ontology)
-    _ = G(quod_brahms_view_size,   "How many peers this node currently knows about for this ontology."),
-    _ = G(quod_brahms_sample_size, "How many of those peers are in this node's small random sample used to gossip fairly."),
-    _ = G(quod_brahms_links,       "How many peers this node currently has an open connection to for this ontology."),
-    _ = G(quod_brahms_rounds,      "How many peer-gossip rounds this node has run for this ontology (running total)."),
-    _ = G(quod_brahms_evictions,   "How many peers this node has dropped after finding them unreachable (running total)."),
-    _ = G(quod_brahms_tombstones,  "Peers just marked dead and remembered briefly so they are not re-added (temporary; returns to 0)."),
-    _ = G(quod_brahms_estimated_n, "This node's estimate of how many nodes are in the whole network for this ontology."),
-    %% Consensus (agreeing on the ordered ledger of changes for this ontology)
-    _ = G(quod_consensus_slot,            "The height of this ontology's ledger: the number of the most recent block."),
-    _ = G(quod_consensus_committed,       "The height of the last block that is final and permanent."),
-    _ = G(quod_consensus_approved,        "The height of the last support-certified block that a proposal may extend."),
-    _ = G(quod_consensus_pipeline_gap,    "Support-certified blocks ahead of durable commit. The depth-one pipeline bounds this to 0, 1, or 2."),
-    _ = G(quod_consensus_last_applied,    "The height of the last block whose changes have been written into this node's database."),
-    _ = G(quod_consensus_committee_size,  "How many nodes are on the committee that votes on changes to this ontology."),
-    _ = G(quod_consensus_appends,         "How many changes this node has accepted into leader batches (running total)."),
-    _ = G(quod_consensus_proposals,       "How many blocks this node has proposed while acting as leader (running total)."),
-    _ = G(quod_consensus_batched_txs,     "How many transactions those proposed blocks contain (running total). Divide its rate by proposal rate for mean batch size."),
-    _ = G(quod_consensus_commits,         "How many blocks have been finalised and applied (running total)."),
-    _ = G(quod_consensus_submitted,       "How many change requests have been submitted at this node (running total)."),
-    _ = G(quod_consensus_skips,           "How many ledger slots were skipped because a leader did not produce a block in time (running total)."),
-    _ = G(quod_consensus_pending,         "How many submitted changes are waiting to be finalised right now."),
-    _ = G(quod_consensus_append_busy,     "Change requests turned away because this node was already busy finalising one (running total)."),
-    _ = G(quod_consensus_append_redirect, "Change requests sent to the wrong node (not the current leader) and redirected (running total)."),
-    _ = G(quod_consensus_append_bad,      "Change requests rejected as malformed or not allowed (running total)."),
-    _ = G(quod_consensus_membership_rejects, "Proposed committee changes (adding or removing a voting node) that this node checked against its own data and rejected as invalid (running total)."),
-    _ = G(quod_consensus_redrives,        "How many times this node re-sent a proposal it was still waiting on, instead of giving up on it (running total). Climbing steadily means a committee member is not responding."),
-    _ = G(quod_consensus_is_validator,    "1 if this node is listed in this ontology's committee facts, 0 if it is a read-only observer. It may vote only when consensus_syncing is also 0."),
-    _ = G(quod_consensus_syncing,         "1 while this node is recovering or corroborating its ledger tip, 0 when it is settled. A validator must be 0 before it may vote."),
-    _ = G(quod_consensus_weak_cert_waits, "How many times this node refused to finalise a block because its proof-of-agreement did not have enough signatures from the current committee, and waited for a valid one instead (running total). Climbing means this node fell behind across a committee change and is waiting to catch up."),
-    _ = G(quod_consensus_ahead_gap,       "How many committed slots the committee has finalised beyond this node's own height (0 = caught up). A sustained positive value means this node has fallen behind the live window and will fetch the missing blocks to catch back up."),
-    %% Knowledge base (this node's copy of the ontology's facts)
-    _ = G(quod_prolog_applied,       "The height of the last block written into this node's knowledge base."),
-    _ = G(quod_prolog_applies,       "How many finalised transactions have been written into the knowledge base (running total)."),
-    _ = G(quod_prolog_rejects,       "Finalised changes that were not written because the data they relied on had changed in the meantime (running total)."),
-    _ = G(quod_prolog_proves,        "How many read queries this node has answered (running total)."),
-    _ = G(quod_prolog_conflicts,     "How many times a finalised change clashed with newer data and was skipped (running total)."),
-    _ = G(quod_prolog_parked,        "How many write requests are waiting here for their change to be finalised right now."),
-    _ = G(quod_prolog_park_timeouts, "Write requests that gave up waiting because their change never finalised (running total)."),
-    %% Spreading finalised blocks to the wider network (gossip)
-    _ = G(quod_feed_pushed,   "Blocks this node finalised and started spreading to the rest of the network (running total)."),
-    _ = G(quod_feed_ingested, "Blocks received from other nodes, checked, applied, and passed along (running total)."),
-    _ = G(quod_feed_pulled,   "How many times this node asked peers to send blocks it was missing (running total)."),
-    _ = G(quod_feed_digests,       "How many peers this node currently tracks a liveness heartbeat for (used to decide whether a candidate is alive enough to admit to the committee)."),
-    _ = G(quod_feed_fresh_digests, "How many of those tracked peers sent a heartbeat recently enough to count as alive right now."),
+    %% Peer discovery: how this node finds and keeps track of the other nodes.
+    _ = G(quod_brahms_view_size,   "How many other nodes this node currently knows about."),
+    _ = G(quod_brahms_sample_size, "How many of those known nodes are in the small random set this node shares updates with, so gossip stays even."),
+    _ = G(quod_brahms_links,       "How many other nodes this node has an open connection to right now."),
+    _ = G(quod_brahms_rounds,      "Total number of update-sharing rounds this node has run (only ever goes up)."),
+    _ = G(quod_brahms_evictions,   "Total number of nodes this node has dropped after they stopped responding (only ever goes up)."),
+    _ = G(quod_brahms_tombstones,  "Nodes just marked dead and remembered for a short while so they are not added straight back (temporary; returns to 0)."),
+    _ = G(quod_brahms_estimated_n, "This node's estimate of how many nodes are in the whole network."),
+    %% Consensus: how the nodes agree on one shared, ordered history of changes.
+    _ = G(quod_consensus_slot,            "The number of the newest block this node has. Higher means more history; all healthy nodes should track close together."),
+    _ = G(quod_consensus_committed,       "The number of the newest block that is final and can never change."),
+    _ = G(quod_consensus_approved,        "The number of the newest block that has enough votes for the next block to be built on top of it (usually one ahead of the final block)."),
+    _ = G(quod_consensus_pipeline_gap,    "How many blocks have enough votes but are not final yet. By design this stays at 0, 1, or 2; a value stuck at 2 means finishing blocks is lagging."),
+    _ = G(quod_consensus_last_applied,    "The number of the newest block whose changes this node has written into its own copy of the data."),
+    _ = G(quod_consensus_committee_size,  "How many nodes are currently allowed to vote on changes."),
+    _ = G(quod_consensus_appends,         "Total change requests this node accepted (while it was the leader) to put into blocks (only ever goes up)."),
+    _ = G(quod_consensus_proposals,       "Total blocks this node has proposed while it was the leader (only ever goes up)."),
+    _ = G(quod_consensus_batched_txs,     "Total changes packed into the blocks this node proposed. Divide its rate by the proposal rate to get the average number of changes per block."),
+    _ = G(quod_consensus_commits,         "Total blocks that have been made final and applied (only ever goes up)."),
+    _ = G(quod_consensus_submitted,       "Total change requests handed to this node (only ever goes up)."),
+    _ = G(quod_consensus_skips,           "Total times a turn was skipped because that turn's leader did not produce a block in time (only ever goes up)."),
+    _ = G(quod_consensus_pending,         "Change requests waiting to be made final right now."),
+    _ = G(quod_consensus_append_busy,     "Total change requests turned away because this node was already busy finishing another one (only ever goes up)."),
+    _ = G(quod_consensus_append_redirect, "Total change requests that reached a node that was not the current leader and were pointed to the right one (only ever goes up)."),
+    _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
+    _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
+    _ = G(quod_consensus_redrives,        "Total times this node re-sent a proposal it was still waiting on instead of giving up. Climbing steadily means one of the voting nodes is not responding."),
+    _ = G(quod_consensus_is_validator,    "1 if this node is allowed to vote on changes, 0 if it only reads and follows along. It actually casts votes only when 'syncing' is also 0."),
+    _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
+    _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
+    _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
+    %% Stored data: this node's own copy of the shared data.
+    _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
+    _ = G(quod_prolog_applies,       "Total finished changes this node has written into its stored data (only ever goes up)."),
+    _ = G(quod_prolog_rejects,       "Total finished changes not written because the data they depended on had already changed (only ever goes up)."),
+    _ = G(quod_prolog_proves,        "Total read queries this node has answered (only ever goes up)."),
+    _ = G(quod_prolog_conflicts,     "Total finished changes skipped because they clashed with newer data (only ever goes up)."),
+    _ = G(quod_prolog_parked,        "Write requests waiting here for their change to be made final right now."),
+    _ = G(quod_prolog_park_timeouts, "Total write requests that gave up waiting because their change was never made final (only ever goes up)."),
+    %% Spreading finished blocks to the rest of the network.
+    _ = G(quod_feed_pushed,   "Total final blocks this node produced and started sending out to the rest of the network (only ever goes up)."),
+    _ = G(quod_feed_ingested, "Total blocks this node received from others, checked, applied, and passed along (only ever goes up)."),
+    _ = G(quod_feed_pulled,   "Total times this node asked others to send it blocks it was missing (only ever goes up)."),
+    _ = G(quod_feed_digests,       "How many other nodes this node is currently getting 'still alive' heartbeats from (used to judge whether a candidate is alive enough to add as a voting node)."),
+    _ = G(quod_feed_fresh_digests, "How many of those nodes sent a heartbeat recently enough to still count as alive."),
     _ = prometheus_gauge:declare([{name, quod_feed_dropped},
-                                  {help, "Blocks received from peers that this node dropped, grouped by reason (running total). "
-                                         "duplicate = already had it (harmless); gap = arrived out of order, fetched again later; "
-                                         "unverified = failed its proof-of-agreement check (the one to watch); "
-                                         "non_following / oversized / ingest_busy = other reasons."},
+                                  {help, "Total blocks received from other nodes that this node threw away, grouped by why (only ever goes up). "
+                                         "duplicate = already had it (harmless); gap = arrived out of order and fetched again later; "
+                                         "unverified = failed its vote check, possibly a faulty or dishonest node (the one to watch); "
+                                         "the other reasons are minor."},
                                   {labels, [namespace, reason]}, {constant_labels, CL}]),
-    %% Per-change timing and size
-    _ = H(quod_tx_commit_latency_ms, "How long each change took from being submitted to being finalised, in milliseconds.", ?LAT_BUCKETS),
-    _ = H(quod_tx_diff_ops,          "How many facts each finalised change added or removed.",    ?DIFF_BUCKETS),
+    %% Per-change timing and size.
+    _ = H(quod_tx_commit_latency_ms, "How long each change took from being handed in to being made final, in milliseconds.", ?LAT_BUCKETS),
+    _ = H(quod_tx_diff_ops,          "How many individual pieces of data each finished change added or removed.", ?DIFF_BUCKETS),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
-                                    {help, "Finalised changes, grouped by the node that submitted them (running total)."},
+                                    {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
     ok.
 

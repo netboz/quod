@@ -115,6 +115,11 @@ confirm_live_test() ->
                                  quod_simplex:confirm_live(st(#{sync => {pulling, self()}})))),
     ?assertEqual(ready, quod_simplex:test_sync(
                           quod_simplex:confirm_live(st(#{sync => ready})))),
+    %% a CAUGHT-UP unconfirmed member self-corroborates on a live finality and RESUMES voting (the stall fix)
+    CaughtUp = st(#{self => <<"me">>, validators => [<<"me">>], slot => 3, sync => unconfirmed,
+                    eng => quod_simplex:eng_with_certs(0, [])}),
+    ?assertNot(quod_simplex:may_vote(CaughtUp)),                          %% unconfirmed ⇒ cannot vote (the stall)
+    ?assert(quod_simplex:may_vote(quod_simplex:confirm_live(CaughtUp))),  %% live finality ⇒ ready ⇒ votes
     %% a member confirmed-live over a head still behind the tip is NOT caught up (behind re-gates voting)
     Behind = st(#{self => <<"me">>, validators => [<<"me">>], slot => 2, sync => unconfirmed,
                   eng => quod_simplex:eng_with_certs(0, [{commit, 20}])}),
@@ -142,15 +147,18 @@ should_sync_and_syncing_test() ->
 %% being bounced back to `unconfirmed` forever. A result from an OBSOLETE worker (pid mismatch) is ignored.
 sync_completion_is_height_bound_test() ->
     Eng = quod_simplex:eng_with_certs(0, []),
-    Base = #{sync => {pulling, self()}, eng => Eng, last_applied => 3, prolog_ready => true},
+    Base = #{self => <<"me">>, validators => [<<"me">>],
+             sync => {pulling, self()}, eng => Eng, last_applied => 3, prolog_ready => true},
     %% exact corroborated height ⇒ ready
     Pulling = st(Base#{slot => 2}),
     {keep_state, Ready} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Pulling),
     ?assertEqual(ready, quod_simplex:test_sync(Ready)),
     %% head advanced past the corroborated height (live cert-verified commits) ⇒ STILL ready (no bounce)
     Advanced = st(Base#{slot => 3}),
+    ?assertNot(quod_simplex:may_vote(Advanced)),   %% mid-pull ⇒ the stall: cannot vote yet
     {keep_state, Accepted} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
     ?assertEqual(ready, quod_simplex:test_sync(Accepted)),
+    ?assert(quod_simplex:may_vote(Accepted)),      %% accepted advanced-during-probe ⇒ RESUMES voting (the fix)
     %% a result whose pid does not own the in-flight pull is stale ⇒ state unchanged (still pulling)
     Other = spawn(fun() -> ok end),
     {keep_state, Stale} = quod_simplex:running(cast, {sync_done, Other, {ready, 2}}, Pulling),
@@ -391,6 +399,26 @@ cross_slot_exclusion_test() ->
     %% genesis edge: slot 1's parent is 0 (the origin sentinel), never a votable slot
     ?assert(quod_simplex:may_commit(1, [])),
     ?assertNot(quod_simplex:may_commit(1, [0])).       %% (defensive) 0 in the complained set still bars
+
+%% The FORK the depth-1 pipeline opened, reproduced at the certificate level. A child's commit implicitly
+%% finalizes its approved PARENT, so a complaint cert on slot v and a commit cert on its child v+1 must
+%% never both form — otherwise v is skipped (noop) on some nodes and block-committed on others. This runs
+%% each honest node's REAL guarded vote (may_commit/may_complain over its own latch) across both adversarial
+%% orderings and forms the certs with `form_cert`, asserting the two conflicting certs cannot coexist.
+%% PRE-FIX (per-slot latch only) BOTH certs formed — the split-brain finalize. Complements the pure-guard
+%% cross_slot_exclusion_test with the quorum/cert-formation layer.
+fork_certs_cannot_coexist_test() ->
+    C    = committee(4),                        %% N=4, quorum(4) = 3
+    Vals = pubs(C),
+    BH5  = quod_simplex:block_hash(blk(5)),     %% the child block at slot 5 (parent = 4)
+    %% (1) every node complains parent 4, THEN is asked to commit child 5: the child-commit cert must NOT form
+    {Cpl1, Cmt1} = run_schedule(C, [{complaint, 4, none}, {commit, 5, BH5}]),
+    ?assertMatch({ok, _}, quod_simplex:form_cert(complaint, 4, none, Cpl1, Vals)),   %% parent-skip cert forms
+    ?assertEqual({error, insufficient}, quod_simplex:form_cert(commit, 5, BH5, Cmt1, Vals)),
+    %% (2) mirror — every node commits child 5 (finalizing 4), THEN is asked to complain 4: the skip cert must NOT form
+    {Cpl2, Cmt2} = run_schedule(C, [{commit, 5, BH5}, {complaint, 4, none}]),
+    ?assertMatch({ok, _}, quod_simplex:form_cert(commit, 5, BH5, Cmt2, Vals)),       %% child-commit cert forms
+    ?assertEqual({error, insufficient}, quod_simplex:form_cert(complaint, 4, none, Cpl2, Vals)).
 
 %%%===================================================================
 %%% boundary / edge / Byzantine (fixes from the review)
@@ -797,6 +825,29 @@ flip1(<<B, Rest/binary>>) -> <<(B bxor 1), Rest/binary>>.
 %% a committee of N validators as [{Pubkey, IdentityMap}]; pubs/1 = just the node_ids
 committee(N) -> [id() || _ <- lists:seq(1, N)].
 pubs(C)      -> [P || {P, _} <- C].
+
+%% Run each honest node through an ordered list of vote steps against the REAL guards, threading its own
+%% {Committed, Complained} latch; returns {AllComplaintShares, AllCommitShares}. A step emits a share only
+%% if the guard permits (mirroring apply_event/on_complain_timeout), so the cross-slot exclusion decides
+%% which shares exist. Used by fork_certs_cannot_coexist_test.
+run_schedule(Committee, Steps) ->
+    lists:foldl(
+      fun({_Pub, Id}, {CplAcc, CmtAcc}) ->
+          {Cpl, Cmt, _Latch} = lists:foldl(fun(Step, A) -> guarded_vote(Step, Id, A) end,
+                                           {[], [], {[], []}}, Steps),
+          {Cpl ++ CplAcc, Cmt ++ CmtAcc}
+      end, {[], []}, Committee).
+
+guarded_vote({complaint, Sl, none}, Id, {Cpl, Cmt, {Committed, Complained}}) ->
+    case quod_simplex:may_complain(Sl, Committed) of   %% barred if this node committed Sl or its child Sl+1
+        true  -> {[quod_simplex:make_share(complaint, Sl, none, Id) | Cpl], Cmt, {Committed, [Sl | Complained]}};
+        false -> {Cpl, Cmt, {Committed, Complained}}
+    end;
+guarded_vote({commit, Sl, BH}, Id, {Cpl, Cmt, {Committed, Complained}}) ->
+    case quod_simplex:may_commit(Sl, Complained) of    %% barred if this node complained Sl or its parent Sl-1
+        true  -> {Cpl, [quod_simplex:make_share(commit, Sl, BH, Id) | Cmt], {[Sl | Committed], Complained}};
+        false -> {Cpl, Cmt, {Committed, Complained}}
+    end.
 
 %% committee-projection fixtures: a transaction whose diff is a list of peer_admitted asserts/retracts
 pa(Pk)  -> {assert,  {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.

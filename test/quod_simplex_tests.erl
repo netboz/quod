@@ -103,6 +103,26 @@ gate_truth_table_test() ->
     ?assertNot(quod_simplex:may_vote(Obs)),
     ?assertNot(quod_simplex:may_lead(Obs)).
 
+%% Load-robust self-corroboration: applying a LIVE quorum-cert finalization (commit_block/skip_block)
+%% flips an `unconfirmed` member to `ready` — so a member that keeps up with a busy head via the live
+%% stream resumes voting without needing the tip probe to catch a quiet instant. Only `unconfirmed` flips;
+%% an in-flight pull (`{pulling,_}`) and an already-`ready` node are left untouched (no double-latch, and a
+%% still-behind head is re-gated by `caught_up = ready AND not behind`).
+confirm_live_test() ->
+    ?assertEqual(ready, quod_simplex:test_sync(
+                          quod_simplex:confirm_live(st(#{sync => unconfirmed})))),
+    ?assertMatch({pulling, _}, quod_simplex:test_sync(
+                                 quod_simplex:confirm_live(st(#{sync => {pulling, self()}})))),
+    ?assertEqual(ready, quod_simplex:test_sync(
+                          quod_simplex:confirm_live(st(#{sync => ready})))),
+    %% a member confirmed-live over a head still behind the tip is NOT caught up (behind re-gates voting)
+    Behind = st(#{self => <<"me">>, validators => [<<"me">>], slot => 2, sync => unconfirmed,
+                  eng => quod_simplex:eng_with_certs(0, [{commit, 20}])}),
+    Confirmed = quod_simplex:confirm_live(Behind),
+    ?assertEqual(ready, quod_simplex:test_sync(Confirmed)),
+    ?assertNot(quod_simplex:caught_up(Confirmed)),
+    ?assertNot(quod_simplex:may_vote(Confirmed)).
+
 %% Recovery intent and the externally visible syncing flag derive from the same enum.
 should_sync_and_syncing_test() ->
     EngIdle = quod_simplex:eng_with_certs(0, []),
@@ -116,17 +136,25 @@ should_sync_and_syncing_test() ->
     ?assert(quod_simplex:should_sync(st(#{sync => ready, slot => 2, eng => EngBehind}))),
     ?assert(quod_simplex:syncing(st(#{sync => {pulling, self()}, slot => 2, eng => EngIdle}))).
 
-%% Success grants readiness only to the exact corroborated height. If consensus advanced while the
-%% completion was in flight, capability is revoked and the next recovery round must confirm the new tip.
+%% Success grants readiness when the durable head is AT OR PAST the corroborated height. A head that
+%% advanced while the completion was in flight only moves via cert-verified commits (`persisted_finality`),
+%% so it is itself corroborated — accepting it is what keeps a member that stays caught up under load from
+%% being bounced back to `unconfirmed` forever. A result from an OBSOLETE worker (pid mismatch) is ignored.
 sync_completion_is_height_bound_test() ->
     Eng = quod_simplex:eng_with_certs(0, []),
     Base = #{sync => {pulling, self()}, eng => Eng, last_applied => 3, prolog_ready => true},
+    %% exact corroborated height ⇒ ready
     Pulling = st(Base#{slot => 2}),
     {keep_state, Ready} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Pulling),
     ?assertEqual(ready, quod_simplex:test_sync(Ready)),
+    %% head advanced past the corroborated height (live cert-verified commits) ⇒ STILL ready (no bounce)
     Advanced = st(Base#{slot => 3}),
-    {keep_state, Retry} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
-    ?assertEqual(unconfirmed, quod_simplex:test_sync(Retry)).
+    {keep_state, Accepted} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
+    ?assertEqual(ready, quod_simplex:test_sync(Accepted)),
+    %% a result whose pid does not own the in-flight pull is stale ⇒ state unchanged (still pulling)
+    Other = spawn(fun() -> ok end),
+    {keep_state, Stale} = quod_simplex:running(cast, {sync_done, Other, {ready, 2}}, Pulling),
+    ?assertMatch({pulling, _}, quod_simplex:test_sync(Stale)).
 
 tip_quorum_test() ->
     A = <<"a">>, B = <<"b">>, C = <<"c">>, D = <<"d">>, Committee = [A, B, C, D],
@@ -347,6 +375,22 @@ mutual_exclusion_guard_test() ->
     ?assertNot(quod_simplex:may_complain(5, [5])),      %% committed slot 5 -> cannot complain it
     ?assertNot(quod_simplex:may_commit(5, [9, 5, 1])),  %% UNSORTED list must still find 5
     ?assertNot(quod_simplex:may_complain(5, [9, 5, 1])).
+
+%% The CROSS-SLOT half of the exclusion, load-bearing for the depth-1 pipeline: committing a block
+%% implicitly finalizes its APPROVED PARENT (slot-1), so an honest validator that complained slot v must
+%% not commit its child v+1 (that would finalize v — the fork the naive per-slot latch allowed), and
+%% symmetrically must not complain v after committing v+1. Without this, a complaint cert on v and a
+%% commit cert on v+1 could both form from honest signers and split the committee on v.
+cross_slot_exclusion_test() ->
+    %% complained the PARENT (4) ⇒ must not commit the child (5), which would implicitly finalize 4
+    ?assertNot(quod_simplex:may_commit(5, [4])),
+    ?assert(quod_simplex:may_commit(5, [6])),          %% complaining a LATER slot never bars committing 5
+    %% committed the CHILD (6) ⇒ must not complain the parent (5), already implicitly finalized
+    ?assertNot(quod_simplex:may_complain(5, [6])),
+    ?assert(quod_simplex:may_complain(5, [4])),        %% committing an EARLIER slot never bars complaining 5
+    %% genesis edge: slot 1's parent is 0 (the origin sentinel), never a votable slot
+    ?assert(quod_simplex:may_commit(1, [])),
+    ?assertNot(quod_simplex:may_commit(1, [0])).       %% (defensive) 0 in the complained set still bars
 
 %%%===================================================================
 %%% boundary / edge / Byzantine (fixes from the review)

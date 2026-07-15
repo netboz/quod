@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.2"
+  default     = "0.7.3"
   description = "Quod image tag in the cluster registry. This clean-ledger release expects freshly provisioned quod-node CSI volumes."
 }
 
@@ -13,29 +13,48 @@ variable "image_registry" {
 variable "node_count" {
   type        = number
   default     = 8
-  description = "Steady-state fleet size. Ignored until genesis_hash is set: an unanchored deployment always starts exactly one founder."
+  description = "Steady-state fleet size (join mode). Ignored when bootstrap=true, which always starts exactly one founder."
 }
 
 variable "genesis_hash" {
   type        = string
   default     = ""
-  description = "Pinned slot-1 block hash. Empty bootstraps one founder; once set, every allocation runs in join mode and node_count takes effect."
+  description = "Pinned slot-1 block hash (the trust anchor). REQUIRED for a steady-state (join) deploy; leave empty ONLY together with -var bootstrap=true when founding a fresh fleet."
+}
+
+# Founding a brand-new fleet is DESTRUCTIVE (count=1, mode=create — a fresh volume re-founds genesis).
+# It fires ONLY when BOTH `bootstrap=true` AND `genesis_hash` is empty. Two independent guards:
+#   - a routine deploy that forgets `-var genesis_hash` stays bootstrap=false ⇒ join, non-destructive;
+#   - passing `-var bootstrap=true` by mistake on an ANCHORED fleet (genesis_hash set) still forces join —
+#     the pinned anchor wins, so no single flag can collapse or re-found a live fleet.
+variable "bootstrap" {
+  type        = bool
+  default     = false
+  description = "Found a fresh fleet: with an EMPTY genesis_hash this forces count=1 and mode=create. Ignored (join) whenever genesis_hash is set. Never use on an anchored fleet."
 }
 
 # One homogeneous fleet, one durable volume family, one rolling-update domain.
 #
-# Fresh bootstrap:
+# Fresh bootstrap (the ONLY destructive action — gated on the explicit `-var bootstrap=true`):
 #   1. Create quod-node[0..N-1] from deploy/volumes/quod-node.hcl.
-#   2. nomad job run -var image_tag=TAG deploy/quod.nomad
-#      With no genesis_hash the group is forced to count=1 and mode=create.
+#   2. nomad job run -var image_tag=TAG -var bootstrap=true deploy/quod.nomad
+#      bootstrap=true forces count=1 and mode=create — one founder writes genesis.
 #   3. Read the `genesis anchor` hash from that allocation's log.
 #   4. nomad job run -var image_tag=TAG -var node_count=N \
 #        -var genesis_hash=HEX deploy/quod.nomad
-#      Allocation zero resumes its durable ledger in join mode if Nomad replaces
-#      it, and every new allocation joins against the same pinned history.
+#      bootstrap defaults false ⇒ EVERY allocation runs in join mode: allocation
+#      zero resumes its durable ledger (its volume is the anchor), and every new
+#      allocation joins against the pinned history. All later deploys (image bumps,
+#      scaling) are this same join-mode form.
 #
-# `max_parallel=1` now covers the entire fleet because there is only one task
-# group. No permanent allocation has a root/founder role after bootstrap.
+# SAFETY: because founding is gated on `bootstrap` (a bool defaulting false), NOT on
+# an empty genesis_hash, a routine `nomad job run` that forgets `-var genesis_hash`
+# can never collapse the fleet to one node or re-found a divergent chain — it stays a
+# non-destructive join-mode deploy (mode=join never writes genesis; existing volumes
+# just resume). Set `bootstrap=true` ONLY against freshly provisioned volumes.
+#
+# `max_parallel=1` covers the entire fleet because there is only one task group.
+# No permanent allocation has a root/founder role after bootstrap.
 job "quod" {
   datacenters = ["qengho"]
   type        = "service"
@@ -46,7 +65,10 @@ job "quod" {
   }
 
   group "quod-node" {
-    count = var.genesis_hash == "" ? 1 : var.node_count
+    # Create (count=1, founding) requires BOTH signals to agree: the explicit bootstrap opt-in AND an
+    # empty anchor. A pinned genesis_hash ALWAYS forces join (count=node_count) even if bootstrap=true is
+    # passed by mistake — so no single flag can re-found an anchored fleet.
+    count = (var.bootstrap && var.genesis_hash == "") ? 1 : var.node_count
 
     spread {
       attribute = "${node.unique.name}"
@@ -67,9 +89,13 @@ job "quod" {
       per_alloc       = true
     }
 
-    # The bootstrap allocation has no peer to wait for. It is also allowed to
-    # restart in join mode without a peer: its existing volume is the anchor
-    # source, while new allocation indexes wait for a current member.
+    # Who may start WITHOUT first waiting for a live peer. This is a DIFFERENT question
+    # from `bootstrap` (which decides create-vs-join): it asks "is there an anchored fleet
+    # to catch up from, and am I not its resume-anchor?". Skip the wait when there is no
+    # anchored fleet yet (genesis_hash empty — the founding deploy, or a forgot-the-var
+    # deploy where existing volumes just resume) OR this is allocation zero (its own
+    # durable volume is the anchor source). Every OTHER allocation of an anchored fleet
+    # waits for a current member so it has someone to catch up from.
     task "wait-for-peer" {
       driver = "docker"
 
@@ -127,11 +153,18 @@ node {
   bind_port = 14567
 }
 metrics { port = 14568 }
-transactions { port = 14569 }
+# The live transaction viewer is off by DEFAULT (unauthenticated debug surface); the fleet opts in
+# explicitly and binds all interfaces so Nomad's quod-transactions /health check can reach it. This is a
+# private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
+transactions {
+  enabled = true
+  ip      = "0.0.0.0"
+  port    = 14569
+}
 content {
   namespace = "quod:root"
   data_dir  = "/quod/data"
-%{if var.genesis_hash == ""}
+%{if var.bootstrap && var.genesis_hash == ""}
   mode         = create
   genesis_file = "ontologies/quod_root.pl"
   seeds        = []

@@ -19,11 +19,14 @@ The leader for slot `v` proposes a `#block{}`. Each validator, in order:
 If slot `v` does not finish before a `Δ_timeout`, a validator broadcasts a **complaint** share → a
 `⅔` **complaint certificate** *skips* `v` and everyone moves on. That is the entire view-change.
 
-**Safety** rests on one guard: a validator issues a *commit* share for `v` only if it has NOT issued a
-*complaint* share for `v` — so a slot can never carry both a commit cert and a complaint cert (any two
-`⅔`-quorums overlap on ≥1 honest party who does at most one). Hence a committed block is unique and
-irreversible. Everything is plain **Ed25519**: a certificate is a bag of `⅔` signatures, self-verifying
-against the validator set — which is exactly the P2 relayed-commit proof a subscriber checks.
+**Safety** rests on one guard: a validator issues a *commit* share for `v` only if it has issued NO
+*complaint* share for `v` **nor for its parent `v-1`** (and, symmetrically, complains `v` only if it has
+committed neither `v` nor its child `v+1`). Because a commit **implicitly finalizes the approved parent**
+(the depth-1 pipeline, below), this one-slot-wider guard is what keeps a slot from carrying both a commit
+cert (its own OR its child's) and a complaint cert: any two `⅔`-quorums overlap on ≥1 honest party, who
+would then have both complained `v` and committed `v` or `v+1` — impossible. Hence a committed block is
+unique and irreversible. Everything is plain **Ed25519**: a certificate is a bag of `⅔` signatures,
+self-verifying against the validator set — which is exactly the P2 relayed-commit proof a subscriber checks.
 
 The runtime keeps two frontiers: **approved** (support-certified, safe to extend) and
 **committed** (durable and externally visible). Leaders micro-batch ordered transactions
@@ -64,7 +67,7 @@ validator sets, is tracked in `doc/deferred.md`.
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
-         is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1,
+         is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
          recovery_failed/1, may_sink/2, reset_pace/0, test_state/1, test_arm/1, test_sync/1,
          proposal_slot/1, acceptable_payload/2,
@@ -228,25 +231,37 @@ distinct_valid(Sigs, Msg, Validators) ->
 %%%===================================================================
 
 -doc """
-May this validator issue a **commit** share for `Slot`? Only if it has NOT already issued a
-**complaint** share for `Slot`. Together with `may_complain/2` this is the whole safety argument: an
-honest validator contributes to at most ONE of {commit cert, complaint cert} per slot, so the two can
-never both form (their `⅔`-quorums would have to overlap only on it) — a committed block is unique and
-permanent. `ComplainedSlots` is any plain list (membership is checked directly — no ordering contract,
-so a caller can't silently break it by passing an unsorted list).
+May this validator issue a **commit** share for `Slot`? Only if it has issued NO **complaint** share for
+`Slot` **and none for its parent `Slot-1`**. Together with `may_complain/2` this is the whole safety
+argument, extended by one slot to cover the depth-1 pipeline: a committed block **implicitly finalizes
+its approved parent** (`detect_commits`), so committing `Slot` finalizes `Slot-1` too. Blocks are always
+contiguous (`proposal_slot` sets `parent = Approved = slot-1`), so the parent is exactly `Slot-1`.
+
+The guarantee: an honest validator is on at most ONE of {commit-or-implicit-commit of `v`, complaint of
+`v`}, for every `v`. Hence a commit cert on the child `v+1` PROVES `⅔` did not complain `v`, so no
+complaint cert on `v` can also form (any two `⅔`-quorums overlap on ≥1 honest party, who would then have
+both complained `v` and committed its child — impossible) — a slot can never be both committed (its own
+or its child's cert) and skipped. That inductive proof is exactly what `quod_catchup:verify_implicit`
+relies on, so the catch-up side needs no extra check. `ComplainedSlots` is any plain list.
 """.
 -spec may_commit(slot(), [slot()]) -> boolean().
 may_commit(Slot, ComplainedSlots) ->
-    not lists:member(Slot, ComplainedSlots).
+    not lists:member(Slot, ComplainedSlots)
+        andalso not lists:member(Slot - 1, ComplainedSlots).
 
 -doc """
-May this validator issue a **complaint** (skip) share for `Slot`? Only if it has NOT already issued a
-**commit** share for `Slot` — the symmetric half of the mutual-exclusion guard (`may_commit/2`).
-`CommittedSlots` is any plain list.
+May this validator issue a **complaint** (skip) share for `Slot`? Only if it has issued NO **commit**
+share for `Slot` **and none for its child `Slot+1`** — the symmetric half of `may_commit/2`. Committing
+the child `Slot+1` implicitly finalizes `Slot`, so complaining `Slot` afterward would put this validator
+on both certs for `Slot`. (The child clause is belt-and-braces: the Δ timer only arms for `Approved+1`,
+which no longer names `Slot` once `Slot+1` is notarized — but keeping the guard local makes the
+mutual-exclusion invariant self-contained rather than depending on the arming logic.) `CommittedSlots`
+is any plain list.
 """.
 -spec may_complain(slot(), [slot()]) -> boolean().
 may_complain(Slot, CommittedSlots) ->
-    not lists:member(Slot, CommittedSlots).
+    not lists:member(Slot, CommittedSlots)
+        andalso not lists:member(Slot + 1, CommittedSlots).
 
 %%%===================================================================
 %%% consensus engine — certificate pool + complete block tree (§2.3)
@@ -945,11 +960,14 @@ running({timeout, tick}, tick, S) ->
     {keep_state, maybe_mark_ready(S1), [tick_timeout()]};
 %% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
-%% worker pid and the exact height it corroborated. There is no intermediate state: allowing consensus
-%% ingestion during a hold-down could advance the durable head and then grant readiness to that newer,
-%% uncorroborated height.
+%% worker pid. We accept the result when the durable head is AT OR PAST the corroborated `H` (`Slot >= H`),
+%% not only exactly `H`: a member ingesting the live `{log}` stream during the pull can only advance its
+%% head via `commit_block`/`skip_block`, each of which finalizes on a QUORUM cert (`persisted_finality`) —
+%% so any slot past `H` is itself cert-corroborated, never a blind advance. Requiring `Slot =:= H` instead
+%% would reject a member that stayed caught up under load (its head moved while the probe was in flight),
+%% bouncing it back to `unconfirmed` forever — the load stall this guard must not cause.
 running(cast, {sync_done, Pid, {ready, H}},
-        S = #s{sync = {pulling, Pid}, slot = H}) when H >= 1 ->
+        S = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
     S1 = S#s{sync = ready, sync_arm = reset_pace()},
     {keep_state, maybe_mark_ready(apply_committed(S1))};
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
@@ -1176,7 +1194,7 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
             S0 = ack_local(Slot, S#s{store = Store1, commits = S#s.commits + 1,
                                      last_ts = max(S#s.last_ts, BlockTs)}),
             S1 = adopt_committee(Data, finalize(Slot, S0)),
-            maybe_mark_ready(apply_live(Slot, Data, S1))
+            maybe_mark_ready(apply_live(Slot, Data, confirm_live(S1)))
     end.
 
 engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
@@ -1223,7 +1241,7 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
             S1 = finalize(Slot, S0),
             S2 = S1#s{approved = max(S1#s.approved, Slot)},
-            maybe_mark_ready(apply_live(Slot, noop, S2))
+            maybe_mark_ready(apply_live(Slot, noop, confirm_live(S2)))
     end.
 
 %% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
@@ -2037,6 +2055,21 @@ is_participant(#s{self = Self} = S) -> lists:member(Self, active_validators(S)).
 %% revokes the capability immediately, before the paced recovery worker starts.
 caught_up(#s{sync = ready} = S) -> not behind(S);
 caught_up(_S) -> false.
+
+%% Load-robust corroboration. The tip probe (recover_tip) confirms readiness by catching a QUORUM at an
+%% EXACT quiet height — which a busy namespace almost never offers, so under sustained load a restarted
+%% member could chase the moving head indefinitely and never resume voting. But a LIVE finalization —
+%% commit_block/skip_block reached only from an ingested QUORUM cert on the `{log}` stream (never a
+%% catch-up pull, which persists via apply_catchup_window) — already proves two things: this node is
+%% connected to the CURRENT committee, and its just-finalized head is quorum-cert-verified. That is
+%% exactly what `ready` asserts, so an `unconfirmed` member self-corroborates here, complementing (not
+%% replacing) the idle-time probe. Safety holds: `behind/1` still gates `caught_up`, so flipping ready
+%% over a head that is still behind cannot vote or lead on a stale slot — it only lets the member resume
+%% once the residual gap clears. Fires only for a member (an observer never reaches commit_block live) and
+%% only when idle between ticks; a live finalizer during an in-flight pull is handled by the `sync_done`
+%% `Slot >= H` guard instead.
+confirm_live(S = #s{sync = unconfirmed}) -> S#s{sync = ready, sync_arm = reset_pace()};
+confirm_live(S)                          -> S.
 
 %% Voting and leading share one capability boundary. Leadership remains a named predicate because callers
 %% express intent, but neither can drift from the recovery policy.

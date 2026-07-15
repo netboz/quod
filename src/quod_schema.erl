@@ -48,7 +48,12 @@ fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}
     ];
 fields(transactions) ->
-    [ {port, hoconsc:mk(integer(), #{default => 14569})}
+    %% The optional live transaction viewer (quod_tx_view). OFF by default: it is an unauthenticated
+    %% debug web surface, so enabling it — and especially widening `ip` past loopback — is a deliberate
+    %% operator choice, not a fleet default.
+    [ {enabled, hoconsc:mk(boolean(), #{default => false})}
+    , {ip,      hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
+    , {port,    hoconsc:mk(integer(), #{default => 14569})}
     ];
 fields(identity) ->
     %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first

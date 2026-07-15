@@ -126,12 +126,24 @@ apply_transport_env(Cfg) ->
            end,
     application:set_env(quod, listen_port, Bind),
     application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
-    application:set_env(quod, transactions_port, maps:get(port, maps:get(transactions, Cfg))),
+    Tx = maps:get(transactions, Cfg),
+    application:set_env(quod, transactions_enabled, maps:get(enabled, Tx, false)),
+    application:set_env(quod, transactions_ip, parse_ip(maps:get(ip, Tx, <<"127.0.0.1">>))),
+    application:set_env(quod, transactions_port, maps:get(port, Tx)),
     application:set_env(quod, node_addr, {Ip, Port}),   %% advertised endpoint the transport announces
     application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     application:set_env(quod, quic_idle_timeout_ms, maps:get(idle_timeout_ms, Node)),  %% dead-peer detection tuning
     application:set_env(quod, quic_keepalive_ms, maps:get(keepalive_ms, Node)),
     ok.
+
+%% Parse a configured bind IP (`transactions.ip`) into an inet address tuple; loopback on anything
+%% unparseable, so a typo can never accidentally widen the viewer to all interfaces.
+parse_ip(Bin) when is_binary(Bin) ->
+    case inet:parse_address(binary_to_list(Bin)) of
+        {ok, Addr} -> Addr;
+        _          -> {127, 0, 0, 1}
+    end;
+parse_ip(_) -> {127, 0, 0, 1}.
 
 conf_path() ->
     case os:getenv("QUOD_CONF") of

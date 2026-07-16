@@ -376,9 +376,10 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
     epidemic spread the fanout only needs to grow like `ln(N)`. At the current 7-node fleet that means
     each block is delivered ~3–4× and dropped as `duplicate` (benign but wasteful — see the
     `quod_feed_dropped{reason=duplicate}` metric); at thousands of nodes a fixed 4 could be too thin.
-    Derive it from the network-size estimate quod already computes — `fanout ≈ clamp(k·ln(n̂), lo, hi)`
-    off the Brahms KMV `estimated_n` — part of the parked "adaptive sizing" bucket (with the Brahms
-    view/sample sizes). Watch `feed_dropped{reason=duplicate}` vs `ingested` to tune `k`.
+    Derive it from an actual membership protocol's count — `fanout ≈ clamp(k·ln(n), lo, hi)` — part of
+    the parked "adaptive sizing" bucket (with the Brahms view/sample sizes). The current Brahms metric
+    is only local reachability and must not control fanout. Watch `feed_dropped{reason=duplicate}` vs
+    `ingested` to tune `k`.
 - **P3 — bounded-cache subscribers (the millions tier).** Predicate cache (warmup = root schema +
   system-ontology registry) + consume the P2 feed + invalidate touched predicates on *live* commit
   (never replay) + lazy-refetch via remote-prove (P1) on miss.
@@ -387,10 +388,9 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 
-- **Adaptive view sizing** — SHELVED. Brahms's `n̂` is deliberately a recently-directly-reachable
-  identity estimate, not a census: it excludes third-party gossip so stale dynamic addresses cannot
-  inflate it after a restart or departure. It is suitable for observability, but must not drive view
-  or fanout sizing. If adaptive sizing is needed at hundreds+ nodes, use an authenticated,
+- **Adaptive view sizing** — SHELVED. Brahms exposes `reachable_n`: self plus authenticated links that
+  recently exchanged traffic. It is an operational reachability signal, not a census, and must not
+  drive view or fanout sizing. If adaptive sizing is needed at hundreds+ nodes, use an authenticated,
   churn-hardened membership protocol plus a push-sum counter. `view_size = 16` remains fixed.
 - **Partition heal** — a hard network split does not auto-recover (seeds read once at boot). Fix when
   needed: periodic re-seed from Consul.

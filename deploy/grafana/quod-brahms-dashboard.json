@@ -454,7 +454,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each node's estimate of the distinct stable identities it has directly reached recently, compared with the currently scraped fleet (the dashed line). It intentionally ignores third-party peer lists: a stale address is useful for reconnecting but is not evidence that its node is still alive. A reading below the fleet means this node has not directly exchanged traffic with every live peer in the observation window.",
+      "description": "Each node plus the peers with an authenticated Brahms link that has recently exchanged traffic, compared with the currently scraped fleet (the dashed line). It falls when dead links expire. This is deliberately a local reachability signal, not a whole-network census.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -523,7 +523,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "quod_brahms_estimated_n",
+          "expr": "quod_brahms_reachable_n",
           "legendFormat": "{{node}} / {{namespace}}",
           "refId": "A"
         },
@@ -537,7 +537,7 @@
           "refId": "B"
         }
       ],
-      "title": "Recently reachable population n̂ (per node) vs fleet",
+      "title": "Locally reachable population (per node) vs fleet",
       "type": "timeseries"
     },
     {

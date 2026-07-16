@@ -118,26 +118,24 @@ stale_conns_test() ->
     ?assertEqual([a],    stale_conns(#{a => l}, #{}, 6, 6)),           %% never-heard, at window
     ?assertEqual([],     stale_conns(#{a => l}, #{}, 5, 6)).           %% never-heard, before window
 
-%% A peer may gossip an old address long after that address's node disappeared.
-%% Only the peer's authenticated link-header identity is live evidence for n̂.
-live_estimate_ignores_gossiped_candidates_test_() ->
+%% A gossiped candidate must not look locally reachable until it opens a direct link.
+reachable_population_ignores_gossiped_candidates_test_() ->
     {setup,
      fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
      fun(Started) -> [application:stop(A) || A <- Started], ok end,
-     [{"gossiped addresses do not inflate the directly-observed population estimate",
-       fun live_estimate_ignores_gossiped_candidates/0}]}.
+     [{"gossiped candidates do not inflate the locally reachable population",
+       fun reachable_population_ignores_gossiped_candidates/0}]}.
 
-live_estimate_ignores_gossiped_candidates() ->
+reachable_population_ignores_gossiped_candidates() ->
     Ns = <<"ont:live-estimate">>,
     SelfAddr = {"127.0.0.1", 65101},
-    SelfKey = <<1:256>>,
     PeerKey = <<2:256>>,
     PeerAddr = {"127.0.0.1", 65102},
     GhostAddr = {"127.0.0.1", 65103},
-    {ok, B} = quod_brahms:start_link(Ns, #{node_id => SelfAddr, estimator_id => SelfKey,
+    {ok, B} = quod_brahms:start_link(Ns, #{node_id => SelfAddr, seed_peers => [PeerAddr],
                                            round_ms => 10000, collect_ms => 100, jitter => 0.0}),
     B ! {quod_message, {{PeerKey, PeerAddr}, self()}, Ns, encode({push, GhostAddr})},
-    ?assertEqual(2, maps:get(estimated_n, quod_brahms:stats(Ns))),
+    ?assertEqual(2, maps:get(reachable_n, quod_brahms:stats(Ns))),
     gen_statem:stop(B).
 
 %% --- take_random: bounded, distinct, subset -----------------------------

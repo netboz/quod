@@ -1207,12 +1207,14 @@ handle_call(get_stats, _From, S) ->
               parked => map_size(S#s.parked),
               proof_workers => map_size(S#s.workers),
               ask_workers => map_size(S#s.ask_workers),
-              kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef)}, S}.
+              kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
+              kb_history_predicates => quod_erlog_db_mvcc:history_predicates(StoreRef)}, S}.
 ```
 
 The Prometheus poller exports the applied height, apply/reject/prove/conflict counters, parked writes, and
-park timeout count per namespace. Worker counts and MVCC memory are available through `stats/1` for direct
-diagnostics.
+park timeout count per namespace. It also exports active proof/ask workers, shared KB ETS memory, and the
+number of predicates retaining an older MVCC version for a frozen query. A history count that does not return
+to zero after the corresponding workers finish is a useful stuck-query signal.
 
 ### 4.8 Edge cases
 

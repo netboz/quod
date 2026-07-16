@@ -411,12 +411,111 @@
     },
     {
       "type": "row",
-      "title": "Rejections & failures",
+      "id": 17,
+      "title": "Prolog execution & memory",
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
         "y": 32
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 18,
+      "title": "Active queries & cross-ontology answers",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 33
+      },
+      "description": "Queries running on this node, and cross-ontology answer streams it is serving. Each uses a frozen data view. Proof workers reaching the configured limit cause new queries to receive a busy response until one finishes.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_prolog_proof_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "local queries · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "quod_prolog_ask_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "cross-ontology answers · {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 19,
+      "title": "Knowledge-base memory & retained history",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 33
+      },
+      "description": "Shared knowledge-base ETS memory (left axis, Erlang VM words) and predicates retaining an older version (right axis). Retained history should fall back to 0 after frozen queries finish; persistent growth points to slow or stuck queries.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byFrameRefID",
+              "options": "B"
+            },
+            "properties": [
+              {
+                "id": "custom.axisPlacement",
+                "value": "right"
+              }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_prolog_kb_memory_words{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "KB memory (VM words) · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "quod_prolog_kb_history_predicates{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "retained history · {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "row",
+      "title": "Rejections & failures",
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 41
       },
       "id": 20
     },
@@ -432,7 +531,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 33
+        "y": 42
       },
       "description": "Routing/flow-control outcomes, NOT hard failures: busy = backpressure, redirect = not this slot's leader, bad = unacceptable change, skipped = slot complaint-skipped.",
       "fieldConfig": {
@@ -482,7 +581,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 33
+        "y": 42
       },
       "description": "Real write failures: OCC conflicts + apply-time rejects (read-set changed under the write), and parked writes reaped by TTL (verdict never arrived).",
       "fieldConfig": {
@@ -519,7 +618,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 50
       },
       "id": 30
     },
@@ -535,7 +634,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 42
+        "y": 51
       },
       "description": "How many final blocks each node produced and started sending to the rest of the network, per second.",
       "fieldConfig": {
@@ -567,7 +666,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 42
+        "y": 51
       },
       "description": "How many blocks each node received from others, checked, applied and passed along, per second.",
       "fieldConfig": {
@@ -599,7 +698,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 59
       },
       "description": "How often each node had to ask others for blocks it was missing, per second.",
       "fieldConfig": {
@@ -631,7 +730,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 59
       },
       "description": "Dropped blocks broken down by reason. duplicate = benign gossip redundancy (loop-suppressed); gap = out-of-order, re-pulled by anti-entropy; unverified = bad cert (the one to watch); non_following/oversized/ingest_busy. Only unverified (and sustained gap) indicate a real problem.",
       "fieldConfig": {
@@ -661,7 +760,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 67
       },
       "id": 40
     },
@@ -677,7 +776,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -709,7 +808,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 68
       },
       "fieldConfig": {
         "defaults": {
@@ -741,7 +840,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 67
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -773,7 +872,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -801,7 +900,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 84
       }
     },
     {
@@ -816,7 +915,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 76
+        "y": 85
       },
       "description": "How many nodes are currently allowed to vote on changes. Every node should report the same value.",
       "fieldConfig": {
@@ -848,7 +947,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 76
+        "y": 85
       },
       "description": "1 if the node is allowed to vote, 0 if it only reads and follows along.",
       "fieldConfig": {
@@ -880,7 +979,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 93
       },
       "description": "On a committee member: how many peers it tracks a liveness heartbeat for (digests) and how many are FRESH right now (fresh_digests). A candidate must be fresh here before it can be admitted. Confirm this is non-zero for the candidate before an admit.",
       "fieldConfig": {
@@ -917,7 +1016,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 92
+        "y": 101
       },
       "description": "Signals that a committee operation hit a snag: redrives (a proposal re-sent because a member is slow to respond), weak_cert_waits (this node fell behind across a committee change and is waiting for a valid proof-of-agreement), membership_rejects (a proposed committee change this node judged invalid). All should stay flat in steady state.",
       "fieldConfig": {
@@ -959,7 +1058,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 100
+        "y": 109
       },
       "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — same id as the $node picker.",
       "options": {

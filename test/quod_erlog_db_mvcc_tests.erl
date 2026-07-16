@@ -47,9 +47,11 @@ released_history_is_pruned_by_unrelated_commit_test() ->
     Version2 = publish(Pending2, 2, 1),
     Table = quod_erlog_db_mvcc:table(db_ref(Version2)),
     ?assertEqual([1, 2], versions(Table, {value, 1})),
+    ?assertEqual(1, quod_erlog_db_mvcc:history_predicates(db_ref(Version2))),
     {succeed, Pending3} = erlog_int:prove_goal({assertz, {unrelated, fact}}, Version2),
     Version3 = publish(Pending3, 3, 3),
     ?assertEqual([2], versions(Table, {value, 1})),
+    ?assertEqual(0, quod_erlog_db_mvcc:history_predicates(db_ref(Version3))),
     quod_erlog_db_mvcc:delete(db_ref(Version3)).
 
 publish(#est{db = #db{ref = Ref0} = Db} = Est, Version, Floor) ->

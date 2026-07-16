@@ -237,7 +237,8 @@ handle_call(get_stats, _From, S) ->
               park_timeouts => S#s.park_timeouts,       %% writes that never committed (reaped)
               proof_workers => map_size(S#s.workers),
               ask_workers => map_size(S#s.ask_workers),
-              kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef)}, S};
+              kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
+              kb_history_predicates => quod_erlog_db_mvcc:history_predicates(StoreRef)}, S};
 
 handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier (sync/1)
 

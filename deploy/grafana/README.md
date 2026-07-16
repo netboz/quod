@@ -49,6 +49,7 @@ with them.
 | Transactions | Incoming rate · Commit & apply rate | Submit throughput; are commits/applies keeping up? |
 | Transactions | **Processing time (submit → commit)** | p50/p95/p99 write latency (`quod_tx_commit_latency_ms`) |
 | Transactions | Committed by author · Write size · In-flight | Who's writing; diff sizes; pending/parked (writes-not-committing symptom) |
+| Prolog execution & memory | Active queries · KB memory & retained history | Query saturation; ETS growth; whether frozen queries are temporarily retaining old data |
 | Rejections & failures | Append rejections by reason · Failed writes | Backpressure/redirect/skip (flow control) vs OCC conflicts + park timeouts (real failures) |
 | Dissemination feed | Feed activity · Dropped blocks | Gossip push/ingest/pull health; gap-drop bursts |
 | Brahms overlay | View/sample/links · n̂ | Overlay connectivity + network-size estimate |

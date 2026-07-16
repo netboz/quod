@@ -123,7 +123,8 @@ moment it next contacts us.
             pull_limit :: pos_integer(),
             view    = [] :: [term()],
             sampler :: quod_brahms_sampler:sampler(),
-            nest    :: quod_brahms_nest:nest(),   %% network-size estimator n̂ (Phase 1: metric only)
+            nest    :: quod_brahms_nest:nest(),   %% recent directly-reachable population estimate
+            estimator_id :: term(),                %% stable identity placed in the live-population sketch
             conns   = #{} :: #{term() => {pid(), reference(), out | in}},  %% NodeId => {LinkPid, MonRef, Origin}
             outbox  = #{} :: #{term() => binary()},  %% latest payload queued for a link being opened
             probing = #{} :: #{term() => non_neg_integer()},  %% NodeId => round the liveness probe was sent
@@ -199,11 +200,14 @@ init({Ns, Config}) ->
             PushLimit = maps:get(push_limit, Config, max(2, 2 * L1)),
             PullLimit = maps:get(pull_limit, Config, max(2, 2 * L2)),
             Sampler = quod_brahms_sampler:observe_all(Seeds, quod_brahms_sampler:new(K)),
-            Nest = quod_brahms_nest:observe_all(Seeds, quod_brahms_nest:new(maps:get(nest_k, Cfg))),
+            %% Brahms still routes by address, but an address changes under Nomad
+            %% port remapping. The population sketch needs the stable pubkey instead.
+            EstimatorId = maps:get(estimator_id, Config, Self),
+            Nest = quod_brahms_nest:observe(EstimatorId, quod_brahms_nest:new(maps:get(nest_k, Cfg))),
             quod_reg:subscribe({channel, Ns}),
             D = #d{ns = Ns, self = Self, cfg = Cfg, counts = Counts,
                    push_limit = PushLimit, pull_limit = PullLimit,
-                   view = Seeds, sampler = Sampler, nest = Nest},
+                   view = Seeds, sampler = Sampler, nest = Nest, estimator_id = EstimatorId},
             %% First round fires FAST (not after a full round_ms): its seed dials exchange
             %% link headers that warm the ledger's pubkey->addr resolver cache, so a node
             %% that just (re)started can resolve and reach its committee in ~1 RTT instead
@@ -220,10 +224,10 @@ idle(state_timeout, tick, D0) ->
     D1 = do_round(D0),
     {next_state, collecting, D1,
      [{state_timeout, maps:get(collect_ms, D1#d.cfg), close}]};
-%% Brahms is ADDRESS-based: the header announces `{Pubkey, Addr}`, so take the Addr as the
-%% peer id (its node_id/pubkey is the ledger's concern). ReplyLink is the inbound link pid.
-idle(info, {quod_message, {{_Pubkey, Addr}, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
-    {keep_state, handle_inbound({Addr, ReplyLink}, Payload, idle, D)};
+%% Brahms routes by address, while the population sketch records the header's
+%% authenticated pubkey. ReplyLink is the inbound link pid.
+idle(info, {quod_message, {PeerIdentity, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
+    {keep_state, handle_inbound({PeerIdentity, ReplyLink}, Payload, idle, D)};
 idle(EventType, Event, D) ->
     common(EventType, Event, D).
 
@@ -231,8 +235,8 @@ idle(EventType, Event, D) ->
 collecting(state_timeout, close, D0) ->
     D1 = reconstruct_and_update(D0),
     {next_state, idle, D1, [{state_timeout, round_delay(D1#d.cfg), tick}]};
-collecting(info, {quod_message, {{_Pubkey, Addr}, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
-    {keep_state, handle_inbound({Addr, ReplyLink}, Payload, collecting, D)};
+collecting(info, {quod_message, {PeerIdentity, ReplyLink}, Ns, Payload}, D = #d{ns = Ns}) ->
+    {keep_state, handle_inbound({PeerIdentity, ReplyLink}, Payload, collecting, D)};
 collecting(EventType, Event, D) ->
     common(EventType, Event, D).
 
@@ -283,10 +287,8 @@ common({call, From}, get_stats, D) ->
               conns      => map_size(D#d.conns),
               rounds     => D#d.rounds,
               evictions  => D#d.evictions,
-              %% +1: a node observes the other n-1 ids but never its own (self is
-              %% filtered from gossip), so the network size is the distinct count + self.
               tombstones => map_size(D#d.tombstones),
-              estimated_n => quod_brahms_nest:estimate(D#d.nest) + 1},
+              estimated_n => quod_brahms_nest:estimate(D#d.nest)},
     {keep_state, D, [{reply, From, Stats}]};
 common(info, {quod_message, _, _OtherNs, _}, D) ->
     {keep_state, D};                               %% another namespace
@@ -303,11 +305,13 @@ terminate(_Reason, _State, #d{ns = Ns}) ->
 %% round
 %% ======================================================================
 
-do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg}) ->
+do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg,
+                 estimator_id = EstimatorId}) ->
     R = D0#d.rounds + 1,
+    Nest0 = rotate_nest(D0#d.nest, R, maps:get(nest_window, Cfg)),
     D = D0#d{rounds = R,
              tombstones = prune_tombstones(D0#d.tombstones, R, maps:get(tombstone_rounds, Cfg)),
-             nest = rotate_nest(D0#d.nest, R, maps:get(nest_window, Cfg))},
+             nest = quod_brahms_nest:observe(EstimatorId, Nest0)},
     {Push, Pull} = gossip_targets(L1, L2, V),      %% independent push/pull subsets of V
     PushBin = encode({push, Self}),                %% encode once, fan out
     PullBin = encode({pull_req, Self}),
@@ -330,15 +334,18 @@ do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg}) ->
 
 handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_BYTES ->
     D;                                             %% oversized gossip -> drop
-handle_inbound({RemoteNodeId, ReplyLink}, Payload, Mode, D0 = #d{self = Self, counts = {_, L2, _}}) ->
+handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
+               D0 = #d{self = Self, counts = {_, L2, _}}) ->
     %% a peer's link is bidirectional: cache it for our own sends so a peer pair
     %% shares ONE stream per channel (no separate dial-back). Hearing from a peer
     %% is also liveness proof: it answers any in-flight probe AND lifts any
     %% tombstone on the SENDER (SWIM refutation — only the node itself can prove
     %% it is alive; third-party gossip below cannot resurrect a tombstoned id).
-    D = note_heard(RemoteNodeId,
-                   untombstone(RemoteNodeId,
-                               clear_probe(RemoteNodeId, cache_inbound(RemoteNodeId, ReplyLink, D0)))),
+    D = observe_live(RemoteIdentity,
+                     note_heard(RemoteNodeId,
+                                untombstone(RemoteNodeId,
+                                            clear_probe(RemoteNodeId,
+                                                        cache_inbound(RemoteNodeId, ReplyLink, D0))))),
     case decode(Payload) of
         {push, Id} when Id =/= Self ->
             case tombstoned(Id, D) of
@@ -556,10 +563,16 @@ pick1(Pool, SelfAddr) ->
 %% helpers
 %% ======================================================================
 
-observe(Id, D)      -> D#d{sampler = quod_brahms_sampler:observe(Id, D#d.sampler),
-                           nest    = quod_brahms_nest:observe(Id, D#d.nest)}.
-observe_all(Ids, D) -> D#d{sampler = quod_brahms_sampler:observe_all(Ids, D#d.sampler),
-                           nest    = quod_brahms_nest:observe_all(Ids, D#d.nest)}.
+%% Candidate addresses are intentionally sampled from gossip, but they do not
+%% enter the population estimate: stale views otherwise make a departure look like
+%% growth, especially when a live process reappears on a new dynamic port.
+observe(Id, D)      -> D#d{sampler = quod_brahms_sampler:observe(Id, D#d.sampler)}.
+observe_all(Ids, D) -> D#d{sampler = quod_brahms_sampler:observe_all(Ids, D#d.sampler)}.
+
+%% A peer's header is authenticated by quod_conn against its TLS certificate, so
+%% it is the only remote evidence admitted to the live-population sketch.
+observe_live(Id, D = #d{nest = Nest}) ->
+    D#d{nest = quod_brahms_nest:observe(Id, Nest)}.
 
 take(N, L) -> lists:sublist(L, N).
 shuffle(L) -> [X || {_, X} <- lists:sort([{rand:uniform(), E} || E <- L])].

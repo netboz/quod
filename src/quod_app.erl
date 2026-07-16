@@ -192,8 +192,10 @@ maybe_join(Blocks) ->
 join_block(Content) ->
     Ns    = maps:get(namespace, Content),
     Self  = application:get_env(quod, node_id, default_node_id()),
+    EstimatorId = application:get_env(quod, node_pubkey, Self),
     Seeds = content_seeds(Content),
-    case quod_brahms:start_namespace(Ns, #{node_id => Self, seed_peers => Seeds}) of
+    case quod_brahms:start_namespace(Ns, #{node_id => Self, estimator_id => EstimatorId,
+                                           seed_peers => Seeds}) of
         {ok, _} ->
             logger:info("quod[~s]: brahms up as ~p (~b seed(s))", [Ns, Self, length(Seeds)]);
         Error ->

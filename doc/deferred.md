@@ -387,8 +387,11 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 
-- **Adaptive view sizing** — SHELVED. The KMV `n̂` self-under-sizes at scale; the correct path (if ever
-  needed at hundreds+ nodes) is a churn-hardened push-sum counter, not the KMV. `view_size = 16` fixed.
+- **Adaptive view sizing** — SHELVED. Brahms's `n̂` is deliberately a recently-directly-reachable
+  identity estimate, not a census: it excludes third-party gossip so stale dynamic addresses cannot
+  inflate it after a restart or departure. It is suitable for observability, but must not drive view
+  or fanout sizing. If adaptive sizing is needed at hundreds+ nodes, use an authenticated,
+  churn-hardened membership protocol plus a push-sum counter. `view_size = 16` remains fixed.
 - **Partition heal** — a hard network split does not auto-recover (seeds read once at boot). Fix when
   needed: periodic re-seed from Consul.
 - **Rolling-deploy ACK compat** — new-vs-old nodes churn during a rolling upgrade (the link ACK is a
@@ -440,4 +443,3 @@ Raft-era concern) — but the store handle inside `#s` was not; see below.
   that can never grow past its founder. Fix when the ontology count grows: a shared prelude the
   founder prepends at genesis (or an include directive in `quod_prolog:genesis_diff/1`) so the
   default gates have ONE home. Until then: copy the clauses deliberately and review them together.
-

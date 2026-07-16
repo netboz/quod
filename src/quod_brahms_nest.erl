@@ -1,7 +1,7 @@
 -module(quod_brahms_nest).
 -moduledoc """
 Network-size estimator (`n̂`) — a windowed **KMV** (k-minimum-values) distinct
-counter over the stream of node ids the Brahms layer gossips.
+counter over recently **directly observed** node identities.
 
 Brahms prescribes per-node structure sizes of `Θ(∛n)` and notes a node can
 estimate `n` from its own sample (each id is seen with probability `1/n`). This
@@ -23,8 +23,11 @@ id count). Relative error is `≈ 1/√K`.
 A plain KMV would also count *departed* ids forever. So the sketch is windowed:
 `rotate/1` (called once per `nest_window` rounds by `m:quod_brahms`) shifts the
 current window to `prev` and starts a fresh `cur`; `estimate/1` reports over
-`cur ∪ prev`. Live ids are re-observed every round and stay; a departed id ages
-out within ~two windows.
+`cur ∪ prev`. The local identity is re-observed every round, and a remote identity
+is observed only when it appears in an authenticated direct link header. Third-party
+gossip is intentionally excluded: an old address may be useful as a reconnection
+candidate, but it is not evidence that its node is still alive. A departed identity
+therefore ages out within ~two windows instead of being kept alive by stale views.
 """.
 
 -export([new/1, observe/2, observe_all/2, rotate/1, estimate/1]).

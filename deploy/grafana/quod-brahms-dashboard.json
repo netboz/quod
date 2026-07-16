@@ -454,7 +454,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each node's estimate of how many nodes are in the whole network, compared with the actual fleet size (the dashed line). A node reading below the actual size is not yet seeing all of its peers through recent gossip.",
+      "description": "Each node's estimate of the distinct stable identities it has directly reached recently, compared with the currently scraped fleet (the dashed line). It intentionally ignores third-party peer lists: a stale address is useful for reconnecting but is not evidence that its node is still alive. A reading below the fleet means this node has not directly exchanged traffic with every live peer in the observation window.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -537,7 +537,7 @@
           "refId": "B"
         }
       ],
-      "title": "Estimated network size n̂ (per node) vs actual",
+      "title": "Recently reachable population n̂ (per node) vs fleet",
       "type": "timeseries"
     },
     {

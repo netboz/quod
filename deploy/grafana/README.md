@@ -52,7 +52,7 @@ with them.
 | Prolog execution & memory | Active queries · KB memory & retained history | Query saturation; ETS growth; whether frozen queries are temporarily retaining old data |
 | Rejections & failures | Append rejections by reason · Failed writes | Backpressure/redirect/skip (flow control) vs OCC conflicts + park timeouts (real failures) |
 | Dissemination feed | Feed activity · Dropped blocks | Gossip push/ingest/pull health; gap-drop bursts |
-| Brahms overlay | View/sample/links · n̂ | Overlay connectivity + network-size estimate |
+| Brahms overlay | View/sample/links · n̂ | Overlay connectivity + recently reachable population estimate |
 
 ## Metric reference
 

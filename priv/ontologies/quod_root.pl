@@ -4,8 +4,10 @@
 %% commits into the ledger as the genesis. After birth it lives in the replicated
 %% ledger; joining nodes sync it and never re-read this file. Modeled on onia_root.pl.
 
-%% The ACL authority anchor for this network (exactly one).
-acl_sovereign('quod:root').
+%% The ACL authority anchor for this network (exactly one). `quod:root` is the
+%% structured name form — `:` reads "belongs-to" (doc/inter-ontology.md §2): the
+%% ontology `root`, owned by `quod`.
+acl_sovereign(quod:root).
 
 %% Default-open reads. Load-bearing: with no can_read/3 clause every read
 %% fail-closes (unknown-predicate ⇒ deny). Narrow this per-ontology as needed.
@@ -29,5 +31,8 @@ can_read(_Goal, _Subject, _Ns).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 
 %% The system-ontology registry: system_ontology(Name, PlFile, ExternalPreds, Flags).
-%% Root declares itself; further system ontologies are added when the cascade lands.
-system_ontology('quod:root', 'quod_root.pl', [], []).
+%% Root declares itself; the real system ontologies (quod:user, quod:node, ... — the
+%% network's own infrastructure knowledge, to be specified from the onia/bbsvx
+%% reference material) are added when they are authored. Demo/user-level ontologies
+%% (animals, pets) are NOT system ontologies and do not belong in this registry.
+system_ontology(quod:root, 'quod_root.pl', [], []).

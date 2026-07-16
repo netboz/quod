@@ -4,18 +4,21 @@ quod application entry point.
 
 Configuration is a **HOCON file** (`config/quod.conf`, or wherever `QUOD_CONF`
 points; a release ships `priv/quod.conf`). The file is the primary source; OS
-environment variables prefixed `QUOD_` override individual keys, using `__` to
-descend the path — e.g. `QUOD_CONTENT__MODE=join` overrides `content.mode`,
-`QUOD_NODE__PORT=15000` overrides `node.port`. See `m:quod_schema` for the shape.
+environment variables prefixed `QUOD_` override individual scalar keys, using `__`
+to descend the path — e.g. `QUOD_NODE__PORT=15000` overrides `node.port`. (The
+`content` section is a LIST and is not env-overridable — deploys render the file.)
+See `m:quod_schema` for the shape.
 
 `load_config/0` bridges the file onto the `application` env the transport reads
-(`listen_port`, `metrics_port`, `node_id`) and returns the `content` section, which
-drives Brahms membership and the content namespace this node founds (`create`) or
-joins. It also **load-or-creates the node's Ed25519 identity** (a side effect:
-persists `node.key` under the identity dir and sets `node_pubkey`/`identity_cert`/
-`identity_key`). **With no config file present, the app starts in legacy mode** —
-`sys.config` / `application:set_env` drive the transport, no content namespace is
-auto-started, and no identity is minted (this is what the multi-node test SUITE relies on).
+(`listen_port`, `metrics_port`, `node_id`) and returns the `content` section — a
+**list** of ontology blocks; for each, the node runs Brahms membership and founds
+(`create`) or joins that namespace. It also **load-or-creates the node's Ed25519
+identity** (a side effect: persists `node.key` under the identity dir and sets
+`node_pubkey`/`identity_cert`/`identity_key`; the identity dir derives from the first
+content entry that SETS a `data_dir` — one node, one identity, however many ontologies).
+**With no config file present, the app starts in legacy mode** — `sys.config` /
+`application:set_env` drive the transport, no content namespace is auto-started, and
+no identity is minted (this is what the multi-node test SUITE relies on).
 """.
 
 -behaviour(application).
@@ -72,6 +75,7 @@ load_config() ->
         none -> none;
         Path ->
             os:putenv("HOCON_ENV_OVERRIDE_PREFIX", "QUOD_"),
+            ok = drop_content_env_overrides(),
             {ok, Raw} = hocon:load(Path),
             Cfg = hocon_tconf:check_plain(quod_schema, Raw,
                                           #{atom_key => true, apply_override_envs => true}),
@@ -79,6 +83,18 @@ load_config() ->
             apply_identity(Cfg),
             maps:get(content, Cfg)
     end.
+
+%% `content` is a LIST; hocon's env override cannot address array elements — a leftover
+%% QUOD_CONTENT__* var (the pre-list override style) would REPLACE the whole rendered list
+%% with a one-key map and crash the schema check with a misleading {bad_array_index,..}.
+%% Strip any such var loudly instead: the file is authoritative for `content`.
+drop_content_env_overrides() ->
+    _ = [begin
+             logger:warning("quod: ignoring stale env override ~s (content is a LIST; "
+                            "edit the config file instead)", [K]),
+             os:unsetenv(K)
+         end || {K, _V} <- os:env(), string:prefix(K, "QUOD_CONTENT__") =/= nomatch],
+    ok.
 
 %% Load-or-create the node's Ed25519 identity and expose it in the application env
 %% (`node_pubkey`, the DER `identity_cert`, the `identity_key`). The pubkey becomes the
@@ -109,10 +125,15 @@ identity_dir(Cfg) ->
     end.
 
 %% The resolved content data dir (mirrors quod_simplex/quod_ledger_store's data_dir default).
+%% `content` is a LIST of ontology blocks; the node identity (one per node) anchors to the
+%% first entry that SETS a data_dir — order-independent in the normal shape where every
+%% entry shares one dir (the ledger store keeps each namespace in its own subdirectory),
+%% and never fooled by a dir-less entry sitting first.
 content_data_dir(Cfg) ->
-    case maps:get(data_dir, maps:get(content, Cfg, #{}), <<>>) of
-        <<>>    -> filename:join(filename:basedir(user_cache, "quod"), "data");
-        DataDir -> binary_to_list(DataDir)
+    Dirs = [maps:get(data_dir, B, <<>>) || B <- maps:get(content, Cfg, [])],
+    case [D || D <- Dirs, D =/= <<>>] of
+        [Dir | _] -> binary_to_list(Dir);
+        []        -> filename:join(filename:basedir(user_cache, "quod"), "data")
     end.
 
 %% Bridge HOCON `node`/`metrics` onto the application env the transport reads.
@@ -157,10 +178,13 @@ regular_or_none(Path) ->
         false -> none
     end.
 
-%% --- Brahms membership (when a content namespace is configured) --------------
+%% --- Brahms membership (one instance per configured ontology) ----------------
 
 maybe_join(none) -> ok;
-maybe_join(Content) ->
+maybe_join(Blocks) ->
+    lists:foreach(fun join_block/1, Blocks).
+
+join_block(Content) ->
     Ns    = maps:get(namespace, Content),
     Self  = application:get_env(quod, node_id, default_node_id()),
     Seeds = content_seeds(Content),
@@ -172,10 +196,35 @@ maybe_join(Content) ->
     end,
     ok.
 
-%% --- content namespace (create founds + serves root; create failure is fatal) -
+%% --- content namespaces (create founds + serves; create failure is fatal) ----
 
 maybe_start_ns(none) -> ok;
-maybe_start_ns(Content) ->
+maybe_start_ns(Blocks) ->
+    ok = validate_blocks(Blocks),
+    lists:foreach(fun start_ns_block/1, Blocks).
+
+%% Boot-config sanity for the content LIST — loud failures instead of a silently wrong
+%% network: duplicate namespaces (two blocks would fight over one committee), and a
+%% non-root entry that inherited the ROOT defaults — a bare `{ namespace = "animals" }`
+%% would otherwise FOUND `animals` seeded with quod_root.pl's content, which is always
+%% an operator mistake (each per-element schema default is root-flavoured).
+validate_blocks(Blocks) ->
+    Names = [maps:get(namespace, B) || B <- Blocks],
+    case Names -- lists:usort(Names) of
+        []   -> ok;
+        Dups -> error({content_duplicate_namespace, Dups})
+    end,
+    lists:foreach(fun check_block_defaults/1, Blocks).
+
+check_block_defaults(#{namespace := <<"quod:root">>}) -> ok;
+check_block_defaults(B = #{namespace := Ns}) ->
+    case {maps:get(mode, B), maps:get(genesis_file, B, <<>>)} of
+        {create, <<"ontologies/quod_root.pl">>} ->
+            error({content_block_inherited_root_defaults, Ns});
+        _ -> ok
+    end.
+
+start_ns_block(Content) ->
     {Ns, NsCfg} = build_ns_config(Content),
     Mode = maps:get(mode, NsCfg),
     case quod_ns_sup:start_namespace(Ns, NsCfg) of

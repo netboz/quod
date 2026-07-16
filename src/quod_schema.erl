@@ -4,9 +4,9 @@ HOCON config **schema** for quod.
 
 The config **file** (`config/quod.conf`, overridable by `$QUOD_CONF`) is the primary
 source of configuration. OS environment variables prefixed `QUOD_` override individual
-keys, using `__` to descend the path — e.g. `QUOD_CONTENT__MODE=join` overrides
-`content.mode`, `QUOD_NODE__PORT=15000` overrides `node.port`. Env override is applied
-during `m:hocon_tconf` check (see `quod_app:load_config/0`).
+scalar keys, using `__` to descend the path — e.g. `QUOD_NODE__PORT=15000` overrides
+`node.port` (the `content` LIST is not env-overridable; deploys render the file). Env
+override is applied during `m:hocon_tconf` check (see `quod_app:load_config/0`).
 
 String values are `binary()` (HOCON's native string), converted to lists in the boot
 code where the rest of the system expects `{Host, Port}` / file paths.
@@ -26,7 +26,9 @@ roots() ->
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
     , {transactions, hoconsc:mk(hoconsc:ref(?MODULE, transactions), #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
-    , {content,  hoconsc:mk(hoconsc:ref(?MODULE, content),  #{default => #{}})}
+      %% A LIST: a node may host several ontologies side by side (each entry founds or
+      %% joins one namespace, with its own mode/genesis/anchor). One entry is the common case.
+    , {content,  hoconsc:mk(hoconsc:array(hoconsc:ref(?MODULE, content)), #{default => [#{}]})}
     ].
 
 fields(node) ->
@@ -62,8 +64,10 @@ fields(identity) ->
     [ {dir, hoconsc:mk(binary(), #{default => <<"">>})}
     ];
 fields(content) ->
-    %% A node founds (create) or joins one content namespace at boot. `genesis_file`
-    %% is read once by the founder at create; `data_dir = ""` ⇒ quod_simplex's default.
+    %% One ontology this node founds (create) or joins at boot — `content` is a LIST of
+    %% these. `genesis_file` is read once by the founder at create; `data_dir = ""` ⇒
+    %% quod_simplex's default. Ontologies may share one data_dir: the ledger store keeps
+    %% each namespace in its own subdirectory (quod_ledger_store:ns_dir/2).
     [ {namespace,    hoconsc:mk(binary(), #{default => <<"quod:root">>})}
     , {mode,         hoconsc:mk(hoconsc:enum([create, join]), #{default => create})}
     , {role,         hoconsc:mk(hoconsc:enum([member, replica]), #{default => member})}

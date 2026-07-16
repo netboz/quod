@@ -49,6 +49,12 @@ the full log always rescans at open.
 
 -export_type([handle/0]).
 
+%% The on-disk namespace-subdirectory rule is the store's own; tests assert against it
+%% through this export instead of re-deriving the encoding.
+-ifdef(TEST).
+-export([ns_dir/2]).
+-endif.
+
 -define(MAGIC, 16#915106AA).
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)

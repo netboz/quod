@@ -136,5 +136,7 @@ to complete before advancing a rolling update.
   DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
   member recovery, bounded transaction micro-batches, depth-one pipelining with
   implicit predecessor finality, metrics, and durable Docker/Nomad deployment.
-- **Next:** signed membership authorship, epoch-frozen validator sets, and the
+- **Next:** the inter-ontology layer — ontologies naming each other's things (`:`)
+  and asking each other questions (`::`), specified in `doc/inter-ontology.md`;
+  then signed membership authorship, epoch-frozen validator sets, and the
   durable read-replica policy described in `doc/deferred.md`.

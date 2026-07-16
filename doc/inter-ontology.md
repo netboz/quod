@@ -1,0 +1,307 @@
+# Inter-ontology asks — the specification
+
+**Status: NORMATIVE.** This document defines how ontologies name each other's things and ask
+each other questions. It supersedes the cross-ontology prose inherited from the deprecated
+bbsvx/onia attempts (`content-layer-design.md` §4/§5/§8 — those sections now defer here).
+Plain language on purpose; the technical anchors are in the boxed notes and file references.
+
+Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
+review against the actual code. Nothing here is built yet; this document is reviewed first.
+
+---
+
+## 1. The two marks
+
+quod content uses two operators, one meaning each:
+
+| mark | meaning | where it appears | example |
+|---|---|---|---|
+| `:` | **belongs-to** — builds a name | inside facts and ontology names | `isa(my_animal, quod:animal)` |
+| `::` | **ask** — run a question over there | as a rule step (goal position) | `user_xxx:door::open(X)` |
+
+- `quod:animal` — *the name `animal`, over in the ontology `quod`*. It is **data**: store it,
+  match it, pass it around; nothing happens until something needs what it points at.
+- `animals::diet(dog, D)` — *ask the ontology `animals` to prove `diet(dog, D)`*. It is an
+  **action**: it runs a question in another ontology and yields its answers here.
+
+Why two marks: ontology names carry their owner (`user_xxx:door`, §2), so a lone `:` cannot
+also mean "call" — in `user_xxx:door:open(X)` nobody can tell where the name ends and the
+call begins. `::` marks the call boundary explicitly.
+
+> **Technical note — parser binding (a build prerequisite).** Both operators parse today
+> (`erlog_parse.erl:299-300`: `:` xfy 600, `::` xfx 600/599), but with these precedences
+> `a:b::goal` groups as `a:(b::goal)` — the top functor is `:`, so a handler registered on
+> `::` would never fire for owner-carrying names. The fork (SHA-pinned `netboz/erlog`) is
+> adjusted so `::` binds looser than `:`: `a:b::goal` ⇒ `(a:b)::goal`. Verified safe: erlog's
+> bundled libraries use no `:` operator, and existing quod content writes colon-names only as
+> quoted atoms.
+
+## 2. Names: ontology names carry their owner
+
+Everyone will want a `door` ontology. So the name itself disambiguates and shows ownership:
+
+- `user_xxx:door` — user_xxx's door ontology. Same idea as DNS subdomains or GitHub
+  `user/repo`.
+- `quod:root` — the system's root ontology. It already fits the pattern; it keeps its name.
+
+**Resolution rule.** In a qualified name, the longest prefix that names a *known* ontology is
+the ontology; whatever follows is the name inside it. A prefix that names no known ontology is
+the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" today = hosted
+locally or reachable through the configured contacts; a network-wide ontology directory is a
+later milestone, §10.)
+
+**Ownership enforcement is NOT in this milestone.** The rule "only user_xxx may create
+`user_xxx:*`" is creation-time permission checking; it needs author-signed writes and the
+ontology registry — both already-deferred work (`deferred.md` §1). This milestone fixes the
+*naming convention and resolution* so no name ever has to change; the spec of record for
+creation-authorization is the signing milestone.
+
+**Parked:** deeper paths inside content terms (`thing:cat:max` as a data path). Nothing
+forbids adding them later; they are not specified now.
+
+### 2.1 One canonical shape for a name
+
+Today the same ontology name exists in three written shapes that never match each other:
+the structured term (`quod:root` unquoted — a `:`-term), the quoted atom (`'quod:root'`,
+present twice in the shipped genesis facts), and the flat runtime id (the binary
+`<<"quod:root">>` used by config, registry keys, and channel names). That is a bug factory.
+
+The canonical rule:
+
+- **At every boundary** (config, wire, registry, committed records), an ontology name is the
+  **flat binary** — segments joined with `:`.
+- **In content**, the structured `:`-term is the ONE written form. The two quoted-atom
+  genesis facts are migrated. The engine bridge flattens a `:`-term to the flat binary when
+  it leaves Prolog (asks, follows), and never goes the other way by minting atoms:
+  **creating atoms from network-received names is forbidden** (atom-table exhaustion — the
+  existing `binary_to_existing_atom` discipline applies).
+
+## 3. Links: facts ARE the web between ontologies
+
+An ordinary fact whose arguments name things in other ontologies — that is the whole
+inter-ontology web. Nothing more:
+
+```prolog
+isa(my_animal, quod:animal).                    % my_animal is a kind of quod's animal
+attached_to(my_stuff:door, my_world:my_house).  % ANY relation can cross, not just isa
+```
+
+- **A link is established when the fact commits — nothing else.** Proposed, agreed by the
+  committee, applied on every replica (or present from the ontology's first block). No
+  registration, no handshake; the pointed-at ontology doesn't know it is being pointed at.
+- **A link is exercised at ask time** — when a question actually needs what it points at.
+
+### 3.1 Every relation follows its links by default
+
+No blessed list of "following" relations — `isa`, `have_attribute`, `attached_to`: all
+uniform. The tag written in the term is the explicit crossing marker (ground rule 1), so
+following it is never silent.
+
+- **Local first, hop last.** A relation's own local facts and rules are always tried first;
+  the hop across is the last resort. `isa(my_dog, animals:dog)` answers "is my_dog a dog?"
+  from the local fact with zero trips; "what does my_dog eat?" finds nothing local and
+  follows the link into `animals`.
+- **The rewrite, precisely.** When the hop fires on a relation `R` whose argument at some
+  position is the name `Ns:X`, the ask sent to `Ns` is the same relation with that argument's
+  **matched prefix stripped**: `have_attribute(animals:dog, diet, D)` re-asks `animals` about
+  `have_attribute(dog, diet, D)`. If several argument positions carry foreign names, each
+  position hops (in argument order); duplicate answers are removed by identity.
+- **Opting out:** a `no_follow(Relation/Arity)` fact turns following off for that relation —
+  agreed content, so every replica behaves identically. The name still stores and matches
+  fine, and a rule can always ask explicitly with `::`.
+
+> **Technical note — followers are synthesized at read time, never stored.** A stored
+> follower clause is mechanically broken: any later user assert lands after it (silently
+> breaking local-first), it would pollute the per-predicate content fingerprints, and at
+> genesis it would leak into the committed block as user content. Instead the proof overlay
+> (`quod_erlog_db_local_prove`) synthesizes the follower as a virtual LAST clause while a
+> relation is being resolved, tagged so `retract`/`clause` never see it, and consults
+> `no_follow` *through the overlay* so the decision itself lands in the recorded read-set
+> (a racing `no_follow` commit then conflicts honestly). Deterministic on every node by
+> construction.
+
+## 4. The ask, start to finish
+
+One ask = one run on the target = one stream of answers back. Nothing is ever held open
+*waiting*; a run is always actively working, and it dies with its ask or its timeout.
+
+1. **Open.** The asking side allocates a fresh **ask id**, subscribes to its answer channel,
+   and sends the ask — target ontology, the goal, the asking chain (§6), an optional
+   freshness floor (§7) — on the target ontology's fixed ask channel.
+2. **Freeze.** The target takes its committed facts **as of that instant** as the run's view.
+   This costs nothing within the engine: the store is an immutable value (a commit builds a
+   new version sharing structure with the old — verified, `quod_prolog.erl:570-580`,
+   `quod_diff.erl:49-51`), so the run simply keeps the old value. Answers can never be
+   half-old, half-new.
+3. **Permission.** Before running the goal, the target proves `can_read` for the asking
+   chain (§6). Refusal = the `not_allowed` error, before any work.
+4. **Stream.** The run produces answers by normal Prolog backtracking; **each answer is sent
+   the moment it is found** — no batches, no waiting. The asking rule's choice point consumes
+   them as they arrive; backtracking into the ask waits for the next answer. First answer =
+   fastest possible, even when later answers are slow to derive.
+5. **Complete.** When the answers run out, a final **complete** marker carries the run's
+   stamps (§5). If the rule stops early instead — or the asking proof dies — the ask is
+   cancelled and the target kills the run on the spot.
+
+### 4.1 Where the work runs: one worker per proof
+
+The ontology's engine process **never runs proofs**. Every proof — a served ask AND the
+engine's own client proofs — runs in its **own small worker process** holding that run's
+frozen view. The engine stays free for commits and coordination; a wedged ask wedges only its
+worker; cancel = kill the worker; two ontologies asking each other simultaneously each block
+only their own workers, so nothing deadlocks.
+
+Quick local proofs behave exactly as today (spawn, prove, reply — one extra process spawn).
+
+> **Technical notes.**
+> - *Why not "pause the engine between answers":* the engine is resumable only at answer
+>   boundaries; a single answer's derivation is unbounded (`findall` runs sub-goals to
+>   exhaustion inside one step), and an asking run blocks in a receive mid-derivation — so
+>   in-engine slicing cannot deliver "never blocks". Workers can. (DA finding F1.)
+> - *Honest cost:* handing the frozen view to a worker copies it once per proof (Erlang
+>   copies terms between processes). Negligible at today's ontology sizes; measured before
+>   any tuning. Future paths if it ever hurts — a pause-able engine fork, or shared-memory
+>   storage — are named here, not built.
+> - *The per-proof read-set table* (a real ETS table today, `quod_erlog_db_local_prove.erl:56-61`)
+>   is **owned by the worker**, so an abandoned run can never leak it. (Today it would leak,
+>   owned by the never-dying engine — DA finding F2.)
+> - *The membership-vote re-proof keeps its own synchronous path*, and link-following is
+>   **disabled** inside it: a committee vote must never make network hops mid-verdict
+>   (`quod_prolog.erl:470-501` stays as-is; DA finding F10).
+
+### 4.2 How answers ride the wire
+
+quod's transport rules (deliberate, bug-history-backed): a node never replies backwards on a
+stream the peer opened, and a node only receives on channel names it subscribed. So an ask is
+**two legs**:
+
+- **Leg 1 (the ask):** on the target ontology's fixed, pre-subscribed ask channel — carrying
+  the ask id.
+- **Leg 2 (the answers):** the target opens its **own outbound link** named by that ask id —
+  which the asker subscribed before sending — and streams answers there.
+
+Cancel uses real transport signals in both directions: the asker resetting its side is seen
+by the target (kills the run's worker); the target's link dying is seen by the asker (link
+death is already a monitored event). After **complete**, each side closes its leg; a finished
+ask leaves nothing behind — no processes, no registrations, no buffers.
+
+> **Technical notes.**
+> - **Backpressure is built, not assumed.** The wire layer today *silently drops* frames
+>   under pressure: `quod_link` deliberately ignores send errors (`quod_link.erl:122-128`)
+>   and the pre-connection buffer drops past 1024 frames (`quod_conn.erl:26,187-193`); the
+>   QUIC library returns `flow_control_blocked`/`send_queue_full` rather than blocking
+>   (`quic_connection.erl:7658-7704`) and offers no "window reopened" event. The serving
+>   worker therefore OWNS its answer link and treats "blocked" as *pause, retry with backoff*.
+> - **Every answer carries a sequence number.** Any residual gap at the asker is the loud
+>   `broken_stream` error — a lost answer can never masquerade as a complete result.
+> - **Ask streams never starve votes:** when wired, ask channels get lower stream priority
+>   than consensus `{log, Ns}` (the unused RFC 9218 knob — `deferred.md` §2).
+> - Co-hosted asks (target ontology on the same node) skip the wire entirely: same handler,
+>   worker-to-worker message stream, same semantics.
+
+## 5. The completion stamps
+
+The **complete** marker carries two stamps, recorded by the asking side:
+
+- **The version** of the frozen view — the target's committed-change count **at the moment
+  the run started** (not at completion: a long stream must not claim freshness it doesn't
+  have).
+- **The read fingerprint** — one content hash per predicate the run actually read, including
+  predicates reached indirectly through rules, and including what the `can_read` check read.
+  This is `quod_diff`'s existing per-functor hashing, unchanged.
+
+These stamps are the raw material of the FUTURE "tell me when it changes" milestone
+("reading a fact subscribes you to it"): which ontology, which predicates, at which version.
+Nothing else is built for that milestone now — but nothing will have to be re-recorded.
+
+## 6. The chain: circles, depth, permission
+
+Every ask carries the **chain** — the list of ontologies already involved in producing it.
+
+- **No circles.** If the target is already in the chain, the ask is refused: `circular_ask`.
+  An endless A→B→A loop would compute nothing and quietly burn both sides.
+- **Bounded depth.** A chain longer than the cap (§9) is refused: `too_deep`.
+- **Self-ask exception.** `A::x` written inside A itself is answered in place — no
+  round-trip, no chain growth.
+- **Permission uses the whole chain.** The target proves `can_read` for **every** ontology in
+  the chain, not just the immediate asker — otherwise A could read C *through* B when A
+  itself isn't allowed (read laundering). The `can_read` policy is ordinary agreed content in
+  the target ontology; the shipped default stays open (as `quod:root`'s placeholder is
+  today), and this milestone wires the actual check on the answering side — today no code
+  consults it at all (`quod_prove.erl` serves without any gate).
+
+> **Technical notes.** The chain travels in the engine run's flag store (it survives run
+> suspension and cannot be forged by content — the flag-setting builtins are whitelisted,
+> `erlog_int.erl:789-795`). On a committed write produced by an ask-capable proof, the
+> recorded asking-ontology field stays the existing single name = the **chain head**, so the
+> consensus validator's shape check (`quod_simplex.erl:1755-1757`) is untouched.
+
+## 7. Freshness
+
+The target answers from its frozen view and reports that view's version. The asker may set a
+floor: "only answer if you have seen at least version H" — if the target's view is older, the
+ask fails with `stale` (the floor mechanism already exists in the wire shapes). The floor is
+checked once, against the frozen view; a commit landing mid-stream neither upgrades nor
+invalidates the stream.
+
+## 8. Errors — the complete catalog
+
+Every failure a rule author can see is **distinct and loud**. Silence is never an answer;
+a partial result never looks complete.
+
+| error | when |
+|---|---|
+| `unknown_ontology` | the name's prefix matches no known ontology |
+| `bad_name` | the name/ask term is malformed |
+| `unreachable` | the target ontology is known but no node serving it can be reached |
+| `not_allowed` | the target's `can_read` refused the asking chain |
+| `circular_ask` | the target is already in the asking chain |
+| `too_deep` | the chain exceeds the depth cap |
+| `too_many_answers` | the run passed the total-answer cap — "narrow your question" |
+| `answer_too_big` | one answer exceeds the frame limit — refused **on the sender** |
+| `broken_stream` | a sequence gap, the target's link died, or the target crashed mid-run |
+| `no_progress` | the no-progress timeout fired (no answer produced AND none consumed) |
+| `stale` | the target's view is older than the asker's freshness floor |
+
+> **Technical note — the plumbing repair this requires.** Typed errors thrown inside a proof
+> currently collapse into one generic `prove_failed` on the way out (`erlog_error/2` *throws*
+> `{erlog_error, E, St}` — `erlog_int.erl:889` — but `run_proof` matches it as a return value,
+> `quod_prolog.erl:263-268`, so everything lands in the catch-all). The catch is fixed so the
+> taxonomy above actually reaches the rule author. The local client-call timeout (35 s today,
+> `quod_prolog.erl:73`) is restated for long streams: the client call returns when the *proof*
+> completes; a proof legitimately consuming a long stream extends it via the no-progress
+> contract, not a silent `fail`.
+
+## 9. Limits (starting values — one table, tuned with real usage)
+
+| limit | value | on breach |
+|---|---|---|
+| answers per ask | 10 000 | `too_many_answers` |
+| one answer's size | 1 MiB (existing frame limit) | `answer_too_big` (sender-side) |
+| chain depth | 8 | `too_deep` |
+| no-progress timeout | 30 s (no answer produced AND none consumed) | `no_progress` |
+| concurrent asks served per ontology | 64 (existing) — also caps serving workers | asker waits/retries |
+
+## 10. Non-goals — deliberately NOT in this milestone
+
+- **Changing another ontology's facts.** Writes stay home-only (`foreign_write_unsupported`
+  stays). Cross-ontology writes need author-signed transactions first (the signing
+  milestone), then the owner-executes model in `content-layer.md` §5.
+- **The notification system** ("tell me when what I read changes"). Later milestone; §5's
+  stamps are its prepared input.
+- **Notification precision finer than per-predicate.** Known, accepted coarseness.
+- **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Arrives with
+  signing; the naming convention lands now (§2).
+- **A network-wide "which nodes host ontology X" directory.** The demo fleet co-hosts the
+  ontologies on every node; routing is local-first with the existing static-seeds fallback.
+  The directory becomes necessary only when ontologies stop being co-hosted everywhere.
+- **Deeper name paths** (`thing:cat:max` as data). Parked.
+
+## 11. What this changes for consensus: nothing
+
+Cross-ontology asks happen while a question **runs**, on the node running it
+(prove-before-broadcast). What the committee agrees on is the finished list of changes; apply
+never re-asks anything, and answers a proof consumed are baked into its proposed diff. This
+layer adds **zero** moving parts to ordering, voting, catch-up, or the feed. Two guard rails
+make it stay that way: the membership-vote re-proof is synchronous with following disabled
+(§4.1), and the committed record keeps its existing shape (§6).

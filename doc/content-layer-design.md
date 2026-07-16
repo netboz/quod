@@ -276,6 +276,15 @@ content, not wires. This stream replaces bbsvx's WebSocket `scope_ws`.
 
 ## 4. The `::` operator
 
+> **Update (2026-07-16): superseded by `doc/inter-ontology.md` (normative).** The operator
+> story changed: there are now TWO marks — `:` builds *names* (`isa(my_dog, animals:dog)`,
+> ontology names carry their owner: `user_xxx:door`) and `::` marks *asks*
+> (`animals::diet(dog, D)`). Link-following is **default-on for every relation** with a
+> `no_follow` opt-out (no fixed set of link-following predicates), followers are synthesized
+> at read time (never stored), and the hop strips the matched prefix. Read this section as
+> history: its one-operator/two-positions framing and its fixed link-follower set are
+> superseded.
+
 ### Explicit, not implicit
 
 Default: the next fact/goal is **local** to the current ontology. `::` is the
@@ -389,6 +398,16 @@ problem is deferred until foreign writes are actually needed.
 
 ### Backtracking
 
+> **Update (2026-07-16): the cursor model below is REJECTED — bbsvx/onia heritage.** Yan
+> declared those attempts deprecated; their session/cursor machinery (cursor held on the
+> answering side, InvocationId, `next`/`close` dialogs) is exactly the leak/DoS surface the
+> caveat below feared, and bbsvx's commit history confirms it. The replacement
+> (`doc/inter-ontology.md` §4): answers are **streamed** — the target runs the goal in a
+> per-ask worker against a frozen view and sends each answer as it is found; the asker's
+> choice point consumes them as they arrive; cancel = the ask's stream closing kills the
+> worker. **Nothing is ever parked on the answering side**, so the cursor-lifecycle problem
+> (§12 #9) is dissolved, not solved. The paragraphs below are history.
+
 A `::` call is not one-shot — the caller can backtrack into it for the next
 solution. The mechanism (bbsvx and onia §16 agree):
 
@@ -402,7 +421,7 @@ solution. The mechanism (bbsvx and onia §16 agree):
 > *Caveat (review):* an open cursor holds the **full interpreter state** on the
 > answering node until `close`/stream-death. Without per-caller caps + an idle
 > timeout that is a memory-leak / DoS surface — cursor lifecycle is a decision
-> owed (§12).
+> owed (§12). *(Dissolved by the streamed design above.)*
 
 **Backtracking and staged writes — we stay ISO Prolog-compliant.** Verified in
 erlog: the choice point (`#cp{}`) captures bindings + variable counter but **not
@@ -508,6 +527,10 @@ which also brought a GPL cliff).
 - **Facts / scope dialogs** → reliable, ordered **QUIC streams** (`quod_link`).
   A scope dialog is one stream per prove invocation; the closed stream *is* the
   "requester left, cancel" signal that MQTT needed a session hook for.
+  *(Update 2026-07-16: the per-ask-stream idea survives, but the mechanics are
+  TWO legs, not one bidirectional stream — quod's transport never replies
+  backwards on a peer-opened stream. The normative wire shape is
+  `doc/inter-ontology.md` §4.2.)*
 - **Physics / dynamic state** → **QUIC datagrams** (`send_dgram`, already noted
   in the QUIC-optimizations memo). Unreliable, last-writer-wins, no log. This is
   the "UDP" instinct — placed on the dynamic half, where loss is fine.
@@ -520,6 +543,12 @@ connection.
 
 ## 8. Machinery to port from bbsvx
 
+> **Update (2026-07-16): bbsvx and onia are DEPRECATED attempts — nothing is "ported" from
+> them conceptually.** The overlay/differ layers listed below were already rebuilt as quod's
+> own (`quod_erlog_db_local_prove`, `quod_diff`). The `pred_cross_ontology_call` row is
+> superseded by `doc/inter-ontology.md` (streamed asks, no scope sessions, no federated read
+> path); at most its caller-side choice-point mechanics serve as a low-level reference.
+
 The staged-proved-scope model already exists in prototype in bbsvx, in layers
 over erlog's DB behaviour:
 
@@ -531,9 +560,11 @@ over erlog's DB behaviour:
 | `bbsvx_actor_ontology` `scope_prove` / `scope_commit` / `scope_drop` | the cross-ontology transactional wrapper: prove in an isolated overlay, commit the diff as one transaction or drop it |
 | `bbsvx_common_predicates` `pred_cross_ontology_call` | the `::` handler: self / local / remote resolution, backtracking via compiled choice points, chain-depth limit + circular-call detection, caller identity propagated for ACL |
 
-**Port, don't reinvent** — but resolve the tensions bbsvx left open (read-only
-comment vs writes-via-scope; self/local/remote semantics; explicit `::` vs the
-implicit `federated` read path) using the decisions in §4–§6.
+~~**Port, don't reinvent**~~ — *superseded (2026-07-16): per the banner above, nothing
+is ported from bbsvx; the overlay/differ layers were rebuilt as quod's own and the `::`
+handler is specified fresh in `doc/inter-ontology.md`. The tensions bbsvx left open
+(read-only comment vs writes-via-scope; self/local/remote semantics; explicit `::` vs
+the implicit `federated` read path) are all resolved there.*
 
 ---
 
@@ -669,9 +700,11 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    you host its log. The replica set (and the `f` in "f+1 attestation") needs its
    own definition.
 
-9. **Cursor resource bounds.** Open `::` dialogs hold full interpreter state on the
-   answering node; need per-caller caps + idle timeout, plus a per-proof hop budget
-   for the link-following fan-out (§4).
+9. **Cursor resource bounds.** ~~Open `::` dialogs hold full interpreter state on the
+   answering node; need per-caller caps + idle timeout~~ — **DISSOLVED (2026-07-16)**: the
+   streamed-ask design holds no server-side cursor at all (`doc/inter-ontology.md` §4).
+   What remains is the per-proof hop budget for link-following fan-out — specified there
+   (chain depth cap + per-position hops).
 
 10. **erlog engine concurrency model.** Likely one gen_server per namespace
     serializing commit/apply, with read-only proofs on copy-on-write overlays —

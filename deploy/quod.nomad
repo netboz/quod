@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.5"
+  default     = "0.7.6"
   description = "Quod image tag in the cluster registry. This clean-ledger release expects freshly provisioned quod-node CSI volumes."
 }
 
@@ -181,23 +181,29 @@ transactions {
   ip      = "0.0.0.0"
   port    = 14569
 }
-content {
-  namespace = "quod:root"
-  data_dir  = "/quod/data"
+# `content` is a LIST: further ontologies are added as extra entries, each with its own
+# mode/anchor (founded once by a single create deploy, then joined fleet-wide with the
+# logged anchor — same two-phase dance as quod:root; they share /quod/data, the ledger
+# keeps one subdirectory per namespace).
+content = [
+  {
+    namespace = "quod:root"
+    data_dir  = "/quod/data"
 %{if var.bootstrap && var.genesis_hash == ""}
-  mode         = create
-  genesis_file = "ontologies/quod_root.pl"
-  seeds        = []
+    mode         = create
+    genesis_file = "ontologies/quod_root.pl"
+    seeds        = []
 %{else}
-  mode         = join
-  genesis_hash = "${var.genesis_hash}"
-  seeds        = [
+    mode         = join
+    genesis_hash = "${var.genesis_hash}"
+    seeds        = [
 {{- range service "quod" }}
-    "{{ .Address }}:{{ .Port }}",
+      "{{ .Address }}:{{ .Port }}",
 {{- end }}
-  ]
+    ]
 %{endif}
-}
+  }
+]
 EOT
         destination = "${NOMAD_TASK_DIR}/quod.conf"
         change_mode = "noop"
@@ -368,17 +374,20 @@ transactions {
   ip      = "0.0.0.0"
   port    = 14569
 }
-content {
-  namespace = "quod:root"
-  data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
-  mode         = join
-  genesis_hash = "${var.genesis_hash}"
-  seeds        = [
+# `content` is a LIST — extra ontologies join here too (see the quod-node group's note).
+content = [
+  {
+    namespace = "quod:root"
+    data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
+    mode         = join
+    genesis_hash = "${var.genesis_hash}"
+    seeds        = [
 {{- range service "quod" }}
-    "{{ .Address }}:{{ .Port }}",
+      "{{ .Address }}:{{ .Port }}",
 {{- end }}
-  ]
-}
+    ]
+  }
+]
 EOT
         destination = "${NOMAD_TASK_DIR}/quod.conf"
         change_mode = "noop"

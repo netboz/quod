@@ -429,3 +429,15 @@ Raft-era concern) — but the store handle inside `#s` was not; see below.
   slot 20 001 measures **5.9 KB post-GC** (whole `#s` 2.0 KB, store handle 808 B), identical after a
   restart-from-disk re-fold — the per-ontology consensus footprint is now height-independent
   (~1 MB at that height before, and growing).
+
+## 7. Content / ontology authoring
+
+- **Shared ACL prelude for authored ontologies.** Every genesis `.pl` (quod_root, animals, pets)
+  hand-copies the two load-bearing governance clauses — the default-open `can_read/3` and the
+  `can_join/3` admission gate (`:- peer_ready(Pk)`). N-way copies of safety-critical clauses drift:
+  a Phase-B tightening of `can_join` applied only to root would leave co-hosted ontologies admitting
+  on divergent gates, and an author who simply omits `can_join` gets a silently fail-closed committee
+  that can never grow past its founder. Fix when the ontology count grows: a shared prelude the
+  founder prepends at genesis (or an include directive in `quod_prolog:genesis_diff/1`) so the
+  default gates have ONE home. Until then: copy the clauses deliberately and review them together.
+

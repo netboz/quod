@@ -79,7 +79,7 @@ t_cannot_remove_last(Cfg) ->
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertEqual(fail, rp(Ns, {remove, Self})),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
-    ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})).   %% still serving proves
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})).   %% still serving proves
 
 %% The consensus gate (Slice A, deferred.md §3 a+c): a RAW membership transaction that bypasses the
 %% admit/remove predicates — the Byzantine-submitter path — is rejected at the leader's own append
@@ -89,7 +89,7 @@ t_cannot_remove_last(Cfg) ->
 t_gate_rejects_raw_wedge(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
-    ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, 'quod:root'})),   %% kb ready, genesis applied
+    ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),   %% kb ready, genesis applied
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     RawTx = fun(Diff) -> #transaction{tx_id = <<"evil">>, caller_ns = Ns, diff = Diff,
                                       read_check = #{}, author = Self, sig = none} end,

@@ -1,17 +1,20 @@
 -module(quod_schema_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-%% A minimal valid config as a HOCON binary.
+%% A minimal valid config as a HOCON binary. `content` is a LIST of ontology blocks.
 conf() ->
     <<"node { ip = \"10.0.0.1\", port = 14000 }\n"
       "metrics { port = 14001 }\n"
-      "content { namespace = \"quod:root\", mode = create, "
-      "genesis_file = \"ontologies/quod_root.pl\", seeds = [\"1.2.3.4:14567\"] }\n">>.
+      "content = [{ namespace = \"quod:root\", mode = create, "
+      "genesis_file = \"ontologies/quod_root.pl\", seeds = [\"1.2.3.4:14567\"] }]\n">>.
 
 check(Bin) ->
     {ok, Raw} = hocon:binary(Bin, #{format => map}),
     hocon_tconf:check_plain(quod_schema, Raw,
                             #{atom_key => true, apply_override_envs => true}).
+
+%% The single content block of a checked config (the common one-ontology case).
+content1(C) -> [Block] = maps:get(content, C), Block.
 
 %% --- defaults + parsing -------------------------------------------------
 
@@ -20,20 +23,33 @@ parse_test() ->
     ?assertEqual(<<"10.0.0.1">>, deep(C, [node, ip])),
     ?assertEqual(14000,          deep(C, [node, port])),
     ?assertEqual(14001,          deep(C, [metrics, port])),
-    ?assertEqual(<<"quod:root">>, deep(C, [content, namespace])),
-    ?assertEqual(create,         deep(C, [content, mode])),
-    ?assertEqual([<<"1.2.3.4:14567">>], deep(C, [content, seeds])).
+    B = content1(C),
+    ?assertEqual(<<"quod:root">>, maps:get(namespace, B)),
+    ?assertEqual(create,          maps:get(mode, B)),
+    ?assertEqual([<<"1.2.3.4:14567">>], maps:get(seeds, B)).
 
 defaults_test() ->
-    %% omit node.ip and metrics → schema defaults apply
-    C = check(<<"content { namespace = \"quod:root\" }\n">>),
+    %% omit node.ip and metrics → schema defaults apply (incl. inside a content entry)
+    C = check(<<"content = [{ namespace = \"quod:root\" }]\n">>),
     ?assertEqual(<<"127.0.0.1">>, deep(C, [node, ip])),
     ?assertEqual(14567,           deep(C, [node, port])),
     ?assertEqual(14568,           deep(C, [metrics, port])),
     ?assertEqual(<<"">>,          deep(C, [identity, dir])),
-    ?assertEqual(create,          deep(C, [content, mode])),
-    ?assertEqual(<<"ontologies/quod_root.pl">>, deep(C, [content, genesis_file])),
-    ?assertEqual([],              deep(C, [content, seeds])).
+    B = content1(C),
+    ?assertEqual(create,          maps:get(mode, B)),
+    ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
+    ?assertEqual([],              maps:get(seeds, B)).
+
+%% Two ontologies side by side: each entry keeps its own mode/anchor.
+two_ontologies_test() ->
+    C = check(<<"content = [{ namespace = \"quod:root\" },\n"
+                "           { namespace = \"animals\", mode = join, genesis_hash = \"ff\" }]\n">>),
+    [B1, B2] = maps:get(content, C),
+    ?assertEqual(<<"quod:root">>, maps:get(namespace, B1)),
+    ?assertEqual(create,          maps:get(mode, B1)),
+    ?assertEqual(<<"animals">>,   maps:get(namespace, B2)),
+    ?assertEqual(join,            maps:get(mode, B2)),
+    ?assertEqual(<<"ff">>,        maps:get(genesis_hash, B2)).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -82,38 +98,38 @@ identity_dir_override_test() ->
 %% --- env overrides individual keys, file stays primary -------------------
 
 env_override_test_() ->
+    %% Scalar keys are env-overridable; the `content` LIST is not (deploys render the file).
     {setup,
      fun() ->
          os:putenv("HOCON_ENV_OVERRIDE_PREFIX", "QUOD_"),
-         os:putenv("QUOD_CONTENT__MODE", "join"),
          os:putenv("QUOD_NODE__PORT", "15000")
      end,
      fun(_) ->
          os:unsetenv("HOCON_ENV_OVERRIDE_PREFIX"),
-         os:unsetenv("QUOD_CONTENT__MODE"),
          os:unsetenv("QUOD_NODE__PORT")
      end,
      fun() ->
          C = check(conf()),
          %% env wins over the file value
-         ?assertEqual(join,  deep(C, [content, mode])),
          ?assertEqual(15000, deep(C, [node, port])),
          %% untouched keys keep their file value
-         ?assertEqual(<<"10.0.0.1">>, deep(C, [node, ip]))
+         ?assertEqual(<<"10.0.0.1">>, deep(C, [node, ip])),
+         ?assertEqual(create, maps:get(mode, content1(C)))
      end}.
 
 %% --- genesis_hash: schema field + build_ns_config hex→binary plumbing ----
 
 genesis_hash_default_test() ->
-    C = check(<<"content { namespace = \"quod:root\" }\n">>),
-    ?assertEqual(<<"">>, deep(C, [content, genesis_hash])).
+    C = check(<<"content = [{ namespace = \"quod:root\" }]\n">>),
+    ?assertEqual(<<"">>, maps:get(genesis_hash, content1(C))).
 
 genesis_hash_parse_test() ->
     Hex = <<"00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff">>,
-    C = check(<<"content { namespace = \"quod:root\", mode = join, genesis_hash = \"",
-                Hex/binary, "\" }\n">>),
-    ?assertEqual(join, deep(C, [content, mode])),
-    ?assertEqual(Hex,  deep(C, [content, genesis_hash])).
+    C = check(<<"content = [{ namespace = \"quod:root\", mode = join, genesis_hash = \"",
+                Hex/binary, "\" }]\n">>),
+    B = content1(C),
+    ?assertEqual(join, maps:get(mode, B)),
+    ?assertEqual(Hex,  maps:get(genesis_hash, B)).
 
 %% A mode=join content config with a hex genesis_hash lands in the ns config as the raw 32-byte binary
 %% quod_simplex pins, with mode + seeds forwarded. (genesis_file/data_dir left "" so build_ns_config
@@ -149,7 +165,7 @@ write_boot_conf(Dir, IdDir) ->
     IdBlock = case IdDir of "" -> ""; _ -> ["identity { dir = \"", IdDir, "\" }\n"] end,
     Conf = ["node { ip = \"127.0.0.1\", port = 14999 }\n",
             IdBlock,
-            "content { namespace = \"bootid:", U, "\", data_dir = \"", Dir, "\" }\n"],
+            "content = [{ namespace = \"bootid:", U, "\", data_dir = \"", Dir, "\" }]\n"],
     ConfPath = filename:join(Dir, "quod.conf"),
     ok = file:write_file(ConfPath, Conf),
     ConfPath.

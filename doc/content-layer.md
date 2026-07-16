@@ -4,8 +4,9 @@ quod lets many computers share collections of facts and keep them in sync, with 
 central server. This guide explains how, end to end, with no special background
 assumed. The original decisions and trade-offs are preserved in
 `content-layer-design.md`; `ordering-layer-spec.md` is the superseded Raft plan.
-The current consensus design is `simplex_extended.pdf`, and unfinished work is
-tracked in `deferred.md`.
+The current consensus design is `simplex_extended.pdf`; **how ontologies name each
+other's things and ask each other questions is specified in `inter-ontology.md`**;
+unfinished work is tracked in `deferred.md`.
 
 Two words you'll see throughout:
 
@@ -93,7 +94,10 @@ That keeps things tidy and matches how Prolog already works.
 ## 3. Ontologies that reach into each other
 
 Think of each ontology as a separate notebook of facts. Most of the time a question
-stays inside one notebook. To reach another, you write `::`.
+stays inside one notebook. Two marks reach across (`inter-ontology.md` is the full
+specification):
+
+- **`::` asks** — run a question over in another notebook:
 
 ```prolog
 animals::diet(dog, D)
@@ -102,25 +106,29 @@ animals::diet(dog, D)
 That reads: "work this out over in the *animals* ontology." (`D` is a blank for the
 system to fill in — so this is asking "what does a dog eat?")
 
-By default a name is local; `::` is the only way to cross into another notebook.
-That keeps things simple — there's no single master list of which ontology owns
-which word, and no confusion when two ontologies happen to use the same name.
+By default a name is local; a written mark is the only way to cross into another
+notebook. That keeps things simple — there's no single master list of which ontology
+owns which word, and no confusion when two ontologies happen to use the same name.
+(Notebook names themselves carry their owner — `user_xxx:door` is user_xxx's door
+notebook — so everyone can have a `door` without collisions.)
 
-There's a second, smaller use of `::`. A *link* between two ontologies — "my_dog is
-a kind of the `dog` that lives in the animals notebook" — is just a fact that
-*points* across a boundary:
+- **`:` names** — a *link* between two ontologies — "my_dog is a kind of the `dog`
+  that lives in the animals notebook" — is just a fact that *points* across a
+  boundary:
 
 ```prolog
-isa(my_dog, animals::dog)
+isa(my_dog, animals:dog)
 ```
 
 Notice this is a stored fact, not a question — it just *names* something in another
 notebook. The system only actually reaches across when it needs something it doesn't
 have at home. Asking "is my_dog a dog?" is answered right here from the local fact;
 but asking "what does my_dog eat?" has to hop over to *animals*, because the answer
-lives there. So a link and a `::` question are the same idea at different sizes: a
-link names a thing across the boundary, and following it becomes a question when you
-actually need what's over there.
+lives there. So a link (`:`) and an ask (`::`) are the same idea at different sizes: a
+link names a thing across the boundary, and following it becomes an ask when you
+actually need what's over there. Every relation follows its links this way by
+default — an ontology that wants a relation's foreign names left alone states a
+`no_follow` fact for it.
 
 Because these links are just facts, the **web of connections between ontologies
 builds itself** as questions run. We don't draw the map by hand — it emerges from
@@ -355,8 +363,8 @@ section 5.
   building block the whole system uses.
 - A change is re-checked at the moment it's made official; if something it relied on
   changed underneath it, it's rejected and retried.
-- `::` to reach another ontology; reading across is allowed now, changing across is
-  deferred.
+- `:` names a thing in another ontology, `::` asks it a question (`inter-ontology.md`);
+  reading across is allowed now, changing across is deferred.
 - Reading a fact subscribes you to it — that's the notification system.
 - Each ontology is run by a small committee that agrees on an ordered list of
   changes; one computer grows to several with the same code.

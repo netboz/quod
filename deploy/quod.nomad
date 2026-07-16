@@ -22,6 +22,12 @@ variable "cloud_node_count" {
   description = "Cloud satellites (join mode, `cloud`-class clients over the tailnet). Forced to 0 on a founding deploy — a satellite never founds. May exceed the cloud-client count: satellites stack on one host, each isolated by a per-alloc data_dir subdir (NOMAD_ALLOC_INDEX)."
 }
 
+variable "max_proof_workers" {
+  type        = number
+  default     = 64
+  description = "Maximum concurrent client proof workers per ontology and allocation. Excess calls receive busy."
+}
+
 variable "genesis_hash" {
   type        = string
   default     = ""
@@ -189,6 +195,7 @@ content = [
   {
     namespace = "quod:root"
     data_dir  = "/quod/data"
+    max_proof_workers = ${var.max_proof_workers}
 %{if var.bootstrap && var.genesis_hash == ""}
     mode         = create
     genesis_file = "ontologies/quod_root.pl"
@@ -379,6 +386,7 @@ content = [
   {
     namespace = "quod:root"
     data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
+    max_proof_workers = ${var.max_proof_workers}
     mode         = join
     genesis_hash = "${var.genesis_hash}"
     seeds        = [

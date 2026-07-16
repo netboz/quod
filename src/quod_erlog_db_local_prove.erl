@@ -30,7 +30,7 @@ agree bit-for-bit.
 
 -record(fstate, {abolished = false :: boolean(),
                  asserta   = []    :: [{integer(), term(), term()}],
-                 assertz   = []    :: [{integer(), term(), term()}],
+                 assertz_rev = []  :: [{integer(), term(), term()}],
                  retracted = #{}   :: #{integer() => {term(), term()}}}).
 
 -record(lp, {out_db   :: #db{},
@@ -55,7 +55,7 @@ wrap_state(#est{db = #db{mod = OutMod, ref = OutRef,
 wrap_state(St, Opts) ->
     #est{db = #db{ref = Ov} = Db} = Wrapped = wrap_state(St),
     case maps:get(read_set, Opts, false) of
-        true  -> Ets = ets:new(quod_read_set, [set, public]),
+        true  -> Ets = ets:new(quod_read_set, [set, private]),
                  Wrapped#est{db = Db#db{ref = Ov#lp{read_ets = Ets}}};
         false -> Wrapped
     end.
@@ -65,12 +65,13 @@ wrap_state(St, Opts) ->
 get_local_changes(#lp{local = Local, out_db = #db{mod = M, ref = R}}) ->
     maps:fold(fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end, [], Local).
 
-functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz = Z, retracted = Ret}, M, R) ->
+functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
+                       retracted = Ret}, M, R) ->
     Retracts = case Ab of
                    true  -> [{retract, {H, B}} || {_T, H, B} <- committed_clauses(M, R, F)];
                    false -> [{retract, {H, B}} || {_Tag, {H, B}} <- maps:to_list(Ret)]
                end,
-    Asserts = [{assert, {H, B}} || {_T, H, B} <- A ++ Z],
+    Asserts = [{assert, {H, B}} || {_T, H, B} <- A ++ lists:reverse(ZR)],
     Retracts ++ Asserts.
 
 -doc "The read-set: `#{ {Functor,Arity} => content-hash }` of what the proof read.".
@@ -110,7 +111,7 @@ assertz_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
         false -> error;
         true  ->
             FS = maps:get(F, L, #fstate{}),
-            FS1 = FS#fstate{assertz = FS#fstate.assertz ++ [{Tag, Head, Body}]},
+            FS1 = FS#fstate{assertz_rev = [{Tag, Head, Body} | FS#fstate.assertz_rev]},
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
@@ -124,7 +125,8 @@ retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
                 {true, asserta} ->
                     {ok, St#lp{local = L#{F => FS#fstate{asserta = lists:keydelete(Tag, 1, FS#fstate.asserta)}}}};
                 {true, assertz} ->
-                    {ok, St#lp{local = L#{F => FS#fstate{assertz = lists:keydelete(Tag, 1, FS#fstate.assertz)}}}};
+                    {ok, St#lp{local = L#{F => FS#fstate{
+                        assertz_rev = lists:keydelete(Tag, 1, FS#fstate.assertz_rev)}}}};
                 false ->
                     case committed_clause(M, R, F, Tag) of
                         undefined -> {ok, St};
@@ -140,9 +142,17 @@ abolish_clauses(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F) ->
         _        -> {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
     end.
 
-get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) ->
+get_procedure(St, F) ->
+    Base = raw_get_procedure(St, F),
+    case {is_tuple(F), get('$quod_in_verdict')} of
+        {true, true} -> Base;  %% committee validation is strictly local
+        {true, _}    -> add_followers(St, F, Base);
+        _            -> Base
+    end.
+
+raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) ->
     FS = maps:get(F, L, #fstate{}),
-    A = FS#fstate.asserta, Z = FS#fstate.assertz,
+    A = FS#fstate.asserta, Z = lists:reverse(FS#fstate.assertz_rev),
     case FS#fstate.abolished of
         true  -> record_read(RS, F, M, R),
                  clauses_or_undef(A ++ Z);
@@ -159,11 +169,69 @@ get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) 
             end
     end.
 
+%% A virtual follower is a LAST clause for every argument position. Its head only
+%% matches a structured foreign name (Owner:Name), and its body strips that
+%% prefix before asking the owner. The clauses never enter local, so they cannot
+%% be committed or included in a content hash.
+add_followers(_St, {no_follow, 1}, Base) -> Base;
+add_followers(_St, _F, Base) when Base =:= built_in -> Base;
+add_followers(_St, _F, {code, _} = Base) -> Base;
+add_followers(St, {Functor, Arity} = F, Base)
+  when is_atom(Functor), is_integer(Arity), Arity > 0 ->
+    case no_follow(St, F) of
+        true  -> Base;
+        false -> clauses_or_undef(base_clauses(Base) ++ follower_clauses(F))
+    end;
+add_followers(_St, _F, Base) -> Base.
+
+base_clauses({clauses, Cs}) -> Cs;
+base_clauses(undefined)      -> [].
+
+no_follow(St, {Functor, Arity}) ->
+    case raw_get_procedure(St, {no_follow, 1}) of
+        {clauses, Cs} ->
+            lists:any(fun({_Tag, {no_follow, {'/', F1, A1}}, _Body}) ->
+                              F1 =:= Functor andalso A1 =:= Arity;
+                         (_) -> false
+                      end, Cs);
+        _ -> false
+    end.
+
+follower_clauses({Functor, Arity}) ->
+    [follower_clause(Functor, Arity, Pos) || Pos <- lists:seq(1, Arity)] ++
+    [follower_end_clause(Functor, Arity)].
+
+follower_clause(Functor, Arity, Pos) ->
+    Ns = {'$quod_follow_ns'},
+    %% Erlog variables are one-tuples. Keep the index inside the variable name
+    %% rather than creating an atom for every generated clause.
+    Args = [{{'$quod_follow_arg', I}} || I <- lists:seq(1, Arity)],
+    Name = {':', Ns, lists:nth(Pos, Args)},
+    Head = list_to_tuple([Functor | replace_nth(Pos, Name, Args)]),
+    Inner = list_to_tuple([Functor | Args]),
+    %% A variable argument must remain a variable. Without this guard a normal
+    %% call such as diet(dog, D) would bind D to a synthetic foreign term and
+    %% then attempt to ask an unbound namespace.
+    Body = {',', {nonvar, Ns},
+            {',', {'::', Ns, Inner}, {'$quod_follow_unique', Head}}},
+    {{'$quod_follower', Pos}, Head, erlog_int:well_form_body(Body, false, sture)}.
+
+%% Keep a goal_clauses choice point alive through the final real follower. Its
+%% stable label scopes the streaming duplicate filter above to one relation call.
+follower_end_clause(Functor, Arity) ->
+    Args = [{{'$quod_follow_end_arg', I}} || I <- lists:seq(1, Arity)],
+    Head = list_to_tuple([Functor | Args]),
+    {'$quod_follower_end', Head, erlog_int:well_form_body(fail, false, sture)}.
+
+replace_nth(1, Value, [_ | Tail]) -> [Value | Tail];
+replace_nth(N, Value, [Head | Tail]) when N > 1 ->
+    [Head | replace_nth(N - 1, Value, Tail)].
+
 %% A type check must NOT record a read-set dependency (review #8): compute from the
 %% committed type + local presence directly, never via the recording get_procedure/2.
 get_procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
     FS = maps:get(F, L, #fstate{}),
-    HasLocal = FS#fstate.asserta =/= [] orelse FS#fstate.assertz =/= [],
+    HasLocal = FS#fstate.asserta =/= [] orelse FS#fstate.assertz_rev =/= [],
     case M:get_procedure_type(R, F) of
         built_in    -> built_in;
         compiled    -> compiled;
@@ -176,7 +244,7 @@ get_procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
 
 get_interpreted_functors(#lp{out_db = #db{mod = M, ref = R}, local = L} = St) ->
     Locals = [F || {F, FS} <- maps:to_list(L),
-                   FS#fstate.asserta =/= [] orelse FS#fstate.assertz =/= []],
+                   FS#fstate.asserta =/= [] orelse FS#fstate.assertz_rev =/= []],
     All = lists:usort(M:get_interpreted_functors(R) ++ Locals),
     [F || F <- All, get_procedure_type(St, F) =:= interpreted].
 
@@ -193,7 +261,7 @@ modifiable(#lp{out_db = #db{mod = M, ref = R}}, F) ->
         _        -> true
     end.
 
-local_tag(Tag, #fstate{asserta = A, assertz = Z}) ->
+local_tag(Tag, #fstate{asserta = A, assertz_rev = Z}) ->
     case lists:keymember(Tag, 1, A) of
         true  -> {true, asserta};
         false -> case lists:keymember(Tag, 1, Z) of true -> {true, assertz}; false -> false end

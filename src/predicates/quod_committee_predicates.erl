@@ -140,7 +140,15 @@ projection in lockstep on retract.
 """.
 -spec admitted_pubkeys(tuple()) -> [binary()].
 admitted_pubkeys(#est{db = #db{mod = M, ref = R}}) ->
+    %% Erlog indexes a predicate by argument count; the internal head tuple also
+    %% contains the functor, hence peer_admitted/4 has a five-element head.
     case M:get_procedure(R, {peer_admitted, 4}) of
-        {clauses, Cs} -> lists:usort([element(5, H) || {_Tag, H, _Body} <- Cs]);
+        {clauses, Cs} ->
+            %% The proof overlay may append virtual clauses. Project only the
+            %% canonical committed shape; a synthetic head contains erlog variables,
+            %% never a binary validator key.
+            lists:usort([Pk || {_Tag, {peer_admitted, _Id, _Host, _Port, Pk}, _Body}
+                                   <- Cs,
+                               is_binary(Pk)]);
         _             -> []
     end.

@@ -1,0 +1,648 @@
+-module(quod_ask).
+-moduledoc """
+The `::` **ask** operator — a goal in one ontology proved inside another
+(`doc/inter-ontology.md`). This module implements both co-hosted and QUIC-backed asks.
+
+- **Asking side** — `ask_2/3` is the erlog predicate registered on `{'::' ,2}`. It runs
+  inside the asking proof's worker process. It resolves the target namespace, guards the
+  ask (no circles, bounded depth, never during a membership vote), then STREAMS the
+  target's solutions into the local proof one at a time through an erlog compiled choice
+  point: the first solution unifies and continues; backtracking pulls the next.
+- **Answering side** — the target's `m:quod_prolog` spawns an `answer` worker (via
+  `start_answer/7`) holding the target's committed `#est{}` as a frozen view. It proves
+  the goal there, demand-driven: one solution per `{next,_}` request, so a slow consumer
+  never makes it buffer. The target engine monitors the asker and can kill this worker
+  even during an unbounded derivation. Reads are gated by the whole-chain `can_read`
+  check first; completion is a minimal sequenced marker.
+
+Errors are surfaced as `throw({quod_ask_error, Reason})`, which `quod_prolog`'s proof
+runner turns into `{error, Reason}` — the loud, distinct catalog of `doc/inter-ontology.md`
+§8 (`unknown_ontology`, `unreachable`, `circular_ask`, `too_deep`, `not_allowed`, …), never
+a silent failure.
+""".
+
+-include_lib("erlog/src/erlog_int.hrl").
+
+-export([load/1, ask_2/3, follow_unique_2/3, start_answer/7, start_answer_remote/9,
+         subscribe/1, ask_channel/1, decode_open/1, decode_next/1, decode_cancel/1,
+         reject_remote/4]).
+
+%% The ask-chain depth cap and the per-`next` no-progress budget (doc/inter-ontology.md §9).
+-define(MAX_CHAIN, 8).
+-define(NEXT_TIMEOUT_MS, 30000).
+-define(MAX_ANSWERS, 10000).
+-define(MAX_ANSWER_BYTES, 1048576).
+-define(MAX_OPEN_RETRIES, 300).
+-define(OPEN_RETRY_MS, 100).
+-define(PROGRESS_INTERVAL_MS, 1000).
+
+-define(ASK_CHANNEL_TAG, quod_ask).
+-define(ANSWER_CHANNEL_TAG, quod_ask_answer).
+
+-doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
+-spec load(tuple()) -> tuple().
+load(#est{db = Db0} = Est) ->
+    Db1 = erlog_int:add_compiled_proc({'::', 2}, ?MODULE, ask_2, Db0),
+    Est#est{db = erlog_int:add_compiled_proc({'$quod_follow_unique', 1},
+                                             ?MODULE, follow_unique_2, Db1)}.
+
+%%%===================================================================
+%%% asking side — the erlog predicate + solution streaming
+%%%===================================================================
+
+%% Fires when a proof reaches `Ns::Goal` (parsed as `{'::' ,Ns,Goal}`). Runs in the
+%% asking proof's worker (see quod_prolog:proof_worker/8).
+ask_2(Goal, Next, #est{bs = Bs} = St) ->
+    case erlog_int:dderef(Goal, Bs) of
+        {'::', NsTerm, Inner} -> do_ask(NsTerm, Inner, Next, St);
+        _                     -> erlog_int:fail(St)
+    end.
+
+%% The virtual follower clauses for one relation call share erlog's clause-choice
+%% label. Keep only the first occurrence of a fully dereferenced answer while those
+%% clauses backtrack; this preserves streaming and needs no answer batch.
+follow_unique_2(Goal, Next, #est{bs = Bs, cps = Cps} = St) ->
+    {'$quod_follow_unique', Answer0} = erlog_int:dderef(Goal, Bs),
+    Answer = erlog_int:dderef(Answer0, Bs),
+    case follower_label(Cps) of
+        undefined -> erlog_int:prove_body(Next, St);
+        Label ->
+            Key = {'$quod_follow_seen', Label},
+            Seen = case get(Key) of undefined -> #{}; Value -> Value end,
+            case maps:is_key(Answer, Seen) of
+                true -> erlog_int:fail(St);
+                false -> put(Key, Seen#{Answer => true}),
+                         erlog_int:prove_body(Next, St)
+            end
+    end.
+
+follower_label([#cp{type = goal_clauses, label = Label} | _]) -> Label;
+follower_label([_ | Rest]) -> follower_label(Rest);
+follower_label([]) -> undefined.
+
+do_ask(NsTerm, Inner, Next, St) ->
+    Self = get('$quod_ns'),
+    case flatten_ns(NsTerm) of
+        error  -> ask_error({bad_name, NsTerm});
+        Self   -> erlog_int:prove_body([Inner | Next], St);  %% self-ask: in place, no hop, no chain growth
+        Target -> guarded_ask(Self, Target, Inner, Next, St)
+    end.
+
+guarded_ask(Self, Target, Inner, Next, St) ->
+    get('$quod_in_verdict') =:= true andalso ask_error(ask_in_membership_verdict),
+    Chain = case get('$quod_ask_chain') of undefined -> [Self]; C -> C end,
+    lists:member(Target, Chain) andalso ask_error({circular_ask, Target}),
+    length(Chain) >= ?MAX_CHAIN andalso ask_error({too_deep, Target}),
+    InnerTerm = erlog_int:dderef(Inner, St#est.bs),
+    case open(Target, InnerTerm, Chain) of
+        {ok, Stream} -> drive_stream(Stream, InnerTerm, Target, Next, St);
+        {error, R}   -> ask_error(R)
+    end.
+
+%% Pull the next solution and either emit it (with a choice point for the one after) or,
+%% when the target is exhausted, fail back into the surrounding proof.
+drive_stream(Stream, GoalTerm, Target, Next, St) ->
+    case next(Stream) of
+        {solution, Sol, Stream1} ->
+            proof_progress(),
+            emit(Stream1, GoalTerm, Target, Sol, Next, St);
+        complete -> erlog_int:fail(St);
+        {error, R} -> ask_error(R)
+    end.
+
+%% Unify one target solution into the local proof. The pushed choice point captures the
+%% PRE-unify bindings/var-counter, so backtracking restores them and pulls the next
+%% solution — the streaming analogue of a clause choice point.
+emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
+    {Grafted, Vn1} = graft(Sol, Vn),   %% rename any target-side vars to fresh local ones
+    case erlog_int:unify(GoalTerm, Grafted, Bs) of
+        {succeed, Bs1} ->
+            Fail = fun(#cp{bs = Bs0, vn = Vn0}, Cps, FSt) ->
+                       drive_stream(Stream, GoalTerm, Target, Next,
+                                    FSt#est{bs = Bs0, vn = Vn0, cps = Cps})
+                   end,
+            Cp = #cp{type = compiled, data = Fail, next = Next, bs = Bs, vn = Vn},
+            erlog_int:prove_body(Next, St#est{bs = Bs1, vn = Vn1, cps = [Cp | St#est.cps]});
+        fail ->
+            %% This solution doesn't unify with the (partially bound) goal — skip it.
+            drive_stream(Stream, GoalTerm, Target, Next, St)
+    end.
+
+%% Rename every variable (a 1-tuple in erlog) in a target solution term to a fresh local
+%% var, consistently within the term, so target-side and asker-side var namespaces never
+%% collide. Ground terms (the common case) pass through untouched.
+graft(Term, Vn) -> {G, Vn1, _} = graft(Term, Vn, #{}), {G, Vn1}.
+
+graft({Name}, Vn, Map) ->
+    case Map of
+        #{Name := V} -> {V, Vn, Map};
+        _            -> {{Vn}, Vn + 1, Map#{Name => {Vn}}}
+    end;
+graft(T, Vn, Map) when is_tuple(T) ->
+    {Args, Vn1, Map1} = graft_list(tuple_to_list(T), Vn, Map),
+    {list_to_tuple(Args), Vn1, Map1};
+graft([H | T], Vn, Map) ->
+    {GH, Vn1, Map1} = graft(H, Vn, Map),
+    {GT, Vn2, Map2} = graft(T, Vn1, Map1),
+    {[GH | GT], Vn2, Map2};
+graft(T, Vn, Map) -> {T, Vn, Map}.
+
+graft_list([], Vn, Map)      -> {[], Vn, Map};
+graft_list([H | T], Vn, Map) ->
+    {GH, Vn1, Map1} = graft(H, Vn, Map),
+    {GT, Vn2, Map2} = graft_list(T, Vn1, Map1),
+    {[GH | GT], Vn2, Map2}.
+
+%% Variable names are implementation-local atoms. Normalize them before a remote
+%% term crosses the node boundary so the safe decoder never needs to create an atom
+%% merely because an asker called its variable `D` or `Result`.
+wire_term(Term) ->
+    {T, _Next, _Names} = wire_term(Term, 0, #{}),
+    T.
+
+wire_term({Name}, Next, Names) ->
+    case maps:find(Name, Names) of
+        {ok, Id} -> {{Id}, Next, Names};
+        error    -> {{Next}, Next + 1, Names#{Name => Next}}
+    end;
+wire_term(Term, Next, Names) when is_tuple(Term) ->
+    {Items, Next1, Names1} = wire_list(tuple_to_list(Term), Next, Names),
+    {list_to_tuple(Items), Next1, Names1};
+wire_term([H | T], Next, Names) ->
+    {H1, Next1, Names1} = wire_term(H, Next, Names),
+    {T1, Next2, Names2} = wire_term(T, Next1, Names1),
+    {[H1 | T1], Next2, Names2};
+wire_term([], Next, Names) -> {[], Next, Names};
+wire_term(Term, Next, Names) -> {Term, Next, Names}.
+
+wire_list([], Next, Names) -> {[], Next, Names};
+wire_list([H | T], Next, Names) ->
+    {H1, Next1, Names1} = wire_term(H, Next, Names),
+    {T1, Next2, Names2} = wire_list(T, Next1, Names1),
+    {[H1 | T1], Next2, Names2}.
+
+%% Flatten a written name-term to the canonical flat namespace binary: an atom `animals`,
+%% an already-flat binary, or a `:`-chain `user_xxx:door` -> <<"user_xxx:door">>.
+flatten_ns(A) when is_atom(A)   -> atom_to_binary(A, utf8);
+flatten_ns(B) when is_binary(B) -> B;
+flatten_ns({':', L, R}) ->
+    case {flatten_ns(L), flatten_ns(R)} of
+        {LB, RB} when is_binary(LB), is_binary(RB) -> <<LB/binary, ":", RB/binary>>;
+        _ -> error
+    end;
+flatten_ns(_) -> error.
+
+-spec ask_error(term()) -> no_return().
+ask_error(Reason) -> throw({quod_ask_error, Reason}).
+
+%%%===================================================================
+%%% co-hosted transport (asking-worker <-> answer-worker)
+%%%===================================================================
+
+%% Ask the target's engine to open a solution stream. Not hosted here => unreachable
+%% (the cross-node path is step 4). Runs in the asking worker.
+open(Target, GoalTerm, Chain) ->
+    case quod_reg:where({quod_prolog, Target}) of
+        undefined ->
+            case remote_contact(get('$quod_ns')) of
+                none -> {error, {unknown_ontology, Target}};
+                _    -> open_remote(Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
+            end;
+        _Engine -> open_local(Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
+    end.
+
+open_local(Target, GoalTerm, Chain, Retries) ->
+    case quod_reg:where({quod_prolog, Target}) of
+        undefined -> {error, {unknown_ontology, Target}};
+        Engine ->
+            try gen_server:call(Engine,
+                                {ask_open, GoalTerm, Chain, self()}, ?NEXT_TIMEOUT_MS) of
+                {ok, Pid}             -> {ok, new_stream(Engine, Pid)};
+                {error, busy} when Retries > 0 ->
+                    timer:sleep(?OPEN_RETRY_MS),
+                    proof_progress(),
+                    open_local(Target, GoalTerm, Chain, Retries - 1);
+                {error, busy}         -> {error, no_progress};
+                {error, not_ready}    -> {error, {unreachable, Target}};
+                {error, R}            -> {error, R}
+            catch exit:_ -> {error, {unreachable, Target}}
+            end
+    end.
+
+%% A remote ask has two independently opened legs. The asker owns the request link;
+%% the target opens the answer link after it has frozen and authorized the run.
+open_remote(Target, GoalTerm, Chain, Retries) when Retries > 0 ->
+    Self = get('$quod_ns'),
+    case remote_contact(Self) of
+        none -> {error, {unreachable, Target}};
+        Contact ->
+            %% References are not accepted by binary_to_term/2's safe mode when
+            %% they originate on another node. A random opaque token is equally
+            %% unique for routing and remains safe to decode.
+            AskId = crypto:strong_rand_bytes(16),
+            AskCh = ask_channel(Target),
+            AnswerCh = answer_channel(AskId),
+            _ = quod_reg:subscribe({channel, AnswerCh}),
+            case open_link(Contact, AskCh) of
+                {ok, AskLink} ->
+                    {ok, WireGoal} = quod_wire_term:encode(wire_term(GoalTerm)),
+                    Payload = term_to_binary({quod_ask_open, AskId, WireGoal, Chain,
+                                               AnswerCh}, [deterministic]),
+                    quod_link:send(AskLink, Payload),
+                    Guard = watch_owner(self(), AskLink, AskId),
+                    {ok, {remote_stream, AskId, AskLink, AskCh, AnswerCh,
+                          undefined, undefined, 1, Guard}};
+                {error, _} ->
+                    _ = unsubscribe(AnswerCh),
+                    timer:sleep(?OPEN_RETRY_MS),
+                    proof_progress(),
+                    open_remote(Target, GoalTerm, Chain, Retries - 1)
+            end
+    end;
+open_remote(Target, _GoalTerm, _Chain, 0) -> {error, {unreachable, Target}}.
+
+remote_contact(Self) ->
+    Seeds = application:get_env(quod, ask_contacts, []),
+    try quod_brahms:sample_contact(Self, Seeds)
+    catch _:_ -> none
+    end.
+
+open_link(Contact, Channel) ->
+    quod_quic:open_link(Contact, Channel),
+    receive
+        {link_up, Contact, Channel, LinkPid} -> {ok, LinkPid};
+        {link_error, Contact, Channel}       -> {error, unreachable}
+    after ?NEXT_TIMEOUT_MS -> {error, no_progress}
+    end.
+
+subscribe(Ns) -> quod_reg:subscribe({channel, ask_channel(Ns)}).
+
+ask_channel(Ns) -> term_to_binary({?ASK_CHANNEL_TAG, Ns}, [deterministic]).
+answer_channel(AskId) -> term_to_binary({?ANSWER_CHANNEL_TAG, AskId}, [deterministic]).
+
+decode_open(Payload) when is_binary(Payload) ->
+    try safe_binary_to_term(Payload) of
+        {quod_ask_open, AskId, WireGoal, Chain, AnswerCh}
+          when is_binary(AskId), byte_size(AskId) =:= 16,
+               is_binary(AnswerCh), is_list(Chain) ->
+            case {AnswerCh =:= answer_channel(AskId) andalso valid_chain(Chain),
+                  quod_wire_term:decode_goal(WireGoal)} of
+                {true, {ok, Goal}} -> {ok, AskId, Goal, Chain, AnswerCh};
+                _ -> error
+            end;
+        _ -> error
+    catch _:_ -> error
+    end;
+decode_open(_) -> error.
+
+decode_next(Payload) when is_binary(Payload) ->
+    try safe_binary_to_term(Payload) of
+        {quod_ask_next, AskId} when is_binary(AskId), byte_size(AskId) =:= 16 ->
+            {ok, AskId};
+        _ -> error
+    catch _:_ -> error
+    end;
+decode_next(_) -> error.
+
+decode_cancel(Payload) when is_binary(Payload) ->
+    try safe_binary_to_term(Payload) of
+        {quod_ask_cancel, AskId} when is_binary(AskId), byte_size(AskId) =:= 16 ->
+            {ok, AskId};
+        _ -> error
+    catch _:_ -> error
+    end;
+decode_cancel(_) -> error.
+
+new_stream(Engine, Pid) -> {ask_stream, Engine, Pid, monitor(process, Pid), 1}.
+
+next({ask_stream, _Engine, Pid, MRef, Expected} = Stream) ->
+    Pid ! {next, self()},
+    receive
+        {ask_solution, Pid, Expected, Sol} ->
+            {ask_stream, Engine, Pid, MRef, _} = Stream,
+            {solution, Sol, {ask_stream, Engine, Pid, MRef, Expected + 1}};
+        {ask_solution, Pid, _Wrong, _Sol} ->
+            close_stream(Stream),
+            {error, broken_stream};
+        {ask_complete, Pid, Expected} ->
+            demonitor(MRef, [flush]),
+            complete;
+        {ask_complete, Pid, _Wrong} ->
+            close_stream(Stream),
+            {error, broken_stream};
+        {ask_error, Pid, R} ->
+            demonitor(MRef, [flush]),
+            {error, R};
+        {'DOWN', MRef, process, Pid, _Reason} ->
+            {error, broken_stream}
+    after ?NEXT_TIMEOUT_MS ->
+        close_stream(Stream),
+        {error, no_progress}
+    end;
+
+next(Stream = {remote_stream, AskId, AskLink, AskCh, AnswerCh,
+               AnswerLink, AnswerMRef, Expected, Guard}) ->
+    quod_link:send(AskLink, term_to_binary({quod_ask_next, AskId})),
+    receive
+        {quod_message, {_Peer, LinkPid}, AnswerCh, Payload} ->
+            case remote_answer(Payload, AskId, Expected) of
+                {solution, Sol} ->
+                    case answer_link(LinkPid, AnswerLink, AnswerMRef) of
+                        {ok, LinkPid, _OldLink, MRef} ->
+                            {solution, Sol,
+                             {remote_stream, AskId, AskLink, AskCh, AnswerCh,
+                              LinkPid, MRef, Expected + 1, Guard}};
+                        error -> close_stream(Stream), {error, broken_stream}
+                    end;
+                complete ->
+                    close_stream(Stream), complete;
+                {error, Reason} -> close_stream(Stream), {error, Reason};
+                error -> close_stream(Stream), {error, broken_stream}
+            end;
+        {'DOWN', AnswerMRef, process, _LinkPid, _Reason} when is_reference(AnswerMRef) ->
+            close_stream(Stream), {error, broken_stream}
+    after ?NEXT_TIMEOUT_MS ->
+        close_stream(Stream), {error, no_progress}
+    end.
+
+answer_link(LinkPid, undefined, undefined) ->
+    {ok, LinkPid, undefined, monitor(process, LinkPid)};
+answer_link(LinkPid, LinkPid, MRef) -> {ok, LinkPid, LinkPid, MRef};
+answer_link(_, _, _) -> error.
+
+remote_answer(Payload, AskId, Expected) ->
+    try safe_binary_to_term(Payload) of
+        {quod_ask_answer, AskId, Expected, {solution, WireSol}} ->
+            case quod_wire_term:decode(WireSol) of
+                {ok, Sol} -> {solution, Sol};
+                _ -> error
+            end;
+        {quod_ask_answer, AskId, Expected, complete} -> complete;
+        {quod_ask_answer, AskId, error, WireReason} ->
+            case quod_wire_term:decode(WireReason) of
+                {ok, Reason} -> decode_remote_error(Reason);
+                _ -> error
+            end;
+        _ -> error
+    catch _:_ -> error
+    end.
+
+safe_binary_to_term(<<131, 80, _/binary>>) -> error(compressed_term);
+safe_binary_to_term(Payload) when byte_size(Payload) =< ?MAX_ANSWER_BYTES ->
+    binary_to_term(Payload, [safe]);
+safe_binary_to_term(_) -> error(oversized_term).
+
+decode_remote_error(Reason) ->
+    case allowed_remote_error(Reason) of
+        true -> {error, Reason};
+        false -> error
+    end.
+
+allowed_remote_error(Reason) ->
+    lists:member(Reason, [rebuilding, busy, not_allowed,
+                          too_many_answers, answer_too_big,
+                          foreign_write_unsupported, no_progress,
+                          prove_failed, broken_stream,
+                          ask_in_membership_verdict]) orelse
+    case Reason of
+        {Tag, _Detail} -> lists:member(Tag, [unknown_ontology, unreachable,
+                                             circular_ask, too_deep, bad_name,
+                                             erlog]);
+        _ -> false
+    end.
+
+encode_error(AskId, Reason) ->
+    SafeReason = case allowed_remote_error(Reason) of true -> Reason; false -> prove_failed end,
+    WireReason = case quod_wire_term:encode(SafeReason) of
+                     {ok, Wire} -> Wire;
+                     {error, bad_term} ->
+                         {ok, Fallback} = quod_wire_term:encode(prove_failed),
+                         Fallback
+                 end,
+    term_to_binary({quod_ask_answer, AskId, error, WireReason}, [deterministic]).
+
+valid_chain([_|_] = Chain) when length(Chain) =< ?MAX_CHAIN ->
+    lists:all(fun is_binary/1, Chain);
+valid_chain(_) -> false.
+
+close_stream({ask_stream, Engine, Pid, MRef, _}) ->
+    gen_server:cast(Engine, {ask_cancel, Pid}),
+    demonitor(MRef, [flush]),
+    ok;
+close_stream({remote_stream, AskId, AskLink, _AskCh, AnswerCh,
+              AnswerLink, AnswerMRef, _Expected, Guard}) ->
+    %% The request channel is shared by all asks to this target. Cancel this ask
+    %% explicitly, but leave the reusable transport link alive.
+    _ = quod_link:send(AskLink, term_to_binary({quod_ask_cancel, AskId})),
+    stop_owner(Guard),
+    case AnswerLink of undefined -> ok; Pid -> quod_link:close(Pid) end,
+    case AnswerMRef of undefined -> ok; Ref -> demonitor(Ref, [flush]) end,
+    _ = unsubscribe(AnswerCh),
+    ok.
+
+watch_owner(Owner, AskLink, AskId) ->
+    spawn(fun() ->
+        Ref = monitor(process, Owner),
+        receive
+            stop -> demonitor(Ref, [flush]), ok;
+            {'DOWN', Ref, process, Owner, _Reason} ->
+                _ = quod_link:send(AskLink, term_to_binary({quod_ask_cancel, AskId})),
+                ok
+        end
+    end).
+
+stop_owner(Pid) -> Pid ! stop, ok.
+
+unsubscribe(Channel) ->
+    try quod_reg:unsubscribe({channel, Channel}) catch _:_ -> ok end.
+
+proof_progress() ->
+    Now = erlang:monotonic_time(millisecond),
+    case {get('$quod_proof_owner'), get('$quod_last_proof_progress')} of
+        {{Engine, Ref}, Last} when not is_integer(Last);
+                                   Now - Last >= ?PROGRESS_INTERVAL_MS ->
+            put('$quod_last_proof_progress', Now),
+            Engine ! {proof_progress, Ref},
+            ok;
+        _ -> ok
+    end.
+
+%%%===================================================================
+%%% answering side — the demand-driven solution worker
+%%%===================================================================
+
+%% Spawned by the target quod_prolog on {ask_open}. Holds a shared-store snapshot
+%% handle and streams solutions of Goal, one per {next,_}, dying with the asker.
+-spec start_answer(binary(), tuple(), non_neg_integer(), term(), [binary()], pid(), pid()) -> pid().
+start_answer(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
+    %% The engine monitors this pid. It must not be linked: an answer worker may
+    %% legitimately die with an untrusted transport peer, and that failure must stop
+    %% at the worker boundary.
+    spawn(fun() ->
+        _ = watch_engine(Engine, self()),
+        try answer_init(Ns, Est, Height, Goal, Chain, Asker, Engine)
+        catch
+            Class:Reason:Stack ->
+                logger:warning("quod_ask[~p]: answer worker crashed: ~p:~p ~p",
+                               [Ns, Class, Reason, Stack]),
+                Asker ! {ask_error, self(), prove_failed}
+        end
+    end).
+
+%% Remote target-side answer worker. The request link is monitored by quod_prolog;
+%% this worker owns only the answer link and therefore remains independent of the
+%% target engine's mailbox.
+start_answer_remote(Ns, Est, Height, Goal, Chain, AskId, Peer, AnswerCh, Engine) ->
+    spawn(fun() ->
+        _ = watch_engine(Engine, self()),
+        case open_link(Peer, AnswerCh) of
+            {ok, Link} ->
+                %% Force-killing the worker must also reset its private answer stream.
+                link(Link),
+                Asker = {remote, AskId, Link},
+                try answer_init(Ns, Est, Height, Goal, Chain, Asker, Engine)
+                catch
+                    Class:Reason:Stack ->
+                        logger:warning(
+                          "quod_ask[~p]: remote answer worker crashed: ~p:~p ~p",
+                          [Ns, Class, Reason, Stack]),
+                        _ = sink_send(Asker, {error, prove_failed}),
+                        sink_close(Asker)
+                end;
+            {error, _} -> ok
+        end
+    end).
+
+%% Links propagate failure in both directions, which is wrong at this trust
+%% boundary. This one-shot watcher gives us directional ownership and can still
+%% kill a worker that is stuck inside erlog and unable to receive an engine DOWN.
+watch_engine(Engine, Worker) ->
+    spawn(fun() ->
+        EngineRef = monitor(process, Engine),
+        WorkerRef = monitor(process, Worker),
+        receive
+            {'DOWN', EngineRef, process, Engine, _Reason} ->
+                exit(Worker, kill);
+            {'DOWN', WorkerRef, process, Worker, _Reason} ->
+                demonitor(EngineRef, [flush]),
+                ok
+        end
+    end).
+
+reject_remote(Peer, AnswerCh, AskId, Reason) ->
+    %% Rejections stay bounded under an open-frame flood: no helper process is
+    %% spawned, and the transport owns this one-shot answer link.
+    quod_quic:send(Peer, AnswerCh, encode_error(AskId, Reason)).
+
+answer_init(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
+    put('$quod_ns', Ns),
+    put('$quod_applied', Height),
+    %% The incoming chain contains ontologies already involved. Add this target only
+    %% for nested asks; permission checks the incoming chain, not the target itself.
+    put('$quod_ask_chain', [Ns | Chain]),
+    W = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => false}),
+    case can_read_chain(Goal, Chain, Ns, W) of
+        false ->
+            _ = sink_send(Asker, {error, not_allowed}),
+            sink_close(Asker);
+        true  -> answer_loop({fresh, Goal, W}, Asker, 0, 1, Engine)
+    end.
+
+answer_loop(State, Asker, Count, Seq, Engine) ->
+    receive
+        {next, Asker} ->
+            Engine ! {ask_step_started, self()},
+            answer_once(State, Asker, Count, Seq, Engine);
+        {next, AskId} when is_binary(AskId) ->
+            case Asker of
+                {remote, AskId, _Link} ->
+                    answer_once(State, Asker, Count, Seq, Engine);
+                _ ->
+                    answer_loop(State, Asker, Count, Seq, Engine)
+            end;
+        {stop, Asker} -> sink_close(Asker)
+    after ?NEXT_TIMEOUT_MS -> sink_close(Asker)    %% asker went silent (its monitor also covers death)
+    end.
+
+answer_once(State, Asker, Count, Seq, Engine) ->
+    case step(State) of
+        {solution, Sol, State1} when Count < ?MAX_ANSWERS ->
+            case sink_solution(Asker, Seq, Sol) of
+                ok ->
+                    Engine ! {ask_step_finished, self()},
+                    answer_loop(State1, Asker, Count + 1, Seq + 1, Engine);
+                too_big ->
+                    ok = sink_send(Asker, {error, answer_too_big}),
+                    sink_close(Asker)
+            end;
+        {solution, _Sol, _State1} ->
+            ok = sink_send(Asker, {error, too_many_answers}),
+            sink_close(Asker);
+        done ->
+            ok = sink_send(Asker, {complete, Seq}),
+            sink_close(Asker);
+        {error, R} ->
+            ok = sink_send(Asker, {error, R}),
+            sink_close(Asker)
+    end.
+
+sink_solution(Asker, Seq, Sol) ->
+    case quod_wire_term:encode(Sol) of
+        {ok, WireSol} ->
+            case Asker of
+                Pid when is_pid(Pid) ->
+                    case erlang:external_size(WireSol) =< ?MAX_ANSWER_BYTES of
+                        true -> Pid ! {ask_solution, self(), Seq, Sol}, ok;
+                        false -> too_big
+                    end;
+                {remote, AskId, Link} ->
+                    Payload = term_to_binary(
+                                {quod_ask_answer, AskId, Seq, {solution, WireSol}},
+                                [deterministic]),
+                    case byte_size(Payload) =< ?MAX_ANSWER_BYTES of
+                        true -> quod_link:send(Link, Payload), ok;
+                        false -> too_big
+                    end
+            end;
+        {error, bad_term} -> too_big
+    end.
+
+sink_send(Asker, {complete, Seq}) when is_pid(Asker) ->
+    _ = Asker ! {ask_complete, self(), Seq}, ok;
+sink_send({remote, AskId, Link}, {complete, Seq}) ->
+    quod_link:send(Link, term_to_binary({quod_ask_answer, AskId, Seq, complete},
+                                        [deterministic]));
+sink_send(Asker, {error, Reason}) when is_pid(Asker) ->
+    _ = Asker ! {ask_error, self(), Reason}, ok;
+sink_send({remote, AskId, Link}, {error, Reason}) ->
+    quod_link:send(Link, encode_error(AskId, Reason)).
+
+sink_close({remote, _AskId, Link}) -> quod_link:close(Link);
+sink_close(_LocalAsker) -> ok.
+
+step({fresh, Goal, W}) -> drive(Goal, catch erlog_int:prove_goal(Goal, W));
+step({more, Goal, St}) -> drive(Goal, catch erlog_int:fail(St)).
+
+drive(Goal, {succeed, St}) ->
+    case quod_erlog_db_local_prove:get_local_changes((St#est.db)#db.ref) of
+        [] -> {solution, erlog_int:dderef(Goal, St#est.bs), {more, Goal, St}};
+        _  -> {error, foreign_write_unsupported}
+    end;
+drive(_Goal, {fail, _})            -> done;
+drive(_Goal, {quod_ask_error, R})  -> {error, R};   %% a nested `::` inside Goal raised it
+drive(_Goal, {erlog_error, E, _})  -> {error, {erlog, E}};
+drive(_Goal, {erlog_error, E})     -> {error, {erlog, E}};
+drive(_Goal, _Other)               -> {error, prove_failed}.
+
+%% Whole-chain read permission (doc/inter-ontology.md §6): EVERY ontology on the ask path
+%% must be allowed to read here, not just the immediate asker — no laundering a read
+%% through an intermediate. Proved against THIS ontology's committed kb; the shipped
+%% default `can_read(_,_,_)` is open.
+can_read_chain(Goal, Chain, Ns, W) ->
+    lists:all(fun(Member) -> prove_bool({can_read, Goal, Member, Ns}, W) end, Chain).
+
+prove_bool(Goal, W) ->
+    try erlog_int:prove_goal(Goal, W) of
+        {succeed, _} -> true;
+        _            -> false
+    catch _:_ -> false end.

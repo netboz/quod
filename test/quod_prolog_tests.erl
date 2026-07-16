@@ -10,7 +10,8 @@
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"test:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    {ok, Pid} = quod_prolog:start_link(Ns, #{node_id => {"127.0.0.1", 5000}}),
+    {ok, Pid} = quod_prolog:start_link(
+                  Ns, #{node_id => {"127.0.0.1", 5000}, max_proof_workers => 1}),
     %% no quod_simplex in these isolated tests — simulate the rebuild handshake completing
     ok = quod_prolog:mark_ready(Ns),
     {Ns, Pid}.
@@ -24,7 +25,8 @@ prolog_test_() ->
      [fun t_unknown_fails/1,
       fun t_apply_and_read/1,
       fun t_occ_reject/1,
-      fun t_batch_apply/1]}.
+      fun t_batch_apply/1,
+      fun t_worker_limit/1]}.
 
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
@@ -126,6 +128,24 @@ t_batch_apply({Ns, _}) ->
         Stats2 = quod_prolog:stats(Ns),
         ?assertEqual(2, maps:get(applied, Stats2)),
         ?assertEqual(2, maps:get(applies, Stats2))
+    end.
+
+t_worker_limit({Ns, _}) ->
+    fun() ->
+        Rule = {':-', loop, loop},
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for(Rule), #{}))),
+        Caller = spawn(fun() -> quod_prolog:prove(Ns, loop, Ns) end),
+        ?assertEqual(ok, wait_proof_workers(Ns, 1, 100)),
+        ?assertEqual({error, busy}, quod_prolog:prove(Ns, {anything, x}, Ns)),
+        exit(Caller, kill),
+        ?assertEqual(ok, wait_proof_workers(Ns, 0, 100))
+    end.
+
+wait_proof_workers(_Ns, _Expected, 0) -> timeout;
+wait_proof_workers(Ns, Expected, Retries) ->
+    case maps:get(proof_workers, quod_prolog:stats(Ns), undefined) of
+        Expected -> ok;
+        _ -> timer:sleep(10), wait_proof_workers(Ns, Expected, Retries - 1)
     end.
 
 %%%===================================================================

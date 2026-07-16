@@ -6,7 +6,10 @@ bbsvx/onia attempts (`content-layer-design.md` §4/§5/§8 — those sections no
 Plain language on purpose; the technical anchors are in the boxed notes and file references.
 
 Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
-review against the actual code. Nothing here is built yet; this document is reviewed first.
+review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
+co-hosted asks, cross-node asks, shared-snapshot worker execution, atom-safe transport, and
+default link following are implemented. A network-wide ontology directory and transport-level
+stream prioritization remain future work.
 
 ---
 
@@ -115,41 +118,48 @@ following it is never silent.
 > breaking local-first), it would pollute the per-predicate content fingerprints, and at
 > genesis it would leak into the committed block as user content. Instead the proof overlay
 > (`quod_erlog_db_local_prove`) synthesizes the follower as a virtual LAST clause while a
-> relation is being resolved, tagged so `retract`/`clause` never see it, and consults
+> relation is being resolved, tagged so `retract` and committee introspection never treat it as
+> committed content, and consults
 > `no_follow` *through the overlay* so the decision itself lands in the recorded read-set
 > (a racing `no_follow` commit then conflicts honestly). Deterministic on every node by
 > construction.
 
+The pinned erlog implementation has no callback context for its built-in `clause/2` path, so
+overlay introspection currently exposes these virtual clauses there. Hiding them requires a small
+erlog hook/fork; execution, retraction, committee projection, and committed content do not treat
+them as stored clauses.
+
 ## 4. The ask, start to finish
 
-One ask = one run on the target = one stream of answers back. Nothing is ever held open
-*waiting*; a run is always actively working, and it dies with its ask or its timeout.
+One ask = one frozen run on the target = one stream of answers back. Its worker waits only
+between explicit demand messages, for at most the idle timeout; while deriving an answer it is
+guarded by an engine-owned no-progress timer. It dies with its ask, engine, or timeout.
 
 1. **Open.** The asking side allocates a fresh **ask id**, subscribes to its answer channel,
-   and sends the ask — target ontology, the goal, the asking chain (§6), an optional
-   freshness floor (§7) — on the target ontology's fixed ask channel.
+   and sends the ask — target ontology, the goal, and the asking chain (§6) — on the
+   target ontology's fixed ask channel.
 2. **Freeze.** The target takes its committed facts **as of that instant** as the run's view.
-   This costs nothing within the engine: the store is an immutable value (a commit builds a
-   new version sharing structure with the old — verified, `quod_prolog.erl:570-580`,
-   `quod_diff.erl:49-51`), so the run simply keeps the old value. Answers can never be
-   half-old, half-new.
+   The committed KB exists once in a versioned ETS store. A worker receives only the table id
+   and height; predicate lookup resolves the newest version at or below that height. No whole KB
+   is copied into the worker, and answers can never be half-old, half-new. Old predicate
+   versions are reclaimed against the oldest live worker snapshot.
 3. **Permission.** Before running the goal, the target proves `can_read` for the asking
    chain (§6). Refusal = the `not_allowed` error, before any work.
 4. **Stream.** The run produces answers by normal Prolog backtracking; **each answer is sent
    the moment it is found** — no batches, no waiting. The asking rule's choice point consumes
    them as they arrive; backtracking into the ask waits for the next answer. First answer =
    fastest possible, even when later answers are slow to derive.
-5. **Complete.** When the answers run out, a final **complete** marker carries the run's
-   stamps (§5). If the rule stops early instead — or the asking proof dies — the ask is
-   cancelled and the target kills the run on the spot.
+5. **Complete.** When the answers run out, a sequenced **complete** marker closes the run.
+   If the rule stops early instead — or the asking proof dies — the ask is cancelled and the
+   target kills the run on the spot.
 
 ### 4.1 Where the work runs: one worker per proof
 
 The ontology's engine process **never runs proofs**. Every proof — a served ask AND the
-engine's own client proofs — runs in its **own small worker process** holding that run's
-frozen view. The engine stays free for commits and coordination; a wedged ask wedges only its
-worker; cancel = kill the worker; two ontologies asking each other simultaneously each block
-only their own workers, so nothing deadlocks.
+engine's own client proofs — runs in its **own small worker process** holding a shared-store
+snapshot handle and private staging overlay. The engine stays free for commits and
+coordination; a wedged ask wedges only its worker; cancel = kill the worker; two ontologies
+asking each other simultaneously each block only their own workers, so nothing deadlocks.
 
 Quick local proofs behave exactly as today (spawn, prove, reply — one extra process spawn).
 
@@ -158,16 +168,17 @@ Quick local proofs behave exactly as today (spawn, prove, reply — one extra pr
 >   boundaries; a single answer's derivation is unbounded (`findall` runs sub-goals to
 >   exhaustion inside one step), and an asking run blocks in a receive mid-derivation — so
 >   in-engine slicing cannot deliver "never blocks". Workers can. (DA finding F1.)
-> - *Honest cost:* handing the frozen view to a worker copies it once per proof (Erlang
->   copies terms between processes). Negligible at today's ontology sizes; measured before
->   any tuning. Future paths if it ever hurts — a pause-able engine fork, or shared-memory
->   storage — are named here, not built.
+> - *No KB copy:* the committed database callback is `quod_erlog_db_mvcc`. Interpreted
+>   predicates live in one shared ETS table; the `#est{}` sent to a worker contains only a
+>   table/height handle, flags, and hooks. A commit publishes only changed predicates.
 > - *The per-proof read-set table* (a real ETS table today, `quod_erlog_db_local_prove.erl:56-61`)
->   is **owned by the worker**, so an abandoned run can never leak it. (Today it would leak,
->   owned by the never-dying engine — DA finding F2.)
+>   is **owned by the worker**, so an abandoned client proof can never leak it. Served asks
+>   do not allocate one: completion subscriptions are not implemented yet.
 > - *The membership-vote re-proof keeps its own synchronous path*, and link-following is
->   **disabled** inside it: a committee vote must never make network hops mid-verdict
->   (`quod_prolog.erl:470-501` stays as-is; DA finding F10).
+>   **disabled** inside it: a committee vote must never make network hops mid-verdict.
+> - Answer workers are monitored, not linked, by the ontology engine. A one-shot lifecycle
+>   watcher gives directional ownership: engine death kills the worker, but an untrusted
+>   transport or worker failure cannot propagate into the engine.
 
 ### 4.2 How answers ride the wire
 
@@ -176,22 +187,31 @@ stream the peer opened, and a node only receives on channel names it subscribed.
 **two legs**:
 
 - **Leg 1 (the ask):** on the target ontology's fixed, pre-subscribed ask channel — carrying
-  the ask id.
+  the ask id. Its control envelope is safe-decoded and malformed metadata is rejected at the
+  boundary. Prolog terms use the bounded `quod_wire_term` codec; atom names cross as binaries
+  and never allocate atoms in the receiving VM.
 - **Leg 2 (the answers):** the target opens its **own outbound link** named by that ask id —
   which the asker subscribed before sending — and streams answers there.
 
-Cancel uses real transport signals in both directions: the asker resetting its side is seen
-by the target (kills the run's worker); the target's link dying is seen by the asker (link
-death is already a monitored event). After **complete**, each side closes its leg; a finished
-ask leaves nothing behind — no processes, no registrations, no buffers.
+Cancellation uses an ask-specific control frame on the shared request channel: the asker leaves
+that reusable channel open, while the target routes the cancel by ask id and kills the matching
+run's worker. The owner watcher sends the same frame if the asking proof worker dies. The target's
+answer link dying is already a monitored event on the asker. After **complete**, each side closes
+its per-ask leg; a finished ask leaves no per-ask worker, registration, or answer buffer behind.
 
 > **Technical notes.**
 > - **Backpressure is built, not assumed.** The wire layer today *silently drops* frames
 >   under pressure: `quod_link` deliberately ignores send errors (`quod_link.erl:122-128`)
 >   and the pre-connection buffer drops past 1024 frames (`quod_conn.erl:26,187-193`); the
 >   QUIC library returns `flow_control_blocked`/`send_queue_full` rather than blocking
->   (`quic_connection.erl:7658-7704`) and offers no "window reopened" event. The serving
->   worker therefore OWNS its answer link and treats "blocked" as *pause, retry with backoff*.
+>   (`quic_connection.erl:7658-7704`) and offers no "window reopened" event. An answer is sent
+>   only after its corresponding `next` request, so demand-driven asks keep at most one answer
+>   in flight; the target engine collapses arbitrarily many premature demands into one bounded
+>   pending bit. Sequence numbers turn transport loss into the loud `broken_stream` error.
+> - **Authenticated is not trusted.** Every envelope is decoded with safe ETF, compressed ETF
+>   is refused, and goals, answers, and errors use the bounded symbol codec. A target-local atom
+>   unknown to the asker becomes `{'$quod_symbol', <<"name">>}`. It can unify and round-trip,
+>   but cannot exhaust the asker's atom table.
 > - **Every answer carries a sequence number.** Any residual gap at the asker is the loud
 >   `broken_stream` error — a lost answer can never masquerade as a complete result.
 > - **Ask streams never starve votes:** when wired, ask channels get lower stream priority
@@ -199,20 +219,13 @@ ask leaves nothing behind — no processes, no registrations, no buffers.
 > - Co-hosted asks (target ontology on the same node) skip the wire entirely: same handler,
 >   worker-to-worker message stream, same semantics.
 
-## 5. The completion stamps
+## 5. Completion and future subscriptions
 
-The **complete** marker carries two stamps, recorded by the asking side:
-
-- **The version** of the frozen view — the target's committed-change count **at the moment
-  the run started** (not at completion: a long stream must not claim freshness it doesn't
-  have).
-- **The read fingerprint** — one content hash per predicate the run actually read, including
-  predicates reached indirectly through rules, and including what the `can_read` check read.
-  This is `quod_diff`'s existing per-functor hashing, unchanged.
-
-These stamps are the raw material of the FUTURE "tell me when it changes" milestone
-("reading a fact subscribes you to it"): which ontology, which predicates, at which version.
-Nothing else is built for that milestone now — but nothing will have to be re-recorded.
+The **complete** marker carries only its sequence number. Earlier drafts also carried a frozen
+version and target read fingerprint, but no implemented component consumed them. Keeping that
+dead contract allocated an ETS read-set per served ask and allowed the final frame to grow past
+the transport limit. The future "tell me when it changes" milestone will add a bounded,
+purpose-built subscription record when there is a consumer for it.
 
 ## 6. The chain: circles, depth, permission
 
@@ -227,8 +240,7 @@ Every ask carries the **chain** — the list of ontologies already involved in p
   the chain, not just the immediate asker — otherwise A could read C *through* B when A
   itself isn't allowed (read laundering). The `can_read` policy is ordinary agreed content in
   the target ontology; the shipped default stays open (as `quod:root`'s placeholder is
-  today), and this milestone wires the actual check on the answering side — today no code
-  consults it at all (`quod_prove.erl` serves without any gate).
+  today), and this milestone wires the actual check on the answering side.
 
 > **Technical notes.** The chain travels in the engine run's flag store (it survives run
 > suspension and cannot be forged by content — the flag-setting builtins are whitelisted,
@@ -238,11 +250,10 @@ Every ask carries the **chain** — the list of ontologies already involved in p
 
 ## 7. Freshness
 
-The target answers from its frozen view and reports that view's version. The asker may set a
-floor: "only answer if you have seen at least version H" — if the target's view is older, the
-ask fails with `stale` (the floor mechanism already exists in the wire shapes). The floor is
-checked once, against the frozen view; a commit landing mid-stream neither upgrades nor
-invalidates the stream.
+The target answers from one frozen view. A commit landing mid-stream neither upgrades nor
+invalidates that stream. An explicit minimum-version request is deferred: log heights belong to
+individual ontologies and are not comparable without a target-specific version contract. The wire
+therefore carries no unused freshness field, and completion does not claim a version (§5).
 
 ## 8. Errors — the complete catalog
 
@@ -261,16 +272,13 @@ a partial result never looks complete.
 | `answer_too_big` | one answer exceeds the frame limit — refused **on the sender** |
 | `broken_stream` | a sequence gap, the target's link died, or the target crashed mid-run |
 | `no_progress` | the no-progress timeout fired (no answer produced AND none consumed) |
-| `stale` | the target's view is older than the asker's freshness floor |
+| `foreign_write_unsupported` | an asked goal tries to change the target ontology |
 
-> **Technical note — the plumbing repair this requires.** Typed errors thrown inside a proof
-> currently collapse into one generic `prove_failed` on the way out (`erlog_error/2` *throws*
-> `{erlog_error, E, St}` — `erlog_int.erl:889` — but `run_proof` matches it as a return value,
-> `quod_prolog.erl:263-268`, so everything lands in the catch-all). The catch is fixed so the
-> taxonomy above actually reaches the rule author. The local client-call timeout (35 s today,
-> `quod_prolog.erl:73`) is restated for long streams: the client call returns when the *proof*
-> completes; a proof legitimately consuming a long stream extends it via the no-progress
-> contract, not a silent `fail`.
+> **Technical note — typed proof errors.** The old runner collapsed thrown erlog errors into
+> `prove_failed`. The worker runner now catches both erlog throw shapes explicitly, so the
+> taxonomy above reaches the rule author. Client calls wait for the proof worker's
+> bounded completion budget; cross-ontology progress renews that budget, while an abandoned
+> or genuinely wedged proof receives `no_progress`.
 
 ## 9. Limits (starting values — one table, tuned with real usage)
 
@@ -281,14 +289,16 @@ a partial result never looks complete.
 | chain depth | 8 | `too_deep` |
 | no-progress timeout | 30 s (no answer produced AND none consumed) | `no_progress` |
 | concurrent asks served per ontology | 64 (existing) — also caps serving workers | asker waits/retries |
+| concurrent client proofs per ontology | 64 (configurable) | `busy` |
+| rejected remote opens sent per ontology | 32/s | excess rejection replies are dropped |
 
 ## 10. Non-goals — deliberately NOT in this milestone
 
 - **Changing another ontology's facts.** Writes stay home-only (`foreign_write_unsupported`
   stays). Cross-ontology writes need author-signed transactions first (the signing
   milestone), then the owner-executes model in `content-layer.md` §5.
-- **The notification system** ("tell me when what I read changes"). Later milestone; §5's
-  stamps are its prepared input.
+- **The notification system** ("tell me when what I read changes"). Later milestone; §5
+  explains why its storage is not prebuilt as dead per-ask state.
 - **Notification precision finer than per-predicate.** Known, accepted coarseness.
 - **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Arrives with
   signing; the naming convention lands now (§2).

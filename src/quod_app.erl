@@ -81,7 +81,12 @@ load_config() ->
                                           #{atom_key => true, apply_override_envs => true}),
             apply_transport_env(Cfg),
             apply_identity(Cfg),
-            maps:get(content, Cfg)
+            Blocks = maps:get(content, Cfg),
+            %% Remote asks may target an ontology that is not hosted locally. Until
+            %% the network-wide ontology directory exists, configured seeds are the
+            %% bounded bootstrap contacts for that first hop.
+            application:set_env(quod, ask_contacts, all_content_seeds(Blocks)),
+            Blocks
     end.
 
 %% `content` is a LIST; hocon's env override cannot address array elements — a leftover
@@ -266,6 +271,7 @@ build_ns_config(Content) ->
     Base = #{node_id    => Self,
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),
+             max_proof_workers => maps:get(max_proof_workers, Content, 64),
              seed_peers => content_seeds(Content)},
     {Ns, with_genesis_hash(Content, with_genesis_file(Content, with_data_dir(Content, Base)))}.
 
@@ -295,6 +301,9 @@ with_genesis_file(Content, Base) ->
 
 content_seeds(Content) ->
     lists:filtermap(fun parse_seed/1, maps:get(seeds, Content, [])).
+
+all_content_seeds(Blocks) ->
+    lists:usort(lists:append([content_seeds(B) || B <- Blocks])).
 
 default_node_id() ->
     {"127.0.0.1", application:get_env(quod, listen_port, 14567)}.

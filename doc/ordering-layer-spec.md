@@ -85,12 +85,15 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 %% `author`/`sig` are RESERVED for signing (identity readiness, see below): Phase 1
 %% sets author = self node id, sig = none, and verification is a pass-through stub.
 %% Reserving them now keeps the wire + on-disk format stable when signing turns on.
--record(transaction, {tx_id      :: binary(),            %% unique per transaction (ulid)
-                 caller_ns  :: binary(),            %% CallerNs (#5), first-class (#2)
-                 diff       :: [op()],              %% concrete asserts/retracts (#25)
-                 read_check :: read_check(),        %% what the proof relied on (#24)
-                 author     :: server_id(),         %% who submitted it (Phase 1: node id; later: pubkey())
-                 sig = none :: binary() | none}).   %% Ed25519 sig over canonical bytes; none in Phase 1
+-record(transaction, {tx_id        :: binary(),
+                      caller_ns    :: binary(),
+                      goal = undefined :: term(),
+                      result = undefined :: term(),
+                      diff         :: [op()],
+                      read_check   :: read_check(),
+                      author       :: server_id(),
+                      submitted_at = 0 :: non_neg_integer(),
+                      sig = none   :: binary() | none}).
 
 %% Raft log entry (§E.0). `data` is a #transaction{} for blocks (or `noop` for the election marker).
 -record(entry, {index :: log_index(),
@@ -478,36 +481,21 @@ is never done.
 **Apply loop (all servers, `apply_committed/1`)** — drives `quod_prolog`:
 
 ```erlang
-apply_committed(D = #d{last_applied = LA, commit_index = CI}) when LA >= CI -> D;
-apply_committed(D = #d{last_applied = LA}) ->
-    I = LA + 1,
-    #entry{kind = Kind, data = Data} = entry_at(I, D),
-    D1 = case Kind of
-             block ->
-                 Verdict = quod_prolog:apply_block(D#d.ns, I, Data),  %% ok | {reject, conflict}
-                 D2 = reply_pending(I, Verdict, D),                   %% see below
-                 D2#d{commits = D2#d.commits + 1};
-             config ->
-                 drop_departed(Data, clear_cfg_gate(Data, D))
-         end,
-    apply_committed(D1#d{last_applied = I}).
+apply_committed(S = #s{last_applied = LA, slot = Head}) when LA >= Head -> S;
+apply_committed(S = #s{store = Store, ns = Ns, last_applied = LA, slot = Head}) ->
+    quod_ledger_store:fold(Store, LA + 1, Head,
+        fun(#entry{index = I, data = Data}, N) ->
+            quod_prolog:apply_block(Ns, I, Data),
+            N rem 256 =:= 0 andalso quod_prolog:sync(Ns),
+            N + 1
+        end, 1),
+    S#s{last_applied = Head}.
 ```
 
-`apply_block/3` is a **synchronous `gen_server:call`** into `quod_prolog`, returning `ok | {reject,
-conflict}`. The OCC read-set re-check happens at apply on **every** member; because every member re-checks
-deterministically against the same converged KB at the same index, the verdict is identical everywhere.
-`quod_ledger` surfaces the verdict to the parked client:
-
-```erlang
-reply_pending(I, Verdict, D) ->
-    case maps:take(I, D#d.pending) of
-        {From, Pending1} ->
-            Reply = case Verdict of ok -> {ok, I}; {reject, conflict} -> {error, conflict_retry} end,
-            gen_statem:reply(From, Reply),
-            D#d{pending = Pending1};
-        error -> D
-    end.
-```
+`apply_block/3` is an asynchronous cast. The OCC read-set re-check still happens at apply on **every**
+member and is deterministic against the same committed prefix. `quod_prolog` correlates the transaction
+id with its own parked caller and returns the final apply/conflict verdict there. Replay inserts a sync
+barrier every 256 casts so rebuilding a long log cannot flood the fact-engine mailbox.
 
 A rejected block stays committed in the log as a no-op (it changed no facts), preserving identical
 prefixes. The `noop` election marker applies as nothing. `config` apply clears the one-change gate and, on
@@ -988,9 +976,10 @@ History is committee-only in the first cut; read-copies hold current facts only.
 
 ## 4. `quod_prolog` apply + prove
 
-`quod_prolog` is the per-namespace fact engine: it owns the committed erlog KB for one ontology, applies
-committed blocks from `quod_ledger` in log order, and serves proofs. It **serialises writes**; read-only proofs
-run on copy-on-write overlays alongside, never blocking the writer (#22, #26). One per ontology.
+`quod_prolog` is the per-namespace fact engine: it owns one shared, versioned erlog KB for one ontology,
+applies committed blocks in log order, and serves proofs. It **serialises publication**; proof workers run
+on private overlays over immutable snapshot handles, never copying or blocking the shared KB. One per
+ontology.
 
 ### 4.1 Module, records
 
@@ -1000,19 +989,17 @@ run on copy-on-write overlays alongside, never blocking the writer (#22, #26). O
 -include("quod_ledger.hrl").
 ```
 
-erlog stack reused from bbsvx: `quod_erlog_db_differ → quod_erlog_db_local_prove → quod_erlog_db_ets`
-(ported from the bbsvx modules, dropping the `db_federated` and `set_acl` layers — deferred with foreign
-writes, #10).
+The erlog stack is `quod_erlog_db_local_prove → quod_erlog_db_mvcc`. The overlay owns one proof's
+write/read sets. The MVCC callback owns the only full KB in an unnamed ETS table and resolves interpreted
+predicates at a snapshot height. Built-ins and compiled procedures are immutable entries.
 
 ```erlang
--record(kb, {est        :: erlog_state(),          %% #est{} over differ->ets, committed facts
-             applied = 0 :: non_neg_integer()}).   %% highest log index folded in
-
 -record(s, {ns        :: binary(),
             self      :: server_id(),
-            cfg       :: map(),
-            kb        :: #kb{},
-            prove_pending = #{} :: #{reference() => prove_ctx()}, %% in-flight prove workers, by Ref
+            est       :: erlog_state(),  %% small #est{} with {ETS table, snapshot height}
+            applied = 0 :: non_neg_integer(),
+            workers   = #{} :: map(),
+            ask_workers = #{} :: map(),
             parked    = #{} :: #{binary() => write_ctx()},        %% writes awaiting commit, by tx_id
             applies   = 0 :: non_neg_integer(),
             rejects   = 0 :: non_neg_integer(),
@@ -1020,9 +1007,9 @@ writes, #10).
             conflicts = 0 :: non_neg_integer()}).
 
 -type bindings()  :: [map()] | fail.
--type prove_ctx() :: {From :: gen_server:from(), CallerNs :: binary(),
-                      HeightRead :: non_neg_integer(), MonRef :: reference(), TimerRef :: reference()}.
--type write_ctx() :: {From :: gen_server:from(), Effects :: [term()]}.
+-type write_ctx() :: {From :: gen_server:from(), Bindings :: [map()],
+                      HeightRead :: non_neg_integer(), TimerRef :: reference(),
+                      RequestId :: term()}.
 ```
 
 `#transaction{}` and the `op()`/`read_check()`/`clause()` types come from the shared header. `read_check` values
@@ -1037,15 +1024,15 @@ start_link(Ns, Config) ->
 
 namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1']}]).
 
--define(DEFAULTS, #{node_id     => undefined,
-                    prove_ms    => 30000,     %% read-proof worker watchdog (server-side)
-                    call_ms     => 35000,     %% client call timeout in prove/3; MUST exceed prove_ms
-                    max_diff_bytes => 1048576}).
+-define(DEFAULTS, #{node_id => undefined,
+                    park_ttl_ms => 30000,
+                    validation_ttl_ms => 2000,
+                    max_proof_workers => 64}).
 ```
 
-Child of `quod_ns` (`rest_for_one`, after `quod_ledger`). `init({Ns, Config})` merges `?DEFAULTS`, validates,
-and rebuilds the KB (§4.6) before answering proves. `quod_prolog` does not subscribe to any channel; it
-receives committed blocks via direct call from `quod_ledger`.
+Child of `quod_ns`. `init({Ns, Config})` creates the shared store, subscribes to the ontology's ask
+channel, and remains unready while `quod_simplex` replays committed blocks (§4.6). Proves cannot observe a
+partially rebuilt KB.
 
 ### 4.3 Serving `prove` — copy-on-write overlays, no writer blocking
 
@@ -1056,7 +1043,7 @@ receives committed blocks via direct call from `quod_ledger`.
 prove(TargetNs, Goal, CallerNs) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(Pid, {prove, Goal, CallerNs}, maps:get(call_ms, ?DEFAULTS))
+        Pid -> try gen_server:call(Pid, {prove, Goal, CallerNs}, infinity)
                catch exit:_ -> fail end
     end.
 ```
@@ -1067,15 +1054,15 @@ prove(TargetNs, Goal, CallerNs) ->
 
 `handle_call({prove, Goal, CallerNs}, From, S)`:
 
-1. **Wrap the committed KB in a per-proof overlay:**
+1. **Capture the current table/height handle and wrap it in a per-proof overlay:**
    ```erlang
-   #kb{est = Committed, applied = HeightRead} = S#s.kb,
-   Wrapped = quod_erlog_db_local_prove:wrap_state(Committed, #{read_set => true}),
+   #s{est = Snapshot, applied = HeightRead} = S,
+   Wrapped = quod_erlog_db_local_prove:wrap_state(Snapshot, #{read_set => true}),
    ```
    `local_prove` shadows asserts/retracts per functor in its own overlay; committed facts untouched.
 2. **Record `HeightRead = #kb.applied`** into the parked `prove_ctx()` (#7 — record height read).
-3. **Spawn + monitor the worker, arm a `prove_ms` watchdog**, stash `{From, CallerNs, HeightRead, MonRef,
-   TimerRef}` in `prove_pending` under the worker `Ref`, return `{noreply, S1}`:
+3. **Spawn + monitor the worker, arm the no-progress watchdog**, stash the worker and caller monitors,
+   frozen height, timer, and correlation token under the worker `Ref`, then return `{noreply, S1}`:
    ```erlang
    try erlog_int:prove_goal(Goal, Wrapped) of
        {succeed, #est{bs = Bs} = Final} ->
@@ -1083,129 +1070,130 @@ prove(TargetNs, Goal, CallerNs) ->
            Db       = Final#est.db,
            Changes  = quod_erlog_db_local_prove:get_local_changes(Db),
            ReadSet  = quod_erlog_db_local_prove:get_read_set(Db),
-           Effects  = quod_erlog_db_local_prove:get_effects(Db),
-           gen_server:cast(Self, {prove_result, Ref, {ok, Bindings, Changes, ReadSet, Effects}});
-       {fail, _} -> gen_server:cast(Self, {prove_result, Ref, fail})
+           gen_server:cast(Self, {proof_result, Ref, Kind, Goal, CallerNs,
+                                  {ok, Bindings, Changes, ReadSet}});
+       {fail, _} -> gen_server:cast(Self,
+                                    {proof_result, Ref, Kind, Goal, CallerNs, fail})
    catch Class:Err -> gen_server:cast(Self, {prove_result, Ref, {error, {Class, Err}}})
    after quod_erlog_db_local_prove:cleanup_read_set(Wrapped) end
    ```
-4. **Classify after execution (#8)** in `handle_cast({prove_result, Ref, Result}, S)` — remove the
-   `prove_ctx()`, cancel timer, demonitor:
+4. **Classify after execution (#8)** in the correlated `proof_result` handler — remove the worker
+   record, cancel the timer, and demonitor both worker and caller:
    - `fail` / `{error, _}` → reply `fail` (resp. `{error, prove_failed}`).
-   - `{ok, Bindings, [], _, _}` → **read** (empty write-set, #6). Reply `{ok, Bindings, HeightRead}`. Nothing
+   - `{ok, Bindings, [], _}` → **read** (empty write-set, #6). Reply `{ok, Bindings, HeightRead}`. Nothing
      asserted, nothing committed. Bump `proves`.
-   - `{ok, Bindings, Changes, ReadSet, Effects}` with `Changes =/= []` → touched facts. **MVP: legal only if
+   - `{ok, Bindings, Changes, ReadSet}` with `Changes =/= []` → touched facts. **MVP: legal only if
      `CallerNs == TargetNs == S#s.ns`** (#10). If so, hand off to the writer path (§4.5), keep `From` parked.
      Else reject `{error, foreign_write_unsupported}`.
 
-**Concurrency:** multiple workers run on independent overlays; `apply` (§4.4) mutates the committed cell on
-the gen_server mailbox between proofs, but a wrapped worker sees its own copy-on-write view. The single
-serialisation point is the mailbox; `apply` is the only mutator of the committed cell.
+**Concurrency:** multiple workers run on independent overlays over the same ETS table. Applying a block
+publishes only changed predicate versions at the new height. Existing workers retain their old height;
+history is reclaimed only below the oldest live worker. Ordinary proofs and served asks are independently
+capped at 64, providing bounded backpressure.
 
 ### 4.4 `apply_block` — deterministic OCC apply (#23, #25)
 
-`quod_ledger`, once a block is committed, calls `quod_prolog` **in log-index order**:
+`quod_simplex`, once a block is committed, casts it to `quod_prolog` **in log-index order**:
 
 ```erlang
 -spec apply_block(Ns :: binary(), Index :: pos_integer(), Change :: #transaction{} | noop)
-        -> ok | {reject, conflict}.
+        -> ok.
 apply_block(Ns, Index, Change) ->
-    gen_server:call(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}, infinity).
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
 ```
 
-`apply_block/3` is a **synchronous call**. To avoid the `quod_prolog`↔`quod_ledger` deadlock, `quod_ledger:append`
-from `quod_prolog` returns at **append/replication-accept** (not commit); the final OCC/commit verdict
-reaches the original prove caller via `quod_prolog`'s own `apply_block` handler correlating by `tx_id`. So
-`quod_prolog` is never blocked in `gen_server:call(quod_ledger, append)` while needing to service
-`apply_block`.
+The cast keeps the consensus state machine independent of proof-engine mailbox latency. Write submission
+uses `gen_statem:send_request/2`, so `quod_prolog` also never blocks synchronously waiting for consensus.
+The original caller remains parked by `tx_id`; ordered apply supplies the final OCC verdict.
 
-`handle_call({apply_block, Index, Change}, _From, S)` runs the pure engine step, replies the verdict
-synchronously, updates `kb`, releases any parked write for the `tx_id`, bumps metrics:
+`apply_step/3` folds every transaction in a committed batch into the engine's pending MVCC handle, then
+publishes all changed predicates once at the block index:
 
 ```erlang
-%% apply(Index, Change, KB) -> {ok, KB'} | {reject, conflict, KB'}
-apply(Index, noop, #kb{applied = A} = KB) ->
-    Index =:= A + 1 orelse error({apply_out_of_order, Index, A}),
-    {ok, KB#kb{applied = Index}};
-apply(Index, #transaction{read_check = ReadCheck, diff = Diff}, #kb{est = Est, applied = A} = KB) ->
-    Index =:= A + 1 orelse error({apply_out_of_order, Index, A}),   %% log order is the contract (#13)
-    case validate_read_set(ReadCheck, Est) of
-        ok ->
-            {ok, Est1} = quod_diff:apply_ops(Est, Diff),            %% deterministic (#25)
-            {ok, KB#kb{est = Est1, applied = Index}};
-        {conflict, _Functor} ->
-            {reject, conflict, KB#kb{applied = Index}}             %% block committed; effect is no-op
+apply_step(Index, noop, S) ->
+    publish_snapshot(Index, S);
+apply_step(Index, {batch, _} = Batch, S) ->
+    case quod_ledger:payload(Batch) of
+        {ok, Transactions} ->
+            publish_snapshot(Index, lists:foldl(fun apply_transaction/2,
+                                                S, Transactions));
+        error ->
+            publish_snapshot(Index, S)
     end.
+
+publish_snapshot(Index, #s{est = #est{db = #db{ref = Ref0} = Db} = Est0} = S) ->
+    Floor = oldest_snapshot(Index, S),
+    Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
+    S#s{est = Est0#est{db = Db#db{ref = Ref1}}, applied = Index}.
 ```
 
 - **OCC re-check** (`validate_read_set/2`, ported): for each `{Functor, Arity} => ExpectedHash`, recompute
   `quod_diff:functor_hash/3` against the committed KB at index `A`, compare. Any mismatch → `{conflict, _}`.
 - **On `ok`:** `quod_diff:apply_ops/2` replays the concrete ops (asserts dedup by content, retracts by
-  content, #1). Deterministic; does not re-run Prolog. Bump `applied := Index`, `applies++`.
+  content, #1) into the block's pending handle. Deterministic; it does not re-run Prolog. The block then
+  publishes once and bumps `applied := Index`.
 - **On `{reject, conflict}`:** do not apply the diff but still advance `applied := Index` (the block is
   consumed; effect is a no-op due to stale read). `rejects++`. The submitting node turns the reject into a
   retry (§4.5); other members no-op. Because every member runs `apply` over the same committed prefix, the
   verdict is identical everywhere — accept/reject is itself part of the replicated state machine.
+- **Committee changes:** membership transactions skip the content OCC check at apply because every
+  validator already re-proved the change against the parent-height KB before voting. Applying the
+  membership diff unconditionally keeps `peer_admitted/4` facts and Simplex's validator projection in
+  lockstep.
+- **Snapshot GC:** publication retains the version needed by the oldest live proof/ask plus newer versions.
+  A small retained-history index lets a later unrelated or no-op block reclaim released versions without
+  scanning the full KB.
 
-### 4.5 Building a `#transaction{}` and submitting it (effects-after-commit)
+### 4.5 Building a `#transaction{}` and submitting it
 
 A would-be writer (own-ns `prove` whose worker produced `Changes =/= []`) becomes a transaction. `From`
 stays parked; nothing is replied until the block applies on this node.
 
-1. Proof already ran on the staging overlay, capturing `Changes`, `ReadSet`, `Effects`.
+1. The proof already ran on its staging overlay, capturing `Bindings`, `Changes`, and `ReadSet`.
 2. Build a `#transaction{}`:
    ```erlang
-   Change = #transaction{tx_id      = ulid:generate(),
-                    caller_ns  = CallerNs,
-                    diff       = normalize_ops(Changes),   %% local_prove ops -> [op()] by content
-                    read_check = ReadSet}
+   Change = #transaction{tx_id = tx_id(Self), caller_ns = CallerNs,
+                         goal = Goal, result = Bindings,
+                         diff = Changes, read_check = ReadSet,
+                         author = Self, submitted_at = quod_time:now_ms(), sig = none}
    ```
-   `normalize_ops/1` strips clause Tags so the diff is content-only/node-portable (#1, #2). Guard
-   `byte_size(term_to_binary(Change)) =< max_diff_bytes`; over-size → `{error, change_too_large}`, drop.
-3. **Park `{From, Effects}` in `parked` under `tx_id`, then submit:**
+   The overlay already emits content-only operations with local clause tags removed.
+3. Submit without blocking the engine, then park the caller under `tx_id` with a 30 s liveness timer:
    ```erlang
-   case quod_ledger:append(S#s.ns, Change) of
-       {ok, _BlockIndex}            -> ok;   %% accepted into the log (replication-accept)
-       {error, not_in_charge, Hint} -> {error, {not_leader, Hint}};  %% reply now, unpark
-       {error, conflict_retry}      -> {retry, conflict};            %% leader fast-fail (optional)
-       {error, busy}                -> {error, busy}
-   end
+   ReqId = gen_statem:send_request(quod_reg:via({quod_simplex, Ns}),
+                                   {append, Change}),
+   Timer = erlang:send_after(Ttl, self(), {park_timeout, TxId}),
+   Parked1 = Parked#{TxId => {From, [Bindings], HeightRead, Timer, ReqId}}
    ```
    `quod_prolog` does not apply its own write directly — it waits for the block via `apply_block/3` in
    committed order, applying via the same deterministic path as every member.
-4. **Release on apply (effects-after-commit, #11).** When `apply_block` processes the block carrying this
+4. **Release on apply.** When `apply_block` processes the block carrying this
    `tx_id`, look up `parked`:
-   - applied → reply `{ok, Bindings, HeightRead}` to the parked `From` **and** fire the deferred `Effects`.
-   - rejected → reply `{retry, conflict}`; discard `Effects`.
+   - applied → reply `{ok, Bindings, HeightRead}` to the parked `From`.
+   - rejected → reply `{error, conflict_retry}`.
    Remove the `tx_id` entry either way. On other members the block has no parked entry, so `apply_block` just
-   mutates the KB. `quod_ledger` tags each applied block with its `#transaction.tx_id` for the correlation.
+   mutates the KB. Definite asynchronous append errors unpark immediately; ambiguous transport/process loss
+   leaves the caller parked because the block may already have committed, and ordered apply or the TTL decides.
 
 ### 4.6 Rebuild on start — replay the log / snapshot (#20, #29, #13)
 
-`init/1` builds the committed KB **from the log**, never from a separately-persisted fact store, via the
-`quod_ledger:replay/1` handshake (the safe direction: the log is authoritative; prolog rebuilds from it, never
-vice-versa):
+`init/1` builds an empty shared MVCC store, subscribes to asks, and remains unready. It then casts
+`quod_simplex:rebuild/1`; the durable Simplex store is authoritative and the fact engine is always a
+projection of its committed prefix.
 
 ```erlang
-build_kb(Ns) ->
-    {ok, Base} = erlog_int:new(quod_erlog_db_differ, {fresh_ets(Ns), quod_erlog_db_ets}),
-    Est0 = load_builtins(Base),
-    case quod_ledger:snapshot(Ns) of
-        {ok, SnapIndex, SnapData} -> {SnapIndex, seed_from_snapshot(SnapData, Est0)};
-        none                      -> {0, Est0}
-    end.
+build_kb() ->
+    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+    Est0 = element(3, Erl),
+    {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
+    quod_ask:load(quod_committee_predicates:load(Est1)).
 ```
 
-Then, on `init`, `quod_prolog` synchronously calls `quod_ledger:replay(Ns)`, which resets `quod_ledger`'s
-`last_applied := snap_idx` (and hands snapshot data if any) and **re-drives `apply_block/3` over `snap_idx+1
-.. commit_index`** into the fresh prolog, before any prove is answered. This is what makes a **lone
-`quod_prolog` crash** recover: without the reset, the surviving log (already at `last_applied =
-commit_index`) would push only future blocks and the fresh KB would stay empty.
-
-Replay uses the **same `apply/3`** as the live path, so the OCC accept/reject sequence and the final
-`applied` counter are reproduced bit-for-bit — the rebuilt `#kb{}` (facts **and** `applied`) is identical to
-a continuously-running member's. `#kb.applied` is seeded to `snap_idx` so the `Index =:= applied+1`
-assertion holds from the first replayed block. No deferred effects fire on replay (committed-already).
+`quod_simplex` streams entries `last_applied+1 .. committed_head` from `quod_ledger_store`, casting the same
+`apply_block/3` messages used by live commits. Every 256 entries it calls `quod_prolog:sync/1`, a no-op
+barrier that bounds the fact-engine mailbox to one replay window. Once the prefix is fully applied and
+Simplex recovery is `ready`, it calls `mark_ready/1`. A lone fact-engine crash therefore rebuilds from disk
+without a second persisted fact store, and no proof can observe partial replay.
 
 ### 4.7 Sync query API + metrics
 
@@ -1213,13 +1201,18 @@ assertion holds from the first replayed block. No deferred effects fire on repla
 stats(Ns) -> try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000) catch exit:_ -> #{} end.
 
 handle_call(get_stats, _From, S) ->
-    {reply, #{applies => S#s.applies, rejects => S#s.rejects, proves => S#s.proves,
-              conflicts => S#s.conflicts, applied => (S#s.kb)#kb.applied}, S}.
+    {reply, #{applied => S#s.applied, applies => S#s.applies,
+              rejects => S#s.rejects, proves => S#s.proves,
+              conflicts => S#s.conflicts,
+              parked => map_size(S#s.parked),
+              proof_workers => map_size(S#s.workers),
+              ask_workers => map_size(S#s.ask_workers),
+              kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef)}, S}.
 ```
 
-`quod_metrics:declare/0` gains `quod_prolog_applied_index`, `quod_prolog_apply_rejects_total`,
-`quod_prolog_proves_total`, labelled `[namespace]`, set in a `refresh_ns`-style loop driven off
-`quod_prolog:namespaces/0`.
+The Prometheus poller exports the applied height, apply/reject/prove/conflict counters, parked writes, and
+park timeout count per namespace. Worker counts and MVCC memory are available through `stats/1` for direct
+diagnostics.
 
 ### 4.8 Edge cases
 
@@ -1227,14 +1220,15 @@ handle_call(get_stats, _From, S) ->
 |---|---|
 | `prove` on unknown `TargetNs` | `quod_reg:where` → `undefined` → `{error, no_such_namespace}`. |
 | Goal fails | worker reports `fail`; reply `fail`; overlay dropped (not a conflict). |
-| Worker crashes / times out | `DOWN` or `prove_ms` watchdog → look up `prove_pending` by `Ref`, reply `{error, prove_failed}`. `call_ms > prove_ms` so the watchdog fires first. |
+| Worker crashes / makes no progress | correlated `DOWN` → `{error, prove_failed}`; watchdog kill → `{error, no_progress}`. Caller death kills its worker. |
 | Foreign-ns write (`CallerNs =/= TargetNs`, `Changes =/= []`) | `{error, foreign_write_unsupported}` (#10). |
-| `apply_block` out of order | `error({apply_out_of_order, ...})`, sub-sup restarts and rebuilds from the log. |
-| OCC conflict at apply | `{reject, conflict}`: facts unchanged, `applied` advances, `rejects++`; submitter gets `{retry, conflict}`; effects discarded. |
-| Over-size `#transaction{}` | reject before `quod_ledger:append`, `{error, change_too_large}`. |
+| Duplicate/old `apply_block` | idempotent no-op. |
+| Forward apply gap | leave state unchanged and ask `quod_simplex` to rebuild the contiguous prefix. |
+| OCC conflict at apply | facts unchanged, `applied` advances, `rejects++`; submitter gets `{error, conflict_retry}`. |
 | Not the leader on submit | `{error, not_in_charge, Hint}` → `{error, {not_leader, Hint}}`, unpark. |
-| 1-voter committee | transparent: `quod_ledger` commits on local fsync, then `apply_block` fires as in N-voter. |
-| Restart mid-flight write | a parked write whose block had not committed is lost; caller times out (`call_ms`) and re-proves. A committed block is replayed in §4.6; only the deferred external effect is lost (at-most-once). |
+| Proof/ask worker cap reached | reject immediately with `{error, busy}`; no unbounded queue or process growth. |
+| 1-voter committee | transparent: Simplex commits locally, then `apply_block` fires as in N-voter. |
+| Restart mid-flight write | the client call exits with the engine; it may retry. A block that already committed is replayed from the durable Simplex store, and content apply remains idempotent. |
 
 ---
 
@@ -1308,18 +1302,17 @@ init({Ns, Config}) ->
 Children are `permanent` within the sub-sup; the sub-sup is `transient` under `quod_ns_sup` (a clean
 `stop_namespace` is not auto-restarted; a crash is).
 
-### 5.3 `quod_ledger` ⇄ `quod_prolog` apply coupling
+### 5.3 `quod_simplex` ⇄ `quod_prolog` apply coupling
 
-The coupling is the Raft apply loop (§1.10): for each committed `kind=block`, `quod_ledger` calls
-`quod_prolog:apply_block(Ns, Index, Change) -> ok | {reject, conflict}` **strictly in index order**. It is a
-synchronous call; the OCC read-set re-check runs at apply on every member (§4.4) — the verdict is
-deterministic and identical everywhere, so this reconciles "apply re-checks" (#23) with determinism (#25).
-`kind=config` entries carry **no `read_check`** and are not read-validated.
+For each finalized slot, `quod_simplex` casts
+`quod_prolog:apply_block(Ns, Index, BatchOrNoop)` **strictly in index order**. The OCC read-set re-check runs
+inside the fact engine on every member (§4.4), so the verdict is deterministic against the same committed
+prefix. The asynchronous boundary prevents an append/apply call cycle; the fact engine itself owns parked
+client correlation by transaction id.
 
-**Rebuild handshake:** on `quod_prolog:init/1` (empty kb), it calls `quod_ledger:replay(Ns) -> {ok, AppliedUpTo}`
-which resets `last_applied := snap_idx` (seeding from snapshot data if present) and re-drives `apply_block/3`
-over `snap_idx+1 .. commit_index` before any prove is answered (§4.6). The same handshake covers the
-`quod_ledger`-crash path (prolog restarts after it).
+**Rebuild handshake:** `quod_prolog:init/1` creates an empty shared store and casts
+`quod_simplex:rebuild/1`. Simplex streams its durable committed entries back through `apply_block/3`, with
+periodic `sync/1` barriers, and calls `mark_ready/1` only after the entire prefix is applied (§4.6).
 
 ### 5.4 Routing `prove(TargetNs, Goal, CallerNs)`
 
@@ -1444,6 +1437,10 @@ milestone is demonstrable on its own and depends only on earlier ones.
 | ------ | ---- | ------- | ---------- |
 | `quod_ledger` | per-Ns Raft committee member; owns the durable log | `{quod_ledger, Ns}` | `quod_ns` |
 | `quod_prolog` | per-Ns facts engine: `apply`/`prove` | `{quod_prolog, Ns}` | `quod_ns` |
+| `quod_erlog_db_mvcc` | shared versioned committed KB; immutable proof snapshots | — | `quod_prolog` |
+| `quod_erlog_db_local_prove` | per-proof write/read overlay over an MVCC snapshot | — | proof worker |
+| `quod_ask` | local and remote inter-ontology solution streams | — | `quod_prolog` |
+| `quod_wire_term` | bounded atom-safe codec for remote Prolog terms | — | `quod_ask` |
 | `quod_ledger_store` | on-disk persistence helper (library) | — | — |
 | `quod_diff` | pure differ: write-set op-log + read-set hashes | — | — |
 | `quod_ns` | per-Ns `rest_for_one` sub-sup | `{quod_ns, Ns}` | `quod_ns_sup` |
@@ -1473,15 +1470,13 @@ on the next heartbeat.
 2. **`quod_diff`** (pure, `-ifdef(TEST)` exported): `functor_hash(Functor, Arity, Clauses) -> integer()`,
    `read_check(KB, ReferencedFunctors) -> read_check()`, `diff_to_ops(BeforeKB, AfterKB) -> [op()]`,
    `apply_ops(KB, [op()]) -> KB'`. Content-only identity; deterministic apply.
-3. **`quod_prolog`** (§4): `prove/3`, `apply_block/3` (`ok | {reject, conflict}`) wrapping the pure engine
-   `apply/3`. `prove/3` runs against the local converged KB, returns bindings (not auto-asserted, #6),
-   classifies after execution (#8); empty diff ⇒ read (no append); non-empty ⇒ transaction. Effects deferred
-   until after commit (#11).
-4. **`quod_ledger` gen_statem** (§1): `init/1` (load durable, reconstruct volatile, subscribe on `Chan`, arm
-   election timer); brand-new-Ns create bootstrap (`{add, self}`); `append/2` (`{error, conflict_retry}` =
-   OCC reject, `{error, busy}` = M5 backpressure); append path (leader, 1-voter: fsync, park `From`, commit
-   on local fsync); apply loop (reply parked `From` from the apply step per OCC verdict; fail `pending` on
-   tail loss / step-down); self-election as a degenerate normal election (#18).
+3. **`quod_prolog`** (§4): `prove/3` and asynchronous `apply_block/3` over the shared MVCC engine.
+   `prove/3` returns bindings for an empty diff; a non-empty own-namespace diff becomes a transaction and
+   the caller remains parked until ordered apply.
+4. **`quod_simplex` gen_statem**: load the durable slot log, recover the current validator projection,
+   run DispersedSimplex support/commit/complaint rounds, batch appends, and cast finalized slots into
+   `quod_prolog`. Consensus append acceptance is asynchronous from the fact engine's perspective; the
+   transaction id ties final apply back to the parked client.
 
 **Demonstrable:** one node, `start_namespace(Ns, #{node_id => Self, mode => create})`; `append` ⇒ `{ok, 1}`;
 `prove` returns the asserted bindings; restart ⇒ log replays from disk, same facts (#20, #29); a read appends

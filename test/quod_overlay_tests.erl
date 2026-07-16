@@ -40,8 +40,9 @@ overlay_apply_roundtrip_test() ->
     {Changes, ReadSet} = scope(C, {',', {parent, tom, {'X'}}, {assertz, {child, {'X'}}}}),
     %% write-set is exactly the staged assert; X resolved to bob
     ?assertMatch([{assert, {{child, bob}, _Body}}], Changes),
-    %% read-set records the predicate read, with a content hash
-    ?assertEqual([{parent, 2}], maps:keys(ReadSet)),
+    %% read-set records both the predicate and the agreed link-following policy,
+    %% with a content hash for each dependency.
+    ?assertEqual([{no_follow, 1}, {parent, 2}], maps:keys(ReadSet)),
     ?assert(is_integer(maps:get({parent, 2}, ReadSet))),
     %% the committed db was NOT touched — child(bob) is only staged
     ?assertEqual(undefined, proc(C, {child, 1})),
@@ -82,7 +83,8 @@ read_after_local_write_is_tracked_test() ->
     {ok, Ov1} = quod_erlog_db_local_prove:assertz_clause(
                   Ov0, {parent, 2}, {parent, tom, sue}, true),
     ?assertMatch({clauses, _}, quod_erlog_db_local_prove:get_procedure(Ov1, {parent, 2})),
-    ?assertEqual([{parent, 2}], maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
+    ?assertEqual([{no_follow, 1}, {parent, 2}],
+                 maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
     quod_erlog_db_local_prove:cleanup_read_set(W0).
 
 %% Abolishing changes the local view to empty, but observing that empty view still
@@ -92,8 +94,9 @@ read_after_local_abolish_is_tracked_test() ->
     W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
     Ov0 = db_ref(W0),
     {ok, Ov1} = quod_erlog_db_local_prove:abolish_clauses(Ov0, {parent, 2}),
-    ?assertEqual(undefined, quod_erlog_db_local_prove:get_procedure(Ov1, {parent, 2})),
-    ?assertEqual([{parent, 2}], maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
+    ?assertMatch({clauses, _}, quod_erlog_db_local_prove:get_procedure(Ov1, {parent, 2})),
+    ?assertEqual([{no_follow, 1}, {parent, 2}],
+                 maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
     quod_erlog_db_local_prove:cleanup_read_set(W0).
 
 %%%===================================================================

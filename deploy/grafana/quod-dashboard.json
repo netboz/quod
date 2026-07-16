@@ -863,7 +863,7 @@
     {
       "type": "timeseries",
       "id": 42,
-      "title": "Locally reachable population",
+      "title": "Estimated total population N",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -886,8 +886,8 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "quod_brahms_reachable_n{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "reachable · {{node_id}}/{{namespace}}"
+          "expr": "quod_brahms_estimated_n{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "estimated N · {{node_id}}/{{namespace}}"
         }
       ]
     },

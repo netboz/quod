@@ -193,7 +193,13 @@ join_block(Content) ->
     Ns    = maps:get(namespace, Content),
     Self  = application:get_env(quod, node_id, default_node_id()),
     Seeds = content_seeds(Content),
-    case quod_brahms:start_namespace(Ns, #{node_id => Self, seed_peers => Seeds}) of
+    PopulationIdentity = case {application:get_env(quod, node_pubkey),
+                               application:get_env(quod, identity_key)} of
+                             {{ok, Pub}, {ok, Key}} -> #{pubkey => Pub, key => Key};
+                             _ -> undefined
+                         end,
+    case quod_brahms:start_namespace(Ns, #{node_id => Self, seed_peers => Seeds,
+                                            population_identity => PopulationIdentity}) of
         {ok, _} ->
             logger:info("quod[~s]: brahms up as ~p (~b seed(s))", [Ns, Self, length(Seeds)]);
         Error ->

@@ -54,9 +54,10 @@ Only a **direct message that announces the id as its own sender** lifts the
 tombstone (SWIM **refutation**). Brahms identifies peers by their **address** (the `Addr`
 half of the link header) and trusts it as-announced — the gossip layer does not verify
 identity (see `m:quod_brahms_sampler`'s sybil caveat), so refutation is only as strong as
-that announced address. (The committee/ledger layer DOES authenticate — it binds the
-header's pubkey to `quic:peercert/1` — but Brahms discovery deliberately stays
-address-based; gossiping the authenticated pubkey is a later refinement.) The
+that announced address. Brahms discovery deliberately stays address-based, but its
+separate population sketch gossips only owner-signed stable public-key heartbeats;
+those heartbeats are independently verifiable and expire unless their owner refreshes
+them. The
 eviction it guards is sound w.r.t. Brahms: the detector evicts only on a probe
 unanswered for `probe_rounds`, which a live node clears well within, so a live id
 is evicted (and tombstoned) only on a rare timing miss, and that self-heals the
@@ -104,6 +105,12 @@ moment it next contacts us.
           %% is now closed by refresh). Keep it a few rounds so a momentary gossip gap
           %% doesn't lapse a still-circulating id; not large, so a reused id frees soon.
           tombstone_rounds => 60,
+          %% Fixed-size, signed live-population sketch.  It is exact while the
+          %% live component has <= population_k nodes and estimates larger
+          %% components from the global bottom-k public-key ranks.
+          population_k => 128,
+          population_ttl_ms => 60000,
+          population_max_future_ms => 10000,
           jitter      => 0.2}).
 
 -define(MAX_GOSSIP_BYTES, 65536).  %% drop oversized gossip payloads before decode
@@ -116,6 +123,7 @@ moment it next contacts us.
             pull_limit :: pos_integer(),
             view    = [] :: [term()],
             sampler :: quod_brahms_sampler:sampler(),
+            population :: quod_brahms_population:population(),
             conns   = #{} :: #{term() => {pid(), reference(), out | in}},  %% NodeId => {LinkPid, MonRef, Origin}
             outbox  = #{} :: #{term() => binary()},  %% latest payload queued for a link being opened
             probing = #{} :: #{term() => non_neg_integer()},  %% NodeId => round the liveness probe was sent
@@ -158,7 +166,7 @@ sample(Ns) -> call(Ns, get_sample).
                            conns => non_neg_integer(), rounds => non_neg_integer(),
                            evictions => non_neg_integer(),
                            tombstones => non_neg_integer(),
-                           reachable_n => pos_integer()} | undefined.
+                           estimated_n => non_neg_integer()} | undefined.
 stats(Ns) ->
     try gen_statem:call(quod_reg:via({quod_brahms, Ns}), get_stats, 1000)
     catch exit:_ -> undefined
@@ -191,10 +199,16 @@ init({Ns, Config}) ->
             PushLimit = maps:get(push_limit, Config, max(2, 2 * L1)),
             PullLimit = maps:get(pull_limit, Config, max(2, 2 * L2)),
             Sampler = quod_brahms_sampler:observe_all(Seeds, quod_brahms_sampler:new(K)),
+            Population0 = quod_brahms_population:new(
+                            maps:get(population_identity, Config, undefined),
+                            maps:get(population_k, Cfg),
+                            maps:get(population_ttl_ms, Cfg),
+                            maps:get(population_max_future_ms, Cfg)),
+            Population = quod_brahms_population:tick(Population0, erlang:system_time(millisecond)),
             quod_reg:subscribe({channel, Ns}),
             D = #d{ns = Ns, self = Self, cfg = Cfg, counts = Counts,
                    push_limit = PushLimit, pull_limit = PullLimit,
-                   view = Seeds, sampler = Sampler},
+                   view = Seeds, sampler = Sampler, population = Population},
             %% First round fires FAST (not after a full round_ms): its seed dials exchange
             %% link headers that warm the ledger's pubkey->addr resolver cache, so a node
             %% that just (re)started can resolve and reach its committee in ~1 RTT instead
@@ -274,10 +288,7 @@ common({call, From}, get_stats, D) ->
               rounds     => D#d.rounds,
               evictions  => D#d.evictions,
               tombstones => map_size(D#d.tombstones),
-              %% The overlay view is only a candidate set. Open links are the
-              %% locally authenticated, receipt-checked population we can state
-              %% without retaining stale gossip history.
-              reachable_n => map_size(D#d.conns) + 1},
+              estimated_n => quod_brahms_population:estimate(D#d.population)},
     {keep_state, D, [{reply, From, Stats}]};
 common(info, {quod_message, _, _OtherNs, _}, D) ->
     {keep_state, D};                               %% another namespace
@@ -294,13 +305,16 @@ terminate(_Reason, _State, #d{ns = Ns}) ->
 %% round
 %% ======================================================================
 
-do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg}) ->
+do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg,
+                 population = Population0}) ->
     R = D0#d.rounds + 1,
-    D = D0#d{rounds = R,
+    Population = quod_brahms_population:tick(Population0, erlang:system_time(millisecond)),
+    D = D0#d{rounds = R, population = Population,
              tombstones = prune_tombstones(D0#d.tombstones, R, maps:get(tombstone_rounds, Cfg))},
     {Push, Pull} = gossip_targets(L1, L2, V),      %% independent push/pull subsets of V
-    PushBin = encode({push, Self}),                %% encode once, fan out
-    PullBin = encode({pull_req, Self}),
+    Heartbeat = quod_brahms_population:self_record(Population),
+    PushBin = encode({push, Self, Heartbeat}),     %% encode once, fan out
+    PullBin = encode({pull_req, Self, Heartbeat}),
     D1 = lists:foldl(fun(T, A) -> send_msg(T, PushBin, A) end, D, Push),
     D2 = lists:foldl(fun(T, A) -> send_msg(T, PullBin, A) end, D1, Pull),
     %% Drop cached links we have not heard from in conn_idle_rounds (a warm link is
@@ -320,8 +334,8 @@ do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg}) ->
 
 handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_BYTES ->
     D;                                             %% oversized gossip -> drop
-handle_inbound({{_RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
-               D0 = #d{self = Self, counts = {_, L2, _}}) ->
+handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
+               D0 = #d{self = Self}) ->
     %% a peer's link is bidirectional: cache it for our own sends so a peer pair
     %% shares ONE stream per channel (no separate dial-back). Hearing from a peer
     %% is also liveness proof: it answers any in-flight probe AND lifts any
@@ -332,7 +346,26 @@ handle_inbound({{_RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                                clear_probe(RemoteNodeId,
                                            cache_inbound(RemoteNodeId, ReplyLink, D0)))),
     case decode(Payload) of
+        {push, Id, Heartbeat} when Id =/= Self ->
+            D1 = merge_sender_heartbeat(RemoteIdentity, Heartbeat, D),
+            handle_push(Id, D1);
         {push, Id} when Id =/= Self ->
+            handle_push(Id, D);
+        {pull_req, From, Heartbeat} when From =/= Self ->
+            reply_view(ReplyLink, D),
+            merge_sender_heartbeat(RemoteIdentity, Heartbeat, observe(From, D));
+        {pull_req, From} when From =/= Self ->
+            reply_view(ReplyLink, D),              %% old peer during rolling upgrade
+            observe(From, D);
+        {pull_resp, From, Ids, Heartbeats} ->
+            handle_pull_response(From, Ids, Heartbeats, Mode, D);
+        {pull_resp, From, Ids} ->
+            handle_pull_response(From, Ids, [], Mode, D);
+        _ ->
+            D                                      %% bad/unknown -> drop
+    end.
+
+handle_push(Id, D) ->
             case tombstoned(Id, D) of
                 true  -> refresh_tombstone(Id, D); %% re-gossiped dead id: keep its tombstone alive
                 %% Pushes are UNSOLICITED and arrive on the peer's schedule, not ours, so we
@@ -341,11 +374,10 @@ handle_inbound({{_RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                 %% feeds the α (push) share of V and makes the limited-push counter see a full
                 %% round's pushes. accumulate_push caps Vpush at push_limit, so it stays bounded.
                 false -> accumulate_push(Id, observe(Id, D))  %% sampler sees every received id too
-            end;
-        {pull_req, From} when From =/= Self ->
-            reply_view(ReplyLink, D),              %% answer on the inbound link
-            observe(From, D);
-        {pull_resp, From, Ids} ->
+            end.
+
+handle_pull_response(From, Ids, Heartbeats, Mode,
+                     D = #d{self = Self, counts = {_, L2, _}}) ->
             %% accept only a response we solicited this round
             case lists:member(From, D#d.pulled) of
                 true ->
@@ -354,14 +386,11 @@ handle_inbound({{_RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                     %% outlives the circulation), then drop those from the rebuild pool.
                     D1 = lists:foldl(fun refresh_tombstone/2, D, Capped),
                     Clean = [I || I <- Capped, not tombstoned(I, D1)],
-                    D2 = observe_all(Clean, D1),
+                    D2 = merge_population(Heartbeats, observe_all(Clean, D1)),
                     case Mode of collecting -> accumulate_pull(Clean, D2); idle -> D2 end;
                 false ->
                     D                              %% unsolicited -> drop
-            end;
-        _ ->
-            D                                      %% bad/unknown -> drop
-    end.
+            end.
 
 accumulate_push(Id, D = #d{push_limit = PL, pushes = P, vpush = Vpush}) ->
     P1 = P + 1,
@@ -375,8 +404,9 @@ accumulate_pull(Ids, D = #d{pull_limit = PL, vpull = Vpull}) ->
     D#d{vpull = lists:sublist(Ids ++ Vpull, PL)}.  %% bound the per-round pull pool
 
 %% answer a pull on the very link the request arrived on (the stream is bidi).
-reply_view(ReplyLink, #d{self = Self, view = V}) ->
-    _ = quod_link:send(ReplyLink, encode({pull_resp, Self, V})),
+reply_view(ReplyLink, #d{self = Self, view = V, population = Population}) ->
+    _ = quod_link:send(ReplyLink,
+                        encode({pull_resp, Self, V, quod_brahms_population:records(Population)})),
     ok.
 
 reconstruct_and_update(D = #d{counts = {L1, L2, L3}, cfg = Cfg, self = Self, view = OldV,
@@ -550,6 +580,17 @@ pick1(Pool, SelfAddr) ->
 
 observe(Id, D)      -> D#d{sampler = quod_brahms_sampler:observe(Id, D#d.sampler)}.
 observe_all(Ids, D) -> D#d{sampler = quod_brahms_sampler:observe_all(Ids, D#d.sampler)}.
+
+%% A sender's own heartbeat is accepted only when its pubkey is exactly the
+%% TLS-authenticated link-header identity.  Pull responses can carry other
+%% members' heartbeats; those are independently owner-signed by the population
+%% sketch, so a forwarder cannot refresh or forge them.
+merge_sender_heartbeat(Pub, {population_v1, Pub, _, _} = Heartbeat, D) when is_binary(Pub) ->
+    merge_population([Heartbeat], D);
+merge_sender_heartbeat(_, _, D) -> D.
+
+merge_population(Heartbeats, D = #d{population = Population}) ->
+    D#d{population = quod_brahms_population:merge(Heartbeats, Population)}.
 
 take(N, L) -> lists:sublist(L, N).
 shuffle(L) -> [X || {_, X} <- lists:sort([{rand:uniform(), E} || E <- L])].

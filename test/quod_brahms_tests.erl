@@ -118,25 +118,36 @@ stale_conns_test() ->
     ?assertEqual([a],    stale_conns(#{a => l}, #{}, 6, 6)),           %% never-heard, at window
     ?assertEqual([],     stale_conns(#{a => l}, #{}, 5, 6)).           %% never-heard, before window
 
-%% A gossiped candidate must not look locally reachable until it opens a direct link.
-reachable_population_ignores_gossiped_candidates_test_() ->
+%% N counts signed stable identities, never their dynamic endpoint.
+population_estimate_uses_signed_stable_identity_test_() ->
     {setup,
      fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
      fun(Started) -> [application:stop(A) || A <- Started], ok end,
-     [{"gossiped candidates do not inflate the locally reachable population",
-       fun reachable_population_ignores_gossiped_candidates/0}]}.
+     [{"signed stable identities contribute to total population N",
+       fun population_estimate_uses_signed_stable_identity/0}]}.
 
-reachable_population_ignores_gossiped_candidates() ->
+population_estimate_uses_signed_stable_identity() ->
     Ns = <<"ont:live-estimate">>,
     SelfAddr = {"127.0.0.1", 65101},
-    PeerKey = <<2:256>>,
+    SelfIdentity = test_identity(),
+    PeerIdentity = test_identity(),
+    PeerKey = maps:get(pubkey, PeerIdentity),
     PeerAddr = {"127.0.0.1", 65102},
     GhostAddr = {"127.0.0.1", 65103},
     {ok, B} = quod_brahms:start_link(Ns, #{node_id => SelfAddr, seed_peers => [PeerAddr],
+                                           population_identity => SelfIdentity,
                                            round_ms => 10000, collect_ms => 100, jitter => 0.0}),
-    B ! {quod_message, {{PeerKey, PeerAddr}, self()}, Ns, encode({push, GhostAddr})},
-    ?assertEqual(2, maps:get(reachable_n, quod_brahms:stats(Ns))),
+    PeerPopulation = quod_brahms_population:tick(
+                       quod_brahms_population:new(PeerIdentity, 128, 60000, 10000),
+                       erlang:system_time(millisecond)),
+    Heartbeat = quod_brahms_population:self_record(PeerPopulation),
+    B ! {quod_message, {{PeerKey, PeerAddr}, self()}, Ns, encode({push, GhostAddr, Heartbeat})},
+    ?assertEqual(2, maps:get(estimated_n, quod_brahms:stats(Ns))),
     gen_statem:stop(B).
+
+test_identity() ->
+    {Pub, Seed} = quod_identity:generate(),
+    #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}.
 
 %% --- take_random: bounded, distinct, subset -----------------------------
 

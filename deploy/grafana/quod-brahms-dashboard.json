@@ -454,7 +454,7 @@
         "type": "prometheus",
         "uid": "prometheus"
       },
-      "description": "Each node plus the peers with an authenticated Brahms link that has recently exchanged traffic, compared with the currently scraped fleet (the dashed line). It falls when dead links expire. This is deliberately a local reachability signal, not a whole-network census.",
+      "description": "Each node's bounded estimate of total live Brahms population, compared with the currently scraped fleet (the dashed line). It is built from signed stable identities whose owner heartbeats expire, so stopped nodes age out and a port change does not create a new member.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -523,7 +523,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "quod_brahms_reachable_n",
+          "expr": "quod_brahms_estimated_n",
           "legendFormat": "{{node}} / {{namespace}}",
           "refId": "A"
         },
@@ -537,7 +537,7 @@
           "refId": "B"
         }
       ],
-      "title": "Locally reachable population (per node) vs fleet",
+      "title": "Estimated total population N (per node) vs fleet",
       "type": "timeseries"
     },
     {

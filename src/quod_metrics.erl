@@ -18,7 +18,7 @@ Two collection paths:
 | metric | type | extra labels | what it means (plain) |
 | ------ | ---- | ------------ | --------------------- |
 | `quod_up` | gauge | | 1 while the node is running |
-| `quod_brahms_*{namespace}` | gauge | | peer discovery: how many other nodes are known / sampled / connected, plus the locally reachable population |
+| `quod_brahms_*{namespace}` | gauge | | peer discovery plus each node's bounded, signed estimate of total live population |
 | `quod_consensus_slot/committed/approved/last_applied/committee_size{namespace}` | gauge | | block numbers (newest / final / votable / applied) and how many nodes may vote |
 | `quod_consensus_pipeline_gap{namespace}` | gauge | | blocks with enough votes but not yet final (stays 0-2 by design) |
 | `quod_consensus_appends/proposals/batched_txs/commits/submitted/skips{namespace}` | gauge | | running totals of change and block activity |
@@ -112,7 +112,7 @@ declare(NodeId) ->
     _ = G(quod_brahms_rounds,      "Total number of update-sharing rounds this node has run (only ever goes up)."),
     _ = G(quod_brahms_evictions,   "Total number of nodes this node has dropped after they stopped responding (only ever goes up)."),
     _ = G(quod_brahms_tombstones,  "Nodes just marked dead and remembered for a short while so they are not added straight back (temporary; returns to 0)."),
-    _ = G(quod_brahms_reachable_n, "This node plus peers with an authenticated Brahms link that has recently exchanged traffic. It falls after dead links expire; it is not a whole-network census."),
+    _ = G(quod_brahms_estimated_n, "Estimated total number of live nodes in this Brahms overlay. Nodes gossip a bounded sketch of signed, expiring stable identities, so a departed node ages out and a port change does not count as a new node."),
     %% Consensus: how the nodes agree on one shared, ordered history of changes.
     _ = G(quod_consensus_slot,            "The number of the newest block this node has. Higher means more history; all healthy nodes should track close together."),
     _ = G(quod_consensus_committed,       "The number of the newest block that is final and can never change."),
@@ -173,14 +173,14 @@ declare(NodeId) ->
 refresh_ns(Ns) ->
     case quod_brahms:stats(Ns) of
         #{view := V, sample := S, conns := C, rounds := R, evictions := E,
-          tombstones := T, reachable_n := RN} ->
+          tombstones := T, estimated_n := EN} ->
             _ = prometheus_gauge:set(quod_brahms_view_size,   [label(Ns)], V),
             _ = prometheus_gauge:set(quod_brahms_sample_size, [label(Ns)], S),
             _ = prometheus_gauge:set(quod_brahms_links,       [label(Ns)], C),
             _ = prometheus_gauge:set(quod_brahms_rounds,      [label(Ns)], R),
             _ = prometheus_gauge:set(quod_brahms_evictions,   [label(Ns)], E),
             _ = prometheus_gauge:set(quod_brahms_tombstones,  [label(Ns)], T),
-            _ = prometheus_gauge:set(quod_brahms_reachable_n, [label(Ns)], RN),
+            _ = prometheus_gauge:set(quod_brahms_estimated_n, [label(Ns)], EN),
             ok;
         _ -> ok
     end.

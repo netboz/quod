@@ -420,6 +420,44 @@ fork_certs_cannot_coexist_test() ->
     ?assertMatch({ok, _}, quod_simplex:form_cert(commit, 5, BH5, Cmt2, Vals)),       %% child-commit cert forms
     ?assertEqual({error, insufficient}, quod_simplex:form_cert(complaint, 4, none, Cpl2, Vals)).
 
+%% A batch still being COLLECTED (not yet sealed into a proposal) whose slot is complaint-skipped must nack
+%% its parked callers {error, skipped} so they retry at once. Pre-fix, finalize/2 dropped the batch silently
+%% (clear_collecting_le) and the caller heard nothing, hanging until the ~30s park TTL and then getting a
+%% bogus {error, timeout} instead of the retryable {error, skipped}.
+skipped_batch_nacks_its_callers_test() ->
+    Ref  = make_ref(),
+    From = {self(), Ref},
+    S = quod_simplex:test_state(#{slot => 4, eng => quod_simplex:eng_with_certs(4, []),
+                                  collecting => {5, [From]}}),
+    _ = quod_simplex:finalize(5, S),   %% slot 5 finalized (skipped) while its batch was still collecting
+    receive
+        {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
+    after 0 -> ?assert(false)          %% no reply => the caller would hang to the park TTL (the bug)
+    end.
+
+%% Batch capacity limits, driven through the real append entry (running/3). An oversized single change is
+%% rejected fast ({error, too_large}) so a block can never blow past the 1 MiB wire frame; a leader whose
+%% depth-one pipeline is already full ({error, busy}) turns further appends away rather than over-committing.
+batch_caps_reject_oversized_and_busy_test() ->
+    Me   = <<"me">>,
+    Base = #{self => Me, validators => [Me], sync => ready, slot => 3,
+             eng => quod_simplex:eng_with_certs(0, [])},   %% a caught-up sole leader
+    From = {self(), make_ref()},
+    %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched
+    Big  = #transaction{tx_id = <<"big">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
+                        diff = [{assert, {{blob, binary:copy(<<0>>, 300 * 1024)}, true}}]},
+    {keep_state, _, A1} = quod_simplex:running({call, From}, {append, Big}, st(Base)),
+    ?assert(lists:member({reply, From, {error, too_large}}, A1)),
+    %% depth-one pipeline already full (committed 3, approved 5 => gap 2, the max): no room to propose => busy
+    Small = #transaction{tx_id = <<"s">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
+                         diff = [{assert, {{k, v}, true}}]},
+    {keep_state, _, A2} = quod_simplex:running({call, From}, {append, Small}, st(Base#{approved => 5})),
+    ?assert(lists:member({reply, From, {error, busy}}, A2)),
+    %% a change whose tx_id is already in the collecting batch is rejected (no double-apply of one write)
+    {keep_state, S1, _} = quod_simplex:running({call, From}, {append, Small}, st(Base)),   %% collect Small
+    {keep_state, _, A3} = quod_simplex:running({call, From}, {append, Small}, S1),          %% same tx_id
+    ?assert(lists:member({reply, From, {error, bad_change}}, A3)).
+
 %%%===================================================================
 %%% boundary / edge / Byzantine (fixes from the review)
 %%%===================================================================

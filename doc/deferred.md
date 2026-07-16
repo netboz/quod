@@ -318,6 +318,23 @@ stages, not carried forward:
   `#round{}` state replace the old `proposing`/`pending` field cluster. A short bounded micro-batch shares
   one block, certificate exchange, and fsync across up to 256 ordered transactions. The approved frontier
   may open one successor over an uncommitted parent, while the durable frontier still drains in order.
+- **Stale collecting-batch on a competing notarization — `function_clause` crash (Byzantine/duplicate-leader
+  only; found in the 2026-07-16 hardening DA review).** `collect_append/4`'s second clause
+  (`src/quod_simplex.erl`) pattern-requires the in-flight `#s.collecting` batch's slot to equal the next
+  proposable slot `Next = approved+1`. `approve_block/2` advances `approved` on ANY notarization but does not
+  clear or reconcile a batch we are still collecting for that same slot. So if a COMPETING block for our
+  collecting slot `V` notarizes (only possible if some other node proposed `V` too — a duplicate/Byzantine
+  leader, since `leader/2` is deterministic and honest nodes propose a slot exactly once), `approved` jumps
+  to `V`, `Next` becomes `V+1`, and the next client append lands with `collecting.slot = V =/= Next = V+1`:
+  neither `collect_append` clause matches and the statem process crashes (its supervisor restarts it, which
+  re-reads the durable log — so it self-heals, but a crash-loop is possible if the condition persists). The
+  skip path is already safe (the 2026-07-16 fix nacks + clears the collecting batch on `finalize`); the gap
+  is specifically the notarize-a-competitor path. Fix when membership opens beyond the trusted fleet: in
+  `approve_block` (or `collect_append`) reconcile a stale collecting batch whose slot the approved frontier
+  has passed — nack its parked callers `{error, skipped}` (reuse `nack_collecting/1`) and drop it, or add a
+  catch-all `collect_append` clause that does the same. Low priority on the trusted fleet (needs a Byzantine
+  or double-leader), but a correctness cliff before OPEN membership. Intersects [[vote-latch persistence]]
+  and the epoch/duplicate-leader work.
 - **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; each round's complaint/commit
   latches make the two finalization paths mutually exclusive.
 - **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,

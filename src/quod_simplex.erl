@@ -69,7 +69,7 @@ validator sets, is tracked in `doc/deferred.md`.
          ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
          is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
-         recovery_failed/1, may_sink/2, reset_pace/0, test_state/1, test_arm/1, test_sync/1,
+         recovery_failed/1, may_sink/2, reset_pace/0, finalize/2, test_state/1, test_arm/1, test_sync/1,
          proposal_slot/1, acceptable_payload/2,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
@@ -714,6 +714,9 @@ test_state_set(eng, V, S)        -> S#s{eng = V};
 test_state_set(sync, V, S)       -> S#s{sync = V};
 test_state_set(last_applied, V, S) -> S#s{last_applied = V};
 test_state_set(prolog_ready, V, S) -> S#s{prolog_ready = V};
+test_state_set(collecting, {Slot, Froms}, S) ->   %% a not-yet-sealed batch parking these callers
+    S#s{collecting = #batch{slot = Slot, parent = Slot - 1,
+                            items_rev = [{From, noop} || From <- Froms], bytes = 0}};
 test_state_set(sync_arm, V, S)   -> S#s{sync_arm = V}.
 test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a state (record is private)
 test_sync(#s{sync = Sy})         -> Sy.
@@ -1266,13 +1269,14 @@ weak_cert_wait(Kind, Slot, BH, S) ->
 %% Advance the height past a now-durable slot and drop its per-slot in-flight state: the engine window,
 %% local proposal, support/commit/complaint latches, and membership validation
 %% latches (all bounded to the in-flight window).
-finalize(Slot, S) ->
+finalize(Slot, S0) ->
+    S = nack_collecting_le(Slot, S0),   %% a still-collecting batch for this now-finalized slot: nack its
+                                        %% parked callers so they retry, not leave them to time out (below)
     S#s{slot = Slot,
         eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
         active_slot   = case S#s.active_slot of Slot -> none; A -> A end,
         rounds = maps:remove(Slot, S#s.rounds),
-        local_proposals = maps:remove(Slot, S#s.local_proposals),
-        collecting = clear_collecting_le(Slot, S#s.collecting)}.
+        local_proposals = maps:remove(Slot, S#s.local_proposals)}.
 
 ack_local(Slot, S) -> reply_local(Slot, {ok, Slot}, S).
 nack_local(Slot, S) -> reply_local(Slot, {error, skipped}, S).
@@ -1285,8 +1289,18 @@ reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
         error -> S
     end.
 
-clear_collecting_le(Slot, #batch{slot = Sl}) when Sl =< Slot -> none;
-clear_collecting_le(_Slot, Collecting) -> Collecting.
+%% A batch still being collected (not yet sealed into a proposal) parks its callers with NO reply. When its
+%% slot finalizes -- reachable when that slot was complaint-SKIPPED, or COMMITTED by a competing block,
+%% before our batch sealed -- nack them {error, skipped} so they retry at once, instead of hanging until the
+%% ~30s park TTL (then getting a bogus {error, timeout}); then drop the batch. `nack_collecting/1` is the
+%% shared body, reused by the recovery re-seat (`nack_inflight/1`), which discards the whole in-flight window.
+nack_collecting_le(Slot, S = #s{collecting = #batch{slot = Sl}}) when Sl =< Slot -> nack_collecting(S);
+nack_collecting_le(_Slot, S) -> S.
+
+nack_collecting(S = #s{collecting = #batch{items_rev = Items}}) ->
+    _ = [gen_statem:reply(From, {error, skipped}) || {From, _Change} <- Items],
+    S#s{collecting = none};
+nack_collecting(S) -> S.
 
 clear_active(Slot, S = #s{active_slot = Slot}) -> S#s{active_slot = none};
 clear_active(_Slot, S) -> S.
@@ -2390,12 +2404,7 @@ reseat_engine(NewHead, S) ->
 %% Its fresh engine cannot safely retain proposals or votes from the old base.
 nack_inflight(S0 = #s{local_proposals = Local}) ->
     S1 = lists:foldl(fun nack_local/2, S0, maps:keys(Local)),
-    case S1#s.collecting of
-        #batch{items_rev = Items} ->
-            _ = [gen_statem:reply(From, {error, skipped}) || {From, _} <- Items],
-            S1#s{collecting = none};
-        _ -> S1
-    end.
+    nack_collecting(S1).
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of

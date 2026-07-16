@@ -70,7 +70,7 @@ validator sets, is tracked in `doc/deferred.md`.
          is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
          recovery_failed/1, may_sink/2, reset_pace/0, finalize/2, test_state/1, test_arm/1, test_sync/1,
-         proposal_slot/1, acceptable_payload/2,
+         proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -621,6 +621,8 @@ eng_with_certs(Base, KindSlots) ->
 -define(SINK_MS,     30000). %% budget for one sink window (store append + KB replay) — generous
 -define(TIP_PROBE_MS, 9500). %% one parallel tip round; exceeds quod_catchup's 9s public pull budget
 -define(RECOVERY_FETCHES, 2). %% bound source changes inside one recovery worker (retries resume durably)
+-define(RECOVERY_HINT_WARMS, 3). %% bounded endpoint discovery before an identity-bound tip quorum
+-define(RECOVERY_WARM_CONTACTS, 16). %% parallel, one-entry probes; cold recovery only
 -define(SYNC_HYSTERESIS,  2).  %% ticks the `behind` gap must persist before a heavyweight pull arms (a transient
                                %% 1-2 slot lag rides the cheap redrive); an `unconfirmed` node bypasses it
 -define(SYNC_BACKOFF_MIN, 3).  %% failure backoff floor (ticks) before re-arming a sync after no_contact/error
@@ -2139,9 +2141,10 @@ committee_contacts(Self, Committee) ->
 %% startup costs one network timeout rather than `committee_size * timeout`. A bootstrap endpoint may fetch
 %% history but never corroborates a voting member because endpoint requests are not identity-bound.
 run_recovery(Ns, GH, Statem, Self, Sink) ->
-    recover_tip(Ns, GH, Statem, Self, Sink, ?RECOVERY_FETCHES, false).
+    recover_tip(Ns, GH, Statem, Self, Sink, ?RECOVERY_FETCHES, false,
+                ?RECOVERY_HINT_WARMS).
 
-recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed) ->
+recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed, HintWarms) ->
     case recovery_snapshot(Statem) of
         {ok, From, Committee} when From > 1 ->
             Height = From - 1,
@@ -2152,14 +2155,52 @@ recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed) ->
             case tip_ready(Committee, Self, Exact) of
                 true -> {ready, Height};
                 false ->
-                    Failure = {tip_unconfirmed, Height, length(lists:usort(Exact))},
-                    continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
-                                      FallbackUsed, ahead_contacts(Probes), Exact, Failure)
+                    case HintWarms > 0 andalso needs_hint_warm(Committee, Self) of
+                        true ->
+                            %% A cold node has endpoint seeds but no pubkey=>endpoint cache. Warm a
+                            %% bounded set with tiny direct pulls; each authenticated header teaches the
+                            %% resolver, then the NEXT pass remains the normal identity-bound quorum probe.
+                            warm_contact_hints(Ns, Height),
+                            recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                                        FallbackUsed, HintWarms - 1);
+                        false ->
+                            Failure = {tip_unconfirmed, Height, length(lists:usort(Exact))},
+                            continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                                              FallbackUsed, ahead_contacts(Probes), Exact, Failure)
+                    end
             end;
         {ok, _From, _Committee} ->
             continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
                               FallbackUsed, [], [], empty_namespace);
         {error, R} -> {error, {status, R}}
+    end.
+
+%% A member needs a quorum-minus-self of resolvable peers; an observer needs one current member. We only
+%% warm when the address cache cannot possibly satisfy that threshold, so normal restarts add no traffic.
+needs_hint_warm(Committee, Self) ->
+    Needed = required_tip_peers(Committee, Self),
+    Resolvable = length([Peer || Peer <- Committee -- [Self],
+                                  quod_quic:resolve(Peer) =/= error]),
+    Resolvable < Needed.
+
+%% Direct endpoint pulls authenticate their link headers and populate the pubkey=>endpoint cache. Their
+%% replies are intentionally discarded: only catch_up_from/6 is allowed to put data into the ledger.
+warm_contact_hints(Ns, Height) ->
+    Contacts = quod_catchup:contacts(Ns, ?RECOVERY_WARM_CONTACTS),
+    Parent = self(),
+    Ref = make_ref(),
+    _ = [spawn(fun() ->
+                   _ = catch quod_catchup:pull(Ns, Height + 1, Height + 1, Contact),
+                   Parent ! {recovery_hint_warm, Ref}
+               end) || Contact <- Contacts],
+    wait_hint_warms(Ref, length(Contacts), quod_time:mono_ms() + ?TIP_PROBE_MS).
+
+wait_hint_warms(_Ref, 0, _Deadline) -> ok;
+wait_hint_warms(Ref, Left, Deadline) ->
+    receive
+        {recovery_hint_warm, Ref} -> wait_hint_warms(Ref, Left - 1, Deadline)
+    after max(0, Deadline - quod_time:mono_ms()) ->
+        ok
     end.
 
 %% A voting member contributes its own durable head, so it needs `quorum(N)-1` peer confirmations. An
@@ -2190,7 +2231,8 @@ continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
         {Sources, FallbackUsed1} ->
             case try_recovery_sources(Ns, GH, Statem, Sources, Sink) of
                 {ok, _} ->
-                    recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft - 1, FallbackUsed1);
+                    recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft - 1, FallbackUsed1,
+                                ?RECOVERY_HINT_WARMS);
                 {error, _} -> {error, Failure}
             end
     end.

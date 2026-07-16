@@ -63,8 +63,9 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   *other* transport crash still forces peers to re-dial in before this node can reach them. **The Slice-D
   admit-fact hints (`learn_addresses`) are re-learned only on NEW commits**, so after a transport crash a
   quiescent committee's member↔member hints stay lost until the next membership commit (or an inbound
-  header) — the same posture, noted. Also (Slice D, DA#1): `learn`/`learn_if_absent` NEVER create the
-  table (only `init` does), so a hint written from the consensus statem can't end up owning a table that
+  header). Cold recovery also heals enough hints from the Brahms/seed endpoint pool before its
+  identity-bound tip quorum, but a completely isolated node still cannot recover. Also (Slice D, DA#1):
+  `learn`/`learn_if_absent` NEVER create the table (only `init` does), so a hint written from the consensus statem can't end up owning a table that
   dies with a namespace teardown; a write before the table exists is a fail-closed no-op. Fix when needed:
   give the ETS table an `heir`, or re-seed on `init` from a persisted/config source.
 - **Cold-start address bootstrap — LANDED as a dial HINT (Slice D), deliberately not an address book.** A
@@ -219,7 +220,10 @@ stages, not carried forward:
   `pulling` until distinct current-committee observations at the exact final height, together with self, form
   a certificate quorum. Only `ready` grants `may_vote`/`may_lead`. A raw `{ok,0}` from an empty/stale contact
   is merely one observation and cannot satisfy that quorum. Committee-targeted catch-up replies are also bound
-  to the authenticated peer queried. `valid_cfg` fail-fasts a bad
+  to the authenticated peer queried. A cold node with too few `pubkey -> endpoint` resolver hints first
+  performs up to three bounded rounds of one-entry direct endpoint pulls; authenticated QUIC headers teach
+  the missing hints, then the same identity-bound quorum probe is retried. Those warm-up replies are never
+  ingested, so they cannot bypass verified catch-up. `valid_cfg` fail-fasts a bad
   `mode` or a `join` without a `genesis_hash` anchor (no silent zombie). Covered by `join_SUITE`'s
   full-namespace-restart resume case. **Still deferred from here:**
   - **~~Admission to voter (S5b)~~ — DONE (multi-validator milestone, Slices A–E, 0.6.30–0.6.34).** A

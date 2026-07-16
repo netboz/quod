@@ -171,6 +171,13 @@ tip_quorum_test() ->
     ?assert(quod_simplex:tip_quorum(Committee, A, [B, B, C, <<"outsider">>])),
     ?assertNot(quod_simplex:tip_quorum(Committee, <<"outsider">>, [A, B])).
 
+%% A sole validator settles locally; it must not perform endpoint warming just because there are no peer
+%% resolver hints. A cold joiner with no committee has no possible identity confirmation and does need its
+%% bootstrap endpoint path.
+hint_warm_threshold_test() ->
+    ?assertNot(quod_simplex:needs_hint_warm([<<"me">>], <<"me">>)),
+    ?assert(quod_simplex:needs_hint_warm([], <<"me">>)).
+
 recovery_failure_revokes_capability_test() ->
     Eng = quod_simplex:eng_with_certs(0, []),
     Pulling = st(#{self => <<"me">>, validators => [<<"me">>], slot => 2,

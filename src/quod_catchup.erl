@@ -25,10 +25,10 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, contact/1, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
+-export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([peer_matches/2]).
+-export([peer_matches/2, contact_candidates/3]).
 -endif.
 
 -define(REQ_TIMEOUT_MS,  8000).
@@ -71,6 +71,14 @@ contact(Ns) ->
     case quod_reg:where({quod_catchup, Ns}) of
         undefined -> none;
         Pid -> try gen_server:call(Pid, contact, 5000) catch exit:_ -> none end
+    end.
+
+-doc "A bounded, shuffled set of non-self endpoint contacts for recovery address discovery.".
+-spec contacts(binary(), pos_integer()) -> [endpoint()].
+contacts(Ns, Limit) when is_integer(Limit), Limit > 0 ->
+    case quod_reg:where({quod_catchup, Ns}) of
+        undefined -> [];
+        Pid -> try gen_server:call(Pid, {contacts, Limit}, 5000) catch exit:_ -> [] end
     end.
 
 -doc "Pull committed entries `[From, To]` from a node id or `{Host, Port}` contact. Returns the entries + the server's height.".
@@ -329,6 +337,8 @@ init({Ns, Config}) ->
 
 handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, quod_brahms:sample_contact(Ns, Seeds), S};
+handle_call({contacts, Limit}, _From, S = #s{ns = Ns, seeds = Seeds}) ->
+    {reply, contact_candidates(Ns, Seeds, Limit), S};
 handle_call({pull, From, To, Contact}, ReplyTo, S) ->
     ReqId = make_ref(),
     TRef  = erlang:send_after(?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
@@ -444,3 +454,12 @@ data_dir(Config) ->
         undefined -> filename:join(filename:basedir(user_cache, "quod"), "data");
         Dir       -> Dir
     end.
+
+%% A restarted node initially knows only addresses.  A direct catch-up request authenticates the remote
+%% header and teaches `quod_quic` its pubkey=>endpoint hint, which lets Simplex make its later
+%% identity-bound quorum probes.  Keep the candidates endpoint-only and self-filtered: this is discovery,
+%% not trust; the catch-up and consensus layers still verify certificates and identities respectively.
+contact_candidates(Ns, Seeds, Limit) ->
+    SelfAddr = application:get_env(quod, node_addr, undefined),
+    Pool = [P || P <- lists:usort(quod_brahms:sample(Ns) ++ Seeds), P =/= SelfAddr],
+    quod_brahms:take_random(min(Limit, length(Pool)), Pool).

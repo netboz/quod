@@ -179,7 +179,7 @@ namespaces() ->
 
 call(Ns, Req) ->
     try gen_statem:call(quod_reg:via({quod_brahms, Ns}), Req, 1000)
-    catch exit:_ -> []
+    catch _:_ -> []
     end.
 
 %% ======================================================================

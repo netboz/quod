@@ -77,3 +77,18 @@ peer_binding_test() ->
     ?assert(quod_catchup:peer_matches(A, {bound, A})),
     ?assertNot(quod_catchup:peer_matches(B, {bound, A})),
     ?assert(quod_catchup:peer_matches(B, unbound)).
+
+%% Cold recovery begins with endpoint seeds, not pubkey resolver hints. Candidate discovery must keep the
+%% endpoint form (so a direct authenticated pull can teach the hint), exclude self, deduplicate, and cap.
+contact_candidates_test() ->
+    Ns = <<"catchup:no-process">>,
+    Self = {"127.0.0.1", 14567},
+    A = {"10.0.0.1", 1001}, B = {"10.0.0.2", 1002},
+    application:set_env(quod, node_addr, Self),
+    try
+        Candidates = quod_catchup:contact_candidates(Ns, [Self, A, A, B], 8),
+        ?assertEqual(lists:sort([A, B]), lists:sort(Candidates)),
+        ?assertEqual(1, length(quod_catchup:contact_candidates(Ns, [A, B], 1)))
+    after
+        application:unset_env(quod, node_addr)
+    end.

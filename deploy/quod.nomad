@@ -18,8 +18,8 @@ variable "node_count" {
 
 variable "cloud_node_count" {
   type        = number
-  default     = 1
-  description = "Cloud satellites (join mode, `cloud`-class clients over the tailnet). Forced to 0 on a founding deploy — a satellite never founds."
+  default     = 2
+  description = "Cloud satellites (join mode, `cloud`-class clients over the tailnet). Forced to 0 on a founding deploy — a satellite never founds. May exceed the cloud-client count: satellites stack on one host, each isolated by a per-alloc data_dir subdir (NOMAD_ALLOC_INDEX)."
 }
 
 variable "genesis_hash" {
@@ -276,7 +276,9 @@ EOT
   #   - host volume instead of Ceph CSI (no RBD attach across the tunnel);
   #   - ALWAYS join mode with NO allocation-zero exemption — a satellite is never the
   #     resume-anchor and never founds (count drops to 0 on a founding deploy);
-  #   - distinct_hosts so two satellites can never share one client's host-volume path.
+  #   - satellites MAY stack on one cloud host (no distinct_hosts): each alloc isolates its
+  #     state under data_dir = /quod/data/${NOMAD_ALLOC_INDEX} on the shared host volume, so
+  #     two satellites on the same host never share an identity key or a ledger dir.
   # The cloud client's `network_interface = "tailscale0"` makes the fingerprinted
   # `attr.unique.network.ip-address` (= the advertised endpoint below) its tailnet IP —
   # the one address every fleet member can dial.
@@ -284,11 +286,6 @@ EOT
     constraint {
       attribute = "${node.class}"
       value     = "cloud"
-    }
-
-    constraint {
-      operator = "distinct_hosts"
-      value    = "true"
     }
 
     count = (var.bootstrap && var.genesis_hash == "") ? 0 : var.cloud_node_count
@@ -373,7 +370,7 @@ transactions {
 }
 content {
   namespace = "quod:root"
-  data_dir  = "/quod/data"
+  data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
   mode         = join
   genesis_hash = "${var.genesis_hash}"
   seeds        = [

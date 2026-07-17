@@ -34,3 +34,18 @@ tampered_heartbeat_is_rejected_test() ->
     P = quod_brahms_population:merge([{population_v1, Pub, At + 1, Sig}],
         quod_brahms_population:new(undefined, 16, 60000, 1000)),
     ?assertEqual(0, quod_brahms_population:estimate(P)).
+
+graceful_leave_removes_only_its_owner_and_blocks_stale_heartbeats_test() ->
+    Now = erlang:system_time(millisecond),
+    I = identity(),
+    Source = quod_brahms_population:tick(quod_brahms_population:new(I, 16, 60000, 1000), Now),
+    [Heartbeat] = quod_brahms_population:records(Source),
+    Leave = quod_brahms_population:leave_record(Source, Now + 1),
+    P0 = quod_brahms_population:merge([Heartbeat],
+        quod_brahms_population:new(undefined, 16, 60000, 1000)),
+    ?assertEqual(1, quod_brahms_population:estimate(P0)),
+    P1 = quod_brahms_population:merge([Leave], P0),
+    ?assertEqual(0, quod_brahms_population:estimate(P1)),
+    ?assertMatch([{population_leave_v1, _, _, _}], quod_brahms_population:records(P1)),
+    %% A delayed pre-leave heartbeat cannot resurrect the identity while the leave is retained.
+    ?assertEqual(0, quod_brahms_population:estimate(quod_brahms_population:merge([Heartbeat], P1))).

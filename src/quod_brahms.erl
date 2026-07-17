@@ -295,7 +295,8 @@ common(info, {quod_message, _, _OtherNs, _}, D) ->
 common(_ET, _E, D) ->
     {keep_state, D}.
 
-terminate(_Reason, _State, #d{ns = Ns}) ->
+terminate(_Reason, _State, D = #d{ns = Ns}) ->
+    announce_leave(D),
     try quod_reg:unsubscribe({channel, Ns})
     catch _:_ -> ok
     end,
@@ -347,13 +348,13 @@ handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                                            cache_inbound(RemoteNodeId, ReplyLink, D0)))),
     case decode(Payload) of
         {push, Id, Heartbeat} when Id =/= Self ->
-            D1 = merge_sender_heartbeat(RemoteIdentity, Heartbeat, D),
+            D1 = merge_sender_population(RemoteIdentity, Heartbeat, D),
             handle_push(Id, D1);
         {push, Id} when Id =/= Self ->
             handle_push(Id, D);
         {pull_req, From, Heartbeat} when From =/= Self ->
             reply_view(ReplyLink, D),
-            merge_sender_heartbeat(RemoteIdentity, Heartbeat, observe(From, D));
+            merge_sender_population(RemoteIdentity, Heartbeat, observe(From, D));
         {pull_req, From} when From =/= Self ->
             reply_view(ReplyLink, D),              %% old peer during rolling upgrade
             observe(From, D);
@@ -585,9 +586,22 @@ observe_all(Ids, D) -> D#d{sampler = quod_brahms_sampler:observe_all(Ids, D#d.sa
 %% TLS-authenticated link-header identity.  Pull responses can carry other
 %% members' heartbeats; those are independently owner-signed by the population
 %% sketch, so a forwarder cannot refresh or forge them.
-merge_sender_heartbeat(Pub, {population_v1, Pub, _, _} = Heartbeat, D) when is_binary(Pub) ->
-    merge_population([Heartbeat], D);
-merge_sender_heartbeat(_, _, D) -> D.
+merge_sender_population(Pub, {Tag, Pub, _, _} = Record, D)
+  when is_binary(Pub), (Tag =:= population_v1 orelse Tag =:= population_leave_v1) ->
+    merge_population([Record], D);
+merge_sender_population(_, _, D) -> D.
+
+%% Termination is the one failure mode where the owner can state its own departure authoritatively. Send
+%% the signed leave on already-authenticated links before the supervisor tears transport down; peers gossip
+%% it onward through normal pull responses. A crash still falls back to heartbeat expiry.
+announce_leave(#d{self = Self, conns = Conns, population = Population}) ->
+    case quod_brahms_population:leave_record(Population, erlang:system_time(millisecond)) of
+        none -> ok;
+        Leave ->
+            Payload = encode({push, Self, Leave}),
+            _ = [quod_link:send(LinkPid, Payload) || {_Peer, {LinkPid, _Ref, _Origin}} <- maps:to_list(Conns)],
+            ok
+    end.
 
 merge_population(Heartbeats, D = #d{population = Population}) ->
     D#d{population = quod_brahms_population:merge(Heartbeats, Population)}.

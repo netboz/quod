@@ -471,8 +471,9 @@ EOT
 
   update {
     max_parallel      = 1
+    stagger           = "5s"
     health_check      = "checks"
-    min_healthy_time  = "15s"
+    min_healthy_time  = "5s"
     healthy_deadline  = "15m"
     progress_deadline = "20m"
     auto_revert       = false

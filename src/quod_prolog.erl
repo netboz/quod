@@ -31,7 +31,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/3, mark_ready/1, sync/1,
+-export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/4, mark_ready/1, sync/1,
          request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -74,6 +74,10 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             self      :: node_id(),
             est       :: tuple(),                 %% committed erlog #est{} (unknown=fail)
             ready     = false :: boolean(),       %% true once the initial rebuild has run
+            %% Runtime lifecycle for the post-apply event layer (doc/agent-fipa-plan.md §7): `live`
+            %% normally; `{replaying, Id}` while catching up (boot rebuild or a runtime gap-fill), so
+            %% replay applies suppress live events and the started/ready boundaries carry a correlating Id.
+            runtime_mode = live :: live | {replaying, reference()},
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
@@ -145,10 +149,16 @@ cast so durable consensus is not serialized behind proof execution in this proce
 submission itself uses OTP asynchronous `gen_statem` requests, so the fact engine can continue
 proving and consuming commits while append calls are outstanding. The OCC verdict is delivered
 straight to the parked client here; a forward gap asks `quod_simplex` to re-drive.
+
+`Origin` is `live` for a freshly-finalized commit and `replay` for a rebuild/catch-up re-drive.
+It is decided by the `quod_simplex` path that obtained the block, never inferred here: a `live`
+apply publishes the post-apply `applied_live` event (`doc/agent-fipa-plan.md` §7), a `replay` apply
+rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
--spec apply_block(binary(), pos_integer(), {batch, [#transaction{}]} | noop) -> ok.
-apply_block(Ns, Index, Change) ->
-    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
+-spec apply_block(binary(), pos_integer(),
+                  {batch, [#transaction{}]} | noop, live | replay) -> ok.
+apply_block(Ns, Index, Change, Origin) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change, Origin}).
 
 -doc "Signal that the initial rebuild is complete and proves may be served.".
 -spec mark_ready(binary()) -> ok.
@@ -200,8 +210,6 @@ init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
     MaxProofWorkers = positive_limit(max_proof_workers, maps:get(max_proof_workers, Cfg)),
     MaxAskWorkers = positive_limit(max_ask_workers, maps:get(max_ask_workers, Cfg)),
-    put('$quod_ns', Ns),        %% so external predicates (e.g. admit) can recover their namespace in-process
-    put('$quod_applied', 0),    %% ... and the applied height (peer_ready's slack judge; kept current below)
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            requests = gen_statem:reqids_new(),
            ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg),
@@ -285,13 +293,23 @@ handle_call({ask_open, Goal, Chain, Asker}, _From, S) ->
 
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
-handle_cast({apply_block, Index, Change}, S) ->
-    {noreply, apply_committed(Index, Change, S)};
+handle_cast({apply_block, Index, Change, Origin}, S0) ->
+    S1 = apply_committed(Index, Change, Origin, S0),
+    %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
+    %% from the raw origin: an already-applied no-op (`Index =< applied`) or a forward gap
+    %% (`Index > applied+1`, which bails to rebuild) must never emit a false boundary.
+    {noreply, note_origin(Origin, S1#s.applied > S0#s.applied, S0#s.applied, S1)};
 %% Workers report through the engine so exactly one process owns reply and lifecycle state.
 handle_cast({proof_result, Ref, Kind, Goal, CallerNs, Result}, S) ->
     {noreply, finish_proof(Ref, Kind, Goal, CallerNs, Result, S)};
 handle_cast({ask_cancel, Pid}, S) ->
     {noreply, cancel_ask(Pid, S)};
+%% mark_ready is the boot ready edge: if a boot replay run is still open, close it (`replay_ready`)
+%% before serving proves. A runtime gap-fill has no second mark_ready (prolog_ready is monotone); its
+%% ready edge is the first advancing `live` apply that resumes, handled in note_origin/4.
+handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
+    publish_runtime(Ns, {replay_ready, Id, H}),
+    {noreply, S#s{ready = true, runtime_mode = live}};
 handle_cast(mark_ready, S) -> {noreply, S#s{ready = true}};
 %% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
 %% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
@@ -493,16 +511,14 @@ spawn_proof(Kind, Goal, CallerNs, From,
 
 bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 
-%% Runs in the worker process. Primes the same per-proof context the engine used to
-%% hold (external predicates read it from the process dictionary), proves against the
-%% frozen view, and reports one correlated result to the engine. The per-proof read-set
-%% ETS table is created here, so an abandoned/killed run can never leak it.
+%% Runs in the worker process. Sets the run's execution context on the frozen `#est{}`
+%% (`m:quod_predicates` — the namespace, applied height, and ask chain the external predicates
+%% read), proves against that view, and reports one correlated result to the engine. The
+%% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
 proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied) ->
     _ = watch_engine(Engine, self()),
-    put('$quod_ns', Ns),
-    put('$quod_applied', Applied),
-    put('$quod_ask_chain', [Ns]),   %% the ask path starts at this ontology (for `::` cycle/depth guards)
-    Result = run_proof_est(Goal, Est),
+    Ctx = quod_predicates:proof_context(Ns, Applied, undefined),   %% Subject: none until §10 signed subjects
+    Result = run_proof_est(Goal, quod_predicates:set_context(Est, Ctx)),
     gen_server:cast(Engine, {proof_result, Ref, Kind, Goal, CallerNs, Result}).
 
 finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
@@ -657,9 +673,6 @@ kill_worker(Pid) ->
     unlink(Pid),
     exit(Pid, kill).
 
-%% The engine-side callers (membership verdicts) prove against the current state inline.
-run_proof(Goal, #s{est = Est}) -> run_proof_est(Goal, Est).
-
 run_proof_est(Goal, Est) ->
     Vs = erlog:vars_in(Goal),
     W0 = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => true}),
@@ -744,40 +757,40 @@ request_completed(Tx, S = #s{parked = Parked}) ->
 %% membership verdict parked for the parent height we just reached. Whether the applied step commits a
 %% tx, skips a `noop`, or logs an unexpected payload, a validation whose parent is that slot must be
 %% answered (and never leak), so `resolve_validations/1` runs once here, keyed on the new `applied`.
-%% The pdict height mirror is refreshed BEFORE the verdicts resolve — their `can_join` re-proof may read
-%% it through the `peer_ready` external predicate.
-apply_committed(Index, Change, S) ->
-    S1 = apply_step(Index, Change, S),
-    put('$quod_applied', S1#s.applied),
-    resolve_validations(S1).
+%% Each verdict's `can_join` re-proof reads the parent height from the verdict execution context that
+%% `membership_verdict/2` builds from `S#s.applied` (see `m:quod_predicates`).
+apply_committed(Index, Change, Origin, S) ->
+    resolve_validations(apply_step(Index, Change, Origin, S)).
 
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
-%% arrive in order on the (FIFO) cast channel from quod_simplex.
+%% arrive in order on the (FIFO) cast channel from quod_simplex. `Origin` (live|replay) reaches
+%% apply_transaction, which publishes the post-apply event only for a LIVE-applied tx.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
-apply_step(Index, _Change, S = #s{applied = A}) when Index =< A ->
+apply_step(Index, _Change, _Origin, S = #s{applied = A}) when Index =< A ->
     S;
 %% Forward gap: quod_simplex is ahead of us (we restarted, or missed a cast). Don't apply out
 %% of order — ask quod_simplex to re-drive from the snapshot so we receive a contiguous run.
-apply_step(Index, _Change, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
+apply_step(Index, _Change, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
     S;
-apply_step(Index, noop, S) ->                              %% Index == applied+1
+apply_step(Index, noop, _Origin, S) ->                     %% Index == applied+1
     publish_snapshot(Index, S);
-apply_step(Index, {batch, _} = Batch, S) ->
+apply_step(Index, {batch, _} = Batch, Origin, S) ->
     case quod_ledger:payload(Batch) of
         {ok, Transactions} ->
-            S1 = lists:foldl(fun apply_transaction/2, S, Transactions),
+            S1 = lists:foldl(fun(T, Acc) -> apply_transaction(T, Index, Origin, Acc) end,
+                             S, Transactions),
             publish_snapshot(Index, S1);
         error ->
             skip_unexpected(Index, Batch, S)
     end;
 %% Defensive: a committed payload that is neither `noop`, a transaction, nor a
 %% well-formed batch advances the cursor instead of restart-looping on old/corrupt data.
-apply_step(Index, Other, S) ->
+apply_step(Index, Other, _Origin, S) ->
     skip_unexpected(Index, Other, S).
 
-apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, S) ->
+apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, Index, Origin, S) ->
     %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was
     %% re-validated against the parent state before the vote (`membership_verdict/2`), so OCC is
     %% redundant here AND is the source of a real divergence: `quod_simplex:adopt_committee` folds the
@@ -788,10 +801,12 @@ apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, S) ->
     case is_membership_change(Change) of
         true ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
-                    S#s{est = Est1, applies = S#s.applies + 1});
+            S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                         S#s{est = Est1, applies = S#s.applies + 1}),
+            emit_applied(Change, Index, Origin, S1),
+            S1;
         false ->
-            apply_content(Change, S)
+            apply_content(Change, Index, Origin, S)
     end.
 
 skip_unexpected(Index, Other, S = #s{ns = Ns}) ->
@@ -812,14 +827,17 @@ oldest_snapshot(Current, #s{workers = Workers, ask_workers = AskWorkers}) ->
     lists:min([Current | ProofHeights ++ AskHeights]).
 
 %% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
-apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
+apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, Index, Origin, S) ->
     #est{db = #db{mod = M, ref = R}} = S#s.est,
     case quod_diff:validate(RC, M, R) of
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
-                    S#s{est = Est1, applies = S#s.applies + 1});
+            S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                         S#s{est = Est1, applies = S#s.applies + 1}),
+            emit_applied(Change, Index, Origin, S1),
+            S1;
         {conflict, _F} ->
+            %% OCC-rejected: nothing changed D, so no post-apply event on any origin.
             release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
                     S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
     end.
@@ -827,6 +845,44 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC}, S) ->
 %% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
 %% no process message, so no append<->apply deadlock).
 is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []}.
+
+%%%===================================================================
+%%% post-apply event layer (doc/agent-fipa-plan.md §7)
+%%%===================================================================
+%%
+%% The `{runtime, Ns}` property carries three messages for `quod_runtime` (§7, not built yet):
+%% `{applied_live, Env}` (one per live-applied transaction), and the `{replay_started, Id, From}` /
+%% `{replay_ready, Id, Height}` boundaries of a replay run. No consumer subscribes yet; these are a
+%% no-op beyond tests. The pre-apply `{committed, Ns}` publication (quod_simplex → feed/metrics) is
+%% untouched and is deliberately NOT the agent event source (it fires before this kb has applied).
+
+%% Track the live/replay lifecycle, emitting the replay boundaries ONLY when the apply `Advanced` the
+%% committed height — so an already-applied no-op or a forward-gap cast never emits a false boundary.
+%% `Before` is the pre-apply height: the height a replay run opened from (`replay_started`), or the
+%% height replay reached before the resuming live block (`replay_ready`). A replay run (boot rebuild or a
+%% runtime gap-fill) opens on the first advancing `replay` apply and closes on its ready edge — the first
+%% advancing `live` apply, or `mark_ready` at boot. The correlating `Id` lets a consumer ignore a stale
+%% boundary from a superseded run. (Coarseness, deferred to §7: a member that catches up into a quiet
+%% namespace stays `{replaying, Id}` until the next advancing live apply declares it ready.)
+note_origin(_Origin, false, _Before, S) -> S;   %% apply did not advance ⇒ no lifecycle change
+note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
+    Id = make_ref(),
+    publish_runtime(Ns, {replay_started, Id, Before}),
+    S#s{runtime_mode = {replaying, Id}};
+note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns}) ->
+    publish_runtime(Ns, {replay_ready, Id, Before}),
+    S#s{runtime_mode = live};
+note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying, or live while already live
+
+%% One event per committed transaction that actually changed D, on a LIVE commit only — never replay
+%% (content-layer-design §14 live-vs-replay). `Subject` is `undefined` until signed subjects (§10).
+emit_applied(#transaction{tx_id = Tx, goal = G, result = Res, diff = Diff}, Index, live, #s{ns = Ns}) ->
+    Env = #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
+            goal => G, result => Res, diff => Diff},
+    publish_runtime(Ns, {applied_live, Env});
+emit_applied(_Change, _Index, replay, _S) -> ok.
+
+publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
@@ -917,17 +973,16 @@ resolve_validations(S = #s{applied = A, validations = V}) ->
 %%   matches nothing, so it can never eject a validator from the set while missing in the KB.
 -spec membership_verdict(term(), #s{}) -> valid | {invalid, term()}.
 membership_verdict(#transaction{diff = [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}]},
-                   S = #s{ns = Ns, est = Est}) ->
+                   #s{ns = Ns, applied = Applied, est = Est}) ->
     case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
         true  -> {invalid, already_admitted};
-        false -> %% The re-proof runs INLINE in the engine (deterministic, parent-height-pinned)
-                 %% with cross-ontology asks DISABLED: a committee vote must never make network
-                 %% hops mid-verdict (doc/inter-ontology.md §11) — the ask handler refuses when
-                 %% this flag is set.
-                 put('$quod_in_verdict', true),
-                 R = run_proof({can_join, Ns, [H, P], Pk}, S),
-                 erase('$quod_in_verdict'),
-                 case R of
+        false -> %% The re-proof runs INLINE in the engine, pinned to the parent height (`Applied`) and
+                 %% carrying a VERDICT execution context (`m:quod_predicates`). That context disables
+                 %% cross-ontology asks (a committee vote must never make network hops mid-verdict,
+                 %% doc/inter-ontology.md §11) and read-time link following, and supplies the height the
+                 %% `peer_ready` gate reads — all deterministically, without any process-dictionary state.
+                 VerdictEst = quod_predicates:set_context(Est, quod_predicates:verdict_context(Ns, Applied)),
+                 case run_proof_est({can_join, Ns, [H, P], Pk}, VerdictEst) of
                      {ok, _, [], _}    -> valid;
                      {ok, _, _Diff, _} -> {invalid, can_join_side_effects};
                      fail              -> {invalid, can_join};
@@ -1014,9 +1069,9 @@ build_kb() ->
     %% unknown predicate => fail (not error): a goal over an undefined predicate just
     %% has no solution, rather than crashing.
     {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
-    %% register the external Erlang predicates: admit/remove (the committee interface)
-    %% and `::` (the cross-ontology ask, doc/inter-ontology.md).
-    Est2 = quod_committee_predicates:load(Est1),
+    %% register the governed external predicates (admit/remove/peer_ready, class-enforced by
+    %% `m:quod_predicates`) and the `::` cross-ontology ask (`doc/inter-ontology.md`).
+    Est2 = quod_predicates:load(Est1),
     quod_ask:load(Est2).
 
 tx_id(Self) -> <<(erlang:phash2(Self)):32, (erlang:unique_integer([positive])):64>>.

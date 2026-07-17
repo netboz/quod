@@ -36,7 +36,12 @@ agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              local    = #{}      :: #{term() => #fstate{}},
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
-             read_ets = undefined :: ets:tid() | undefined}).
+             read_ets = undefined :: ets:tid() | undefined,
+             %% Read-time link following is disabled inside a committee membership verdict
+             %% (a vote must never make network hops). Snapshotted from the `#est{}`'s
+             %% execution context at wrap time — the db callback layer cannot see `#est.fs`,
+             %% so the flag is carried here rather than read per-lookup.
+             follow_disabled = false :: boolean()}).
 
 %%%===================================================================
 %%% wrapping + extraction
@@ -46,7 +51,7 @@ agree bit-for-bit.
 -spec wrap_state(tuple()) -> tuple().
 wrap_state(#est{db = #db{mod = OutMod, ref = OutRef,
                          assert_hooks = AH, retract_hooks = RH}} = St) ->
-    Overlay = new({OutRef, OutMod}),
+    Overlay = (new({OutRef, OutMod}))#lp{follow_disabled = quod_predicates:in_verdict(St)},
     St#est{db = #db{mod = ?MODULE, ref = Overlay, loc = [],
                     assert_hooks = AH, retract_hooks = RH}}.
 
@@ -144,10 +149,9 @@ abolish_clauses(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F) ->
 
 get_procedure(St, F) ->
     Base = raw_get_procedure(St, F),
-    case {is_tuple(F), get('$quod_in_verdict')} of
-        {true, true} -> Base;  %% committee validation is strictly local
-        {true, _}    -> add_followers(St, F, Base);
-        _            -> Base
+    case is_tuple(F) andalso not St#lp.follow_disabled of
+        true  -> add_followers(St, F, Base);     %% synthesize read-time link followers
+        false -> Base                            %% non-tuple functor, or a strictly-local verdict
     end.
 
 raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS}, F) ->

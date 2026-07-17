@@ -1993,15 +1993,16 @@ publish_feed(Slot, #entry{} = Entry, #s{ns = Ns}) ->
 apply_live(Slot, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
-        _         -> _ = safe_apply_block(Ns, Slot, Change),   %% async cast (breaks the append<->apply deadlock)
+        _         -> _ = safe_apply_block(Ns, Slot, Change, live),   %% async cast (breaks the append<->apply deadlock)
                      S#s{last_applied = Slot}
     end;
 apply_live(_Slot, _Change, S) -> S.
 
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — STREAMED from the store
-%% (the rebuild path; this process keeps no in-memory log, and re-applying already-counted commits
-%% must not recount them). Deferred if quod_prolog is not up yet; the registry lookup is done ONCE
-%% here, not per block. apply_block is a cast by design (see quod_prolog:apply_block/3 — a sync call
+%% (the rebuild/catch-up path; this process keeps no in-memory log, and re-applying already-counted
+%% commits must not recount them). These are REPLAY applies: quod_prolog rebuilds D only and emits no
+%% live event (doc/agent-fipa-plan.md §7). Deferred if quod_prolog is not up yet; the registry lookup is
+%% done ONCE here, not per block. apply_block is a cast by design (see quod_prolog:apply_block/4 — a sync call
 %% would deadlock the live write path), so a long replay would flood quod_prolog's mailbox with the
 %% whole log; every ?APPLY_SYNC_EVERY casts a synchronous no-op (`quod_prolog:sync/1`) drains the
 %% queue — its reply proves every prior cast was consumed, bounding the mailbox to one window.
@@ -2017,7 +2018,7 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}) ->
             try
                 _ = quod_ledger_store:fold(Store, LA + 1, C,
                                            fun(#entry{index = I, data = Data}, N) ->
-                                               _ = safe_apply_block(Ns, I, Data),
+                                               _ = safe_apply_block(Ns, I, Data, replay),
                                                N rem ?APPLY_SYNC_EVERY =:= 0
                                                    andalso (ok = quod_prolog:sync(Ns)),
                                                N + 1
@@ -2027,8 +2028,8 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}) ->
             end
     end.
 
-safe_apply_block(Ns, I, Data) ->
-    try quod_prolog:apply_block(Ns, I, Data) catch _:_ -> ok end.
+safe_apply_block(Ns, I, Data, Origin) ->
+    try quod_prolog:apply_block(Ns, I, Data, Origin) catch _:_ -> ok end.
 
 %% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix is
 %% actually applied AND recovery is `ready`, so a node never answers from a half-built or uncorroborated

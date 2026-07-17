@@ -118,14 +118,14 @@ core) have landed with the DispersedSimplex milestone (consensus plan + `doc/sim
   `calculate_keep_alive_interval/2` so a non-integer `keep_alive_interval` can't `case_clause`-crash init;
   (d) consider **upstreaming** the §10.1 fix to benoitc. **Rejected (don't revisit):** a loss/PTO-based
   DisconnectTimeout — it false-closes a *live* peer when only the return/ACK path drops.
-- **Stream prioritization for signaling (RFC 9218) — deferred.** quod already gives each channel its own QUIC
-  stream (`{log}` consensus, `{feed}` dissemination, `{catchup}`, Brahms), so loss-induced head-of-line
-  blocking between them is already avoided. But all streams on one connection share ONE congestion window, so
-  under heavy feed load consensus signaling contends for bandwidth. The `quic` lib supports
-  `quic:set_stream_priority/4` (RFC 9218 urgency 0–7) but quod doesn't use it — mark `{log}`/`{catchup}`
-  high-urgency and `{feed}` lower so votes preempt bulk dissemination under congestion. (Bandwidth is also
-  partly isolated today by the accidental two-conns-per-peer split — consensus by pubkey, feed by address; the
-  clean end-state is ONE connection per peer + prioritization.)
+- **Stream prioritization for signaling (RFC 9218) — PROMOTED to the agent/runtime substrate plan.** quod
+  already gives each channel its own QUIC stream, so loss-induced head-of-line blocking is avoided, and
+  `quod_quic` now converges channels onto one connection per peer. All those streams still share one congestion
+  window, so feed, ACL, and future client traffic can contend with consensus. The pinned `quic` fork supports
+  `quic:set_stream_priority/4` (urgency 0–7); Slice 3 must define channel priority classes and prove under load
+  that lower-priority producers cannot starve `{log}` consensus signaling. Future RFC 9221 datagrams share the
+  same congestion window and pacing even though they do not head-of-line block streams, so they also require
+  explicit byte-rate caps and mixed-traffic tests.
 
 ## 3. Consensus + membership (DispersedSimplex stages)
 

@@ -44,21 +44,14 @@ the committee stays a pure, deterministic projection of the committed log on eve
 > clause to be present). See `doc/deferred.md` §3. (Signed membership authorship — closing committee
 > *packing* — is Phase B.)
 
-Registered per-node in `quod_prolog:build_kb/0`, so `admit`/`remove` are identical on every member and are
-never carried in the log — only their resulting `peer_admitted` diff is.
+Registered per-node in `quod_prolog:build_kb/0` — via `m:quod_predicates`, which routes them through
+its class-enforcing dispatcher (`admit`/`remove` are `staging`, `peer_ready` is `query`) — so they are
+identical on every member and never carried in the log; only their resulting `peer_admitted` diff is.
 """.
 
--export([load/1, admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1]).
+-export([admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1]).
 
 -include_lib("erlog/src/erlog_int.hrl").
-
--doc "Register the committee predicates onto a freshly-built kb (`#est{}`), threading the erlog `#db{}`.".
--spec load(tuple()) -> tuple().
-load(#est{db = Db0} = Est) ->
-    Db1 = erlog_int:add_compiled_proc({admit, 3},      ?MODULE, admit_3,      Db0),
-    Db2 = erlog_int:add_compiled_proc({remove, 1},     ?MODULE, remove_1,     Db1),
-    Db3 = erlog_int:add_compiled_proc({peer_ready, 1}, ?MODULE, peer_ready_1, Db2),
-    Est#est{db = Db3}.
 
 %% admit(Pubkey, Host, Port): prove can_join, then stage the peer_admitted assert. Gate + stage are ONE
 %% erlog conjunction — if can_join fails, the assert is never reached, so nothing is staged and the prove
@@ -66,7 +59,7 @@ load(#est{db = Db0} = Est) ->
 admit_3(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {admit, Pub, Host, Port} when is_binary(Pub) ->
-            case self_ns() of
+            case self_ns(St) of
                 undefined -> erlog_int:fail(St);
                 Ns        -> Fact = {peer_admitted, Pub, Host, Port, Pub},
                              erlog_int:prove_body(
@@ -102,10 +95,10 @@ remove_1(Goal, Next, #est{bs = Bs} = St) ->
 peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {peer_ready, Pk} when is_binary(Pk) ->
-            %% BOTH the namespace and the applied-height mirror must be present, or we fail CLOSED. A
-            %% missing height must NOT default to 0: ready/4's slack check is `Height + window >= Judge`,
+            %% BOTH the namespace and the applied-height must be present in the context, or we fail CLOSED.
+            %% A missing height must NOT default to 0: ready/4's slack check is `Height + window >= Judge`,
             %% which a judge height of 0 passes for ANY candidate — admitting a node arbitrarily far behind.
-            case {self_ns(), applied_height()} of
+            case {self_ns(St), applied_height(St)} of
                 {Ns, H} when is_binary(Ns), is_integer(H) ->
                     case quod_feed:peer_ready(Ns, Pk, H) of
                         true  -> erlog_int:prove_body(Next, St);
@@ -117,16 +110,14 @@ peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
             erlog_int:fail(St)
     end.
 
-%% This node's namespace, stashed in the owning `quod_prolog` process dictionary at init — the handler runs
-%% in-process during `run_proof`, so it is visible here. (Under `erlog_db_dict` there is no namespace handle
-%% in `#est{}`; onia's `self_ns/1` ETS trick does not apply.)
-self_ns() -> get('$quod_ns').
+%% This node's namespace, read from the run's execution context (`m:quod_predicates`), which every proof,
+%% verdict, and served ask carries in `#est.fs`. `undefined` when no context is set — `admit_3` then fails
+%% closed rather than staging a half-formed fact.
+self_ns(St) -> quod_predicates:ctx_ns(quod_predicates:context(St)).
 
-%% The judge's applied height, stashed next to '$quod_ns' by the owning `quod_prolog` (updated on every
-%% apply) — `quod_prolog:applied/1` from in here would be a gen_server call to self. `undefined` if the
-%% mirror was never primed; peer_ready_1 then fails the gate CLOSED rather than defaulting to a height that
-%% passes the slack check.
-applied_height() -> get('$quod_applied').
+%% The judge's applied height, read from the same execution context. `undefined` if no context is set;
+%% `peer_ready_1` then fails the gate CLOSED rather than defaulting to a height that passes the slack check.
+applied_height(St) -> quod_predicates:ctx_height(quod_predicates:context(St)).
 
 %% The current committee size = the number of DISTINCT peer_admitted pubkeys — a pubkey with more than
 %% one address fact must not inflate the floor.

@@ -95,7 +95,7 @@ follower_label([_ | Rest]) -> follower_label(Rest);
 follower_label([]) -> undefined.
 
 do_ask(NsTerm, Inner, Next, St) ->
-    Self = get('$quod_ns'),
+    Self = quod_predicates:ctx_ns(quod_predicates:context(St)),
     case flatten_ns(NsTerm) of
         error  -> ask_error({bad_name, NsTerm});
         Self   -> erlog_int:prove_body([Inner | Next], St);  %% self-ask: in place, no hop, no chain growth
@@ -103,12 +103,15 @@ do_ask(NsTerm, Inner, Next, St) ->
     end.
 
 guarded_ask(Self, Target, Inner, Next, St) ->
-    get('$quod_in_verdict') =:= true andalso ask_error(ask_in_membership_verdict),
-    Chain = case get('$quod_ask_chain') of undefined -> [Self]; C -> C end,
+    quod_predicates:in_verdict(St) andalso ask_error(ask_in_membership_verdict),
+    Chain = case quod_predicates:ctx_chain(quod_predicates:context(St)) of
+                [] -> [Self];   %% no context (defensive): start the chain at this ontology
+                C  -> C
+            end,
     lists:member(Target, Chain) andalso ask_error({circular_ask, Target}),
     length(Chain) >= ?MAX_CHAIN andalso ask_error({too_deep, Target}),
     InnerTerm = erlog_int:dderef(Inner, St#est.bs),
-    case open(Target, InnerTerm, Chain) of
+    case open(Self, Target, InnerTerm, Chain) of
         {ok, Stream} -> drive_stream(Stream, InnerTerm, Target, Next, St);
         {error, R}   -> ask_error(R)
     end.
@@ -213,13 +216,14 @@ ask_error(Reason) -> throw({quod_ask_error, Reason}).
 %%%===================================================================
 
 %% Ask the target's engine to open a solution stream. Not hosted here => unreachable
-%% (the cross-node path is step 4). Runs in the asking worker.
-open(Target, GoalTerm, Chain) ->
+%% (the cross-node path is step 4). Runs in the asking worker. `Self` is the asking
+%% ontology (from the run's execution context), threaded in so this path reads no ambient state.
+open(Self, Target, GoalTerm, Chain) ->
     case quod_reg:where({quod_prolog, Target}) of
         undefined ->
-            case remote_contact(get('$quod_ns')) of
+            case remote_contact(Self) of
                 none -> {error, {unknown_ontology, Target}};
-                _    -> open_remote(Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
+                _    -> open_remote(Self, Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
             end;
         _Engine -> open_local(Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
     end.
@@ -243,8 +247,7 @@ open_local(Target, GoalTerm, Chain, Retries) ->
 
 %% A remote ask has two independently opened legs. The asker owns the request link;
 %% the target opens the answer link after it has frozen and authorized the run.
-open_remote(Target, GoalTerm, Chain, Retries) when Retries > 0 ->
-    Self = get('$quod_ns'),
+open_remote(Self, Target, GoalTerm, Chain, Retries) when Retries > 0 ->
     case remote_contact(Self) of
         none -> {error, {unreachable, Target}};
         Contact ->
@@ -273,10 +276,10 @@ open_remote(Target, GoalTerm, Chain, Retries) when Retries > 0 ->
                 {error, _} ->
                     _ = unsubscribe(AnswerCh),
                     timer:sleep(?OPEN_RETRY_MS),
-                    open_remote(Target, GoalTerm, Chain, Retries - 1)
+                    open_remote(Self, Target, GoalTerm, Chain, Retries - 1)
             end
     end;
-open_remote(Target, _GoalTerm, _Chain, 0) -> {error, {unreachable, Target}}.
+open_remote(_Self, Target, _GoalTerm, _Chain, 0) -> {error, {unreachable, Target}}.
 
 remote_contact(Self) ->
     Seeds = application:get_env(quod, ask_contacts, []),
@@ -554,12 +557,12 @@ answer_init(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
     answer_init(Ns, Est, Height, Goal, Chain, Chain, Asker, Engine).
 
 answer_init(Ns, Est, Height, Goal, Chain, AuthorizedSubjects, Asker, Engine) ->
-    put('$quod_ns', Ns),
-    put('$quod_applied', Height),
-    %% The incoming chain contains ontologies already involved. Add this target only
-    %% for nested asks; permission checks the incoming chain, not the target itself.
-    put('$quod_ask_chain', [Ns | Chain]),
-    W = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => false}),
+    %% Run the served ask under a proof execution context (`m:quod_predicates`): this ontology, the
+    %% frozen height, and the ask chain with this ontology PREPENDED (added only for nested asks;
+    %% permission checks the incoming chain, not the target itself).
+    Ctx = quod_predicates:proof_context(Ns, Height, undefined, [Ns | Chain]),
+    W = quod_erlog_db_local_prove:wrap_state(
+          quod_predicates:set_context(Est, Ctx), #{read_set => false}),
     case can_read_subjects(Goal, AuthorizedSubjects, Ns, W) of
         false ->
             _ = sink_send(Asker, {error, not_allowed}),

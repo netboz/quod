@@ -263,19 +263,24 @@ failed_allocs() {   # count allocs currently failed/lost (0 = healthy)
     | jq '[.[] | select(.ClientStatus=="failed" or .ClientStatus=="lost")] | length' 2>/dev/null || echo 0
 }
 
-# scrape ONE alloc's metrics ->
+# Scrape ONE alloc's metrics for $NS only ->
 # "alloc group slot unverified rejects is_validator committee_size weak_cert_waits syncing".
-# A down/restarting node's curl fails -> slot/isv/cs = -1 (excluded from aggregates + classification).
+# Nodes may host more than one ontology. Every metric used for the verdict must
+# therefore match the requested namespace; otherwise a small auxiliary ontology
+# can be mistaken for a lagging root replica. A down/restarting node's curl
+# fails -> slot/isv/cs = -1 (excluded from aggregates + classification).
 scrape_row() {   # arg: "alloc,group,host:port"
   local a g hp; IFS=, read -r a g hp <<<"$1"
-  curl -s --max-time 4 "http://$hp/metrics" 2>/dev/null | awk -v a="$a" -v g="$g" '
-    /^quod_consensus_slot\{/                     {slot=$2}
-    /^quod_feed_dropped\{.*reason="unverified"/  {unv+=$2}
-    /^quod_consensus_membership_rejects\{/       {mr=$2}
-    /^quod_consensus_is_validator\{/             {isv=$2}
-    /^quod_consensus_committee_size\{/           {cs=$2}
-    /^quod_consensus_weak_cert_waits\{/          {wcw=$2}
-    /^quod_consensus_syncing\{/                  {sy=$2}
+  curl -s --max-time 4 "http://$hp/metrics" 2>/dev/null | awk -v a="$a" -v g="$g" -v ns="$NS" '
+    index($0, "namespace=\"" ns "\"") {
+      if ($1 ~ /^quod_consensus_slot\{/) slot=$2
+      else if ($1 ~ /^quod_feed_dropped\{/ && $0 ~ /reason="unverified"/) unv+=$2
+      else if ($1 ~ /^quod_consensus_membership_rejects\{/) mr=$2
+      else if ($1 ~ /^quod_consensus_is_validator\{/) isv=$2
+      else if ($1 ~ /^quod_consensus_committee_size\{/) cs=$2
+      else if ($1 ~ /^quod_consensus_weak_cert_waits\{/) wcw=$2
+      else if ($1 ~ /^quod_consensus_syncing\{/) sy=$2
+    }
     END { printf "%s %s %d %d %d %d %d %d %d\n", a, g,
                  (slot==""?-1:slot), unv+0, mr+0,
                  (isv==""?-1:isv), (cs==""?-1:cs), wcw+0, (sy==""?-1:sy) }'

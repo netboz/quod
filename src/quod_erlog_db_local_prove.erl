@@ -199,7 +199,8 @@ no_follow(St, {Functor, Arity}) ->
 
 follower_clauses({Functor, Arity}) ->
     [follower_clause(Functor, Arity, Pos) || Pos <- lists:seq(1, Arity)] ++
-    [follower_end_clause(Functor, Arity)].
+    [follower_clear_clause(Functor, Arity),
+     follower_end_clause(Functor, Arity)].
 
 follower_clause(Functor, Arity, Pos) ->
     Ns = {'$quod_follow_ns'},
@@ -216,10 +217,16 @@ follower_clause(Functor, Arity, Pos) ->
             {',', {'::', Ns, Inner}, {'$quod_follow_unique', Head}}},
     {{'$quod_follower', Pos}, Head, erlog_int:well_form_body(Body, false, sture)}.
 
-%% Keep a goal_clauses choice point alive through the final real follower. Its
-%% stable label scopes the streaming duplicate filter above to one relation call.
-follower_end_clause(Functor, Arity) ->
+%% Keep one clause after cleanup so Erlog retains the relation choice point while
+%% `$quod_follow_clear` recovers its stable label.
+follower_clear_clause(Functor, Arity) ->
     Args = [{{'$quod_follow_end_arg', I}} || I <- lists:seq(1, Arity)],
+    Head = list_to_tuple([Functor | Args]),
+    Body = '$quod_follow_clear',
+    {'$quod_follower_clear', Head, erlog_int:well_form_body(Body, false, sture)}.
+
+follower_end_clause(Functor, Arity) ->
+    Args = [{{'$quod_follow_fail_arg', I}} || I <- lists:seq(1, Arity)],
     Head = list_to_tuple([Functor | Args]),
     {'$quod_follower_end', Head, erlog_int:well_form_body(fail, false, sture)}.
 

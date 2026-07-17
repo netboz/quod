@@ -15,6 +15,25 @@ exact_below_k_test() ->
         quod_brahms_population:new(undefined, 128, 60000, 1000)),
     ?assertEqual(30, quod_brahms_population:estimate(P)).
 
+bottom_k_estimates_above_capacity_test() ->
+    Now = erlang:system_time(millisecond),
+    K = 32,
+    Population = 256,
+    Records = [begin
+                   I = identity(),
+                   Source = quod_brahms_population:tick(
+                              quod_brahms_population:new(I, K, 60000, 1000), Now),
+                   quod_brahms_population:self_record(Source)
+               end || _ <- lists:seq(1, Population)],
+    P = quod_brahms_population:merge(
+          Records, quod_brahms_population:new(undefined, K, 60000, 1000)),
+    Estimate = quod_brahms_population:estimate(P),
+    %% Broad bounds keep this probabilistic test stable while proving that the
+    %% estimator does not merely saturate at K.
+    ?assert(Estimate > 100),
+    ?assert(Estimate < 700),
+    ?assert(quod_brahms_population:count(P) =< 4 * K).
+
 expired_heartbeats_are_not_kept_alive_by_forwarding_test() ->
     Now = erlang:system_time(millisecond),
     I = identity(),

@@ -29,7 +29,7 @@ sends the ACK back. This makes a link to a dead/unreachable peer fail to come up
 so the membership layer's probe correctly evicts it.
 """.
 
--export([start_outbound/6, start_inbound/3, send/2, close/1]).
+-export([start_outbound/6, start_inbound/3, send/2, send_reliable/3, close/1]).
 
 -ifdef(TEST).
 -export([header/2, parse_header/1, frame/1, parse/1]).
@@ -87,6 +87,29 @@ send(LinkPid, Payload) ->
     LinkPid ! {send, iolist_to_binary(Payload)},
     ok.
 
+-doc """
+Send one frame and wait until the local QUIC connection accepts it. Transient
+flow-control pressure is retried until `Timeout`; no peer acknowledgement is
+involved. Intended for bounded request/response protocols, not gossip.
+""".
+-spec send_reliable(pid(), iodata(), pos_integer()) -> ok | {error, term()}.
+send_reliable(LinkPid, Payload, Timeout)
+  when is_pid(LinkPid), is_integer(Timeout), Timeout > 0 ->
+    Ref = make_ref(),
+    MRef = monitor(process, LinkPid),
+    LinkPid ! {send_reliable, self(), Ref, iolist_to_binary(Payload),
+               erlang:monotonic_time(millisecond) + Timeout},
+    receive
+        {Ref, Result} ->
+            demonitor(MRef, [flush]),
+            Result;
+        {'DOWN', MRef, process, LinkPid, Reason} ->
+            {error, Reason}
+    after Timeout + 100 ->
+        demonitor(MRef, [flush]),
+        {error, timeout}
+    end.
+
 -doc "Close this link and reset its stream (its holder's `erlang:monitor` then fires `DOWN`).".
 -spec close(pid()) -> ok.
 close(LinkPid) ->
@@ -126,12 +149,39 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
             %% quod_conn, which is the real disconnect signal.
             _ = quic:send_data(Conn, Sid, frame(Payload), false),
             loop(S);
+        {send_reliable, From, Ref, Payload, Deadline} ->
+            Result = send_until_accepted(Conn, Sid, frame(Payload), Deadline),
+            From ! {Ref, Result},
+            loop(S);
         close ->
             _ = quic:reset_stream(Conn, Sid, 0),
             exit(normal);
         _Other ->
             loop(S)
     end.
+
+send_until_accepted(Conn, Sid, Frame, Deadline) ->
+    case erlang:monotonic_time(millisecond) < Deadline of
+        false ->
+            {error, backpressure_timeout};
+        true ->
+            case catch quic:send_data(Conn, Sid, Frame, false) of
+                ok ->
+                    ok;
+                {error, {flow_control_blocked, _}} ->
+                    retry_send(Conn, Sid, Frame, Deadline);
+                {error, send_queue_full} ->
+                    retry_send(Conn, Sid, Frame, Deadline);
+                {error, Reason} ->
+                    {error, Reason};
+                {'EXIT', Reason} ->
+                    {error, Reason}
+            end
+    end.
+
+retry_send(Conn, Sid, Frame, Deadline) ->
+    timer:sleep(2),
+    send_until_accepted(Conn, Sid, Frame, Deadline).
 
 %% append bytes, publish every complete payload frame, keep the remainder
 loop_msgs(Data, S = #s{buf = Buf, peer = Peer, channel = Ch}) ->
@@ -162,9 +212,23 @@ header(NodeId, Channel) ->
 
 %% {ok, NodeId, Channel, Rest} | more | error
 parse_header(<<NLen:16, NB:NLen/binary, CLen:16, Channel:CLen/binary, Rest/binary>>) ->
-    try {ok, binary_to_term(NB, [safe]), Channel, Rest}
+    try binary_to_term(NB, [safe]) of
+        Peer ->
+            case valid_identity(Peer) of
+                true  -> {ok, Peer, Channel, Rest};
+                false -> error
+            end
     catch _:_ -> error end;
 parse_header(_Buf) -> more.
+
+valid_identity({Pubkey, Addr}) ->
+    is_binary(Pubkey) andalso byte_size(Pubkey) =:= 32 andalso valid_endpoint(Addr);
+valid_identity(_) -> false.
+
+valid_endpoint({Host, Port}) when is_integer(Port), Port > 0, Port =< 65535,
+                                  (is_list(Host) orelse is_binary(Host) orelse
+                                   is_tuple(Host)) -> true;
+valid_endpoint(_) -> false.
 
 %% payload frame: <<PLen:32, Payload>>
 frame(Payload) -> <<(byte_size(Payload)):32, Payload/binary>>.

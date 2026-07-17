@@ -219,8 +219,8 @@ open_new(Channel, Waiters, S = #s{conn = Conn, peer = Peer, self = Self,
 handle_link_up(_Channel, RemotePeer, _LinkPid, in, S = #s{conn = Conn}) ->
     %% Identity bind: a peer dialed US (we are the TLS server, verify=>true), so its header
     %% claims a pubkey AND mutual TLS proved one via `quic:peercert/1`. They must match — else
-    %% the peer is lying about who it is, or presented no cert. Drop the whole connection. (A
-    %% non-pubkey id — the no-identity/test path — has nothing to bind, so it is allowed.)
+    %% the peer is lying about who it is, or presented no cert. Drop the whole connection.
+    %% Malformed or non-keyed headers are rejected before they reach upper layers.
     case bind_ok(RemotePeer, Conn) of
         ok ->
             ensure_peer(RemotePeer, S);
@@ -302,7 +302,7 @@ ensure_peer(RemotePeer, S = #s{peer = undefined}) -> S#s{peer = RemotePeer};
 ensure_peer(_RemotePeer, S)                       -> S.
 
 %% The header's claimed pubkey must equal the TLS-proven peer cert's pubkey. A 32-byte
-%% binary id ⇒ a real identity, enforced; any other id (the no-identity/test path) ⇒ skip.
+%% binary id ⇒ a real identity, enforced. There is no unauthenticated fallback.
 bind_ok({Pubkey, _Addr}, Conn) when is_binary(Pubkey), byte_size(Pubkey) =:= 32 ->
     case quic:peercert(Conn) of
         {ok, Der} ->
@@ -313,4 +313,4 @@ bind_ok({Pubkey, _Addr}, Conn) when is_binary(Pubkey), byte_size(Pubkey) =:= 32 
             end;
         {error, _} -> {fail, no_peercert}
     end;
-bind_ok(_RemotePeer, _Conn) -> ok.
+bind_ok(_RemotePeer, _Conn) -> {fail, malformed_header_identity}.

@@ -133,7 +133,9 @@ them as stored clauses.
 
 One ask = one frozen run on the target = one stream of answers back. Its worker waits only
 between explicit demand messages, for at most the idle timeout; while deriving an answer it is
-guarded by an engine-owned no-progress timer. It dies with its ask, engine, or timeout.
+guarded by an engine-owned no-progress timer. An independent absolute lifetime bounds the
+worker and its MVCC snapshot even while answers keep flowing. It dies with its ask, engine,
+or either timeout.
 
 1. **Open.** The asking side allocates a fresh **ask id**, subscribes to its answer channel,
    and sends the ask — target ontology, the goal, and the asking chain (§6) — on the
@@ -144,7 +146,8 @@ guarded by an engine-owned no-progress timer. It dies with its ask, engine, or t
    is copied into the worker, and answers can never be half-old, half-new. Old predicate
    versions are reclaimed against the oldest live worker snapshot.
 3. **Permission.** Before running the goal, the target proves `can_read` for the asking
-   chain (§6). Refusal = the `not_allowed` error, before any work.
+   chain and, on a remote hop, the TLS-authenticated node key (§6). Refusal =
+   `not_allowed`, before any work.
 4. **Stream.** The run produces answers by normal Prolog backtracking; **each answer is sent
    the moment it is found** — no batches, no waiting. The asking rule's choice point consumes
    them as they arrive; backtracking into the ask waits for the next answer. First answer =
@@ -200,14 +203,13 @@ answer link dying is already a monitored event on the asker. After **complete**,
 its per-ask leg; a finished ask leaves no per-ask worker, registration, or answer buffer behind.
 
 > **Technical notes.**
-> - **Backpressure is built, not assumed.** The wire layer today *silently drops* frames
->   under pressure: `quod_link` deliberately ignores send errors (`quod_link.erl:122-128`)
->   and the pre-connection buffer drops past 1024 frames (`quod_conn.erl:26,187-193`); the
->   QUIC library returns `flow_control_blocked`/`send_queue_full` rather than blocking
->   (`quic_connection.erl:7658-7704`) and offers no "window reopened" event. An answer is sent
->   only after its corresponding `next` request, so demand-driven asks keep at most one answer
->   in flight; the target engine collapses arbitrarily many premature demands into one bounded
->   pending bit. Sequence numbers turn transport loss into the loud `broken_stream` error.
+> - **Backpressure is explicit for asks.** Managed ask links retry
+>   `flow_control_blocked`/`send_queue_full` until their bounded send timeout and fail
+>   loudly if the local QUIC connection never accepts the frame. Gossip and feed traffic
+>   retain their deliberately fire-and-forget delivery. An answer is sent only after its
+>   corresponding `next` request, so demand-driven asks keep at most one answer in flight;
+>   the target engine collapses duplicate demands into one bounded pending bit. Sequence
+>   numbers still detect transport gaps as `broken_stream`.
 > - **Authenticated is not trusted.** Every envelope is decoded with safe ETF, compressed ETF
 >   is refused, and goals, answers, and errors use the bounded symbol codec. A target-local atom
 >   unknown to the asker becomes `{'$quod_symbol', <<"name">>}`. It can unify and round-trip,
@@ -236,11 +238,12 @@ Every ask carries the **chain** — the list of ontologies already involved in p
 - **Bounded depth.** A chain longer than the cap (§9) is refused: `too_deep`.
 - **Self-ask exception.** `A::x` written inside A itself is answered in place — no
   round-trip, no chain growth.
-- **Permission uses the whole chain.** The target proves `can_read` for **every** ontology in
-  the chain, not just the immediate asker — otherwise A could read C *through* B when A
-  itself isn't allowed (read laundering). The `can_read` policy is ordinary agreed content in
-  the target ontology; the shipped default stays open (as `quod:root`'s placeholder is
-  today), and this milestone wires the actual check on the answering side.
+- **Permission uses the whole chain and authenticated peer.** The target proves `can_read`
+  for **every** ontology in the chain. On a remote hop it also proves the same policy for
+  the Ed25519 node key bound to the request connection by mutual TLS. The caller may describe
+  an ontology path, but cannot omit its real transport identity to launder a read through an
+  allowed name. The `can_read` policy is ordinary agreed content in the target ontology; the
+  shipped default remains open.
 
 > **Technical notes.** The chain travels in the engine run's flag store (it survives run
 > suspension and cannot be forged by content — the flag-setting builtins are whitelisted,
@@ -265,20 +268,20 @@ a partial result never looks complete.
 | `unknown_ontology` | the name's prefix matches no known ontology |
 | `bad_name` | the name/ask term is malformed |
 | `unreachable` | the target ontology is known but no node serving it can be reached |
-| `not_allowed` | the target's `can_read` refused the asking chain |
+| `not_allowed` | the target's `can_read` refused an asking ontology or the authenticated peer |
 | `circular_ask` | the target is already in the asking chain |
 | `too_deep` | the chain exceeds the depth cap |
 | `too_many_answers` | the run passed the total-answer cap — "narrow your question" |
 | `answer_too_big` | one answer exceeds the frame limit — refused **on the sender** |
 | `broken_stream` | a sequence gap, the target's link died, or the target crashed mid-run |
-| `no_progress` | the no-progress timeout fired (no answer produced AND none consumed) |
+| `no_progress` | the absolute proof lifetime or an answer-step timeout expired |
 | `foreign_write_unsupported` | an asked goal tries to change the target ontology |
 
 > **Technical note — typed proof errors.** The old runner collapsed thrown erlog errors into
 > `prove_failed`. The worker runner now catches both erlog throw shapes explicitly, so the
 > taxonomy above reaches the rule author. Client calls wait for the proof worker's
-> bounded completion budget; cross-ontology progress renews that budget, while an abandoned
-> or genuinely wedged proof receives `no_progress`.
+> absolute completion budget; streamed progress does not extend it. An abandoned,
+> slow-drip, or genuinely wedged proof receives `no_progress`.
 
 ## 9. Limits (starting values — one table, tuned with real usage)
 
@@ -287,8 +290,10 @@ a partial result never looks complete.
 | answers per ask | 10 000 | `too_many_answers` |
 | one answer's size | 1 MiB (existing frame limit) | `answer_too_big` (sender-side) |
 | chain depth | 8 | `too_deep` |
-| no-progress timeout | 30 s (no answer produced AND none consumed) | `no_progress` |
-| concurrent asks served per ontology | 64 (existing) — also caps serving workers | asker waits/retries |
+| client proof lifetime | 60 s absolute (configurable) | `no_progress` |
+| served ask lifetime | 60 s absolute (configurable) | worker and snapshot are killed |
+| answer-step no-progress timeout | 30 s (configurable) | worker is killed |
+| concurrent asks served per ontology | 64 (configurable) | asker waits/retries |
 | concurrent client proofs per ontology | 64 (configurable) | `busy` |
 | rejected remote opens sent per ontology | 32/s | excess rejection replies are dropped |
 

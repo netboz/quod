@@ -3,6 +3,31 @@
 
 -define(WAIT_RETRIES, 200).
 
+decode_guards_test() ->
+    AskId = <<0:128>>,
+    AnswerCh = term_to_binary({quod_ask_answer, AskId}, [deterministic]),
+    {ok, WireGoal} = quod_wire_term:encode({diet, dog, {'D'}}),
+    Open = fun(Chain, Wire) ->
+                   term_to_binary({quod_ask_open, AskId, Wire, Chain, AnswerCh},
+                                  [deterministic])
+           end,
+    ?assertMatch({ok, AskId, _, [<<"pets">>], AnswerCh},
+                 quod_ask:decode_open(Open([<<"pets">>], WireGoal))),
+    ?assertEqual(error, quod_ask:decode_open(Open([], WireGoal))),
+    ?assertEqual(error, quod_ask:decode_open(
+                          Open(lists:duplicate(9, <<"n">>), WireGoal))),
+    ?assertEqual(error, quod_ask:decode_open(Open([not_binary], WireGoal))),
+    ?assertEqual(error, quod_ask:decode_open(Open([<<"pets">>], malformed))),
+    Bomb = term_to_binary(
+             {quod_ask_open, AskId, WireGoal, [<<"pets">>], AnswerCh},
+             [{compressed, 9}]),
+    ?assertMatch(<<131, 80, _/binary>>, Bomb),
+    ?assertEqual(error, quod_ask:decode_open(Bomb)),
+    ?assertEqual(error, quod_ask:decode_next(
+                          term_to_binary({quod_ask_next, <<0:120>>}))),
+    ?assertEqual(error, quod_ask:decode_cancel(
+                          term_to_binary({quod_ask_cancel, <<0:136>>}))).
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
@@ -10,6 +35,7 @@ ask_test_() ->
           ?_test(t_backtracking_all_answers(Ctx)),
           ?_test(t_default_link_following(Ctx)),
           ?_test(t_multi_position_follow_dedup(Ctx)),
+          ?_test(t_repeated_follow_queries_are_independent(Ctx)),
           ?_test(t_grounded_ask(Ctx)),
           ?_test(t_self_ask(Ctx)),
           ?_test(t_loud_routing_errors(Ctx)),
@@ -21,6 +47,7 @@ ask_test_() ->
           ?_test(t_answer_worker_failure_isolated(Ctx)),
           ?_test(t_target_crash_kills_answer(Ctx)),
           ?_test(t_answer_worker_limit(Ctx)),
+          ?_test(t_absolute_ask_lifetime(Ctx)),
           ?_test(t_frozen_stream_view(Ctx)),
           ?_test(t_workers_are_reaped(Ctx))]
      end}.
@@ -84,6 +111,13 @@ t_multi_position_follow_dedup(#{pets := P}) ->
     Goal = {isa, {':', animals, dog}, {':', animals, mammal}},
     ?assertMatch({ok, [#{'L' := [ok]}], _},
                  prove(P, {findall, ok, Goal, {'L'}})).
+
+t_repeated_follow_queries_are_independent(#{pets := P}) ->
+    First = {findall, {'D1'}, {diet, {':', animals, dog}, {'D1'}}, {'L1'}},
+    Second = {findall, {'D2'}, {diet, {':', animals, dog}, {'D2'}}, {'L2'}},
+    ?assertMatch({ok, [#{'L1' := [kibble, meat],
+                         'L2' := [kibble, meat]}], _},
+                 prove(P, {',', First, Second})).
 
 t_grounded_ask(#{pets := P}) ->
     ?assertMatch({ok, [#{}], _}, prove(P, {'::', animals, {diet, dog, meat}})),
@@ -178,6 +212,43 @@ t_answer_worker_limit(#{animals := A, pets := P}) ->
         Engine, {ask_open, {diet, cat, {'D'}}, [P], self()})),
     lists:foreach(fun(Stream) -> gen_server:cast(Engine, {ask_cancel, Stream}) end, Streams),
     ?assertEqual(ok, wait_workers(A, 0, ?WAIT_RETRIES)).
+
+t_absolute_ask_lifetime(_Ctx) ->
+    Ns = <<"ask-timeout:", (integer_to_binary(
+                              erlang:unique_integer([positive])))/binary>>,
+    {ok, Engine} = quod_prolog:start_link(
+                     Ns, #{node_id => {"127.0.0.1", 5000},
+                           ask_timeout_ms => 80,
+                           ask_step_timeout_ms => 1000}),
+    try
+        ok = quod_prolog:mark_ready(Ns),
+        {ok, Stream} = gen_server:call(
+                         Engine, {ask_open, repeat, [<<"caller">>], self()}),
+        MRef = monitor(process, Stream),
+        ?assertEqual(ok, pull_until_down(Stream, MRef, 30)),
+        ?assertEqual(ok, wait_workers(Ns, 0, ?WAIT_RETRIES))
+    after
+        case is_process_alive(Engine) of
+            true -> gen_server:stop(Engine);
+            false -> ok
+        end
+    end.
+
+pull_until_down(_Stream, _MRef, 0) -> timeout;
+pull_until_down(Stream, MRef, Retries) ->
+    Stream ! {next, self()},
+    receive
+        {ask_solution, Stream, _Seq, repeat} ->
+            timer:sleep(10),
+            pull_until_down(Stream, MRef, Retries - 1);
+        {'DOWN', MRef, process, Stream, _Reason} ->
+            ok
+    after 100 ->
+        case is_process_alive(Stream) of
+            true -> pull_until_down(Stream, MRef, Retries - 1);
+            false -> ok
+        end
+    end.
 
 %% The answer worker keeps the target state captured at open. A commit between
 %% streamed answers must not appear halfway through the stream.

@@ -145,6 +145,45 @@ population_estimate_uses_signed_stable_identity() ->
     ?assertEqual(2, maps:get(estimated_n, quod_brahms:stats(Ns))),
     gen_statem:stop(B).
 
+graceful_leave_retires_endpoint_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"a signed leave removes rather than re-observes the departing endpoint",
+       fun graceful_leave_retires_endpoint/0}]}.
+
+graceful_leave_retires_endpoint() ->
+    Ns = <<"ont:leave">>,
+    SelfAddr = {"127.0.0.1", 65111},
+    PeerAddr = {"127.0.0.1", 65112},
+    SelfIdentity = test_identity(),
+    PeerIdentity = test_identity(),
+    PeerKey = maps:get(pubkey, PeerIdentity),
+    PeerPopulation = quod_brahms_population:tick(
+                       quod_brahms_population:new(PeerIdentity, 128, 60000, 10000),
+                       erlang:system_time(millisecond)),
+    Heartbeat = quod_brahms_population:self_record(PeerPopulation),
+    {ok, B} = quod_brahms:start_link(
+                Ns, #{node_id => SelfAddr, seed_peers => [],
+                      population_identity => SelfIdentity,
+                      round_ms => 30, collect_ms => 5, probe_fanout => 0,
+                      jitter => 0.0}),
+    B ! {quod_message, {{PeerKey, PeerAddr}, self()}, Ns,
+         encode({push, PeerAddr, Heartbeat})},
+    ?assertEqual(ok, wait_until(fun() ->
+                                    lists:member(PeerAddr, quod_brahms:view(Ns))
+                                end, 20, 10)),
+    Leave = quod_brahms_population:leave_record(
+              PeerPopulation, erlang:system_time(millisecond) + 1),
+    B ! {quod_message, {{PeerKey, PeerAddr}, self()}, Ns,
+         encode({leave, PeerAddr, Leave})},
+    ?assertEqual(ok, wait_until(fun() ->
+                                    not lists:member(PeerAddr, quod_brahms:view(Ns)) andalso
+                                    not lists:member(PeerAddr, quod_brahms:sample(Ns))
+                                end, 20, 10)),
+    ?assertEqual(1, maps:get(estimated_n, quod_brahms:stats(Ns))),
+    gen_statem:stop(B).
+
 test_identity() ->
     {Pub, Seed} = quod_identity:generate(),
     #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}.

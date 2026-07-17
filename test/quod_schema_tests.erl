@@ -38,6 +38,10 @@ defaults_test() ->
     B = content1(C),
     ?assertEqual(create,          maps:get(mode, B)),
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
+    ?assertEqual(64,              maps:get(max_ask_workers, B)),
+    ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
+    ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
+    ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
     ?assertEqual([],              maps:get(seeds, B)).
 
@@ -150,7 +154,11 @@ build_ns_config_no_genesis_hash_test() ->
                 genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => <<"">>},
     {_, NsCfg} = quod_app:build_ns_config(Content),
     ?assertNot(maps:is_key(genesis_hash, NsCfg)),
-    ?assertEqual(64, maps:get(max_proof_workers, NsCfg)).
+    ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
+    ?assertEqual(64, maps:get(max_ask_workers, NsCfg)),
+    ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
+    ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
+    ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
 
 deep(Map, Path) -> lists:foldl(fun(K, M) -> maps:get(K, M) end, Map, Path).
 

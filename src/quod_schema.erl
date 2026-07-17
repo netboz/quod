@@ -76,6 +76,14 @@ fields(content) ->
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     , {max_proof_workers,
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
+    , {max_ask_workers,
+       hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
+    , {proof_timeout_ms,
+       hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
+    , {ask_timeout_ms,
+       hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
+    , {ask_step_timeout_ms,
+       hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
       %% `mode=join` REQUIRES this: the out-of-band trust anchor — the founder's genesis
       %% block hash as a 64-char hex string, copied from the founder's boot log (see
       %% `quod_app`). Empty for a `create` node. It is what makes catch-up trustless: a

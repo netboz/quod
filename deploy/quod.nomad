@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.13"
+  default     = "0.7.14"
   description = "Quod image tag in the cluster registry. This clean-ledger release expects freshly provisioned quod-node CSI volumes."
 }
 
@@ -26,6 +26,30 @@ variable "max_proof_workers" {
   type        = number
   default     = 64
   description = "Maximum concurrent client proof workers per ontology and allocation. Excess calls receive busy."
+}
+
+variable "max_ask_workers" {
+  type        = number
+  default     = 64
+  description = "Maximum concurrent foreign-answer workers per ontology and allocation. Excess asks receive busy."
+}
+
+variable "proof_timeout_ms" {
+  type        = number
+  default     = 60000
+  description = "Absolute lifetime of a client proof, including cross-ontology waits."
+}
+
+variable "ask_timeout_ms" {
+  type        = number
+  default     = 60000
+  description = "Absolute lifetime of a served foreign ask, even while it continues producing answers."
+}
+
+variable "ask_step_timeout_ms" {
+  type        = number
+  default     = 30000
+  description = "No-progress timeout while a served ask derives one answer."
 }
 
 variable "genesis_hash" {
@@ -196,6 +220,10 @@ content = [
     namespace = "quod:root"
     data_dir  = "/quod/data"
     max_proof_workers = ${var.max_proof_workers}
+    max_ask_workers = ${var.max_ask_workers}
+    proof_timeout_ms = ${var.proof_timeout_ms}
+    ask_timeout_ms = ${var.ask_timeout_ms}
+    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
 %{if var.bootstrap && var.genesis_hash == ""}
     mode         = create
     genesis_file = "ontologies/quod_root.pl"
@@ -387,6 +415,10 @@ content = [
     namespace = "quod:root"
     data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
     max_proof_workers = ${var.max_proof_workers}
+    max_ask_workers = ${var.max_ask_workers}
+    proof_timeout_ms = ${var.proof_timeout_ms}
+    ask_timeout_ms = ${var.ask_timeout_ms}
+    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     mode         = join
     genesis_hash = "${var.genesis_hash}"
     seeds        = [

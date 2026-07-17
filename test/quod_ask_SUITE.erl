@@ -4,17 +4,19 @@
 -include_lib("stdlib/include/assert.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([remote_stream/1, remote_symbol_safety/1, remote_cancel/1]).
+-export([remote_stream/1, remote_symbol_safety/1, remote_peer_acl/1,
+         remote_cancel/1]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
 -define(NS, <<"animals">>).
 -define(ASKER_NS, <<"pets">>).
+-define(PRIVATE_NS, <<"private">>).
 
-all() -> [remote_stream, remote_symbol_safety, remote_cancel].
+all() -> [remote_stream, remote_symbol_safety, remote_peer_acl, remote_cancel].
 
 init_per_suite(Config) ->
-    TargetKey = quod_identity:generate(),
+    {TargetPub, _} = TargetKey = quod_identity:generate(),
     AskerKey = quod_identity:generate(),
     TargetAddr = {"127.0.0.1", ?TARGET_PORT},
     AskerAddr = {"127.0.0.1", ?ASKER_PORT},
@@ -24,13 +26,26 @@ init_per_suite(Config) ->
     ok = file:write_file(TargetGenesis, [AnimalsBin, "\necho(X).\nloop :- loop.\n"]),
     Target = start_node(target, ?TARGET_PORT, TargetKey, ?NS,
                         TargetGenesis, [], Config),
+    PrivateGenesis = filename:join(?config(priv_dir, Config), "remote_private.pl"),
+    ok = file:write_file(
+           PrivateGenesis,
+           ["can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n",
+            "secret(42).\n"]),
+    start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
     start_brahms(Target, ?NS, TargetAddr, []),
     Asker = start_node(asker, ?ASKER_PORT, AskerKey, ?ASKER_NS,
                        filename:join(code:priv_dir(quod), "ontologies/pets.pl"),
                        [TargetAddr], Config),
     start_brahms(Asker, ?ASKER_NS, AskerAddr, [TargetAddr]),
     wait_ready(Target, ?NS, {diet, dog, kibble}),
+    wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Asker, ?ASKER_NS, {instance_of, pet, my_dog}),
+    %% Authorize the ontology name only. A remote request must additionally pass
+    %% can_read for the TLS-authenticated node key, which this policy omits.
+    ACL = {assertz, {can_read, {secret, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}},
+    ?assertMatch({ok, [_], _},
+                 peer:call(Target, quod_prolog, prove,
+                           [?PRIVATE_NS, ACL, ?PRIVATE_NS], 60000)),
     [{target, Target}, {asker, Asker} | Config].
 
 end_per_suite(Config) ->
@@ -62,6 +77,13 @@ remote_symbol_safety(Config) ->
                  peer:call(Asker, quod_prolog, prove,
                            [?ASKER_NS, Unknown, ?ASKER_NS], 60000)).
 
+remote_peer_acl(Config) ->
+    Asker = ?config(asker, Config),
+    Goal = {'::', ?PRIVATE_NS, {secret, {'X'}}},
+    ?assertEqual({error, not_allowed},
+                 peer:call(Asker, quod_prolog, prove,
+                           [?ASKER_NS, Goal, ?ASKER_NS], 60000)).
+
 remote_cancel(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
@@ -86,12 +108,19 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds, Config) ->
     Set(identity_key, Key),
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
-    DataDir = filename:join(?config(priv_dir, Config), atom_to_list(Name)),
+    start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config),
+    Peer.
+
+start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config) ->
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                atom_to_list(peer:call(Peer, erlang, node, [])) ++
+                    "_" ++ binary_to_list(Ns)),
     Cfg = #{node_id => Pub, mode => create, role => member,
             data_dir => DataDir, seed_peers => Seeds,
             genesis_file => Genesis},
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
-    Peer.
+    ok.
 
 start_brahms(Peer, Ns, SelfAddr, Seeds) ->
     {ok, _} = peer:call(Peer, quod_brahms, start_namespace,

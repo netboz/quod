@@ -4,10 +4,10 @@ Per-namespace fact engine: owns the committed erlog knowledge base for one
 ontology, serves `prove/3`, and applies committed blocks from `quod_simplex` in log
 order. One `gen_server` per namespace.
 
-- **Every proof runs in its own short-lived WORKER process** — the engine never blocks
+- **Every proof runs in its own bounded WORKER process** — the engine never blocks
   on a proof (doc/inter-ontology.md §4.1). The worker gets a small shared-store snapshot
   handle, never the knowledge base. A wedged proof wedges only its worker (killed after
-  `?PROOF_KILL_MS`), never the engine, and the per-proof overlay dies with it.
+  past its configured absolute lifetime, and the per-proof overlay dies with it.
 - **Reads** run on a copy-on-write overlay (`m:quod_erlog_db_local_prove`) so the
   committed kb is never touched; the answer is bindings (stamped with the height the
   frozen view was taken at), returned to the caller.
@@ -43,15 +43,21 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 %% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000,
-                    validation_ttl_ms => 2000, max_proof_workers => 64}).
+                    validation_ttl_ms => 2000, max_proof_workers => 64,
+                    max_ask_workers => 64, proof_timeout_ms => 60000,
+                    ask_timeout_ms => 60000, ask_step_timeout_ms => 30000}).
 
-%% A runaway proof (an infinite Prolog derivation) is KILLED after this budget. Before the
-%% worker-per-proof refactor it would have wedged the whole engine forever; now it costs one
-%% worker and the caller gets the public no-progress error.
--define(PROOF_KILL_MS, 60000).
--define(ASK_STEP_KILL_MS, 30000).
--define(MAX_ASK_WORKERS, 64).
+%% Busy/rebuilding replies are deliberately rate-limited: an authenticated peer can
+%% still flood valid open frames, and rejecting them must not create unbounded work.
 -define(MAX_ASK_REJECTS_PER_SECOND, 32).
+
+-record(proof_worker, {pid         :: pid(),
+                       worker_mref :: reference(),
+                       caller_mref :: reference(),
+                       from        :: gen_server:from(),
+                       timer       :: reference(),
+                       token       :: reference(),
+                       height = 0  :: non_neg_integer()}).
 
 -record(ask_worker, {pid        :: pid(),
                      owner_mref :: reference(),
@@ -59,6 +65,8 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
                      height = 0 :: non_neg_integer(),
                      timer = undefined :: reference() | undefined,
                      token = undefined :: reference() | undefined,
+                     lifetime_timer :: reference(),
+                     lifetime_token :: reference(),
                      pending = false :: boolean(),
                      queued = false :: boolean()}).
 
@@ -69,6 +77,10 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
+            max_ask_workers = 64 :: pos_integer(),
+            proof_timeout_ms = 60000 :: pos_integer(),
+            ask_timeout_ms = 60000 :: pos_integer(),
+            ask_step_timeout_ms = 30000 :: pos_integer(),
             applied   = 0  :: log_index(),
             %% tx_id => {From, Bindings, HeightRead, TimerRef, AsyncRequestId | none}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
@@ -80,10 +92,10 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             validations = #{} :: #{term() => {log_index(), term(), pid(), reference()}},
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
             park_timeouts = 0 :: non_neg_integer(),     %% parked writes reaped by TTL (verdict never arrived)
-            %% Ref => {Pid, WorkerMon, CallerMon, From, TimerRef, TimerToken, FrozenHeight}
+            %% Ref => #proof_worker{}
             workers   = #{} :: map(),
             %% WorkerMon => #ask_worker{}. The reverse index makes both normal
-            %% completion and asker cancellation O(1), bounded at 64 live asks.
+            %% completion and asker cancellation O(1), bounded by max_ask_workers.
             ask_workers = #{} :: map(),
             ask_callers = #{} :: map(),
             ask_pids = #{} :: map(),
@@ -177,8 +189,8 @@ stats(Ns) ->
 
 namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1']}]).
 
-positive_worker_limit(Value) when is_integer(Value), Value > 0 -> Value;
-positive_worker_limit(Value) -> error({bad_config, {max_proof_workers, Value}}).
+positive_limit(_Name, Value) when is_integer(Value), Value > 0 -> Value;
+positive_limit(Name, Value) -> error({bad_config, {Name, Value}}).
 
 %%%===================================================================
 %%% gen_server
@@ -186,13 +198,20 @@ positive_worker_limit(Value) -> error({bad_config, {max_proof_workers, Value}}).
 
 init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
-    MaxProofWorkers = positive_worker_limit(maps:get(max_proof_workers, Cfg)),
+    MaxProofWorkers = positive_limit(max_proof_workers, maps:get(max_proof_workers, Cfg)),
+    MaxAskWorkers = positive_limit(max_ask_workers, maps:get(max_ask_workers, Cfg)),
     put('$quod_ns', Ns),        %% so external predicates (e.g. admit) can recover their namespace in-process
     put('$quod_applied', 0),    %% ... and the applied height (peer_ready's slack judge; kept current below)
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            requests = gen_statem:reqids_new(),
            ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg),
-           max_proof_workers = MaxProofWorkers, ready = false},
+           max_proof_workers = MaxProofWorkers, max_ask_workers = MaxAskWorkers,
+           proof_timeout_ms = positive_limit(proof_timeout_ms,
+                                             maps:get(proof_timeout_ms, Cfg)),
+           ask_timeout_ms = positive_limit(ask_timeout_ms, maps:get(ask_timeout_ms, Cfg)),
+           ask_step_timeout_ms = positive_limit(ask_step_timeout_ms,
+                                                maps:get(ask_step_timeout_ms, Cfg)),
+           ready = false},
     true = quod_ask:subscribe(Ns),
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
     %% into this fresh kb; it casts mark_ready when the kb is caught up. Async, so
@@ -249,15 +268,15 @@ handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier 
 handle_call({ask_open, _G, _C, _A}, _From, S = #s{ready = false}) ->
     {reply, {error, not_ready}, S};
 handle_call({ask_open, _Goal, _Chain, _Asker}, _From,
-            S = #s{ask_workers = AW}) when map_size(AW) >= ?MAX_ASK_WORKERS ->
+            S = #s{ask_workers = AW, max_ask_workers = Max}) when map_size(AW) >= Max ->
     {reply, {error, busy}, S};
 handle_call({ask_open, Goal, Chain, Asker}, _From, S) ->
     Stream = quod_ask:start_answer(S#s.ns, S#s.est, S#s.applied,
                                    Goal, Chain, Asker, self()),
     WorkerMRef = monitor(process, Stream),
     AskerMRef = monitor(process, Asker),
-    Worker = #ask_worker{pid = Stream, owner_mref = AskerMRef,
-                         height = S#s.applied},
+    Worker = new_ask_worker(Stream, WorkerMRef, AskerMRef,
+                            undefined, S#s.applied, S),
     AW1 = (S#s.ask_workers)#{WorkerMRef => Worker},
     AC1 = (S#s.ask_callers)#{AskerMRef => WorkerMRef},
     AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
@@ -291,21 +310,10 @@ handle_info(Info = {'DOWN', MRef, process, _Pid, Reason}, S) ->
 %% A proof outlived its kill budget: end it (the DOWN above replies no_progress).
 handle_info({proof_kill, Ref, Token}, S = #s{workers = W}) ->
     case W of
-        #{Ref := {Pid, _WM, _CM, _From, _TRef, Token, _Height}} -> kill_worker(Pid);
+        #{Ref := #proof_worker{pid = Pid, token = Token}} -> kill_worker(Pid);
         _ -> ok
     end,
     {noreply, S};
-%% Cross-ontology solutions count as progress: renew the watchdog without allowing
-%% a cancelled timer message already in the mailbox to kill the worker later.
-handle_info({proof_progress, Ref}, S = #s{workers = W}) ->
-    case W of
-        #{Ref := {Pid, WM, CM, From, TRef, _OldToken, Height}} ->
-            _ = erlang:cancel_timer(TRef),
-            Token = make_ref(),
-            TRef1 = erlang:send_after(?PROOF_KILL_MS, self(), {proof_kill, Ref, Token}),
-            {noreply, S#s{workers = W#{Ref => {Pid, WM, CM, From, TRef1, Token, Height}}}};
-        _ -> {noreply, S}
-    end;
 %% Ask derivation is guarded outside the worker so cancellation and no-progress
 %% remain preemptive even while erlog is inside an unbounded goal.
 handle_info({ask_step_started, Pid}, S = #s{ask_pids = Pids}) ->
@@ -321,6 +329,11 @@ handle_info({ask_step_finished, Pid}, S = #s{ask_pids = Pids}) ->
 handle_info({ask_step_kill, WorkerMRef, Token}, S = #s{ask_workers = Workers}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
         #ask_worker{token = Token} -> {noreply, kill_ask(WorkerMRef, S)};
+        _ -> {noreply, S}
+    end;
+handle_info({ask_lifetime_kill, WorkerMRef, Token}, S = #s{ask_workers = Workers}) ->
+    case maps:get(WorkerMRef, Workers, undefined) of
+        #ask_worker{lifetime_token = Token} -> {noreply, kill_ask(WorkerMRef, S)};
         _ -> {noreply, S}
     end;
 %% Remote asks arrive on the fixed channel owned by this ontology. The request link is
@@ -370,7 +383,8 @@ handle_info(Info, S) ->
     handle_response_info(Info, S).
 
 handle_remote_ask(Peer, RequestLink, Payload,
-                  S = #s{ns = Ns, ready = Ready, ask_workers = AW, ask_ids = Ids}) ->
+                  S = #s{ns = Ns, ready = Ready, ask_workers = AW, ask_ids = Ids,
+                         max_ask_workers = Max}) ->
     case quod_ask:decode_open(Payload) of
         error -> S;
         {ok, AskId, Goal, Chain, AnswerCh} ->
@@ -378,7 +392,7 @@ handle_remote_ask(Peer, RequestLink, Payload,
                 true -> S; %% duplicate request frame: the existing run owns this id
                 false when not Ready ->
                     reject_remote(Peer, AnswerCh, AskId, rebuilding, S);
-                false when map_size(AW) >= ?MAX_ASK_WORKERS ->
+                false when map_size(AW) >= Max ->
                     reject_remote(Peer, AnswerCh, AskId, busy, S);
                 false when is_pid(RequestLink) ->
                     Stream = quod_ask:start_answer_remote(Ns, S#s.est, S#s.applied,
@@ -386,8 +400,8 @@ handle_remote_ask(Peer, RequestLink, Payload,
                                                           AnswerCh, self()),
                     WorkerMRef = monitor(process, Stream),
                     RequestMRef = monitor(process, RequestLink),
-                    Worker = #ask_worker{pid = Stream, owner_mref = RequestMRef,
-                                         id = AskId, height = S#s.applied},
+                    Worker = new_ask_worker(Stream, WorkerMRef, RequestMRef,
+                                            AskId, S#s.applied, S),
                     AW1 = AW#{WorkerMRef => Worker},
                     AC1 = (S#s.ask_callers)#{RequestMRef => WorkerMRef},
                     AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
@@ -447,7 +461,7 @@ handle_response_info(Info, S = #s{requests = Requests}) ->
     end.
 
 terminate(_Reason, #s{ns = Ns, workers = W, ask_workers = AW}) ->
-    maps:foreach(fun(_Ref, {Pid, _WM, _CM, _From, _TR, _Tok, _H}) -> kill_worker(Pid) end, W),
+    maps:foreach(fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end, W),
     maps:foreach(fun(_WM, #ask_worker{pid = Pid}) -> kill_worker(Pid) end, AW),
     _ = try quod_reg:unsubscribe({channel, quod_ask:ask_channel(Ns)}) catch _:_ -> ok end,
     ok.
@@ -459,7 +473,9 @@ terminate(_Reason, #s{ns = Ns, workers = W, ask_workers = AW}) ->
 %% Spawn one worker for this proof. The worker gets a small table/height snapshot handle,
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
-spawn_proof(Kind, Goal, CallerNs, From, S = #s{ns = Ns, est = Est, applied = Applied}) ->
+spawn_proof(Kind, Goal, CallerNs, From,
+            S = #s{ns = Ns, est = Est, applied = Applied,
+                   proof_timeout_ms = ProofTimeout}) ->
     Engine = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_opt(fun() ->
@@ -467,9 +483,12 @@ spawn_proof(Kind, Goal, CallerNs, From, S = #s{ns = Ns, est = Est, applied = App
     end, [monitor]),
     CallerMRef = monitor(process, element(1, From)),
     Token = make_ref(),
-    KillRef = erlang:send_after(?PROOF_KILL_MS, Engine, {proof_kill, Ref, Token}),
+    KillRef = erlang:send_after(ProofTimeout, Engine, {proof_kill, Ref, Token}),
+    Worker = #proof_worker{pid = Pid, worker_mref = MRef, caller_mref = CallerMRef,
+                           from = From, timer = KillRef, token = Token,
+                           height = Applied},
     S#s{workers = (S#s.workers)#{Ref =>
-          {Pid, MRef, CallerMRef, From, KillRef, Token, Applied}},
+          Worker},
         proves  = S#s.proves + 1}.
 
 bump_proves(S) -> S#s{proves = S#s.proves + 1}.
@@ -479,9 +498,9 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% frozen view, and reports one correlated result to the engine. The per-proof read-set
 %% ETS table is created here, so an abandoned/killed run can never leak it.
 proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied) ->
+    _ = watch_engine(Engine, self()),
     put('$quod_ns', Ns),
     put('$quod_applied', Applied),
-    put('$quod_proof_owner', {Engine, Ref}),
     put('$quod_ask_chain', [Ns]),   %% the ask path starts at this ontology (for `::` cycle/depth guards)
     Result = run_proof_est(Goal, Est),
     gen_server:cast(Engine, {proof_result, Ref, Kind, Goal, CallerNs, Result}).
@@ -507,7 +526,8 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
 
 take_proof_worker(Ref, S = #s{workers = W}) ->
     case maps:take(Ref, W) of
-        {{_Pid, WorkerMRef, CallerMRef, From, TimerRef, _Token, Applied}, W1} ->
+        {#proof_worker{worker_mref = WorkerMRef, caller_mref = CallerMRef,
+                       from = From, timer = TimerRef, height = Applied}, W1} ->
             _ = erlang:cancel_timer(TimerRef),
             demonitor(WorkerMRef, [flush]),
             demonitor(CallerMRef, [flush]),
@@ -548,7 +568,8 @@ handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
 
 find_proof_monitor(MRef, W) ->
     maps:fold(
-      fun(Ref, {Pid, WorkerMRef, CallerMRef, From, _TR, _Tok, _H}, Acc) ->
+      fun(Ref, #proof_worker{pid = Pid, worker_mref = WorkerMRef,
+                             caller_mref = CallerMRef, from = From}, Acc) ->
           case Acc of
               false when WorkerMRef =:= MRef -> {worker, Ref, From};
               false when CallerMRef =:= MRef -> {caller, Ref, Pid};
@@ -562,11 +583,12 @@ cancel_ask(Pid, S = #s{ask_pids = Pids}) ->
         _ -> S
     end.
 
-arm_ask(WorkerMRef, S = #s{ask_workers = Workers}) ->
+arm_ask(WorkerMRef, S = #s{ask_workers = Workers,
+                            ask_step_timeout_ms = StepTimeout}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
         #ask_worker{pending = false} = Worker ->
             Token = make_ref(),
-            Timer = erlang:send_after(?ASK_STEP_KILL_MS, self(),
+            Timer = erlang:send_after(StepTimeout, self(),
                                       {ask_step_kill, WorkerMRef, Token}),
             S#s{ask_workers = Workers#{WorkerMRef =>
                 Worker#ask_worker{pending = true, timer = Timer, token = Token}}};
@@ -597,8 +619,9 @@ drop_ask(WorkerMRef, S = #s{ask_workers = Workers, ask_callers = Callers,
                              ask_pids = Pids, ask_ids = Ids}) ->
     case maps:take(WorkerMRef, Workers) of
         {#ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId,
-                     timer = Timer}, Workers1} ->
+                     timer = Timer, lifetime_timer = LifetimeTimer}, Workers1} ->
             cancel_ask_timer(Timer),
+            cancel_ask_timer(LifetimeTimer),
             demonitor(WorkerMRef, [flush]),
             demonitor(OwnerMRef, [flush]),
             Ids1 = case AskId of undefined -> Ids; _ -> maps:remove(AskId, Ids) end,
@@ -610,6 +633,25 @@ drop_ask(WorkerMRef, S = #s{ask_workers = Workers, ask_callers = Callers,
 
 cancel_ask_timer(undefined) -> ok;
 cancel_ask_timer(Timer) -> _ = erlang:cancel_timer(Timer), ok.
+
+new_ask_worker(Pid, WorkerMRef, OwnerMRef, AskId, Height,
+               #s{ask_timeout_ms = AskTimeout}) ->
+    Token = make_ref(),
+    Timer = erlang:send_after(AskTimeout, self(),
+                              {ask_lifetime_kill, WorkerMRef, Token}),
+    #ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId, height = Height,
+                lifetime_timer = Timer, lifetime_token = Token}.
+
+watch_engine(Engine, Worker) ->
+    spawn(fun() ->
+        EngineRef = monitor(process, Engine),
+        WorkerRef = monitor(process, Worker),
+        receive
+            {'DOWN', EngineRef, process, Engine, _Reason} -> exit(Worker, kill);
+            {'DOWN', WorkerRef, process, Worker, _Reason} ->
+                demonitor(EngineRef, [flush])
+        end
+    end).
 
 kill_worker(Pid) ->
     unlink(Pid),
@@ -763,8 +805,8 @@ publish_snapshot(Index, S = #s{est = #est{db = #db{mod = quod_erlog_db_mvcc,
     S#s{est = Est#est{db = Db#db{ref = Ref1}}, applied = Index}.
 
 oldest_snapshot(Current, #s{workers = Workers, ask_workers = AskWorkers}) ->
-    ProofHeights = [Height || {_Ref, {_Pid, _WM, _CM, _From, _TR, _Tok, Height}}
-                                  <- maps:to_list(Workers)],
+    ProofHeights = [Height || {_Ref, #proof_worker{height = Height}}
+                                 <- maps:to_list(Workers)],
     AskHeights = [Height || {_MRef, #ask_worker{height = Height}}
                                 <- maps:to_list(AskWorkers)],
     lists:min([Current | ProofHeights ++ AskHeights]).

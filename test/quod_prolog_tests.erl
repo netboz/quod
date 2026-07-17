@@ -28,6 +28,27 @@ prolog_test_() ->
       fun t_batch_apply/1,
       fun t_worker_limit/1]}.
 
+absolute_proof_timeout_test_() ->
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(gproc),
+         Ns = <<"timeout:", (integer_to_binary(
+                               erlang:unique_integer([positive])))/binary>>,
+         {ok, Pid} = quod_prolog:start_link(
+                       Ns, #{node_id => {"127.0.0.1", 5000},
+                             proof_timeout_ms => 60}),
+         ok = quod_prolog:mark_ready(Ns),
+         {Ns, Pid}
+     end,
+     fun cleanup/1,
+     fun({Ns, _Pid}) ->
+         Rule = {':-', loop, loop},
+         ok = quod_prolog:apply_block(
+                Ns, 1, batch(change(Ns, diff_for(Rule), #{}))),
+         ?_assertEqual({error, no_progress},
+                       quod_prolog:prove(Ns, loop, Ns))
+     end}.
+
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
 setup_mem() ->

@@ -42,8 +42,8 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 -define(ADDR_CACHE, quod_addr_cache).   %% public ETS: pubkey() => endpoint() (resolution hints)
 
 %% `self` is the transport identity `{Pubkey, Addr}` announced in every link header, where the
-%% two slots are DISTINCT: Pubkey = the node's Ed25519 identity (`node_pubkey`; the address
-%% itself in the no-identity/test path), Addr = the advertised `{Host,Port}` peers dial
+%% two slots are DISTINCT: Pubkey = the node's Ed25519 identity (`node_pubkey`),
+%% Addr = the advertised `{Host,Port}` peers dial
 %% (`node_addr`, which may differ from the local bind port). The receiver binds the proven peer
 %% pubkey and learns Pubkey => Addr — but only when Addr is a real endpoint (see `learn/2`).
 -record(state, {self, alpn, cert, key, conns = #{}}).
@@ -111,7 +111,7 @@ store_hint(Pubkey, Endpoint, Op) when is_binary(Pubkey) ->
                  ok;
         false -> ok   %% a non-endpoint address must NEVER clobber a good hint
     end;
-store_hint(_, _, _) -> ok.   %% non-pubkey id (the test/no-identity path): nothing to resolve
+store_hint(_, _, _) -> ok.   %% non-pubkey ids are not resolvable transport identities
 
 -doc "Resolve a target to a dialable endpoint: an endpoint dials direct; a pubkey via the cache.".
 -spec resolve(term()) -> {ok, {inet:hostname(), inet:port_number()}} | error.
@@ -145,7 +145,7 @@ init([]) ->
     Port    = env(listen_port, 14567),
     ALPN    = [to_bin(env(alpn, "quod"))],
     Pubkey0 = env(node_pubkey, undefined),
-    case self_addr(env(node_addr, undefined), Pubkey0, Port) of
+    case self_addr(env(node_addr, undefined), Pubkey0) of
         {error, Reason} ->
             logger:error("quod: transport init aborted: ~p", [Reason]),
             {stop, Reason};
@@ -153,10 +153,8 @@ init([]) ->
             %% Identity and reachable address are two SEPARATE inputs. `node_pubkey` is the
             %% Ed25519 identity; `node_addr` is the advertised {Host,Port} others dial. A keyed
             %% node's address is deployment-specific (NAT / containers / port-mapping), so it is
-            %% supplied explicitly — never the pubkey, never guessed from the bind port. With no
-            %% identity (legacy/test) the id IS the address, so both slots hold the {Host,Port}.
-            Pubkey = case Pubkey0 of undefined -> Addr; P -> P end,
-            Self   = {Pubkey, Addr},
+            %% supplied explicitly — never the pubkey, never guessed from the bind port.
+            Self   = {Pubkey0, Addr},
             {Cert, Key} = identity_certkey(),
             _ = ensure_cache(),
             Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
@@ -174,7 +172,7 @@ init([]) ->
             case quic:start_server(?SERVER, Port, ServerOpts) of
                 {ok, _} ->
                     logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
-                                [Port, hd(ALPN), id_str(Pubkey), Addr]),
+                                [Port, hd(ALPN), id_str(Pubkey0), Addr]),
                     {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
                 {error, Reason} ->
                     {stop, {listen_failed, Reason}}
@@ -184,18 +182,19 @@ init([]) ->
 %% A node's own advertised endpoint. `node_addr` (an explicit {Host,Port}) is the sole source:
 %% a reachable address depends on the deployment and is NEVER derived from the local bind port.
 %% A keyed node (real `node_pubkey`) with no `node_addr` is a misconfiguration — fail loudly at
-%% boot rather than advertise a wrong/placeholder address. Only the no-identity (legacy/test) path
-%% may fall back to loopback:listen_port.
-self_addr(NodeAddr, Pubkey, Port) ->
+%% boot rather than advertise a wrong/placeholder address. A transport without
+%% an Ed25519 node identity cannot authenticate its link headers and is refused.
+self_addr(NodeAddr, Pubkey) ->
     case {NodeAddr, Pubkey} of
-        {Addr, _} when is_tuple(Addr) ->
+        {Addr, Key} when is_tuple(Addr), is_binary(Key), byte_size(Key) =:= 32 ->
             case is_endpoint(Addr) of
                 true  -> {ok, Addr};
                 false -> {error, {bad_node_addr, Addr}}
             end;
-        {undefined, undefined} -> {ok, {"127.0.0.1", Port}};
-        {undefined, _Keyed}    -> {error, node_addr_required_for_keyed_node};
-        {Other, _}             -> {error, {bad_node_addr, Other}}
+        {undefined, Key} when is_binary(Key), byte_size(Key) =:= 32 ->
+            {error, node_addr_required_for_keyed_node};
+        {_Addr, _BadKey} ->
+            {error, node_pubkey_required}
     end.
 
 handle_call(_Req, _From, State) ->

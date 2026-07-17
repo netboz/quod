@@ -337,6 +337,21 @@ handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_B
     D;                                             %% oversized gossip -> drop
 handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                D0 = #d{self = Self}) ->
+    case decode(Payload) of
+        {leave, RemoteNodeId, Leave} when RemoteNodeId =/= Self ->
+            %% A signed departure is not liveness. Merge its population record,
+            %% then retire the endpoint without feeding it back into the view.
+            retire_departed(RemoteNodeId,
+                            merge_sender_population(RemoteIdentity, Leave, D0));
+        Message ->
+            handle_live_inbound(RemoteIdentity, RemoteNodeId, ReplyLink,
+                                Message, Mode, D0)
+    end;
+handle_inbound(_MalformedPeer, _Payload, _Mode, D) ->
+    D.
+
+handle_live_inbound(RemoteIdentity, RemoteNodeId, ReplyLink, Message, Mode,
+                    D0 = #d{self = Self}) ->
     %% a peer's link is bidirectional: cache it for our own sends so a peer pair
     %% shares ONE stream per channel (no separate dial-back). Hearing from a peer
     %% is also liveness proof: it answers any in-flight probe AND lifts any
@@ -346,7 +361,7 @@ handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
                    untombstone(RemoteNodeId,
                                clear_probe(RemoteNodeId,
                                            cache_inbound(RemoteNodeId, ReplyLink, D0)))),
-    case decode(Payload) of
+    case Message of
         {push, Id, Heartbeat} when Id =/= Self ->
             D1 = merge_sender_population(RemoteIdentity, Heartbeat, D),
             handle_push(Id, D1);
@@ -598,7 +613,7 @@ announce_leave(#d{self = Self, conns = Conns, population = Population}) ->
     case quod_brahms_population:leave_record(Population, erlang:system_time(millisecond)) of
         none -> ok;
         Leave ->
-            Payload = encode({push, Self, Leave}),
+            Payload = encode({leave, Self, Leave}),
             _ = [quod_link:send(LinkPid, Payload) || {_Peer, {LinkPid, _Ref, _Origin}} <- maps:to_list(Conns)],
             ok
     end.
@@ -754,6 +769,28 @@ mark_dead(NodeId, D = #d{ns = Ns, view = V, sampler = S, probing = Pr,
         last_heard = maps:remove(NodeId, LH),
         evictions = D#d.evictions + 1,
         tombstones = (D#d.tombstones)#{NodeId => D#d.rounds}}.   %% refuse re-admission for a while
+
+%% A directly authenticated graceful departure is authoritative immediately.
+%% Unlike a failed probe it is not counted as an eviction, but it gets the same
+%% tombstone so delayed third-party gossip cannot resurrect the old endpoint.
+retire_departed(NodeId,
+                 D = #d{view = V, sampler = S, probing = Pr, conns = Conns,
+                        outbox = Outbox, last_heard = LH, vpush = VPush,
+                        vpull = VPull, pulled = Pulled}) ->
+    Conns1 = case maps:take(NodeId, Conns) of
+                 {ConnVal, C} -> _ = teardown_conn(ConnVal, true), C;
+                 error        -> Conns
+             end,
+    D#d{sampler = quod_brahms_sampler:invalidate(NodeId, S),
+        view = V -- [NodeId],
+        probing = maps:remove(NodeId, Pr),
+        conns = Conns1,
+        outbox = maps:remove(NodeId, Outbox),
+        last_heard = maps:remove(NodeId, LH),
+        vpush = VPush -- [NodeId],
+        vpull = VPull -- [NodeId],
+        pulled = Pulled -- [NodeId],
+        tombstones = (D#d.tombstones)#{NodeId => D#d.rounds}}.
 
 clear_probe(NodeId, D = #d{probing = Pr}) ->
     case maps:is_key(NodeId, Pr) of

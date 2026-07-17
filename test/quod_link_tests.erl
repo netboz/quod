@@ -7,30 +7,36 @@
 %% --- header: <<NLen:16, NodeId, CLen:16, Channel>> ----------------------
 
 header_roundtrip_test() ->
-    Cases = [{{"127.0.0.1", 14567}, <<"chan">>},
-             {node_atom,            <<>>},
-             {<<"binid">>,          <<"a/b">>}],
+    Addr = {"127.0.0.1", 14567},
+    Cases = [{{<<0:256>>, Addr}, <<"chan">>},
+             {{<<1:256>>, Addr}, <<"a/b">>}],
     [?assertEqual({ok, NodeId, Ch, <<>>}, parse_header(header(NodeId, Ch)))
      || {NodeId, Ch} <- Cases].
 
 %% the header consumes exactly its bytes; trailing payload frames are the Rest.
 header_keeps_remainder_test() ->
     Tail = frame(<<"payload">>),
-    Buf  = <<(header({"h", 1}, <<"c">>))/binary, Tail/binary>>,
-    ?assertEqual({ok, {"h", 1}, <<"c">>, Tail}, parse_header(Buf)).
+    Id = {<<0:256>>, {"h", 1}},
+    Buf  = <<(header(Id, <<"c">>))/binary, Tail/binary>>,
+    ?assertEqual({ok, Id, <<"c">>, Tail}, parse_header(Buf)).
 
 %% a header that arrives in pieces -> `more` until complete, then decoded.
 header_split_buffers_test() ->
-    Full = header({"h", 1}, <<"chan">>),
+    Id = {<<0:256>>, {"h", 1}},
+    Full = header(Id, <<"chan">>),
     Half = byte_size(Full) div 2,
     <<A:Half/binary, _/binary>> = Full,
     ?assertEqual(more, parse_header(A)),
-    ?assertEqual({ok, {"h", 1}, <<"chan">>, <<>>}, parse_header(Full)).
+    ?assertEqual({ok, Id, <<"chan">>, <<>>}, parse_header(Full)).
 
 %% a structurally complete header whose node id isn't a decodable term -> error
 %% (defensive decode), not a crash.
 header_bad_nodeid_rejected_test() ->
-    ?assertEqual(error, parse_header(<<3:16, "abc", 0:16>>)).
+    ?assertEqual(error, parse_header(<<3:16, "abc", 0:16>>)),
+    [?assertEqual(error, parse_header(header(Bad, <<"c">>)))
+     || Bad <- [node_atom, 42, {a, b, c}, {{"h", 1}, {"h", 1}},
+                {<<"short">>, {"h", 1}},
+                {<<0:256>>, malformed_endpoint}]].
 
 %% --- payload frames: <<PLen:32, Payload>> -------------------------------
 

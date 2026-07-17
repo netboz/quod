@@ -278,6 +278,10 @@ build_ns_config(Content) ->
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),
              max_proof_workers => maps:get(max_proof_workers, Content, 64),
+             max_ask_workers => maps:get(max_ask_workers, Content, 64),
+             proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
+             ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
+             ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
              seed_peers => content_seeds(Content)},
     {Ns, with_genesis_hash(Content, with_genesis_file(Content, with_data_dir(Content, Base)))}.
 

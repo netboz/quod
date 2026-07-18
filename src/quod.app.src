@@ -1,6 +1,6 @@
 {application, quod,
  [{description, "Quod - a Prolog/Brahms P2P node over QUIC"},
-  {vsn, "0.7.17"},
+  {vsn, "0.7.18"},
   %% processes register through gproc (via tuples), not local names.
   {registered, []},
   {mod, {quod_app, []}},

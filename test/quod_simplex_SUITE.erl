@@ -13,13 +13,14 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
-         t_restart_replays/1, t_status_stats/1, t_multi_member_accepted/1, t_commit_carries_cert/1,
+         t_restart_replays/1, t_unsigned_history_rejected/1, t_status_stats/1,
+         t_multi_member_accepted/1, t_commit_carries_cert/1,
          t_concurrent_appends_batch/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
-     t_restart_replays, t_status_stats, t_multi_member_accepted, t_commit_carries_cert,
-     t_concurrent_appends_batch].
+     t_restart_replays, t_unsigned_history_rejected, t_status_stats,
+     t_multi_member_accepted, t_commit_carries_cert, t_concurrent_appends_batch].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -112,7 +113,39 @@ t_restart_replays(Cfg) ->
     St = quod_simplex:status(Ns),
     ?assertEqual(3, maps:get(slot, St)),
     ?assertEqual(3, maps:get(committed, St)),
-    ?assertEqual([Self], quod_simplex:committee(Ns)).
+    ?assertEqual([Self], quod_simplex:committee(Ns)),
+    ?assertEqual({ok, 4}, quod_simplex:append(Ns, tx(Ns, Self, <<"c">>))),
+    {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
+    try
+        {ok, #entry{data = {batch, [T]}}} =
+            quod_ledger_store:read_at(Store, 4),
+        ?assertEqual(3, T#transaction.author_seq)
+    after quod_ledger_store:close(Store) end.
+
+%% Signature enforcement also applies while rebuilding the node's own durable
+%% log. Replacing a valid slot with an otherwise-identical unsigned transaction
+%% must fail the restart; unsigned history is not silently grandfathered.
+t_unsigned_history_rejected(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    Dir = ?config(dir, Cfg),
+    Self = ?config(node_id, Cfg),
+    _ = start(Cfg, #{}),
+    ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"signed">>))),
+    stop(Ns),
+    {ok, Source} = quod_ledger_store:open(Ns, Dir),
+    {ok, Genesis} = quod_ledger_store:read_at(Source, 1),
+    {ok, #entry{data = {batch, [Signed]}} = E2} =
+        quod_ledger_store:read_at(Source, 2),
+    ok = quod_ledger_store:close(Source),
+    ok = file:del_dir_r(quod_ledger_store:ns_dir(Dir, Ns)),
+    {ok, Rewritten0} = quod_ledger_store:open(Ns, Dir),
+    Unsigned = Signed#transaction{sig = none},
+    {ok, Rewritten1} = quod_ledger_store:append(
+                         Rewritten0,
+                         [Genesis, E2#entry{data = {batch, [Unsigned]}}]),
+    ok = quod_ledger_store:close(Rewritten1),
+    ?assertEqual({error, {invalid_transaction_history, 2}},
+                 quod_simplex:start_link(Ns, ?config(base_cfg, Cfg))).
 
 t_status_stats(Cfg) ->
     Ns   = ?config(ns, Cfg),
@@ -167,7 +200,10 @@ t_concurrent_appends_batch(Cfg) ->
         {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
         try
             {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
-            ?assertEqual(Count, length(Transactions))
+            ?assertEqual(Count, length(Transactions)),
+            ?assertEqual(lists:seq(1, Count),
+                         lists:sort([T#transaction.author_seq
+                                     || T <- Transactions]))
         after quod_ledger_store:close(Store) end,
         Stats = quod_simplex:stats(Ns),
         ?assertEqual(1, maps:get(proposals, Stats)),

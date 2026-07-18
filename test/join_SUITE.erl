@@ -137,7 +137,9 @@ joiner_catches_up(Config) ->
     ?assert(eventually(fun() -> match_ok(prove(Joiner, {capital, france, {'X'}})) end, 15000)),
 
     %% a write to the non-member joiner is refused (it is not a committee member) — it cannot lead a slot.
-    ?assertMatch({error, not_in_charge, none}, peer:call(Joiner, quod_simplex, append, [?NS, dummy_tx()])).
+    ?assertMatch({error, not_in_charge, none},
+                 peer:call(Joiner, quod_simplex, append,
+                           [?NS, dummy_tx(pub_of(Joiner))])).
 
 %% After the founder commits a NEW fact the joiner never saw, the WHOLE namespace restarts from disk (a
 %% fleet redeploy): the founder re-derives its full log (mode=create, non-empty ⇒ no re-found), and the
@@ -286,5 +288,5 @@ pub_of(Peer) -> peer:call(Peer, application, get_env, [quod, node_pubkey, undefi
 
 %% A shape-valid #transaction (tx_id, caller_ns, diff, read_check, author, sig) — never committed: the
 %% non-member joiner refuses the append before any consensus step even inspects it.
-dummy_tx() -> #transaction{tx_id = <<"probe">>, caller_ns = ?NS, diff = [],
-                           read_check = #{}, author = <<0:256>>}.
+dummy_tx(Author) -> #transaction{tx_id = <<"probe">>, caller_ns = ?NS, diff = [],
+                                 read_check = #{}, author = Author}.

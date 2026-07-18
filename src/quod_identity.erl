@@ -33,7 +33,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -export([ensure/1, generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
          sign/2, verify/3]).
 
--export_type([pubkey/0, seed/0, keypair/0, key_term/0, identity/0]).
+-export_type([pubkey/0, seed/0, keypair/0, key_term/0, signer/0, identity/0]).
 
 -type pubkey()  :: binary().   %% 32-byte Ed25519 public key == the node_id
 -type seed()    :: binary().   %% 32-byte Ed25519 private seed (the only persisted secret)
@@ -41,7 +41,9 @@ chain, so a self-signed per-node cert authenticates cleanly.
 %% The private-key term `public_key:pkix_sign/2` and `quic` (`convert_private_key`)
 %% both sign with: the standard `#'ECPrivateKey'{}` carrying the Ed25519 namedCurve.
 -type key_term() :: #'ECPrivateKey'{}.
-%% A loaded identity: the public key (node_id), the DER cert, and the signing key term.
+%% The signing subset used by consensus does not need the TLS certificate.
+-type signer() :: #{pubkey := pubkey(), key := key_term()}.
+%% A loaded identity adds the DER certificate used by the transport.
 -type identity() :: #{pubkey := pubkey(), cert := binary(), key := key_term()}.
 
 -define(KEYFILE, "node.key").
@@ -128,7 +130,7 @@ against the signer's public key (== its `node_id`). This is the primitive the
 DispersedSimplex support/commit/complaint shares and the commit certificate are
 built from.
 """.
--spec sign(iodata(), identity() | key_term()) -> binary().
+-spec sign(iodata(), signer() | key_term()) -> binary().
 sign(Msg, #{key := KeyTerm}) ->
     sign(Msg, KeyTerm);
 sign(Msg, #'ECPrivateKey'{privateKey = Seed}) ->

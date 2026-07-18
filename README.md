@@ -34,6 +34,8 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | `quod_reg` | gproc nomenclature (`{conn,NodeId}`, `{channel,Ns}`, `{quod_brahms,Ns}`, …) |
 | `quod_app` | env-driven boot (config from the orchestrator) |
 | `quod_simplex` | per-namespace BFT ordering, batching, failover, and recovery |
+| `quod_transaction` | namespace-bound canonical transaction signing and relay envelopes |
+| `quod_relay` | one-pass relay/consensus wire dispatch and bounded relay-result caching |
 | `quod_prolog` | committed Prolog state, optimistic validation, reads, and ordered apply |
 | `quod_ledger_store` | append-only durable block log; one fsync per committed batch |
 | `quod_catchup` / `quod_feed` | verified historical catch-up and live dissemination |
@@ -43,9 +45,11 @@ boot and persisted; the address `{Host, Port}` is demoted to a resolvable routin
 The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}` + channel,
 and **mutual TLS** binds the connection to that key (`quic:peercert/1` must match the
 claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
-addresses (it reads the `Addr` from the header). *(No-identity/test boots use the address
-as the id, transitionally.)* Consensus shares and finality certificates are signed today;
-individual transaction-author signatures remain deferred.
+addresses (it reads the `Addr` from the header). Consensus shares, finality
+certificates, and every non-genesis transaction are Ed25519-signed. A write sent
+to a non-leader validator is transparently relayed to the current leader using
+the signed canonical bytes; signatures authenticate authors but do not replace
+the still-deferred user/agent authorization policy.
 
 **Message contract.** A consumer of channel `Ns`:
 

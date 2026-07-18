@@ -259,17 +259,31 @@ entry_txs(#entry{data = Data}) ->
 
 -doc "The list-row rendering of one transaction inside its committed entry.".
 tx_json(#transaction{tx_id = Id, caller_ns = CNs, goal = G, author = A,
-                     submitted_at = Sub, diff = Diff},
+                     author_seq = AuthorSeq, submitted_at = Sub, diff = Diff},
         #entry{index = Slot, timestamp = Ts}) ->
     #{tx_id => tx_id_text(Id), ns => CNs, height => Slot, time => Ts,
-      goal => goal_text(G), author => id_json(A), submitted_at => Sub,
+      goal => goal_text(G), author => id_json(A), author_seq => AuthorSeq,
+      submitted_at => Sub,
       ops => length(Diff)}.
 
--doc "The detail rendering: the row plus result bindings, the diff, and OCC extent.".
-tx_json_full(#transaction{result = Res, diff = Diff, read_check = RC} = T, E) ->
+-doc "The detail rendering: the row plus result bindings, authentication, the diff, and OCC extent.".
+tx_json_full(#transaction{result = Res, diff = Diff, read_check = RC, sig = Sig} = T, E) ->
     (tx_json(T, E))#{result => result_json(Res),
                      diff => [op_json(Op) || Op <- Diff],
-                     read_predicates => map_size(RC)}.
+                     read_predicates => map_size(RC),
+                     signature => signature_json(Sig),
+                     signature_status => signature_status(T, E)}.
+
+signature_json(Sig) when is_binary(Sig) -> binary:encode_hex(Sig, lowercase);
+signature_json(none) -> null.
+
+signature_status(#transaction{sig = none}, #entry{index = 1}) -> genesis;
+signature_status(#transaction{sig = none}, _Entry) -> unsigned;
+signature_status(#transaction{sig = Sig}, _Entry)
+  when is_binary(Sig), byte_size(Sig) =:= 64 ->
+    verified;
+signature_status(_Transaction, _Entry) ->
+    invalid.
 
 block_json(#entry{index = Slot} = E) ->
     (block_meta(E))#{txs => [tx_json_full(T, E) || T <- entry_txs(E)],
@@ -307,8 +321,8 @@ clause_text({Head, Body}) -> <<(prolog_text(Head))/binary, " :- ", (prolog_text(
 goal_text(undefined) -> null;
 goal_text(G)         -> prolog_text(G).
 
-%% tx_id is raw bytes for a live tx (node-hash ++ counter) but readable text for genesis
-%% (`<<"genesis:", Ns>>`): show text as-is, bytes as hex.
+%% tx_id is opaque bytes for a live tx but readable text for genesis
+%% (`<<"genesis:", Ns>>`): show printable values as-is, other bytes as hex.
 tx_id_text(Id) when is_binary(Id) ->
     case printable(Id) of
         true  -> Id;

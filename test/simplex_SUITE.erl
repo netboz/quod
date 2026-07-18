@@ -10,7 +10,7 @@ The four co-found the same committee (`mode=create`, `committee` = the four `{pu
 block asserts every co-founder's `peer_admitted` fact, so their logs are byte-identical). The committee is
 derived from those facts. The leader for a slot **rotates** round-robin over the sorted set, so tests
 target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
-`follower_redirects` proves a non-leader redirects; `leader_failover` kills the next slot's leader
+`follower_relays` proves a non-leader transparently relays; `leader_failover` kills the next slot's leader
 **before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
 the rotated leader commits the re-submitted write. `quorum(4)=3` tolerates the one down node; this is the
 multi-node failover validation the engine's eunit tests (a simulated committee) cannot give.
@@ -21,7 +21,7 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([commits_across_committee/1, follower_redirects/1,
+-export([commits_across_committee/1, follower_relays/1,
          byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1]).
 
 -define(NS, <<"simplex:2c">>).
@@ -30,7 +30,7 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
                            %% pairwise QUIC links (so a healthy slot never spuriously skips), well below the
                            %% `eventually` budgets (so a genuinely stuck slot still skips fast)
 
-all() -> [commits_across_committee, follower_redirects,
+all() -> [commits_across_committee, follower_relays,
           byzantine_retract_rejected, byzantine_admit_rejected, leader_failover].
 
 %%%===================================================================
@@ -39,10 +39,14 @@ all() -> [commits_across_committee, follower_redirects,
 
 init_per_suite(Config) ->
     Keys  = [quod_identity:generate() || _ <- ?PORTS],       %% [{Pubkey, Seed}]
+    Identities = maps:from_list(
+                   [{Pub, #{pubkey => Pub,
+                            key => quod_identity:key_term({Pub, Seed})}}
+                    || {Pub, Seed} <- Keys]),
     Addrs = [{P, {"127.0.0.1", Port}} || {{P, _}, Port} <- lists:zip(Keys, ?PORTS)],
     Nodes = [start_member(Port, Key, Addrs, Config)
              || {Port, Key} <- lists:zip(?PORTS, Keys)],
-    [{nodes, Nodes} | Config].
+    [{nodes, Nodes}, {identities, Identities} | Config].
 
 end_per_suite(Config) ->
     _ = [catch peer:stop(Peer) || {Peer, _Pub} <- ?config(nodes, Config)],
@@ -102,15 +106,22 @@ commits_across_committee(Config) ->
       end || {Peer, _} <- Nodes ],
     ?assert(eventually(fun() -> lists:usort([slot(Peer) || {Peer, _} <- Nodes]) =:= [2] end, 5000)).
 
-%% A write submitted to a non-leader is redirected to the current slot's leader, not silently dropped.
-follower_redirects(Config) ->
+%% A write submitted to a non-leader is signed there, relayed to the current
+%% leader, committed once, and applied across the committee.
+follower_relays(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
     {_LeaderPeer, LeaderPub} = leader_peer(H + 1, Config),
     %% pick a NON-leader by PUBKEY (element 2) — comparing the peer handle (element 1) would never match
     %% a pubkey, leaving the leader itself in the candidate set.
     {FollowerPeer, _} = hd([N || {_, Pub} = N <- Nodes, Pub =/= LeaderPub]),
-    ?assertMatch({error, {not_leader, _}}, prove(FollowerPeer, {assertz, {should, not_commit}})).
+    ?assertMatch({ok, _, _},
+                 prove(FollowerPeer, {assertz, {relayed, from_follower}})),
+    [ ?assert(eventually(
+                fun() -> match_ok(prove(Peer, {relayed, {'X'}})) end,
+                10000))
+      || {Peer, _} <- Nodes ],
+    ?assertEqual(H + 1, synced_height(Nodes)).
 
 %% A Byzantine leader injects a crafted `{propose, ...}` whose payload is a committee change its OWN
 %% run_proof never gated — the multi-validator membership defense (Slice C). The proposal passes the pure
@@ -150,7 +161,9 @@ leader_failover(Config) ->
     %% a client write reaches every LIVE validator; each redirects to the (dead) leader AND arms its Δ
     %% timer for slot V — after Δ the three complain, forming a ⅔ complaint cert that skips V.
     W = {assertz, {failover, done, yes}},
-    _ = [prove(P, W) || {P, _} <- Live],
+    Parent = self(),
+    _ = [spawn(fun() -> Parent ! {dead_leader_submit, P, prove(P, W)} end)
+         || {P, _} <- Live],
     %% slot V can ONLY be reached by a skip — its leader is dead, so no block for V can ever commit.
     %% (NB: the write goes to the followers, not the dead leader; an alive leader given the write would
     %% instead PROPOSE + commit V — that contrasting path is what commits_across_committee proves.)
@@ -184,7 +197,11 @@ assert_membership_proposal_skipped(Config, Evil) ->
     %% node — authenticated as the leader (so on_propose's leader-check passes), but bypassing the leader's
     %% own statem (a transport-level send). Timestamp margin keeps it monotonic vs the last committed block.
     Ts    = erlang:system_time(millisecond) + 1000,
-    Block = #block{slot = V, parent = H, payload = [Evil], timestamp = Ts},
+    Identity = maps:get(LeaderPub, ?config(identities, Config)),
+    Unsigned = Evil#transaction{author = LeaderPub,
+                                author_seq = (1 bsl 60) + V, sig = none},
+    {ok, SignedEvil} = quod_transaction:sign(?NS, Unsigned, Identity),
+    Block = #block{slot = V, parent = H, payload = [SignedEvil], timestamp = Ts},
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
     Frame = quod_simplex:encode(?NS, {propose, Block}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])
@@ -203,7 +220,7 @@ assert_membership_proposal_skipped(Config, Evil) ->
 %% a raw #transaction carrying an arbitrary diff (the Byzantine submitter path — no admit/remove predicate)
 tx(Diff) ->
     #transaction{tx_id = <<"evil">>, caller_ns = ?NS, diff = Diff,
-                 read_check = #{}, author = <<"evil-author">>, sig = none}.
+                 read_check = #{}, author = <<0:256>>, sig = none}.
 
 committee(Peer)          -> maps:get(committee, status(Peer), []).
 membership_rejects(Peer) -> maps:get(membership_rejects, peer:call(Peer, quod_simplex, stats, [?NS]), 0).

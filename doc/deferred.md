@@ -12,18 +12,17 @@ When you close an item, delete it from this file. When you defer something durin
 
 Node keypairs (`node_id` = Ed25519 **pubkey**, A.3), Ed25519 `sign/2` + `verify/3`, mutual TLS bound to
 the pubkey (A.4), and the per-block **commit certificate** (a bag of ⅔ signatures — `quod_simplex`'s pure
-core) have landed with the DispersedSimplex milestone (consensus plan + `doc/simplex_extended.pdf`).
-`#transaction.author` carries the submitter's pubkey; `#transaction.sig` is still `none`
-(transaction-author signing rides Stage 2). Remaining, gated:
+core), namespace-bound transaction-author signatures, and authenticated
+follower-to-leader relay have landed. `#transaction.author` carries the
+submitter's pubkey and every non-genesis `#transaction.sig` is verified before
+vote, rebuild, and catch-up. Remaining, gated:
 
-- **Transaction-author signatures.** Blocks and relayed entries already carry quorum finality proofs;
-  `#transaction.sig` is still `none`. Signing the canonical transaction is required before safe
-  follower-to-leader forwarding and before membership can be opened beyond the trusted fleet.
 - **Membership-path hardening.** Committee admission has since landed (committee = `peer_admitted` facts +
   `admit`/`remove` external predicates, membership rework Slice 1+2). The HARDENING is the deferred
-  membership-safety work in §3: a pubkey-possession gate before `can_join`, signed membership
-  transactions, epoch-frozen voting sets, and a `can_replicate` policy for private read-replicas.
-  Per-node `can_join` re-validation is already live.
+  membership-safety work in §3: an author-aware authorization policy,
+  epoch-frozen voting sets, and a `can_replicate` policy for private
+  read-replicas. Per-node `can_join` re-validation and signed membership
+  transactions are already live.
 - **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any node
   (reads are open; content is gated per-clause by `can_read`). *Bounded now:* `?MAX_INFLIGHT` proofs,
   `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
@@ -145,8 +144,9 @@ stages, not carried forward:
   `quod_committee_predicates` provides the `admit(Pubkey,Host,Port)` / `remove(Pubkey)` external Erlang
   predicates (**prove-before-broadcast**: gate `can_join`, stage the assert/retract; the normal write path
   commits it — no sync-call from the predicate). Genesis asserts each founder's `peer_admitted`.
-- **Membership SAFETY — per-node re-validation + shrink floor: parts (a)+(c) LANDED (0.6.22–0.6.24,
-  Slices A–C); part (b) signatures still open.** The gate is now at **propose/support time** on EVERY
+- **Membership SAFETY — per-node re-validation, signed authors, and shrink floor
+  LANDED; author-aware authorization remains.** The gate is now at
+  **propose/support time** on EVERY
   validator (the BFT-native seam), not the honest submitter alone:
   - **(a) per-node re-validation — DONE.** Every validator re-judges a committee-changing proposal against
     its OWN kb before support-signing (`quod_prolog:request_membership_verdict/5`, an async cast pinned to
@@ -168,15 +168,15 @@ stages, not carried forward:
     validator (`valid_proposal`). Kills the raw `retract`-everyone wedge, mass packing/shrinking in one block,
     op-smuggling, and the `Id≠Pk` address-poison op. The floor is **stepwise never-empty** (4→3→2→1 legal, one
     quorum-endorsed member per block); the **hard `3f+1` Byzantine-tolerance floor stays OPEN** — it needs a
-    network-target-`f` concept, and with today's liveness-only `can_join` (`peer_ready` — any live,
-    caught-up node passes) + `sig=none` a still-admitted member can walk the committee down one endorsed
-    step at a time.
-  - **(b) transaction signatures — STILL OPEN (Phase B).** Writes are unsigned (`sig=none`), so the verdict
-    checks WHAT changes, not WHO authorized it: with a liveness-only `can_join` (the `peer_ready` gate
-    checks the candidate is alive and caught up, not that anyone *authorized* it), committee **packing**
-    (admitting nodes the policy would allow) and authorized-but-unwanted **shrink** are not yet closed —
-    that needs the write-gate = membership signature trick from onbrater. Until (b) lands, membership is Byzantine-safe
-    against *malformed / policy-violating / KB-inconsistent* changes but not against a **forged author**.
+    network-target-`f` concept. With today's liveness-only `can_join`
+    (`peer_ready` — any live, caught-up node passes), a signed, still-admitted
+    member can walk the committee down one endorsed step at a time.
+  - **(b) transaction signatures — DONE (2026-07-18); authorization remains.**
+    Signatures now prove WHO authored a membership transaction and prevent a
+    relay from inventing or altering it. They do not answer whether that author
+    MAY admit or remove a node. The liveness-only `can_join` policy still permits
+    committee packing and authorized-but-unwanted shrink; close that with an
+    explicit author-aware capability rule inspired by onbrater's write gate.
 - **Mid-flight committee-change / stale-cert hazard (code-review 2026-07-04) — CLOSED for finalization
   (Slice E, 0.6.34); ROOT epoch fix still deferred.** Because the committee can change on ANY slot (a
   `peer_admitted` assert/retract) and shares are ingested un-gated by height, a node LAGGING across a
@@ -201,7 +201,7 @@ stages, not carried forward:
 - **Join cold-start + trustless catch-up** — **DONE (Stage 3 / Simplex 4, S1–S5a):** the machinery
   (`quod_catchup`: persist each block's finalizing cert, an off-consensus catch-up server, the inductive
   forward-verifier, and the driver loop) plus the `mode=join` wiring in `quod_simplex`. A `mode=join` node
-  boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/3` from
+  boots UNFOUNDED (empty log ⇒ `validators=[]`, `slot=0`), and a monitored worker drives `catch_up/4` from
   a sampled bootstrap contact, then reconciles a member against every available current-committee source:
   pull a window → `verify_forward` each cert against the committee it reconstructs → hand
   the verified window back to the statem (`sink_catchup`) to append + **replay into the KB as it lands** →
@@ -214,7 +214,7 @@ stages, not carried forward:
   `mode=join` node re-enters catch-up on EVERY boot (empty OR partial log) via the unified `start_sync_worker`,
   which RESUMES from the persisted height (`slot+1`, committee-as-of-that-slot) — so a crash/redeploy
   mid-catch-up never re-appends its on-disk prefix (the store's `assert_contiguous` would throw) nor treats a
-  partial log as complete (`maybe_mark_ready` stays gated on recovery reaching `ready`). `catch_up/5` is the resume entry
+  partial log as complete (`maybe_mark_ready` stays gated on recovery reaching `ready`). `catch_up/6` is the resume entry
   (skips the genesis anchor past slot 1). `is_participant/1` is now FACTS-ONLY, so a window that folds the
   joiner's OWN pubkey does flip it to a participant — but the explicit recovery enum remains `unconfirmed` /
   `pulling` until distinct current-committee observations at the exact final height, together with self, form
@@ -265,12 +265,6 @@ stages, not carried forward:
   cross-check. Also: **`can_join` must stay side-effect-free** — the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **Pending-transaction forwarding remains deferred.** Failover is now evidence-gated and self-healing:
-  `f+1` peer complaints are amplified, complaint/support/commit shares are periodically re-driven, the
-  approved frontier advances on notarization, and a successor commit implicitly finalizes its parent.
-  What is still missing is forwarding a follower's rejected local `#transaction{}` to the actual slot
-  leader. That needs transaction-author signatures first; without them, forwarding would let an
-  intermediary invent client intent. Until then the client follows the leader hint and retries.
 - **Vote-latch persistence across restart (Phase B — a blocker before OPEN membership).** The per-slot
   vote latches (`#round.supporting`/`commit`/`complaint`) that enforce the one-share-per-slot safety rule
   live in RAM, so a validator that CRASHES and restarts mid-slot loses them and could re-sign a

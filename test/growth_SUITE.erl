@@ -51,6 +51,10 @@ init_per_suite(Config) ->
     %% chain the joiner keys so FPub < J1 < J2 < J3 < J4 — sort order = admission order, so the round-robin
     %% leader for any slot at any committee size is computable (via quod_simplex:leader/2).
     JKeys = chain_keys(FPub, 4),
+    Identities = maps:from_list(
+                   [{Pub, #{pubkey => Pub,
+                            key => quod_identity:key_term({Pub, Seed})}}
+                    || {Pub, Seed} <- [FKey | JKeys]]),
     FAddr = {"127.0.0.1", ?FOUNDER_PORT},
     GenesisPl = write_genesis(Config),
 
@@ -62,7 +66,8 @@ init_per_suite(Config) ->
     start_brahms(Founder, FAddr, []),
 
     [{founder, Founder}, {fpub, FPub}, {faddr, FAddr}, {gh, GH},
-     {genesis_pl, GenesisPl}, {jkeys, JKeys} | Config].
+     {genesis_pl, GenesisPl}, {jkeys, JKeys},
+     {identities, Identities} | Config].
 
 end_per_suite(Config) ->
     quod_ct:stop_all([?config(founder, Config)]),
@@ -150,9 +155,8 @@ grow_to_four(Config) ->
     probe(Config, Members, {grown, four}),
     {save_config, Members}.
 
-%% CASE 6 — rotation sweep at N=4: submit one write via each of four consecutive slot leaders. A non-leader
-%% refuses ({error,{not_leader,_}}), so an accepted write through node X at slot S proves X led S; the four
-%% accepting leaders must be the whole committee.
+%% CASE 6 — rotation sweep at N=4: submit one write via each of four consecutive slot leaders and verify
+%% the deterministic leader function visits the whole committee.
 rotation_sweep(Config) ->
     Members = prev_joiners(Config),
     Peers   = member_peers(Config, Members),
@@ -183,7 +187,13 @@ byzantine_on_grown_committee(Config) ->
     Before  = committee(hd(Peers)),
     RejBefore = rejects_total(Peers),
     Victim = ?config(fpub, Config),
-    Evil   = tx([{retract, {{peer_admitted, Victim, "wrong-host", 9999, Victim}, true}}]),
+    Evil0  = tx([{retract, {{peer_admitted, Victim, "wrong-host", 9999, Victim}, true}}]),
+    Identity = maps:get(LeaderPub, ?config(identities, Config)),
+    {ok, Evil} = quod_transaction:sign(
+                   ?NS,
+                   Evil0#transaction{author = LeaderPub,
+                                     author_seq = (1 bsl 60) + V},
+                   Identity),
     Ts     = erlang:system_time(millisecond) + 1000,
     Block  = #block{slot = V, parent = H, payload = [Evil], timestamp = Ts},
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
@@ -373,4 +383,4 @@ rejects_total(Peers) ->
 %% a raw #transaction carrying an arbitrary diff (the Byzantine-submitter path — no admit/remove predicate)
 tx(Diff) ->
     #transaction{tx_id = <<"evil">>, caller_ns = ?NS, diff = Diff,
-                 read_check = #{}, author = <<"evil-author">>, sig = none}.
+                 read_check = #{}, author = <<0:256>>, sig = none}.

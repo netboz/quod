@@ -125,8 +125,22 @@ tx_json_full_test() ->
                    ns := <<"ont:test">>, submitted_at := 1007}, J),
     ?assertEqual(<<"assertz(fact(7))">>, maps:get(goal, J)),
     ?assertEqual([#{op => assert, clause => <<"fact(7)">>}], maps:get(diff, J)),
+    ?assertEqual(unsigned, maps:get(signature_status, J)),
+    ?assertEqual(null, maps:get(signature, J)),
     %% the whole thing must be JSON-encodable
     ?assert(is_binary(quod_explorer_http:encode(J))).
+
+signed_tx_json_test() ->
+    {Pub, Seed} = quod_identity:generate(),
+    Identity = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    T0 = (tx(8))#transaction{author = Pub},
+    {ok, T} = quod_transaction:sign(<<"ont:test">>, T0, Identity),
+    J = quod_explorer_http:tx_json_full(T, entry(2, [T])),
+    ?assertEqual(verified, maps:get(signature_status, J)),
+    ?assertEqual(128, byte_size(maps:get(signature, J))),
+    ?assertEqual(genesis,
+                 maps:get(signature_status,
+                          quod_explorer_http:tx_json_full(tx(1), entry(1, [tx(1)])))).
 
 compiled_clause_test() ->
     %% committed clauses carry erlog's COMPILED body `{Goals, HasCut}` — facts render head-only,

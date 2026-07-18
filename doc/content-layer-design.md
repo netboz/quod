@@ -583,10 +583,13 @@ cluster-wide.
 **Identity stance.** *Updated 2026-07-14:* a node's `node_id`
 is now its **Ed25519 pubkey** (the address is a routing hint), and connections are bound
 to that key via **mutual TLS**. Simplex votes and quorum certificates are Ed25519-signed
-and verified. Still unfinished: per-change **author signatures** (`#transaction.sig`) and
-the authorization policy that consumes them. ACL-enforced foreign writes (§5) and open
-membership therefore remain gated on that work; the trusted-fleet boundary still applies
-to who may request a write.
+and verified. *Updated 2026-07-18:* every non-genesis transaction also carries a
+namespace-bound author signature, verified by receiving validators before
+voting and by every node during rebuild and catch-up;
+followers relay those exact signed bytes to the current leader. Still unfinished:
+the authorization policy that consumes authenticated authors. ACL-enforced
+foreign writes (§5) and open membership remain gated on that policy; the
+trusted-fleet boundary still applies to who may request a write.
 
 ---
 
@@ -674,11 +677,11 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    for conserved resources; define the coupling protocol (deferred to Phase 4, but
    the motivating example needs it).
 
-4. **Identity landed (A.3); signing is Phase B.** `node_id` is the node's Ed25519
-   **pubkey** and connections are bound to it via mutual TLS. Still pending:
-   per-change **signatures** + the per-block **quorum certificate**, so ACL-enforced
-   foreign writes (§5) and attestation (§6) — which need *signed* changes — remain
-   gated on Phase B (§9).
+4. **Identity and signing landed; authorization remains.** `node_id` is the
+   node's Ed25519 **pubkey**, connections are bound to it via mutual TLS,
+   transactions carry namespace-bound author signatures, and blocks carry quorum
+   certificates. ACL-enforced foreign writes (§5) still need an author-aware
+   capability policy; authentication alone does not grant write permission.
 
 5. **No "fast *and* agreed" lane.** Instance/gameplay facts are high-rate *and*
    need agreement, so they pay full ordering latency and can't use the lossy
@@ -856,10 +859,14 @@ append(Ns, Change)               -> {ok, BlockIndex} | {error, not_in_charge, Hi
 apply(BlockIndex, Change, Facts) -> Facts'        % deterministic
 ```
 
-- A **change** is a committed transaction: `{TxId, CallerNs, Diff, ReadCheck}` — the
-  asserts/retracts to apply, plus a note of what the proof relied on.
+- A **change** is a committed transaction: its signed author and `author_seq`,
+  caller namespace, audit goal/result, diff, and OCC read check. The sequence is
+  exact replay protection; the diff is the asserts/retracts to apply.
 - **append** is how a write-transaction commits (§5): the one in charge orders it,
-  copies it to the others, and it counts once a majority have it.
+  copies it to the others, and it counts once a quorum finalizes it. A validator
+  that is not the current leader signs its local transaction and transparently
+  relays the exact canonical bytes to the leader; `not_in_charge` remains the
+  bounded failure result when no live leader can be reached.
 - **apply** runs on every member in the same order: **re-check what the proof relied
   on is still true; if so apply the diff; if not, reject it** (the caller retries).
   That is §6's "validate the read-set at the change's position," located precisely.

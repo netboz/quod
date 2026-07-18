@@ -266,13 +266,13 @@ pipeline_frontier_test() ->
 %% Content transactions may batch. A committee transaction is legal only as a
 %% singleton at the committed frontier, making it a pipeline barrier by construction.
 batch_membership_barrier_test() ->
-    [A, B] = pubs(committee(2)),
+    [{A, IdA}, {B, _IdB}] = committee(2),
     Eng = quod_simplex:eng_new([A, B], 5),
     S0 = st(#{self => A, validators => [A, B], slot => 5, approved => 5,
               eng => Eng, sync => ready}),
-    C1 = (tx([{assert, {{fact, one}, true}}]))#transaction{tx_id = <<"one">>},
-    C2 = (tx([{assert, {{fact, two}, true}}]))#transaction{tx_id = <<"two">>},
-    Membership = tx([pa(B)]),
+    C1 = signed_tx(<<"t">>, <<"one">>, [{assert, {{fact, one}, true}}], {A, IdA}),
+    C2 = signed_tx(<<"t">>, <<"two">>, [{assert, {{fact, two}, true}}], {A, IdA}),
+    Membership = signed_tx(<<"t">>, <<"membership">>, [pa(B)], {A, IdA}),
     ?assert(quod_simplex:acceptable_payload([C1, C2], S0)),
     ?assertNot(quod_simplex:acceptable_payload([C1, C1], S0)),
     ?assertNot(quod_simplex:acceptable_payload([C1 | malformed_tail], S0)),
@@ -281,6 +281,46 @@ batch_membership_barrier_test() ->
     S1 = st(#{self => A, validators => [A, B], slot => 5, approved => 6,
               eng => Eng, sync => ready}),
     ?assertNot(quod_simplex:acceptable_payload([Membership], S1)).
+
+transaction_signature_acceptance_test() ->
+    [{Author, AuthorId}, {Outsider, OutsiderId}] = committee(2),
+    State = st(#{self => Author, validators => [Author], slot => 5,
+                 approved => 5, eng => quod_simplex:eng_new([Author], 5),
+                 sync => ready}),
+    Good = signed_tx(<<"t">>, <<"good">>,
+                     [{assert, {{fact, signed}, true}}], {Author, AuthorId}),
+    Forged = Good#transaction{sig = flip1(Good#transaction.sig)},
+    Unsigned = Good#transaction{sig = none},
+    WrongNamespace = signed_tx(
+                       <<"other">>, <<"wrong-ns">>,
+                       [{assert, {{fact, other}, true}}], {Author, AuthorId}),
+    Unauthorized = signed_tx(
+                     <<"t">>, <<"outsider">>,
+                     [{assert, {{fact, outsider}, true}}], {Outsider, OutsiderId}),
+    ?assert(quod_simplex:acceptable_payload([Good], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Unsigned], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Forged], State)),
+    ?assertNot(quod_simplex:acceptable_payload([WrongNamespace], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Unauthorized], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Good, Forged], State)).
+
+committed_author_sequence_replay_test() ->
+    [{Author, AuthorId}] = committee(1),
+    State = st(#{self => Author, validators => [Author], slot => 5,
+                 approved => 5, eng => quod_simplex:eng_new([Author], 5),
+                 author_seqs => #{Author => 5}, sync => ready}),
+    Fresh = signed_tx_seq(<<"t">>, <<"fresh">>, 6,
+                          [{assert, {{fact, fresh}, true}}],
+                          {Author, AuthorId}),
+    Replay = signed_tx_seq(<<"t">>, <<"old">>, 5,
+                           [{assert, {{fact, old}, true}}],
+                           {Author, AuthorId}),
+    SameSeq = signed_tx_seq(<<"t">>, <<"same-seq">>, 6,
+                            [{assert, {{fact, duplicate}, true}}],
+                            {Author, AuthorId}),
+    ?assert(quod_simplex:acceptable_payload([Fresh], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Replay], State)),
+    ?assertNot(quod_simplex:acceptable_payload([Fresh, SameSeq], State)).
 
 %% The dialing timeout: a dial marker whose deadline has passed is swept (so the tick re-dials it),
 %% while one still in the future is kept. This is the whole self-heal for a dial that resolves to neither
@@ -446,8 +486,8 @@ skipped_batch_nacks_its_callers_test() ->
 %% rejected fast ({error, too_large}) so a block can never blow past the 1 MiB wire frame; a leader whose
 %% depth-one pipeline is already full ({error, busy}) turns further appends away rather than over-committing.
 batch_caps_reject_oversized_and_busy_test() ->
-    Me   = <<"me">>,
-    Base = #{self => Me, validators => [Me], sync => ready, slot => 3,
+    {Me, Id} = id(),
+    Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
              eng => quod_simplex:eng_with_certs(0, [])},   %% a caught-up sole leader
     From = {self(), make_ref()},
     %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched
@@ -898,7 +938,18 @@ guarded_vote({commit, Sl, BH}, Id, {Cpl, Cmt, {Committed, Complained}}) ->
 pa(Pk)  -> {assert,  {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
 rm(Pk)  -> {retract, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}.
 tx(Ops) -> #transaction{tx_id = <<"t">>, caller_ns = <<"ns">>, diff = Ops,
-                        read_check = #{}, author = <<"a">>, sig = none}.
+                        read_check = #{}, author = <<1:256>>, sig = none}.
+
+signed_tx(Ns, TxId, Ops, {Pub, Identity}) ->
+    signed_tx_seq(Ns, TxId, erlang:phash2(TxId) + 1, Ops,
+                  {Pub, Identity}).
+
+signed_tx_seq(Ns, TxId, Seq, Ops, {Pub, Identity}) ->
+    Unsigned = #transaction{tx_id = TxId, caller_ns = Ns, diff = Ops,
+                            read_check = #{}, author = Pub, author_seq = Seq,
+                            sig = none},
+    {ok, Signed} = quod_transaction:sign(Ns, Unsigned, Identity),
+    Signed.
 
 %% support/commit shares for block B from the first K committee members
 supports(B, C, K) -> [quod_simplex:make_share(support, B#block.slot, quod_simplex:block_hash(B), Id)

@@ -2,16 +2,25 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+-define(NS, <<"ns">>).
+
 %%%===================================================================
-%%% quod_catchup:verify_forward/3 — the trustless catch-up trust core. A joiner replays a pulled chain by
+%%% quod_catchup:verify_forward/4 — the trustless catch-up trust core. A joiner replays a pulled chain by
 %%% INDUCTION from the pinned genesis committee, verifying each entry's finalizing cert against the
 %%% committee AS-OF-that-slot (folded forward from the peer_admitted facts). Trusts nothing but the certs.
 %%%===================================================================
 
 %%%--- helpers: build a real signed chain ---
-committee(N) -> [quod_identity:generate() || _ <- lists:seq(1, N)].   %% [{Pubkey, Seed}]
+%% Every content transaction is authored by a deterministic first committee
+%% member, while the remaining members stay fresh per test.
+author() -> crypto:generate_key(eddsa, ed25519, <<16#5a:256>>).
+committee(N) -> [author() | [quod_identity:generate() || _ <- lists:seq(2, N)]].
 pubs(C)      -> lists:usort([P || {P, _} <- C]).
 signer({P, Seed}) -> #{pubkey => P, key => quod_identity:key_term({P, Seed})}.
+
+sign_tx(Transaction) ->
+    {ok, Signed} = quod_transaction:sign(?NS, Transaction, signer(author())),
+    Signed.
 
 %% slot 1: the self-signed genesis (no cert) asserting each founder's peer_admitted — establishes C1.
 genesis(Pubs) ->
@@ -46,13 +55,21 @@ skipped(I, C, K) ->
     {ok, Cert} = quod_simplex:form_cert(complaint, I, none, Shares, pubs(C)),
     #entry{index = I, data = noop, cert = Cert}.
 
-tx(I)        -> #transaction{tx_id = integer_to_binary(I), caller_ns = <<"ns">>,
-                             diff = [{assert, {{fact, I}, true}}], read_check = #{}, author = <<"a">>, sig = none}.
+tx(I)        ->
+    {Author, _} = author(),
+    sign_tx(#transaction{tx_id = integer_to_binary(I), caller_ns = ?NS,
+                         diff = [{assert, {{fact, I}, true}}],
+                         read_check = #{}, author = Author, author_seq = I,
+                         sig = none}).
 admit_tx(Pk) -> peer_tx(assert, Pk).
 remove_tx(Pk) -> peer_tx(retract, Pk).
-peer_tx(Op, Pk) -> #transaction{tx_id = <<"m">>, caller_ns = <<"ns">>,
-                                diff = [{Op, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}],
-                                read_check = #{}, author = <<"a">>, sig = none}.
+peer_tx(Op, Pk) ->
+    {Author, _} = author(),
+    sign_tx(#transaction{tx_id = <<"m">>, caller_ns = ?NS,
+                         diff = [{Op, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}],
+                         read_check = #{}, author = Author,
+                         author_seq = erlang:phash2({Op, Pk}) + 1,
+                         sig = none}).
 
 %%%--- tests ---
 
@@ -60,17 +77,17 @@ peer_tx(Op, Pk) -> #transaction{tx_id = <<"m">>, caller_ns = <<"ns">>,
 happy_test() ->
     C = committee(4), P = pubs(C),
     Chain = [genesis(P), committed(2, tx(2), C, 3), committed(3, tx(3), C, 4)],
-    {ok, [_, _, _], Final} = quod_catchup:verify_forward([], 1, Chain),
+    {ok, [_, _, _], Final} = quod_catchup:verify_forward(?NS, [], 1, Chain),
     ?assertEqual(P, Final).
 
 batch_hash_is_verified_test() ->
     C = committee(4), P = pubs(C),
     Batch = committed_batch(2, [tx(20), tx(21)], C, 3),
     ?assertMatch({ok, [_, _], _},
-                 quod_catchup:verify_forward([], 1, [genesis(P), Batch])),
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(P), Batch])),
     %% Reordering transactions changes the certified block hash.
     ?assertEqual({error, {cert_mismatch, 2}},
-                 quod_catchup:verify_forward(
+                 quod_catchup:verify_forward(?NS,
                    [], 1, [genesis(P), Batch#entry{data = quod_ledger:data([tx(21), tx(20)])}])).
 
 implicit_parent_commit_test() ->
@@ -91,16 +108,16 @@ implicit_parent_commit_test() ->
                 cert = #implicit_cert{support = Support, child = Child, commit = Commit}},
     E3 = #entry{index = 3, data = ChildData, cert = Commit},
     ?assertMatch({ok, [_, _, _], _},
-                 quod_catchup:verify_forward([], 1, [genesis(P), E2, E3])),
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(P), E2, E3])),
     ?assertEqual({error, {bad_implicit_cert, 2}},
-                 quod_catchup:verify_forward(
+                 quod_catchup:verify_forward(?NS,
                    [], 1, [genesis(P), E2#entry{data = quod_ledger:data([tx(99)])}, E3])).
 
 %% A complaint-skipped slot (noop + complaint cert) is accepted between committed blocks.
 skip_test() ->
     C = committee(4), P = pubs(C),
     ?assertMatch({ok, [_, _, _], _},
-                 quod_catchup:verify_forward([], 1, [genesis(P), skipped(2, C, 3), committed(3, tx(3), C, 3)])).
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(P), skipped(2, C, 3), committed(3, tx(3), C, 3)])).
 
 %% Nonzero block timestamps ride inside the cert-bound hash: a chain with real timestamps verifies, and an
 %% entry whose stored timestamp differs from the one its cert signed is rejected on block_hash reconstruction.
@@ -108,71 +125,71 @@ timestamped_test() ->
     C = committee(4), P = pubs(C),
     Good = [genesis(P), committed_at(2, tx(2), 1750000000000, C, 3),
                         committed_at(3, tx(3), 1750000000500, C, 4)],
-    ?assertMatch({ok, [_, _, _], _}, quod_catchup:verify_forward([], 1, Good)),
+    ?assertMatch({ok, [_, _, _], _}, quod_catchup:verify_forward(?NS, [], 1, Good)),
     %% tamper the stored timestamp while keeping the cert (signed over the original Ts) ⇒ block_hash mismatch
     [G, E2, E3] = Good,
     ?assertMatch({error, _},
-                 quod_catchup:verify_forward([], 1, [G, E2#entry{timestamp = 1750000009999}, E3])).
+                 quod_catchup:verify_forward(?NS, [], 1, [G, E2#entry{timestamp = 1750000009999}, E3])).
 
 %% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
 complaint_over_tx_rejected_test() ->
     C = committee(4), {X, _} = quod_identity:generate(),
     Forged = (skipped(2, C, 3))#entry{data = quod_ledger:data([admit_tx(X)])},
-    ?assertEqual({error, {cert_mismatch, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Forged])).
+    ?assertEqual({error, {cert_mismatch, 2}}, quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), Forged])).
 
 %% A cert signed by NON-committee members fails the ⅔ check.
 bad_cert_test() ->
     C = committee(4), Outsiders = committee(4),
     Bad = committed(2, tx(2), Outsiders, 3),
-    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])).
+    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), Bad])).
 
 %% A non-genesis entry with no cert is rejected (a committed slot MUST carry its proof).
 missing_cert_test() ->
     C = committee(4), B2 = committed(2, tx(2), C, 3),
     ?assertEqual({error, {missing_cert, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), B2#entry{cert = none}])).
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), B2#entry{cert = none}])).
 
 %% A cert that does not BIND the block (the entry's data was swapped) is rejected on block_hash.
 cert_mismatch_test() ->
     C = committee(4), B2 = committed(2, tx(2), C, 3),
     ?assertEqual({error, {cert_mismatch, 2}},
-                 quod_catchup:verify_forward(
+                 quod_catchup:verify_forward(?NS,
                    [], 1, [genesis(pubs(C)), B2#entry{data = quod_ledger:data([tx(99)])}])).
 
 %% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
 malformed_cert_rejected_test() ->
     C = committee(4), B2 = committed(2, tx(2), C, 3),
     Bad = B2#entry{cert = (B2#entry.cert)#cert{sigs = not_a_list}},
-    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])),
+    ?assertEqual({error, {bad_cert, 2}}, quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), Bad])),
     [First | _] = (B2#entry.cert)#cert.sigs,
     Improper = B2#entry{cert = (B2#entry.cert)#cert{sigs = [First | bad_tail]}},
     ?assertEqual({error, {bad_cert, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Improper])).
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), Improper])).
 
 %% A GAP (a dropped intermediate entry) is rejected — the fold must be complete + contiguous, so a server
 %% cannot omit a committee-changing block to shift verification onto a stale committee.
 noncontiguous_rejected_test() ->
     C = committee(4), P = pubs(C),
     ?assertMatch({error, {noncontiguous, 2, 3}},
-                 quod_catchup:verify_forward([], 1, [genesis(P), committed(3, tx(3), C, 3)])),   %% dropped 2
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(P), committed(3, tx(3), C, 3)])),   %% dropped 2
     %% a window that doesn't start at the requested From is likewise rejected
-    ?assertMatch({error, {noncontiguous, 5, 2}}, quod_catchup:verify_forward(P, 5, [committed(2, tx(2), C, 3)])).
+    ?assertMatch({error, {noncontiguous, 5, 2}}, quod_catchup:verify_forward(?NS, P, 5, [committed(2, tx(2), C, 3)])).
 
 %% A non-#entry element from a hostile server is rejected, not crashed.
 malformed_entry_rejected_test() ->
     C = committee(4),
     ?assertMatch({error, {malformed_entry, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), {not_an_entry, 2}])),
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), {not_an_entry, 2}])),
     B2 = committed(2, tx(2), C, 3),
     ?assertEqual({error, {malformed_entry, 2}},
-                 quod_catchup:verify_forward(
+                 quod_catchup:verify_forward(?NS,
                    [], 1, [genesis(pubs(C)), B2#entry{data = {batch, [tx(2) | bad_tail]}}])),
     BadTx = (tx(2))#transaction{diff = [not_an_operation]},
     ?assertEqual({error, {malformed_entry, 2}},
-                 quod_catchup:verify_forward(
+                 quod_catchup:verify_forward(?NS,
                    [], 1, [genesis(pubs(C)), B2#entry{data = {batch, [BadTx]}}])),
     ?assertEqual({error, {malformed_entry, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)) | bad_tail])).
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)) | bad_tail])).
 
 %% Complaint skips have no block timestamp. Letting a certified `noop` carry an arbitrary
 %% value would raise the restart timestamp floor and could freeze future proposals.
@@ -180,13 +197,13 @@ skip_timestamp_must_be_zero_test() ->
     C = committee(4),
     Bad = (skipped(2, C, 3))#entry{timestamp = 9999999999999},
     ?assertEqual({error, {cert_mismatch, 2}},
-                 quod_catchup:verify_forward([], 1, [genesis(pubs(C)), Bad])).
+                 quod_catchup:verify_forward(?NS, [], 1, [genesis(pubs(C)), Bad])).
 
 %% A mid-chain window: the caller threads Committee0 (as of From>1); no genesis in the window.
 midchain_window_test() ->
     C = committee(4), P = pubs(C),
     ?assertMatch({ok, [_, _], P},
-                 quod_catchup:verify_forward(P, 5, [committed(5, tx(5), C, 3), committed(6, tx(6), C, 4)])).
+                 quod_catchup:verify_forward(?NS, P, 5, [committed(5, tx(5), C, 3), committed(6, tx(6), C, 4)])).
 
 %% A committee-changing block is verified under the OLD set; the NEXT block must meet the GROWN set's quorum.
 committee_grows_test() ->
@@ -194,7 +211,7 @@ committee_grows_test() ->
     {P5, _} = New = quod_identity:generate(),
     C5 = C4 ++ [New],
     Chain = [genesis(P4), committed(2, admit_tx(P5), C4, 3), committed(3, tx(3), C5, 4)],
-    {ok, _, Final} = quod_catchup:verify_forward([], 1, Chain),
+    {ok, _, Final} = quod_catchup:verify_forward(?NS, [], 1, Chain),
     ?assertEqual(lists:usort([P5 | P4]), Final).
 
 %% The SAME chain but the post-change block is signed only by the OLD set (3 sigs) is REJECTED — it must meet
@@ -204,19 +221,20 @@ committee_grows_rejects_stale_test() ->
     C4 = committee(4), P4 = pubs(C4),
     {P5, _} = quod_identity:generate(),
     Chain = [genesis(P4), committed(2, admit_tx(P5), C4, 3), committed(3, tx(3), C4, 3)],
-    ?assertEqual({error, {bad_cert, 3}}, quod_catchup:verify_forward([], 1, Chain)).
+    ?assertEqual({error, {bad_cert, 3}}, quod_catchup:verify_forward(?NS, [], 1, Chain)).
 
 %% A committee SHRINK (retract peer_admitted): the removed member is dropped, and the next block is verified
 %% against the smaller set.
 committee_shrinks_test() ->
     C5 = committee(5), P5 = pubs(C5),
-    Gone = lists:last(P5),
+    {Author, _} = author(),
+    Gone = hd(P5 -- [Author]),
     C4 = [M || {Pk, _} = M <- C5, Pk =/= Gone],
     Chain = [genesis(P5), committed(2, remove_tx(Gone), C5, 4), committed(3, tx(3), C4, 3)],
-    {ok, _, Final} = quod_catchup:verify_forward([], 1, Chain),
+    {ok, _, Final} = quod_catchup:verify_forward(?NS, [], 1, Chain),
     ?assertEqual(lists:usort(P5 -- [Gone]), Final).
 
-%%%--- catch_up/3 driver (mocked Fetch/Sink — no transport/store) ---
+%%%--- catch_up/4 driver (mocked Fetch/Sink — no transport/store) ---
 
 %% a Fetch serving a pre-built Chain (entries 1..H) in windows of W; From > H ⇒ empty.
 mock_fetch(Chain, W) ->
@@ -238,7 +256,7 @@ catch_up_happy_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
     Chain = [G, committed(2, tx(2), C, 3), committed(3, tx(3), C, 4)],
     Sink = sink(),
-    ?assertEqual({ok, 3}, quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
+    ?assertEqual({ok, 3}, quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
     ?assertEqual(Chain, get(sink)).                                                          %% all, in order
 
 %% A genesis whose CONTENT (here, committee) differs from the pinned genesis hash is rejected (forged anchor).
@@ -246,7 +264,7 @@ catch_up_bad_anchor_test() ->
     C = committee(4), Fake = committee(4),
     Chain = [genesis(pubs(Fake)), committed(2, tx(2), Fake, 3)],
     ?assertEqual({error, bad_anchor},
-                 quod_catchup:catch_up(gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10), fun(_) -> ok end)).
+                 quod_catchup:catch_up(?NS, gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10), fun(_) -> ok end)).
 
 %% A window that fails verification aborts catch-up, and NOTHING is persisted (the whole window is atomic).
 catch_up_forged_test() ->
@@ -254,7 +272,7 @@ catch_up_forged_test() ->
     Chain = [G, committed(2, tx(2), Outsiders, 3)],
     Sink = sink(),
     ?assertMatch({error, {verify, {bad_cert, 2}}},
-                 quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 10), Sink)),
+                 quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 10), Sink)),
     ?assertEqual([], get(sink)).   %% the bad window is never sunk
 
 %% A committee change in window 1 is threaded so window 2 verifies against the GROWN set.
@@ -265,7 +283,7 @@ catch_up_committee_change_across_windows_test() ->
     B3 = committed(3, tx(3), C5, 4),           %% window 2, needs the 5-set quorum
     Sink  = sink(),
     Fetch = fun(1) -> {ok, [G, B2], 3}; (3) -> {ok, [B3], 3}; (_) -> {ok, [], 3} end,
-    ?assertEqual({ok, 3}, quod_catchup:catch_up(gen_hash(G), Fetch, Sink)),
+    ?assertEqual({ok, 3}, quod_catchup:catch_up(?NS, gen_hash(G), Fetch, Sink)),
     ?assertEqual([G, B2, B3], get(sink)).
 
 %% A contact that REGRESSES its claimed height below what it already served is treated as stalled (the target
@@ -275,16 +293,16 @@ catch_up_height_regression_test() ->
     Fetch = fun(1) -> {ok, [G, B2], 100};   %% claims height 100
                (_) -> {ok, [], 5}           %% then regresses to 5, mid-catch-up
             end,
-    ?assertEqual({error, no_progress}, quod_catchup:catch_up(gen_hash(G), Fetch, sink())).
+    ?assertEqual({error, no_progress}, quod_catchup:catch_up(?NS, gen_hash(G), Fetch, sink())).
 
 %% A fetch failure surfaces so the caller can try another contact.
 catch_up_fetch_error_test() ->
     ?assertEqual({error, {fetch, timeout}},
-                 quod_catchup:catch_up(<<0>>, fun(_) -> {error, timeout} end, fun(_) -> ok end)).
+                 quod_catchup:catch_up(?NS, <<0>>, fun(_) -> {error, timeout} end, fun(_) -> ok end)).
 
 catch_up_malformed_height_test() ->
     ?assertEqual({error, {fetch, bad_response}},
-                 quod_catchup:catch_up(<<0>>, fun(_) -> {ok, [], not_a_height} end,
+                 quod_catchup:catch_up(?NS, <<0>>, fun(_) -> {ok, [], not_a_height} end,
                                        fun(_) -> ok end)).
 
 %% A sink failure aborts catch-up cleanly (recoverable), not a badmatch crash.
@@ -292,9 +310,9 @@ catch_up_sink_error_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
     Chain = [G, committed(2, tx(2), C, 3)],
     ?assertEqual({error, {sink, disk_full}},
-                 quod_catchup:catch_up(gen_hash(G), mock_fetch(Chain, 10), fun(_) -> {error, disk_full} end)).
+                 quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 10), fun(_) -> {error, disk_full} end)).
 
 %% A server that returns empty while claiming more height is stuck — reported, not looped forever.
 catch_up_no_progress_test() ->
     ?assertEqual({error, no_progress},
-                 quod_catchup:catch_up(<<0>>, fun(_) -> {ok, [], 5} end, fun(_) -> ok end)).
+                 quod_catchup:catch_up(?NS, <<0>>, fun(_) -> {ok, [], 5} end, fun(_) -> ok end)).

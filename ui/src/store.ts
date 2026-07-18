@@ -52,6 +52,8 @@ const asHistory = (t: TxRow): LiveTx => ({
   result: null,
   diff: [],
   read_predicates: 0,
+  signature: null,
+  signature_status: 'unknown',
   ...t,
   status: 'history',
   cert: null,

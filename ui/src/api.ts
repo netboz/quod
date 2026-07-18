@@ -9,6 +9,7 @@ export type TxRow = {
   time: number // block timestamp, ms epoch (0 = genesis/unset)
   goal: string | null // Prolog text; null = genesis
   author: PeerId | null
+  author_seq: number
   submitted_at: number // ms epoch, 0 = unset
   ops: number
 }
@@ -19,6 +20,8 @@ export type TxFull = TxRow & {
   result: Record<string, string> | Record<string, string>[] | string | null
   diff: Op[]
   read_predicates: number
+  signature: string | null
+  signature_status: 'verified' | 'genesis' | 'unsigned' | 'invalid' | 'unknown'
 }
 
 export type Cert = {

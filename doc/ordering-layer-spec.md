@@ -82,9 +82,8 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 -type read_check() :: #{ {Functor :: atom(), Arity :: non_neg_integer()} => integer() }.
 
 %% the committed change record — FIXED shape (#24).
-%% `author`/`sig` are RESERVED for signing (identity readiness, see below): Phase 1
-%% sets author = self node id, sig = none, and verification is a pass-through stub.
-%% Reserving them now keeps the wire + on-disk format stable when signing turns on.
+%% Non-genesis transactions are author-signed. `author_seq` is a per-author,
+%% monotonically increasing replay nonce assigned by Simplex ingress.
 -record(transaction, {tx_id        :: binary(),
                       caller_ns    :: binary(),
                       goal = undefined :: term(),
@@ -92,6 +91,7 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
                       diff         :: [op()],
                       read_check   :: read_check(),
                       author       :: server_id(),
+                      author_seq = 0 :: non_neg_integer(),
                       submitted_at = 0 :: non_neg_integer(),
                       sig = none   :: binary() | none}).
 

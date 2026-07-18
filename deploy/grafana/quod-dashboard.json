@@ -1047,6 +1047,87 @@
       ]
     },
     {
+      "type": "row",
+      "id": 109,
+      "title": "Transaction authentication",
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 109
+      }
+    },
+    {
+      "type": "timeseries",
+      "id": 110,
+      "title": "Author signature check time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 110
+      },
+      "description": "Median and 95th-percentile time each node spends checking one transaction author's Ed25519 signature before voting. A sustained rise means authentication is consuming more of the block-processing budget.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_tx_signature_validation_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p50 · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_tx_signature_validation_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p95 · {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 111,
+      "title": "Invalid author signatures rejected",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 110
+      },
+      "description": "Rate of transactions rejected because the author's cryptographic signature did not match the signed content. This should stay at zero; any increase means corrupted, malformed, or dishonest input reached a validator.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (node_id) (rate(quod_tx_invalid_signatures_total{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "{{node_id}}"
+        }
+      ]
+    },
+    {
       "type": "logs",
       "id": 43,
       "title": "Node logs — warnings & errors (Loki)",
@@ -1058,7 +1139,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 109
+        "y": 118
       },
       "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — same id as the $node picker.",
       "options": {

@@ -16,14 +16,14 @@ A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, last in the `m
   the F2 anti-entropy pull-source selection). Never on the replay/rebuild path, so catching up
   never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay).
 - **Relay / follower** (a caught-up non-member — see `follows/4`): a gossiped `{block, Entry}` for slot
-  `H+1` is verified against the current committee (`quod_catchup:verify_forward/3`) and, if genuine,
+  `H+1` is verified against the current committee (`quod_catchup:verify_forward/4`) and, if genuine,
   handed to `m:quod_simplex` to append+apply (the sole store writer); then eager-pushed onward. A
   duplicate (`slot ≤ H`) is dropped and **never re-pushed** (loop suppression); a gap (`slot > H+1`) is
   dropped and recovered by anti-entropy.
 - **Anti-entropy** (the completeness guarantee): every `?ANTI_ENTROPY_MS` a follower advertises its
   height (`{digest, Hi}`) to one `quod_brahms:sample/1` peer AND to every committee member; a behind
   node PULLs the gap, an ahead node replies its height so the sender pulls. The pull is the SAME
-  trustless driver as cold-start catch-up (`quod_catchup:catch_up/5`) sourced from a live peer, so a
+  trustless driver as cold-start catch-up (`quod_catchup:catch_up/6`) sourced from a live peer, so a
   block missed by eager push (loss, an out-of-fanout peer, a transient ingest error) is always
   recovered — and because members are always-known contacts, a caught-up observer keeps tracking the
   head even with no overlay.
@@ -230,7 +230,7 @@ on_block(#entry{index = Slot, data = Data} = Entry, S0 = #s{ns = Ns, self = Self
                 duplicate -> drop(duplicate, S);     %% already applied — loop suppression (benign gossip redundancy)
                 gap       -> drop(gap, S);           %% ahead of H+1 — anti-entropy will re-pull the missing prefix
                 next ->
-                    case quod_catchup:verify_forward(Committee, Slot, [Entry]) of
+                    case quod_catchup:verify_forward(Ns, Committee, Slot, [Entry]) of
                         {ok, [_], _} ->
                             case ingest(Ns, [Entry], ?INGEST_MS) of
                                 ok         -> %% our height advanced to Slot — fold the snapshot forward too
@@ -422,7 +422,8 @@ digest_counts(Table) ->
 
 %% Reconcile the gap by running the SAME trustless catch-up driver used at cold-start, but sourced from a
 %% live sampled peer (`Contact = Addr`) instead of a boot seed: pull a window via quod_catchup, which
-%% verifies each entry's cert against the committee it folds forward, and sink it through quod_simplex
+%% verifies each entry's cert and transactions against the committee it folds forward, then sinks it
+%% through quod_simplex
 %% (the sole writer, contiguity-checked). `From > 1` here (a follower is past genesis), so the genesis
 %% anchor is skipped — every block is proven inductively from the committee we already hold. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
@@ -431,7 +432,7 @@ start_pull(Peer, From, Committee, S = #s{ns = Ns}) ->
         fun() ->
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
             Sink  = fun(Es) -> ingest(Ns, Es, ?PULL_SINK_MS) end,
-            _ = quod_catchup:catch_up(<<>>, Fetch, Sink, From, Committee)
+            _ = quod_catchup:catch_up(Ns, <<>>, Fetch, Sink, From, Committee)
         end),
     S#s{pulling = Pid, pulled = S#s.pulled + 1}.
 

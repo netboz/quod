@@ -299,11 +299,11 @@ only with a certificate containing distinct signatures from more than two-thirds
 the current committee. With `3f+1` members, this preserves one history while up to `f`
 members are Byzantine.
 
-That does not make every write authorized. The network authenticates committee
-members and verifies their votes, but transaction-author signatures and the final
-membership authorization policy are still unfinished. Until those land, deployment
-inside a trusted administrative fleet remains the honest security boundary for who
-may request a write.
+That does not make every write authorized. Every non-genesis transaction is now
+signed by its author and bound to its ontology, but signatures prove identity,
+not permission. Until the user/agent capability and membership authorization
+policies land, deployment inside a trusted administrative fleet remains the
+security boundary for who may request a write.
 
 ---
 
@@ -399,5 +399,5 @@ durable ordered history, trustless catch-up, deterministic Prolog apply, optimis
 conflict checks, short transaction batches, and a one-block consensus pipeline.
 `ordering-layer-spec.md` records the superseded Raft design; the current consensus
 implementation and `simplex_extended.pdf` are authoritative. The remaining work is
-tracked in `deferred.md`, especially transaction signatures, epoch-frozen membership,
-cross-ontology writes, and history compaction.
+tracked in `deferred.md`, especially author-aware authorization, epoch-frozen
+membership, cross-ontology writes, and history compaction.

@@ -67,6 +67,18 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
             '—'
           )}
         </dd>
+        <Dt>Author sequence</Dt>
+        <dd className="font-mono">{full.author_seq}</dd>
+        <Dt>Author signature</Dt>
+        <dd>
+          <SignatureBadge status={full.signature_status} />
+        </dd>
+        {full.signature && (
+          <>
+            <Dt>Signature bytes</Dt>
+            <dd className="font-mono text-[11px] break-all text-gray">{full.signature}</dd>
+          </>
+        )}
         <Dt>Tx id</Dt>
         <dd className="font-mono text-xs break-all">{full.tx_id}</dd>
         <Dt>Read set</Dt>
@@ -160,6 +172,24 @@ function StatusBadge({ status }: { status: TxStatus }) {
     rejected: 'bg-rose/15 text-rose',
   }[status]
   const label = { history: 'committed', pending: 'committing…', applied: 'applied', rejected: 'rejected' }[status]
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>
+}
+
+function SignatureBadge({ status }: { status: LiveTx['signature_status'] }) {
+  const cls = {
+    verified: 'bg-olive/15 text-olive',
+    genesis: 'bg-teal-light/15 text-teal-light',
+    unsigned: 'bg-gold-soft/40 text-teal',
+    invalid: 'bg-rose/15 text-rose',
+    unknown: 'bg-gray/15 text-gray',
+  }[status]
+  const label = {
+    verified: 'verified',
+    genesis: 'trusted genesis',
+    unsigned: 'unsigned',
+    invalid: 'invalid',
+    unknown: 'loading…',
+  }[status]
   return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${cls}`}>{label}</span>
 }
 

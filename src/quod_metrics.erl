@@ -40,11 +40,13 @@ Two collection paths:
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | time from handing in a change to it being made final |
 | `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change |
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
+| `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
+| `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 """.
 
 -behaviour(gen_server).
 
--export([start_link/0]).
+-export([start_link/0, observe_transaction_signature/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -include("quod_ledger.hrl").
@@ -52,6 +54,8 @@ Two collection paths:
 -define(REFRESH_MS, 5000).
 -define(LAT_BUCKETS,  [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]).  %% ms: submit→commit
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
+-define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
+                       0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -163,10 +167,42 @@ declare(NodeId) ->
     %% Per-change timing and size.
     _ = H(quod_tx_commit_latency_ms, "How long each change took from being handed in to being made final, in milliseconds.", ?LAT_BUCKETS),
     _ = H(quod_tx_diff_ops,          "How many individual pieces of data each finished change added or removed.", ?DIFF_BUCKETS),
+    _ = H(quod_tx_signature_validation_seconds,
+          "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
+          ?SIG_BUCKETS),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
                                     {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_tx_invalid_signatures_total},
+           {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
+           {labels, [namespace]}, {constant_labels, CL}]),
     ok.
+
+%% Signature checks happen in the consensus and history-validation paths. Metrics
+%% must never become a dependency of either path, including during supervisor
+%% startup or a metrics-process restart.
+-spec observe_transaction_signature(binary(), boolean(), non_neg_integer()) -> ok.
+observe_transaction_signature(Ns, Valid, DurationNative)
+  when is_binary(Ns), is_boolean(Valid), is_integer(DurationNative), DurationNative >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                Seconds = erlang:convert_time_unit(DurationNative, native, nanosecond) / 1000000000,
+                _ = prometheus_histogram:observe(
+                      quod_tx_signature_validation_seconds, [label(Ns)], Seconds),
+                _ = case Valid of
+                        true  -> ok;
+                        false -> prometheus_counter:inc(
+                                   quod_tx_invalid_signatures_total, [label(Ns)])
+                    end,
+                ok
+            catch
+                _:_ -> ok
+            end
+    end.
 
 %% --- poll refresh --------------------------------------------------------
 

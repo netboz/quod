@@ -131,7 +131,7 @@ t_direct_membership_revalidated({_Dir, Ns, Cfg}) ->
                     tx_id = <<"direct-membership">>, caller_ns = Ns,
                     diff = [{assert, {{peer_admitted, NewMember, "127.0.0.1", 9999,
                                       NewMember}, true}}],
-                    read_check = #{}, author = NewMember, sig = none},
+                    read_check = #{}, author = maps:get(node_id, Cfg), sig = none},
         ?assertEqual({error, skipped}, quod_simplex:append(Ns, Change)),
         ?assertEqual(1, length(quod_simplex:committee(Ns))),
         ?assertMatch(#{slot := 2, membership_rejects := 1}, quod_simplex:stats(Ns))

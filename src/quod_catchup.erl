@@ -25,7 +25,8 @@ Two halves in one `gen_server`, riding a dedicated **`{catchup, Ns}`** `quod_lin
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
 
--export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, verify_forward/3, catch_up/3, catch_up/5]).
+-export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4,
+         verify_forward/4, catch_up/4, catch_up/6]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([peer_matches/2, contact_candidates/3]).
@@ -147,23 +148,25 @@ out-of-band trust anchor, so a genesis-window caller (`From=1`, `Committee0=[]`)
 returned `Committee1` / genesis hash against config before trusting it. A malformed cert, a wrong
 `(kind, slot, block_hash)`, or one that fails the `⅔` check against the committee-as-of-slot is rejected.
 """.
--spec verify_forward([node_id()], pos_integer(), [#entry{}]) ->
+-spec verify_forward(binary(), [node_id()], pos_integer(), [#entry{}]) ->
         {ok, [#entry{}], [node_id()]} | {error, term()}.
-verify_forward(Committee0, From, Entries) -> verify_forward(Committee0, From, Entries, []).
+verify_forward(Ns, Committee0, From, Entries) ->
+    verify_forward(Ns, Committee0, From, Entries, []).
 
-verify_forward(Committee, _Next, [], Acc) ->
+verify_forward(_Ns, Committee, _Next, [], Acc) ->
     {ok, lists:reverse(Acc), Committee};
-verify_forward(Committee, Next, [#entry{index = Next} = E | Rest], Acc) ->   %% contiguous: index =:= Next
-    case verify_entry(E, Committee) of
-        ok    -> verify_forward(quod_simplex:apply_committee_delta(entry_data(E), Committee),
+verify_forward(Ns, Committee, Next, [#entry{index = Next} = E | Rest], Acc) ->
+    case verify_entry(Ns, E, Committee) of
+        ok    -> verify_forward(Ns,
+                                quod_simplex:apply_committee_delta(entry_data(E), Committee),
                                 Next + 1, Rest, [E | Acc]);
         Error -> Error
     end;
-verify_forward(_Committee, Next, [#entry{index = I} | _], _Acc) ->
+verify_forward(_Ns, _Committee, Next, [#entry{index = I} | _], _Acc) ->
     {error, {noncontiguous, Next, I}};   %% a gap/reorder — the server dropped or misordered an entry
-verify_forward(_Committee, Next, [_NotAnEntry | _], _Acc) ->
+verify_forward(_Ns, _Committee, Next, [_NotAnEntry | _], _Acc) ->
     {error, {malformed_entry, Next}};    %% a non-#entry element from a hostile server
-verify_forward(_Committee, Next, _ImproperTail, _Acc) ->
+verify_forward(_Ns, _Committee, Next, _ImproperTail, _Acc) ->
     {error, {malformed_entry, Next}}.    %% a hostile improper list after an otherwise-valid prefix
 
 entry_data(#entry{data = Data}) -> Data.
@@ -172,19 +175,30 @@ entry_data(#entry{data = Data}) -> Data.
 %% payload): a complaint cert finalizes a `noop` SKIP; a commit cert finalizes a block (payload a
 %% #transaction OR a committed `noop`). A complaint cert over non-`noop` data, or any other cert shape, is
 %% rejected — a complaint proves "skip slot I" and authorizes no payload.
-verify_entry(#entry{index = 1, cert = none} = E, _Committee) ->
+verify_entry(Ns, #entry{index = I, data = Data} = E, Committee) ->
+    case verify_entry_finality(Ns, E, Committee) of
+        ok ->
+            case quod_simplex:valid_history_entry(Ns, I, Data, Committee) of
+                true  -> ok;
+                false -> {error, {invalid_transaction, I}}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+verify_entry_finality(_Ns, #entry{index = 1, cert = none} = E, _Committee) ->
     case entry_block(E) of
         {ok, _Block} -> ok;   %% genesis is pinned out of band, but must still be structurally valid
         error -> {error, {malformed_entry, 1}}
     end;
-verify_entry(#entry{index = I, cert = none}, _Committee) ->
+verify_entry_finality(_Ns, #entry{index = I, cert = none}, _Committee) ->
     {error, {missing_cert, I}};   %% a non-genesis committed slot MUST carry a cert
-verify_entry(#entry{index = I, data = noop, timestamp = 0,
-                    cert = #cert{kind = complaint} = Cert}, Committee) ->
+verify_entry_finality(_Ns, #entry{index = I, data = noop, timestamp = 0,
+                                  cert = #cert{kind = complaint} = Cert}, Committee) ->
     verify_finalizer(Cert, complaint, I, none, Committee);
-verify_entry(#entry{index = I, cert = #implicit_cert{} = Proof} = E, Committee) ->
-    verify_implicit(E, I, Proof, Committee);
-verify_entry(#entry{index = I, cert = #cert{kind = commit} = Cert} = E, Committee) ->
+verify_entry_finality(Ns, #entry{index = I, cert = #implicit_cert{} = Proof} = E, Committee) ->
+    verify_implicit(Ns, E, I, Proof, Committee);
+verify_entry_finality(_Ns, #entry{index = I, cert = #cert{kind = commit} = Cert} = E, Committee) ->
     case entry_block(E) of
         {ok, Block} ->
             BH = quod_simplex:block_hash(Block),
@@ -192,10 +206,10 @@ verify_entry(#entry{index = I, cert = #cert{kind = commit} = Cert} = E, Committe
         error ->
             {error, {malformed_entry, I}}
     end;
-verify_entry(#entry{index = I}, _Committee) ->
+verify_entry_finality(_Ns, #entry{index = I}, _Committee) ->
     {error, {cert_mismatch, I}}.   %% complaint cert over non-noop data, a support cert, a non-#cert, …
 
-verify_implicit(E, I,
+verify_implicit(Ns, E, I,
                 #implicit_cert{support = Support,
                                child = #block{slot = ChildSlot, parent = I,
                                               payload = ChildPayload,
@@ -207,22 +221,27 @@ verify_implicit(E, I,
             ChildBH = quod_simplex:block_hash(Child),
             StableCommittee = quod_simplex:committee_delta(entry_data(E)) =:= {[], []}
                               andalso quod_simplex:committee_delta({batch, ChildPayload}) =:= {[], []},
-            case StableCommittee andalso ChildTs >= Parent#block.timestamp of
-                false -> {error, {cert_mismatch, I}};
-                true ->
-                    case verify_finalizer(Support, support, I, ParentBH, Committee) of
+            case verify_finalizer(Support, support, I, ParentBH, Committee) of
+                ok ->
+                    case verify_finalizer(Commit, commit, ChildSlot, ChildBH,
+                                          Committee) of
                         ok ->
-                            case verify_finalizer(Commit, commit, ChildSlot, ChildBH, Committee) of
-                                ok -> ok;
-                                {error, _} -> {error, {bad_implicit_cert, I}}
+                            ValidChild = quod_simplex:valid_history_entry(
+                                           Ns, ChildSlot,
+                                           {batch, ChildPayload}, Committee),
+                            case StableCommittee andalso ValidChild
+                                 andalso ChildTs >= Parent#block.timestamp of
+                                true  -> ok;
+                                false -> {error, {cert_mismatch, I}}
                             end;
                         {error, _} -> {error, {bad_implicit_cert, I}}
-                    end
+                    end;
+                {error, _} -> {error, {bad_implicit_cert, I}}
             end;
         _ ->
             {error, {malformed_entry, I}}
     end;
-verify_implicit(_E, I, _Proof, _Committee) ->
+verify_implicit(_Ns, _E, I, _Proof, _Committee) ->
     {error, {cert_mismatch, I}}.
 
 entry_block(E) ->
@@ -247,7 +266,7 @@ verify_finalizer(_Cert, _K, Sl, _BH, _Committee) ->
 
 -doc """
 Drive trustless catch-up to completion for a FRESH joiner: repeatedly FETCH a window of committed entries,
-VERIFY it forward (`verify_forward/3`), and hand the verified entries to SINK (which appends them to the
+VERIFY it forward (`verify_forward/4`), and hand the verified entries to SINK (which appends them to the
 local store), threading the committee, until caught up.
 
 `GenesisHash` is the out-of-band-pinned `block_hash` of the genesis block (slot 1) — it pins the genesis's
@@ -265,23 +284,25 @@ height cannot truncate catch-up into a false "caught up". Returns `{ok, Height}`
 `{error, Reason}` (forged chain / bad anchor / sink failure / fetch failure / a stuck server making no
 progress — the caller should try another contact).
 
-Use `catch_up/5` to RESUME from a partial prefix already on disk: `From` = `height+1` and `Committee` = the
+Use `catch_up/6` to RESUME from a partial prefix already on disk: `From` = `height+1` and `Committee` = the
 committee AS OF `From` (`quod_simplex:log_projection/2` over the persisted log). Resuming past slot 1
 skips the genesis anchor (the persisted prefix was already verified when first sunk); a fresh joiner uses
-`catch_up/3` (= `From=1, Committee=[]`) so slot 1 IS anchored against `GenesisHash`.
+`catch_up/4` (= `From=1, Committee=[]`) so slot 1 IS anchored against `GenesisHash`.
 """.
--spec catch_up(binary(),
+-spec catch_up(binary(), binary(),
                fun((pos_integer()) -> {ok, [#entry{}], log_index()} | {error, term()}),
                fun(([#entry{}]) -> ok | {error, term()})) -> {ok, log_index()} | {error, term()}.
-catch_up(GenesisHash, Fetch, Sink) -> catch_up(GenesisHash, Fetch, Sink, 1, [], 0).
+catch_up(Ns, GenesisHash, Fetch, Sink) ->
+    catch_up(Ns, GenesisHash, Fetch, Sink, 1, [], 0).
 
--spec catch_up(binary(),
+-spec catch_up(binary(), binary(),
                fun((pos_integer()) -> {ok, [#entry{}], log_index()} | {error, term()}),
                fun(([#entry{}]) -> ok | {error, term()}),
                pos_integer(), [node_id()]) -> {ok, log_index()} | {error, term()}.
-catch_up(GenesisHash, Fetch, Sink, From, Committee) -> catch_up(GenesisHash, Fetch, Sink, From, Committee, 0).
+catch_up(Ns, GenesisHash, Fetch, Sink, From, Committee) ->
+    catch_up(Ns, GenesisHash, Fetch, Sink, From, Committee, 0).
 
-catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
+catch_up(Ns, GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
     case Fetch(From) of
         {error, R} -> {error, {fetch, R}};
         {ok, Entries, H} when is_integer(H), H >= 0 ->
@@ -290,7 +311,7 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
                 [] when From > Target -> {ok, Target};        %% nothing at/after the max height ⇒ caught up
                 []                    -> {error, no_progress};  %% empty but more claimed/regressed H ⇒ stuck
                 _ ->
-                    case verify_forward(Committee, From, Entries) of
+                    case verify_forward(Ns, Committee, From, Entries) of
                         {error, R} -> {error, {verify, R}};
                         {ok, Verified, Committee1} ->
                             case anchor_ok(From, Verified, GenesisHash) of
@@ -302,7 +323,8 @@ catch_up(GenesisHash, Fetch, Sink, From, Committee, MaxH) ->
                                             Next = From + length(Verified),
                                             case Next > Target of
                                                 true  -> {ok, Target};
-                                                false -> catch_up(GenesisHash, Fetch, Sink, Next, Committee1, Target)
+                                                false -> catch_up(Ns, GenesisHash, Fetch, Sink,
+                                                                  Next, Committee1, Target)
                                             end
                                     end
                             end

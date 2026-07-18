@@ -22,17 +22,20 @@
 %% The read-set: one content hash per predicate {Functor, Arity}.
 -type read_check() :: #{ {Functor :: atom(), Arity :: non_neg_integer()} => integer() }.
 
-%% The committed change record. `sig` is RESERVED for signing (Phase B): it stays `none`
-%% until node-author signatures land; `author` is the submitting node's pubkey.
--record(transaction, {tx_id      :: binary(),            %% unique per transaction (node-hash ++ unique counter; NOT time-ordered)
+%% The committed change record. Every non-genesis transaction carries an Ed25519
+%% signature over the namespace-bound canonical bytes owned by `quod_transaction`;
+%% `author` is the submitting node's 32-byte public key. Only anchored genesis uses
+%% `sig = none`.
+-record(transaction, {tx_id      :: binary(),            %% client correlation id; uniqueness is enforced by author_seq
                  caller_ns    :: binary(),            %% emitting ontology (CallerNs)
                  goal = undefined :: term(),          %% successful Prolog goal that produced this write
                  result = undefined :: term(),        %% bindings returned by that proof
                  diff         :: [op()],              %% concrete asserts/retracts
                  read_check   :: read_check(),        %% what the proof relied on (OCC)
                  author       :: node_id(),           %% submitting node's pubkey
+                 author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis
                  submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
-                 sig = none   :: binary() | none}).   %% Ed25519 sig over canonical bytes; none until Phase B
+                 sig = none   :: binary() | none}).   %% 64-byte Ed25519 signature; none only for genesis
 
 %% --- DispersedSimplex consensus records (doc/simplex_extended.pdf) ---
 %% A slot is a consensus height: the leader for slot v proposes one block; validators support

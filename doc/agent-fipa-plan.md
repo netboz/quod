@@ -409,10 +409,10 @@ can_declare_runtime(Subject, Kind, Declaration).
 
 `Kind` is `state_handler`, `handler_dependency`, or `reaction`.
 
-Until transaction-author signatures and validator-side authorization exist,
-only declarations included in a trusted system ontology's pinned genesis may
-be activated. Dynamic declarations remain rejected, even if a trusted node
-could technically commit the fact.
+Transaction-author signatures now exist, but validator-side authorization does
+not. Until it does, only declarations included in a trusted system ontology's
+pinned genesis may be activated. Dynamic declarations remain rejected, even if
+an authenticated trusted node could technically commit the fact.
 
 After signing lands, validators authorize a declaration before committing it.
 The runtime also verifies the committed provenance before activation as a
@@ -833,7 +833,7 @@ Acceptance:
 
 ### Slice 5 -- signed users and subjects
 
-- Implement transaction-author signatures.
+- Build user/subject authorization on the implemented transaction signatures.
 - Add `quod:user`.
 - Implement authentication and immutable subjects.
 - Test whole-chain authorization and laundering attempts.

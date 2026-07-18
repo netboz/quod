@@ -223,7 +223,26 @@ function StatCards({ info, liveHeight }: { info: NsSummary; liveHeight: number }
       <Card label="Committed height" value={`#${Math.max(liveHeight, info.height)}`} tone="border-teal-light" />
       <Card label="Applied locally" value={`#${info.applied}`} tone="border-olive" />
       <Card label="Committee" value={String(info.committee.length)} sub={info.role} tone="border-gold" />
-      <Card label="Slot leader" value={info.leader?.id ?? '—'} mono sub={info.syncing ? 'syncing' : undefined} tone="border-teal" />
+      <Card
+        label={info.proposal_open ? 'Next proposer' : 'Finality leader'}
+        value={
+          (info.proposal_open ? info.next_proposer?.id : info.finality_leader?.id) ?? '—'
+        }
+        mono
+        sub={
+          info.syncing
+            ? 'syncing'
+            : info.proposal_open
+              ? `slot #${info.proposal_slot}`
+              : `${info.progress_phase.replaceAll('_', ' ')} · finality #${info.finality_slot}`
+        }
+        title={
+          info.proposal_open
+            ? `Validator responsible for proposing slot ${info.proposal_slot}`
+            : `Waiting for slot ${info.finality_slot}; its leader is ${info.finality_leader?.id ?? 'unknown'}`
+        }
+        tone="border-teal"
+      />
       <Card
         label="Genesis anchor"
         value={info.genesis ? info.genesis.slice(0, 10) + '…' : '—'}

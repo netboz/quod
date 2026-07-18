@@ -10,7 +10,8 @@ KB, WITHOUT being a committee member (a read-only observer).
 
 Then **S5b admission-to-voter**: the founder admits the caught-up observer (one ordinary
 transaction through the normal write path), the observer sees its own `peer_admitted` fact arrive over the
-live feed and **self-promotes to a voter** (`maybe_promote` — the committed fact is the signal), and then
+live feed and **self-promotes to a voter** (`catchup_membership_transition` — the committed fact is the
+signal), and then
 proves it really votes: probe writes commit at `quorum(2) = 2` under EACH member's leadership, including a
 slot the promoted joiner leads. The admit passes the **readiness gate** (`can_join :- peer_ready(Pk)`,
 judged from the observer's live feed digests); a never-seen candidate is refused first.
@@ -174,7 +175,8 @@ joiner_resumes_after_restart(Config) ->
 %% S5b admission-to-voter. The founder ADMITS the caught-up observer — one ordinary transaction through the
 %% normal write path (`admit_3` gates `can_join`, stages the `peer_admitted` assert, consensus commits it).
 %% The observer, following live commits over the feed, applies the block that admits ITSELF: the committed
-%% fact is the signal — `maybe_promote` re-arms its engine over the new committee and `is_participant`
+%% fact is the signal — `catchup_membership_transition` re-seats its engine over the new committee and
+%% `is_participant`
 %% flips. Then the proof that it really votes: at N=2 quorum(2)=2, so NOTHING commits unless BOTH members
 %% sign — two probe writes, one led by each member (round-robin), must both commit and fan out.
 joiner_promoted_to_voter(Config) ->

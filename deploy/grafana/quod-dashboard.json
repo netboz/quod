@@ -1006,19 +1006,58 @@
     },
     {
       "type": "timeseries",
-      "id": 47,
-      "title": "Growth stress (redrives / weak-cert waits / membership rejects)",
+      "id": 48,
+      "title": "Finality watchdog state",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
       },
       "gridPos": {
         "h": 8,
-        "w": 24,
+        "w": 12,
         "x": 0,
         "y": 101
       },
-      "description": "Signals that a committee operation hit a snag: redrives (a proposal re-sent because a member is slow to respond), weak_cert_waits (this node fell behind across a committee change and is waiting for a valid proof-of-agreement), membership_rejects (a proposed committee change this node judged invalid). All should stay flat in steady state.",
+      "description": "State of the oldest unfinished block on each node. phase: 0 idle, 1 waiting for a proposal, 2 waiting for support, 3 waiting for final commit votes. quorum_connected is 1 when enough voting peers are linked; complaint voting pauses while it is 0.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 3,
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_consensus_progress_phase{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "phase · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "quod_consensus_progress_quorum_connected{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "quorum connected · {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 47,
+      "title": "Consensus recovery activity",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 101
+      },
+      "description": "Recovery work per second: proposal/finality redrives, oldest-head watchdog expirations, complaints paused during a known below-quorum outage, weak-certificate waits, and invalid membership proposals. These should stay near zero in steady state; a burst should return to zero after connectivity recovers.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -1043,6 +1082,16 @@
           "refId": "C",
           "expr": "rate(quod_consensus_membership_rejects{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "membership_rejects · {{node_id}}"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(quod_consensus_progress_timeouts{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "head timeouts · {{node_id}}"
+        },
+        {
+          "refId": "E",
+          "expr": "rate(quod_consensus_quorum_pauses{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "quorum pauses · {{node_id}}"
         }
       ]
     },

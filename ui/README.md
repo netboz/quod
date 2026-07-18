@@ -16,3 +16,9 @@ The panel is opt-in on a node (`explorer.enabled`, loopback by default — see
 `/api/block`), a prove console (`POST /api/prove`, reads answer / writes commit),
 and the `/ws` stream fusing `{committed, Ns}` block frames with per-transaction
 `applied_live` events. Palette: `doc/BBSVX Palette.pdf` — don't invent colors.
+
+The summary distinguishes the **finality head** (`committed+1`) from the next
+proposal slot (`approved+1`). The consensus card shows "Next proposer" and
+`leader(approved+1)` while a proposal slot is open. While finality blocks the
+pipeline, it switches to "Finality leader" and `leader(committed+1)`, with the
+oldest finality slot and watchdog phase in the subtitle.

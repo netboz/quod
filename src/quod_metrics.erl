@@ -26,6 +26,8 @@ Two collection paths:
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | running totals of turned-away change requests, by reason |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node may vote (it actually votes only when `syncing` is 0) |
 | `quod_consensus_syncing{namespace}` | gauge | | 1 while catching up / confirming the latest block, 0 once up to date |
+| `quod_consensus_progress_slot/progress_phase/progress_quorum_connected{namespace}` | gauge | | oldest unfinished slot, its phase (0 idle, 1 proposal, 2 notarization, 3 commit), and whether enough voters are connected |
+| `quod_consensus_progress_timeouts/quorum_pauses{namespace}` | gauge | | watchdog expirations and complaints deliberately withheld while fewer than a quorum were connected |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
@@ -136,6 +138,11 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
     _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
     _ = G(quod_consensus_redrives,        "Total times this node re-sent a proposal it was still waiting on instead of giving up. Climbing steadily means one of the voting nodes is not responding."),
+    _ = G(quod_consensus_progress_slot,   "The oldest unfinished block slot watched by this node; 0 means no block is currently waiting for progress."),
+    _ = G(quod_consensus_progress_phase,  "What the oldest unfinished block is waiting for: 0 idle, 1 a proposal, 2 a notarization certificate, 3 enough final votes to commit."),
+    _ = G(quod_consensus_progress_quorum_connected, "1 when this node currently has live consensus links to enough voting nodes to form a certificate, 0 otherwise. A complaint timeout is paused while this is 0."),
+    _ = G(quod_consensus_progress_timeouts, "Total oldest-block watchdog expirations. Occasional increases recover packet loss; sustained increases mean consensus is not advancing."),
+    _ = G(quod_consensus_quorum_pauses,   "Total watchdog expirations where this node withheld a complaint because fewer than a certificate quorum of voting nodes were connected. It prevents an outage from splitting irreversible commit and skip votes."),
     _ = G(quod_consensus_is_validator,    "1 if this node is allowed to vote on changes, 0 if it only reads and follows along. It actually casts votes only when 'syncing' is also 0."),
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
@@ -228,7 +235,9 @@ refresh_log_ns(Ns) ->
           appends := AP, proposals := PR, batched_txs := BT,
           commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
-          redrives := RV, weak_cert_waits := WC, is_validator := IV, syncing := SY,
+          redrives := RV, progress_slot := PS, progress_phase_code := PP,
+          progress_quorum_connected := PQ, progress_timeouts := PT,
+          quorum_pauses := QP, weak_cert_waits := WC, is_validator := IV, syncing := SY,
           ahead_gap := AG} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
@@ -249,6 +258,11 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_append_bad,      RD),
             _ = S(quod_consensus_membership_rejects, MR),
             _ = S(quod_consensus_redrives,        RV),
+            _ = S(quod_consensus_progress_slot,   PS),
+            _ = S(quod_consensus_progress_phase,  PP),
+            _ = S(quod_consensus_progress_quorum_connected, PQ),
+            _ = S(quod_consensus_progress_timeouts, PT),
+            _ = S(quod_consensus_quorum_pauses,   QP),
             _ = S(quod_consensus_is_validator,    IV),
             _ = S(quod_consensus_syncing,         SY),
             _ = S(quod_consensus_weak_cert_waits, WC),

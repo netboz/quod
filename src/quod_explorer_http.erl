@@ -5,7 +5,7 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 
 | endpoint | answers |
 | -------- | ------- |
-| `GET /api/summary` | node identity + per-namespace consensus status (height, committee, leader…) |
+| `GET /api/summary` | node identity + per-namespace consensus status (height, committee, finality head, next proposer…) |
 | `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
 | `GET /api/tx/:ns/:id` | one transaction by id (bounded backward scan — no global tx index yet) |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
@@ -176,23 +176,35 @@ ns_summary(Ns) ->
     St = quod_simplex:status(Ns),
     Committee = quod_simplex:committee(Ns),
     Slot = maps:get(slot, St, 0),
+    Approved = maps:get(approved, St, Slot),
+    FinalitySlot = maps:get(finality_slot, St, Slot + 1),
+    ProposalSlot = maps:get(proposal_slot, St, Approved + 1),
     #{ns        => Ns,
       height    => maps:get(committed, St, 0),
       applied   => quod_prolog:applied(Ns),
       role      => maps:get(role, St, observer),
       syncing   => maps:get(syncing, St, false),
       committee => [id_json(M) || M <- Committee],
-      %% `leader/2` is 1-based on the slot; guard `Slot >= 1` so a slot of 0 (a fresh/behind node, or a
-      %% `status/1` that timed out to its `#{}` default while `committee/1` still returned members) can
-      %% never reach `lists:nth(0, _)` and crash the whole summary.
-      leader    => case Slot >= 1 andalso quod_simplex:leader(Slot, Committee) of
-                       L when is_binary(L); is_tuple(L) -> id_json(L);
-                       _ -> null
-                   end,
+      approved  => Approved,
+      finality_slot => FinalitySlot,
+      finality_leader => leader_json(FinalitySlot, Committee),
+      proposal_slot => ProposalSlot,
+      next_proposer => leader_json(ProposalSlot, Committee),
+      proposal_open => maps:get(proposal_open, St, false),
+      progress_phase => maps:get(progress_phase, St, idle),
+      progress_quorum_connected => maps:get(progress_quorum_connected, St, false),
       genesis   => case quod_simplex:genesis_hash(Ns) of
                        H when is_binary(H) -> binary:encode_hex(H, lowercase);
                        _ -> null
                    end}.
+
+leader_json(Slot, Committee) when is_integer(Slot), Slot >= 1 ->
+    case quod_simplex:leader(Slot, Committee) of
+        L when is_binary(L); is_tuple(L) -> id_json(L);
+        _ -> null
+    end;
+leader_json(_Slot, _Committee) ->
+    null.
 
 %%%===================================================================
 %%% history — read-only ledger views (quod_catchup's pattern)

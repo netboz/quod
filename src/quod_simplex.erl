@@ -35,6 +35,17 @@ finalizes its approved parent; catch-up persists and verifies that implicit proo
 transactions are singleton barriers, so a voting-set change is explicitly committed before
 the next proposal opens.
 
+One explicit `head_progress` state watches the oldest non-final slot (`committed+1`) through
+`awaiting_proposal`, `awaiting_notarization`, and `awaiting_commit`. Notarization changes phase; it
+does not cancel the watchdog. Complaint signing pauses while fewer than a certificate quorum have
+live consensus links. The first three quorum restorations for one unchanged phase start a fresh full
+Delta; later flaps cannot extend its deadline. A member that accepted a proposal while recovering runs
+that held proposal through the normal support or membership-verdict path once ready. If the block was
+already notarized, it reconstructs only its commit latch from the complete tree. Together these rules improve
+**liveness** after a temporary `>f` crash outage without a namespace-wide restart. Safety beyond `f`
+still requires durable vote latches across process/node restarts; the protocol's guaranteed fault bound
+remains `f`.
+
 The same engine handles N=1 and multi-validator namespaces, complaint-certified skips,
 trustless catch-up, observer promotion, live member recovery, and deterministic Prolog apply.
 Every non-genesis transaction is namespace-bound and Ed25519-signed by its author,
@@ -67,11 +78,18 @@ persistence, and epoch-frozen validator sets, is tracked in `doc/deferred.md`.
 -export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
-         ahead_cert_ceiling/1, eng_with_certs/2,   %% Slice 1: the gap detector's pure core
+         ahead_cert_ceiling/1, eng_with_certs/2, eng_buffered_commit/4,
+                                                     %% Slice 1: the gap detector's pure core
          is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
-         recovery_failed/1, may_sink/2, reset_pace/0, finalize/2, test_state/1, test_arm/1, test_sync/1,
+         recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
+         test_state/1, test_arm/1, test_sync/1,
          proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
+         reconcile_head_progress/1, resume_ready_rounds/1, resume_ready_slot/2,
+         on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
+         settle_readiness/2, prune_consensus_links/1,
+         test_progress/1, test_progress_rearms/1, test_round/2, test_requested/1,
+         test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -585,6 +603,14 @@ eng_with_certs(Base, KindSlots) ->
     Certs = maps:from_list([{{K, Sl, <<>>}, #cert{kind = K, slot = Sl, block_hash = <<>>, sigs = []}}
                             || {K, Sl} <- KindSlots]),
     #eng{validators = [], base = Base, certs = Certs}.
+
+%% Reconstruct the exact engine half of an out-of-order commit already emitted to the FSM: the valid
+%% certificate and committed latch exist, while the FSM separately holds the block in commit_buf.
+eng_buffered_commit(Slot, Block, #cert{} = Cert,
+                    Eng = #eng{certs = Certs, committed = Committed}) ->
+    BH = block_hash(Block),
+    Eng#eng{certs = Certs#{{commit, Slot, BH} => Cert},
+            committed = Committed#{Slot => Block}}.
 -endif.
 
 %%%===================================================================
@@ -601,7 +627,7 @@ eng_with_certs(Base, KindSlots) ->
 %%
 %% The engine drives commit uniformly at every N: at N=1 the sole validator IS the ⅔ quorum, so each
 %% step self-satisfies and the append commits synchronously; with peers the same path runs over the
-%% `{log, Ns}` transport, the complaint timer, and the per-slot committee.
+%% `{log, Ns}` transport, the durable-head progress watchdog, and the per-slot committee.
 
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
@@ -617,8 +643,9 @@ eng_with_certs(Base, KindSlots) ->
                                   %% long, and sweep its marker so the tick re-dials (guards a conn that dies
                                   %% mid-handshake); safely exceeds the worst-case legit dial (connect ~5s +
                                   %% link-ack ~5s, quod_conn), so an in-flight dial is never swept early
--define(DELTA_MS,   1000).   %% Δ_timeout: a proposed-but-stuck head slot is complained (skipped) after this;
-                             %% must exceed real commit latency (override via app-env `simplex_delta_ms`)
+-define(DELTA_MS,   1000).   %% oldest-head progress timeout: redrive or complain while waiting for proposal,
+                             %% notarization, or commit; must exceed real commit latency
+                             %% (override via app-env `simplex_delta_ms`)
 -define(SYNC_WINDOW,  256).  %% entries requested per catch-up / gap-fill fetch (matches the server's block cap)
 -define(SINK_MS,     30000). %% budget for one sink window (store append + KB replay) — generous
 -define(TIP_PROBE_MS, 9500). %% one parallel tip round; exceeds quod_catchup's 9s public pull budget
@@ -639,6 +666,7 @@ eng_with_certs(Base, KindSlots) ->
 -define(RELAY_RETRY_MS, 300).                    %% exact-request redrive; receiver deduplicates by id
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
+-define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
 
 -record(round, {supporting = none :: none | binary(),
                 commit = false :: boolean(),
@@ -653,6 +681,12 @@ eng_with_certs(Base, KindSlots) ->
 
 -record(local_proposal, {hash :: binary(),
                          waiters = [] :: [term()]}).
+
+-type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
+-record(head_progress, {slot :: slot(),
+                        phase :: progress_phase(),
+                        quorum_connected = false :: boolean(),
+                        quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS}).
 
 -record(relay_pending, {from :: gen_statem:from(),
                         target :: node_id(),
@@ -679,9 +713,14 @@ eng_with_certs(Base, KindSlots) ->
             collecting = none :: none | #batch{},    %% leader's not-yet-sealed micro-batch
             local_proposals = #{} :: #{slot() => #local_proposal{}}, %% sealed local blocks + parked callers
             rounds = #{} :: #{slot() => #round{}},   %% all local vote/validation latches for an in-flight slot
-            active_slot   = none :: none | slot(),       %% the head+1 slot the Δ complaint timer is armed for
+            requested_slot = none :: none | slot(),  %% earliest client-demanded slot not yet proposed/finalized
+            head_progress = idle :: idle | #head_progress{},
+                                                     %% explicit state of the oldest non-final slot; unlike the
+                                                     %% old approval-frontier latch, notarization advances this
+                                                     %% to awaiting_commit instead of cancelling its watchdog
             commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
+            inbound_conns = #{} :: #{node_id() => {pid(), reference()}}, %% authenticated inbound consensus links
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             relay_pending = #{} :: #{binary() => #relay_pending{}},
@@ -713,6 +752,8 @@ eng_with_certs(Base, KindSlots) ->
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
+            progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
+            quorum_pauses = 0 :: non_neg_integer(), %% timeouts that withheld a complaint while < quorum connected
             weak_cert_waits = 0 :: non_neg_integer()}).  %% finalizations refused on a sub-quorum cert (Slice E,
                                                          %% the stale-cert hazard) — climbing = a laggard waiting
 
@@ -737,12 +778,44 @@ test_state_set(sync, V, S)       -> S#s{sync = V};
 test_state_set(last_applied, V, S) -> S#s{last_applied = V};
 test_state_set(prolog_ready, V, S) -> S#s{prolog_ready = V};
 test_state_set(author_seqs, V, S) -> S#s{author_seqs = V};
+test_state_set(store, V, S)       -> S#s{store = V};
+test_state_set(commit_buf, V, S)  -> S#s{commit_buf = V};
+test_state_set(head_progress, idle, S) -> S#s{head_progress = idle};
+test_state_set(head_progress, {Slot, Phase, Connected}, S) ->
+    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
+                                       quorum_connected = Connected}};
+test_state_set(head_progress, {Slot, Phase, Connected, Rearms}, S) ->
+    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
+                                       quorum_connected = Connected,
+                                       quorum_rearms = Rearms}};
+test_state_set(requested_slot, V, S) -> S#s{requested_slot = V};
+test_state_set(conns, V, S)      -> S#s{conns = V};
+test_state_set(inbound_conns, V, S) -> S#s{inbound_conns = V};
+test_state_set(outbox, V, S)     -> S#s{outbox = V};
+test_state_set(dialing, V, S)    -> S#s{dialing = V};
+test_state_set(rounds, V, S)     -> S#s{rounds = V};
 test_state_set(collecting, {Slot, Froms}, S) ->   %% a not-yet-sealed batch parking these callers
     S#s{collecting = #batch{slot = Slot, parent = Slot - 1,
                             items_rev = [{From, noop} || From <- Froms], bytes = 0}};
 test_state_set(sync_arm, V, S)   -> S#s{sync_arm = V}.
 test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a state (record is private)
 test_sync(#s{sync = Sy})         -> Sy.
+test_progress(#s{head_progress = idle}) -> idle;
+test_progress(#s{head_progress = #head_progress{slot = Slot, phase = Phase,
+                                                quorum_connected = Connected}}) ->
+    {Slot, Phase, Connected}.
+test_progress_rearms(#s{head_progress = idle}) -> 0;
+test_progress_rearms(#s{head_progress = #head_progress{quorum_rearms = Rearms}}) -> Rearms.
+test_round(Slot, S) ->
+    R = round_state(Slot, S),
+    {R#round.supporting, R#round.commit, R#round.complaint}.
+test_requested(#s{requested_slot = V}) -> V.
+test_progress_counts(#s{progress_timeouts = T, quorum_pauses = P}) -> {T, P}.
+test_committed_store(#s{slot = Slot, store = Store}) -> {Slot, Store}.
+test_link_peers(#s{conns = Conns, inbound_conns = Inbound,
+                   outbox = Outbox, dialing = Dialing}) ->
+    {lists:sort(maps:keys(Conns)), lists:sort(maps:keys(Inbound)),
+     lists:sort(maps:keys(Outbox)), lists:sort(maps:keys(Dialing))}.
 -endif.
 
 callback_mode() -> [state_functions].
@@ -935,15 +1008,16 @@ self_addr(Cfg) ->
 
 running({call, From}, {append, Change}, S0) ->
     {S1, Reply} = handle_append(From, Change, S0#s{submitted = S0#s.submitted + 1}),
-    {keep_state, S1, Reply ++ timer_actions(S0, S1)};
+    keep_progress(S0, S1, Reply);
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
-running(cast, rebuild, S) ->
-    {keep_state, maybe_mark_ready(apply_committed(S#s{last_applied = 0, prolog_ready = false}))};
+running(cast, rebuild, S0) ->
+    S1 = apply_committed(S0#s{last_applied = 0, prolog_ready = false}),
+    keep_progress(S0, S1, []);
 %% A peer's consensus message (proposal / share / cert) on our `{log, Ns}` channel. `Peer` is the
 %% sender's authenticated node_id (pubkey); the address is a routing hint we ignore. Processing it can
-%% advance/skip the head (arming or cancelling the Δ timer) — `timer_actions/2` reflects that.
-running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
+%% advance/skip the head; `keep_progress/3` reconciles the explicit head watchdog afterward.
+running(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
     %% Only a committee member acts on consensus traffic. A node that is still joining, or caught up but
     %% not (yet) admitted, is a read-only observer — it stays current via catch-up + its KB, never by
     %% voting — so it drops the committee's propose/share/cert stream (also guards `leader/2` on `[]`).
@@ -951,15 +1025,16 @@ running(info, {quod_message, {{Peer, _Addr}, _InLink}, Chan, Payload}, S0 = #s{c
         false ->
             {keep_state, S0};
         true ->
+            SIn = track_inbound(Peer, InLink, S0),
             case quod_relay:decode_frame(Payload, S0#s.ns) of
                 {relay, Relay} ->
-                    {S1, Actions} = dispatch_relay(Peer, Relay, S0),
-                    {keep_state, S1, Actions ++ timer_actions(S0, S1)};
+                    {S1, Actions} = dispatch_relay(Peer, Relay, SIn),
+                    keep_progress(S0, S1, Actions);
                 {consensus, Msg} ->
-                    S1 = dispatch(Peer, Msg, S0),
-                    {keep_state, S1, timer_actions(S0, S1)};
+                    S1 = dispatch(Peer, Msg, SIn),
+                    keep_progress(S0, S1, []);
                 error ->
-                    {keep_state, S0}
+                    keep_progress(S0, SIn, [])
             end
     end;
 running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
@@ -968,44 +1043,39 @@ running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brah
 %% to the exact block. Support can advance/skip the head, so reflect that in the Δ timer.
 running(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
     S1 = on_membership_verdict(Sl, BH, Verdict, S0),
-    {keep_state, S1, timer_actions(S0, S1)};
-running(info, {link_up, Peer, Chan, LinkPid}, S = #s{chan = Chan}) ->
-    {keep_state, handle_link_up(Peer, LinkPid, S)};
-running(info, {link_error, Peer, Chan}, S = #s{chan = Chan}) ->
+    keep_progress(S0, S1, []);
+running(info, {link_up, Peer, Chan, LinkPid}, S0 = #s{chan = Chan}) ->
+    keep_progress(S0, handle_link_up(Peer, LinkPid, S0), []);
+running(info, {link_error, Peer, Chan}, S0 = #s{chan = Chan}) ->
     %% the dial failed — clear the in-flight marker but KEEP the buffered frames; the tick re-dials
     %% (consensus emits each propose/share only once, so dropping them would stall the slot forever).
-    {keep_state, S#s{dialing = maps:remove(Peer, S#s.dialing)}};
+    S1 = S0#s{dialing = maps:remove(Peer, S0#s.dialing)},
+    keep_progress(S0, S1, []);
 %% The sync worker CRASHED before casting `{sync_done,_}` (a normal exit always casts first, and that cast,
 %% sent before the exit, is processed before this DOWN — flipping `sync` away from `{pulling,Pid}` to the
 %% generic clause below). Clear the single-flight latch + back off; the tick re-arms if still `should_sync`.
 %% The worker resumes from the persisted height, so a retry continues from the prefix already on disk.
-running(info, {'DOWN', _Ref, process, Pid, _Reason}, S = #s{sync = {pulling, Pid}}) ->
-    {keep_state, recovery_failed(S)};
-running(info, {'DOWN', _Ref, process, Pid, _}, S) ->
-    {keep_state, drop_conn(Pid, S)};
+running(info, {'DOWN', _Ref, process, Pid, _Reason}, S0 = #s{sync = {pulling, Pid}}) ->
+    keep_progress(S0, recovery_failed(S0), []);
+running(info, {'DOWN', _Ref, process, Pid, _}, S0) ->
+    keep_progress(S0, drop_link(Pid, S0), []);
 %% Seal the current micro-batch. A stale timeout is harmless: flush_batch/2 only
 %% acts when the collecting slot still matches.
 running({timeout, batch}, {flush_batch, V}, S0) ->
     S1 = flush_batch(V, S0),
-    {keep_state, S1, timer_actions(S0, S1)};
-%% Δ_timeout fired for slot V (armed when V=head+1 became an *active* view — a proposal seen, or a
-%% local client write we couldn't lead). The redrive-or-complain decision lives in `on_complain_timeout/2`;
-%% this clause owns only the timer mechanics: re-arm while V stays stuck (the Δ re-fire IS the retransmit
-%% over the send-once transport), stop once the head advances (commit or skip). See on_complain_timeout/2.
-running({timeout, complain}, {complain, V}, S0) ->
-    S1 = on_complain_timeout(V, S0),
-    Actions = case S1#s.active_slot of
-                  V -> [{{timeout, complain}, delta_ms(), {complain, V}}];   %% still stuck ⇒ keep pressing
-                  _ -> timer_actions(S0, S1)                                 %% advanced/resolved ⇒ cancel or re-arm
-              end,
-    {keep_state, S1, Actions};
+    keep_progress(S0, S1, []);
+%% The oldest non-final slot owns one Δ watchdog through all three phases. A timeout may redrive a
+%% proposal/finality bundle or issue a complaint, but it never silently disappears at notarization.
+running({timeout, progress}, {progress_timeout, V}, S0) ->
+    S1 = on_progress_timeout(V, S0),
+    keep_progress(S0, S1, [], rearm);
 %% Consensus re-drive: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
 %% re-dial every peer whose link never came up (its frames are still buffered), AND arm sync — the one
 %% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
-running({timeout, tick}, tick, S) ->
+running({timeout, tick}, tick, S0) ->
     S1 = maybe_arm_sync(
-           redrive_relays(redrive_votes(redial_pending(sweep_stale_dials(S))))),
-    {keep_state, maybe_mark_ready(S1), [tick_timeout()]};
+           redrive_relays(redrive_votes(redial_pending(sweep_stale_dials(S0))))),
+    keep_progress(S0, S1, [tick_timeout()]);
 %% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
 %% worker pid. We accept the result when the durable head is AT OR PAST the corroborated `H` (`Slot >= H`),
@@ -1015,25 +1085,25 @@ running({timeout, tick}, tick, S) ->
 %% would reject a member that stayed caught up under load (its head moved while the probe was in flight),
 %% bouncing it back to `unconfirmed` forever — the load stall this guard must not cause.
 running(cast, {sync_done, Pid, {ready, H}},
-        S = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
-    S1 = S#s{sync = ready, sync_arm = reset_pace()},
-    {keep_state, maybe_mark_ready(apply_committed(S1))};
+        S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
+    S1 = S0#s{sync = ready, sync_arm = reset_pace()},
+    keep_progress(S0, apply_committed(S1), []);
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
-running(cast, {sync_done, Pid, _Result}, S = #s{sync = {pulling, Pid}}) ->
-    {keep_state, recovery_failed(S)};
+running(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
+    keep_progress(S0, recovery_failed(S0), []);
 running(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from an obsolete worker
 %% The sync worker — and, for an observer, the feed's anti-entropy pull — hands each verified, contiguous
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
 %% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
-running({call, From}, {sink_catchup, Source, Es}, S) ->
-    case may_sink(Source, S) of
-        %% `reseat_engine` inside may clear `active_slot`; `timer_actions/2` cancels the stale complain timer
-        %% (a no-op for a joiner/observer, load-bearing when a VOTING member gap-fills — DA review).
-        true  -> {S1, Reply} = apply_catchup_window(Es, S),
-                 {keep_state, S1, [{reply, From, Reply} | timer_actions(S, S1)]};
-        false -> {keep_state, S, [{reply, From, {error, not_following}}]}
+running({call, From}, {sink_catchup, Source, Es}, S0) ->
+    case may_sink(Source, S0) of
+        %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
+        %% transition helper cancels the named timer before the recovered member can vote again.
+        true  -> {S1, Reply} = apply_catchup_window(Es, S0),
+                 keep_progress(S0, S1, [{reply, From, Reply}]);
+        false -> {keep_state, S0, [{reply, From, {error, not_following}}]}
     end;
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
@@ -1077,7 +1147,7 @@ handle_append(From, Change, S = #s{self = Self}) ->
                                         Self   -> collect_append(From, SignedChange, Next, S1);
                                         Leader -> relay_append(
                                                     From, Leader, SignedChange,
-                                                    arm_complaint(Next, S1))
+                                                    watch_requested(Next, S1))
                                     end
                             end
                     end
@@ -1101,7 +1171,7 @@ handle_relayed_append(Waiter, Change, S = #s{self = Self}) ->
                                 Self   -> collect_append(Waiter, Change, Next, S);
                                 Leader -> redirect_append(
                                             Waiter, Leader,
-                                            arm_complaint(Next, S))
+                                            watch_requested(Next, S))
                             end
                     end
             end
@@ -1249,7 +1319,7 @@ propose_batch(Slot, Parent, Items, Payload, S) ->
              batched_txs = S#s.batched_txs + length(Payload)},
     S2 = broadcast({propose, Block}, S1),
     S3 = engine_step([{block, BH, Block}], S2),
-    arm_complaint(Slot, support_or_validate(Block, BH, S3)).
+    watch_proposal(Slot, support_or_validate(Block, BH, S3)).
 
 reject_collected_batch(Items, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
@@ -1302,29 +1372,38 @@ apply_event({broadcast, Cert}, S) ->
 %% belt-and-braces: a node that evaluated a membership proposal and rejected it never endorses at ANY phase,
 %% even if the block notarized via others (an absent verdict, by contrast, must NOT bar a commit share — a
 %% support cert already proves ≥ f+1 honest validations).
-apply_event({notarized, #block{slot = Sl} = Block}, S0) ->
-    S = approve_block(Block, S0),
-    Round = round_state(Sl, S),
-    case may_commit(Sl, complained_slots(S)) andalso not Round#round.invalid of
-        false -> S;
-        true  -> case own_share(commit, Sl, engine_block_hash(Sl, S), S) of
-                     blocked -> S;
-                     {ok, Share} ->
-                         S1 = put_round(Sl, Round#round{commit = true}, S),
-                         engine_step([{share, Share}], broadcast({share, Share}, S1))
-                 end
-    end;
+apply_event({notarized, #block{} = Block}, S0) ->
+    maybe_commit_notarized(Block, approve_block(Block, S0));
 %% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
 apply_event({committed, Slot, Block}, S) ->
     commit_contiguous(Slot, Block, S);
 %% A slot was complaint-skipped: finalize it as an empty (`noop`) slot, in order — advancing the height
 %% so the rotated leader for the next slot proposes.
 apply_event({skipped, Slot}, S) ->
-    skip_contiguous(Slot, clear_active(Slot, S)).
+    skip_contiguous(Slot, S).
+
+maybe_commit_notarized(#block{slot = Sl}, S = #s{slot = Committed}) when Sl =< Committed ->
+    S;
+maybe_commit_notarized(#block{slot = Sl}, S) ->
+    Round = round_state(Sl, S),
+    case may_commit(Sl, complained_slots(S)) andalso not Round#round.invalid of
+        false -> S;
+        true when Round#round.commit -> S;
+        true  -> case own_share(commit, Sl, engine_block_hash(Sl, S), S) of
+                     blocked -> S;
+                     {ok, Share} ->
+                         S1 = put_round(Sl, Round#round{commit = true}, S),
+                         engine_step([{share, Share}], broadcast({share, Share}, S1))
+                 end
+    end.
 
 approve_block(#block{slot = Sl}, S = #s{approved = Approved}) ->
-    S#s{approved = max(Approved, Sl),
-        active_slot = case S#s.active_slot of Sl -> none; A -> A end}.
+    %% A competing/equivocating proposal can notarize while this leader is still collecting its own batch
+    %% for the same slot. Advancing `approved` without dropping that stale batch made the next append hit no
+    %% `collect_append` clause and crash the statem. The slot is now decided at the approval layer, so reply
+    %% retryably and discard the obsolete collection before advancing.
+    S1 = nack_collecting_le(Sl, S),
+    watch_notarized(Sl, S1#s{approved = max(Approved, Sl)}).
 
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
 %% clear the per-slot latches, and reply `{ok, Slot}` to every caller in the batch.
@@ -1345,7 +1424,7 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                                    advance_author_seqs(Payload, S#s.author_seqs)}),
             S0 = ack_local(Slot, SCommitted),
             S1 = adopt_committee(Data, finalize(Slot, S0)),
-            maybe_mark_ready(apply_live(Slot, Data, confirm_live(S1)))
+            apply_live(Slot, Data, confirm_live(S1))
     end.
 
 resolve_committed_relays(_Payload, _Slot, S = #s{relay_pending = Pending})
@@ -1391,14 +1470,15 @@ adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
               %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
               %% next slot. Fires on every member at the live finality point (commit_block).
               _ = [quod_quic:learn(Pk, Ep) || {Pk, Ep} <- admitted_endpoints(Change), Pk =/= Self],
-              %% DEMOTION log-event (pairs with log_promotion's promotion notice): a member commit-signs its
+              %% DEMOTION log-event (pairs with catchup_membership_transition's promotion notice): a member
+              %% commit-signs its
               %% own removal as a voter, so it reaches here still a member and observes itself drop out.
               _ = case lists:member(Self, V) andalso not lists:member(Self, V1) of
                       true  -> logger:notice("quod[~s]: removed from the committee — now a read-only "
                                              "observer (committee ~b)", [S#s.ns, length(V1)]);
                       false -> ok
                   end,
-              S1 = S#s{validators = V1},            %% FACTS advance
+              S1 = prune_consensus_links(S#s{validators = V1}),   %% FACTS + transport scope advance
               S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
 
@@ -1415,7 +1495,7 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
             S1 = finalize(Slot, S0),
             S2 = S1#s{approved = max(S1#s.approved, Slot)},
-            maybe_mark_ready(apply_live(Slot, noop, confirm_live(S2)))
+            apply_live(Slot, noop, confirm_live(S2))
     end.
 
 %% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
@@ -1443,11 +1523,12 @@ weak_cert_wait(Kind, Slot, BH, S) ->
 finalize(Slot, S0) ->
     S = nack_collecting_le(Slot, S0),   %% a still-collecting batch for this now-finalized slot: nack its
                                         %% parked callers so they retry, not leave them to time out (below)
-    S#s{slot = Slot,
-        eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
-        active_slot   = case S#s.active_slot of Slot -> none; A -> A end,
-        rounds = maps:remove(Slot, S#s.rounds),
-        local_proposals = maps:remove(Slot, S#s.local_proposals)}.
+    clear_requested_le(
+      Slot,
+      S#s{slot = Slot,
+          eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
+          rounds = maps:remove(Slot, S#s.rounds),
+          local_proposals = maps:remove(Slot, S#s.local_proposals)}).
 
 ack_local(Slot, S) -> reply_local(Slot, {ok, Slot}, S).
 nack_local(Slot, S) -> reply_local(Slot, {error, skipped}, S).
@@ -1482,9 +1563,6 @@ reply_waiter({relay, Peer, ReqId}, Reply, S) ->
 reply_waiter(From, Reply, S) ->
     gen_statem:reply(From, Reply),
     S.
-
-clear_active(Slot, S = #s{active_slot = Slot}) -> S#s{active_slot = none};
-clear_active(_Slot, S) -> S.
 
 round_state(Slot, #s{rounds = Rounds}) ->
     maps:get(Slot, Rounds, #round{}).
@@ -1598,7 +1676,7 @@ on_propose(Peer, #block{slot = Sl} = Block, S) ->
         %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
         true  -> S1 = engine_step([{block, BH, Block}], S),
                  case may_vote(S1) of
-                     true  -> support_or_validate(Block, BH, arm_complaint(Sl, S1));
+                     true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
                      false -> S1
                  end;
         false -> S
@@ -1668,21 +1746,175 @@ on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= 
     end;
 on_membership_verdict(_Sl, _BH, _Verdict, S) -> S.
 
-%% The head+1 slot is now an ACTIVE view (a proposal seen, or a local write we couldn't lead): arm the
-%% Δ complaint timer for it. Idempotent per slot (`A =/= V`) so repeat evidence never pushes the deadline
-%% out; only ever `head+1`, so a single named timer suffices. An idle committee acquires no evidence, so
-%% the timer is never armed — the client-driven model never skips a slot nobody wants.
-arm_complaint(V, S = #s{approved = Approved, active_slot = A})
-        when V =:= Approved + 1, A =/= V ->
-    S#s{active_slot = V};
-arm_complaint(_V, S) -> S.
+%% The oldest non-final slot is an explicit local protocol state. The former `active_slot` latch followed
+%% `approved+1`; consequently a support certificate cleared its timer even though the slot was not durable.
+%% Under an over-f outage, returning validators could then miss the one-shot notarization event and no node
+%% remained responsible for moving the finality frontier. These transitions instead follow `committed+1`
+%% until commit/skip and expose the actual phase for diagnostics.
+%% A complaint share can complete a skip synchronously inside `complain_slot/2`; callers that then try to
+%% retain demand for that same slot must not resurrect already-finalized state.
+watch_requested(V, S = #s{slot = Committed}) when V =< Committed ->
+    clear_requested_le(Committed, S);
+watch_requested(V, S = #s{requested_slot = Requested}) ->
+    Earliest = case Requested of none -> V; _ -> min(V, Requested) end,
+    watch_head(V, awaiting_proposal, S#s{requested_slot = Earliest}).
+watch_proposal(V, S)  -> watch_head(V, awaiting_notarization, clear_requested_le(V, S)).
+watch_notarized(V, S) -> watch_head(V, awaiting_commit, S).
 
-%% Translate an `active_slot` transition into the gen_statem timer action for the named `complain` timer
-%% (unchanged ⇒ leave it running; `none` ⇒ cancel; a slot ⇒ (re)arm for Δ). A named timeout is not
-%% cancelled by unrelated events, so only the head-advancing / arming clauses touch it.
-timer_actions(#s{active_slot = A}, #s{active_slot = A}) -> [];
-timer_actions(_S0, #s{active_slot = none})             -> [{{timeout, complain}, cancel}];
-timer_actions(_S0, #s{active_slot = V})                -> [{{timeout, complain}, delta_ms(), {complain, V}}].
+watch_head(V, Phase, S = #s{slot = Committed}) when V =:= Committed + 1 ->
+    Current = case S#s.head_progress of
+                  #head_progress{slot = V, phase = P} -> later_phase(P, Phase);
+                  _                                   -> Phase
+              end,
+    Connected = quorum_connected(S),
+    S#s{head_progress = next_head_progress(
+                           V, Current, Connected, S#s.head_progress)};
+watch_head(_V, _Phase, S) ->
+    S.
+
+later_phase(awaiting_commit, _Phase) -> awaiting_commit;
+later_phase(_Phase, awaiting_commit) -> awaiting_commit;
+later_phase(awaiting_notarization, _Phase) -> awaiting_notarization;
+later_phase(_Phase, awaiting_notarization) -> awaiting_notarization;
+later_phase(awaiting_proposal, awaiting_proposal) -> awaiting_proposal.
+
+%% Re-derive the oldest-head state after every transition. `awaiting_proposal` is demand evidence and has
+%% no engine object yet, so it is retained for the same head. Every later phase derives from concrete
+%% consensus state and therefore self-heals after event reordering.
+reconcile_head_progress(S = #s{slot = Committed, approved = Approved}) ->
+    V = Committed + 1,
+    Phase = case Approved >= V of
+                true  -> awaiting_commit;
+                false -> case may_vote(S) andalso head_has_evidence(V, S) of
+                             true  -> awaiting_notarization;
+                             false -> retained_request(V, S)
+                         end
+            end,
+    case Phase of
+        idle ->
+            S#s{head_progress = idle};
+        _ ->
+            Connected = quorum_connected(S),
+            S#s{head_progress = next_head_progress(
+                                   V, Phase, Connected, S#s.head_progress)}
+    end.
+
+next_head_progress(V, Phase, Connected,
+                   #head_progress{slot = V, phase = Phase,
+                                  quorum_connected = WasConnected,
+                                  quorum_rearms = Rearms}) ->
+    Rearms1 = case {WasConnected, Connected, Rearms < ?MAX_QUORUM_REARMS} of
+                  {false, true, true} -> Rearms + 1;
+                  _                   -> Rearms
+              end,
+    #head_progress{slot = V, phase = Phase, quorum_connected = Connected,
+                   quorum_rearms = Rearms1};
+next_head_progress(V, Phase, Connected, _Previous) ->
+    #head_progress{slot = V, phase = Phase, quorum_connected = Connected}.
+
+retained_request(V, #s{requested_slot = V}) -> awaiting_proposal;
+retained_request(V, #s{head_progress = #head_progress{slot = V,
+                                                       phase = awaiting_proposal}}) ->
+    awaiting_proposal;
+retained_request(_V, _S) -> idle.
+
+clear_requested_le(V, S = #s{requested_slot = Requested})
+  when is_integer(Requested), Requested =< V ->
+    S#s{requested_slot = none};
+clear_requested_le(_V, S) ->
+    S.
+
+head_has_evidence(V, #s{eng = #eng{blocks = Blocks}, rounds = Rounds,
+                        local_proposals = Local, collecting = Collecting,
+                        commit_buf = CommitBuf}) ->
+    maps:is_key(V, Rounds)
+        orelse maps:is_key(V, Local)
+        orelse maps:is_key(V, CommitBuf)
+        orelse lists:any(fun(#block{slot = Sl}) -> Sl =:= V end, maps:values(Blocks))
+        orelse case Collecting of #batch{slot = V} -> true; _ -> false end;
+head_has_evidence(_V, _S) ->
+    false.
+
+quorum_connected(#s{self = Self, conns = Conns, inbound_conns = Inbound} = S) ->
+    Validators = active_validators(S),
+    case length(Validators) of
+        0 -> false;
+        N ->
+            Live = 1 + length([P || P <- Validators, P =/= Self,
+                                   live_link(P, Conns) orelse live_link(P, Inbound)]),
+            lists:member(Self, Validators) andalso Live >= quorum(N)
+    end.
+
+live_link(Peer, Links) ->
+    case maps:get(Peer, Links, undefined) of
+        {Pid, _Ref} when is_pid(Pid) -> is_process_alive(Pid);
+        _                            -> false
+    end.
+
+%% All normal state transitions pass through here. A phase change resets the full Delta. Quorum restoration
+%% may reset it only within the bounded per-phase budget; losing quorum leaves the existing timer running,
+%% whose expiry only probes/re-drives.
+keep_progress(S0, S1, Actions) ->
+    keep_progress(S0, S1, Actions, normal).
+
+keep_progress(S0, S1, Actions, TimerMode) ->
+    SReady = settle_readiness(S0, maybe_mark_ready(S1)),
+    S2 = reconcile_head_progress(SReady),
+    log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
+    TimerActions = case TimerMode of
+                       rearm -> rearm_progress_timer(S2);
+                       normal -> progress_timer_actions(S0, S2)
+                   end,
+    {keep_state, S2, Actions ++ TimerActions}.
+
+%% One capability edge owns recovery reconciliation. This catches explicit sync completion, periodic
+%% readiness, and live commit/skip self-corroboration without each caller remembering a special hook.
+settle_readiness(S0, S1) ->
+    case {may_vote(S0), may_vote(S1)} of
+        {false, true} -> resume_ready_rounds(S1);
+        _             -> S1
+    end.
+
+progress_timer_actions(#s{head_progress = P}, #s{head_progress = P}) -> [];
+progress_timer_actions(_S0, #s{head_progress = idle}) ->
+    [{{timeout, progress}, cancel}];
+%% Losing visible quorum suppresses complaint signing but does not reset the existing timeout. A later
+%% false->true transition may replace it with one fresh full Delta, up to the per-phase cap below.
+progress_timer_actions(
+  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_connected = true}},
+  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_connected = false}}) ->
+    [];
+%% A restoration grants a fresh Delta only a bounded number of times for one unchanged slot/phase.
+%% Once exhausted, the existing named timer keeps its original deadline, so a flapping link cannot
+%% postpone complaint progress forever. Advancing slot or phase creates a fresh budget.
+progress_timer_actions(
+  #s{head_progress = #head_progress{slot = V, phase = Phase,
+                                   quorum_connected = false,
+                                   quorum_rearms = Rearms}},
+  #s{head_progress = #head_progress{slot = V, phase = Phase,
+                                   quorum_connected = true}})
+  when Rearms >= ?MAX_QUORUM_REARMS ->
+    [];
+progress_timer_actions(_S0, #s{head_progress = #head_progress{slot = V}}) ->
+    [progress_timeout(V)].
+
+rearm_progress_timer(#s{head_progress = idle}) ->
+    [{{timeout, progress}, cancel}];
+rearm_progress_timer(#s{head_progress = #head_progress{slot = V}}) ->
+    [progress_timeout(V)].
+
+progress_timeout(V) ->
+    {{timeout, progress}, delta_ms(), {progress_timeout, V}}.
+
+log_progress_transition(P, P, _S) -> ok;
+log_progress_transition(_Old, idle, #s{ns = Ns, slot = Slot}) ->
+    logger:debug("quod[~s]: head progress idle at committed slot ~b", [Ns, Slot]);
+log_progress_transition(_Old,
+                        #head_progress{slot = V, phase = Phase,
+                                       quorum_connected = Connected},
+                        #s{ns = Ns}) ->
+    logger:debug("quod[~s]: head ~b phase=~p quorum_connected=~p",
+                 [Ns, V, Phase, Connected]).
 
 delta_ms() ->
     case application:get_env(quod, simplex_delta_ms, ?DELTA_MS) of
@@ -1690,27 +1922,71 @@ delta_ms() ->
         _                           -> ?DELTA_MS   %% a mistyped override must not crash the timer action
     end.
 
-%% Δ fired for the stuck head V. The decision:
-%%
-%% - **A follower complains** (if it hasn't commit-signed V) — its own expired Δ IS the evidence of a
-%%   stall, and its share is what seeds the `f+1` amplification below.
-%% - **The LEADER of its own in-flight proposal REDRIVES instead of giving up.** Complaining would latch
-%%   `complained[V]` and bar our own commit share forever — at the quorum=N committee sizes (2, 3) that
-%%   wedges the slot PERMANENTLY (the promotion race: our proposal reached a member that had not yet
-%%   promoted, was dropped, and nothing retransmits over the send-once transport). So each Δ re-fire
-%%   re-broadcasts the in-flight state (proposal + our shares + pooled certs) — self-healing the moment
-%%   the counterpart can act. The leader JOINS a complaint only on the `f+1` evidence (below) — and if it
-%%   already commit-signed V (so it may never complain), it keeps REDRIVING: retransmitting the pooled
-%%   support cert + its commit share is exactly what heals a follower whose copy was lost.
-on_complain_timeout(V, S = #s{approved = Approved}) when V =:= Approved + 1 ->
+%% Δ fired for the oldest non-final slot. Finality always re-drives; before notarization, a complaint is
+%% emitted only while this node has authenticated inbound or outbound links to a certificate quorum. During
+%% a known over-f outage we retain and re-send the proposal but deliberately do not accumulate complaint
+%% votes. This improves crash-recovery liveness; safety outside the formal f-fault bound still requires
+%% durable vote latches. Early quorum restorations grant a fresh full Delta; the bounded rearm budget keeps
+%% repeated link flaps from postponing complaint progress forever.
+on_progress_timeout(V,
+        S0 = #s{head_progress = #head_progress{slot = V, phase = Phase}}) ->
+    S1 = S0#s{progress_timeouts = S0#s.progress_timeouts + 1},
+    case may_vote(S1) of
+        false ->
+            probe_committee(S1);
+        true when Phase =:= awaiting_commit ->
+            probe_committee(redrive_finality(V, S1));
+        true ->
+            case quorum_connected(S1) of
+                false ->
+                    S2 = case leads_inflight(V, S1) of
+                             true  -> redrive_slot(V, S1);
+                             false -> S1
+                         end,
+                    probe_committee(S2#s{quorum_pauses = S2#s.quorum_pauses + 1});
+                true ->
+                    on_pre_notarization_timeout(V, S1)
+            end
+    end;
+on_progress_timeout(_V, S) ->
+    S.
+
+on_pre_notarization_timeout(V, S) ->
     case leads_inflight(V, S) of
-        false -> complain_slot(V, S);
-        true  -> case complaint_evidence(V, S) andalso may_complain(V, committed_slots(S)) of
+        false ->
+            case held_unsupported_proposal(V, S) of
+                {resume, Block, BH} -> support_or_validate(Block, BH, S);
+                validating         -> S;
+                none               -> complain_slot(V, S)
+            end;
+        true  -> case complaint_evidence(V, S)
+                           andalso may_complain(V, committed_slots(S)) of
                      true  -> complain_slot(V, S);
                      false -> redrive_slot(V, S)
                  end
-    end;
-on_complain_timeout(_V, S) -> S.
+    end.
+
+%% A recovering voter can ingest a valid leader proposal while signing is disabled. The engine retains the
+%% block, but no support latch exists and the original proposal event will not repeat. On the first ready
+%% timeout, run that held proposal through the normal support/membership-verdict path before considering a
+%% complaint. Blocks enter `eng.blocks` only through authenticated leader + full proposal validation.
+held_unsupported_proposal(V, S = #s{eng = #eng{blocks = Blocks}}) ->
+    Round = round_state(V, S),
+    case {Round#round.supporting, Round#round.validating, Round#round.invalid} of
+        {none, BH, false} when is_binary(BH) ->
+            validating;
+        {none, none, false} ->
+            Candidates = lists:sort(
+                           [{BH, Block}
+                            || {BH, #block{slot = Sl} = Block} <- maps:to_list(Blocks),
+                               Sl =:= V, valid_proposal(Block, S)]),
+            case Candidates of
+                [{BH, Block} | _] -> {resume, Block, BH};
+                []                -> none
+            end;
+        _ ->
+            none
+    end.
 
 %% **f+1 complaint amplification** (deferred.md §3, landed with growth): on ingesting a complaint share
 %% for the in-flight head with `f+1` distinct PEER complaints pooled, JOIN the complaint immediately —
@@ -1718,12 +1994,12 @@ on_complain_timeout(_V, S) -> S.
 %% no evidence of its own). This is what completes a skip at the quorum=N sizes: the skip cert needs
 %% EVERY member's share there, and a late-promoting member only learns of the stall from the re-broadcast
 %% complaint shares — on arrival it joins, and the cert closes. `complain_slot`'s `may_complain` keeps the
-%% commit/complaint mutual exclusion; `arm_complaint` puts the re-broadcast of our own share on our Δ.
+%% commit/complaint mutual exclusion; watching the head keeps our share on the periodic re-drive path.
 maybe_join_complaint(#share{kind = complaint, slot = V}, S = #s{approved = Approved})
         when V =:= Approved + 1 ->
     case may_vote(S) andalso not (round_state(V, S))#round.complaint
          andalso complaint_evidence(V, S) of
-        true  -> arm_complaint(V, complain_slot(V, S));
+        true  -> watch_requested(V, complain_slot(V, S));
         false -> S
     end;
 maybe_join_complaint(_Share, S) -> S.
@@ -1795,35 +2071,92 @@ redrive_local_block(V, Block, BH, S0) ->
                         lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Live)
                 end, S2, [{propose, Block} | Own ++ Cs]).
 
+%% Once a block is notarized, its watchdog remains attached to the durable head. The original leader still
+%% owns the only authenticated proposal resend, while every validator re-emits its own finality evidence.
+%% Keeping both halves together is what lets a just-recovered validator obtain the block and then contribute
+%% the missing commit share.
+redrive_finality(V, S) ->
+    redrive_round(V, redrive_slot(V, S)).
+
 %% Reliable channels are built from reconnecting send-once links. Re-emit this
 %% validator's bounded in-flight evidence on the existing tick so notarization can
-%% safely cancel the complaint timer without also cancelling commit liveness. This
-%% covers the important case where the slot leader dies after a bare support quorum:
-%% the remaining notarizers continue exchanging commit shares and finish the slot.
+%% progress even between head-watchdog firings. This covers the important case where
+%% the slot leader dies after a bare support quorum: the remaining notarizers continue
+%% exchanging commit shares and finish the slot.
 redrive_votes(S) ->
     case may_vote(S) of
         false -> S;
         true ->
             lists:foldl(
-              fun({Sl, #round{supporting = BH, commit = Commit, complaint = Complaint}}, Acc0) ->
-                      Evidence0 = case BH of
-                                      none -> [];
-                                      _    -> {ok, Support} = own_share(support, Sl, BH, Acc0),
-                                              [{share, Support}]
-                                  end,
-                      Evidence1 = case Commit andalso BH =/= none of
-                                      true  -> {ok, CommitShare} = own_share(commit, Sl, BH, Acc0),
-                                               [{share, CommitShare} | Evidence0];
-                                      false -> Evidence0
-                                  end,
-                      Evidence = case Complaint of
-                                     true  -> {ok, ComplaintShare} = own_share(complaint, Sl, none, Acc0),
-                                              [{share, ComplaintShare} | Evidence1];
-                                     false -> Evidence1
-                                 end,
-                      lists:foldl(fun broadcast/2, Acc0, Evidence)
-              end, S, [{Sl, R} || {Sl, R} <- maps:to_list(S#s.rounds), Sl > S#s.slot])
+              fun(Sl, Acc) -> redrive_round(Sl, Acc) end,
+              S, [Sl || Sl <- maps:keys(S#s.rounds), Sl > S#s.slot])
     end.
+
+redrive_round(Sl, S) ->
+    case {may_vote(S), maps:get(Sl, S#s.rounds, undefined)} of
+        {true, #round{supporting = BH, commit = Commit, complaint = Complaint}} ->
+            Evidence0 = case BH of
+                            none -> [];
+                            _    -> {ok, Support} = own_share(support, Sl, BH, S),
+                                    [{share, Support}]
+                        end,
+            Evidence1 = case Commit of
+                            true  -> CommitBH = engine_block_hash(Sl, S),
+                                     {ok, CommitShare} = own_share(commit, Sl, CommitBH, S),
+                                     [{share, CommitShare} | Evidence0];
+                            false -> Evidence0
+                        end,
+            Evidence = case Complaint of
+                           true  -> {ok, ComplaintShare} = own_share(complaint, Sl, none, S),
+                                    [{share, ComplaintShare} | Evidence1];
+                           false -> Evidence1
+                       end,
+            lists:foldl(fun broadcast/2, S, Evidence);
+        _ ->
+            S
+    end.
+
+%% A recovering member may have accepted and notarized a block while `may_vote=false`. Engine events are
+%% edge-triggered, so becoming ready does not naturally emit `{notarized,...}` again. Reconcile the complete
+%% tree into the approval/commit latches and emit any commit share that was intentionally withheld during
+%% recovery. Do NOT invent a support vote here: a committee-changing proposal requires this node's
+%% asynchronous KB verdict before support, and recovery deliberately skipped that validation. The existing
+%% notarization certificate is sufficient authority to cast the final vote. The operation is idempotent
+%% (`#round.commit` is the latch) and runs on ready transitions/ticks.
+resume_ready_rounds(S) ->
+    case may_vote(S) of
+        false -> S;
+        true ->
+            %% Snapshot only slot numbers. A vote in an earlier iteration can finalize and prune later
+            %% entries via commit_buf; resume_ready_slot/2 re-reads the current tree on every step.
+            Slots = lists:sort([Sl || Sl <- maps:keys((S#s.eng)#eng.tree),
+                                     Sl > S#s.slot]),
+            lists:foldl(
+              fun resume_ready_slot/2,
+              S, Slots)
+    end.
+
+resume_ready_slot(Sl, S = #s{slot = Committed}) when Sl =< Committed ->
+    S;
+resume_ready_slot(Sl, S = #s{eng = #eng{tree = Tree}}) ->
+    case maps:get(Sl, Tree, undefined) of
+        #block{} = Block ->
+            maybe_commit_notarized(Block, approve_block(Block, S));
+        undefined ->
+            S
+    end.
+
+%% A timeout observed with fewer than a certificate quorum connected must not sign an irreversible
+%% complaint. Open missing committee links without queuing duplicate protocol frames; link_up updates the
+%% progress state's connectivity bit and may start a fresh full Delta within the bounded rearm budget.
+probe_committee(S = #s{self = Self, conns = Conns, dialing = Dialing, chan = Chan}) ->
+    Missing = [P || P <- active_validators(S), P =/= Self,
+                    not live_link(P, Conns), not maps:is_key(P, Dialing)],
+    lists:foldl(
+      fun(P, Acc) ->
+              _ = quod_quic:open_link(P, Chan),
+              Acc#s{dialing = (Acc#s.dialing)#{P => dial_deadline()}}
+      end, S, Missing).
 
 %% Sign + (re)broadcast our complaint share and offer it to the engine, unless we commit-signed V.
 complain_slot(V, S) ->
@@ -2474,11 +2807,44 @@ handle_link_up(Peer, LinkPid, S0 = #s{outbox = Outbox}) ->
                  S1#s{conns = (S1#s.conns)#{Peer => {LinkPid, Ref}}, outbox = maps:remove(Peer, Outbox)}
     end.
 
-%% A tracked outbound link died (DOWN): drop it (a later send / the tick re-dials + re-buffers).
+%% An authenticated inbound stream is also proof of current reachability. Track one per peer so an
+%% asymmetric connection (their outbound works while ours is still dialing) cannot suppress complaints
+%% forever. Replacing a stream removes the obsolete monitor; the peer identity came from the link header.
+track_inbound(Peer, LinkPid, S = #s{inbound_conns = Inbound})
+  when is_pid(LinkPid) ->
+    case {lists:member(Peer, active_validators(S)), maps:get(Peer, Inbound, undefined)} of
+        {false, _} ->
+            S;
+        {true, {LinkPid, _Ref}} ->
+            S;
+        {true, {_OldPid, OldRef}} ->
+            _ = erlang:demonitor(OldRef, [flush]),
+            Ref = erlang:monitor(process, LinkPid),
+            S#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}};
+        {true, undefined} ->
+            Ref = erlang:monitor(process, LinkPid),
+            S#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}}
+    end;
+track_inbound(_Peer, _LinkPid, S) ->
+    S.
+
+%% A tracked link died (DOWN): drop it from either direction. A later send/tick reopens outbound links.
+drop_link(Pid, S) ->
+    drop_inbound(Pid, drop_conn(Pid, S)).
+
 drop_conn(Pid, S = #s{conns = Conns}) ->
     case [{P, R} || {P, {LP, R}} <- maps:to_list(Conns), LP =:= Pid] of
         [{Peer, Ref} | _] -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
         []                -> S
+    end.
+
+drop_inbound(Pid, S = #s{inbound_conns = Inbound}) ->
+    case [{P, R} || {P, {LP, R}} <- maps:to_list(Inbound), LP =:= Pid] of
+        [{Peer, Ref} | _] ->
+            _ = erlang:demonitor(Ref, [flush]),
+            S#s{inbound_conns = maps:remove(Peer, Inbound)};
+        [] ->
+            S
     end.
 
 drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
@@ -2486,6 +2852,35 @@ drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
         {_Pid, Ref} -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
         undefined   -> S
     end.
+
+%% Committee membership scopes consensus transport state. Once a committed transition removes a peer,
+%% close both stream directions and discard its queued frames/dial attempt so repeated membership churn
+%% cannot accumulate unreachable link processes or stale outboxes.
+prune_consensus_links(S = #s{self = Self, conns = Conns, inbound_conns = Inbound,
+                             outbox = Outbox, dialing = Dialing}) ->
+    Allowed = maps:from_keys(active_validators(S) -- [Self], true),
+    {Conns1, RemovedOut} = partition_consensus_links(Allowed, Conns),
+    {Inbound1, RemovedIn} = partition_consensus_links(Allowed, Inbound),
+    maps:foreach(fun(_Peer, Link) -> close_tracked_link(Link) end, RemovedOut),
+    maps:foreach(fun(_Peer, Link) -> close_tracked_link(Link) end, RemovedIn),
+    S#s{conns = Conns1,
+        inbound_conns = Inbound1,
+        outbox = maps:with(maps:keys(Allowed), Outbox),
+        dialing = maps:with(maps:keys(Allowed), Dialing)}.
+
+partition_consensus_links(Allowed, Links) ->
+    maps:fold(
+      fun(Peer, Link, {Keep, Remove}) ->
+              case maps:is_key(Peer, Allowed) of
+                  true  -> {Keep#{Peer => Link}, Remove};
+                  false -> {Keep, Remove#{Peer => Link}}
+              end
+      end, {#{}, #{}}, Links).
+
+close_tracked_link({Pid, Ref}) ->
+    _ = erlang:demonitor(Ref, [flush]),
+    _ = quod_link:close(Pid),
+    ok.
 
 %% Post-commit hook for the LIVE-commit consumers (the dissemination feed `m:quod_feed`, and `m:quod_metrics`
 %% for per-tx observability): announce a LIVE-finalized entry as `{committed, Slot, Entry}` on the
@@ -2547,7 +2942,8 @@ safe_apply_block(Ns, I, Data, Origin) ->
 %% far. `prolog_ready` is monotone: a later-behind node keeps serving its
 %% (stale-but-valid) reads while it gap-fills — it never drops back to unready.
 maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, sync = ready}) ->
-    case (quod_reg:where({quod_prolog, Ns}) =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
+    Prolog = try quod_reg:where({quod_prolog, Ns}) catch _:_ -> undefined end,
+    case (Prolog =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
                  S#s{prolog_ready = true};
         false -> S
@@ -2895,9 +3291,10 @@ apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
             Slot = (lists:last(Es))#entry.index,
             %% Re-seat the engine UNCONDITIONALLY at the new head (committee-as-of-new-head + reset every stale
             %% live-slot latch). For a VOTING member gap-filling this is load-bearing (its engine was pinned to
-            %% the stale head); for a joiner/observer the resets are no-ops. `log_promotion` keeps the S5b
-            %% false->true notice now that the re-seat no longer rides `maybe_promote`. The caller
-            %% (`sink_catchup`) pairs this with `timer_actions/2` so a cleared `active_slot` cancels the timer.
+            %% the stale head); for a joiner/observer the resets are no-ops. The following
+            %% `catchup_membership_transition` emits the S5b false->true notice. The caller
+            %% (`sink_catchup`) passes the result through `keep_progress/3`, so the discarded head state
+            %% cancels its named watchdog before voting resumes.
             S1 = reseat_engine(
                    Slot, S#s{store = Store1, validators = Vs1, slot = Slot,
                              last_ts = Ts1, author_seqs = Seqs1,
@@ -2905,7 +3302,7 @@ apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
                                  max(S#s.next_author_seq,
                                      maps:get(S#s.self, Seqs1, 0) + 1)}),
             S2 = catchup_membership_transition(S, S1),
-            {maybe_mark_ready(apply_committed(S2)), ok}
+            {apply_committed(S2), ok}
     end
     end.
 
@@ -2946,17 +3343,18 @@ catchup_membership_transition(S0, S1) ->
 %% fresh engine over the committee AS-OF the new head, PLUS a reset of every volatile consensus window.
 %% Those slots are now decided history, so a lingering local proposal/timer would wedge the leader or
 %% redrive a `=< base` slot; parked appends for discarded slots are nacked so the caller
-%% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), collapsing the former
-%% split re-arm (a per-catch-up-completion re-arm + a `maybe_promote` conditional re-arm, both `eng_new/2`). At
+%% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), replacing the former
+%% separate catch-up and promotion re-arms with one `eng_new/2` path. At
 %% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
-%% member gap-filling — the caller (`sink_catchup`) pairs this with `timer_actions/2` to cancel a stale
-%% complain timer when `active_slot` is cleared here (a no-op where `active_slot` is already `none`).
+%% member gap-filling — the caller (`sink_catchup`) passes this through `keep_progress/3` to cancel a stale
+%% head watchdog when `head_progress` is cleared here (a no-op where it is already idle).
 reseat_engine(NewHead, S) ->
-    S1 = nack_inflight(S),
+    S1 = prune_consensus_links(nack_inflight(S)),
     S1#s{eng             = eng_new(active_validators(S1), NewHead),
           approved        = NewHead,
           commit_buf      = #{},
-          active_slot     = none,
+          requested_slot  = none,
+          head_progress   = idle,
           rounds          = #{}}.
 
 %% A recovery re-seat intentionally discards the whole volatile consensus window.
@@ -3163,26 +3561,55 @@ genesis_file(Cfg) ->
 
 status_map(S) ->
     Role = case is_participant(S) of true -> validator; false -> observer end,
+    {_ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
+    ProposalSlot = S#s.approved + 1,
     #{role => Role, committee => S#s.validators, slot => S#s.slot,
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
-      syncing => syncing(S), recovery => recovery_phase(S#s.sync)}.
+      syncing => syncing(S), recovery => recovery_phase(S#s.sync),
+      finality_slot => S#s.slot + 1,
+      progress_phase => ProgressPhase, progress_quorum_connected => ProgressQuorum,
+      proposal_slot => ProposalSlot,
+      proposal_open => case proposal_slot(S) of {ok, ProposalSlot} -> true; _ -> false end}.
+
+progress_status(idle) -> {0, idle, false};
+progress_status(#head_progress{slot = Slot, phase = Phase,
+                               quorum_connected = Connected}) ->
+    {Slot, Phase, Connected}.
+
+progress_phase_number(idle) -> 0;
+progress_phase_number(awaiting_proposal) -> 1;
+progress_phase_number(awaiting_notarization) -> 2;
+progress_phase_number(awaiting_commit) -> 3.
 
 recovery_phase({pulling, _}) -> pulling;
 recovery_phase(Phase) -> Phase.
 
 stats_map(S) ->
+    {ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
     #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
       pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
       proposals => S#s.proposals, batched_txs => S#s.batched_txs,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
       submitted => S#s.submitted, skips => S#s.skips, pending => pending_count(S),
+      requested_slot => case S#s.requested_slot of none -> 0; Requested -> Requested end,
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
+      progress_slot => ProgressSlot,
+      progress_phase_code => progress_phase_number(ProgressPhase),
+      progress_quorum_connected => case ProgressQuorum of true -> 1; false -> 0 end,
+      progress_timeouts => S#s.progress_timeouts, quorum_pauses => S#s.quorum_pauses,
+      head_complaint_signed => head_complaint_signed(S),
       weak_cert_waits => S#s.weak_cert_waits,
       ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
       syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
+
+head_complaint_signed(#s{slot = Committed} = S) ->
+    case (round_state(Committed + 1, S))#round.complaint of
+        true -> 1;
+        false -> 0
+    end.
 
 pending_count(#s{collecting = Collecting, local_proposals = Local}) ->
     CollectingN = case Collecting of #batch{items_rev = Items} -> length(Items); none -> 0 end,

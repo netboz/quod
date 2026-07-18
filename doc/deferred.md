@@ -135,8 +135,9 @@ discovery) are **retired with the Raft code**; the equivalent capabilities are r
 stages, not carried forward:
 
 - **Multi-validator BFT** — **DONE** (Stage 2b+2c): real ⅔ support/commit/**complaint** certs, the
-  `Δ_timeout` complaint timer, the `may_commit`/`may_complain` guards, **round-robin leader rotation**,
-  and complaint-cert **skip** (a `noop` slot), over the `{log, Ns}` transport.
+  durable-head progress watchdog (redrive/complain across proposal, notarization, and commit),
+  the `may_commit`/`may_complain` guards, **round-robin leader rotation**, and complaint-cert **skip**
+  (a `noop` slot), over the `{log, Ns}` transport.
 - **Committee = `peer_admitted` facts + admit/remove — DONE** (membership rework, Slice 1+2): the committee
   is the set of `peer_admitted/4` facts, derived deterministically from the committed log
   (`quod_simplex:log_projection/2`), swapped in-process at commit (`adopt_committee/2`), and re-folded
@@ -228,7 +229,8 @@ stages, not carried forward:
   full-namespace-restart resume case. **Still deferred from here:**
   - **~~Admission to voter (S5b)~~ — DONE (multi-validator milestone, Slices A–E, 0.6.30–0.6.34).** A
     caught-up joiner IS promoted to a voting member: an existing member proves `admit`, the `peer_admitted`
-    commits, the joiner sees its own fact arrive over the feed and self-promotes (`maybe_promote`). Slice B
+    commits, the joiner sees its own fact arrive over the feed and self-promotes
+    (`catchup_membership_transition`). Slice B
     added the growth-liveness redrive (the 1→2 promotion race), Slice C the `peer_ready` readiness gate
     (never admit a dead/lagging node into a quorum=all committee), Slice D the fresh-admission dial hint
     (a member can reach a brand-new member via the committed address — growth past 2 needs no manual
@@ -270,10 +272,12 @@ stages, not carried forward:
   live in RAM, so a validator that CRASHES and restarts mid-slot loses them and could re-sign a
   different block/complaint for the same slot — an equivocation. Bounded today: at `N ≤ 4` a SINGLE
   crash-equivocator can't fork (its two shares still need a quorum that overlaps an honest party), but TWO
-  simultaneous crash-equivocators can. Safe enough for the trusted fleet (crash-restart is rare and the CSI
-  volume + catch-up re-syncs a restarted node past its in-flight slot before it votes again), but it MUST be
-  closed before open/Byzantine membership: persist the latches (or a per-slot "already-voted" marker)
-  alongside the durable log so a restart refuses to re-sign a slot it already signed. Intersects tx signing
+  simultaneous crash-equivocators can. The oldest-head recovery FSM now deliberately lets a restarted node
+  final-vote a notarized in-flight slot, so catch-up can no longer be assumed to move it past that slot
+  first; `restart_loses_complaint_latch_boundary_test` documents the complaint-before-crash,
+  commit-after-restart boundary. This MUST be closed before open/Byzantine membership or before claiming
+  safety for `>f` crash recovery: persist the latches (or a per-slot "already-voted" marker) alongside the
+  durable log so a restart refuses to re-sign a slot it already signed. Intersects transaction signatures
   (Phase B) and the epoch work.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
   0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
@@ -316,27 +320,25 @@ stages, not carried forward:
   `#round{}` state replace the old `proposing`/`pending` field cluster. A short bounded micro-batch shares
   one block, certificate exchange, and fsync across up to 256 ordered transactions. The approved frontier
   may open one successor over an uncommitted parent, while the durable frontier still drains in order.
-- **Stale collecting-batch on a competing notarization — `function_clause` crash (Byzantine/duplicate-leader
-  only; found in the 2026-07-16 hardening DA review).** `collect_append/4`'s second clause
-  (`src/quod_simplex.erl`) pattern-requires the in-flight `#s.collecting` batch's slot to equal the next
-  proposable slot `Next = approved+1`. `approve_block/2` advances `approved` on ANY notarization but does not
-  clear or reconcile a batch we are still collecting for that same slot. So if a COMPETING block for our
-  collecting slot `V` notarizes (only possible if some other node proposed `V` too — a duplicate/Byzantine
-  leader, since `leader/2` is deterministic and honest nodes propose a slot exactly once), `approved` jumps
-  to `V`, `Next` becomes `V+1`, and the next client append lands with `collecting.slot = V =/= Next = V+1`:
-  neither `collect_append` clause matches and the statem process crashes (its supervisor restarts it, which
-  re-reads the durable log — so it self-heals, but a crash-loop is possible if the condition persists). The
-  skip path is already safe (the 2026-07-16 fix nacks + clears the collecting batch on `finalize`); the gap
-  is specifically the notarize-a-competitor path. Fix when membership opens beyond the trusted fleet: in
-  `approve_block` (or `collect_append`) reconcile a stale collecting batch whose slot the approved frontier
-  has passed — nack its parked callers `{error, skipped}` (reuse `nack_collecting/1`) and drop it, or add a
-  catch-all `collect_append` clause that does the same. Low priority on the trusted fleet (needs a Byzantine
-  or double-leader), but a correctness cliff before OPEN membership. Intersects [[vote-latch persistence]]
-  and the epoch/duplicate-leader work.
 - **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; each round's complaint/commit
   latches make the two finalization paths mutually exclusive.
+- **Oldest-head recovery + over-f crash-liveness recovery — DONE (2026-07-18).** The approval-frontier
+  `active_slot` latch was deleted. An explicit `head_progress` state now watches `committed+1` through
+  proposal, notarization, and final commit, so support certification cannot silently cancel finality
+  recovery. A member that retained an unnotarized proposal while `unconfirmed` processes it through normal
+  support or membership validation before complaining; a notarized block reconstructs only its commit latch
+  when recovery grants `ready`. Complaint signing pauses while fewer than a certificate quorum have live
+  authenticated inbound or outbound consensus links. Three restoration rearms are allowed per unchanged
+  phase, after which link flaps cannot extend the deadline. Committed committee changes close obsolete
+  consensus links and discard their queued frames and pending dials. This is a liveness extension, not a
+  larger safety bound: vote-latch persistence above remains the prerequisite for safe `>f` recovery. Also
+  closed the stale collecting-batch crash: a competing
+  notarization nacks and removes the obsolete collection before advancing `approved`.
 - **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,
-  and `leader_failover` = kill-leader → complaint-skip → rotated-leader-commit).
+  `leader_failover` = kill-leader → complaint-skip → rotated-leader-commit, and
+  `over_fault_restart_recovers` = commit durable history → stop 2/4 → hold past Delta with both survivors
+  withholding complaints → restart from disk → interrupted + subsequent writes commit without a
+  namespace-wide restart).
 - **Implicit predecessor commit** (spec §2.3.3) — **DONE for the depth-one runtime pipeline.** A child
   commit finalizes its immediate approved parent. The parent entry persists a self-contained proof
   (`#implicit_cert{support,parent-child link,child commit}`), and catch-up verifies it independently.

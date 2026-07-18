@@ -37,7 +37,14 @@ export type NsSummary = {
   role: string
   syncing: boolean
   committee: PeerId[]
-  leader: PeerId | null
+  approved: number
+  finality_slot: number
+  finality_leader: PeerId | null
+  proposal_slot: number
+  next_proposer: PeerId | null
+  proposal_open: boolean
+  progress_phase: 'idle' | 'awaiting_proposal' | 'awaiting_notarization' | 'awaiting_commit'
+  progress_quorum_connected: boolean
   genesis: string | null
 }
 

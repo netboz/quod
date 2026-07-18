@@ -905,6 +905,22 @@ superseded). The `apply` side and everything above the `append`/`apply` interfac
 regardless of the recipe, so the ordering layer can still be swapped per ontology without disturbing
 the rest.
 
+The runtime distinguishes the proposal frontier from the durable frontier. A per-node head-progress
+state watches exactly `committed+1` through `awaiting_proposal`, `awaiting_notarization`, and
+`awaiting_commit`; it is cleared only by commit, complaint-certified skip, or a verified catch-up
+re-seat. Demand for the depth-one successor is retained separately while its parent is the durable
+head, then becomes `awaiting_proposal` as soon as the parent finalizes. A recovering validator that retained
+a valid, unnotarized proposal processes it through the normal support or membership-verdict path before
+complaining. A notarized complete-tree block instead reconstructs only its local commit latch when voting
+returns, because the original notarization event was one-shot. Complaint timeouts are withheld while fewer
+than a certificate quorum have live authenticated inbound or outbound consensus links. The first three
+restorations for one unchanged phase grant a fresh Delta; later flaps leave the existing deadline intact.
+Committee transitions close obsolete inbound and outbound consensus links and discard their queued frames
+and pending dials, so transport state cannot outlive the validator set that authorized it.
+This improves liveness after a temporary `>f` crash outage. It does not extend the
+safety bound: a restarted validator currently loses its RAM-only prior-vote latches, so durable latches
+are required before claiming safety beyond `f`. The protocol's guaranteed fault bound remains `f`.
+
 ### Still open
 
 - **Hand-roll vs `ra` — _decided: hand-rolled_** — but the hand-rolled recipe is a lean

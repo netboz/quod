@@ -151,12 +151,13 @@ sync_completion_is_height_bound_test() ->
              sync => {pulling, self()}, eng => Eng, last_applied => 3, prolog_ready => true},
     %% exact corroborated height ⇒ ready
     Pulling = st(Base#{slot => 2}),
-    {keep_state, Ready} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Pulling),
+    {keep_state, Ready, _} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Pulling),
     ?assertEqual(ready, quod_simplex:test_sync(Ready)),
     %% head advanced past the corroborated height (live cert-verified commits) ⇒ STILL ready (no bounce)
     Advanced = st(Base#{slot => 3}),
     ?assertNot(quod_simplex:may_vote(Advanced)),   %% mid-pull ⇒ the stall: cannot vote yet
-    {keep_state, Accepted} = quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
+    {keep_state, Accepted, _} =
+        quod_simplex:running(cast, {sync_done, self(), {ready, 2}}, Advanced),
     ?assertEqual(ready, quod_simplex:test_sync(Accepted)),
     ?assert(quod_simplex:may_vote(Accepted)),      %% accepted advanced-during-probe ⇒ RESUMES voting (the fix)
     %% a result whose pid does not own the in-flight pull is stale ⇒ state unchanged (still pulling)
@@ -262,6 +263,355 @@ pipeline_frontier_test() ->
     Full = st(#{self => <<"self">>, validators => [<<"self">>], slot => 5,
                 approved => 7, eng => Eng, sync => ready}),
     ?assertEqual(blocked, quod_simplex:proposal_slot(Full)).
+
+%% The watchdog follows the durable head, not the proposal frontier. Notarizing H+1 changes the phase to
+%% awaiting_commit and keeps slot H+1 watched while the pipeline may already propose H+2. Connectivity is
+%% part of the state so a returning quorum receives a fresh full timeout.
+head_progress_state_test() ->
+    [{A, _}, {B, _}, {C, _}, {_D, _}] = Committee = committee(4),
+    Eng0 = quod_simplex:eng_new(pubs(Committee), 5),
+    Idle = st(#{self => A, validators => pubs(Committee), slot => 5,
+                approved => 5, eng => Eng0, sync => ready}),
+    ?assertEqual(idle, quod_simplex:test_progress(
+                         quod_simplex:reconcile_head_progress(Idle))),
+
+    Requested = st(#{self => A, validators => pubs(Committee), slot => 5,
+                     approved => 5, eng => Eng0, sync => ready,
+                     head_progress => {6, awaiting_proposal, false}}),
+    ?assertEqual({6, awaiting_proposal, false},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(Requested))),
+
+    Conns = #{B => {self(), make_ref()}, C => {self(), make_ref()}},
+    Notarized = st(#{self => A, validators => pubs(Committee), slot => 5,
+                     approved => 6, eng => Eng0, sync => ready, conns => Conns,
+                     head_progress => {6, awaiting_notarization, false}}),
+    ?assertEqual({6, awaiting_commit, true},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(Notarized))),
+
+    %% Once slot 6 is durable, the same approved frontier now means slot 7 is the watched finality head.
+    Advanced = st(#{self => A, validators => pubs(Committee), slot => 6,
+                    approved => 7, eng => quod_simplex:eng_new(pubs(Committee), 6),
+                    sync => ready, conns => Conns}),
+    ?assertEqual({7, awaiting_commit, true},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(Advanced))),
+    ok.
+
+%% Demand for the depth-one successor arrives while the durable head is still awaiting commit. Preserve
+%% that demand separately; once the parent commits, the successor immediately becomes the watched
+%% awaiting-proposal head even if no second client request arrives.
+pipelined_demand_survives_parent_finality_test() ->
+    Eng = quod_simplex:eng_new([<<"self">>], 5),
+    Pipelined = st(#{self => <<"self">>, validators => [<<"self">>],
+                     slot => 5, approved => 6, eng => Eng, sync => ready}),
+    Requested = quod_simplex:watch_requested(7, Pipelined),
+    ?assertEqual(7, quod_simplex:test_requested(Requested)),
+    ?assertEqual({6, awaiting_commit, true},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(Requested))),
+    ParentFinal = st(#{self => <<"self">>, validators => [<<"self">>],
+                       slot => 6, approved => 6,
+                       requested_slot => quod_simplex:test_requested(Requested),
+                       eng => quod_simplex:eng_new([<<"self">>], 6), sync => ready}),
+    ?assertEqual({7, awaiting_proposal, true},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(ParentFinal))).
+
+%% A complaint may finalize its slot synchronously before the amplification caller retains the demand.
+%% Finalized demand must stay cleared; a genuinely later pipelined request is preserved.
+finalized_request_is_not_resurrected_test() ->
+    Eng = quod_simplex:eng_new([<<"self">>], 6),
+    Final = st(#{self => <<"self">>, validators => [<<"self">>],
+                 slot => 6, approved => 6, eng => Eng, sync => ready,
+                 requested_slot => 6}),
+    Cleared = quod_simplex:watch_requested(6, Final),
+    ?assertEqual(none, quod_simplex:test_requested(Cleared)),
+    Later = quod_simplex:watch_requested(
+              6, st(#{self => <<"self">>, validators => [<<"self">>],
+                      slot => 6, approved => 6, eng => Eng, sync => ready,
+                      requested_slot => 7})),
+    ?assertEqual(7, quod_simplex:test_requested(Later)).
+
+%% Either authenticated stream direction proves reachability. This avoids an asymmetric connection where
+%% the peer can send to us but our still-opening outbound stream falsely suppresses complaint progress.
+inbound_link_counts_toward_quorum_test() ->
+    [{A, _}, {B, _}, {C, _}, {_D, _}] = Committee = committee(4),
+    Outbound = #{B => {self(), make_ref()}},
+    Inbound = #{C => {self(), make_ref()}},
+    S = st(#{self => A, validators => pubs(Committee), slot => 5, approved => 5,
+             eng => quod_simplex:eng_new(pubs(Committee), 5), sync => ready,
+             conns => Outbound, inbound_conns => Inbound,
+             head_progress => {6, awaiting_proposal, false}}),
+    ?assertEqual({6, awaiting_proposal, true},
+                 quod_simplex:test_progress(
+                   quod_simplex:reconcile_head_progress(S))).
+
+%% Consensus links are committee-scoped. A committed removal drops both directions plus any queued frames
+%% and outstanding dial for the departed peer, while preserving the remaining member's transport state.
+committee_change_prunes_stale_links_test() ->
+    [{A, _}, {B, _}, {C, _}] = committee(3),
+    Keep = spawn(fun Loop() -> receive _ -> Loop() end end),
+    DropOut = spawn(fun Loop() -> receive _ -> Loop() end end),
+    DropIn = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        S = st(#{self => A, validators => [A, B],
+                 conns => #{B => {Keep, erlang:monitor(process, Keep)},
+                            C => {DropOut, erlang:monitor(process, DropOut)}},
+                 inbound_conns => #{B => {Keep, erlang:monitor(process, Keep)},
+                                    C => {DropIn, erlang:monitor(process, DropIn)}},
+                 outbox => #{B => [<<"keep">>], C => [<<"drop">>]},
+                 dialing => #{B => 1, C => 1}}),
+        Pruned = quod_simplex:prune_consensus_links(S),
+        ?assertEqual({[B], [B], [B], [B]},
+                     quod_simplex:test_link_peers(Pruned))
+    after
+        exit(Keep, kill),
+        exit(DropOut, kill),
+        exit(DropIn, kill)
+    end.
+
+%% Exercise every watchdog decision boundary directly: a ready node with quorum complains, a ready node
+%% without quorum pauses, and a recovering node merely probes. Connectivity restoration replaces the
+%% timer with a fresh full Delta; losing quorum leaves the existing timer untouched.
+progress_timeout_branches_test() ->
+    [{A, IdA}, {B, _}, {C, _}, {D, _}] = Committee = committee(4),
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        Eng = quod_simplex:eng_new(pubs(Committee), 5),
+        Full = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                 D => {Sink, make_ref()}},
+        Common = #{self => A, id => IdA, validators => pubs(Committee),
+                   slot => 5, approved => 5, eng => Eng,
+                   head_progress => {6, awaiting_proposal, true}},
+        Complained = quod_simplex:on_progress_timeout(
+                       6, st(Common#{sync => ready, conns => Full})),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
+        ?assertEqual({1, 0}, quod_simplex:test_progress_counts(Complained)),
+
+        Sparse = #{B => {Sink, make_ref()}},
+        Dialing = #{C => 999999999999, D => 999999999999},
+        Paused = quod_simplex:on_progress_timeout(
+                   6, st(Common#{sync => ready, conns => Sparse,
+                                 dialing => Dialing,
+                                 head_progress => {6, awaiting_proposal, false}})),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, Paused)),
+        ?assertEqual({1, 1}, quod_simplex:test_progress_counts(Paused)),
+
+        Recovering = quod_simplex:on_progress_timeout(
+                       6, st(Common#{sync => unconfirmed, conns => Sparse,
+                                     dialing => Dialing,
+                                     head_progress => {6, awaiting_proposal, false}})),
+        ?assertEqual({none, false, false}, quod_simplex:test_round(6, Recovering)),
+        ?assertEqual({1, 0}, quod_simplex:test_progress_counts(Recovering)),
+
+        Disconnected = st(Common#{sync => ready,
+                                  head_progress => {6, awaiting_proposal, false}}),
+        Connected = st(Common#{sync => ready,
+                               head_progress => {6, awaiting_proposal, true}}),
+        ?assertMatch([{{timeout, progress}, _, {progress_timeout, 6}}],
+                     quod_simplex:progress_timer_actions(Disconnected, Connected)),
+        ?assertEqual([], quod_simplex:progress_timer_actions(Connected, Disconnected))
+    after
+        exit(Sink, kill)
+    end.
+
+%% A valid proposal received while recovery forbids voting is retained without starting a complaint timer.
+%% Once ready, the node watches it and its first timeout emits ordinary support rather than skipping it.
+ready_after_passive_ingest_supports_before_complaining_test() ->
+    Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"passive-recovery">>,
+                   [{assert, {{recovered, proposal}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    {Eng, []} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                  D => {Sink, make_ref()}},
+        Recovering = st(#{self => A, id => IdA, validators => pubs(Committee),
+                          slot => 5, approved => 5, eng => Eng, sync => unconfirmed,
+                          conns => Conns}),
+        ?assertEqual(idle, quod_simplex:test_progress(
+                             quod_simplex:reconcile_head_progress(Recovering))),
+        Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                     slot => 5, approved => 5, eng => Eng, sync => ready,
+                     conns => Conns}),
+        Watched = quod_simplex:reconcile_head_progress(Ready),
+        ?assertEqual({6, awaiting_notarization, true},
+                     quod_simplex:test_progress(Watched)),
+        Supported = quod_simplex:on_progress_timeout(6, Watched),
+        ?assertEqual({BH, false, false}, quod_simplex:test_round(6, Supported))
+    after
+        exit(Sink, kill)
+    end.
+
+%% Quorum restoration may grant a few fresh Deltas for transient reconnects, but an unchanged slot/phase
+%% eventually exhausts that budget. Further false->true flaps leave the existing deadline untouched.
+quorum_restoration_rearm_is_bounded_test() ->
+    Common = #{slot => 5, approved => 5, eng => quod_simplex:eng_new([<<"self">>], 5),
+               self => <<"self">>, validators => [<<"self">>], sync => ready},
+    BelowCap = st(Common#{head_progress => {6, awaiting_proposal, false, 2}}),
+    Restored = quod_simplex:reconcile_head_progress(BelowCap),
+    ?assertEqual(3, quod_simplex:test_progress_rearms(Restored)),
+    ?assertMatch([{{timeout, progress}, _, {progress_timeout, 6}}],
+                 quod_simplex:progress_timer_actions(BelowCap, Restored)),
+    AtCap = st(Common#{head_progress => {6, awaiting_proposal, false, 3}}),
+    Capped = quod_simplex:reconcile_head_progress(AtCap),
+    ?assertEqual(3, quod_simplex:test_progress_rearms(Capped)),
+    ?assertEqual([], quod_simplex:progress_timer_actions(AtCap, Capped)),
+    NewPhase = st(Common#{approved => 6,
+                         head_progress => {6, awaiting_notarization, false, 3}}),
+    Advanced = quod_simplex:reconcile_head_progress(NewPhase),
+    ?assertEqual(0, quod_simplex:test_progress_rearms(Advanced)).
+
+%% A block can be notarized while a restarted member is still `unconfirmed`: it is deliberately forbidden
+%% to vote, and the engine's one-shot notarized event is consumed. Regaining `ready` must reconstruct the
+%% commit latch from the complete tree, otherwise this validator never contributes to finality. It must
+%% not invent a support vote: membership support requires a separate local KB verdict.
+resume_notarized_after_recovery_test() ->
+    Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
+    Block = blk(6),
+    {Eng1, _} = quod_simplex:eng_offer({block, Block},
+                                       quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
+    ?assert(maps:is_key(6, quod_simplex:eng_tree(Eng2))),
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+              D => {Sink, make_ref()}},
+    Recovering = st(#{self => A, id => IdA, validators => pubs(Committee),
+                      slot => 5, approved => 6, eng => Eng2,
+                      sync => unconfirmed, conns => Conns}),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(6, Recovering)),
+    ?assertEqual({none, false, false},
+                 quod_simplex:test_round(
+                   6, quod_simplex:resume_ready_rounds(Recovering))),
+
+    Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 6, eng => Eng2,
+                 sync => ready, conns => Conns}),
+    Resumed = quod_simplex:resume_ready_rounds(Ready),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)),
+    exit(Sink, kill).
+
+%% Live commit/skip self-corroboration can restore voting between periodic ticks. The common transition
+%% hook must reconcile an already-notarized successor immediately on that false->true capability edge.
+live_finality_ready_edge_resumes_successor_test() ->
+    Committee = [{A, IdA}, {_, _}, {_, _}, {_, _}] = committee(4),
+    Block = blk(6),
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
+    Before = st(#{self => A, id => IdA, validators => pubs(Committee),
+                  slot => 5, approved => 6, eng => Eng2, sync => unconfirmed}),
+    After = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 6, eng => Eng2, sync => ready}),
+    Settled = quod_simplex:settle_readiness(Before, After),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Settled)).
+
+%% The recovery fold snapshots slot numbers. An earlier iteration can commit and prune a buffered successor;
+%% revisiting that stale snapshot entry must be a no-op rather than maps:get(tree_hashes) crashing the statem.
+resume_stale_snapshot_slot_is_skipped_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    [{A, IdA}] = Committee = committee(1),
+    B6 = blk(6),
+    B7 = blk(7),
+    {E1, _} = quod_simplex:eng_offer(
+                {block, B6}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {E2, _} = quod_simplex:eng_offer({block, B7}, E1),
+    {E3, _} = feed_shares(supports(B6, Committee, 1) ++
+                          supports(B7, Committee, 1), E2),
+    B7Hash = quod_simplex:block_hash(B7),
+    B7Commit = quod_simplex:make_share(commit, 7, B7Hash, IdA),
+    {ok, B7Cert} = quod_simplex:form_cert(
+                     commit, 7, B7Hash, [B7Commit], pubs(Committee)),
+    Eng = quod_simplex:eng_buffered_commit(7, B7, B7Cert, E3),
+    Dir = filename:join(
+            "/tmp", "quod_resume_snapshot_" ++
+                    integer_to_list(erlang:unique_integer([positive]))),
+    {ok, Store0} = quod_ledger_store:open(<<"t">>, Dir),
+    Prefix = [#entry{index = I, data = noop, timestamp = I} ||
+                 I <- lists:seq(1, 5)],
+    {ok, Store1} = quod_ledger_store:append(Store0, Prefix),
+    try
+        Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                     slot => 5, approved => 7, eng => Eng, sync => ready,
+                     store => Store1, last_applied => 5,
+                     commit_buf => #{7 => {commit, B7}}}),
+        Resumed = quod_simplex:resume_ready_rounds(Ready),
+        {7, FinalStore} = quod_simplex:test_committed_store(Resumed),
+        ?assertMatch({ok, #entry{index = 6}},
+                     quod_ledger_store:read_at(FinalStore, 6)),
+        ?assertMatch({ok, #entry{index = 7}},
+                     quod_ledger_store:read_at(FinalStore, 7))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% More than one notarized entry may be present when recovery grants voting capability. Reconcile every
+%% still-live tree slot, but create final-vote latches only; no synthetic support vote is permitted.
+resume_multiple_notarized_slots_test() ->
+    Committee = [{A, IdA}, {_, _}, {_, _}, {_, _}] = committee(4),
+    B6 = blk(6),
+    B7 = blk(7),
+    {E1, _} = quod_simplex:eng_offer({block, B6},
+                                     quod_simplex:eng_new(pubs(Committee), 5)),
+    {E2, _} = quod_simplex:eng_offer({block, B7}, E1),
+    {E3, _} = feed_shares(supports(B6, Committee, 3), E2),
+    {E4, _} = feed_shares(supports(B7, Committee, 3), E3),
+    Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 7, eng => E4, sync => ready}),
+    Resumed = quod_simplex:resume_ready_rounds(Ready),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(7, Resumed)).
+
+%% Membership proposals use the same final-vote recovery but retain their stricter support boundary:
+%% recovery may commit a quorum-notarized block and must never manufacture the skipped local KB verdict.
+resume_membership_notarization_does_not_support_test() ->
+    Committee = [{A, IdA}, {_, _}, {_, _}, {_, _}] = committee(4),
+    {E, _NewId} = id(),
+    Membership = signed_tx(<<"t">>, <<"recovery-membership">>, [pa(E)], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Membership]},
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
+    Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 6, eng => Eng2, sync => ready}),
+    Resumed = quod_simplex:resume_ready_rounds(Ready),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)).
+
+%% Safety is guaranteed only through f faults until vote latches are durable. This executable boundary
+%% documents the current >f limitation: a node can complaint-sign, crash (losing RAM latches), then
+%% re-ingest a notarized block and commit-sign it. Quorum intersection prevents a fork within <=f.
+restart_loses_complaint_latch_boundary_test() ->
+    Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                  D => {Sink, make_ref()}},
+        EmptyEng = quod_simplex:eng_new(pubs(Committee), 5),
+        BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
+                           slot => 5, approved => 5, eng => EmptyEng, sync => ready,
+                           conns => Conns,
+                           head_progress => {6, awaiting_proposal, true}}),
+        Complained = quod_simplex:on_progress_timeout(6, BeforeCrash),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
+
+        Block = blk(6),
+        {E1, _} = quod_simplex:eng_offer(
+                    {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+        {Notarized, _} = feed_shares(supports(Block, Committee, 3), E1),
+        Restarted = st(#{self => A, id => IdA, validators => pubs(Committee),
+                         slot => 5, approved => 6, eng => Notarized, sync => ready,
+                         conns => Conns}),
+        AfterRestart = quod_simplex:resume_ready_rounds(Restarted),
+        ?assertEqual({none, true, false}, quod_simplex:test_round(6, AfterRestart))
+    after
+        exit(Sink, kill)
+    end.
 
 %% Content transactions may batch. A committee transaction is legal only as a
 %% singleton at the committed frontier, making it a pipeline barrier by construction.
@@ -480,6 +830,21 @@ skipped_batch_nacks_its_callers_test() ->
     receive
         {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
     after 0 -> ?assert(false)          %% no reply => the caller would hang to the park TTL (the bug)
+    end.
+
+%% A competing block can notarize while this leader is still collecting its own batch for the same slot.
+%% The approval frontier then moves past the collection; it must be nacked immediately rather than leaving
+%% a stale batch that makes the next append miss every `collect_append` clause and crash the statem.
+competing_notarization_nacks_collected_batch_test() ->
+    Ref = make_ref(),
+    From = {self(), Ref},
+    S = quod_simplex:test_state(
+          #{slot => 4, approved => 4, eng => quod_simplex:eng_with_certs(4, []),
+            collecting => {5, [From]}}),
+    _ = quod_simplex:approve_block(blk(5), S),
+    receive
+        {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
+    after 0 -> ?assert(false)
     end.
 
 %% Batch capacity limits, driven through the real append entry (running/3). An oversized single change is
@@ -913,7 +1278,7 @@ pubs(C)      -> [P || {P, _} <- C].
 
 %% Run each honest node through an ordered list of vote steps against the REAL guards, threading its own
 %% {Committed, Complained} latch; returns {AllComplaintShares, AllCommitShares}. A step emits a share only
-%% if the guard permits (mirroring apply_event/on_complain_timeout), so the cross-slot exclusion decides
+%% if the guard permits (mirroring apply_event/on_progress_timeout), so the cross-slot exclusion decides
 %% which shares exist. Used by fork_certs_cannot_coexist_test.
 run_schedule(Committee, Steps) ->
     lists:foldl(

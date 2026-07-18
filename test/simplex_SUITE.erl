@@ -12,8 +12,11 @@ derived from those facts. The leader for a slot **rotates** round-robin over the
 target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
 `follower_relays` proves a non-leader transparently relays; `leader_failover` kills the next slot's leader
 **before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
-the rotated leader commits the re-submitted write. `quorum(4)=3` tolerates the one down node; this is the
-multi-node failover validation the engine's eunit tests (a simulated committee) cannot give.
+the rotated leader commits the re-submitted write. `over_fault_restart_recovers` uses an isolated second
+committee to stop two validators (`>f`), keeps the head stalled past Δ, restarts both from their existing
+logs, and proves live finality resumes without a namespace-wide reboot. `quorum(4)=3` tolerates one down
+in normal operation; the latter case validates liveness recovery after deliberately exceeding that bound,
+not safety beyond `f` (which still requires durable vote latches).
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
@@ -22,7 +25,8 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([commits_across_committee/1, follower_relays/1,
-         byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1]).
+         byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1,
+         over_fault_restart_recovers/1]).
 
 -define(NS, <<"simplex:2c">>).
 -define(PORTS, [15820, 15821, 15822, 15823]).   %% N=4 ⇒ quorum 3, tolerates 1 down (failover)
@@ -31,7 +35,8 @@ multi-node failover validation the engine's eunit tests (a simulated committee) 
                            %% `eventually` budgets (so a genuinely stuck slot still skips fast)
 
 all() -> [commits_across_committee, follower_relays,
-          byzantine_retract_rejected, byzantine_admit_rejected, leader_failover].
+          byzantine_retract_rejected, byzantine_admit_rejected, leader_failover,
+          over_fault_restart_recovers].
 
 %%%===================================================================
 %%% suite setup: one 4-node committee, shared across the (ordered) tests
@@ -56,9 +61,21 @@ end_per_suite(Config) ->
 %% Δ_timeout, the resolver pre-seeded with every peer's pubkey→addr (so consensus can dial by pubkey),
 %% then the namespace as a co-founder of the shared committee. Returns {Peer, Pubkey}.
 start_member(Port, {Pub, Seed}, Addrs, Config) ->
-    Name = list_to_atom("sx_" ++ integer_to_list(Port)),
+    start_member(?NS, "sx_", Port, {Pub, Seed}, Addrs, Config).
+
+start_member(Ns, NamePrefix, Port, {Pub, Seed}, Addrs, Config) ->
+    Name = list_to_atom(NamePrefix ++ integer_to_list(Port)),
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io, args => ["-pa" | code:get_path()]}),
+    try
+        configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, Config)
+    catch
+        Class:Reason:Stack ->
+            _ = catch peer:stop(Peer),
+            erlang:raise(Class, Reason, Stack)
+    end.
+
+configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, Config) ->
     _ = peer:call(Peer, logger, set_primary_config, [level, warning]),
     _ = peer:call(Peer, application, load, [quod]),
     KeyTerm = quod_identity:key_term({Pub, Seed}),
@@ -81,8 +98,13 @@ start_member(Port, {Pub, Seed}, Addrs, Config) ->
             %% node_addr). Consensus needs only the pubkeys; the addresses are the dial hint the KB carries.
             committee => [{Pj, Hj, Pt} || {Pj, {Hj, Pt}} <- Addrs, Pj =/= Pub],
             data_dir  => DataDir},
-    {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),
+    {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
     {Peer, Pub}.
+
+start_tracked_member(Ns, NamePrefix, Port, Key, Addrs, Config) ->
+    Node = start_member(Ns, NamePrefix, Port, Key, Addrs, Config),
+    put(over_f_nodes, [Node | case get(over_f_nodes) of undefined -> []; L -> L end]),
+    Node.
 
 %%%===================================================================
 %%% tests
@@ -104,7 +126,12 @@ commits_across_committee(Config) ->
           ?assert(eventually(fun() -> slot(Peer) >= 2 end, 15000)),
           ?assert(eventually(fun() -> match_ok(prove(Peer, {capital, france, {'X'}})) end, 10000))
       end || {Peer, _} <- Nodes ],
-    ?assert(eventually(fun() -> lists:usort([slot(Peer) || {Peer, _} <- Nodes]) =:= [2] end, 5000)).
+    Requested = [maps:get(requested_slot,
+                          peer:call(Peer, quod_simplex, stats, [?NS]), -1)
+                 || {Peer, _} <- Nodes],
+    ?assertEqual([0, 0, 0, 0], Requested),
+    Heights = lists:usort([slot(Peer) || {Peer, _} <- Nodes]),
+    ?assertEqual([2], Heights).
 
 %% A write submitted to a non-leader is signed there, relayed to the current
 %% leader, committed once, and applied across the committee.
@@ -180,6 +207,106 @@ leader_failover(Config) ->
       end || {P, _} <- Live ],
     ?assert(eventually(fun() -> lists:usort([slot(P) || {P, _} <- Live]) =:= [V + 1] end, 5000)).
 
+%% Exceed the formal liveness bound (`N=4`, `f=1`) while a real proposal is in flight. The two survivors
+%% must not accumulate irreversible complaints while they can see fewer than a quorum. Restart both absent
+%% validators from their existing logs; the head watchdog then gets a fresh Δ, re-drives the full proposal
+%% and finality evidence, and the committee commits both the interrupted write and a later probe without a
+%% coordinated namespace restart.
+over_fault_restart_recovers(Config) ->
+    Ns = <<"simplex:over-f-recovery">>,
+    Ports = [15830, 15831, 15832, 15833],
+    Keys = [quod_identity:generate() || _ <- Ports],
+    Addrs = [{P, {"127.0.0.1", Port}} || {{P, _}, Port} <- lists:zip(Keys, Ports)],
+    put(over_f_nodes, []),
+    try
+        Nodes0 = [start_tracked_member(Ns, "sxr_", Port, Key, Addrs, Config)
+                  || {Port, Key} <- lists:zip(Ports, Keys)],
+        ?assert(eventually(
+                  fun() ->
+                          lists:all(
+                            fun({P, _}) ->
+                                    maps:get(syncing, status(P, Ns), true) =:= false
+                            end, Nodes0)
+                  end, 30000)),
+
+        %% Create durable, non-genesis history before the outage. Restarting the stopped peers must now
+        %% reopen and extend their existing ledgers, not accidentally pass as fresh empty/catch-up boots.
+        HBase = synced_height(Nodes0, Ns),
+        {BaselineLeader, _} =
+            lists:keyfind(leader_for(HBase + 1, Nodes0), 2, Nodes0),
+        ?assert(eventually(
+                  fun() -> match_ok(prove(BaselineLeader, Ns,
+                                          {assertz, {before_over_f, durable}})) end,
+                  20000)),
+        ?assert(eventually(
+                  fun() -> lists:all(fun({P, _}) -> slot(P, Ns) >= HBase + 1 end, Nodes0) end,
+                  20000)),
+        H0 = synced_height(Nodes0, Ns),
+        ?assert(H0 >= 2),
+
+        LeaderPub = leader_for(H0 + 1, Nodes0),
+        {LeaderPeer, LeaderPub} = lists:keyfind(LeaderPub, 2, Nodes0),
+        {SurvivorPeer, _} = Survivor =
+            hd([N || N <- Nodes0, N =/= {LeaderPeer, LeaderPub}]),
+        Down = [N || N <- Nodes0,
+                     N =/= {LeaderPeer, LeaderPub}, N =/= Survivor],
+        LeaderPauses0 = maps:get(
+                          quorum_pauses,
+                          peer:call(LeaderPeer, quod_simplex, stats, [Ns]), 0),
+        SurvivorPauses0 = maps:get(
+                            quorum_pauses,
+                            peer:call(SurvivorPeer, quod_simplex, stats, [Ns]), 0),
+        [ok = peer:stop(P) || {P, _} <- Down],
+
+        %% The write reaches the real leader with only 2/4 validators alive. Its caller may time out while
+        %% quorum is absent; consensus still owns the signed proposal and must finish it after recovery.
+        _ = spawn(fun() -> _ = prove(LeaderPeer, Ns, {assertz, {over_f, recovered}}) end),
+        ?assert(eventually(
+                  fun() ->
+                          LeaderStats = peer:call(
+                                          LeaderPeer, quod_simplex, stats, [Ns]),
+                          SurvivorStats = peer:call(
+                                            SurvivorPeer, quod_simplex, stats, [Ns]),
+                          maps:get(quorum_pauses, LeaderStats, 0) > LeaderPauses0
+                              andalso maps:get(quorum_pauses, SurvivorStats, 0)
+                                      > SurvivorPauses0
+                              andalso maps:get(head_complaint_signed, LeaderStats, 1) =:= 0
+                              andalso maps:get(head_complaint_signed, SurvivorStats, 1) =:= 0
+                              andalso slot(LeaderPeer, Ns) =:= H0
+                              andalso slot(SurvivorPeer, Ns) =:= H0
+                  end, ?DELTA_MS * 3)),
+
+        DownPubs = [Pub || {_P, Pub} <- Down],
+        Restarted = [start_tracked_member(
+                       Ns, "sxr_", Port, Key, Addrs, Config)
+                     || {Port, {Pub, _} = Key} <- lists:zip(Ports, Keys),
+                        lists:member(Pub, DownPubs)],
+        Nodes1 = [N || N <- Nodes0, not lists:member(element(2, N), DownPubs)] ++ Restarted,
+        ?assert(eventually(
+                  fun() ->
+                          lists:all(fun({P, _}) -> slot(P, Ns) >= H0 + 1 end, Nodes1)
+                              andalso lists:all(
+                                        fun({P, _}) ->
+                                                match_ok(prove(P, Ns, {over_f, {'X'}}))
+                                        end, Nodes1)
+                  end, 45000)),
+
+        H1 = synced_height(Nodes1, Ns),
+        {NextLeader, _} = lists:keyfind(leader_for(H1 + 1, Nodes1), 2, Nodes1),
+        ?assert(eventually(
+                  fun() -> match_ok(prove(NextLeader, Ns,
+                                          {assertz, {after_over_f, live}})) end,
+                  20000)),
+        ?assert(eventually(
+                  fun() -> lists:all(fun({P, _}) -> slot(P, Ns) >= H1 + 1 end, Nodes1) end,
+                  20000))
+    after
+        %% Every successfully-started peer is registered immediately, so setup/restart failures cannot leak
+        %% earlier OS nodes. Duplicate/stopped entries are harmless under catch.
+        Tracked = case erase(over_f_nodes) of undefined -> []; L -> L end,
+        _ = [catch peer:stop(P) || {P, _} <- Tracked]
+    end.
+
 %%%===================================================================
 %%% helpers
 %%%===================================================================
@@ -236,6 +363,12 @@ synced_height(Nodes) ->
     ?assert(eventually(fun() -> length(lists:usort([slot(P) || {P, _} <- Nodes])) =:= 1 end, 10000)),
     slot(peer1(Nodes)).
 
+synced_height(Nodes, Ns) ->
+    ?assert(eventually(
+              fun() -> length(lists:usort([slot(P, Ns) || {P, _} <- Nodes])) =:= 1 end,
+              15000)),
+    slot(peer1(Nodes), Ns).
+
 %% The round-robin leader for a slot — MUST match quod_simplex:leader/2 (sorted set, (Slot-1) rem N).
 leader_for(Slot, Nodes) ->
     Sorted = lists:sort(pubs(Nodes)),
@@ -246,8 +379,11 @@ leader_peer(Slot, Config) ->
     lists:keyfind(leader_for(Slot, Nodes), 2, Nodes).
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
+status(Peer, Ns) -> peer:call(Peer, quod_simplex, status, [Ns]).
 %% -1 (not a valid slot) if status/1 hits its internal timeout and returns #{} — a clean, retryable
 %% miss instead of a {badkey,slot} crash. Numeric so `>= V` in eventually stays false (an atom sentinel
 %% would sort above integers in Erlang term order and spuriously satisfy it).
 slot(Peer) -> maps:get(slot, status(Peer), -1).
+slot(Peer, Ns) -> maps:get(slot, status(Peer, Ns), -1).
 prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
+prove(Peer, Ns, Goal) -> peer:call(Peer, quod_prolog, prove, [Ns, Goal, Ns]).

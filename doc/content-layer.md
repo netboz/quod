@@ -199,9 +199,24 @@ agrees on every change.
   becomes official once **more than two-thirds** of the committee has signed off on it.
 - Once a block has enough first-stage support, the next slot may begin while final
   signatures for the parent are still arriving. The pipeline is deliberately only one
-  slot deep, and membership changes stop it until they are durably committed.
+  slot deep, and membership changes stop it until they are durably committed. Demand
+  already received for that next slot is retained while the parent finishes, then
+  becomes the watched head without requiring the client to submit it again.
 - If the one in charge stalls or goes quiet, the others **agree to skip it** and move
   on to the next, in a second or two. No human involved.
+- Each node keeps one explicit watchdog on the **oldest unfinished slot**. It follows
+  that slot from proposal, through first-stage approval, until durable commit or skip;
+  approval never cancels finality recovery. If too many validators are disconnected to
+  form a certificate, complaint voting pauses. The first three connectivity restorations
+  for one unchanged phase grant a fresh timeout; further link flaps cannot keep moving the
+  deadline. A recovering validator processes a valid proposal it retained through the
+  ordinary support or membership-check path. If it already has a notarization certificate,
+  it resumes only the missing final vote and never invents support that bypasses validation.
+  Consensus connections and queued frames are scoped to the current committee: a committed
+  membership change closes and forgets transport state for every departed validator.
+  This improves **liveness** when a trusted deployment temporarily loses more nodes than
+  its normal fault-tolerance bound. Safety is guaranteed through that bound; extending
+  safety beyond it requires persisting each validator's vote latches across restarts.
 
 Why "more than two-thirds"? Because any two "more than two-thirds" groups overlap by
 enough that they always share at least one **honest** computer — and an honest

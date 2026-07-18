@@ -46,6 +46,7 @@ with them.
 | Row | Panel | Answers |
 | --- | ----- | ------- |
 | Overview | Nodes up · Consensus height | How many nodes are live; is any node lagging (slot vs applied)? |
+| Consensus recovery | Finality watchdog · Recovery activity | Which phase the oldest unfinished block is in; whether a quorum is connected; are retries or outage pauses accumulating? |
 | Transactions | Incoming rate · Commit & apply rate | Submit throughput; are commits/applies keeping up? |
 | Transactions | **Processing time (submit → commit)** | p50/p95/p99 write latency (`quod_tx_commit_latency_ms`) |
 | Transactions | Committed by author · Write size · In-flight | Who's writing; diff sizes; pending/parked (writes-not-committing symptom) |

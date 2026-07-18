@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.18"
+  default     = "0.7.19"
   description = "Quod image tag in the cluster registry. This clean-ledger release expects freshly provisioned quod-node CSI volumes."
 }
 

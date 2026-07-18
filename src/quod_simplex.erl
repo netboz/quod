@@ -88,7 +88,8 @@ persistence, and epoch-frozen validator sets, is tracked in `doc/deferred.md`.
          reconcile_head_progress/1, resume_ready_rounds/1, resume_ready_slot/2,
          on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
          settle_readiness/2, prune_consensus_links/1,
-         test_progress/1, test_progress_rearms/1, test_round/2, test_requested/1,
+         test_progress/1, test_progress_rearms/1, test_support_grace/1,
+         test_round/2, test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
@@ -686,7 +687,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(head_progress, {slot :: slot(),
                         phase :: progress_phase(),
                         quorum_connected = false :: boolean(),
-                        quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS}).
+                        quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS,
+                        support_grace_used = false :: boolean()}).
 
 -record(relay_pending, {from :: gen_statem:from(),
                         target :: node_id(),
@@ -788,6 +790,11 @@ test_state_set(head_progress, {Slot, Phase, Connected, Rearms}, S) ->
     S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
                                        quorum_connected = Connected,
                                        quorum_rearms = Rearms}};
+test_state_set(head_progress, {Slot, Phase, Connected, Rearms, SupportGrace}, S) ->
+    S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
+                                       quorum_connected = Connected,
+                                       quorum_rearms = Rearms,
+                                       support_grace_used = SupportGrace}};
 test_state_set(requested_slot, V, S) -> S#s{requested_slot = V};
 test_state_set(conns, V, S)      -> S#s{conns = V};
 test_state_set(inbound_conns, V, S) -> S#s{inbound_conns = V};
@@ -806,6 +813,8 @@ test_progress(#s{head_progress = #head_progress{slot = Slot, phase = Phase,
     {Slot, Phase, Connected}.
 test_progress_rearms(#s{head_progress = idle}) -> 0;
 test_progress_rearms(#s{head_progress = #head_progress{quorum_rearms = Rearms}}) -> Rearms.
+test_support_grace(#s{head_progress = idle}) -> false;
+test_support_grace(#s{head_progress = #head_progress{support_grace_used = Used}}) -> Used.
 test_round(Slot, S) ->
     R = round_state(Slot, S),
     {R#round.supporting, R#round.commit, R#round.complaint}.
@@ -1802,13 +1811,17 @@ reconcile_head_progress(S = #s{slot = Committed, approved = Approved}) ->
 next_head_progress(V, Phase, Connected,
                    #head_progress{slot = V, phase = Phase,
                                   quorum_connected = WasConnected,
-                                  quorum_rearms = Rearms}) ->
-    Rearms1 = case {WasConnected, Connected, Rearms < ?MAX_QUORUM_REARMS} of
-                  {false, true, true} -> Rearms + 1;
-                  _                   -> Rearms
-              end,
+                                  quorum_rearms = Rearms,
+                                  support_grace_used = GraceUsed}) ->
+    {Rearms1, GraceUsed1} =
+        case {WasConnected, Connected, Rearms < ?MAX_QUORUM_REARMS} of
+            %% A bounded quorum restoration starts a fresh Delta and a fresh support-redrive grace.
+            %% Once the rearm cap is exhausted, neither deadline nor grace can be renewed by flapping.
+            {false, true, true} -> {Rearms + 1, false};
+            _                   -> {Rearms, GraceUsed}
+        end,
     #head_progress{slot = V, phase = Phase, quorum_connected = Connected,
-                   quorum_rearms = Rearms1};
+                   quorum_rearms = Rearms1, support_grace_used = GraceUsed1};
 next_head_progress(V, Phase, Connected, _Previous) ->
     #head_progress{slot = V, phase = Phase, quorum_connected = Connected}.
 
@@ -1926,8 +1939,9 @@ delta_ms() ->
 %% emitted only while this node has authenticated inbound or outbound links to a certificate quorum. During
 %% a known over-f outage we retain and re-send the proposal but deliberately do not accumulate complaint
 %% votes. This improves crash-recovery liveness; safety outside the formal f-fault bound still requires
-%% durable vote latches. Early quorum restorations grant a fresh full Delta; the bounded rearm budget keeps
-%% repeated link flaps from postponing complaint progress forever.
+%% durable vote latches. An already-supporting follower re-echoes once after a bounded quorum restoration
+%% before it may complain, giving the leader's redrive one final Delta to reach recovered validators. The
+%% bounded rearm budget keeps repeated link flaps from postponing complaint progress forever.
 on_progress_timeout(V,
         S0 = #s{head_progress = #head_progress{slot = V, phase = Phase}}) ->
     S1 = S0#s{progress_timeouts = S0#s.progress_timeouts + 1},
@@ -1957,7 +1971,11 @@ on_pre_notarization_timeout(V, S) ->
             case held_unsupported_proposal(V, S) of
                 {resume, Block, BH} -> support_or_validate(Block, BH, S);
                 validating         -> S;
-                none               -> complain_slot(V, S)
+                none ->
+                    case retry_supported_proposal(V, S) of
+                        {retried, S1} -> S1;
+                        none          -> complain_slot(V, S)
+                    end
             end;
         true  -> case complaint_evidence(V, S)
                            andalso may_complain(V, committed_slots(S)) of
@@ -1987,6 +2005,29 @@ held_unsupported_proposal(V, S = #s{eng = #eng{blocks = Blocks}}) ->
         _ ->
             none
     end.
+
+%% A quorum can return after a long outage while the surviving followers already hold support latches.
+%% Complaining immediately races the leader's proposal redrive and can skip a valid retained slot before a
+%% recovered validator sees it. Re-echo our support once and grant one final Delta; the next timeout may
+%% complain normally. The grace resets only on a phase change or one of the bounded quorum restorations.
+retry_supported_proposal(
+  V, S = #s{head_progress = P = #head_progress{slot = V,
+                                               phase = awaiting_notarization,
+                                               support_grace_used = false}}) ->
+    case round_state(V, S) of
+        #round{supporting = BH, complaint = false, invalid = false} when is_binary(BH) ->
+            case block_for(BH, S#s.eng) of
+                #block{} = Block ->
+                    S1 = S#s{head_progress = P#head_progress{support_grace_used = true}},
+                    {retried, support_block(Block, BH, S1)};
+                _ ->
+                    none
+            end;
+        _ ->
+            none
+    end;
+retry_supported_proposal(_V, _S) ->
+    none.
 
 %% **f+1 complaint amplification** (deferred.md §3, landed with growth): on ingesting a complaint share
 %% for the in-flight head with `f+1` distinct PEER complaints pooled, JOIN the complaint immediately —

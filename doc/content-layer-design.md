@@ -915,6 +915,9 @@ complaining. A notarized complete-tree block instead reconstructs only its local
 returns, because the original notarization event was one-shot. Complaint timeouts are withheld while fewer
 than a certificate quorum have live authenticated inbound or outbound consensus links. The first three
 restorations for one unchanged phase grant a fresh Delta; later flaps leave the existing deadline intact.
+Before notarization, an already-supporting follower uses the first such timeout to re-echo its support and
+waits one final Delta before complaining. This lets the leader's retained proposal reach a recovered voter;
+the one-shot latch prevents the grace from becoming an unbounded liveness delay.
 Committee transitions close obsolete inbound and outbound consensus links and discard their queued frames
 and pending dials, so transport state cannot outlive the validator set that authorized it.
 This improves liveness after a temporary `>f` crash outage. It does not extend the

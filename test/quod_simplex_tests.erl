@@ -448,24 +448,63 @@ ready_after_passive_ingest_supports_before_complaining_test() ->
         exit(Sink, kill)
     end.
 
+%% Live recovery regression: the below-quorum survivors may already have support-signed the retained
+%% proposal. When quorum returns, their first timeout must re-echo support and leave complaint unsigned,
+%% giving the leader's proposal redrive one Delta to reach a recovered voter. The grace is exactly once:
+%% if notarization still does not form, the following timeout may complain and preserve leader-failure
+%% liveness.
+supported_proposal_gets_one_redrive_before_complaint_test() ->
+    Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"supported-recovery">>,
+                   [{assert, {{recovered, supported}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    {Eng, []} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                  D => {Sink, make_ref()}},
+        Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                     slot => 5, approved => 5, eng => Eng, sync => ready,
+                     conns => Conns,
+                     head_progress => {6, awaiting_notarization, true}}),
+
+        Supported = quod_simplex:on_progress_timeout(6, Ready),
+        ?assertEqual({BH, false, false}, quod_simplex:test_round(6, Supported)),
+        ?assertNot(quod_simplex:test_support_grace(Supported)),
+
+        Retried = quod_simplex:on_progress_timeout(6, Supported),
+        ?assertEqual({BH, false, false}, quod_simplex:test_round(6, Retried)),
+        ?assert(quod_simplex:test_support_grace(Retried)),
+
+        Complained = quod_simplex:on_progress_timeout(6, Retried),
+        ?assertEqual({BH, false, true}, quod_simplex:test_round(6, Complained))
+    after
+        exit(Sink, kill)
+    end.
+
 %% Quorum restoration may grant a few fresh Deltas for transient reconnects, but an unchanged slot/phase
 %% eventually exhausts that budget. Further false->true flaps leave the existing deadline untouched.
 quorum_restoration_rearm_is_bounded_test() ->
     Common = #{slot => 5, approved => 5, eng => quod_simplex:eng_new([<<"self">>], 5),
                self => <<"self">>, validators => [<<"self">>], sync => ready},
-    BelowCap = st(Common#{head_progress => {6, awaiting_proposal, false, 2}}),
+    BelowCap = st(Common#{head_progress => {6, awaiting_proposal, false, 2, true}}),
     Restored = quod_simplex:reconcile_head_progress(BelowCap),
     ?assertEqual(3, quod_simplex:test_progress_rearms(Restored)),
+    ?assertNot(quod_simplex:test_support_grace(Restored)),
     ?assertMatch([{{timeout, progress}, _, {progress_timeout, 6}}],
                  quod_simplex:progress_timer_actions(BelowCap, Restored)),
-    AtCap = st(Common#{head_progress => {6, awaiting_proposal, false, 3}}),
+    AtCap = st(Common#{head_progress => {6, awaiting_proposal, false, 3, true}}),
     Capped = quod_simplex:reconcile_head_progress(AtCap),
     ?assertEqual(3, quod_simplex:test_progress_rearms(Capped)),
+    ?assert(quod_simplex:test_support_grace(Capped)),
     ?assertEqual([], quod_simplex:progress_timer_actions(AtCap, Capped)),
     NewPhase = st(Common#{approved => 6,
-                         head_progress => {6, awaiting_notarization, false, 3}}),
+                         head_progress => {6, awaiting_notarization, false, 3, true}}),
     Advanced = quod_simplex:reconcile_head_progress(NewPhase),
-    ?assertEqual(0, quod_simplex:test_progress_rearms(Advanced)).
+    ?assertEqual(0, quod_simplex:test_progress_rearms(Advanced)),
+    ?assertNot(quod_simplex:test_support_grace(Advanced)).
 
 %% A block can be notarized while a restarted member is still `unconfirmed`: it is deliberately forbidden
 %% to vote, and the engine's one-shot notarized event is consumed. Regaining `ready` must reconstruct the

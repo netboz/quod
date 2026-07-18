@@ -329,9 +329,12 @@ stages, not carried forward:
   support or membership validation before complaining; a notarized block reconstructs only its commit latch
   when recovery grants `ready`. Complaint signing pauses while fewer than a certificate quorum have live
   authenticated inbound or outbound consensus links. Three restoration rearms are allowed per unchanged
-  phase, after which link flaps cannot extend the deadline. Committed committee changes close obsolete
-  consensus links and discard their queued frames and pending dials. This is a liveness extension, not a
-  larger safety bound: vote-latch persistence above remains the prerequisite for safe `>f` recovery. Also
+  phase, after which link flaps cannot extend the deadline. On the first pre-notarization timeout after
+  quorum returns, an already-supporting follower re-echoes its support once before complaint becomes
+  eligible; this closes the live-observed race where survivors skipped the valid retained proposal before
+  a recovered voter received the leader's redrive. Committed committee changes close obsolete consensus
+  links and discard their queued frames and pending dials. This is a liveness extension, not a larger safety
+  bound: vote-latch persistence above remains the prerequisite for safe `>f` recovery. Also
   closed the stale collecting-batch crash: a competing
   notarization nacks and removes the obsolete collection before advancing `approved`.
 - **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,

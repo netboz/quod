@@ -212,6 +212,10 @@ agrees on every change.
   deadline. A recovering validator processes a valid proposal it retained through the
   ordinary support or membership-check path. If it already has a notarization certificate,
   it resumes only the missing final vote and never invents support that bypasses validation.
+  When quorum returns before notarization, a validator that already supported the proposal
+  re-sends that support once and waits one final timeout before it may complain; this gives
+  the leader's retained proposal time to reach a recovered validator without allowing an
+  endless retry loop.
   Consensus connections and queued frames are scoped to the current committee: a committed
   membership change closes and forgets transport state for every departed validator.
   This improves **liveness** when a trusted deployment temporarily loses more nodes than

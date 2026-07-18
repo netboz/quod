@@ -24,7 +24,7 @@ namespace() -> quod.
 roots() ->
     [ {node,     hoconsc:mk(hoconsc:ref(?MODULE, node),     #{default => #{}})}
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
-    , {transactions, hoconsc:mk(hoconsc:ref(?MODULE, transactions), #{default => #{}})}
+    , {explorer, hoconsc:mk(hoconsc:ref(?MODULE, explorer), #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
       %% A LIST: a node may host several ontologies side by side (each entry founds or
       %% joins one namespace, with its own mode/genesis/anchor). One entry is the common case.
@@ -49,10 +49,10 @@ fields(node) ->
 fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}
     ];
-fields(transactions) ->
-    %% The optional live transaction viewer (quod_tx_view). OFF by default: it is an unauthenticated
-    %% debug web surface, so enabling it — and especially widening `ip` past loopback — is a deliberate
-    %% operator choice, not a fleet default.
+fields(explorer) ->
+    %% The optional web explorer (quod_explorer). OFF by default: it is an unauthenticated web
+    %% surface whose prove endpoint WRITES, so enabling it — and especially widening `ip` past
+    %% loopback — is a deliberate operator choice, not a fleet default.
     [ {enabled, hoconsc:mk(boolean(), #{default => false})}
     , {ip,      hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
     , {port,    hoconsc:mk(integer(), #{default => 14569})}

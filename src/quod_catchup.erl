@@ -451,7 +451,7 @@ send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
 
 data_dir(Config) ->
     case maps:get(data_dir, Config, undefined) of
-        undefined -> filename:join(filename:basedir(user_cache, "quod"), "data");
+        undefined -> quod_ledger_store:default_data_dir();
         Dir       -> Dir
     end.
 

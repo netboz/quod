@@ -152,17 +152,17 @@ apply_transport_env(Cfg) ->
            end,
     application:set_env(quod, listen_port, Bind),
     application:set_env(quod, metrics_port, maps:get(port, maps:get(metrics, Cfg))),
-    Tx = maps:get(transactions, Cfg),
-    application:set_env(quod, transactions_enabled, maps:get(enabled, Tx, false)),
-    application:set_env(quod, transactions_ip, parse_ip(maps:get(ip, Tx, <<"127.0.0.1">>))),
-    application:set_env(quod, transactions_port, maps:get(port, Tx)),
+    Ex = maps:get(explorer, Cfg),
+    application:set_env(quod, explorer_enabled, maps:get(enabled, Ex, false)),
+    application:set_env(quod, explorer_ip, parse_ip(maps:get(ip, Ex, <<"127.0.0.1">>))),
+    application:set_env(quod, explorer_port, maps:get(port, Ex)),
     application:set_env(quod, node_addr, {Ip, Port}),   %% advertised endpoint the transport announces
     application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     application:set_env(quod, quic_idle_timeout_ms, maps:get(idle_timeout_ms, Node)),  %% dead-peer detection tuning
     application:set_env(quod, quic_keepalive_ms, maps:get(keepalive_ms, Node)),
     ok.
 
-%% Parse a configured bind IP (`transactions.ip`) into an inet address tuple; loopback on anything
+%% Parse a configured bind IP (`explorer.ip`) into an inet address tuple; loopback on anything
 %% unparseable, so a typo can never accidentally widen the viewer to all interfaces.
 parse_ip(Bin) when is_binary(Bin) ->
     case inet:parse_address(binary_to_list(Bin)) of
@@ -237,6 +237,7 @@ check_block_defaults(B = #{namespace := Ns}) ->
 
 start_ns_block(Content) ->
     {Ns, NsCfg} = build_ns_config(Content),
+    ok = publish_data_dir(Ns, NsCfg),
     Mode = maps:get(mode, NsCfg),
     case quod_ns_sup:start_namespace(Ns, NsCfg) of
         {ok, _} ->
@@ -252,6 +253,14 @@ start_ns_block(Content) ->
             logger:error("quod[~s]: content namespace start failed: ~p", [Ns, Error])
     end,
     ok.
+
+%% Record where each namespace's ledger lives (`content_data_dirs :: #{Ns => Dir}`) so the
+%% explorer (a singleton outside the per-ns subtree) can open read-only store views without
+%% re-deriving per-block config. Resolved exactly as the store users resolve it.
+publish_data_dir(Ns, NsCfg) ->
+    Dir = maps:get(data_dir, NsCfg, quod_ledger_store:default_data_dir()),
+    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    application:set_env(quod, content_data_dirs, Dirs#{Ns => Dir}).
 
 %% After a founder (create) stands up its namespace, log its genesis block hash — the anchor a mode=join
 %% node must pin in `content.genesis_hash`. Logged at `notice` so it stands out in the boot log: this is

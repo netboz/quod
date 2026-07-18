@@ -837,9 +837,15 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
             emit_applied(Change, Index, Origin, S1),
             S1;
         {conflict, _F} ->
-            %% OCC-rejected: nothing changed D, so no post-apply event on any origin.
-            release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
-                    S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1})
+            %% OCC-rejected: D is unchanged, but the transaction WAS committed (it is in the block),
+            %% so a live apply still announces the outcome — `rejected_live` — so an observer distinguishes
+            %% "committed and applied" from "committed but rejected at apply" without inferring it from a
+            %% later commit. Replay stays silent (rebuild only). Its cross-node consistency is the same as
+            %% the OCC verdict itself: deterministic on every member.
+            S1 = release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
+                         S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1}),
+            emit_rejected(Change, Index, Origin, S1),
+            S1
     end.
 
 %% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
@@ -850,11 +856,13 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %%% post-apply event layer (doc/agent-fipa-plan.md §7)
 %%%===================================================================
 %%
-%% The `{runtime, Ns}` property carries three messages for `quod_runtime` (§7, not built yet):
-%% `{applied_live, Env}` (one per live-applied transaction), and the `{replay_started, Id, From}` /
-%% `{replay_ready, Id, Height}` boundaries of a replay run. No consumer subscribes yet; these are a
-%% no-op beyond tests. The pre-apply `{committed, Ns}` publication (quod_simplex → feed/metrics) is
-%% untouched and is deliberately NOT the agent event source (it fires before this kb has applied).
+%% The `{runtime, Ns}` property carries these messages for `quod_runtime` (§7, not built yet) and the
+%% explorer (`m:quod_explorer_ws`): `{applied_live, Env}` (one per live-applied transaction that changed
+%% D), `{rejected_live, Env}` (one per live transaction that committed but was OCC-rejected at apply — a
+%% state-change consumer like `quod_runtime` ignores it; an observer uses it to show the outcome), and the
+%% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run. The pre-apply
+%% `{committed, Ns}` publication (quod_simplex → feed/metrics) is untouched and is deliberately NOT the
+%% agent event source (it fires before this kb has applied).
 
 %% Track the live/replay lifecycle, emitting the replay boundaries ONLY when the apply `Advanced` the
 %% committed height — so an already-applied no-op or a forward-gap cast never emits a false boundary.
@@ -881,6 +889,14 @@ emit_applied(#transaction{tx_id = Tx, goal = G, result = Res, diff = Diff}, Inde
             goal => G, result => Res, diff => Diff},
     publish_runtime(Ns, {applied_live, Env});
 emit_applied(_Change, _Index, replay, _S) -> ok.
+
+%% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors `emit_applied`
+%% so every live tx in a block yields exactly one outcome event (applied or rejected); D is unchanged, so
+%% the envelope carries no diff/result.
+emit_rejected(#transaction{tx_id = Tx, goal = G}, Index, live, #s{ns = Ns}) ->
+    Env = #{ns => Ns, height => Index, tx_id => Tx, subject => undefined, goal => G},
+    publish_runtime(Ns, {rejected_live, Env});
+emit_rejected(_Change, _Index, replay, _S) -> ok.
 
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
 

@@ -18,7 +18,6 @@
    ]},
   {env,
    [{listen_port, 14567},
-    {transactions_port, 14569},
     {alpn, "quod"},
     {certfile, "priv/certs/cert.pem"},
     {keyfile, "priv/certs/key.pem"},

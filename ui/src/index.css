@@ -1,0 +1,34 @@
+@import "tailwindcss";
+
+/* BBSVX Design Palette (doc/BBSVX Palette.pdf) — the five house hexes plus the
+   extended light/dark variants used by the reference frontends. */
+@theme {
+  --color-teal: #0b3954;
+  --color-teal-light: #1a5f7a;
+  --color-teal-dark: #062538;
+  --color-gray: #848fa5;
+  --color-rose: #c14953;
+  --color-rose-light: #d4737b;
+  --color-olive: #698f3f;
+  --color-olive-light: #8ab85a;
+  --color-gold: #f9c80e;
+  --color-gold-soft: #fbd85d;
+  --color-cream: #f5f1eb;
+  --color-slate: #2e3440;
+
+  --font-sans: ui-sans-serif, system-ui, sans-serif;
+  --font-mono: ui-monospace, "JetBrains Mono", "Fira Code", Menlo, Consolas, monospace;
+}
+
+body {
+  @apply bg-cream text-slate antialiased;
+}
+
+/* a freshly committed row flashes gold, then settles */
+@keyframes tx-flash {
+  0% { background-color: color-mix(in srgb, var(--color-gold-soft) 55%, white); }
+  100% { background-color: transparent; }
+}
+.tx-flash {
+  animation: tx-flash 1.6s ease-out;
+}

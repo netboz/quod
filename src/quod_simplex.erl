@@ -2601,7 +2601,7 @@ valid_member(_)                                      -> false.
 
 data_dir(Cfg) ->
     case maps:get(data_dir, Cfg) of
-        undefined -> filename:join(filename:basedir(user_cache, "quod"), "data");
+        undefined -> quod_ledger_store:default_data_dir();
         Dir       -> Dir
     end.
 

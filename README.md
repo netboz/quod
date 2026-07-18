@@ -93,6 +93,12 @@ orchestrator, no custom `sys.config`):
 Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 `14568`): `quod_up` and per-namespace `quod_brahms_{view_size,sample_size,links,rounds}`.
 
+The **web explorer** (live transaction list, detail view, prove console) is
+opt-in: `explorer.enabled` in the HOCON config, loopback-bound by default
+(`explorer.ip`/`explorer.port`, default `14569`). Frontend source lives in
+`ui/`; its built bundle is committed under `priv/explorer/` and served by the
+node itself — see `ui/README.md`.
+
 > #### `+Q` is not optional in a container {: .warning }
 >
 > The BEAM sizes its port table from `ulimit -n`. Container runtimes default

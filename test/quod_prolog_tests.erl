@@ -73,6 +73,7 @@ membership_test_() ->
 runtime_event_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_live_emits_event/1,
+      fun t_live_reject_emits_event/1,
       fun t_replay_no_event/1,
       fun t_replay_reentry/1,
       fun t_no_boundary_without_advance/1]}.
@@ -332,6 +333,26 @@ t_live_emits_event({Ns, _}) ->
         ?assertEqual(Diff, maps:get(diff, Env)),
         ?assertEqual(Tx#transaction.tx_id, maps:get(tx_id, Env)),
         ?assertMatch({ok, [_], 1}, quod_prolog:prove(Ns, {parent, tom, {'X'}}, Ns))
+    end.
+
+%% (c2) a committed-but-OCC-rejected LIVE tx publishes exactly one rejected_live envelope at its height
+%% (tx id + goal, no diff — D is unchanged), and NO applied_live. So an observer sees the outcome of every
+%% committed tx without inferring it from a later commit.
+t_live_reject_emits_event({Ns, _}) ->
+    fun() ->
+        true = quod_reg:subscribe({runtime, Ns}),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{})), live),
+        ?assertMatch({applied_live, _}, recv_rt(applied_live)),
+        %% a stale read-set for parent/2 → rejected at apply
+        Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
+        ok = quod_prolog:apply_block(Ns, 2, batch(Stale), live),
+        {rejected_live, Env} = recv_rt(rejected_live),
+        ?assertEqual(2, maps:get(height, Env)),
+        ?assertEqual(Stale#transaction.tx_id, maps:get(tx_id, Env)),
+        ?assertNot(maps:is_key(diff, Env)),
+        ok = refute_rt(applied_live),
+        %% and the rejected diff did not touch D
+        ?assertEqual(fail, quod_prolog:prove(Ns, {sibling, x}, Ns))
     end.
 
 %% (b) a REPLAY apply rebuilds D (fact readable) but publishes NO applied_live event — only the

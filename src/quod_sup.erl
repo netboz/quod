@@ -31,8 +31,8 @@ init([]) ->
          #{id => quod_metrics,
            start => {quod_metrics, start_link, []},
            type => worker},
-         #{id => quod_tx_view,
-           start => {quod_tx_view, start_link, []},
+         #{id => quod_explorer,
+           start => {quod_explorer, start_link, []},
            type => worker}
         ],
     {ok, {SupFlags, ChildSpecs}}.

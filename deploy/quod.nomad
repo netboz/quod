@@ -115,7 +115,7 @@ job "quod" {
       mode = "bridge"
       port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
-      port "transactions" { to = 14569 }
+      port "explorer" { to = 14569 }
     }
 
     volume "quod-data" {
@@ -186,7 +186,7 @@ EOT
       config {
         image      = "${var.image_registry}/quod:${var.image_tag}"
         force_pull = true
-        ports      = ["p2p", "metrics", "transactions"]
+        ports      = ["p2p", "metrics", "explorer"]
       }
 
       volume_mount {
@@ -203,10 +203,10 @@ node {
   bind_port = 14567
 }
 metrics { port = 14568 }
-# The live transaction viewer is off by DEFAULT (unauthenticated debug surface); the fleet opts in
-# explicitly and binds all interfaces so Nomad's quod-transactions /health check can reach it. This is a
-# private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
-transactions {
+# The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet
+# opts in explicitly and binds all interfaces so Nomad's quod-explorer /health check can reach it. This
+# is a private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
+explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
@@ -288,9 +288,9 @@ EOT
       }
 
       service {
-        name = "quod-transactions"
-        port = "transactions"
-        tags = ["quod", "transactions", "web"]
+        name = "quod-explorer"
+        port = "explorer"
+        tags = ["quod", "explorer", "web"]
 
         check {
           type     = "http"
@@ -335,7 +335,7 @@ EOT
       mode = "bridge"
       port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
-      port "transactions" { to = 14569 }
+      port "explorer" { to = 14569 }
     }
 
     volume "quod-data" {
@@ -385,7 +385,7 @@ EOT
       config {
         image      = "${var.image_registry}/quod:${var.image_tag}"
         force_pull = true
-        ports      = ["p2p", "metrics", "transactions"]
+        ports      = ["p2p", "metrics", "explorer"]
       }
 
       volume_mount {
@@ -402,9 +402,9 @@ node {
   bind_port = 14567
 }
 metrics { port = 14568 }
-# Viewer stays tunnel-only: the published port lives on tailscale0 and the VM's public
+# Explorer stays tunnel-only: the published port lives on tailscale0 and the VM's public
 # interface is firewalled, so 0.0.0.0 here never faces the internet.
-transactions {
+explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
@@ -477,9 +477,9 @@ EOT
       }
 
       service {
-        name = "quod-transactions"
-        port = "transactions"
-        tags = ["quod", "transactions", "web", "cloud"]
+        name = "quod-explorer"
+        port = "explorer"
+        tags = ["quod", "explorer", "web", "cloud"]
 
         check {
           type     = "http"

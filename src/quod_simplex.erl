@@ -91,6 +91,7 @@ persistence, and epoch-frozen validator sets, is tracked in `doc/deferred.md`.
          test_progress/1, test_progress_rearms/1, test_support_grace/1,
          test_round/2, test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
+         test_redrive_slot/3,
          encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -668,6 +669,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
 -define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
+-define(READINESS_MS, 1000).                      %% readiness refresh; at or below the default Delta
+-define(READINESS_FRESH_MS, 3000).                %% tolerate two missed refreshes, then fail closed
 
 -record(round, {supporting = none :: none | binary(),
                 commit = false :: boolean(),
@@ -686,7 +689,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
 -record(head_progress, {slot :: slot(),
                         phase :: progress_phase(),
-                        quorum_connected = false :: boolean(),
+                        quorum_ready = false :: boolean(),
                         quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS,
                         support_grace_used = false :: boolean()}).
 
@@ -723,6 +726,10 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             commit_buf = #{} :: #{slot() => {commit, #block{}} | skip},  %% out-of-order finalizations, drained in order
             conns      = #{} :: #{node_id() => {pid(), reference()}},  %% our OUTBOUND links to peers
             inbound_conns = #{} :: #{node_id() => {pid(), reference()}}, %% authenticated inbound consensus links
+            peer_readiness = #{} :: #{node_id() => {pid(), slot(), boolean(), integer()}},
+                                                     %% readiness reported on the exact inbound link generation
+            readiness_advertised = {0, false, 0}
+              :: {slot(), boolean(), integer()},      %% last local {height,ready,monotonic-ms} advertisement
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             relay_pending = #{} :: #{binary() => #relay_pending{}},
@@ -755,7 +762,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
-            quorum_pauses = 0 :: non_neg_integer(), %% timeouts that withheld a complaint while < quorum connected
+            quorum_pauses = 0 :: non_neg_integer(), %% timeouts that withheld a complaint while < quorum ready
             weak_cert_waits = 0 :: non_neg_integer()}).  %% finalizations refused on a sub-quorum cert (Slice E,
                                                          %% the stale-cert hazard) — climbing = a laggard waiting
 
@@ -783,21 +790,22 @@ test_state_set(author_seqs, V, S) -> S#s{author_seqs = V};
 test_state_set(store, V, S)       -> S#s{store = V};
 test_state_set(commit_buf, V, S)  -> S#s{commit_buf = V};
 test_state_set(head_progress, idle, S) -> S#s{head_progress = idle};
-test_state_set(head_progress, {Slot, Phase, Connected}, S) ->
+test_state_set(head_progress, {Slot, Phase, Ready}, S) ->
     S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_connected = Connected}};
-test_state_set(head_progress, {Slot, Phase, Connected, Rearms}, S) ->
+                                       quorum_ready = Ready}};
+test_state_set(head_progress, {Slot, Phase, Ready, Rearms}, S) ->
     S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_connected = Connected,
+                                       quorum_ready = Ready,
                                        quorum_rearms = Rearms}};
-test_state_set(head_progress, {Slot, Phase, Connected, Rearms, SupportGrace}, S) ->
+test_state_set(head_progress, {Slot, Phase, Ready, Rearms, SupportGrace}, S) ->
     S#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                       quorum_connected = Connected,
+                                       quorum_ready = Ready,
                                        quorum_rearms = Rearms,
                                        support_grace_used = SupportGrace}};
 test_state_set(requested_slot, V, S) -> S#s{requested_slot = V};
 test_state_set(conns, V, S)      -> S#s{conns = V};
 test_state_set(inbound_conns, V, S) -> S#s{inbound_conns = V};
+test_state_set(peer_readiness, V, S) -> S#s{peer_readiness = V};
 test_state_set(outbox, V, S)     -> S#s{outbox = V};
 test_state_set(dialing, V, S)    -> S#s{dialing = V};
 test_state_set(rounds, V, S)     -> S#s{rounds = V};
@@ -809,8 +817,8 @@ test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a 
 test_sync(#s{sync = Sy})         -> Sy.
 test_progress(#s{head_progress = idle}) -> idle;
 test_progress(#s{head_progress = #head_progress{slot = Slot, phase = Phase,
-                                                quorum_connected = Connected}}) ->
-    {Slot, Phase, Connected}.
+                                                quorum_ready = Ready}}) ->
+    {Slot, Phase, Ready}.
 test_progress_rearms(#s{head_progress = idle}) -> 0;
 test_progress_rearms(#s{head_progress = #head_progress{quorum_rearms = Rearms}}) -> Rearms.
 test_support_grace(#s{head_progress = idle}) -> false;
@@ -825,6 +833,9 @@ test_link_peers(#s{conns = Conns, inbound_conns = Inbound,
                    outbox = Outbox, dialing = Dialing}) ->
     {lists:sort(maps:keys(Conns)), lists:sort(maps:keys(Inbound)),
      lists:sort(maps:keys(Outbox)), lists:sort(maps:keys(Dialing))}.
+test_redrive_slot(Slot, Hash, S) ->
+    Local = #local_proposal{hash = Hash, waiters = []},
+    redrive_slot(Slot, S#s{local_proposals = #{Slot => Local}}).
 -endif.
 
 callback_mode() -> [state_functions].
@@ -1644,6 +1655,9 @@ drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
 dispatch(Peer, {propose, #block{} = B}, S) -> case well_formed_block(B) of true -> on_propose(Peer, B, S); false -> S end;
 dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true -> maybe_join_complaint(Sh, engine_step([{share, Sh}], S)); false -> S end;
 dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
+dispatch(Peer, {readiness, Height, Ready}, S)
+  when is_integer(Height), Height >= 0, is_boolean(Ready) ->
+    record_peer_readiness(Peer, Height, Ready, S);
 dispatch(_Peer, _Other, S)                 -> S.
 
 well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
@@ -1775,9 +1789,9 @@ watch_head(V, Phase, S = #s{slot = Committed}) when V =:= Committed + 1 ->
                   #head_progress{slot = V, phase = P} -> later_phase(P, Phase);
                   _                                   -> Phase
               end,
-    Connected = quorum_connected(S),
+    Ready = quorum_ready(S),
     S#s{head_progress = next_head_progress(
-                           V, Current, Connected, S#s.head_progress)};
+                           V, Current, Ready, S#s.head_progress)};
 watch_head(_V, _Phase, S) ->
     S.
 
@@ -1803,27 +1817,27 @@ reconcile_head_progress(S = #s{slot = Committed, approved = Approved}) ->
         idle ->
             S#s{head_progress = idle};
         _ ->
-            Connected = quorum_connected(S),
+            Ready = quorum_ready(S),
             S#s{head_progress = next_head_progress(
-                                   V, Phase, Connected, S#s.head_progress)}
+                                   V, Phase, Ready, S#s.head_progress)}
     end.
 
-next_head_progress(V, Phase, Connected,
+next_head_progress(V, Phase, Ready,
                    #head_progress{slot = V, phase = Phase,
-                                  quorum_connected = WasConnected,
+                                  quorum_ready = WasReady,
                                   quorum_rearms = Rearms,
                                   support_grace_used = GraceUsed}) ->
     {Rearms1, GraceUsed1} =
-        case {WasConnected, Connected, Rearms < ?MAX_QUORUM_REARMS} of
+        case {WasReady, Ready, Rearms < ?MAX_QUORUM_REARMS} of
             %% A bounded quorum restoration starts a fresh Delta and a fresh support-redrive grace.
             %% Once the rearm cap is exhausted, neither deadline nor grace can be renewed by flapping.
             {false, true, true} -> {Rearms + 1, false};
             _                   -> {Rearms, GraceUsed}
         end,
-    #head_progress{slot = V, phase = Phase, quorum_connected = Connected,
+    #head_progress{slot = V, phase = Phase, quorum_ready = Ready,
                    quorum_rearms = Rearms1, support_grace_used = GraceUsed1};
-next_head_progress(V, Phase, Connected, _Previous) ->
-    #head_progress{slot = V, phase = Phase, quorum_connected = Connected}.
+next_head_progress(V, Phase, Ready, _Previous) ->
+    #head_progress{slot = V, phase = Phase, quorum_ready = Ready}.
 
 retained_request(V, #s{requested_slot = V}) -> awaiting_proposal;
 retained_request(V, #s{head_progress = #head_progress{slot = V,
@@ -1848,15 +1862,41 @@ head_has_evidence(V, #s{eng = #eng{blocks = Blocks}, rounds = Rounds,
 head_has_evidence(_V, _S) ->
     false.
 
-quorum_connected(#s{self = Self, conns = Conns, inbound_conns = Inbound} = S) ->
+quorum_ready(#s{self = Self, slot = Height,
+                inbound_conns = Inbound, peer_readiness = Readiness} = S) ->
     Validators = active_validators(S),
-    case length(Validators) of
-        0 -> false;
-        N ->
-            Live = 1 + length([P || P <- Validators, P =/= Self,
-                                   live_link(P, Conns) orelse live_link(P, Inbound)]),
-            lists:member(Self, Validators) andalso Live >= quorum(N)
+    case may_vote(S) andalso length(Validators) > 0 of
+        false -> false;
+        true ->
+            ReadyPeers = [P || P <- Validators, P =/= Self,
+                               peer_ready_at(P, Height, Inbound, Readiness)],
+            1 + length(ReadyPeers) >= quorum(length(Validators))
     end.
+
+%% A readiness claim is useful only on the exact authenticated inbound consensus link that carried it.
+%% Replacing or losing that link removes the claim, so a restarted process cannot inherit its predecessor's
+%% readiness merely because it uses the same long-lived node key.
+peer_ready_at(Peer, Height, Inbound, Readiness) ->
+    case {maps:get(Peer, Inbound, undefined), maps:get(Peer, Readiness, undefined)} of
+        {{Pid, _Ref}, {Pid, PeerHeight, true, SeenAt}} when PeerHeight >= Height ->
+            is_process_alive(Pid)
+                andalso quod_time:mono_ms() - SeenAt =< ?READINESS_FRESH_MS;
+        _ ->
+            false
+    end.
+
+record_peer_readiness(Peer, Height, Ready,
+                      S = #s{inbound_conns = Inbound, peer_readiness = Readiness}) ->
+    case {lists:member(Peer, active_validators(S)), maps:get(Peer, Inbound, undefined)} of
+        {true, {Pid, _Ref}} when is_pid(Pid) ->
+            SeenAt = quod_time:mono_ms(),
+            S#s{peer_readiness = Readiness#{Peer => {Pid, Height, Ready, SeenAt}}};
+        _ ->
+            S
+    end.
+
+drop_peer_readiness(Peer, S = #s{peer_readiness = Readiness}) ->
+    S#s{peer_readiness = maps:remove(Peer, Readiness)}.
 
 live_link(Peer, Links) ->
     case maps:get(Peer, Links, undefined) of
@@ -1872,13 +1912,37 @@ keep_progress(S0, S1, Actions) ->
 
 keep_progress(S0, S1, Actions, TimerMode) ->
     SReady = settle_readiness(S0, maybe_mark_ready(S1)),
-    S2 = reconcile_head_progress(SReady),
+    SAdvertised = refresh_readiness(SReady),
+    S2 = reconcile_head_progress(SAdvertised),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);
                        normal -> progress_timer_actions(S0, S2)
                    end,
     {keep_state, S2, Actions ++ TimerActions}.
+
+%% Readiness is consensus state, so advertise it on the authenticated consensus channel rather than infer
+%% it from socket existence or a separate dissemination process. Capability/height changes go immediately;
+%% an unchanged state refreshes once per second so a failed dial is retried and a half-open link cannot
+%% leave an immortal claim. Readiness frames are intentionally not queued: `handle_link_up/3` sends the
+%% current value, so retaining older values would only bloat the protocol outbox during a long outage.
+refresh_readiness(S1) ->
+    {Height, Ready} = local_readiness(S1),
+    {LastHeight, LastReady, LastAt} = S1#s.readiness_advertised,
+    Now = quod_time:mono_ms(),
+    case {Height, Ready} =/= {LastHeight, LastReady}
+             orelse Now - LastAt >= ?READINESS_MS of
+        true  -> advertise_readiness(Height, Ready, Now, S1);
+        false -> S1
+    end.
+
+local_readiness(S) -> {S#s.slot, may_vote(S)}.
+
+advertise_readiness(Height, Ready, Now, S = #s{self = Self}) ->
+    Frame = encode(S#s.ns, {readiness, Height, Ready}),
+    S1 = lists:foldl(fun(Peer, Acc) -> send_readiness(Peer, Frame, Acc) end,
+                     S, active_validators(S) -- [Self]),
+    S1#s{readiness_advertised = {Height, Ready, Now}}.
 
 %% One capability edge owns recovery reconciliation. This catches explicit sync completion, periodic
 %% readiness, and live commit/skip self-corroboration without each caller remembering a special hook.
@@ -1894,18 +1958,18 @@ progress_timer_actions(_S0, #s{head_progress = idle}) ->
 %% Losing visible quorum suppresses complaint signing but does not reset the existing timeout. A later
 %% false->true transition may replace it with one fresh full Delta, up to the per-phase cap below.
 progress_timer_actions(
-  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_connected = true}},
-  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_connected = false}}) ->
+  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_ready = true}},
+  #s{head_progress = #head_progress{slot = V, phase = Phase, quorum_ready = false}}) ->
     [];
 %% A restoration grants a fresh Delta only a bounded number of times for one unchanged slot/phase.
 %% Once exhausted, the existing named timer keeps its original deadline, so a flapping link cannot
 %% postpone complaint progress forever. Advancing slot or phase creates a fresh budget.
 progress_timer_actions(
   #s{head_progress = #head_progress{slot = V, phase = Phase,
-                                   quorum_connected = false,
+                                   quorum_ready = false,
                                    quorum_rearms = Rearms}},
   #s{head_progress = #head_progress{slot = V, phase = Phase,
-                                   quorum_connected = true}})
+                                   quorum_ready = true}})
   when Rearms >= ?MAX_QUORUM_REARMS ->
     [];
 progress_timer_actions(_S0, #s{head_progress = #head_progress{slot = V}}) ->
@@ -1924,10 +1988,10 @@ log_progress_transition(_Old, idle, #s{ns = Ns, slot = Slot}) ->
     logger:debug("quod[~s]: head progress idle at committed slot ~b", [Ns, Slot]);
 log_progress_transition(_Old,
                         #head_progress{slot = V, phase = Phase,
-                                       quorum_connected = Connected},
+                                       quorum_ready = Ready},
                         #s{ns = Ns}) ->
-    logger:debug("quod[~s]: head ~b phase=~p quorum_connected=~p",
-                 [Ns, V, Phase, Connected]).
+    logger:debug("quod[~s]: head ~b phase=~p quorum_ready=~p",
+                 [Ns, V, Phase, Ready]).
 
 delta_ms() ->
     case application:get_env(quod, simplex_delta_ms, ?DELTA_MS) of
@@ -1951,7 +2015,7 @@ on_progress_timeout(V,
         true when Phase =:= awaiting_commit ->
             probe_committee(redrive_finality(V, S1));
         true ->
-            case quorum_connected(S1) of
+            case quorum_ready(S1) of
                 false ->
                     S2 = case leads_inflight(V, S1) of
                              true  -> redrive_slot(V, S1);
@@ -2068,9 +2132,9 @@ complaint_amplified(Self, Validators, Bucket) ->
 %% shares (re-signed — Ed25519 is deterministic, so the bytes are identical to the originals), and any
 %% pooled certs. The Δ re-fire IS the retransmit over the send-once transport. Idempotent at every
 %% receiver: duplicate blocks/shares/certs are absorbed by the engine, and a duplicate proposal makes the
-%% receiver RE-ECHO its own shares (see `support_block`) — healing the reverse direction too. Sent only
-%% to peers with a LIVE conn: a peer we cannot reach yet has the original frames in its outbox already
-%% (flushed on link_up); buffering per-Δ duplicates would only bloat it toward the ?MAX_OUTBOX cap.
+%% receiver RE-ECHO its own shares (see `support_block`) — healing the reverse direction too. Send to the
+%% whole committee: `send_frame/3` deduplicates a disconnected peer's outbox, so a proposal whose original
+%% send raced a dead link is retained and flushed as soon as that validator reconnects.
 redrive_slot(V, S) ->
     case may_vote(S) of
         true  -> redrive_slot_ready(V, S);
@@ -2092,7 +2156,7 @@ redrive_local_block(V, Block, BH, S0) ->
     %% the common path re-requests only after an abstention; an outstanding request is
     %% idempotent. The proposal itself is always retransmitted, even before support.
     S1 = support_or_validate(Block, BH, S0),
-    #s{self = Self, conns = Conns, eng = #eng{certs = Certs}} = S1,
+    #s{self = Self, eng = #eng{certs = Certs}} = S1,
     Round = round_state(V, S1),
     Own = case Round#round.supporting =:= BH of
               true ->
@@ -2105,11 +2169,11 @@ redrive_local_block(V, Block, BH, S0) ->
               false -> []
           end,
     Cs   = [{cert, C} || {{_K, Sl, _B}, C} <- maps:to_list(Certs), Sl =:= V],
-    Live = [P || P <- active_validators(S1) -- [Self], maps:is_key(P, Conns)],
+    Peers = active_validators(S1) -- [Self],
     S2   = S1#s{redrives = S1#s.redrives + 1},
     lists:foldl(fun(Msg, Acc) ->
                         Frame = encode(Acc#s.ns, Msg),
-                        lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Live)
+                        lists:foldl(fun(P, A) -> send_frame(P, Frame, A) end, Acc, Peers)
                 end, S2, [{propose, Block} | Own ++ Cs]).
 
 %% Once a block is notarized, its watchdog remains attached to the durable head. The original leader still
@@ -2187,9 +2251,9 @@ resume_ready_slot(Sl, S = #s{eng = #eng{tree = Tree}}) ->
             S
     end.
 
-%% A timeout observed with fewer than a certificate quorum connected must not sign an irreversible
-%% complaint. Open missing committee links without queuing duplicate protocol frames; link_up updates the
-%% progress state's connectivity bit and may start a fresh full Delta within the bounded rearm budget.
+%% A timeout observed with fewer than a certificate quorum ready must not sign an irreversible complaint.
+%% Open missing committee links without queuing duplicate protocol frames; a peer counts only after it
+%% reports readiness on its current authenticated inbound link.
 probe_committee(S = #s{self = Self, conns = Conns, dialing = Dialing, chan = Chan}) ->
     Missing = [P || P <- active_validators(S), P =/= Self,
                     not live_link(P, Conns), not maps:is_key(P, Dialing)],
@@ -2664,6 +2728,22 @@ send_frame(Peer, Frame, S = #s{chan = Chan, conns = Conns, outbox = Outbox, dial
             end
     end.
 
+%% Latest-value control frame. Never queue it: a successful link-up sends the then-current value directly,
+%% while the periodic refresh retries a failed dial. This keeps a long-disconnected peer from accumulating
+%% one obsolete readiness frame per committed height and displacing consensus evidence from the outbox.
+send_readiness(Peer, Frame, S = #s{chan = Chan, conns = Conns, dialing = Dialing}) ->
+    case maps:get(Peer, Conns, undefined) of
+        {LinkPid, _Ref} ->
+            _ = quod_link:send(LinkPid, Frame),
+            S;
+        undefined ->
+            case maps:is_key(Peer, Dialing) of
+                true  -> S;
+                false -> _ = quod_quic:open_link(Peer, Chan),
+                         S#s{dialing = Dialing#{Peer => dial_deadline()}}
+            end
+    end.
+
 buffer_frame(Frame, Frames) ->
     %% Periodic vote redrive must leave one recoverable copy for a disconnected peer,
     %% not fill the bounded outbox with the same signed bytes every tick.
@@ -2842,32 +2922,44 @@ handle_link_up(Peer, LinkPid, S0 = #s{outbox = Outbox}) ->
               end,
     case LiveDup orelse (not lists:member(Peer, active_validators(S))) of
         true  -> _ = quod_link:close(LinkPid), S;
-        false -> S1  = drop_conn_by_peer(Peer, S),         %% demonitor + drop any dead stored conn
+        false -> S1  = drop_conn_by_peer(Peer, S),
                  Ref = erlang:monitor(process, LinkPid),
                  _   = [quod_link:send(LinkPid, F) || F <- lists:reverse(maps:get(Peer, Outbox, []))],
-                 S1#s{conns = (S1#s.conns)#{Peer => {LinkPid, Ref}}, outbox = maps:remove(Peer, Outbox)}
+                 S2 = S1#s{conns = (S1#s.conns)#{Peer => {LinkPid, Ref}},
+                           outbox = maps:remove(Peer, Outbox)},
+                 {Height, Ready} = local_readiness(S2),
+                 _ = quod_link:send(LinkPid, encode(S2#s.ns, {readiness, Height, Ready})),
+                 S2
     end.
 
-%% An authenticated inbound stream is also proof of current reachability. Track one per peer so an
-%% asymmetric connection (their outbound works while ours is still dialing) cannot suppress complaints
-%% forever. Replacing a stream removes the obsolete monitor; the peer identity came from the link header.
+%% Track the authenticated inbound stream that carries this peer's votes and readiness. Readiness is bound
+%% to this exact pid; replacing the stream removes the previous claim before the new process can count.
 track_inbound(Peer, LinkPid, S = #s{inbound_conns = Inbound})
   when is_pid(LinkPid) ->
+    case is_process_alive(LinkPid) of
+        true  -> track_live_inbound(Peer, LinkPid, S, Inbound);
+        false -> S
+    end;
+track_inbound(_Peer, _LinkPid, S) ->
+    S.
+
+track_live_inbound(Peer, LinkPid, S, Inbound) ->
     case {lists:member(Peer, active_validators(S)), maps:get(Peer, Inbound, undefined)} of
         {false, _} ->
             S;
         {true, {LinkPid, _Ref}} ->
             S;
-        {true, {_OldPid, OldRef}} ->
+        {true, {OldPid, OldRef}} ->
+            _ = quod_link:close(OldPid),
             _ = erlang:demonitor(OldRef, [flush]),
             Ref = erlang:monitor(process, LinkPid),
-            S#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}};
+            S1 = drop_peer_readiness(Peer, S),
+            S1#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}};
         {true, undefined} ->
             Ref = erlang:monitor(process, LinkPid),
-            S#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}}
-    end;
-track_inbound(_Peer, _LinkPid, S) ->
-    S.
+            S1 = drop_peer_readiness(Peer, S),
+            S1#s{inbound_conns = Inbound#{Peer => {LinkPid, Ref}}}
+    end.
 
 %% A tracked link died (DOWN): drop it from either direction. A later send/tick reopens outbound links.
 drop_link(Pid, S) ->
@@ -2875,7 +2967,9 @@ drop_link(Pid, S) ->
 
 drop_conn(Pid, S = #s{conns = Conns}) ->
     case [{P, R} || {P, {LP, R}} <- maps:to_list(Conns), LP =:= Pid] of
-        [{Peer, Ref} | _] -> _ = erlang:demonitor(Ref, [flush]), S#s{conns = maps:remove(Peer, Conns)};
+        [{Peer, Ref} | _] ->
+            _ = erlang:demonitor(Ref, [flush]),
+            S#s{conns = maps:remove(Peer, Conns)};
         []                -> S
     end.
 
@@ -2883,7 +2977,7 @@ drop_inbound(Pid, S = #s{inbound_conns = Inbound}) ->
     case [{P, R} || {P, {LP, R}} <- maps:to_list(Inbound), LP =:= Pid] of
         [{Peer, Ref} | _] ->
             _ = erlang:demonitor(Ref, [flush]),
-            S#s{inbound_conns = maps:remove(Peer, Inbound)};
+            drop_peer_readiness(Peer, S#s{inbound_conns = maps:remove(Peer, Inbound)});
         [] ->
             S
     end.
@@ -2898,6 +2992,7 @@ drop_conn_by_peer(Peer, S = #s{conns = Conns}) ->
 %% close both stream directions and discard its queued frames/dial attempt so repeated membership churn
 %% cannot accumulate unreachable link processes or stale outboxes.
 prune_consensus_links(S = #s{self = Self, conns = Conns, inbound_conns = Inbound,
+                             peer_readiness = Readiness,
                              outbox = Outbox, dialing = Dialing}) ->
     Allowed = maps:from_keys(active_validators(S) -- [Self], true),
     {Conns1, RemovedOut} = partition_consensus_links(Allowed, Conns),
@@ -2906,6 +3001,7 @@ prune_consensus_links(S = #s{self = Self, conns = Conns, inbound_conns = Inbound
     maps:foreach(fun(_Peer, Link) -> close_tracked_link(Link) end, RemovedIn),
     S#s{conns = Conns1,
         inbound_conns = Inbound1,
+        peer_readiness = maps:with(maps:keys(Allowed), Readiness),
         outbox = maps:with(maps:keys(Allowed), Outbox),
         dialing = maps:with(maps:keys(Allowed), Dialing)}.
 
@@ -3608,14 +3704,14 @@ status_map(S) ->
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
       finality_slot => S#s.slot + 1,
-      progress_phase => ProgressPhase, progress_quorum_connected => ProgressQuorum,
+      progress_phase => ProgressPhase, progress_quorum_ready => ProgressQuorum,
       proposal_slot => ProposalSlot,
       proposal_open => case proposal_slot(S) of {ok, ProposalSlot} -> true; _ -> false end}.
 
 progress_status(idle) -> {0, idle, false};
 progress_status(#head_progress{slot = Slot, phase = Phase,
-                               quorum_connected = Connected}) ->
-    {Slot, Phase, Connected}.
+                               quorum_ready = Ready}) ->
+    {Slot, Phase, Ready}.
 
 progress_phase_number(idle) -> 0;
 progress_phase_number(awaiting_proposal) -> 1;
@@ -3638,7 +3734,7 @@ stats_map(S) ->
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       progress_slot => ProgressSlot,
       progress_phase_code => progress_phase_number(ProgressPhase),
-      progress_quorum_connected => case ProgressQuorum of true -> 1; false -> 0 end,
+      progress_quorum_ready => case ProgressQuorum of true -> 1; false -> 0 end,
       progress_timeouts => S#s.progress_timeouts, quorum_pauses => S#s.quorum_pauses,
       head_complaint_signed => head_complaint_signed(S),
       weak_cert_waits => S#s.weak_cert_waits,

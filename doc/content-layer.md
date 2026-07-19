@@ -206,12 +206,14 @@ agrees on every change.
   on to the next, in a second or two. No human involved.
 - Each node keeps one explicit watchdog on the **oldest unfinished slot**. It follows
   that slot from proposal, through first-stage approval, until durable commit or skip;
-  approval never cancels finality recovery. If too many validators are disconnected to
-  form a certificate, complaint voting pauses. The first three connectivity restorations
-  for one unchanged phase grant a fresh timeout; further link flaps cannot keep moving the
-  deadline. A recovering validator processes a valid proposal it retained through the
-  ordinary support or membership-check path. If it already has a notarization certificate,
-  it resumes only the missing final vote and never invents support that bypasses validation.
+  approval never cancels finality recovery. Complaint voting pauses unless enough
+  validators have both a live authenticated consensus stream and a fresh report that
+  they are caught up to the local committed height. A socket opened by a still-recovering
+  process therefore does not count as a voter. The first three readiness restorations for
+  one unchanged phase grant a fresh timeout; later flaps cannot keep moving the deadline.
+  A recovering validator processes a valid proposal it retained through the ordinary
+  support or membership-check path. If it already has a notarization certificate, it
+  resumes only the missing final vote and never invents support that bypasses validation.
   When quorum returns before notarization, a validator that already supported the proposal
   re-sends that support once and waits one final timeout before it may complain; this gives
   the leader's retained proposal time to reach a recovered validator without allowing an

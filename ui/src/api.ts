@@ -44,7 +44,7 @@ export type NsSummary = {
   next_proposer: PeerId | null
   proposal_open: boolean
   progress_phase: 'idle' | 'awaiting_proposal' | 'awaiting_notarization' | 'awaiting_commit'
-  progress_quorum_connected: boolean
+  progress_quorum_ready: boolean
   genesis: string | null
 }
 

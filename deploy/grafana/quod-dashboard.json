@@ -1018,7 +1018,7 @@
         "x": 0,
         "y": 101
       },
-      "description": "State of the oldest unfinished block on each node. phase: 0 idle, 1 waiting for a proposal, 2 waiting for support, 3 waiting for final commit votes. quorum_connected is 1 when enough voting peers are linked; complaint voting pauses while it is 0.",
+      "description": "State of the oldest unfinished block on each node. phase: 0 idle, 1 waiting for a proposal, 2 waiting for support, 3 waiting for final commit votes. quorum_ready is 1 when enough linked validators have freshly reported that they are caught up to this node; complaint voting pauses while it is 0.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -1038,8 +1038,8 @@
         },
         {
           "refId": "B",
-          "expr": "quod_consensus_progress_quorum_connected{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "quorum connected · {{node_id}}"
+          "expr": "quod_consensus_progress_quorum_ready{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "quorum ready · {{node_id}}"
         }
       ]
     },

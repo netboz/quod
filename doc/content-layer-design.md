@@ -913,13 +913,19 @@ head, then becomes `awaiting_proposal` as soon as the parent finalizes. A recove
 a valid, unnotarized proposal processes it through the normal support or membership-verdict path before
 complaining. A notarized complete-tree block instead reconstructs only its local commit latch when voting
 returns, because the original notarization event was one-shot. Complaint timeouts are withheld while fewer
-than a certificate quorum have live authenticated inbound or outbound consensus links. The first three
-restorations for one unchanged phase grant a fresh Delta; later flaps leave the existing deadline intact.
+than a certificate quorum have reported `ready` at or beyond the local committed height on their current
+authenticated inbound consensus streams. The report is refreshed once per second, expires after three
+seconds, and is discarded with its exact stream generation; opening a replacement socket while still
+recovering cannot inherit the previous process's readiness. The first three readiness restorations for one
+unchanged phase grant a fresh Delta; later flaps leave the existing deadline intact.
 Before notarization, an already-supporting follower uses the first such timeout to re-echo its support and
 waits one final Delta before complaining. This lets the leader's retained proposal reach a recovered voter;
 the one-shot latch prevents the grace from becoming an unbounded liveness delay.
-Committee transitions close obsolete inbound and outbound consensus links and discard their queued frames
-and pending dials, so transport state cannot outlive the validator set that authorized it.
+The leader redrives a retained proposal to the whole active committee through the bounded, deduplicating
+outbox, including validators that are not connected yet; reconnecting voters therefore receive the proposal
+before their support is needed. Committee transitions close obsolete inbound and outbound consensus links,
+discard readiness reports, and remove queued frames and pending dials, so transport state cannot outlive the
+validator set that authorized it.
 This improves liveness after a temporary `>f` crash outage. It does not extend the
 safety bound: a restarted validator currently loses its RAM-only prior-vote latches, so durable latches
 are required before claiming safety beyond `f`. The protocol's guaranteed fault bound remains `f`.

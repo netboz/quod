@@ -229,6 +229,10 @@ sync_arm_pacing_test() ->
 %% minimal-state builder for the pure gate predicates (the #s record is private to quod_simplex)
 st(Overrides) -> quod_simplex:test_state(Overrides).
 
+voting_readiness(Peers, LinkPid, Height) ->
+    Now = quod_time:mono_ms(),
+    maps:from_list([{Peer, {LinkPid, Height, true, Now}} || Peer <- Peers]).
+
 %%%===================================================================
 %%% block-timestamp acceptance (the valid_proposal monotonic + future + type gate)
 %%%===================================================================
@@ -282,9 +286,11 @@ head_progress_state_test() ->
                  quod_simplex:test_progress(
                    quod_simplex:reconcile_head_progress(Requested))),
 
-    Conns = #{B => {self(), make_ref()}, C => {self(), make_ref()}},
+    Inbound = #{B => {self(), make_ref()}, C => {self(), make_ref()}},
+    Readiness = voting_readiness([B, C], self(), 6),
     Notarized = st(#{self => A, validators => pubs(Committee), slot => 5,
-                     approved => 6, eng => Eng0, sync => ready, conns => Conns,
+                     approved => 6, eng => Eng0, sync => ready,
+                     inbound_conns => Inbound, peer_readiness => Readiness,
                      head_progress => {6, awaiting_notarization, false}}),
     ?assertEqual({6, awaiting_commit, true},
                  quod_simplex:test_progress(
@@ -293,11 +299,11 @@ head_progress_state_test() ->
     %% Once slot 6 is durable, the same approved frontier now means slot 7 is the watched finality head.
     Advanced = st(#{self => A, validators => pubs(Committee), slot => 6,
                     approved => 7, eng => quod_simplex:eng_new(pubs(Committee), 6),
-                    sync => ready, conns => Conns}),
+                    sync => ready, inbound_conns => Inbound,
+                    peer_readiness => Readiness}),
     ?assertEqual({7, awaiting_commit, true},
                  quod_simplex:test_progress(
-                   quod_simplex:reconcile_head_progress(Advanced))),
-    ok.
+                   quod_simplex:reconcile_head_progress(Advanced))).
 
 %% Demand for the depth-one successor arrives while the durable head is still awaiting commit. Preserve
 %% that demand separately; once the parent commits, the successor immediately becomes the watched
@@ -334,19 +340,53 @@ finalized_request_is_not_resurrected_test() ->
                       requested_slot => 7})),
     ?assertEqual(7, quod_simplex:test_requested(Later)).
 
-%% Either authenticated stream direction proves reachability. This avoids an asymmetric connection where
-%% the peer can send to us but our still-opening outbound stream falsely suppresses complaint progress.
+%% A peer counts only after reporting readiness on the authenticated inbound stream that carries its
+%% votes. Our own outbound stream may still be opening; that does not hide a peer that can already vote.
 inbound_link_counts_toward_quorum_test() ->
     [{A, _}, {B, _}, {C, _}, {_D, _}] = Committee = committee(4),
-    Outbound = #{B => {self(), make_ref()}},
-    Inbound = #{C => {self(), make_ref()}},
+    Inbound = #{B => {self(), make_ref()}, C => {self(), make_ref()}},
     S = st(#{self => A, validators => pubs(Committee), slot => 5, approved => 5,
              eng => quod_simplex:eng_new(pubs(Committee), 5), sync => ready,
-             conns => Outbound, inbound_conns => Inbound,
+             inbound_conns => Inbound,
+             peer_readiness => voting_readiness([B, C], self(), 5),
              head_progress => {6, awaiting_proposal, false}}),
     ?assertEqual({6, awaiting_proposal, true},
                  quod_simplex:test_progress(
                    quod_simplex:reconcile_head_progress(S))).
+
+%% Open authenticated streams alone are not evidence that a restarted peer has recovered enough state to
+%% vote. A current-height heartbeat turns the same links into a ready quorum; a behind heartbeat does not.
+socket_only_quorum_is_not_ready_test() ->
+    [{A, _}, {B, _}, {C, _}, {_D, _}] = Committee = committee(4),
+    Links = #{B => {self(), make_ref()}, C => {self(), make_ref()}},
+    Common = #{self => A, validators => pubs(Committee), slot => 5, approved => 5,
+               eng => quod_simplex:eng_new(pubs(Committee), 5), sync => ready,
+               inbound_conns => Links, head_progress => {6, awaiting_proposal, false}},
+    SocketOnly = quod_simplex:reconcile_head_progress(st(Common)),
+    ?assertEqual({6, awaiting_proposal, false},
+                 quod_simplex:test_progress(SocketOnly)),
+    Behind = quod_simplex:reconcile_head_progress(
+               st(Common#{peer_readiness => voting_readiness([B, C], self(), 4)})),
+    ?assertEqual({6, awaiting_proposal, false},
+                 quod_simplex:test_progress(Behind)),
+    Now = quod_time:mono_ms(),
+    Stale = maps:from_list([{Peer, {self(), 5, true, Now - 3001}} ||
+                               Peer <- [B, C]]),
+    StaleState = quod_simplex:reconcile_head_progress(
+                   st(Common#{peer_readiness => Stale})),
+    ?assertEqual({6, awaiting_proposal, false},
+                 quod_simplex:test_progress(StaleState)),
+    OtherLink = spawn(fun() -> receive stop -> ok end end),
+    WrongGeneration = voting_readiness([B, C], OtherLink, 5),
+    WrongState = quod_simplex:reconcile_head_progress(
+                   st(Common#{peer_readiness => WrongGeneration})),
+    ?assertEqual({6, awaiting_proposal, false},
+                 quod_simplex:test_progress(WrongState)),
+    OtherLink ! stop,
+    Ready = quod_simplex:reconcile_head_progress(
+              st(Common#{peer_readiness => voting_readiness([B, C], self(), 5)})),
+    ?assertEqual({6, awaiting_proposal, true},
+                 quod_simplex:test_progress(Ready)).
 
 %% Consensus links are committee-scoped. A committed removal drops both directions plus any queued frames
 %% and outstanding dial for the departed peer, while preserving the remaining member's transport state.
@@ -373,8 +413,8 @@ committee_change_prunes_stale_links_test() ->
     end.
 
 %% Exercise every watchdog decision boundary directly: a ready node with quorum complains, a ready node
-%% without quorum pauses, and a recovering node merely probes. Connectivity restoration replaces the
-%% timer with a fresh full Delta; losing quorum leaves the existing timer untouched.
+%% without quorum pauses, and a recovering node merely probes. Readiness restoration replaces the timer
+%% with a fresh full Delta; losing quorum leaves the existing timer untouched.
 progress_timeout_branches_test() ->
     [{A, IdA}, {B, _}, {C, _}, {D, _}] = Committee = committee(4),
     Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
@@ -382,26 +422,28 @@ progress_timeout_branches_test() ->
         Eng = quod_simplex:eng_new(pubs(Committee), 5),
         Full = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
                  D => {Sink, make_ref()}},
+        Readiness = voting_readiness([B, C, D], Sink, 5),
         Common = #{self => A, id => IdA, validators => pubs(Committee),
                    slot => 5, approved => 5, eng => Eng,
                    head_progress => {6, awaiting_proposal, true}},
         Complained = quod_simplex:on_progress_timeout(
-                       6, st(Common#{sync => ready, conns => Full})),
+                       6, st(Common#{sync => ready, inbound_conns => Full,
+                                     peer_readiness => Readiness})),
         ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
         ?assertEqual({1, 0}, quod_simplex:test_progress_counts(Complained)),
 
         Sparse = #{B => {Sink, make_ref()}},
         Dialing = #{C => 999999999999, D => 999999999999},
         Paused = quod_simplex:on_progress_timeout(
-                   6, st(Common#{sync => ready, conns => Sparse,
-                                 dialing => Dialing,
+                   6, st(Common#{sync => ready, inbound_conns => Sparse,
+                                 peer_readiness => Readiness, dialing => Dialing,
                                  head_progress => {6, awaiting_proposal, false}})),
         ?assertEqual({none, false, false}, quod_simplex:test_round(6, Paused)),
         ?assertEqual({1, 1}, quod_simplex:test_progress_counts(Paused)),
 
         Recovering = quod_simplex:on_progress_timeout(
-                       6, st(Common#{sync => unconfirmed, conns => Sparse,
-                                     dialing => Dialing,
+                       6, st(Common#{sync => unconfirmed, inbound_conns => Sparse,
+                                     peer_readiness => Readiness, dialing => Dialing,
                                      head_progress => {6, awaiting_proposal, false}})),
         ?assertEqual({none, false, false}, quod_simplex:test_round(6, Recovering)),
         ?assertEqual({1, 0}, quod_simplex:test_progress_counts(Recovering)),
@@ -429,16 +471,17 @@ ready_after_passive_ingest_supports_before_complaining_test() ->
                   {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
     Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
     try
-        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
-                  D => {Sink, make_ref()}},
+        Inbound = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                    D => {Sink, make_ref()}},
+        Readiness = voting_readiness([B, C, D], Sink, 5),
         Recovering = st(#{self => A, id => IdA, validators => pubs(Committee),
                           slot => 5, approved => 5, eng => Eng, sync => unconfirmed,
-                          conns => Conns}),
+                          inbound_conns => Inbound, peer_readiness => Readiness}),
         ?assertEqual(idle, quod_simplex:test_progress(
                              quod_simplex:reconcile_head_progress(Recovering))),
         Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
                      slot => 5, approved => 5, eng => Eng, sync => ready,
-                     conns => Conns}),
+                     inbound_conns => Inbound, peer_readiness => Readiness}),
         Watched = quod_simplex:reconcile_head_progress(Ready),
         ?assertEqual({6, awaiting_notarization, true},
                      quod_simplex:test_progress(Watched)),
@@ -463,11 +506,12 @@ supported_proposal_gets_one_redrive_before_complaint_test() ->
                   {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
     Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
     try
-        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
-                  D => {Sink, make_ref()}},
+        Inbound = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                    D => {Sink, make_ref()}},
         Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
                      slot => 5, approved => 5, eng => Eng, sync => ready,
-                     conns => Conns,
+                     inbound_conns => Inbound,
+                     peer_readiness => voting_readiness([B, C, D], Sink, 5),
                      head_progress => {6, awaiting_notarization, true}}),
 
         Supported = quod_simplex:on_progress_timeout(6, Ready),
@@ -483,6 +527,23 @@ supported_proposal_gets_one_redrive_before_complaint_test() ->
     after
         exit(Sink, kill)
     end.
+
+%% A retained leader proposal must be queued for validators that are not connected yet. The old live-link
+%% filter omitted them entirely, so a recovered validator could advertise readiness but never receive the
+%% proposal whose support was needed to complete notarization.
+redrive_queues_proposal_for_disconnected_validators_test() ->
+    Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"redrive-disconnected">>,
+                   [{assert, {{recovered, redrive}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    {Eng, []} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    S = st(#{self => A, id => IdA, validators => pubs(Committee),
+             slot => 5, approved => 5, eng => Eng, sync => ready}),
+    Redriven = quod_simplex:test_redrive_slot(6, BH, S),
+    ?assertEqual({[], [], lists:sort([B, C, D]), lists:sort([B, C, D])},
+                 quod_simplex:test_link_peers(Redriven)).
 
 %% Quorum restoration may grant a few fresh Deltas for transient reconnects, but an unchanged slot/phase
 %% eventually exhausts that budget. Further false->true flaps leave the existing deadline untouched.
@@ -629,12 +690,13 @@ restart_loses_complaint_latch_boundary_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
     try
-        Conns = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
-                  D => {Sink, make_ref()}},
+        Inbound = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
+                    D => {Sink, make_ref()}},
+        Readiness = voting_readiness([B, C, D], Sink, 5),
         EmptyEng = quod_simplex:eng_new(pubs(Committee), 5),
         BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
                            slot => 5, approved => 5, eng => EmptyEng, sync => ready,
-                           conns => Conns,
+                           inbound_conns => Inbound, peer_readiness => Readiness,
                            head_progress => {6, awaiting_proposal, true}}),
         Complained = quod_simplex:on_progress_timeout(6, BeforeCrash),
         ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
@@ -644,8 +706,7 @@ restart_loses_complaint_latch_boundary_test() ->
                     {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
         {Notarized, _} = feed_shares(supports(Block, Committee, 3), E1),
         Restarted = st(#{self => A, id => IdA, validators => pubs(Committee),
-                         slot => 5, approved => 6, eng => Notarized, sync => ready,
-                         conns => Conns}),
+                         slot => 5, approved => 6, eng => Notarized, sync => ready}),
         AfterRestart = quod_simplex:resume_ready_rounds(Restarted),
         ?assertEqual({none, true, false}, quod_simplex:test_round(6, AfterRestart))
     after

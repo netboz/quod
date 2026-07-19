@@ -327,13 +327,16 @@ stages, not carried forward:
   proposal, notarization, and final commit, so support certification cannot silently cancel finality
   recovery. A member that retained an unnotarized proposal while `unconfirmed` processes it through normal
   support or membership validation before complaining; a notarized block reconstructs only its commit latch
-  when recovery grants `ready`. Complaint signing pauses while fewer than a certificate quorum have live
-  authenticated inbound or outbound consensus links. Three restoration rearms are allowed per unchanged
-  phase, after which link flaps cannot extend the deadline. On the first pre-notarization timeout after
-  quorum returns, an already-supporting follower re-echoes its support once before complaint becomes
-  eligible; this closes the live-observed race where survivors skipped the valid retained proposal before
-  a recovered voter received the leader's redrive. Committed committee changes close obsolete consensus
-  links and discard their queued frames and pending dials. This is a liveness extension, not a larger safety
+  when recovery grants `ready`. Complaint signing pauses while fewer than a certificate quorum have a live
+  authenticated inbound consensus stream and a fresh, stream-generation-bound report that they are caught
+  up to the local committed height. Reports refresh every second and expire after three, so a restarted
+  process's socket cannot count before its recovery FSM grants voting capability. Three readiness-restoration
+  rearms are allowed per unchanged phase, after which flaps cannot extend the deadline. On the first
+  pre-notarization timeout after quorum returns, an already-supporting follower re-echoes its support once
+  before complaint becomes eligible. Retained proposals are redriven through the bounded outbox to the
+  whole committee, including disconnected validators, so a recovered voter receives the proposal before
+  its support is needed. Committed committee changes close obsolete consensus links and discard their
+  readiness, queued frames, and pending dials. This is a liveness extension, not a larger safety
   bound: vote-latch persistence above remains the prerequisite for safe `>f` recovery. Also
   closed the stale collecting-batch crash: a competing
   notarization nacks and removes the obsolete collection before advancing `approved`.

@@ -192,7 +192,7 @@ ns_summary(Ns) ->
       next_proposer => leader_json(ProposalSlot, Committee),
       proposal_open => maps:get(proposal_open, St, false),
       progress_phase => maps:get(progress_phase, St, idle),
-      progress_quorum_connected => maps:get(progress_quorum_connected, St, false),
+      progress_quorum_ready => maps:get(progress_quorum_ready, St, false),
       genesis   => case quod_simplex:genesis_hash(Ns) of
                        H when is_binary(H) -> binary:encode_hex(H, lowercase);
                        _ -> null

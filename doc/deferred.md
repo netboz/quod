@@ -279,6 +279,12 @@ stages, not carried forward:
   safety for `>f` crash recovery: persist the latches (or a per-slot "already-voted" marker) alongside the
   durable log so a restart refuses to re-sign a slot it already signed. Intersects transaction signatures
   (Phase B) and the epoch work.
+  *Design settled + consciously deferred (2026-07-19):* diskless alternatives were evaluated and rejected —
+  "sit out possibly-voted slots after restart" deadlocks the in-flight slot when `>f` restart at once (the
+  exact outage validated on 0.7.20), and rebuilding one's votes from peers' echoes proves only votes that
+  DID happen, never their absence. The chosen shape is a tiny per-ns vote journal: append one small record
+  and flush BEFORE broadcasting each share, reload it at boot, truncate as slots finalize. At the observed
+  ~5 slots/s the extra flushes are negligible. Do as a small standalone milestone before open membership.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
   0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
   per-message redrive (Slice B) + dial-tick retransmit to refill, but had no member-side *bulk* catch-up, and

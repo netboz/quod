@@ -13,14 +13,10 @@
 # and nothing is failed/lost (stability).
 #
 # WHY THIS IS NOT THE OLD N=1 DRIVER:
-#   * Writes are LEADER-AWARE. At N=4 the founder leads only 1/4 of slots, so a
-#     founder-only fire-and-forget writer would bounce ~3/4 of writes off
-#     {error,{not_leader,_}} and silently drop them. There is no cross-alloc
-#     Erlang distribution (nodes speak QUIC only) and no leader-forwarding, so a
-#     writer MUST run in-BEAM on a validator and land only when that node leads.
-#     We therefore run a bounded-retry writer on EACH validator: it retries a
-#     write across the leader rotation (not_leader / retry / busy / rebuilding)
-#     until it lands, then paces. Load is thus authored by all leaders, not one.
+#   * Writes run from every validator. Signed follower-to-leader relay now
+#     forwards a valid submission to the current leader, while bounded retries
+#     still cover leader rotation, recovery, and bounded backpressure. Keeping
+#     writers on every validator exercises both the leader ingress and relay.
 #   * Churn is VALIDATOR-AWARE. The committee tolerates ANY 1 of N validators down
 #     (quorum = N-f); restarting one validator — INCLUDING the founder, no longer
 #     special — must NOT stop commits (the key BFT test). Restarting f+1 at once
@@ -47,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.1}"                     # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.17}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
@@ -242,21 +238,30 @@ QEVAL_LONG() { timeout 70 nomad alloc exec -task quod "$1" /opt/quod/bin/quod ev
 #==============================================================================
 # fleet discovery (JSON — no dependence on nomad's human table format / subnet)
 #==============================================================================
-# Running allocation IDs for the homogeneous quod-node task group. Uses the JSON API, not `nomad job status`
-# text table: during churn the human table intermittently drops/mis-lists rows, which made stop_writers'
-# re-kill miss the very validators holding writers (orphans survived + kept advancing the ledger).
+# Running allocation IDs for one task group, or every Quod task group with
+# `all`. Uses the JSON API, not `nomad job status` text table: during churn the
+# human table intermittently drops/mis-lists rows, which made stop_writers'
+# re-kill miss the very validators holding writers (orphans survived + kept
+# advancing the ledger).
 allocs() {
+  local group=${1:-all}
   nomad operator api "/v1/job/$JOB/allocations" 2>/dev/null \
-    | jq -r --arg g "$1" '.[] | select(.ClientStatus == "running" and .TaskGroup == $g) | .ID' 2>/dev/null
+    | jq -r --arg g "$group" '.[] | select(.ClientStatus == "running" and ($g == "all" or .TaskGroup == $g)) | .ID' 2>/dev/null
 }
 
-# "allocid group host:port" for every running alloc's metrics endpoint (parallel, one nomad call each)
+# "allocid group target" for every running allocation's metrics endpoint. Compute
+# nodes publish a host port; cloud allocations are tailnet-only from this driver,
+# so their target is `local` and scrape_row enters the allocation through Nomad.
 endpoints() {
-  allocs quod-node | xargs -P 16 -I{} sh -c '
+  allocs all | xargs -r -P 16 -I{} sh -c '
     j=$(nomad alloc status -json "$1" 2>/dev/null)
-    hp=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"metrics\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
     grp=$(printf "%s" "$j" | jq -r ".TaskGroup" 2>/dev/null)
-    [ -n "$hp" ] && echo "$1 $grp $hp"' _ {}
+    if [ "$grp" = "quod-cloud" ]; then
+      echo "$1 $grp local"
+    else
+      hp=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"metrics\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
+      [ -n "$hp" ] && echo "$1 $grp $hp"
+    fi' _ {}
 }
 failed_allocs() {   # count allocs currently failed/lost (0 = healthy)
   nomad operator api "/v1/job/$JOB/allocations" 2>/dev/null \
@@ -271,7 +276,11 @@ failed_allocs() {   # count allocs currently failed/lost (0 = healthy)
 # fails -> slot/isv/cs = -1 (excluded from aggregates + classification).
 scrape_row() {   # arg: "alloc,group,host:port"
   local a g hp; IFS=, read -r a g hp <<<"$1"
-  curl -s --max-time 4 "http://$hp/metrics" 2>/dev/null | awk -v a="$a" -v g="$g" -v ns="$NS" '
+  if [ "$g" = "quod-cloud" ]; then
+    nomad alloc exec -task quod "$a" /usr/bin/curl -s --max-time 4 http://127.0.0.1:14568/metrics 2>/dev/null
+  else
+    curl -s --max-time 4 "http://$hp/metrics" 2>/dev/null
+  fi | awk -v a="$a" -v g="$g" -v ns="$NS" '
     index($0, "namespace=\"" ns "\"") {
       if ($1 ~ /^quod_consensus_slot\{/) slot=$2
       else if ($1 ~ /^quod_feed_dropped\{/ && $0 ~ /reason="unverified"/) unv+=$2
@@ -347,7 +356,7 @@ kill_writers_once() {
     [ -z "$a" ] && continue
     ( QEVAL_LONG "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(100), case whereis($WRITER) of undefined -> killed; _ -> alive end end." > "$tmp/$a" 2>&1 ) &
     pids+=("$!")
-  done < <(allocs quod-node)
+  done < <(allocs all)
   for pid in "${pids[@]}"; do wait "$pid" || true; done
   for out in "$tmp"/*; do
     [ -e "$out" ] || continue

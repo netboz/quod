@@ -3682,11 +3682,7 @@ valid_member(Pk)                when is_binary(Pk)   -> true;
 valid_member({Pk, _Host, _Port}) when is_binary(Pk)  -> true;
 valid_member(_)                                      -> false.
 
-data_dir(Cfg) ->
-    case maps:get(data_dir, Cfg) of
-        undefined -> quod_ledger_store:default_data_dir();
-        Dir       -> Dir
-    end.
+data_dir(Cfg) -> quod_ledger_store:data_dir(Cfg).
 
 genesis_file(Cfg) ->
     case maps:get(genesis_file, Cfg, undefined) of

@@ -1,7 +1,8 @@
 -module(quod_prolog_tests).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").
+-include_lib("erlog/src/erlog_int.hrl").   %% real_hash/2 mirrors a committed functor into a raw #est{}
 -include("quod_ledger.hrl").
+-import(quod_ct, [diff_for/1, change/3, batch/1, wait_until/2]).
 
 %%%===================================================================
 %%% fixtures
@@ -82,23 +83,6 @@ runtime_event_test_() ->
 %%% helpers
 %%%===================================================================
 
-%% a real content-diff for asserting `Fact` (erlog term) — built via the overlay
-%% so the clause body form matches what quod_prolog produces.
-diff_for(Fact) ->
-    Tab = list_to_atom("qpt_" ++ integer_to_list(erlang:unique_integer([positive]))),
-    {ok, C} = erlog_int:new(erlog_db_ets, Tab),
-    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
-    {succeed, W1} = erlog_int:prove_goal({assertz, Fact}, W0),
-    Diff = quod_erlog_db_local_prove:get_local_changes((W1#est.db)#db.ref),
-    quod_erlog_db_local_prove:cleanup_read_set(W1),
-    Diff.
-
-change(Ns, Diff, RC) ->
-    #transaction{tx_id = integer_to_binary(erlang:unique_integer([positive])),
-            caller_ns = Ns, diff = Diff, read_check = RC,
-            author = {"127.0.0.1", 5000}, sig = none}.
-
-batch(Transaction) -> {batch, [Transaction]}.
 
 %% Apply a block as a LIVE commit (the common case these tests simulate). Increment-2 tests that need
 %% the replay path call quod_prolog:apply_block/4 with `replay` explicitly.
@@ -397,3 +381,117 @@ real_hash(_Ns, Functor) ->
     {ok, C0} = erlog_int:new(erlog_db_ets, Tab),
     {succeed, C1} = erlog_int:prove_goal({assertz, {parent, tom, bob}}, C0),
     quod_diff:functor_hash((C1#est.db)#db.mod, (C1#est.db)#db.ref, Functor).
+
+%%%===================================================================
+%%% Slice 2 increment 1: the runtime attach seam (plan resilient-frolicking-valley) —
+%%% post-commit direct envelopes with the snapshot handle, the MVCC floor pin, and the
+%%% quiet-boot ready edge.
+%%%===================================================================
+
+runtime_attach_test_() ->
+    {foreach, fun setup/0, fun cleanup/1,
+     [fun t_attach_refused_until_ready/1,
+      fun t_direct_envelope_carries_committed_snapshot/1,
+      fun t_reject_not_direct_sent/1,
+      fun t_floor_pins_and_raises/1,
+      fun t_runtime_down_clears_floor/1,
+      fun t_quiet_boot_ready_edge_once/1]}.
+
+%% attach is refused until the KB is ready (a pin must never span a rebuild); after the ready
+%% edge it returns the committed snapshot handle and height.
+t_attach_refused_until_ready({_Ns, _}) ->
+    fun() ->
+        Fresh = <<"attach:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+        {ok, Pid} = quod_prolog:start_link(Fresh, #{node_id => {"127.0.0.1", 5000}}),
+        ?assertEqual({error, not_ready}, quod_prolog:attach_runtime(Fresh)),
+        ok = quod_prolog:mark_ready(Fresh),
+        ?assertMatch({ok, _Est, 0}, quod_prolog:attach_runtime(Fresh)),
+        gen_server:stop(Pid)
+    end.
+
+%% the attached runtime receives {applied_live, Env, Est} directly, post-commit: the fact is
+%% provable THROUGH the carried snapshot handle. The shared property stays est-free.
+t_direct_envelope_carries_committed_snapshot({Ns, _}) ->
+    fun() ->
+        true = quod_reg:subscribe({runtime, Ns}),
+        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        ok = ab(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
+        {Env, Est} = receive {applied_live, E, S} -> {E, S}
+                     after 1000 -> erlang:error(no_direct_envelope) end,
+        ?assertEqual(1, maps:get(height, Env)),
+        ?assertMatch({ok, _, _, _}, quod_prolog:prove_est({parent, tom, bob}, Est)),
+        %% the property copy is the SAME envelope without the handle
+        PropEnv = receive {applied_live, E2} -> E2
+                  after 1000 -> erlang:error(no_property_envelope) end,
+        ?assertEqual(Env, PropEnv)
+    end.
+
+%% an OCC-rejected committed tx announces rejected_live on the property but never a direct
+%% envelope — D did not change, so the runtime has nothing to converge.
+t_reject_not_direct_sent({Ns, _}) ->
+    fun() ->
+        true = quod_reg:subscribe({runtime, Ns}),
+        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        ok = ab(Ns, 1, batch(change(Ns, diff_for({widget, z}), #{{widget, 1} => 12345}))),
+        ?assertMatch({rejected_live, _}, recv_rt(rejected_live)),
+        receive {applied_live, _, _} = M -> erlang:error({unexpected_direct, M})
+        after 200 -> ok end
+    end.
+
+%% the pin holds MVCC history at its floor (history grows while pinned low), and a floor
+%% raise lets the next commit prune it.
+t_floor_pins_and_raises({Ns, _}) ->
+    fun() ->
+        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns)),
+        [ok = ab(Ns, N, batch(change(Ns, diff_for({counter, N}), #{})))
+         || N <- [1, 2, 3]],
+        H1 = hist(Ns),
+        ?assert(H1 > 0),
+        %% raise the floor past every retained version: the next commit prunes in full
+        %% (kb_history_predicates counts PREDICATES with history, so only a full release
+        %% moves it — the partial-floor keep-newest-version case is mvcc-internal)
+        ok = quod_prolog:runtime_floor(Ns, 4),
+        ok = ab(Ns, 4, batch(change(Ns, diff_for({counter, 4}), #{}))),
+        ?assertEqual(0, hist(Ns))
+    end.
+
+%% a dead runtime cannot wedge pruning: its DOWN clears the pin and the next commit prunes.
+t_runtime_down_clears_floor({Ns, _}) ->
+    fun() ->
+        Parent = self(),
+        Rt = spawn(fun() ->
+                       Parent ! {attached, quod_prolog:attach_runtime(Ns)},
+                       receive stop -> ok end
+                   end),
+        receive {attached, {ok, _, 0}} -> ok
+        after 1000 -> erlang:error(attach_failed) end,
+        [ok = ab(Ns, N, batch(change(Ns, diff_for({counter, N}), #{})))
+         || N <- [1, 2]],
+        ?assert(hist(Ns) > 0),
+        exit(Rt, kill),
+        ok = wait_until(fun() ->
+                            ok = ab_next(Ns, batch(change(Ns, diff_for({counter, 99}), #{}))),
+                            hist(Ns) =:= 0
+                        end, 20)
+    end.
+
+%% the quiet-boot ready edge fires exactly once, on the actual false->true transition.
+t_quiet_boot_ready_edge_once({_Ns, _}) ->
+    fun() ->
+        Fresh = <<"bootedge:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+        {ok, Pid} = quod_prolog:start_link(Fresh, #{node_id => {"127.0.0.1", 5000}}),
+        true = quod_reg:subscribe({runtime, Fresh}),
+        ok = quod_prolog:mark_ready(Fresh),
+        receive {replay_ready, boot, 0} -> ok
+        after 1000 -> erlang:error(no_boot_ready_edge) end,
+        ok = quod_prolog:mark_ready(Fresh),
+        _ = quod_prolog:applied(Fresh),   %% barrier: the second cast has been processed
+        receive {replay_ready, _, _} = M2 -> erlang:error({spurious_ready_edge, M2})
+        after 200 -> ok end,
+        gen_server:stop(Pid)
+    end.
+
+hist(Ns) -> maps:get(kb_history_predicates, quod_prolog:stats(Ns), 0).
+
+%% apply one more block at the next height (reads the current applied height first).
+ab_next(Ns, Change) -> ab(Ns, quod_prolog:applied(Ns) + 1, Change).

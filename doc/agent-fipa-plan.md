@@ -363,6 +363,26 @@ state_handler(Id, WatchedPatterns, OnDiffGoal, ReconcileGoal).
 state_handler_depends_on(After, Before).
 ```
 
+> **As built (Slice 2, Yan-amended).** ONE recipe per handler, and no separate dependency
+> facts:
+>
+> ```prolog
+> state_handler(Id, WatchedPatterns, Needs, ConvergeGoal).
+> ```
+>
+> The same `ConvergeGoal` runs everywhere with a scope argument appended (declared arity N
+> is invoked at N+1 — this erlog has no `call/2`): `all` at reconcile, `{keys, ChangedHeads}`
+> after a live change, where the heads are full terms INCLUDING retracted heads, a narrowing
+> hint only — a join-shaped handler may treat it as `all`. This replaces the OnDiff/Reconcile
+> pair (one recipe cannot drift from itself; idempotency is structural). Ordering is the
+> onia/bbsvx action-pattern shape: `Needs` is a list carried IN the declaration, restricted
+> in this slice to ground `current(OtherId)` terms so the whole graph validates statically
+> at reconcile; matched handlers and their transitive dependents run in the global converge
+> order (Kahn, Id-term-order tiebreak — deterministic per node). Arbitrary condition goals
+> in Needs are deferred: under `unknown => fail` a typo'd condition is indistinguishable
+> from a false one, and data-dependent conditions would activate different handler sets on
+> nodes reconciling at different heights.
+
 Rules:
 
 - handler IDs are globally qualified names;
@@ -777,6 +797,24 @@ Acceptance:
 - the thin ordered P tier is complete before general E sees an event;
 - a deliberately slow heavy P worker cannot delay later namespace events, and
   its dependent output is not published before its resource revision installs.
+
+> **As built (Slice 2 — DELIVERED, all four acceptance bullets test-pinned).** `m:quod_runtime`
+> per namespace, LAST in `quod_ns`'s rest_for_one chain; one-recipe handlers with the
+> action-pattern Needs (the §8 as-built note above); §8.1's provenance check is a FULL-TERM
+> match against the founding (slot-1) block — currently the sole lock, since no write ACL
+> exists yet — with retracted/nonground founding declarations a distinct loud unhealthy and
+> dynamic declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
+> killable budgeted runner (never in the server); execution failures collapse pending work
+> into one reconciliation with exponential backoff (crash to the supervisor after 5); the
+> runtime raises its MVCC floor as the tier completes, and `quod_prolog` suspends the attach
+> pin while a replay run is open — no history retention behind an idle pin (probe-verified
+> regression). The heavy framework ships as API shape + machinery (enqueue_projection/2
+> bridge, coalesced per-resource queues, global cap, revision barrier via await_revision/4);
+> jobs are Prolog goals against the newest snapshot, Erlang job kinds arrive with the first
+> real worker. Known limitation: an OBSERVER's KB applies everything as replay and never
+> publishes a post-boot ready edge, so its runtime stays at boot-time P (no leak — the pin is
+> suspended); revisit with agents-on-observers. "Move existing projection behavior behind
+> handlers" was vacuous (grep-verified: none existed).
 
 ### Slice 3 -- reactions and outbox
 

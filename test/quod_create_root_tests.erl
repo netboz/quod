@@ -1,5 +1,6 @@
 -module(quod_create_root_tests).
 -include_lib("eunit/include/eunit.hrl").
+-import(quod_ct, [rp/2]).
 
 %%%===================================================================
 %%% create-a-network: the founder reads quod_root.pl once and commits it
@@ -71,13 +72,6 @@ stop_ns(Pid) ->
     exit(Pid, shutdown),
     receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
 
-rp(Ns, Goal) -> rp(Ns, Goal, 300).
-rp(_Ns, _Goal, 0) -> {error, timeout};
-rp(Ns, Goal, N) ->
-    case quod_prolog:prove(Ns, Goal, Ns) of
-        {error, rebuilding} -> timer:sleep(10), rp(Ns, Goal, N - 1);
-        R -> R
-    end.
 
 %%%===================================================================
 %%% tests

@@ -1,16 +1,20 @@
 -module(quod_ct).
 -moduledoc """
-Shared Common Test helpers, extracted from the per-suite copies (deferred cleanup #1).
+Shared test helpers (Common Test AND eunit), extracted from the per-module copies
+(deferred cleanup #1).
 
-These four were byte-identical across the CT suites, so they live here once and are pulled in
-via `-import(quod_ct, [...])` so call sites read unchanged (`eventually(F, T)`, `stop_all(Ps)`, …).
-Helpers that genuinely vary per suite — node boot (`start_peer`/`start_member`), the self-signed
-dev cert (`make_cert`, whose CN differs), and the `?NS`-bound query helpers (`status`/`role`/`prove`)
-— stay in their suites. `replica_SUITE` keeps its own slightly-different `eventually`/`match_ok`/
-`datadir` variants.
+These were byte-identical across suites/modules, so they live here once and are pulled in
+via `-import(quod_ct, [...])` so call sites read unchanged (`eventually(F, T)`, `rp(Ns, G)`,
+`diff_for(Fact)`, …). Helpers that genuinely vary — node boot (`start_peer`/`start_member`),
+the self-signed dev cert (`make_cert`, whose CN differs), and the `?NS`-bound query helpers
+(`status`/`role`/`prove`) — stay in their suites. `replica_SUITE` keeps its own
+slightly-different `eventually`/`match_ok`/`datadir` variants.
 """.
 -include_lib("common_test/include/ct.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
+-include("quod_ledger.hrl").
 -export([eventually/2, stop_all/1, match_ok/1, datadir/2, generate_key_gt/1]).
+-export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1, wait_until/1, wait_until/2]).
 
 %% Poll `F` every 150ms until it returns `true` or the budget runs out.
 eventually(_F, Timeout) when Timeout =< 0 -> false;
@@ -35,3 +39,43 @@ datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ int
 generate_key_gt(Lo) ->
     {P, _} = Key = quod_identity:generate(),
     case P > Lo of true -> Key; false -> generate_key_gt(Lo) end.
+
+%% prove, retrying only while the engine is still rebuilding (a transient state right after a
+%% (re)start). `fail`/`{ok,_,_}`/other answers are returned as-is. Was copied per-module 4x.
+rp(Ns, Goal) -> rp(Ns, Goal, 300).
+rp(_Ns, _Goal, 0) -> {error, timeout};
+rp(Ns, Goal, N) ->
+    case quod_prolog:prove(Ns, Goal, Ns) of
+        {error, rebuilding} -> timer:sleep(10), rp(Ns, Goal, N - 1);
+        R -> R
+    end.
+
+%% a real content-diff asserting `Fact` (erlog term) — built via the overlay so the clause
+%% body form matches what quod_prolog produces.
+diff_for(Fact) ->
+    Tab = list_to_atom("qct_" ++ integer_to_list(erlang:unique_integer([positive]))),
+    {ok, C} = erlog_int:new(erlog_db_ets, Tab),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    {succeed, W1} = erlog_int:prove_goal({assertz, Fact}, W0),
+    Diff = quod_erlog_db_local_prove:get_local_changes((W1#est.db)#db.ref),
+    quod_erlog_db_local_prove:cleanup_read_set(W1),
+    Diff.
+
+%% a well-shaped unsigned test transaction carrying `Diff` (+ optional OCC read_check)
+change(Ns, Diff) -> change(Ns, Diff, #{}).
+change(Ns, Diff, RC) ->
+    #transaction{tx_id = integer_to_binary(erlang:unique_integer([positive])),
+                 caller_ns = Ns, diff = Diff, read_check = RC,
+                 author = {"127.0.0.1", 5000}, sig = none}.
+
+batch(Tx) -> {batch, [Tx]}.
+
+%% Poll `F` (a boolean condition, side effects allowed) every 50 ms until true; error out
+%% after `N` tries. The eunit sibling of `eventually/2`.
+wait_until(F) -> wait_until(F, 100).
+wait_until(_F, 0) -> erlang:error(condition_never_true);
+wait_until(F, N) ->
+    case F() of
+        true -> ok;
+        _    -> timer:sleep(50), wait_until(F, N - 1)
+    end.

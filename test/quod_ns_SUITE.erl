@@ -11,6 +11,7 @@ founder can't commit it), so `remove`'s retract SHAPE is pinned at the predicate
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
+-import(quod_ct, [rp/2]).
 
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_admit_grows_committee/1, t_cannot_remove_last/1, t_gate_rejects_raw_wedge/1]).
@@ -104,12 +105,3 @@ t_gate_rejects_raw_wedge(Cfg) ->
     ?assertEqual([Self], quod_simplex:committee(Ns)),                     %% committee untouched
     ?assertMatch({ok, [#{}], _}, rp(Ns, {assertz, {after_gate, ok}})),    %% namespace still commits
     ?assertMatch({ok, [#{}], _}, rp(Ns, {after_gate, {'_'}})).
-
-%% Proves are refused ({error,rebuilding}) until the post-boot replay marks the kb ready — retry.
-rp(Ns, Goal) -> rp(Ns, Goal, 300).
-rp(_Ns, _Goal, 0) -> {error, timeout};
-rp(Ns, Goal, N) ->
-    case quod_prolog:prove(Ns, Goal, Ns) of
-        {error, rebuilding} -> timer:sleep(10), rp(Ns, Goal, N - 1);
-        R -> R
-    end.

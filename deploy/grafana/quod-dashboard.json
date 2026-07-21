@@ -1206,6 +1206,58 @@
           "expr": "{job=\"docker\"} |~ \"node_id\" | json | node_id=~\"kp_.+\" | level=~\"warning|error|notice\""
         }
       ]
+    },
+    {
+      "type": "timeseries",
+      "id": 112,
+      "title": "Runtime (P tier)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 129
+      },
+      "description": "Derived working state per node. healthy is 1 while handlers are live; e_frontier should track the committed height (effects for a block are released only once the frontier reaches it); collapses climbing means handler work keeps being thrown away and rebuilt; rejected_dynamic above 0 means someone tried to install running code after founding.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_runtime_healthy{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "healthy · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "quod_runtime_e_frontier{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "e_frontier · {{node_id}}"
+        },
+        {
+          "refId": "C",
+          "expr": "quod_runtime_collapses{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "collapses · {{node_id}}"
+        },
+        {
+          "refId": "D",
+          "expr": "quod_runtime_rejected_dynamic{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "rejected dynamic · {{node_id}}"
+        },
+        {
+          "refId": "E",
+          "expr": "quod_runtime_heavy_failures{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "heavy failures · {{node_id}}"
+        }
+      ]
     }
   ]
 }

@@ -1,6 +1,7 @@
 -module(quod_e2e_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-import(quod_ct, [rp/2]).
 
 %%%===================================================================
 %%% single-node end-to-end: prove(write) -> commit -> apply -> read,
@@ -49,15 +50,6 @@ stop_ns(Pid) ->
     exit(Pid, shutdown),
     receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end.
 
-%% prove, retrying only while the engine is still rebuilding (a transient state
-%% right after (re)start). `fail`/`{ok,_,_}`/other answers are returned as-is.
-rp(Ns, Goal) -> rp(Ns, Goal, 300).
-rp(_Ns, _Goal, 0) -> {error, timeout};
-rp(Ns, Goal, N) ->
-    case quod_prolog:prove(Ns, Goal, Ns) of
-        {error, rebuilding} -> timer:sleep(10), rp(Ns, Goal, N - 1);
-        R -> R
-    end.
 
 wait_new_pid(Key, OldPid) -> wait_new_pid(Key, OldPid, 300).
 wait_new_pid(_K, _Old, 0) -> error(timeout);

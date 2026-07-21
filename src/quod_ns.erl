@@ -41,5 +41,12 @@ init({Ns, Config}) ->
          %% depends on the others (reads consensus commits via {committed, Ns}, ingests through quod_simplex,
          %% samples quod_brahms) and holds no state they need, so its crash restarts only itself.
          #{id => quod_feed, start => {quod_feed, start_link, [Ns, Config]},
+           restart => permanent, type => worker},
+         %% runtime projection orchestrator (P tier, agent-fipa-plan §7/§8): rebuilds derived
+         %% local state from the committed kb. LAST in the chain: it must come after
+         %% quod_prolog (the attach monitor is one-way — a kb restart must restart the runtime
+         %% so it re-attaches), and being last means its own crash restarts nothing else, so a
+         %% runtime fault never bounces the serving endpoints or amplifies restart intensity.
+         #{id => quod_runtime, start => {quod_runtime, start_link, [Ns, Config]},
            restart => permanent, type => worker}],
     {ok, {Flags, Children}}.

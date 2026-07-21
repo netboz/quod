@@ -46,7 +46,7 @@ the full log always rescans at open.
 
 -export([open/2, open_ro/2, close/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
--export([default_data_dir/0]).
+-export([default_data_dir/0, data_dir/1]).
 
 -export_type([handle/0]).
 
@@ -82,6 +82,14 @@ store user (`m:quod_simplex`, `m:quod_catchup`, `m:quod_explorer_http`) resolves
 """.
 -spec default_data_dir() -> file:filename().
 default_data_dir() -> filename:join(filename:basedir(user_cache, "quod"), "data").
+
+-doc "The store root from an ns `Config` map — its `data_dir` if set, else `default_data_dir/0`.".
+-spec data_dir(map()) -> file:filename_all().
+data_dir(Config) ->
+    case maps:get(data_dir, Config, undefined) of
+        undefined -> default_data_dir();
+        Dir       -> Dir
+    end.
 
 -doc "Open (creating if needed) the on-disk store for `Ns` under `DataDir`.".
 -spec open(binary(), file:filename_all()) -> {ok, handle()}.

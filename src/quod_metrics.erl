@@ -30,6 +30,9 @@ Two collection paths:
 | `quod_consensus_progress_timeouts/quorum_pauses{namespace}` | gauge | | watchdog expirations and complaints deliberately withheld while fewer than a quorum were ready |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
+| `quod_runtime_healthy/handlers_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, rebuilt-through height, effect-release frontier, queued events |
+| `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused dynamic handler declarations |
+| `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_failures{namespace}` | gauge | | heavy background jobs: queued (one slot per resource), running, coalesced-away, and failed (isolated from the tier) |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes that gave up waiting |
@@ -82,6 +85,7 @@ handle_cast(_Msg, State)        -> {noreply, State}.
 handle_info(refresh, State) ->
     _ = [refresh_ns(Ns)        || Ns <- quod_brahms:namespaces()],
     _ = [refresh_log_ns(Ns)    || Ns <- quod_simplex:namespaces()],
+    _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
     State1 = subscribe_commits(State),
@@ -147,6 +151,20 @@ declare(NodeId) ->
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
+    %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
+    _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Staying 0 with the node otherwise up means the handler configuration is broken (check the logs)."),
+    _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
+    _ = G(quod_runtime_p_height,        "The newest block whose derived working state this node has finished rebuilding."),
+    _ = G(quod_runtime_e_frontier,      "The newest block fully processed by every handler; effects for a block are released only once this reaches it."),
+    _ = G(quod_runtime_queue_len,       "Change events waiting for the handlers right now."),
+    _ = G(quod_runtime_reconciles,      "Total full rebuilds of the derived working state (only ever goes up). One per boot or recovery is normal; climbing steadily means handlers keep failing."),
+    _ = G(quod_runtime_collapses,       "Total times pending handler work was thrown away and replaced by one full rebuild, due to overload or a handler failure (only ever goes up)."),
+    _ = G(quod_runtime_dropped_events,  "Total change events dropped because a rebuild made them redundant or the queue overflowed (only ever goes up)."),
+    _ = G(quod_runtime_rejected_dynamic,"Total handler declarations refused because they were written after the ontology was founded (only ever goes up). Any value above 0 deserves a look: someone tried to install running code."),
+    _ = G(quod_runtime_heavy_pending,   "Heavy background jobs queued, one slot per resource (newer jobs replace older queued ones)."),
+    _ = G(quod_runtime_heavy_running,   "Heavy background jobs running right now."),
+    _ = G(quod_runtime_heavy_superseded,"Total queued heavy jobs replaced by a newer job for the same resource before they ran (only ever goes up)."),
+    _ = G(quod_runtime_heavy_failures,  "Total heavy background jobs that failed or were killed (only ever goes up). These are isolated from the handler pipeline; a climbing value means one heavy resource is broken while the rest of the node keeps working."),
     %% Stored data: this node's own copy of the shared data.
     _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
     _ = G(quod_prolog_applies,       "Total finished changes this node has written into its stored data (only ever goes up)."),
@@ -226,6 +244,30 @@ refresh_ns(Ns) ->
             _ = prometheus_gauge:set(quod_brahms_estimated_n, [label(Ns)], EN),
             ok;
         _ -> ok
+    end.
+
+refresh_runtime_ns(Ns) ->
+    case quod_runtime:stats(Ns) of
+        #{mode := Mode, handlers_active := HA, p_height := PH, e_frontier := EF,
+          queue_len := QL, reconciles := RC, collapses := CO, dropped_events := DE,
+          rejected_dynamic := RJ, heavy_pending := HP, heavy_running := HR,
+          heavy_superseded := HS, heavy_failures := HF} ->
+            S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
+            _ = S(quod_runtime_healthy, case Mode of live -> 1; _ -> 0 end),
+            _ = S(quod_runtime_handlers_active, HA),
+            _ = S(quod_runtime_p_height, PH),
+            _ = S(quod_runtime_e_frontier, EF),
+            _ = S(quod_runtime_queue_len, QL),
+            _ = S(quod_runtime_reconciles, RC),
+            _ = S(quod_runtime_collapses, CO),
+            _ = S(quod_runtime_dropped_events, DE),
+            _ = S(quod_runtime_rejected_dynamic, RJ),
+            _ = S(quod_runtime_heavy_pending, HP),
+            _ = S(quod_runtime_heavy_running, HR),
+            _ = S(quod_runtime_heavy_superseded, HS),
+            _ = S(quod_runtime_heavy_failures, HF),
+            ok;
+        _ -> ok   %% runtime booting/absent: keep the last published values
     end.
 
 refresh_log_ns(Ns) ->

@@ -57,11 +57,12 @@ The context *kinds* are `proof` (a normal client proof or a staged write),
 %% context constructors (proof + verdict are used today; projection/effect land with their slices)
 -export([proof_context/3, proof_context/4, verdict_context/2]).
 %% context accessors
--export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_subject/1, ctx_chain/1]).
+-export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_subject/1, ctx_chain/1, ctx_id/1]).
+-export([projection_context/3]).
 %% class metadata (also drives dispatch)
 -export([class/1, allowed/2]).
 %% the stub effect predicate (only reachable from an `effect` context, which does not exist yet)
--export([effect_noop_0/3]).
+-export([effect_noop_0/3, projection_noop_1/3]).
 
 -define(CTX_FLAG, '$quod_ctx').
 
@@ -71,7 +72,10 @@ The context *kinds* are `proof` (a normal client proof or a staged write),
                ns      :: binary() | undefined,
                height  = 0 :: non_neg_integer(),
                subject = undefined :: term(),
-               chain   = [] :: [binary()]}).
+               chain   = [] :: [binary()],
+               %% the executing declaration: a state_handler id in a `projection` context
+               %% (an effect/reaction id in an `effect` context, Slice 3). `undefined` elsewhere.
+               id      = undefined :: term()}).
 
 -type kind()  :: proof | verdict | projection | effect.
 -type class() :: query | staging | projection | effect.
@@ -96,13 +100,19 @@ load(#est{db = Db0} = Est) ->
     Est#est{db = Db1}.
 
 %% The governed predicates, in registration order. Their class + real handler is in registry/1.
-governed() -> [{peer_ready, 1}, {admit, 3}, {remove, 1}, {effect_noop, 0}].
+governed() -> [{peer_ready, 1}, {admit, 3}, {remove, 1}, {effect_noop, 0},
+               {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
 registry({peer_ready, 1}) -> {query,   quod_committee_predicates, peer_ready_1};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
 registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
 registry({effect_noop, 0})-> {effect,  ?MODULE,                   effect_noop_0};
+%% arity 1: a handler ConvergeGoal is invoked with the scope argument appended, so the
+%% declared atom `projection_noop` reaches the KB as {projection_noop, Scope}.
+registry({projection_noop, 1}) -> {projection, ?MODULE, projection_noop_1};
+%% heavy work leaves the ordered tier through this bridge (m:quod_runtime_predicates)
+registry({enqueue_projection, 2}) -> {projection, quod_runtime_predicates, enqueue_projection_2};
 registry(_)               -> undefined.
 
 -doc """
@@ -166,6 +176,12 @@ allowed(effect,     _Kind)       -> false.
 -spec effect_noop_0(term(), term(), tuple()) -> term().
 effect_noop_0(_Goal, Next, St) -> erlog_int:prove_body(Next, St).
 
+%% The no-op projection ConvergeGoal (`m:quod_runtime` handlers, Slice 2): succeeds under a
+%% `projection` context, refused everywhere else by `dispatch/3`. Real P-mutating projection
+%% primitives arrive with their first consumer (AMS/DF, Slice 4) and must be ensure-style.
+-spec projection_noop_1(term(), term(), tuple()) -> term().
+projection_noop_1(_Goal, Next, St) -> erlog_int:prove_body(Next, St).
+
 %%%===================================================================
 %%% context: read/write on #est.fs
 %%%===================================================================
@@ -215,6 +231,16 @@ proof_context(Ns, Height, Subject, Chain) ->
 verdict_context(Ns, Height) ->
     #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined, chain = [Ns]}.
 
+-doc """
+A `projection` context: a `m:quod_runtime` handler converging its piece of P against the
+frozen snapshot at `Height`. `HandlerId` identifies the executing declaration (readable by
+content via `current_prolog_flag`, like every context field — forge-resistant, not secret).
+""".
+-spec projection_context(binary() | undefined, non_neg_integer(), term()) -> #qctx{}.
+projection_context(Ns, Height, HandlerId) ->
+    #qctx{kind = projection, ns = Ns, height = Height, subject = undefined,
+          chain = [Ns], id = HandlerId}.
+
 -spec ctx_kind(ctx()) -> kind() | undefined.
 ctx_kind(#qctx{kind = K}) -> K;
 ctx_kind(undefined)       -> undefined.
@@ -234,3 +260,7 @@ ctx_subject(undefined)          -> undefined.
 -spec ctx_chain(ctx()) -> [binary()].
 ctx_chain(#qctx{chain = C}) -> C;
 ctx_chain(undefined)        -> [].
+
+-spec ctx_id(ctx()) -> term().
+ctx_id(#qctx{id = Id}) -> Id;
+ctx_id(undefined)      -> undefined.

@@ -355,7 +355,8 @@ init({Ns, Config}) ->
     Chan = term_to_binary({catchup, Ns}, [deterministic]),
     quod_reg:subscribe({channel, Chan}),
     {ok, #s{ns = Ns, self = Self, chan = Chan,
-            data_dir = data_dir(Config), seeds = maps:get(seed_peers, Config, [])}}.
+            data_dir = quod_ledger_store:data_dir(Config),
+            seeds = maps:get(seed_peers, Config, [])}}.
 
 handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, quod_brahms:sample_contact(Ns, Seeds), S};
@@ -470,12 +471,6 @@ peer_matches(_Peer, {bound, _ExpectedPeer}) -> false.
 send(Peer, Term, S = #s{ns = Ns, chan = Chan}) ->
     _ = quod_quic:send(Peer, Chan, term_to_binary({catchup, Ns, term_to_binary(Term)})),
     S.
-
-data_dir(Config) ->
-    case maps:get(data_dir, Config, undefined) of
-        undefined -> quod_ledger_store:default_data_dir();
-        Dir       -> Dir
-    end.
 
 %% A restarted node initially knows only addresses.  A direct catch-up request authenticates the remote
 %% header and teaches `quod_quic` its pubkey=>endpoint hint, which lets Simplex make its later

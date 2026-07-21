@@ -32,9 +32,11 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include("quod_ledger.hrl").
 
 -export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/4, mark_ready/1, sync/1,
+         attach_runtime/1, runtime_floor/2,
          request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
+-export([prove_est/2]).            %% prove against a raw #est{} handle (quod_runtime's read path)
 -ifdef(TEST).
 -export([membership_verdict/2]).   %% the pure verdict over #s.est — driven directly by eunit
 -endif.
@@ -86,6 +88,9 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             ask_timeout_ms = 60000 :: pos_integer(),
             ask_step_timeout_ms = 30000 :: pos_integer(),
             applied   = 0  :: log_index(),
+            %% the attached quod_runtime: {Pid, Monitor, Floor}. The floor joins oldest_snapshot/2
+            %% so MVCC history >= floor survives for the runtime's queued work; DOWN clears it.
+            runtime_pin = none :: none | {pid(), reference(), log_index()},
             %% tx_id => {From, Bindings, HeightRead, TimerRef, AsyncRequestId | none}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
                                                reference(), term()}},
@@ -163,6 +168,34 @@ apply_block(Ns, Index, Change, Origin) ->
 -doc "Signal that the initial rebuild is complete and proves may be served.".
 -spec mark_ready(binary()) -> ok.
 mark_ready(Ns) -> gen_server:cast(quod_reg:via({quod_prolog, Ns}), mark_ready).
+
+-doc """
+Attach the calling process as this namespace's runtime (`m:quod_runtime`, agent-fipa-plan §7/§8).
+
+On success the caller is monitored and becomes the single pinned runtime: every LIVE block's
+post-commit outcome flush sends it `{applied_live, Env, Est}` — `Est` being the committed
+snapshot handle at the envelope's height — and its **floor** (initially the current applied
+height, raised via `runtime_floor/2`) joins `oldest_snapshot/2`, so MVCC history at or above
+the floor survives until the runtime is done with it. The pin is cleared by `DOWN`, so a dead
+runtime can never block history pruning.
+
+Refused (`{error, not_ready}`) while the KB is unready or replaying: a pin held across a long
+rebuild would retain every fact version since the pin height (unbounded history growth), and
+the runtime reconciles from a fresh snapshot at the ready edge anyway. Re-attaching — same or
+a restarted runtime process — replaces the pin at the newest applied height.
+""".
+-spec attach_runtime(binary()) -> {ok, tuple(), log_index()} | {error, not_ready}.
+attach_runtime(Ns) ->
+    gen_server:call(quod_reg:via({quod_prolog, Ns}), {attach_runtime, self()}, infinity).
+
+-doc """
+Monotonically raise the attached runtime's snapshot floor to `Height` (its oldest still-needed
+snapshot: pending ordered-tier work or queued heavy-job revision). Ignored unless cast by the
+currently pinned runtime; lowering is impossible by construction.
+""".
+-spec runtime_floor(binary(), log_index()) -> ok.
+runtime_floor(Ns, Height) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {runtime_floor, self(), Height}).
 
 -doc """
 Synchronous no-op barrier: returns once every message already in this kb's queue — in
@@ -291,6 +324,16 @@ handle_call({ask_open, Goal, Chain, Asker}, _From, S) ->
     {reply, {ok, Stream},
      bump_proves(S#s{ask_workers = AW1, ask_callers = AC1, ask_pids = AP1})};
 
+%% Runtime attach (attach_runtime/1). Ready+live only — see the API doc for why a pin must
+%% never span a rebuild. Replacing an existing pin demonitors it first (a restarted runtime
+%% re-attaches before its predecessor's DOWN is processed).
+handle_call({attach_runtime, Pid}, _From,
+            S = #s{ready = true, runtime_mode = live, est = Est, applied = A}) ->
+    S1 = clear_runtime_pin(S),
+    MRef = erlang:monitor(process, Pid),
+    {reply, {ok, Est, A}, S1#s{runtime_pin = {Pid, MRef, A}}};
+handle_call({attach_runtime, _Pid}, _From, S) ->
+    {reply, {error, not_ready}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 handle_cast({apply_block, Index, Change, Origin}, S0) ->
@@ -310,7 +353,20 @@ handle_cast({ask_cancel, Pid}, S) ->
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
     {noreply, S#s{ready = true, runtime_mode = live}};
-handle_cast(mark_ready, S) -> {noreply, S#s{ready = true}};
+%% Quiet-boot ready edge (agent-fipa-plan §7 as-built): a fresh/empty-log boot never opens a
+%% replay run, so without this clause the FIRST ready transition would be unobservable and a
+%% waiting runtime would hang. Guarded on the actual false→true edge — rebuild handshakes
+%% re-cast mark_ready, and an unguarded `boot` edge (a constant, not a RecoveryId) would cost
+%% the runtime a spurious full reconciliation each time.
+handle_cast(mark_ready, S = #s{ready = false, ns = Ns, applied = H}) ->
+    publish_runtime(Ns, {replay_ready, boot, H}),
+    {noreply, S#s{ready = true}};
+handle_cast(mark_ready, S) -> {noreply, S};
+%% Monotone floor raise from the attached runtime (runtime_floor/2); a stale or foreign
+%% caller's cast is ignored, and lowering is impossible by construction.
+handle_cast({runtime_floor, Pid, H}, S = #s{runtime_pin = {Pid, MRef, F}}) when H > F ->
+    {noreply, S#s{runtime_pin = {Pid, MRef, H}}};
+handle_cast({runtime_floor, _Pid, _H}, S) -> {noreply, S};
 %% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
 %% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
 handle_cast({membership_verdict_req, Change, Slot, ReplyTo, Tag}, S) ->
@@ -551,6 +607,10 @@ take_proof_worker(Ref, S = #s{workers = W}) ->
         error -> error
     end.
 
+%% The attached runtime died: clear its pin so history pruning resumes at the next commit.
+%% (Its monitor already fired — no demonitor needed.)
+handle_worker_down(MRef, _Reason, S = #s{runtime_pin = {_Pid, MRef, _F}}) ->
+    {noreply, S#s{runtime_pin = none}};
 handle_worker_down(MRef, Reason,
                    S = #s{ask_workers = AW, ask_callers = AC}) ->
     case maps:is_key(MRef, AW) of
@@ -673,6 +733,20 @@ kill_worker(Pid) ->
     unlink(Pid),
     exit(Pid, kill).
 
+-doc """
+Prove `Goal` against a raw committed `#est{}` handle, in the calling process, through the
+local-prove overlay (staged writes never touch the shared KB table). Returns
+`{ok, Bindings, StagedChanges, ReadSet} | fail | {error, _}`. Used internally by every proof
+worker and by `m:quod_runtime`, whose handler runs prove against the snapshot handle carried
+in `{applied_live, Env, Est}` — set a context first via `quod_predicates:set_context/2`, and
+treat a non-empty `StagedChanges` as a violation in projection contexts. The caller must hold
+a snapshot guarantee for the est (a proof-worker height entry or the runtime floor pin), or
+reads can race history pruning.
+""".
+-spec prove_est(term(), tuple()) ->
+          {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
+prove_est(Goal, Est) -> run_proof_est(Goal, Est).
+
 run_proof_est(Goal, Est) ->
     Vs = erlog:vars_in(Goal),
     W0 = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => true}),
@@ -764,7 +838,8 @@ apply_committed(Index, Change, Origin, S) ->
 
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex. `Origin` (live|replay) reaches
-%% apply_transaction, which publishes the post-apply event only for a LIVE-applied tx.
+%% apply_transaction, which yields a post-apply outcome event only for a LIVE-applied tx —
+%% buffered through the block fold, published post-commit by flush_outcomes/2.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
 apply_step(Index, _Change, _Origin, S = #s{applied = A}) when Index =< A ->
@@ -776,12 +851,21 @@ apply_step(Index, _Change, _Origin, S = #s{ns = Ns, applied = A}) when Index > A
     S;
 apply_step(Index, noop, _Origin, S) ->                     %% Index == applied+1
     publish_snapshot(Index, S);
+%% Outcome events are BUFFERED through the fold and flushed only after `publish_snapshot`
+%% commits the block's MVCC version: an event consumer (the runtime) must observe the tx's
+%% effects as committed state, and the snapshot handle sent with `applied_live` is only valid
+%% at the block height once the commit ran. All of a block's envelopes therefore share the
+%% block-final snapshot (plan §8: "frozen MVCC snapshot at the applied height" — the height is
+%% the block's).
 apply_step(Index, {batch, _} = Batch, Origin, S) ->
     case quod_ledger:payload(Batch) of
         {ok, Transactions} ->
-            S1 = lists:foldl(fun(T, Acc) -> apply_transaction(T, Index, Origin, Acc) end,
-                             S, Transactions),
-            publish_snapshot(Index, S1);
+            {S1, RevEvents} =
+                lists:foldl(fun(T, {Acc, Evs}) ->
+                                    {Acc1, Ev} = apply_transaction(T, Index, Origin, Acc),
+                                    {Acc1, [Ev | Evs]}
+                            end, {S, []}, Transactions),
+            flush_outcomes(lists:reverse(RevEvents), publish_snapshot(Index, S1));
         error ->
             skip_unexpected(Index, Batch, S)
     end;
@@ -803,8 +887,7 @@ apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, Index, Origin,
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
-            emit_applied(Change, Index, Origin, S1),
-            S1;
+            {S1, outcome_applied(Change, Index, Origin, S1)};
         false ->
             apply_content(Change, Index, Origin, S)
     end.
@@ -819,12 +902,14 @@ publish_snapshot(Index, S = #s{est = #est{db = #db{mod = quod_erlog_db_mvcc,
     Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
     S#s{est = Est#est{db = Db#db{ref = Ref1}}, applied = Index}.
 
-oldest_snapshot(Current, #s{workers = Workers, ask_workers = AskWorkers}) ->
+oldest_snapshot(Current, #s{workers = Workers, ask_workers = AskWorkers,
+                            runtime_pin = Pin}) ->
     ProofHeights = [Height || {_Ref, #proof_worker{height = Height}}
                                  <- maps:to_list(Workers)],
     AskHeights = [Height || {_MRef, #ask_worker{height = Height}}
                                 <- maps:to_list(AskWorkers)],
-    lists:min([Current | ProofHeights ++ AskHeights]).
+    PinFloor = case Pin of {_Pid, _MRef, F} -> [F]; none -> [] end,
+    lists:min([Current | ProofHeights ++ AskHeights ++ PinFloor]).
 
 %% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
 apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, Index, Origin, S) ->
@@ -834,8 +919,7 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
-            emit_applied(Change, Index, Origin, S1),
-            S1;
+            {S1, outcome_applied(Change, Index, Origin, S1)};
         {conflict, _F} ->
             %% OCC-rejected: D is unchanged, but the transaction WAS committed (it is in the block),
             %% so a live apply still announces the outcome — `rejected_live` — so an observer distinguishes
@@ -844,8 +928,7 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
             %% the OCC verdict itself: deterministic on every member.
             S1 = release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
                          S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1}),
-            emit_rejected(Change, Index, Origin, S1),
-            S1
+            {S1, outcome_rejected(Change, Index, Origin, S1)}
     end.
 
 %% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
@@ -856,13 +939,32 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %%% post-apply event layer (doc/agent-fipa-plan.md §7)
 %%%===================================================================
 %%
-%% The `{runtime, Ns}` property carries these messages for `quod_runtime` (§7, not built yet) and the
-%% explorer (`m:quod_explorer_ws`): `{applied_live, Env}` (one per live-applied transaction that changed
-%% D), `{rejected_live, Env}` (one per live transaction that committed but was OCC-rejected at apply — a
-%% state-change consumer like `quod_runtime` ignores it; an observer uses it to show the outcome), and the
-%% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run. The pre-apply
+%% The `{runtime, Ns}` property carries these messages for the explorer (`m:quod_explorer_ws`) and any
+%% observer: `{applied_live, Env}` (one per live-applied transaction that changed D), `{rejected_live,
+%% Env}` (one per live transaction that committed but was OCC-rejected at apply), and the
+%% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run (`Id` is
+%% `boot` for the quiet-boot ready edge). The ATTACHED runtime (`attach_runtime/1`) additionally
+%% receives each applied envelope as a direct `{applied_live, Env, Est}` carrying the post-commit
+%% snapshot handle — see flush_outcomes/2 for why the handle is never broadcast. The pre-apply
 %% `{committed, Ns}` publication (quod_simplex → feed/metrics) is untouched and is deliberately NOT the
 %% agent event source (it fires before this kb has applied).
+%%
+%% CONSUMER CONTRACT for the attached runtime (`m:quod_runtime`, Slice 2) — the seam creates these
+%% obligations, verified by review; honour them there:
+%%   1. `applied_live` arrives on BOTH channels (2-tuple on the property for the explorer/observers,
+%%      3-tuple direct with the snapshot). A runtime that also subscribes for the boundaries must act on
+%%      the 3-tuple ONLY and ignore the property's 2-tuple `applied_live`/`rejected_live` — else it
+%%      double-processes every tx.
+%%   2. On the replay→live resume, the resuming live block's direct `applied_live` is delivered just
+%%      BEFORE its `{replay_ready, Id, _}` boundary (the boundary is published after apply_committed
+%%      returns). Gate on the boundary: reconcile at `replay_ready` captures that block from the fresh
+%%      snapshot, so never treat a pre-ready `applied_live` as live.
+%%   3. The floor pin IS auto-suspended when a replay run opens (see note_origin/4) — no
+%%      `applied_live` flows during replay, so the runtime could not advance its floor and the
+%%      pin would otherwise retain the whole window's history. Re-attach at `replay_ready`.
+%%   4. The pin is one-way monitored (this kb watches the runtime, not vice-versa). A kb restart voids
+%%      the carried `Est` with no back-signal, so the runtime MUST be supervised `rest_for_one` AFTER
+%%      `quod_prolog` — a kb crash then restarts the runtime, which re-attaches on the fresh ready edge.
 
 %% Track the live/replay lifecycle, emitting the replay boundaries ONLY when the apply `Advanced` the
 %% committed height — so an already-applied no-op or a forward-gap cast never emits a false boundary.
@@ -876,7 +978,11 @@ note_origin(_Origin, false, _Before, S) -> S;   %% apply did not advance ⇒ no 
 note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
     Id = make_ref(),
     publish_runtime(Ns, {replay_started, Id, Before}),
-    S#s{runtime_mode = {replaying, Id}};
+    %% SUSPEND the runtime pin for the run: replay emits no envelopes, so the runtime cannot
+    %% advance its floor, and a pin held across a long catch-up (or an OBSERVER's endless
+    %% replay-mode feed ingest) would retain every superseded version — the same unbounded
+    %% growth attach_runtime refuses to start. The runtime re-attaches at its ready edge.
+    clear_runtime_pin(S#s{runtime_mode = {replaying, Id}});
 note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns}) ->
     publish_runtime(Ns, {replay_ready, Id, Before}),
     S#s{runtime_mode = live};
@@ -884,21 +990,45 @@ note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying
 
 %% One event per committed transaction that actually changed D, on a LIVE commit only — never replay
 %% (content-layer-design §14 live-vs-replay). `Subject` is `undefined` until signed subjects (§10).
-emit_applied(#transaction{tx_id = Tx, goal = G, result = Res, diff = Diff}, Index, live, #s{ns = Ns}) ->
-    Env = #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
-            goal => G, result => Res, diff => Diff},
-    publish_runtime(Ns, {applied_live, Env});
-emit_applied(_Change, _Index, replay, _S) -> ok.
+%% Built during the block fold, PUBLISHED by flush_outcomes/2 after the MVCC commit.
+outcome_applied(#transaction{tx_id = Tx, goal = G, result = Res, diff = Diff}, Index, live, #s{ns = Ns}) ->
+    {applied, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
+                goal => G, result => Res, diff => Diff}};
+outcome_applied(_Change, _Index, replay, _S) -> none.
 
-%% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors `emit_applied`
-%% so every live tx in a block yields exactly one outcome event (applied or rejected); D is unchanged, so
-%% the envelope carries no diff/result.
-emit_rejected(#transaction{tx_id = Tx, goal = G}, Index, live, #s{ns = Ns}) ->
-    Env = #{ns => Ns, height => Index, tx_id => Tx, subject => undefined, goal => G},
-    publish_runtime(Ns, {rejected_live, Env});
-emit_rejected(_Change, _Index, replay, _S) -> ok.
+%% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors
+%% `outcome_applied` so every live tx in a block yields exactly one outcome event (applied or
+%% rejected); D is unchanged, so the envelope carries no diff/result.
+outcome_rejected(#transaction{tx_id = Tx, goal = G}, Index, live, #s{ns = Ns}) ->
+    {rejected, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined, goal => G}};
+outcome_rejected(_Change, _Index, replay, _S) -> none.
+
+%% Publish the block's buffered outcomes in fold order, post-commit. The `{runtime, Ns}`
+%% property carries the est-FREE envelopes (explorer + any observer); the committed snapshot
+%% handle rides ONLY the direct send to the pinned runtime — a live read capability over the
+%% KB table must not be broadcast to unpinned subscribers, whose reads could otherwise race
+%% history pruning.
+flush_outcomes([], S) -> S;
+flush_outcomes([none | Rest], S) -> flush_outcomes(Rest, S);
+flush_outcomes([{applied, Env} | Rest], S = #s{ns = Ns, est = Est, runtime_pin = Pin}) ->
+    publish_runtime(Ns, {applied_live, Env}),
+    _ = case Pin of
+            {Pid, _MRef, _F} -> Pid ! {applied_live, Env, Est};
+            none             -> ok
+        end,
+    flush_outcomes(Rest, S);
+flush_outcomes([{rejected, Env} | Rest], S = #s{ns = Ns}) ->
+    publish_runtime(Ns, {rejected_live, Env}),
+    flush_outcomes(Rest, S).
 
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
+
+%% Drop the runtime pin and its monitor (on re-attach or DOWN). The demonitor flush purges any
+%% already-queued DOWN so a stale one can't later clear a freshly-installed pin.
+clear_runtime_pin(S = #s{runtime_pin = {_Pid, MRef, _F}}) ->
+    erlang:demonitor(MRef, [flush]),
+    S#s{runtime_pin = none};
+clear_runtime_pin(S) -> S.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.

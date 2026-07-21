@@ -13,6 +13,14 @@
 d(Id, Needs)       -> d(Id, Needs, projection_noop).
 d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
 
+%% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
+%% other unbound variable, because a queue entry must be stable and fully ground.
+anonymous_projection_argument_refused_test() ->
+    ?assertNot(quod_runtime_predicates:is_ground({'_'})),
+    ?assertNot(quod_runtime_predicates:is_ground({job, {'_'}})),
+    ?assertNot(quod_runtime_predicates:is_ground([resource, {'X'}])),
+    ?assert(quod_runtime_predicates:is_ground({job, [resource, 1]})).
+
 %%%===================================================================
 %%% pure core: plan_handlers/2
 %%%===================================================================
@@ -52,7 +60,7 @@ duplicate_need_is_not_a_cycle_test() ->
     {ok, #{order := Order}} = quod_runtime:plan_handlers(G, G),
     ?assertEqual([a, b], Order).
 
-%% a founding declaration containing a variable can never round-trip the KB byte-identically
+%% a founding declaration containing a variable can never round-trip the KB as the same term
 %% (findall renames vars) — refused loudly instead of misreporting missing_founding
 nonground_founding_refused_test() ->
     G = [{state_handler, a, [{'/', w, 1}], [], {goal, {'X'}}}],
@@ -171,6 +179,9 @@ bare_lifecycle_test_() ->
                fun t_direct_envelopes_counted/1,
                fun t_replay_cycle_reconciles_and_rejects_dynamic/1,
                fun t_frontier_follows_and_no_history_leak/1,
+               fun t_no_job_resource_follows_frontier/1,
+               fun t_failed_job_blocks_frontier/1,
+               fun t_heavy_queue_is_bounded/1,
                fun t_overflow_collapses_and_converges/1]]}.
 
 %% booting until the kb's ready edge, then attach + reconcile (zero handlers) => live
@@ -245,6 +256,59 @@ t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt}) ->
         ok = wait_until(fun() ->
                             maps:get(kb_history_predicates, quod_prolog:stats(Ns), 99) =< 1
                         end)
+    end.
+
+%% A resource with no pending work needs no synthetic no-op job for every block: its derived
+%% state is current through the ordered tier's frontier, and revision waiters release there.
+t_no_job_resource_follows_frontier({Ns, _Kb, _Rt}) ->
+    fun() ->
+        ok = quod_prolog:mark_ready(Ns),
+        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
+        ?assertEqual(1, quod_runtime:revision(Ns, untouched_resource)),
+        ?assertEqual(ok, quod_runtime:await_revision(Ns, untouched_resource, 1, 100))
+    end.
+
+%% A failed full rebuild is explicit missing work. Later unrelated events must not make its
+%% revision barrier look satisfied; a successful rebuild clears the block and catches up.
+t_failed_job_blocks_frontier({Ns, _Kb, _Rt}) ->
+    fun() ->
+        ok = quod_prolog:mark_ready(Ns),
+        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
+        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
+        ok = quod_runtime:enqueue_heavy(Ns, broken_resource, 1, definitely_missing_goal),
+        ok = wait_stats(Ns, fun(#{heavy_failures := N}) -> N >= 1; (_) -> false end),
+        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({ping, 2}))), live),
+        ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 2; (_) -> false end),
+        ?assertEqual({error, timeout},
+                     quod_runtime:await_revision(Ns, broken_resource, 2, 25)),
+        ok = quod_runtime:enqueue_heavy(Ns, broken_resource, 2, true),
+        ?assertEqual(ok, quod_runtime:await_revision(Ns, broken_resource, 2, 5000)),
+        ?assert(quod_runtime:revision(Ns, broken_resource) >= 2)
+    end.
+
+%% Pending resources and retained job terms are independently bounded. Updating the one
+%% admitted resource coalesces in place and does not consume another queue slot.
+t_heavy_queue_is_bounded({Ns, _Kb, Rt}) ->
+    fun() ->
+        ok = gen_server:stop(Rt),
+        {ok, Rt2} = quod_runtime:start_link(
+                      Ns, #{runtime_max_heavy_workers => 0,
+                            runtime_max_heavy_pending => 1,
+                            runtime_max_heavy_job_bytes => 1024}),
+        ok = quod_prolog:mark_ready(Ns),
+        ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
+        ok = quod_runtime:enqueue_heavy(Ns, resource_a, 1, first),
+        ok = quod_runtime:enqueue_heavy(Ns, resource_a, 2, replacement),
+        ?assertEqual({error, overloaded},
+                     quod_runtime:enqueue_heavy(Ns, resource_b, 1, small)),
+        ?assertEqual({error, oversized},
+                     quod_runtime:enqueue_heavy(Ns, resource_a, 3, <<0:16384>>)),
+        #{heavy_pending := 1, heavy_running := 0, heavy_superseded := 1,
+          heavy_rejected := 2} = quod_runtime:stats(Ns),
+        ok = gen_server:stop(Rt2)
     end.
 
 %% Inc 3: a zero-capacity queue makes every envelope overflow — each collapses to a fresh
@@ -402,9 +466,11 @@ heavy_worker_does_not_delay_events_test_() ->
             %% while the slow job runs, ordinary writes keep advancing the frontier
             ?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, 1}})),
             ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E > H0; (_) -> false end),
-            %% the revision barrier releases once the worker completes
-            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, H0, 60000)),
-            ?assert(quod_runtime:revision(Ns, res1) >= H0)
+            H1 = maps:get(e_frontier, quod_runtime:stats(Ns)),
+            %% Wait for the event-triggered rebuild, not merely the older boot job. This leaves
+            %% no snapshot reader behind and proves the barrier reaches the live event revision.
+            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, H1, 60000)),
+            ?assert(quod_runtime:revision(Ns, res1) >= H1)
         after cleanup_founded(F) end
     end}.
 
@@ -422,8 +488,9 @@ heavy_coalesce_and_converge_test_() ->
             ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 1;
                                    (_) -> false end),
             [?assertMatch({ok, _, _}, rp(Ns, {assertz, {ping, N}})) || N <- [1, 2, 3]],
-            HTop = maps:get(height, quod_runtime:stats(Ns)),
-            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, HTop - 1, 60000)),
+            HTop = quod_prolog:applied(Ns),
+            ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E >= HTop; (_) -> false end),
+            ?assertEqual(ok, quod_runtime:await_revision(Ns, res1, HTop, 60000)),
             #{heavy_superseded := Sup, heavy_running := Run} = quod_runtime:stats(Ns),
             ?assert(Sup >= 0),           %% supersede is timing-dependent; never negative
             ?assert(Run =< 1)            %% never two workers for one resource
@@ -476,6 +543,32 @@ heavy_job_sees_trigger_height_snapshot_test_() ->
             %% correct, and could only install a LOWER revision, never HTrig.
             ?assertEqual(ok, quod_runtime:await_revision(Ns, res_ok, HTrig, 60000)),
             ?assert(quod_runtime:revision(Ns, res_ok) >= HTrig)
+        after cleanup_founded(F) end
+    end}.
+
+%% Replay cannot move the MVCC pin while a projection is still reading its old snapshot.
+%% The runtime kills and reaps the worker first, detaches, then reconciles from the replay tip.
+replay_quiesces_snapshot_readers_test_() ->
+    {timeout, 120, fun() ->
+        F = setup_founded(<<"slow(0).\n"
+                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n">>),
+        {_, Ns, _} = F,
+        try
+            ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+            H0 = quod_prolog:applied(Ns),
+            R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
+            ok = quod_runtime:enqueue_heavy(Ns, slow_resource, H0, {slow, 20000000}),
+            ok = wait_stats(Ns, fun(#{heavy_running := N}) -> N =:= 1; (_) -> false end),
+            ok = quod_prolog:apply_block(
+                   Ns, H0 + 1, batch(change(Ns, diff_for({during_replay, 1}))), replay),
+            ok = quod_prolog:mark_ready(Ns),
+            ok = wait_stats(Ns, fun(#{mode := live, height := H, reconciles := R,
+                                      heavy_running := Running}) ->
+                                    H =:= H0 + 1 andalso R > R0 andalso Running =:= 0;
+                               (_) -> false
+                               end),
+            ?assert(is_pid(quod_reg:where({quod_prolog, Ns}))),
+            ?assertEqual(H0 + 1, quod_prolog:applied(Ns))
         after cleanup_founded(F) end
     end}.
 

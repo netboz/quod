@@ -285,29 +285,19 @@ stages, not carried forward:
   DID happen, never their absence. The chosen shape is a tiny per-ns vote journal: append one small record
   and flush BEFORE broadcasting each share, reload it at boot, truncate as slots finalize. At the observed
   ~5 slots/s the extra flushes are negligible. Do as a small standalone milestone before open membership.
-- **Runtime (P tier, agents Slice 2) — follow-ups deferred by design.** (1) *Validator-side
+- **Runtime (P tier, agents Slice 2) — remaining follow-ups.** (1) *Validator-side
   declaration authorization*: `can_declare_runtime/3` is still conceptual — activation is gated
   solely by the full-term founding-block match in `quod_runtime`; the committee judging a
   declaration before commit (and lifting the founding-only restriction) lands with the
-  authorization work after signing-based authz exists. (2) *Observers' stale P*: a
-  non-committee observer applies every block as replay, so its runtime never reconciles past
-  boot (its pin is suspended — no leak); needs an origin/ready-edge design for observers
-  before agents run there. (3) *Conditional Needs*: `state_handler` Needs are restricted to
+  authorization work after signing-based authz exists. (2) *Conditional Needs*:
+  `state_handler` Needs are restricted to
   ground `current/1` edges; arbitrary condition goals return only with explicit skip-vs-error
   semantics and per-node re-arming (silent-fail + height-divergence hazards, DA2 C-B).
-  (4) *Erlang heavy-job kinds + non-coalescable jobs*: heavy jobs are Prolog goals against the
+  (3) *Erlang heavy-job kinds + non-coalescable jobs*: heavy jobs are Prolog goals against the
   newest snapshot, always coalescable; per-worker declarations arrive with the first real
-  worker (world/mesh, client-world-direction.md). (5) *Founding read cost*: `open_ro` rescans
+  worker (world/mesh, client-world-direction.md). (4) *Founding read cost*: `open_ro` rescans
   the whole log to read slot 1 (re-paid per KB restart); bound it store-side (checkpointed
-  first-entry read) when compaction lands. (6) *Revision-frontier gap* (Inc-3/4 review): a
-  `await_revision(Res, Rev)` for a height at which `Res` legitimately needs NO rebuild parks
-  until timeout — the installed revision only advances when a job for `Res` completes, never to
-  track the frontier. Needs the revision-advance-on-no-change semantics designed WITH the
-  effect layer (Slice 3), which is the only consumer. (7) *Heavy fairness + job-size cap*:
-  `pump_heavy` starts pending resources in fixed key order (a hot small-keyed resource can
-  starve larger ones under the worker cap — no round-robin), and `enqueue_projection/2` accepts
-  any ground `Job` term with no size bound and treats an anonymous `_` as ground; both are
-  founding-gated today, tighten before non-founding declaration authz lands.
+  first-entry read) when compaction lands.
 - **~~Member multi-slot gap-fill / founder-stall corner~~ — DONE (clean-separation refactor, Slices 3+4,
   0.6.38–0.6.39).** A committee member that fell several slots behind the head could stall: it relied on the
   per-message redrive (Slice B) + dial-tick retransmit to refill, but had no member-side *bulk* catch-up, and

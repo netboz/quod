@@ -83,6 +83,7 @@ persistence, and epoch-frozen validator sets, is tracked in `doc/deferred.md`.
          is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
          recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
+         catchup_origin/1,
          test_state/1, test_arm/1, test_sync/1,
          proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
          reconcile_head_progress/1, resume_ready_rounds/1, resume_ready_slot/2,
@@ -1107,7 +1108,11 @@ running({timeout, tick}, tick, S0) ->
 running(cast, {sync_done, Pid, {ready, H}},
         S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
     S1 = S0#s{sync = ready, sync_arm = reset_pace()},
-    keep_progress(S0, apply_committed(S1), []);
+    S2 = apply_committed(S1),
+    %% Close the runtime replay even when recovery reaches a quiet head. This cast follows all
+    %% replay apply casts from this same process, so reconciliation sees the complete prefix.
+    _ = quod_prolog:mark_ready(S2#s.ns),
+    keep_progress(S0, S2, []);
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
 running(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
@@ -1121,10 +1126,22 @@ running({call, From}, {sink_catchup, Source, Es}, S0) ->
     case may_sink(Source, S0) of
         %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
         %% transition helper cancels the named timer before the recovered member can vote again.
-        true  -> {S1, Reply} = apply_catchup_window(Es, S0),
+        true  -> {S1, Reply} = apply_catchup_window(Source, Es, S0),
                  keep_progress(S0, S1, [{reply, From, Reply}]);
         false -> {keep_state, S0, [{reply, From, {error, not_following}}]}
     end;
+%% The feed puller closes its whole multi-window replay through this process. All apply casts
+%% above and this ready cast therefore have one sender and preserve mailbox order at Prolog.
+running({call, From}, finish_feed_replay, S = #s{sync = ready}) ->
+    case is_participant(S) of
+        false -> _ = quod_prolog:mark_ready(S#s.ns),
+                 {keep_state, S, [{reply, From, ok}]};
+        true  -> {keep_state, S, [{reply, From, {error, not_following}}]}
+    end;
+running({call, From}, finish_feed_replay, S) ->
+    %% Promotion can revoke feed ownership mid-window. Its member recovery will publish the
+    %% ready edge after corroborating the new head; acknowledge the obsolete feed worker now.
+    {keep_state, S, [{reply, From, ok}]};
 running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
 running({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
@@ -3041,9 +3058,9 @@ apply_live(Slot, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 
 apply_live(_Slot, _Change, S) -> S.
 
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — STREAMED from the store
-%% (the rebuild/catch-up path; this process keeps no in-memory log, and re-applying already-counted
-%% commits must not recount them). These are REPLAY applies: quod_prolog rebuilds D only and emits no
-%% live event (doc/agent-fipa-plan.md §7). Deferred if quod_prolog is not up yet; the registry lookup is
+%% (this process keeps no in-memory log, and re-applying already-counted commits must not recount them).
+%% Rebuild/member/feed-gap callers use replay; a settled observer's verified next-block feed fast path
+%% uses live so its runtime receives the incremental event. Deferred if quod_prolog is not up; lookup is
 %% done ONCE here, not per block. apply_block is a cast by design (see quod_prolog:apply_block/4 — a sync call
 %% would deadlock the live write path), so a long replay would flood quod_prolog's mailbox with the
 %% whole log; every ?APPLY_SYNC_EVERY casts a synchronous no-op (`quod_prolog:sync/1`) drains the
@@ -3052,15 +3069,17 @@ apply_live(_Slot, _Change, S) -> S.
 %% (rebuild/catch-up), and an unready quod_prolog rejects proves, so it can never be parked in an
 %% `append` back into this statem. If quod_prolog dies mid-replay, the barrier exits `noproc`:
 %% stop replaying with last_applied unchanged — its restart casts `rebuild` and re-drives the gap.
-apply_committed(S = #s{last_applied = LA, slot = C}) when LA >= C -> S;
-apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}) ->
+apply_committed(S) -> apply_committed(S, replay).
+
+apply_committed(S = #s{last_applied = LA, slot = C}, _Origin) when LA >= C -> S;
+apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Origin) ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
         _ ->
             try
                 _ = quod_ledger_store:fold(Store, LA + 1, C,
                                            fun(#entry{index = I, data = Data}, N) ->
-                                               _ = safe_apply_block(Ns, I, Data, replay),
+                                               _ = safe_apply_block(Ns, I, Data, Origin),
                                                N rem ?APPLY_SYNC_EVERY =:= 0
                                                    andalso (ok = quod_prolog:sync(Ns)),
                                                N + 1
@@ -3147,7 +3166,8 @@ syncing(#s{sync = Sy}) -> Sy =/= ready.
 %% Catch-up ingestion is capability-based: one monitored recovery worker, or the feed while this node is a
 %% ready observer. There is no state in which both sources are authorized.
 may_sink({recovery, Pid}, #s{sync = {pulling, Pid}}) -> true;
-may_sink(feed, #s{sync = ready} = S) -> not is_participant(S);
+may_sink({feed, Mode}, #s{sync = ready} = S) when Mode =:= live; Mode =:= replay ->
+    not is_participant(S);
 may_sink(_Source, _S) -> false.
 
 %% Spawn the unified recovery coordinator. It owns ingestion for its lifetime, resumes from the current
@@ -3398,15 +3418,16 @@ jitter_ticks(N) -> max(1, N - (N div 5) + rand:uniform(2 * (N div 5) + 1) - 1).
 sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 
 %% Persist a verified, contiguous window (indices `slot+1..`) to the store, fold the committee across it,
-%% and replay it into quod_prolog in slot order (`apply_committed` — the same path a restart-rebuild uses).
+%% and apply it into quod_prolog in slot order. Recovery and feed gap windows are replay; a settled
+%% observer's verified next-block fast path is live and drives runtime handlers incrementally.
 %% An APPEND error aborts the window cleanly (returns `{error, _}` ⇒ the driver fails over); nothing is
 %% acked half-applied. The try covers ONLY the append: once the window is durable, reverting to the
 %% pre-append state on a later throw would hand the retry a STALE handle whose re-append splices over
 %% live bytes — so a post-append failure (a store read-back error in the replay) crashes the statem
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
-apply_catchup_window([], S) -> {S, ok};
-apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
+apply_catchup_window(_Source, [], S) -> {S, ok};
+apply_catchup_window(Source, Es0, S = #s{store = Store, validators = Vs}) ->
     %% Idempotency: the live engine may have committed a prefix of this window while the pull worker was
     %% fetching it (a VOTING member gap-fills while still ingesting live consensus). Drop the already-present
     %% prefix so the append stays contiguous instead of failing `assert_contiguous`.
@@ -3439,9 +3460,12 @@ apply_catchup_window(Es0, S = #s{store = Store, validators = Vs}) ->
                                  max(S#s.next_author_seq,
                                      maps:get(S#s.self, Seqs1, 0) + 1)}),
             S2 = catchup_membership_transition(S, S1),
-            {apply_committed(S2), ok}
+            {apply_committed(S2, catchup_origin(Source)), ok}
     end
     end.
+
+catchup_origin({feed, live}) -> live;
+catchup_origin(_)            -> replay.
 
 %% Drop entries whose `#entry.index` is `=< LastI` (already durable) — keep only the genuinely-new tail so a
 %% window that straddles a prefix the live engine committed meanwhile still appends contiguously.

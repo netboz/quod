@@ -1221,7 +1221,7 @@
         "x": 0,
         "y": 129
       },
-      "description": "Derived working state per node. healthy is 1 while handlers are live; e_frontier should track the committed height (effects for a block are released only once the frontier reaches it); collapses climbing means handler work keeps being thrown away and rebuilt; rejected_dynamic above 0 means someone tried to install running code after founding.",
+      "description": "Derived working state per node. healthy is 1 while handlers are live; e_frontier should track the committed height (effects for a block are released only once the frontier reaches it); collapses climbing means ordered handler work keeps being rebuilt; heavy failures are isolated resource rebuild failures; heavy rejected means a job exceeded the size limit or the bounded pending-resource queue was full; rejected dynamic means someone tried to install running code after founding.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -1256,6 +1256,11 @@
           "refId": "E",
           "expr": "quod_runtime_heavy_failures{node_id=~\"$node\", namespace=~\"$namespace\"}",
           "legendFormat": "heavy failures · {{node_id}}"
+        },
+        {
+          "refId": "F",
+          "expr": "quod_runtime_heavy_rejected{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "heavy rejected · {{node_id}}"
         }
       ]
     }

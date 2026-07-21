@@ -22,13 +22,13 @@ missing dependency fails loudly up front, never mid-run.
 
 Handlers are executable — writing the fact must not be enough to activate it. Until the
 `can_declare_runtime` authorization lands, a declaration is **active only if its complete
-GROUND term is byte-identical to one in the ontology's founding (slot-1) block**. This
+GROUND term is identical to one in the ontology's founding (slot-1) block**. This
 full-term founding match is currently the *sole* lock (quod has no write ACL yet — the
 intended end state is founding-only *system* ontologies whose ACL is read-only).
 Consequences: later-written declarations are recorded but refused (counted, warned); a
 *retracted* founding declaration (`G∖K`) is a loud, distinct unhealthy — the runtime never
 runs handlers the KB no longer contains; a founding declaration containing a variable is
-refused loudly (a nonground term cannot round-trip the KB byte-identically).
+refused loudly (a nonground term cannot round-trip through the KB as the same term).
 
 ## The ordered tier (live events)
 
@@ -55,19 +55,17 @@ restart intensity. A ready edge arriving mid-reconcile is retried immediately af
 including after a FAILED reconcile, where the newer edge is exactly the retry needed.
 
 After the tier completes a batch, the floor is raised to the processed height (nothing
-below is needed any more), so KB history never accumulates behind an idle pin;
-`quod_prolog` itself suspends the pin while a replay run is open.
+below is needed any more), so KB history never accumulates behind an idle pin. At a replay
+edge the runtime kills and reaps every snapshot reader before detaching the Prolog pin;
+history is then free to prune throughout the replay without invalidating an active reader.
 
 Supervised LAST in `m:quod_ns`'s `rest_for_one` chain: any restart of `quod_prolog` (or a
 later sibling) restarts this runtime, whose re-attach then re-pins against the fresh KB —
 closing the one-way attach monitor — while a runtime crash restarts nothing else.
 
-## Known Slice-2/3 limitation (observers)
-
-A non-committee observer ingests every block as a replay, so its KB never publishes a ready
-edge after boot: the observer's runtime stays at its boot-time P (`mode=replaying`) until
-agents-on-observers work lands. Its KB does not leak history — the pin is suspended for the
-whole run — but its handlers are stale by design for now.
+Settled observers use the same lifecycle: a verified contiguous feed block is a live event;
+an anti-entropy gap is one replay interval followed by reconciliation. Validators and
+observers therefore maintain current P without reconstructing best-effort effects from gaps.
 """.
 
 -behaviour(gen_server).
@@ -89,6 +87,8 @@ whole run — but its handlers are stale by design for now.
 -define(MAX_EXEC_FAILURES, 5).            %% then crash deliberately: the supervisor path runs
 -define(DEFAULT_MAX_QUEUED_EVENTS, 1024). %% >= 4 max-size blocks of per-tx envelopes
 -define(DEFAULT_MAX_HEAVY_WORKERS, 8).    %% global concurrent resource-worker cap
+-define(DEFAULT_MAX_HEAVY_PENDING, 1024). %% distinct queued resources, coalescing included
+-define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
 
 %% raw declaration fields — UNVALIDATED wire/KB terms until validate/2 has passed them
 -record(handler, {id :: term(),
@@ -132,13 +132,16 @@ whole run — but its handlers are stale by design for now.
             %% workers run against the NEWEST attached snapshot (converging to at-least-Rev),
             %% so only RUNNING workers pin history (at their captured est height).
             heavy_pending = #{} :: #{term() => {non_neg_integer(), term()}},  %% Res => {Rev, Job}
+            heavy_order = [] :: [term()],                    %% FIFO distinct-resource order
             heavy_running = #{} :: #{term() => {pid(), reference(), reference(),
-                                                non_neg_integer(), non_neg_integer()}},
-                                   %% Res => {Pid, MRef, TRef, Rev, EstHeight}
+                                                reference(), non_neg_integer(), non_neg_integer()}},
+                                   %% Res => {Pid, MRef, TRef, JobRef, Rev, EstHeight}
             revisions = #{} :: #{term() => non_neg_integer()},   %% Res => installed rev
+            blocked_revisions = #{} :: #{term() => non_neg_integer()},
             waiters = #{} :: #{reference() => {gen_server:from(), term(), non_neg_integer(),
                                                reference()}},    %% WRef => {From,Res,Rev,TRef}
             superseded = 0 :: non_neg_integer(),
+            heavy_rejected = 0 :: non_neg_integer(),
             heavy_failures = 0 :: non_neg_integer()}).   %% heavy jobs that failed (isolated)
 
 %%%===================================================================
@@ -157,12 +160,16 @@ stats(Ns) ->
 
 -doc """
 Queue heavy work for `Resource` at requested revision `Rev` (the enqueueing event's height).
-Called by the `enqueue_projection/2` bridge from a handler's converge run — fire-and-forget:
-the runtime coalesces (a newer job supersedes a queued one) and bounds the workers.
+Called synchronously by the `enqueue_projection/2` bridge so queue/size backpressure is loud:
+the runtime coalesces a newer job for one resource, bounds distinct pending resources, and
+bounds the encoded job size before retaining it.
 """.
--spec enqueue_heavy(binary(), term(), non_neg_integer(), term()) -> ok.
+-spec enqueue_heavy(binary(), term(), non_neg_integer(), term()) ->
+          ok | {error, overloaded | oversized | unavailable}.
 enqueue_heavy(Ns, Resource, Rev, Job) ->
-    gen_server:cast(quod_reg:via({quod_runtime, Ns}), {heavy_enqueue, Resource, Rev, Job}).
+    try gen_server:call(quod_reg:via({quod_runtime, Ns}),
+                        {heavy_enqueue, Resource, Rev, Job}, 5000)
+    catch exit:_ -> {error, unavailable} end.
 
 -doc "The installed revision for `Resource` (0 before any job completed).".
 -spec revision(binary(), term()) -> non_neg_integer().
@@ -219,12 +226,13 @@ handle_call(get_stats, _From, S) ->
               heavy_pending => map_size(S#s.heavy_pending),
               heavy_running => map_size(S#s.heavy_running),
               heavy_superseded => S#s.superseded,
+              heavy_rejected => S#s.heavy_rejected,
               heavy_failures => S#s.heavy_failures,
               waiters => map_size(S#s.waiters)}, S};
 handle_call({revision, Resource}, _From, S) ->
-    {reply, maps:get(Resource, S#s.revisions, 0), S};
+    {reply, effective_revision(Resource, S), S};
 handle_call({await_revision, Resource, Rev, TimeoutMs}, From, S) ->
-    case maps:get(Resource, S#s.revisions, 0) >= Rev of
+    case effective_revision(Resource, S) >= Rev of
         true  -> {reply, ok, S};
         false ->
             case S#s.mode of
@@ -239,7 +247,26 @@ handle_call({await_revision, Resource, Rev, TimeoutMs}, From, S) ->
                     {noreply, park_waiter(From, Resource, Rev, TimeoutMs, S)}
             end
     end;
+handle_call({heavy_enqueue, Resource, Rev, Job}, From, S = #s{mode = live}) ->
+    handle_heavy_enqueue(Resource, Rev, Job, From, S);
+handle_call({heavy_enqueue, Resource, Rev, Job}, From,
+            S = #s{mode = {reconciling, _Id}}) ->
+    handle_heavy_enqueue(Resource, Rev, Job, From, S);
+handle_call({heavy_enqueue, _Resource, _Rev, _Job}, _From, S) ->
+    {reply, {error, unavailable}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
+
+handle_heavy_enqueue(Resource, Rev, Job, _From, S) ->
+    case validate_heavy_enqueue(Resource, Job, S) of
+        ok ->
+            case queue_heavy(Resource, Rev, Job, S) of
+                {ok, S1} -> {reply, ok, pump_heavy(S1)};
+                full -> {reply, {error, overloaded},
+                         S#s{heavy_rejected = S#s.heavy_rejected + 1}}
+            end;
+        oversized ->
+            {reply, {error, oversized}, S#s{heavy_rejected = S#s.heavy_rejected + 1}}
+    end.
 
 handle_cast({runner_done, Ref, Outcome}, S = #s{runner = {Kind, _Pid, MRef, Ref, TRef}}) ->
     _ = erlang:cancel_timer(TRef),
@@ -251,29 +278,21 @@ handle_cast({runner_done, Ref, Outcome}, S = #s{runner = {Kind, _Pid, MRef, Ref,
     end;
 handle_cast({runner_done, _StaleRef, _Outcome}, S) ->
     {noreply, S};
-%% A handler enqueued heavy work (enqueue_projection/2 → enqueue_heavy/4). Coalesce: a newer
-%% job for the same resource supersedes a QUEUED one — never a running one (per-resource
-%% order holds: the running job finishes, then the newest queued job starts).
-handle_cast({heavy_enqueue, Resource, Rev, Job}, S) ->
-    Superseded = case maps:is_key(Resource, S#s.heavy_pending) of
-                     true  -> S#s.superseded + 1;
-                     false -> S#s.superseded
-                 end,
-    S1 = S#s{heavy_pending = (S#s.heavy_pending)#{Resource => {Rev, Job}},
-             superseded = Superseded},
-    {noreply, pump_heavy(S1)};
 handle_cast({heavy_done, Resource, Ref, Outcome}, S) ->
     case maps:get(Resource, S#s.heavy_running, undefined) of
-        {_Pid, MRef, TRef, Ref, Rev, _EstH} ->
+        {_Pid, MRef, TRef, Ref, _Rev, EstH} ->
             _ = erlang:cancel_timer(TRef),
             erlang:demonitor(MRef, [flush]),
             S1 = S#s{heavy_running = maps:remove(Resource, S#s.heavy_running)},
             case Outcome of
                 ok ->
-                    NewRev = max(maps:get(Resource, S1#s.revisions, 0), Rev),
-                    S2 = release_waiters(Resource, NewRev,
-                                         S1#s{revisions = (S1#s.revisions)#{Resource =>
-                                                                            NewRev}}),
+                    %% A full-rebuild job reads EstH, so its installed output is current through
+                    %% that captured height, not merely through the older trigger revision.
+                    NewRev = max(maps:get(Resource, S1#s.revisions, 0), EstH),
+                    Blocked1 = clear_blocked(Resource, NewRev, S1#s.blocked_revisions),
+                    S2 = release_ready_waiters(
+                           S1#s{revisions = (S1#s.revisions)#{Resource => NewRev},
+                                blocked_revisions = Blocked1}),
                     %% floor may lift now that this worker's snapshot is released
                     {noreply, floor_raise(pump_heavy(S2))};
                 {error, Reason} ->
@@ -296,13 +315,12 @@ handle_info({replay_ready, Id, _H}, S = #s{runner = {_, _, _, _, _}}) ->
     {noreply, S#s{pending_edge = Id}};
 handle_info({replay_ready, Id, _H}, S) ->
     {noreply, attach_and_reconcile(Id, S)};
-handle_info({replay_started, Id, _From}, S = #s{runner = none}) ->
-    %% queued envelopes' state is covered by the coming reconcile snapshot
-    {noreply, drop_queue(S#s{mode = {replaying, Id}})};
+handle_info({replay_started, Id, _From}, S = #s{mode = {replaying, Id}}) ->
+    {noreply, S};
 handle_info({replay_started, Id, _From}, S) ->
-    %% let the in-flight runner finish (its P is idempotent and pre-gap); freeze the frontier
-    %% by mode, drop what hasn't started
-    {noreply, drop_queue(S#s{mode = {replaying, Id}})};
+    %% Stop every old-snapshot reader. Keep their monitors until DOWN and only then tell
+    %% quod_prolog to release the MVCC pin; queued state is covered by the ready reconciliation.
+    {noreply, begin_replay(Id, S)};
 %% The direct post-commit envelope (est-carrying): the ordered tier's input. Enqueue in
 %% arrival (= height) order; overflow collapses to one reconciliation at the newest snapshot.
 handle_info({applied_live, Env, Est}, S0 = #s{mode = live}) ->
@@ -477,7 +495,8 @@ reconcile_finished({ok, FoundingCache, #{handlers := Hs, order := Order, index :
               reconciles = S0#s.reconciles + 1,
               exec_failures = 0},
     case S1#s.pending_edge of
-        none -> maybe_run_events(drop_stale_queue(pump_heavy(S1#s{mode = live})));
+        none -> maybe_run_events(drop_stale_queue(
+                                   pump_heavy(release_ready_waiters(S1#s{mode = live}))));
         Id   -> attach_and_reconcile(Id, S1#s{pending_edge = none})
     end;
 reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
@@ -539,7 +558,7 @@ maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
             {Tip, TipEst} = batch_tip(Blocks),
             S1 = S#s{queue = [], queue_len = 0, est = TipEst, height = Tip,
                      p_height = Tip, e_frontier = Tip},
-            floor_raise(pump_heavy(S1));
+            floor_raise(pump_heavy(release_ready_waiters(S1)));
         _ ->
             %% budget = one per-event allowance per block, CAPPED — a wedged goal in a huge
             %% batch must not hold the single runner (and the KB floor) for minutes; the cap's
@@ -641,12 +660,7 @@ events_finished({ok, Tip, TipEst}, S = #s{mode = live}) ->
              p_height = max(S#s.p_height, Tip),
              e_frontier = max(S#s.e_frontier, Tip),
              exec_failures = 0},
-    next_after_runner(floor_raise(pump_heavy(S1)));
-events_finished({ok, _Tip, _TipEst}, S) ->
-    %% a replay opened mid-batch: the pin is suspended (quod_prolog cleared it on replay_open),
-    %% so this batch's est is now unpinned — DO NOT keep it or pump against it. Freeze the
-    %% frontier; the coming reconcile re-attaches a fresh pinned snapshot and rebuilds.
-    next_after_runner(S#s{exec_failures = 0});
+    next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S1))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
 
@@ -689,20 +703,38 @@ kill_runner(S0 = #s{heavy_running = Running}) ->
     %% collapse kills EVERY in-flight worker — tier runner AND heavy workers [DA M7]: their
     %% stale writes must not land after the clear, and the reconcile's converge goals
     %% re-enqueue heavy jobs, so revision barriers still resolve.
-    S = case S0#s.runner of
-            none -> S0;
-            {_Kind, Pid, MRef, _Ref, TRef} ->
-                _ = erlang:cancel_timer(TRef),
-                erlang:demonitor(MRef, [flush]),
-                exit(Pid, kill),
-                S0#s{runner = none}
-        end,
-    maps:foreach(fun(_Res, {P, M, T, _R, _Rev, _EH}) ->
-                         _ = erlang:cancel_timer(T),
-                         erlang:demonitor(M, [flush]),
-                         exit(P, kill)
-                 end, Running),
-    S#s{heavy_running = #{}, heavy_pending = #{}}.
+    RunnerWorkers = case S0#s.runner of
+                        none -> [];
+                        {_Kind, Pid, MRef, _Ref, TRef} ->
+                            _ = erlang:cancel_timer(TRef),
+                            [{Pid, MRef}]
+                    end,
+    HeavyWorkers = maps:fold(
+                     fun(_Res, {P, M, T, _R, _Rev, _EH}, Acc) ->
+                             _ = erlang:cancel_timer(T),
+                             [{P, M} | Acc]
+                     end, [], Running),
+    Workers = RunnerWorkers ++ HeavyWorkers,
+    lists:foreach(fun({Pid, _MRef}) -> exit(Pid, kill) end, Workers),
+    %% `exit(Pid, kill)` and a later Prolog pin detach/replace target different processes;
+    %% there is no cross-recipient signal ordering. Wait for every DOWN here so no worker can
+    %% still read the old snapshot when the pin moves. This runs only on replay/failure/stop.
+    await_worker_downs(maps:from_list([{MRef, true} || {_Pid, MRef} <- Workers])),
+    S0#s{runner = none, heavy_running = #{}, heavy_pending = #{}, heavy_order = []}.
+
+await_worker_downs(Pending) when map_size(Pending) =:= 0 -> ok;
+await_worker_downs(Pending) ->
+    receive
+        {'DOWN', MRef, process, _Pid, _Reason} when is_map_key(MRef, Pending) ->
+            await_worker_downs(maps:remove(MRef, Pending))
+    end.
+
+begin_replay(Id, S0) ->
+    S1 = kill_runner(S0),
+    %% All readers are now dead, so releasing the base pin cannot invalidate a proof. The
+    %% cast precedes any later re-attach call from this process by Erlang signal ordering.
+    ok = quod_prolog:runtime_detach(S1#s.ns),
+    drop_queue(S1#s{mode = {replaying, Id}, pending_edge = none}).
 
 %% Queue overflow is BACKPRESSURE, not a fault: collapse to a reconciliation (kill the runner,
 %% drop the queue, rebuild from the newest snapshot) but do NOT touch `exec_failures` and log at
@@ -727,31 +759,38 @@ overflow_collapse(S0 = #s{ns = Ns}) ->
 %% lags at the pre-batch height, which would converge the wrong snapshot and install a bogus
 %% revision). A job's captured snapshot is pinned by `floor_raise` while it runs.
 pump_heavy(S = #s{mode = live, runner = none, est = Est,
-                  heavy_pending = Pending, heavy_running = Running})
+                  heavy_pending = Pending, heavy_order = Order,
+                  heavy_running = Running})
   when map_size(Pending) > 0, Est =/= undefined ->
     Cap = max_heavy_workers(S),
-    Startable = [Res || Res := _ <- Pending, not is_map_key(Res, Running)],
+    Startable = [Res || Res <- Order, not is_map_key(Res, Running)],
     lists:foldl(fun(Res, Acc) ->
                         case map_size(Acc#s.heavy_running) < Cap of
                             true  -> start_heavy(Res, Acc);
                             false -> Acc
                         end
-                end, S, lists:sort(Startable));
+                end, S, Startable);
 pump_heavy(S) -> S.   %% booting/reconciling/replaying/unhealthy, or a tier runner is active
 
 %% A heavy job failed or its worker died — ISOLATED from the ordered tier (the plan's guarantee
 %% that a slow/failing heavy worker cannot delay namespace events). Drop the resource's pending
-%% job (the handler re-enqueues on its next matching event, so this cannot tight-loop), lift the
-%% floor now its snapshot is released, and keep the tier running. Waiters are left to their
-%% timeout; a later successful job for the resource releases them.
+%% job (the handler re-enqueues on its next matching event, so this cannot tight-loop), mark its
+%% revision blocked, lift the floor, and keep the tier running. The frontier cannot release that
+%% resource's waiters until a later successful full rebuild clears the blocked revision.
 heavy_failed(Resource, Reason, S = #s{ns = Ns}) ->
     logger:warning("quod_runtime[~s]: heavy job for ~0p failed (~0p) — dropped; the namespace "
                    "tier is unaffected", [Ns, Resource, Reason]),
+    FailedRev = S#s.height,
+    Blocked = maps:update_with(Resource, fun(Old) -> max(Old, FailedRev) end,
+                               FailedRev, S#s.blocked_revisions),
     S1 = S#s{heavy_pending = maps:remove(Resource, S#s.heavy_pending),
+             heavy_order = lists:delete(Resource, S#s.heavy_order),
+             blocked_revisions = Blocked,
              heavy_failures = S#s.heavy_failures + 1},
     floor_raise(pump_heavy(S1)).
 
-start_heavy(Resource, S = #s{ns = Ns, est = Est, height = EstH}) ->
+start_heavy(Resource, S = #s{ns = Ns, est = Est, height = EstH,
+                              heavy_order = Order}) ->
     {{Rev, Job}, Pending} = maps:take(Resource, S#s.heavy_pending),
     Server = self(),
     Ref = make_ref(),
@@ -765,7 +804,7 @@ start_heavy(Resource, S = #s{ns = Ns, est = Est, height = EstH}) ->
                   gen_server:cast(Server, {heavy_done, Resource, Ref, Outcome})
           end),
     TRef = erlang:send_after(Budget, self(), {heavy_kill, Resource, Ref}),
-    S#s{heavy_pending = Pending,
+    S#s{heavy_pending = Pending, heavy_order = lists:delete(Resource, Order),
         heavy_running = (S#s.heavy_running)#{Resource => {Pid, MRef, TRef, Ref, Rev, EstH}}}.
 
 %% The job is a complete Prolog goal (no scope appended), proved under a projection context
@@ -779,9 +818,9 @@ heavy_job(Ns, Est, EstH, Resource, _Rev, Job) ->
         {error, Reason}       -> throw({job_error, Resource, Reason})
     end.
 
-release_waiters(Resource, Rev, S = #s{waiters = Waiters}) ->
+release_ready_waiters(S = #s{waiters = Waiters}) ->
     Released = [WRef || WRef := {_From, Res, WRev, _TRef} <- Waiters,
-                        Res =:= Resource, WRev =< Rev],
+                        effective_revision(Res, S) >= WRev],
     lists:foldl(fun(WRef, Acc) ->
                         {{From, _Res, _WRev, TRef}, Rest} = maps:take(WRef, Acc#s.waiters),
                         _ = erlang:cancel_timer(TRef),
@@ -801,6 +840,56 @@ max_heavy_workers(#s{config = Config}) ->
     maps:get(runtime_max_heavy_workers, Config,
              application:get_env(quod, runtime_max_heavy_workers,
                                  ?DEFAULT_MAX_HEAVY_WORKERS)).
+
+max_heavy_pending(#s{config = Config}) ->
+    maps:get(runtime_max_heavy_pending, Config,
+             application:get_env(quod, runtime_max_heavy_pending,
+                                 ?DEFAULT_MAX_HEAVY_PENDING)).
+
+max_heavy_job_bytes(#s{config = Config}) ->
+    maps:get(runtime_max_heavy_job_bytes, Config,
+             application:get_env(quod, runtime_max_heavy_job_bytes,
+                                 ?DEFAULT_MAX_HEAVY_JOB_BYTES)).
+
+validate_heavy_enqueue(Resource, Job, S) ->
+    try byte_size(term_to_binary({Resource, Job}, [deterministic])) =< max_heavy_job_bytes(S) of
+        true  -> ok;
+        false -> oversized
+    catch _:_ -> oversized
+    end.
+
+queue_heavy(Resource, Rev, Job, S = #s{heavy_pending = Pending}) ->
+    case maps:is_key(Resource, Pending) of
+        true ->
+            {ok, S#s{heavy_pending = Pending#{Resource => {Rev, Job}},
+                     superseded = S#s.superseded + 1}};
+        false ->
+            case map_size(Pending) < max_heavy_pending(S) of
+                true ->
+                    {ok, S#s{heavy_pending = Pending#{Resource => {Rev, Job}},
+                             heavy_order = S#s.heavy_order ++ [Resource]}};
+                false ->
+                    full
+            end
+    end.
+
+%% A resource is current through the namespace frontier when no job for it is outstanding.
+%% A failed job blocks that inference until a later full-rebuild job succeeds at/after it.
+effective_revision(Resource, S) ->
+    Installed = maps:get(Resource, S#s.revisions, 0),
+    Outstanding = maps:is_key(Resource, S#s.heavy_pending)
+                  orelse maps:is_key(Resource, S#s.heavy_running),
+    Blocked = maps:get(Resource, S#s.blocked_revisions, none),
+    case Outstanding orelse Blocked =/= none of
+        true  -> Installed;
+        false -> max(Installed, S#s.e_frontier)
+    end.
+
+clear_blocked(Resource, NewRev, Blocked) ->
+    case maps:get(Resource, Blocked, none) of
+        Rev when is_integer(Rev), Rev =< NewRev -> maps:remove(Resource, Blocked);
+        _ -> Blocked
+    end.
 
 handle_info_rest(_Info, S) -> {noreply, S}.
 

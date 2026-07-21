@@ -32,7 +32,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 -include("quod_ledger.hrl").
 
 -export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/4, mark_ready/1, sync/1,
-         attach_runtime/1, runtime_floor/2,
+         attach_runtime/1, runtime_floor/2, runtime_detach/1,
          request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -197,6 +197,11 @@ currently pinned runtime; lowering is impossible by construction.
 runtime_floor(Ns, Height) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {runtime_floor, self(), Height}).
 
+-doc "Release this process's runtime snapshot pin after all of its snapshot readers stopped.".
+-spec runtime_detach(binary()) -> ok.
+runtime_detach(Ns) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {runtime_detach, self()}).
+
 -doc """
 Synchronous no-op barrier: returns once every message already in this kb's queue — in
 particular a burst of `apply_block/3` casts — has been consumed. `quod_simplex`'s streamed
@@ -347,9 +352,9 @@ handle_cast({proof_result, Ref, Kind, Goal, CallerNs, Result}, S) ->
     {noreply, finish_proof(Ref, Kind, Goal, CallerNs, Result, S)};
 handle_cast({ask_cancel, Pid}, S) ->
     {noreply, cancel_ask(Pid, S)};
-%% mark_ready is the boot ready edge: if a boot replay run is still open, close it (`replay_ready`)
-%% before serving proves. A runtime gap-fill has no second mark_ready (prolog_ready is monotone); its
-%% ready edge is the first advancing `live` apply that resumes, handled in note_origin/4.
+%% mark_ready closes any replay interval before serving proves or resuming steady-state handling.
+%% Simplex emits it after boot, member recovery, and observer anti-entropy; the first later live
+%% apply can also close a replay interval, handled in note_origin/4.
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
     {noreply, S#s{ready = true, runtime_mode = live}};
@@ -367,6 +372,12 @@ handle_cast(mark_ready, S) -> {noreply, S};
 handle_cast({runtime_floor, Pid, H}, S = #s{runtime_pin = {Pid, MRef, F}}) when H > F ->
     {noreply, S#s{runtime_pin = {Pid, MRef, H}}};
 handle_cast({runtime_floor, _Pid, _H}, S) -> {noreply, S};
+%% Replay detachment is accepted only from the attached runtime. The runtime sends this after
+%% every runner that could still read the pinned snapshot is confirmed dead; until then the pin
+%% deliberately survives replay commits, preventing MVCC GC from invalidating an active read.
+handle_cast({runtime_detach, Pid}, S = #s{runtime_pin = {Pid, _MRef, _F}}) ->
+    {noreply, clear_runtime_pin(S)};
+handle_cast({runtime_detach, _Pid}, S) -> {noreply, S};
 %% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
 %% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
 handle_cast({membership_verdict_req, Change, Slot, ReplyTo, Tag}, S) ->
@@ -959,9 +970,9 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %%      BEFORE its `{replay_ready, Id, _}` boundary (the boundary is published after apply_committed
 %%      returns). Gate on the boundary: reconcile at `replay_ready` captures that block from the fresh
 %%      snapshot, so never treat a pre-ready `applied_live` as live.
-%%   3. The floor pin IS auto-suspended when a replay run opens (see note_origin/4) — no
-%%      `applied_live` flows during replay, so the runtime could not advance its floor and the
-%%      pin would otherwise retain the whole window's history. Re-attach at `replay_ready`.
+%%   3. A replay-start notification does NOT immediately clear the floor pin: the runtime first
+%%      kills and reaps every old-snapshot reader, then calls runtime_detach/1. This prevents MVCC
+%%      pruning from racing a projection while still releasing history during a long replay.
 %%   4. The pin is one-way monitored (this kb watches the runtime, not vice-versa). A kb restart voids
 %%      the carried `Est` with no back-signal, so the runtime MUST be supervised `rest_for_one` AFTER
 %%      `quod_prolog` — a kb crash then restarts the runtime, which re-attaches on the fresh ready edge.
@@ -972,17 +983,16 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %% height replay reached before the resuming live block (`replay_ready`). A replay run (boot rebuild or a
 %% runtime gap-fill) opens on the first advancing `replay` apply and closes on its ready edge — the first
 %% advancing `live` apply, or `mark_ready` at boot. The correlating `Id` lets a consumer ignore a stale
-%% boundary from a superseded run. (Coarseness, deferred to §7: a member that catches up into a quiet
-%% namespace stays `{replaying, Id}` until the next advancing live apply declares it ready.)
+%% boundary from a superseded run. Simplex explicitly casts `mark_ready` after every completed
+%% recovery, so a quiet head closes the interval without waiting for another live block.
 note_origin(_Origin, false, _Before, S) -> S;   %% apply did not advance ⇒ no lifecycle change
 note_origin(replay, true, Before, S = #s{runtime_mode = live, ns = Ns}) ->
     Id = make_ref(),
     publish_runtime(Ns, {replay_started, Id, Before}),
-    %% SUSPEND the runtime pin for the run: replay emits no envelopes, so the runtime cannot
-    %% advance its floor, and a pin held across a long catch-up (or an OBSERVER's endless
-    %% replay-mode feed ingest) would retain every superseded version — the same unbounded
-    %% growth attach_runtime refuses to start. The runtime re-attaches at its ready edge.
-    clear_runtime_pin(S#s{runtime_mode = {replaying, Id}});
+    %% Keep the pin until quod_runtime has killed and reaped every reader of its old snapshot.
+    %% It then calls runtime_detach/1; the next replay commit can prune released history. An
+    %% eager clear here races the runtime's event/heavy workers and invalidates their MVCC view.
+    S#s{runtime_mode = {replaying, Id}};
 note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns}) ->
     publish_runtime(Ns, {replay_ready, Id, Before}),
     S#s{runtime_mode = live};

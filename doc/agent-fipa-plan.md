@@ -279,9 +279,9 @@ Initial boot follows the same state machine, starting in `replaying`.
    new E work for the namespace.
 2. `quod_prolog` applies each recovered block as D with origin `replay`.
    Per-block P and E do not run.
-3. Once the verified catch-up window reaches a corroborated ready edge — the first
-   resuming `live` apply, or `mark_ready` at boot after Simplex drains the Prolog
-   apply queue — `quod_prolog` announces `replay_ready(RecoveryId, ReadyHeight)`.
+3. Once verified recovery reaches a corroborated ready edge, Simplex casts
+   `mark_ready` after all replay apply casts; `quod_prolog` then announces
+   `replay_ready(RecoveryId, ReadyHeight)`. This also closes a quiet recovery.
 4. `quod_runtime` reconciles all P once from the newest applied MVCC snapshot.
 5. Live envelopes that arrive during reconciliation wait in a bounded ordered
    queue. After reconciliation they run through P then E in height order. If the
@@ -300,20 +300,16 @@ also returns through reconciliation before E resumes.
 Durable outbox facts learned during replay are recovered by reconciliation.
 Best-effort effects from replayed history remain deliberately absent.
 
-> **As built (Slice 1).** The apply origin is the bare `live | replay`: Simplex
-> tags it at its two apply sites (`apply_live` → `live`; the streamed
-> rebuild/catch-up fold → `replay`) and nothing more. `quod_prolog` owns the
+> **As built (Slices 1–2).** The apply origin is `live | replay`: Simplex tags local
+> commits and a settled observer's contiguous feed block `live`; rebuild, member recovery,
+> and observer anti-entropy gaps are `replay`. `quod_prolog` owns the
 > `live | {replaying, RecoveryId}` state machine, **mints the RecoveryId itself**
 > on the live→replay edge, and publishes all three messages
 > (`replay_started` / `replay_ready` / `applied_live`) on the `{runtime, Ns}`
-> property. This keeps the boundary logic out of Simplex's recovery enum entirely.
-> No consumer subscribes yet — `quod_runtime` (the reconciler above) is Slice 2 —
-> so the boundaries and events are inert beyond tests. One known coarseness to
-> tighten when `quod_runtime` lands: a member that catches up into a **quiet**
-> namespace stays `{replaying, Id}` until the next `live` apply declares it ready,
-> because origin alone cannot mark "last replay block". If Simplex should instead
-> mint and thread the RecoveryId (as the numbered steps read), that is a small
-> follow-up.
+> property. Simplex does not mint IDs, but it explicitly casts `mark_ready` after a
+> recovery or complete feed pull; because it also sends the apply casts, mailbox order
+> guarantees the ready edge cannot overtake the final replay block. `quod_runtime`
+> consumes these boundaries and reconciles once per interval.
 
 ### Event envelope
 
@@ -401,9 +397,13 @@ Rules:
   the requested resource revision;
 - every handler and worker has a hard time budget and is instrumented;
 - runtime input and worker counts are bounded;
-- a timeout or projection failure marks the namespace runtime unhealthy, stops
-  E publication, and collapses pending P work into one reconciliation at the
-  newest applied snapshot;
+- distinct pending heavy resources and encoded job size are bounded; overflow is
+  rejected loudly, and resources are scheduled in FIFO order;
+- an ordered-handler timeout or failure stops E publication and collapses pending
+  P work into one reconciliation at the newest applied snapshot; repeated failures
+  mark the namespace runtime unhealthy;
+- a heavy-worker failure is isolated from the ordered tier, but blocks that
+  resource's revision until a later full rebuild succeeds;
 - after successful reconciliation, durable effects are recovered from their
   outbox; best-effort reactions skipped during the unhealthy interval are
   counted and deliberately not reconstructed;
@@ -806,15 +806,15 @@ Acceptance:
 > dynamic declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
 > killable budgeted runner (never in the server); execution failures collapse pending work
 > into one reconciliation with exponential backoff (crash to the supervisor after 5); the
-> runtime raises its MVCC floor as the tier completes, and `quod_prolog` suspends the attach
-> pin while a replay run is open — no history retention behind an idle pin (probe-verified
-> regression). The heavy framework ships as API shape + machinery (enqueue_projection/2
-> bridge, coalesced per-resource queues, global cap, revision barrier via await_revision/4);
+> runtime raises its MVCC floor as the tier completes; at replay it reaps every reader before
+> detaching the pin, so neither stale reads nor replay-long history retention are possible.
+> The heavy framework ships as API shape + machinery (enqueue_projection/2 bridge, bounded
+> FIFO per-resource queues, worker cap, encoded-size cap, revision barrier via await_revision/4);
 > jobs are Prolog goals against the newest snapshot, Erlang job kinds arrive with the first
-> real worker. Known limitation: an OBSERVER's KB applies everything as replay and never
-> publishes a post-boot ready edge, so its runtime stays at boot-time P (no leak — the pin is
-> suspended); revisit with agents-on-observers. "Move existing projection behavior behind
-> handlers" was vacuous (grep-verified: none existed).
+> real worker. A resource with no work advances with the ordered frontier; a failed job blocks
+> that inference until a later successful rebuild. Settled observers process contiguous feed
+> blocks live and reconcile once after an anti-entropy gap. "Move existing projection behavior
+> behind handlers" was vacuous (grep-verified: none existed).
 
 ### Slice 3 -- reactions and outbox
 

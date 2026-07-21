@@ -192,12 +192,19 @@ sink_ownership_test() ->
     Pulling = st(#{sync => {pulling, self()}}),
     ?assert(quod_simplex:may_sink({recovery, self()}, Pulling)),
     ?assertNot(quod_simplex:may_sink({recovery, Other}, Pulling)),
-    ?assertNot(quod_simplex:may_sink(feed, Pulling)),
-    ?assert(quod_simplex:may_sink(feed,
+    ?assertNot(quod_simplex:may_sink({feed, replay}, Pulling)),
+    ?assert(quod_simplex:may_sink({feed, live},
                                   st(#{self => <<"me">>, validators => [<<"other">>], sync => ready}))),
-    ?assertNot(quod_simplex:may_sink(feed,
+    ?assertNot(quod_simplex:may_sink({feed, replay},
                                      st(#{self => <<"me">>, validators => [<<"me">>], sync => ready}))),
     Other ! stop.
+
+%% A settled observer's contiguous push is a real live event. Recovery and anti-entropy
+%% windows rebuild D silently and reconcile P once at their explicit ready edge.
+feed_apply_origin_test() ->
+    ?assertEqual(live, quod_simplex:catchup_origin({feed, live})),
+    ?assertEqual(replay, quod_simplex:catchup_origin({feed, replay})),
+    ?assertEqual(replay, quod_simplex:catchup_origin({recovery, self()})).
 
 %% Arm pacing (#s.sync_arm): the behind-hysteresis counter, the backoff cooldown countdown, and the
 %% arm_ready gate / backoff growth.

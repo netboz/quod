@@ -9,7 +9,7 @@ volatile host:port. Per-namespace series add a **`namespace`** label.
 Two collection paths:
 
   * **Poll (5s).** Scalar gauges are refreshed from each subsystem's `stats/1`
-    (`m:quod_brahms`, `m:quod_simplex`, `m:quod_prolog`, `m:quod_feed`). Cumulative counts are exposed
+    (`m:quod_brahms`, `m:quod_simplex`, `m:quod_prolog`, `m:quod_runtime`, `m:quod_feed`). Cumulative counts are exposed
     as gauges set to the running total (use `rate()`/`increase()` in Grafana).
   * **Event.** Per-transaction histograms + a per-author counter are driven by the LIVE
     `{committed, Ns}` commit event (never replay — see `quod_simplex:publish_feed/3`), so they observe
@@ -32,7 +32,7 @@ Two collection paths:
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
 | `quod_runtime_healthy/handlers_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, rebuilt-through height, effect-release frontier, queued events |
 | `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused dynamic handler declarations |
-| `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_failures{namespace}` | gauge | | heavy background jobs: queued (one slot per resource), running, coalesced-away, and failed (isolated from the tier) |
+| `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes that gave up waiting |
@@ -152,7 +152,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
     %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
-    _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Staying 0 with the node otherwise up means the handler configuration is broken (check the logs)."),
+    _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Missing means the runtime process is absent. A persistent 0 means it cannot currently release effects; check runtime logs and the failure metrics."),
     _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
     _ = G(quod_runtime_p_height,        "The newest block whose derived working state this node has finished rebuilding."),
     _ = G(quod_runtime_e_frontier,      "The newest block fully processed by every handler; effects for a block are released only once this reaches it."),
@@ -164,6 +164,7 @@ declare(NodeId) ->
     _ = G(quod_runtime_heavy_pending,   "Heavy background jobs queued, one slot per resource (newer jobs replace older queued ones)."),
     _ = G(quod_runtime_heavy_running,   "Heavy background jobs running right now."),
     _ = G(quod_runtime_heavy_superseded,"Total queued heavy jobs replaced by a newer job for the same resource before they ran (only ever goes up)."),
+    _ = G(quod_runtime_heavy_rejected,  "Total heavy jobs refused before retention because the bounded pending-resource queue was full or the encoded job exceeded its size limit (only ever goes up). Any increase means handlers are producing work faster or larger than configured."),
     _ = G(quod_runtime_heavy_failures,  "Total heavy background jobs that failed or were killed (only ever goes up). These are isolated from the handler pipeline; a climbing value means one heavy resource is broken while the rest of the node keeps working."),
     %% Stored data: this node's own copy of the shared data.
     _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
@@ -251,7 +252,7 @@ refresh_runtime_ns(Ns) ->
         #{mode := Mode, handlers_active := HA, p_height := PH, e_frontier := EF,
           queue_len := QL, reconciles := RC, collapses := CO, dropped_events := DE,
           rejected_dynamic := RJ, heavy_pending := HP, heavy_running := HR,
-          heavy_superseded := HS, heavy_failures := HF} ->
+          heavy_superseded := HS, heavy_rejected := HX, heavy_failures := HF} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_runtime_healthy, case Mode of live -> 1; _ -> 0 end),
             _ = S(quod_runtime_handlers_active, HA),
@@ -265,10 +266,22 @@ refresh_runtime_ns(Ns) ->
             _ = S(quod_runtime_heavy_pending, HP),
             _ = S(quod_runtime_heavy_running, HR),
             _ = S(quod_runtime_heavy_superseded, HS),
+            _ = S(quod_runtime_heavy_rejected, HX),
             _ = S(quod_runtime_heavy_failures, HF),
             ok;
-        _ -> ok   %% runtime booting/absent: keep the last published values
+        _ -> remove_runtime_metrics(Ns)
     end.
+
+remove_runtime_metrics(Ns) ->
+    Labels = [label(Ns)],
+    Names = [quod_runtime_healthy, quod_runtime_handlers_active,
+             quod_runtime_p_height, quod_runtime_e_frontier, quod_runtime_queue_len,
+             quod_runtime_reconciles, quod_runtime_collapses, quod_runtime_dropped_events,
+             quod_runtime_rejected_dynamic, quod_runtime_heavy_pending,
+             quod_runtime_heavy_running, quod_runtime_heavy_superseded,
+             quod_runtime_heavy_rejected, quod_runtime_heavy_failures],
+    _ = [prometheus_gauge:remove(Name, Labels) || Name <- Names],
+    ok.
 
 refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of

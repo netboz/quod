@@ -232,7 +232,7 @@ on_block(#entry{index = Slot, data = Data} = Entry, S0 = #s{ns = Ns, self = Self
                 next ->
                     case quod_catchup:verify_forward(Ns, Committee, Slot, [Entry]) of
                         {ok, [_], _} ->
-                            case ingest(Ns, [Entry], ?INGEST_MS) of
+                            case ingest(Ns, [Entry], ?INGEST_MS, live) of
                                 ok         -> %% our height advanced to Slot — fold the snapshot forward too
                                               S1 = fold_snap(Slot, Data, S),
                                               eager_push(Entry, S1#s{ingested = S1#s.ingested + 1});
@@ -305,11 +305,14 @@ invalidate_transient(S = #s{snap = {_, _, true}}) -> S#s{snap = none};
 invalidate_transient(S) -> S.
 
 %% Hand a verified, contiguous window to quod_simplex — the SOLE store writer. Reuses the catch-up sink
-%% (append + committee fold + KB replay, contiguity-checked); a duplicate/non-contiguous window is
-%% rejected there and surfaces as {error, _}. (When the event system's live reactions land, a fresh
-%% fast-path block routes through the live-apply seam; today apply is D-only on both paths.)
-ingest(Ns, Entries, Timeout) ->
-    try gen_server:call(quod_reg:via({quod_simplex, Ns}), {sink_catchup, feed, Entries}, Timeout)
+%% (append + committee fold + KB apply, contiguity-checked); a duplicate/non-contiguous window is
+%% rejected there and surfaces as {error, _}. A verified next-block push is `live` for this settled
+%% observer and drives P incrementally. An anti-entropy gap window is `replay`: P reconciles once at
+%% its explicit ready edge, so best-effort effects are not reconstructed from missed history.
+ingest(Ns, Entries, Timeout, Mode) when Mode =:= live; Mode =:= replay ->
+    Source = {feed, Mode},
+    try gen_server:call(quod_reg:via({quod_simplex, Ns}),
+                        {sink_catchup, Source, Entries}, Timeout)
     catch exit:_ -> {error, unavailable} end.
 
 %%%===================================================================
@@ -431,10 +434,22 @@ start_pull(Peer, From, Committee, S = #s{ns = Ns}) ->
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
-            Sink  = fun(Es) -> ingest(Ns, Es, ?PULL_SINK_MS) end,
-            _ = quod_catchup:catch_up(Ns, <<>>, Fetch, Sink, From, Committee)
+            Sink  = fun(Es) -> ingest(Ns, Es, ?PULL_SINK_MS, replay) end,
+            try
+                quod_catchup:catch_up(Ns, <<>>, Fetch, Sink, From, Committee)
+            after
+                %% Close even a failed or partial pull at its valid durable prefix. Simplex sent
+                %% every Prolog apply cast, so its ready edge cannot overtake the final apply.
+                _ = finish_pull_replay(Ns)
+            end
         end),
     S#s{pulling = Pid, pulled = S#s.pulled + 1}.
+
+finish_pull_replay(Ns) ->
+    try gen_statem:call(quod_reg:via({quod_simplex, Ns}),
+                        finish_feed_replay, ?PULL_SINK_MS)
+    catch exit:_ -> {error, unavailable}
+    end.
 
 %%%===================================================================
 %%% eager push over the Brahms view

@@ -214,15 +214,26 @@ agrees on every change.
   A recovering validator processes a valid proposal it retained through the ordinary
   support or membership-check path. If it already has a notarization certificate, it
   resumes only the missing final vote and never invents support that bypasses validation.
+  Before sending any support, commit, or skip signature, it records that small decision
+  durably; restarting cannot make it vote differently. One final-vote rule covers both
+  live pipeline slots: if enough peers already chose skip, an uncommitted validator joins
+  them even when the block was approved meanwhile; otherwise a notarized block selects commit.
+  A node that has the approval certificate but not the block asks one candidate holder at a
+  time, trying certificate signers before the rest of the committee, and verifies both block
+  and certificate before using them; no knowledge-base or full proposal copy is written to
+  this journal.
+  A final certificate beyond the block frontier also makes the node stop voting and recover
+  the missing committed entry from the durable log, including when it is only one block behind.
   When quorum returns before notarization, a validator that already supported the proposal
   re-sends that support once and waits one final timeout before it may complain; this gives
   the leader's retained proposal time to reach a recovered validator without allowing an
   endless retry loop.
   Consensus connections and queued frames are scoped to the current committee: a committed
   membership change closes and forgets transport state for every departed validator.
-  This improves **liveness** when a trusted deployment temporarily loses more nodes than
-  its normal fault-tolerance bound. Safety is guaranteed through that bound; extending
-  safety beyond it requires persisting each validator's vote latches across restarts.
+  This improves **liveness** when a deployment temporarily loses more nodes than its normal
+  fault-tolerance bound, while durable vote decisions keep crash-restarted validators honest.
+  The Byzantine guarantee still assumes no more than the normal fault bound are malicious.
+  A simultaneous, mutually hidden split between final votes remains a later view-change job.
 
 Why "more than two-thirds"? Because any two "more than two-thirds" groups overlap by
 enough that they always share at least one **honest** computer — and an honest

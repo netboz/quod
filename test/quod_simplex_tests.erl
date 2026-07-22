@@ -3,8 +3,8 @@
 Pure-logic unit tests for `quod_simplex`'s DispersedSimplex consensus core — the parts that must be
 correct independently of the network: quorum math, share signing, certificate formation + trustless
 verification (incl. the Byzantine rejections), and the commit-vs-complaint guard. Uses real Ed25519
-keypairs, so the crypto path is exercised end-to-end. Multi-node behaviour is (will be) in
-`simplex_SUITE`.
+keypairs, so the crypto path is exercised end-to-end. Real multi-node QUIC behavior and restart recovery
+are covered by `simplex_SUITE`.
 """.
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
@@ -140,6 +140,18 @@ should_sync_and_syncing_test() ->
     ?assert(quod_simplex:syncing(Fresh)),
     ?assert(quod_simplex:should_sync(st(#{sync => ready, slot => 2, eng => EngBehind}))),
     ?assert(quod_simplex:syncing(st(#{sync => {pulling, self()}, slot => 2, eng => EngIdle}))).
+
+%% A final certificate for the immediate next slot is already authoritative gap evidence when this node
+%% never received the block. It must lose voting capability and enter normal durable-log recovery instead
+%% of waiting for the network to advance a second slot.
+next_slot_finalizer_revokes_stale_voting_test() ->
+    Me = <<"me">>,
+    FinalizedNext = quod_simplex:eng_with_certs(5, [{commit, 6}]),
+    Stale = st(#{self => Me, validators => [Me], slot => 5, approved => 5,
+                 eng => FinalizedNext, sync => ready}),
+    ?assert(quod_simplex:should_sync(Stale)),
+    ?assertNot(quod_simplex:caught_up(Stale)),
+    ?assertNot(quod_simplex:may_vote(Stale)).
 
 %% Success grants readiness when the durable head is AT OR PAST the corroborated height. A head that
 %% advanced while the completion was in flight only moves via cert-verified commits (`persisted_finality`),
@@ -548,9 +560,162 @@ redrive_queues_proposal_for_disconnected_validators_test() ->
                   {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
     S = st(#{self => A, id => IdA, validators => pubs(Committee),
              slot => 5, approved => 5, eng => Eng, sync => ready}),
-    Redriven = quod_simplex:test_redrive_slot(6, BH, S),
+    Redriven = quod_simplex:test_redrive_head(6, BH, S),
     ?assertEqual({[], [], lists:sort([B, C, D]), lists:sort([B, C, D])},
                  quod_simplex:test_link_peers(Redriven)).
+
+%% A validator that has a support certificate but lost the corresponding block asks one holder at a
+%% time. The request itself is tiny; it must not fan a complete block out from every validator.
+certified_block_request_targets_one_holder_test() ->
+    Committee = [{A, IdA} | _] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"missing-block">>,
+                   [{assert, {{recovered, block}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    {Eng, _} = feed_shares(supports(Block, Committee, 3),
+                           quod_simplex:eng_new(pubs(Committee), 5)),
+    Missing = st(#{self => A, id => IdA, validators => pubs(Committee),
+                   slot => 5, approved => 5, eng => Eng, sync => ready}),
+
+    Requested = quod_simplex:reconcile_block_requests(Missing),
+    {[], [], OutboxPeers, DialPeers} = quod_simplex:test_link_peers(Requested),
+    ?assertEqual(1, length(OutboxPeers)),
+    ?assertEqual(OutboxPeers, DialPeers),
+    ?assertEqual(1, map_size(quod_simplex:test_block_requests(Requested))).
+
+%% Any active validator holding both the exact block and its support certificate may answer, but an
+%% authenticated non-member cannot use block recovery as an oracle or make the node queue large frames.
+certified_block_request_is_committee_scoped_test() ->
+    Committee = [{A, IdA}, {B, _} | _] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"serve-certified-block">>,
+                   [{assert, {{recovered, served}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 3), Eng1),
+    Holder = st(#{self => B, validators => pubs(Committee), slot => 5,
+                  approved => 6, eng => Eng2, sync => ready}),
+
+    Answered = quod_simplex:dispatch(A, {block_request, 6, BH}, Holder),
+    ?assertEqual({[], [], [A], [A]}, quod_simplex:test_link_peers(Answered)),
+    Outsider = <<"not-a-validator">>,
+    Ignored = quod_simplex:dispatch(Outsider, {block_request, 6, BH}, Holder),
+    ?assertEqual({[], [], [], []}, quod_simplex:test_link_peers(Ignored)).
+
+%% The responder need not be the original proposer. A quorum support certificate authenticates the exact
+%% block hash; the receiver rechecks the bounded block and its transactions before putting it in the tree.
+certified_block_from_non_leader_restores_finality_test() ->
+    Committee = [{A, IdA} | Peers] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"non-leader-recovery">>,
+                   [{assert, {{recovered, any_holder}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    SupportShares = supports(Block, Committee, 3),
+    {ok, Cert} = quod_simplex:form_cert(support, 6, BH, SupportShares, pubs(Committee)),
+    {CertOnly, _} = feed_shares(SupportShares, quod_simplex:eng_new(pubs(Committee), 5)),
+    Requester = st(#{self => A, id => IdA, validators => pubs(Committee),
+                     slot => 5, approved => 5, eng => CertOnly, sync => ready,
+                     block_requests => #{{6, BH} => {1, 0}}}),
+    Leader = quod_simplex:leader(6, pubs(Committee)),
+    Sender = hd([Peer || {Peer, _} <- Peers, Peer =/= Leader]),
+
+    Restored = quod_simplex:dispatch(Sender, {certified_block, Block, Cert}, Requester),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Restored)),
+    ?assertEqual(0, map_size(quod_simplex:test_block_requests(Restored))).
+
+certified_block_response_requires_outstanding_request_test() ->
+    Committee = [{A, IdA} | Peers] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"unsolicited-certified-block">>,
+                   [{assert, {{recovered, requested_only}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    SupportShares = supports(Block, Committee, 3),
+    {ok, Cert} = quod_simplex:form_cert(support, 6, BH, SupportShares,
+                                        pubs(Committee)),
+    {CertOnly, _} = feed_shares(SupportShares,
+                                quod_simplex:eng_new(pubs(Committee), 5)),
+    S = st(#{self => A, id => IdA, validators => pubs(Committee),
+             slot => 5, approved => 5, eng => CertOnly, sync => ready}),
+    Sender = element(1, hd(Peers)),
+
+    Ignored = quod_simplex:dispatch(Sender, {certified_block, Block, Cert}, S),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(6, Ignored)),
+    ?assertEqual(1, maps:get(missing_certified_blocks,
+                            quod_simplex:stats_map(Ignored))).
+
+%% Supporting one proposal does not bind the later final vote to that losing hash. Once a different block
+%% has the unique support quorum, this validator must recover it and join finality; otherwise one leader
+%% equivocation can remove an honest validator from the only completable commit camp.
+certified_block_recovery_accepts_losing_local_support_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Leader = quod_simplex:leader(6, Validators),
+    {Leader, LeaderId} = lists:keyfind(Leader, 1, Committee),
+    [{Self, SelfId} | _] = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Leader],
+    OtherValidators = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Self],
+    Losing = #block{slot = 6, parent = 5,
+                    payload = [signed_tx(<<"t">>, <<"losing-support">>,
+                                             [{assert, {{proposal, losing}, true}}],
+                                             {Leader, LeaderId})]},
+    Winning = #block{slot = 6, parent = 5,
+                     payload = [signed_tx(<<"t">>, <<"winning-support">>,
+                                              [{assert, {{proposal, winning}, true}}],
+                                              hd(OtherValidators))]},
+    WinningHash = quod_simplex:block_hash(Winning),
+    {ok, WinningCert} = quod_simplex:form_cert(
+                          support, 6, WinningHash,
+                          supports(Winning, OtherValidators, 3), Validators),
+    Initial = st(#{self => Self, id => SelfId, validators => Validators,
+                   slot => 5, approved => 5,
+                   eng => quod_simplex:eng_new(Validators, 5), sync => ready}),
+    SupportedLosing = quod_simplex:dispatch(Leader, {propose, Losing}, Initial),
+    LosingHash = quod_simplex:block_hash(Losing),
+    ?assertEqual({LosingHash, false, false},
+                 quod_simplex:test_round(6, SupportedLosing)),
+    HasCertificate = quod_simplex:dispatch(Leader, {cert, WinningCert}, SupportedLosing),
+    Requested = quod_simplex:reconcile_block_requests(HasCertificate),
+    Sender = element(1, hd(OtherValidators)),
+
+    Restored = quod_simplex:dispatch(
+                 Sender, {certified_block, Winning, WinningCert}, Requested),
+    ?assertEqual({LosingHash, true, false}, quod_simplex:test_round(6, Restored)),
+    ?assertEqual(0, map_size(quod_simplex:test_block_requests(Restored))).
+
+certified_block_hash_mismatch_is_rejected_test() ->
+    Committee = [{A, IdA} | Peers] = committee(4),
+    Tx = signed_tx(<<"t">>, <<"certified-good">>,
+                   [{assert, {{recovered, correct}, true}}], {A, IdA}),
+    Block = #block{slot = 6, parent = 5, payload = [Tx]},
+    BH = quod_simplex:block_hash(Block),
+    {ok, Cert} = quod_simplex:form_cert(
+                   support, 6, BH, supports(Block, Committee, 3), pubs(Committee)),
+    Different = Block#block{timestamp = 1},
+    DifferentHash = quod_simplex:block_hash(Different),
+    S = st(#{self => A, id => IdA, validators => pubs(Committee),
+             slot => 5, approved => 5,
+             eng => quod_simplex:eng_new(pubs(Committee), 5), sync => ready,
+             block_requests => #{{6, DifferentHash} => {1, 0}}}),
+    Rejected = quod_simplex:dispatch(element(1, hd(Peers)),
+                                     {certified_block, Different, Cert}, S),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(6, Rejected)).
+
+%% Recovery metrics count signatures carried by a verified certificate even when individual share frames
+%% were not received, and expose the exact "certificate present, block absent" condition.
+recovery_stats_include_certificate_evidence_test() ->
+    Committee = [{A, _} | _] = committee(4),
+    Block = blk(6),
+    BH = quod_simplex:block_hash(Block),
+    {ok, Cert} = quod_simplex:form_cert(
+                   support, 6, BH, supports(Block, Committee, 3), pubs(Committee)),
+    {CertOnly, _} = quod_simplex:eng_offer(
+                      {cert, Cert}, quod_simplex:eng_new(pubs(Committee), 5)),
+    Stats = quod_simplex:stats_map(
+              st(#{self => A, validators => pubs(Committee), slot => 5,
+                   approved => 5, eng => CertOnly, sync => ready})),
+    ?assertEqual(3, maps:get(head_support_votes, Stats)),
+    ?assertEqual(0, maps:get(head_commit_votes, Stats)),
+    ?assertEqual(0, maps:get(head_complaint_votes, Stats)),
+    ?assertEqual(1, maps:get(missing_certified_blocks, Stats)).
 
 %% Quorum restoration may grant a few fresh Deltas for transient reconnects, but an unchanged slot/phase
 %% eventually exhausts that budget. Further false->true flaps leave the existing deadline untouched.
@@ -602,6 +767,88 @@ resume_notarized_after_recovery_test() ->
     Resumed = quod_simplex:resume_ready_rounds(Ready),
     ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)),
     exit(Sink, kill).
+
+%% A recovered validator must not blindly join the commit side of a notarized
+%% round when f+1 distinct peers have already complaint-signed the durable
+%% head. At N=10, four complaint latches leave at most six commit-eligible
+%% validators, so choosing commit would recreate the permanent 4/6 split seen
+%% at live slot 6180. Complaint evidence is deliberately below certificate
+%% quorum here: this exercises camp selection, not ordinary skip processing.
+resume_notarized_joins_amplified_complaint_test() ->
+    Committee = [{A, IdA} | Peers] = committee(10),
+    Block = blk(6),
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 7), Eng1),
+    Complaints = [quod_simplex:make_share(complaint, 6, none, Id)
+                  || {_Pub, Id} <- take(4, Peers)],
+    {Eng3, _} = feed_shares(Complaints, Eng2),
+    Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 6, eng => Eng3, sync => ready}),
+
+    Resumed = quod_simplex:resume_ready_rounds(Ready),
+    ?assertEqual({none, false, true}, quod_simplex:test_round(6, Resumed)).
+
+%% Approval does not close complaint amplification. The fourth peer complaint at N=10 is f+1 evidence;
+%% an uncommitted head already awaiting final votes must join the skip side instead of freezing a 4/6 split.
+awaiting_commit_joins_amplified_complaint_test() ->
+    Committee = [{A, IdA} | Peers] = committee(10),
+    Block = blk(6),
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 7), Eng1),
+    ComplaintShares = [{Pub, quod_simplex:make_share(complaint, 6, none, Id)}
+                       || {Pub, Id} <- take(4, Peers)],
+    Prefix = [Share || {_Pub, Share} <- take(3, ComplaintShares)],
+    {Eng3, _} = feed_shares(Prefix, Eng2),
+    [{LastPeer, LastShare}] = lists:nthtail(3, ComplaintShares),
+    AwaitingCommit = st(#{self => A, id => IdA, validators => pubs(Committee),
+                          slot => 5, approved => 6, eng => Eng3, sync => ready,
+                          head_progress => {6, awaiting_commit, true}}),
+
+    Joined = quod_simplex:dispatch(LastPeer, {share, LastShare}, AwaitingCommit),
+    ?assertEqual({none, false, true}, quod_simplex:test_round(6, Joined)).
+
+%% Final-vote ownership covers the complete depth-one pipeline, not only committed+1. A child already
+%% notarized over the head must join amplified skip evidence immediately; its skip is buffered until the
+%% parent finalizes, but the two slots do not need serial evidence collection.
+pipelined_child_joins_amplified_complaint_test() ->
+    Committee = [{A, IdA} | Peers] = committee(10),
+    Parent = blk(6),
+    Child = blk(7),
+    {E1, _} = quod_simplex:eng_offer(
+                {block, Parent}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {E2, _} = quod_simplex:eng_offer({block, Child}, E1),
+    {E3, _} = feed_shares(supports(Parent, Committee, 7), E2),
+    {E4, _} = feed_shares(supports(Child, Committee, 7), E3),
+    ComplaintShares = [{Pub, quod_simplex:make_share(complaint, 7, none, Id)}
+                       || {Pub, Id} <- take(4, Peers)],
+    Prefix = [Share || {_Pub, Share} <- take(3, ComplaintShares)],
+    {E5, _} = feed_shares(Prefix, E4),
+    [{LastPeer, LastShare}] = lists:nthtail(3, ComplaintShares),
+    Pipelined = st(#{self => A, id => IdA, validators => pubs(Committee),
+                     slot => 5, approved => 7, eng => E5, sync => ready}),
+
+    Joined = quod_simplex:dispatch(LastPeer, {share, LastShare}, Pipelined),
+    ?assertEqual({none, false, true}, quod_simplex:test_round(7, Joined)),
+    ?assertEqual({none, false, false}, quod_simplex:test_round(6, Joined)).
+
+%% At most f peer complaints cannot steer an unlatched validator away from a notarized block. This pins
+%% the threshold so Byzantine validators alone cannot force the honest committee onto the skip side.
+resume_notarized_commits_below_complaint_amplification_test() ->
+    Committee = [{A, IdA} | Peers] = committee(10),
+    Block = blk(6),
+    {Eng1, _} = quod_simplex:eng_offer(
+                  {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Eng2, _} = feed_shares(supports(Block, Committee, 7), Eng1),
+    Complaints = [quod_simplex:make_share(complaint, 6, none, Id)
+                  || {_Pub, Id} <- take(3, Peers)],
+    {Eng3, _} = feed_shares(Complaints, Eng2),
+    Ready = st(#{self => A, id => IdA, validators => pubs(Committee),
+                 slot => 5, approved => 6, eng => Eng3, sync => ready}),
+
+    Resumed = quod_simplex:resume_ready_rounds(Ready),
+    ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)).
 
 %% Live commit/skip self-corroboration can restore voting between periodic ticks. The common transition
 %% hook must reconcile an already-notarized successor immediately on that false->true capability edge.
@@ -690,34 +937,132 @@ resume_membership_notarization_does_not_support_test() ->
     Resumed = quod_simplex:resume_ready_rounds(Ready),
     ?assertEqual({none, true, false}, quod_simplex:test_round(6, Resumed)).
 
-%% Safety is guaranteed only through f faults until vote latches are durable. This executable boundary
-%% documents the current >f limitation: a node can complaint-sign, crash (losing RAM latches), then
-%% re-ingest a notarized block and commit-sign it. Quorum intersection prevents a fork within <=f.
-restart_loses_complaint_latch_boundary_test() ->
+%% A restart reloads the validator's own final-vote decision before recovery sees network evidence. A
+%% notarized block therefore cannot recruit a validator that complaint-signed this slot before crashing.
+restart_preserves_complaint_latch_test() ->
     Committee = [{A, IdA}, {B, _}, {C, _}, {D, _}] = committee(4),
     Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    Dir = filename:join("/tmp", "quod_simplex_vote_restart_" ++
+                                integer_to_list(erlang:unique_integer([positive]))),
     try
+        {ok, Journal0} = quod_vote_journal:open(<<"t">>, Dir, 5),
         Inbound = #{B => {Sink, make_ref()}, C => {Sink, make_ref()},
                     D => {Sink, make_ref()}},
         Readiness = voting_readiness([B, C, D], Sink, 5),
         EmptyEng = quod_simplex:eng_new(pubs(Committee), 5),
         BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
                            slot => 5, approved => 5, eng => EmptyEng, sync => ready,
+                           vote_journal => Journal0,
                            inbound_conns => Inbound, peer_readiness => Readiness,
                            head_progress => {6, awaiting_proposal, true}}),
         Complained = quod_simplex:on_progress_timeout(6, BeforeCrash),
         ?assertEqual({none, false, true}, quod_simplex:test_round(6, Complained)),
+        ok = quod_vote_journal:close(quod_simplex:test_vote_journal(Complained)),
 
         Block = blk(6),
         {E1, _} = quod_simplex:eng_offer(
                     {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
         {Notarized, _} = feed_shares(supports(Block, Committee, 3), E1),
-        Restarted = st(#{self => A, id => IdA, validators => pubs(Committee),
-                         slot => 5, approved => 6, eng => Notarized, sync => ready}),
+        {ok, Journal1} = quod_vote_journal:open(<<"t">>, Dir, 5),
+        Restarted = quod_simplex:restore_vote_rounds(
+                      st(#{self => A, id => IdA, validators => pubs(Committee),
+                           slot => 5, approved => 6, eng => Notarized, sync => ready,
+                           vote_journal => Journal1})),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(6, Restarted)),
         AfterRestart = quod_simplex:resume_ready_rounds(Restarted),
-        ?assertEqual({none, true, false}, quod_simplex:test_round(6, AfterRestart))
+        ?assertEqual({none, false, true}, quod_simplex:test_round(6, AfterRestart)),
+        ok = quod_vote_journal:close(quod_simplex:test_vote_journal(AfterRestart))
     after
-        exit(Sink, kill)
+        exit(Sink, kill),
+        file:del_dir_r(Dir)
+    end.
+
+%% The opposite final camp is equally durable. Once recovery commit-signs a notarized block, reopening the
+%% journal must keep later amplified complaint evidence from moving this validator to the skip side.
+restart_preserves_commit_latch_test() ->
+    Committee = [{A, IdA} | Peers] = committee(4),
+    Block = blk(6),
+    {E1, _} = quod_simplex:eng_offer(
+                {block, Block}, quod_simplex:eng_new(pubs(Committee), 5)),
+    {Notarized, _} = feed_shares(supports(Block, Committee, 3), E1),
+    Dir = filename:join("/tmp", "quod_simplex_commit_restart_" ++
+                                integer_to_list(erlang:unique_integer([positive]))),
+    try
+        {ok, Journal0} = quod_vote_journal:open(<<"t">>, Dir, 5),
+        BeforeCrash = st(#{self => A, id => IdA, validators => pubs(Committee),
+                           slot => 5, approved => 6, eng => Notarized, sync => ready,
+                           vote_journal => Journal0}),
+        Committed = quod_simplex:resume_ready_rounds(BeforeCrash),
+        ?assertEqual({none, true, false}, quod_simplex:test_round(6, Committed)),
+        ok = quod_vote_journal:close(quod_simplex:test_vote_journal(Committed)),
+
+        Complaints = [quod_simplex:make_share(complaint, 6, none, Id)
+                      || {_Pub, Id} <- take(2, Peers)],
+        {WithComplaints, _} = feed_shares(Complaints, Notarized),
+        {ok, Journal1} = quod_vote_journal:open(<<"t">>, Dir, 5),
+        Restarted = quod_simplex:restore_vote_rounds(
+                      st(#{self => A, id => IdA, validators => pubs(Committee),
+                           slot => 5, approved => 6, eng => WithComplaints, sync => ready,
+                           vote_journal => Journal1})),
+        ?assertEqual({none, true, false}, quod_simplex:test_round(6, Restarted)),
+        StillCommitted = quod_simplex:resume_ready_rounds(Restarted),
+        ?assertEqual({none, true, false}, quod_simplex:test_round(6, StillCommitted)),
+        ok = quod_vote_journal:close(quod_simplex:test_vote_journal(StillCommitted))
+    after
+        file:del_dir_r(Dir)
+    end.
+
+%% Drive the repaired liveness path through the state-machine boundary: f+1 peer complaints for an already
+%% notarized head recruit this validator, its durable share completes the skip certificate, the noop is
+%% appended, and the rotated slot then accepts and commits a normal signed transaction. This is the complete
+%% join -> skip -> continue guarantee rather than three isolated predicate assertions.
+amplified_complaint_skips_and_next_slot_commits_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Committee = [{Self, SelfId} | Peers] = committee(4),
+    Validators = pubs(Committee),
+    SkippedBlock = blk(6),
+    {E1, _} = quod_simplex:eng_offer(
+                {block, SkippedBlock}, quod_simplex:eng_new(Validators, 5)),
+    {Notarized, _} = feed_shares(supports(SkippedBlock, Committee, 3), E1),
+    [FirstComplainer, SecondComplainer | _] = Peers,
+    FirstShare = complaint_share(6, FirstComplainer),
+    {WithOneComplaint, _} = feed_shares([FirstShare], Notarized),
+    SecondShare = complaint_share(6, SecondComplainer),
+    Dir = filename:join("/tmp", "quod_finality_continue_" ++
+                                integer_to_list(erlang:unique_integer([positive]))),
+    {ok, Store0} = quod_ledger_store:open(<<"t">>, Dir),
+    Prefix = [#entry{index = I, data = noop, timestamp = I}
+              || I <- lists:seq(1, 5)],
+    {ok, Store1} = quod_ledger_store:append(Store0, Prefix),
+    {ok, Journal0} = quod_vote_journal:open(<<"t">>, Dir, 5),
+    try
+        Split = st(#{self => Self, id => SelfId, validators => Validators,
+                     slot => 5, approved => 6, eng => WithOneComplaint,
+                     sync => ready, store => Store1, vote_journal => Journal0,
+                     last_applied => 5}),
+        Skipped = quod_simplex:dispatch(
+                    element(1, SecondComplainer), {share, SecondShare}, Split),
+        {6, Store2} = quod_simplex:test_committed_store(Skipped),
+        ?assertMatch({ok, #entry{index = 6, data = noop}},
+                     quod_ledger_store:read_at(Store2, 6)),
+
+        Leader7 = quod_simplex:leader(7, Validators),
+        {Leader7, LeaderId} = lists:keyfind(Leader7, 1, Committee),
+        Tx7 = signed_tx(<<"t">>, <<"after-amplified-skip">>,
+                        [{assert, {{after_skip, live}, true}}],
+                        {Leader7, LeaderId}),
+        Block7 = #block{slot = 7, parent = 6, payload = [Tx7]},
+        Proposed = quod_simplex:dispatch(Leader7, {propose, Block7}, Skipped),
+        OtherVoters = [Pair || {Pub, _} = Pair <- Committee, Pub =/= Self],
+        Supported = dispatch_shares(supports(Block7, OtherVoters, 2), Proposed),
+        Final = dispatch_shares(commits(Block7, OtherVoters, 2), Supported),
+        {7, FinalStore} = quod_simplex:test_committed_store(Final),
+        ?assertMatch({ok, #entry{index = 7}},
+                     quod_ledger_store:read_at(FinalStore, 7))
+    after
+        quod_vote_journal:close(Journal0),
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
     end.
 
 %% Content transactions may batch. A committee transaction is legal only as a
@@ -1034,7 +1379,12 @@ complaint_amplified_threshold_test() ->
     ?assertNot(Amp(7, 2)), ?assert(Amp(7, 3)),                 %% N=7: needs three (f=2)
     %% our OWN complaint share is not independent evidence — self is excluded from the count.
     ?assertNot(quod_simplex:complaint_amplified(me, Vs(2), Bucket([me]))),
-    ?assert(quod_simplex:complaint_amplified(me, Vs(2), Bucket([me, {peer, 1}]))).
+    ?assert(quod_simplex:complaint_amplified(me, Vs(2), Bucket([me, {peer, 1}]))),
+    %% Cached shares from outsiders or removed validators do not count in the current committee.
+    ?assertNot(quod_simplex:complaint_amplified(
+                 me, Vs(4), Bucket([{peer, 1}, outsider]))),
+    ?assert(quod_simplex:complaint_amplified(
+              me, Vs(4), Bucket([{peer, 1}, {peer, 2}, outsider]))).
 
 %% Malformed shapes are rejected even with a valid signature over their (malformed) bytes.
 share_shape_test() ->
@@ -1428,6 +1778,14 @@ supports(B, C, K) -> [quod_simplex:make_share(support, B#block.slot, quod_simple
                       || {_, Id} <- take(K, C)].
 commits(B, C, K)  -> [quod_simplex:make_share(commit, B#block.slot, quod_simplex:block_hash(B), Id)
                       || {_, Id} <- take(K, C)].
+complaint_share(Slot, {_Pub, Id}) ->
+    quod_simplex:make_share(complaint, Slot, none, Id).
+
+dispatch_shares(Shares, S) ->
+    lists:foldl(
+      fun(#share{signer = Peer} = Share, Acc) ->
+              quod_simplex:dispatch(Peer, {share, Share}, Acc)
+      end, S, Shares).
 
 %% offer each share to the engine in turn, accumulating all emitted events
 feed_shares(Shares, Eng) ->

@@ -135,7 +135,7 @@ discovery) are **retired with the Raft code**; the equivalent capabilities are r
 stages, not carried forward:
 
 - **Multi-validator BFT** — **DONE** (Stage 2b+2c): real ⅔ support/commit/**complaint** certs, the
-  durable-head progress watchdog (redrive/complain across proposal, notarization, and commit),
+  oldest-head progress watchdog (redrive/complain across proposal, notarization, and commit),
   the `may_commit`/`may_complain` guards, **round-robin leader rotation**, and complaint-cert **skip**
   (a `noop` slot), over the `{log, Ns}` transport.
 - **Committee = `peer_admitted` facts + admit/remove — DONE** (membership rework, Slice 1+2): the committee
@@ -267,24 +267,34 @@ stages, not carried forward:
   cross-check. Also: **`can_join` must stay side-effect-free** — the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **Vote-latch persistence across restart (Phase B — a blocker before OPEN membership).** The per-slot
-  vote latches (`#round.supporting`/`commit`/`complaint`) that enforce the one-share-per-slot safety rule
-  live in RAM, so a validator that CRASHES and restarts mid-slot loses them and could re-sign a
-  different block/complaint for the same slot — an equivocation. Bounded today: at `N ≤ 4` a SINGLE
-  crash-equivocator can't fork (its two shares still need a quorum that overlaps an honest party), but TWO
-  simultaneous crash-equivocators can. The oldest-head recovery FSM now deliberately lets a restarted node
-  final-vote a notarized in-flight slot, so catch-up can no longer be assumed to move it past that slot
-  first; `restart_loses_complaint_latch_boundary_test` documents the complaint-before-crash,
-  commit-after-restart boundary. This MUST be closed before open/Byzantine membership or before claiming
-  safety for `>f` crash recovery: persist the latches (or a per-slot "already-voted" marker) alongside the
-  durable log so a restart refuses to re-sign a slot it already signed. Intersects transaction signatures
-  (Phase B) and the epoch work.
-  *Design settled + consciously deferred (2026-07-19):* diskless alternatives were evaluated and rejected —
-  "sit out possibly-voted slots after restart" deadlocks the in-flight slot when `>f` restart at once (the
-  exact outage validated on 0.7.20), and rebuilding one's votes from peers' echoes proves only votes that
-  DID happen, never their absence. The chosen shape is a tiny per-ns vote journal: append one small record
-  and flush BEFORE broadcasting each share, reload it at boot, truncate as slots finalize. At the observed
-  ~5 slots/s the extra flushes are negligible. Do as a small standalone milestone before open membership.
+- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22).** `quod_vote_journal` now owns one
+  bounded `votes.0001` file per namespace. The only constructor for a new runtime share first appends a
+  CRC-framed `{support|commit|complaint, Slot, BlockHash}` decision and calls `datasync`; only then may the
+  signature enter the engine or transport. Boot reloads live decisions before recovery can vote, exact
+  repeats are idempotent, and conflicting support hashes or final votes fail-stop. Finalization removes the
+  slot from memory; at 1 MiB the remaining live decisions are rewritten and atomically renamed. No block,
+  proposal, transaction, or KB data is copied. The restart tests exercise both complaint and commit through
+  record → close → reopen → opposing evidence. The sync latency is exported as
+  `quod_consensus_vote_journal_sync_seconds`, so its real finality cost is visible rather than assumed.
+  Recovery trims only an incomplete final frame. A complete checksum/magic failure fail-stops even at EOF,
+  deliberately stricter than the committed ledger's torn-append policy: a vote may already be visible to
+  peers once its sync returns, so a complete record can never be discarded as though it were unacknowledged.
+  The two stores share a frame shape but not a recovery contract; extracting only the header codec would not
+  remove their load-bearing policy difference.
+  Diskless reconstruction was rejected because peer echoes can prove that a vote happened but never prove
+  that no unseen vote happened.
+- **Finality view change + in-flight block availability (post-journal residual).** The current evidence rule
+  directs an unlatched validator to skip when it sees `f+1` peer complaints and otherwise to commit a
+  notarized block. One decision table owns notarization, ready recovery, complaint ingestion, and timeout
+  triggers for both slots in the depth-one pipeline. This resolves the live slot-6180 shape once evidence is
+  exchanged, but a sub-Delta photo finish can still put
+  at least `f+1` validators on each final-vote side before either side sees the other's threshold. Durable
+  latches correctly prevent switching, so resolving that already-formed split requires an explicit
+  view/epoch recovery protocol, not another exception in the timeout FSM. Separately, certified-block
+  anti-entropy reconstructs an in-flight block from any surviving holder; if every holder disappears after
+  enough validators have commit-latched the block, no node can safely recreate its payload. A later
+  availability layer (DispersedSimplex dispersal/erasure fragments or durable proposal storage) must close
+  that bound. Do not claim unconditional liveness for arbitrary `>f` crash schedules until both are solved.
 - **Runtime (P tier, agents Slice 2) — remaining follow-ups.** (1) *Validator-side
   declaration authorization*: `can_declare_runtime/3` is still conceptual — activation is gated
   solely by the full-term founding-block match in `quod_runtime`; the committee judging a
@@ -341,22 +351,33 @@ stages, not carried forward:
   may open one successor over an uncommitted parent, while the durable frontier still drains in order.
 - **`may_commit/2` guard** — **DONE** (2c): gated at the commit-share emit; each round's complaint/commit
   latches make the two finalization paths mutually exclusive.
-- **Oldest-head recovery + over-f crash-liveness recovery — DONE (2026-07-18).** The approval-frontier
+- **Oldest-head and mixed-camp recovery — DONE (2026-07-22).** The approval-frontier
   `active_slot` latch was deleted. An explicit `head_progress` state now watches `committed+1` through
   proposal, notarization, and final commit, so support certification cannot silently cancel finality
   recovery. A member that retained an unnotarized proposal while `unconfirmed` processes it through normal
-  support or membership validation before complaining; a notarized block reconstructs only its commit latch
-  when recovery grants `ready`. Complaint signing pauses while fewer than a certificate quorum have a live
+  support or membership validation before complaining. Complaint signing pauses while fewer than a
+  certificate quorum have a live
   authenticated inbound consensus stream and a fresh, stream-generation-bound report that they are caught
   up to the local committed height. Reports refresh every second and expire after three, so a restarted
   process's socket cannot count before its recovery FSM grants voting capability. Three readiness-restoration
   rearms are allowed per unchanged phase, after which flaps cannot extend the deadline. On the first
   pre-notarization timeout after quorum returns, an already-supporting follower re-echoes its support once
-  before complaint becomes eligible. Retained proposals are redriven through the bounded outbox to the
-  whole committee, including disconnected validators, so a recovered voter receives the proposal before
-  its support is needed. Committed committee changes close obsolete consensus links and discard their
-  readiness, queued frames, and pending dials. This is a liveness extension, not a larger safety
-  bound: vote-latch persistence above remains the prerequisite for safe `>f` recovery. Also
+  before complaint becomes eligible.
+
+  Final-vote recovery is one evidence-driven path for both live pipeline slots. `f+1` verified peer
+  complaints cause an eligible unlatched validator to complaint-sign even after notarization; at most `f`
+  complaints leave a quorum-sized commit side. The same decision table runs on live notarization, the ready
+  edge, complaint ingestion, and timeout triggers. All first votes pass through the durable journal above;
+  periodic redrive reconstructs only those recorded shares.
+  A support certificate without its block starts bounded point-to-point recovery, rotating across certificate
+  signers and then committee members. Any holder may answer, but the receiver verifies the certificate,
+  block hash, parent, timestamp, payload, and local final-vote compatibility before ingestion. This replaces
+  proposer-only availability without broadcasting full blocks every tick.
+  A final certificate beyond the approved frontier revokes voting immediately and sends even a one-block
+  gap through the existing verified durable-log recovery path.
+
+  Retained leader proposals still use the bounded outbox. Committed committee changes close obsolete
+  consensus links and discard their readiness, queued frames, pending dials, and block requests. Also
   closed the stale collecting-batch crash: a competing
   notarization nacks and removes the obsolete collection before advancing `approved`.
 - **Loopback CT** — **DONE**: `simplex_SUITE` is a real 4-node OS-peer QUIC committee (commit, redirect,

@@ -3,9 +3,9 @@
 > **⚠ SUPERSEDED (2026-07-02).** This is the Phase-1 build spec for the hand-rolled **Raft** ordering
 > layer (`quod_ledger`), which has since been **removed**. quod's consensus is now a hand-rolled
 > **DispersedSimplex** BFT (`quod_simplex`); the authoritative sources are `doc/simplex_extended.pdf`
-> (§2 = the spec) and the module docs (`quod_simplex`, `quod_ledger_store`, `quod_prolog`). §§3–4 below
-> (the durable store + the `quod_prolog` apply/prove pipeline) remain broadly accurate; §§1–2 and the
-> M1–M5 build plan describe the **retired Raft protocol** and are kept only as a historical record.
+> (§2 = the spec) and the module docs (`quod_simplex`, `quod_vote_journal`, `quod_ledger_store`,
+> `quod_prolog`). §4 below remains broadly accurate. §3 describes the retired Raft store rather than
+> today's committed log plus vote journal; §§1–3 and the M1–M5 build plan are kept only as history.
 
 This document is the single, unified Phase-1 build spec for quod's ordering/content layer, realizing
 `doc/content-layer-design.md` §13. The decisions it fixes: a **hand-rolled lean Raft** over `quod_link`
@@ -812,7 +812,11 @@ independent on the same QUIC connection.
 
 ## 3. Persistence (`quod_ledger_store`)
 
-`quod_ledger_store` is the only quod code that touches disk. A **plain library module** (no process, no reg, no
+> **Historical Raft persistence.** This section is not the current disk contract. Today
+> `quod_ledger_store` owns `log.0001`, while `quod_vote_journal` owns the bounded `votes.0001` file that
+> makes in-flight validator decisions durable before their signatures are sent. Neither stores a KB copy.
+
+`quod_ledger_store` was the only quod code that touched disk. A **plain library module** (no process, no reg, no
 supervisor child), called synchronously in-line from inside the `quod_ledger` `gen_statem` callbacks so an
 fsync provably completes before the triggering network reply leaves. It holds no state beyond an opaque
 handle threaded through `#d.store`.

@@ -16,7 +16,8 @@ the rotated leader commits the re-submitted write. `over_fault_restart_recovers`
 committee to stop two validators (`>f`), keeps the head stalled past Δ, restarts both from their existing
 logs, and proves live finality resumes without a namespace-wide reboot. `quorum(4)=3` tolerates one down
 in normal operation; the latter case validates liveness recovery after deliberately exceeding that bound,
-not safety beyond `f` (which still requires durable vote latches).
+while each validator's durable vote journal preserves its own no-equivocation decisions across restart.
+The Byzantine safety assumption remains at most `f` faulty validators.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").

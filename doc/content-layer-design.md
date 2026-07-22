@@ -911,7 +911,7 @@ state watches exactly `committed+1` through `awaiting_proposal`, `awaiting_notar
 re-seat. Demand for the depth-one successor is retained separately while its parent is the durable
 head, then becomes `awaiting_proposal` as soon as the parent finalizes. A recovering validator that retained
 a valid, unnotarized proposal processes it through the normal support or membership-verdict path before
-complaining. A notarized complete-tree block instead reconstructs only its local commit latch when voting
+complaining. A notarized complete-tree block instead re-enters the common final-vote decision when voting
 returns, because the original notarization event was one-shot. Complaint timeouts are withheld while fewer
 than a certificate quorum have reported `ready` at or beyond the local committed height on their current
 authenticated inbound consensus streams. The report is refreshed once per second, expires after three
@@ -921,14 +921,30 @@ unchanged phase grant a fresh Delta; later flaps leave the existing deadline int
 Before notarization, an already-supporting follower uses the first such timeout to re-echo its support and
 waits one final Delta before complaining. This lets the leader's retained proposal reach a recovered voter;
 the one-shot latch prevents the grace from becoming an unbounded liveness delay.
-The leader redrives a retained proposal to the whole active committee through the bounded, deduplicating
-outbox, including validators that are not connected yet; reconnecting voters therefore receive the proposal
-before their support is needed. Committee transitions close obsolete inbound and outbound consensus links,
-discard readiness reports, and remove queued frames and pending dials, so transport state cannot outlive the
-validator set that authorized it.
-This improves liveness after a temporary `>f` crash outage. It does not extend the
-safety bound: a restarted validator currently loses its RAM-only prior-vote latches, so durable latches
-are required before claiming safety beyond `f`. The protocol's guaranteed fault bound remains `f`.
+
+Every first support, commit, or complaint decision is appended to the namespace's bounded vote journal and
+synced before its signature can be sent. A restart reloads those exact decisions, so it cannot switch blocks
+or switch between commit and skip. One decision table covers both live pipeline slots: for an unlatched
+round, `f+1` visible peer complaints select skip; otherwise a notarized block selects commit, while only the
+head watchdog or an invalid-membership verdict may originate a complaint without amplified evidence.
+Complaint amplification remains active after notarization. A validator missing a support-certified block
+rotates one point-to-point request at a time through certificate signers and then other committee members.
+Normal proposals and recovered blocks use one shared timestamp/payload admission predicate after their
+distinct position and certificate checks, so recovery cannot accept content that live voting would reject.
+Full proposals are not persisted and non-leaders do not flood them.
+A verified final certificate beyond the local approved frontier immediately revokes voting capability. If
+the finalized block itself never arrived, the ordinary durable-log recovery path fetches and verifies that
+entry; the node does not remain "ready" one block behind.
+
+The leader still redrives its retained proposal through the bounded outbox. Committee transitions close
+obsolete inbound and outbound consensus links, discard readiness reports, and remove queued frames and
+pending dials, so transport state cannot outlive the validator set that authorized it. These mechanisms
+recover the observed mixed-camp and proposer-loss outages after a temporary `>f` crash wave. The protocol's
+Byzantine safety assumption remains at most `f` faulty validators; journaled latches preserve honest votes
+across restarts but do not enlarge that adversary bound. Liveness is still conditional if opposing final
+votes become hidden simultaneously before either camp's `f+1` evidence is visible, or if every holder of a
+notarized block disappears after enough validators have commit-latched it. Those cases require a later
+view-change/availability protocol rather than more timeout exceptions.
 
 ### Still open
 

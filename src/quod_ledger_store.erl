@@ -4,17 +4,19 @@ Durable on-disk store for one namespace's **DispersedSimplex block log** — the
 append-only list of committed `#entry{}` records, each a block plus the quorum
 certificate that finalized its slot.
 
-This is the only quod code that touches disk. It is a plain library (no process,
+This module exclusively owns the committed block log. It is a plain library (no process,
 no registration): every function is synchronous and completes its required `fsync`
 before returning, and the handle is threaded by the caller — the writer is
 `m:quod_simplex`; `m:quod_catchup` opens a read-only view via `open_ro/2` to serve
-a joiner (the dissemination feed will do the same for its pull path in a later slice).
+a joiner. The separate `m:quod_vote_journal` stores only this validator's bounded,
+in-flight vote decisions; it never duplicates blocks or knowledge-base data.
 
 Layout, under `DataDir/<base64url(Ns)>/`:
 
 | file       | holds                                                          |
 | ---------- | -------------------------------------------------------------- |
 | `log.0001` | append-only CRC-framed `#entry{}` records — the block log      |
+| `votes.0001` | bounded in-flight vote decisions, owned by `quod_vote_journal` |
 
 Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` with
 `Payload = term_to_binary(Entry, [deterministic])` and `CRC = erlang:crc32(Payload)`.
@@ -46,15 +48,9 @@ the full log always rescans at open.
 
 -export([open/2, open_ro/2, close/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
--export([default_data_dir/0, data_dir/1]).
+-export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
 -export_type([handle/0]).
-
-%% The on-disk namespace-subdirectory rule is the store's own; tests assert against it
-%% through this export instead of re-deriving the encoding.
--ifdef(TEST).
--export([ns_dir/2]).
--endif.
 
 -define(MAGIC, 16#915106AA).
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
@@ -216,6 +212,8 @@ last(#store{last_index = LI}) -> LI.
 %%% internals
 %%%===================================================================
 
+-doc "The shared on-disk directory for one namespace's ledger and consensus metadata.".
+-spec ns_dir(file:filename_all(), binary()) -> file:filename_all().
 ns_dir(DataDir, Ns) -> filename:join(DataDir, base64url(Ns)).
 
 base64url(Bin) ->

@@ -28,6 +28,9 @@ Two collection paths:
 | `quod_consensus_syncing{namespace}` | gauge | | 1 while catching up / confirming the latest block, 0 once up to date |
 | `quod_consensus_progress_slot/progress_phase/progress_quorum_ready{namespace}` | gauge | | oldest unfinished slot, its phase (0 idle, 1 proposal, 2 notarization, 3 commit), and whether enough connected validators have freshly reported they are caught up |
 | `quod_consensus_progress_timeouts/quorum_pauses{namespace}` | gauge | | watchdog expirations and complaints deliberately withheld while fewer than a quorum were ready |
+| `quod_consensus_head_*_votes/head_complaint_signed{namespace}` | gauge | | verified finality evidence for the oldest unfinished block and this node's own skip decision |
+| `quod_consensus_missing_certified_blocks{namespace}` | gauge | | quorum-approved in-flight blocks whose content this node is retrieving from another validator |
+| `quod_consensus_vote_journal_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
 | `quod_runtime_healthy/handlers_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, rebuilt-through height, effect-release frontier, queued events |
@@ -51,7 +54,7 @@ Two collection paths:
 
 -behaviour(gen_server).
 
--export([start_link/0, observe_transaction_signature/3]).
+-export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -include("quod_ledger.hrl").
@@ -61,6 +64,8 @@ Two collection paths:
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
+-define(VOTE_SYNC_BUCKETS, [0.0001, 0.00025, 0.0005, 0.001, 0.0025,
+                            0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5]).               %% seconds per datasync
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -147,6 +152,11 @@ declare(NodeId) ->
     _ = G(quod_consensus_progress_quorum_ready, "1 when this node has live consensus links to enough validators that freshly reported being caught up to this node's current block, 0 otherwise. Complaint voting pauses while this is 0."),
     _ = G(quod_consensus_progress_timeouts, "Total oldest-block watchdog expirations. Occasional increases recover packet loss; sustained increases mean consensus is not advancing."),
     _ = G(quod_consensus_quorum_pauses,   "Total watchdog expirations where this node withheld a complaint because fewer than a certificate quorum of validators had a live consensus link and freshly reported being caught up. It prevents recovering sockets from being mistaken for voting nodes."),
+    _ = G(quod_consensus_head_support_votes, "Verified support votes this node currently holds for the strongest block at the oldest unfinished slot. Reaching the certificate quorum approves that block."),
+    _ = G(quod_consensus_head_commit_votes, "Verified commit votes this node currently holds for the strongest block at the oldest unfinished slot. Reaching the certificate quorum makes that block final."),
+    _ = G(quod_consensus_head_complaint_votes, "Verified skip votes this node currently holds for the oldest unfinished slot. Reaching the certificate quorum skips that slot without applying its proposed changes."),
+    _ = G(quod_consensus_head_complaint_signed, "1 when this validator has itself durably voted to skip the oldest unfinished slot, 0 otherwise. A mixture of this value across nodes explains which finality camp each validator is locked into."),
+    _ = G(quod_consensus_missing_certified_blocks, "Quorum-approved in-flight blocks whose vote certificate this node has but whose transaction content it is still retrieving. A value that stays above 0 means block recovery is not reaching any holder."),
     _ = G(quod_consensus_is_validator,    "1 if this node is allowed to vote on changes, 0 if it only reads and follows along. It actually casts votes only when 'syncing' is also 0."),
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
@@ -196,6 +206,9 @@ declare(NodeId) ->
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
+    _ = H(quod_consensus_vote_journal_sync_seconds,
+          "How long this node took to make one support, commit, or skip vote crash-durable before sending its signature. Every new vote waits for this small disk sync; sustained high values directly delay block finality.",
+          ?VOTE_SYNC_BUCKETS),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
                                     {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
@@ -224,6 +237,25 @@ observe_transaction_signature(Ns, Valid, DurationNative)
                         false -> prometheus_counter:inc(
                                    quod_tx_invalid_signatures_total, [label(Ns)])
                     end,
+                ok
+            catch
+                _:_ -> ok
+            end
+    end.
+
+%% Vote persistence is on the consensus hot path, but observability must remain optional during
+%% supervisor startup and metrics-process restarts.
+-spec observe_vote_journal_sync(binary(), non_neg_integer()) -> ok.
+observe_vote_journal_sync(Ns, DurationNative)
+  when is_binary(Ns), is_integer(DurationNative), DurationNative >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                Seconds = erlang:convert_time_unit(DurationNative, native, nanosecond) / 1000000000,
+                _ = prometheus_histogram:observe(
+                      quod_consensus_vote_journal_sync_seconds, [label(Ns)], Seconds),
                 ok
             catch
                 _:_ -> ok
@@ -292,7 +324,10 @@ refresh_log_ns(Ns) ->
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
           progress_quorum_ready := PQ, progress_timeouts := PT,
-          quorum_pauses := QP, weak_cert_waits := WC, is_validator := IV, syncing := SY,
+          quorum_pauses := QP, head_support_votes := HSV, head_commit_votes := HCV,
+          head_complaint_votes := HXV, head_complaint_signed := HXS,
+          missing_certified_blocks := MCB,
+          weak_cert_waits := WC, is_validator := IV, syncing := SY,
           ahead_gap := AG} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_consensus_slot,            Sl),
@@ -318,6 +353,11 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_progress_quorum_ready, PQ),
             _ = S(quod_consensus_progress_timeouts, PT),
             _ = S(quod_consensus_quorum_pauses,   QP),
+            _ = S(quod_consensus_head_support_votes, HSV),
+            _ = S(quod_consensus_head_commit_votes, HCV),
+            _ = S(quod_consensus_head_complaint_votes, HXV),
+            _ = S(quod_consensus_head_complaint_signed, HXS),
+            _ = S(quod_consensus_missing_certified_blocks, MCB),
             _ = S(quod_consensus_is_validator,    IV),
             _ = S(quod_consensus_syncing,         SY),
             _ = S(quod_consensus_weak_cert_waits, WC),

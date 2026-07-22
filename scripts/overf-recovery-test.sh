@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Controlled >f outage recovery validation for the voting-readiness gate (commit 79cb1e7, release 0.7.20).
+# Controlled >f outage validation for voting readiness and evidence-driven finality recovery.
 #
 # Reproduces the slot-713 incident on the LIVE fleet against a QUIESCENT, caught-up committee — the exact
 # path scripts/loadtest.sh cannot force (it self-defers over-f under load):
@@ -8,14 +8,13 @@
 #   2. submit ONE write -> the surviving leader proposes it at H+1, the survivors support-sign, and
 #      complaint signing PAUSES (quod_consensus_quorum_pauses climbs while the slot stays at H);
 #   3. bring the down nodes back;
-#   4. assert the RETAINED slot COMMITS rather than being complaint-skipped.
+#   4. assert the interrupted slot RESOLVES (commit or evidence-driven skip), then commit a fresh write.
 #
-# Discriminator: `quod_consensus_skips`. Pre-fix (<=0.7.19) slot H+1 was complaint-skipped on quorum
-# restoration (skips++), and the write only landed on a later re-proposal. The 79cb1e7 fix must let the
-# retained slot COMMIT with skips FLAT. The leader is kept UP so a skip can only mean the recovery race,
-# never leader-death.
+# `quod_consensus_skips` identifies which safe finality camp won; it is not itself a failure signal. If
+# enough validators durably chose complaint, skipping is the only safe resolution and the interrupted write
+# must be retried. The final continuation write is therefore the liveness discriminator in both outcomes.
 #
-# Side effects: `nomad alloc restart` on f+1 compute validators, and ONE `POST /api/prove` write. Reads
+# Side effects: `nomad alloc restart` on f+1 compute validators, and TWO `POST /api/prove` writes. Reads
 # go through /metrics + the explorer /api/* HTTP surface — no `nomad alloc exec`. qengho is a TEST cluster.
 # Needs: nomad CLI (NOMAD_ADDR reachable), curl, python3.
 #
@@ -191,15 +190,42 @@ for a in "${COMPUTE[@]}"; do
   d=$(( ${skips:-0} - ${BASE_SKIPS[$a]:-0} )); [ "$d" -gt 0 ] && NET_SKIPS=$((NET_SKIPS + d))
 done
 
-# is the written fact present? (read prove on a healthy survivor)
+# Did the interrupted write itself commit? A safe skip normally leaves it absent.
 FACT="unknown"
 RESP=$(curl -s --max-time 8 -X POST "http://$PROBER_EXP/api/prove" \
         -H 'content-type: application/json' \
-        -d "{\"ns\":\"$NS\",\"goal\":\"overf_probe(X).\"}" 2>/dev/null)
-echo "$RESP" | grep -q "\"$UNIQ\"" && FACT="present" || { echo "$RESP" | grep -qi '"result":"ok"' && FACT="present" || FACT="absent"; }
+        -d "{\"ns\":\"$NS\",\"goal\":\"overf_probe($UNIQ).\"}" 2>/dev/null)
+echo "$RESP" | grep -qi '"result":"ok"' && FACT="present" || FACT="absent"
 
 wait "$WRITE_PID" 2>/dev/null || true
 WRITE_RESP=$(head -c 300 "$WOUT"); rm -f "$WOUT"
+
+# Whichever finality camp won H+1, a fresh transaction must commit afterward. This distinguishes a safely
+# resolved skip from a cluster that merely moved one metric while remaining unable to process work.
+CONT_UNIQ=$((UNIQ + 1000000))
+CONT_FACT="unknown"; CONT_RESP="<not submitted>"
+if [ -n "$FINAL_H" ]; then
+  LOG "STEP 4 — proving continuation with assertz(overf_continue($CONT_UNIQ))..."
+  CONT_RESP=$(curl -s --max-time 45 -X POST "http://$PROBER_EXP/api/prove" \
+      -H 'content-type: application/json' \
+      -d "{\"ns\":\"$NS\",\"goal\":\"assertz(overf_continue($CONT_UNIQ)).\"}" 2>/dev/null)
+  CONT_FACT="absent"
+  for _ in $(seq 1 20); do
+    Q=$(curl -s --max-time 8 -X POST "http://$PROBER_EXP/api/prove" \
+          -H 'content-type: application/json' \
+          -d "{\"ns\":\"$NS\",\"goal\":\"overf_continue($CONT_UNIQ).\"}" 2>/dev/null)
+    echo "$Q" | grep -qi '"result":"ok"' && { CONT_FACT="present"; break; }
+    sleep 1
+  done
+fi
+
+if [ "$NET_SKIPS" -gt 0 ]; then
+  HEAD_OUTCOME="safely skipped"
+elif [ "$FACT" = "present" ]; then
+  HEAD_OUTCOME="committed"
+else
+  HEAD_OUTCOME="unclear"
+fi
 
 echo
 LOG "================= RESULT (over-f recovery, N=10 f=3) ================="
@@ -209,22 +235,21 @@ LOG "validators taken down       : $OVERF_N (quorum 7 impossible with 6 up)"
 LOG "over-f pause precondition   : $([ $PAUSE_SEEN = 1 ] && echo 'observed (survivors stalled at H, complaints paused)' || echo 'NOT observed (window too short — inconclusive)')"
 LOG "peak quorum_pauses (surv)   : $MAX_PAUSE_DELTA"
 LOG "final converged height      : ${FINAL_H:-<not converged>}"
-LOG "net skips across fleet      : $NET_SKIPS   (0 = retained slot COMMITTED; >0 = complaint-SKIPPED)"
+LOG "net skips across fleet      : $NET_SKIPS"
+LOG "interrupted-slot outcome    : $HEAD_OUTCOME"
 LOG "written fact overf_probe    : $FACT"
 LOG "original write response     : ${WRITE_RESP:-<none>}"
+LOG "continuation fact           : $CONT_FACT"
+LOG "continuation response       : ${CONT_RESP:0:300}"
 LOG "====================================================================="
 
 if [ "$PAUSE_SEEN" != 1 ]; then
   LOG "VERDICT: INCONCLUSIVE — the over-f stall was not actually exercised (nodes recovered too fast)."
   exit 3
-elif [ -n "$FINAL_H" ] && [ "$NET_SKIPS" -eq 0 ] && [ "$FACT" = "present" ]; then
-  LOG "VERDICT: PASS — quorum went sub-threshold, the retained slot COMMITTED (skips flat), fact present."
-  LOG "         This is the 79cb1e7 fix working: no complaint-skip of the valid pending slot."
+elif [ -n "$FINAL_H" ] && [ "$HEAD_OUTCOME" != "unclear" ] && [ "$CONT_FACT" = "present" ]; then
+  LOG "VERDICT: PASS — the interrupted slot $HEAD_OUTCOME and a fresh transaction committed afterward."
   exit 0
-elif [ "$NET_SKIPS" -gt 0 ]; then
-  LOG "VERDICT: FAIL — the pending slot was COMPLAINT-SKIPPED ($NET_SKIPS skip(s)); the fix did not hold."
-  exit 1
 else
-  LOG "VERDICT: UNCLEAR — pause seen but reconvergence/fact check incomplete; inspect above + /metrics."
+  LOG "VERDICT: UNCLEAR — recovery did not prove both slot resolution and subsequent transaction progress."
   exit 4
 fi

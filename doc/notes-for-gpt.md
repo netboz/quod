@@ -7,6 +7,44 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-22 — slot 6180 mixed-camp recovery rewrite reviewed; live validation pending
+
+The later live outage disproved the narrow 0.7.20 conclusion below. Two over-f restart waves left slot
+6180 notarized with fewer than quorum validators eligible for commit and fewer than quorum latched for
+complaint; readiness was 100%, but readiness did not describe final-vote eligibility. Restart also erased
+RAM-only vote latches, allowing honest nodes to sign complaint before the crash and commit afterward.
+
+The current branch rewrites that boundary around three invariants: every first support, commit, or complaint
+vote is journaled and synced before network visibility; one final-vote decision table covers both live
+pipeline slots and makes an unlatched validator follow `f+1` visible peer complaints even after
+notarization; and a node with a support certificate but no block rotates one point-to-point request at a
+time through certificate signers and then other committee members, verifying any response before ingestion.
+Live proposals and recovered blocks also share one timestamp and payload admission predicate after their
+distinct position/certificate checks. Full proposals and KB state are not copied to disk.
+
+Claude's read-only review found the load-bearing safety argument sound and no commit blocker. Its useful
+cleanup findings were folded in rather than deferred: the split final-vote sites became the decision table
+above, child-slot complaint evidence no longer waits for the parent, and tests now use the real vote journal
+for both final camps plus a complete amplified-complaint -> skip -> next-slot-commit path. The controlled
+outage script now treats either commit or evidence-driven skip as a valid interrupted-slot outcome and
+requires a fresh transaction afterward to prove liveness. The final local gate is green: 401 EUnit tests,
+all 44 Common Test cases (including the real four-node QUIC suite), Dialyzer, xref, and the production
+release build. The remaining honest boundary is an already-formed mutually hidden final-vote split, which
+needs a real view-change protocol, plus total loss of every in-flight block holder after a commit camp has
+formed. The Nomad fleet has deliberately not been changed yet; live validation is the next milestone after
+commit.
+
+**Pre-deploy forensic snapshot (2026-07-22).** A read-only `quod_simplex:stats/1` call on the four
+preserved slot-6180 stayers confirmed the mixed camp before any restart erased it. All four reported
+`slot=6179`, `approved=6181`, `progress_slot=6180`, `progress_phase_code=3`,
+`progress_quorum_ready=1`, and `syncing=0`. Allocations `bc3ead12` and `22ccb8c9` reported
+`head_complaint_signed=1`; `3e3413d6` and `9ee16eb2` reported `head_complaint_signed=0`. Thus the cluster
+was fully connected and ready while honest validators remained durably divided over the unfinished head,
+exactly matching the recovery rewrite's diagnosis. The deployed build did not yet export the new per-camp
+vote-count gauges, so this direct process snapshot is the surviving pre-roll evidence.
+
+---
+
 ## 2026-07-19 — 0.7.20 deployed (recovery readiness gate) + chaos test
 
 **What shipped.** `79cb1e7` "Bind Simplex recovery to voting readiness" — reviewed by Claude
@@ -72,6 +110,12 @@ confirmed fixed by 79cb1e7. Two gotchas baked into the script (learned the hard 
 victims, not graceful `nomad alloc restart` (which drains slowly, leaving them up + voting); (2) submit the
 write only AFTER all victims are confirmed down (STEP 1b), else it commits at full quorum before the outage
 opens and the run is inconclusive. Rerun: `NOMAD_ADDR=http://192.168.1.10:4646 bash scripts/overf-recovery-test.sh`.
+
+**Current script contract (2026-07-22).** The paragraph above records the historical 0.7.20 run. With
+durable final-vote latches, a recovered interrupted slot may now correctly commit or correctly skip,
+depending on which evidence camp formed before the outage. The script no longer treats the skip counter as
+a failure signal: it identifies the outcome, then requires a second fresh write to commit after
+reconvergence. That continuation is the decisive liveness assertion.
 
 **Deploy mechanics reminders.**
 - Bump `image_tag` to force a redeploy — Nomad dedupes an unchanged tag string (re-pushing a fixed

@@ -1096,6 +1096,97 @@
       ]
     },
     {
+      "type": "timeseries",
+      "id": 113,
+      "title": "Finality vote camps",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 109
+      },
+      "description": "Votes each node currently knows for the oldest unfinished block. Support votes approve a block, commit votes make it final, and skip votes abandon the slot. Commit and skip both stuck below the committee quorum reveal a split finality round. own skip is 1 on validators locked to the skip side; missing block means the node has an approval certificate but is still retrieving the block's transactions.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_consensus_head_support_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "support · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "quod_consensus_head_commit_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "commit · {{node_id}}"
+        },
+        {
+          "refId": "C",
+          "expr": "quod_consensus_head_complaint_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "skip · {{node_id}}"
+        },
+        {
+          "refId": "D",
+          "expr": "quod_consensus_head_complaint_signed{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "own skip · {{node_id}}"
+        },
+        {
+          "refId": "E",
+          "expr": "quod_consensus_missing_certified_blocks{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "missing block · {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 114,
+      "title": "Vote journal disk sync time",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 109
+      },
+      "description": "Median and 95th-percentile time to make one validator vote crash-durable before sending its signature. A healthy block normally needs one support sync and one final-vote sync per validator; sustained high values directly add to block finality time.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p50 · {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p95 · {{node_id}}"
+        }
+      ]
+    },
+    {
       "type": "row",
       "id": 109,
       "title": "Transaction authentication",
@@ -1104,7 +1195,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 109
+        "y": 117
       }
     },
     {
@@ -1119,7 +1210,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 110
+        "y": 118
       },
       "description": "Median and 95th-percentile time each node spends checking one transaction author's Ed25519 signature before voting. A sustained rise means authentication is consuming more of the block-processing budget.",
       "fieldConfig": {
@@ -1156,7 +1247,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 110
+        "y": 118
       },
       "description": "Rate of transactions rejected because the author's cryptographic signature did not match the signed content. This should stay at zero; any increase means corrupted, malformed, or dishonest input reached a validator.",
       "fieldConfig": {
@@ -1188,7 +1279,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 118
+        "y": 126
       },
       "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — same id as the $node picker.",
       "options": {
@@ -1219,7 +1310,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 129
+        "y": 137
       },
       "description": "Derived working state per node. healthy is 1 while handlers are live; e_frontier should track the committed height (effects for a block are released only once the frontier reaches it); collapses climbing means ordered handler work keeps being rebuilt; heavy failures are isolated resource rebuild failures; heavy rejected means a job exceeded the size limit or the bounded pending-resource queue was full; rejected dynamic means someone tried to install running code after founding.",
       "fieldConfig": {

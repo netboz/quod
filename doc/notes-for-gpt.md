@@ -7,6 +7,31 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-22 — 0.7.24 load/chaos validation and harness accounting repair
+
+**Full campaign.** A 600-second public-HTTP load run started at slot 6183 and settled every one of the
+ten nodes at slot 6722 (+539 blocks). It exercised follower-to-leader relay, bursts of 20 submissions per
+validator, five single-validator restarts, and one four-validator (>f) restart wave. There were no
+unverified drops, failed/lost allocations, membership rejects, weak-cert waits, lingering recovery, or
+validator lag after settlement. The four-node wave returned before the 15-second monitor could observe a
+flat height, so it is correctly recorded as an *unobserved* over-f event rather than a duplicate proof of
+the controlled outage test above.
+
+**Harness correction.** That first campaign initially printed FAIL solely because `task_restarts` included
+the nine restarts deliberately requested by the churn driver. `scripts/loadtest.sh` now counts planned
+allocation restarts and fails only when Nomad reports an additional, unplanned task restart; it still flags
+failed/lost allocations. A 75-second restart smoke test passed with `2 new (2 planned, 0 unplanned)` task
+restarts, full reconvergence at 6830, and no safety-counter movement.
+
+**Append-rejection monitoring.** `append_bad` is now baselined per allocation and tracked through process
+resets, so the well-formed load workload fails if it creates a new malformed/disallowed append. A final
+45-second no-churn smoke test passed at slot 6930 (+100 blocks), with `append bad (new): 0`, zero
+unverified drops, zero restarts, and all ten validators at the head. Existing `busy` and `redirect`
+counters are expected under concurrent all-validator ingress: the former is bounded pipeline backpressure,
+the latter is normal leader routing/relay.
+
+---
+
 ## 2026-07-22 — 0.7.24 deployed and mixed-camp recovery validated live
 
 **What shipped.** `5960464` "Harden consensus recovery finality" followed by `bdb2066` "Bump release to

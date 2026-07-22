@@ -10,7 +10,7 @@
 # at N>=4: no unverified gossip (safety), every node reconverged to one height
 # (liveness), the ledger advanced (the load landed), the committee stayed intact
 # (no spurious membership change, is_validator stable, weak-cert waits drained),
-# and nothing is failed/lost/restarted (stability).
+# and no allocation fails or task restarts except for the churn the driver requested.
 #
 # WHY THIS IS NOT THE OLD N=1 DRIVER:
 #   * Writers target every validator. Signed follower-to-leader relay forwards
@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.23}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.24}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
@@ -282,7 +282,7 @@ task_restarts() {
 }
 
 # Scrape ONE alloc's metrics for $NS only ->
-# "alloc group slot unverified rejects is_validator committee_size weak_cert_waits syncing".
+# "alloc group slot unverified rejects is_validator committee_size weak_cert_waits syncing append_bad".
 # Nodes may host more than one ontology. Every metric used for the verdict must
 # therefore match the requested namespace; otherwise a small auxiliary ontology
 # can be mistaken for a lagging root replica. A down/restarting node's curl
@@ -302,10 +302,11 @@ scrape_row() {   # arg: "alloc,group,host:port"
       else if ($1 ~ /^quod_consensus_committee_size\{/) cs=$2
       else if ($1 ~ /^quod_consensus_weak_cert_waits\{/) wcw=$2
       else if ($1 ~ /^quod_consensus_syncing\{/) sy=$2
+      else if ($1 ~ /^quod_consensus_append_bad\{/) bad=$2
     }
-    END { printf "%s %s %d %d %d %d %d %d %d\n", a, g,
+    END { printf "%s %s %d %d %d %d %d %d %d %d\n", a, g,
                  (slot==""?-1:slot), unv+0, mr+0,
-                 (isv==""?-1:isv), (cs==""?-1:cs), wcw+0, (sy==""?-1:sy) }'
+                 (isv==""?-1:isv), (cs==""?-1:cs), wcw+0, (sy==""?-1:sy), bad+0 }'
 }
 # re-entry hook: parallel scrape workers re-exec THIS script. Must sit AFTER the fn
 # defs and BEFORE any fleet side effect (scale/writer/churn).
@@ -450,6 +451,7 @@ churn_observers() {
   [ "$n" -gt "${#ids[@]}" ] && n=${#ids[@]}
   pick=$(printf '%s\n' "${ids[@]}" | shuf | head -n "$n")
   LOG "CHURN(observer): restarting $n observer(s) simultaneously"
+  PLANNED_TASK_RESTARTS=$((PLANNED_TASK_RESTARTS + n))
   echo "$pick" | xargs -P "$CHURN_MAX" -I{} nomad alloc restart {} >/dev/null 2>&1 &
   CHURN_PID=$!
 }
@@ -486,6 +488,7 @@ churn_validators() {
   else
     LOG "CHURN(validator, $label): restarting $n/$up [$(echo $pick | tr '\n' ' ')]"
   fi
+  PLANNED_TASK_RESTARTS=$((PLANNED_TASK_RESTARTS + n))
   echo "$pick" | xargs -P "$n" -I{} nomad alloc restart {} >/dev/null 2>&1 &
   VAL_CHURN_PID=$!
 }
@@ -510,6 +513,7 @@ random_churn() {
     label="within-f: $validator_count validator(s) <= f=$F"
   fi
   LOG "CHURN(random): restarting $n mixed node(s), $label"
+  PLANNED_TASK_RESTARTS=$((PLANNED_TASK_RESTARTS + n))
   printf '%s\n' "$ids" | xargs -P "$n" -I{} nomad alloc restart {} >/dev/null 2>&1 &
   RANDOM_CHURN_PID=$!
 }
@@ -584,6 +588,33 @@ REJECT_BASELINE=0
 CS_SEEN_MIN=999; CS_SEEN_MAX=0
 BASE_FAILED_ALLOCS=0
 BASE_TASK_RESTARTS=0
+# Each `nomad alloc restart` below restarts exactly the allocation's `quod` task.
+# Subtract those deliberate restarts at the verdict so a recovered OOM remains visible.
+PLANNED_TASK_RESTARTS=0
+declare -A APPEND_BAD_BY_ALLOC=()
+NEW_APPEND_BAD=0
+
+# `append_bad` is per-process and resets when churn restarts an allocation. Count only
+# post-baseline increments, treating a lower value as that process reset rather than a
+# counter wrap; each new malformed/disallowed request still contributes once.
+observe_append_bad() {
+  local alloc slot bad previous delta
+  while read -r alloc _ slot _ _ _ _ _ _ bad; do
+    [ -n "${alloc:-}" ] || continue
+    [[ "${slot:-}" =~ ^-?[0-9]+$ ]] && [ "$slot" -ge 0 ] || continue
+    [[ "${bad:-}" =~ ^[0-9]+$ ]] || continue
+    if [[ -v "APPEND_BAD_BY_ALLOC[$alloc]" ]]; then
+      previous=${APPEND_BAD_BY_ALLOC[$alloc]}
+      if [ "$bad" -ge "$previous" ]; then
+        delta=$((bad - previous))
+      else
+        delta=$bad
+      fi
+      NEW_APPEND_BAD=$((NEW_APPEND_BAD + delta))
+    fi
+    APPEND_BAD_BY_ALLOC[$alloc]=$bad
+  done
+}
 
 # aggregate the current FLEETFILE -> "up min max lag unv mr ready_validators cs_min cs_max wcw recovering"
 snapshot() {
@@ -644,6 +675,7 @@ detect_overf_recovery() {   # $1 = current max slot, $2 = ready validators
 poll_unverified() {
   local rows u w
   rows=$(scrape_fleet)
+  observe_append_bad <<< "$rows"
   u=$(printf '%s\n' "$rows" | awk '{s+=$4} END{print s+0}')
   w=$(printf '%s\n' "$rows" | awk '{if($8>m)m=$8} END{print m+0}')
   [ "${u:-0}" -gt "$MAX_UNVERIFIED" ] && MAX_UNVERIFIED=$u
@@ -671,6 +703,7 @@ fi
 
 LOG "warmup ${WARMUP}s (let any cold/restarted node catch up)..."; sleep "$WARMUP"
 refresh_endpoints; scrape_fleet > "$FLEETFILE"
+observe_append_bad < "$FLEETFILE"
 
 # discover the fleet shape from reality (fleet-size-agnostic)
 TOTAL=$(awk 'END{print NR}' "$FLEETFILE")
@@ -705,6 +738,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
   fi
 
   refresh_endpoints; scrape_fleet > "$FLEETFILE"
+  observe_append_bad < "$FLEETFILE"
   read -r n mn mx lag unv mr vals csmn csmx wcw recovering <<<"$(snapshot)"
   accumulate "$n" "$lag" "$unv" "$mr" "$csmn" "$csmx" "$wcw"
   [ "$mx" -ge 0 ] && CUR_MAX=$mx
@@ -725,6 +759,7 @@ stop_writers
 converged=0; n=0; mx=$START_SLOT; vals=$EXP_VALIDATORS; csmn=$EXP_COMMITTEE; csmx=$EXP_COMMITTEE; wcw=0; vbehind=$EXP_VALIDATORS; recovering=$TOTAL
 for _ in $(seq 1 "$SETTLE_TRIES"); do
   refresh_endpoints; scrape_fleet > "$FLEETFILE"
+  observe_append_bad < "$FLEETFILE"
   read -r n mn mx lag unv mr vals csmn csmx wcw recovering <<<"$(snapshot)"
   # validators NOT at the (frozen) head: a promote-behind validator (member gap-fill gap) reads
   # is_validator=1 and can sit within LAG_OK of the head, so a lag<=LAG_OK check passes it
@@ -750,6 +785,8 @@ NEW_FAILEDALLOCS=$((FAILEDALLOCS - BASE_FAILED_ALLOCS))
 TASK_RESTARTS=$(task_restarts)
 NEW_TASK_RESTARTS=$((TASK_RESTARTS - BASE_TASK_RESTARTS))
 [ "$NEW_TASK_RESTARTS" -lt 0 ] && NEW_TASK_RESTARTS=$TASK_RESTARTS
+UNPLANNED_TASK_RESTARTS=$((NEW_TASK_RESTARTS - PLANNED_TASK_RESTARTS))
+[ "$UNPLANNED_TASK_RESTARTS" -lt 0 ] && UNPLANNED_TASK_RESTARTS=0
 ADVANCE=$(( END_SLOT - START_SLOT ))
 echo
 LOG "================= RESULT (N=$EXP_VALIDATORS, f=$F) ================="
@@ -758,8 +795,9 @@ LOG "nodes still recovering  : $recovering";                 [ "$recovering" -eq
 LOG "reconverged (lag<=$LAG_OK)   : $([ "$converged" = 1 ] && echo yes || echo NO)"; [ "$converged" = 1 ] || { LOG "  FAIL: fleet did not reconverge"; FAILED=1; }
 LOG "ledger advanced          : +$ADVANCE (>= $MIN_ADVANCE required)"; [ "$ADVANCE" -ge "$MIN_ADVANCE" ] || { LOG "  FAIL: too few commits (sustained load did not land)"; FAILED=1; }
 LOG "unverified drops (max)   : $MAX_UNVERIFIED";             [ "$MAX_UNVERIFIED" -eq 0 ]            || { LOG "  FAIL: unverified gossip observed (safety!)"; FAILED=1; }
+LOG "append bad (new)         : $NEW_APPEND_BAD";              [ "$NEW_APPEND_BAD" -eq 0 ]             || { LOG "  FAIL: malformed/disallowed appends observed from this well-formed workload"; FAILED=1; }
 LOG "failed/lost allocs       : $NEW_FAILEDALLOCS new ($FAILEDALLOCS total)"; [ "$NEW_FAILEDALLOCS" -eq 0 ] || { LOG "  FAIL: allocs failed/lost during test"; FAILED=1; }
-LOG "task restarts             : $NEW_TASK_RESTARTS new ($TASK_RESTARTS total)"; [ "$NEW_TASK_RESTARTS" -eq 0 ] || { LOG "  FAIL: task crash/restart during test (including a recovered OOM)"; FAILED=1; }
+LOG "task restarts             : $NEW_TASK_RESTARTS new ($PLANNED_TASK_RESTARTS planned, $UNPLANNED_TASK_RESTARTS unplanned; $TASK_RESTARTS total)"; [ "$UNPLANNED_TASK_RESTARTS" -eq 0 ] || { LOG "  FAIL: unplanned task crash/restart during test (including a recovered OOM)"; FAILED=1; }
 # --- N>=4 committee invariants ---
 LOG "validators at end        : $vals / $EXP_VALIDATORS";     [ "$vals" -eq "$EXP_VALIDATORS" ]      || { LOG "  FAIL: not all validators recovered/voting"; FAILED=1; }
 LOG "validators at head       : $([ "$vbehind" -eq 0 ] && echo yes || echo NO)  ($vbehind behind head=$END_SLOT)"; [ "$vbehind" -eq 0 ] || { LOG "  FAIL: validator(s) stuck behind the head after load stopped (member multi-slot gap-fill gap — deferred.md §3)"; FAILED=1; }
@@ -788,5 +826,5 @@ LOG "worst height spread      : $WORST_LAG (during chaos — informational)"
 LOG "======================================================"
 LOG "note: the unverified/weak-cert gauges reset on a node restart; they are sampled every ${UNV_POLL}s"
 LOG "      (< churn cadence) to shrink but not eliminate that gauge blind spot. Nomad task restart"
-LOG "      deltas are checked separately, so a recovered OOM/crash still fails the run."
+LOG "      deltas are compared with the deliberate churn count, so a recovered OOM/crash still fails the run."
 [ "$FAILED" -eq 0 ] && { LOG "PASS"; exit 0; } || { LOG "FAIL"; exit 1; }

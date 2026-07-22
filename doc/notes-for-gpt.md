@@ -7,6 +7,30 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-22 — 0.7.24 deployed and mixed-camp recovery validated live
+
+**What shipped.** `5960464` "Harden consensus recovery finality" followed by `bdb2066` "Bump release to
+0.7.24". Built and pushed `192.168.1.11:5000/quod:0.7.24`
+(`sha256:a96c0d68c5fea7b8bae89a00bb8bf60a93233dd2900af50231a3830d67bcb67e`). The checked Nomad plan
+changed only the container image from `0.7.23` to `0.7.24`; it used the live pinned anchor
+`0bc99fb4b6bc30b318d14257bdf7c3ee469dd4b213b783ee49de0850f3889719`, so it remained join mode and did
+not alter CSI volumes. Deployment `dbb0dde4`, Job Version 40, completed with all 8 compute and 2 cloud
+allocations healthy.
+
+**Preserved wedge resolved.** Immediately after the rolling restart, every validator converged from the
+preserved mixed-camp state to slot/approved/committed `6181`; no live final-vote latch or missing-certified
+block remained.
+
+**Controlled `>f` validation: PASS.** `scripts/overf-recovery-test.sh` began at H=6181, kept the H+1
+leader up, SIGKILLed four compute validators (6 live < quorum 7), and submitted `overf_probe(734030)`.
+The survivors held the head and paused complaints as intended (`quorum_pauses` peak 22). After recovery the
+interrupted slot committed at 6182 with zero new skips; `overf_probe(734030)` was present. A fresh
+`overf_continue(1734030)` transaction then committed, and all ten nodes settled at slot 6183 with
+`syncing=0`, `prolog_ready=true`, no complaint latch, no missing certified block, and no weak-cert wait.
+A post-roll sweep of every allocation's recent logs found no warning, error, or critical records.
+
+---
+
 ## 2026-07-22 — slot 6180 mixed-camp recovery rewrite reviewed; live validation pending
 
 The later live outage disproved the narrow 0.7.20 conclusion below. Two over-f restart waves left slot

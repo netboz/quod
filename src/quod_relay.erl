@@ -44,12 +44,12 @@ decode_relay_inner(Inner) ->
     end.
 
 valid_wire({relay_submit, ReqId,
-            {submit, Author, Signature, Canonical}})
+            {submit, Author, Signature, Canonical}, TraceCarrier})
   when is_binary(ReqId), byte_size(ReqId) =:= 16,
        is_binary(Author), byte_size(Author) =:= 32,
        is_binary(Signature), byte_size(Signature) =:= 64,
        is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
-    true;
+    quod_trace:valid_carrier(TraceCarrier);
 valid_wire({relay_result, ReqId, Result})
   when is_binary(ReqId), byte_size(ReqId) =:= 16 ->
     valid_result(Result);

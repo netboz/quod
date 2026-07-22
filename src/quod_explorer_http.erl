@@ -112,18 +112,28 @@ handle(prove, Req0) ->
 
 prove(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
   when is_binary(Ns), is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
-    case atom_headroom_ok() of
-        false ->
-            json_reply(503, #{error => atom_table_pressure}, Req);
-        true ->
-            case parse_goal(Text) of
-                {ok, Goal} ->
-                    {Code, Reply} = prove_result(quod_prolog:prove(Ns, Goal, Ns)),
-                    json_reply(Code, Reply, Req);
-                {error, Detail} ->
-                    json_reply(400, #{error => parse_error, detail => Detail}, Req)
-            end
-    end;
+    quod_trace:with_span(
+      quod_trace:extract(trace_headers(Req)), <<"quod.http.prove">>, server,
+      #{'quod.namespace' => Ns, 'quod.goal.bytes' => byte_size(Text),
+        'http.request.method' => <<"POST">>, 'url.path' => <<"/api/prove">>},
+      fun(SpanCtx) ->
+          case atom_headroom_ok() of
+              false ->
+                  _ = quod_trace:result(SpanCtx, {error, atom_table_pressure}),
+                  json_reply(503, #{error => atom_table_pressure}, Req);
+              true ->
+                  case parse_goal(Text) of
+                      {ok, Goal} ->
+                          Result = quod_prolog:prove(Ns, Goal, Ns),
+                          _ = quod_trace:result(SpanCtx, Result),
+                          {Code, Reply} = prove_result(Result),
+                          json_reply(Code, Reply, Req);
+                      {error, Detail} ->
+                          _ = quod_trace:result(SpanCtx, {error, parse_error}),
+                          json_reply(400, #{error => parse_error, detail => Detail}, Req)
+                  end
+          end
+      end);
 prove(#{<<"goal">> := Text}, Req) when is_binary(Text), byte_size(Text) > ?MAX_GOAL_BYTES ->
     json_reply(413, #{error => goal_too_large}, Req);
 prove(_Bad, Req) ->
@@ -133,6 +143,12 @@ prove(_Bad, Req) ->
 %% never exhaust the table and crash the VM (it just stops serving until the node is restarted).
 atom_headroom_ok() ->
     erlang:system_info(atom_count) + ?ATOM_SAFETY_MARGIN < erlang:system_info(atom_limit).
+
+trace_headers(Req) ->
+    [{Name, Value}
+     || Name <- [<<"traceparent">>, <<"tracestate">>],
+        Value <- [cowboy_req:header(Name, Req, undefined)],
+        is_binary(Value)].
 
 %% Goal text is one Prolog term; the parser requires the closing `.`, so add it when the
 %% console user (reasonably) left it off.

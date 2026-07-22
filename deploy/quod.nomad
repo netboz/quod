@@ -247,6 +247,13 @@ EOT
       template {
         data        = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
+OTEL_SERVICE_NAME=quod
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=quod,deployment.environment=nomad,service.instance.id={{ env "NOMAD_ALLOC_ID" }}
+OTEL_TRACES_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-otlp.service.consul:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.05
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true
@@ -436,6 +443,13 @@ EOT
       template {
         data        = <<-EOT
 QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
+OTEL_SERVICE_NAME=quod
+OTEL_RESOURCE_ATTRIBUTES=service.namespace=quod,deployment.environment=nomad,service.instance.id={{ env "NOMAD_ALLOC_ID" }}
+OTEL_TRACES_EXPORTER=otlp
+OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-otlp.service.consul:4318
+OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.05
 EOT
         destination = "${NOMAD_TASK_DIR}/env"
         env         = true

@@ -59,6 +59,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
                        from        :: gen_server:from(),
                        timer       :: reference(),
                        token       :: reference(),
+                       trace_ctx   :: quod_trace:context(),
                        height = 0  :: non_neg_integer()}).
 
 -record(ask_worker, {pid        :: pid(),
@@ -91,9 +92,10 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             %% the attached quod_runtime: {Pid, Monitor, Floor}. The floor joins oldest_snapshot/2
             %% so MVCC history >= floor survives for the runtime's queued work; DOWN clears it.
             runtime_pin = none :: none | {pid(), reference(), log_index()},
-            %% tx_id => {From, Bindings, HeightRead, TimerRef, AsyncRequestId | none}
+            %% tx_id => {From, Bindings, HeightRead, TimerRef,
+            %%           AsyncRequestId | none, TransactionSpan}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
-                                               reference(), term()}},
+                                               reference(), term(), quod_trace:span_ctx()}},
             requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
             %% membership verdicts parked until the KB reaches the proposal's parent height (Slot-1),
             %% then delivered to ReplyTo as {membership_verdict, Tag, Verdict}. Keyed by the unique Tag.
@@ -126,7 +128,8 @@ start_link(Ns, Config) ->
 prove(TargetNs, Goal, CallerNs) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(Pid, {prove, Goal, CallerNs}, infinity)
+        Pid -> try gen_server:call(
+                     Pid, {prove, Goal, CallerNs, quod_trace:context()}, infinity)
                catch exit:_ -> fail end
     end.
 
@@ -272,14 +275,16 @@ init({Ns, Config}) ->
 %% A ready engine SPAWNS a worker per proof and returns immediately — the engine never
 %% blocks on a proof (doc/inter-ontology.md §4.1); the worker reports its result back
 %% to this engine, which owns the single reply path to the caller.
-handle_call({prove, _G, _C}, _From, S = #s{ready = false}) ->
+handle_call({prove, Goal, CallerNs}, From, S) ->
+    handle_call({prove, Goal, CallerNs, otel_ctx:new()}, From, S);
+handle_call({prove, _G, _C, _TraceCtx}, _From, S = #s{ready = false}) ->
     {reply, {error, rebuilding}, S};
-handle_call({prove, _Goal, _CallerNs}, _From,
+handle_call({prove, _Goal, _CallerNs, _TraceCtx}, _From,
             S = #s{workers = Workers, max_proof_workers = Max})
   when map_size(Workers) >= Max ->
     {reply, {error, busy}, S};
-handle_call({prove, Goal, CallerNs}, From, S) ->
-    {noreply, spawn_proof(prove, Goal, CallerNs, From, S)};
+handle_call({prove, Goal, CallerNs, TraceCtx}, From, S) ->
+    {noreply, spawn_proof(prove, Goal, CallerNs, From, TraceCtx, S)};
 %% Read-only prove (the remote-read path): identical to a read, but a goal that stages a WRITE
 %% is REFUSED ({error, read_only}) instead of submitted — a remote reader can never write through
 %% a Member's responder. Reads carry the committed height of the frozen view they were proved
@@ -291,7 +296,7 @@ handle_call({prove_ro, _Goal, _CallerNs}, _From,
   when map_size(Workers) >= Max ->
     {reply, {error, busy}, S};
 handle_call({prove_ro, Goal, CallerNs}, From, S) ->
-    {noreply, spawn_proof(prove_ro, Goal, CallerNs, From, S)};
+    {noreply, spawn_proof(prove_ro, Goal, CallerNs, From, otel_ctx:new(), S)};
 
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
@@ -445,7 +450,8 @@ handle_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload},
 %% so the caller gets a definite answer instead of hanging.
 handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, _B, _H, _TRef, ReqId}, P1} ->
+        {{From, _B, _H, _TRef, ReqId, SpanCtx}, P1} ->
+            quod_trace:finish_span(SpanCtx, {error, timeout}),
             gen_server:reply(From, {error, timeout}),
             {noreply, S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests),
                           park_timeouts = S#s.park_timeouts + 1}};
@@ -558,19 +564,20 @@ terminate(_Reason, #s{ns = Ns, workers = W, ask_workers = AW}) ->
 %% Spawn one worker for this proof. The worker gets a small table/height snapshot handle,
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
-spawn_proof(Kind, Goal, CallerNs, From,
+spawn_proof(Kind, Goal, CallerNs, From, TraceCtx,
             S = #s{ns = Ns, est = Est, applied = Applied,
                    proof_timeout_ms = ProofTimeout}) ->
     Engine = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_opt(fun() ->
-        proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied)
+        proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx)
     end, [monitor]),
     CallerMRef = monitor(process, element(1, From)),
     Token = make_ref(),
     KillRef = erlang:send_after(ProofTimeout, Engine, {proof_kill, Ref, Token}),
     Worker = #proof_worker{pid = Pid, worker_mref = MRef, caller_mref = CallerMRef,
                            from = From, timer = KillRef, token = Token,
+                           trace_ctx = TraceCtx,
                            height = Applied},
     S#s{workers = (S#s.workers)#{Ref =>
           Worker},
@@ -582,16 +589,24 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% (`m:quod_predicates` — the namespace, applied height, and ask chain the external predicates
 %% read), proves against that view, and reports one correlated result to the engine. The
 %% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
-proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied) ->
+proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
     _ = watch_engine(Engine, self()),
     Ctx = quod_predicates:proof_context(Ns, Applied, undefined),   %% Subject: none until §10 signed subjects
-    Result = run_proof_est(Goal, quod_predicates:set_context(Est, Ctx)),
+    Result = quod_trace:with_span(
+               TraceCtx, <<"quod.prolog.prove">>, internal,
+               #{'quod.namespace' => Ns, 'quod.kb.height' => Applied,
+                 'quod.proof.mode' => atom_to_binary(Kind, utf8)},
+               fun(SpanCtx) ->
+                   R = run_proof_est(Goal, quod_predicates:set_context(Est, Ctx)),
+                   _ = quod_trace:result(SpanCtx, R),
+                   R
+               end),
     gen_server:cast(Engine, {proof_result, Ref, Kind, Goal, CallerNs, Result}).
 
 finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
     case take_proof_worker(Ref, S) of
         error -> S;
-        {{From, Applied}, S1} ->
+        {{From, Applied, TraceCtx}, S1} ->
             case {Kind, Result} of
                 {_, fail} -> gen_server:reply(From, fail), S1;
                 {_, {error, _} = E} -> gen_server:reply(From, E), S1;
@@ -600,7 +615,8 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
                 {prove_ro, {ok, _B, _Diff, _RS}} ->
                     gen_server:reply(From, {error, read_only}), S1;
                 {prove, {ok, Bindings, Diff, RS}} ->
-                    case submit_write(From, Goal, Bindings, Diff, RS, CallerNs, S1) of
+                    case submit_write(From, Goal, Bindings, Diff, RS, CallerNs,
+                                      TraceCtx, S1) of
                         {noreply, S2} -> S2;
                         {reply, Reply, S2} -> gen_server:reply(From, Reply), S2
                     end
@@ -610,11 +626,12 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
 take_proof_worker(Ref, S = #s{workers = W}) ->
     case maps:take(Ref, W) of
         {#proof_worker{worker_mref = WorkerMRef, caller_mref = CallerMRef,
-                       from = From, timer = TimerRef, height = Applied}, W1} ->
+                       from = From, timer = TimerRef, trace_ctx = TraceCtx,
+                       height = Applied}, W1} ->
             _ = erlang:cancel_timer(TimerRef),
             demonitor(WorkerMRef, [flush]),
             demonitor(CallerMRef, [flush]),
-            {{From, Applied}, S#s{workers = W1}};
+            {{From, Applied, TraceCtx}, S#s{workers = W1}};
         error -> error
     end.
 
@@ -638,7 +655,7 @@ handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
     case find_proof_monitor(MRef, W) of
         {worker, Ref, From} ->
             case take_proof_worker(Ref, S) of
-                {{_From, _Height}, S1} ->
+                {{_From, _Height, _TraceCtx}, S1} ->
                     Reply = case Reason of killed -> {error, no_progress}; _ -> {error, prove_failed} end,
                     gen_server:reply(From, Reply),
                     {noreply, S1};
@@ -647,7 +664,7 @@ handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
         {caller, Ref, Pid} ->
             kill_worker(Pid),
             case take_proof_worker(Ref, S) of
-                {{_From, _Height}, S1} -> {noreply, S1};
+                {{_From, _Height, _TraceCtx}, S1} -> {noreply, S1};
                 error -> {noreply, S}
             end;
         false -> unhandled
@@ -793,28 +810,38 @@ bindings_map(_)                         -> #{}.
 %% then park the caller until ordered apply (or a definite consensus rejection). This
 %% keeps the KB free to prove and apply while consensus runs, without spawning one
 %% blocked helper process for every write.
-submit_write(From, Goal, Bindings, Diff, ReadSet, CallerNs, S = #s{ns = Ns}) when CallerNs =:= Ns ->
+submit_write(From, Goal, Bindings, Diff, ReadSet, CallerNs, TraceCtx,
+             S = #s{ns = Ns}) when CallerNs =:= Ns ->
     Tx     = tx_id(S#s.self),
     Change = #transaction{tx_id = Tx, caller_ns = CallerNs, goal = Goal, result = Bindings, diff = Diff,
                      read_check = ReadSet, author = S#s.self,
                      submitted_at = quod_time:now_ms(), sig = none},
-    try gen_statem:send_request(quod_reg:via({quod_simplex, Ns}), {append, Change}) of
+    {TransactionCtx, SpanCtx} = quod_trace:start_span(
+                                  TraceCtx, <<"quod.transaction">>, internal,
+                                  #{'quod.namespace' => Ns,
+                                    'quod.tx.id' => quod_trace:tx_id(Tx),
+                                    'quod.kb.read_height' => S#s.applied,
+                                    'quod.diff.operations' => length(Diff)}),
+    _ = quod_trace:add_event(TransactionCtx, <<"transaction.proved">>, #{}),
+    try gen_statem:send_request(
+          quod_reg:via({quod_simplex, Ns}), {append, Change, TransactionCtx}) of
         ReqId ->
             Requests1 = gen_statem:reqids_add(ReqId, Tx, S#s.requests),
             TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
             S1 = S#s{parked = (S#s.parked)#{Tx =>
-                       {From, [Bindings], S#s.applied, TRef, ReqId}},
+                       {From, [Bindings], S#s.applied, TRef, ReqId, SpanCtx}},
                      requests = Requests1},
             {noreply, S1}
     catch
         error:badarg ->
+            quod_trace:finish_span(SpanCtx, {error, consensus_unavailable}),
             {reply, {error, consensus_unavailable}, S}
     end;
-submit_write(_From, _Goal, _B, _D, _R, _CallerNs, S) ->
+submit_write(_From, _Goal, _B, _D, _R, _CallerNs, _TraceCtx, S) ->
     {reply, {error, foreign_write_unsupported}, S}.
 
-append_result(Tx, {ok, _Slot}, S) ->
-    request_completed(Tx, S);
+append_result(Tx, {ok, Slot}, S) ->
+    request_completed(Tx, mark_consensus_reply(Tx, Slot, S));
 append_result(Tx, {error, not_in_charge, unavailable}, S) ->
     request_completed(Tx, S);   %% ambiguous: a late ordered apply or the parked TTL decides
 append_result(Tx, {error, not_in_charge, Hint}, S) ->
@@ -828,8 +855,18 @@ append_result(Tx, Other, S) ->
 
 request_completed(Tx, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        {From, Bindings, Height, TRef, _ReqId} ->
-            S#s{parked = Parked#{Tx => {From, Bindings, Height, TRef, none}}};
+        {From, Bindings, Height, TRef, _ReqId, SpanCtx} ->
+            S#s{parked = Parked#{Tx =>
+                   {From, Bindings, Height, TRef, none, SpanCtx}}};
+        undefined ->
+            S
+    end.
+
+mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
+    case maps:get(Tx, Parked, undefined) of
+        {_From, _Bindings, _Height, _TRef, _ReqId, SpanCtx} ->
+            _ = quod_trace:set_attributes(SpanCtx, #{'quod.consensus.slot' => Slot}),
+            S;
         undefined ->
             S
     end.
@@ -896,7 +933,8 @@ apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, Index, Origin,
     case is_membership_change(Change) of
         true ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+            S1 = release(Tx, {ok, {applied, Index}},
+                         fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
             {S1, outcome_applied(Change, Index, Origin, S1)};
         false ->
@@ -928,7 +966,8 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
     case quod_diff:validate(RC, M, R) of
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            S1 = release(Tx, fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+            S1 = release(Tx, {ok, {applied, Index}},
+                         fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
             {S1, outcome_applied(Change, Index, Origin, S1)};
         {conflict, _F} ->
@@ -937,7 +976,8 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
             %% "committed and applied" from "committed but rejected at apply" without inferring it from a
             %% later commit. Replay stays silent (rebuild only). Its cross-node consistency is the same as
             %% the OCC verdict itself: deterministic on every member.
-            S1 = release(Tx, fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
+            S1 = release(Tx, {error, {conflict_retry, Index}},
+                         fun(From, _B, _H) -> gen_server:reply(From, {error, conflict_retry}) end,
                          S#s{rejects = S#s.rejects + 1, conflicts = S#s.conflicts + 1}),
             {S1, outcome_rejected(Change, Index, Origin, S1)}
     end.
@@ -1042,17 +1082,27 @@ clear_runtime_pin(S) -> S.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
 %% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
-release(Tx, ReplyFun, S = #s{parked = P}) ->
+release(Tx, Outcome, ReplyFun, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, B, H, TRef, ReqId}, P1} ->
+        {{From, B, H, TRef, ReqId, SpanCtx}, P1} ->
             _ = erlang:cancel_timer(TRef),
+            _ = set_final_trace_attributes(SpanCtx, Outcome),
+            quod_trace:finish_span(SpanCtx, Outcome),
             ReplyFun(From, B, H),
             S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests)};
         error -> S
     end.
 
+set_final_trace_attributes(SpanCtx, {ok, {applied, Height}}) ->
+    quod_trace:set_attributes(SpanCtx, #{'quod.kb.applied_height' => Height});
+set_final_trace_attributes(SpanCtx, {error, {_Reason, Height}}) ->
+    quod_trace:set_attributes(SpanCtx, #{'quod.kb.applied_height' => Height});
+set_final_trace_attributes(_SpanCtx, _Outcome) ->
+    false.
+
 reject_parked(Tx, Reply, S) ->
-    release(Tx, fun(From, _Bindings, _Height) -> gen_server:reply(From, Reply) end, S).
+    release(Tx, Reply,
+            fun(From, _Bindings, _Height) -> gen_server:reply(From, Reply) end, S).
 
 abandon_request(none, Requests) ->
     Requests;

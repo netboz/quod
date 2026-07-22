@@ -13,6 +13,7 @@
     cowboy,
     quic,
     erlog,
+    opentelemetry_api,
     prometheus,
     prometheus_httpd
    ]},

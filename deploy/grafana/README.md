@@ -4,6 +4,28 @@ quod exposes Prometheus metrics at `GET /metrics` on the node's `metrics_port`
 (default `14568`, mapped to a dynamic host port by Nomad and registered as the
 `quod-metrics` Consul service, tagged `prometheus`).
 
+## Transaction traces (Tempo)
+
+The Nomad deployment enables sampled OpenTelemetry traces and exports them to
+the `tempo-otlp.service.consul:4318` OTLP/HTTP endpoint. The qengho
+observability role runs Tempo beside Loki and provisions it as Grafana's
+`Tempo` data source. In Grafana, open **Explore**, select **Tempo**, and search
+for the `quod.transaction` span. A trace follows one request through Prolog,
+relay, batching, proposal, durable journal/ledger writes, and final apply or
+rejection.
+
+Production uses the `parentbased_traceidratio` sampler at 5%. A browser or
+other caller may send a sampled W3C `traceparent` header to retain a specific
+request end to end. Only `traceparent` and `tracestate` cross validator relay
+links; trace context is transient and is never included in signed transaction
+bytes, blocks, or the ledger.
+
+Quod JSON logs emitted inside active spans contain `otel_trace_id` and
+`otel_span_id`. The provisioned data sources expose **View trace** links from
+Loki results and **Logs for this span** from Tempo. Tracing is disabled by
+default outside the Nomad deployment; enable it with standard `OTEL_*`
+variables when running elsewhere.
+
 Every series carries a constant **`node_id`** label — the node's stable identity
 (`kp_<hex>`, the Ed25519 pubkey short form), so a fleet-wide Prometheus tells
 nodes apart by identity rather than a volatile host:port. Per-namespace series

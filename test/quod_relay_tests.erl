@@ -13,7 +13,16 @@ frame_dispatch_test() ->
     Frame = term_to_binary({sx, Ns, Inner}, [deterministic]),
     ?assertEqual({consensus, Consensus},
                  quod_relay:decode_frame(Frame, Ns)),
-    ?assertEqual(error, quod_relay:decode_frame(Frame, <<"other">>)).
+    ?assertEqual(error, quod_relay:decode_frame(Frame, <<"other">>)),
+    Submit = {relay_submit, ReqId,
+              {submit, <<2:256>>, <<3:512>>, <<4, 5, 6>>},
+              [{<<"traceparent">>,
+                <<"00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01">>}]},
+    ?assertEqual({relay, Submit},
+                 quod_relay:decode_frame(quod_relay:encode(Ns, Submit), Ns)),
+    BadCarrier = setelement(4, Submit, [{<<"baggage">>, <<"not-accepted">>}]),
+    ?assertEqual(error,
+                 quod_relay:decode_frame(quod_relay:encode(Ns, BadCarrier), Ns)).
 
 bounded_result_cache_test() ->
     Now = quod_time:mono_ms(),

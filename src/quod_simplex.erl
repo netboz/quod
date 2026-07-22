@@ -702,8 +702,13 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 items_rev = [] :: [{term(), #transaction{}}],
                 bytes = 0 :: non_neg_integer()}).
 
+-record(waiter, {reply_to :: term(),
+                 trace_ctx :: quod_trace:context(),
+                 trace_span :: quod_trace:span_ctx()}).
+
 -record(local_proposal, {hash :: binary(),
-                         waiters = [] :: [term()]}).
+                         waiters = [] :: [term()],
+                         trace_ctxs = [] :: [quod_trace:context()]}).
 
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
 -record(head_progress, {slot :: slot(),
@@ -712,7 +717,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                         quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS,
                         support_grace_used = false :: boolean()}).
 
--record(relay_pending, {from :: gen_statem:from(),
+-record(relay_pending, {from :: term(),
                         target :: node_id(),
                         frame :: binary(),
                         deadline :: integer(),
@@ -885,7 +890,8 @@ retry). At N=1 only the sole-validator commit path runs, so an append just retur
         {ok, slot()} | {error, busy} | {error, skipped} | {error, bad_change}
       | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
-    try gen_statem:call(quod_reg:via({quod_simplex, Ns}), {append, Change}, 5000)
+    try gen_statem:call(quod_reg:via({quod_simplex, Ns}),
+                        {append, Change, quod_trace:context()}, 5000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
 
 -doc "Ask the consensus process to (re)drive committed blocks into a freshly-started `quod_prolog`.".
@@ -1066,7 +1072,12 @@ self_addr(Cfg) ->
 %%%===================================================================
 
 running({call, From}, {append, Change}, S0) ->
-    {S1, Reply} = handle_append(From, Change, S0#s{submitted = S0#s.submitted + 1}),
+    running({call, From}, {append, Change, otel_ctx:new()}, S0);
+running({call, From}, {append, Change, TraceCtx}, S0) ->
+    Waiter = new_waiter(From, TraceCtx, Change, S0#s.ns, false),
+    {S1, Reply} = handle_append(
+                    Waiter, Change,
+                    S0#s{submitted = S0#s.submitted + 1}),
     keep_progress(S0, S1, Reply);
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
@@ -1206,7 +1217,12 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store, vote_journal = Journal
 %% Appends collect for a few milliseconds into one block. A sealed proposal owns its
 %% parked callers until commit/skip; the next slot may open as soon as that block is
 %% notarized, even though the durable committed frontier has not caught up yet.
-handle_append(From, Change, S = #s{self = Self}) ->
+handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
+              S = #s{self = Self, ns = Ns}) ->
+    _ = quod_trace:add_event(
+          TraceCtx, <<"consensus.append_received">>,
+          #{'quod.namespace' => Ns,
+            'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id)}),
     case may_lead(S) of
         false ->
             redirect_append(From, none, S);
@@ -1277,9 +1293,7 @@ sign_local_change(#transaction{author = Self, sig = none} = Change,
         {error, _} = Error -> Error
     end;
 sign_local_change(#transaction{}, _S) ->
-    {error, invalid_local_author};
-sign_local_change(_Change, _S) ->
-    {error, malformed_transaction}.
+    {error, invalid_local_author}.
 
 reject_append(From, bad_change, S) ->
     reply_now(From, {error, bad_change}, S#s{r_bad = S#s.r_bad + 1});
@@ -1292,10 +1306,13 @@ redirect_append(From, Leader, S) ->
     reply_now(From, {error, not_in_charge, Leader},
               S#s{r_redirect = S#s.r_redirect + 1}).
 
+reply_now(Waiter = #waiter{reply_to = {relay, _Peer, _ReqId}}, Reply, S) ->
+    {reply_waiter(Waiter, Reply, S), []};
+reply_now(Waiter = #waiter{reply_to = From}, Reply, S) ->
+    finish_waiter_trace(Waiter, Reply),
+    {S, [{reply, From, Reply}]};
 reply_now({relay, Peer, ReqId}, Reply, S) ->
-    {reply_relay(Peer, ReqId, Reply, S), []};
-reply_now(From, Reply, S) ->
-    {S, [{reply, From, Reply}]}.
+    {reply_relay(Peer, ReqId, Reply, S), []}.
 
 relay_append(From, Leader, Change,
              S = #s{ns = Ns, relay_pending = Pending,
@@ -1312,8 +1329,13 @@ relay_append(From, Leader, Change,
                 {false, true} ->
                     reject_append(From, busy, S);
                 {false, false} ->
+                    TraceCtx = waiter_trace_ctx(From),
+                    _ = quod_trace:add_event(
+                          TraceCtx, <<"consensus.relayed">>,
+                          #{'quod.relay.target' => trace_node_id(Leader)}),
                     Frame = quod_relay:encode(
-                              Ns, {relay_submit, ReqId, Submission}),
+                              Ns, {relay_submit, ReqId, Submission,
+                                   quod_trace:inject(TraceCtx)}),
                     Now = quod_time:mono_ms(),
                     Relay = #relay_pending{
                                from = From, target = Leader,
@@ -1357,6 +1379,9 @@ collect_append(From, Change, Slot, S = #s{collecting = none}) ->
                 true  -> reject_append(From, busy, S)
             end;
         true ->
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(From), <<"consensus.queued">>,
+                  #{'quod.consensus.slot' => Slot}),
             Batch = #batch{slot = Slot, parent = S#s.approved,
                            items_rev = [{From, Change}], bytes = Bytes},
             S1 = S#s{collecting = Batch, appends = S#s.appends + 1},
@@ -1376,6 +1401,9 @@ collect_append(From, Change, Slot,
         {true, _} -> reject_append(From, bad_change, S);
         {false, true} -> reject_append(From, busy, S);
         {false, false} ->
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(From), <<"consensus.queued">>,
+                  #{'quod.consensus.slot' => Slot}),
             Batch1 = Batch#batch{items_rev = [{From, Change} | Items], bytes = Bytes + Added},
             S1 = S#s{collecting = Batch1, appends = S#s.appends + 1},
             case length(Batch1#batch.items_rev) >= ?MAX_BATCH_TXS of
@@ -1399,7 +1427,13 @@ propose_batch(Slot, Parent, Items, Payload, S) ->
     Block = #block{slot = Slot, parent = Parent, payload = Payload,
                    timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
     BH = block_hash(Block),
-    Local = #local_proposal{hash = BH, waiters = Waiters},
+    _ = [quod_trace:add_event(
+           waiter_trace_ctx(Waiter), <<"consensus.proposed">>,
+           #{'quod.consensus.slot' => Slot,
+             'quod.batch.transactions' => length(Payload)})
+         || {Waiter, _Change} <- Items],
+    Local = #local_proposal{hash = BH, waiters = Waiters,
+                            trace_ctxs = [waiter_trace_ctx(W) || W <- Waiters]},
     S1 = S#s{collecting = none,
              local_proposals = (S#s.local_proposals)#{Slot => Local},
              proposals = S#s.proposals + 1,
@@ -1486,7 +1520,7 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
         Cert ->
             Data = quod_ledger:data(Payload),
             E = #entry{index = Slot, data = Data, timestamp = BlockTs, cert = Cert},
-            {ok, Store1} = quod_ledger_store:append(Store, [E]),
+            {ok, Store1} = persist_entry(Store, E, Slot, S),
             publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
             SCommitted = resolve_committed_relays(
                            Payload, Slot,
@@ -1498,6 +1532,12 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
             S1 = adopt_committee(Data, finalize(Slot, S0)),
             apply_live(Slot, Data, confirm_live(S1))
     end.
+
+persist_entry(Store, Entry, Slot, S) ->
+    quod_trace:with_optional_span(
+      trace_context_for_slot(Slot, S), <<"quod.ledger.sync">>, internal,
+      #{'quod.namespace' => S#s.ns, 'quod.consensus.slot' => Slot},
+      fun() -> quod_ledger_store:append(Store, [Entry]) end).
 
 resolve_committed_relays(_Payload, _Slot, S = #s{relay_pending = Pending})
   when map_size(Pending) =:= 0 ->
@@ -1514,9 +1554,10 @@ resolve_committed_relays(Payload, Slot, S = #s{relay_pending = Pending}) ->
       fun(ReqId, #relay_pending{from = From}, Acc) ->
               case maps:is_key(ReqId, RequestIds) of
                   true ->
-                      gen_statem:reply(From, {ok, Slot}),
-                      Acc#s{relay_pending =
-                                maps:remove(ReqId, Acc#s.relay_pending)};
+                      reply_waiter(
+                        From, {ok, Slot},
+                        Acc#s{relay_pending =
+                                  maps:remove(ReqId, Acc#s.relay_pending)});
                   false ->
                       Acc
               end
@@ -1562,7 +1603,7 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
         none -> weak_cert_wait(complaint, Slot, none, S);   %% Slice E: don't skip-finalize on a sub-quorum cert
         Cert ->
             E = #entry{index = Slot, data = noop, cert = Cert},
-            {ok, Store1} = quod_ledger_store:append(Store, [E]),
+            {ok, Store1} = persist_entry(Store, E, Slot, S),
             publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
             S1 = finalize(Slot, S0),
@@ -1633,11 +1674,50 @@ reply_waiters(Waiters, Reply, S) ->
     lists:foldl(fun(Waiter, Acc) -> reply_waiter(Waiter, Reply, Acc) end,
                 S, Waiters).
 
+reply_waiter(Waiter = #waiter{reply_to = ReplyTo}, Reply, S) ->
+    finish_waiter_trace(Waiter, Reply),
+    reply_waiter(ReplyTo, Reply, S);
 reply_waiter({relay, Peer, ReqId}, Reply, S) ->
     reply_relay(Peer, ReqId, Reply, S);
 reply_waiter(From, Reply, S) ->
     gen_statem:reply(From, Reply),
     S.
+
+waiter_trace_ctx(#waiter{trace_ctx = TraceCtx}) -> TraceCtx;
+waiter_trace_ctx(_) -> otel_ctx:new().
+
+new_waiter(ReplyTo, ParentCtx, Change, Ns, Relayed) ->
+    {TraceCtx, SpanCtx} = quod_trace:start_span(
+                            ParentCtx, <<"quod.consensus.append">>, internal,
+                            #{'quod.namespace' => Ns,
+                              'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id),
+                              'quod.relay.hop' => Relayed}),
+    #waiter{reply_to = ReplyTo, trace_ctx = TraceCtx, trace_span = SpanCtx}.
+
+finish_waiter_trace(#waiter{trace_ctx = TraceCtx, trace_span = SpanCtx}, Reply) ->
+    _ = quod_trace:add_event(
+          TraceCtx, <<"consensus.append_result">>, trace_reply_attributes(Reply)),
+    quod_trace:finish_span(SpanCtx, Reply).
+
+trace_reply_attributes({ok, Slot}) ->
+    #{'quod.outcome' => <<"committed">>, 'quod.consensus.slot' => Slot};
+trace_reply_attributes({error, Reason}) when is_atom(Reason) ->
+    #{'quod.outcome' => atom_to_binary(Reason, utf8)};
+trace_reply_attributes({error, not_in_charge, _Hint}) ->
+    #{'quod.outcome' => <<"not_in_charge">>};
+trace_reply_attributes(_) ->
+    #{'quod.outcome' => <<"unknown">>}.
+
+trace_node_id(Id) when is_binary(Id) -> binary:encode_hex(Id, lowercase);
+trace_node_id({Host, Port}) ->
+    iolist_to_binary(io_lib:format("~ts:~B", [Host, Port]));
+trace_node_id(_) -> <<"unknown">>.
+
+trace_context_for_slot(Slot, #s{local_proposals = Local}) ->
+    case maps:get(Slot, Local, undefined) of
+        #local_proposal{trace_ctxs = [TraceCtx | _]} -> TraceCtx;
+        _ -> undefined
+    end.
 
 round_state(Slot, #s{rounds = Rounds}) ->
     maps:get(Slot, Rounds, #round{}).
@@ -2518,7 +2598,15 @@ record_share(Kind, Slot, BlockHash, S = #s{vote_journal = Journal}) ->
         false ->
             blocked;
         true ->
-            {ok, Journal1} = record_vote(S#s.ns, Journal, Kind, Slot, BlockHash),
+            TraceCtx = trace_context_for_slot(Slot, S),
+            {ok, Journal1} = quod_trace:with_optional_span(
+                               TraceCtx, <<"quod.vote_journal.sync">>, internal,
+                               #{'quod.namespace' => S#s.ns,
+                                 'quod.consensus.slot' => Slot,
+                                 'quod.vote.kind' => atom_to_binary(Kind, utf8)},
+                               fun() ->
+                                   record_vote(S#s.ns, Journal, Kind, Slot, BlockHash)
+                               end),
             Round = round_state(Slot, S),
             Round1 = case Kind of
                          support   -> Round#round{supporting = BlockHash};
@@ -3060,7 +3148,8 @@ dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 %%%===================================================================
 
 dispatch_relay(Peer, {relay_submit, ReqId,
-                      {submit, Author, _Signature, _Canonical} = Submission},
+                      {submit, Author, _Signature, _Canonical} = Submission,
+                      TraceCarrier},
                S = #s{relay_results = Results, relay_inflight = Inflight}) ->
     case ReqId =:= quod_transaction:submission_id(Submission) of
         false ->
@@ -3081,7 +3170,7 @@ dispatch_relay(Peer, {relay_submit, ReqId,
                                     {S, []};
                                 false ->
                                     verify_and_accept_relay(
-                                      Peer, ReqId, Submission, S)
+                                      Peer, ReqId, Submission, TraceCarrier, S)
                             end
                     end
             end
@@ -3089,7 +3178,8 @@ dispatch_relay(Peer, {relay_submit, ReqId,
 dispatch_relay(Peer, {relay_result, ReqId, Result}, S) ->
     {handle_relay_result(Peer, ReqId, Result, S), []}.
 
-verify_and_accept_relay(Peer, ReqId, Submission, S = #s{ns = Ns}) ->
+verify_and_accept_relay(Peer, ReqId, Submission, TraceCarrier,
+                        S = #s{ns = Ns}) ->
     Started = erlang:monotonic_time(),
     Valid = quod_transaction:verify_submission(Submission),
     quod_metrics:observe_transaction_signature(
@@ -3101,8 +3191,14 @@ verify_and_accept_relay(Peer, ReqId, Submission, S = #s{ns = Ns}) ->
             case quod_transaction:decode_verified_submission(Ns, Submission) of
                 {ok, Change} ->
                     Inflight = (S#s.relay_inflight)#{ReqId => Peer},
-                    handle_relayed_append({relay, Peer, ReqId}, Change,
-                                          S#s{relay_inflight = Inflight});
+                    ParentCtx = quod_trace:extract(TraceCarrier),
+                    Waiter = new_waiter(
+                               {relay, Peer, ReqId}, ParentCtx, Change, Ns, true),
+                    _ = quod_trace:add_event(
+                          waiter_trace_ctx(Waiter), <<"consensus.relay_received">>,
+                          #{'quod.relay.source' => trace_node_id(Peer)}),
+                    handle_relayed_append(
+                      Waiter, Change, S#s{relay_inflight = Inflight});
                 {error, _} ->
                     reply_now({relay, Peer, ReqId}, {error, bad_change}, S)
             end
@@ -3128,12 +3224,14 @@ handle_relay_result(Peer, ReqId, Result,
                             S1#s{relay_pending =
                                     (S1#s.relay_pending)#{ReqId => Relay1}};
                         false ->
-                            gen_statem:reply(From, Result),
-                            S#s{relay_pending = maps:remove(ReqId, Pending)}
+                            reply_waiter(
+                              From, Result,
+                              S#s{relay_pending = maps:remove(ReqId, Pending)})
                     end;
                 _ ->
-                    gen_statem:reply(From, Result),
-                    S#s{relay_pending = maps:remove(ReqId, Pending)}
+                    reply_waiter(
+                      From, Result,
+                      S#s{relay_pending = maps:remove(ReqId, Pending)})
             end;
         _ ->
             S
@@ -3162,9 +3260,10 @@ redrive_relays(S = #s{relay_pending = Pending, relay_results = Results}) ->
           Acc) ->
               case Now >= Deadline of
                   true ->
-                      gen_statem:reply(From, {error, not_in_charge, unavailable}),
-                      Acc#s{relay_pending =
-                                maps:remove(ReqId, Acc#s.relay_pending)};
+                      reply_waiter(
+                        From, {error, not_in_charge, unavailable},
+                        Acc#s{relay_pending =
+                                  maps:remove(ReqId, Acc#s.relay_pending)});
                   false when Now >= Retry ->
                       Acc1 = send_frame(Target, Frame, Acc),
                       Relay1 = Relay#relay_pending{

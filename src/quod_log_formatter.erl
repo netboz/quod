@@ -4,7 +4,9 @@
 OTP `m:logger` formatter that emits **one JSON object per log event** to
 stdout, so the promtail `{job="docker"}` scrape already running on the qengho
 cluster ships structured lines that Loki's `| json` parser splits into
-queryable fields (`level`, `msg`, `node_id`, `mfa`, ...).
+queryable fields (`level`, `msg`, `node_id`, `mfa`, ...). Logs emitted inside
+a sampled span also carry `otel_trace_id` and `otel_span_id`, allowing Grafana
+to jump from a log line to the matching Tempo trace.
 
 One line per event:
 

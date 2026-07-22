@@ -10,13 +10,13 @@
 # at N>=4: no unverified gossip (safety), every node reconverged to one height
 # (liveness), the ledger advanced (the load landed), the committee stayed intact
 # (no spurious membership change, is_validator stable, weak-cert waits drained),
-# and nothing is failed/lost (stability).
+# and nothing is failed/lost/restarted (stability).
 #
 # WHY THIS IS NOT THE OLD N=1 DRIVER:
-#   * Writes run from every validator. Signed follower-to-leader relay now
-#     forwards a valid submission to the current leader, while bounded retries
-#     still cover leader rotation, recovery, and bounded backpressure. Keeping
-#     writers on every validator exercises both the leader ingress and relay.
+#   * Writers target every validator. Signed follower-to-leader relay forwards
+#     valid submissions to the current leader, while bounded retries still cover
+#     leader rotation, recovery, and bounded backpressure. This exercises both
+#     the leader ingress and relay.
 #   * Churn is VALIDATOR-AWARE. The committee tolerates ANY 1 of N validators down
 #     (quorum = N-f); restarting one validator — INCLUDING the founder, no longer
 #     special — must NOT stop commits (the key BFT test). Restarting f+1 at once
@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.17}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.23}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
@@ -53,7 +53,7 @@ set -uo pipefail
 : "${DURATION:=900}"                        # total chaos window, seconds
 : "${WARMUP:=45}"                           # let any cold/restarted node catch up before churn starts, seconds
 
-# sustained transaction load (a bounded-retry writer per validator, autonomous)
+# sustained transaction load (a bounded-retry HTTP writer per validator, autonomous)
 : "${TX_BASE_MS:=120}"                      # base delay between a validator's writes
 : "${TX_JITTER_MS:=180}"                    # + a random 0..JITTER ms per write (random pacing)
 : "${WRITER_RETRIES:=16}"                   # bounded not_leader/retry retries per fact (covers a full leader rotation)
@@ -89,9 +89,13 @@ set -uo pipefail
 
 export NOMAD_ADDR
 SELF=$(realpath "$0")                        # absolute path for the parallel scrape re-exec (survives the cd to repo root below)
-WRITER=loadtest_writer                      # registered process name on each validator
 STAMP() { date +%H:%M:%S; }
 LOG()   { echo "[$(STAMP)] $*"; }
+sleep_ms() {
+  local ms=$1 delay
+  printf -v delay '%d.%03d' "$((ms / 1000))" "$((ms % 1000))"
+  sleep "$delay"
+}
 
 usage() {
   cat <<'EOF'
@@ -240,32 +244,41 @@ QEVAL_LONG() { timeout 70 nomad alloc exec -task quod "$1" /opt/quod/bin/quod ev
 #==============================================================================
 # Running allocation IDs for one task group, or every Quod task group with
 # `all`. Uses the JSON API, not `nomad job status` text table: during churn the
-# human table intermittently drops/mis-lists rows, which made stop_writers'
-# re-kill miss the very validators holding writers (orphans survived + kept
-# advancing the ledger).
+# human table intermittently drops or mis-lists rows, which can hide validators
+# during churn.
 allocs() {
   local group=${1:-all}
   nomad operator api "/v1/job/$JOB/allocations" 2>/dev/null \
     | jq -r --arg g "$group" '.[] | select(.ClientStatus == "running" and ($g == "all" or .TaskGroup == $g)) | .ID' 2>/dev/null
 }
 
-# "allocid group target" for every running allocation's metrics endpoint. Compute
-# nodes publish a host port; cloud allocations are tailnet-only from this driver,
-# so their target is `local` and scrape_row enters the allocation through Nomad.
+# "allocid group metrics_target explorer_target" for every running allocation.
+# Compute nodes publish host ports; cloud allocations are tailnet-only from this
+# driver, so their targets are `local` and requests enter through Nomad exec.
 endpoints() {
   allocs all | xargs -r -P 16 -I{} sh -c '
     j=$(nomad alloc status -json "$1" 2>/dev/null)
     grp=$(printf "%s" "$j" | jq -r ".TaskGroup" 2>/dev/null)
     if [ "$grp" = "quod-cloud" ]; then
-      echo "$1 $grp local"
+      echo "$1 $grp local local"
     else
-      hp=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"metrics\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
-      [ -n "$hp" ] && echo "$1 $grp $hp"
+      mp=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"metrics\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
+      ep=$(printf "%s" "$j" | jq -r ".AllocatedResources.Shared.Ports[]? | select(.Label==\"explorer\") | \"\(.HostIP):\(.Value)\"" 2>/dev/null | head -1)
+      [ -n "$mp" ] && [ -n "$ep" ] && echo "$1 $grp $mp $ep"
     fi' _ {}
 }
 failed_allocs() {   # count allocs currently failed/lost (0 = healthy)
   nomad operator api "/v1/job/$JOB/allocations" 2>/dev/null \
     | jq '[.[] | select(.ClientStatus=="failed" or .ClientStatus=="lost")] | length' 2>/dev/null || echo 0
+}
+
+# Sum restarts of the currently active Quod tasks. A cgroup OOM normally restarts
+# the task in-place, so failed_allocs remains zero and final convergence can look
+# healthy. The baseline/delta makes every recovered crash visible to the verdict.
+task_restarts() {
+  nomad operator api "/v1/job/$JOB/allocations" 2>/dev/null \
+    | jq '[.[] | select(.ClientStatus == "running") | (.TaskStates.quod.Restarts // 0)] | add // 0' 2>/dev/null \
+    || echo 0
 }
 
 # Scrape ONE alloc's metrics for $NS only ->
@@ -302,7 +315,7 @@ parse_args "$@"
 [ -z "$MIN_ADVANCE" ] && MIN_ADVANCE=$(( DURATION / 4 ))
 validate_config
 
-EPFILE=$(mktemp)                            # alloc->endpoint map:  "alloc group host:port"
+EPFILE=$(mktemp)                            # alloc->endpoint map: "alloc group metrics explorer"
 FLEETFILE=$(mktemp)                         # per-tick metrics table (cols above); shared by churn + monitor
 refresh_endpoints() { endpoints > "$EPFILE"; }
 # scrape every endpoint in parallel into the shared per-tick table
@@ -315,91 +328,108 @@ validators() { awk '$6==1 && $9==0 {print $1}' "$FLEETFILE"; }
 observers()  { awk '$2=="quod-node" && $6==0 && $9==0 {print $1}' "$FLEETFILE"; }
 
 #==============================================================================
-# load control — a bounded-retry writer per validator (leader-aware)
+# load control — bounded-retry HTTP writers (the real client ingress)
 #==============================================================================
-# One line (Erlang tolerates the whitespace; keep it single-arg for `quod eval`).
-# Force=true kills+respawns; Force=false is ensure-if-missing (self-heals after a restart).
-writer_code() {   # $1 = true|false
-  printf 'W=%s, Force=%s, Spawn=fun()->spawn(fun Loop()->Try=fun T(0)->dropped; T(K)->case (catch quod_prolog:prove(<<"%s">>,{assertz,{loadtest,erlang:unique_integer([positive])}},<<"%s">>)) of {ok,_,_}->committed; {error,{not_leader,_}}->timer:sleep(%d),T(K-1); {error,retry}->timer:sleep(%d),T(K-1); {error,busy}->timer:sleep(%d),T(K-1); {error,rebuilding}->timer:sleep(%d),T(K-1); _->dropped end end, _=Try(%d), timer:sleep(%d+rand:uniform(%d)), Loop() end) end, case {Force,whereis(W)} of {false,P0} when is_pid(P0)->{already_running,P0}; _->(fun Kill()->case whereis(W) of undefined->ok; O->exit(O,kill),timer:sleep(30),Kill() end end)(), P=Spawn(), register(W,P), {writer_started,P} end.' \
-    "$WRITER" "$1" "$NS" "$NS" \
-    "$WRITER_RETRY_MS" "$WRITER_RETRY_MS" "$WRITER_RETRY_MS" "$WRITER_RETRY_MS" \
-    "$WRITER_RETRIES" "$TX_BASE_MS" "$((TX_JITTER_MS + 1))"
+declare -A WRITER_PIDS=()
+
+# Submit through Cowboy instead of `quod eval`. The latter starts a SECOND BEAM
+# inside the allocation's cgroup; on a 512 MiB task that diagnostic VM can OOM
+# the real node. HTTP also exercises exactly the public parse/prove/sign/relay path.
+prove_request() {   # alloc group explorer_target numeric_id
+  local alloc=$1 group=$2 target=$3 id=$4 body
+  body="{\"ns\":$NS_JSON,\"goal\":\"assertz(loadtest($id))\"}"
+  if [ "$group" = "quod-cloud" ]; then
+    nomad alloc exec -task quod "$alloc" /usr/bin/curl -fsS --max-time 10 \
+      -o /dev/null -H 'content-type: application/json' -X POST \
+      --data-binary "$body" http://127.0.0.1:14569/api/prove 2>/dev/null
+  else
+    curl -fsS --max-time 10 -o /dev/null -H 'content-type: application/json' \
+      -X POST --data-binary "$body" "http://$target/api/prove" 2>/dev/null
+  fi
 }
 
-start_writers() {   # $1 = "force" to kill+respawn (run once at start); else ensure-if-missing (each tick)
-  local force=false; [ "${1:-}" = force ] && force=true
-  local code vals a tmp started=0 running=0
-  code=$(writer_code "$force")
-  mapfile -t vals < <(validators)
-  [ "${#vals[@]}" -eq 0 ] && { LOG "WARN: no validators up to run writers on"; return 0; }
-  tmp=$(mktemp -d)
-  for a in "${vals[@]}"; do ( QEVAL "$a" "$code" > "$tmp/$a" 2>&1 ) & done
-  wait
-  for a in "${vals[@]}"; do
-    case "$(cat "$tmp/$a" 2>/dev/null)" in
-      *writer_started*)  started=$((started + 1));;
-      *already_running*) running=$((running + 1));;
-    esac
+writer_loop() {   # alloc group explorer_target absolute_deadline
+  local alloc=$1 group=$2 target=$3 deadline=$4 seq=0 try id delay
+  while [ "$(date +%s)" -lt "$deadline" ]; do
+    seq=$((seq + 1))
+    id="$(date +%s%N)${BASHPID}${seq}"
+    for ((try=0; try<WRITER_RETRIES; try++)); do
+      [ "$(date +%s)" -lt "$deadline" ] || return 0
+      prove_request "$alloc" "$group" "$target" "$id" && break
+      sleep_ms "$WRITER_RETRY_MS"
+    done
+    delay=$((TX_BASE_MS + RANDOM % (TX_JITTER_MS + 1)))
+    sleep_ms "$delay"
   done
-  rm -rf "$tmp"
-  [ "$started" -gt 0 ] && LOG "writers: +$started (re)started, $running already running (on ${#vals[@]} validators)"
-  return 0
 }
 
-kill_writers_once() {
-  # Fan out through the long exec path. Under saturation the short probe can
-  # time out before it reaches the BEAM, leaving an otherwise invisible writer.
-  local a out tmp left=0 pid
-  local -a pids=()
-  tmp=$(mktemp -d)
-  while read -r a; do
-    [ -z "$a" ] && continue
-    ( QEVAL_LONG "$a" "case whereis($WRITER) of undefined -> gone; P -> exit(P,kill), timer:sleep(100), case whereis($WRITER) of undefined -> killed; _ -> alive end end." > "$tmp/$a" 2>&1 ) &
-    pids+=("$!")
-  done < <(allocs all)
-  for pid in "${pids[@]}"; do wait "$pid" || true; done
-  for out in "$tmp"/*; do
-    [ -e "$out" ] || continue
-    case "$(<"$out")" in *gone*|*killed*) ;; *) left=$((left + 1));; esac
+stop_local_writers() {
+  local alloc pid
+  for alloc in "${!WRITER_PIDS[@]}"; do
+    pid=${WRITER_PIDS[$alloc]}
+    kill "$pid" 2>/dev/null || true
   done
-  rm -rf "$tmp"
-  printf '%s\n' "$left"
+  for alloc in "${!WRITER_PIDS[@]}"; do
+    pid=${WRITER_PIDS[$alloc]}
+    wait "$pid" 2>/dev/null || true
+    unset 'WRITER_PIDS[$alloc]'
+  done
+}
+
+start_writers() {   # "force" at run start; later calls add writers for replacement/promoted validators
+  local alloc row group target pid started=0 running=0
+  [ "${1:-}" = force ] && stop_local_writers
+  while read -r alloc; do
+    [ -n "$alloc" ] || continue
+    pid=${WRITER_PIDS[$alloc]:-}
+    if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
+      running=$((running + 1)); continue
+    fi
+    row=$(awk -v a="$alloc" '$1==a {print $2" "$4}' "$EPFILE")
+    read -r group target <<<"$row"
+    [ -n "${target:-}" ] || continue
+    writer_loop "$alloc" "$group" "$target" "$END" &
+    WRITER_PIDS[$alloc]=$!
+    started=$((started + 1))
+  done < <(validators)
+  [ "$started" -gt 0 ] && LOG "writers: +$started started, $running already running (HTTP ingress)"
 }
 
 stop_writers() {
-  # Stop on the full current allocation set, then prove the ledger is quiet.
-  # A task can be absent while its allocation restarts, hence repeated rounds.
-  local left round h1 h2 tries
-  for round in 1 2 3 4 5; do
-    left=$(kill_writers_once)
-    [ "$left" -eq 0 ] && break
-    LOG "stop_writers: $left alloc exec probe(s) unresolved; retrying"
-    sleep 3
-  done
+  # Stop local children, then prove the ledger is quiet. Every child also checks
+  # END, so SIGKILL of the driver leaves only a bounded lease, never an orphan.
+  local h1 h2 tries
+  stop_local_writers
   h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=0
   while [ "${h2:-0}" -gt "${h1:-0}" ] && [ "$tries" -lt 6 ]; do
-    LOG "stop_writers: ledger still advancing ($h1 -> $h2) — re-killing current writers"
-    kill_writers_once >/dev/null
+    LOG "stop_writers: ledger still advancing ($h1 -> $h2) — waiting for in-flight commits"
     h1=$(fleet_head); sleep 4; h2=$(fleet_head); tries=$((tries + 1))
   done
   if [ "${h2:-0}" -le "${h1:-0}" ]; then
     LOG "writers stopped (ledger quiescent at ${h2:-?})"
   else
-    LOG "writers: WARN ledger still advancing ($h1 -> $h2) after re-kills"
+    LOG "writers: WARN ledger still advancing ($h1 -> $h2) after the drain window"
   fi
 }
 
 burst() {
-  local vals a
+  local vals a row group target i id
+  local -a pids=()
   mapfile -t vals < <(validators)
   [ "${#vals[@]}" -eq 0 ] && return 0
-  # BURST_SIZE concurrent one-shots on EVERY validator: the leader's contend (backpressure /
-  # append_busy), the rest exercise the not_leader redirect path. Each eval monitors its
-  # children and bounds their lifetime, so stopping the load cannot leave detached submits behind.
+  # BURST_SIZE concurrent HTTP submits on EVERY validator: the leader's contend
+  # while follower requests exercise signed relay. Curl bounds every request.
   for a in "${vals[@]}"; do
-    QEVAL "$a" "Ps=[spawn_monitor(fun()->catch quod_prolog:prove(<<\"$NS\">>,{assertz,{burst,erlang:unique_integer([positive])}},<<\"$NS\">>) end)||_<-lists:seq(1,$BURST_SIZE)], D=erlang:monotonic_time(millisecond)+20000, W=fun F([])->ok; F([{P,R}|T])->Left=D-erlang:monotonic_time(millisecond), receive {'DOWN',R,process,P,_}->F(T) after max(0,Left)->lists:foreach(fun({P0,_})->exit(P0,kill) end,[{P,R}|T]),ok end end, W(Ps), ok." >/dev/null &
+    row=$(awk -v alloc="$a" '$1==alloc {print $2" "$4}' "$EPFILE")
+    read -r group target <<<"$row"
+    [ -n "${target:-}" ] || continue
+    for ((i=0; i<BURST_SIZE; i++)); do
+      id="$(date +%s%N)${BASHPID}${i}"
+      prove_request "$a" "$group" "$target" "$id" >/dev/null &
+      pids+=("$!")
+    done
   done
-  wait
+  for i in "${pids[@]}"; do wait "$i" || true; done
   LOG "BURST: $BURST_SIZE concurrent submits x ${#vals[@]} validators"
 }
 
@@ -496,8 +526,9 @@ cand_pk_addr() {   # $1 = alloc
   out=${out#\"}; out=${out%\"}   # eval prints a string with surrounding quotes
   printf '%s' "$out"
 }
-# admit/remove goals run in-BEAM on a validator with an internal leader-retry (like the writer,
-# but generous — up to ~40s — so peer_ready has time to go true and the leader turn to come round).
+# Admit/remove goals use the private administrative eval path with a generous
+# internal leader-retry (up to ~40s), so peer_ready can become true and the
+# leader turn can come round. This path is opt-in and never used by normal load.
 admit_code()  { printf 'Ns= <<"%s">>, G={admit,%s,"%s",%d}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->admitted; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); _->timer:sleep(200),T(K-1) end end)(200).' "$NS" "$1" "$2" "$3"; }
 remove_code() { printf 'Ns= <<"%s">>, G={remove,%s}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->removed; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); _->timer:sleep(200),T(K-1) end end)(200).' "$NS" "$1"; }
 
@@ -552,6 +583,7 @@ WORST_LAG=0; MAX_UNVERIFIED=0; MAX_REJECTS=0; MAX_WEAK_CERT=0
 REJECT_BASELINE=0
 CS_SEEN_MIN=999; CS_SEEN_MAX=0
 BASE_FAILED_ALLOCS=0
+BASE_TASK_RESTARTS=0
 
 # aggregate the current FLEETFILE -> "up min max lag unv mr ready_validators cs_min cs_max wcw recovering"
 snapshot() {
@@ -623,8 +655,11 @@ poll_unverified() {
 #==============================================================================
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" || exit 1
 command -v jq >/dev/null || { echo "FATAL: jq required"; exit 1; }
+NS_JSON=$(jq -Rn --arg ns "$NS" '$ns')
 trap 'echo; LOG "interrupted — stopping writers"; stop_writers; exit 130' INT TERM
-trap 'stop_writers; rm -f "$EPFILE" "$FLEETFILE"' EXIT
+# Unexpected exits only need to reap local children. Normal completion and
+# INT/TERM already run the ledger quiescence check explicitly.
+trap 'stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"' EXIT
 
 LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
 
@@ -649,13 +684,15 @@ LOG "validators: $START_VALIDATORS"
 [ "$EXP_VALIDATORS" -lt 1 ] && { LOG "FATAL: no validators discovered — is the fleet up?"; exit 1; }
 BASE_FAILED_ALLOCS=$(failed_allocs)
 LOG "failed/lost alloc baseline: $BASE_FAILED_ALLOCS"
+BASE_TASK_RESTARTS=$(task_restarts)
+LOG "task restart baseline: $BASE_TASK_RESTARTS"
 LOG "membership reject baseline: $REJECT_BASELINE"
 
+START_TS=$(date +%s); END=$(( START_TS + DURATION )); tick=0
 start_writers force
 
 MEMB_AT=$(( DURATION * 40 / 100 ))          # fire the membership cycle ~40% into the window
 polls=$(( TICK / UNV_POLL )); [ "$polls" -lt 1 ] && polls=1
-START_TS=$(date +%s); END=$(( START_TS + DURATION )); tick=0
 while [ "$(date +%s)" -lt "$END" ]; do
   tick=$((tick + 1))
   [ "$((RANDOM % 100))" -lt "$BURST_PROB" ]     && burst
@@ -710,6 +747,9 @@ FAILED=0
 FAILEDALLOCS=$(failed_allocs)
 NEW_FAILEDALLOCS=$((FAILEDALLOCS - BASE_FAILED_ALLOCS))
 [ "$NEW_FAILEDALLOCS" -lt 0 ] && NEW_FAILEDALLOCS=$FAILEDALLOCS
+TASK_RESTARTS=$(task_restarts)
+NEW_TASK_RESTARTS=$((TASK_RESTARTS - BASE_TASK_RESTARTS))
+[ "$NEW_TASK_RESTARTS" -lt 0 ] && NEW_TASK_RESTARTS=$TASK_RESTARTS
 ADVANCE=$(( END_SLOT - START_SLOT ))
 echo
 LOG "================= RESULT (N=$EXP_VALIDATORS, f=$F) ================="
@@ -719,6 +759,7 @@ LOG "reconverged (lag<=$LAG_OK)   : $([ "$converged" = 1 ] && echo yes || echo N
 LOG "ledger advanced          : +$ADVANCE (>= $MIN_ADVANCE required)"; [ "$ADVANCE" -ge "$MIN_ADVANCE" ] || { LOG "  FAIL: too few commits (sustained load did not land)"; FAILED=1; }
 LOG "unverified drops (max)   : $MAX_UNVERIFIED";             [ "$MAX_UNVERIFIED" -eq 0 ]            || { LOG "  FAIL: unverified gossip observed (safety!)"; FAILED=1; }
 LOG "failed/lost allocs       : $NEW_FAILEDALLOCS new ($FAILEDALLOCS total)"; [ "$NEW_FAILEDALLOCS" -eq 0 ] || { LOG "  FAIL: allocs failed/lost during test"; FAILED=1; }
+LOG "task restarts             : $NEW_TASK_RESTARTS new ($TASK_RESTARTS total)"; [ "$NEW_TASK_RESTARTS" -eq 0 ] || { LOG "  FAIL: task crash/restart during test (including a recovered OOM)"; FAILED=1; }
 # --- N>=4 committee invariants ---
 LOG "validators at end        : $vals / $EXP_VALIDATORS";     [ "$vals" -eq "$EXP_VALIDATORS" ]      || { LOG "  FAIL: not all validators recovered/voting"; FAILED=1; }
 LOG "validators at head       : $([ "$vbehind" -eq 0 ] && echo yes || echo NO)  ($vbehind behind head=$END_SLOT)"; [ "$vbehind" -eq 0 ] || { LOG "  FAIL: validator(s) stuck behind the head after load stopped (member multi-slot gap-fill gap — deferred.md §3)"; FAILED=1; }
@@ -746,6 +787,6 @@ fi
 LOG "worst height spread      : $WORST_LAG (during chaos — informational)"
 LOG "======================================================"
 LOG "note: the unverified/weak-cert gauges reset on a node restart; they are sampled every ${UNV_POLL}s"
-LOG "      (< churn cadence) to shrink but not eliminate that blind spot. A transient recovered crash"
-LOG "      between snapshots is not counted; a PERSISTENT crash-loop still fails via non-reconvergence."
+LOG "      (< churn cadence) to shrink but not eliminate that gauge blind spot. Nomad task restart"
+LOG "      deltas are checked separately, so a recovered OOM/crash still fails the run."
 [ "$FAILED" -eq 0 ] && { LOG "PASS"; exit 0; } || { LOG "FAIL"; exit 1; }

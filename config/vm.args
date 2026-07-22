@@ -9,7 +9,16 @@
 -setcookie quod_dev_cookie
 
 +K true
-+A 16
+## Nomad gives each Quod task 500 MHz. Letting BEAM inherit the host's 16 CPUs
+## starts 16 normal + 16 dirty-CPU + 10 dirty-I/O schedulers and a 16-thread
+## async pool, along with per-scheduler allocators. A recovering node then peaks
+## close to the task's memory limit before doing useful work. Four schedulers
+## preserve proof/crypto parallelism and burst capacity without sizing the VM as
+## though it owned the whole host. Raise these together with task CPU resources.
++S 4:4
++SDcpu 4
++SDio 2
++A 4
 +sbwt very_short
 +sbwtdcpu very_short
 +sbwtdio very_short

@@ -110,6 +110,12 @@ node itself — see `ui/README.md`.
 > caps it with `+Q 65536` (KB-sized table). Without it a node uses ~2 GB instead
 > of ~100 MB.
 
+The release also caps BEAM at four normal/dirty CPU schedulers, two dirty-I/O
+schedulers, and four async threads. Nomad grants each Quod task 500 MHz; inheriting
+all 16 host CPUs created 58 scheduler/async threads and made a normal recovery peak
+near the 512 MiB task limit. Raise the VM thread counts together with task CPU when
+deploying on substantially larger dedicated resources.
+
 ## Deploy (Docker + Nomad)
 
 ```bash

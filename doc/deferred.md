@@ -432,18 +432,6 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 - **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
   debounce, onia §10). The `quod_diff` functor-hash read-set already produces the per-predicate keys.
 
-- **Ingress router: compute-then-execute (kills the route-preview mirror).** The park-queue drain
-  must know, BEFORE popping the FIFO head, whether routing it would park it again (a pop-then-repark
-  breaks first-come-first-served). Today that prediction (`drain_dispatchable/2`) is a HAND-MAINTAINED
-  mirror of the real router (`append_route/6`) — the same decision tree written twice. The two copies
-  already diverged once during implementation (the `admissible_now` vs `admissible_for` queue-guard
-  bug: preview said go, router re-parked, the drain silently stalled until a test caught it). The
-  deeper fix: ONE function computing the route decision (`{collect,Next} | {relay,Leader} |
-  {redirect,Hint} | {reject,Reason} | park`), consumed by both the preview (peek) and the executor
-  (act) — nothing left to keep in sync, the divergence class disappears. Deferred because the current
-  shape was just reviewed+tested green and carries a safety net (the drain's no-progress check stops
-  cleanly on any future divergence — worst case a stall-until-TTL, not a breakage). Do it as a pure
-  refactor with the existing ingress eunit as the harness. (Self-review finding, 2026-07-23.)
 - **Link backpressure signalling (unblocks demoting the relay retransmit).** `quod_link`'s plain
   `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,
   `send_queue_full`) so transient pressure never tears a link down — the accepted cost is that frames

@@ -7,6 +7,46 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-23 — ingress v2: pre-position at the FUTURE leader (measurement falsified v1's routing)
+
+**Why.** The live A/B of the park-queue ingress (0.7.27 vs 0.7.25, identical load) met its
+stated goal — busy 2061→0 — but REGRESSED the point: p50 225→460ms, p99 896→2497ms,
+blocks/s 1.8→0.98, 3243 forwards (~3 hops/tx; traces show park→drain→relay→redirect
+loops over 2.6s). Root cause: all routing targeted the leader of the CURRENTLY open slot —
+a target that moves every slot — so txs chased the rotation while leaders opened their
+slots with empty queues. The fleet was rolled back to 0.7.25 pending this fix.
+
+**What changed (design Architect+DA-reviewed, 2× approve-with-changes, before impl).**
+`leader/2` is a pure function of the slot, so the author now computes the FIRST slot a
+change can still enter (`Floor = approved+1`, or `Floor+1` once Floor's proposal is
+visible) and relays ONCE to that slot's leader — pre-positioning during the current slot's
+consensus. The receiver parks anything within `?INGRESS_HORIZON = 2` slots of its turn and
+proposes it the moment its slot opens; only a genuine misroute redirects (concrete
+forward hint, never `none`; a useless hint is rescued at the origin by a recomputed seat,
+or `skipped` if the origin now leads). Membership barrier ⇒ unconditional park (post-
+adoption schedule unknowable). TTL 5s→7s (re-derived: H slots where one may burn a full
+Δ×(1+rearms) complaint cycle, still under the 8s caller timeout). Local egress serializes
+through the FIFO when the queue is live (narrows the dual-target seq race; the residue is
+`stale_seq`, now counted as `r_stale`/`append_stale`, NEVER `r_bad` — that mis-bucketing
+is what failed the 0.7.27 loadtest with 57 false "malformed" appends). `park_ingress` arms
+head demand constructively (the pre-positioned park is the one cause with no head evidence
+of its own). New gauge `ingress_prepositioned`; `ingress_forwarded` is now a MISROUTE
+signal (≈0 steady-state expected). The deferred compute-then-execute router refactor was
+done FIRST: one pure `route/4` decision (park/collect/relay/redirect/reject), previewed by
+the drain and executed by `execute/7` — `drain_dispatchable`'s hand-mirror and the drain's
+no-progress backstop are gone by construction. `{relay,_,_}` is unconstructible for
+relayed origin (holder→holder forwarding stays illegal). No wire change: the receiver
+decides from its own state, so old and new nodes interoperate during rolling upgrade
+(old nodes simply redirect what they would now park — the chase, not an error).
+
+**Leader tenure explicitly NOT taken**: `(Slot div K) rem N` keeps a dead leader for up to
+K complaint rounds and touches everything that reads `leader/2`; pre-positioning gets the
+batching win with rotation-as-failover intact. Accepted residue (measured next): a small
+straggler tail (boundary flights), modest r_stale, bounded origin-bounce under sustained
+overload (budget 3; r_busy/overflow stays THE overload alarm).
+
+---
+
 ## 2026-07-23 — event-driven consensus ingress (park, don't reject); awaiting live measurement
 
 **Why.** The 0.7.25 tracing measurement showed the write path pacing itself on its own

@@ -198,12 +198,14 @@ agrees on every change.
   batch of incoming changes into a **block** and sends that block to the others. A block
   becomes official once **more than two-thirds** of the committee has signed off on it.
 - A change that arrives while the current block is already sealed is not turned away:
-  it **waits in a bounded line** and pours into the very next block the moment it opens
-  — block N+1 naturally carries everything that arrived during block N. The line is
-  first-come-first-served (so a waiting membership change drains the pipeline instead
-  of being overtaken), each member gets a fair share of it, and a request only hears
-  "busy" when the line truly overflows or the cluster is genuinely stalled — which
-  makes "busy" an alarm, not a retry hint.
+  because everyone can compute whose turn comes next, it is sent **straight to the
+  member whose turn is coming** and **waits in a bounded line there**, pouring into
+  that block the moment the turn opens — block N+1 naturally carries everything that
+  arrived during block N, already in place, with no bouncing between members. The line
+  is first-come-first-served (so a waiting membership change drains the pipeline
+  instead of being overtaken), each member gets a fair share of it, and a request only
+  hears "busy" when the line truly overflows or the cluster is genuinely stalled —
+  which makes "busy" an alarm, not a retry hint.
 - Once a block has enough first-stage support, the next slot may begin while final
   signatures for the parent are still arriving. The pipeline is deliberately only one
   slot deep, and membership changes stop it until they are durably committed. Demand

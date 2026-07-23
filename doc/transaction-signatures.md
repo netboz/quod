@@ -118,23 +118,36 @@ verification and rejects non-canonical encodings. The authenticated transport
 peer must equal `Author`, and that author must be in the current committee.
 The inter-ontology ask symbol codec is never used for transaction relay.
 
-Relay uses the existing authenticated `{log, Ns}` links. A leader that cannot
-place the submission into a block immediately PARKS it in its bounded ingress
-queue and answers when consensus decides — the terminal `relay_result` is the
-follower's notification, so the follower's exact-request-id retransmit is a
-lost-frame backstop only (the link send is deliberately fire-and-forget under
-flow-control pressure, so the retransmit cadence stays tight until links carry
-backpressure signalling). Leaders bound in-flight requests and cache completed
-results for 30 seconds, and a follower independently resolves its pending relay
-only when the exact signed submission commits. A stale leader may redirect the
-request to the current leader without changing its authorship, up to three hops:
-per-slot leader rotation legitimately chases a parked slot's resolution to the
-next leader, and the bound still caps Byzantine redirect ping-pong. Relay
-lifetime matches the Prolog parked-proof lifetime, anchored at the submission's
-ORIGINAL arrival, so time parked at any hop counts against the same deadline. A
-submission whose signed sequence falls below the committed floor because it lost
-a multi-hop routing race resolves `{error, stale_seq}` — retryable by contract
-(the origin re-proves and re-signs); it is never a terminal rejection.
+Relay uses the existing authenticated `{log, Ns}` links, and it targets the
+rotation instead of chasing it: the leader schedule is a pure function of the
+slot, so the author computes the first slot its submission can still enter and
+sends it ONCE to that slot's leader — pre-positioning it there while the current
+slot's consensus is in flight. The receiver PARKS anything arriving at most two
+slots ahead of its own turn in its bounded ingress queue and proposes it the
+moment its slot opens, answering when consensus decides — the terminal
+`relay_result` is the follower's notification, so the follower's
+exact-request-id retransmit is a lost-frame backstop only (the link send is
+deliberately fire-and-forget under flow-control pressure, so the retransmit
+cadence stays tight until links carry backpressure signalling; parked request
+ids stay in the receiver's inflight set, so retransmits are idempotent).
+Leaders bound in-flight requests and cache completed results for 30 seconds,
+and a follower independently resolves its pending relay only when the exact
+signed submission commits. Only a genuine misroute — the schedule moved past
+the holder — redirects the request back through its author with a concrete
+forward-looking hint, up to three hops; a useless hint (a recovering target
+answers `none`) is replaced at the origin by a locally recomputed seat, and
+`skipped` (retryable) is returned if that seat is the origin itself. During a
+membership barrier every arrival parks unconditionally: the post-adoption
+schedule is unknowable, so hints minted against the old committee would only
+burn the redirect budget. Relay lifetime matches the Prolog parked-proof
+lifetime, anchored at the submission's ORIGINAL arrival, so time parked at any
+hop counts against the same deadline. A submission whose signed sequence falls
+below the committed floor because it lost a routing race resolves
+`{error, stale_seq}` — retryable by contract (the origin re-proves and
+re-signs), counted apart from malformed input; it is never a terminal
+rejection. An author whose burst straddles a target flip can sign consecutive
+sequences toward two slots and lose the earlier race — the accepted, retryable
+residue of routing without a per-author ordering gate.
 
 ## Verification
 

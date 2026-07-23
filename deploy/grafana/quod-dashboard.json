@@ -533,7 +533,7 @@
         "x": 0,
         "y": 42
       },
-      "description": "Routing outcomes: redirect = not this slot's leader (normal), bad = unacceptable change. busy is now an ALERT signal, not backpressure: requests that arrive at a busy moment wait in the bounded ingress line and drain into the next block; busy fires only when that line overflows or a waiting request was cut loose during a genuine stall (see quod_consensus_ingress_queued/overflow/expired). Any sustained busy rate deserves investigation.",
+      "description": "Routing outcomes: redirect = not this slot's leader (normal), bad = unacceptable change. busy is now an ALERT signal, not backpressure: requests that arrive at a busy moment wait in the bounded ingress line and drain into the next block; busy fires only when that line overflows or a waiting request was cut loose during a genuine stall (see quod_consensus_ingress_queued/overflow/expired). Any sustained busy rate deserves investigation. stale_seq = a write lost a leader-rotation routing race; it is retried automatically and is counted apart from bad_change, which stays the malformed-workload alarm.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -566,6 +566,11 @@
           "refId": "D",
           "expr": "rate(quod_consensus_skips{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "skipped \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "F",
+          "expr": "rate(quod_consensus_append_stale{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "stale_seq \u00b7 {{node_id}}"
         }
       ]
     },
@@ -583,7 +588,7 @@
         "x": 0,
         "y": 50
       },
-      "description": "The waiting line for changes that arrive while the current block is sealed. queued = requests waiting right now (they pour into the very next block; a persistently high value means blocks seal slower than requests arrive). forwarded = waiting requests handed to the next leader on rotation (normal under load). overflow = requests refused because the bounded line or one author's fair share was full; expired = waiting requests cut loose during a stall. overflow and expired are the only sources of 'busy' \u2014 any sustained rate on either deserves an alert.",
+      "description": "Requests waiting for consensus and how they move. Requests are sent straight to the node whose turn to build a block is coming (prepositioned/s) and drain into that block the moment the turn opens. forwarded/s counts MISROUTES (the schedule moved past a holder) and should sit near zero; overflow/s and expired/s are the only sources of busy and deserve an alert.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -599,6 +604,11 @@
           "refId": "A",
           "expr": "quod_consensus_ingress_queued{node_id=~\"$node\", namespace=~\"$namespace\"}",
           "legendFormat": "queued \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "E",
+          "expr": "rate(quod_consensus_ingress_prepositioned{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "prepositioned/s \u00b7 {{node_id}}"
         },
         {
           "refId": "B",

@@ -1339,10 +1339,11 @@ lt(N, Author) -> (lt(N))#transaction{author = Author}.
 
 %% Two parked items drain into ONE immediately-sealed block the moment the pipeline
 %% opens — no micro-batch window for backlog that already waited a full flight. On an
-%% N=4 committee the sealed proposal stays in flight (quorum 3), so the pure state
-%% keeps both waiters parked on it.
+%% N=2 committee this node leads BOTH the blocked-time floor (slot 6) and the reopened
+%% slot 4, so the items park at home and the sealed proposal stays in flight
+%% (quorum 2), keeping both waiters parked on it.
 multi_item_drain_seals_one_block_test() ->
-    Committee = committee(4),
+    Committee = committee(2),
     Validators = pubs(Committee),
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
     Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
@@ -1367,7 +1368,7 @@ multi_item_drain_seals_one_block_test() ->
 %% A singleton drain keeps the normal micro-batch window (its arm action threads out),
 %% so the post-rotation re-send wave can still join the same block.
 singleton_drain_keeps_batch_window_test() ->
-    Committee = committee(4),
+    Committee = committee(2),   %% this node leads both slot 6 (park) and slot 4 (drain)
     Validators = pubs(Committee),
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
     Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
@@ -1385,8 +1386,12 @@ singleton_drain_keeps_batch_window_test() ->
 %% A foreign author reaches this node only over the signed relay, so its park rides
 %% the relayed entry; the flooding author's overflow never blocks anyone else's seat.
 ingress_overflow_and_author_cap_test() ->
-    [{Me, Id}, {Other, OtherId}] = committee(2),
-    Blocked = st(#{self => Me, id => Id, validators => [Me, Other], sync => ready,
+    Committee = committee(2),
+    Validators = pubs(Committee),
+    %% the node that leads the blocked-time floor (slot 6) — local items park HERE
+    {Me, Id} = lists:keyfind(quod_simplex:leader(6, Validators), 1, Committee),
+    [{Other, OtherId}] = [P || {Pub, _} = P <- Committee, Pub =/= Me],
+    Blocked = st(#{self => Me, id => Id, validators => Validators, sync => ready,
                    slot => 3, approved => 5,
                    eng => quod_simplex:eng_with_certs(0, [])}),
     %% fill one author to its fair-share cap (64)
@@ -1453,30 +1458,50 @@ drain_forwards_to_next_leader_with_anchored_deadline_test() ->
     %% enqueue time — park time counts against the caller's budget, not on top of it
     {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Drained),
     ?assertEqual([quod_simplex:leader(4, Validators)], OutboxPeers),
-    [{Target, Deadline}] = quod_simplex:test_relay_pending(Drained),
+    [{_ReqId, Target, Deadline}] = quod_simplex:test_relay_pending(Drained),
     ?assertEqual(quod_simplex:leader(4, Validators), Target),
     ?assert(Deadline =< Anchor + 32000),                  %% anchored: ~Anchor + 31s
     ?assert(Deadline < quod_time:mono_ms() + 30000).      %% NOT re-anchored at drain time
 
-%% Origin-park: while THIS slot's proposal is already visible (here: notarized into the
-%% tree), a local item stays home — relaying now could only park remotely and bounce
-%% back on rotation; the drain sends it once to the NEXT leader instead.
-origin_parks_while_proposal_visible_test() ->
+%% Pre-positioning: while THIS slot's proposal is already visible (here: notarized into
+%% the tree), the first free seat is slot 5 — a local item is signed once and relayed
+%% straight to leader(5), DURING slot 4's consensus, so it is already parked there when
+%% slot 5 opens. No origin-park, no chase.
+origin_prepositions_to_future_leader_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
-    NotLeader = hd([P || P <- Validators, P =/= quod_simplex:leader(4, Validators)]),
-    {Me, MyId} = lists:keyfind(NotLeader, 1, Committee),
+    Ahead = [quod_simplex:leader(4, Validators), quod_simplex:leader(5, Validators)],
+    {Me, MyId} = lists:keyfind(hd(Validators -- Ahead), 1, Committee),
     B4 = blk(4),
     {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
     {E2, _} = feed_shares(supports(B4, Committee, 3), E1),   %% tree holds slot 4
     From = {self(), make_ref()},
     S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
              slot => 3, approved => 3, eng => E2}),
-    %% entry parks (slot 4's proposal is visible), and the drain leaves it parked
+    ?assert(quod_simplex:proposal_visible(4, S)),
+    {Sent, []} = quod_simplex:test_append(From, lt($g, Me), S),
+    {0, 0, _, []} = quod_simplex:test_ingress(Sent),
+    [{_ReqId, Target, _Deadline}] = quod_simplex:test_relay_pending(Sent),
+    ?assertEqual(quod_simplex:leader(5, Validators), Target),
+    %% a live entry is not a drain forward — the forwarded counter stays a misroute signal
+    ?assertEqual(0, maps:get(ingress_forwarded, quod_simplex:stats_map(Sent))).
+
+%% ...unless this node IS leader(5): then home is already the right place — park and
+%% propose it ourselves when slot 5 opens.
+origin_parks_when_it_leads_the_future_slot_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(5, Validators), 1, Committee),
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => E2}),
     {Parked, []} = quod_simplex:test_append(From, lt($g, Me), S),
     {1, _, _, [{local, _, _}]} = quod_simplex:test_ingress(Parked),
-    ?assert(quod_simplex:proposal_visible(4, Parked)),
-    {Still, []} = quod_simplex:test_drain(Parked),
+    ?assertEqual([], quod_simplex:test_relay_pending(Parked)),
+    {Still, []} = quod_simplex:test_drain(Parked),   %% the drain holds it for our turn
     {1, _, _, _} = quod_simplex:test_ingress(Still).
 
 %% Every parked item sits under an armed head watchdog: for each blocked cause the
@@ -1512,7 +1537,26 @@ parked_ingress_implies_armed_watchdog_test() ->
                         [quod_simplex:make_share(
                            support, 4, quod_simplex:block_hash(MBlock), MId)],
                         EngB0),
-    F(#{approved => 3, eng => BarrierEng}).
+    F(#{approved => 3, eng => BarrierEng}),
+    %% pre-positioned relayed park (this node leads slot 5, item arrives during slot 4):
+    %% the NEW cause with no head evidence of its own — park_ingress must arm demand itself
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Recv, RecvId} = lists:keyfind(quod_simplex:leader(5, Validators), 1, Committee),
+    [{Author, AuthorId} | _] =
+        [P || {Pub, _} = P <- Committee,
+              Pub =/= Recv, Pub =/= quod_simplex:leader(4, Validators)],
+    Tx = signed_tx(<<"t">>, <<"prepos">>, [{assert, {{pp, fact}, true}}],
+                   {Author, AuthorId}),
+    SR = st(#{self => Recv, id => RecvId, validators => Validators, sync => ready,
+              slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, [])}),
+    {SP, []} = quod_simplex:test_relayed_append(
+                 {relay, Author, binary:copy(<<3>>, 16)}, Tx, SR),
+    {1, _, _, [{relayed, _, _}]} = quod_simplex:test_ingress(SP),
+    ?assertEqual(1, maps:get(ingress_prepositioned, quod_simplex:stats_map(SP))),
+    ?assertNotEqual(idle,
+                    quod_simplex:test_progress(
+                      quod_simplex:reconcile_head_progress(SP))).
 
 %% A pre-signed relayed change whose sequence fell below the floor is STALE_SEQ —
 %% retryable by contract — never terminal bad_change.
@@ -1527,7 +1571,11 @@ stale_seq_is_retryable_test() ->
     {S1, []} = quod_simplex:test_relayed_append(ReplyTo, Signed, S),
     %% the relay result frame carrying {error, stale_seq} is queued toward the origin
     {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(S1),
-    ?assertEqual([A], OutboxPeers).
+    ?assertEqual([A], OutboxPeers),
+    %% counted as a ROUTING RACE, never as malformed input — r_bad is the loadtest's
+    %% "malformed workload" alarm and must stay quiet for retryable races
+    ?assertEqual(1, maps:get(r_stale, quod_simplex:stats_map(S1))),
+    ?assertEqual(0, maps:get(r_bad, quod_simplex:stats_map(S1))).
 
 %% reseat (recovery) nacks the whole parked window retryably, like a discarded batch.
 reseat_nacks_parked_ingress_test() ->
@@ -1539,6 +1587,149 @@ reseat_nacks_parked_ingress_test() ->
     Reseated = quod_simplex:reseat_engine(3, S),
     {0, 0, _, []} = quod_simplex:test_ingress(Reseated),
     receive {_Ref2, Reply2} -> ?assertEqual({error, skipped}, Reply2)
+    after 0 -> ?assert(false) end.
+
+%% A pre-positioned item drains into the holder's OWN block the moment its slot opens —
+%% the end-to-end pre-positioning win: one hop, zero forwards.
+prepositioned_item_drains_into_own_slot_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(5, Validators), 1, Committee),
+    [{Author, AuthorId} | _] =
+        [P || {Pub, _} = P <- Committee,
+              Pub =/= Me, Pub =/= quod_simplex:leader(4, Validators)],
+    Tx = signed_tx(<<"t">>, <<"early">>, [{assert, {{early, fact}, true}}],
+                   {Author, AuthorId}),
+    %% arrives during slot 4 (still open here) => parks for our slot-5 turn
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, [])}),
+    {Parked, []} = quod_simplex:test_relayed_append(
+                     {relay, Author, binary:copy(<<4>>, 16)}, Tx, S),
+    {1, _, _, [{relayed, _, _}]} = quod_simplex:test_ingress(Parked),
+    {Held, []} = quod_simplex:test_drain(Parked),   %% slot 4 still ahead: hold
+    {1, _, _, _} = quod_simplex:test_ingress(Held),
+    %% slot 4 approves (a real notarized block, so the author-seq floor derives) =>
+    %% slot 5 opens => the drain proposes OUR block straight from the queue
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
+    Open = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                slot => 3, approved => 4, eng => E2,
+                ingress => [{relayed, {relay, Author, binary:copy(<<4>>, 16)},
+                             Tx, quod_time:mono_ms()}]}),
+    {Drained, _} = quod_simplex:test_drain(Open),
+    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+    ?assertEqual(0, maps:get(ingress_forwarded, quod_simplex:stats_map(Drained))),
+    ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(Drained))).
+
+%% The pure decision function, cell by cell: horizon membership, concrete redirect
+%% hints (never `none` — that is terminal at the origin), the barrier override, and
+%% the FIFO-egress clause. N=4 sorted validators lead slots 4..7 as idx 3,0,1,2.
+route_decision_cells_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    L = fun(Slot) -> quod_simplex:leader(Slot, Validators) end,
+    Outside = L(7),   %% leads only slot 7 — outside horizon {4,5,6}
+    {Me, MyId} = lists:keyfind(Outside, 1, Committee),
+    [{Author, AuthorId} | _] = [P || {Pub, _} = P <- Committee, Pub =/= Me],
+    Tx = signed_tx(<<"t">>, <<"cell">>, [{assert, {{cell, fact}, true}}],
+                   {Author, AuthorId}),
+    Open = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, [])}),
+    %% relayed, out of horizon, open pipeline: redirect with the CONCRETE first seat
+    ?assertEqual({redirect, L(4), 4},
+                 quod_simplex:route(entry, relayed, Tx, Open)),
+    %% ordinary-blocked (pipeline full): floor is 6, horizon {6,7,8} now COVERS us =>
+    %% park ahead of our slot-7 turn instead of bouncing
+    Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                   slot => 3, approved => 5, eng => quod_simplex:eng_with_certs(3, [])}),
+    ?assertEqual({park, prepositioned},
+                 quod_simplex:route(entry, relayed, Tx, Blocked)),
+    %% same blocked state seen by leader(9) — outside {6,7,8}: concrete hint leader(6)
+    {Far, FarId} = lists:keyfind(L(9), 1, Committee),
+    BlockedFar = st(#{self => Far, id => FarId, validators => Validators,
+                      sync => ready, slot => 3, approved => 5,
+                      eng => quod_simplex:eng_with_certs(3, [])}),
+    FarTx = signed_tx(<<"t">>, <<"cellf">>, [{assert, {{cellf, fact}, true}}],
+                      {Author, AuthorId}),
+    ?assertEqual({redirect, L(6), 6},
+                 quod_simplex:route(entry, relayed, FarTx, BlockedFar)),
+    %% membership barrier: park UNCONDITIONALLY, both origins — the post-adoption
+    %% schedule is unknowable, hints against the old set would burn redirect budget
+    {MPub, MId} = id(),
+    MTx = signed_tx(<<"t">>, <<"mb">>, [pa(MPub)], {MPub, MId}),
+    MBlock = #block{slot = 4, parent = 3, payload = [MTx]},
+    {EngB0, _} = quod_simplex:eng_offer({block, MBlock},
+                                        quod_simplex:eng_new([MPub], 3)),
+    {BarrierEng, _} = feed_shares(
+                        [quod_simplex:make_share(
+                           support, 4, quod_simplex:block_hash(MBlock), MId)],
+                        EngB0),
+    Barrier = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                   slot => 3, approved => 3, eng => BarrierEng}),
+    ?assertEqual({park, barrier}, quod_simplex:route(entry, relayed, Tx, Barrier)),
+    ?assertEqual({park, barrier},
+                 quod_simplex:route(entry, local, lt($m, Me), Barrier)),
+    %% FIFO egress: with a live queue a local ENTRY joins the tail (ordered dispatch),
+    %% while the DRAIN pass relays that same item to the first seat's leader
+    Queued = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                  slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, []),
+                  ingress => [{local, {self(), make_ref()}, lt($q, Me),
+                               quod_time:mono_ms()}]}),
+    ?assertEqual({park, fifo},
+                 quod_simplex:route(entry, local, lt($n, Me), Queued)),
+    ?assertEqual({relay, L(4), 4},
+                 quod_simplex:route(drain, local, lt($q, Me), Queued)).
+
+%% A refused relay whose hint is useless (`none` from a recovering target, the refuser
+%% itself, garbage) is RESCUED with a locally recomputed seat — never surfaced as a
+%% terminal client error while the budget lasts.
+relay_hint_rescue_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    NotLeader4 = hd([P || P <- Validators,
+                          P =/= quod_simplex:leader(4, Validators),
+                          P =/= quod_simplex:leader(5, Validators)]),
+    {Me, MyId} = lists:keyfind(NotLeader4, 1, Committee),
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(0, []),
+             ingress => [{local, From, lt($r, Me), quod_time:mono_ms()}]}),
+    {Sent, []} = quod_simplex:test_drain(S),   %% relay pending toward leader(4)
+    [{ReqId, T0, _}] = quod_simplex:test_relay_pending(Sent),
+    ?assertEqual(quod_simplex:leader(4, Validators), T0),
+    %% slot 4's proposal becomes visible locally => our recomputed seat is leader(5)
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
+    Rescued = quod_simplex:test_relay_result(
+                quod_simplex:leader(4, Validators), ReqId,
+                {error, not_in_charge, none},
+                quod_simplex:test_state_set(eng, E2, Sent)),
+    [{ReqId, T1, _}] = quod_simplex:test_relay_pending(Rescued),
+    ?assertEqual(quod_simplex:leader(5, Validators), T1).
+
+%% ...and when the recomputed seat is OURS, the origin replies `skipped` (retryable —
+%% the fresh append routes into our own batch) instead of a terminal not_in_charge.
+relay_hint_rescue_self_leads_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(5, Validators), 1, Committee),
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(0, []),
+             ingress => [{local, From, lt($s, Me), quod_time:mono_ms()}]}),
+    {Sent, []} = quod_simplex:test_drain(S),
+    [{ReqId, _, _}] = quod_simplex:test_relay_pending(Sent),
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
+    Rescued = quod_simplex:test_relay_result(
+                quod_simplex:leader(4, Validators), ReqId,
+                {error, not_in_charge, none},
+                quod_simplex:test_state_set(eng, E2, Sent)),
+    ?assertEqual([], quod_simplex:test_relay_pending(Rescued)),
+    receive {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
     after 0 -> ?assert(false) end.
 
 %% A leader latched into a final-vote camp for its OWN in-flight slot must STILL redrive

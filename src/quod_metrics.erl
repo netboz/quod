@@ -58,7 +58,7 @@ Two collection paths:
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([consensus_stat_keys/0]).
+-export([consensus_stat_keys/0, declare/1]).
 -endif.
 
 -include("quod_ledger.hrl").
@@ -149,7 +149,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_append_busy,     "Total change requests turned away as overloaded: the bounded waiting line was full, or a request waited past its cutoff during a stall. Requests that merely arrive at a busy moment now wait in line instead of being turned away, so any sustained increase here is an overload or a stalled cluster and deserves an alert (only ever goes up)."),
     _ = G(quod_consensus_ingress_queued,  "Change requests waiting in this node's ingress line right now. They drain into the very next block; a value that stays high means blocks are sealing slower than requests arrive."),
     _ = G(quod_consensus_ingress_overflow, "Total requests refused because the bounded ingress line (or one author's fair share of it) was full (only ever goes up)."),
-    _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff — a visible sign of a stall (only ever goes up)."),
+    _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff - a visible sign of a stall (only ever goes up)."),
     _ = G(quod_consensus_ingress_forwarded, "Total waiting requests handed onward to the next leader when the block-building role rotated (only ever goes up)."),
     _ = G(quod_consensus_append_redirect, "Total change requests that reached a node that was not the current leader and were pointed to the right one (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),

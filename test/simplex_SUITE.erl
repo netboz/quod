@@ -25,7 +25,7 @@ The Byzantine safety assumption remains at most `f` faulty validators.
 -import(quod_ct, [eventually/2, match_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([commits_across_committee/1, follower_relays/1,
+-export([commits_across_committee/1, follower_relays/1, burst_commits_without_busy/1,
          byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1,
          over_fault_restart_recovers/1]).
 
@@ -35,7 +35,7 @@ The Byzantine safety assumption remains at most `f` faulty validators.
                            %% pairwise QUIC links (so a healthy slot never spuriously skips), well below the
                            %% `eventually` budgets (so a genuinely stuck slot still skips fast)
 
-all() -> [commits_across_committee, follower_relays,
+all() -> [commits_across_committee, follower_relays, burst_commits_without_busy,
           byzantine_retract_rejected, byzantine_admit_rejected, leader_failover,
           over_fault_restart_recovers].
 
@@ -150,6 +150,67 @@ follower_relays(Config) ->
                 10000))
       || {Peer, _} <- Nodes ],
     ?assertEqual(H + 1, synced_height(Nodes)).
+
+%% A concurrent burst across every validator commits COMPLETELY with ZERO busy
+%% rejections: arrivals that miss a batch park in the bounded ingress queue and drain
+%% into following blocks instead of bouncing on a retry timer. This is the headline
+%% guarantee of the event-driven ingress work — before it, ~55% of burst appends were
+%% rejected busy and paced by the 300ms relay retransmit.
+burst_commits_without_busy(Config) ->
+    Nodes = ?config(nodes, Config),
+    %% settle first (standalone-safe): one committed warmup write, readable on every
+    %% node, absorbs {error, rebuilding} so the burst measures ingress, not boot.
+    H = synced_height(Nodes),
+    {WarmLeader, _} = leader_peer(H + 1, Config),
+    ?assert(eventually(
+              fun() -> match_ok(prove(WarmLeader, {assertz, {burst_warmup, ready}})) end,
+              20000)),
+    [ ?assert(eventually(
+                fun() -> match_ok(prove(Peer, {burst_warmup, {'X'}})) end, 15000))
+      || {Peer, _} <- Nodes ],
+    BusyBefore = total_busy(Nodes),
+    Parent = self(),
+    Writers =
+        [begin
+             Tag = {burst, NodeIx, I},
+             spawn(fun() ->
+                       R = writer_retry(Peer, {assertz, {burst_fact, NodeIx, I}}, 40),
+                       Parent ! {Tag, R}
+                   end),
+             Tag
+         end
+         || {NodeIx, {Peer, _}} <- lists:zip(lists:seq(1, length(Nodes)), Nodes),
+            I <- lists:seq(1, 10)],
+    [receive {Tag, R} -> ?assertMatch({ok, _, _}, R)
+     after 60000 ->
+         ct:pal("burst stall — fleet state: ~p",
+                [[{Pub, peer:call(Peer, quod_simplex, stats, [?NS])}
+                  || {Peer, Pub} <- Nodes]]),
+         ct:fail({writer_timed_out, Tag})
+     end || Tag <- Writers],
+    %% every fact readable everywhere; not one busy was minted anywhere in the fleet
+    [ ?assert(eventually(
+                fun() -> match_ok(prove(Peer, {burst_fact, 1, 1})) end, 15000))
+      || {Peer, _} <- Nodes ],
+    ?assertEqual(BusyBefore, total_busy(Nodes)),
+    Heights = lists:usort([slot(Peer) || {Peer, _} <- Nodes]),
+    ?assertEqual(1, length(Heights)).
+
+total_busy(Nodes) ->
+    lists:sum([maps:get(r_busy, peer:call(Peer, quod_simplex, stats, [?NS]), 0)
+               || {Peer, _} <- Nodes]).
+
+%% Writes ride quod_prolog: {error,rebuilding}/conflict_retry/retry/not_leader are all
+%% client-retryable and MUST NOT count as failures; busy alone is what this test bans
+%% (and it asserts the counter fleet-wide, so a swallowed busy cannot hide).
+writer_retry(_Peer, _Goal, 0) -> {error, out_of_retries};
+writer_retry(Peer, Goal, N) ->
+    case prove(Peer, Goal) of
+        {ok, _, _} = Ok -> Ok;
+        _Other ->
+            timer:sleep(50),
+            writer_retry(Peer, Goal, N - 1)
+    end.
 
 %% A Byzantine leader injects a crafted `{propose, ...}` whose payload is a committee change its OWN
 %% run_proof never gated — the multi-validator membership defense (Slice C). The proposal passes the pure

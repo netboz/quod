@@ -1300,27 +1300,294 @@ competing_notarization_nacks_collected_batch_test() ->
     end.
 
 %% Batch capacity limits, driven through the real append entry (running/3). An oversized single change is
-%% rejected fast ({error, too_large}) so a block can never blow past the 1 MiB wire frame; a leader whose
-%% depth-one pipeline is already full ({error, busy}) turns further appends away rather than over-committing.
-batch_caps_reject_oversized_and_busy_test() ->
+%% rejected fast ({error, too_large}) so a block can never blow past the wire frame; a leader whose
+%% depth-one pipeline is already full now PARKS the append in the bounded ingress queue instead of
+%% rejecting {error, busy} — the caller waits for the pipeline's own events, not a retry timer.
+batch_caps_reject_oversized_and_park_test() ->
     {Me, Id} = id(),
     Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
              eng => quod_simplex:eng_with_certs(0, [])},   %% a caught-up sole leader
     From = {self(), make_ref()},
-    %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched
+    %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched, never parked
     Big  = #transaction{tx_id = <<"big">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
                         diff = [{assert, {{blob, binary:copy(<<0>>, 300 * 1024)}, true}}]},
     {keep_state, _, A1} = quod_simplex:running({call, From}, {append, Big}, st(Base)),
     ?assert(lists:member({reply, From, {error, too_large}}, A1)),
-    %% depth-one pipeline already full (committed 3, approved 5 => gap 2, the max): no room to propose => busy
+    %% depth-one pipeline already full (committed 3, approved 5 => gap 2, the max): the append PARKS —
+    %% no reply action, no busy, one queued item under this author.
     Small = #transaction{tx_id = <<"s">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
                          diff = [{assert, {{k, v}, true}}]},
-    {keep_state, _, A2} = quod_simplex:running({call, From}, {append, Small}, st(Base#{approved => 5})),
-    ?assert(lists:member({reply, From, {error, busy}}, A2)),
+    {keep_state, SParked, A2} =
+        quod_simplex:running({call, From}, {append, Small}, st(Base#{approved => 5})),
+    ?assertEqual([], [R || {reply, _, _} = R <- A2]),
+    {1, _, Authors, [{local, <<"s">>, _}]} = quod_simplex:test_ingress(SParked),
+    ?assertEqual(#{Me => 1}, Authors),
+    ?assertEqual(0, maps:get(r_busy, quod_simplex:stats_map(SParked))),
     %% a change whose tx_id is already in the collecting batch is rejected (no double-apply of one write)
     {keep_state, S1, _} = quod_simplex:running({call, From}, {append, Small}, st(Base)),   %% collect Small
     {keep_state, _, A3} = quod_simplex:running({call, From}, {append, Small}, S1),          %% same tx_id
     ?assert(lists:member({reply, From, {error, bad_change}}, A3)).
+
+%%%===================================================================
+%%% ingress park queue — park, drain, forward, expire (event-driven ingress)
+%%%===================================================================
+
+lt(N) -> #transaction{tx_id = <<"lt", N>>, caller_ns = <<"t">>, author = undefined,
+                      sig = none, read_check = #{},
+                      diff = [{assert, {{loadfact, N}, true}}]}.
+lt(N, Author) -> (lt(N))#transaction{author = Author}.
+
+%% Two parked items drain into ONE immediately-sealed block the moment the pipeline
+%% opens — no micro-batch window for backlog that already waited a full flight. On an
+%% N=4 committee the sealed proposal stays in flight (quorum 3), so the pure state
+%% keeps both waiters parked on it.
+multi_item_drain_seals_one_block_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+    Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                   slot => 3, approved => 5,
+                   eng => quod_simplex:eng_with_certs(3, [])}),
+    F1 = {self(), make_ref()}, F2 = {self(), make_ref()},
+    {P1, []} = quod_simplex:test_append(F1, lt($a, Me), Blocked),
+    {P2, []} = quod_simplex:test_append(F2, lt($b, Me), P1),
+    {2, _, _, [{local, <<"lt", $a>>, _}, {local, <<"lt", $b>>, _}]} =
+        quod_simplex:test_ingress(P2),
+    %% pipeline opens (approval frontier back at the durable head) => drain pours + seals NOW
+    {Drained, Actions} = quod_simplex:test_drain(
+                           quod_simplex:test_state_set(approved, 3, P2)),
+    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+    %% sealed immediately: no open batch survives, both waiters sit on the in-flight
+    %% proposal (pending counts local_proposal waiters), the head watchdog is armed.
+    ?assert(lists:member({{timeout, batch}, cancel}, Actions)),
+    ?assertMatch({4, _, _}, quod_simplex:test_progress(Drained)),
+    ?assertEqual(2, maps:get(pending, quod_simplex:stats_map(Drained))),
+    ?assertEqual(2, maps:get(batched_txs, quod_simplex:stats_map(Drained))).
+
+%% A singleton drain keeps the normal micro-batch window (its arm action threads out),
+%% so the post-rotation re-send wave can still join the same block.
+singleton_drain_keeps_batch_window_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+    Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                   slot => 3, approved => 5,
+                   eng => quod_simplex:eng_with_certs(3, [])}),
+    F = {self(), make_ref()},
+    {P1, []} = quod_simplex:test_append(F, lt($c, Me), Blocked),
+    {Drained, Actions} = quod_simplex:test_drain(
+                           quod_simplex:test_state_set(approved, 3, P1)),
+    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+    ?assertMatch([{{timeout, batch}, _, {flush_batch, 4}}],
+                 [A || {{timeout, batch}, _, _} = A <- Actions]).
+
+%% Shared and per-author bounds: overflow is the only remaining live source of busy.
+%% A foreign author reaches this node only over the signed relay, so its park rides
+%% the relayed entry; the flooding author's overflow never blocks anyone else's seat.
+ingress_overflow_and_author_cap_test() ->
+    [{Me, Id}, {Other, OtherId}] = committee(2),
+    Blocked = st(#{self => Me, id => Id, validators => [Me, Other], sync => ready,
+                   slot => 3, approved => 5,
+                   eng => quod_simplex:eng_with_certs(0, [])}),
+    %% fill one author to its fair-share cap (64)
+    S64 = lists:foldl(
+            fun(N, Acc) ->
+                    {Acc1, []} = quod_simplex:test_append(
+                                   {self(), make_ref()}, lt(N, Me), Acc),
+                    Acc1
+            end, Blocked, lists:seq(1, 64)),
+    {64, _, #{Me := 64}, _} = quod_simplex:test_ingress(S64),
+    %% the 65th from the SAME author overflows busy; another author still parks
+    FromB = {self(), make_ref()},
+    {S65, A65} = quod_simplex:test_append(FromB, lt(65, Me), S64),
+    ?assert(lists:member({reply, FromB, {error, busy}}, A65)),
+    ?assertEqual(1, maps:get(ingress_overflow, quod_simplex:stats_map(S65))),
+    OtherTx = signed_tx(<<"t">>, <<"other-park">>,
+                        [{assert, {{other, fact}, true}}], {Other, OtherId}),
+    {S66, []} = quod_simplex:test_relayed_append(
+                  {relay, Other, binary:copy(<<2>>, 16)}, OtherTx, S65),
+    {65, _, #{Other := 1}, _} = quod_simplex:test_ingress(S66).
+
+%% TTL expiry fails VISIBLY (busy) and walks only the queue head — a stalled cluster
+%% must never silently hold callers hostage.
+ingress_ttl_expires_visibly_test() ->
+    {Me, Id} = id(),
+    Old = quod_time:mono_ms() - 60000,
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
+             approved => 5, eng => quod_simplex:eng_with_certs(0, [])}),
+    {Parked, []} = quod_simplex:test_append(From, lt($e, Me), S),
+    %% age the single parked item by rebuilding it with an old enqueue stamp
+    Aged = st(#{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
+                approved => 5, eng => quod_simplex:eng_with_certs(0, []),
+                ingress => [{local, From, lt($e, Me), Old}]}),
+    {1, _, _, _} = quod_simplex:test_ingress(Aged),
+    Expired = quod_simplex:test_expire_ingress(Aged),
+    {0, 0, _, []} = quod_simplex:test_ingress(Expired),
+    receive {_Ref, Reply} -> ?assertEqual({error, busy}, Reply)
+    after 0 -> ?assert(false) end,
+    ?assertEqual(1, maps:get(ingress_expired, quod_simplex:stats_map(Expired))),
+    ?assertEqual(1, maps:get(r_busy, quod_simplex:stats_map(Expired))),
+    %% the fresh twin above must NOT have expired anything
+    Fresh = quod_simplex:test_expire_ingress(Parked),
+    {1, _, _, _} = quod_simplex:test_ingress(Fresh).
+
+%% Forward-on-rotation: at drain, a local item whose next slot belongs to another
+%% leader is signed once and relayed — with the relay deadline anchored at the ORIGINAL
+%% enqueue time, so queue time counts against the caller's end-to-end budget.
+drain_forwards_to_next_leader_with_anchored_deadline_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    NotLeader4 = hd([P || {P, _} = P4 <- Committee,
+                          element(1, P4) =/= quod_simplex:leader(4, Validators)]),
+    {Me, MyId} = lists:keyfind(NotLeader4, 1, Committee),
+    Anchor = quod_time:mono_ms() - 3000,   %% parked 3s ago
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(0, []),
+             ingress => [{local, From, lt($f, Me), Anchor}]}),
+    {Drained, []} = quod_simplex:test_drain(S),
+    {0, 0, _, []} = quod_simplex:test_ingress(Drained),
+    ?assertEqual(1, maps:get(ingress_forwarded, quod_simplex:stats_map(Drained))),
+    %% the relay is pending toward leader(4) with its deadline anchored at the ORIGINAL
+    %% enqueue time — park time counts against the caller's budget, not on top of it
+    {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Drained),
+    ?assertEqual([quod_simplex:leader(4, Validators)], OutboxPeers),
+    [{Target, Deadline}] = quod_simplex:test_relay_pending(Drained),
+    ?assertEqual(quod_simplex:leader(4, Validators), Target),
+    ?assert(Deadline =< Anchor + 32000),                  %% anchored: ~Anchor + 31s
+    ?assert(Deadline < quod_time:mono_ms() + 30000).      %% NOT re-anchored at drain time
+
+%% Origin-park: while THIS slot's proposal is already visible (here: notarized into the
+%% tree), a local item stays home — relaying now could only park remotely and bounce
+%% back on rotation; the drain sends it once to the NEXT leader instead.
+origin_parks_while_proposal_visible_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    NotLeader = hd([P || P <- Validators, P =/= quod_simplex:leader(4, Validators)]),
+    {Me, MyId} = lists:keyfind(NotLeader, 1, Committee),
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),   %% tree holds slot 4
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+             slot => 3, approved => 3, eng => E2}),
+    %% entry parks (slot 4's proposal is visible), and the drain leaves it parked
+    {Parked, []} = quod_simplex:test_append(From, lt($g, Me), S),
+    {1, _, _, [{local, _, _}]} = quod_simplex:test_ingress(Parked),
+    ?assert(quod_simplex:proposal_visible(4, Parked)),
+    {Still, []} = quod_simplex:test_drain(Parked),
+    {1, _, _, _} = quod_simplex:test_ingress(Still).
+
+%% Every parked item sits under an armed head watchdog: for each blocked cause the
+%% reconciled head_progress is non-idle (the liveness invariant behind park-not-poll).
+parked_ingress_implies_armed_watchdog_test() ->
+    {Me, Id} = id(),
+    Base = #{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
+             eng => quod_simplex:eng_with_certs(0, [])},
+    F = fun(Over) ->
+            {S, []} = quod_simplex:test_append({self(), make_ref()}, lt($h, Me),
+                                               st(maps:merge(Base, Over))),
+            {C, _, _, _} = quod_simplex:test_ingress(S),
+            ?assertEqual(1, C),
+            ?assertNotEqual(idle,
+                            quod_simplex:test_progress(
+                              quod_simplex:reconcile_head_progress(S)))
+        end,
+    F(#{approved => 5}),                                   %% pipeline full
+    F(#{approved => 3, commit_buf => #{4 => skip}}),       %% commit_buf holds Next
+    %% a sealed local proposal in flight for Next
+    B4 = blk(4),
+    F(#{approved => 3,
+        local_proposal => {4, quod_simplex:block_hash(B4)}}),
+    %% membership barrier: a notarized committee-touching block above the head (a
+    %% one-member engine notarizes it from a single support share; the barrier and the
+    %% watchdog evidence both read the engine, not the state's validator list)
+    {MPub, MId} = id(),
+    MTx = signed_tx(<<"t">>, <<"barrier">>, [pa(MPub)], {MPub, MId}),
+    MBlock = #block{slot = 4, parent = 3, payload = [MTx]},
+    {EngB0, _} = quod_simplex:eng_offer({block, MBlock},
+                                        quod_simplex:eng_new([MPub], 3)),
+    {BarrierEng, _} = feed_shares(
+                        [quod_simplex:make_share(
+                           support, 4, quod_simplex:block_hash(MBlock), MId)],
+                        EngB0),
+    F(#{approved => 3, eng => BarrierEng}).
+
+%% A pre-signed relayed change whose sequence fell below the floor is STALE_SEQ —
+%% retryable by contract — never terminal bad_change.
+stale_seq_is_retryable_test() ->
+    [{A, IdA}] = Committee = committee(1),
+    Signed = signed_tx_seq(<<"t">>, <<"stale">>, 2,
+                           [{assert, {{stale, fact}, true}}], {A, IdA}),
+    S = st(#{self => A, id => IdA, validators => pubs(Committee), sync => ready,
+             slot => 5, approved => 5, eng => quod_simplex:eng_with_certs(0, []),
+             author_seqs => #{A => 9}}),   %% committed floor already past seq 2
+    ReplyTo = {relay, A, binary:copy(<<1>>, 16)},
+    {S1, []} = quod_simplex:test_relayed_append(ReplyTo, Signed, S),
+    %% the relay result frame carrying {error, stale_seq} is queued toward the origin
+    {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(S1),
+    ?assertEqual([A], OutboxPeers).
+
+%% reseat (recovery) nacks the whole parked window retryably, like a discarded batch.
+reseat_nacks_parked_ingress_test() ->
+    {Me, Id} = id(),
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => Id, validators => [Me], sync => ready, slot => 3,
+             approved => 5, eng => quod_simplex:eng_with_certs(0, []),
+             ingress => [{local, From, lt($i, Me), quod_time:mono_ms()}]}),
+    Reseated = quod_simplex:reseat_engine(3, S),
+    {0, 0, _, []} = quod_simplex:test_ingress(Reseated),
+    receive {_Ref2, Reply2} -> ?assertEqual({error, skipped}, Reply2)
+    after 0 -> ?assert(false) end.
+
+%% A leader latched into a final-vote camp for its OWN in-flight slot must STILL redrive
+%% the proposal on every Δ: the link send is fire-and-forget, so the Δ re-fire is the
+%% only retransmit of a lost proposal frame. (Live regression: a leader that
+%% complaint-signed its slot before proposing stopped redriving, no follower ever saw
+%% the proposal, and the burst wedged with zero support votes.)
+latched_leader_still_redrives_proposal_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+    B4 = blk(4),
+    BH = quod_simplex:block_hash(B4),
+    {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
+    S0 = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+              slot => 3, approved => 3, eng => E1,
+              head_progress => {4, awaiting_notarization, true},
+              inbound_conns => #{}, peer_readiness => #{}}),
+    %% latch the complaint exactly as the pre-proposal timeout path does
+    Sink = spawn(fun Loop() -> receive _ -> Loop() end end),
+    try
+        Inbound = maps:from_list([{P, {Sink, make_ref()}} || P <- Validators, P =/= Me]),
+        Readiness = voting_readiness([P || P <- Validators, P =/= Me], Sink, 3),
+        SReady = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                      slot => 3, approved => 3, eng => E1,
+                      inbound_conns => Inbound, peer_readiness => Readiness,
+                      head_progress => {4, awaiting_proposal, true}}),
+        Complained = quod_simplex:on_progress_timeout(4, SReady),
+        ?assertEqual({none, false, true}, quod_simplex:test_round(4, Complained)),
+        %% now it proposes (the drain would do this); then the next Δ must RE-SEND it
+        Redriven = quod_simplex:on_progress_timeout(
+                     4, quod_simplex:test_state_set(
+                          local_proposal, {4, BH}, Complained)),
+        ?assertEqual(1, maps:get(redrives, quod_simplex:stats_map(Redriven)))
+    after
+        exit(Sink, kill)
+    end.
+
+%% The quod_metrics matcher and stats_map can never drift: every key the Prometheus
+%% refresh pattern requires must exist in the stats map (a miss silently zeroes ALL
+%% consensus gauges).
+metrics_matcher_lockstep_test() ->
+    {Me, Id} = id(),
+    Stats = quod_simplex:stats_map(
+              st(#{self => Me, id => Id, validators => [Me], sync => ready,
+                   slot => 1, approved => 1,
+                   eng => quod_simplex:eng_with_certs(0, [])})),
+    Missing = quod_metrics:consensus_stat_keys() -- maps:keys(Stats),
+    ?assertEqual([], Missing).
 
 %%%===================================================================
 %%% boundary / edge / Byzantine (fixes from the review)

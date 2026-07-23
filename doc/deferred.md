@@ -432,6 +432,29 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 - **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
   debounce, onia §10). The `quod_diff` functor-hash read-set already produces the per-predicate keys.
 
+- **Ingress router: compute-then-execute (kills the route-preview mirror).** The park-queue drain
+  must know, BEFORE popping the FIFO head, whether routing it would park it again (a pop-then-repark
+  breaks first-come-first-served). Today that prediction (`drain_dispatchable/2`) is a HAND-MAINTAINED
+  mirror of the real router (`append_route/6`) — the same decision tree written twice. The two copies
+  already diverged once during implementation (the `admissible_now` vs `admissible_for` queue-guard
+  bug: preview said go, router re-parked, the drain silently stalled until a test caught it). The
+  deeper fix: ONE function computing the route decision (`{collect,Next} | {relay,Leader} |
+  {redirect,Hint} | {reject,Reason} | park`), consumed by both the preview (peek) and the executor
+  (act) — nothing left to keep in sync, the divergence class disappears. Deferred because the current
+  shape was just reviewed+tested green and carries a safety net (the drain's no-progress check stops
+  cleanly on any future divergence — worst case a stall-until-TTL, not a breakage). Do it as a pure
+  refactor with the existing ingress eunit as the harness. (Self-review finding, 2026-07-23.)
+- **Link backpressure signalling (unblocks demoting the relay retransmit).** `quod_link`'s plain
+  `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,
+  `send_queue_full`) so transient pressure never tears a link down — the accepted cost is that frames
+  can DROP SILENTLY on a live link under load. Each layer owns its own recovery today: the Δ redrive
+  for consensus evidence, the ?RELAY_RETRY_MS exact-request retransmit for relay. With the ingress park
+  queue the retransmit is a lost-frame backstop only, but its cadence must STAY tight (300ms) until the
+  link can either signal backpressure to its holder (a `{link_backpressure,...}` message) or run a
+  bounded in-link retry for consensus/relay frames (`send_reliable`'s `send_until_accepted` already
+  exists in the link process — unused by consensus). Only after that lands may the retransmit cadence
+  be relaxed. Found during the event-driven-ingress review (DA, 2026-07-23).
+
 ## 5. Parked (deliberately — don't reopen without a reason)
 
 - **Adaptive view sizing** — deferred until the live-population estimate has been exercised under much

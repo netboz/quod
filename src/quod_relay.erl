@@ -60,7 +60,7 @@ valid_result({ok, Slot}) ->
     is_integer(Slot) andalso Slot >= 1 andalso Slot =< 16#FFFFFFFFFFFFFFFF;
 valid_result({error, Reason})
   when Reason =:= busy; Reason =:= skipped; Reason =:= bad_change;
-       Reason =:= too_large ->
+       Reason =:= too_large; Reason =:= stale_seq ->
     true;
 valid_result({error, not_in_charge, Hint}) ->
     Hint =:= none orelse Hint =:= unavailable orelse

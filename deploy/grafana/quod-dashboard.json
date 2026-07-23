@@ -14,7 +14,7 @@
   "tags": [
     "quod"
   ],
-  "title": "quod — consensus & content layer",
+  "title": "quod \u2014 consensus & content layer",
   "uid": "quod-content",
   "templating": {
     "list": [
@@ -164,17 +164,17 @@
         {
           "refId": "A",
           "expr": "quod_consensus_slot{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "slot · {{node_id}}/{{namespace}}"
+          "legendFormat": "slot \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "B",
           "expr": "quod_consensus_committed{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "committed · {{node_id}}/{{namespace}}"
+          "legendFormat": "committed \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "C",
           "expr": "quod_consensus_last_applied{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "applied · {{node_id}}/{{namespace}}"
+          "legendFormat": "applied \u00b7 {{node_id}}/{{namespace}}"
         }
       ]
     },
@@ -249,19 +249,19 @@
         {
           "refId": "A",
           "expr": "rate(quod_consensus_commits{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "commit · {{node_id}}/{{namespace}}"
+          "legendFormat": "commit \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "B",
           "expr": "rate(quod_prolog_applies{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "apply · {{node_id}}/{{namespace}}"
+          "legendFormat": "apply \u00b7 {{node_id}}/{{namespace}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "id": 13,
-      "title": "Transaction processing time (submit → commit)",
+      "title": "Transaction processing time (submit \u2192 commit)",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -272,7 +272,7 @@
         "x": 0,
         "y": 16
       },
-      "description": "Percentiles of block.timestamp − tx.submitted_at, from the quod_tx_commit_latency_ms histogram. Observed on the committing node (accurate at N=1 where submitter == committer).",
+      "description": "Percentiles of block.timestamp \u2212 tx.submitted_at, from the quod_tx_commit_latency_ms histogram. Observed on the committing node (accurate at N=1 where submitter == committer).",
       "fieldConfig": {
         "defaults": {
           "unit": "ms",
@@ -286,17 +286,17 @@
         {
           "refId": "A",
           "expr": "histogram_quantile(0.50, sum by (le, node_id, namespace) (rate(quod_tx_commit_latency_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p50 · {{node_id}}/{{namespace}}"
+          "legendFormat": "p50 \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum by (le, node_id, namespace) (rate(quod_tx_commit_latency_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p95 · {{node_id}}/{{namespace}}"
+          "legendFormat": "p95 \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "C",
           "expr": "histogram_quantile(0.99, sum by (le, node_id, namespace) (rate(quod_tx_commit_latency_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p99 · {{node_id}}/{{namespace}}"
+          "legendFormat": "p99 \u00b7 {{node_id}}/{{namespace}}"
         }
       ]
     },
@@ -331,7 +331,7 @@
         {
           "refId": "A",
           "expr": "sum by (author, namespace) (rate(quod_tx_committed_total{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval]))",
-          "legendFormat": "{{author}} · {{namespace}}"
+          "legendFormat": "{{author}} \u00b7 {{namespace}}"
         }
       ]
     },
@@ -363,12 +363,12 @@
         {
           "refId": "A",
           "expr": "histogram_quantile(0.50, sum by (le, namespace) (rate(quod_tx_diff_ops_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p50 · {{namespace}}"
+          "legendFormat": "p50 \u00b7 {{namespace}}"
         },
         {
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum by (le, namespace) (rate(quod_tx_diff_ops_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p95 · {{namespace}}"
+          "legendFormat": "p95 \u00b7 {{namespace}}"
         }
       ]
     },
@@ -400,12 +400,12 @@
         {
           "refId": "A",
           "expr": "quod_consensus_pending{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "pending · {{node_id}}/{{namespace}}"
+          "legendFormat": "pending \u00b7 {{node_id}}/{{namespace}}"
         },
         {
           "refId": "B",
           "expr": "quod_prolog_parked{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "parked · {{node_id}}/{{namespace}}"
+          "legendFormat": "parked \u00b7 {{node_id}}/{{namespace}}"
         }
       ]
     },
@@ -448,12 +448,12 @@
         {
           "refId": "A",
           "expr": "quod_prolog_proof_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "local queries · {{node_id}}"
+          "legendFormat": "local queries \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_prolog_ask_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "cross-ontology answers · {{node_id}}"
+          "legendFormat": "cross-ontology answers \u00b7 {{node_id}}"
         }
       ]
     },
@@ -499,12 +499,12 @@
         {
           "refId": "A",
           "expr": "quod_prolog_kb_memory_words{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "KB memory (VM words) · {{node_id}}"
+          "legendFormat": "KB memory (VM words) \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_prolog_kb_history_predicates{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "retained history · {{node_id}}"
+          "legendFormat": "retained history \u00b7 {{node_id}}"
         }
       ]
     },
@@ -533,7 +533,7 @@
         "x": 0,
         "y": 42
       },
-      "description": "Routing/flow-control outcomes, NOT hard failures: busy = backpressure, redirect = not this slot's leader, bad = unacceptable change, skipped = slot complaint-skipped.",
+      "description": "Routing outcomes: redirect = not this slot's leader (normal), bad = unacceptable change. busy is now an ALERT signal, not backpressure: requests that arrive at a busy moment wait in the bounded ingress line and drain into the next block; busy fires only when that line overflows or a waiting request was cut loose during a genuine stall (see quod_consensus_ingress_queued/overflow/expired). Any sustained busy rate deserves investigation.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -550,22 +550,70 @@
         {
           "refId": "A",
           "expr": "rate(quod_consensus_append_busy{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "busy · {{node_id}}"
+          "legendFormat": "busy \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "rate(quod_consensus_append_redirect{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "redirect · {{node_id}}"
+          "legendFormat": "redirect \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
           "expr": "rate(quod_consensus_append_bad{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "bad_change · {{node_id}}"
+          "legendFormat": "bad_change \u00b7 {{node_id}}"
         },
         {
           "refId": "D",
           "expr": "rate(quod_consensus_skips{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "skipped · {{node_id}}"
+          "legendFormat": "skipped \u00b7 {{node_id}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "id": 115,
+      "title": "Ingress queue (park, don't reject)",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "description": "The waiting line for changes that arrive while the current block is sealed. queued = requests waiting right now (they pour into the very next block; a persistently high value means blocks seal slower than requests arrive). forwarded = waiting requests handed to the next leader on rotation (normal under load). overflow = requests refused because the bounded line or one author's fair share was full; expired = waiting requests cut loose during a stall. overflow and expired are the only sources of 'busy' \u2014 any sustained rate on either deserves an alert.",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        }
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "quod_consensus_ingress_queued{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "queued \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "B",
+          "expr": "rate(quod_consensus_ingress_forwarded{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "forwarded/s \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "C",
+          "expr": "rate(quod_consensus_ingress_overflow{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "overflow/s \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "D",
+          "expr": "rate(quod_consensus_ingress_expired{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "expired/s \u00b7 {{node_id}}"
         }
       ]
     },
@@ -597,17 +645,17 @@
         {
           "refId": "A",
           "expr": "rate(quod_prolog_conflicts{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "occ_conflict · {{node_id}}"
+          "legendFormat": "occ_conflict \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "rate(quod_prolog_rejects{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "reject · {{node_id}}"
+          "legendFormat": "reject \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
           "expr": "rate(quod_prolog_park_timeouts{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "park_timeout · {{node_id}}"
+          "legendFormat": "park_timeout \u00b7 {{node_id}}"
         }
       ]
     },
@@ -618,7 +666,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 50
+        "y": 58
       },
       "id": 30
     },
@@ -634,7 +682,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 51
+        "y": 59
       },
       "description": "How many final blocks each node produced and started sending to the rest of the network, per second.",
       "fieldConfig": {
@@ -666,7 +714,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 51
+        "y": 59
       },
       "description": "How many blocks each node received from others, checked, applied and passed along, per second.",
       "fieldConfig": {
@@ -698,7 +746,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 67
       },
       "description": "How often each node had to ask others for blocks it was missing, per second.",
       "fieldConfig": {
@@ -730,7 +778,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 67
       },
       "description": "Dropped blocks broken down by reason. duplicate = benign gossip redundancy (loop-suppressed); gap = out-of-order, re-pulled by anti-entropy; unverified = bad cert (the one to watch); non_following/oversized/ingest_busy. Only unverified (and sustained gap) indicate a real problem.",
       "fieldConfig": {
@@ -760,7 +808,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "id": 40
     },
@@ -776,7 +824,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 68
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -808,7 +856,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 68
+        "y": 76
       },
       "fieldConfig": {
         "defaults": {
@@ -840,7 +888,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "fieldConfig": {
         "defaults": {
@@ -872,7 +920,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 76
+        "y": 84
       },
       "fieldConfig": {
         "defaults": {
@@ -887,7 +935,7 @@
         {
           "refId": "A",
           "expr": "quod_brahms_estimated_n{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "estimated N · {{node_id}}/{{namespace}}"
+          "legendFormat": "estimated N \u00b7 {{node_id}}/{{namespace}}"
         }
       ]
     },
@@ -900,7 +948,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 92
       }
     },
     {
@@ -915,7 +963,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 85
+        "y": 93
       },
       "description": "How many nodes are currently allowed to vote on changes. Every node should report the same value.",
       "fieldConfig": {
@@ -947,7 +995,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 85
+        "y": 93
       },
       "description": "1 if the node is allowed to vote, 0 if it only reads and follows along.",
       "fieldConfig": {
@@ -979,7 +1027,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 93
+        "y": 101
       },
       "description": "On a committee member: how many peers it tracks a liveness heartbeat for (digests) and how many are FRESH right now (fresh_digests). A candidate must be fresh here before it can be admitted. Confirm this is non-zero for the candidate before an admit.",
       "fieldConfig": {
@@ -995,12 +1043,12 @@
         {
           "refId": "A",
           "expr": "quod_feed_digests{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "tracked · {{node_id}}"
+          "legendFormat": "tracked \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_feed_fresh_digests{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "fresh · {{node_id}}"
+          "legendFormat": "fresh \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1016,7 +1064,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 101
+        "y": 109
       },
       "description": "State of the oldest unfinished block on each node. phase: 0 idle, 1 waiting for a proposal, 2 waiting for support, 3 waiting for final commit votes. quorum_ready is 1 when enough linked validators have freshly reported that they are caught up to this node; complaint voting pauses while it is 0.",
       "fieldConfig": {
@@ -1034,12 +1082,12 @@
         {
           "refId": "A",
           "expr": "quod_consensus_progress_phase{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "phase · {{node_id}}"
+          "legendFormat": "phase \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_consensus_progress_quorum_ready{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "quorum ready · {{node_id}}"
+          "legendFormat": "quorum ready \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1055,7 +1103,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 101
+        "y": 109
       },
       "description": "Recovery work per second: proposal/finality redrives, oldest-head watchdog expirations, complaints paused during a known below-quorum outage, weak-certificate waits, and invalid membership proposals. These should stay near zero in steady state; a burst should return to zero after connectivity recovers.",
       "fieldConfig": {
@@ -1071,27 +1119,27 @@
         {
           "refId": "A",
           "expr": "rate(quod_consensus_redrives{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "redrives · {{node_id}}"
+          "legendFormat": "redrives \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "rate(quod_consensus_weak_cert_waits{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "weak_cert_waits · {{node_id}}"
+          "legendFormat": "weak_cert_waits \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
           "expr": "rate(quod_consensus_membership_rejects{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "membership_rejects · {{node_id}}"
+          "legendFormat": "membership_rejects \u00b7 {{node_id}}"
         },
         {
           "refId": "D",
           "expr": "rate(quod_consensus_progress_timeouts{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "head timeouts · {{node_id}}"
+          "legendFormat": "head timeouts \u00b7 {{node_id}}"
         },
         {
           "refId": "E",
           "expr": "rate(quod_consensus_quorum_pauses{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "quorum pauses · {{node_id}}"
+          "legendFormat": "quorum pauses \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1107,7 +1155,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 109
+        "y": 117
       },
       "description": "Votes each node currently knows for the oldest unfinished block. Support votes approve a block, commit votes make it final, and skip votes abandon the slot. Commit and skip both stuck below the committee quorum reveal a split finality round. own skip is 1 on validators locked to the skip side; missing block means the node has an approval certificate but is still retrieving the block's transactions.",
       "fieldConfig": {
@@ -1124,27 +1172,27 @@
         {
           "refId": "A",
           "expr": "quod_consensus_head_support_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "support · {{node_id}}"
+          "legendFormat": "support \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_consensus_head_commit_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "commit · {{node_id}}"
+          "legendFormat": "commit \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
           "expr": "quod_consensus_head_complaint_votes{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "skip · {{node_id}}"
+          "legendFormat": "skip \u00b7 {{node_id}}"
         },
         {
           "refId": "D",
           "expr": "quod_consensus_head_complaint_signed{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "own skip · {{node_id}}"
+          "legendFormat": "own skip \u00b7 {{node_id}}"
         },
         {
           "refId": "E",
           "expr": "quod_consensus_missing_certified_blocks{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "missing block · {{node_id}}"
+          "legendFormat": "missing block \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1160,7 +1208,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 109
+        "y": 117
       },
       "description": "Median and 95th-percentile time to make one validator vote crash-durable before sending its signature. A healthy block normally needs one support sync and one final-vote sync per validator; sustained high values directly add to block finality time.",
       "fieldConfig": {
@@ -1177,12 +1225,12 @@
         {
           "refId": "A",
           "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p50 · {{node_id}}"
+          "legendFormat": "p50 \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p95 · {{node_id}}"
+          "legendFormat": "p95 \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1195,7 +1243,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 117
+        "y": 125
       }
     },
     {
@@ -1210,7 +1258,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 118
+        "y": 126
       },
       "description": "Median and 95th-percentile time each node spends checking one transaction author's Ed25519 signature before voting. A sustained rise means authentication is consuming more of the block-processing budget.",
       "fieldConfig": {
@@ -1226,12 +1274,12 @@
         {
           "refId": "A",
           "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_tx_signature_validation_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p50 · {{node_id}}"
+          "legendFormat": "p50 \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_tx_signature_validation_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
-          "legendFormat": "p95 · {{node_id}}"
+          "legendFormat": "p95 \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1247,7 +1295,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 118
+        "y": 126
       },
       "description": "Rate of transactions rejected because the author's cryptographic signature did not match the signed content. This should stay at zero; any increase means corrupted, malformed, or dishonest input reached a validator.",
       "fieldConfig": {
@@ -1270,7 +1318,7 @@
     {
       "type": "logs",
       "id": 43,
-      "title": "Node logs — warnings & errors (Loki)",
+      "title": "Node logs \u2014 warnings & errors (Loki)",
       "datasource": {
         "type": "loki",
         "uid": "loki"
@@ -1279,9 +1327,9 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 126
+        "y": 134
       },
-      "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_…) names the emitting instance — same id as the $node picker.",
+      "description": "Live warning/error/notice log lines from every quod node. Each node emits one JSON object per event to stdout (quod_log_formatter); promtail ships it as {job=\"docker\"} and Loki's | json exposes level/msg/node_id. node_id (kp_\u2026) names the emitting instance \u2014 same id as the $node picker.",
       "options": {
         "showTime": true,
         "wrapLogMessage": true,
@@ -1310,7 +1358,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 137
+        "y": 145
       },
       "description": "Derived working state per node. healthy is 1 while handlers are live; e_frontier should track the committed height (effects for a block are released only once the frontier reaches it); collapses climbing means ordered handler work keeps being rebuilt; heavy failures are isolated resource rebuild failures; heavy rejected means a job exceeded the size limit or the bounded pending-resource queue was full; rejected dynamic means someone tried to install running code after founding.",
       "fieldConfig": {
@@ -1326,32 +1374,32 @@
         {
           "refId": "A",
           "expr": "quod_runtime_healthy{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "healthy · {{node_id}}"
+          "legendFormat": "healthy \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
           "expr": "quod_runtime_e_frontier{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "e_frontier · {{node_id}}"
+          "legendFormat": "e_frontier \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
           "expr": "quod_runtime_collapses{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "collapses · {{node_id}}"
+          "legendFormat": "collapses \u00b7 {{node_id}}"
         },
         {
           "refId": "D",
           "expr": "quod_runtime_rejected_dynamic{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "rejected dynamic · {{node_id}}"
+          "legendFormat": "rejected dynamic \u00b7 {{node_id}}"
         },
         {
           "refId": "E",
           "expr": "quod_runtime_heavy_failures{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "heavy failures · {{node_id}}"
+          "legendFormat": "heavy failures \u00b7 {{node_id}}"
         },
         {
           "refId": "F",
           "expr": "quod_runtime_heavy_rejected{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "heavy rejected · {{node_id}}"
+          "legendFormat": "heavy rejected \u00b7 {{node_id}}"
         }
       ]
     }

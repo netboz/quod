@@ -118,12 +118,23 @@ verification and rejects non-canonical encodings. The authenticated transport
 peer must equal `Author`, and that author must be in the current committee.
 The inter-ontology ask symbol codec is never used for transaction relay.
 
-Relay uses the existing authenticated `{log, Ns}` links. The follower retries
-the exact request id, leaders bound in-flight requests and cache completed
+Relay uses the existing authenticated `{log, Ns}` links. A leader that cannot
+place the submission into a block immediately PARKS it in its bounded ingress
+queue and answers when consensus decides — the terminal `relay_result` is the
+follower's notification, so the follower's exact-request-id retransmit is a
+lost-frame backstop only (the link send is deliberately fire-and-forget under
+flow-control pressure, so the retransmit cadence stays tight until links carry
+backpressure signalling). Leaders bound in-flight requests and cache completed
 results for 30 seconds, and a follower independently resolves its pending relay
 only when the exact signed submission commits. A stale leader may redirect the
-request once to the current leader without changing its authorship. Relay
-lifetime matches the Prolog parked-proof lifetime.
+request to the current leader without changing its authorship, up to three hops:
+per-slot leader rotation legitimately chases a parked slot's resolution to the
+next leader, and the bound still caps Byzantine redirect ping-pong. Relay
+lifetime matches the Prolog parked-proof lifetime, anchored at the submission's
+ORIGINAL arrival, so time parked at any hop counts against the same deadline. A
+submission whose signed sequence falls below the committed floor because it lost
+a multi-hop routing race resolves `{error, stale_seq}` — retryable by contract
+(the origin re-proves and re-signs); it is never a terminal rejection.
 
 ## Verification
 

@@ -7,6 +7,45 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-23 — event-driven consensus ingress (park, don't reject); awaiting live measurement
+
+**Why.** The 0.7.25 tracing measurement showed the write path pacing itself on its own
+rejection-retry loop: 55% of burst appends rejected `busy`, retries quantized by the 300ms
+relay retransmit, leadership rotating away between attempts — 3.1-tx blocks at p50 225ms
+while fsync/crypto cost microseconds.
+
+**What changed (design Architect+DA-reviewed before implementation).** Appends that cannot
+enter a block RIGHT NOW park in a bounded FIFO ingress queue (512 items / 512 KiB / 64 per
+author / 5s TTL) and drain event-driven from `keep_progress` the moment the pipeline opens —
+into the next batch (multi-item drains seal immediately: block N+1 carries what arrived
+during block N) or forwarded once to the rotated leader. Origin-park keeps an item home when
+the current slot's proposal is already visible (1 hop instead of the 3-hop bounce — a
+relayed submission is only accepted from its author, so holder→holder forwarding is
+illegal). `busy` now means ONLY queue overflow or TTL expiry — an alertable signal (dashboard
+panel 115 + 4 new `ingress_*` gauges). New retryable `{error, stale_seq}` for writes that
+lose a multi-hop routing race (quod_prolog maps it to `{error, retry}`); redirect budget 1→3;
+relay deadlines anchored at ORIGINAL arrival so park time counts against the caller's 30s
+envelope; the 300ms retransmit stays (quod_link's send is fire-and-forget under flow
+control — see the new deferred.md link-backpressure item — so it remains the loss recovery).
+
+**Regression found by the new burst CT and fixed.** A leader latched into a final-vote camp
+for its own in-flight slot stopped redriving the proposal; with the lossy link send the lost
+frame was never re-sent and a burst wedged with zero support votes. The Δ path now always
+redrives after the camp decision (`latched_leader_still_redrives_proposal_test` pins it).
+
+**Rolling-upgrade caveat.** Old nodes drop `{error, stale_seq}` relay results (their
+`valid_result` rejects the atom), degrading that race to a ~30s timeout-retry during the
+mixed-fleet window — deploy fleet-wide promptly, same class as 0.7.20's readiness frames.
+
+**Gates green** (eunit 415, CT 45 incl. `burst_commits_without_busy` asserting ZERO busy
+under a 40-wide burst, dialyzer, xref). Self-review only past the design stage — the
+independent review agents died on a spend cap; findings applied: relayed-path oversize gate,
+invariant-test coverage for all four park causes, size-accounting unified
+(`signed_size`/`item_bytes`), stale comments and a dead TEST export removed. Uncommitted;
+next = commit + 0.7.26 + the before/after load measurement.
+
+---
+
 ## 2026-07-22 — 0.7.24 load/chaos validation and harness accounting repair
 
 **Full campaign.** A 600-second public-HTTP load run started at slot 6183 and settled every one of the

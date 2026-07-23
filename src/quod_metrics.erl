@@ -57,6 +57,10 @@ Two collection paths:
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
+-ifdef(TEST).
+-export([consensus_stat_keys/0]).
+-endif.
+
 -include("quod_ledger.hrl").
 
 -define(REFRESH_MS, 5000).
@@ -142,7 +146,11 @@ declare(NodeId) ->
     _ = G(quod_consensus_submitted,       "Total change requests handed to this node (only ever goes up)."),
     _ = G(quod_consensus_skips,           "Total times a turn was skipped because that turn's leader did not produce a block in time (only ever goes up)."),
     _ = G(quod_consensus_pending,         "Change requests waiting to be made final right now."),
-    _ = G(quod_consensus_append_busy,     "Total change requests turned away because this node was already busy finishing another one (only ever goes up)."),
+    _ = G(quod_consensus_append_busy,     "Total change requests turned away as overloaded: the bounded waiting line was full, or a request waited past its cutoff during a stall. Requests that merely arrive at a busy moment now wait in line instead of being turned away, so any sustained increase here is an overload or a stalled cluster and deserves an alert (only ever goes up)."),
+    _ = G(quod_consensus_ingress_queued,  "Change requests waiting in this node's ingress line right now. They drain into the very next block; a value that stays high means blocks are sealing slower than requests arrive."),
+    _ = G(quod_consensus_ingress_overflow, "Total requests refused because the bounded ingress line (or one author's fair share of it) was full (only ever goes up)."),
+    _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff — a visible sign of a stall (only ever goes up)."),
+    _ = G(quod_consensus_ingress_forwarded, "Total waiting requests handed onward to the next leader when the block-building role rotated (only ever goes up)."),
     _ = G(quod_consensus_append_redirect, "Total change requests that reached a node that was not the current leader and were pointed to the right one (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
     _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
@@ -317,11 +325,17 @@ remove_runtime_metrics(Ns) ->
 
 refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of
+        %% This pattern MUST stay a subset of quod_simplex:stats_map/1 — a key listed
+        %% here but absent there silently skips EVERY consensus gauge (falls through to
+        %% the `_ -> ok` arm). consensus_stat_keys/0 mirrors this list; the lockstep
+        %% eunit in quod_simplex_tests pins the two together.
         #{slot := Sl, committed := CI, approved := AV, pipeline_gap := PG,
           last_applied := LA, committee_size := CS,
           appends := AP, proposals := PR, batched_txs := BT,
           commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, membership_rejects := MR,
+          ingress_queued := IQ, ingress_overflow := IO,
+          ingress_expired := IE, ingress_forwarded := IF,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
           progress_quorum_ready := PQ, progress_timeouts := PT,
           quorum_pauses := QP, head_support_votes := HSV, head_commit_votes := HCV,
@@ -344,6 +358,10 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_skips,           SK),
             _ = S(quod_consensus_pending,         PE),
             _ = S(quod_consensus_append_busy,     RB),
+            _ = S(quod_consensus_ingress_queued,  IQ),
+            _ = S(quod_consensus_ingress_overflow, IO),
+            _ = S(quod_consensus_ingress_expired, IE),
+            _ = S(quod_consensus_ingress_forwarded, IF),
             _ = S(quod_consensus_append_redirect, RR),
             _ = S(quod_consensus_append_bad,      RD),
             _ = S(quod_consensus_membership_rejects, MR),
@@ -462,3 +480,18 @@ label(Ns) when is_binary(Ns) ->
         B when is_binary(B) -> B;
         _                   -> base64:encode(Ns)
     end.
+
+-ifdef(TEST).
+%% EXACTLY the keys refresh_log_ns/1's map pattern requires of quod_simplex:stats_map/1.
+%% The lockstep eunit (quod_simplex_tests) asserts every one exists in stats_map — a key
+%% added to the pattern without the stat would otherwise silently zero ALL consensus gauges.
+consensus_stat_keys() ->
+    [slot, committed, approved, pipeline_gap, last_applied, committee_size,
+     appends, proposals, batched_txs, commits, submitted, skips, pending,
+     r_busy, r_redirect, r_bad, membership_rejects,
+     ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
+     redrives, progress_slot, progress_phase_code, progress_quorum_ready,
+     progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,
+     head_complaint_votes, head_complaint_signed, missing_certified_blocks,
+     weak_cert_waits, is_validator, syncing, ahead_gap].
+-endif.

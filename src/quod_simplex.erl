@@ -35,6 +35,16 @@ finalizes its approved parent; catch-up persists and verifies that implicit proo
 transactions are singleton barriers, so a voting-set change is explicitly committed before
 the next proposal opens.
 
+Ingress is **park, don't reject**: an append that cannot enter a block right now (pipeline
+blocked, batch out of capacity, a membership change waiting for the pipeline to quiesce, or
+this slot's proposal already sealed under another leader) waits in a bounded FIFO ingress
+queue and drains — event-driven, from the universal transition hook — the moment the
+pipeline opens: into this node's next batch (a multi-item drain seals immediately: block
+N+1 carries what arrived during block N), or forwarded once to the next rotated leader.
+`{error, busy}` therefore only means queue overflow or the ingress TTL cutting a genuinely
+stalled item loose — an alertable overload signal, not routine backpressure — and the relay
+retransmit timer is demoted to a lost-frame backstop (the terminal reply is the event).
+
 One explicit `head_progress` state watches the oldest non-final slot (`committed+1`) through
 `awaiting_proposal`, `awaiting_notarization`, and `awaiting_commit`. Notarization changes phase; it
 does not cancel the watchdog. Complaint signing pauses while fewer than a certificate quorum have
@@ -109,6 +119,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_round/2, test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
+         test_append/3, test_relayed_append/3, test_ingress/1, test_drain/1,
+         test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
+         proposal_visible/2, reseat_engine/2,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -682,8 +695,23 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(BATCH_ENVELOPE_BYTES, 6).               %% exact singleton-list ETF overhead beyond term_to_binary(Tx)
 -define(BATCH_MS, 2).                           %% short micro-batch window; configurable with simplex_batch_ms
 -define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
--define(RELAY_RETRY_MS, 300).                    %% exact-request redrive; receiver deduplicates by id
+-define(RELAY_RETRY_MS, 300).                    %% lost-frame backstop: the terminal reply is the normal
+                                                  %% resolution now that holders PARK instead of rejecting;
+                                                  %% this cadence only recovers frames the fire-and-forget
+                                                  %% link send dropped (quod_link ignores flow-control
+                                                  %% pressure by design), so it must stay tight until links
+                                                  %% grow backpressure signalling (doc/deferred.md)
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
+-define(MAX_INGRESS_TXS, 512).                    %% ingress park queue: shared item bound (2x a full block)
+-define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).  %% ingress park queue: shared byte bound
+-define(MAX_INGRESS_PER_AUTHOR, 64).              %% fairness: one authenticated member cannot capture the
+                                                  %% FIFO by flooding — its overflow rejects, others park
+-define(INGRESS_TTL_MS, 5000).                    %% parked-item cutoff: above Δ×(1+?MAX_QUORUM_REARMS) so a
+                                                  %% legitimately quorum-flapping slot can still resolve,
+                                                  %% far below the ~30s prolog park TTL — a REAL stall must
+                                                  %% fail visibly, the queue never hides a wedge
+-define(SIGNED_GROWTH_BYTES, 96).                 %% capacity headroom for an unsigned local item growing at
+                                                  %% sign time (64B Ed25519 sig + author_seq + ETF framing)
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
 -define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
 -define(READINESS_MS, 1000).                      %% readiness refresh; at or below the default Delta
@@ -722,7 +750,21 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                         frame :: binary(),
                         deadline :: integer(),
                         next_retry :: integer(),
-                        redirects = 0 :: 0..1}).
+                        redirects = 0 :: 0..3}).   %% per-slot rotation legitimately chases a few
+                                                   %% hops; the bound still caps Byzantine ping-pong
+
+%% One parked append: the FIFO "take a ticket" entry that replaced the reject-busy/retry
+%% loop. `origin` fixes the trust shape (`local` = this node's own still-UNSIGNED
+%% transaction — signed exactly once, on the pass that leaves the queue; `relayed` = an
+%% author-signed submission verify_and_accept_relay already admitted). `enqueued_at` is
+%% BOTH the TTL clock and the relay-deadline anchor: queue time counts against the
+%% caller's end-to-end budget, so consensus still gives up no later than ~1s after the
+%% prolog park TTL, exactly as before parking existed.
+-record(ingress_item, {origin :: local | relayed,
+                       waiter :: #waiter{},
+                       change :: #transaction{},
+                       bytes  :: pos_integer(),     %% batch-capacity accounting, incl. sign growth
+                       enqueued_at :: integer()}).  %% mono ms
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -764,6 +806,16 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             block_requests = #{} :: #{{slot(), binary()} =>
                                        {non_neg_integer(), integer()}},
                                                      %% certified block anti-entropy: attempt + next retry time
+            %% Ingress park queue (park, don't reject): appends that cannot enter the batch RIGHT NOW
+            %% wait here and drain event-driven from keep_progress the moment the pipeline opens. FIFO is
+            %% strict — live arrivals join the tail whenever the queue is non-empty, so a parked head
+            %% (e.g. a membership change waiting for the pipeline to quiesce) is never starved by
+            %% queue-jumping. Bounded three ways (items, bytes, per-author); overflow and TTL expiry are
+            %% the only remaining `busy` sources, making `busy` an alertable overload/stall signal.
+            ingress = queue:new() :: queue:queue(#ingress_item{}),
+            ingress_count = 0 :: non_neg_integer(),
+            ingress_bytes = 0 :: non_neg_integer(),
+            ingress_authors = #{} :: #{node_id() => pos_integer()},
             relay_timeout_ms = 31000 :: pos_integer(),
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             next_author_seq = 1 :: pos_integer(),
@@ -784,9 +836,15 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             commits = 0  :: non_neg_integer(),
             submitted  = 0 :: non_neg_integer(),   %% every append attempt (metrics: submit rate)
             skips      = 0 :: non_neg_integer(),   %% complaint-skipped (noop) slots
-            r_busy     = 0 :: non_neg_integer(),   %% append rejected: batch/pipeline capacity unavailable
+            r_busy     = 0 :: non_neg_integer(),   %% appends REFUSED busy. Since the park queue landed this
+                                                   %% counts only ingress overflow + TTL expiry — an
+                                                   %% ALERTABLE overload/stall signal, no longer routine
+                                                   %% backpressure (dashboards updated to match)
             r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
+            ingress_overflow  = 0 :: non_neg_integer(),  %% parks refused: queue item/byte/per-author bound hit
+            ingress_expired   = 0 :: non_neg_integer(),  %% parked items cut by ?INGRESS_TTL_MS (stalled head)
+            ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward (relay or redirect)
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
@@ -838,6 +896,20 @@ test_state_set(peer_readiness, V, S) -> S#s{peer_readiness = V};
 test_state_set(outbox, V, S)     -> S#s{outbox = V};
 test_state_set(dialing, V, S)    -> S#s{dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
+test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
+    S#s{local_proposals =
+            (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
+%% Plant parked ingress items: [{Origin, From, Change, EnqueuedAtMonoMs}] — waiter
+%% envelopes, byte accounting, and per-author counts are derived exactly as park_ingress
+%% derives them, so drain/expiry tests exercise the real bookkeeping.
+test_state_set(ingress, Items, S) ->
+    lists:foldl(
+      fun({Origin, From, Change, At}, Acc) ->
+              Waiter = new_waiter(From, otel_ctx:new(), Change, Acc#s.ns,
+                                  Origin =:= relayed),
+              {Acc1, []} = park_ingress(entry, Origin, Waiter, Change, At, Acc),
+              Acc1
+      end, S, Items);
 test_state_set(rounds, V, S)     -> S#s{rounds = V};
 test_state_set(collecting, {Slot, Froms}, S) ->   %% a not-yet-sealed batch parking these callers
     S#s{collecting = #batch{slot = Slot, parent = Slot - 1,
@@ -868,6 +940,24 @@ test_redrive_head(Slot, Hash, S) ->
     redrive_head(Slot, S#s{local_proposals = #{Slot => Local}}).
 test_block_requests(#s{block_requests = Requests}) -> Requests.
 test_vote_journal(#s{vote_journal = Journal}) -> Journal.
+%% Ingress-queue test surface: raw-From entry wrappers (the waiter/trace envelope is
+%% built here exactly as the running/3 handlers build it), the queue view, and
+%% clock-controlled drain/expiry.
+test_append(From, Change, S) ->
+    handle_append(new_waiter(From, otel_ctx:new(), Change, S#s.ns, false), Change, S).
+test_relayed_append({relay, _Peer, _ReqId} = ReplyTo, Change, S) ->
+    handle_relayed_append(
+      new_waiter(ReplyTo, otel_ctx:new(), Change, S#s.ns, true), Change, S).
+test_ingress(#s{ingress = Q, ingress_count = C, ingress_bytes = B,
+                ingress_authors = Authors}) ->
+    {C, B, Authors,
+     [{O, Ch#transaction.tx_id, T}
+      || #ingress_item{origin = O, change = Ch, enqueued_at = T} <- queue:to_list(Q)]}.
+test_drain(S) -> drain_ingress(S).
+test_expire_ingress(S) -> expire_ingress(S).
+test_relay_pending(#s{relay_pending = Pending}) ->
+    [{Target, Deadline}
+     || #relay_pending{target = Target, deadline = Deadline} <- maps:values(Pending)].
 -endif.
 
 callback_mode() -> [state_functions].
@@ -880,18 +970,24 @@ start_link(Ns, Config) ->
     gen_statem:start_link(quod_reg:via({quod_simplex, Ns}), ?MODULE, {Ns, Config}, []).
 
 -doc """
-Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is its own fsync. The error
-arms are the stable consensus-append contract `quod_prolog` handles: `busy` (a proposal already in
-flight), `not_in_charge` (this node isn't the slot's leader — a redirect hint, or `unavailable` if this
-process is unreachable), and `skipped` (a multi-node committee complaint-skipped our proposed slot →
-retry). At N=1 only the sole-validator commit path runs, so an append just returns `{ok, Slot}`.
+Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is its own fsync. A change
+that cannot enter a block RIGHT NOW parks in the bounded ingress queue and resolves on the pipeline's
+own events, so the error arms of the stable consensus-append contract `quod_prolog` handles are now:
+`busy` (queue OVERFLOW, or a parked change cut by the ingress TTL during a genuine stall — an overload
+signal, no longer routine backpressure), `stale_seq` (the change lost a routing race and its signed
+sequence fell below the committed floor — retry), `not_in_charge` (this node isn't the slot's leader —
+a redirect hint, or `unavailable` if this process is unreachable), and `skipped` (a multi-node committee
+complaint-skipped our proposed slot → retry). At N=1 only the sole-validator commit path runs, so an
+append just returns `{ok, Slot}`. The call timeout sits above the ingress TTL so a parked direct append
+cannot race its own expiry reply.
 """.
 -spec append(binary(), #transaction{}) ->
         {ok, slot()} | {error, busy} | {error, skipped} | {error, bad_change}
+      | {error, stale_seq}
       | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}),
-                        {append, Change, quod_trace:context()}, 5000)
+                        {append, Change, quod_trace:context()}, 8000)
     catch exit:_ -> {error, not_in_charge, unavailable} end.
 
 -doc "Ask the consensus process to (re)drive committed blocks into a freshly-started `quod_prolog`.".
@@ -1144,7 +1240,8 @@ running({timeout, progress}, {progress_timeout, V}, S0) ->
 %% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
 running({timeout, tick}, tick, S0) ->
     S1 = maybe_arm_sync(
-           redrive_relays(redrive_inflight(redial_pending(sweep_stale_dials(S0))))),
+           redrive_relays(redrive_inflight(redial_pending(
+             sweep_stale_dials(expire_ingress(S0)))))),
     keep_progress(S0, S1, [tick_timeout()]);
 %% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
@@ -1218,11 +1315,32 @@ terminate(_Reason, _State, #s{chan = Chan, store = Store, vote_journal = Journal
 %% parked callers until commit/skip; the next slot may open as soon as that block is
 %% notarized, even though the durable committed frontier has not caught up yet.
 handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
-              S = #s{self = Self, ns = Ns}) ->
+              S = #s{ns = Ns}) ->
     _ = quod_trace:add_event(
           TraceCtx, <<"consensus.append_received">>,
           #{'quod.namespace' => Ns,
             'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id)}),
+    append_route(entry, local, From, Change, quod_time:mono_ms(), S).
+
+handle_relayed_append(Waiter, Change, S) ->
+    append_route(entry, relayed, Waiter, Change, quod_time:mono_ms(), S).
+
+%% The ONE routing decision tree for consensus ingress. Live arrivals (`entry`) and the
+%% park-queue drain (`drain`) both come through here, so admission and routing can never
+%% fork into two drifting paths. `Origin` fixes the trust shape (see `#ingress_item{}`);
+%% `Anchor` is the caller's mono-ms arrival time — it stamps a park and anchors a relay
+%% deadline, so queue time always counts against the end-to-end budget.
+%%
+%% Park-don't-reject: anything that cannot be routed terminally RIGHT NOW parks —
+%% pipeline blocked, batch out of capacity, a membership change waiting for the
+%% pipeline to quiesce (its head-of-line wait is what DRAINS the pipeline to
+%% `approved == committed`, since live arrivals behind it also park), or, for a local
+%% item, the origin-park case: the current slot's proposal is already visible, so a
+%% relay now would only park remotely and bounce home on rotation — waiting here turns
+%% the 3-hop bounce into one hop to the NEXT leader. A `drain` pass never parks (the
+%% drain pre-check mirrors this tree); if state shifts mid-drain the item returns to
+%% the queue HEAD, preserving FIFO, and the drain loop stops on the lack of progress.
+append_route(Pass, local, From, Change, Anchor, S = #s{self = Self}) ->
     case may_lead(S) of
         false ->
             redirect_append(From, none, S);
@@ -1231,50 +1349,150 @@ handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
                 false ->
                     reject_append(From, bad_change, S);
                 true ->
-                    case proposal_slot(S) of
-                        blocked ->
-                            reject_append(From, busy, S);
-                        {ok, Next} ->
-                            case sign_local_change(Change, S) of
-                                {error, _} ->
-                                    reject_append(From, bad_change, S);
-                                {ok, SignedChange, S1} ->
-                                    case leader(Next, active_validators(S1)) of
-                                        Self   -> collect_append(From, SignedChange, Next, S1);
-                                        Leader -> relay_append(
-                                                    From, Leader, SignedChange,
-                                                    watch_requested(Next, S1))
-                                    end
-                            end
+                    case oversized(Change) of
+                        true  -> reject_append(From, too_large, S);
+                        false -> route_local(Pass, From, Change, Anchor, Self, S)
                     end
             end
-    end.
-
-handle_relayed_append(Waiter, Change, S = #s{self = Self}) ->
+    end;
+append_route(Pass, relayed, Waiter, Change, Anchor, S = #s{self = Self}) ->
     case ingress_change_acceptable(Change, S) of
         false ->
             reject_append(Waiter, bad_change, S);
         true ->
-            case may_lead(S) of
-                false ->
-                    redirect_append(Waiter, none, S);
+            case oversized(Change) of
                 true ->
-                    case proposal_slot(S) of
-                        blocked ->
-                            reject_append(Waiter, busy, S);
-                        {ok, Next} ->
-                            case leader(Next, active_validators(S)) of
-                                Self   -> collect_append(Waiter, Change, Next, S);
-                                Leader -> redirect_append(
-                                            Waiter, Leader,
-                                            watch_requested(Next, S))
-                            end
+                    %% reachable only at the envelope edge of the relay's own byte cap,
+                    %% but the gate and admissible_now's assumption must hold for BOTH
+                    %% origins, and the caller deserves too_large, not a doomed batch
+                    reject_append(Waiter, too_large, S);
+                false ->
+                    relayed_route(Pass, Waiter, Change, Anchor, Self, S)
+            end
+    end.
+
+relayed_route(Pass, Waiter, Change, Anchor, Self, S) ->
+    case may_lead(S) of
+        false ->
+            redirect_append(Waiter, none, S);
+        true ->
+            case proposal_slot(S) of
+                blocked ->
+                    park_ingress(Pass, relayed, Waiter, Change, Anchor, S);
+                {ok, Next} ->
+                    case leader(Next, active_validators(S)) of
+                        Self ->
+                            case admissible_for(Pass, Change, S) of
+                                true  -> collect_append(Waiter, Change, Next, S);
+                                false -> park_ingress(Pass, relayed, Waiter,
+                                                      Change, Anchor, S)
+                            end;
+                        Leader ->
+                            redirect_append(
+                              Waiter, Leader,
+                              watch_requested(Next, count_forwarded(Pass, S)))
                     end
             end
     end.
 
+route_local(Pass, From, Change, Anchor, Self, S) ->
+    case proposal_slot(S) of
+        blocked ->
+            park_ingress(Pass, local, From, Change, Anchor, S);
+        {ok, Next} ->
+            case leader(Next, active_validators(S)) of
+                Self ->
+                    case admissible_for(Pass, Change, S) of
+                        true  -> sign_then(From, Change, S,
+                                           fun(F, Signed, S1) ->
+                                               collect_append(F, Signed, Next, S1)
+                                           end);
+                        false -> park_ingress(Pass, local, From, Change, Anchor, S)
+                    end;
+                Leader ->
+                    case proposal_visible(Next, S) of
+                        true ->
+                            %% origin-park: Next's proposal is already sealed, a relay
+                            %% would arrive too late and bounce; wait for the rotation.
+                            park_ingress(Pass, local, From, Change, Anchor, S);
+                        false ->
+                            sign_then(From, Change, S,
+                                      fun(F, Signed, S1) ->
+                                          relay_append(
+                                            F, Leader, Signed, Anchor,
+                                            watch_requested(Next, count_forwarded(Pass, S1)))
+                                      end)
+                    end
+            end
+    end.
+
+%% Sign exactly once, on the pass that leaves the queue for a batch or the wire.
+sign_then(From, Change, S, Then) ->
+    case sign_local_change(Change, S) of
+        {error, _}       -> reject_append(From, bad_change, S);
+        {ok, Signed, S1} -> Then(From, Signed, S1)
+    end.
+
+count_forwarded(drain, S) -> S#s{ingress_forwarded = S#s.ingress_forwarded + 1};
+count_forwarded(entry, S) -> S.
+
+%% ONE size accounting for a change entering consensus. `signed_size` = encoded bytes
+%% plus the sign-time growth headroom of a still-unsigned local item; `item_bytes` adds
+%% the once-per-block envelope. The oversize gate, the park-queue byte bound, and batch
+%% admission (which adds to a batch already carrying the envelope) all read these, so
+%% they can never disagree about how big a change is.
+signed_size(Change) ->
+    encoded_change_size(Change) + signing_growth(Change).
+
+item_bytes(Change) ->
+    ?BATCH_ENVELOPE_BYTES + signed_size(Change).
+
+%% A change that cannot fit even an EMPTY block can never be admitted — terminal, never parked.
+oversized(Change) ->
+    item_bytes(Change) > ?MAX_BLOCK_BYTES.
+
+%% Would this change enter the batch RIGHT NOW? The single admission predicate shared by
+%% live entry and the drain pre-check (so "can it go in" has exactly one definition).
+%% Capacity and membership gating only — sequence/duplicate problems are CONTENT verdicts
+%% (`stale_seq` / `bad_change`) decided in collect_append, not reasons to wait. Strict
+%% FIFO: a non-empty park queue makes every live arrival inadmissible (join the tail),
+%% so the queue head — possibly a membership change draining the pipeline — is never
+%% starved by queue-jumping.
+admissible_now(Change, S = #s{collecting = Collecting}) ->
+    S#s.ingress_count =:= 0
+        andalso membership_can_enter(Change, S)
+        andalso case Collecting of
+                    none ->
+                        true;   %% oversized/1 already rejected what can't fit alone
+                    #batch{items_rev = Items, bytes = Bytes} ->
+                        not is_membership_change(Change)   %% membership seals alone
+                            andalso length(Items) < ?MAX_BATCH_TXS
+                            andalso Bytes + signed_size(Change) =< ?MAX_BLOCK_BYTES
+                end.
+
+%% The drain bypasses the queue-nonempty guard: it IS the queue. The route consults
+%% this Pass-aware form so a drained item can never re-park behind its own queue-mates
+%% (the no-re-park invariant — the entry guard would otherwise see the still-non-empty
+%% queue and bounce the head straight back).
+admissible_for(entry, Change, S) -> admissible_now(Change, S);
+admissible_for(drain, Change, S) -> drain_admissible(Change, S).
+
+drain_admissible(Change, S) -> admissible_now(Change, S#s{ingress_count = 0}).
+
+signing_growth(#transaction{sig = none}) -> ?SIGNED_GROWTH_BYTES;
+signing_growth(#transaction{})           -> 0.
+
+%% Is the current slot's proposal already out, as seen from this node? True once we
+%% supported it or it notarized — O(1) on existing latches. If the proposal exists but
+%% has not reached us yet, relaying is still right: it joins the leader's open batch.
+proposal_visible(Next, S = #s{eng = #eng{tree = Tree}}) ->
+    (round_state(Next, S))#round.supporting =/= none
+        orelse maps:is_key(Next, Tree);
+proposal_visible(_Next, _S) ->
+    false.
+
 %% The local append API accepts only a structurally valid unsigned transaction
-%% authored by this node. Sign after the cheap rejection/busy checks but before
+%% authored by this node. Sign after the cheap rejection/park routing but before
 %% byte accounting, batching, or relay, so no unsigned live transaction crosses
 %% the consensus boundary.
 local_change_acceptable(
@@ -1299,8 +1517,157 @@ reject_append(From, bad_change, S) ->
     reply_now(From, {error, bad_change}, S#s{r_bad = S#s.r_bad + 1});
 reject_append(From, too_large, S) ->
     reply_now(From, {error, too_large}, S#s{r_bad = S#s.r_bad + 1});
+reject_append(From, stale_seq, S) ->   %% content lost a routing race; retryable by contract
+    reply_now(From, {error, stale_seq}, S#s{r_bad = S#s.r_bad + 1});
 reject_append(From, busy, S) ->
     reply_now(From, {error, busy}, S#s{r_busy = S#s.r_busy + 1}).
+
+%%%===================================================================
+%%% ingress park queue — take a ticket, drain on the pipeline's own events
+%%%===================================================================
+
+%% Park one append (FIFO tail on `entry`; back to the HEAD on the never-expected `drain`
+%% re-park, preserving order and stopping the drain loop). Overflow of any bound is the
+%% real backpressure boundary; together with the TTL sweep below these are the only
+%% remaining live sources of `{error, busy}`.
+park_ingress(Pass, Origin, Waiter, Change, Anchor,
+             S = #s{ingress_authors = Authors}) ->
+    Author = Change#transaction.author,
+    Bytes = item_bytes(Change),
+    PerAuthor = maps:get(Author, Authors, 0),
+    case S#s.ingress_count >= ?MAX_INGRESS_TXS
+         orelse S#s.ingress_bytes + Bytes > ?MAX_INGRESS_BYTES
+         orelse PerAuthor >= ?MAX_INGRESS_PER_AUTHOR of
+        true ->
+            {S1, Actions} = reject_append(Waiter, busy, S),
+            {S1#s{ingress_overflow = S1#s.ingress_overflow + 1}, Actions};
+        false ->
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(Waiter), <<"consensus.parked">>,
+                  #{'quod.ingress.depth' => S#s.ingress_count + 1}),
+            Item = #ingress_item{origin = Origin, waiter = Waiter, change = Change,
+                                 bytes = Bytes, enqueued_at = Anchor},
+            In = case Pass of
+                     entry -> queue:in(Item, S#s.ingress);
+                     drain -> queue:in_r(Item, S#s.ingress)
+                 end,
+            {S#s{ingress = In,
+                 ingress_count = S#s.ingress_count + 1,
+                 ingress_bytes = S#s.ingress_bytes + Bytes,
+                 ingress_authors = Authors#{Author => PerAuthor + 1}}, []}
+    end.
+
+ingress_take_head(S = #s{ingress = Q, ingress_authors = Authors}) ->
+    {{value, #ingress_item{change = Change, bytes = Bytes}}, Q1} = queue:out(Q),
+    Author = Change#transaction.author,
+    Authors1 = case maps:get(Author, Authors) of
+                   1 -> maps:remove(Author, Authors);
+                   N -> Authors#{Author => N - 1}
+               end,
+    S#s{ingress = Q1,
+        ingress_count = S#s.ingress_count - 1,
+        ingress_bytes = S#s.ingress_bytes - Bytes,
+        ingress_authors = Authors1}.
+
+%% Event-driven drain, LEVEL-triggered from keep_progress (the slot-6180 lesson: an
+%% edge-triggered hook that can miss an edge eventually does; an O(1)-guarded level
+%% check on the universal transition seam cannot). Strict FIFO: only the head is ever
+%% considered; an inadmissible head stops the loop — deliberately, since a waiting
+%% membership change must drain the pipeline, not be overtaken. The pre-check mirrors
+%% `append_route`, so a dispatched item never re-parks; if state shifts underneath
+%% anyway, the head-re-park + progress check below stops the loop instead of spinning.
+drain_ingress(S = #s{ingress_count = 0}) -> {S, []};
+drain_ingress(S) -> drain_loop(S, [], 0).
+
+drain_loop(S = #s{ingress_count = 0}, Acc, N) ->
+    seal_drained(S, Acc, N);
+drain_loop(S, Acc, N) ->
+    {value, Item} = queue:peek(S#s.ingress),
+    case drain_dispatchable(Item, S) of
+        false ->
+            seal_drained(S, Acc, N);
+        true ->
+            S1 = ingress_take_head(S),
+            Left = S1#s.ingress_count,
+            #ingress_item{origin = Origin, waiter = Waiter,
+                          change = Change, enqueued_at = Anchor} = Item,
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(Waiter), <<"consensus.drained">>,
+                  #{'quod.ingress.depth' => Left}),
+            {S2, Actions} = append_route(drain, Origin, Waiter, Change, Anchor, S1),
+            case S2#s.ingress_count > Left of
+                true  -> seal_drained(S2, Acc ++ Actions, N);   %% re-parked: stop, no spin
+                false -> drain_loop(S2, Acc ++ Actions, N + 1)
+            end
+    end.
+
+%% Route preview for the queue head — terminal routes drain; a would-park head waits.
+drain_dispatchable(#ingress_item{origin = Origin, change = Change},
+                   S = #s{self = Self}) ->
+    case may_lead(S) of
+        false -> true;                                     %% will redirect — terminal
+        true ->
+            Acceptable = case Origin of
+                             local   -> local_change_acceptable(Change, S);
+                             relayed -> ingress_change_acceptable(Change, S)
+                         end,
+            case Acceptable of
+                false -> true;                             %% will reject — terminal
+                true ->
+                    case proposal_slot(S) of
+                        blocked -> false;
+                        {ok, Next} ->
+                            case leader(Next, active_validators(S)) of
+                                Self -> drain_admissible(Change, S);
+                                _    -> Origin =:= relayed  %% relayed: redirect hint
+                                        orelse not proposal_visible(Next, S)
+                            end
+                    end
+            end
+    end.
+
+%% A multi-item drain seals its batch NOW: the backlog already waited a full flight, a
+%% 2ms window would only re-add latency (block N+1 = what arrived during block N — the
+%% natural batch size). A SINGLETON drain keeps the normal micro-batch window so the
+%% post-rotation re-send wave can join it (its arm action is already in Acc).
+seal_drained(S = #s{collecting = #batch{slot = Slot}}, Acc, N) when N >= 2 ->
+    {flush_batch(Slot, S), Acc ++ [{{timeout, batch}, cancel}]};
+seal_drained(S, Acc, _N) ->
+    {S, Acc}.
+
+%% TTL sweep, on the consensus tick. FIFO + constant TTL make expiry order = queue
+%% order, so this peeks the HEAD only — O(expired), free when nothing expired. It walks
+%% the ingress queue EXCLUSIVELY: every other waiter container (collecting batch,
+%% local_proposals, relay_pending) has its own lifecycle, and expiring any of them here
+%% would double-reply. An expiring stall must fail visibly: `busy` to the caller.
+expire_ingress(S = #s{ingress_count = 0}) -> S;
+expire_ingress(S) ->
+    expire_ingress(quod_time:mono_ms() - ?INGRESS_TTL_MS, S).
+
+expire_ingress(Cutoff, S = #s{ingress_count = C}) when C > 0 ->
+    case queue:peek(S#s.ingress) of
+        {value, #ingress_item{enqueued_at = T, waiter = Waiter}} when T =< Cutoff ->
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(Waiter), <<"consensus.expired">>, #{}),
+            S1 = reply_waiter(Waiter, {error, busy}, ingress_take_head(S)),
+            expire_ingress(Cutoff, S1#s{ingress_expired = S1#s.ingress_expired + 1,
+                                        r_busy = S1#s.r_busy + 1});
+        _ ->
+            S
+    end;
+expire_ingress(_Cutoff, S) ->
+    S.
+
+%% Recovery re-seat / shutdown of the volatile window: parked callers are nacked
+%% retryably, exactly like a discarded collecting batch.
+nack_ingress(S = #s{ingress_count = 0}) -> S;
+nack_ingress(S) ->
+    S1 = lists:foldl(
+           fun(#ingress_item{waiter = Waiter}, Acc) ->
+                   reply_waiter(Waiter, {error, skipped}, Acc)
+           end, S, queue:to_list(S#s.ingress)),
+    S1#s{ingress = queue:new(), ingress_count = 0,
+         ingress_bytes = 0, ingress_authors = #{}}.
 
 redirect_append(From, Leader, S) ->
     reply_now(From, {error, not_in_charge, Leader},
@@ -1314,7 +1681,10 @@ reply_now(Waiter = #waiter{reply_to = From}, Reply, S) ->
 reply_now({relay, Peer, ReqId}, Reply, S) ->
     {reply_relay(Peer, ReqId, Reply, S), []}.
 
-relay_append(From, Leader, Change,
+%% `Anchor` = the submission's ORIGINAL arrival time (mono ms): a drained item's park
+%% wait counts against the relay deadline, so consensus still resolves or definitively
+%% fails inside the caller's park-TTL envelope, exactly as before the queue existed.
+relay_append(From, Leader, Change, Anchor,
              S = #s{ns = Ns, relay_pending = Pending,
                     relay_timeout_ms = RelayTimeout}) ->
     case quod_transaction:submission(Ns, Change) of
@@ -1336,12 +1706,11 @@ relay_append(From, Leader, Change,
                     Frame = quod_relay:encode(
                               Ns, {relay_submit, ReqId, Submission,
                                    quod_trace:inject(TraceCtx)}),
-                    Now = quod_time:mono_ms(),
                     Relay = #relay_pending{
                                from = From, target = Leader,
                                frame = Frame,
-                               deadline = Now + RelayTimeout,
-                               next_retry = Now + ?RELAY_RETRY_MS},
+                               deadline = Anchor + RelayTimeout,
+                               next_retry = quod_time:mono_ms() + ?RELAY_RETRY_MS},
                     S1 = send_frame(Leader, Frame, S),
                     {S1#s{relay_pending = Pending#{ReqId => Relay}}, []}
             end
@@ -1367,17 +1736,15 @@ proposal_slot(S = #s{slot = Committed, approved = Approved, collecting = Collect
 live_pipeline_slot(Slot, Committed) ->
     Slot > Committed andalso Slot =< Committed + ?PIPELINE_DEPTH + 1.
 
+%% Capacity and membership gating live in the router (`admissible_now/2` — inadmissible
+%% parks, it no longer rejects), so only CONTENT verdicts remain here: a sequence below
+%% the floor is `stale_seq` (retryable — the write lost a routing race, its content is
+%% fine), a duplicate tx_id is `bad_change` (terminal).
 collect_append(From, Change, Slot, S = #s{collecting = none}) ->
     Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
-    case Bytes =< ?MAX_BLOCK_BYTES
-         andalso membership_can_enter(Change, S)
-         andalso sequence_payload_ok([Change], S) of
-        false when Bytes > ?MAX_BLOCK_BYTES -> reject_append(From, too_large, S);
+    case sequence_payload_ok([Change], S) of
         false ->
-            case sequence_payload_ok([Change], S) of
-                false -> reject_append(From, bad_change, S);
-                true  -> reject_append(From, busy, S)
-            end;
+            reject_append(From, stale_seq, S);
         true ->
             _ = quod_trace:add_event(
                   waiter_trace_ctx(From), <<"consensus.queued">>,
@@ -1393,14 +1760,12 @@ collect_append(From, Change, Slot, S = #s{collecting = none}) ->
 collect_append(From, Change, Slot,
                S = #s{collecting = #batch{slot = Slot, items_rev = Items, bytes = Bytes} = Batch}) ->
     Added = encoded_change_size(Change),
-    Full = length(Items) >= ?MAX_BATCH_TXS orelse Bytes + Added > ?MAX_BLOCK_BYTES,
     Duplicate = lists:any(fun({_From, T}) -> T#transaction.tx_id =:= Change#transaction.tx_id end, Items),
     Candidate = [T || {_Waiter, T} <- lists:reverse([{From, Change} | Items])],
-    SequenceOk = sequence_payload_ok(Candidate, S),
-    case {Duplicate orelse not SequenceOk, is_membership_change(Change) orelse Full} of
-        {true, _} -> reject_append(From, bad_change, S);
-        {false, true} -> reject_append(From, busy, S);
-        {false, false} ->
+    case {Duplicate, sequence_payload_ok(Candidate, S)} of
+        {true, _}      -> reject_append(From, bad_change, S);
+        {false, false} -> reject_append(From, stale_seq, S);
+        {false, true} ->
             _ = quod_trace:add_event(
                   waiter_trace_ctx(From), <<"consensus.queued">>,
                   #{'quod.consensus.slot' => Slot}),
@@ -2143,14 +2508,17 @@ keep_progress(S0, S1, Actions) ->
 keep_progress(S0, S1, Actions, TimerMode) ->
     SReady = settle_readiness(S0, maybe_mark_ready(S1)),
     SRecovered = reconcile_block_requests(SReady),
-    SAdvertised = refresh_readiness(SRecovered),
+    %% Drain BEFORE head reconciliation and the timer diff: a drain-created proposal
+    %% moves head_progress, and the watchdog must be armed against the post-drain head.
+    {SDrained, DrainActions} = drain_ingress(SRecovered),
+    SAdvertised = refresh_readiness(SDrained),
     S2 = reconcile_head_progress(SAdvertised),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);
                        normal -> progress_timer_actions(S0, S2)
                    end,
-    {keep_state, S2, Actions ++ TimerActions}.
+    {keep_state, S2, Actions ++ DrainActions ++ TimerActions}.
 
 %% Readiness is consensus state, so advertise it on the authenticated consensus channel rather than infer
 %% it from socket existence or a separate dissemination process. Capability/height changes go immediately;
@@ -2273,11 +2641,13 @@ on_pre_notarization_timeout(V, S) ->
                     end
             end;
         true  ->
-            S1 = choose_final_vote(V, notarized, S),
-            case (round_state(V, S1))#round.final of
-                none -> redrive_head(V, S1);
-                _    -> S1
-            end
+            %% Camp decision first (amplified evidence may pick the skip), then ALWAYS
+            %% redrive: a leader latched into either camp still owns the only
+            %% authenticated resend of its in-flight proposal, and the lossy
+            %% fire-and-forget link makes the Δ re-fire THE retransmit. Suppressing it
+            %% for a latched leader wedged a burst live: the lost proposal was never
+            %% re-sent, so no follower could ever support it.
+            redrive_head(V, choose_final_vote(V, notarized, S))
     end.
 
 %% A recovering voter can ingest a valid leader proposal while signing is disabled. The engine retains the
@@ -3213,12 +3583,15 @@ handle_relay_result(Peer, ReqId, Result,
             case Result of
                 {error, not_in_charge, Hint}
                   when is_binary(Hint), Hint =/= Peer, Now < Deadline,
-                       Redirects =:= 0 ->
+                       Redirects < 3 ->
+                    %% Per-slot rotation legitimately chases a few hops (a parked slot
+                    %% resolves under the NEXT leader); the budget still bounds a
+                    %% Byzantine redirect ping-pong. Hint-paced (immediate), not timer-paced.
                     case lists:member(Hint, Validators) of
                         true ->
                             Relay1 = Relay#relay_pending{
                                        target = Hint,
-                                       redirects = 1,
+                                       redirects = Redirects + 1,
                                        next_retry = Now + ?RELAY_RETRY_MS},
                             S1 = send_frame(Hint, Frame, S),
                             S1#s{relay_pending =
@@ -3886,7 +4259,7 @@ reseat_engine(NewHead, S) ->
 %% Its fresh engine cannot safely retain proposals or votes from the old base.
 nack_inflight(S0 = #s{local_proposals = Local}) ->
     S1 = lists:foldl(fun nack_local/2, S0, maps:keys(Local)),
-    nack_collecting(S1).
+    nack_collecting(nack_ingress(S1)).
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
@@ -4115,6 +4488,10 @@ stats_map(S) ->
       submitted => S#s.submitted, skips => S#s.skips, pending => pending_count(S),
       requested_slot => case S#s.requested_slot of none -> 0; Requested -> Requested end,
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
+      ingress_queued => S#s.ingress_count,
+      ingress_overflow => S#s.ingress_overflow,
+      ingress_expired => S#s.ingress_expired,
+      ingress_forwarded => S#s.ingress_forwarded,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       progress_slot => ProgressSlot,
       progress_phase_code => progress_phase_number(ProgressPhase),

@@ -848,6 +848,11 @@ append_result(Tx, {error, not_in_charge, Hint}, S) ->
     reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
 append_result(Tx, {error, skipped}, S) ->
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
+%% The signed sequence fell below the committed floor because the change lost a routing
+%% race (multi-hop relay chases under leader rotation). The content is fine — a retry
+%% re-proves and re-signs with a fresh sequence, so surface it retryably, never terminal.
+append_result(Tx, {error, stale_seq}, S) ->
+    reject_parked(Tx, {error, retry}, request_completed(Tx, S));
 append_result(Tx, {error, Reason}, S) ->
     reject_parked(Tx, {error, Reason}, request_completed(Tx, S));
 append_result(Tx, Other, S) ->

@@ -143,11 +143,17 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
         {data, Bin, _Fin} ->
             loop(loop_msgs(Bin, S));
         {send, Payload} ->
-            %% Ignore the return: it includes TRANSIENT backpressure ({flow_control_blocked,
-            %% _}, send_queue_full) that must NOT tear the link down — doing so churns links
-            %% under load. A genuinely dead stream/connection kills this (linked) process via
-            %% quod_conn, which is the real disconnect signal.
-            _ = quic:send_data(Conn, Sid, frame(Payload), false),
+            %% Do not ACT on the return: it includes TRANSIENT backpressure
+            %% ({flow_control_blocked,_}, send_queue_full) that must NOT tear the link
+            %% down — doing so churns links under load. A genuinely dead stream/connection
+            %% kills this (linked) process via quod_conn, which is the real disconnect
+            %% signal. But COUNT every refusal: a dropped frame only exists again once
+            %% some layer's recovery timer repairs it, so the drop rate is the hidden
+            %% pacemaker of consensus latency and must be visible per receiving peer.
+            case quic:send_data(Conn, Sid, frame(Payload), false) of
+                ok              -> ok;
+                {error, Reason} -> quod_metrics:count_link_send_drop(S#s.peer, Reason)
+            end,
             loop(S);
         {send_reliable, From, Ref, Payload, Deadline} ->
             Result = send_until_accepted(Conn, Sid, frame(Payload), Deadline),

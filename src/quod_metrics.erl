@@ -50,12 +50,13 @@ Two collection paths:
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
+| `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 """.
 
 -behaviour(gen_server).
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
-         observe_tx_latency/2]).
+         observe_tx_latency/2, count_link_send_drop/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -227,6 +228,10 @@ declare(NodeId) ->
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
            {labels, [namespace]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_link_send_drops_total},
+           {help, "Total frames this node DISCARDED at the QUIC send gate instead of transmitting, by receiving peer and reason. flow_control means that peer reads too slowly to extend its receive window (an overloaded receiver); queue_full means this node's own connection send queue overflowed. Every drop is later repaired by a recovery timer, so a sustained rate here directly paces consensus latency (only ever goes up)."},
+           {labels, [peer, reason]}, {constant_labels, CL}]),
     ok.
 
 %% Signature checks happen in the consensus and history-validation paths. Metrics
@@ -462,6 +467,31 @@ observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff}) 
     _ = prometheus_histogram:observe(quod_tx_diff_ops, [L], length(Diff)),
     _ = prometheus_counter:inc(quod_tx_committed_total, [L, author_label(Author)]),
     ok.
+
+-doc """
+One frame discarded at the QUIC send gate (`m:quod_link` ignores backpressure by design;
+this makes the ignored return VISIBLE). Called from bare link processes on the send path,
+so — like every observe helper here — an absent metrics process makes it a no-op.
+""".
+-spec count_link_send_drop(binary() | term(), term()) -> ok.
+count_link_send_drop(Peer, Reason) ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_counter:inc(
+                      quod_link_send_drops_total,
+                      [author_label(Peer), drop_reason(Reason)]),
+                ok
+            catch _:_ -> ok
+            end
+    end.
+
+drop_reason({flow_control_blocked, connection})  -> <<"flow_control_conn">>;
+drop_reason({flow_control_blocked, {stream, _}}) -> <<"flow_control_stream">>;
+drop_reason(send_queue_full)                     -> <<"queue_full">>;
+drop_reason(_)                                   -> <<"other">>.
 
 -doc """
 One end-to-end latency sample: a write submitted on THIS node resolved as committed and applied,

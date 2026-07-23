@@ -38,3 +38,30 @@ observe_tx_latency_test() ->
     after
         Placeholder ! stop
     end.
+
+%% The link-send drop counter makes quod_link's deliberately ignored backpressure
+%% returns visible, classified by reason, labelled by the receiving peer.
+count_link_send_drop_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Peer = binary:copy(<<16#ab>>, 32),
+    ok = quod_metrics:count_link_send_drop(Peer, send_queue_full),   %% no process: no-op
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:count_link_send_drop(Peer, {flow_control_blocked, connection}),
+        ok = quod_metrics:count_link_send_drop(Peer, {flow_control_blocked, {stream, 4}}),
+        ok = quod_metrics:count_link_send_drop(Peer, send_queue_full),
+        ok = quod_metrics:count_link_send_drop(Peer, {shutdown, whatever}),
+        Short = quod_identity:short(Peer),
+        ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
+                                                 [Short, <<"flow_control_conn">>])),
+        ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
+                                                 [Short, <<"flow_control_stream">>])),
+        ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
+                                                 [Short, <<"queue_full">>])),
+        ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
+                                                 [Short, <<"other">>]))
+    after
+        Placeholder ! stop
+    end.

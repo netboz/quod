@@ -125,7 +125,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
          test_append/3, test_relayed_append/3, test_ingress/1, test_drain/1,
          test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
-         test_relay_result/4, route/4,
+         test_relay_result/4, test_round_probe/1, route/4,
          proposal_visible/2, reseat_engine/2,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
@@ -869,6 +869,12 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward (relay or redirect)
             ingress_prepositioned = 0 :: non_neg_integer(),  %% relayed items parked AHEAD of this node's
                                                              %% turn to lead (the pre-positioning win path)
+            round_probe = #{} :: #{slot() => {integer(), none | integer()}},
+                                                    %% OWN proposals only: slot => {proposed_at,
+                                                    %% approved_at|none}, mono-ms on THIS node — feeds the
+                                                    %% round-phase histograms that localize where a
+                                                    %% consensus round spends its time; bounded by the
+                                                    %% pipeline depth, pruned in finalize/2
             membership_rejects = 0 :: non_neg_integer(),   %% membership proposals a KB verdict rejected as invalid
             redrives   = 0 :: non_neg_integer(),   %% Δ re-fires that re-broadcast our own in-flight proposal
             progress_timeouts = 0 :: non_neg_integer(), %% oldest-head watchdog expirations
@@ -985,6 +991,7 @@ test_relay_pending(#s{relay_pending = Pending}) ->
             <- maps:to_list(Pending)].
 test_relay_result(Peer, ReqId, Result, S) ->
     handle_relay_result(Peer, ReqId, Result, S).
+test_round_probe(#s{round_probe = Probe}) -> Probe.
 -endif.
 
 callback_mode() -> [state_functions].
@@ -1886,7 +1893,8 @@ propose_batch(Slot, Parent, Items, Payload, S) ->
     S1 = S#s{collecting = none,
              local_proposals = (S#s.local_proposals)#{Slot => Local},
              proposals = S#s.proposals + 1,
-             batched_txs = S#s.batched_txs + length(Payload)},
+             batched_txs = S#s.batched_txs + length(Payload),
+             round_probe = (S#s.round_probe)#{Slot => {quod_time:mono_ms(), none}}},
     S2 = broadcast({propose, Block}, S1),
     S3 = engine_step([{block, BH, Block}], S2),
     watch_proposal(Slot, support_or_validate(Block, BH, S3)).
@@ -1958,7 +1966,37 @@ approve_block(#block{slot = Sl}, S = #s{approved = Approved}) ->
     %% `collect_append` clause and crash the statem. The slot is now decided at the approval layer, so reply
     %% retryably and discard the obsolete collection before advancing.
     S1 = nack_collecting_le(Sl, S),
-    watch_notarized(Sl, S1#s{approved = max(Approved, Sl)}).
+    watch_notarized(Sl, probe_approved(Sl, S1#s{approved = max(Approved, Sl)})).
+
+%% ---- Round-phase probe: where does a consensus round spend its time? -------
+%% Stamped in propose_batch, marked here at support-quorum approval, observed at
+%% commit, pruned in finalize/2 (which both the commit and skip paths run). Own
+%% proposals only, single monotonic clock on this node — the same discipline as
+%% the tx-latency histogram: never a cross-node timestamp difference.
+probe_approved(Sl, S = #s{round_probe = Probe}) ->
+    case Probe of
+        #{Sl := {ProposedAt, none}} ->
+            Now = quod_time:mono_ms(),
+            quod_metrics:observe_round_phase(S#s.ns, approve, Now - ProposedAt),
+            S#s{round_probe = Probe#{Sl => {ProposedAt, Now}}};
+        _ ->
+            S   %% not ours, or approval already seen (re-offered cert)
+    end.
+
+probe_committed(Sl, S = #s{round_probe = Probe}) ->
+    case Probe of
+        #{Sl := {_ProposedAt, ApprovedAt}} when is_integer(ApprovedAt) ->
+            quod_metrics:observe_round_phase(
+              S#s.ns, commit, quod_time:mono_ms() - ApprovedAt);
+        _ ->
+            ok   %% not ours, or committed without a local approval mark (catch-up)
+    end,
+    S.
+
+probe_prune(Sl, S = #s{round_probe = Probe}) when map_size(Probe) > 0 ->
+    S#s{round_probe = maps:filter(fun(K, _) -> K > Sl end, Probe)};
+probe_prune(_Sl, S) ->
+    S.
 
 %% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
 %% clear the per-slot latches, and reply `{ok, Slot}` to every caller in the batch.
@@ -1977,7 +2015,7 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                                last_ts = max(S#s.last_ts, BlockTs),
                                author_seqs =
                                    advance_author_seqs(Payload, S#s.author_seqs)}),
-            S0 = ack_local(Slot, SCommitted),
+            S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
             S1 = adopt_committee(Data, finalize(Slot, S0)),
             apply_live(Slot, Data, confirm_live(S1))
     end.
@@ -2083,7 +2121,8 @@ weak_cert_wait(Kind, Slot, BH, S) ->
 %% local proposal, support/commit/complaint latches, and membership validation
 %% latches (all bounded to the in-flight window).
 finalize(Slot, S0) ->
-    S = nack_collecting_le(Slot, S0),   %% a still-collecting batch for this now-finalized slot: nack its
+    S = probe_prune(Slot, nack_collecting_le(Slot, S0)),
+                                        %% a still-collecting batch for this now-finalized slot: nack its
                                         %% parked callers so they retry, not leave them to time out (below)
     {ok, Journal1} = prune_vote_journal(Slot, S#s.vote_journal),
     clear_requested_le(

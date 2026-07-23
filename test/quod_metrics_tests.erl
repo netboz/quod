@@ -65,3 +65,24 @@ count_link_send_drop_test() ->
     after
         Placeholder ! stop
     end.
+
+%% Round-phase samples land in the right histogram; a negative duration (impossible on
+%% one monotonic clock — the guard is the contract) is dropped.
+observe_round_phase_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"round:test">>,
+    ok = quod_metrics:observe_round_phase(Ns, approve, 5),   %% no process: no-op
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_round_phase(Ns, approve, 12),
+        ok = quod_metrics:observe_round_phase(Ns, commit, 30),
+        ok = quod_metrics:observe_round_phase(Ns, commit, -1),
+        {_, ASum} = prometheus_histogram:value(quod_consensus_round_approve_ms, [Ns]),
+        {_, CSum} = prometheus_histogram:value(quod_consensus_round_commit_ms, [Ns]),
+        ?assertEqual(12, ASum),
+        ?assertEqual(30, CSum)
+    after
+        Placeholder ! stop
+    end.

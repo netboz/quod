@@ -7,6 +7,78 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-24 (later) — frame-loss diagnosis REFUTED by the 0.7.30 drop counter; state of truth
+
+The probe (commits `468ac74`+`bfb162b`, 0.7.30 deployed, identical load, PASS):
+**`quod_link_send_drops_total` = 0** over the whole run. No frames are discarded at the
+QUIC send gate. The transport-reliability milestone proposed below is CANCELLED.
+
+Two further artifacts in my own analysis, corrected for the record:
+- The "committed-frontier spread 14-18 slots" was a SCRAPE-STALENESS artifact: Prometheus
+  scrapes every 15s; at ~1.4 blocks/s that alone fabricates apparent spreads up to ~21
+  slots with random per-target phase — including the "smooth gradient". Cross-node gauge
+  comparisons at one instant are INVALID at this scrape cadence. (Same-snapshot
+  differences remain valid: committed−applied = 0 per node stands.)
+- "~100 watchdog fires / ~130 skips per 4min" summed per-node counters for CLUSTER-WIDE
+  events → 10× inflated. Real: ~13 skips/~400 slots (3%), ~1 progress timeout per node
+  per 24s. Proposal share is uniform (9.2-10.4%). Consensus machinery looks HEALTHY.
+
+**What is solid now (all single-clock or counter-rate):** honest e2e p50 1.34s / p99
+4.9s; ~1.4 blocks/s under the burst load; leader-side span queued→commit ≈ 550-740ms
+per block (single-node span duration, trustworthy); zero transport drops; apply instant;
+fair rotation; few skips. **The open question is now sharply posed: why does one
+propose→commit round take ~550ms on a ~1ms LAN when every component measured so far
+(fsync ~50µs, sig verify ~25µs, transport clean) accounts for single-digit ms?** A
+burst of 40 txs drains at ~4.8 txs/block, so at ~550ms/block the median burst tx waits
+~1.3s — the p50 is fully explained by the round time; nothing else is missing. Next
+probe (pending Yan): single-node round-phase histograms on the leader (propose→approved,
+approved→committed) to localize the ~550ms, before ANY design work. Candidate suspects
+once localized: timer-paced steps (TICK 300ms), QUIC-lib internals (ack-delay, pacing,
+congestion window), readiness gating, scheduler latency. Lesson standing: measure, then
+conclude — three artifacts (clock-skew metric, scrape-staleness spread, per-node counter
+summing) each produced a confident wrong diagnosis.
+
+---
+
+## 2026-07-24 — [DIAGNOSIS REFUTED by 0.7.30 — see entry above] frame loss on live links (honest metric, 0.7.29)
+
+**The old latency metric was broken** — `BlockTs − submitted_at` compared the proposer's
+wall clock (ratcheted to the fleet max) against the author's; every prior number (225 /
+460 / 437 ms) was clock-skew arithmetic. 0.7.29 (commits `6d91650` + `3aee2ae`, deployed)
+measures at the SUBMITTING node on one monotonic clock, submit → committed-and-applied
+locally, one sample per write.
+
+**Honest baseline (identical load, PASS, +407 slots): p50 1338ms, p90 2320, p99 4900.**
+The real client experience is ~4-10× worse than any prior figure suggested.
+
+**Decomposition (measured, not guessed):**
+- committed−applied gap during load = **0 slots on all 10 nodes** → the KB/apply layer is
+  instant; NOT the bottleneck.
+- committed-frontier spread during load = **14-18 slots** → nodes learn commits LATE.
+- blocks/s ≈ 1.4 on a ~1ms LAN where a commit round should take ~10ms; progress_timeouts
+  ≈ 100/4min = the Δ=1000ms watchdog constantly recovering something.
+
+**Diagnosis: consensus frames DROP on live links under load** — `quod_link`'s plain send
+deliberately ignores `quic:send_data` flow-control returns (frames drop silently on a LIVE
+link; documented, accepted). Under burst load every recovery is timer-paced: Δ=1000ms
+proposal/vote redrive, 300ms relay retransmit, 500ms block-request retry. The block
+cadence and the frontier spread are paced by RECOVERY TIMERS, not by the network. This is
+the SAME deferred.md item the DA flagged during the ingress review ("Link backpressure
+signalling") — it is not a nice-to-have, it IS the latency floor. It also explains why
+pre-positioning misses (frontier spread ≫ horizon 2) and why the busiest hosts (corin:
+registry+Tempo+3 allocs) lag most: a busy BEAM reads sockets slowly → flow-control
+pressure → more drops.
+
+**Direction (Yan to approve): transport reliability BEFORE any more consensus-layer work.**
+The link already has an unused bounded in-link retry (`send_until_accepted` in
+quod_link's `send_reliable`); consensus/relay frames need either that or backpressure
+signalling to the sender. Gossip-mempool (CometBFT-style tx flooding — researched, right
+long-term shape) fixes routing hops (~ms), NOT the seconds; it moves to second place.
+Sequence: fix frame loss → re-measure honest baseline → THEN judge mempool/tenure/pipeline
+against a floor that reflects the network instead of the timers.
+
+---
+
 ## 2026-07-23 — ingress v2: pre-position at the FUTURE leader (measurement falsified v1's routing)
 
 **Why.** The live A/B of the park-queue ingress (0.7.27 vs 0.7.25, identical load) met its

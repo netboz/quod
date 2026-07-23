@@ -1681,6 +1681,28 @@ route_decision_cells_test() ->
     ?assertEqual({relay, L(4), 4},
                  quod_simplex:route(drain, local, lt($q, Me), Queued)).
 
+%% The round-phase probe follows an own proposal: stamped when the proposal seals
+%% (mono-ms, approval mark still `none`), and pruned by finalize/2 — which both the
+%% commit and skip paths run, so a probe entry can never outlive its slot.
+round_probe_lifecycle_test() ->
+    Committee = committee(2),
+    Validators = pubs(Committee),
+    {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
+    Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
+                   slot => 3, approved => 5,
+                   eng => quod_simplex:eng_with_certs(3, [])}),
+    ?assertEqual(#{}, quod_simplex:test_round_probe(Blocked)),
+    F1 = {self(), make_ref()}, F2 = {self(), make_ref()},
+    {P1, []} = quod_simplex:test_append(F1, lt($p, Me), Blocked),
+    {P2, []} = quod_simplex:test_append(F2, lt($q, Me), P1),
+    %% pipeline opens => the multi-item drain seals OUR block for slot 4 => stamped
+    {Drained, _} = quod_simplex:test_drain(quod_simplex:test_state_set(approved, 3, P2)),
+    Probe = quod_simplex:test_round_probe(Drained),
+    ?assertMatch(#{4 := {At, none}} when is_integer(At), Probe),
+    %% the slot finalizing (commit OR skip both run finalize/2) prunes the entry
+    Finalized = quod_simplex:finalize(4, Drained),
+    ?assertEqual(#{}, quod_simplex:test_round_probe(Finalized)).
+
 %% A refused relay whose hint is useless (`none` from a recovering target, the refuser
 %% itself, garbage) is RESCUED with a locally recomputed seat — never surfaced as a
 %% terminal client error while the budget lasts.

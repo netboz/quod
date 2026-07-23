@@ -51,12 +51,14 @@ Two collection paths:
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
+| `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
+| `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
 """.
 
 -behaviour(gen_server).
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
-         observe_tx_latency/2, count_link_send_drop/2]).
+         observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -67,6 +69,9 @@ Two collection paths:
 
 -define(REFRESH_MS, 5000).
 -define(LAT_BUCKETS,  [1, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000]).  %% ms: submit→commit
+-define(ROUND_BUCKETS, [1, 2, 5, 10, 25, 50, 100, 150, 200, 300, 400, 500, 750,
+                        1000, 2000, 5000]).   %% ms: one consensus round phase — fine-grained around the
+                                              %% suspicious 100-750ms range so the probe can localize it
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
@@ -221,6 +226,12 @@ declare(NodeId) ->
     _ = H(quod_consensus_vote_journal_sync_seconds,
           "How long this node took to make one support, commit, or skip vote crash-durable before sending its signature. Every new vote waits for this small disk sync; sustained high values directly delay block finality.",
           ?VOTE_SYNC_BUCKETS),
+    _ = H(quod_consensus_round_approve_ms,
+          "For blocks THIS node proposed: milliseconds from broadcasting the proposal to holding the support quorum that approves it, on this node's clock. This is the first half of a consensus round; on a fast local network it should be tens of milliseconds.",
+          ?ROUND_BUCKETS),
+    _ = H(quod_consensus_round_commit_ms,
+          "For blocks THIS node proposed: milliseconds from approval to the block becoming final and durable here, on this node's clock. This is the second half of a consensus round; together with the approve phase it is the whole per-block latency budget.",
+          ?ROUND_BUCKETS),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
                                     {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
@@ -492,6 +503,33 @@ drop_reason({flow_control_blocked, connection})  -> <<"flow_control_conn">>;
 drop_reason({flow_control_blocked, {stream, _}}) -> <<"flow_control_stream">>;
 drop_reason(send_queue_full)                     -> <<"queue_full">>;
 drop_reason(_)                                   -> <<"other">>.
+
+-doc """
+One consensus-round phase sample for a block THIS node proposed, `Ms` on this node's
+monotonic clock: `approve` = proposal broadcast → support quorum held; `commit` =
+approval → final and durable here. Called from the consensus statem's hot path, so an
+absent metrics process makes it a no-op (same contract as every observe helper here).
+""".
+-spec observe_round_phase(binary(), approve | commit, integer()) -> ok.
+observe_round_phase(Ns, Phase, Ms)
+  when is_binary(Ns), (Phase =:= approve orelse Phase =:= commit),
+       is_integer(Ms), Ms >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                Name = case Phase of
+                           approve -> quod_consensus_round_approve_ms;
+                           commit  -> quod_consensus_round_commit_ms
+                       end,
+                _ = prometheus_histogram:observe(Name, [label(Ns)], Ms),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_round_phase(_Ns, _Phase, _Ms) ->
+    ok.
 
 -doc """
 One end-to-end latency sample: a write submitted on THIS node resolved as committed and applied,

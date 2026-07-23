@@ -49,7 +49,7 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
             {ok, Conn} ->
                 receive
                     {quic, Conn, {connected, _}} ->
-                        loop(#s{conn = Conn, self = Self, peer = Peer});
+                        run(#s{conn = Conn, self = Self, peer = Peer});
                     {quic, Conn, {closed, R}} ->
                         logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R]),
                         fail_queued_opens(Peer)
@@ -81,7 +81,7 @@ fail_queued_opens(Peer) ->
 start_inbound(Conn, Self) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
-        loop(#s{conn = Conn, self = Self})
+        run(#s{conn = Conn, self = Self})
     end).
 
 -doc "Ask this connection to open (or reuse) a link for `Channel`, replying to `ReplyTo`.".
@@ -103,12 +103,24 @@ send(ConnPid, Channel, Frame) ->
 
 %% --- loop ----------------------------------------------------------------
 
+%% Register on the connection-stats property before entering the loop: the metrics
+%% refresh enumerates these processes and asks each for its QUIC transport stats
+%% (srtt / cwnd / in-flight), the per-peer numbers that decide whether the transport
+%% or the application is pacing consensus. Property, not name: many conns, gproc
+%% auto-cleans on death.
+run(S) ->
+    _ = quod_reg:subscribe({conn_stats, local}),
+    loop(S).
+
 loop(S = #s{conn = Conn}) ->
     receive
         {open_link, Channel, ReplyTo} ->
             loop(handle_open(Channel, ReplyTo, S));
         {send, Channel, Frame} ->
             loop(handle_send(Channel, Frame, S));
+        {transport_stats, From, Ref} ->
+            From ! {Ref, {S#s.peer, quic:get_stats(Conn)}},
+            loop(S);
         {quic, Conn, {stream_data, Sid, Data, Fin}} ->
             loop(route_data(Sid, Data, Fin, S));
         {quic, Conn, {stream_opened, Sid}} ->

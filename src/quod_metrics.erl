@@ -53,6 +53,7 @@ Two collection paths:
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
+| `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, throttle flags |
 """.
 
 -behaviour(gen_server).
@@ -104,6 +105,7 @@ handle_info(refresh, State) ->
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
+    _ = refresh_transport(),                                          %% per-peer QUIC srtt/cwnd/in-flight
     State1 = subscribe_commits(State),
     erlang:send_after(?REFRESH_MS, self(), refresh),
     {noreply, State1};
@@ -239,6 +241,22 @@ declare(NodeId) ->
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
            {labels, [namespace]}, {constant_labels, CL}]),
+    P = fun(Name, Help) ->
+            prometheus_gauge:declare([{name, Name}, {help, Help}, {labels, [peer]},
+                                      {constant_labels, CL}])
+        end,
+    _ = P(quod_quic_srtt_ms,
+          "Smoothed round-trip time this node's QUIC transport estimates toward each peer, in milliseconds. On a local network this should be a few milliseconds; a much larger value than quod_quic_min_rtt_ms means delay is being added by queueing or delayed acknowledgements, and it directly slows every consensus round."),
+    _ = P(quod_quic_min_rtt_ms,
+          "Smallest round-trip time ever observed toward each peer, in milliseconds - the pure network floor with no queueing."),
+    _ = P(quod_quic_cwnd_bytes,
+          "QUIC congestion window toward each peer: how many bytes may be in flight at once. Sends beyond it are silently queued, not dropped, so a small window throttles consensus fan-out invisibly."),
+    _ = P(quod_quic_bytes_in_flight,
+          "Bytes sent but not yet acknowledged toward each peer. Sitting at the congestion window means the transport is the bottleneck."),
+    _ = P(quod_quic_congested,
+          "1 while the congestion controller toward this peer is throttling, else 0."),
+    _ = P(quod_quic_in_recovery,
+          "1 while the transport toward this peer is recovering from packet loss, else 0."),
     _ = prometheus_counter:declare(
           [{name, quod_link_send_drops_total},
            {help, "Total frames this node DISCARDED at the QUIC send gate instead of transmitting, by receiving peer and reason. flow_control means that peer reads too slowly to extend its receive window (an overloaded receiver); queue_full means this node's own connection send queue overflowed. Every drop is later repaired by a recovery timer, so a sustained rate here directly paces consensus latency (only ever goes up)."},
@@ -406,6 +424,50 @@ refresh_log_ns(Ns) ->
             ok;
         _ -> ok
     end.
+
+%% Ask every live connection process for its QUIC transport stats and surface them
+%% per peer. The conn processes register on the `{conn_stats, local}` property; a
+%% bounded selective receive per conn keeps a wedged connection from stalling the
+%% refresh. Stats RTTs arrive in MICROseconds (the lib's public contract) — convert.
+refresh_transport() ->
+    Pids = try gproc:lookup_pids(quod_reg:prop({conn_stats, local}))
+           catch _:_ -> []
+           end,
+    lists:foreach(
+      fun(Pid) ->
+              Ref = make_ref(),
+              Pid ! {transport_stats, self(), Ref},
+              receive
+                  {Ref, {Peer, {ok, Stats}}} when is_binary(Peer) ->
+                      set_transport_gauges(author_label(Peer), Stats);
+                  {Ref, _} ->
+                      ok   %% peer not yet learned, or stats unavailable
+              after 50 -> ok
+              end
+      end, Pids).
+
+set_transport_gauges(Peer, Stats) ->
+    Num = fun(Name, Key, Scale) ->
+                  case maps:get(Key, Stats, undefined) of
+                      V when is_number(V) ->
+                          prometheus_gauge:set(Name, [Peer], V / Scale);
+                      _ -> ok
+                  end
+          end,
+    Bool = fun(Name, Key) ->
+                   case maps:get(Key, Stats, undefined) of
+                       true  -> prometheus_gauge:set(Name, [Peer], 1);
+                       false -> prometheus_gauge:set(Name, [Peer], 0);
+                       _     -> ok
+                   end
+           end,
+    _ = Num(quod_quic_srtt_ms, srtt, 1000),            %% us -> ms
+    _ = Num(quod_quic_min_rtt_ms, min_rtt, 1000),      %% us -> ms
+    _ = Num(quod_quic_cwnd_bytes, cwnd, 1),
+    _ = Num(quod_quic_bytes_in_flight, bytes_in_flight, 1),
+    _ = Bool(quod_quic_congested, congested),
+    _ = Bool(quod_quic_in_recovery, in_recovery),
+    ok.
 
 refresh_prolog_ns(Ns) ->
     case quod_prolog:stats(Ns) of

@@ -45,7 +45,7 @@ Two collection paths:
 | `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | running totals of blocks spread / received / pulled to fill gaps |
 | `quod_feed_dropped{namespace}` | gauge | `reason` | blocks thrown away, by reason (duplicate / gap / unverified / ...) |
 | `quod_feed_digests/fresh_digests{namespace}` | gauge | | nodes sending 'alive' heartbeats / of those, still fresh |
-| `quod_tx_commit_latency_ms{namespace}` | histogram | | time from handing in a change to it being made final |
+| `quod_tx_commit_latency_ms{namespace}` | histogram | | submit → committed-and-applied, measured on the SUBMITTING node with one monotonic clock (one sample per change, at its author) |
 | `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change |
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
@@ -54,7 +54,8 @@ Two collection paths:
 
 -behaviour(gen_server).
 
--export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2]).
+-export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
+         observe_tx_latency/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -211,7 +212,7 @@ declare(NodeId) ->
                                          "the other reasons are minor."},
                                   {labels, [namespace, reason]}, {constant_labels, CL}]),
     %% Per-change timing and size.
-    _ = H(quod_tx_commit_latency_ms, "How long each change took from being handed in to being made final, in milliseconds.", ?LAT_BUCKETS),
+    _ = H(quod_tx_commit_latency_ms, "How long each change took from being handed in to being made final and applied, in milliseconds. Measured on the node that submitted the change, with a single clock - so it is honest end-to-end time, never a comparison of two machines' clocks - and each change is counted exactly once.", ?LAT_BUCKETS),
     _ = H(quod_tx_diff_ops,          "How many individual pieces of data each finished change added or removed.", ?DIFF_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
@@ -442,27 +443,46 @@ subscribe_commits(State = #{subs := Subs}) ->
                         end, Subs, quod_simplex:namespaces()),
     State#{subs => Subs1}.
 
-%% A live-committed entry: observe the per-tx dimensions a scalar counter can't carry. A `noop` skip is not
-%% a transaction. Latency needs both wall-clocks real (submit > 0, commit ≥ submit); a cross-node skew that
-%% would make it negative is dropped rather than recorded as a bogus sample.
-observe_commit(#entry{data = Data, timestamp = BlockTs}) ->
+%% A live-committed entry: observe the per-tx dimensions a scalar counter can't carry. A `noop` skip is
+%% not a transaction. Deliberately NOT observed here: commit latency — the block timestamp is the
+%% proposer's wall clock (ratcheted to the fleet maximum) and `submitted_at` is the author's, so their
+%% difference measures clock skew as much as processing time. Latency is observed at the SUBMITTING
+%% node instead (`observe_tx_latency/2`, called by quod_prolog when the parked write resolves).
+observe_commit(#entry{data = Data}) ->
     case quod_ledger:payload(Data) of
-        {ok, Payload} -> lists:foreach(fun(T) -> observe_payload(T, BlockTs) end, Payload);
+        {ok, Payload} -> lists:foreach(fun observe_payload/1, Payload);
         error         -> ok
     end.
 
-observe_payload(#transaction{} = Transaction, BlockTs) -> observe_transaction(Transaction, BlockTs);
-observe_payload(noop, _BlockTs)                         -> ok.   %% complaint skip, not a transaction
+observe_payload(#transaction{} = Transaction) -> observe_transaction(Transaction);
+observe_payload(noop)                         -> ok.   %% complaint skip, not a transaction
 
-observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff,
-                                  submitted_at = Sub}, BlockTs) ->
+observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff}) ->
     L = label(Ns),
-    _ = case is_integer(Sub) andalso Sub > 0 andalso is_integer(BlockTs) andalso BlockTs >= Sub of
-            true  -> prometheus_histogram:observe(quod_tx_commit_latency_ms, [L], BlockTs - Sub);
-            false -> ok
-        end,
     _ = prometheus_histogram:observe(quod_tx_diff_ops, [L], length(Diff)),
     _ = prometheus_counter:inc(quod_tx_committed_total, [L, author_label(Author)]),
+    ok.
+
+-doc """
+One end-to-end latency sample: a write submitted on THIS node resolved as committed and applied,
+`Ms` measured by the caller on one monotonic clock. The submitting node is the only place that
+latency is real — any cross-node timestamp difference embeds wall-clock skew. Like every observe
+helper here, metrics must never become a dependency of the observed path (write resolution), so
+an absent/mid-restart metrics process makes this a no-op.
+""".
+-spec observe_tx_latency(binary(), integer()) -> ok.
+observe_tx_latency(Ns, Ms) when is_binary(Ns), is_integer(Ms), Ms >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(quod_tx_commit_latency_ms, [label(Ns)], Ms),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_tx_latency(_Ns, _Ms) ->
     ok.
 
 %% --- labels --------------------------------------------------------------

@@ -45,6 +45,23 @@ batching win with rotation-as-failover intact. Accepted residue (measured next):
 straggler tail (boundary flights), modest r_stale, bounded origin-bounce under sustained
 overload (budget 3; r_busy/overflow stays THE overload alarm).
 
+**LIVE MEASUREMENT (0.7.28, deployed, identical load — PARTIAL WIN, root cause found).**
+loadtest PASS restored (append_bad 0 — the stale-bucket fix worked). busy 0, overflow 0,
+expired 0. blocks/s recovered 0.98→1.44-1.8, throughput 86 tx/s, forwarded down
+3243→2207. Median trace = ONE hop (pre-positioning works when frontiers align). BUT p50
+437ms (0.7.25's 225 was a measurement artifact — it timed only the lucky retry after 55%
+busy; 0.7.28 times first-submit-to-commit honestly) and prepositioned landed only 459 vs
+~5000 bounces (redirect 2830 + forwarded 2207). ROOT CAUSE: the `approved` frontier
+spreads **~18 slots across the fleet under load** (smooth gradient, lag 0..18, not a couple
+of laggards) while `?INGRESS_HORIZON = 2`. An origin targets `leader(its_approved+1)`, but
+its `approved` lags the true frontier by up to 18, so the target lands outside the
+receiver's horizon → redirect → bounce. Pre-positioning is sound but fights a SYMPTOM; the
+disease is block-commit propagation lag (the ~18-slot gradient = the real latency floor,
+~1 block interval per tx). Next lever is the frontier spread / block cadence (#3 tenure,
+#5 deeper pipeline), which would ALSO make the horizon-2 pre-positioning land — the levers
+compound. 0.7.28 is a net improvement over both 0.7.25 and 0.7.27 and is safe to keep
+deployed; it does NOT by itself restore a sub-250ms honest p50.
+
 ---
 
 ## 2026-07-23 — event-driven consensus ingress (park, don't reject); awaiting live measurement

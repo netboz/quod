@@ -450,7 +450,7 @@ handle_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload},
 %% so the caller gets a definite answer instead of hanging.
 handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, _B, _H, _TRef, ReqId, SpanCtx}, P1} ->
+        {{From, _B, _H, _TRef, ReqId, SpanCtx, _T0}, P1} ->
             quod_trace:finish_span(SpanCtx, {error, timeout}),
             gen_server:reply(From, {error, timeout}),
             {noreply, S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests),
@@ -828,8 +828,11 @@ submit_write(From, Goal, Bindings, Diff, ReadSet, CallerNs, TraceCtx,
         ReqId ->
             Requests1 = gen_statem:reqids_add(ReqId, Tx, S#s.requests),
             TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
+            %% T0 anchors the tx-latency histogram: same node, same monotonic clock
+            %% as the observation in release/4 — never a cross-node wall-clock delta.
+            T0 = quod_time:mono_ms(),
             S1 = S#s{parked = (S#s.parked)#{Tx =>
-                       {From, [Bindings], S#s.applied, TRef, ReqId, SpanCtx}},
+                       {From, [Bindings], S#s.applied, TRef, ReqId, SpanCtx, T0}},
                      requests = Requests1},
             {noreply, S1}
     catch
@@ -861,16 +864,16 @@ append_result(Tx, Other, S) ->
 
 request_completed(Tx, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        {From, Bindings, Height, TRef, _ReqId, SpanCtx} ->
+        {From, Bindings, Height, TRef, _ReqId, SpanCtx, T0} ->
             S#s{parked = Parked#{Tx =>
-                   {From, Bindings, Height, TRef, none, SpanCtx}}};
+                   {From, Bindings, Height, TRef, none, SpanCtx, T0}}};
         undefined ->
             S
     end.
 
 mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
     case maps:get(Tx, Parked, undefined) of
-        {_From, _Bindings, _Height, _TRef, _ReqId, SpanCtx} ->
+        {_From, _Bindings, _Height, _TRef, _ReqId, SpanCtx, _T0} ->
             _ = quod_trace:set_attributes(SpanCtx, #{'quod.consensus.slot' => Slot}),
             S;
         undefined ->
@@ -1087,11 +1090,20 @@ clear_runtime_pin(S = #s{runtime_pin = {_Pid, MRef, _F}}) ->
 clear_runtime_pin(S) -> S.
 
 %% Deliver the verdict to a parked caller (only on the submitting node) and cancel
-%% its TTL. ReplyFun :: (From, Bindings, Height) -> _.
-release(Tx, Outcome, ReplyFun, S = #s{parked = P}) ->
+%% its TTL. ReplyFun :: (From, Bindings, Height) -> _. A successful outcome is THE
+%% end-to-end latency sample: submit (T0) to committed-and-applied-here, one node,
+%% one monotonic clock — the only latency this system reports, because any metric
+%% derived from block timestamps compares two machines' wall clocks.
+release(Tx, Outcome, ReplyFun, S = #s{ns = Ns, parked = P}) ->
     case maps:take(Tx, P) of
-        {{From, B, H, TRef, ReqId, SpanCtx}, P1} ->
+        {{From, B, H, TRef, ReqId, SpanCtx, T0}, P1} ->
             _ = erlang:cancel_timer(TRef),
+            _ = case Outcome of
+                    {ok, {applied, _}} ->
+                        quod_metrics:observe_tx_latency(Ns, quod_time:mono_ms() - T0);
+                    _ ->
+                        ok
+                end,
             _ = set_final_trace_attributes(SpanCtx, Outcome),
             quod_trace:finish_span(SpanCtx, Outcome),
             ReplyFun(From, B, H),

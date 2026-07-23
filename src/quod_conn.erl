@@ -119,7 +119,21 @@ loop(S = #s{conn = Conn}) ->
         {send, Channel, Frame} ->
             loop(handle_send(Channel, Frame, S));
         {transport_stats, From, Ref} ->
-            From ! {Ref, {S#s.peer, quic:get_stats(Conn)}},
+            %% get_path_stats (NOT get_stats, which is packet counters only) carries
+            %% srtt/min_rtt/cwnd/in-flight; the send-queue depth — data accepted but
+            %% still waiting behind pacing/cwnd — is the most direct evidence of the
+            %% transport queueing, so merge it in when available.
+            Stats = case quic:get_path_stats(Conn) of
+                        {ok, Path} ->
+                            case quic:get_send_queue_info(Conn) of
+                                {ok, #{bytes := QBytes}} ->
+                                    {ok, Path#{send_queue_bytes => QBytes}};
+                                _ ->
+                                    {ok, Path}
+                            end;
+                        Error -> Error
+                    end,
+            From ! {Ref, {S#s.peer, Stats}},
             loop(S);
         {quic, Conn, {stream_data, Sid, Data, Fin}} ->
             loop(route_data(Sid, Data, Fin, S));

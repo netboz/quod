@@ -53,7 +53,7 @@ Two collection paths:
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
-| `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, throttle flags |
+| `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/send_queue_bytes/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, data queued behind pacing/cwnd, throttle flags |
 """.
 
 -behaviour(gen_server).
@@ -253,6 +253,8 @@ declare(NodeId) ->
           "QUIC congestion window toward each peer: how many bytes may be in flight at once. Sends beyond it are silently queued, not dropped, so a small window throttles consensus fan-out invisibly."),
     _ = P(quod_quic_bytes_in_flight,
           "Bytes sent but not yet acknowledged toward each peer. Sitting at the congestion window means the transport is the bottleneck."),
+    _ = P(quod_quic_send_queue_bytes,
+          "Bytes accepted for sending toward each peer but still waiting inside the QUIC transport behind pacing or the congestion window. This queue is invisible to the application (sends still return ok); a sustained non-zero value is the transport delaying consensus frames."),
     _ = P(quod_quic_congested,
           "1 while the congestion controller toward this peer is throttling, else 0."),
     _ = P(quod_quic_in_recovery,
@@ -465,6 +467,7 @@ set_transport_gauges(Peer, Stats) ->
     _ = Num(quod_quic_min_rtt_ms, min_rtt, 1000),      %% us -> ms
     _ = Num(quod_quic_cwnd_bytes, cwnd, 1),
     _ = Num(quod_quic_bytes_in_flight, bytes_in_flight, 1),
+    _ = Num(quod_quic_send_queue_bytes, send_queue_bytes, 1),
     _ = Bool(quod_quic_congested, congested),
     _ = Bool(quod_quic_in_recovery, in_recovery),
     ok.

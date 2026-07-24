@@ -1057,7 +1057,7 @@ init({Ns, Config}) ->
     end.
 
 init_store(Ns, Cfg, Id) ->
-    {ok, Store} = quod_ledger_store:open(Ns, data_dir(Cfg)),
+    {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
     Chan = term_to_binary({log, Ns}, [deterministic]),   %% the committee's consensus channel
     quod_reg:subscribe({channel, Chan}),                 %% receive peers' proposals/shares/certs
     RelayTimeout = relay_timeout_ms(Cfg),

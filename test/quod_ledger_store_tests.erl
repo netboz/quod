@@ -289,3 +289,15 @@ raw_frame(Entry) ->
 base64url(Bin) ->
     B = base64:encode(Bin),
     [case C of $+ -> $-; $/ -> $_; _ -> C end || <<C>> <= B, C =/= $=].
+
+%% The ledger's home is `ledger_dir` when set (fast local disk), else `data_dir` (the
+%% durable volume), else the user-cache default — the split that keeps the replicated,
+%% re-fetchable chain off the slow-fsync volume while identity + vote journal stay on it.
+ledger_dir_resolution_test() ->
+    ?assertEqual("/fast/ledger",
+                 quod_ledger_store:ledger_dir(#{ledger_dir => "/fast/ledger",
+                                                data_dir => "/durable"})),
+    ?assertEqual("/durable",
+                 quod_ledger_store:ledger_dir(#{data_dir => "/durable"})),
+    ?assertEqual(quod_ledger_store:default_data_dir(),
+                 quod_ledger_store:ledger_dir(#{})).

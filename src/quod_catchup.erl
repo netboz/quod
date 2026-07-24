@@ -355,7 +355,7 @@ init({Ns, Config}) ->
     Chan = term_to_binary({catchup, Ns}, [deterministic]),
     quod_reg:subscribe({channel, Chan}),
     {ok, #s{ns = Ns, self = Self, chan = Chan,
-            data_dir = quod_ledger_store:data_dir(Config),
+            data_dir = quod_ledger_store:ledger_dir(Config),
             seeds = maps:get(seed_peers, Config, [])}}.
 
 handle_call(contact, _From, S = #s{ns = Ns, seeds = Seeds}) ->

@@ -111,6 +111,15 @@ job "quod" {
       attribute = "${node.unique.name}"
     }
 
+    # Home of the local ledger (content.ledger_dir renders into $NOMAD_ALLOC_DIR/data).
+    # sticky+migrate keeps it across in-place updates and best-effort across moves; a
+    # genuinely lost ledger is re-fetched from peers (catch-up), never a safety issue.
+    ephemeral_disk {
+      sticky  = true
+      migrate = true
+      size    = 1024
+    }
+
     network {
       mode = "bridge"
       port "p2p" { to = 14567 }
@@ -219,6 +228,12 @@ content = [
   {
     namespace = "quod:root"
     data_dir  = "/quod/data"
+    # The block ledger lives on the alloc's LOCAL ephemeral disk, not the Ceph volume:
+    # one fdatasync on Ceph RBD costs 40-106ms and the per-commit ledger sync dominated
+    # consensus round time. Safe because the chain is replicated by consensus — a node
+    # whose ledger is lost re-syncs trustlessly from peers against the pinned anchor.
+    # Identity + vote journal REMAIN on the durable Ceph volume (data_dir above).
+    ledger_dir = "{{ env "NOMAD_ALLOC_DIR" }}/data/ledger"
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}

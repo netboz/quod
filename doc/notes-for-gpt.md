@@ -7,6 +7,25 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-24 (final) — ROOT CAUSE: Ceph RBD fsync 40-106ms x 3-5 mandatory syncs/round
+
+`dd oflag=dsync` on the production CSI volume, in-container: **p50 40ms / p90 64 / max
+106ms per 4KB sync**. Every vote journal-datasyncs before its signature leaves (the
+0.7.24 no-equivocation journal); every commit fsyncs the ledger. That is the whole
+~300-600ms round and the ~900ms lone write. All local repros ran on NVMe/tmpfs — the
+storage backend was the single unreplicated production ingredient. Probe lineage:
+0.7.34 event/mailbox/share-lag histograms (broadcast-bearing handlers slow, queues pile
+behind them) -> 0.7.35 step timers (support 148ms + persist 134ms p50, all else µs) ->
+quota/otel/signing refuted by direct test -> dd. The first Tempo trace had shown
+86/237/122ms sync spans; they were wrongly dismissed against the journal-sync histogram,
+whose mass turns out to be deduped no-op record calls, not real syncs. Fix directions
+(Yan to choose; Architect+DA before implementation): ledger to local disk (chain is
+replicated; catch-up covers loss), vote-journal sync batching (1/slot) or local-disk
+with fenced reschedules, and/or Ceph-side tuning. Fleet runs 0.7.35 with all probes
+live and healthy.
+
+---
+
 ## 2026-07-24 (later) — frame-loss diagnosis REFUTED by the 0.7.30 drop counter; state of truth
 
 The probe (commits `468ac74`+`bfb162b`, 0.7.30 deployed, identical load, PASS):

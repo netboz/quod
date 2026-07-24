@@ -945,7 +945,7 @@ converge(Ns, Est, H, Id, Goal, Scope) ->
 %% log file eagerly at init, so an empty read is the same "not founded yet" case as enoent —
 %% caching it would silently disable this node's handlers forever once slot 1 arrives.
 read_founding(Ns, Config) ->
-    case quod_ledger_store:open_ro(Ns, quod_ledger_store:data_dir(Config)) of
+    case quod_ledger_store:open_ro(Ns, quod_ledger_store:ledger_dir(Config)) of
         {ok, Store} ->
             try quod_ledger_store:read_at(Store, 1) of
                 {ok, #entry{data = {batch, Txs}}} -> {ok, founding_heads(Txs)};

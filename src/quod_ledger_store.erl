@@ -46,7 +46,7 @@ the full log always rescans at open.
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, open_ro/2, close/1,
+-export([open/2, ledger_dir/1, open_ro/2, close/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
@@ -84,6 +84,22 @@ default_data_dir() -> filename:join(filename:basedir(user_cache, "quod"), "data"
 data_dir(Config) ->
     case maps:get(data_dir, Config, undefined) of
         undefined -> default_data_dir();
+        Dir       -> Dir
+    end.
+
+-doc """
+The LEDGER root from an ns `Config` map: `ledger_dir` if set, else `data_dir/1`. The split
+exists because the two directories have DIFFERENT durability needs: the ledger is
+replicated by consensus itself (any node re-fetches lost history trustlessly via
+catch-up against the pinned genesis anchor), so it may live on fast LOCAL disk — while
+the identity key and the vote journal (whose loss is not repairable from peers) stay on
+the durable `data_dir`. On the production Ceph volume one fdatasync costs 40-106ms and
+the per-commit ledger sync was a dominant share of consensus round time.
+""".
+-spec ledger_dir(map()) -> file:filename_all().
+ledger_dir(Config) ->
+    case maps:get(ledger_dir, Config, undefined) of
+        undefined -> data_dir(Config);
         Dir       -> Dir
     end.
 

@@ -258,7 +258,7 @@ start_ns_block(Content) ->
 %% explorer (a singleton outside the per-ns subtree) can open read-only store views without
 %% re-deriving per-block config. Resolved exactly as the store users resolve it.
 publish_data_dir(Ns, NsCfg) ->
-    Dir = maps:get(data_dir, NsCfg, quod_ledger_store:default_data_dir()),
+    Dir = quod_ledger_store:ledger_dir(NsCfg),   %% store views must follow the LEDGER home
     Dirs = application:get_env(quod, content_data_dirs, #{}),
     application:set_env(quod, content_data_dirs, Dirs#{Ns => Dir}).
 
@@ -292,12 +292,20 @@ build_ns_config(Content) ->
              ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
              ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
              seed_peers => content_seeds(Content)},
-    {Ns, with_genesis_hash(Content, with_genesis_file(Content, with_data_dir(Content, Base)))}.
+    {Ns, with_genesis_hash(Content,
+          with_genesis_file(Content,
+            with_ledger_dir(Content, with_data_dir(Content, Base))))}.
 
 with_data_dir(Content, Base) ->
     case maps:get(data_dir, Content, <<>>) of
         <<>> -> Base;
         Dir  -> Base#{data_dir => binary_to_list(Dir)}
+    end.
+
+with_ledger_dir(Content, Base) ->
+    case maps:get(ledger_dir, Content, <<>>) of
+        <<>> -> Base;
+        Dir  -> Base#{ledger_dir => binary_to_list(Dir)}
     end.
 
 %% The `mode=join` trust anchor: a 64-char hex string in config (`content.genesis_hash`, copied from the

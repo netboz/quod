@@ -73,6 +73,11 @@ fields(content) ->
     , {role,         hoconsc:mk(hoconsc:enum([member, replica]), #{default => member})}
     , {genesis_file, hoconsc:mk(binary(), #{default => <<"ontologies/quod_root.pl">>})}
     , {data_dir,     hoconsc:mk(binary(), #{default => <<"">>})}
+      %% Optional FAST-LOCAL home for the block ledger only. The chain is replicated by
+      %% consensus (a node that loses its ledger re-syncs trustlessly from peers), so it
+      %% does not need the durable volume; identity + vote journal REMAIN under data_dir.
+      %% "" => the ledger shares data_dir (the previous behaviour).
+    , {ledger_dir,   hoconsc:mk(binary(), #{default => <<"">>})}
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     , {max_proof_workers,
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}

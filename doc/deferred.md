@@ -426,12 +426,17 @@ fixes:
   work per pipeline slot. (a)+(b) are medium effort and low risk; (c)/(d) are real
   architecture changes.
 
-- **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant sized for
-  worst-case commit latency; it is now 25× the real round time, and the right value depends
-  on live conditions (idle vs burst, LAN vs WAN satellites). Track a rolling p99 of the
-  actual propose→notarize time and set Δ = k × that (with floor/ceiling). Removes the
-  guess-and-test tuning and makes skips cost the minimum safe amount. Ties into the
-  per-slot round-phase histograms already emitted (`quod_consensus_round_*_ms`).
+- **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant. It looks
+  25× the *steady* round time (~40ms), so lowering it is tempting — but a lower FIXED Δ was
+  TESTED (500ms, 2026-07-24) and was strictly WORSE: skips 4.4→12.4/node, p90/p99 blew from
+  90/232ms to 10s. Under a 40-tx burst the single-statem mailbox backs up and a *healthy*
+  round transiently exceeds 500ms, so Δ=500 spuriously skips it and the skip→retry feeds the
+  storm. The lesson: Δ must cover the burst-tail round time, not the steady one, so a fixed
+  low value is unsafe. The right fix is ADAPTIVE: track a rolling p99 of the actual
+  propose→notarize time (the `quod_consensus_round_*_ms` histograms already emit it) and set
+  Δ = k × that with floor/ceiling, so it's tight when calm and patient under a burst. Note
+  this only makes skips cost the minimum SAFE amount — it does not remove the skips; the
+  burst-amplification fixes above are what reduce their frequency. Reverted to Δ=1000ms.
 
 ## 4. Reader/subscriber arc — the path to "millions read root"
 

@@ -1412,6 +1412,424 @@
           "legendFormat": "heavy rejected \u00b7 {{node_id}}"
         }
       ]
+    },
+    {
+      "id": 200,
+      "type": "row",
+      "title": "Consensus performance \u2014 how fast the nodes agree on a block",
+      "gridPos": {
+        "x": 0,
+        "y": 154,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 201,
+      "type": "timeseries",
+      "title": "Block agreement time - the two halves (this node's blocks)",
+      "description": "When it is this node's turn to build a block, the two stages of getting it agreed: 'accept' is until enough other nodes approve it, 'make final' is until it is saved for good. Add the two lines for the total time one block takes. On a fast local network each should be tens of milliseconds.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 155,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(quod_consensus_round_approve_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le))",
+          "legendFormat": "accept p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_round_approve_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le))",
+          "legendFormat": "accept p99",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(quod_consensus_round_commit_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le))",
+          "legendFormat": "make final p50",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_round_commit_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le))",
+          "legendFormat": "make final p99",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "id": 202,
+      "type": "timeseries",
+      "title": "Where a block's time is spent, by step (slowest first)",
+      "description": "Each block is handled in a series of small steps (saving a vote to disk, saving the block, sending it on, and so on). This shows how long each step takes at the 99th percentile. When a block is slow, the step with the tallest line is the reason - for example 'support' and 'persist' were the disk-write steps that the storage fix made ~40x faster.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 155,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_step_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le, step))",
+          "legendFormat": "{{step}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 203,
+      "type": "timeseries",
+      "title": "Time to handle one message",
+      "description": "How long this node takes to deal with a single incoming message (a proposal, a vote, and so on), by kind. These should stay small (a few milliseconds). If they stay small but blocks are still slow, the delay is elsewhere - the network or waiting on other nodes.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 163,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_event_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le, class))",
+          "legendFormat": "{{class}} p99",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 204,
+      "type": "timeseries",
+      "title": "Messages waiting in line (backlog)",
+      "description": "How many messages are already queued up waiting when this node picks up the next one. This should be near zero. A number that climbs means messages are arriving faster than the node can handle them, so work backs up - this is the signal that showed a burst of transactions briefly overwhelming a node.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 163,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.9, sum(rate(quod_consensus_event_qlen_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le, class))",
+          "legendFormat": "{{class}} p90",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_event_qlen_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le))",
+          "legendFormat": "all p99",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 205,
+      "type": "timeseries",
+      "title": "Time to collect votes from the other nodes",
+      "description": "When this node builds a block, how long from sending it out until each other node's vote comes back. This is the plain round-trip time to gather agreement; it sets the floor for how fast a block can be made final.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 171,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.5, sum(rate(quod_consensus_share_lag_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le, kind))",
+          "legendFormat": "{{kind}} p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.99, sum(rate(quod_consensus_share_lag_ms_bucket{namespace=~\"$namespace\", node_id=~\"$node\"}[$__rate_interval])) by (le, kind))",
+          "legendFormat": "{{kind}} p99",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 206,
+      "type": "timeseries",
+      "title": "Discarded messages (should stay flat at zero)",
+      "description": "Messages this node threw away instead of sending, per second, by reason. 'flow_control' means the receiving node was too slow to accept more; 'queue_full' means this node's own send buffer was full. A discarded message is re-sent later by a timer, so any sustained rate here quietly slows agreement down. Flat at zero is healthy.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 171,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "cps",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(quod_link_send_drops_total{node_id=~\"$node\"}[$__rate_interval])) by (reason)",
+          "legendFormat": "{{reason}}",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "id": 210,
+      "type": "row",
+      "title": "Network connections (one line per other node)",
+      "gridPos": {
+        "x": 0,
+        "y": 179,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 211,
+      "type": "timeseries",
+      "title": "Round-trip time per connection (typical vs best-ever)",
+      "description": "For each connection to another node: 'typical' is the current estimate of how long a message-and-reply takes, 'best' is the fastest ever seen (the raw network speed). On a local network both should be a few milliseconds. A big gap - typical much higher than best - means something is adding delay on top of the network (a busy machine or slow replies).",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 180,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "avg(quod_quic_srtt_ms{node_id=~\"$node\"})",
+          "legendFormat": "typical (avg)",
+          "refId": "A"
+        },
+        {
+          "expr": "max(quod_quic_srtt_ms{node_id=~\"$node\"})",
+          "legendFormat": "typical (worst peer)",
+          "refId": "B"
+        },
+        {
+          "expr": "avg(quod_quic_min_rtt_ms{node_id=~\"$node\"})",
+          "legendFormat": "best (avg)",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 212,
+      "type": "timeseries",
+      "title": "Data buffered inside connections (hidden delay)",
+      "description": "Bytes sitting inside the network connections instead of being delivered: 'waiting to send' has not left this node yet, 'sent, unconfirmed' is on the wire but not acknowledged. Both near zero is healthy. If 'waiting to send' stays above zero, the connection is holding messages back and adding delay the application cannot see.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 180,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(quod_quic_send_queue_bytes{node_id=~\"$node\"})",
+          "legendFormat": "waiting to send",
+          "refId": "A"
+        },
+        {
+          "expr": "sum(quod_quic_bytes_in_flight{node_id=~\"$node\"})",
+          "legendFormat": "sent, unconfirmed",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }

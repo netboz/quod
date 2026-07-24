@@ -682,9 +682,15 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                   %% long, and sweep its marker so the tick re-dials (guards a conn that dies
                                   %% mid-handshake); safely exceeds the worst-case legit dial (connect ~5s +
                                   %% link-ack ~5s, quod_conn), so an in-flight dial is never swept early
--define(DELTA_MS,   1000).   %% oldest-head progress timeout: redrive or complain while waiting for proposal,
-                             %% notarization, or commit; must exceed real commit latency
-                             %% (override via app-env `simplex_delta_ms`)
+-define(DELTA_MS,    500).   %% oldest-head progress timeout: redrive or complain while waiting for proposal,
+                             %% Sized at 500ms after the local-disk migration cut commit latency ~25x: the
+                             %% measured round (propose->notarize->commit) p99 is ~320ms even under a burst
+                             %% spike and ~40-90ms steady, so 500ms leaves >1.5x margin for a HEALTHY slot
+                             %% while halving the cost of a genuine skip (the tail is dominated by the few
+                             %% slots that stall past Δ). Was 1000ms in the Ceph era (commits ~500ms then).
+                             %% Fixed-constant tuning; adaptive Δ is the deferred follow-up.
+                             %% Guards the proposal/notarization/commit of the oldest head;
+                             %% override via app-env `simplex_delta_ms`.
 -define(SYNC_WINDOW,  256).  %% entries requested per catch-up / gap-fill fetch (matches the server's block cap)
 -define(SINK_MS,     30000). %% budget for one sink window (store append + KB replay) — generous
 -define(TIP_PROBE_MS, 9500). %% one parallel tip round; exceeds quod_catchup's 9s public pull budget

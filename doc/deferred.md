@@ -390,6 +390,49 @@ stages, not carried forward:
   (`#implicit_cert{support,parent-child link,child commit}`), and catch-up verifies it independently.
   Committee-changing blocks remain explicit-finality barriers.
 
+### Latency tail under burst load — bigger refactors (post storage-fix, 2026-07-24)
+
+Context: the Ceph→local-disk storage migration removed the dominant cost (fsync 40-137ms →
+~3ms; commit p50 929→40ms, p99 4900→~210ms). What remains is a **transient tail**: under
+40-tx bursts the commit p99 occasionally spikes to ~1-2s, then self-heals. Measured root
+cause (0.7.34/35 probes): a burst amplifies into a message storm that momentarily backs up
+the SINGLE per-namespace consensus `gen_statem` mailbox (seen hit ~1000), which delays a
+head slot's proposal/votes past Δ, so the slot **skips** (Δ-timeout), and every tx batched
+in it waits the full Δ then retries. KB is small (4MB, GC not a factor) and steady event
+rate is low (~11/node/s), so this is a burst-amplification + serial-process problem, not
+saturation. The easy Δ-shrink lever is applied separately (see below); these are the deeper
+fixes:
+
+- **Ingress simplification — retire pre-positioning now that consensus is fast.** The
+  park-queue (0.7.27) + pre-position-at-future-leader (0.7.28) machinery was built to cope
+  with SLOW (Ceph-era) consensus, where the depth-1 pipeline couldn't keep up and appends
+  piled into `busy` rejections. With ~40ms commits the pipeline keeps up, but the routing
+  still runs: it MISSES most of the time (measured ~0.2 redirects/submit, redirects ≫
+  prepositions) and each miss is extra messages (relay → redirect → re-relay) that amplify
+  a 40-tx burst into the mailbox storm above. Proposed: gate or revert the ingress back to
+  direct-append-to-current-leader (the 0.7.25 shape), keeping only the bounded park queue
+  as an overflow cushion. Expect the redirect traffic and the burst-time mailbox spikes to
+  collapse. Architect+DA review (the routing touches liveness/failover); the `route/4`
+  compute-then-execute refactor already isolates the decision, so a toggle is feasible.
+
+- **Consensus-process burst resilience (the serial mailbox).** All consensus for a
+  namespace runs through one `gen_statem`; a 40-tx burst + its vote/cert fan-out can
+  momentarily exceed its drain rate (mailbox → ~1000), stalling the head. Options, cheapest
+  first: (a) shed/off-load non-consensus work handled inline — `get_stats`/`get_committee`
+  are synchronous calls that block the statem; serve them from a cached projection updated
+  on commit instead. (b) Coalesce redundant inbound (dedupe repeated share/redrive frames
+  before they queue). (c) Split the hot path — a front `gen_server` that validates/dedupes
+  frames and forwards only state-advancing events to the statem. (d) Full: shard consensus
+  work per pipeline slot. (a)+(b) are medium effort and low risk; (c)/(d) are real
+  architecture changes.
+
+- **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant sized for
+  worst-case commit latency; it is now 25× the real round time, and the right value depends
+  on live conditions (idle vs burst, LAN vs WAN satellites). Track a rolling p99 of the
+  actual propose→notarize time and set Δ = k × that (with floor/ceiling). Removes the
+  guess-and-test tuning and makes skips cost the minimum safe amount. Ties into the
+  per-slot round-phase histograms already emitted (`quod_consensus_round_*_ms`).
+
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.

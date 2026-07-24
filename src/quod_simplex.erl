@@ -1215,6 +1215,15 @@ running(EventType, Content, S) ->
       erlang:monotonic_time(microsecond) - T0, QLen),
     Result.
 
+%% Time one named sub-step of a handler; the step histogram is the slow-handler
+%% decomposition (which seam inside a 200ms handler actually holds the time).
+timed_step(Ns, Step, Fun) ->
+    T0 = erlang:monotonic_time(microsecond),
+    Result = Fun(),
+    quod_metrics:observe_consensus_step(
+      Ns, Step, erlang:monotonic_time(microsecond) - T0),
+    Result.
+
 event_class({call, _}, {append, _})            -> append;
 event_class({call, _}, {append, _, _})         -> append;
 event_class({call, _}, _)                      -> call;
@@ -1956,11 +1965,13 @@ parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
 %% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
 engine_step(Items, S) ->
-    {Eng1, EventsRev} = lists:foldl(fun(It, {E, Acc}) ->
-                                        {E1, Es} = offer_engine_item(It, E),
-                                        {E1, lists:reverse(Es, Acc)}
-                                    end, {S#s.eng, []}, Items),
-    apply_events(lists:reverse(EventsRev), S#s{eng = Eng1}).
+    timed_step(S#s.ns, engine, fun() ->
+        {Eng1, EventsRev} = lists:foldl(fun(It, {E, Acc}) ->
+                                            {E1, Es} = offer_engine_item(It, E),
+                                            {E1, lists:reverse(Es, Acc)}
+                                        end, {S#s.eng, []}, Items),
+        apply_events(lists:reverse(EventsRev), S#s{eng = Eng1})
+    end).
 
 offer_engine_item({block, BH, #block{} = B}, Eng) -> eng_offer_hashed(BH, B, Eng);
 offer_engine_item(Item, Eng) -> eng_offer(Item, Eng).
@@ -2035,17 +2046,20 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
         Cert ->
             Data = quod_ledger:data(Payload),
             E = #entry{index = Slot, data = Data, timestamp = BlockTs, cert = Cert},
-            {ok, Store1} = persist_entry(Store, E, Slot, S),
-            publish_feed(Slot, E, S),   %% LIVE commit ⇒ let the dissemination feed push it (never on replay/rebuild)
-            SCommitted = resolve_committed_relays(
-                           Payload, Slot,
-                           S#s{store = Store1, commits = S#s.commits + 1,
-                               last_ts = max(S#s.last_ts, BlockTs),
-                               author_seqs =
-                                   advance_author_seqs(Payload, S#s.author_seqs)}),
+            {ok, Store1} = timed_step(S#s.ns, persist,
+                                      fun() -> persist_entry(Store, E, Slot, S) end),
+            timed_step(S#s.ns, feed, fun() -> publish_feed(Slot, E, S) end),
+            SCommitted = timed_step(S#s.ns, resolve, fun() ->
+                             resolve_committed_relays(
+                               Payload, Slot,
+                               S#s{store = Store1, commits = S#s.commits + 1,
+                                   last_ts = max(S#s.last_ts, BlockTs),
+                                   author_seqs =
+                                       advance_author_seqs(Payload, S#s.author_seqs)})
+                         end),
             S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
             S1 = adopt_committee(Data, finalize(Slot, S0)),
-            apply_live(Slot, Data, confirm_live(S1))
+            timed_step(S#s.ns, apply, fun() -> apply_live(Slot, Data, confirm_live(S1)) end)
     end.
 
 persist_entry(Store, Entry, Slot, S) ->
@@ -2485,7 +2499,8 @@ support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% ce
 support_or_validate(#block{slot = Sl}, _BH, S) ->
     case (round_state(Sl, S))#round.invalid of
         true -> S;
-        false -> support_or_validate_ready(Sl, _BH, S)
+        false -> timed_step(S#s.ns, support,
+                            fun() -> support_or_validate_ready(Sl, _BH, S) end)
     end.
 
 support_or_validate_ready(Sl, BH, S) ->
@@ -2677,13 +2692,18 @@ keep_progress(S0, S1, Actions) ->
     keep_progress(S0, S1, Actions, normal).
 
 keep_progress(S0, S1, Actions, TimerMode) ->
-    SReady = settle_readiness(S0, maybe_mark_ready(S1)),
-    SRecovered = reconcile_block_requests(SReady),
+    SReady = timed_step(S1#s.ns, readiness,
+                        fun() -> settle_readiness(S0, maybe_mark_ready(S1)) end),
+    SRecovered = timed_step(S1#s.ns, reconcile,
+                            fun() -> reconcile_block_requests(SReady) end),
     %% Drain BEFORE head reconciliation and the timer diff: a drain-created proposal
     %% moves head_progress, and the watchdog must be armed against the post-drain head.
-    {SDrained, DrainActions} = drain_ingress(SRecovered),
-    SAdvertised = refresh_readiness(SDrained),
-    S2 = reconcile_head_progress(SAdvertised),
+    {SDrained, DrainActions} = timed_step(S1#s.ns, drain,
+                                          fun() -> drain_ingress(SRecovered) end),
+    SAdvertised = timed_step(S1#s.ns, advertise,
+                             fun() -> refresh_readiness(SDrained) end),
+    S2 = timed_step(S1#s.ns, head_reconcile,
+                    fun() -> reconcile_head_progress(SAdvertised) end),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);
@@ -3608,9 +3628,11 @@ membership_change_ok(#transaction{}, _Vs) ->
 
 %% Send a consensus message to every OTHER member of the ACTIVE voting set, each on our own outbound link.
 broadcast(Msg, S = #s{self = Self}) ->
-    Frame = encode(S#s.ns, Msg),
-    lists:foldl(fun(P, Acc) -> send_frame(P, Frame, Acc) end,
-                S, active_validators(S) -- [Self]).
+    timed_step(S#s.ns, bcast, fun() ->
+        Frame = encode(S#s.ns, Msg),
+        lists:foldl(fun(P, Acc) -> send_frame(P, Frame, Acc) end,
+                    S, active_validators(S) -- [Self])
+    end).
 
 %% Send to one peer on our outbound link, dialing on demand; frames buffer (bounded) in the outbox until
 %% `link_up` flushes them. We transmit only on our OWN outbound link, never a peer's inbound stream, so

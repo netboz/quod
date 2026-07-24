@@ -56,6 +56,7 @@ Two collection paths:
 | `quod_consensus_event_ms{namespace}` | histogram | `class` | wall time handling one consensus event, by event class |
 | `quod_consensus_event_qlen{namespace}` | histogram | `class` | mailbox depth found at consensus event entry |
 | `quod_consensus_share_lag_ms{namespace}` | histogram | `kind` | own proposal: broadcast to each peer vote share arriving back |
+| `quod_consensus_step_ms{namespace}` | histogram | `step` | named sub-steps inside consensus handlers (the slow-handler decomposition) |
 | `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/send_queue_bytes/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, data queued behind pacing/cwnd, throttle flags |
 """.
 
@@ -63,7 +64,7 @@ Two collection paths:
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
          observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3,
-         observe_consensus_event/4, observe_share_lag/3]).
+         observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -247,6 +248,10 @@ declare(NodeId) ->
           [{name, quod_consensus_event_qlen},
            {help, "How many messages were already waiting in the consensus process mailbox when it began handling an event, by event class. Deep mailboxes mean events queue behind slow processing."},
            {labels, [namespace, class]}, {buckets, ?QLEN_BUCKETS}, {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_consensus_step_ms},
+           {help, "How long one named sub-step inside a consensus handler took, in milliseconds. The decomposition of slow handlers: the step label carrying the time is the bottleneck."},
+           {labels, [namespace, step]}, {buckets, ?EVENT_BUCKETS}, {constant_labels, CL}]),
     _ = prometheus_histogram:declare(
           [{name, quod_consensus_share_lag_ms},
            {help, "For blocks THIS node proposed: milliseconds from broadcasting the proposal to each peer vote share arriving back, on this node's clock. The direct measure of vote round-trip time."},
@@ -637,6 +642,25 @@ observe_consensus_event(Ns, Class, Us, QLen)
             end
     end;
 observe_consensus_event(_Ns, _Class, _Us, _QLen) ->
+    ok.
+
+-doc "One named sub-step inside a consensus handler took `Us` microseconds (guarded no-op without a metrics process).".
+-spec observe_consensus_step(binary(), atom(), integer()) -> ok.
+observe_consensus_step(Ns, Step, Us)
+  when is_binary(Ns), is_atom(Step), is_integer(Us), Us >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_consensus_step_ms,
+                      [label(Ns), atom_to_binary(Step, utf8)], Us / 1000),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_consensus_step(_Ns, _Step, _Us) ->
     ok.
 
 -doc "A peer's vote share arrived for a slot this node proposed, `Ms` after the proposal broadcast (one clock).".

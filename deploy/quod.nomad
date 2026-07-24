@@ -111,15 +111,6 @@ job "quod" {
       attribute = "${node.unique.name}"
     }
 
-    # Home of the local ledger (content.ledger_dir renders into $NOMAD_ALLOC_DIR/data).
-    # sticky+migrate keeps it across in-place updates and best-effort across moves; a
-    # genuinely lost ledger is re-fetched from peers (catch-up), never a safety issue.
-    ephemeral_disk {
-      sticky  = true
-      migrate = true
-      size    = 1024
-    }
-
     network {
       mode = "bridge"
       port "p2p" { to = 14567 }
@@ -127,12 +118,19 @@ job "quod" {
       port "explorer" { to = 14569 }
     }
 
+    # Fast LOCAL storage: a per-alloc dynamic host volume (mkdir plugin) on each compute
+    # node's local disk (~2ms fdatasync vs Ceph RBD's 40-137ms). This carries EVERYTHING
+    # for the node — identity, vote journal, and the block ledger — on one fast disk, so
+    # every consensus sync is local. Safe because the durability domains are unified: a
+    # host that survives keeps all three (restart resumes with its votes remembered); a
+    # host that dies loses all three together, so the node can only return as a fresh
+    # validator (no identity kept while votes are lost — the equivocation hazard cannot
+    # arise). The volumes are pre-created pinned per alloc index; identities were migrated
+    # off the old Ceph volumes before this switch, so the committee is unchanged.
     volume "quod-data" {
-      type            = "csi"
-      source          = "quod-node"
-      access_mode     = "single-node-writer"
-      attachment_mode = "file-system"
-      per_alloc       = true
+      type      = "host"
+      source    = "quod-node-local"
+      per_alloc = true
     }
 
     # Start-gate: an allocation may start once it can REACH a current fleet member (its port
@@ -227,13 +225,10 @@ explorer {
 content = [
   {
     namespace = "quod:root"
+    # data_dir is the fast local host volume mounted at /quod/data — identity, vote
+    # journal, and ledger all live here now, so ledger_dir (the 0.7.36 Ceph workaround)
+    # is no longer needed.
     data_dir  = "/quod/data"
-    # The block ledger lives on the alloc's LOCAL ephemeral disk, not the Ceph volume:
-    # one fdatasync on Ceph RBD costs 40-106ms and the per-commit ledger sync dominated
-    # consensus round time. Safe because the chain is replicated by consensus — a node
-    # whose ledger is lost re-syncs trustlessly from peers against the pinned anchor.
-    # Identity + vote journal REMAIN on the durable Ceph volume (data_dir above).
-    ledger_dir = "{{ env "NOMAD_ALLOC_DIR" }}/data/ledger"
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}

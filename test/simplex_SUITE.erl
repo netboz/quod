@@ -169,6 +169,8 @@ burst_commits_without_busy(Config) ->
                 fun() -> match_ok(prove(Peer, {burst_warmup, {'X'}})) end, 15000))
       || {Peer, _} <- Nodes ],
     BusyBefore = total_busy(Nodes),
+    H0 = synced_height(Nodes),
+    T0 = erlang:monotonic_time(millisecond),
     Parent = self(),
     Writers =
         [begin
@@ -194,7 +196,15 @@ burst_commits_without_busy(Config) ->
       || {Peer, _} <- Nodes ],
     ?assertEqual(BusyBefore, total_busy(Nodes)),
     Heights = lists:usort([slot(Peer) || {Peer, _} <- Nodes]),
-    ?assertEqual(1, length(Heights)).
+    ?assertEqual(1, length(Heights)),
+    %% round pacing over the burst: the local-cluster reference number for the
+    %% live fleet's ~250-500ms phases — local rounds much faster than production
+    %% convicts the environment; equally slow convicts the code, reproducibly here
+    ElapsedMs = erlang:monotonic_time(millisecond) - T0,
+    Slots = hd(Heights) - H0,
+    ct:pal("burst pacing: ~p slots in ~pms (~.1f ms/round, ~.2f blocks/s)",
+           [Slots, ElapsedMs, ElapsedMs / max(1, Slots),
+            Slots * 1000 / max(1, ElapsedMs)]).
 
 total_busy(Nodes) ->
     lists:sum([maps:get(r_busy, peer:call(Peer, quod_simplex, stats, [?NS]), 0)

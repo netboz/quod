@@ -1201,9 +1201,37 @@ self_addr(Cfg) ->
 %%% running
 %%%===================================================================
 
-running({call, From}, {append, Change}, S0) ->
-    running({call, From}, {append, Change, otel_ctx:new()}, S0);
-running({call, From}, {append, Change, TraceCtx}, S0) ->
+%% One wrapper owns every event: wall-time per handler invocation and the mailbox
+%% depth found at entry, by coarse event class — the in-production decomposition of
+%% "where does a consensus round's time go": slow handlers convict processing, deep
+%% mailboxes convict queueing, and neither convicts the path BEFORE this process.
+%% The observes are guarded no-ops without a metrics process (~µs when live).
+running(EventType, Content, S) ->
+    {message_queue_len, QLen} = process_info(self(), message_queue_len),
+    T0 = erlang:monotonic_time(microsecond),
+    Result = running_impl(EventType, Content, S),
+    quod_metrics:observe_consensus_event(
+      S#s.ns, event_class(EventType, Content),
+      erlang:monotonic_time(microsecond) - T0, QLen),
+    Result.
+
+event_class({call, _}, {append, _})            -> append;
+event_class({call, _}, {append, _, _})         -> append;
+event_class({call, _}, _)                      -> call;
+event_class(info, {quod_message, _, _, _})     -> frame;
+event_class({timeout, batch}, _)               -> timeout_batch;
+event_class({timeout, progress}, _)            -> timeout_progress;
+event_class({timeout, tick}, _)                -> timeout_tick;
+event_class({timeout, _}, _)                   -> timeout_other;
+event_class(_, {link_up, _, _, _, _})          -> link;
+event_class(_, {link_error, _, _})             -> link;
+event_class(_, {'DOWN', _, _, _, _})           -> link;
+event_class(cast, _)                           -> cast;
+event_class(_, _)                              -> other.
+
+running_impl({call, From}, {append, Change}, S0) ->
+    running_impl({call, From}, {append, Change, otel_ctx:new()}, S0);
+running_impl({call, From}, {append, Change, TraceCtx}, S0) ->
     Waiter = new_waiter(From, TraceCtx, Change, S0#s.ns, false),
     {S1, Reply} = handle_append(
                     Waiter, Change,
@@ -1211,13 +1239,13 @@ running({call, From}, {append, Change, TraceCtx}, S0) ->
     keep_progress(S0, S1, Reply);
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
-running(cast, rebuild, S0) ->
+running_impl(cast, rebuild, S0) ->
     S1 = apply_committed(S0#s{last_applied = 0, prolog_ready = false}),
     keep_progress(S0, S1, []);
 %% A peer's consensus message (proposal / share / cert) on our `{log, Ns}` channel. `Peer` is the
 %% sender's authenticated node_id (pubkey); the address is a routing hint we ignore. Processing it can
 %% advance/skip the head; `keep_progress/3` reconciles the explicit head watchdog afterward.
-running(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
+running_impl(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
     %% Only a committee member acts on consensus traffic. A node that is still joining, or caught up but
     %% not (yet) admitted, is a read-only observer — it stays current via catch-up + its KB, never by
     %% voting — so it drops the committee's propose/share/cert stream (also guards `leader/2` on `[]`).
@@ -1237,16 +1265,16 @@ running(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = #s{ch
                     keep_progress(S0, SIn, [])
             end
     end;
-running(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
+running_impl(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
 %% A membership verdict from our own quod_prolog (a plain message from `deliver_verdict`): emit or withhold
 %% the deferred support share. The tag echoes the `{Slot, BlockHash}` we requested with, so the verdict binds
 %% to the exact block. Support can advance/skip the head, so reflect that in the Δ timer.
-running(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
+running_impl(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
     S1 = on_membership_verdict(Sl, BH, Verdict, S0),
     keep_progress(S0, S1, []);
-running(info, {link_up, Peer, Chan, LinkPid}, S0 = #s{chan = Chan}) ->
+running_impl(info, {link_up, Peer, Chan, LinkPid}, S0 = #s{chan = Chan}) ->
     keep_progress(S0, handle_link_up(Peer, LinkPid, S0), []);
-running(info, {link_error, Peer, Chan}, S0 = #s{chan = Chan}) ->
+running_impl(info, {link_error, Peer, Chan}, S0 = #s{chan = Chan}) ->
     %% the dial failed — clear the in-flight marker but KEEP the buffered frames; the tick re-dials
     %% (consensus emits each propose/share only once, so dropping them would stall the slot forever).
     S1 = S0#s{dialing = maps:remove(Peer, S0#s.dialing)},
@@ -1255,24 +1283,24 @@ running(info, {link_error, Peer, Chan}, S0 = #s{chan = Chan}) ->
 %% sent before the exit, is processed before this DOWN — flipping `sync` away from `{pulling,Pid}` to the
 %% generic clause below). Clear the single-flight latch + back off; the tick re-arms if still `should_sync`.
 %% The worker resumes from the persisted height, so a retry continues from the prefix already on disk.
-running(info, {'DOWN', _Ref, process, Pid, _Reason}, S0 = #s{sync = {pulling, Pid}}) ->
+running_impl(info, {'DOWN', _Ref, process, Pid, _Reason}, S0 = #s{sync = {pulling, Pid}}) ->
     keep_progress(S0, recovery_failed(S0), []);
-running(info, {'DOWN', _Ref, process, Pid, _}, S0) ->
+running_impl(info, {'DOWN', _Ref, process, Pid, _}, S0) ->
     keep_progress(S0, drop_link(Pid, S0), []);
 %% Seal the current micro-batch. A stale timeout is harmless: flush_batch/2 only
 %% acts when the collecting slot still matches.
-running({timeout, batch}, {flush_batch, V}, S0) ->
+running_impl({timeout, batch}, {flush_batch, V}, S0) ->
     S1 = flush_batch(V, S0),
     keep_progress(S0, S1, []);
 %% The oldest non-final slot owns one Δ watchdog through all three phases. A timeout may redrive a
 %% proposal/finality bundle or issue a complaint, but it never silently disappears at notarization.
-running({timeout, progress}, {progress_timeout, V}, S0) ->
+running_impl({timeout, progress}, {progress_timeout, V}, S0) ->
     S1 = on_progress_timeout(V, S0),
     keep_progress(S0, S1, [], rearm);
 %% Consensus re-drive: sweep any dial that resolved to neither link_up nor link_error (presumed lost),
 %% re-dial every peer whose link never came up (its frames are still buffered), AND arm sync — the one
 %% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
-running({timeout, tick}, tick, S0) ->
+running_impl({timeout, tick}, tick, S0) ->
     S1 = maybe_arm_sync(
            redrive_relays(redrive_inflight(redial_pending(
              sweep_stale_dials(expire_ingress(S0)))))),
@@ -1285,7 +1313,7 @@ running({timeout, tick}, tick, S0) ->
 %% so any slot past `H` is itself cert-corroborated, never a blind advance. Requiring `Slot =:= H` instead
 %% would reject a member that stayed caught up under load (its head moved while the probe was in flight),
 %% bouncing it back to `unconfirmed` forever — the load stall this guard must not cause.
-running(cast, {sync_done, Pid, {ready, H}},
+running_impl(cast, {sync_done, Pid, {ready, H}},
         S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
     S1 = S0#s{sync = ready, sync_arm = reset_pace()},
     S2 = apply_committed(S1),
@@ -1295,14 +1323,14 @@ running(cast, {sync_done, Pid, {ready, H}},
     keep_progress(S0, S2, []);
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
-running(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
+running_impl(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
     keep_progress(S0, recovery_failed(S0), []);
-running(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from an obsolete worker
+running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from an obsolete worker
 %% The sync worker — and, for an observer, the feed's anti-entropy pull — hands each verified, contiguous
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
 %% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
-running({call, From}, {sink_catchup, Source, Es}, S0) ->
+running_impl({call, From}, {sink_catchup, Source, Es}, S0) ->
     case may_sink(Source, S0) of
         %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
         %% transition helper cancels the named timer before the recovered member can vote again.
@@ -1312,21 +1340,21 @@ running({call, From}, {sink_catchup, Source, Es}, S0) ->
     end;
 %% The feed puller closes its whole multi-window replay through this process. All apply casts
 %% above and this ready cast therefore have one sender and preserve mailbox order at Prolog.
-running({call, From}, finish_feed_replay, S = #s{sync = ready}) ->
+running_impl({call, From}, finish_feed_replay, S = #s{sync = ready}) ->
     case is_participant(S) of
         false -> _ = quod_prolog:mark_ready(S#s.ns),
                  {keep_state, S, [{reply, From, ok}]};
         true  -> {keep_state, S, [{reply, From, {error, not_following}}]}
     end;
-running({call, From}, finish_feed_replay, S) ->
+running_impl({call, From}, finish_feed_replay, S) ->
     %% Promotion can revoke feed ownership mid-window. Its member recovery will publish the
     %% ready edge after corroborating the new head; acknowledge the obsolete feed worker now.
     {keep_state, S, [{reply, From, ok}]};
-running({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
-running({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
-running({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
-running({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
-running(_EventType, _Event, S)             -> {keep_state, S}.
+running_impl({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
+running_impl({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
+running_impl({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
+running_impl({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
+running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
 terminate(_Reason, _State, #s{chan = Chan, store = Store, vote_journal = Journal}) ->
     _ = case Chan of undefined -> ok; _ -> catch quod_reg:unsubscribe({channel, Chan}) end,
@@ -2291,7 +2319,27 @@ drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
 %% every message is SHAPE-VALIDATED first — a record with a malformed field (e.g. a non-integer slot)
 %% would otherwise crash the statem downstream (share_bytes packs `Slot:64`). Malformed ⇒ silently dropped.
 dispatch(Peer, {propose, #block{} = B}, S) -> case well_formed_block(B) of true -> on_propose(Peer, B, S); false -> S end;
-dispatch(_Peer, {share, #share{} = Sh}, S) -> case well_formed_share(Sh) of true -> maybe_join_complaint(Sh, engine_step([{share, Sh}], S)); false -> S end;
+dispatch(_Peer, {share, #share{} = Sh}, S) ->
+    case well_formed_share(Sh) of
+        true ->
+            %% A peer's share for a slot WE proposed: its arrival lag since our own
+            %% propose (one clock) is the direct in-production measure of how long
+            %% votes take to come back — the number the round-phase histograms can
+            %% only bound from outside.
+            _ = case S#s.round_probe of
+                    #{} = Probe when map_size(Probe) > 0 ->
+                        case Probe of
+                            #{(Sh#share.slot) := {ProposedAt, _}} ->
+                                quod_metrics:observe_share_lag(
+                                  S#s.ns, Sh#share.kind,
+                                  quod_time:mono_ms() - ProposedAt);
+                            _ -> ok
+                        end;
+                    _ -> ok
+                end,
+            maybe_join_complaint(Sh, engine_step([{share, Sh}], S));
+        false -> S
+    end;
 dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
 dispatch(Peer, {block_request, Slot, BH}, S)
   when is_integer(Slot), Slot >= 1, is_binary(BH), byte_size(BH) =:= 32 ->

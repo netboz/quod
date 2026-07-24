@@ -53,13 +53,17 @@ Two collection paths:
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
+| `quod_consensus_event_ms{namespace}` | histogram | `class` | wall time handling one consensus event, by event class |
+| `quod_consensus_event_qlen{namespace}` | histogram | `class` | mailbox depth found at consensus event entry |
+| `quod_consensus_share_lag_ms{namespace}` | histogram | `kind` | own proposal: broadcast to each peer vote share arriving back |
 | `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/send_queue_bytes/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, data queued behind pacing/cwnd, throttle flags |
 """.
 
 -behaviour(gen_server).
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
-         observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3]).
+         observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3,
+         observe_consensus_event/4, observe_share_lag/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -73,6 +77,10 @@ Two collection paths:
 -define(ROUND_BUCKETS, [1, 2, 5, 10, 25, 50, 100, 150, 200, 300, 400, 500, 750,
                         1000, 2000, 5000]).   %% ms: one consensus round phase — fine-grained around the
                                               %% suspicious 100-750ms range so the probe can localize it
+-define(EVENT_BUCKETS, [0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 25, 50, 100,
+                        250, 500, 1000]).  %% ms per statem event; sub-ms resolution to
+                                           %% split "fast handler" from "slow handler"
+-define(QLEN_BUCKETS, [0, 1, 2, 5, 10, 25, 50, 100, 500, 1000]).  %% mailbox depth at entry
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
@@ -231,6 +239,18 @@ declare(NodeId) ->
     _ = H(quod_consensus_round_approve_ms,
           "For blocks THIS node proposed: milliseconds from broadcasting the proposal to holding the support quorum that approves it, on this node's clock. This is the first half of a consensus round; on a fast local network it should be tens of milliseconds.",
           ?ROUND_BUCKETS),
+    _ = prometheus_histogram:declare(
+          [{name, quod_consensus_event_ms},
+           {help, "How long the consensus process spent handling one event, by event class, in milliseconds. Consistently fast handlers with slow rounds mean the delay is outside this process."},
+           {labels, [namespace, class]}, {buckets, ?EVENT_BUCKETS}, {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_consensus_event_qlen},
+           {help, "How many messages were already waiting in the consensus process mailbox when it began handling an event, by event class. Deep mailboxes mean events queue behind slow processing."},
+           {labels, [namespace, class]}, {buckets, ?QLEN_BUCKETS}, {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_consensus_share_lag_ms},
+           {help, "For blocks THIS node proposed: milliseconds from broadcasting the proposal to each peer vote share arriving back, on this node's clock. The direct measure of vote round-trip time."},
+           {labels, [namespace, kind]}, {buckets, ?ROUND_BUCKETS}, {constant_labels, CL}]),
     _ = H(quod_consensus_round_commit_ms,
           "For blocks THIS node proposed: milliseconds from approval to the block becoming final and durable here, on this node's clock. This is the second half of a consensus round; together with the approve phase it is the whole per-block latency budget.",
           ?ROUND_BUCKETS),
@@ -594,6 +614,48 @@ observe_round_phase(Ns, Phase, Ms)
             end
     end;
 observe_round_phase(_Ns, _Phase, _Ms) ->
+    ok.
+
+-doc """
+One consensus statem event handled: wall `Us` (microseconds) and the mailbox depth found
+at entry, by event class. Called on EVERY event — the guard plus a histogram update cost
+~1-2µs; an absent metrics process makes it a no-op.
+""".
+-spec observe_consensus_event(binary(), atom(), integer(), non_neg_integer()) -> ok.
+observe_consensus_event(Ns, Class, Us, QLen)
+  when is_binary(Ns), is_atom(Class), is_integer(Us), Us >= 0, is_integer(QLen) ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                L = [label(Ns), atom_to_binary(Class, utf8)],
+                _ = prometheus_histogram:observe(quod_consensus_event_ms, L, Us / 1000),
+                _ = prometheus_histogram:observe(quod_consensus_event_qlen, L, QLen),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_consensus_event(_Ns, _Class, _Us, _QLen) ->
+    ok.
+
+-doc "A peer's vote share arrived for a slot this node proposed, `Ms` after the proposal broadcast (one clock).".
+-spec observe_share_lag(binary(), atom(), integer()) -> ok.
+observe_share_lag(Ns, Kind, Ms)
+  when is_binary(Ns), is_atom(Kind), is_integer(Ms), Ms >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_consensus_share_lag_ms,
+                      [label(Ns), atom_to_binary(Kind, utf8)], Ms),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_share_lag(_Ns, _Kind, _Ms) ->
     ok.
 
 -doc """

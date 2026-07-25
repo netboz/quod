@@ -86,3 +86,69 @@ observe_round_phase_test() ->
     after
         Placeholder ! stop
     end.
+
+%% Per-event timing: microseconds land (divided by 1000) in the ms histogram, the
+%% mailbox depth lands in its own histogram, both labelled by event class. A negative
+%% duration (impossible on one monotonic clock) is dropped by the guard.
+observe_consensus_event_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"ev:test">>,
+    ok = quod_metrics:observe_consensus_event(Ns, frame, 5000, 3),   %% no process yet: no-op, no crash
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_consensus_event(Ns, frame, 12000, 7),  %% 12000us -> 12ms, mailbox 7
+        ok = quod_metrics:observe_consensus_event(Ns, append, 3000, 0),  %% a different event class
+        ok = quod_metrics:observe_consensus_event(Ns, frame, -1, 0),     %% negative us: dropped by guard
+        {_, MsSum} = prometheus_histogram:value(quod_consensus_event_ms, [Ns, <<"frame">>]),
+        {_, QlSum} = prometheus_histogram:value(quod_consensus_event_qlen, [Ns, <<"frame">>]),
+        {_, MsAppend} = prometheus_histogram:value(quod_consensus_event_ms, [Ns, <<"append">>]),
+        ?assert(MsSum == 12.0),   %% only the one valid frame sample survived
+        ?assert(QlSum == 7),
+        ?assert(MsAppend == 3.0)
+    after
+        Placeholder ! stop
+    end.
+
+%% Per named sub-step timing: microseconds land (divided by 1000) in the ms histogram,
+%% labelled by step name. Negative durations are dropped by the guard.
+observe_consensus_step_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"step:test">>,
+    ok = quod_metrics:observe_consensus_step(Ns, persist, 4000),   %% no process: no-op
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_consensus_step(Ns, persist, 2000),    %% 2000us -> 2ms
+        ok = quod_metrics:observe_consensus_step(Ns, support, 150000),  %% 150000us -> 150ms
+        ok = quod_metrics:observe_consensus_step(Ns, persist, -5),      %% negative: dropped
+        {_, PSum} = prometheus_histogram:value(quod_consensus_step_ms, [Ns, <<"persist">>]),
+        {_, SSum} = prometheus_histogram:value(quod_consensus_step_ms, [Ns, <<"support">>]),
+        ?assert(PSum == 2.0),
+        ?assert(SSum == 150.0)
+    after
+        Placeholder ! stop
+    end.
+
+%% Vote-share arrival lag lands in the histogram in milliseconds, labelled by vote
+%% kind (support/commit/complaint). Negative durations are dropped by the guard.
+observe_share_lag_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"lag:test">>,
+    ok = quod_metrics:observe_share_lag(Ns, support, 40),   %% no process: no-op
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_share_lag(Ns, support, 25),
+        ok = quod_metrics:observe_share_lag(Ns, commit, 60),
+        ok = quod_metrics:observe_share_lag(Ns, support, -1),   %% negative: dropped
+        {_, SupSum} = prometheus_histogram:value(quod_consensus_share_lag_ms, [Ns, <<"support">>]),
+        {_, ComSum} = prometheus_histogram:value(quod_consensus_share_lag_ms, [Ns, <<"commit">>]),
+        ?assert(SupSum == 25),
+        ?assert(ComSum == 60)
+    after
+        Placeholder ! stop
+    end.

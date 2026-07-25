@@ -35,12 +35,6 @@ vote, rebuild, and catch-up. Remaining, gated:
   real 32-byte key but whose `quic:peercert/1` is missing or mismatched — so an unauthenticated /
   impersonating peer can't speak on a pubkey identity. *Still open:* the bind is skipped for non-pubkey
   (no-identity/test) ids, so it only bites once a node has a real keypair (the production path).
-- **PEM-fallback badmatch on a missing cert file** (`quod_quic:identity_certkey/0` →
-  `load_cert`/`load_key`). When the identity env (`identity_cert`/`identity_key`) is absent, the
-  fallback does `{ok, Pem} = file:read_file(certfile)`, which **badmatches if the file is missing**
-  and crashes the transport's `init/1` at boot. Pre-existing (the old code loaded the PEM
-  unconditionally) and now *less* reachable; make it a clean fail-fast error once the legacy/test
-  PEM path is retired (the production boot always sets the identity env via `quod_app:apply_identity`).
 - **Non-`[safe]` decode** (`quod_prove:inbound`; and the DispersedSimplex `{log, Ns}` transport once it
   lands in Stage 2). Any on-channel speaker can deliver arbitrary terms (atom-table growth). Deliberate
   so fact atoms decode; closed by signed/validated payloads (§1). Size-bounded: `quod_prove` caps frames

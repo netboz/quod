@@ -281,6 +281,19 @@ task_restarts() {
     || echo 0
 }
 
+# Raw /metrics text for ONE node. Compute nodes expose it on their mapped host:port;
+# quod-cloud allocs only bind it inside the container, so exec curl there. The outer
+# `timeout` bounds the exec itself (a hung/churning alloc must not wedge the caller —
+# `--max-time` only bounds curl, not the nomad exec around it). Shared by every scraper.
+fetch_metrics() {   # $1=alloc $2=group $3=host:port
+  if [ "$2" = "quod-cloud" ]; then
+    timeout 8 nomad alloc exec -task quod "$1" /usr/bin/curl -s --max-time 4 \
+      http://127.0.0.1:14568/metrics 2>/dev/null
+  else
+    curl -s --max-time 4 "http://$3/metrics" 2>/dev/null
+  fi
+}
+
 # Scrape ONE alloc's metrics for $NS only ->
 # "alloc group slot unverified rejects is_validator committee_size weak_cert_waits syncing append_bad".
 # Nodes may host more than one ontology. Every metric used for the verdict must
@@ -289,11 +302,7 @@ task_restarts() {
 # fails -> slot/isv/cs = -1 (excluded from aggregates + classification).
 scrape_row() {   # arg: "alloc,group,host:port"
   local a g hp; IFS=, read -r a g hp <<<"$1"
-  if [ "$g" = "quod-cloud" ]; then
-    nomad alloc exec -task quod "$a" /usr/bin/curl -s --max-time 4 http://127.0.0.1:14568/metrics 2>/dev/null
-  else
-    curl -s --max-time 4 "http://$hp/metrics" 2>/dev/null
-  fi | awk -v a="$a" -v g="$g" -v ns="$NS" '
+  fetch_metrics "$a" "$g" "$hp" | awk -v a="$a" -v g="$g" -v ns="$NS" '
     index($0, "namespace=\"" ns "\"") {
       if ($1 ~ /^quod_consensus_slot\{/) slot=$2
       else if ($1 ~ /^quod_feed_dropped\{/ && $0 ~ /reason="unverified"/) unv+=$2
@@ -327,6 +336,106 @@ fleet_head() { refresh_endpoints; scrape_fleet 2>/dev/null | awk '$3>m{m=$3} END
 # classification from the current FLEETFILE
 validators() { awk '$6==1 && $9==0 {print $1}' "$FLEETFILE"; }
 observers()  { awk '$2=="quod-node" && $6==0 && $9==0 {print $1}' "$FLEETFILE"; }
+
+#==============================================================================
+# performance report — commit-latency percentiles + per-node bandwidth over the
+# load window. Captured as a start/end snapshot; each node is deltaed SEPARATELY
+# (keeping the node_id label / per-alloc counters) so a node that restarts mid-run
+# — expected under chaos — has its reset counter dropped instead of corrupting the
+# fleet-wide percentile or showing negative bandwidth. Reported in RESULT.
+#==============================================================================
+PERFDIR=$(mktemp -d)
+perf_snapshot() {   # $1 = start|end
+  local label=$1
+  # eth0 counters first, with the window timestamp captured adjacent to the read so the
+  # bandwidth dt matches the interval the counters actually span (not the whole scrape).
+  date +%s.%N > "$PERFDIR/$label.ts"
+  while IFS=, read -r a g hp; do
+    echo "$a $(timeout 8 nomad alloc exec -task quod "$a" sh -c 'grep eth0 /proc/net/dev' 2>/dev/null | awk 'NR==1{print $2, $10}')"
+  done < <(awk '{print $1","$2","$3}' "$EPFILE") > "$PERFDIR/$label.net"
+  # fleet latency histogram bucket lines (commit latency + the two round phases); the
+  # node_id label is kept so perf_report can delta each node on its own cumulative counter.
+  while IFS=, read -r a g hp; do
+    fetch_metrics "$a" "$g" "$hp" \
+      | grep -E 'quod_tx_commit_latency_ms_bucket|quod_consensus_round_(approve|commit)_ms_bucket' \
+      | grep -F "namespace=\"$NS\""
+  done < <(awk '{print $1","$2","$3}' "$EPFILE") > "$PERFDIR/$label.hist"
+}
+
+perf_report() {
+  # Only the END snapshot must have samples: histograms emit no series until first
+  # observed, so a quiet fleet at load-start yields an empty start.hist — the python
+  # treats a missing start baseline as all-zero (delta = full end count), which is
+  # exactly right for series that first appeared during the window.
+  [ -s "$PERFDIR/end.hist" ] || { LOG "performance: no end snapshot (skipped)"; return; }
+  LOG "performance (over the load window):"
+  python3 - "$PERFDIR" 2>/dev/null <<'PY' || LOG "  (perf report unavailable — python3 missing?)"
+import sys, re
+d = sys.argv[1]
+def load(f):
+    # key by (node_id, metric, le) so each node's cumulative counter deltas on its own
+    h = {}
+    for ln in open(f):
+        m = re.match(r'(\S+?)\{(.*)\}\s+([0-9.eE+]+)', ln)
+        if not m: continue
+        name, lbls, val = m.group(1), m.group(2), float(m.group(3))
+        le = re.search(r'le="([^"]+)"', lbls)
+        if not le: continue
+        nid = re.search(r'node_id="([^"]+)"', lbls)
+        h[(nid.group(1) if nid else '', name, le.group(1))] = val
+    return h
+def pct(delta, q):
+    les = sorted(delta, key=lambda x: float('inf') if x == '+Inf' else float(x))
+    tot = delta.get('+Inf', 0)
+    if tot <= 0: return '-'
+    for le in les:
+        if delta[le] >= q * tot: return le
+    return '+Inf'
+s, e = load(d + '/start.hist'), load(d + '/end.hist')
+# per-node delta; a node whose counter went backwards (restart) is dropped for the whole
+# window rather than letting a negative delta corrupt the fleet cumulative -> honest pXX.
+fleet = {}; reset = set()
+for key, ev in e.items():
+    dv = ev - s.get(key, 0)
+    node, name, le = key
+    if dv < 0: reset.add(node); continue
+    fleet[(name, le)] = fleet.get((name, le), 0) + dv
+labels = [('quod_tx_commit_latency_ms_bucket', 'commit latency (submit->final)'),
+          ('quod_consensus_round_approve_ms_bucket', 'round: accept phase'),
+          ('quod_consensus_round_commit_ms_bucket', 'round: make-final phase')]
+for metric, label in labels:
+    delta = {le: v for (nm, le), v in fleet.items() if nm == metric}
+    n = delta.get('+Inf', 0)
+    if n <= 0: continue
+    print("  %-30s p50<=%-6s p90<=%-6s p99<=%-6s ms  (n=%d)"
+          % (label, pct(delta, .5), pct(delta, .9), pct(delta, .99), int(n)))
+if reset:
+    print("  (%d node(s) restarted mid-window; their pre-restart latency samples are excluded)" % len(reset))
+try:
+    dt = float(open(d + '/end.ts').read()) - float(open(d + '/start.ts').read())
+    ns = {}
+    for f, tag in ((d + '/start.net', 's'), (d + '/end.net', 'e')):
+        for ln in open(f):
+            p = ln.split()
+            if len(p) >= 3: ns.setdefault(p[0], {})[tag] = (int(p[1]), int(p[2]))
+    rows = []; churned = 0
+    for a, v in ns.items():
+        if 's' in v and 'e' in v and dt > 0:
+            # clamp: a same-alloc restart resets eth0 counters -> a negative delta is not real
+            rx = max(0, v['e'][0]-v['s'][0])*8/dt/1e6; tx = max(0, v['e'][1]-v['s'][1])*8/dt/1e6
+            rows.append((a[:8], rx, tx))
+        else:
+            churned += 1   # a rescheduled node gets a new alloc id -> in only one snapshot
+    if rows:
+        print("  per-node bandwidth, window average (Mbps) over %.0fs:" % dt)
+        for a, rx, tx in sorted(rows, key=lambda r: -(r[1]+r[2])):
+            print("    %-10s rx=%5.2f tx=%5.2f" % (a, rx, tx))
+        tail = "" if not churned else "; %d churned alloc(s) excluded" % churned
+        print("    fleet tx total=%.1f Mbps (average; bursts peak higher%s)" % (sum(r[2] for r in rows), tail))
+except Exception as ex:
+    print("  (bandwidth unavailable: %s)" % ex)
+PY
+}
 
 #==============================================================================
 # load control — bounded-retry HTTP writers (the real client ingress)
@@ -691,7 +800,7 @@ NS_JSON=$(jq -Rn --arg ns "$NS" '$ns')
 trap 'echo; LOG "interrupted — stopping writers"; stop_writers; exit 130' INT TERM
 # Unexpected exits only need to reap local children. Normal completion and
 # INT/TERM already run the ledger quiescence check explicitly.
-trap 'stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"' EXIT
+trap 'stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"; rm -rf "$PERFDIR"' EXIT
 
 LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
 
@@ -723,6 +832,7 @@ LOG "membership reject baseline: $REJECT_BASELINE"
 
 START_TS=$(date +%s); END=$(( START_TS + DURATION )); tick=0
 start_writers force
+perf_snapshot start          # baseline for the load-window latency + bandwidth report
 
 MEMB_AT=$(( DURATION * 40 / 100 ))          # fire the membership cycle ~40% into the window
 polls=$(( TICK / UNV_POLL )); [ "$polls" -lt 1 ] && polls=1
@@ -751,6 +861,7 @@ while [ "$(date +%s)" -lt "$END" ]; do
 done
 
 LOG "chaos window over — stopping load, waiting for churn to settle + reconvergence..."
+perf_snapshot end            # close the load-window latency + bandwidth measurement
 [ -n "$CHURN_PID" ]     && wait "$CHURN_PID" 2>/dev/null
 [ -n "$VAL_CHURN_PID" ] && wait "$VAL_CHURN_PID" 2>/dev/null
 [ -n "$RANDOM_CHURN_PID" ] && wait "$RANDOM_CHURN_PID" 2>/dev/null
@@ -823,6 +934,7 @@ if [ "$MEMB_RAN" = 1 ]; then
   LOG "membership churn cycle   : $MEMB_RESULT";               [ "$MEMB_RESULT" = pass ]             || { LOG "  FAIL: committee did not re-form/keep committing under membership churn"; FAILED=1; }
 fi
 LOG "worst height spread      : $WORST_LAG (during chaos — informational)"
+perf_report
 LOG "======================================================"
 LOG "note: the unverified/weak-cert gauges reset on a node restart; they are sampled every ${UNV_POLL}s"
 LOG "      (< churn cadence) to shrink but not eliminate that gauge blind spot. Nomad task restart"

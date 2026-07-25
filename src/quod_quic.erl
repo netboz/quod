@@ -35,6 +35,7 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([ensure_cache/0]).   %% tests own the resolver cache themselves (store_hint no longer creates it)
+-export([identity_certkey/0]).   %% tests exercise the PEM-fallback error path directly
 -endif.
 
 -define(KEY, {transport, node}).
@@ -155,28 +156,38 @@ init([]) ->
             %% node's address is deployment-specific (NAT / containers / port-mapping), so it is
             %% supplied explicitly — never the pubkey, never guessed from the bind port.
             Self   = {Pubkey0, Addr},
-            {Cert, Key} = identity_certkey(),
-            _ = ensure_cache(),
-            Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
-            %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
-            %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
-            %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
-            %% bound to the header's claimed pubkey in `m:quod_conn`). We present our own cert when
-            %% dialing too (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
-            %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection,
-            %% from config via `liveness_opts/0`. This quic build enforces each side's OWN
-            %% idle_timeout (no RFC min negotiation), so `quod_conn` dials with the SAME opts
-            %% (both call `liveness_opts/0`) for symmetric detection in both directions.
-            ServerOpts = maps:merge(#{cert => Cert, key => Key, verify => true, alpn => ALPN,
-                                      connection_handler => Handler}, liveness_opts()),
-            case quic:start_server(?SERVER, Port, ServerOpts) of
-                {ok, _} ->
-                    logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
-                                [Port, hd(ALPN), id_str(Pubkey0), Addr]),
-                    {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
-                {error, Reason} ->
-                    {stop, {listen_failed, Reason}}
+            case identity_certkey() of
+                {error, CertReason} ->
+                    logger:error("quod: transport init aborted: cert/key load failed: ~p",
+                                 [CertReason]),
+                    {stop, {cert_key_load_failed, CertReason}};
+                {ok, {Cert, Key}} ->
+                    start_listener(Port, ALPN, Self, Cert, Key)
             end
+    end.
+
+%% Bring up the listener once identity, address, and cert/key are all in hand.
+start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key) ->
+    _ = ensure_cache(),
+    Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
+    %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
+    %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
+    %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
+    %% bound to the header's claimed pubkey in `m:quod_conn`). We present our own cert when
+    %% dialing too (`quod_conn:start_outbound`), so every directed pair is mutually authenticated.
+    %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection,
+    %% from config via `liveness_opts/0`. This quic build enforces each side's OWN
+    %% idle_timeout (no RFC min negotiation), so `quod_conn` dials with the SAME opts
+    %% (both call `liveness_opts/0`) for symmetric detection in both directions.
+    ServerOpts = maps:merge(#{cert => Cert, key => Key, verify => true, alpn => ALPN,
+                              connection_handler => Handler}, liveness_opts()),
+    case quic:start_server(?SERVER, Port, ServerOpts) of
+        {ok, _} ->
+            logger:info("quod: QUIC (pure Erlang) listening on ~p (alpn ~s, id ~s @ ~p)",
+                        [Port, hd(ALPN), id_str(Pubkey0), Addr]),
+            {ok, #state{self = Self, alpn = ALPN, cert = Cert, key = Key}};
+        {error, Reason} ->
+            {stop, {listen_failed, Reason}}
     end.
 
 %% A node's own advertised endpoint. `node_addr` (an explicit {Host,Port}) is the sole source:
@@ -285,30 +296,77 @@ ensure_cache() ->
 id_str(Pubkey) when is_binary(Pubkey) -> quod_identity:short(Pubkey);
 id_str(Other)                         -> io_lib:format("~p", [Other]).
 
-%% The node's transport cert+key. Production: the per-node Ed25519 identity, set in the
-%% app env by `quod_app:apply_identity` (DER cert + `#'ECPrivateKey'{}` key). Legacy/test
-%% boots with no identity fall back to a PEM file pair (`certfile`/`keyfile`).
+%% The node's transport cert+key, as `{ok, {Cert, Key}}` or a clean `{error, Reason}`.
+%% Production: the per-node Ed25519 identity, set in the app env by `quod_app:apply_identity`
+%% (DER cert + `#'ECPrivateKey'{}` key). Legacy/test boots with no identity fall back to a PEM
+%% file pair (`certfile`/`keyfile`) — a missing/empty file is reported, not badmatched, so
+%% `init/1` can `{stop, _}` with a readable reason instead of crashing the transport at boot.
 identity_certkey() ->
     %% get_env yields the bare atom `undefined` when unset, so an absent key misses the
     %% `{ok, _}` pattern and falls to the PEM fallback (no guard needed).
     case {application:get_env(quod, identity_cert), application:get_env(quod, identity_key)} of
         {{ok, Cert}, {ok, Key}} ->
-            {Cert, Key};
+            {ok, {Cert, Key}};
         _ ->
-            {load_cert(env(certfile, "priv/certs/cert.pem")),
-             load_key(env(keyfile, "priv/certs/key.pem"))}
+            load_pem_pair(env(certfile, "priv/certs/cert.pem"),
+                          env(keyfile, "priv/certs/key.pem"))
     end.
 
-%% certs: load the PEM file -> DER cert / decoded key term (what `quic` expects).
+%% Both halves of the fallback pair, tagging the offending file on the first failure.
+load_pem_pair(CertFile, KeyFile) ->
+    case load_cert(CertFile) of
+        {ok, Cert} ->
+            case load_key(KeyFile) of
+                {ok, Key}    -> {ok, {Cert, Key}};
+                {error, KR}  -> {error, {keyfile, KeyFile, KR}}
+            end;
+        {error, CR} ->
+            {error, {certfile, CertFile, CR}}
+    end.
+
+%% certs: load the PEM file -> DER cert / decoded key term (what `quic` expects). A missing
+%% file returns `file:read_file`'s error (e.g. `enoent`); a PEM with no matching entry returns
+%% a named reason — never a badmatch.
 load_cert(File) ->
-    {ok, Pem} = file:read_file(File),
-    [Der | _] = [D || {'Certificate', D, _} <- public_key:pem_decode(Pem)],
-    Der.
+    case file:read_file(File) of
+        {ok, Pem} ->
+            case [D || {'Certificate', D, _} <- public_key:pem_decode(Pem)] of
+                [Der | _] -> {ok, Der};
+                []        -> {error, no_certificate_in_pem}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
 
 load_key(File) ->
-    {ok, Pem} = file:read_file(File),
-    [{Type, Der, _} | _] = [E || {T, _, _} = E <- public_key:pem_decode(Pem), T =/= 'Certificate'],
-    public_key:der_decode(Type, Der).
+    case file:read_file(File) of
+        {ok, Pem} ->
+            Keys = [E || {T, _, _} = E <- public_key:pem_decode(Pem), is_private_key_type(T)],
+            case Keys of
+                %% only an unencrypted entry is decodable; `der_decode` still THROWS on
+                %% truncated/garbage DER, so guard it — an unreadable key must surface as a
+                %% clean `{error, _}` (and hence `{stop, _}` in init/1), never a boot crash.
+                [{Type, Der, not_encrypted} | _] ->
+                    try {ok, public_key:der_decode(Type, Der)}
+                    catch _:_ -> {error, {undecodable_private_key, Type}}
+                    end;
+                [{Type, _Der, _Enc} | _] ->
+                    {error, {encrypted_private_key, Type}};
+                [] ->
+                    {error, no_private_key_in_pem}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+%% PEM entry tags that carry an actual private key (excludes 'Certificate' AND parameter
+%% blocks like 'EcpkParameters'/'DHParameter' that a `T =/= 'Certificate'` filter would
+%% wrongly select as the key in a multi-entry file).
+is_private_key_type('RSAPrivateKey')   -> true;
+is_private_key_type('DSAPrivateKey')   -> true;
+is_private_key_type('ECPrivateKey')    -> true;
+is_private_key_type('PrivateKeyInfo')  -> true;   %% PKCS#8 (the default key.pem)
+is_private_key_type(_)                 -> false.
 
 to_bin(B) when is_binary(B) -> B;
 to_bin(L) when is_list(L)   -> list_to_binary(L);

@@ -272,8 +272,8 @@ EOT
 
       resources {
         cpu        = 500
-        memory     = 256
-        memory_max = 512
+        memory     = 512
+        memory_max = 1024
       }
 
       service {
@@ -468,8 +468,8 @@ EOT
 
       resources {
         cpu        = 500
-        memory     = 256
-        memory_max = 512
+        memory     = 512
+        memory_max = 1024
       }
 
       service {

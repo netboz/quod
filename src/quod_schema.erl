@@ -87,6 +87,12 @@ fields(content) ->
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
     , {park_ttl_ms,
        hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
+      %% Time the proposer keeps a newly-opened block available for more ordinary
+      %% transactions. 0 seals immediately; 25 ms is the measured fleet default.
+    , {batch_window_ms,
+       hoconsc:mk(integer(),
+                  #{default => 25,
+                    validator => fun(N) -> N >= 0 andalso N =< 1000 end})}
     , {ask_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
     , {ask_step_timeout_ms,

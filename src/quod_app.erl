@@ -290,6 +290,7 @@ build_ns_config(Content) ->
              max_ask_workers => maps:get(max_ask_workers, Content, 64),
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
              park_ttl_ms => maps:get(park_ttl_ms, Content, 30000),
+             batch_window_ms => maps:get(batch_window_ms, Content, 25),
              ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
              ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
              detailed_consensus_metrics =>

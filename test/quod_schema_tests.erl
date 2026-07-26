@@ -41,6 +41,7 @@ defaults_test() ->
     ?assertEqual(64,              maps:get(max_ask_workers, B)),
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(park_ttl_ms, B)),
+    ?assertEqual(25,              maps:get(batch_window_ms, B)),
     ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
@@ -56,6 +57,10 @@ two_ontologies_test() ->
     ?assertEqual(<<"animals">>,   maps:get(namespace, B2)),
     ?assertEqual(join,            maps:get(mode, B2)),
     ?assertEqual(<<"ff">>,        maps:get(genesis_hash, B2)).
+
+batch_window_parse_test() ->
+    C = check(<<"content = [{ namespace = \"quod:root\", batch_window_ms = 40 }]\n">>),
+    ?assertEqual(40, maps:get(batch_window_ms, content1(C))).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -149,6 +154,7 @@ build_ns_config_genesis_hash_test() ->
     ?assertEqual(join, maps:get(mode, NsCfg)),
     ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
     ?assertEqual(12345, maps:get(park_ttl_ms, NsCfg)),
+    ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
     ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
 
 %% A create node (blank genesis_hash) carries no anchor key at all — quod_simplex needs none.
@@ -161,6 +167,7 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertEqual(64, maps:get(max_ask_workers, NsCfg)),
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(park_ttl_ms, NsCfg)),
+    ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
     ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
 

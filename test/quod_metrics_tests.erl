@@ -152,3 +152,33 @@ observe_share_lag_test() ->
     after
         Placeholder ! stop
     end.
+
+%% Batching is sampled once per proposed block, while retry outcomes are counted
+%% at the caller-facing Prolog boundary. Invalid samples/reasons are ignored.
+batch_and_retry_metrics_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"batch:test">>,
+    ok = quod_metrics:observe_batch(Ns, 4, 25),
+    ok = quod_metrics:count_tx_retry(Ns, slot_closed),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_batch(Ns, 4, 25),
+        ok = quod_metrics:observe_batch(Ns, 0, -1),
+        ok = quod_metrics:count_tx_retry(Ns, slot_closed),
+        ok = quod_metrics:count_tx_retry(Ns, stale_sequence),
+        ok = quod_metrics:count_tx_retry(Ns, unknown),
+        {_, SizeSum} = prometheus_histogram:value(
+                         quod_consensus_batch_size, [Ns]),
+        {_, WaitSum} = prometheus_histogram:value(
+                         quod_consensus_batch_wait_ms, [Ns]),
+        ?assertEqual(4, SizeSum),
+        ?assertEqual(25, WaitSum),
+        ?assertEqual(1, prometheus_counter:value(
+                          quod_tx_retries_total, [Ns, <<"slot_closed">>])),
+        ?assertEqual(1, prometheus_counter:value(
+                          quod_tx_retries_total, [Ns, <<"stale_sequence">>]))
+    after
+        Placeholder ! stop
+    end.

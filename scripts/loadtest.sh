@@ -56,6 +56,7 @@ set -uo pipefail
 # sustained transaction load (a bounded safe-retry HTTP writer per validator, autonomous)
 : "${TX_BASE_MS:=120}"                      # base delay between a validator's writes
 : "${TX_JITTER_MS:=180}"                    # + a random 0..JITTER ms per write (random pacing)
+: "${TX_PREDICATE:=loadtest}"               # fact predicate; use a fresh name for controlled A/B runs
 : "${WRITER_RETRIES:=16}"                   # bounded not_leader/retry retries per fact (covers a full leader rotation)
 : "${WRITER_RETRY_MS:=40}"                  # sleep between those retries (a fraction of a slot)
 : "${PARK_TTL_MS:=30000}"                   # must match content.park_ttl_ms on the tested fleet
@@ -124,6 +125,7 @@ Load and chaos:
   --tick SEC                chaos/log interval (TICK, default: 15)
   --tx-base-ms MS           writer base delay (TX_BASE_MS)
   --tx-jitter-ms MS         writer random delay (TX_JITTER_MS)
+  --tx-predicate ATOM       predicate receiving generated facts (TX_PREDICATE)
   --writer-retries N        retries per write (WRITER_RETRIES)
   --writer-retry-ms MS      delay between retries (WRITER_RETRY_MS)
   --park-ttl-ms MS           deployed write-result wait (PARK_TTL_MS)
@@ -182,6 +184,7 @@ parse_args() {
       --tick|--tick=*) take_value "$@"; TICK=$ARG_VALUE ;;
       --tx-base-ms|--tx-base-ms=*) take_value "$@"; TX_BASE_MS=$ARG_VALUE ;;
       --tx-jitter-ms|--tx-jitter-ms=*) take_value "$@"; TX_JITTER_MS=$ARG_VALUE ;;
+      --tx-predicate|--tx-predicate=*) take_value "$@"; TX_PREDICATE=$ARG_VALUE ;;
       --writer-retries|--writer-retries=*) take_value "$@"; WRITER_RETRIES=$ARG_VALUE ;;
       --writer-retry-ms|--writer-retry-ms=*) take_value "$@"; WRITER_RETRY_MS=$ARG_VALUE ;;
       --park-ttl-ms|--park-ttl-ms=*) take_value "$@"; PARK_TTL_MS=$ARG_VALUE ;;
@@ -219,6 +222,8 @@ validate_config() {
   validate_uint warmup "$WARMUP"
   validate_uint tick "$TICK"
   validate_uint nodes "$NODES"
+  [[ "$TX_PREDICATE" =~ ^[a-z][a-zA-Z0-9_]{0,63}$ ]] ||
+    die "tx-predicate must be an unquoted Prolog atom of at most 64 characters"
   validate_uint writer-retries "$WRITER_RETRIES"
   validate_uint writer-retry-ms "$WRITER_RETRY_MS"
   validate_uint park-ttl-ms "$PARK_TTL_MS"
@@ -459,7 +464,7 @@ declare -A WRITER_PIDS=()
 # the real node. HTTP also exercises exactly the public parse/prove/sign/relay path.
 prove_request() {   # alloc group explorer_target numeric_id
   local alloc=$1 group=$2 target=$3 id=$4 body code rc
-  body="{\"ns\":$NS_JSON,\"goal\":\"assertz(loadtest($id))\"}"
+  body="{\"ns\":$NS_JSON,\"goal\":\"assertz(${TX_PREDICATE}($id))\"}"
   if [ "$group" = "quod-cloud" ]; then
     code=$(nomad alloc exec -task quod "$alloc" /usr/bin/curl -sS \
       --max-time "$WRITER_HTTP_TIMEOUT_S" -o /dev/null -w '%{http_code}' \
@@ -831,7 +836,7 @@ trap 'echo; LOG "interrupted — stopping writers"; stop_writers; exit 130' INT 
 # INT/TERM already run the ledger quiescence check explicitly.
 trap 'stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"; rm -rf "$PERFDIR"' EXIT
 
-LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
+LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG predicate=$TX_PREDICATE overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
 
 if [ "$SCALE" = "1" ]; then
   LOG "scaling homogeneous job to $NODES nodes..."

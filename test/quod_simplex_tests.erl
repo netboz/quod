@@ -1376,6 +1376,7 @@ singleton_drain_keeps_batch_window_test() ->
     {Me, MyId} = lists:keyfind(quod_simplex:leader(4, Validators), 1, Committee),
     Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                    slot => 3, approved => 5,
+                   batch_window_ms => 37,
                    eng => quod_simplex:eng_with_certs(3, [])}),
     F = {self(), make_ref()},
     P1 = quod_simplex:test_state_set(
@@ -1383,7 +1384,7 @@ singleton_drain_keeps_batch_window_test() ->
     {Drained, Actions} = quod_simplex:test_drain(
                            quod_simplex:test_state_set(approved, 3, P1)),
     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
-    ?assertMatch([{{timeout, batch}, _, {flush_batch, 4}}],
+    ?assertEqual([{{timeout, batch}, 37, {flush_batch, 4}}],
                  [A || {{timeout, batch}, _, _} = A <- Actions]).
 
 %% Membership must enter only after the approved pipeline becomes final. It is a

@@ -533,7 +533,7 @@
         "x": 0,
         "y": 42
       },
-      "description": "Failure outcomes: redirect means the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed; it should stay near zero. bad means malformed or unauthorized content. busy is an ALERT signal: the bounded ingress line overflowed or a waiting request expired during a genuine stall. stale_seq means newer approved history superseded an otherwise-valid signed request, usually after a skipped proposal or retry.",
+      "description": "Failure outcomes: redirect means the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed; it should stay near zero. bad means malformed or unauthorized content. busy is an ALERT signal: the bounded ingress line overflowed or a waiting request expired during a genuine stall. stale_seq means newer approved history superseded an otherwise-valid signed request. retry shows the caller-visible requests that must run Prolog and submit again, split by cause.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -571,6 +571,11 @@
           "refId": "F",
           "expr": "rate(quod_consensus_append_stale{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "stale_seq \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "G",
+          "expr": "rate(quod_tx_retries_total{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "retry {{reason}} \u00b7 {{node_id}}"
         }
       ]
     },
@@ -1838,6 +1843,127 @@
           "expr": "sum(quod_quic_bytes_in_flight{node_id=~\"$node\"})",
           "legendFormat": "sent, unconfirmed",
           "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 220,
+      "type": "row",
+      "title": "Transaction batching",
+      "gridPos": {
+        "x": 0,
+        "y": 188,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 221,
+      "type": "timeseries",
+      "title": "Transactions per proposed block",
+      "description": "How effectively proposers pack transactions together. Average is the exact fleet ratio; p50 and p95 show the distribution of individual proposed blocks. Under sustained load, values near 1 mean transactions are missing the same collection window and creating avoidable blocks.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(quod_consensus_batched_txs{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])) / clamp_min(sum(rate(quod_consensus_proposals{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])), 0.000001)",
+          "legendFormat": "average",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, namespace) (rate(quod_consensus_batch_size_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p50",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, namespace) (rate(quod_consensus_batch_size_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p95",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 222,
+      "type": "timeseries",
+      "title": "Batch collection wait",
+      "description": "How long each proposer actually kept a block open to collect transactions. Ordinary blocks should approach the configured window; full and membership blocks seal early. This is intentional batching delay, not consensus or disk latency.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 189,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, namespace) (rate(quod_consensus_batch_wait_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "actual p50",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, namespace) (rate(quod_consensus_batch_wait_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "actual p95",
+          "refId": "B"
+        },
+        {
+          "expr": "max(quod_consensus_batch_window_ms{node_id=~\"$node\", namespace=~\"$namespace\"})",
+          "legendFormat": "configured window",
+          "refId": "C"
         }
       ]
     }

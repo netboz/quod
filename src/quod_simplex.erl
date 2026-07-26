@@ -677,6 +677,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
           committee    => [],          %% co-founders; `[]` = self-only (N=1), a list = a multi-validator committee
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
           genesis_hash => undefined,   %% join only: the out-of-band-pinned slot-1 block_hash (the trust anchor)
+          batch_window_ms => 25,        %% per-ontology micro-batch collection window
           data_dir     => undefined}).
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
@@ -710,7 +711,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(MAX_BATCH_TXS, 256).                    %% hard count cap; bounds per-block apply work
 -define(MAX_BLOCK_BYTES, (256 * 1024)).         %% an implicit proof may carry one child below the 1 MiB cap
 -define(BATCH_ENVELOPE_BYTES, 6).               %% exact singleton-list ETF overhead beyond term_to_binary(Tx)
--define(BATCH_MS, 2).                           %% short micro-batch window; configurable with simplex_batch_ms
 -define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
 -define(RELAY_RETRY_MS, 300).                    %% retry until the destination acknowledges receipt
 -define(RELAY_ACCEPTED_RETRY_MS, 5000).          %% after receipt, a slow status retry recovers a lost
@@ -745,7 +745,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(batch, {slot :: slot(),
                 parent :: slot(),
                 items_rev = [] :: [{term(), #transaction{}}],
-                bytes = 0 :: non_neg_integer()}).
+                bytes = 0 :: non_neg_integer(),
+                opened_at = 0 :: integer()}).   %% monotonic ms; measures collection wait on this proposer
 
 -record(waiter, {reply_to :: term(),
                  trace_ctx :: quod_trace:context(),
@@ -832,6 +833,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             ingress_bytes = 0 :: non_neg_integer(),
             ingress_authors = #{} :: #{node_id() => pos_integer()},
             relay_timeout_ms = 31000 :: pos_integer(),
+            batch_window_ms = 25 :: 0..1000,
             detailed_metrics = false :: boolean(),
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             next_author_seq = 1 :: pos_integer(),
@@ -930,6 +932,7 @@ test_state_set(outbox, V, S)     -> S#s{outbox = V};
 test_state_set(dialing, V, S)    -> S#s{dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
+test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
             (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
@@ -1112,6 +1115,7 @@ init_store(Ns, Cfg, Id) ->
     RelayTimeout = relay_timeout_ms(Cfg),
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
             chan = Chan, relay_timeout_ms = RelayTimeout,
+            batch_window_ms = maps:get(batch_window_ms, Cfg),
             detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
     %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
     try load_or_bootstrap(S0, Cfg) of
@@ -1899,8 +1903,8 @@ restore_held(S = #s{ingress = Q}, HeldRev) ->
     S#s{ingress = queue:join(queue:from_list(Held), Q)}.
 
 %% A multi-item drain seals its batch NOW: the backlog already waited a full flight, a
-%% 2ms window would only re-add latency (block N+1 = what arrived during block N — the
-%% natural batch size). A SINGLETON drain keeps the normal micro-batch window so relays
+%% configured window would only re-add latency (block N+1 = what arrived during block N
+%% is already the natural batch). A SINGLETON drain keeps the normal micro-batch window so relays
 %% landing in the same slot-open moment can still join it.
 seal_drained(S = #s{collecting = #batch{slot = Slot}}, ActionsRev, N) when N >= 2 ->
     {flush_batch(Slot, S), lists:reverse([{{timeout, batch}, cancel} | ActionsRev])};
@@ -2092,11 +2096,13 @@ collect_append(From, Change, Slot, S = #s{collecting = none}) ->
                   waiter_trace_ctx(From), <<"consensus.queued">>,
                   #{'quod.consensus.slot' => Slot}),
             Batch = #batch{slot = Slot, parent = S#s.approved,
-                           items_rev = [{From, Change}], bytes = Bytes},
+                           items_rev = [{From, Change}], bytes = Bytes,
+                           opened_at = quod_time:mono_ms()},
             S1 = S#s{collecting = Batch, appends = S#s.appends + 1},
-            case is_membership_change(Change) orelse batch_ms() =:= 0 of
+            case is_membership_change(Change) orelse S#s.batch_window_ms =:= 0 of
                 true  -> {flush_batch(Slot, S1), [{{timeout, batch}, cancel}]};
-                false -> {S1, [{{timeout, batch}, batch_ms(), {flush_batch, Slot}}]}
+                false -> {S1, [{{timeout, batch}, S#s.batch_window_ms,
+                                {flush_batch, Slot}}]}
             end
     end;
 collect_append(From, Change, Slot,
@@ -2120,16 +2126,18 @@ collect_append(From, Change, Slot,
     end.
 
 flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
-                                              items_rev = ItemsRev}}) ->
+                                              items_rev = ItemsRev,
+                                              opened_at = OpenedAt}}) ->
     Items = lists:reverse(ItemsRev),
     Payload = [Change || {_From, Change} <- Items],
     case acceptable_collected_payload(Payload, S) of
         false -> reject_collected_batch(Items, S);
-        true  -> propose_batch(Slot, Parent, Items, Payload, S)
+        true  -> propose_batch(Slot, Parent, Items, Payload,
+                               max(0, quod_time:mono_ms() - OpenedAt), S)
     end;
 flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 
-propose_batch(Slot, Parent, Items, Payload, S) ->
+propose_batch(Slot, Parent, Items, Payload, WaitMs, S) ->
     Waiters = [From || {From, _Change} <- Items],
     Block = #block{slot = Slot, parent = Parent, payload = Payload,
                    timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
@@ -2137,8 +2145,10 @@ propose_batch(Slot, Parent, Items, Payload, S) ->
     _ = [quod_trace:add_event(
            waiter_trace_ctx(Waiter), <<"consensus.proposed">>,
            #{'quod.consensus.slot' => Slot,
-             'quod.batch.transactions' => length(Payload)})
+             'quod.batch.transactions' => length(Payload),
+             'quod.batch.wait_ms' => WaitMs})
          || {Waiter, _Change} <- Items],
+    quod_metrics:observe_batch(S#s.ns, length(Payload), WaitMs),
     Local = #local_proposal{hash = BH, waiters = Waiters,
                             trace_ctxs = [waiter_trace_ctx(W) || W <- Waiters]},
     S1 = S#s{collecting = none,
@@ -2157,12 +2167,6 @@ reject_collected_batch(Items, S) ->
 
 encoded_change_size(Change) ->
     byte_size(term_to_binary(Change, [deterministic])).
-
-batch_ms() ->
-    case application:get_env(quod, simplex_batch_ms, ?BATCH_MS) of
-        N when is_integer(N), N >= 0 -> N;
-        _                            -> ?BATCH_MS
-    end.
 
 membership_can_enter(Change, #s{approved = A, slot = C}) ->
     not is_membership_change(Change) orelse A =:= C.
@@ -4862,11 +4866,18 @@ active_validators(#s{validators = V}) -> V.
 
 %% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
 %% list of co-founders = a multi-validator committee (the founding validator set is frozen from it);
-%% `mode` must be create|join, and a `join` node MUST carry the out-of-band `genesis_hash` anchor.
+%% `batch_window_ms` is bounded below the append deadline; `mode` must be create|join, and a `join`
+%% node MUST carry the out-of-band `genesis_hash` anchor.
 valid_cfg(Config, Cfg) ->
     case maps:get(node_id, Config, undefined) of
         undefined -> {error, missing_node_id};
-        _         -> valid_committee(Cfg)
+        _         -> valid_batch_window(Cfg)
+    end.
+
+valid_batch_window(Cfg) ->
+    case maps:get(batch_window_ms, Cfg) of
+        N when is_integer(N), N >= 0, N =< 1000 -> valid_committee(Cfg);
+        Other -> {error, {bad_batch_window_ms, Other}}
     end.
 
 valid_committee(Cfg) ->
@@ -4938,6 +4949,7 @@ stats_map(S) ->
       pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
       proposals => S#s.proposals, batched_txs => S#s.batched_txs,
+      batch_window_ms => S#s.batch_window_ms,
       commits => S#s.commits, prolog_ready => S#s.prolog_ready,
       submitted => S#s.submitted, skips => S#s.skips, pending => pending_count(S),
       requested_slot => case S#s.requested_slot of none -> 0; Requested -> Requested end,

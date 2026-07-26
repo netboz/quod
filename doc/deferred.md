@@ -419,8 +419,7 @@ rate is low (~11/node/s), so this is a burst-amplification + serial-process prob
 saturation. The easy Δ-shrink lever is applied separately (see below); these are the deeper
 fixes:
 
-- **Ingress simplification — explicit exact-slot relay implemented locally; live A/B
-  pending.** The
+- **Ingress simplification — explicit exact-slot relay implemented and live-tested.** The
   park-queue (0.7.27) + pre-position-at-future-leader (0.7.28) machinery was built to cope
   with SLOW (Ceph-era) consensus, where the depth-1 pipeline couldn't keep up and appends
   piled into `busy` rejections. With ~40ms commits the pipeline keeps up, but the routing
@@ -448,8 +447,9 @@ fixes:
   leader queued, proposed a 154-change block, and replied in 191 ms. Prolog proving took
   13 ms. Cross-machine timestamps cannot safely divide the remaining delay into wire time
   versus mailbox wait, but the single-clock spans locate it before the final leader's
-  consensus round. The next design must remove moving-leader chase from the serialized
-  consensus mailbox, not tune disk, signatures, batching timers, or Delta.
+  consensus round. This ruled out disk, signatures, and the final vote round, but the
+  closed-loop workload could not yet distinguish mailbox delay from requests repeatedly
+  missing the very short batching window; the fixed-work experiment below did.
 
   A rank-sharded stable-custodian successor was implemented and then rejected before
   deployment: the four-node integration test showed that assigning a request several
@@ -457,7 +457,7 @@ fixes:
   commit it. That trades mailbox distribution for worse latency and throughput and is not
   an acceptable consensus schedule.
 
-  The current local version keeps the earliest-usable-slot rule but makes ownership
+  The current version keeps the earliest-usable-slot rule but makes ownership
   unambiguous on the wire: `{relay_submit, ReqId, TargetSlot, Submission, Trace}`. The
   receiver verifies it proposes `TargetSlot`, parks only until that exact slot, and rejects
   it if the slot has closed; it never invents a redirect from its own frontier. While that
@@ -466,10 +466,27 @@ fixes:
   queued later sequences to target the new frontier. Receipt acknowledgement still demotes
   the 300 ms lost-send loop to a 5-second result probe. Relay creation enforces the
   single-target/single-slot lane invariant consumed by the O(1) route check. Focused routing
-  tests (120/0), the full EUnit suite (445/0), all 45 Common Test cases, Dialyzer, and xref
-  pass. This version
-  still shares the consensus mailbox and needs the same live workload before deciding
-  whether ingress extraction or source-side relay batching is necessary.
+  tests, the full EUnit and Common Test suites, Dialyzer, and xref pass.
+
+  A fixed-work live comparison on 2026-07-26 then separated this routing change from
+  the closed-loop load generator. For the same 960 offered operations, the exact-slot
+  version committed 443 first attempts with p50/p99 40/142 ms; its parent committed
+  only 137 first attempts, with p50/p99 118/237 ms, while most misses waited about
+  30 seconds. The rewrite is therefore an improvement, not the source of the remaining
+  tail.
+
+  The fixed-work benchmark also identified that tail precisely. At the old 2 ms batch
+  window, 720 successful operations required 1,349 HTTP attempts; every retry was an
+  explicit slot-closed response, and every operation above 1.5 seconds had been proved
+  and submitted six or seven times. The consensus round itself remained fast. Raising
+  only the collection window to 25 ms reduced the same workload to 840 attempts,
+  reduced proposed blocks from 115 to 53, and changed p50/p95/p99/max from about
+  224/593/1546/1911 ms to 151/298/337/385 ms. A light 48-operation control added about
+  21 ms to the median (44 to 65 ms) while removing all eight retries. The production
+  default is therefore now a per-ontology 25 ms window, with batch-size, collection-wait,
+  and caller-retry metrics. This is a measured batching correction, not the final
+  architecture: a later ingress owner should retain and retarget the same signed
+  transaction after a slot closes, instead of asking the client to run Prolog again.
 
 - **Consensus-process burst resilience (the serial mailbox).** All consensus for a
   namespace runs through one `gen_statem`; a 40-tx burst + its vote/cert fan-out can
@@ -482,10 +499,8 @@ fixes:
   work per pipeline slot. (a)+(b) are medium effort and low risk; (c)/(d) are real
   architecture changes.
 
-  The A/B above made an ingress split a credible option. The explicit-slot rewrite removes
-  ambiguous receiver-side routing and retransmission amplification with less machinery and
-  should be measured first. Keep detailed probes off by default. If the consensus mailbox
-  remains the tail, extract the complete ingress contract together: local unsigned submissions,
+  The A/B above makes an ingress split a credible next milestone. Keep detailed probes
+  off by default. Extract the complete ingress contract together: local unsigned submissions,
   authenticated relay envelopes, per-author sequence order, accepted acknowledgements,
   terminal results, and committee-change barriers must have one owner.
 

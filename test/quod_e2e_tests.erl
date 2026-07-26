@@ -86,29 +86,24 @@ t_write_read({Dir, Ns, Cfg}) ->
 
 t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
     fun() ->
-        _Pid = start_ns(Ns, Cfg),
-        ok = application:set_env(quod, simplex_batch_ms, 75),
+        _Pid = start_ns(Ns, Cfg#{batch_window_ms => 75}),
+        %% Wait for the rebuild gate before launching the burst.
+        ?assertMatch({ok, _, 1}, rp(Ns, true)),
+        Parent = self(),
+        Count = 8,
+        _ = [spawn(fun() -> Parent ! {write_result, N,
+                                       quod_prolog:prove(Ns, {assertz, {batch_fact, N}}, Ns)}
+                   end) || N <- lists:seq(1, Count)],
+        Results = [receive {write_result, N, R} -> {N, R} after 5000 -> timeout end
+                   || N <- lists:seq(1, Count)],
+        ?assert(lists:all(fun({_N, {ok, [#{}], 1}}) -> true; (_) -> false end, Results)),
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
-            %% Wait for the rebuild gate before launching the burst.
-            ?assertMatch({ok, _, 1}, rp(Ns, true)),
-            Parent = self(),
-            Count = 8,
-            _ = [spawn(fun() -> Parent ! {write_result, N,
-                                           quod_prolog:prove(Ns, {assertz, {batch_fact, N}}, Ns)}
-                       end) || N <- lists:seq(1, Count)],
-            Results = [receive {write_result, N, R} -> {N, R} after 5000 -> timeout end
-                       || N <- lists:seq(1, Count)],
-            ?assert(lists:all(fun({_N, {ok, [#{}], 1}}) -> true; (_) -> false end, Results)),
-            {ok, Store} = quod_ledger_store:open(Ns, Dir),
-            try
-                {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
-                ?assertEqual(Count, length(Transactions))
-            after quod_ledger_store:close(Store) end,
-            [ ?assertMatch({ok, [#{}], 2}, rp(Ns, {batch_fact, N}))
-              || N <- lists:seq(1, Count) ]
-        after
-            application:unset_env(quod, simplex_batch_ms)
-        end
+            {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+            ?assertEqual(Count, length(Transactions))
+        after quod_ledger_store:close(Store) end,
+        [ ?assertMatch({ok, [#{}], 2}, rp(Ns, {batch_fact, N}))
+          || N <- lists:seq(1, Count) ]
     end.
 
 %% Even the local leader rechecks a committee transaction against the parent KB.

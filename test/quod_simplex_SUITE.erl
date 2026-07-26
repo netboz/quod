@@ -186,32 +186,28 @@ t_commit_carries_cert(Cfg) ->
 t_concurrent_appends_batch(Cfg) ->
     Ns = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
-    ok = application:set_env(quod, simplex_batch_ms, 50),
+    _ = start(Cfg, #{batch_window_ms => 50}),
+    Parent = self(),
+    Count = 8,
+    _ = [spawn(fun() -> Parent ! {batch_result, N,
+                                  quod_simplex:append(Ns, tx(Ns, Self, integer_to_binary(N)))}
+               end) || N <- lists:seq(1, Count)],
+    Results = [receive {batch_result, N, Result} -> {N, Result} after 5000 -> timeout end
+               || N <- lists:seq(1, Count)],
+    ?assertEqual([{N, {ok, 2}} || N <- lists:seq(1, Count)], lists:sort(Results)),
+    {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
-        _ = start(Cfg, #{}),
-        Parent = self(),
-        Count = 8,
-        _ = [spawn(fun() -> Parent ! {batch_result, N,
-                                      quod_simplex:append(Ns, tx(Ns, Self, integer_to_binary(N)))}
-                   end) || N <- lists:seq(1, Count)],
-        Results = [receive {batch_result, N, Result} -> {N, Result} after 5000 -> timeout end
-                   || N <- lists:seq(1, Count)],
-        ?assertEqual([{N, {ok, 2}} || N <- lists:seq(1, Count)], lists:sort(Results)),
-        {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
-        try
-            {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
-            ?assertEqual(Count, length(Transactions)),
-            ?assertEqual(lists:seq(1, Count),
-                         lists:sort([T#transaction.author_seq
-                                     || T <- Transactions]))
-        after quod_ledger_store:close(Store) end,
-        Stats = quod_simplex:stats(Ns),
-        ?assertEqual(1, maps:get(proposals, Stats)),
-        ?assertEqual(Count, maps:get(batched_txs, Stats)),
-        ?assertEqual(0, maps:get(pending, Stats))
-    after
-        application:unset_env(quod, simplex_batch_ms)
-    end.
+        {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),
+        ?assertEqual(Count, length(Transactions)),
+        ?assertEqual(lists:seq(1, Count),
+                     lists:sort([T#transaction.author_seq
+                                 || T <- Transactions]))
+    after quod_ledger_store:close(Store) end,
+    Stats = quod_simplex:stats(Ns),
+    ?assertEqual(1, maps:get(proposals, Stats)),
+    ?assertEqual(Count, maps:get(batched_txs, Stats)),
+    ?assertEqual(50, maps:get(batch_window_ms, Stats)),
+    ?assertEqual(0, maps:get(pending, Stats)).
 
 %%%===================================================================
 %%% helpers

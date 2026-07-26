@@ -11,9 +11,10 @@ Two collection paths:
   * **Poll (5s).** Scalar gauges are refreshed from each subsystem's `stats/1`
     (`m:quod_brahms`, `m:quod_simplex`, `m:quod_prolog`, `m:quod_runtime`, `m:quod_feed`). Cumulative counts are exposed
     as gauges set to the running total (use `rate()`/`increase()` in Grafana).
-  * **Event.** Per-transaction histograms + a per-author counter are driven by the LIVE
-    `{committed, Ns}` commit event (never replay — see `quod_simplex:publish_feed/3`), so they observe
-    each finalized transaction exactly once on the committing node.
+  * **Event.** The LIVE `{committed, Ns}` event drives finalized-transaction size and
+    author metrics (never replay — see `quod_simplex:publish_feed/3`). The submitting
+    Prolog process records end-to-end latency and authoritative retry outcomes; the
+    proposer records one batching sample per proposed block.
 
 | metric | type | extra labels | what it means (plain) |
 | ------ | ---- | ------------ | --------------------- |
@@ -22,6 +23,8 @@ Two collection paths:
 | `quod_consensus_slot/committed/approved/last_applied/committee_size{namespace}` | gauge | | block numbers (newest / final / votable / applied) and how many nodes may vote |
 | `quod_consensus_pipeline_gap{namespace}` | gauge | | blocks with enough votes but not yet final (stays 0-2 by design) |
 | `quod_consensus_appends/proposals/batched_txs/commits/submitted/skips{namespace}` | gauge | | running totals of change and block activity |
+| `quod_consensus_batch_window_ms{namespace}` | gauge | | configured time a proposer waits for more transactions before sealing a block |
+| `quod_consensus_batch_size/batch_wait_ms{namespace}` | histogram | | transactions per proposed block and actual collection time |
 | `quod_consensus_pending{namespace}` | gauge | | change requests waiting to be made final right now |
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | running totals of turned-away change requests, by reason |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node may vote (it actually votes only when `syncing` is 0) |
@@ -50,6 +53,7 @@ Two collection paths:
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
+| `quod_tx_retries_total{namespace}` | counter | `reason` | client writes explicitly told to prove and submit again |
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
@@ -64,7 +68,8 @@ Two collection paths:
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
          observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3,
-         observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3]).
+         observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3,
+         observe_batch/3, count_tx_retry/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -83,6 +88,8 @@ Two collection paths:
                                            %% split "fast handler" from "slow handler"
 -define(QLEN_BUCKETS, [0, 1, 2, 5, 10, 25, 50, 100, 500, 1000]).  %% mailbox depth at entry
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
+-define(BATCH_SIZE_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128, 256]).
+-define(BATCH_WAIT_BUCKETS, [0, 1, 2, 5, 10, 15, 25, 40, 75, 100, 250, 500, 1000]).
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
 -define(VOTE_SYNC_BUCKETS, [0.0001, 0.00025, 0.0005, 0.001, 0.0025,
@@ -160,6 +167,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_appends,         "Total change requests this node accepted (while it was the leader) to put into blocks (only ever goes up)."),
     _ = G(quod_consensus_proposals,       "Total blocks this node has proposed while it was the leader (only ever goes up)."),
     _ = G(quod_consensus_batched_txs,     "Total changes packed into the blocks this node proposed. Divide its rate by the proposal rate to get the average number of changes per block."),
+    _ = G(quod_consensus_batch_window_ms, "How many milliseconds this ontology's proposer is configured to wait after the first transaction before sealing a block. A larger value usually packs more transactions together but adds up to that much delay to a quiet write."),
     _ = G(quod_consensus_commits,         "Total blocks that have been made final and applied (only ever goes up)."),
     _ = G(quod_consensus_submitted,       "Total change requests handed to this node (only ever goes up)."),
     _ = G(quod_consensus_skips,           "Total times a turn was skipped because that turn's leader did not produce a block in time (only ever goes up)."),
@@ -233,6 +241,12 @@ declare(NodeId) ->
     %% Per-change timing and size.
     _ = H(quod_tx_commit_latency_ms, "How long each change took from being handed in to being made final and applied, in milliseconds. Measured on the node that submitted the change, with a single clock - so it is honest end-to-end time, never a comparison of two machines' clocks - and each change is counted exactly once.", ?LAT_BUCKETS),
     _ = H(quod_tx_diff_ops,          "How many individual pieces of data each finished change added or removed.", ?DIFF_BUCKETS),
+    _ = H(quod_consensus_batch_size,
+          "How many transactions this node packed into each block it proposed. Values near 1 under a busy workload mean transactions are missing the same collection window and causing extra blocks.",
+          ?BATCH_SIZE_BUCKETS),
+    _ = H(quod_consensus_batch_wait_ms,
+          "How long, in milliseconds, this node kept each new block open to collect more transactions before proposing it. Full or membership blocks can seal early; ordinary quiet blocks should be close to the configured batch window.",
+          ?BATCH_WAIT_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
@@ -268,6 +282,10 @@ declare(NodeId) ->
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
            {labels, [namespace]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_tx_retries_total},
+           {help, "Total client writes explicitly told to prove and submit again, grouped by cause. slot_closed means the proposal slot closed before this transaction was included; stale_sequence means newer approved history overtook its signed author sequence. A high rate repeats Prolog work and directly raises latency."},
+           {labels, [namespace, reason]}, {constant_labels, CL}]),
     P = fun(Name, Help) ->
             prometheus_gauge:declare([{name, Name}, {help, Help}, {labels, [peer]},
                                       {constant_labels, CL}])
@@ -398,6 +416,7 @@ refresh_log_ns(Ns) ->
         #{slot := Sl, committed := CI, approved := AV, pipeline_gap := PG,
           last_applied := LA, committee_size := CS,
           appends := AP, proposals := PR, batched_txs := BT,
+          batch_window_ms := BW,
           commits := CM, submitted := SU, skips := SK, pending := PE,
           r_busy := RB, r_redirect := RR, r_bad := RD, r_stale := RS,
           membership_rejects := MR,
@@ -422,6 +441,7 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_appends,         AP),
             _ = S(quod_consensus_proposals,       PR),
             _ = S(quod_consensus_batched_txs,     BT),
+            _ = S(quod_consensus_batch_window_ms, BW),
             _ = S(quod_consensus_commits,         CM),
             _ = S(quod_consensus_submitted,       SU),
             _ = S(quod_consensus_skips,           SK),
@@ -709,6 +729,50 @@ observe_tx_latency(Ns, Ms) when is_binary(Ns), is_integer(Ms), Ms >= 0 ->
 observe_tx_latency(_Ns, _Ms) ->
     ok.
 
+-doc """
+Record one proposed block's transaction count and collection wait. This is called
+once per local proposal, not once per consensus message, so it remains cheap enough
+to keep enabled during performance runs.
+""".
+-spec observe_batch(binary(), pos_integer(), non_neg_integer()) -> ok.
+observe_batch(Ns, Size, WaitMs)
+  when is_binary(Ns), is_integer(Size), Size > 0,
+       is_integer(WaitMs), WaitMs >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_consensus_batch_size, [label(Ns)], Size),
+                _ = prometheus_histogram:observe(
+                      quod_consensus_batch_wait_ms, [label(Ns)], WaitMs),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_batch(_Ns, _Size, _WaitMs) ->
+    ok.
+
+-doc "Count one authoritative retry response returned to a write caller.".
+-spec count_tx_retry(binary(), slot_closed | stale_sequence) -> ok.
+count_tx_retry(Ns, Reason)
+  when is_binary(Ns), (Reason =:= slot_closed orelse Reason =:= stale_sequence) ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_counter:inc(
+                      quod_tx_retries_total,
+                      [label(Ns), atom_to_binary(Reason, utf8)]),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+count_tx_retry(_Ns, _Reason) ->
+    ok.
+
 %% --- labels --------------------------------------------------------------
 
 %% This node's stable identity for the constant `node_id` label. `node_pubkey` is set by
@@ -737,7 +801,8 @@ label(Ns) when is_binary(Ns) ->
 %% added to the pattern without the stat would otherwise silently zero ALL consensus gauges.
 consensus_stat_keys() ->
     [slot, committed, approved, pipeline_gap, last_applied, committee_size,
-     appends, proposals, batched_txs, commits, submitted, skips, pending,
+     appends, proposals, batched_txs, batch_window_ms,
+     commits, submitted, skips, pending,
      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
      relay_accepted, relay_redrives, relay_duplicates,

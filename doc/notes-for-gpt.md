@@ -7,7 +7,7 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
-## 2026-07-26 — explicit exact-slot relay implemented locally; live A/B pending
+## 2026-07-26 — exact-slot relay and batching window live A/B complete
 
 Claude's read-only review found no safety/liveness blocker. Its hot-path finding was
 valid: `relay_lane/2` copied up to 2,048 pending entries on route-key checks. It now reads
@@ -47,8 +47,19 @@ applies normally without replying to the reaped caller. Focused `quod_simplex_te
 green (120/0), `quod_relay_tests` are green (2/0), and all seven four-node
 `simplex_SUITE` scenarios pass. Full local gates are also green: EUnit 445/0, Common Test
 45/45, Dialyzer, and xref. The Nomad OTLP endpoint was already parameterized and is
-reachable from the cloud allocation; no endpoint change was needed. The live comparison
-has not run yet. Do not claim the 2.5-second tail is fixed until that workload is repeated.
+reachable from the cloud allocation; no endpoint change was needed.
+
+The fixed-work live comparison is now complete. Against the same 960 offered operations,
+the exact-slot version committed 443 first attempts at p50/p99 40/142 ms; its parent
+committed 137 at 118/237 ms while most misses waited about 30 seconds. The rewrite is a
+clear improvement. A second controlled run isolated the remaining tail: with the old 2 ms
+batch window, 720 committed operations needed 1,349 HTTP attempts and every operation over
+1.5 seconds had been proved/submitted six or seven times. Changing only the window to
+25 ms reduced that to 840 attempts and p50/p95/p99/max to about
+151/298/337/385 ms (from 224/593/1546/1911 ms). The implementation now makes this a
+bounded per-ontology setting, exports batch-size/wait and retry-cause metrics, and adds
+matching Grafana panels. The next architecture milestone is still to retain and retarget
+one signed transaction internally after a slot closes, eliminating client re-proving.
 
 ---
 
@@ -76,8 +87,9 @@ A successful sampled trace gives the safe, single-clock decomposition: Prolog pr
 correct leader's queue/propose/final reply 191ms (154 changes in that block). Raw
 timestamps across nodes are not used as latency arithmetic. Result: moving-leader chase
 and its shared consensus mailbox remain the next architecture problem. Preserve the
-single router/order/security contracts if ingress is extracted; do not tune fsync,
-signature checks, or a lower fixed Delta (all refuted here).
+single router/order/security contracts if ingress is extracted. This closed-loop run
+correctly refuted fsync, signature checks, and a lower fixed Delta, but its conclusion
+about batching was later superseded by the fixed-work experiment in the newest entry.
 
 Deployment cleanup found alongside the test: release metadata and Nomad's default still
 said 0.7.24 while relx/image was 0.7.41, and the cloud allocation could not resolve

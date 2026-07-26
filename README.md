@@ -150,9 +150,10 @@ to complete before advancing a rolling update.
 
 - **Done:** pure-Erlang QUIC transport, Brahms membership, Prolog content, the
   DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
-  member recovery, bounded transaction micro-batches, depth-one pipelining with
-  implicit predecessor finality, metrics, and durable Docker/Nomad deployment.
-- **Next:** the inter-ontology layer — ontologies naming each other's things (`:`)
-  and asking each other questions (`::`), specified in `doc/inter-ontology.md`;
-  then signed membership authorship, epoch-frozen validator sets, and the
-  durable read-replica policy described in `doc/deferred.md`.
+  member recovery, bounded per-ontology transaction micro-batches, depth-one pipelining with
+  implicit predecessor finality, signed transaction relay, inter-ontology asks,
+  runtime projection, metrics, and durable Docker/Nomad deployment.
+- **Next:** remove client re-proving when a proposal slot closes by giving ingress
+  one bounded owner that retains and retargets the signed transaction; then build
+  the network ontology directory and user/agent authorization described in
+  `doc/inter-ontology.md`, `doc/agent-fipa-plan.md`, and `doc/deferred.md`.

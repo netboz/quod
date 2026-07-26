@@ -46,6 +46,12 @@ variable "park_ttl_ms" {
   description = "How long a proved write waits locally for a final applied/rejected outcome. Expiry returns outcome_unknown and does not cancel consensus."
 }
 
+variable "batch_window_ms" {
+  type        = number
+  default     = 25
+  description = "Per-ontology time in milliseconds to collect ordinary transactions into one block. 0 seals immediately; 25 is the measured fleet default."
+}
+
 variable "ask_timeout_ms" {
   type        = number
   default     = 60000
@@ -251,6 +257,7 @@ content = [
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
+    batch_window_ms = ${var.batch_window_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}
@@ -455,6 +462,7 @@ content = [
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
+    batch_window_ms = ${var.batch_window_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}

@@ -854,12 +854,14 @@ append_result(Tx, {error, not_in_charge, unavailable}, S) ->
     request_completed(Tx, S);   %% ambiguous: ordered apply may still resolve it; the TTL reports unknown
 append_result(Tx, {error, not_in_charge, Hint}, S) ->
     reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
-append_result(Tx, {error, skipped}, S) ->
+append_result(Tx, {error, skipped}, S = #s{ns = Ns}) ->
+    quod_metrics:count_tx_retry(Ns, slot_closed),
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
 %% A newer author sequence reached approved history first, normally after a skipped
 %% proposal or retry. The content is fine: re-prove and sign with a fresh sequence,
 %% so surface it retryably, never terminal.
-append_result(Tx, {error, stale_seq}, S) ->
+append_result(Tx, {error, stale_seq}, S = #s{ns = Ns}) ->
+    quod_metrics:count_tx_retry(Ns, stale_sequence),
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
 append_result(Tx, {error, Reason}, S) ->
     reject_parked(Tx, {error, Reason}, request_completed(Tx, S));

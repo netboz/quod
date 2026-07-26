@@ -437,7 +437,8 @@ section 5.
 
 The careful route is running: each ontology has a signed Byzantine committee, a
 durable ordered history, trustless catch-up, deterministic Prolog apply, optimistic
-conflict checks, short transaction batches, and a one-block consensus pipeline.
+conflict checks, per-ontology transaction batches (25 ms collection window by
+default), and a one-block consensus pipeline.
 `ordering-layer-spec.md` records the superseded Raft design; the current consensus
 implementation and `simplex_extended.pdf` are authoritative. The remaining work is
 tracked in `deferred.md`, especially author-aware authorization, epoch-frozen

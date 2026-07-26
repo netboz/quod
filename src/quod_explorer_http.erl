@@ -9,7 +9,7 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 | `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
 | `GET /api/tx/:ns/:id` | one transaction by id (bounded backward scan — no global tx index yet) |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
-| `POST /api/prove` `{ns, goal}` | run a goal through `quod_prolog:prove/3` — a read answers with bindings, a write parks until its block commits and answers with the height |
+| `POST /api/prove` `{ns, goal}` | run a goal through `quod_prolog:prove/3` — a read answers with bindings; a write answers with its committed height or a pending transaction id if the local wait expires first |
 
 History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
 store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
@@ -24,7 +24,8 @@ the live stream, so a transaction renders identically live and from history.
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
 -export([summary/0, tx_json_full/2, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
 -ifdef(TEST).
--export([prolog_text/1, txs_page/3, find_tx/2, parse_goal/1]).   %% driven directly by eunit
+-export([prolog_text/1, txs_page/3, find_tx/2, parse_goal/1,
+         prove_result/1]).   %% pure surface driven directly by eunit
 -endif.
 -include("quod_ledger.hrl").
 
@@ -167,6 +168,8 @@ prove_result(fail) ->
 prove_result({error, {not_leader, Hint}}) ->
     Leader = case Hint of none -> null; _ -> id_json(Hint) end,
     {409, #{error => not_leader, leader => Leader}};
+prove_result({error, {outcome_unknown, TxId}}) when is_binary(TxId) ->
+    {202, #{result => pending, tx_id => tx_id_text(TxId)}};
 prove_result({error, Reason}) ->
     {503, #{error => text(Reason)}}.
 

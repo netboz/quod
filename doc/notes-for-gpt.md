@@ -7,6 +7,87 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-26 — explicit exact-slot relay implemented locally; live A/B pending
+
+Claude's read-only review found no safety/liveness blocker. Its hot-path finding was
+valid: `relay_lane/2` copied up to 2,048 pending entries on route-key checks. It now reads
+one map iterator entry without allocating the values list. Route-key reuse removes a
+second hot computation, its maintenance contract is explicit, and a non-vacuous test
+forces the drain's second pass after the first pass seals a block. Grafana's old
+misroute wording was corrected. The live cloud allocation also verified TCP reachability
+to Tempo at `192.168.1.11:4318`.
+
+The review's pre-existing "8–31 second" timeout account mixed the public synchronous
+`quod_simplex:append/2` helper with the normal asynchronous Prolog write path. The actual
+caller deadline is 30 seconds there, but the underlying ambiguity is real: a deadline
+cannot cancel a transaction that may already be proposed. Both APIs now report
+`{outcome_unknown, TxId}` instead of a false failure; HTTP returns `202 pending`, and
+automatic test retry is restricted to explicit `409`/`503` responses that say the write
+did not apply. A transport failure or timeout is unknown and is never resubmitted. The
+load-test HTTP deadline now derives from the deployed, configurable `park_ttl_ms` rather
+than assuming 30 seconds. Durable transparent retry still requires a stable client
+operation id and persistent lookup, tracked in `doc/deferred.md`.
+
+The exact-seat deployment below improved throughput but still produced about 8,000
+redirects and a 2.5-second p99 because sender and receiver frontiers selected different
+moving leaders. A rank-sharded stable-custodian replacement was implemented, then rejected
+before deployment: the four-node suite showed that assigning a request to a later proposer
+manufactures empty skipped slots before that proposer gets its turn.
+
+The replacement keeps the earliest usable slot and makes it explicit in the relay frame:
+`{relay_submit, ReqId, TargetSlot, Submission, Trace}`. A receiver accepts only a slot it
+proposes, parks only until that exact slot, and fails it once the slot closes. It never
+recomputes a redirect from its own frontier. Later local sequences reuse an open relay lane;
+slot finalization resolves matching requests and immediately fails the rest so the queue can
+move to the new frontier. Accepted acknowledgements still suppress the 300 ms resend loop.
+
+Lane creation now enforces the single-target/single-slot invariant consumed by the O(1)
+route check, and a direct Prolog test proves that a late commit after `outcome_unknown`
+applies normally without replying to the reaped caller. Focused `quod_simplex_tests` are
+green (120/0), `quod_relay_tests` are green (2/0), and all seven four-node
+`simplex_SUITE` scenarios pass. Full local gates are also green: EUnit 445/0, Common Test
+45/45, Dialyzer, and xref. The Nomad OTLP endpoint was already parameterized and is
+reachable from the cloud allocation; no endpoint change was needed. The live comparison
+has not run yet. Do not claim the 2.5-second tail is fixed until that workload is repeated.
+
+---
+
+## 2026-07-26 — exact-seat ingress A/B: more throughput, redirect tail remains
+
+Branch `codex/ingress-simplification` replaced speculative pre-positioning with one
+compute-then-execute router, exact first-usable-seat routing, accepted relay
+acknowledgements (300 ms retry before receipt, 5 s result recovery afterward), a
+work-conserving per-author drain, retryable redirect exhaustion, and opt-in detailed
+consensus probes. Local gates were green before deployment (EUnit 439, CT 45, Dialyzer,
+xref).
+
+The live N=9 no-churn saturation run stayed functionally clean in both modes: all nodes
+reconverged, with no bad append, queue overflow/expiry, unverified block, transport drop,
+restart, or allocation failure. Detailed probes ON: +914 blocks, transaction
+p50/p90/p99 about 0.62/1.78/2.44s, append mailbox p99 about 612, round approve/commit p99
+about 263/82ms, roughly 6,300 redirects and 1,465 relay redrives in the two-minute query
+window. Probes OFF: +1,124 blocks, transaction p50/p90/p99 about
+0.44/1.91/2.46s, round p99 about 125/46ms, roughly 8,000 redirects and 2,073 redrives.
+The probes cost useful throughput and stay off by default, but they are not the
+2.5-second tail.
+
+A successful sampled trace gives the safe, single-clock decomposition: Prolog proof
+13ms; submitting node's append/relay span 1.23s; wrong target's rejection handler 0.16ms;
+correct leader's queue/propose/final reply 191ms (154 changes in that block). Raw
+timestamps across nodes are not used as latency arithmetic. Result: moving-leader chase
+and its shared consensus mailbox remain the next architecture problem. Preserve the
+single router/order/security contracts if ingress is extracted; do not tune fsync,
+signature checks, or a lower fixed Delta (all refuted here).
+
+Deployment cleanup found alongside the test: release metadata and Nomad's default still
+said 0.7.24 while relx/image was 0.7.41, and the cloud allocation could not resolve
+`tempo-otlp.service.consul`. The worktree aligns application/Nomad versions and makes the
+OTLP endpoint an explicit routable Nomad variable; those edits are not in the measured
+0.7.41 image yet. On 2026-07-26 the running `quod-cloud` allocation directly verified
+TCP reachability to the default `192.168.1.11:4318` endpoint.
+
+---
+
 ## 2026-07-24 (final) — ROOT CAUSE: Ceph RBD fsync 40-106ms x 3-5 mandatory syncs/round
 
 `dd oflag=dsync` on the production CSI volume, in-container: **p50 40ms / p90 64 / max
@@ -99,6 +180,12 @@ against a floor that reflects the network instead of the timers.
 ---
 
 ## 2026-07-23 — ingress v2: pre-position at the FUTURE leader (measurement falsified v1's routing)
+
+> **Historical, superseded 2026-07-26.** This section records the deployed 0.7.28
+> experiment and its measurements; it no longer describes current ingress behavior.
+> `?INGRESS_HORIZON` and the pre-positioning metric were removed on
+> `codex/ingress-simplification`. See `doc/transaction-signatures.md` for the
+> normative exact-seat routing and relay-acknowledgement flow.
 
 **Why.** The live A/B of the park-queue ingress (0.7.27 vs 0.7.25, identical load) met its
 stated goal — busy 2061→0 — but REGRESSED the point: p50 225→460ms, p99 896→2497ms,

@@ -71,6 +71,12 @@ parse_goal_test() ->
                  quod_explorer_http:parse_goal(<<"capital(france, X).">>)),
     ?assertMatch({error, _}, quod_explorer_http:parse_goal(<<"capital(france">>)).
 
+outcome_unknown_is_pending_test() ->
+    TxId = <<0, 1, 2, 3>>,
+    ?assertEqual(
+       {202, #{result => pending, tx_id => <<"00010203">>}},
+       quod_explorer_http:prove_result({error, {outcome_unknown, TxId}})).
+
 %%%===================================================================
 %%% tx JSON + history paging over a real store
 %%%===================================================================

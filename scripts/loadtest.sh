@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.24}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.41}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
@@ -53,11 +53,13 @@ set -uo pipefail
 : "${DURATION:=900}"                        # total chaos window, seconds
 : "${WARMUP:=45}"                           # let any cold/restarted node catch up before churn starts, seconds
 
-# sustained transaction load (a bounded-retry HTTP writer per validator, autonomous)
+# sustained transaction load (a bounded safe-retry HTTP writer per validator, autonomous)
 : "${TX_BASE_MS:=120}"                      # base delay between a validator's writes
 : "${TX_JITTER_MS:=180}"                    # + a random 0..JITTER ms per write (random pacing)
 : "${WRITER_RETRIES:=16}"                   # bounded not_leader/retry retries per fact (covers a full leader rotation)
 : "${WRITER_RETRY_MS:=40}"                  # sleep between those retries (a fraction of a slot)
+: "${PARK_TTL_MS:=30000}"                   # must match content.park_ttl_ms on the tested fleet
+: "${WRITER_HTTP_TIMEOUT_S:=}"              # empty => ceil(PARK_TTL_MS/1000)+1; proof time is deliberately excluded
 
 # bursts (fired from here during the chaos loop, on every validator)
 : "${BURST_PROB:=35}"                       # % chance, each chaos tick, of a burst
@@ -124,6 +126,8 @@ Load and chaos:
   --tx-jitter-ms MS         writer random delay (TX_JITTER_MS)
   --writer-retries N        retries per write (WRITER_RETRIES)
   --writer-retry-ms MS      delay between retries (WRITER_RETRY_MS)
+  --park-ttl-ms MS           deployed write-result wait (PARK_TTL_MS)
+  --writer-http-timeout SEC HTTP deadline; default/min is ceil(park TTL)+1s (WRITER_HTTP_TIMEOUT_S)
   --burst-prob PCT          burst probability per tick (BURST_PROB)
   --burst-size N            concurrent writes per burst (BURST_SIZE)
   --churn-prob PCT          observer churn probability (CHURN_PROB)
@@ -180,6 +184,8 @@ parse_args() {
       --tx-jitter-ms|--tx-jitter-ms=*) take_value "$@"; TX_JITTER_MS=$ARG_VALUE ;;
       --writer-retries|--writer-retries=*) take_value "$@"; WRITER_RETRIES=$ARG_VALUE ;;
       --writer-retry-ms|--writer-retry-ms=*) take_value "$@"; WRITER_RETRY_MS=$ARG_VALUE ;;
+      --park-ttl-ms|--park-ttl-ms=*) take_value "$@"; PARK_TTL_MS=$ARG_VALUE ;;
+      --writer-http-timeout|--writer-http-timeout=*) take_value "$@"; WRITER_HTTP_TIMEOUT_S=$ARG_VALUE ;;
       --burst-prob|--burst-prob=*) take_value "$@"; BURST_PROB=$ARG_VALUE ;;
       --burst-size|--burst-size=*) take_value "$@"; BURST_SIZE=$ARG_VALUE ;;
       --churn-prob|--churn-prob=*) take_value "$@"; CHURN_PROB=$ARG_VALUE ;;
@@ -215,6 +221,12 @@ validate_config() {
   validate_uint nodes "$NODES"
   validate_uint writer-retries "$WRITER_RETRIES"
   validate_uint writer-retry-ms "$WRITER_RETRY_MS"
+  validate_uint park-ttl-ms "$PARK_TTL_MS"
+  local min_writer_timeout=$(( (PARK_TTL_MS + 999) / 1000 + 1 ))
+  [ -n "$WRITER_HTTP_TIMEOUT_S" ] || WRITER_HTTP_TIMEOUT_S=$min_writer_timeout
+  validate_uint writer-http-timeout "$WRITER_HTTP_TIMEOUT_S"
+  [ "$WRITER_HTTP_TIMEOUT_S" -ge "$min_writer_timeout" ] ||
+    die "writer-http-timeout must be >=${min_writer_timeout}s for park-ttl-ms=$PARK_TTL_MS"
   validate_uint burst-size "$BURST_SIZE"
   validate_uint churn-max "$CHURN_MAX"
   validate_uint random-churn-prob "$RANDOM_CHURN_PROB"
@@ -446,27 +458,42 @@ declare -A WRITER_PIDS=()
 # inside the allocation's cgroup; on a 512 MiB task that diagnostic VM can OOM
 # the real node. HTTP also exercises exactly the public parse/prove/sign/relay path.
 prove_request() {   # alloc group explorer_target numeric_id
-  local alloc=$1 group=$2 target=$3 id=$4 body
+  local alloc=$1 group=$2 target=$3 id=$4 body code rc
   body="{\"ns\":$NS_JSON,\"goal\":\"assertz(loadtest($id))\"}"
   if [ "$group" = "quod-cloud" ]; then
-    nomad alloc exec -task quod "$alloc" /usr/bin/curl -fsS --max-time 10 \
-      -o /dev/null -H 'content-type: application/json' -X POST \
-      --data-binary "$body" http://127.0.0.1:14569/api/prove 2>/dev/null
+    code=$(nomad alloc exec -task quod "$alloc" /usr/bin/curl -sS \
+      --max-time "$WRITER_HTTP_TIMEOUT_S" -o /dev/null -w '%{http_code}' \
+      -H 'content-type: application/json' -X POST --data-binary "$body" \
+      http://127.0.0.1:14569/api/prove 2>/dev/null)
+    rc=$?
   else
-    curl -fsS --max-time 10 -o /dev/null -H 'content-type: application/json' \
-      -X POST --data-binary "$body" "http://$target/api/prove" 2>/dev/null
+    code=$(curl -sS --max-time "$WRITER_HTTP_TIMEOUT_S" -o /dev/null -w '%{http_code}' \
+      -H 'content-type: application/json' -X POST --data-binary "$body" \
+      "http://$target/api/prove" 2>/dev/null)
+    rc=$?
   fi
+  [ "$rc" -eq 0 ] || return 11
+  case "$code" in
+    2??)     return 0 ;;  # committed/read result, or 202 outcome_unknown: never resubmit
+    409|503) return 10 ;; # explicit response: the operation did not apply and is safe to retry
+    *)       return 12 ;; # malformed/auth/server failure: terminal for this operation
+  esac
 }
 
 writer_loop() {   # alloc group explorer_target absolute_deadline
-  local alloc=$1 group=$2 target=$3 deadline=$4 seq=0 try id delay
+  local alloc=$1 group=$2 target=$3 deadline=$4 seq=0 try id delay rc
   while [ "$(date +%s)" -lt "$deadline" ]; do
     seq=$((seq + 1))
     id="$(date +%s%N)${BASHPID}${seq}"
     for ((try=0; try<WRITER_RETRIES; try++)); do
       [ "$(date +%s)" -lt "$deadline" ] || return 0
-      prove_request "$alloc" "$group" "$target" "$id" && break
-      sleep_ms "$WRITER_RETRY_MS"
+      prove_request "$alloc" "$group" "$target" "$id"
+      rc=$?
+      case "$rc" in
+        0)  break ;;
+        10) sleep_ms "$WRITER_RETRY_MS" ;;
+        *)  break ;;  # no response means unknown, so retrying could apply the goal twice
+      esac
     done
     delay=$((TX_BASE_MS + RANDOM % (TX_JITTER_MS + 1)))
     sleep_ms "$delay"
@@ -641,9 +668,11 @@ cand_pk_addr() {   # $1 = alloc
 }
 # Admit/remove goals use the private administrative eval path with a generous
 # internal leader-retry (up to ~40s), so peer_ready can become true and the
-# leader turn can come round. This path is opt-in and never used by normal load.
-admit_code()  { printf 'Ns= <<"%s">>, G={admit,%s,"%s",%d}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->admitted; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); _->timer:sleep(200),T(K-1) end end)(200).' "$NS" "$1" "$2" "$3"; }
-remove_code() { printf 'Ns= <<"%s">>, G={remove,%s}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->removed; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); _->timer:sleep(200),T(K-1) end end)(200).' "$NS" "$1"; }
+# leader turn can come round. Only definite pre-commit/rejection outcomes retry;
+# an unknown outcome is returned to the test instead of duplicating the operation.
+# This path is opt-in and never used by normal load.
+admit_code()  { printf 'Ns= <<"%s">>, G={admit,%s,"%s",%d}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->admitted; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1" "$2" "$3"; }
+remove_code() { printf 'Ns= <<"%s">>, G={remove,%s}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->removed; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1"; }
 
 _memb_wait() {   # $1=admitter $2=cand $3=target_cs_op(-ge|-le) $4=target_cs $5=want_isv  -> 0 ok / 1 timeout
   local i cs isv sy
@@ -807,7 +836,8 @@ LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_T
 if [ "$SCALE" = "1" ]; then
   LOG "scaling homogeneous job to $NODES nodes..."
   nomad job run -var image_tag="$IMAGE_TAG" -var image_registry="$IMAGE_REGISTRY" \
-    -var node_count="$NODES" -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
+    -var node_count="$NODES" -var park_ttl_ms="$PARK_TTL_MS" \
+    -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
 fi
 
 LOG "warmup ${WARMUP}s (let any cold/restarted node catch up)..."; sleep "$WARMUP"

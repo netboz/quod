@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.24"
+  default     = "0.7.41"
   description = "Quod image tag in the cluster registry. Routine upgrades resume the existing anchored quod-node CSI volumes."
 }
 
@@ -40,6 +40,12 @@ variable "proof_timeout_ms" {
   description = "Absolute lifetime of a client proof, including cross-ontology waits."
 }
 
+variable "park_ttl_ms" {
+  type        = number
+  default     = 30000
+  description = "How long a proved write waits locally for a final applied/rejected outcome. Expiry returns outcome_unknown and does not cancel consensus."
+}
+
 variable "ask_timeout_ms" {
   type        = number
   default     = 60000
@@ -50,6 +56,18 @@ variable "ask_step_timeout_ms" {
   type        = number
   default     = 30000
   description = "No-progress timeout while a served ask derives one answer."
+}
+
+variable "detailed_consensus_metrics" {
+  type        = bool
+  default     = false
+  description = "Enable expensive per-event consensus timing and mailbox probes for a short diagnostic run. Keep false during normal operation and throughput tests."
+}
+
+variable "otel_exporter_otlp_endpoint" {
+  type        = string
+  default     = "http://192.168.1.11:4318"
+  description = "Reachable OTLP/HTTP endpoint for Tempo. Use an address routable from both home and cloud allocations; do not rely on host-local Consul DNS inside bridge containers."
 }
 
 variable "genesis_hash" {
@@ -232,8 +250,10 @@ content = [
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
+    park_ttl_ms = ${var.park_ttl_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    detailed_consensus_metrics = ${var.detailed_consensus_metrics}
 %{if var.bootstrap && var.genesis_hash == ""}
     mode         = create
     genesis_file = "ontologies/quod_root.pl"
@@ -260,7 +280,7 @@ QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
 OTEL_SERVICE_NAME=quod
 OTEL_RESOURCE_ATTRIBUTES=service.namespace=quod,deployment.environment=nomad,service.instance.id={{ env "NOMAD_ALLOC_ID" }}
 OTEL_TRACES_EXPORTER=otlp
-OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-otlp.service.consul:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
 OTEL_TRACES_SAMPLER_ARG=0.05
@@ -434,8 +454,10 @@ content = [
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
+    park_ttl_ms = ${var.park_ttl_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    detailed_consensus_metrics = ${var.detailed_consensus_metrics}
     mode         = join
     genesis_hash = "${var.genesis_hash}"
     seeds        = [
@@ -456,7 +478,7 @@ QUOD_CONF={{ env "NOMAD_TASK_DIR" }}/quod.conf
 OTEL_SERVICE_NAME=quod
 OTEL_RESOURCE_ATTRIBUTES=service.namespace=quod,deployment.environment=nomad,service.instance.id={{ env "NOMAD_ALLOC_ID" }}
 OTEL_TRACES_EXPORTER=otlp
-OTEL_EXPORTER_OTLP_ENDPOINT=http://tempo-otlp.service.consul:4318
+OTEL_EXPORTER_OTLP_ENDPOINT=${var.otel_exporter_otlp_endpoint}
 OTEL_EXPORTER_OTLP_PROTOCOL=http_protobuf
 OTEL_TRACES_SAMPLER=parentbased_traceidratio
 OTEL_TRACES_SAMPLER_ARG=0.05

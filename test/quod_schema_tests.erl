@@ -40,6 +40,7 @@ defaults_test() ->
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
     ?assertEqual(64,              maps:get(max_ask_workers, B)),
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
+    ?assertEqual(30000,           maps:get(park_ttl_ms, B)),
     ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
@@ -142,10 +143,12 @@ genesis_hash_parse_test() ->
 build_ns_config_genesis_hash_test() ->
     Raw = crypto:strong_rand_bytes(32),
     Content = #{namespace => <<"quod:root">>, mode => join, role => member, seeds => [<<"1.2.3.4:14567">>],
+                park_ttl_ms => 12345,
                 genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => binary:encode_hex(Raw)},
     {<<"quod:root">>, NsCfg} = quod_app:build_ns_config(Content),
     ?assertEqual(join, maps:get(mode, NsCfg)),
     ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
+    ?assertEqual(12345, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
 
 %% A create node (blank genesis_hash) carries no anchor key at all — quod_simplex needs none.
@@ -157,6 +160,7 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
     ?assertEqual(64, maps:get(max_ask_workers, NsCfg)),
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
+    ?assertEqual(30000, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
 

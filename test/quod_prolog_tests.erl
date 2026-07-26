@@ -50,6 +50,39 @@ absolute_proof_timeout_test_() ->
                        quod_prolog:prove(Ns, loop, Ns))
      end}.
 
+outcome_unknown_timeout_test_() ->
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(gproc),
+         Ns = <<"write-timeout:", (integer_to_binary(
+                                     erlang:unique_integer([positive])))/binary>>,
+         {ok, Pid} = quod_prolog:start_link(
+                       Ns, #{node_id => {"127.0.0.1", 5000},
+                             park_ttl_ms => 30}),
+         ok = quod_prolog:mark_ready(Ns),
+         {Ns, Pid}
+     end,
+     fun cleanup/1,
+     fun({Ns, _Pid}) ->
+         fun() ->
+             Result = quod_prolog:prove(Ns, {assertz, {timeout_fact, x}}, Ns),
+             ?assertMatch({error, {outcome_unknown, _}}, Result),
+             {error, {outcome_unknown, TxId}} = Result,
+             ?assert(is_binary(TxId)),
+             ?assert(byte_size(TxId) > 0),
+             ?assertEqual(1, maps:get(park_timeouts, quod_prolog:stats(Ns))),
+             ?assertEqual(fail, quod_prolog:prove(Ns, {timeout_fact, x}, Ns)),
+             %% The local deadline only reaps the caller/request alias. Consensus may
+             %% still commit that exact transaction later; applying it must update the
+             %% KB normally without trying to reply to the departed caller.
+             Late = (change(Ns, diff_for({timeout_fact, x}), #{}))#transaction{tx_id = TxId},
+             ok = ab(Ns, 1, batch(Late)),
+             ?assertEqual({ok, [#{}], 1},
+                          quod_prolog:prove(Ns, {timeout_fact, x}, Ns)),
+             ?assertEqual(1, maps:get(park_timeouts, quod_prolog:stats(Ns)))
+         end
+     end}.
+
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
 setup_mem() ->

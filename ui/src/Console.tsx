@@ -89,6 +89,17 @@ function Reply({ reply }: { reply: ProveReply }) {
   if (reply.result === 'fail') {
     return <div className="mt-3 rounded-lg bg-cream px-3 py-2 font-mono text-sm text-gray">false.</div>
   }
+  if (reply.result === 'pending') {
+    return (
+      <div className="mt-3 rounded-lg border border-gold/50 bg-gold-soft/20 px-3 py-2 text-sm text-teal">
+        <div className="font-semibold">Outcome still pending</div>
+        <div className="mt-1 text-xs text-gray">
+          Do not resubmit this operation. Transaction{' '}
+          <span className="font-mono text-teal">{reply.tx_id}</span> may still be committed.
+        </div>
+      </div>
+    )
+  }
   return (
     <div className="mt-3 rounded-lg border border-olive/30 bg-olive/5 px-3 py-2 text-sm">
       <div className="font-medium text-olive">

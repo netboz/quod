@@ -1,9 +1,10 @@
 # Grafana Tempo — trace backend for quod's OpenTelemetry spans.
 #
-# quod nodes export OTLP/HTTP to `tempo-otlp.service.consul:4318` (see deploy/quod.nomad).
-# Consul A-records carry no port, so the OTLP receiver MUST bind host port 4318 exactly;
-# the query API (used by the Grafana datasource) is on 3200. Single-binary, local storage,
-# short retention — this is a load-test/measurement backend, not long-term trace storage.
+# quod nodes export OTLP/HTTP to `otel_exporter_otlp_endpoint` from deploy/quod.nomad.
+# Its qengho default is the routable host endpoint `192.168.1.11:4318`; the receiver
+# therefore MUST bind host port 4318 exactly. The query API (used by the Grafana
+# datasource) is on 3200. Single-binary, local storage, short retention — this is a
+# load-test/measurement backend, not long-term trace storage.
 #
 # Deploy:  NOMAD_ADDR=http://192.168.1.10:4646 nomad job run deploy/tempo.nomad
 # Remove:  nomad job stop -purge tempo
@@ -44,7 +45,7 @@ job "tempo" {
       }
     }
 
-    # OTLP/HTTP ingest — quod nodes export here (tempo-otlp.service.consul:4318).
+    # OTLP/HTTP ingest — quod nodes reach this host port through their configured endpoint.
     service {
       name = "tempo-otlp"
       port = "otlp_http"

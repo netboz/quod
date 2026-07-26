@@ -103,7 +103,16 @@ safe, namespace-scoped correlation envelope:
 {submit, Author, Signature, CanonicalTransactionBytes}
 ```
 
-The receiving leader:
+The relay frame keeps routing outside the signed transaction bytes:
+
+```erlang
+{relay_submit, RequestId, TargetSlot, SubmitEnvelope, TraceCarrier}
+```
+
+`TargetSlot` is validated as a positive 64-bit slot and is used only for
+placement; changing it cannot change the authenticated transaction content.
+
+The receiving proposer:
 
 1. enforces the frame and canonical-byte limits;
 2. safely decodes the outer envelope, which contains only known atoms and
@@ -118,36 +127,48 @@ verification and rejects non-canonical encodings. The authenticated transport
 peer must equal `Author`, and that author must be in the current committee.
 The inter-ontology ask symbol codec is never used for transaction relay.
 
-Relay uses the existing authenticated `{log, Ns}` links, and it targets the
-rotation instead of chasing it: the leader schedule is a pure function of the
-slot, so the author computes the first slot its submission can still enter and
-sends it ONCE to that slot's leader — pre-positioning it there while the current
-slot's consensus is in flight. The receiver PARKS anything arriving at most two
-slots ahead of its own turn in its bounded ingress queue and proposes it the
-moment its slot opens, answering when consensus decides — the terminal
-`relay_result` is the follower's notification, so the follower's
-exact-request-id retransmit is a lost-frame backstop only (the link send is
-deliberately fire-and-forget under flow-control pressure, so the retransmit
-cadence stays tight until links carry backpressure signalling; parked request
-ids stay in the receiver's inflight set, so retransmits are idempotent).
-Leaders bound in-flight requests and cache completed results for 30 seconds,
-and a follower independently resolves its pending relay only when the exact
-signed submission commits. Only a genuine misroute — the schedule moved past
-the holder — redirects the request back through its author with a concrete
-forward-looking hint, up to three hops; a useless hint (a recovering target
-answers `none`) is replaced at the origin by a locally recomputed seat, and
-`skipped` (retryable) is returned if that seat is the origin itself. During a
-membership barrier every arrival parks unconditionally: the post-adoption
-schedule is unknowable, so hints minted against the old committee would only
-burn the redirect budget. Relay lifetime matches the Prolog parked-proof
-lifetime, anchored at the submission's ORIGINAL arrival, so time parked at any
-hop counts against the same deadline. A submission whose signed sequence falls
-below the committed floor because it lost a routing race resolves
+Relay uses the existing authenticated `{log, Ns}` links. The sender computes
+the first slot the submission can still enter and includes that exact target
+slot in the relay frame. The receiver verifies that it is the deterministic
+proposer for the declared slot. It may collect the request or park it until that
+slot opens, but it never derives a replacement destination from its own
+frontier. If the declared slot is already closed, the relay fails retryably.
+
+While an unresolved target slot remains usable, later submissions from the
+same author reuse that destination and slot. If the slot finalizes, matching
+submissions resolve successfully and every remaining relay for it fails
+immediately; queued later sequences can then target the new frontier. This
+preserves signed sequence order without retaining a stale request for a full
+leader rotation.
+
+Once a destination holds the request, it sends `relay_accepted`. Before that
+acknowledgement the author retransmits the exact request every 300 ms to recover
+a dropped fire-and-forget link send. After acknowledgement it probes only every
+5 seconds to recover a lost terminal result, avoiding request amplification
+during a slow commit. Parked request ids remain in the receiver's inflight set,
+so both kinds of retransmit are idempotent. Destinations cache completed
+results for 30 seconds, and the author resolves its pending relay only when the
+exact signed submission commits or receives a definite failure. A local caller
+deadline cannot cancel a transaction that may already be proposed: it returns
+`{error, {outcome_unknown, TxId}}`. That transaction id must be inspected in the
+ledger/explorer; automatically re-proving a non-idempotent goal is unsafe.
+
+During an in-flight membership barrier every arrival parks unconditionally:
+the post-adoption schedule is unknowable. A membership change waiting for the
+approved parent to commit is also a global queue barrier; ordinary writes may
+not continually pass it and starve the committee transition. Other queue
+blocking is per-author, so capacity pressure from one author does not prevent
+another author's transaction from filling an open batch. Relay lifetime is
+anchored at the submission's original arrival, so time parked at any hop counts
+against the same budget. Its one-second cleanup margin outlives the Prolog caller
+deadline only to absorb a racing final relay result; it does not turn an unknown
+caller outcome into a safe retry.
+A submission whose signed sequence falls below the approved floor because a
+newer sequence became final first (for example after a skipped proposal and retry) resolves
 `{error, stale_seq}` — retryable by contract (the origin re-proves and
 re-signs), counted apart from malformed input; it is never a terminal
-rejection. An author whose burst straddles a target flip can sign consecutive
-sequences toward two slots and lose the earlier race — the accepted, retryable
-residue of routing without a per-author ordering gate.
+rejection. Normal bursts cannot split consecutive sequences across target
+slots: the unresolved relay map is the source-side ordering lane.
 
 ## Verification
 

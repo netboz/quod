@@ -10,9 +10,10 @@ The four co-found the same committee (`mode=create`, `committee` = the four `{pu
 block asserts every co-founder's `peer_admitted` fact, so their logs are byte-identical). The committee is
 derived from those facts. The leader for a slot **rotates** round-robin over the sorted set, so tests
 target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
-`follower_relays` proves a non-leader transparently relays; `leader_failover` kills the next slot's leader
+`follower_relays` proves a non-leader transparently relays a write to its exact target proposer;
+`leader_failover` kills the next slot's leader
 **before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
-the rotated leader commits the re-submitted write. `over_fault_restart_recovers` uses an isolated second
+the client retries on the rotated proposer. `over_fault_restart_recovers` uses an isolated second
 committee to stop two validators (`>f`), keeps the head stalled past Δ, restarts both from their existing
 logs, and proves live finality resumes without a namespace-wide reboot. `quorum(4)=3` tolerates one down
 in normal operation; the latter case validates liveness recovery after deliberately exceeding that bound,
@@ -134,8 +135,8 @@ commits_across_committee(Config) ->
     Heights = lists:usort([slot(Peer) || {Peer, _} <- Nodes]),
     ?assertEqual([2], Heights).
 
-%% A write submitted to a non-leader is signed there, relayed to the current
-%% leader, committed once, and applied across the committee.
+%% A write submitted to a non-leader is signed there, relayed with its exact
+%% target slot, committed once, and applied across the committee.
 follower_relays(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
@@ -210,16 +211,27 @@ total_busy(Nodes) ->
     lists:sum([maps:get(r_busy, peer:call(Peer, quod_simplex, stats, [?NS]), 0)
                || {Peer, _} <- Nodes]).
 
-%% Writes ride quod_prolog: {error,rebuilding}/conflict_retry/retry/not_leader are all
-%% client-retryable and MUST NOT count as failures; busy alone is what this test bans
-%% (and it asserts the counter fleet-wide, so a swallowed busy cannot hide).
+%% Retry only outcomes that are explicitly safe. In particular, outcome_unknown is
+%% terminal here: retrying it could commit the same non-idempotent goal twice. Busy
+%% also fails the test, whose fleet-wide counter assertion prevents it being hidden.
 writer_retry(_Peer, _Goal, 0) -> {error, out_of_retries};
 writer_retry(Peer, Goal, N) ->
     case prove(Peer, Goal) of
         {ok, _, _} = Ok -> Ok;
-        _Other ->
+        {error, rebuilding} ->
             timer:sleep(50),
-            writer_retry(Peer, Goal, N - 1)
+            writer_retry(Peer, Goal, N - 1);
+        {error, conflict_retry} ->
+            timer:sleep(50),
+            writer_retry(Peer, Goal, N - 1);
+        {error, retry} ->
+            timer:sleep(50),
+            writer_retry(Peer, Goal, N - 1);
+        {error, {not_leader, _}} ->
+            timer:sleep(50),
+            writer_retry(Peer, Goal, N - 1);
+        Other ->
+            Other
     end.
 
 %% A Byzantine leader injects a crafted `{propose, ...}` whose payload is a committee change its OWN
@@ -248,8 +260,8 @@ byzantine_admit_rejected(Config) ->
     assert_membership_proposal_skipped(Config, Evil).
 
 %% Kill the next slot's leader BEFORE it proposes: the slot cannot commit (no proposer), so the three
-%% live validators complain, a ⅔ complaint cert SKIPS it (a noop), and the rotated leader for the next
-%% slot commits the re-submitted write. Proves complaint-timer → skip → rotation → commit end-to-end.
+%% live validators complain and a ⅔ complaint cert SKIPS it. The stale exact-slot
+%% requests fail immediately, then a fresh submission commits on the rotated proposer.
 leader_failover(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
@@ -257,27 +269,41 @@ leader_failover(Config) ->
     {DeadPeer, DeadPub} = leader_peer(V, Config),
     ok   = peer:stop(DeadPeer),
     Live = [N || {_, P} = N <- Nodes, P =/= DeadPub],
-    %% a client write reaches every LIVE validator; each redirects to the (dead) leader AND arms its Δ
-    %% timer for slot V — after Δ the three complain, forming a ⅔ complaint cert that skips V.
+    Skips0 = total_skips(Live),
+    %% Submit on every live validator so all three arm demand for slot V. Every
+    %% request names that exact slot; none can commit because its proposer is dead.
     W = {assertz, {failover, done, yes}},
     Parent = self(),
-    _ = [spawn(fun() -> Parent ! {dead_leader_submit, P, prove(P, W)} end)
-         || {P, _} <- Live],
+    Tags =
+        [begin
+             Tag = {dead_leader_submit, P},
+             _ = spawn(fun() -> Parent ! {Tag, prove(P, W)} end),
+             Tag
+         end || {P, _} <- Live],
     %% slot V can ONLY be reached by a skip — its leader is dead, so no block for V can ever commit.
-    %% (NB: the write goes to the followers, not the dead leader; an alive leader given the write would
-    %% instead PROPOSE + commit V — that contrasting path is what commits_across_committee proves.)
     [ ?assert(eventually(fun() -> slot(P) >= V end, 20000)) || {P, _} <- Live ],
-    %% V is a NOOP skip, not a stealth commit of W: the fact must be ABSENT until the rotated leader commits.
-    {LP1, _} = hd(Live),
-    ?assertNot(match_ok(prove(LP1, {failover, done, {'X'}}))),
-    %% re-submit to the rotated (alive) leader for V+1: it proposes, the three live nodes commit it.
-    {L2, _} = leader_peer(V + 1, Config),
-    ?assert(eventually(fun() -> match_ok(prove(L2, W)) end, 20000)),
+    ?assert(eventually(fun() -> total_skips(Live) > Skips0 end, 10000)),
+    Results =
+        [receive {Tag, Result} -> Result
+         after 15000 -> ct:fail({stale_relay_did_not_finish, Tag})
+         end || Tag <- Tags],
+    ?assert(lists:all(fun(Result) -> not match_ok(Result) end, Results)),
+    {ProbePeer, _} = hd(Live),
+    ?assertNot(match_ok(prove(ProbePeer, {failover, done, {'X'}}))),
+    {NextLeader, _} = leader_peer(V + 1, Config),
+    ?assert(eventually(fun() -> match_ok(prove(NextLeader, W)) end, 20000)),
     [ begin
           ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)),
           ?assert(eventually(fun() -> match_ok(prove(P, {failover, done, {'X'}})) end, 10000))
       end || {P, _} <- Live ],
-    ?assert(eventually(fun() -> lists:usort([slot(P) || {P, _} <- Live]) =:= [V + 1] end, 5000)).
+    ?assert(eventually(
+              fun() -> length(lists:usort([slot(P) || {P, _} <- Live])) =:= 1 end,
+              10000)).
+
+total_skips(Nodes) ->
+    lists:sum(
+      [maps:get(skips, peer:call(Peer, quod_simplex, stats, [?NS]), 0)
+       || {Peer, _} <- Nodes]).
 
 %% Exceed the formal liveness bound (`N=4`, `f=1`) while a real proposal is in flight. The two survivors
 %% must not accumulate irreversible complaints while they can see fewer than a quorum. Restart both absent

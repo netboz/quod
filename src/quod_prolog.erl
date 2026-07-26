@@ -93,16 +93,17 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
             %% so MVCC history >= floor survives for the runtime's queued work; DOWN clears it.
             runtime_pin = none :: none | {pid(), reference(), log_index()},
             %% tx_id => {From, Bindings, HeightRead, TimerRef,
-            %%           AsyncRequestId | none, TransactionSpan}
+            %%           AsyncRequestId | none, TransactionSpan, SubmittedMonoMs}
             parked    = #{} :: #{binary() => {gen_server:from(), [map()], log_index(),
-                                               reference(), term(), quod_trace:span_ctx()}},
+                                               reference(), term(), quod_trace:span_ctx(),
+                                               integer()}},
             requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
             %% membership verdicts parked until the KB reaches the proposal's parent height (Slot-1),
             %% then delivered to ReplyTo as {membership_verdict, Tag, Verdict}. Keyed by the unique Tag.
             %% Tag => {Slot, Change, ReplyTo, TimerRef}
             validations = #{} :: #{term() => {log_index(), term(), pid(), reference()}},
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
-            park_timeouts = 0 :: non_neg_integer(),     %% parked writes reaped by TTL (verdict never arrived)
+            park_timeouts = 0 :: non_neg_integer(),     %% writes still unresolved at their caller deadline
             %% Ref => #proof_worker{}
             workers   = #{} :: map(),
             %% WorkerMon => #ask_worker{}. The reverse index makes both normal
@@ -304,7 +305,7 @@ handle_call(get_stats, _From, S) ->
               rejects   => S#s.rejects,  proves  => S#s.proves,
               conflicts => S#s.conflicts,
               parked    => map_size(S#s.parked),        %% in-flight writes awaiting commit (liveness gauge)
-              park_timeouts => S#s.park_timeouts,       %% writes that never committed (reaped)
+              park_timeouts => S#s.park_timeouts,       %% final outcome unknown when caller deadline elapsed
               proof_workers => map_size(S#s.workers),
               ask_workers => map_size(S#s.ask_workers),
               kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
@@ -446,13 +447,17 @@ handle_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload},
             end;
         false -> handle_response_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload}, S)
     end;
-%% A parked write whose verdict never arrived (leader change / lost block): reap it
-%% so the caller gets a definite answer instead of hanging.
+%% A parked write whose verdict never arrived (leader change / lost block): stop
+%% retaining its caller, but do NOT claim failure. Consensus cannot cancel a change
+%% that may already be proposed; it can still finalize after this local deadline.
+%% Return its explorer handle so clients can inspect the eventual outcome without
+%% resubmitting a possibly non-idempotent operation.
 handle_info({park_timeout, Tx}, S = #s{parked = P}) ->
     case maps:take(Tx, P) of
         {{From, _B, _H, _TRef, ReqId, SpanCtx, _T0}, P1} ->
-            quod_trace:finish_span(SpanCtx, {error, timeout}),
-            gen_server:reply(From, {error, timeout}),
+            Outcome = {error, {outcome_unknown, Tx}},
+            quod_trace:finish_span(SpanCtx, Outcome),
+            gen_server:reply(From, Outcome),
             {noreply, S#s{parked = P1, requests = abandon_request(ReqId, S#s.requests),
                           park_timeouts = S#s.park_timeouts + 1}};
         error -> {noreply, S}
@@ -846,15 +851,14 @@ submit_write(_From, _Goal, _B, _D, _R, _CallerNs, _TraceCtx, S) ->
 append_result(Tx, {ok, Slot}, S) ->
     request_completed(Tx, mark_consensus_reply(Tx, Slot, S));
 append_result(Tx, {error, not_in_charge, unavailable}, S) ->
-    request_completed(Tx, S);   %% ambiguous: a late ordered apply or the parked TTL decides
+    request_completed(Tx, S);   %% ambiguous: ordered apply may still resolve it; the TTL reports unknown
 append_result(Tx, {error, not_in_charge, Hint}, S) ->
     reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
 append_result(Tx, {error, skipped}, S) ->
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
-%% The signed sequence fell below the committed floor because the change lost a routing
-%% race (an author's burst straddling a leader-rotation target flip). The content is
-%% fine — a retry re-proves and re-signs with a fresh sequence, so surface it retryably,
-%% never terminal.
+%% A newer author sequence reached approved history first, normally after a skipped
+%% proposal or retry. The content is fine: re-prove and sign with a fresh sequence,
+%% so surface it retryably, never terminal.
 append_result(Tx, {error, stale_seq}, S) ->
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
 append_result(Tx, {error, Reason}, S) ->

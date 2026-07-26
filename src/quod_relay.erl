@@ -43,9 +43,11 @@ decode_relay_inner(Inner) ->
         _:_ -> error
     end.
 
-valid_wire({relay_submit, ReqId,
+valid_wire({relay_submit, ReqId, TargetSlot,
             {submit, Author, Signature, Canonical}, TraceCarrier})
   when is_binary(ReqId), byte_size(ReqId) =:= 16,
+       is_integer(TargetSlot), TargetSlot >= 1,
+       TargetSlot =< 16#FFFFFFFFFFFFFFFF,
        is_binary(Author), byte_size(Author) =:= 32,
        is_binary(Signature), byte_size(Signature) =:= 64,
        is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
@@ -53,6 +55,9 @@ valid_wire({relay_submit, ReqId,
 valid_wire({relay_result, ReqId, Result})
   when is_binary(ReqId), byte_size(ReqId) =:= 16 ->
     valid_result(Result);
+valid_wire({relay_accepted, ReqId})
+  when is_binary(ReqId), byte_size(ReqId) =:= 16 ->
+    true;
 valid_wire(_) ->
     false.
 

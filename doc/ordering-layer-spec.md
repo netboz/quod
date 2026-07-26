@@ -1177,7 +1177,9 @@ stays parked; nothing is replied until the block applies on this node.
    - rejected → reply `{error, conflict_retry}`.
    Remove the `tx_id` entry either way. On other members the block has no parked entry, so `apply_block` just
    mutates the KB. Definite asynchronous append errors unpark immediately; ambiguous transport/process loss
-   leaves the caller parked because the block may already have committed, and ordered apply or the TTL decides.
+   leaves the caller parked because the block may already have committed. If the local waiting deadline
+   expires first, return `{error, {outcome_unknown, TxId}}`, never a false failure: the client must inspect
+   that transaction id and must not automatically resubmit a non-idempotent operation.
 
 ### 4.6 Rebuild on start — replay the log / snapshot (#20, #29, #13)
 
@@ -1234,7 +1236,8 @@ to zero after the corresponding workers finish is a useful stuck-query signal.
 | Not the leader on submit | `{error, not_in_charge, Hint}` → `{error, {not_leader, Hint}}`, unpark. |
 | Proof/ask worker cap reached | reject immediately with `{error, busy}`; no unbounded queue or process growth. |
 | 1-voter committee | transparent: Simplex commits locally, then `apply_block` fires as in N-voter. |
-| Restart mid-flight write | the client call exits with the engine; it may retry. A block that already committed is replayed from the durable Simplex store, and content apply remains idempotent. |
+| Write waiting deadline expires | return `outcome_unknown` with its transaction id; it may still finalize, so automatic retry is unsafe. |
+| Restart mid-flight write | the client call exits with the engine and its outcome is unknown. A block that already committed is replayed from the durable Simplex store; inspect the original transaction id before deciding whether an application-level retry is safe. |
 
 ---
 

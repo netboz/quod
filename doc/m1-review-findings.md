@@ -35,8 +35,9 @@ e2e test didn't exercise.
    deadlock).
 4. **[FIXED] `quod_prolog.erl:144` — a write "fails" but takes effect.** A 5s append
    timeout replied `{error,…}` *without parking*, but `quod_ledger` could still
-   commit+apply. → park before submit; keep parked on an ambiguous timeout; a
-   per-tx TTL delivers the verdict or a clean `{error, timeout}`.
+   commit+apply. → park before submit; keep parked on ambiguous process/transport
+   loss; if the caller deadline expires before finality, return
+   `{error, {outcome_unknown, TxId}}` rather than falsely claiming failure.
 5. **[FIXED] `quod_prolog.erl:173` — parked caller never replied.** If the block
    never reached `apply_block`, `From` hung to its 35s client timeout (no TTL). →
    per-tx TTL eviction (same mechanism as #4).

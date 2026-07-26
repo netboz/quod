@@ -7,12 +7,13 @@ quod exposes Prometheus metrics at `GET /metrics` on the node's `metrics_port`
 ## Transaction traces (Tempo)
 
 The Nomad deployment enables sampled OpenTelemetry traces and exports them to
-the `tempo-otlp.service.consul:4318` OTLP/HTTP endpoint. The qengho
-observability role runs Tempo beside Loki and provisions it as Grafana's
-`Tempo` data source. In Grafana, open **Explore**, select **Tempo**, and search
-for the `quod.transaction` span. A trace follows one request through Prolog,
-relay, batching, proposal, durable journal/ledger writes, and final apply or
-rejection.
+the OTLP/HTTP endpoint configured by `otel_exporter_otlp_endpoint` (the qengho
+default is `http://192.168.1.11:4318`, reachable from home and cloud
+allocations). The qengho observability role runs Tempo beside Loki and
+provisions it as Grafana's `Tempo` data source. In Grafana, open **Explore**,
+select **Tempo**, and search for the `quod.transaction` span. A trace follows
+one request through Prolog, relay, batching, proposal, durable journal/ledger
+writes, and final apply or rejection.
 
 Production uses the `parentbased_traceidratio` sampler at 5%. A browser or
 other caller may send a sampled W3C `traceparent` header to retain a specific
@@ -74,7 +75,7 @@ with them.
 | Transactions | Committed by author · Write size · In-flight | Who's writing; diff sizes; pending/parked (writes-not-committing symptom) |
 | Transaction authentication | Signature check time · Invalid signatures | Ed25519 verification cost; whether corrupted or dishonest transaction input was rejected |
 | Prolog execution & memory | Active queries · KB memory & retained history | Query saturation; ETS growth; whether frozen queries are temporarily retaining old data |
-| Rejections & failures | Append rejections by reason · Failed writes | Backpressure/redirect/skip (flow control) vs OCC conflicts + park timeouts (real failures) |
+| Rejections & failures | Append rejections by reason · Failed writes | Overload/wrong or closed target slot/skip vs OCC conflicts and request timeouts |
 | Dissemination feed | Feed activity · Dropped blocks | Gossip push/ingest/pull health; gap-drop bursts |
 | Brahms overlay | View/sample/links · estimated population N | Overlay connectivity plus each node's bounded estimate of total live population |
 

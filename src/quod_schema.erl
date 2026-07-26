@@ -85,10 +85,15 @@ fields(content) ->
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
     , {proof_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
+    , {park_ttl_ms,
+       hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
     , {ask_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
     , {ask_step_timeout_ms,
        hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
+      %% Expensive per-event/per-substep Prometheus probes for short diagnostic runs.
+      %% Disabled by default because they execute inside the serial consensus process.
+    , {detailed_consensus_metrics, hoconsc:mk(boolean(), #{default => false})}
       %% `mode=join` REQUIRES this: the out-of-band trust anchor — the founder's genesis
       %% block hash as a 64-char hex string, copied from the founder's boot log (see
       %% `quod_app`). Empty for a `create` node. It is what makes catch-up trustless: a

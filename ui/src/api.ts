@@ -65,6 +65,7 @@ export type FoundTx = { tx: TxFull; block: { slot: number; time: number; noop: b
 export type ProveReply =
   | { result: 'ok'; height: number; bindings: Record<string, string>[] }
   | { result: 'fail' }
+  | { result: 'pending'; tx_id: string }
   | { error: string; detail?: string; leader?: PeerId | null }
 
 async function get<T>(url: string): Promise<T> {

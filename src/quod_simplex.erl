@@ -35,19 +35,18 @@ finalizes its approved parent; catch-up persists and verifies that implicit proo
 transactions are singleton barriers, so a voting-set change is explicitly committed before
 the next proposal opens.
 
-Ingress is **park at the future leader, don't reject**: the rotation is a pure function of
-the slot, so an author sends each change ONCE to the leader of the first slot it can still
-enter — pre-positioned while the current slot's consensus is in flight — and that node
-parks anything arriving within `?INGRESS_HORIZON` slots of its turn in a bounded FIFO
-ingress queue. The queue drains — event-driven, from the universal transition hook — the
-moment the holder's slot opens, straight into its batch (a multi-item drain seals
-immediately: block N+1 carries what arrived during block N, already in place). Only a
-genuine misroute — the schedule moved past the holder — redirects back through the author
-with a concrete forward hint; a membership barrier parks unconditionally, since the
-post-adoption schedule is unknowable. `{error, busy}` therefore only means queue overflow
-or the ingress TTL cutting a genuinely stalled item loose — an alertable overload signal,
-not routine backpressure — and the relay retransmit timer is demoted to a lost-frame
-backstop (the terminal reply is the event).
+Ingress names the first slot a request can still enter and sends that slot with the signed
+submission to its deterministic proposer. The receiver may collect or park the request only
+for that exact slot; it never reinterprets the author's intent from a different local
+frontier. Once the slot finalizes, matching submissions succeed and every remaining relay
+for it fails immediately so the author can retry on the new frontier. While an exact-slot
+lane remains open, later local changes share it, preserving author-sequence order.
+Temporarily blocked changes wait in a bounded queue whose drain may pass one blocked author
+to keep others moving. Membership changes remain a global barrier so sustained writes
+cannot starve a committee transition. `{error, busy}` means queue overflow or TTL expiry,
+not routine backpressure.
+A relay destination acknowledges once it holds the request: the sender then replaces its
+300 ms lost-send retry with a slow final-result recovery probe.
 
 One explicit `head_progress` state watches the oldest non-final slot (`committed+1`) through
 `awaiting_proposal`, `awaiting_notarization`, and `awaiting_commit`. Notarization changes phase; it
@@ -123,9 +122,14 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_round/2, test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
-         test_append/3, test_relayed_append/3, test_ingress/1, test_drain/1,
+         test_append/3, test_relayed_append/3, test_relayed_append/4,
+         test_ingress/1, test_drain/1,
          test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
-         test_relay_result/4, test_round_probe/1, route/4,
+         test_relay_pending_detail/1, test_relay_result/4,
+         test_relay_accepted/3, test_dispatch_relay/3,
+         test_put_pending_relay/3,
+         test_ingress_needs_drain/2,
+         test_round_probe/1, route/4,
          proposal_visible/2, reseat_engine/2,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
@@ -620,11 +624,10 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
 -doc """
 The deterministic leader (proposer) for a slot: **round-robin** over the sorted validator set,
 `sort(V)[(Slot-1) rem N]`. Every node computes the same leader for a given slot from the same frozen
-set — for FUTURE slots too, which is what lets ingress routing (`route/4`) pre-position a change at
-the node whose turn is coming — and a complaint-skip of slot `v` moves slot `v+1` to a *different*
-leader: that rotation IS the failover. `Slot ≥ 1` (genesis is 0). Stable per-epoch leaders (keep one
-leader for K slots) remain deliberately NOT taken: a dead tenured leader would cost K complaint
-rounds instead of one, and pre-positioning already gives batching the stability tenure would buy.
+set. Ingress routing (`route/4`) binds each relay to the earliest usable slot, while
+a complaint-skip of slot `v` moves slot `v+1` to a *different* leader: that rotation is the failover.
+`Slot ≥ 1` (genesis is 0). Stable per-epoch leaders (keeping one leader for K slots) remain
+deliberately unused because a dead tenured leader would cost K complaint rounds instead of one.
 """.
 -spec leader(slot(), [node_id()]) -> node_id() | none.
 leader(_Slot, []) -> none;   %% an empty committee has no leader — `none` matches no peer, so the append/
@@ -709,32 +712,21 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(BATCH_ENVELOPE_BYTES, 6).               %% exact singleton-list ETF overhead beyond term_to_binary(Tx)
 -define(BATCH_MS, 2).                           %% short micro-batch window; configurable with simplex_batch_ms
 -define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
--define(RELAY_RETRY_MS, 300).                    %% lost-frame backstop: the terminal reply is the normal
-                                                  %% resolution now that holders PARK instead of rejecting;
-                                                  %% this cadence only recovers frames the fire-and-forget
-                                                  %% link send dropped (quod_link ignores flow-control
-                                                  %% pressure by design), so it must stay tight until links
-                                                  %% grow backpressure signalling (doc/deferred.md)
+-define(RELAY_RETRY_MS, 300).                    %% retry until the destination acknowledges receipt
+-define(RELAY_ACCEPTED_RETRY_MS, 5000).          %% after receipt, a slow status retry recovers a lost
+                                                  %% terminal result without flooding the consensus mailbox
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
 -define(MAX_INGRESS_TXS, 512).                    %% ingress park queue: shared item bound (2x a full block)
 -define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).  %% ingress park queue: shared byte bound
 -define(MAX_INGRESS_PER_AUTHOR, 64).              %% fairness: one authenticated member cannot capture the
-                                                  %% FIFO by flooding — its overflow rejects, others park
--define(INGRESS_TTL_MS, 7000).                    %% parked-item cutoff. Derivation: a pre-positioned park
-                                                  %% may legitimately wait ?INGRESS_HORIZON slots, and ONE
-                                                  %% of them may burn a full quorum-flap complaint cycle
+                                                  %% queue by flooding — its overflow rejects, others park
+-define(INGRESS_TTL_MS, 7000).                    %% parked-item cutoff. One eligible slot may burn a full
+                                                  %% quorum-flap complaint cycle
                                                   %% (Δ×(1+?MAX_QUORUM_REARMS) = 4s) before the skip lands;
                                                   %% flight time is negligible. 7s covers that worst legit
                                                   %% wait yet stays under the caller's 8s append timeout,
                                                   %% so a REAL stall still fails visibly (busy) while the
                                                   %% caller can still hear it — the queue never hides a wedge
--define(INGRESS_HORIZON, 2).                      %% a relayed change parks here only if this node leads
-                                                  %% within this many slots of the pipeline floor: the
-                                                  %% origin targets the FIRST enterable slot, so +2 absorbs
-                                                  %% one slot of in-flight advance plus the origin/receiver
-                                                  %% view lag; anything farther out is a misroute — redirect.
-                                                  %% Effectively min(H, N-1): a small committee's horizon
-                                                  %% covers everyone, which is correct (nowhere better to go)
 -define(SIGNED_GROWTH_BYTES, 96).                 %% capacity headroom for an unsigned local item growing at
                                                   %% sign time (64B Ed25519 sig + author_seq + ETF framing)
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
@@ -772,21 +764,21 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 
 -record(relay_pending, {from :: term(),
                         target :: node_id(),
+                        target_slot :: slot(),
                         frame :: binary(),
                         deadline :: integer(),
                         next_retry :: integer(),
-                        redirects = 0 :: 0..3}).   %% misroute correction: pre-positioning targets the
-                                                   %% seat, so hops are the exception; the bound caps
-                                                   %% Byzantine redirect ping-pong
+                        accepted = false :: boolean()}).
 
-%% One parked append: the FIFO "take a ticket" entry that replaced the reject-busy/retry
-%% loop. `origin` fixes the trust shape (`local` = this node's own still-UNSIGNED
+%% One parked append in the bounded, per-author-ordered ingress queue. `origin`
+%% fixes the trust shape (`local` = this node's own still-UNSIGNED
 %% transaction — signed exactly once, on the pass that leaves the queue; `relayed` = an
 %% author-signed submission verify_and_accept_relay already admitted). `enqueued_at` is
-%% BOTH the TTL clock and the relay-deadline anchor: queue time counts against the
-%% caller's end-to-end budget, so consensus still gives up no later than ~1s after the
-%% prolog park TTL, exactly as before parking existed.
--record(ingress_item, {origin :: local | relayed,
+%% BOTH the TTL clock and the relay-deadline anchor: draining cannot reset a request's
+%% lifetime. Relay state is reaped about one second after Prolog's local wait ends; that
+%% cleanup bound does not turn the caller's earlier unknown outcome into a failure.
+-type ingress_origin() :: local | {relayed, slot()}.
+-record(ingress_item, {origin :: ingress_origin(),
                        waiter :: #waiter{},
                        change :: #transaction{},
                        bytes  :: pos_integer(),     %% batch-capacity accounting, incl. sign growth
@@ -832,17 +824,15 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             block_requests = #{} :: #{{slot(), binary()} =>
                                        {non_neg_integer(), integer()}},
                                                      %% certified block anti-entropy: attempt + next retry time
-            %% Ingress park queue (park, don't reject): appends that cannot enter the batch RIGHT NOW
-            %% wait here and drain event-driven from keep_progress the moment the pipeline opens. FIFO is
-            %% strict — live arrivals join the tail whenever the queue is non-empty, so a parked head
-            %% (e.g. a membership change waiting for the pipeline to quiesce) is never starved by
-            %% queue-jumping. Bounded three ways (items, bytes, per-author); overflow and TTL expiry are
-            %% the only remaining `busy` sources, making `busy` an alertable overload/stall signal.
+            %% Appends that cannot enter a batch now wait here and drain from keep_progress.
+            %% A drain preserves order per author but may pass a blocked author to fill the
+            %% block with another author's ready work. Bounded by items, bytes, and author.
             ingress = queue:new() :: queue:queue(#ingress_item{}),
             ingress_count = 0 :: non_neg_integer(),
             ingress_bytes = 0 :: non_neg_integer(),
             ingress_authors = #{} :: #{node_id() => pos_integer()},
             relay_timeout_ms = 31000 :: pos_integer(),
+            detailed_metrics = false :: boolean(),
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             next_author_seq = 1 :: pos_integer(),
             prolog_ready = false :: boolean(),
@@ -866,16 +856,17 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                    %% counts only ingress overflow + TTL expiry — an
                                                    %% ALERTABLE overload/stall signal, no longer routine
                                                    %% backpressure (dashboards updated to match)
-            r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: not this slot's leader / not a member (redirect)
+            r_redirect = 0 :: non_neg_integer(),   %% append not-in-charge: unavailable, wrong proposer, or target closed
             r_bad      = 0 :: non_neg_integer(),    %% append rejected: unacceptable change
-            r_stale    = 0 :: non_neg_integer(),    %% append lost a routing race (stale_seq — retryable,
+            r_stale    = 0 :: non_neg_integer(),    %% author sequence superseded (stale_seq — retryable,
                                                     %% NOT malformed; keeping it out of r_bad keeps the
                                                     %% "malformed workload" alarm honest)
             ingress_overflow  = 0 :: non_neg_integer(),  %% parks refused: queue item/byte/per-author bound hit
-            ingress_expired   = 0 :: non_neg_integer(),  %% parked items cut by ?INGRESS_TTL_MS (stalled head)
-            ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward (relay or redirect)
-            ingress_prepositioned = 0 :: non_neg_integer(),  %% relayed items parked AHEAD of this node's
-                                                             %% turn to lead (the pre-positioning win path)
+            ingress_expired   = 0 :: non_neg_integer(),  %% parked items cut by ?INGRESS_TTL_MS
+            ingress_forwarded = 0 :: non_neg_integer(),  %% drained items routed onward after state moved
+            relay_accepted = 0 :: non_neg_integer(),     %% destinations that acknowledged holding a relay
+            relay_redrives = 0 :: non_neg_integer(),     %% relay request retries (fast before ack, slow after)
+            relay_duplicates = 0 :: non_neg_integer(),   %% duplicate submits received while already in flight
             round_probe = #{} :: #{slot() => {integer(), none | integer()}},
                                                     %% OWN proposals only: slot => {proposed_at,
                                                     %% approved_at|none}, mono-ms on THIS node — feeds the
@@ -893,12 +884,17 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 %% Build a minimal #s{} for the Slice-4 gate-predicate eunit (the record is otherwise private). Only the
 %% fields the pure predicates read carry meaning; every other field takes its record default.
 test_state(Overrides) ->
-    S = maps:fold(fun(approved, _V, Acc) -> Acc;
+    S0 = maps:fold(fun(approved, _V, Acc) -> Acc;
+                     (ingress, _V, Acc) -> Acc;
                      (K, V, Acc) -> test_state_set(K, V, Acc)
                   end, #s{ns = <<"t">>, self = <<"self">>, vote_journal = memory}, Overrides),
-    case maps:find(approved, Overrides) of
-        {ok, V} -> S#s{approved = V};
-        error   -> S
+    S1 = case maps:find(approved, Overrides) of
+             {ok, V} -> S0#s{approved = V};
+             error   -> S0
+         end,
+    case maps:find(ingress, Overrides) of
+        {ok, Items} -> test_state_set(ingress, Items, S1);
+        error       -> S1
     end.
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
@@ -933,6 +929,7 @@ test_state_set(peer_readiness, V, S) -> S#s{peer_readiness = V};
 test_state_set(outbox, V, S)     -> S#s{outbox = V};
 test_state_set(dialing, V, S)    -> S#s{dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
+test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
             (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
@@ -942,9 +939,16 @@ test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight seale
 test_state_set(ingress, Items, S) ->
     lists:foldl(
       fun({Origin, From, Change, At}, Acc) ->
+              NormalizedOrigin =
+                  case Origin of
+                      relayed -> {relayed, Acc#s.approved + 1};
+                      _ -> Origin
+                  end,
               Waiter = new_waiter(From, otel_ctx:new(), Change, Acc#s.ns,
-                                  Origin =:= relayed),
-              {Acc1, []} = park_ingress(Origin, awaiting_turn, Waiter, Change, At, Acc),
+                                  NormalizedOrigin =/= local),
+              {Acc1, []} = park_ingress(
+                             NormalizedOrigin, awaiting_turn,
+                             Waiter, Change, At, Acc),
               Acc1
       end, S, Items);
 test_state_set(rounds, V, S)     -> S#s{rounds = V};
@@ -983,21 +987,51 @@ test_vote_journal(#s{vote_journal = Journal}) -> Journal.
 test_append(From, Change, S) ->
     handle_append(new_waiter(From, otel_ctx:new(), Change, S#s.ns, false), Change, S).
 test_relayed_append({relay, _Peer, _ReqId} = ReplyTo, Change, S) ->
+    TargetSlot = S#s.approved + 1,
+    test_relayed_append(ReplyTo, TargetSlot, Change, S).
+test_relayed_append({relay, _Peer, _ReqId} = ReplyTo,
+                    TargetSlot, Change, S) ->
     handle_relayed_append(
-      new_waiter(ReplyTo, otel_ctx:new(), Change, S#s.ns, true), Change, S).
+      new_waiter(ReplyTo, otel_ctx:new(), Change, S#s.ns, true),
+      TargetSlot, Change, S).
 test_ingress(#s{ingress = Q, ingress_count = C, ingress_bytes = B,
                 ingress_authors = Authors}) ->
     {C, B, Authors,
-     [{O, Ch#transaction.tx_id, T}
+     [{test_origin(O), Ch#transaction.tx_id, T}
       || #ingress_item{origin = O, change = Ch, enqueued_at = T} <- queue:to_list(Q)]}.
-test_drain(S) -> drain_ingress(S).
+test_origin(local) -> local;
+test_origin({relayed, _TargetSlot}) -> relayed.
+test_drain(S) -> drain_ingress(S, ingress_route_key(S)).
 test_expire_ingress(S) -> expire_ingress(S).
 test_relay_pending(#s{relay_pending = Pending}) ->
-    [{ReqId, Target, Deadline}
-     || {ReqId, #relay_pending{target = Target, deadline = Deadline}}
+    [{ReqId, Target, TargetSlot, Deadline}
+     || {ReqId, #relay_pending{target = Target, target_slot = TargetSlot,
+                              deadline = Deadline}}
+            <- maps:to_list(Pending)].
+test_relay_pending_detail(#s{relay_pending = Pending}) ->
+    [{ReqId, Target, TargetSlot, Deadline, NextRetry, Accepted}
+     || {ReqId, #relay_pending{target = Target, target_slot = TargetSlot,
+                              deadline = Deadline,
+                              next_retry = NextRetry, accepted = Accepted}}
             <- maps:to_list(Pending)].
 test_relay_result(Peer, ReqId, Result, S) ->
     handle_relay_result(Peer, ReqId, Result, S).
+test_relay_accepted(Peer, ReqId, S) ->
+    handle_relay_accepted(Peer, ReqId, S).
+test_dispatch_relay(Peer, Msg, S) ->
+    dispatch_relay(Peer, Msg, S).
+test_put_pending_relay(Target, TargetSlot,
+                       S = #s{relay_pending = Pending}) ->
+    ReqId = term_to_binary(make_ref()),
+    Relay = #relay_pending{from = test, target = Target,
+                           target_slot = TargetSlot, frame = <<>>,
+                           deadline = 0, next_retry = 0},
+    case put_pending_relay(ReqId, Relay, Pending) of
+        {ok, Pending1} -> {ok, S#s{relay_pending = Pending1}};
+        {error, _} = Error -> Error
+    end.
+test_ingress_needs_drain(S0, S1) ->
+    ingress_drain_key(S0, S1) =/= none.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
 -endif.
 
@@ -1015,21 +1049,29 @@ Submit a change. Blocks until the block commits (`{ok, Slot}`); at N=1 that is i
 that cannot enter a block RIGHT NOW parks in the bounded ingress queue and resolves on the pipeline's
 own events, so the error arms of the stable consensus-append contract `quod_prolog` handles are now:
 `busy` (queue OVERFLOW, or a parked change cut by the ingress TTL during a genuine stall — an overload
-signal, no longer routine backpressure), `stale_seq` (the change lost a routing race and its signed
-sequence fell below the committed floor — retry), `not_in_charge` (this node isn't the slot's leader —
-a redirect hint, or `unavailable` if this process is unreachable), and `skipped` (retry: a multi-node
-committee complaint-skipped our proposed slot, or a relayed change came home because rotation reached
-us mid-relay). At N=1 only the sole-validator commit path runs, so an append just returns `{ok, Slot}`.
+signal, no longer routine backpressure), `stale_seq` (newer approved history superseded this signed
+sequence — retry), `not_in_charge` (this process cannot currently accept local work, with `unavailable`
+when it cannot be reached), and `skipped` (retry: consensus finalized the relay's target slot without
+that request, or its proposer left the committee). At N=1 only the sole-validator commit
+path runs, so an append just returns `{ok, Slot}`.
 The call timeout sits above the ingress TTL so a parked direct append cannot race its own expiry reply.
+If that deadline is nevertheless reached after consensus accepted the call, the result is
+`{error, {outcome_unknown, TxId}}`: the transaction may still finalize, so callers must inspect that
+transaction id rather than submit the same non-idempotent operation again.
 """.
 -spec append(binary(), #transaction{}) ->
         {ok, slot()} | {error, busy} | {error, skipped} | {error, bad_change}
       | {error, stale_seq}
+      | {error, {outcome_unknown, binary()}}
       | {error, not_in_charge, node_id() | none | unavailable}.
 append(Ns, Change) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}),
                         {append, Change, quod_trace:context()}, 8000)
-    catch exit:_ -> {error, not_in_charge, unavailable} end.
+    catch
+        exit:{noproc, _} -> {error, not_in_charge, unavailable};
+        exit:{timeout, _} -> {error, {outcome_unknown, Change#transaction.tx_id}};
+        exit:_ -> {error, {outcome_unknown, Change#transaction.tx_id}}
+    end.
 
 -doc "Ask the consensus process to (re)drive committed blocks into a freshly-started `quod_prolog`.".
 -spec rebuild(binary()) -> ok.
@@ -1069,7 +1111,8 @@ init_store(Ns, Cfg, Id) ->
     quod_reg:subscribe({channel, Chan}),                 %% receive peers' proposals/shares/certs
     RelayTimeout = relay_timeout_ms(Cfg),
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
-            chan = Chan, relay_timeout_ms = RelayTimeout},
+            chan = Chan, relay_timeout_ms = RelayTimeout,
+            detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
     %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
     try load_or_bootstrap(S0, Cfg) of
         S1 ->
@@ -1208,11 +1251,10 @@ self_addr(Cfg) ->
 %%% running
 %%%===================================================================
 
-%% One wrapper owns every event: wall-time per handler invocation and the mailbox
-%% depth found at entry, by coarse event class — the in-production decomposition of
-%% "where does a consensus round's time go": slow handlers convict processing, deep
-%% mailboxes convict queueing, and neither convicts the path BEFORE this process.
-%% The observes are guarded no-ops without a metrics process (~µs when live).
+%% Detailed per-event probes are diagnostic-only. They synchronously update several
+%% Prometheus histograms from this serial process, so production keeps them disabled.
+running(EventType, Content, S = #s{detailed_metrics = false}) ->
+    running_impl(EventType, Content, S);
 running(EventType, Content, S) ->
     {message_queue_len, QLen} = process_info(self(), message_queue_len),
     T0 = erlang:monotonic_time(microsecond),
@@ -1224,7 +1266,9 @@ running(EventType, Content, S) ->
 
 %% Time one named sub-step of a handler; the step histogram is the slow-handler
 %% decomposition (which seam inside a 200ms handler actually holds the time).
-timed_step(Ns, Step, Fun) ->
+timed_step(#s{detailed_metrics = false}, _Step, Fun) ->
+    Fun();
+timed_step(#s{ns = Ns}, Step, Fun) ->
     T0 = erlang:monotonic_time(microsecond),
     Result = Fun(),
     quod_metrics:observe_consensus_step(
@@ -1400,11 +1444,11 @@ handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
             'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id)}),
     append_entry(local, From, Change, S).
 
-handle_relayed_append(Waiter, Change, S) ->
-    append_entry(relayed, Waiter, Change, S).
+handle_relayed_append(Waiter, TargetSlot, Change, S) ->
+    append_entry({relayed, TargetSlot}, Waiter, Change, S).
 
-%% Live arrival: stamp the mono-ms anchor (parks and relay deadlines count queue
-%% time against the end-to-end budget), compute the route, execute it.
+%% Live arrival: stamp the mono-ms anchor so parking cannot reset ingress or relay
+%% lifetime, then compute the route and execute it.
 append_entry(Origin, From, Change, S) ->
     Anchor = quod_time:mono_ms(),
     execute(entry, Origin, From, Change, Anchor, route(entry, Origin, Change, S), S).
@@ -1420,43 +1464,42 @@ append_entry(Origin, From, Change, S) ->
 %% every side effect (signing, parking, wire frames, counters), which is what
 %% keeps the decision previewable: a `{park,_}` head simply stays parked.
 %%
-%% Placement follows the deterministic rotation instead of chasing it. `leader/2`
-%% is a pure function of the slot, so the author computes the FIRST slot a change
-%% can still enter — `T = Floor` (= approved+1) if that slot's proposal is not
-%% yet visible, else `Floor+1` — and sends the change to leader(T) ONCE, while
-%% the current slot's consensus is still in flight. The receiver parks anything
-%% arriving at most ?INGRESS_HORIZON slots ahead of its turn and proposes it the
-%% moment its slot opens (the level-triggered drain); only a genuine misroute —
-%% the schedule moved past the holder — is redirected back to the author with a
-%% concrete forward-looking hint, under the origin's redirect budget. A
-%% membership barrier parks unconditionally: the post-adoption schedule is
-%% unknowable until the committee block commits, so hints minted against the old
-%% validator set would only burn that budget.
+%% The author computes the first still-usable seat: `Floor` (`approved+1`) while
+%% its proposal is open, otherwise `Floor+1`. Both the destination and that exact
+%% target slot travel in the relay frame. The receiver verifies that it owns the
+%% declared slot, parks only until that slot opens, and rejects it once the slot is
+%% past. It never derives a new target from its own, potentially different frontier.
+%%
+%% While one exact-slot relay lane remains usable, later local submissions use the
+%% same destination and slot. The receiver's per-author queue then preserves signed
+%% sequence order without serializing the author's workload one transaction at a time.
+%% A membership barrier parks unconditionally because the post-adoption schedule
+%% is unknowable until the committee block commits. A queued membership change is
+%% itself a drain barrier: letting ordinary writes continually pass it could keep
+%% the depth-one pipeline occupied forever and starve the committee transition.
 %%
 %% Origin fixes the trust shape: only the author may relay its own submission
 %% (dispatch_relay verifies Peer =:= Author), so `{relay,_,_}` is constructible
-%% for LOCAL origin only — a relayed change can leave its holder solely as a
-%% `{redirect,_,_}` back through the author. Known accepted hazard: an author
-%% whose burst straddles the proposal_visible flip signs consecutive sequences
-%% toward two different target slots; if the earlier one loses its race the
-%% committed floor passes it and it resolves `stale_seq` — retryable by contract
-%% (quod_prolog re-proves under a fresh sequence). The FIFO clause below narrows
-%% that window; closing it entirely would take a per-author in-flight order gate
-%% for a race the retry already heals.
+%% for LOCAL origin only. A relayed change never leaves its authenticated target
+%% proposer: it enters that exact slot, waits for it, or is rejected.
 
--type park_cause() :: barrier | fifo | awaiting_turn | prepositioned.
+-type park_cause() :: barrier | fifo | awaiting_turn.
 -type route_decision() ::
         {reject, bad_change | too_large}
-      | {redirect, node_id() | none, none | slot()}   %% hint, demand slot to arm
+      | redirect
       | {park, park_cause()}
       | {collect, slot()}
       | {relay, node_id(), slot()}.                   %% target + demand slot; LOCAL origin only
+-type ingress_capability() :: accept | hold | reject.
 
--spec route(entry | drain, local | relayed, #transaction{}, #s{}) -> route_decision().
+-spec route(entry | drain, ingress_origin(), #transaction{}, #s{}) -> route_decision().
 route(Pass, local, Change, S) ->
-    case may_lead(S) of
-        false -> {redirect, none, none};
-        true ->
+    case ingress_capability(Pass, local, S) of
+        reject ->
+            redirect;
+        hold ->
+            {park, awaiting_turn};
+        accept ->
             case local_change_acceptable(Change, S) of
                 false -> {reject, bad_change};
                 true ->
@@ -1466,7 +1509,7 @@ route(Pass, local, Change, S) ->
                     end
             end
     end;
-route(Pass, relayed, Change, S) ->
+route(Pass, {relayed, _TargetSlot} = Origin, Change, S) ->
     case ingress_change_acceptable(Change, S) of
         false -> {reject, bad_change};
         true ->
@@ -1477,11 +1520,42 @@ route(Pass, relayed, Change, S) ->
                     %% too_large, not a doomed batch
                     {reject, too_large};
                 false ->
-                    case may_lead(S) of
-                        false -> {redirect, none, none};
-                        true  -> place(Pass, relayed, Change, S)
+                    case relay_target_open(Origin, S) of
+                        false ->
+                            redirect;
+                        true ->
+                            case ingress_capability(Pass, Origin, S) of
+                                reject -> redirect;
+                                hold   -> {park, awaiting_turn};
+                                accept -> place(Pass, Origin, Change, S)
+                            end
                     end
             end
+    end.
+
+%% Validate exact-slot ownership before readiness or membership barriers can
+%% park the request. Recovery may delay work this node owns; it must never make
+%% the node acknowledge a misrouted or already-closed relay.
+relay_target_open({relayed, TargetSlot}, S = #s{self = Self}) ->
+    Floor = S#s.approved + 1,
+    Vals = active_validators(S),
+    leader(TargetSlot, Vals) =:= Self
+        andalso (TargetSlot > Floor
+                 orelse (TargetSlot =:= Floor
+                         andalso not proposal_visible(Floor, S))).
+
+%% A local unsigned submission is accepted only while this process may vote; Prolog
+%% itself is normally unavailable during recovery. An authenticated relayed submission
+%% transfers custody, so a still-admitted participant accepts and holds it across a
+%% temporary recovery or cert-before-block reorder. A node removed from the committee
+%% cannot recover that capability and rejects/nacks instead.
+-spec ingress_capability(entry | drain, ingress_origin(), #s{}) -> ingress_capability().
+ingress_capability(entry, local, S) ->
+    case may_lead(S) of true -> accept; false -> reject end;
+ingress_capability(_Pass, _Origin, S) ->
+    case is_participant(S) of
+        false -> reject;
+        true  -> case may_lead(S) of true -> accept; false -> hold end
     end.
 
 place(Pass, Origin, Change, S = #s{self = Self}) ->
@@ -1493,44 +1567,75 @@ place(Pass, Origin, Change, S = #s{self = Self}) ->
             Vals = active_validators(S),
             case Origin of
                 local   -> place_local(Pass, Change, Floor, Self, Vals, S);
-                relayed -> place_relayed(Pass, Change, Floor, Self, Vals, S)
+                {relayed, TargetSlot} ->
+                    place_relayed(Pass, TargetSlot, Change, Floor, S)
             end
     end.
 
 place_local(Pass, Change, Floor, Self, Vals, S) ->
-    case leader(first_seat(Floor, S), Vals) of
-        Self ->
-            case proposal_slot(S) =:= {ok, Floor}
-                     andalso not proposal_visible(Floor, S)
-                     andalso admissible_for(Pass, Change, S) of
-                true  -> {collect, Floor};
-                false -> {park, awaiting_turn}   %% our seat is next — hold for it
-            end;
-        none ->
-            {redirect, none, none};              %% empty committee
-        Leader ->
-            case Pass =:= entry andalso S#s.ingress_count > 0 of
-                %% a live queue is the ONE ordered dispatcher for local egress: joining
-                %% the tail preserves this author's sequence order through target flips
-                true  -> {park, fifo};
-                false -> {relay, Leader, Floor}
+    case Pass =:= entry andalso S#s.ingress_count > 0 of
+        true ->
+            %% A live queue is the one ordered dispatcher for local egress.
+            {park, fifo};
+        false ->
+            case relay_lane(Floor, S) of
+                {target, Target, TargetSlot} ->
+                    {relay, Target, TargetSlot};
+                blocked ->
+                    %% The previous target slot closed or its proposer left the
+                    %% committee. Finalization/the relay sweep fails those requests;
+                    %% keep later sequences behind them until the lane is empty.
+                    {park, fifo};
+                empty ->
+                    Seat = first_seat(Floor, S),
+                    case leader(Seat, Vals) of
+                        Self ->
+                            case Seat =:= Floor
+                                     andalso proposal_slot(S) =:= {ok, Floor}
+                                     andalso admissible_for(Pass, Change, S) of
+                                true  -> {collect, Floor};
+                                false -> {park, awaiting_turn}
+                            end;
+                        none ->
+                            redirect;                   %% empty committee
+                        Leader ->
+                            {relay, Leader, Seat}
+                    end
             end
     end.
 
-place_relayed(Pass, Change, Floor, Self, Vals, S) ->
-    case leads_within(Self, Floor, Vals) of
+place_relayed(Pass, TargetSlot, Change, Floor, S) ->
+    case TargetSlot > Floor of
         true ->
-            case Self =:= leader(Floor, Vals)
-                     andalso proposal_slot(S) =:= {ok, Floor}
+            {park, awaiting_turn};
+        false ->
+            %% relay_target_open/2 already established exact ownership and an
+            %% unclosed slot for this same event.
+            case proposal_slot(S) =:= {ok, Floor}
                      andalso admissible_for(Pass, Change, S) of
                 true  -> {collect, Floor};
-                false -> {park, preposition_cause(Floor, Self, Vals)}
+                false -> {park, awaiting_turn}
+            end
+    end.
+
+%% All unresolved local relays form one exact-slot author lane. No extra latch is
+%% needed: relay_pending owns the callers, target, and slot; clearing its final
+%% member atomically opens the next lane. A finalized slot or removed proposer is
+%% `blocked` until finalization/the periodic sweep fails the old requests retryably.
+relay_lane(_Floor, #s{relay_pending = Pending}) when map_size(Pending) =:= 0 ->
+    empty;
+relay_lane(Floor, #s{relay_pending = Pending} = S) ->
+    {_ReqId, #relay_pending{target = Target, target_slot = TargetSlot}, _Iter} =
+        maps:next(maps:iterator(Pending)),
+    case lists:member(Target, active_validators(S)) of
+        false -> blocked;
+        true when TargetSlot < Floor -> blocked;
+        true when TargetSlot =:= Floor ->
+            case proposal_visible(Floor, S) of
+                true  -> blocked;
+                false -> {target, Target, TargetSlot}
             end;
-        false ->
-            %% misroute: the schedule moved past this holder. The hint must be a
-            %% concrete forward seat — `none` is TERMINAL at the origin
-            %% (handle_relay_result chases binary hints only)
-            {redirect, leader(first_seat(Floor, S), Vals), Floor}
+        true  -> {target, Target, TargetSlot}
     end.
 
 %% The first slot a change can still enter, as seen from here: the pipeline floor
@@ -1541,33 +1646,18 @@ first_seat(Floor, S) ->
         false -> Floor
     end.
 
-%% Does Self lead any slot within the horizon of the pipeline floor?
-leads_within(Self, Floor, Vals) ->
-    N = length(Vals),
-    lists:any(fun(K) -> leader(Floor + K, Vals) =:= Self end,
-              lists:seq(0, min(?INGRESS_HORIZON, max(N - 1, 0)))).
-
-preposition_cause(Floor, Self, Vals) ->
-    case leader(Floor, Vals) of
-        Self -> awaiting_turn;   %% leading now, the batch/pipeline just isn't open
-        _    -> prepositioned    %% parked AHEAD of our turn — the pre-positioning win path
-    end.
-
 %% Executor: the ONLY place a decision becomes effects. Entry parks to the queue
 %% TAIL; the drain never executes `{park,_}` (drain_loop holds the head instead),
-%% so a drained item can never re-park — strict FIFO by construction.
+%% so a drained item can never re-park.
 execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
     case Decision of
         {reject, Why} ->
             reject_append(From, Why, S);
-        {redirect, Hint, none} ->
-            redirect_append(From, Hint, S);
-        {redirect, Hint, WatchSlot} ->
-            redirect_append(From, Hint,
-                            watch_requested(WatchSlot, count_forwarded(Pass, S)));
+        redirect ->
+            redirect_append(From, none, S);
         {park, Cause} ->
             park_ingress(Origin, Cause, From, Change, Anchor, S);
-        {collect, Slot} when Origin =:= relayed ->
+        {collect, Slot} when Origin =/= local ->
             collect_append(From, Change, Slot, S);
         {collect, Slot} ->
             sign_then(From, Change, S,
@@ -1575,7 +1665,7 @@ execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
         {relay, Leader, WatchSlot} ->   %% LOCAL origin only, by construction of route/4
             sign_then(From, Change, S,
                       fun(F, Signed, S1) ->
-                          relay_append(F, Leader, Signed, Anchor,
+                          relay_append(F, Leader, WatchSlot, Signed, Anchor,
                                        watch_requested(WatchSlot,
                                                        count_forwarded(Pass, S1)))
                       end)
@@ -1610,9 +1700,8 @@ oversized(Change) ->
 %% live entry and the drain pre-check (so "can it go in" has exactly one definition).
 %% Capacity and membership gating only — sequence/duplicate problems are CONTENT verdicts
 %% (`stale_seq` / `bad_change`) decided in collect_append, not reasons to wait. Strict
-%% FIFO: a non-empty park queue makes every live arrival inadmissible (join the tail),
-%% so the queue head — possibly a membership change draining the pipeline — is never
-%% starved by queue-jumping.
+%% A non-empty park queue makes every live arrival join the tail. The drain itself is
+%% work-conserving across authors and bypasses this entry-only guard.
 admissible_now(Change, S = #s{collecting = Collecting}) ->
     S#s.ingress_count =:= 0
         andalso membership_can_enter(Change, S)
@@ -1672,7 +1761,7 @@ reject_append(From, bad_change, S) ->
     reply_now(From, {error, bad_change}, S#s{r_bad = S#s.r_bad + 1});
 reject_append(From, too_large, S) ->
     reply_now(From, {error, too_large}, S#s{r_bad = S#s.r_bad + 1});
-reject_append(From, stale_seq, S) ->   %% content lost a routing race; retryable by contract,
+reject_append(From, stale_seq, S) ->   %% a newer sequence became approved first; retryable by contract,
                                        %% so it counts as r_stale, NEVER as r_bad — r_bad is
                                        %% the "malformed workload" alarm and must stay quiet
                                        %% for races the caller's retry heals
@@ -1684,10 +1773,8 @@ reject_append(From, busy, S) ->
 %%% ingress park queue — take a ticket, drain on the pipeline's own events
 %%%===================================================================
 
-%% Park one append (FIFO tail on `entry`; back to the HEAD on the never-expected `drain`
-%% re-park, preserving order and stopping the drain loop). Overflow of any bound is the
-%% real backpressure boundary; together with the TTL sweep below these are the only
-%% remaining live sources of `{error, busy}`.
+%% Park one append at the queue tail. Overflow of any bound is the real backpressure
+%% boundary; together with TTL expiry it is the only live source of `{error, busy}`.
 park_ingress(Origin, Cause, Waiter, Change, Anchor,
              S = #s{ingress_authors = Authors}) ->
     Author = Change#transaction.author,
@@ -1709,66 +1796,153 @@ park_ingress(Origin, Cause, Waiter, Change, Anchor,
             S1 = S#s{ingress = queue:in(Item, S#s.ingress),
                      ingress_count = S#s.ingress_count + 1,
                      ingress_bytes = S#s.ingress_bytes + Bytes,
-                     ingress_authors = Authors#{Author => PerAuthor + 1},
-                     ingress_prepositioned =
-                         S#s.ingress_prepositioned
-                         + case Cause of prepositioned -> 1; _ -> 0 end},
-            %% Parked demand arms the head watchdog CONSTRUCTIVELY: every park is a
+                     ingress_authors = Authors#{Author => PerAuthor + 1}},
+            %% Parked demand arms the head watchdog constructively: every park is a
             %% claim that the pipeline floor must move, so register it as demand
-            %% instead of relying on each park cause to coincide with head evidence
-            %% (the pre-positioned park is exactly the cause with none of its own).
+            %% instead of relying on the park cause to coincide with head evidence.
             {watch_requested(S1#s.approved + 1, S1), []}
     end.
 
-ingress_take_head(S = #s{ingress = Q, ingress_authors = Authors}) ->
-    {{value, #ingress_item{change = Change, bytes = Bytes}}, Q1} = queue:out(Q),
+ingress_take_head(S = #s{ingress = Q}) ->
+    {{value, Item}, Q1} = queue:out(Q),
+    ingress_remove(Item, S#s{ingress = Q1}).
+
+ingress_remove(#ingress_item{change = Change, bytes = Bytes},
+               S = #s{ingress_authors = Authors}) ->
     Author = Change#transaction.author,
     Authors1 = case maps:get(Author, Authors) of
                    1 -> maps:remove(Author, Authors);
                    N -> Authors#{Author => N - 1}
                end,
-    S#s{ingress = Q1,
-        ingress_count = S#s.ingress_count - 1,
+    S#s{ingress_count = S#s.ingress_count - 1,
         ingress_bytes = S#s.ingress_bytes - Bytes,
         ingress_authors = Authors1}.
 
-%% Event-driven drain, LEVEL-triggered from keep_progress (the slot-6180 lesson: an
-%% edge-triggered hook that can miss an edge eventually does; an O(1)-guarded level
-%% check on the universal transition seam cannot). Strict FIFO: only the head is ever
-%% considered, and a head routed `{park,_}` — waiting for this node's imminent turn,
-%% a capacity gate, or a membership barrier — HOLDS the loop; deliberately, since a
-%% waiting head must never be overtaken. Everything else pops and executes the exact
-%% decision that was previewed, so a drained item can never re-park: the old preview
-%% mirror and its no-progress backstop are gone by construction.
-drain_ingress(S = #s{ingress_count = 0}) -> {S, []};
-drain_ingress(S) -> drain_loop(S, [], 0).
+%% Event-driven, work-conserving drain. One pass considers every item that was queued
+%% at entry. An ordinary blocked item does not stop unrelated authors: it is held while
+%% later authors are considered. Once one item for an author blocks, every later item
+%% from that author is held too, preserving signed author-sequence order. Membership is
+%% deliberately global: an in-flight membership barrier or a queued membership change
+%% stops the pass so the pipeline must quiesce and the committee transition cannot
+%% starve. Held items retain their relative order, so TTL expiry remains oldest-first.
+drain_ingress(S, RouteKey) ->
+    drain_until_stable(S, RouteKey, []).
 
-drain_loop(S = #s{ingress_count = 0}, Acc, N) ->
-    seal_drained(S, Acc, N);
-drain_loop(S, Acc, N) ->
-    {value, #ingress_item{origin = Origin, waiter = Waiter,
-                          change = Change, enqueued_at = Anchor}} =
-        queue:peek(S#s.ingress),
-    case route(drain, Origin, Change, S) of
-        {park, _Cause} ->
-            seal_drained(S, Acc, N);   %% the head keeps waiting; FIFO holds the line
-        Decision ->
-            S1 = ingress_take_head(S),
-            _ = quod_trace:add_event(
-                  waiter_trace_ctx(Waiter), <<"consensus.drained">>,
-                  #{'quod.ingress.depth' => S1#s.ingress_count}),
-            {S2, Actions} = execute(drain, Origin, Waiter, Change, Anchor, Decision, S1),
-            drain_loop(S2, Acc ++ Actions, N + 1)
+drain_until_stable(S, RouteKey, ActionsRev0) ->
+    {S1, Actions, N} =
+        drain_loop(S, S#s.ingress_count, #{}, [], [], 0),
+    ActionsRev1 = lists:reverse(Actions, ActionsRev0),
+    case N > 0 andalso S1#s.ingress_count > 0 of
+        true ->
+            NextRouteKey = ingress_route_key(S1),
+            case NextRouteKey =/= RouteKey of
+                true  -> drain_until_stable(S1, NextRouteKey, ActionsRev1);
+                false -> {S1, lists:reverse(ActionsRev1)}
+            end;
+        false ->
+            {S1, lists:reverse(ActionsRev1)}
     end.
+
+drain_loop(S, 0, _BlockedAuthors, HeldRev, ActionsRev, N) ->
+    {S1, Actions} = seal_drained(restore_held(S, HeldRev), ActionsRev, N),
+    {S1, Actions, N};
+drain_loop(S = #s{ingress = Q}, Remaining, BlockedAuthors,
+           HeldRev, ActionsRev, N) ->
+    {{value, Item = #ingress_item{origin = Origin, waiter = Waiter,
+                                  change = Change, enqueued_at = Anchor}}, Q1} =
+        queue:out(Q),
+    Author = Change#transaction.author,
+    SWithoutHead = S#s{ingress = Q1},
+    case maps:is_key(Author, BlockedAuthors) of
+        true ->
+            drain_loop(SWithoutHead, Remaining - 1, BlockedAuthors,
+                       [Item | HeldRev], ActionsRev, N);
+        false ->
+            case route(drain, Origin, Change, S) of
+                {park, barrier} ->
+                    {S1, Actions} =
+                        seal_drained(
+                          restore_held(SWithoutHead, [Item | HeldRev]),
+                          ActionsRev, N),
+                    {S1, Actions, N};
+                {park, _Cause} ->
+                    case is_membership_change(Change) of
+                        true ->
+                            {S1, Actions} =
+                                seal_drained(
+                                  restore_held(SWithoutHead, [Item | HeldRev]),
+                                  ActionsRev, N),
+                            {S1, Actions, N};
+                        false ->
+                            drain_loop(SWithoutHead, Remaining - 1,
+                                       BlockedAuthors#{Author => true},
+                                       [Item | HeldRev], ActionsRev, N)
+                    end;
+                Decision ->
+                    S1 = ingress_remove(Item, SWithoutHead),
+                    _ = quod_trace:add_event(
+                          waiter_trace_ctx(Waiter), <<"consensus.drained">>,
+                          #{'quod.ingress.depth' => S1#s.ingress_count}),
+                    {S2, Actions} =
+                        execute(drain, Origin, Waiter, Change, Anchor, Decision, S1),
+                    drain_loop(S2, Remaining - 1, BlockedAuthors, HeldRev,
+                               lists:reverse(Actions, ActionsRev), N + 1)
+            end
+    end.
+
+restore_held(S, []) ->
+    S;
+restore_held(S = #s{ingress = Q}, HeldRev) ->
+    %% No callback can append concurrently while this gen_statem event is running.
+    %% Q contains only entries not part of this pass (normally none).
+    Held = lists:reverse(HeldRev),
+    S#s{ingress = queue:join(queue:from_list(Held), Q)}.
 
 %% A multi-item drain seals its batch NOW: the backlog already waited a full flight, a
 %% 2ms window would only re-add latency (block N+1 = what arrived during block N — the
 %% natural batch size). A SINGLETON drain keeps the normal micro-batch window so relays
-%% landing in the same slot-open moment can still join it (its arm action is already in Acc).
-seal_drained(S = #s{collecting = #batch{slot = Slot}}, Acc, N) when N >= 2 ->
-    {flush_batch(Slot, S), Acc ++ [{{timeout, batch}, cancel}]};
-seal_drained(S, Acc, _N) ->
-    {S, Acc}.
+%% landing in the same slot-open moment can still join it.
+seal_drained(S = #s{collecting = #batch{slot = Slot}}, ActionsRev, N) when N >= 2 ->
+    {flush_batch(Slot, S), lists:reverse([{{timeout, batch}, cancel} | ActionsRev])};
+seal_drained(S, ActionsRev, _N) ->
+    {S, lists:reverse(ActionsRev)}.
+
+%% The universal transition hook sees every vote, readiness refresh, relay duplicate,
+%% and timer. A blocked queue must not be rescanned after events that cannot change a
+%% routing decision: doing O(queue length) work per mailbox message recreates the
+%% saturation feedback loop this ingress refactor is meant to remove. The key contains
+%% every state component consulted by `route/4`, `relay_target_open/2`, `place/6`, and
+%% `admissible_for/3`; adding a routing input requires adding it here and a route-key
+%% transition test. A queue length change also wakes the drain so a new author can pass
+%% an already-blocked one.
+ingress_drain_key(_S0, #s{ingress_count = 0}) ->
+    none;
+ingress_drain_key(#s{ingress_count = C0}, S1 = #s{ingress_count = C1})
+  when C0 =/= C1 ->
+    {drain, ingress_route_key(S1)};
+ingress_drain_key(S0, S1) ->
+    Key1 = ingress_route_key(S1),
+    case ingress_route_key(S0) =:= Key1 of
+        true  -> none;
+        false -> {drain, Key1}
+    end.
+
+ingress_route_key(S = #s{approved = Approved, collecting = Collecting}) ->
+    Floor = Approved + 1,
+    {may_lead(S),
+     S#s.slot,
+     Approved,
+     active_validators(S),
+     proposal_visible(Floor, S),
+     proposal_slot(S),
+     membership_barrier(S),
+     relay_lane(Floor, S),
+     collecting_gate(Collecting)}.
+
+collecting_gate(none) ->
+    none;
+collecting_gate(#batch{slot = Slot, items_rev = Items, bytes = Bytes}) ->
+    {Slot, length(Items), Bytes}.
 
 %% TTL sweep, on the consensus tick. FIFO + constant TTL make expiry order = queue
 %% order, so this peeks the HEAD only — O(expired), free when nothing expired. It walks
@@ -1817,9 +1991,10 @@ reply_now({relay, Peer, ReqId}, Reply, S) ->
     {reply_relay(Peer, ReqId, Reply, S), []}.
 
 %% `Anchor` = the submission's ORIGINAL arrival time (mono ms): a drained item's park
-%% wait counts against the relay deadline, so consensus still resolves or definitively
-%% fails inside the caller's park-TTL envelope, exactly as before the queue existed.
-relay_append(From, Leader, Change, Anchor,
+%% wait counts against the relay cleanup deadline. The caller may stop waiting first
+%% and receive `outcome_unknown`; the pending relay then remains briefly to absorb a
+%% racing final result before its bounded state is reaped.
+relay_append(From, Leader, TargetSlot, Change, Anchor,
              S = #s{ns = Ns, relay_pending = Pending,
                     relay_timeout_ms = RelayTimeout}) ->
     case quod_transaction:submission(Ns, Change) of
@@ -1835,20 +2010,52 @@ relay_append(From, Leader, Change, Anchor,
                     reject_append(From, busy, S);
                 {false, false} ->
                     TraceCtx = waiter_trace_ctx(From),
-                    _ = quod_trace:add_event(
-                          TraceCtx, <<"consensus.relayed">>,
-                          #{'quod.relay.target' => trace_node_id(Leader)}),
                     Frame = quod_relay:encode(
-                              Ns, {relay_submit, ReqId, Submission,
+                              Ns, {relay_submit, ReqId, TargetSlot, Submission,
                                    quod_trace:inject(TraceCtx)}),
                     Relay = #relay_pending{
                                from = From, target = Leader,
+                               target_slot = TargetSlot,
                                frame = Frame,
                                deadline = Anchor + RelayTimeout,
                                next_retry = quod_time:mono_ms() + ?RELAY_RETRY_MS},
-                    S1 = send_frame(Leader, Frame, S),
-                    {S1#s{relay_pending = Pending#{ReqId => Relay}}, []}
+                    case put_pending_relay(ReqId, Relay, Pending) of
+                        {error, Conflict} ->
+                            logger:error(
+                              "quod[~s]: refusing divergent relay lane: ~0p",
+                              [Ns, Conflict]),
+                            reply_now(From, {error, skipped}, S);
+                        {ok, Pending1} ->
+                            _ = quod_trace:add_event(
+                                  TraceCtx, <<"consensus.relayed">>,
+                                  #{'quod.relay.target' => trace_node_id(Leader)}),
+                            S1 = send_frame(Leader, Frame, S),
+                            {S1#s{relay_pending = Pending1}, []}
+                    end
             end
+    end.
+
+%% There is one outbound author per node, so all unresolved requests deliberately
+%% share one exact target and slot. Enforce that invariant at the only creation
+%% point in O(1); later updates preserve both fields and removals cannot violate it.
+put_pending_relay(ReqId,
+                  Relay = #relay_pending{target = Target,
+                                         target_slot = TargetSlot},
+                  Pending) ->
+    case maps:next(maps:iterator(Pending)) of
+        none ->
+            {ok, Pending#{ReqId => Relay}};
+        {_ExistingReqId,
+         #relay_pending{target = Target, target_slot = TargetSlot},
+         _Iter} ->
+            {ok, Pending#{ReqId => Relay}};
+        {_ExistingReqId,
+         #relay_pending{target = ExistingTarget,
+                        target_slot = ExistingSlot},
+         _Iter} ->
+            {error, {relay_lane_conflict,
+                     {ExistingTarget, ExistingSlot},
+                     {Target, TargetSlot}}}
     end.
 
 %% A depth-one pipeline permits proposing H+2 after H+1 is approved but before it
@@ -1873,8 +2080,8 @@ live_pipeline_slot(Slot, Committed) ->
 
 %% Capacity and membership gating live in the router (`admissible_now/2` — inadmissible
 %% parks, it no longer rejects), so only CONTENT verdicts remain here: a sequence below
-%% the floor is `stale_seq` (retryable — the write lost a routing race, its content is
-%% fine), a duplicate tx_id is `bad_change` (terminal).
+%% the floor is `stale_seq` (retryable — newer approved history won first, while the
+%% content remains valid), and a duplicate tx_id is `bad_change` (terminal).
 collect_append(From, Change, Slot, S = #s{collecting = none}) ->
     Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
     case sequence_payload_ok([Change], S) of
@@ -1972,7 +2179,7 @@ parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
 %% Offer items to the consensus engine and act on every event it emits (to a fixpoint), returning the
 %% new state. Commit replies are sent inline via `gen_statem:reply` (the caller for that slot is parked).
 engine_step(Items, S) ->
-    timed_step(S#s.ns, engine, fun() ->
+    timed_step(S, engine, fun() ->
         {Eng1, EventsRev} = lists:foldl(fun(It, {E, Acc}) ->
                                             {E1, Es} = offer_engine_item(It, E),
                                             {E1, lists:reverse(Es, Acc)}
@@ -2053,10 +2260,10 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
         Cert ->
             Data = quod_ledger:data(Payload),
             E = #entry{index = Slot, data = Data, timestamp = BlockTs, cert = Cert},
-            {ok, Store1} = timed_step(S#s.ns, persist,
+            {ok, Store1} = timed_step(S, persist,
                                       fun() -> persist_entry(Store, E, Slot, S) end),
-            timed_step(S#s.ns, feed, fun() -> publish_feed(Slot, E, S) end),
-            SCommitted = timed_step(S#s.ns, resolve, fun() ->
+            timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
+            SCommitted = timed_step(S, resolve, fun() ->
                              resolve_committed_relays(
                                Payload, Slot,
                                S#s{store = Store1, commits = S#s.commits + 1,
@@ -2066,7 +2273,7 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                          end),
             S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
             S1 = adopt_committee(Data, finalize(Slot, S0)),
-            timed_step(S#s.ns, apply, fun() -> apply_live(Slot, Data, confirm_live(S1)) end)
+            timed_step(S, apply, fun() -> apply_live(Slot, Data, confirm_live(S1)) end)
     end.
 
 persist_entry(Store, Entry, Slot, S) ->
@@ -2092,8 +2299,7 @@ resolve_committed_relays(Payload, Slot, S = #s{relay_pending = Pending}) ->
                   true ->
                       reply_waiter(
                         From, {ok, Slot},
-                        Acc#s{relay_pending =
-                                  maps:remove(ReqId, Acc#s.relay_pending)});
+                        remove_pending_relay(ReqId, Acc));
                   false ->
                       Acc
               end
@@ -2170,7 +2376,8 @@ weak_cert_wait(Kind, Slot, BH, S) ->
 %% local proposal, support/commit/complaint latches, and membership validation
 %% latches (all bounded to the in-flight window).
 finalize(Slot, S0) ->
-    S = probe_prune(Slot, nack_collecting_le(Slot, S0)),
+    S = probe_prune(
+          Slot, nack_relays_le(Slot, nack_collecting_le(Slot, S0))),
                                         %% a still-collecting batch for this now-finalized slot: nack its
                                         %% parked callers so they retry, not leave them to time out (below)
     {ok, Journal1} = prune_vote_journal(Slot, S#s.vote_journal),
@@ -2196,10 +2403,22 @@ reply_local(Slot, Reply, S = #s{local_proposals = Local}) ->
 %% A batch still being collected (not yet sealed into a proposal) parks its callers with NO reply. When its
 %% slot finalizes -- reachable when that slot was complaint-SKIPPED, or COMMITTED by a competing block,
 %% before our batch sealed -- nack them {error, skipped} so they retry at once, instead of hanging until the
-%% ~30s park TTL (then getting a bogus {error, timeout}); then drop the batch. `nack_collecting/1` is the
+%% ~30s park TTL (which can only report an unknown outcome); then drop the batch. `nack_collecting/1` is the
 %% shared body, reused by the recovery re-seat (`nack_inflight/1`), which discards the whole in-flight window.
 nack_collecting_le(Slot, S = #s{collecting = #batch{slot = Sl}}) when Sl =< Slot -> nack_collecting(S);
 nack_collecting_le(_Slot, S) -> S.
+
+%% Exact-slot relay ownership ends with that slot. A matching transaction was
+%% already removed by resolve_committed_relays/3; every remaining request aimed
+%% at this or an older slot lost placement and must be retried immediately.
+nack_relays_le(Slot, S = #s{relay_pending = Pending}) ->
+    maps:fold(
+      fun(ReqId, #relay_pending{from = From, target_slot = TargetSlot}, Acc)
+            when TargetSlot =< Slot ->
+              finish_relay(ReqId, From, {error, skipped}, Acc);
+         (_ReqId, _Relay, Acc) ->
+              Acc
+      end, S, Pending).
 
 nack_collecting(S = #s{collecting = #batch{items_rev = Items}}) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
@@ -2506,7 +2725,7 @@ support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% ce
 support_or_validate(#block{slot = Sl}, _BH, S) ->
     case (round_state(Sl, S))#round.invalid of
         true -> S;
-        false -> timed_step(S#s.ns, support,
+        false -> timed_step(S, support,
                             fun() -> support_or_validate_ready(Sl, _BH, S) end)
     end.
 
@@ -2699,17 +2918,26 @@ keep_progress(S0, S1, Actions) ->
     keep_progress(S0, S1, Actions, normal).
 
 keep_progress(S0, S1, Actions, TimerMode) ->
-    SReady = timed_step(S1#s.ns, readiness,
+    SReady = timed_step(S1, readiness,
                         fun() -> settle_readiness(S0, maybe_mark_ready(S1)) end),
-    SRecovered = timed_step(S1#s.ns, reconcile,
+    SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
     %% Drain BEFORE head reconciliation and the timer diff: a drain-created proposal
     %% moves head_progress, and the watchdog must be armed against the post-drain head.
-    {SDrained, DrainActions} = timed_step(S1#s.ns, drain,
-                                          fun() -> drain_ingress(SRecovered) end),
-    SAdvertised = timed_step(S1#s.ns, advertise,
+    %% The routing key avoids a full queue scan after unrelated mailbox traffic.
+    {SDrained, DrainActions} = timed_step(SRecovered, drain,
+                                          fun() ->
+                                              case ingress_drain_key(S0, SRecovered) of
+                                                  {drain, RouteKey} ->
+                                                      drain_ingress(SRecovered,
+                                                                    RouteKey);
+                                                  none ->
+                                                      {SRecovered, []}
+                                              end
+                                          end),
+    SAdvertised = timed_step(SDrained, advertise,
                              fun() -> refresh_readiness(SDrained) end),
-    S2 = timed_step(S1#s.ns, head_reconcile,
+    S2 = timed_step(SAdvertised, head_reconcile,
                     fun() -> reconcile_head_progress(SAdvertised) end),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
@@ -3635,7 +3863,7 @@ membership_change_ok(#transaction{}, _Vs) ->
 
 %% Send a consensus message to every OTHER member of the ACTIVE voting set, each on our own outbound link.
 broadcast(Msg, S = #s{self = Self}) ->
-    timed_step(S#s.ns, bcast, fun() ->
+    timed_step(S, bcast, fun() ->
         Frame = encode(S#s.ns, Msg),
         lists:foldl(fun(P, Acc) -> send_frame(P, Frame, Acc) end,
                     S, active_validators(S) -- [Self])
@@ -3717,7 +3945,7 @@ dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 %%% transaction relay
 %%%===================================================================
 
-dispatch_relay(Peer, {relay_submit, ReqId,
+dispatch_relay(Peer, {relay_submit, ReqId, TargetSlot,
                       {submit, Author, _Signature, _Canonical} = Submission,
                       TraceCarrier},
                S = #s{relay_results = Results, relay_inflight = Inflight}) ->
@@ -3737,18 +3965,23 @@ dispatch_relay(Peer, {relay_submit, ReqId,
                         true ->
                             case maps:is_key(ReqId, Inflight) of
                                 true ->
-                                    {S, []};
+                                    {send_relay_accepted(Peer, ReqId,
+                                         S#s{relay_duplicates =
+                                                 S#s.relay_duplicates + 1}), []};
                                 false ->
                                     verify_and_accept_relay(
-                                      Peer, ReqId, Submission, TraceCarrier, S)
+                                      Peer, ReqId, TargetSlot,
+                                      Submission, TraceCarrier, S)
                             end
                     end
             end
     end;
 dispatch_relay(Peer, {relay_result, ReqId, Result}, S) ->
-    {handle_relay_result(Peer, ReqId, Result, S), []}.
+    {handle_relay_result(Peer, ReqId, Result, S), []};
+dispatch_relay(Peer, {relay_accepted, ReqId}, S) ->
+    {handle_relay_accepted(Peer, ReqId, S), []}.
 
-verify_and_accept_relay(Peer, ReqId, Submission, TraceCarrier,
+verify_and_accept_relay(Peer, ReqId, TargetSlot, Submission, TraceCarrier,
                         S = #s{ns = Ns}) ->
     Started = erlang:monotonic_time(),
     Valid = quod_transaction:verify_submission(Submission),
@@ -3767,75 +4000,57 @@ verify_and_accept_relay(Peer, ReqId, Submission, TraceCarrier,
                     _ = quod_trace:add_event(
                           waiter_trace_ctx(Waiter), <<"consensus.relay_received">>,
                           #{'quod.relay.source' => trace_node_id(Peer)}),
-                    handle_relayed_append(
-                      Waiter, Change, S#s{relay_inflight = Inflight});
+                    {S1, Actions} = handle_relayed_append(
+                                      Waiter, TargetSlot, Change,
+                                      S#s{relay_inflight = Inflight}),
+                    case maps:is_key(ReqId, S1#s.relay_inflight) of
+                        true  -> {send_relay_accepted(Peer, ReqId, S1), Actions};
+                        false -> {S1, Actions}
+                    end;
                 {error, _} ->
                     reply_now({relay, Peer, ReqId}, {error, bad_change}, S)
             end
     end.
 
 handle_relay_result(Peer, ReqId, Result,
-                    S = #s{relay_pending = Pending, validators = Validators}) ->
+                    S = #s{relay_pending = Pending}) ->
     case maps:get(ReqId, Pending, undefined) of
-        #relay_pending{from = From, target = Peer, frame = Frame,
-                       deadline = Deadline, redirects = Redirects} = Relay ->
-            Now = quod_time:mono_ms(),
+        #relay_pending{from = From, target = Peer} ->
             case Result of
-                {error, not_in_charge, Hint0}
-                  when Now < Deadline, Redirects < 3 ->
-                    %% Pre-positioning makes redirects rare (the target is computed,
-                    %% not chased), but a residual misroute still resolves by hopping;
-                    %% the budget bounds a Byzantine redirect ping-pong. A useless
-                    %% hint (`none` from a recovering target, garbage, or the refusing
-                    %% peer itself) is RESCUED with a locally recomputed seat rather
-                    %% than surfaced as a terminal client error. Hint-paced
-                    %% (immediate), not timer-paced.
-                    case usable_hint(Hint0, Peer, Validators, S) of
-                        {chase, Hint} ->
-                            Relay1 = Relay#relay_pending{
-                                       target = Hint,
-                                       redirects = Redirects + 1,
-                                       next_retry = Now + ?RELAY_RETRY_MS},
-                            S1 = send_frame(Hint, Frame, S),
-                            S1#s{relay_pending =
-                                    (S1#s.relay_pending)#{ReqId => Relay1}};
-                        self_leads ->
-                            %% rotation came back around to US mid-relay: `skipped` is
-                            %% the honest retryable verdict (quod_prolog re-proves and
-                            %% the fresh append routes straight into our own batch)
-                            reply_waiter(
-                              From, {error, skipped},
-                              S#s{relay_pending = maps:remove(ReqId, Pending)});
-                        stuck ->
-                            reply_waiter(
-                              From, Result,
-                              S#s{relay_pending = maps:remove(ReqId, Pending)})
-                    end;
-                _ ->
-                    reply_waiter(
-                      From, Result,
-                      S#s{relay_pending = maps:remove(ReqId, Pending)})
+                %% The exact target slot closed or this peer does not own it.
+                %% Re-prove against the new frontier instead of trusting a
+                %% peer-supplied redirect hint.
+                {error, not_in_charge, _Hint} ->
+                    finish_relay(ReqId, From, {error, skipped}, S);
+                _ -> finish_relay(ReqId, From, Result, S)
             end;
         _ ->
             S
     end.
 
-%% Pick the next relay target after a refusal. The peer's hint wins when it is a
-%% real third validator; otherwise fall back to the seat we can compute ourselves
-%% (`first_seat` over the local pipeline floor). `self_leads` when that seat is
-%% ours — the caller retries locally instead of relaying to itself; `stuck` when
-%% no forward target exists (refuser still leads from our view, empty committee).
-usable_hint(Hint, Peer, Validators, S = #s{self = Self}) ->
-    case is_binary(Hint) andalso Hint =/= Peer andalso Hint =/= Self
-             andalso lists:member(Hint, Validators) of
-        true ->
-            {chase, Hint};
-        false ->
-            case leader(first_seat(S#s.approved + 1, S), active_validators(S)) of
-                Self                            -> self_leads;
-                L when is_binary(L), L =/= Peer -> {chase, L};
-                _                               -> stuck
-            end
+finish_relay(ReqId, From, Result, S) ->
+    reply_waiter(From, Result, remove_pending_relay(ReqId, S)).
+
+remove_pending_relay(ReqId, S = #s{relay_pending = Pending}) ->
+    S#s{relay_pending = maps:remove(ReqId, Pending)}.
+
+handle_relay_accepted(Peer, ReqId,
+                      S = #s{relay_pending = Pending}) ->
+    case maps:get(ReqId, Pending, undefined) of
+        #relay_pending{target = Peer, accepted = false} = Relay ->
+            Relay1 = Relay#relay_pending{
+                       accepted = true,
+                       next_retry = quod_time:mono_ms() + ?RELAY_ACCEPTED_RETRY_MS},
+            S#s{relay_pending = Pending#{ReqId => Relay1},
+                relay_accepted = S#s.relay_accepted + 1};
+        #relay_pending{target = Peer, accepted = true} = Relay ->
+            %% A duplicate acknowledgement answers a slow status retry. Push the
+            %% next recovery probe out again while the destination still holds it.
+            Relay1 = Relay#relay_pending{
+                       next_retry = quod_time:mono_ms() + ?RELAY_ACCEPTED_RETRY_MS},
+            S#s{relay_pending = Pending#{ReqId => Relay1}};
+        _ ->
+            S
     end.
 
 reply_relay(Peer, ReqId, Reply, S) ->
@@ -3851,26 +4066,37 @@ reply_relay(Peer, ReqId, Reply, S) ->
 send_relay_result(Peer, ReqId, Reply, S = #s{ns = Ns}) ->
     send_frame(Peer, quod_relay:encode(Ns, {relay_result, ReqId, Reply}), S).
 
+send_relay_accepted(Peer, ReqId, S = #s{ns = Ns}) ->
+    send_frame(Peer, quod_relay:encode(Ns, {relay_accepted, ReqId}), S).
+
 redrive_relays(S = #s{relay_pending = Pending, relay_results = Results}) ->
     Now = quod_time:mono_ms(),
     S1 = S#s{relay_results = quod_relay:prune_results(Results)},
+    Validators = active_validators(S1),
     maps:fold(
       fun(ReqId,
           #relay_pending{from = From, target = Target, frame = Frame,
-                         deadline = Deadline, next_retry = Retry} = Relay,
+                         deadline = Deadline, next_retry = Retry,
+                         accepted = Accepted} = Relay,
           Acc) ->
-              case Now >= Deadline of
+              case not lists:member(Target, Validators) of
                   true ->
+                      finish_relay(ReqId, From, {error, skipped}, Acc);
+                  false when Now >= Deadline ->
                       reply_waiter(
                         From, {error, not_in_charge, unavailable},
-                        Acc#s{relay_pending =
-                                  maps:remove(ReqId, Acc#s.relay_pending)});
+                        remove_pending_relay(ReqId, Acc));
                   false when Now >= Retry ->
                       Acc1 = send_frame(Target, Frame, Acc),
                       Relay1 = Relay#relay_pending{
-                                   next_retry = Now + ?RELAY_RETRY_MS},
+                                   next_retry =
+                                       Now + case Accepted of
+                                                 true  -> ?RELAY_ACCEPTED_RETRY_MS;
+                                                 false -> ?RELAY_RETRY_MS
+                                             end},
                       Acc1#s{relay_pending =
-                                 (Acc1#s.relay_pending)#{ReqId => Relay1}};
+                                 (Acc1#s.relay_pending)#{ReqId => Relay1},
+                             relay_redrives = Acc1#s.relay_redrives + 1};
                   false ->
                       Acc
               end
@@ -4721,7 +4947,9 @@ stats_map(S) ->
       ingress_overflow => S#s.ingress_overflow,
       ingress_expired => S#s.ingress_expired,
       ingress_forwarded => S#s.ingress_forwarded,
-      ingress_prepositioned => S#s.ingress_prepositioned,
+      relay_accepted => S#s.relay_accepted,
+      relay_redrives => S#s.relay_redrives,
+      relay_duplicates => S#s.relay_duplicates,
       membership_rejects => S#s.membership_rejects, redrives => S#s.redrives,
       progress_slot => ProgressSlot,
       progress_phase_code => progress_phase_number(ProgressPhase),

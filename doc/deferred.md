@@ -386,6 +386,28 @@ stages, not carried forward:
 
 ### Latency tail under burst load — bigger refactors (post storage-fix, 2026-07-24)
 
+**UPDATE 2026-07-25 — a controlled saturation test confirmed mailbox overload and throughput
+collapse; it did not isolate the single mailbox as the sole root cause.**
+Test: `OVERF=0` + all churn off, `BURST_PROB=100 BURST_SIZE=60 TICK=2` (~480 concurrent submits
+sustained) on the N=9 fleet at the new 1024 MiB cap. Findings: (1) offering MORE load made the
+fleet LESS productive — block rate dropped 5.7→1.3 slots/s and blocks went near-empty (tx/block
+1.3→0.2), i.e. the flooded leader keeps proposing on schedule but can't pack the queued txs.
+(2) The `quod_consensus_event_qlen` p99 split cleanly and BIMODALLY per node: 4 nodes stayed
+shallow (~32–50 queued) while 5 flooded to the ~1000 top bucket. Since commit latency is
+submitter-measured, txs through a shallow node commit <100ms while txs through a flooded node
+take 2s+ — that is the visible bimodal tail. (3) The ROUNDS stayed fast throughout
+(`round_approve`/`round_commit` p99 ≤100ms), so the seconds are spent before the measured round,
+while the current leader receives followers' relay traffic and consensus evidence in one
+`gen_statem` mailbox. The 300ms relay retransmit, speculative placement misses, synchronous
+diagnostic probes, and queue head-of-line behavior all amplified that mailbox load; the test
+did not attribute a percentage to each contributor. It was not a local network-only effect:
+the Hetzner satellite and local compute nodes both flooded.
+The fleet degrades GRACEFULLY (loadtest PASS, 9/9, 0 restarts, no OOM, snaps back the instant
+load stops) but has NO headroom above ~moderate concurrency until this lands. Highest-leverage
+fixes are reducing ingress amplification and measuring again before deciding whether a front
+process is justified. See [[quod-nomad-deploy]] for the run details and the memory-cap fix
+that preceded this (512→1024 MiB, an OOM, not this ceiling).
+
 Context: the Ceph→local-disk storage migration removed the dominant cost (fsync 40-137ms →
 ~3ms; commit p50 929→40ms, p99 4900→~210ms). What remains is a **transient tail**: under
 40-tx bursts the commit p99 occasionally spikes to ~1-2s, then self-heals. Measured root
@@ -397,17 +419,57 @@ rate is low (~11/node/s), so this is a burst-amplification + serial-process prob
 saturation. The easy Δ-shrink lever is applied separately (see below); these are the deeper
 fixes:
 
-- **Ingress simplification — retire pre-positioning now that consensus is fast.** The
+- **Ingress simplification — explicit exact-slot relay implemented locally; live A/B
+  pending.** The
   park-queue (0.7.27) + pre-position-at-future-leader (0.7.28) machinery was built to cope
   with SLOW (Ceph-era) consensus, where the depth-1 pipeline couldn't keep up and appends
   piled into `busy` rejections. With ~40ms commits the pipeline keeps up, but the routing
-  still runs: it MISSES most of the time (measured ~0.2 redirects/submit, redirects ≫
-  prepositions) and each miss is extra messages (relay → redirect → re-relay) that amplify
-  a 40-tx burst into the mailbox storm above. Proposed: gate or revert the ingress back to
-  direct-append-to-current-leader (the 0.7.25 shape), keeping only the bounded park queue
-  as an overflow cushion. Expect the redirect traffic and the burst-time mailbox spikes to
-  collapse. Architect+DA review (the routing touches liveness/failover); the `route/4`
-  compute-then-execute refactor already isolates the decision, so a toggle is feasible.
+  still runs and each miss is extra messages (relay → redirect → re-relay). The first replacement
+  routed to one exact first-usable seat, acknowledged accepted relays to demote the retry cadence,
+  and drains ordinary capacity-blocked work per author. Membership remains a global barrier so
+  continuous writes cannot starve a committee transition. A routing-state key prevents the
+  work-conserving drain from scanning the whole queue after unrelated mailbox events. Redirect
+  budget exhaustion was retryable.
+
+  The 2026-07-26 N=9 live A/B used the same no-churn workload in both runs: six bursts of
+  60 concurrent submissions to every validator, 75 seconds active. With detailed event probes
+  enabled the fleet advanced 914 blocks, transaction p50/p90/p99 were approximately
+  0.62/1.78/2.44 seconds, append-mailbox p99 reached about 612, and the two-minute metric
+  window contained approximately 6,300 redirects, 1,465 relay redrives, and 498 duplicate
+  relay deliveries. With probes disabled it advanced 1,124 blocks (+23%), transaction
+  p50 improved to about 0.44 seconds, and approve/commit p99 improved to about 125/46 ms,
+  but transaction p90/p99 remained about 1.91/2.46 seconds. Redirects remained dominant
+  (about 8,000 in the comparison window); no busy, malformed, overflow, expiry, unverified,
+  transport-drop, crash, or restart signal moved. The exact-seat/ack rewrite therefore
+  improves useful work and graceful recovery, but does not remove the tail.
+
+  A sampled successful trace spent 1.23 seconds in the submitting node's append/relay span.
+  The wrong target rejected it in 0.16 ms of its own CPU time; after the redirect, the final
+  leader queued, proposed a 154-change block, and replied in 191 ms. Prolog proving took
+  13 ms. Cross-machine timestamps cannot safely divide the remaining delay into wire time
+  versus mailbox wait, but the single-clock spans locate it before the final leader's
+  consensus round. The next design must remove moving-leader chase from the serialized
+  consensus mailbox, not tune disk, signatures, batching timers, or Delta.
+
+  A rank-sharded stable-custodian successor was implemented and then rejected before
+  deployment: the four-node integration test showed that assigning a request several
+  proposer turns ahead manufactures empty complaint-skipped slots before the custodian can
+  commit it. That trades mailbox distribution for worse latency and throughput and is not
+  an acceptable consensus schedule.
+
+  The current local version keeps the earliest-usable-slot rule but makes ownership
+  unambiguous on the wire: `{relay_submit, ReqId, TargetSlot, Submission, Trace}`. The
+  receiver verifies it proposes `TargetSlot`, parks only until that exact slot, and rejects
+  it if the slot has closed; it never invents a redirect from its own frontier. While that
+  slot remains usable, later local sequences reuse the same lane. Finalization resolves
+  matching submissions and immediately fails every remaining relay for that slot, allowing
+  queued later sequences to target the new frontier. Receipt acknowledgement still demotes
+  the 300 ms lost-send loop to a 5-second result probe. Relay creation enforces the
+  single-target/single-slot lane invariant consumed by the O(1) route check. Focused routing
+  tests (120/0), the full EUnit suite (445/0), all 45 Common Test cases, Dialyzer, and xref
+  pass. This version
+  still shares the consensus mailbox and needs the same live workload before deciding
+  whether ingress extraction or source-side relay batching is necessary.
 
 - **Consensus-process burst resilience (the serial mailbox).** All consensus for a
   namespace runs through one `gen_statem`; a 40-tx burst + its vote/cert fan-out can
@@ -420,6 +482,13 @@ fixes:
   work per pipeline slot. (a)+(b) are medium effort and low risk; (c)/(d) are real
   architecture changes.
 
+  The A/B above made an ingress split a credible option. The explicit-slot rewrite removes
+  ambiguous receiver-side routing and retransmission amplification with less machinery and
+  should be measured first. Keep detailed probes off by default. If the consensus mailbox
+  remains the tail, extract the complete ingress contract together: local unsigned submissions,
+  authenticated relay envelopes, per-author sequence order, accepted acknowledgements,
+  terminal results, and committee-change barriers must have one owner.
+
 - **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant. It looks
   25× the *steady* round time (~40ms), so lowering it is tempting — but a lower FIXED Δ was
   TESTED (500ms, 2026-07-24) and was strictly WORSE: skips 4.4→12.4/node, p90/p99 blew from
@@ -431,6 +500,16 @@ fixes:
   Δ = k × that with floor/ceiling, so it's tight when calm and patient under a burst. Note
   this only makes skips cost the minimum SAFE amount — it does not remove the skips; the
   burst-amplification fixes above are what reduce their frequency. Reverted to Δ=1000ms.
+
+- **Durable client idempotency for automatic write retry.** A transaction that has entered
+  consensus cannot be cancelled when a local caller deadline expires. The current API now
+  reports `{outcome_unknown, TxId}` and exposes that id through the explorer instead of
+  falsely claiming failure; built-in test/load clients do not retry that outcome or a
+  transport failure with no authoritative response. They retry only explicit responses
+  that guarantee the operation did not apply. Fully automatic retry of non-idempotent goals
+  still needs a client-supplied stable operation id plus a durable committed/pending lookup,
+  so a reconnect can resume the same submission instead of proving and signing a new
+  transaction. Do not implement this as a timeout tweak or an unbounded in-memory dedup set.
 
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
@@ -474,16 +553,17 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 - **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
   debounce, onia §10). The `quod_diff` functor-hash read-set already produces the per-predicate keys.
 
-- **Link backpressure signalling (unblocks demoting the relay retransmit).** `quod_link`'s plain
+- **Link backpressure signalling (still useful; relay amplification mitigated).** `quod_link`'s plain
   `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,
   `send_queue_full`) so transient pressure never tears a link down — the accepted cost is that frames
   can DROP SILENTLY on a live link under load. Each layer owns its own recovery today: the Δ redrive
-  for consensus evidence, the ?RELAY_RETRY_MS exact-request retransmit for relay. With the ingress park
-  queue the retransmit is a lost-frame backstop only, but its cadence must STAY tight (300ms) until the
-  link can either signal backpressure to its holder (a `{link_backpressure,...}` message) or run a
+  for consensus evidence and exact-request retransmit for relay. Relay now keeps the 300ms cadence only
+  until the destination returns `relay_accepted`; it then uses a 5s final-result recovery probe. This
+  bounds amplification without assuming the original send succeeded. The link should still either
+  signal backpressure to its holder (a `{link_backpressure,...}` message) or run a
   bounded in-link retry for consensus/relay frames (`send_reliable`'s `send_until_accepted` already
-  exists in the link process — unused by consensus). Only after that lands may the retransmit cadence
-  be relaxed. Found during the event-driven-ingress review (DA, 2026-07-23).
+  exists in the link process — unused by consensus). Found during the event-driven-ingress review
+  (DA, 2026-07-23); acknowledgement mitigation added 2026-07-26.
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 

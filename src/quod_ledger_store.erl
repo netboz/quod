@@ -11,12 +11,15 @@ before returning, and the handle is threaded by the caller — the writer is
 a joiner. The separate `m:quod_vote_journal` stores only this validator's bounded,
 in-flight vote decisions; it never duplicates blocks or knowledge-base data.
 
-Layout, under `DataDir/<base64url(Ns)>/`:
+Layout, under `LedgerDir/<base64url(Ns)>/`:
 
-| file       | holds                                                          |
-| ---------- | -------------------------------------------------------------- |
-| `log.0001` | append-only CRC-framed `#entry{}` records — the block log      |
-| `votes.0001` | bounded in-flight vote decisions, owned by `quod_vote_journal` |
+| file       | holds                                                     |
+| ---------- | --------------------------------------------------------- |
+| `log.0001` | append-only CRC-framed `#entry{}` records — the block log |
+
+`m:quod_vote_journal` separately owns `votes.0001` under the configured
+**data** root. The roots may coincide, as they do in the Nomad deployment, but
+`ledger_dir` can place the replicated block log elsewhere.
 
 Each frame is `<<Magic:32, Len:32, CRC:32, Payload:Len/binary>>` with
 `Payload = term_to_binary(Entry, [deterministic])` and `CRC = erlang:crc32(Payload)`.

@@ -255,12 +255,13 @@ demote_to_observer(Config) ->
     {save_config, Remaining}.
 
 %%%===================================================================
-%%% growth helpers — commit a write/admit/remove through the current leader (retried, zero pre-seed)
+%%% growth helpers — commit a write/admit/remove through its exact target proposer (retried, zero pre-seed)
 %%%===================================================================
 
-%% Commit `Goal` by trying it on every member until one accepts (a non-leader redirects; the leader parks
-%% until commit and returns {ok,_,_}). Retried under `eventually`, so an admit that fails at the submitter
-%% because the candidate isn't digesting-fresh yet simply re-tries until it is.
+%% Commit `Goal` by trying it on every member until one exact-slot relay commits.
+%% Retried under
+%% `eventually`, so an admit that fails because the candidate is not digesting-fresh yet
+%% simply retries until it is.
 commit(Peers, Goal, Budget) ->
     eventually(fun() -> lists:any(fun(P) -> match_ok(prove(P, Goal)) end, Peers) end, Budget).
 
@@ -334,11 +335,15 @@ write_genesis(Config) ->
 %% the post-boot {error,rebuilding} window; at N=1 each prove commits synchronously.
 pump(Ns, N) ->
     lists:foreach(fun(I) -> pump1(Ns, I, 200) end, lists:seq(1, N)).
-pump1(_Ns, _I, 0) -> ok;
+pump1(_Ns, I, 0) -> ct:fail({pump_retries_exhausted, I});
 pump1(Ns, I, Tries) ->
     case quod_prolog:prove(Ns, {assertz, {pump, I}}, Ns) of
         {ok, _, _} -> ok;
-        _          -> timer:sleep(20), pump1(Ns, I, Tries - 1)
+        {error, rebuilding} ->
+            timer:sleep(20),
+            pump1(Ns, I, Tries - 1);
+        Other ->
+            ct:fail({pump_failed, I, Other})
     end.
 
 %%%===================================================================

@@ -533,7 +533,7 @@
         "x": 0,
         "y": 42
       },
-      "description": "Routing outcomes: redirect = not this slot's leader (normal), bad = unacceptable change. busy is now an ALERT signal, not backpressure: requests that arrive at a busy moment wait in the bounded ingress line and drain into the next block; busy fires only when that line overflows or a waiting request was cut loose during a genuine stall (see quod_consensus_ingress_queued/overflow/expired). Any sustained busy rate deserves investigation. stale_seq = a write lost a leader-rotation routing race; it is retried automatically and is counted apart from bad_change, which stays the malformed-workload alarm.",
+      "description": "Failure outcomes: redirect means the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed; it should stay near zero. bad means malformed or unauthorized content. busy is an ALERT signal: the bounded ingress line overflowed or a waiting request expired during a genuine stall. stale_seq means newer approved history superseded an otherwise-valid signed request, usually after a skipped proposal or retry.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -555,7 +555,7 @@
         {
           "refId": "B",
           "expr": "rate(quod_consensus_append_redirect{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "redirect \u00b7 {{node_id}}"
+          "legendFormat": "wrong/closed target \u00b7 {{node_id}}"
         },
         {
           "refId": "C",
@@ -577,7 +577,7 @@
     {
       "type": "timeseries",
       "id": 115,
-      "title": "Ingress queue (park, don't reject)",
+      "title": "Ingress queue and relay retries",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -588,7 +588,7 @@
         "x": 0,
         "y": 50
       },
-      "description": "Requests waiting for consensus and how they move. Requests are sent straight to the node whose turn to build a block is coming (prepositioned/s) and drain into that block the moment the turn opens. forwarded/s counts MISROUTES (the schedule moved past a holder) and should sit near zero; overflow/s and expired/s are the only sources of busy and deserve an alert.",
+      "description": "Requests waiting for consensus and relay retry health. accepted/s means a destination acknowledged receipt and fast retries stopped. redrives/s recovers dropped requests or final replies; duplicates/s is work that reached the consensus mailbox unnecessarily and should stay low. forwarded/s counts locally queued requests dispatched when their exact target slot became available. Overflow and expiry are genuine overload or stall signals.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -607,8 +607,8 @@
         },
         {
           "refId": "E",
-          "expr": "rate(quod_consensus_ingress_prepositioned{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "prepositioned/s \u00b7 {{node_id}}"
+          "expr": "rate(quod_consensus_relay_accepted{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "relay accepted/s \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
@@ -624,13 +624,23 @@
           "refId": "D",
           "expr": "rate(quod_consensus_ingress_expired{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
           "legendFormat": "expired/s \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "F",
+          "expr": "rate(quod_consensus_relay_redrives{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "relay redrives/s \u00b7 {{node_id}}"
+        },
+        {
+          "refId": "G",
+          "expr": "rate(quod_consensus_relay_duplicates{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
+          "legendFormat": "relay duplicates/s \u00b7 {{node_id}}"
         }
       ]
     },
     {
       "type": "timeseries",
       "id": 22,
-      "title": "Failed writes (OCC conflict / rejects / park timeouts)",
+      "title": "Write conflicts, rejects and unresolved deadlines",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -641,7 +651,7 @@
         "x": 12,
         "y": 42
       },
-      "description": "Real write failures: OCC conflicts + apply-time rejects (read-set changed under the write), and parked writes reaped by TTL (verdict never arrived).",
+      "description": "OCC conflicts and apply-time rejects are definite failures. An unresolved deadline means the local caller stopped waiting before the transaction's final result was known; it may still commit and must not be retried blindly.",
       "fieldConfig": {
         "defaults": {
           "unit": "ops",
@@ -665,7 +675,7 @@
         {
           "refId": "C",
           "expr": "rate(quod_prolog_park_timeouts{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])",
-          "legendFormat": "park_timeout \u00b7 {{node_id}}"
+          "legendFormat": "outcome_unknown \u00b7 {{node_id}}"
         }
       ]
     },

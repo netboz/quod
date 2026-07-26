@@ -38,7 +38,7 @@ Two collection paths:
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
-| `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes that gave up waiting |
+| `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes whose final outcome was still unknown when their caller deadline elapsed |
 | `quod_prolog_proof_workers/ask_workers{namespace}` | gauge | | queries and cross-ontology answer streams currently using a frozen data snapshot |
 | `quod_prolog_kb_memory_words{namespace}` | gauge | | Erlang VM words used by the committed knowledge-base ETS table |
 | `quod_prolog_kb_history_predicates{namespace}` | gauge | | predicates retaining an older version because a query still needs it |
@@ -53,8 +53,8 @@ Two collection paths:
 | `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
-| `quod_consensus_event_ms{namespace}` | histogram | `class` | wall time handling one consensus event, by event class |
-| `quod_consensus_event_qlen{namespace}` | histogram | `class` | mailbox depth found at consensus event entry |
+| `quod_consensus_event_ms{namespace}` | histogram | `class` | opt-in wall time handling one consensus event, by event class |
+| `quod_consensus_event_qlen{namespace}` | histogram | `class` | opt-in mailbox depth found at consensus event entry |
 | `quod_consensus_share_lag_ms{namespace}` | histogram | `kind` | own proposal: broadcast to each peer vote share arriving back |
 | `quod_consensus_step_ms{namespace}` | histogram | `step` | named sub-steps inside consensus handlers (the slow-handler decomposition) |
 | `quod_quic_srtt_ms/min_rtt_ms/cwnd_bytes/bytes_in_flight/send_queue_bytes/congested/in_recovery` | gauge | `peer` | per-peer QUIC transport health: RTT estimate vs wire floor, congestion window, unacked bytes, data queued behind pacing/cwnd, throttle flags |
@@ -165,14 +165,16 @@ declare(NodeId) ->
     _ = G(quod_consensus_skips,           "Total times a turn was skipped because that turn's leader did not produce a block in time (only ever goes up)."),
     _ = G(quod_consensus_pending,         "Change requests waiting to be made final right now."),
     _ = G(quod_consensus_append_busy,     "Total change requests turned away as overloaded: the bounded waiting line was full, or a request waited past its cutoff during a stall. Requests that merely arrive at a busy moment now wait in line instead of being turned away, so any sustained increase here is an overload or a stalled cluster and deserves an alert (only ever goes up)."),
-    _ = G(quod_consensus_ingress_queued,  "Change requests waiting in this node's ingress line right now. They drain into the very next block; a value that stays high means blocks are sealing slower than requests arrive."),
+    _ = G(quod_consensus_ingress_queued,  "Change requests this node is holding right now. Relayed requests wait only for their explicitly named target slot; local requests may wait behind an unresolved author lane. Membership changes also wait for the current pipeline to become final. A value that stays high means consensus is not making room as fast as requests arrive."),
     _ = G(quod_consensus_ingress_overflow, "Total requests refused because the bounded ingress line (or one author's fair share of it) was full (only ever goes up)."),
     _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff - a visible sign of a stall (only ever goes up)."),
-    _ = G(quod_consensus_ingress_forwarded, "Total waiting requests this node had to send onward because the block-building schedule moved past it. Requests are normally sent straight to the node whose turn is coming, so a sustained rate here means routing is missing its target (only ever goes up)."),
-    _ = G(quod_consensus_ingress_prepositioned, "Total requests parked at this node ahead of its turn to build a block - sent here early on purpose so the block can be built the moment the turn opens (only ever goes up)."),
-    _ = G(quod_consensus_append_redirect, "Total change requests that reached a node that was not the current leader and were pointed to the right one (only ever goes up)."),
+    _ = G(quod_consensus_ingress_forwarded, "Total locally queued requests sent to the proposer of their exact target slot when the queue became dispatchable (only ever goes up)."),
+    _ = G(quod_consensus_relay_accepted, "Total relayed requests whose destination acknowledged that it was holding or processing them. Once acknowledged, the sender stops its fast retry loop (only ever goes up)."),
+    _ = G(quod_consensus_relay_redrives, "Total relay request retries. Before a destination acknowledges receipt they recover dropped sends quickly; after acknowledgement they run slowly only to recover a lost final result (only ever goes up)."),
+    _ = G(quod_consensus_relay_duplicates, "Total duplicate relay submissions received while the original request was already being processed. This should stay low; a high rate means retries are adding avoidable consensus-mailbox work (only ever goes up)."),
+    _ = G(quod_consensus_append_redirect, "Total change requests refused because the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed. This should stay near zero (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
-    _ = G(quod_consensus_append_stale,    "Total change requests that lost a routing race during leader rotation and were told to retry. Harmless in small numbers; the request's content was fine and the retry succeeds (only ever goes up)."),
+    _ = G(quod_consensus_append_stale,    "Total otherwise-valid requests whose author sequence had already been superseded by newer approved history, usually after a skipped proposal or retry. The caller can safely re-prove and retry (only ever goes up)."),
     _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
     _ = G(quod_consensus_redrives,        "Total times this node re-sent a proposal it was still waiting on instead of giving up. Climbing steadily means one of the voting nodes is not responding."),
     _ = G(quod_consensus_progress_slot,   "The oldest unfinished block slot watched by this node; 0 means no block is currently waiting for progress."),
@@ -211,7 +213,7 @@ declare(NodeId) ->
     _ = G(quod_prolog_proves,        "Total read queries this node has answered (only ever goes up)."),
     _ = G(quod_prolog_conflicts,     "Total finished changes skipped because they clashed with newer data (only ever goes up)."),
     _ = G(quod_prolog_parked,        "Write requests waiting here for their change to be made final right now."),
-    _ = G(quod_prolog_park_timeouts, "Total write requests that gave up waiting because their change was never made final (only ever goes up)."),
+    _ = G(quod_prolog_park_timeouts, "Total write callers whose transaction still had no final result at the local waiting deadline. The transaction may finalize later, so inspect the returned transaction id instead of retrying the same non-idempotent operation (only ever goes up)."),
     _ = G(quod_prolog_proof_workers, "How many local queries are running right now. Each uses a frozen view of the data, so a value at the configured limit means new queries are being turned away until one finishes."),
     _ = G(quod_prolog_ask_workers, "How many cross-ontology answer streams this node is serving right now. Each keeps a frozen view of the requested ontology until it finishes or is cancelled."),
     _ = G(quod_prolog_kb_memory_words, "How much Erlang VM memory, in words, this ontology's shared knowledge-base table is using. Multiply by the VM word size (normally 8 bytes on a 64-bit node) for an approximate byte count."),
@@ -401,7 +403,8 @@ refresh_log_ns(Ns) ->
           membership_rejects := MR,
           ingress_queued := IQ, ingress_overflow := IO,
           ingress_expired := IE, ingress_forwarded := IF,
-          ingress_prepositioned := IPP,
+          relay_accepted := RA, relay_redrives := RRD,
+          relay_duplicates := RDU,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
           progress_quorum_ready := PQ, progress_timeouts := PT,
           quorum_pauses := QP, head_support_votes := HSV, head_commit_votes := HCV,
@@ -428,7 +431,9 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_ingress_overflow, IO),
             _ = S(quod_consensus_ingress_expired, IE),
             _ = S(quod_consensus_ingress_forwarded, IF),
-            _ = S(quod_consensus_ingress_prepositioned, IPP),
+            _ = S(quod_consensus_relay_accepted, RA),
+            _ = S(quod_consensus_relay_redrives, RRD),
+            _ = S(quod_consensus_relay_duplicates, RDU),
             _ = S(quod_consensus_append_redirect, RR),
             _ = S(quod_consensus_append_bad,      RD),
             _ = S(quod_consensus_append_stale,    RS),
@@ -623,8 +628,8 @@ observe_round_phase(_Ns, _Phase, _Ms) ->
 
 -doc """
 One consensus statem event handled: wall `Us` (microseconds) and the mailbox depth found
-at entry, by event class. Called on EVERY event — the guard plus a histogram update cost
-~1-2µs; an absent metrics process makes it a no-op.
+at entry, by event class. The consensus state machine calls this only when
+`detailed_consensus_metrics` is enabled; an absent metrics process makes it a no-op.
 """.
 -spec observe_consensus_event(binary(), atom(), integer(), non_neg_integer()) -> ok.
 observe_consensus_event(Ns, Class, Us, QLen)
@@ -735,7 +740,7 @@ consensus_stat_keys() ->
      appends, proposals, batched_txs, commits, submitted, skips, pending,
      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
-     ingress_prepositioned,
+     relay_accepted, relay_redrives, relay_duplicates,
      redrives, progress_slot, progress_phase_code, progress_quorum_ready,
      progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,
      head_complaint_votes, head_complaint_signed, missing_certified_blocks,

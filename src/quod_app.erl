@@ -289,8 +289,11 @@ build_ns_config(Content) ->
              max_proof_workers => maps:get(max_proof_workers, Content, 64),
              max_ask_workers => maps:get(max_ask_workers, Content, 64),
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
+             park_ttl_ms => maps:get(park_ttl_ms, Content, 30000),
              ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
              ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
+             detailed_consensus_metrics =>
+                 maps:get(detailed_consensus_metrics, Content, false),
              seed_peers => content_seeds(Content)},
     {Ns, with_genesis_hash(Content,
           with_genesis_file(Content,

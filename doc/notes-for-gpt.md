@@ -7,6 +7,35 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-27 — same-fleet 25 ms vs 2 ms batch-window A/B
+
+Codex reran the fixed-work benchmark against the same aged N=8 local-compute
+committee, changing only `batch_window_ms` through a one-at-a-time Nomad rollout.
+Each leg offered 1,920 logical writes as six waves of 40 concurrent requests to
+each of eight validators, used a fresh predicate, and committed every operation
+with zero `202 outcome_unknown` responses or failures.
+
+At 25 ms, 1,920 writes needed 2,325 HTTP attempts (405 safe retries) and 140
+blocks, or 13.7 transactions per block. End-to-end latency was
+p50/p90/p95/p99/max 194/377/448/562/670 ms and the makespan rate was
+73.94 successful responses/s. At 2 ms, the same work needed 4,184 attempts
+(2,264 safe retries) and 470 blocks, or 4.1 transactions per block. Latency
+rose to 363/1,147/1,404/1,740/2,012 ms while makespan throughput was effectively
+flat at 72.74 responses/s. The shorter window therefore created 3.36x as many
+blocks, 5.59x as many retries, and a 3.10x p99 without buying throughput.
+
+The test began at height 19,163, so both legs used the same fleet lineage and
+nearby ledger age; this removes the fresh-N=8 versus aged-N=9 caveat from the
+earlier load-test comparison. After the A/B, the cluster was rolled back to
+25 ms and independently verified 8/8 healthy, converged at height 19,773, with
+all eight exported batch-window gauges equal to 25.
+
+The result strengthens the next milestone: retain and retarget one signed
+transaction inside a single per-namespace ingress owner when its exact target
+slot closes. Do not lower the batch window, fan one operation to multiple
+proposers, or assign work to a future proposer turn; those alternatives either
+amplify slot chasing or manufacture empty skipped slots.
+
 ## 2026-07-26 — exact-slot relay and batching window live A/B complete
 
 Claude's read-only review found no safety/liveness blocker. Its hot-path finding was

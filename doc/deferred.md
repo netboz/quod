@@ -488,6 +488,15 @@ fixes:
   architecture: a later ingress owner should retain and retarget the same signed
   transaction after a slot closes, instead of asking the client to run Prolog again.
 
+  A same-fleet A/B on 2026-07-27 removed the earlier fleet-age caveat. On the
+  same aged N=8 committee, 1,920 fixed writes at 25 ms used 140 blocks and 405
+  safe retries, with p50/p99 194/562 ms and 73.94 successful responses/s. At
+  2 ms they used 470 blocks and 2,264 retries, with p50/p99 363/1,740 ms and
+  72.74 responses/s. Thus 2 ms caused 3.36x the blocks, 5.59x the retries, and
+  3.10x the p99 for no throughput gain. The fleet was restored to 25 ms after
+  the comparison. This directly supports signed-transaction retention and
+  internal retargeting; another fixed-window adjustment is not the next lever.
+
 - **Consensus-process burst resilience (the serial mailbox).** All consensus for a
   namespace runs through one `gen_statem`; a 40-tx burst + its vote/cert fan-out can
   momentarily exceed its drain rate (mailbox → ~1000), stalling the head. Options, cheapest

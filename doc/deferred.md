@@ -496,6 +496,9 @@ fixes:
   3.10x the p99 for no throughput gain. The fleet was restored to 25 ms after
   the comparison. This directly supports signed-transaction retention and
   internal retargeting; another fixed-window adjustment is not the next lever.
+  The reviewed identities, safety invariants, rolling protocol, restart
+  boundaries, and staged extraction are specified in
+  [the ingress-owner contract](ingress-owner.md).
 
 - **Consensus-process burst resilience (the serial mailbox).** All consensus for a
   namespace runs through one `gen_statem`; a 40-tx burst + its vote/cert fan-out can
@@ -511,7 +514,9 @@ fixes:
   The A/B above makes an ingress split a credible next milestone. Keep detailed probes
   off by default. Extract the complete ingress contract together: local unsigned submissions,
   authenticated relay envelopes, per-author sequence order, accepted acknowledgements,
-  terminal results, and committee-change barriers must have one owner.
+  terminal results, and committee-change barriers must have one owner. The extraction is
+  deliberately staged after relay-v2 compatibility and retained-custody semantics; see
+  [the ingress-owner contract](ingress-owner.md).
 
 - **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant. It looks
   25× the *steady* round time (~40ms), so lowering it is tempting — but a lower FIXED Δ was

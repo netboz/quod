@@ -483,5 +483,5 @@ status(Peer, Ns) -> peer:call(Peer, quod_simplex, status, [Ns]).
 %% would sort above integers in Erlang term order and spuriously satisfy it).
 slot(Peer) -> maps:get(slot, status(Peer), -1).
 slot(Peer, Ns) -> maps:get(slot, status(Peer, Ns), -1).
-prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
-prove(Peer, Ns, Goal) -> peer:call(Peer, quod_prolog, prove, [Ns, Goal, Ns]).
+prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).
+prove(Peer, Ns, Goal) -> quod_ct:peer_prove(Peer, Ns, Goal).

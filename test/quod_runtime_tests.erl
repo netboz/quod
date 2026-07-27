@@ -452,10 +452,11 @@ founded_staged_d_violation_test_() ->
 %% its dependent output — await_revision — is released only when its revision installs.
 heavy_worker_does_not_delay_events_test_() ->
     {timeout, 120, fun() ->
-        %% slow/1 recursion ~ a second of real work; pump enqueues it per converge run
+        %% Deliberately slow work that remains inside the production 30-second budget;
+        %% pump enqueues it per converge run.
         F = setup_founded(<<"slow(0).\n"
                             "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n"
-                            "pump(_Scope) :- enqueue_projection(res1, slow(2000000)).\n"
+                            "pump(_Scope) :- enqueue_projection(res1, slow(500000)).\n"
                             "state_handler(pumper, [ping/1], [], pump).\n">>),
         {_, Ns, _} = F,
         try

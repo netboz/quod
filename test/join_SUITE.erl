@@ -285,7 +285,7 @@ founder_cfg() ->
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)   -> maps:get(slot, status(Peer), -1).
-prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
+prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).
 pub_of(Peer) -> peer:call(Peer, application, get_env, [quod, node_pubkey, undefined]).
 
 %% A shape-valid #transaction (tx_id, caller_ns, diff, read_check, author, sig) — never committed: the

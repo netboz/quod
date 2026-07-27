@@ -168,4 +168,4 @@ start_node(Port, {Pub, Seed}, Config, Extra) ->
 
 status(Peer)      -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)        -> maps:get(slot, status(Peer), -1).
-prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
+prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).

@@ -16,7 +16,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
--export([eventually/2, stop_all/1, match_ok/1, datadir/2, generate_key_gt/1]).
+-export([eventually/2, stop_all/1, match_ok/1, peer_prove/3,
+         datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1, wait_until/1, wait_until/2]).
 
 %% Poll `F` every 150ms until it returns `true` or the budget runs out.
@@ -40,6 +41,8 @@ stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
 %% `lists:any/2` callback escapes `eventually/2` instead of resubmitting it.
 match_ok({error, {outcome_unknown, TxId}}) ->
     throw({quod_retry_stop, {outcome_unknown, TxId}});
+match_ok({badrpc, timeout}) ->
+    throw({quod_retry_stop, {transport_timeout, peer_call}});
 match_ok({ok, [_ | _], _}) -> true;
 match_ok(_)                -> false.
 
@@ -54,7 +57,22 @@ eventually_stops_on_unknown_outcome_test() ->
         error:{unsafe_retry, {outcome_unknown, TxId}} ->
             ok
     end.
+
+eventually_stops_on_transport_timeout_test() ->
+    try eventually(fun() -> match_ok({badrpc, timeout}) end, 1000) of
+        _ ->
+            erlang:error(transport_timeout_was_retried)
+    catch
+        error:{unsafe_retry, {transport_timeout, peer_call}} ->
+            ok
+    end.
 -endif.
+
+%% peer:call/4 defaults to five seconds, shorter than quod_prolog's 30-second
+%% parked-write deadline. Let the application report outcome_unknown itself;
+%% otherwise a test poll can resubmit a write that is still able to commit.
+peer_prove(Peer, Ns, Goal) ->
+    peer:call(Peer, quod_prolog, prove, [Ns, Goal, Ns], 35000).
 
 %% A per-port data_dir under the suite's private dir.
 datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).

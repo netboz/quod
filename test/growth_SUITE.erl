@@ -380,7 +380,7 @@ slot(Peer)      -> maps:get(slot, status(Peer), -1).
 role(Peer)      -> maps:get(role, status(Peer), undefined).
 synced(Peer)    -> maps:get(syncing, status(Peer), true) =:= false.   %% caught up + confirmed the tip
 committee(Peer) -> maps:get(committee, status(Peer), []).
-prove(Peer, Goal) -> peer:call(Peer, quod_prolog, prove, [?NS, Goal, ?NS]).
+prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).
 
 rejects_total(Peers) ->
     lists:sum([maps:get(membership_rejects, peer:call(P, quod_simplex, stats, [?NS]), 0) || P <- Peers]).

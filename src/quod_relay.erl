@@ -58,6 +58,32 @@ valid_wire({relay_result, ReqId, Result})
 valid_wire({relay_accepted, ReqId})
   when is_binary(ReqId), byte_size(ReqId) =:= 16 ->
     true;
+valid_wire({relay_submit_v2, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+            {submit, Author, Signature, Canonical}, TraceCarrier})
+  when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
+       is_binary(AttemptId), byte_size(AttemptId) =:= 16,
+       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_integer(TargetSlot), TargetSlot >= 1,
+       TargetSlot =< 16#FFFFFFFFFFFFFFFF,
+       is_binary(Author), byte_size(Author) =:= 32,
+       is_binary(Signature), byte_size(Signature) =:= 64,
+       is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+    quod_trace:valid_carrier(TraceCarrier);
+valid_wire({relay_result_v2, SubmissionId, AttemptId, CommitteeId,
+            TargetSlot, Result})
+  when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
+       is_binary(AttemptId), byte_size(AttemptId) =:= 16,
+       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_integer(TargetSlot), TargetSlot >= 1,
+       TargetSlot =< 16#FFFFFFFFFFFFFFFF ->
+    valid_result(Result);
+valid_wire({relay_accepted_v2, SubmissionId, AttemptId, CommitteeId, TargetSlot})
+  when is_binary(SubmissionId), byte_size(SubmissionId) =:= 16,
+       is_binary(AttemptId), byte_size(AttemptId) =:= 16,
+       is_binary(CommitteeId), byte_size(CommitteeId) =:= 32,
+       is_integer(TargetSlot), TargetSlot >= 1,
+       TargetSlot =< 16#FFFFFFFFFFFFFFFF ->
+    true;
 valid_wire(_) ->
     false.
 

@@ -100,6 +100,66 @@ relay_submission_roundtrip_test() ->
                  quod_transaction:decode_verified_submission(
                    <<"other">>, Submission)).
 
+relay_attempt_identity_test() ->
+    {Tx, _Identity} = signed(),
+    {ok, Submission} = quod_transaction:submission(?NS, Tx),
+    SubmissionId = quod_transaction:submission_id(Submission),
+    CommitteeId = <<6:256>>,
+    Target = <<7:256>>,
+    AttemptId =
+        quod_transaction:relay_attempt_id(
+          ?NS, SubmissionId, CommitteeId, 17, Target),
+    ?assertEqual(16, byte_size(AttemptId)),
+    ?assertEqual(
+       AttemptId,
+       quod_transaction:relay_attempt_id(
+         ?NS, SubmissionId, CommitteeId, 17, Target)),
+    ?assertEqual(
+       16,
+       byte_size(
+         quod_transaction:relay_attempt_id(
+           ?NS, SubmissionId, CommitteeId,
+           16#FFFFFFFFFFFFFFFF, Target))),
+    Mutations =
+        [quod_transaction:relay_attempt_id(
+           <<"other:ontology">>, SubmissionId, CommitteeId, 17, Target),
+         quod_transaction:relay_attempt_id(
+           ?NS, flip_first(SubmissionId), CommitteeId, 17, Target),
+         quod_transaction:relay_attempt_id(
+           ?NS, SubmissionId, <<9:256>>, 17, Target),
+         quod_transaction:relay_attempt_id(
+           ?NS, SubmissionId, CommitteeId, 18, Target),
+         quod_transaction:relay_attempt_id(
+           ?NS, SubmissionId, CommitteeId, 17, <<8:256>>)],
+    [?assertNotEqual(AttemptId, Mutated) || Mutated <- Mutations].
+
+relay_attempt_identity_golden_vector_test() ->
+    ?assertEqual(
+       <<16#00, 16#0d, 16#3c, 16#41, 16#6f, 16#b2, 16#78, 16#63,
+         16#7c, 16#96, 16#d7, 16#08, 16#79, 16#75, 16#fe, 16#e9>>,
+       quod_transaction:relay_attempt_id(
+         <<"relay:test">>, <<1:128>>, <<3:256>>, 17, <<2:256>>)).
+
+relay_attempt_identity_rejects_malformed_test() ->
+    Sid = <<1:128>>,
+    CommitteeId = <<3:256>>,
+    Target = <<2:256>>,
+    BadInputs =
+        [{not_binary, Sid, CommitteeId, 1, Target},
+         {?NS, <<1:120>>, CommitteeId, 1, Target},
+         {?NS, Sid, <<3:248>>, 1, Target},
+         {?NS, Sid, not_binary, 1, Target},
+         {?NS, Sid, CommitteeId, 0, Target},
+         {?NS, Sid, CommitteeId, 16#10000000000000000, Target},
+         {?NS, Sid, CommitteeId, <<"1">>, Target},
+         {?NS, Sid, CommitteeId, 1, <<2:248>>},
+         {?NS, Sid, CommitteeId, 1, not_binary}],
+    [?assertEqual(
+       error,
+       quod_transaction:relay_attempt_id(
+         Ns, SubmissionId, Committee, Slot, Peer))
+     || {Ns, SubmissionId, Committee, Slot, Peer} <- BadInputs].
+
 relay_verifies_before_decode_test() ->
     {Tx, _Identity} = signed(),
     {ok, {submit, Author, Signature, Canonical}} =

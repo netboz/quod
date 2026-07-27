@@ -52,6 +52,18 @@ variable "batch_window_ms" {
   description = "Per-ontology time in milliseconds to collect ordinary transactions into one block. 0 seals immediately; 25 is the measured fleet default."
 }
 
+variable "relay_protocol" {
+  type        = string
+  default     = "v1"
+  description = "Relay wire protocol emitted by the fleet: v1 or v2. Roll out v2-capable binaries everywhere before changing this to v2."
+}
+
+variable "ingress_retarget" {
+  type        = bool
+  default     = false
+  description = "Retain and re-place a signed write after its exact target slot closes. Enable only after relay_protocol=v2 is active fleet-wide."
+}
+
 variable "ask_timeout_ms" {
   type        = number
   default     = 60000
@@ -258,6 +270,8 @@ content = [
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
+    relay_protocol = "${var.relay_protocol}"
+    ingress_retarget = ${var.ingress_retarget}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}
@@ -463,6 +477,8 @@ content = [
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
+    relay_protocol = "${var.relay_protocol}"
+    ingress_retarget = ${var.ingress_retarget}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}

@@ -291,6 +291,8 @@ build_ns_config(Content) ->
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
              park_ttl_ms => maps:get(park_ttl_ms, Content, 30000),
              batch_window_ms => maps:get(batch_window_ms, Content, 25),
+             relay_protocol => maps:get(relay_protocol, Content, v1),
+             ingress_retarget => maps:get(ingress_retarget, Content, false),
              ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
              ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
              detailed_consensus_metrics =>

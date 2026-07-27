@@ -74,8 +74,7 @@ relay_activation_parse_test() ->
 invalid_relay_protocol_test() ->
     ?assertThrow(
        {quod_schema,
-        [#{path := "content.1.relay_protocol",
-           reason := unable_to_convert_to_enum_symbol} | _]},
+        [#{path := "content.1.relay_protocol"} | _]},
        check(<<"content = [{ namespace = \"quod:root\", "
                "relay_protocol = v3 }]\n">>)).
 

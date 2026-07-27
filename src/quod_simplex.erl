@@ -131,6 +131,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_ingress_needs_drain/2,
          test_round_probe/1, route/4,
          proposal_visible/2, reseat_engine/2,
+         committee_view_id/4, test_committee_id/1, test_ingress_gates/1,
+         test_valid_cfg/1, test_log_projection/3,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -678,6 +680,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
           genesis_hash => undefined,   %% join only: the out-of-band-pinned slot-1 block_hash (the trust anchor)
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
+          relay_protocol => v1,         %% compatibility gate: v1 until every peer can serve relay v2
+          ingress_retarget => false,    %% requires relay_protocol=v2; behavior lands in a later milestone
           data_dir     => undefined}).
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
@@ -797,6 +801,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                      %% (in-process). The ACTIVE voting set derives from this
                                                      %% via `active_validators/1` (identity at epoch length 1);
                                                      %% "who votes now" reads route through THAT, not this field.
+            committee_id = undefined :: binary() | undefined,
+                                                     %% hash identity of the exact membership-adoption block;
+                                                     %% undefined only while the namespace has no founded view
             slot         = 0  :: slot(),             %% height: index of the last COMMITTED block (commits are
                                                      %% strictly in order, so this is also the committed floor)
             approved     = 0  :: slot(),             %% latest notarized/activated slot; proposals extend this
@@ -834,6 +841,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             ingress_authors = #{} :: #{node_id() => pos_integer()},
             relay_timeout_ms = 31000 :: pos_integer(),
             batch_window_ms = 25 :: 0..1000,
+            relay_protocol = v1 :: v1 | v2,
+            ingress_retarget = false :: boolean(),
             detailed_metrics = false :: boolean(),
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
             next_author_seq = 1 :: pos_integer(),
@@ -933,6 +942,9 @@ test_state_set(dialing, V, S)    -> S#s{dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
+test_state_set(committee_id, V, S) -> S#s{committee_id = V};
+test_state_set(relay_protocol, V, S) -> S#s{relay_protocol = V};
+test_state_set(ingress_retarget, V, S) -> S#s{ingress_retarget = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
             (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
@@ -1036,6 +1048,14 @@ test_put_pending_relay(Target, TargetSlot,
 test_ingress_needs_drain(S0, S1) ->
     ingress_drain_key(S0, S1) =/= none.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
+test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
+test_ingress_gates(#s{relay_protocol = Protocol,
+                      ingress_retarget = Retarget}) ->
+    {Protocol, Retarget}.
+test_valid_cfg(Config) ->
+    valid_cfg(Config, maps:merge(?DEFAULTS, Config)).
+test_log_projection(Ns, Entries, Seed) ->
+    log_projection(Ns, Entries, Seed).
 -endif.
 
 callback_mode() -> [state_functions].
@@ -1116,6 +1136,8 @@ init_store(Ns, Cfg, Id) ->
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
             chan = Chan, relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
+            relay_protocol = maps:get(relay_protocol, Cfg),
+            ingress_retarget = maps:get(ingress_retarget, Cfg),
             detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
     %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
     try load_or_bootstrap(S0, Cfg) of
@@ -1161,7 +1183,7 @@ relay_timeout_ms(Cfg) ->
     end.
 
 %% Restart reloads durable state: re-derive the committee by folding the `peer_admitted` asserts/retracts
-%% out of the committed log's transaction diffs (`log_projection_step/2`, which also recovers the timestamp
+%% out of the committed log's transaction diffs (`log_projection_step/3`, which also recovers the timestamp
 %% floor `last_ts` in the same pass), STREAMED from the store in bounded windows — the log is never
 %% materialized in RAM (the store is the archive, quod_prolog holds the KB projection; this consensus
 %% process holds only the validator-set projection). A brand-new namespace is bootstrapped.
@@ -1180,12 +1202,14 @@ relay_timeout_ms(Cfg) ->
 load_or_bootstrap(S0 = #s{ns = Ns, store = Store}, Cfg) ->
     Base = case quod_ledger_store:last(Store) of
                0     -> S0;   %% empty ⇒ unfounded (slot 0)
-               LastI -> {Vs, Ts, Seqs} = quod_ledger_store:fold(Store, 1, LastI,
-                                                          fun(E, Acc) ->
-                                                              checked_log_projection_step(Ns, E, Acc)
-                                                          end, {[], 0, #{}}),
-                        S0#s{validators = Vs, slot = LastI, last_ts = Ts,
-                             author_seqs = Seqs}
+               LastI -> {Vs, CommitteeId, Ts, Seqs} =
+                            quod_ledger_store:fold(
+                              Store, 1, LastI,
+                              fun(E, Acc) ->
+                                  checked_log_projection_step(Ns, E, Acc)
+                              end, {[], undefined, 0, #{}}),
+                        S0#s{validators = Vs, committee_id = CommitteeId,
+                             slot = LastI, last_ts = Ts, author_seqs = Seqs}
            end,
     S1 = case {maps:get(mode, Cfg), Base#s.slot} of
              {join,   _} -> Base#s{genesis_hash = maps:get(genesis_hash, Cfg)};
@@ -1217,7 +1241,10 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     GenesisTx = genesis_tx(Cfg, Ns, Self),
     E = #entry{index = 1, data = quod_ledger:data([GenesisTx])},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    S#s{store = Store1, validators = apply_committee_delta(GenesisTx, []), slot = 1}.
+    {Validators, CommitteeId, _Ts, _Seqs} =
+        log_projection(Ns, [E], {[], undefined, 0, #{}}),
+    S#s{store = Store1, validators = Validators,
+        committee_id = CommitteeId, slot = 1}.
 
 %% The genesis transaction: assert each founding member's `peer_admitted/4` fact (the committee as facts),
 %% then the root ontology content from the `.pl` (if any). Facts + content are compiled through the erlog
@@ -2276,7 +2303,10 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                                        advance_author_seqs(Payload, S#s.author_seqs)})
                          end),
             S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
-            S1 = adopt_committee(Data, finalize(Slot, S0)),
+            %% Capture the hash while the finalized block is still present in the
+            %% engine. finalize/2 prunes that tree entry before the committee view
+            %% crosses its adoption boundary.
+            S1 = adopt_committee(Data, Slot, BH, finalize(Slot, S0)),
             timed_step(S, apply, fun() -> apply_live(Slot, Data, confirm_live(S1)) end)
     end.
 
@@ -2321,10 +2351,15 @@ engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
 %% after the next round had started. The facts are a pure function of the committed prefix and every node
 %% crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
-adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
-    case apply_committee_delta(Change, V) of
-        V  -> S;                                    %% no `peer_admitted` change → facts unchanged
-        V1 -> %% learn the fresh admit-fact address (OVERWRITE): the change just passed quorum-many
+adopt_committee(Change, Slot, BlockHash,
+                S = #s{ns = Ns, validators = V, committee_id = CommitteeId,
+                       self = Self, eng = Eng}) ->
+    {V1, CommitteeId1} =
+        advance_committee_view(
+          Ns, Slot, BlockHash, Change, V, CommitteeId),
+    case V1 =:= V of
+        true -> S;                                   %% no `peer_admitted` change → facts/view unchanged
+        false -> %% learn the fresh admit-fact address (OVERWRITE): the change just passed quorum-many
               %% peer_ready verdicts, so this address is live NOW — this is the dial hint a member that
               %% missed the candidate's digests (a quorum<N voter) needs to reach the new member for the
               %% next slot. Fires on every member at the live finality point (commit_block).
@@ -2337,7 +2372,9 @@ adopt_committee(Change, S = #s{validators = V, self = Self, eng = Eng}) ->
                                              "observer (committee ~b)", [S#s.ns, length(V1)]);
                       false -> ok
                   end,
-              S1 = prune_consensus_links(S#s{validators = V1}),   %% FACTS + transport scope advance
+              S1 = prune_consensus_links(
+                     S#s{validators = V1, committee_id = CommitteeId1}),
+                                                            %% FACTS/view + transport scope advance
               S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
 
@@ -3983,7 +4020,12 @@ dispatch_relay(Peer, {relay_submit, ReqId, TargetSlot,
 dispatch_relay(Peer, {relay_result, ReqId, Result}, S) ->
     {handle_relay_result(Peer, ReqId, Result, S), []};
 dispatch_relay(Peer, {relay_accepted, ReqId}, S) ->
-    {handle_relay_accepted(Peer, ReqId, S), []}.
+    {handle_relay_accepted(Peer, ReqId, S), []};
+%% Relay framing may learn a new, safely decoded version before this state
+%% machine serves it. Compatibility deployment must fail closed instead of
+%% letting an authenticated but unsupported frame crash the consensus owner.
+dispatch_relay(_Peer, _Unsupported, S) ->
+    {S, []}.
 
 verify_and_accept_relay(Peer, ReqId, TargetSlot, Submission, TraceCarrier,
                         S = #s{ns = Ns}) ->
@@ -4619,7 +4661,10 @@ sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
 apply_catchup_window(_Source, [], S) -> {S, ok};
-apply_catchup_window(Source, Es0, S = #s{store = Store, validators = Vs}) ->
+apply_catchup_window(
+  Source, Es0,
+  S = #s{ns = Ns, store = Store, validators = Vs,
+         committee_id = CommitteeId}) ->
     %% Idempotency: the live engine may have committed a prefix of this window while the pull worker was
     %% fetching it (a VOTING member gap-fills while still ingesting live consensus). Drop the already-present
     %% prefix so the append stays contiguous instead of failing `assert_contiguous`.
@@ -4629,8 +4674,10 @@ apply_catchup_window(Source, Es0, S = #s{store = Store, validators = Vs}) ->
     case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
-            {Vs1, Ts1, Seqs1} =
-                log_projection(Es, {Vs, S#s.last_ts, S#s.author_seqs}),
+            {Vs1, CommitteeId1, Ts1, Seqs1} =
+                log_projection(
+                  Ns, Es,
+                  {Vs, CommitteeId, S#s.last_ts, S#s.author_seqs}),
             %% only re-walk the window for dial hints when it actually changed the committee — the common
             %% content-only window (Vs1 =:= Vs) skips the whole flatmap. (A same-window remove+re-add nets
             %% Vs1 =:= Vs and is skipped — the accepted address-refresh residual; heals via a header hint.)
@@ -4646,7 +4693,8 @@ apply_catchup_window(Source, Es0, S = #s{store = Store, validators = Vs}) ->
             %% (`sink_catchup`) passes the result through `keep_progress/3`, so the discarded head state
             %% cancels its named watchdog before voting resumes.
             S1 = reseat_engine(
-                   Slot, S#s{store = Store1, validators = Vs1, slot = Slot,
+                   Slot, S#s{store = Store1, validators = Vs1,
+                             committee_id = CommitteeId1, slot = Slot,
                              last_ts = Ts1, author_seqs = Seqs1,
                              next_author_seq =
                                  max(S#s.next_author_seq,
@@ -4746,31 +4794,73 @@ block_from_entry(#entry{index = I, data = D, timestamp = Ts})
     end;
 block_from_entry(_) -> error.
 
-%% ONE pass over a run of committed entries yielding BOTH projections we need from the log: the validator
-%% set (fold `peer_admitted` asserts/retracts through `apply_committee_delta/2`) and the monotonic
-%% timestamp floor (max block time; `noop` skips carry 0 and never lower it). Seed `{[], 0}` for a full
-%% boot re-fold (streamed straight off the store via `quod_ledger_store:fold/5` + `log_projection_step/2`),
-%% or `{RunningVs, last_ts}` for an in-hand catch-up window — one step function, so the boot re-derive
-%% and the running set/bound can never drift.
--spec log_projection([#entry{}],
-                     {[node_id()], non_neg_integer(),
-                      #{node_id() => non_neg_integer()}}) ->
-        {[node_id()], non_neg_integer(),
+%% ONE pass over a run of committed entries yielding every durable ordering projection: validator facts,
+%% their exact adoption-block identity, the monotonic timestamp floor, and author sequence floors. The
+%% committee identity advances only when this exact entry changes the set. Content and `noop` entries
+%% therefore retain it, while remove→re-add in one window advances twice and the recurring set has a new
+%% identity. Boot replay and catch-up both use this per-entry step; the latter seeds the current view.
+-spec log_projection(
+        binary(), [#entry{}],
+        {[node_id()], binary() | undefined, non_neg_integer(),
+         #{node_id() => non_neg_integer()}}) ->
+        {[node_id()], binary() | undefined, non_neg_integer(),
          #{node_id() => non_neg_integer()}}.
-log_projection(Entries, Seed) ->
-    lists:foldl(fun log_projection_step/2, Seed, Entries).
+log_projection(Ns, Entries, Seed) ->
+    lists:foldl(fun(Entry, Acc) -> log_projection_step(Ns, Entry, Acc) end,
+                Seed, Entries).
 
-log_projection_step(#entry{data = Data, timestamp = T}, {V, Ts, Seqs}) ->
-    {apply_committee_delta(Data, V), max(T, Ts),
-     advance_author_seqs(Data, Seqs)}.
+log_projection_step(
+  Ns, #entry{data = Data, timestamp = T} = Entry,
+  {V, CommitteeId, Ts, Seqs}) ->
+    {V1, CommitteeId1} =
+        project_entry_committee_view(Ns, Entry, V, CommitteeId),
+    {V1, CommitteeId1, max(T, Ts), advance_author_seqs(Data, Seqs)}.
 
 checked_log_projection_step(
-  Ns, #entry{index = I, data = Data} = Entry, {V, _Ts, Seqs} = Acc) ->
+  Ns, #entry{index = I, data = Data} = Entry,
+  {V, _CommitteeId, _Ts, Seqs} = Acc) ->
     case valid_history_entry(Ns, I, Data, V)
          andalso historical_sequences_ok(I, Data, Seqs) of
-        true  -> log_projection_step(Entry, Acc);
+        true  -> log_projection_step(Ns, Entry, Acc);
         false -> error({invalid_transaction_history, I})
     end.
+
+%% Project one persisted entry onto the authoritative committee view. Reconstructing the committed block
+%% here is load-bearing: the view id is bound to the same block hash that its finality certificate covered,
+%% without adding a second hash representation to the ledger. A changed set can only come from a canonical
+%% batch, so block reconstruction must succeed after history/catch-up verification.
+project_entry_committee_view(
+  Ns, #entry{index = Slot, data = Data} = Entry, Validators, CommitteeId) ->
+    Validators1 = apply_committee_delta(Data, Validators),
+    case Validators1 =:= Validators of
+        true ->
+            {Validators, CommitteeId};
+        false ->
+            {ok, Block} = block_from_entry(Entry),
+            advance_committee_view(
+              Ns, Slot, block_hash(Block), Data, Validators, CommitteeId)
+    end.
+
+advance_committee_view(
+  Ns, AdoptionSlot, AdoptionBlockHash, Change, Validators, CommitteeId) ->
+    NewValidators = apply_committee_delta(Change, Validators),
+    case NewValidators =:= Validators of
+        true ->
+            {Validators, CommitteeId};
+        false ->
+            {NewValidators,
+             committee_view_id(
+               Ns, AdoptionSlot, AdoptionBlockHash, NewValidators)}
+    end.
+
+-spec committee_view_id(binary(), slot(), binary(), [node_id()]) -> binary().
+committee_view_id(Ns, AdoptionSlot, AdoptionBlockHash, NewValidators) ->
+    crypto:hash(
+      sha256,
+      term_to_binary(
+        {quod_committee_view, 1, Ns, AdoptionSlot, AdoptionBlockHash,
+         lists:sort(NewValidators)},
+        [deterministic])).
 
 historical_sequences_ok(1, {batch, [_Genesis]}, _Seqs) ->
     true;
@@ -4794,8 +4884,8 @@ historical_payload_sequences_ok(_Payload, _Seqs, _Seen) ->
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). Each transaction folds its diff (the validator id is the 4th arg / 5th element
 %% of `peer_admitted(NodeId, Host, Port, Pubkey)`); a `noop` or malformed payload changes nothing. This ONE
-%% function feeds BOTH the live commit-time swap (`adopt_committee/2`) and the boot/restart re-fold
-%% (`log_projection/2`), so the running set can never drift from a fresh re-fold.
+%% function feeds BOTH the live commit-time swap (`adopt_committee/4`) and the boot/restart re-fold
+%% (`log_projection/3`), so the running set can never drift from a fresh re-fold.
 committee_delta(#transaction{} = Transaction) ->
     committee_transaction(Transaction, {[], []});
 committee_delta({batch, _} = Batch) ->
@@ -4876,8 +4966,27 @@ valid_cfg(Config, Cfg) ->
 
 valid_batch_window(Cfg) ->
     case maps:get(batch_window_ms, Cfg) of
-        N when is_integer(N), N >= 0, N =< 1000 -> valid_committee(Cfg);
+        N when is_integer(N), N >= 0, N =< 1000 -> valid_relay_protocol(Cfg);
         Other -> {error, {bad_batch_window_ms, Other}}
+    end.
+
+valid_relay_protocol(Cfg) ->
+    case maps:get(relay_protocol, Cfg) of
+        v1    -> valid_ingress_retarget(v1, Cfg);
+        v2    -> valid_ingress_retarget(v2, Cfg);
+        Other -> {error, {bad_relay_protocol, Other}}
+    end.
+
+valid_ingress_retarget(Protocol, Cfg) ->
+    case maps:get(ingress_retarget, Cfg) of
+        false ->
+            valid_committee(Cfg);
+        true when Protocol =:= v2 ->
+            valid_committee(Cfg);
+        true ->
+            {error, ingress_retarget_requires_relay_v2};
+        Other ->
+            {error, {bad_ingress_retarget, Other}}
     end.
 
 valid_committee(Cfg) ->
@@ -4922,7 +5031,11 @@ status_map(S) ->
     Role = case is_participant(S) of true -> validator; false -> observer end,
     {_ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
     ProposalSlot = S#s.approved + 1,
-    #{role => Role, committee => S#s.validators, slot => S#s.slot,
+    #{role => Role, committee => S#s.validators,
+      committee_id => S#s.committee_id,
+      relay_protocol => S#s.relay_protocol,
+      ingress_retarget => S#s.ingress_retarget,
+      slot => S#s.slot,
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
       finality_slot => S#s.slot + 1,

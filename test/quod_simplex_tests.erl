@@ -36,6 +36,95 @@ block_hash_deterministic_test() ->
     ?assertEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(5))),
     ?assertNotEqual(quod_simplex:block_hash(blk(5)), quod_simplex:block_hash(blk(6))).
 
+%% The committee view is the membership set PLUS the exact committed block that adopted it. Boot replay
+%% and catch-up both fold the same per-entry projector, and the live path feeds the same formula with the
+%% engine-captured block hash. Content/noop slots do not invent revisions.
+committee_view_projection_test() ->
+    Ns = <<"committee:view">>,
+    [A, B, C] = lists:sort(pubs(committee(3))),
+    Genesis = #entry{index = 1,
+                     data = quod_ledger:data([tx([pa(B), pa(A)])])},
+    Content = #entry{index = 2,
+                     data = quod_ledger:data(
+                              [tx([{assert, {{content, kept}, true}}])]),
+                     timestamp = 123},
+    Skipped = #entry{index = 3, data = noop},
+    AdmitC = #entry{index = 4,
+                    data = quod_ledger:data([tx([pa(C)])]),
+                    timestamp = 456},
+    {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
+    GenesisHash = quod_simplex:block_hash(GenesisBlock),
+    ExpectedGenesisId =
+        crypto:hash(
+          sha256,
+          term_to_binary(
+            {quod_committee_view, 1, Ns, 1, GenesisHash,
+             lists:sort([A, B])},
+            [deterministic])),
+    Seed = {[], undefined, 0, #{}},
+    {[A, B], GenesisId, 0, Seqs1} =
+        quod_simplex:test_log_projection(Ns, [Genesis], Seed),
+    ?assertEqual(32, byte_size(GenesisId)),
+    ?assertEqual(ExpectedGenesisId, GenesisId),
+    ?assertEqual(
+       GenesisId,
+       quod_simplex:committee_view_id(Ns, 1, GenesisHash, [B, A])),
+
+    %% Folding a window in one call and streaming it entry-by-entry are identical.
+    AfterStable =
+        quod_simplex:test_log_projection(
+          Ns, [Content, Skipped], {[A, B], GenesisId, 0, Seqs1}),
+    {[A, B], GenesisId, 123, Seqs3} = AfterStable,
+    Full = quod_simplex:test_log_projection(
+             Ns, [Genesis, Content, Skipped, AdmitC], Seed),
+    Streamed = quod_simplex:test_log_projection(
+                 Ns, [AdmitC], {[A, B], GenesisId, 123, Seqs3}),
+    ?assertEqual(Full, Streamed),
+    {[A, B, C], AdmitCId, 456, _} = Full,
+    {ok, AdmitCBlock} = quod_simplex:block_from_entry(AdmitC),
+    ?assertEqual(
+       quod_simplex:committee_view_id(
+         Ns, 4, quod_simplex:block_hash(AdmitCBlock), [A, B, C]),
+       AdmitCId),
+    ?assertNotEqual(GenesisId, AdmitCId).
+
+%% Returning to the same validator set in a later membership block is a new view, while an idempotent
+%% re-assert that does not change the facts retains the current identity.
+committee_view_recurring_set_revision_test() ->
+    Ns = <<"committee:recurring">>,
+    [A, B] = lists:sort(pubs(committee(2))),
+    Entries =
+        [#entry{index = 1,
+                data = quod_ledger:data([tx([pa(A), pa(B)])])},
+         #entry{index = 2,
+                data = quod_ledger:data([tx([rm(B)])]),
+                timestamp = 10},
+         #entry{index = 3,
+                data = quod_ledger:data([tx([pa(B)])]),
+                timestamp = 11}],
+    [Genesis, Removed, Readded] = Entries,
+    {Set1, Id1, Ts1, Seqs1} =
+        quod_simplex:test_log_projection(
+          Ns, [Genesis], {[], undefined, 0, #{}}),
+    {Set2, Id2, Ts2, Seqs2} =
+        quod_simplex:test_log_projection(
+          Ns, [Removed], {Set1, Id1, Ts1, Seqs1}),
+    {Set3, Id3, Ts3, Seqs3} =
+        quod_simplex:test_log_projection(
+          Ns, [Readded], {Set2, Id2, Ts2, Seqs2}),
+    ?assertEqual([A, B], Set1),
+    ?assertEqual([A], Set2),
+    ?assertEqual([A, B], Set3),
+    ?assertNotEqual(Id1, Id2),
+    ?assertNotEqual(Id1, Id3),
+    ?assertNotEqual(Id2, Id3),
+    Reassert = #entry{index = 4,
+                      data = quod_ledger:data([tx([pa(B)])]),
+                      timestamp = 12},
+    {[A, B], Id3, 12, _} =
+        quod_simplex:test_log_projection(
+          Ns, [Reassert], {Set3, Id3, Ts3, Seqs3}).
+
 canonical_ledger_payload_test() ->
     Transaction = tx([{assert, {{fact, canonical}, true}}]),
     Data = quod_ledger:data([Transaction]),
@@ -68,6 +157,32 @@ initial_sync_test() ->
     ?assertEqual(unconfirmed, Init([])),
     ?assertEqual(unconfirmed, Init([<<"me">>, <<"b">>])),
     ?assertEqual(unconfirmed, Init([<<"b">>])).
+
+relay_activation_gate_validation_test() ->
+    Base = #{node_id => <<0:256>>},
+    ?assertEqual(ok, quod_simplex:test_valid_cfg(Base)),
+    ?assertEqual(
+       {error, ingress_retarget_requires_relay_v2},
+       quod_simplex:test_valid_cfg(
+         Base#{relay_protocol => v1, ingress_retarget => true})),
+    ?assertEqual(
+       ok,
+       quod_simplex:test_valid_cfg(
+         Base#{relay_protocol => v2, ingress_retarget => true})),
+    ?assertEqual(
+       {error, {bad_relay_protocol, v3}},
+       quod_simplex:test_valid_cfg(Base#{relay_protocol => v3})),
+    ?assertEqual(
+       {error, {bad_ingress_retarget, enabled}},
+       quod_simplex:test_valid_cfg(
+         Base#{relay_protocol => v2, ingress_retarget => enabled})),
+    Empty = st(#{}),
+    ?assertEqual({v1, false}, quod_simplex:test_ingress_gates(Empty)),
+    ?assertEqual(undefined, quod_simplex:test_committee_id(Empty)),
+    ?assertEqual(
+       {v2, true},
+       quod_simplex:test_ingress_gates(
+         st(#{relay_protocol => v2, ingress_retarget => true}))).
 
 %% is_participant is FACTS-ONLY now — Self ∈ active_validators, with no sync/boot coupling.
 is_participant_test() ->
@@ -2014,6 +2129,22 @@ duplicate_inflight_relay_is_acknowledged_test() ->
     {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Acked),
     ?assertEqual([Author], OutboxPeers),
     ?assertEqual(1, maps:get(relay_duplicates, quod_simplex:stats_map(Acked))).
+
+%% The codec is deployed before v2 serving. A valid authenticated v2 frame reaching a v1-only state
+%% machine must be ignored without changing state or crashing the consensus owner.
+unsupported_v2_relay_is_safely_dropped_test() ->
+    Ns = <<"relay:v2:safe-drop">>,
+    Peer = <<3:256>>,
+    V2 = {relay_submit_v2, <<1:128>>, <<2:128>>, <<8:256>>, 7,
+          {submit, Peer, <<4:512>>, <<5, 6, 7>>}, []},
+    {relay, Decoded} =
+        quod_relay:decode_frame(quod_relay:encode(Ns, V2), Ns),
+    S = st(#{self => <<"self">>, validators => [<<"self">>],
+             slot => 6, approved => 6,
+             eng => quod_simplex:eng_with_certs(6, [])}),
+    {S1, Actions} = quod_simplex:test_dispatch_relay(Peer, Decoded, S),
+    ?assertEqual(S, S1),
+    ?assertEqual([], Actions).
 
 %% A leader latched into a final-vote camp for its OWN in-flight slot must STILL redrive
 %% the proposal on every Δ: the link send is fire-and-forget, so the Δ re-fire is the

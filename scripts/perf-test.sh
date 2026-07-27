@@ -19,6 +19,7 @@ set -euo pipefail
 : "${MAX_ATTEMPTS:=100}"
 : "${RETRY_DELAY_MS:=40}"
 : "${PREFLIGHT_TIMEOUT_S:=30}"
+: "${EXPECTED_INGRESS_RETARGET:=}"
 : "${RESULT_DIR:=}"
 
 usage() {
@@ -39,6 +40,8 @@ Options:
   --max-attempts N          maximum HTTP attempts per operation (default: 100)
   --retry-delay-ms MS       delay between safe retries (default: 40)
   --preflight-timeout SEC   wait for one fully converged fleet snapshot (default: 30)
+  --expected-ingress-retarget true|false
+                            require this fleet-wide retarget gate (optional)
   --consul-addr URL         Consul HTTP endpoint
   --result-dir PATH         retain raw request timings here
   --help                    show this help
@@ -73,6 +76,8 @@ while [ "$#" -gt 0 ]; do
     --max-attempts|--max-attempts=*) take_value "$@"; MAX_ATTEMPTS=$ARG_VALUE ;;
     --retry-delay-ms|--retry-delay-ms=*) take_value "$@"; RETRY_DELAY_MS=$ARG_VALUE ;;
     --preflight-timeout|--preflight-timeout=*) take_value "$@"; PREFLIGHT_TIMEOUT_S=$ARG_VALUE ;;
+    --expected-ingress-retarget|--expected-ingress-retarget=*)
+      take_value "$@"; EXPECTED_INGRESS_RETARGET=$ARG_VALUE ;;
     --consul-addr|--consul-addr=*) take_value "$@"; CONSUL_ADDR=$ARG_VALUE ;;
     --result-dir|--result-dir=*) take_value "$@"; RESULT_DIR=$ARG_VALUE ;;
     -*) die "unknown option: $1" ;;
@@ -95,6 +100,10 @@ done
 [ "$WAVES" -gt 0 ] || die "waves must be positive"
 [ "$REQUESTS_PER_NODE" -gt 0 ] || die "requests-per-node must be positive"
 [ "$MAX_ATTEMPTS" -gt 0 ] || die "max-attempts must be positive"
+case "$EXPECTED_INGRESS_RETARGET" in
+  ""|true|false) ;;
+  *) die "expected-ingress-retarget must be true or false" ;;
+esac
 
 if [ -z "$RESULT_DIR" ]; then
   RESULT_DIR="/tmp/quod-perf-$(date +%Y%m%d-%H%M%S)-$TX_PREDICATE"
@@ -160,8 +169,10 @@ preflight_snapshot() {
   local output="$RESULT_DIR/preflight.tsv.tmp"
   local endpoint payload row node pubkey batch role syncing node_height applied
   local genesis committee_size node_in_committee committee reachable_count
+  local committee_id ingress_retarget
   local reference_height= reference_committee= reference_batch=
   local reference_genesis= reference_committee_size=
+  local reference_committee_id= reference_ingress_retarget=
   local -A batch_by_node=()
   local -A metrics_by_node=()
   local -A seen_nodes=()
@@ -206,6 +217,12 @@ preflight_snapshot() {
           | ($n.committee
              | map(.pubkey // error("committee pubkey missing"))
              | sort) as $committee
+          | ($n.committee_id // error("missing committee_id")) as $committee_id
+          | ($n.ingress_retarget
+             | if type == "boolean"
+               then tostring
+               else error("invalid ingress_retarget")
+               end) as $ingress_retarget
           | [$node,
              $pubkey,
              $n.role,
@@ -215,14 +232,17 @@ preflight_snapshot() {
              ($n.genesis // error("missing genesis")),
              ($committee | length | tostring),
              (($committee | index($pubkey)) != null | tostring),
-             ($committee | join(","))]
+             ($committee | join(",")),
+             $committee_id,
+             $ingress_retarget]
           | @tsv'
     ); then
       PREFLIGHT_ERROR="$endpoint has no complete $NS status"
       return 1
     fi
     IFS=$'\t' read -r node pubkey role syncing node_height applied genesis \
-      committee_size node_in_committee committee <<< "$row"
+      committee_size node_in_committee committee committee_id \
+      ingress_retarget <<< "$row"
 
     if [ "$role" != validator ] || [ "$syncing" != false ]; then
       PREFLIGHT_ERROR="$endpoint node=$node is role=$role syncing=$syncing"
@@ -256,6 +276,22 @@ preflight_snapshot() {
       PREFLIGHT_ERROR="$endpoint node=$node pubkey is absent from its committee"
       return 1
     fi
+    if ! [[ "$committee_id" =~ ^[0-9a-f]{64}$ ]]; then
+      PREFLIGHT_ERROR="$endpoint node=$node reports invalid committee_id"
+      return 1
+    fi
+    case "$ingress_retarget" in
+      true|false) ;;
+      *)
+        PREFLIGHT_ERROR="$endpoint node=$node reports invalid ingress_retarget=$ingress_retarget"
+        return 1
+        ;;
+    esac
+    if [ -n "$EXPECTED_INGRESS_RETARGET" ] &&
+       [ "$ingress_retarget" != "$EXPECTED_INGRESS_RETARGET" ]; then
+      PREFLIGHT_ERROR="$endpoint ingress_retarget=$ingress_retarget expected=$EXPECTED_INGRESS_RETARGET"
+      return 1
+    fi
     if [ -n "${seen_nodes[$node]+present}" ]; then
       PREFLIGHT_ERROR="duplicate explorer identity $node"
       return 1
@@ -278,6 +314,8 @@ preflight_snapshot() {
       reference_batch=$batch
       reference_genesis=$genesis
       reference_committee_size=$committee_size
+      reference_committee_id=$committee_id
+      reference_ingress_retarget=$ingress_retarget
     elif [ "$node_height" != "$reference_height" ]; then
       PREFLIGHT_ERROR="height divergence: $endpoint=$node_height expected=$reference_height"
       return 1
@@ -293,14 +331,19 @@ preflight_snapshot() {
     elif [ "$committee_size" != "$reference_committee_size" ]; then
       PREFLIGHT_ERROR="committee-size divergence at $endpoint node=$node"
       return 1
+    elif [ "$committee_id" != "$reference_committee_id" ]; then
+      PREFLIGHT_ERROR="committee_id divergence at $endpoint node=$node"
+      return 1
+    elif [ "$ingress_retarget" != "$reference_ingress_retarget" ]; then
+      PREFLIGHT_ERROR="ingress_retarget divergence: $endpoint=$ingress_retarget expected=$reference_ingress_retarget"
+      return 1
     fi
 
-    # Keep the original six preflight columns stable; append the stronger
-    # identity/projection fields for later audit.
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
+    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
       "$endpoint" "$node" "$node_height" "$batch" "$role" \
       "${metrics_by_node[$node]}" "$pubkey" "$applied" "$genesis" \
-      "$committee_size" "$committee" >> "$output"
+      "$committee_size" "$committee" "$committee_id" \
+      "$ingress_retarget" >> "$output"
   done
 
   reachable_count=${#seen_pubkeys[@]}
@@ -325,8 +368,8 @@ wait_for_preflight() {
 
   echo "cluster preflight"
   awk -F'\t' '
-    {printf "  %s node=%s height=%s applied=%s batch_window_ms=%s genesis=%s committee=%s metrics=%s\n",
-            $1, $2, $3, $8, $4, $9, $10, $6}
+    {printf "  %s node=%s height=%s applied=%s batch_window_ms=%s genesis=%s committee=%s committee_id=%s retarget=%s metrics=%s\n",
+            $1, $2, $3, $8, $4, $9, $10, $12, $13, $6}
   ' "$RESULT_DIR/preflight.tsv"
 }
 

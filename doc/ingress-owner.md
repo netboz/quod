@@ -1,6 +1,6 @@
 # Ingress ownership and signed-submission retargeting
 
-Status: reviewed design; compatibility foundations staged  
+Status: reviewed design; definitive attempt-scoped relay foundation staged
 Scope: transaction custody and relay; no change to Simplex ordering, voting, or proposer selection
 
 ## Why this change exists
@@ -42,20 +42,14 @@ sha256(term_to_binary(
    lists:sort(NewValidators)}, [deterministic]))
 ```
 
-The current relay `ReqId` is the `SubmissionId`. Reusing it across target slots
-is incorrect: inbound-flight and completed-result caches are keyed only by that
-ID, while accepted/result frames do not echo a slot. A delayed or cached result
-from an old slot could therefore affect a new placement, especially when
-round-robin leadership returns to the same peer.
-
-Version 2 relay messages bind every acknowledgement and result to both logical
-and placement identity:
+The definitive relay protocol binds every acknowledgement and result to both
+logical and placement identity:
 
 ```erlang
-{relay_submit_v2, SubmissionId, AttemptId, CommitteeId, TargetSlot,
-                  Submission, TraceCarrier}
-{relay_accepted_v2, SubmissionId, AttemptId, CommitteeId, TargetSlot}
-{relay_result_v2, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result}
+{relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+               Submission, TraceCarrier}
+{relay_accepted, SubmissionId, AttemptId, CommitteeId, TargetSlot}
+{relay_result, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result}
 ```
 
 The receiver derives `SubmissionId` from the bounded opaque submission envelope
@@ -63,9 +57,15 @@ and derives `AttemptId` from that ID plus the bounded outer placement fields. It
 validates the exact committee view, verifies the author signature over the
 still-opaque canonical bytes, and only then decodes and namespace/author-binds
 the transaction. Attempt/result caches use `AttemptId`; commit matching uses
-`SubmissionId`. During compatibility, all cache keys are protocol tagged
-(`{v1, SubmissionId}` or `{v2, AttemptId}`), so a coincident 16-byte v1 and v2
-identifier cannot alias.
+`SubmissionId`. Each inflight/cache value also retains the complete
+peer/identity/view/slot reference and is write-once: a same-key,
+different-context collision fails closed.
+
+Current committee-view equality gates only the first admission of an attempt.
+An exact inflight duplicate or cached result admitted under an older view is
+still answered from its stored context after membership advances. Likewise, an
+origin matches a late response against the stored attempt, not its current
+committee view.
 
 ## Safety invariants
 
@@ -128,10 +128,11 @@ ingress contract:
 - proposal ordering, batching acceptance, voting, certificates, and finality;
 - ordered slot-finalization notifications to ingress.
 
-Relay v2 uses a separate authenticated `{ingress, Ns}` transport channel.
-Consensus proposals, shares, and certificates remain on `{log, Ns}`. This
-removes relay submits, duplicates, acknowledgements, and results from the
-serial consensus mailbox instead of merely forwarding them through it.
+The final transport split moves the attempt relay to a separate authenticated
+`{ingress, Ns}` channel while consensus proposals, shares, and certificates
+remain on `{log, Ns}`. That later cutover removes relay submits, duplicates,
+acknowledgements, and results from the serial consensus mailbox instead of
+merely forwarding them through it.
 
 Ingress and Simplex must share an explicit incarnation contract. Every route
 view carries a fresh Simplex incarnation token and monotonic version. After a
@@ -162,27 +163,18 @@ still commit.
 
 ## Staged delivery
 
-### Stage 1 — relay-v2 compatibility foundation
+### Stage 1 — definitive attempt relay and retained custody
 
+- Use the single attempt-scoped relay contract.
 - Add stable `SubmissionId`, committee-view identity, and slot-bound
-  `AttemptId`.
-- Decode and serve relay v1 and v2 with bounded, attempt-scoped v2 caches.
-- Add separate `relay_protocol = v1 | v2` and `ingress_retarget` gates, both
-  defaulting to the old behavior. Reject `ingress_retarget = true` unless
-  `relay_protocol = v2`.
-- Match every v2 acknowledgement/result against peer, `SubmissionId`,
+  `AttemptId`, with bounded write-once attempt caches.
+- Match every acknowledgement/result against peer, `SubmissionId`,
   `AttemptId`, committee identity, and exact slot.
-- Deploy the compatible binary fleet-wide while continuing to emit v1 and
-  keeping retained custody disabled.
-
-This stage changes no placement, ordering, or caller semantics.
-
-### Stage 2 — activate v2, then retained custody in the current Simplex owner
-
-After every validator is known to decode v2, switch emission to v2 while
-retargeting remains disabled. Once v1 attempts have drained and v2 operation is
-observed:
-
+- Keep `ingress_retarget` as the sole behavioral gate. `false` preserves
+  caller-visible exclusion after origin-local finality; `true` retains ordinary
+  content for internal reconsideration.
+- Export `committee_id` and `ingress_retarget`. The fixed-work preflight requires
+  the whole committee to report the same values before offering a write.
 - Retain locally signed submissions, caller, per-author position, and original
   deadline in one custody record.
 - Make collecting batches, local proposals, and outbound relays reference that
@@ -208,37 +200,37 @@ extraction. The first behavioral slice retains ordinary content writes only;
 committee-changing transactions preserve the old terminal skip/re-proof
 contract until membership-verdict skip loops have a separately reviewed rule.
 
-There is no timeout-based downgrade from v2 to v1. A timeout is ambiguous and
-must not create a second protocol attempt for the same placement.
+Protocol rollout is deliberately quiesced. Stop new writes, let every pending
+write and relay result cache drain, deploy the definitive binary across the
+whole committee, require identical committee identity and ingress behavior from
+every member, and only then resume writes. A timeout is ambiguous and must not
+create a second attempt for the same placement.
+Rollback uses the same boundary—quiesce writes, wait for custody and attempt
+caches to drain, then replace the fleet as one protocol generation.
 
-Rollback is also staged: disable retargeting, let every retained custody record
-resolve or expire, switch emission back to v1, and drain outstanding v2
-attempts plus the result-cache TTL before installing a binary that cannot
-decode v2.
-
-### Stage 3 — isolate pure ingress state
+### Stage 2 — isolate pure ingress state
 
 - Move custody/routing transitions into a pure ingress state module without
   changing process ownership.
 - Add a cached, versioned Simplex route view.
 
-### Stage 4 — sequence durability and process extraction
+### Stage 3 — sequence durability and process extraction
 
 - Land the durable, synced author-sequence high-water lease.
 - Move the pure state into `quod_ingress`.
 - Add incarnation-aware restart classification and fault-inject the selected
   supervision layout.
 
-### Stage 5 — migrate the transport channel
+### Stage 4 — migrate the transport channel
 
-- Make old and new binaries dual-subscribe to `{log, Ns}` and `{ingress, Ns}`.
-- Activate v2 relay emission on `{ingress, Ns}` only after fleet compatibility.
-- Drain old-channel relay attempts and caches before dropping the old
-  subscription.
+- Quiesce new writes and wait for custody plus attempt caches to drain.
+- Replace the fleet with the generation that carries relay traffic only on
+  `{ingress, Ns}` while consensus remains on `{log, Ns}`.
+- Verify all committee members on the new channel before resuming writes.
 
-This is a separate rolling protocol change from process extraction.
+This is a separate quiesced protocol cutover from process extraction.
 
-### Stage 6 — sealed-batch interface
+### Stage 5 — sealed-batch interface
 
 - Send one sealed, revalidated batch offer to Simplex rather than one statem
   event per incoming transaction.
@@ -264,7 +256,7 @@ Correctness tests must cover:
   ingress notification;
 - destination restart before and after accepted acknowledgement;
 - original deadline and caller `outcome_unknown`;
-- v1/v2 mixed-binary and mixed-feature matrices;
+- quiesced protocol cutover and fail-closed rejection of unsupported relay shapes;
 - one ledger occurrence of each retained signed submission in the honest
   ingress workload;
 - no overtaking across blocks in an honest per-author ingress lane.

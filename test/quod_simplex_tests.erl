@@ -158,31 +158,23 @@ initial_sync_test() ->
     ?assertEqual(unconfirmed, Init([<<"me">>, <<"b">>])),
     ?assertEqual(unconfirmed, Init([<<"b">>])).
 
-relay_activation_gate_validation_test() ->
+ingress_retarget_gate_validation_test() ->
     Base = #{node_id => <<0:256>>},
     ?assertEqual(ok, quod_simplex:test_valid_cfg(Base)),
     ?assertEqual(
-       {error, ingress_retarget_requires_relay_v2},
+       {error, ingress_retarget_not_supported},
        quod_simplex:test_valid_cfg(
-         Base#{relay_protocol => v1, ingress_retarget => true})),
-    ?assertEqual(
-       ok,
-       quod_simplex:test_valid_cfg(
-         Base#{relay_protocol => v2, ingress_retarget => true})),
-    ?assertEqual(
-       {error, {bad_relay_protocol, v3}},
-       quod_simplex:test_valid_cfg(Base#{relay_protocol => v3})),
+         Base#{ingress_retarget => true})),
     ?assertEqual(
        {error, {bad_ingress_retarget, enabled}},
        quod_simplex:test_valid_cfg(
-         Base#{relay_protocol => v2, ingress_retarget => enabled})),
+         Base#{ingress_retarget => enabled})),
     Empty = st(#{}),
-    ?assertEqual({v1, false}, quod_simplex:test_ingress_gates(Empty)),
+    ?assertEqual(false, quod_simplex:test_ingress_gates(Empty)),
     ?assertEqual(undefined, quod_simplex:test_committee_id(Empty)),
     ?assertEqual(
-       {v2, true},
-       quod_simplex:test_ingress_gates(
-         st(#{relay_protocol => v2, ingress_retarget => true}))).
+       true,
+       quod_simplex:test_ingress_gates(st(#{ingress_retarget => true}))).
 
 %% is_participant is FACTS-ONLY now — Self ∈ active_validators, with no sync/boot coupling.
 is_participant_test() ->
@@ -361,7 +353,21 @@ sync_arm_pacing_test() ->
     ?assertEqual({0, 0, 0}, quod_simplex:reset_pace()).
 
 %% minimal-state builder for the pure gate predicates (the #s record is private to quod_simplex)
-st(Overrides) -> quod_simplex:test_state(Overrides).
+st(Overrides) ->
+    %% Every founded test committee has the same kind of authoritative view
+    %% identity as a live/replayed node. Tests that intentionally model an
+    %% unfounded state leave `validators` empty; explicit committee ids win.
+    WithCommitteeId =
+        case {maps:is_key(committee_id, Overrides),
+              maps:get(validators, Overrides, [])} of
+            {false, [_ | _]} ->
+                Overrides#{
+                  committee_id =>
+                      crypto:hash(sha256, <<"simplex-test-committee-view">>)};
+            _ ->
+                Overrides
+        end,
+    quod_simplex:test_state(WithCommitteeId).
 
 voting_readiness(Peers, LinkPid, Height) ->
     Now = quod_time:mono_ms(),
@@ -1525,12 +1531,15 @@ queued_membership_stops_the_drain_test() ->
                   slot => 3, approved => 4,
                   eng => Eng,
                   ingress =>
-                      [{relayed, {relay, AuthorA, <<10:128>>}, Membership, Now},
-                       {relayed, {relay, AuthorB, <<11:128>>}, Ordinary, Now}]}),
+                      [{relayed, AuthorA, 5, Membership, Now},
+                       {relayed, AuthorB, 5, Ordinary, Now}]}),
     %% The ordinary write could enter slot 5 in isolation; queue ordering is what
     %% deliberately holds it behind the membership boundary.
+    OrdinaryOrigin =
+        quod_simplex:test_relay_origin(AuthorB, 5, Ordinary, Queued),
     ?assertEqual({collect, 5},
-                 quod_simplex:route(drain, {relayed, 5}, Ordinary, Queued)),
+                 quod_simplex:route(
+                   drain, OrdinaryOrigin, Ordinary, Queued)),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {2, _, #{AuthorA := 1, AuthorB := 1},
      [{relayed, <<"membership-head">>, _},
@@ -1566,21 +1575,24 @@ blocked_author_does_not_block_other_authors_test() ->
                 eng => quod_simplex:eng_with_certs(3, [])}),
     {WithBatch, _BatchActions} =
         quod_simplex:test_relayed_append(
-          {relay, FillerAuthor, <<12:128>>}, Filler, Base),
+          FillerAuthor, Filler, Base),
     Now = quod_time:mono_ms(),
     Queued = quod_simplex:test_state_set(
                ingress,
-               [{relayed, {relay, AuthorA, <<13:128>>}, A1, Now},
-                {relayed, {relay, AuthorA, <<14:128>>}, A2, Now + 1},
-               {relayed, {relay, AuthorB, <<15:128>>}, B, Now + 2}],
+               [{relayed, AuthorA, 4, A1, Now},
+                {relayed, AuthorA, 4, A2, Now + 1},
+                {relayed, AuthorB, 4, B, Now + 2}],
                WithBatch),
     ?assert(quod_simplex:test_ingress_needs_drain(WithBatch, Queued)),
+    A1Origin = quod_simplex:test_relay_origin(AuthorA, 4, A1, Queued),
+    A2Origin = quod_simplex:test_relay_origin(AuthorA, 4, A2, Queued),
+    BOrigin = quod_simplex:test_relay_origin(AuthorB, 4, B, Queued),
     ?assertMatch({park, _},
-                 quod_simplex:route(drain, {relayed, 4}, A1, Queued)),
+                 quod_simplex:route(drain, A1Origin, A1, Queued)),
     ?assertEqual({collect, 4},
-                 quod_simplex:route(drain, {relayed, 4}, A2, Queued)),
+                 quod_simplex:route(drain, A2Origin, A2, Queued)),
     ?assertEqual({collect, 4},
-                 quod_simplex:route(drain, {relayed, 4}, B, Queued)),
+                 quod_simplex:route(drain, BOrigin, B, Queued)),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {2, _, #{AuthorA := 2},
      [{relayed, <<"a-large">>, _}, {relayed, <<"a-small">>, _}]} =
@@ -1621,14 +1633,14 @@ drain_rechecks_held_authors_after_route_change_test() ->
                 eng => quod_simplex:eng_with_certs(3, [])}),
     {WithBatch, _} =
         quod_simplex:test_relayed_append(
-          {relay, FillerAuthor, <<21:128>>}, Filler, Base),
+          FillerAuthor, Filler, Base),
     Now = quod_time:mono_ms(),
     Queued = quod_simplex:test_state_set(
                ingress,
-               [{relayed, {relay, AuthorA, <<22:128>>}, A1, Now},
-                {relayed, {relay, AuthorA, <<23:128>>}, A2, Now + 1},
-                {relayed, {relay, AuthorB, <<24:128>>}, B, Now + 2},
-                {relayed, {relay, AuthorC, <<25:128>>}, C, Now + 3}],
+               [{relayed, AuthorA, 4, A1, Now},
+                {relayed, AuthorA, 4, A2, Now + 1},
+                {relayed, AuthorB, 4, B, Now + 2},
+                {relayed, AuthorC, 4, C, Now + 3}],
                WithBatch),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
@@ -1653,13 +1665,17 @@ queued_work_survives_temporary_unready_state_test() ->
                      sync => unconfirmed, slot => 3, approved => 3,
                      eng => quod_simplex:eng_with_certs(3, []),
                      ingress =>
-                         [{relayed, {relay, Author, <<16:128>>}, Tx, Now}]}),
+                         [{relayed, Author, 4, Tx, Now}]}),
+    Origin4 =
+        quod_simplex:test_relay_origin(Author, 4, Tx, Recovering),
+    Origin5 =
+        quod_simplex:test_relay_origin(Author, 5, Tx, Recovering),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, {relayed, 4}, Tx, Recovering)),
+                 quod_simplex:route(entry, Origin4, Tx, Recovering)),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(drain, {relayed, 4}, Tx, Recovering)),
+                 quod_simplex:route(drain, Origin4, Tx, Recovering)),
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, {relayed, 5}, Tx, Recovering)),
+                 quod_simplex:route(entry, Origin5, Tx, Recovering)),
     {Held, []} = quod_simplex:test_drain(Recovering),
     {1, _, _, [{relayed, <<"recovering-queue">>, _}]} =
         quod_simplex:test_ingress(Held),
@@ -1697,7 +1713,7 @@ ingress_overflow_and_author_cap_test() ->
     OtherTx = signed_tx(<<"t">>, <<"other-park">>,
                         [{assert, {{other, fact}, true}}], {Other, OtherId}),
     {S66, []} = quod_simplex:test_relayed_append(
-                  {relay, Other, binary:copy(<<2>>, 16)}, OtherTx, S65),
+                  Other, OtherTx, S65),
     {65, _, #{Other := 1}, _} = quod_simplex:test_ingress(S66).
 
 %% TTL expiry fails VISIBLY (busy) and walks only the queue head — a stalled cluster
@@ -1746,7 +1762,8 @@ drain_forwards_to_next_leader_with_anchored_deadline_test() ->
     %% enqueue time — park time counts against the caller's budget, not on top of it
     {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Drained),
     ?assertEqual([TargetLeader], OutboxPeers),
-    [{_ReqId, Target, 4, Deadline}] = quod_simplex:test_relay_pending(Drained),
+    [{_AttemptId, Target, 4, Deadline}] =
+        quod_simplex:test_relay_pending(Drained),
     ?assertEqual(TargetLeader, Target),
     ?assert(Deadline =< Anchor + 32000),                  %% anchored: ~Anchor + 31s
     ?assert(Deadline < quod_time:mono_ms() + 30000).      %% NOT re-anchored at drain time
@@ -1765,7 +1782,8 @@ origin_routes_to_earliest_seat_test() ->
              eng => quod_simplex:eng_with_certs(3, [])}),
     {Sent, []} = quod_simplex:test_append(From, lt($g, Me), S),
     {0, 0, _, []} = quod_simplex:test_ingress(Sent),
-    [{_ReqId, Target, 4, _Deadline}] = quod_simplex:test_relay_pending(Sent),
+    [{_AttemptId, Target, 4, _Deadline}] =
+        quod_simplex:test_relay_pending(Sent),
     ?assertEqual(ExpectedTarget, Target),
     %% A live entry is not a drain forward.
     ?assertEqual(0, maps:get(ingress_forwarded, quod_simplex:stats_map(Sent))).
@@ -1853,8 +1871,7 @@ stale_seq_is_retryable_test() ->
     S = st(#{self => A, id => IdA, validators => pubs(Committee), sync => ready,
              slot => 5, approved => 5, eng => quod_simplex:eng_with_certs(0, []),
              author_seqs => #{A => 9}}),   %% committed floor already past seq 2
-    ReplyTo = {relay, A, binary:copy(<<1>>, 16)},
-    {S1, []} = quod_simplex:test_relayed_append(ReplyTo, Signed, S),
+    {S1, []} = quod_simplex:test_relayed_append(A, Signed, S),
     %% the relay result frame carrying {error, stale_seq} is queued toward the origin
     {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(S1),
     ?assertEqual([A], OutboxPeers),
@@ -1893,10 +1910,12 @@ closed_target_slot_is_rejected_test() ->
     Closed = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                   slot => 3, approved => 3, eng => E2}),
     ?assert(quod_simplex:proposal_visible(4, Closed)),
+    ClosedOrigin =
+        quod_simplex:test_relay_origin(Author, 4, Tx, Closed),
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, {relayed, 4}, Tx, Closed)),
+                 quod_simplex:route(entry, ClosedOrigin, Tx, Closed)),
     {Rejected, []} = quod_simplex:test_relayed_append(
-                       {relay, Author, binary:copy(<<4>>, 16)}, 4, Tx, Closed),
+                       Author, 4, Tx, Closed),
     {0, 0, #{}, []} = quod_simplex:test_ingress(Rejected),
     ?assertEqual(1, maps:get(r_redirect, quod_simplex:stats_map(Rejected))).
 
@@ -1913,17 +1932,21 @@ route_decision_cells_test() ->
                    {Author, AuthorId}),
     Open = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                 slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, [])}),
+    Origin4 = quod_simplex:test_relay_origin(Author, 4, Tx, Open),
+    Origin7 = quod_simplex:test_relay_origin(Author, 7, Tx, Open),
     %% This node does not own target slot 4, so it refuses that placement.
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, {relayed, 4}, Tx, Open)),
+                 quod_simplex:route(entry, Origin4, Tx, Open)),
     %% It does own target slot 7 and may safely hold it until that slot opens.
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, {relayed, 7}, Tx, Open)),
+                 quod_simplex:route(entry, Origin7, Tx, Open)),
     %% The same exact-slot rule holds while the pipeline is full.
     Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                    slot => 3, approved => 5, eng => quod_simplex:eng_with_certs(3, [])}),
+    BlockedOrigin7 =
+        quod_simplex:test_relay_origin(Author, 7, Tx, Blocked),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, {relayed, 7}, Tx, Blocked)),
+                 quod_simplex:route(entry, BlockedOrigin7, Tx, Blocked)),
     %% Another participant accepts only the slot it actually owns.
     {Far, FarId} = lists:keyfind(L(9), 1, Committee),
     BlockedFar = st(#{self => Far, id => FarId, validators => Validators,
@@ -1931,8 +1954,10 @@ route_decision_cells_test() ->
                       eng => quod_simplex:eng_with_certs(3, [])}),
     FarTx = signed_tx(<<"t">>, <<"cellf">>, [{assert, {{cellf, fact}, true}}],
                       {Author, AuthorId}),
+    FarOrigin =
+        quod_simplex:test_relay_origin(Author, 9, FarTx, BlockedFar),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, {relayed, 9}, FarTx, BlockedFar)),
+                 quod_simplex:route(entry, FarOrigin, FarTx, BlockedFar)),
     %% membership barrier: park UNCONDITIONALLY, both origins — the post-adoption
     %% schedule is unknowable until the committee block commits
     {MPub, MId} = id(),
@@ -1946,8 +1971,10 @@ route_decision_cells_test() ->
                         EngB0),
     Barrier = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                    slot => 3, approved => 3, eng => BarrierEng}),
+    BarrierOrigin =
+        quod_simplex:test_relay_origin(Author, 7, Tx, Barrier),
     ?assertEqual({park, barrier},
-                 quod_simplex:route(entry, {relayed, 7}, Tx, Barrier)),
+                 quod_simplex:route(entry, BarrierOrigin, Tx, Barrier)),
     ?assertEqual({park, barrier},
                  quod_simplex:route(entry, local, lt($m, Me), Barrier)),
     %% FIFO egress: with a live queue a local ENTRY joins the tail (ordered dispatch),
@@ -1997,7 +2024,7 @@ relay_lane_creation_rejects_divergent_target_test() ->
     ?assertEqual(
        [{Target4, 4}, {Target4, 4}],
        lists:sort([{Target, Slot}
-                   || {_ReqId, Target, Slot, _Deadline} <-
+                   || {_AttemptId, Target, Slot, _Deadline} <-
                           quod_simplex:test_relay_pending(S2)])),
     ?assertEqual(
        {error, {relay_lane_conflict, {Target4, 4}, {Target5, 5}}},
@@ -2054,7 +2081,7 @@ future_target_drains_at_declared_slot_test() ->
                   sync => ready, slot => 3, approved => 3,
                   eng => quod_simplex:eng_with_certs(3, [])}),
     {Held, []} = quod_simplex:test_relayed_append(
-                   {relay, Author, binary:copy(<<8>>, 16)}, 5, Tx, Before),
+                   Author, 5, Tx, Before),
     {1, _, _, _} = quod_simplex:test_ingress(Held),
     B4 = blk(4),
     {E1, _} = quod_simplex:eng_offer(
@@ -2066,9 +2093,10 @@ future_target_drains_at_declared_slot_test() ->
     {0, 0, _, []} = quod_simplex:test_ingress(Drained),
     ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(Drained))).
 
-%% A target refusal makes the exact-slot lane retryable; the author can re-prove
-%% against its current frontier without following peer-supplied routing hints.
-stale_target_fails_lane_retryably_test() ->
+%% A target refusal is only a recovery hint: a Byzantine destination cannot
+%% make the author retry an attempt that may still commit. The origin's own
+%% finalized slot is the authority that eventually makes the lane retryable.
+stale_target_hint_waits_for_local_finality_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     Leader4 = quod_simplex:leader(4, Validators),
@@ -2078,15 +2106,27 @@ stale_target_fails_lane_retryably_test() ->
              slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, []),
              ingress => [{local, From, lt($u, Me), quod_time:mono_ms()}]}),
     {Sent, []} = quod_simplex:test_drain(S),
-    [{ReqId, Target, 4, _}] = quod_simplex:test_relay_pending(Sent),
-    Done = quod_simplex:test_relay_result(
-             Target, ReqId, {error, not_in_charge, none}, Sent),
-    ?assertEqual([], quod_simplex:test_relay_pending(Done)),
-    receive {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
-    after 0 -> ?assert(false) end.
+    [{AttemptId, Target, 4, _}] = quod_simplex:test_relay_pending(Sent),
+    Hinted = quod_simplex:test_relay_result(
+               Target, AttemptId, {error, not_in_charge, none}, Sent),
+    [{AttemptId, Target, 4, _Deadline, _SlowRetry, true}] =
+        quod_simplex:test_relay_pending_detail(Hinted),
+    Tag = element(2, From),
+    receive
+        {Tag, _ForgedOutcome} -> ?assert(false)
+    after 0 ->
+        ok
+    end,
+    Finalized = quod_simplex:finalize(4, Hinted),
+    ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
+    receive
+        {Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
+    after 0 ->
+        ?assert(false)
+    end.
 
 %% Receipt acknowledgement changes relay recovery from the fast 300ms lost-send
-%% loop to a slow final-result probe. A spoofed acknowledgement from another peer
+%% loop to a slow result-hint probe. A spoofed acknowledgement from another peer
 %% cannot alter the pending request.
 relay_accepted_suppresses_fast_retry_test() ->
     Committee = committee(4),
@@ -2099,15 +2139,17 @@ relay_accepted_suppresses_fast_retry_test() ->
              slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(0, []),
              ingress => [{local, From, lt($t, Me), quod_time:mono_ms()}]}),
     {Sent, []} = quod_simplex:test_drain(S),
-    [{ReqId, Target, 4, _Deadline, FastRetry, false}] =
+    [{AttemptId, Target, 4, _Deadline, FastRetry, false}] =
         quod_simplex:test_relay_pending_detail(Sent),
     ?assert(FastRetry < quod_time:mono_ms() + 1000),
     [Other | _] = Validators -- [Target],
     ?assertEqual(quod_simplex:test_relay_pending_detail(Sent),
                  quod_simplex:test_relay_pending_detail(
-                   quod_simplex:test_relay_accepted(Other, ReqId, Sent))),
-    Accepted = quod_simplex:test_relay_accepted(Target, ReqId, Sent),
-    [{ReqId, Target, 4, _Deadline2, SlowRetry, true}] =
+                   quod_simplex:test_relay_accepted(
+                     Other, AttemptId, Sent))),
+    Accepted =
+        quod_simplex:test_relay_accepted(Target, AttemptId, Sent),
+    [{AttemptId, Target, 4, _Deadline2, SlowRetry, true}] =
         quod_simplex:test_relay_pending_detail(Accepted),
     ?assert(SlowRetry >= quod_time:mono_ms() + 4000),
     ?assertEqual(1, maps:get(relay_accepted, quod_simplex:stats_map(Accepted))).
@@ -2115,36 +2157,691 @@ relay_accepted_suppresses_fast_retry_test() ->
 %% Duplicate requests are acknowledged again so a sender that missed the first
 %% acknowledgement can stop retrying. Deduplication remains before signature work.
 duplicate_inflight_relay_is_acknowledged_test() ->
-    [{Author, AuthorId}] = Committee = committee(1),
-    Tx = signed_tx(<<"t">>, <<"duplicate-inflight">>,
-                   [{assert, {{duplicate, inflight}, true}}], {Author, AuthorId}),
-    {ok, Submission} = quod_transaction:submission(<<"t">>, Tx),
-    ReqId = quod_transaction:submission_id(Submission),
-    S = st(#{self => Author, id => AuthorId, validators => pubs(Committee),
-             sync => ready, slot => 3, approved => 3,
-             eng => quod_simplex:eng_with_certs(3, []),
-             relay_inflight => #{ReqId => Author}}),
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     SubmissionId, AttemptId, Submit, S} =
+        relay_receiver_fixture(<<"duplicate-inflight">>),
+    {Accepted, _Actions} = quod_simplex:test_dispatch_relay(
+                             Author, Submit, S),
     {Acked, []} = quod_simplex:test_dispatch_relay(
-                    Author, {relay_submit, ReqId, 4, Submission, []}, S),
-    {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Acked),
-    ?assertEqual([Author], OutboxPeers),
+                    Author, Submit, Accepted),
+    ?assertEqual(
+       [{relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot}],
+       relay_outbox(Ns, Author, Acked)),
     ?assertEqual(1, maps:get(relay_duplicates, quod_simplex:stats_map(Acked))).
 
-%% The codec is deployed before v2 serving. A valid authenticated v2 frame reaching a v1-only state
-%% machine must be ignored without changing state or crashing the consensus owner.
-unsupported_v2_relay_is_safely_dropped_test() ->
-    Ns = <<"relay:v2:safe-drop">>,
-    Peer = <<3:256>>,
-    V2 = {relay_submit_v2, <<1:128>>, <<2:128>>, <<8:256>>, 7,
-          {submit, Peer, <<4:512>>, <<5, 6, 7>>}, []},
-    {relay, Decoded} =
-        quod_relay:decode_frame(quod_relay:encode(Ns, V2), Ns),
-    S = st(#{self => <<"self">>, validators => [<<"self">>],
+%% An exact inflight attempt remains answerable after the current committee
+%% view advances. Current-view equality gates first admission, not recovery.
+inflight_attempt_is_answerable_after_view_change_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     SubmissionId, AttemptId, Submit, S} =
+        relay_receiver_fixture(<<"serve-inflight">>),
+    {Accepted, _Actions} =
+        quod_simplex:test_dispatch_relay(Author, Submit, S),
+    ?assertEqual(
+       {[], [AttemptId], []},
+       quod_simplex:test_relay_state_keys(Accepted)),
+    ?assertEqual(
+       [{relay_accepted, SubmissionId, AttemptId,
+         CommitteeId, Slot}],
+       relay_outbox(Ns, Author, Accepted)),
+
+    NewCommitteeId = crypto:hash(sha256, <<"later-view">>),
+    Advanced =
+        quod_simplex:test_state_set(
+          outbox, #{},
+          quod_simplex:test_state_set(
+            committee_id, NewCommitteeId, Accepted)),
+    {Duplicate, []} =
+        quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
+    ?assertEqual(
+       [{relay_accepted, SubmissionId, AttemptId,
+         CommitteeId, Slot}],
+       relay_outbox(Ns, Author, Duplicate)),
+    ?assertEqual(
+       1, maps:get(relay_duplicates, quod_simplex:stats_map(Duplicate))).
+
+%% Completed attempts are cached by their immutable full relay reference. A
+%% duplicate old-view submit is served from that stored context even after both
+%% the local frontier and committee view have advanced.
+cached_result_is_served_after_view_change_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     SubmissionId, AttemptId, Submit, S} =
+        relay_receiver_fixture(<<"serve-cache">>),
+    {Accepted, _} = quod_simplex:test_dispatch_relay(Author, Submit, S),
+    Completed = quod_simplex:finalize(Slot, Accepted),
+    ?assertEqual(
+       {[], [], [AttemptId]},
+       quod_simplex:test_relay_state_keys(Completed)),
+    ?assertMatch(
+       [{relay_result, SubmissionId, AttemptId, CommitteeId,
+         Slot, {error, skipped}} | _],
+       relay_outbox(Ns, Author, Completed)),
+
+    Advanced =
+        quod_simplex:test_state_set(
+          outbox, #{},
+          quod_simplex:test_state_set(
+            committee_id, crypto:hash(sha256, <<"post-cache-view">>),
+            Completed)),
+    {Replayed, []} =
+        quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
+    ?assertEqual(
+       [{relay_result, SubmissionId, AttemptId, CommitteeId,
+         Slot, {error, skipped}}],
+       relay_outbox(Ns, Author, Replayed)).
+
+%% Destination relay caches are volatile. After a restart, the durable target
+%% slot is the authority: an included SubmissionId reconstructs the exact
+%% attempt success without re-admitting it. The opaque signature is still
+%% verified before any recovery lookup.
+destination_restart_reconstructs_committed_result_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, Target, Validators,
+     SubmissionId, AttemptId,
+     {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+      Submission, _Carrier} = Submit,
+     Initial} =
+        relay_receiver_fixture(<<"restart-committed">>),
+    {ok, Transaction} =
+        quod_transaction:decode_verified_submission(Ns, Submission),
+    Dir = relay_store_dir("committed"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    Entries =
+        [#entry{index = I, data = noop, timestamp = I}
+         || I <- lists:seq(1, Slot - 1)]
+        ++ [#entry{index = Slot,
+                   data = quod_ledger:data([Transaction]),
+                   timestamp = Slot}],
+    {ok, Store1} = quod_ledger_store:append(Store0, Entries),
+    try
+        Restarted =
+            quod_simplex:test_state_set(
+              outbox, #{},
+              quod_simplex:test_state_set(
+                committee_id, crypto:hash(sha256, <<"post-restart-view">>),
+                quod_simplex:test_state_set(
+                  store, Store1,
+                  quod_simplex:test_state_set(slot, Slot, Initial)))),
+        %% Exercise the real mailbox boundary after this former proposer has
+        %% been removed from the voting set. Relay recovery must remain live
+        %% for observers even though consensus frames are ignored there.
+        Observer =
+            quod_simplex:test_state_set(
+              validators, Validators -- [Target], Restarted),
+        ?assertEqual(false, quod_simplex:is_participant(Observer)),
+        ?assertEqual({[], [], []},
+                     quod_simplex:test_relay_state_keys(Observer)),
+        Payload = quod_relay:encode(Ns, Submit),
+        {keep_state, Reconstructed, _Actions} =
+            quod_simplex:running(
+              info,
+              {quod_message, {{Author, ignored}, self()},
+               undefined, Payload},
+              Observer),
+        ?assertEqual(
+           [{relay_result, SubmissionId, AttemptId, CommitteeId,
+             Slot, {ok, Slot}}],
+           relay_outbox(Ns, Author, Reconstructed)),
+        ?assertEqual(
+           {[], [], [AttemptId]},
+           quod_simplex:test_relay_state_keys(Reconstructed))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% The authenticated transport peer must be the signed submission author
+%% before any volatile-cache or durable-log recovery lookup. Otherwise an
+%% attacker could pre-play somebody else's valid envelope and poison the
+%% attempt cache, or replay a cached result onto an attacker-owned outbox.
+non_author_replay_cannot_poison_or_read_result_cache_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, Target, _Validators,
+     SubmissionId, AttemptId,
+     {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+      Submission, _Carrier} = Submit,
+     Initial} =
+        relay_receiver_fixture(<<"non-author-replay">>),
+    {ok, Transaction} =
+        quod_transaction:decode_verified_submission(Ns, Submission),
+    Dir = relay_store_dir("non_author_replay"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    Entries =
+        [#entry{index = I, data = noop, timestamp = I}
+         || I <- lists:seq(1, Slot - 1)]
+        ++ [#entry{index = Slot,
+                   data = quod_ledger:data([Transaction]),
+                   timestamp = Slot}],
+    {ok, Store1} = quod_ledger_store:append(Store0, Entries),
+    try
+        Restarted =
+            quod_simplex:test_state_set(
+              outbox, #{},
+              quod_simplex:test_state_set(
+                store, Store1,
+                quod_simplex:test_state_set(slot, Slot, Initial))),
+
+        {RejectedBeforeLookup, []} =
+            quod_simplex:test_dispatch_relay(Target, Submit, Restarted),
+        ?assertEqual({[], [], []},
+                     quod_simplex:test_relay_state_keys(
+                       RejectedBeforeLookup)),
+        ?assertEqual(#{},
+                     quod_simplex:test_outbox(RejectedBeforeLookup)),
+
+        {Recovered, []} =
+            quod_simplex:test_dispatch_relay(
+              Author, Submit, RejectedBeforeLookup),
+        ?assertEqual({[], [], [AttemptId]},
+                     quod_simplex:test_relay_state_keys(Recovered)),
+        ?assertEqual(
+           [{relay_result, SubmissionId, AttemptId, CommitteeId,
+             Slot, {ok, Slot}}],
+           relay_outbox(Ns, Author, Recovered)),
+
+        Cached = quod_simplex:test_state_set(outbox, #{}, Recovered),
+        CachedEntries = quod_simplex:test_relay_result_entries(Cached),
+        {RejectedCachedReplay, []} =
+            quod_simplex:test_dispatch_relay(Target, Submit, Cached),
+        ?assertEqual(CachedEntries,
+                     quod_simplex:test_relay_result_entries(
+                       RejectedCachedReplay)),
+        ?assertEqual(#{},
+                     quod_simplex:test_outbox(RejectedCachedReplay))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% Even an authenticated transport peer claiming the envelope's author cannot
+%% use a bad signature to prune/read/populate recovery state. Pin this against a
+%% durable target slot: the old ordering reconstructed and cached an exclusion
+%% before it reached signature verification.
+invalid_signature_precedes_cache_and_durable_recovery_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, Target, Validators,
+     _SubmissionId, _AttemptId,
+     {relay_submit, _, _, _, _, {submit, Author, Signature, Canonical}, Carrier},
+     Initial} =
+        relay_receiver_fixture(<<"invalid-before-recovery">>),
+    InvalidSubmission = {submit, Author, flip1(Signature), Canonical},
+    InvalidSubmissionId =
+        quod_transaction:submission_id(InvalidSubmission),
+    InvalidAttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, InvalidSubmissionId, CommitteeId, Slot, Target),
+    InvalidSubmit =
+        {relay_submit, InvalidSubmissionId, InvalidAttemptId, CommitteeId,
+         Slot, InvalidSubmission, Carrier},
+    Dir = relay_store_dir("invalid_before_recovery"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store1} =
+        quod_ledger_store:append(
+          Store0,
+          [#entry{index = I, data = noop, timestamp = I}
+           || I <- lists:seq(1, Slot)]),
+    try
+        Durable =
+            quod_simplex:test_state_set(
+              store, Store1,
+              quod_simplex:test_state_set(slot, Slot, Initial)),
+        SeedSubmissionId = <<16#A5:128>>,
+        SeedAttemptId = <<16#5A:128>>,
+        WithExpiredResult =
+            quod_simplex:test_state_set(
+              outbox, #{},
+              quod_simplex:test_expire_relay_results(
+                quod_simplex:test_reply_relay(
+                  Author, SeedSubmissionId, SeedAttemptId, CommitteeId,
+                  Slot, {error, skipped}, Durable))),
+        [{SeedAttemptId, {error, skipped}, ExpiredAt}] =
+            quod_simplex:test_relay_result_entries(WithExpiredResult),
+        ?assert(ExpiredAt =< quod_time:mono_ms()),
+
+        {Rejected, []} =
+            quod_simplex:test_dispatch_relay(
+              Author, InvalidSubmit, WithExpiredResult),
+        ?assertEqual(WithExpiredResult, Rejected),
+        ?assertEqual(#{}, quod_simplex:test_outbox(Rejected)),
+        ?assertEqual(
+           {[], [], [SeedAttemptId]},
+           quod_simplex:test_relay_state_keys(Rejected)),
+
+        %% The observer mailbox uses the same guarded recovery path after a
+        %% proposer is demoted; it must not reintroduce the pre-verify lookup.
+        Observer =
+            quod_simplex:test_state_set(
+              validators, Validators -- [Target], WithExpiredResult),
+        ?assertEqual(false, quod_simplex:is_participant(Observer)),
+        Payload = quod_relay:encode(Ns, InvalidSubmit),
+        {keep_state, ObserverRejected, _Actions} =
+            quod_simplex:running(
+              info,
+              {quod_message, {{Author, ignored}, self()},
+               undefined, Payload},
+              Observer),
+        ?assertEqual(
+           quod_simplex:test_relay_result_entries(Observer),
+           quod_simplex:test_relay_result_entries(ObserverRejected)),
+        ?assertEqual(
+           {[], [], [SeedAttemptId]},
+           quod_simplex:test_relay_state_keys(ObserverRejected)),
+        ?assertEqual(
+           [], relay_outbox(Ns, Author, ObserverRejected))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% The complementary restart case reconstructs authoritative exclusion from a
+%% durable noop target slot. It never fabricates success or reopens placement.
+destination_restart_reconstructs_excluded_result_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     SubmissionId, AttemptId, Submit, Initial} =
+        relay_receiver_fixture(<<"restart-excluded">>),
+    Dir = relay_store_dir("excluded"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store1} =
+        quod_ledger_store:append(
+          Store0,
+          [#entry{index = I, data = noop, timestamp = I}
+           || I <- lists:seq(1, Slot)]),
+    try
+        Restarted =
+            quod_simplex:test_state_set(
+              outbox, #{},
+              quod_simplex:test_state_set(
+                store, Store1,
+                quod_simplex:test_state_set(slot, Slot, Initial))),
+        {Reconstructed, []} =
+            quod_simplex:test_dispatch_relay(Author, Submit, Restarted),
+        ?assertEqual(
+           [{relay_result, SubmissionId, AttemptId, CommitteeId,
+             Slot, {error, not_in_charge, none}}],
+           relay_outbox(Ns, Author, Reconstructed)),
+        ?assertEqual(
+           {[], [], [AttemptId]},
+           quod_simplex:test_relay_state_keys(Reconstructed))
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% A catch-up window can settle both directions of relay ownership at once.
+%% Slot 4 contains an inbound attempt already sealed by this destination;
+%% slot 5 contains this node's outbound signed submission. Recovery resolves
+%% both from durable SubmissionIds before discarding the volatile window.
+catchup_window_settles_inbound_and_outbound_relays_test() ->
+    {Ns, CommitteeId, InboundSlot = 4, Author, _AuthorId, Self, _Validators,
+     InboundSubmissionId, InboundAttemptId,
+     {relay_submit, InboundSubmissionId, InboundAttemptId, CommitteeId,
+      InboundSlot, InboundSubmission, _InboundCarrier} = InboundSubmit,
+     Initial} =
+        relay_receiver_fixture(<<"catchup-inbound">>),
+    {ok, InboundTx} =
+        quod_transaction:decode_verified_submission(
+          Ns, InboundSubmission),
+    Dir = relay_store_dir("catchup_both_directions"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store1} =
+        quod_ledger_store:append(
+          Store0,
+          [#entry{index = I, data = noop, timestamp = I}
+           || I <- lists:seq(1, InboundSlot - 1)]),
+    try
+        Ready =
+            quod_simplex:test_state_set(
+              batch_window_ms, 0,
+              quod_simplex:test_state_set(store, Store1, Initial)),
+        {WithInbound, _Actions} =
+            quod_simplex:test_dispatch_relay(
+              Author, InboundSubmit, Ready),
+        ?assert(quod_simplex:proposal_visible(
+                  InboundSlot, WithInbound)),
+        ?assertEqual(
+           {[], [InboundAttemptId], []},
+           quod_simplex:test_relay_state_keys(WithInbound)),
+
+        %% Once slot 4 is visibly proposed, the earliest usable seat is slot 5.
+        %% Clear only captured wire output so the later result assertion is
+        %% independent of the initial accepted acknowledgement.
+        SourceFrom = {self(), make_ref()},
+        SourceChange = lt($w, Self),
+        {WithSource, []} =
+            quod_simplex:test_append(
+              SourceFrom, SourceChange,
+              quod_simplex:test_state_set(outbox, #{}, WithInbound)),
+        [{SourceAttemptId, SourceTarget, 5, _Deadline}] =
+            quod_simplex:test_relay_pending(WithSource),
+        [SourceFrame] =
+            maps:get(SourceTarget, quod_simplex:test_outbox(WithSource)),
+        {relay,
+         {relay_submit, SourceSubmissionId, SourceAttemptId, CommitteeId,
+          5, SourceSubmission, _SourceCarrier}} =
+            quod_relay:decode_frame(SourceFrame, Ns),
+        {ok, SourceTx} =
+            quod_transaction:decode_verified_submission(
+              Ns, SourceSubmission),
+
+        Entries =
+            [#entry{index = 4,
+                    data = quod_ledger:data([InboundTx]),
+                    timestamp = 4},
+             #entry{index = 5,
+                    data = quod_ledger:data([SourceTx]),
+                    timestamp = 5}],
+        {Recovered, ok} =
+            quod_simplex:test_apply_catchup_window(
+              recovery, Entries, WithSource),
+
+        receive
+            {SourceTag, {ok, 5}} ->
+                ?assertEqual(element(2, SourceFrom), SourceTag)
+        after 0 ->
+            ?assert(false)
+        end,
+        ?assert(
+           lists:member(
+             {relay_result, InboundSubmissionId, InboundAttemptId,
+              CommitteeId, 4, {ok, 4}},
+             relay_outbox(Ns, Author, Recovered))),
+        ?assertEqual(
+           {[], [], [InboundAttemptId]},
+           quod_simplex:test_relay_state_keys(Recovered)),
+        ?assertEqual(
+           {0, 0, #{}, []},
+           quod_simplex:test_ingress(Recovered)),
+        {5, DurableStore} =
+            quod_simplex:test_committed_store(Recovered),
+        ?assertMatch(
+           {ok, #entry{index = 5}},
+           quod_ledger_store:read_at(DurableStore, 5)),
+        ?assertNotEqual(InboundSubmissionId, SourceSubmissionId)
+    after
+        quod_ledger_store:close(Store1),
+        file:del_dir_r(Dir)
+    end.
+
+%% Terminal result state is write-once. Repeating the identical completion may
+%% re-send it but cannot extend expiry; a same-key divergent context emits
+%% nothing and cannot replace the cached answer.
+terminal_cache_is_write_once_test() ->
+    Ns = <<"t">>,
+    Peer = <<1:256>>,
+    SubmissionId = <<2:128>>,
+    AttemptId = <<3:128>>,
+    CommitteeId = <<4:256>>,
+    Slot = 7,
+    S = st(#{self => <<5:256>>, validators => [<<5:256>>]}),
+    First =
+        quod_simplex:test_reply_relay(
+          Peer, SubmissionId, AttemptId, CommitteeId, Slot,
+          {error, skipped}, S),
+    [{Key = AttemptId, {error, skipped}, Expires}] =
+        quod_simplex:test_relay_result_entries(First),
+    Exact =
+        quod_simplex:test_reply_relay(
+          Peer, SubmissionId, AttemptId, CommitteeId, Slot,
+          {error, skipped}, First),
+    ?assertEqual(
+       [{Key, {error, skipped}, Expires}],
+       quod_simplex:test_relay_result_entries(Exact)),
+
+    DivergentBase = quod_simplex:test_state_set(outbox, #{}, Exact),
+    Divergent =
+        quod_simplex:test_reply_relay(
+          Peer, flip1(SubmissionId), AttemptId, CommitteeId, Slot,
+          {error, bad_change}, DivergentBase),
+    ?assertEqual(
+       [{Key, {error, skipped}, Expires}],
+       quod_simplex:test_relay_result_entries(Divergent)),
+    ?assertEqual([], relay_outbox(Ns, Peer, Divergent)).
+
+%% Only a brand-new attempt is gated on the current committee revision and this
+%% node's exact ownership of the declared slot.
+first_admission_requires_current_view_and_exact_owner_test() ->
+    {Ns, CommitteeId, Slot, Author, AuthorId, Target, Validators,
+     _SubmissionId, _AttemptId, _Submit, S} =
+        relay_receiver_fixture(<<"first-admission">>),
+    Tx = signed_tx(
+           Ns, <<"first-admission">>,
+           [{assert, {{relay, first_admission}, true}}],
+           {Author, AuthorId}),
+    {ok, Submission} = quod_transaction:submission(Ns, Tx),
+    SubmissionId = quod_transaction:submission_id(Submission),
+
+    StaleCommitteeId = crypto:hash(sha256, <<"stale-view">>),
+    StaleAttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, StaleCommitteeId, Slot, Target),
+    StaleSubmit =
+        {relay_submit, SubmissionId, StaleAttemptId,
+         StaleCommitteeId, Slot, Submission, []},
+    {Stale, []} =
+        quod_simplex:test_dispatch_relay(Author, StaleSubmit, S),
+    ?assertEqual(
+       [{relay_result, SubmissionId, StaleAttemptId, StaleCommitteeId,
+         Slot, {error, not_in_charge, none}}],
+       relay_outbox(Ns, Author, Stale)),
+    ?assertEqual(
+       {[], [], [StaleAttemptId]},
+       quod_simplex:test_relay_state_keys(Stale)),
+
+    WrongSlot =
+        hd([Candidate
+            || Candidate <- lists:seq(Slot + 1, Slot + length(Validators)),
+               quod_simplex:leader(Candidate, Validators) =/= Target]),
+    WrongAttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, CommitteeId, WrongSlot, Target),
+    WrongSubmit =
+        {relay_submit, SubmissionId, WrongAttemptId,
+         CommitteeId, WrongSlot, Submission, []},
+    {WrongOwner, []} =
+        quod_simplex:test_dispatch_relay(Author, WrongSubmit, S),
+    ?assertEqual(
+       [{relay_result, SubmissionId, WrongAttemptId, CommitteeId,
+         WrongSlot, {error, not_in_charge, none}}],
+       relay_outbox(Ns, Author, WrongOwner)).
+
+%% Source hints bind to the stored peer, submission, attempt, committee, and
+%% slot—not the source's later current view. Even a perfectly matching success
+%% or error remains only a hint: the origin's durable log decides the outcome.
+source_ignores_foreign_metadata_and_waits_for_local_finality_test() ->
+    {_Ns, CommitteeId, Slot, From, Target, Validators,
+     SubmissionId, AttemptId, Sent} =
+        outbound_fixture(<<"source-match">>),
+    [Other | _] = Validators -- [Target],
+    Advanced =
+        quod_simplex:test_state_set(
+          committee_id, crypto:hash(sha256, <<"source-new-view">>), Sent),
+    BadAccepted =
+        [{Other,
+          {relay_accepted, SubmissionId, AttemptId,
+           CommitteeId, Slot}},
+         {Target,
+          {relay_accepted, flip1(SubmissionId), AttemptId,
+           CommitteeId, Slot}},
+         {Target,
+          {relay_accepted, SubmissionId, AttemptId,
+           crypto:hash(sha256, <<"foreign-view">>), Slot}},
+         {Target,
+          {relay_accepted, SubmissionId, AttemptId,
+           CommitteeId, Slot + 1}}],
+    _ =
+        [begin
+             {Ignored, []} =
+                 quod_simplex:test_dispatch_relay(Peer, Frame, Advanced),
+             ?assertEqual(
+                quod_simplex:test_relay_pending_detail(Advanced),
+                quod_simplex:test_relay_pending_detail(Ignored))
+         end || {Peer, Frame} <- BadAccepted],
+
+    {Accepted, []} =
+        quod_simplex:test_dispatch_relay(
+          Target,
+          {relay_accepted, SubmissionId, AttemptId,
+           CommitteeId, Slot},
+          Advanced),
+    [{AttemptId, Target, Slot, Deadline, _SlowRetry, true}] =
+        quod_simplex:test_relay_pending_detail(Accepted),
+
+    BadResults =
+        [{Other,
+          {relay_result, SubmissionId, AttemptId,
+           CommitteeId, Slot, {ok, Slot}}},
+         {Target,
+          {relay_result, flip1(SubmissionId), AttemptId,
+           CommitteeId, Slot, {ok, Slot}}},
+         {Target,
+          {relay_result, SubmissionId, AttemptId,
+           crypto:hash(sha256, <<"wrong-result-view">>),
+           Slot, {ok, Slot}}},
+         {Target,
+          {relay_result, SubmissionId, AttemptId,
+           CommitteeId, Slot + 1, {ok, Slot + 1}}},
+         {Target,
+          {relay_result, SubmissionId, AttemptId,
+           CommitteeId, Slot, {ok, Slot + 1}}}],
+    _ =
+        [begin
+             {Ignored, []} =
+                 quod_simplex:test_dispatch_relay(Peer, Frame, Accepted),
+             ?assertEqual(
+                quod_simplex:test_relay_pending_detail(Accepted),
+                quod_simplex:test_relay_pending_detail(Ignored))
+         end || {Peer, Frame} <- BadResults],
+
+    {SuccessHint, []} =
+        quod_simplex:test_dispatch_relay(
+          Target,
+          {relay_result, SubmissionId, AttemptId,
+           CommitteeId, Slot, {ok, Slot}},
+          Accepted),
+    [{AttemptId, Target, Slot, Deadline, _RetryAfterSuccess, true}] =
+        quod_simplex:test_relay_pending_detail(SuccessHint),
+    Tag = element(2, From),
+    receive
+        {Tag, _ForgedSuccess} ->
+            ?assert(false)
+    after 0 ->
+        ok
+    end,
+
+    {ErrorHint, []} =
+        quod_simplex:test_dispatch_relay(
+          Target,
+          {relay_result, SubmissionId, AttemptId,
+           CommitteeId, Slot, {error, not_in_charge, none}},
+          SuccessHint),
+    [{AttemptId, Target, Slot, Deadline, _RetryAfterError, true}] =
+        quod_simplex:test_relay_pending_detail(ErrorHint),
+    receive
+        {Tag, _ForgedError} ->
+            ?assert(false)
+    after 0 ->
+        ok
+    end,
+
+    %% Local exclusion is authoritative and does complete the request.
+    Finalized = quod_simplex:finalize(Slot, ErrorHint),
+    ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
+    receive
+        {Tag, Result} ->
+            ?assertEqual({error, skipped}, Result)
+    after 0 ->
+        ?assert(false)
+    end,
+    %% Hints never reset the original lifetime bound.
+    ?assert(Deadline > quod_time:mono_ms()).
+
+%% The emitted frame binds the signed envelope to one committee/slot/target
+%% attempt. Redrive reuses the exact bytes and original deadline.
+relay_emission_is_attempt_scoped_and_redrive_is_immutable_test() ->
+    {Ns, CommitteeId, Slot, _From, Target, _Validators,
+     SubmissionId, AttemptId, Sent} =
+        outbound_fixture(<<"wire-attempt">>),
+    [Frame] = maps:get(Target, quod_simplex:test_outbox(Sent)),
+    {relay,
+     {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+      Submission, _TraceCarrier}} =
+        quod_relay:decode_frame(Frame, Ns),
+    ?assertEqual(
+       AttemptId,
+       quod_transaction:relay_attempt_id(
+         Ns, quod_transaction:submission_id(Submission),
+         CommitteeId, Slot, Target)),
+    [{AttemptId, Target, Slot, Deadline, _Retry, false}] =
+        quod_simplex:test_relay_pending_detail(Sent),
+    Redriven = quod_simplex:test_redrive_relays(Sent),
+    ?assertEqual([Frame],
+                 maps:get(Target, quod_simplex:test_outbox(Redriven))),
+    [{AttemptId, Target, Slot, Deadline, _Retry2, false}] =
+        quod_simplex:test_relay_pending_detail(Redriven),
+    ?assertEqual(
+       1, maps:get(relay_redrives, quod_simplex:stats_map(Redriven))).
+
+%% Signature verification consumes the opaque canonical bytes as bytes. An
+%% invalid signature must prevent the later unsafe canonical ETF decode from
+%% even interning an atom embedded in those bytes.
+signature_is_checked_before_canonical_decode_test() ->
+    {Ns, CommitteeId, Slot, Author, AuthorId, Target, _Validators,
+     _SubmissionId, _AttemptId, _Submit, S} =
+        relay_receiver_fixture(<<"verify-before-decode">>),
+    Tx = signed_tx(
+           Ns, <<"verify-before-decode">>,
+           [{assert, {{relay, opaque}, true}}],
+           {Author, AuthorId}),
+    {ok, {submit, Author, _GoodSignature, Canonical}} =
+        quod_transaction:submission(Ns, Tx),
+    AtomName =
+        iolist_to_binary(
+          io_lib:format(
+            "qars_~11..0B",
+            [erlang:unique_integer([positive]) rem 100000000000])),
+    ?assertEqual(16, byte_size(AtomName)),
+    ?assertException(
+       error, badarg, binary_to_existing_atom(AtomName, utf8)),
+    Poisoned =
+        binary:replace(
+          Canonical, <<"quod_transaction">>, AtomName, [global]),
+    Submission = {submit, Author, <<0:512>>, Poisoned},
+    SubmissionId = quod_transaction:submission_id(Submission),
+    AttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, CommitteeId, Slot, Target),
+    Wire =
+        quod_relay:encode(
+          Ns, {relay_submit, SubmissionId, AttemptId, CommitteeId,
+               Slot, Submission, []}),
+    {relay, Decoded} = quod_relay:decode_frame(Wire, Ns),
+    {Rejected, []} =
+        quod_simplex:test_dispatch_relay(Author, Decoded, S),
+    ?assertException(
+       error, badarg, binary_to_existing_atom(AtomName, utf8)),
+    %% A failed opaque-signature check is silent and leaves even volatile
+    %% recovery state untouched.
+    ?assertEqual(S, Rejected),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Rejected)),
+    ?assertEqual({[], [], []},
+                 quod_simplex:test_relay_state_keys(Rejected)).
+
+%% A decoded but unsupported or malformed relay term cannot crash or mutate the
+%% state owner. The wire codec normally rejects the malformed shape first; this
+%% keeps the state-machine boundary fail-closed as well.
+unsupported_and_malformed_relay_terms_are_safely_dropped_test() ->
+    S = st(#{self => <<0:256>>, validators => [<<0:256>>],
              slot => 6, approved => 6,
              eng => quod_simplex:eng_with_certs(6, [])}),
-    {S1, Actions} = quod_simplex:test_dispatch_relay(Peer, Decoded, S),
-    ?assertEqual(S, S1),
-    ?assertEqual([], Actions).
+    Messages =
+        [{relay_unsupported, <<"opaque">>},
+         {relay_submit, <<1:120>>, <<2:128>>, <<3:256>>, 7,
+          malformed_submission, []}],
+    _ =
+        [begin
+             {S1, Actions} =
+                 quod_simplex:test_dispatch_relay(<<1:256>>, Message, S),
+             ?assertEqual(S, S1),
+             ?assertEqual([], Actions)
+         end || Message <- Messages],
+    ok.
 
 %% A leader latched into a final-vote camp for its OWN in-flight slot must STILL redrive
 %% the proposal on every Δ: the link send is fire-and-forget, so the Δ re-fire is the
@@ -2561,12 +3258,12 @@ transaction_shape_gate_test() ->
 %% Every `peer_admitted` fact is a voter (no non-voting tier): asserting one grows the set and the quorum.
 committee_grows_test() ->
     [A, B] = [P || {P, _} <- committee(2)],
-    V1 = quod_simplex:apply_committee_delta(tx([pa(A)]), []),
-    V2 = quod_simplex:apply_committee_delta(tx([pa(B)]), V1),
-    ?assertEqual([A], V1),
-    ?assertEqual(lists:usort([A, B]), V2),
-    ?assertEqual(1, quod_simplex:quorum(length(V1))),
-    ?assertEqual(2, quod_simplex:quorum(length(V2))).
+    Members1 = quod_simplex:apply_committee_delta(tx([pa(A)]), []),
+    Members2 = quod_simplex:apply_committee_delta(tx([pa(B)]), Members1),
+    ?assertEqual([A], Members1),
+    ?assertEqual(lists:usort([A, B]), Members2),
+    ?assertEqual(1, quod_simplex:quorum(length(Members1))),
+    ?assertEqual(2, quod_simplex:quorum(length(Members2))).
 
 %% Pruning a committed slot advances `base` and drops it from every map (the memory-leak fix), and a
 %% stale share/cert/block for an already-final slot (`=< base`) is then ignored.
@@ -2592,6 +3289,74 @@ eng_prune_test() ->
 %%%===================================================================
 %%% helpers
 %%%===================================================================
+
+relay_receiver_fixture(TxId) ->
+    Ns = <<"t">>,
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Slot = 4,
+    Target = quod_simplex:leader(Slot, Validators),
+    {Target, TargetId} = lists:keyfind(Target, 1, Committee),
+    {Author, AuthorId} =
+        hd([Member || {Pub, _} = Member <- Committee, Pub =/= Target]),
+    Tx = signed_tx(
+           Ns, TxId, [{assert, {{relay_fixture, TxId}, true}}],
+           {Author, AuthorId}),
+    {ok, Submission} = quod_transaction:submission(Ns, Tx),
+    SubmissionId = quod_transaction:submission_id(Submission),
+    CommitteeId =
+        crypto:hash(sha256, <<"fixture-view:", TxId/binary>>),
+    AttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, CommitteeId, Slot, Target),
+    Submit =
+        {relay_submit, SubmissionId, AttemptId, CommitteeId,
+         Slot, Submission, []},
+    S = st(#{self => Target, id => TargetId,
+             validators => Validators, committee_id => CommitteeId,
+             sync => ready, slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Ns, CommitteeId, Slot, Author, AuthorId, Target, Validators,
+     SubmissionId, AttemptId, Submit, S}.
+
+outbound_fixture(TxId) ->
+    Ns = <<"t">>,
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Slot = 4,
+    Target = quod_simplex:leader(Slot, Validators),
+    {Me, MyId} =
+        hd([Member || {Pub, _} = Member <- Committee, Pub =/= Target]),
+    CommitteeId =
+        crypto:hash(sha256, <<"outbound-view:", TxId/binary>>),
+    Change =
+        #transaction{tx_id = TxId, caller_ns = Ns, author = Me,
+                     sig = none, read_check = #{},
+                     diff = [{assert, {{relay_outbound, TxId}, true}}]},
+    From = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators,
+             committee_id => CommitteeId,
+             sync => ready, slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Sent, []} = quod_simplex:test_append(From, Change, S),
+    [Frame] = maps:get(Target, quod_simplex:test_outbox(Sent)),
+    {relay,
+     {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+      _Submission, _Carrier}} =
+        quod_relay:decode_frame(Frame, Ns),
+    {Ns, CommitteeId, Slot, From, Target, Validators,
+     SubmissionId, AttemptId, Sent}.
+
+relay_outbox(Ns, Peer, S) ->
+    [Relay
+     || Frame <- maps:get(Peer, quod_simplex:test_outbox(S), []),
+        {relay, Relay} <- [quod_relay:decode_frame(Frame, Ns)]].
+
+relay_store_dir(Suffix) ->
+    filename:join(
+      "/tmp",
+      "quod_relay_restart_" ++ Suffix ++ "_"
+      ++ integer_to_list(erlang:unique_integer([positive]))).
 
 take(N, L) -> lists:sublist(L, N).
 

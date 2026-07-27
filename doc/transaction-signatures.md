@@ -106,11 +106,17 @@ safe, namespace-scoped correlation envelope:
 The relay frame keeps routing outside the signed transaction bytes:
 
 ```erlang
-{relay_submit, RequestId, TargetSlot, SubmitEnvelope, TraceCarrier}
+{relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+               SubmitEnvelope, TraceCarrier}
+{relay_accepted, SubmissionId, AttemptId, CommitteeId, TargetSlot}
+{relay_result, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result}
 ```
 
-`TargetSlot` is validated as a positive 64-bit slot and is used only for
-placement; changing it cannot change the authenticated transaction content.
+`SubmissionId` identifies the exact signed envelope. `AttemptId` binds that
+submission to the namespace, committee identity, target slot, and target
+validator. `TargetSlot` is a positive 64-bit placement value; changing any
+placement field creates a different attempt without changing the authenticated
+transaction content.
 
 The receiving proposer:
 
@@ -124,15 +130,18 @@ The receiving proposer:
 
 This prevents unauthenticated content from creating atoms before signature
 verification and rejects non-canonical encodings. The authenticated transport
-peer must equal `Author`, and that author must be in the current committee.
-The inter-ontology ask symbol codec is never used for transaction relay.
+peer must equal `Author`. First admission also requires that author and the
+declared target belong to the declared current committee view. Exact duplicate,
+cached, and durable-recovery lookups retain their originally admitted metadata,
+so a later committee transition cannot change an old attempt's meaning. The
+inter-ontology ask symbol codec is never used for transaction relay.
 
 Relay uses the existing authenticated `{log, Ns}` links. The sender computes
 the first slot the submission can still enter and includes that exact target
 slot in the relay frame. The receiver verifies that it is the deterministic
 proposer for the declared slot. It may collect the request or park it until that
 slot opens, but it never derives a replacement destination from its own
-frontier. If the declared slot is already closed, the relay fails retryably.
+frontier.
 
 While an unresolved target slot remains usable, later submissions from the
 same author reuse that destination and slot. If the slot finalizes, matching
@@ -144,14 +153,19 @@ leader rotation.
 Once a destination holds the request, it sends `relay_accepted`. Before that
 acknowledgement the author retransmits the exact request every 300 ms to recover
 a dropped fire-and-forget link send. After acknowledgement it probes only every
-5 seconds to recover a lost terminal result, avoiding request amplification
-during a slow commit. Parked request ids remain in the receiver's inflight set,
-so both kinds of retransmit are idempotent. Destinations cache completed
-results for 30 seconds, and the author resolves its pending relay only when the
-exact signed submission commits or receives a definite failure. A local caller
-deadline cannot cancel a transaction that may already be proposed: it returns
-`{error, {outcome_unknown, TxId}}`. That transaction id must be inspected in the
-ledger/explorer; automatically re-proving a non-idempotent goal is unsafe.
+5 seconds to recover a lost result hint, avoiding request amplification
+during a slow commit. Attempt IDs remain in the receiver's inflight set, so both
+kinds of retransmit are idempotent. Destinations cache completed results for 30
+seconds. After restart, any member with the durable target slot—including a
+former proposer or observer—can reconstruct inclusion or proven exclusion from
+the ledger.
+
+Destination results are authenticated hints, not finality evidence. The author
+resolves its pending relay only from its own durable log: inclusion succeeds,
+while target-slot finalization without the submission is a safe retry. A local
+caller deadline cannot cancel a transaction that may already be proposed: it
+returns `{error, {outcome_unknown, TxId}}`. That transaction id must be inspected
+in the ledger/explorer; automatically re-proving a non-idempotent goal is unsafe.
 
 During an in-flight membership barrier every arrival parks unconditionally:
 the post-adoption schedule is unknowable. A membership change waiting for the
@@ -161,7 +175,7 @@ blocking is per-author, so capacity pressure from one author does not prevent
 another author's transaction from filling an open batch. Relay lifetime is
 anchored at the submission's original arrival, so time parked at any hop counts
 against the same budget. Its one-second cleanup margin outlives the Prolog caller
-deadline only to absorb a racing final relay result; it does not turn an unknown
+deadline only to absorb a racing relay result hint; it does not turn an unknown
 caller outcome into a safe retry.
 A submission whose signed sequence falls below the approved floor because a
 newer sequence became final first (for example after a skipped proposal and retry) resolves

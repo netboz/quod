@@ -47,9 +47,9 @@ and **mutual TLS** binds the connection to that key (`quic:peercert/1` must matc
 claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
 addresses (it reads the `Addr` from the header). Consensus shares, finality
 certificates, and every non-genesis transaction are Ed25519-signed. A write sent
-to a non-leader validator is transparently relayed to the current leader using
-the signed canonical bytes; signatures authenticate authors but do not replace
-the still-deferred user/agent authorization policy.
+to a non-leader validator is transparently relayed to the proposer of its exact
+earliest usable slot using the signed canonical bytes; signatures authenticate
+authors but do not replace the still-deferred user/agent authorization policy.
 
 **Message contract.** A consumer of channel `Ns`:
 

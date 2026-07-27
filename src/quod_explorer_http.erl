@@ -25,7 +25,7 @@ the live stream, so a transaction renders identically live and from history.
 -export([summary/0, tx_json_full/2, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
 -ifdef(TEST).
 -export([prolog_text/1, txs_page/3, find_tx/2, parse_goal/1,
-         prove_result/1]).   %% pure surface driven directly by eunit
+         prove_result/1, ingress_status_json/1]).   %% pure surface driven directly by eunit
 -endif.
 -include("quod_ledger.hrl").
 
@@ -198,24 +198,43 @@ ns_summary(Ns) ->
     Approved = maps:get(approved, St, Slot),
     FinalitySlot = maps:get(finality_slot, St, Slot + 1),
     ProposalSlot = maps:get(proposal_slot, St, Approved + 1),
-    #{ns        => Ns,
-      height    => maps:get(committed, St, 0),
-      applied   => quod_prolog:applied(Ns),
-      role      => maps:get(role, St, observer),
-      syncing   => maps:get(syncing, St, false),
-      committee => [id_json(M) || M <- Committee],
-      approved  => Approved,
-      finality_slot => FinalitySlot,
-      finality_leader => leader_json(FinalitySlot, Committee),
-      proposal_slot => ProposalSlot,
-      next_proposer => leader_json(ProposalSlot, Committee),
-      proposal_open => maps:get(proposal_open, St, false),
-      progress_phase => maps:get(progress_phase, St, idle),
-      progress_quorum_ready => maps:get(progress_quorum_ready, St, false),
-      genesis   => case quod_simplex:genesis_hash(Ns) of
-                       H when is_binary(H) -> binary:encode_hex(H, lowercase);
-                       _ -> null
-                   end}.
+    maps:merge(
+      #{ns        => Ns,
+        height    => maps:get(committed, St, 0),
+        applied   => quod_prolog:applied(Ns),
+        role      => maps:get(role, St, observer),
+        syncing   => maps:get(syncing, St, false),
+        committee => [id_json(M) || M <- Committee],
+        approved  => Approved,
+        finality_slot => FinalitySlot,
+        finality_leader => leader_json(FinalitySlot, Committee),
+        proposal_slot => ProposalSlot,
+        next_proposer => leader_json(ProposalSlot, Committee),
+        proposal_open => maps:get(proposal_open, St, false),
+        progress_phase => maps:get(progress_phase, St, idle),
+        progress_quorum_ready => maps:get(progress_quorum_ready, St, false),
+        genesis   => case quod_simplex:genesis_hash(Ns) of
+                         H when is_binary(H) -> binary:encode_hex(H, lowercase);
+                         _ -> null
+                     end},
+      ingress_status_json(St)).
+
+%% Invalid/missing ingress state is exposed as `null`, so a fleet preflight
+%% fails closed instead of benchmarking divergent committee views or behavior.
+ingress_status_json(St) ->
+    #{committee_id =>
+          case maps:get(committee_id, St, undefined) of
+              Id when is_binary(Id), byte_size(Id) =:= 32 ->
+                  binary:encode_hex(Id, lowercase);
+              _ ->
+                  null
+          end,
+      ingress_retarget =>
+          case maps:get(ingress_retarget, St, undefined) of
+              true  -> true;
+              false -> false;
+              _     -> null
+          end}.
 
 leader_json(Slot, Committee) when is_integer(Slot), Slot >= 1 ->
     case quod_simplex:leader(Slot, Committee) of

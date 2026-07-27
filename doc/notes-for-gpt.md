@@ -7,6 +7,35 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-27 — attempt-scoped relay safety foundation
+
+The relay now has one definitive wire contract, binding every attempt to its
+`SubmissionId`, `AttemptId`, `CommitteeId`, exact target slot, and target
+validator. Retired short forms and protocol-selection configuration were
+removed rather than retained as compatibility paths. Remote replies are hints
+only: inclusion, exclusion, catch-up, and reseating resolve callers exclusively
+from the origin's durable log.
+
+Destinations reconstruct completed attempts from the exact durable target slot,
+including after restart or demotion. The authenticated peer must equal the
+signed author, and the opaque signature is verified before any result-cache
+prune/lookup, inflight lookup, durable read, reply, or cache insertion. Invalid
+signatures leave the original state unchanged. Canonical decoding remains
+behind current membership/view/target gates for safe new admission.
+
+Committee identity binds the adoption slot, exact adoption-block hash, and
+sorted validator set. Cofounders now author genesis deterministically with the
+lexicographically first founder, producing byte-identical genesis blocks and
+committee identities. Recurring validator sets at later adoption slots retain
+distinct identities.
+
+Independent review found consensus ordering, voting, quorum, certificates, and
+proposer selection untouched. Post-review gates are green: EUnit 472/472,
+relay-path Common Test 16/16, Dialyzer, and xref; the complete 45-case Common
+Test suite was green immediately before the final ordering fix. This release is
+the safety/recovery prerequisite for retained-custody retargeting; it does not
+yet eliminate public redirects, and `ingress_retarget=true` remains rejected.
+
 ## 2026-07-27 — same-fleet 25 ms vs 2 ms batch-window A/B
 
 Codex reran the fixed-work benchmark against the same aged N=8 local-compute
@@ -63,11 +92,11 @@ moving leaders. A rank-sharded stable-custodian replacement was implemented, the
 before deployment: the four-node suite showed that assigning a request to a later proposer
 manufactures empty skipped slots before that proposer gets its turn.
 
-The replacement keeps the earliest usable slot and makes it explicit in the relay frame:
-`{relay_submit, ReqId, TargetSlot, Submission, Trace}`. A receiver accepts only a slot it
-proposes, parks only until that exact slot, and fails it once the slot closes. It never
+The replacement keeps the earliest usable slot and makes it explicit in the definitive relay
+frame: `{relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot, Submission, Trace}`.
+A receiver accepts only a slot it proposes, parks only until that exact slot, and never
 recomputes a redirect from its own frontier. Later local sequences reuse an open relay lane;
-slot finalization resolves matching requests and immediately fails the rest so the queue can
+origin-local finality resolves matching requests and safely releases the rest so the queue can
 move to the new frontier. Accepted acknowledgements still suppress the 300 ms resend loop.
 
 Lane creation now enforces the single-target/single-slot invariant consumed by the O(1)
@@ -220,7 +249,7 @@ against a floor that reflects the network instead of the timers.
 
 ---
 
-## 2026-07-23 — ingress v2: pre-position at the FUTURE leader (measurement falsified v1's routing)
+## 2026-07-23 — future-leader pre-positioning experiment
 
 > **Historical, superseded 2026-07-26.** This section records the deployed 0.7.28
 > experiment and its measurements; it no longer describes current ingress behavior.
@@ -245,7 +274,7 @@ forward hint, never `none`; a useless hint is rescued at the origin by a recompu
 or `skipped` if the origin now leads). Membership barrier ⇒ unconditional park (post-
 adoption schedule unknowable). TTL 5s→7s (re-derived: H slots where one may burn a full
 Δ×(1+rearms) complaint cycle, still under the 8s caller timeout). Local egress serializes
-through the FIFO when the queue is live (narrows the dual-target seq race; the residue is
+through the FIFO when the queue is live (narrows the multi-target seq race; the residue is
 `stale_seq`, now counted as `r_stale`/`append_stale`, NEVER `r_bad` — that mis-bucketing
 is what failed the 0.7.27 loadtest with 57 false "malformed" appends). `park_ingress` arms
 head demand constructively (the pre-positioned park is the one cause with no head evidence
@@ -253,10 +282,8 @@ of its own). New gauge `ingress_prepositioned`; `ingress_forwarded` is now a MIS
 signal (≈0 steady-state expected). The deferred compute-then-execute router refactor was
 done FIRST: one pure `route/4` decision (park/collect/relay/redirect/reject), previewed by
 the drain and executed by `execute/7` — `drain_dispatchable`'s hand-mirror and the drain's
-no-progress backstop are gone by construction. `{relay,_,_}` is unconstructible for
-relayed origin (holder→holder forwarding stays illegal). No wire change: the receiver
-decides from its own state, so old and new nodes interoperate during rolling upgrade
-(old nodes simply redirect what they would now park — the chase, not an error).
+no-progress backstop are gone by construction. Holder-to-holder forwarding stays illegal.
+This historical design was later replaced by the definitive attempt-scoped relay contract.
 
 **Leader tenure explicitly NOT taken**: `(Slot div K) rem N` keeps a dead leader for up to
 K complaint rounds and touches everything that reads `leader/2`; pre-positioning gets the
@@ -308,10 +335,6 @@ control — see the new deferred.md link-backpressure item — so it remains the
 for its own in-flight slot stopped redriving the proposal; with the lossy link send the lost
 frame was never re-sent and a burst wedged with zero support votes. The Δ path now always
 redrives after the camp decision (`latched_leader_still_redrives_proposal_test` pins it).
-
-**Rolling-upgrade caveat.** Old nodes drop `{error, stale_seq}` relay results (their
-`valid_result` rejects the atom), degrading that race to a ~30s timeout-retry during the
-mixed-fleet window — deploy fleet-wide promptly, same class as 0.7.20's readiness frames.
 
 **Gates green** (eunit 415, CT 45 incl. `burst_commits_without_busy` asserting ZERO busy
 under a 40-wide burst, dialyzer, xref). Self-review only past the design stage — the
@@ -456,12 +479,6 @@ over-f → stall → recover → commit path that `79cb1e7` fixes. That path is 
 outage against a *quiescent, caught-up* committee (take 4 validators down with a pending write,
 bring them back, confirm the retained slot **commits** rather than complaint-skipping as slot 713
 did pre-fix). The loadtest's own over-f can't reliably force this — it self-defers under load.
-
-**Mixed-fleet wire note (now moot, keep for future rolls).** A 0.7.20 node withholds complaint
-signing until a quorum of peers also speak the new `{readiness, Height, Ready}` frame; old nodes
-drop the unknown frame. So during a partial roll, upgraded nodes pause complaints until enough of
-the committee is upgraded — commits are unaffected. Deploy the readiness change fleet-wide in one
-pass (as was done here).
 
 **Controlled >f outage validator (`scripts/overf-recovery-test.sh`) — RAN, VERDICT PASS ✅.** New sibling to
 `loadtest.sh` that reproduces the slot-713 incident on a *quiescent, caught-up* committee (what the loadtest

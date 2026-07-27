@@ -178,7 +178,7 @@ declare(NodeId) ->
     _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff - a visible sign of a stall (only ever goes up)."),
     _ = G(quod_consensus_ingress_forwarded, "Total locally queued requests sent to the proposer of their exact target slot when the queue became dispatchable (only ever goes up)."),
     _ = G(quod_consensus_relay_accepted, "Total relayed requests whose destination acknowledged that it was holding or processing them. Once acknowledged, the sender stops its fast retry loop (only ever goes up)."),
-    _ = G(quod_consensus_relay_redrives, "Total relay request retries. Before a destination acknowledges receipt they recover dropped sends quickly; after acknowledgement they run slowly only to recover a lost final result (only ever goes up)."),
+    _ = G(quod_consensus_relay_redrives, "Total relay request retries. Before a destination acknowledges receipt they recover dropped sends quickly; after acknowledgement they run slowly only to recover a lost result hint (only ever goes up)."),
     _ = G(quod_consensus_relay_duplicates, "Total duplicate relay submissions received while the original request was already being processed. This should stay low; a high rate means retries are adding avoidable consensus-mailbox work (only ever goes up)."),
     _ = G(quod_consensus_append_redirect, "Total change requests refused because the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed. This should stay near zero (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),

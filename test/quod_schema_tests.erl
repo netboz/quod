@@ -42,7 +42,6 @@ defaults_test() ->
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(park_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
-    ?assertEqual(v1,              maps:get(relay_protocol, B)),
     ?assertEqual(false,           maps:get(ingress_retarget, B)),
     ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
@@ -64,19 +63,10 @@ batch_window_parse_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\", batch_window_ms = 40 }]\n">>),
     ?assertEqual(40, maps:get(batch_window_ms, content1(C))).
 
-relay_activation_parse_test() ->
+ingress_retarget_parse_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\", "
-                "relay_protocol = v2, ingress_retarget = true }]\n">>),
-    B = content1(C),
-    ?assertEqual(v2, maps:get(relay_protocol, B)),
-    ?assertEqual(true, maps:get(ingress_retarget, B)).
-
-invalid_relay_protocol_test() ->
-    ?assertThrow(
-       {quod_schema,
-        [#{path := "content.1.relay_protocol"} | _]},
-       check(<<"content = [{ namespace = \"quod:root\", "
-               "relay_protocol = v3 }]\n">>)).
+                "ingress_retarget = true }]\n">>),
+    ?assertEqual(true, maps:get(ingress_retarget, content1(C))).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -171,16 +161,14 @@ build_ns_config_genesis_hash_test() ->
     ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
     ?assertEqual(12345, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(v1, maps:get(relay_protocol, NsCfg)),
     ?assertEqual(false, maps:get(ingress_retarget, NsCfg)),
     ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
 
-build_ns_config_relay_activation_test() ->
+build_ns_config_ingress_retarget_test() ->
     Content = #{namespace => <<"quod:root">>, mode => create, role => member, seeds => [],
                 genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => <<"">>,
-                relay_protocol => v2, ingress_retarget => true},
+                ingress_retarget => true},
     {_, NsCfg} = quod_app:build_ns_config(Content),
-    ?assertEqual(v2, maps:get(relay_protocol, NsCfg)),
     ?assertEqual(true, maps:get(ingress_retarget, NsCfg)).
 
 %% A create node (blank genesis_hash) carries no anchor key at all — quod_simplex needs none.
@@ -194,7 +182,6 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(v1, maps:get(relay_protocol, NsCfg)),
     ?assertEqual(false, maps:get(ingress_retarget, NsCfg)),
     ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).

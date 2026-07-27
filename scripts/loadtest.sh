@@ -13,10 +13,10 @@
 # and no allocation fails or task restarts except for the churn the driver requested.
 #
 # WHY THIS IS NOT THE OLD N=1 DRIVER:
-#   * Writers target every validator. Signed follower-to-leader relay forwards
-#     valid submissions to the current leader, while bounded retries still cover
-#     leader rotation, recovery, and bounded backpressure. This exercises both
-#     the leader ingress and relay.
+#   * Writers target every validator. Signed relay forwards valid submissions to
+#     the proposer of their exact earliest usable slot, while bounded retries
+#     still cover slot closure, recovery, and bounded backpressure. This exercises
+#     both proposer ingress and relay.
 #   * Churn is VALIDATOR-AWARE. The committee tolerates ANY 1 of N validators down
 #     (quorum = N-f); restarting one validator — INCLUDING the founder, no longer
 #     special — must NOT stop commits (the key BFT test). Restarting f+1 at once
@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.43}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.44}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root

@@ -93,11 +93,6 @@ fields(content) ->
        hoconsc:mk(integer(),
                   #{default => 25,
                     validator => fun(N) -> N >= 0 andalso N =< 1000 end})}
-      %% Relay-v2 and retained ingress custody are activated in two fleet-wide
-      %% stages. Every binary first learns v2 while still emitting v1; only then
-      %% does the operator enable retargeting in a homogeneous committee.
-    , {relay_protocol,
-       hoconsc:mk(hoconsc:enum([v1, v2]), #{default => v1})}
     , {ingress_retarget,
        hoconsc:mk(boolean(), #{default => false})}
     , {ask_timeout_ms,

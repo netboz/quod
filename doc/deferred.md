@@ -457,16 +457,17 @@ fixes:
   commit it. That trades mailbox distribution for worse latency and throughput and is not
   an acceptable consensus schedule.
 
-  The current version keeps the earliest-usable-slot rule but makes ownership
-  unambiguous on the wire: `{relay_submit, ReqId, TargetSlot, Submission, Trace}`. The
-  receiver verifies it proposes `TargetSlot`, parks only until that exact slot, and rejects
-  it if the slot has closed; it never invents a redirect from its own frontier. While that
-  slot remains usable, later local sequences reuse the same lane. Finalization resolves
-  matching submissions and immediately fails every remaining relay for that slot, allowing
-  queued later sequences to target the new frontier. Receipt acknowledgement still demotes
-  the 300 ms lost-send loop to a 5-second result probe. Relay creation enforces the
-  single-target/single-slot lane invariant consumed by the O(1) route check. Focused routing
-  tests, the full EUnit and Common Test suites, Dialyzer, and xref pass.
+  The definitive replacement keeps the earliest-usable-slot rule but makes each placement
+  unambiguous on the wire:
+  `{relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot, Submission, Trace}`.
+  Acknowledgement and result frames echo the same four placement fields. The receiver verifies
+  it proposes `TargetSlot`, parks only under that exact committee view, and never invents a
+  redirect from its own frontier. While that slot remains usable, later local sequences reuse
+  the same lane. Origin-local finality resolves inclusion or exclusion; an excluded ordinary
+  write retains its exact signed submission and moves internally to the next earliest usable
+  seat. Receipt acknowledgement still demotes the 300 ms lost-send loop to a 5-second result
+  probe. Relay creation enforces the single-target/single-slot lane invariant consumed by the
+  O(1) route check.
 
   A fixed-work live comparison on 2026-07-26 then separated this routing change from
   the closed-loop load generator. For the same 960 offered operations, the exact-slot
@@ -496,7 +497,7 @@ fixes:
   3.10x the p99 for no throughput gain. The fleet was restored to 25 ms after
   the comparison. This directly supports signed-transaction retention and
   internal retargeting; another fixed-window adjustment is not the next lever.
-  The reviewed identities, safety invariants, rolling protocol, restart
+  The reviewed identities, safety invariants, quiesced protocol cutover, restart
   boundaries, and staged extraction are specified in
   [the ingress-owner contract](ingress-owner.md).
 
@@ -514,8 +515,8 @@ fixes:
   The A/B above makes an ingress split a credible next milestone. Keep detailed probes
   off by default. Extract the complete ingress contract together: local unsigned submissions,
   authenticated relay envelopes, per-author sequence order, accepted acknowledgements,
-  terminal results, and committee-change barriers must have one owner. The extraction is
-  deliberately staged after relay-v2 compatibility and retained-custody semantics; see
+  result hints, and committee-change barriers must have one owner. The extraction is
+  deliberately staged after the definitive attempt relay and retained-custody semantics; see
   [the ingress-owner contract](ingress-owner.md).
 
 - **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant. It looks
@@ -587,7 +588,7 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   `send_queue_full`) so transient pressure never tears a link down — the accepted cost is that frames
   can DROP SILENTLY on a live link under load. Each layer owns its own recovery today: the Δ redrive
   for consensus evidence and exact-request retransmit for relay. Relay now keeps the 300ms cadence only
-  until the destination returns `relay_accepted`; it then uses a 5s final-result recovery probe. This
+  until the destination returns `relay_accepted`; it then uses a 5s result-hint recovery probe. This
   bounds amplification without assuming the original send succeeded. The link should still either
   signal backpressure to its holder (a `{link_backpressure,...}` message) or run a
   bounded in-link retry for consensus/relay frames (`send_reliable`'s `send_until_accepted` already
@@ -602,8 +603,8 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   full membership list, but it is still an operational estimate and does not yet drive protocol sizing.
 - **Partition heal** — a hard network split does not auto-recover (seeds read once at boot). Fix when
   needed: periodic re-seed from Consul.
-- **Rolling-deploy ACK compat** — new-vs-old nodes churn during a rolling upgrade (the link ACK is a
-  wire change). Non-issue in dev (redeploy all at once).
+- **Quiesced relay cutovers** — stop new writes, drain custody and attempt caches, replace the committee,
+  verify the code-defined capability on every member, and only then resume writes.
 
 ## 6. Per-ontology memory density (multi-tenant scaling)
 

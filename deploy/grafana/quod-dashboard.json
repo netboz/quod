@@ -593,7 +593,7 @@
         "x": 0,
         "y": 50
       },
-      "description": "Requests waiting for consensus and relay retry health. accepted/s means a destination acknowledged receipt and fast retries stopped. redrives/s recovers dropped requests or final replies; duplicates/s is work that reached the consensus mailbox unnecessarily and should stay low. forwarded/s counts locally queued requests dispatched when their exact target slot became available. Overflow and expiry are genuine overload or stall signals.",
+      "description": "Requests waiting for consensus and relay retry health. accepted/s means a destination acknowledged receipt and fast retries stopped. redrives/s recovers dropped requests or result hints; duplicates/s is work that reached the consensus mailbox unnecessarily and should stay low. forwarded/s counts locally queued requests dispatched when their exact target slot became available. Overflow and expiry are genuine overload or stall signals.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",

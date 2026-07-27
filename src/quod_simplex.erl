@@ -46,7 +46,8 @@ to keep others moving. Membership changes remain a global barrier so sustained w
 cannot starve a committee transition. `{error, busy}` means queue overflow or TTL expiry,
 not routine backpressure.
 A relay destination acknowledges once it holds the request: the sender then replaces its
-300 ms lost-send retry with a slow final-result recovery probe.
+300 ms lost-send retry with a slow result-hint probe. Only the origin's durable
+log resolves inclusion or exclusion.
 
 One explicit `head_progress` state watches the oldest non-final slot (`committed+1`) through
 `awaiting_proposal`, `awaiting_notarization`, and `awaiting_commit`. Notarization changes phase; it
@@ -123,16 +124,22 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
          test_append/3, test_relayed_append/3, test_relayed_append/4,
+         test_relay_origin/4,
          test_ingress/1, test_drain/1,
          test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
          test_relay_pending_detail/1, test_relay_result/4,
          test_relay_accepted/3, test_dispatch_relay/3,
          test_put_pending_relay/3,
+         test_relay_state_keys/1, test_relay_result_entries/1,
+         test_expire_relay_results/1, test_redrive_relays/1,
+         test_reply_relay/7,
+         test_outbox/1,
          test_ingress_needs_drain/2,
          test_round_probe/1, route/4,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1, test_ingress_gates/1,
          test_valid_cfg/1, test_log_projection/3,
+         test_apply_catchup_window/3,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -680,8 +687,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
           genesis_hash => undefined,   %% join only: the out-of-band-pinned slot-1 block_hash (the trust anchor)
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
-          relay_protocol => v1,         %% compatibility gate: v1 until every peer can serve relay v2
-          ingress_retarget => false,    %% requires relay_protocol=v2; behavior lands in a later milestone
+          ingress_retarget => false,    %% retained custody lands behind this gate
           data_dir     => undefined}).
 
 -define(MAX_OUTBOX, 1024).   %% per-peer cap on frames buffered while a link opens (bounds memory vs a dead peer)
@@ -718,7 +724,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
 -define(RELAY_RETRY_MS, 300).                    %% retry until the destination acknowledges receipt
 -define(RELAY_ACCEPTED_RETRY_MS, 5000).          %% after receipt, a slow status retry recovers a lost
-                                                  %% terminal result without flooding the consensus mailbox
+                                                  %% result hint without flooding the consensus mailbox
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
 -define(MAX_INGRESS_TXS, 512).                    %% ingress park queue: shared item bound (2x a full block)
 -define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).  %% ingress park queue: shared byte bound
@@ -753,6 +759,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 opened_at = 0 :: integer()}).   %% monotonic ms; measures collection wait on this proposer
 
 -record(waiter, {reply_to :: term(),
+                 submission_id = undefined :: binary() | undefined,
                  trace_ctx :: quod_trace:context(),
                  trace_span :: quod_trace:span_ctx()}).
 
@@ -767,9 +774,18 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                         quorum_rearms = 0 :: 0..?MAX_QUORUM_REARMS,
                         support_grace_used = false :: boolean()}).
 
+-record(relay_ref, {peer :: node_id(),
+                    submission_id :: binary(),
+                    attempt_id :: binary(),
+                    committee_id :: binary(),
+                    target_slot :: slot()}).
+
 -record(relay_pending, {from :: term(),
                         target :: node_id(),
                         target_slot :: slot(),
+                        submission_id :: binary(),
+                        attempt_id :: binary(),
+                        committee_id :: binary(),
                         frame :: binary(),
                         deadline :: integer(),
                         next_retry :: integer(),
@@ -782,7 +798,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 %% BOTH the TTL clock and the relay-deadline anchor: draining cannot reset a request's
 %% lifetime. Relay state is reaped about one second after Prolog's local wait ends; that
 %% cleanup bound does not turn the caller's earlier unknown outcome into a failure.
--type ingress_origin() :: local | {relayed, slot()}.
+-type ingress_origin() :: local | {relayed, #relay_ref{}}.
 -record(ingress_item, {origin :: ingress_origin(),
                        waiter :: #waiter{},
                        change :: #transaction{},
@@ -826,9 +842,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             outbox     = #{} :: #{node_id() => [binary()]},            %% frames buffered while a link opens
             dialing    = #{} :: #{node_id() => integer()},             %% peer => monotonic-ms deadline of its in-flight open_link dial
             relay_pending = #{} :: #{binary() => #relay_pending{}},
-            relay_inflight = #{} :: #{binary() => node_id()},
+            relay_inflight = #{} :: #{binary() => #relay_ref{}},
             relay_results = #{} :: #{binary() =>
-                                      {node_id(), term(), integer()}},
+                                      {#relay_ref{}, term(), integer()}},
             block_requests = #{} :: #{{slot(), binary()} =>
                                        {non_neg_integer(), integer()}},
                                                      %% certified block anti-entropy: attempt + next retry time
@@ -841,7 +857,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             ingress_authors = #{} :: #{node_id() => pos_integer()},
             relay_timeout_ms = 31000 :: pos_integer(),
             batch_window_ms = 25 :: 0..1000,
-            relay_protocol = v1 :: v1 | v2,
             ingress_retarget = false :: boolean(),
             detailed_metrics = false :: boolean(),
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
@@ -943,7 +958,6 @@ test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
-test_state_set(relay_protocol, V, S) -> S#s{relay_protocol = V};
 test_state_set(ingress_retarget, V, S) -> S#s{ingress_retarget = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
@@ -953,16 +967,20 @@ test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight seale
 %% derives them, so drain/expiry tests exercise the real bookkeeping.
 test_state_set(ingress, Items, S) ->
     lists:foldl(
-      fun({Origin, From, Change, At}, Acc) ->
-              NormalizedOrigin =
-                  case Origin of
-                      relayed -> {relayed, Acc#s.approved + 1};
-                      _ -> Origin
-                  end,
-              Waiter = new_waiter(From, otel_ctx:new(), Change, Acc#s.ns,
-                                  NormalizedOrigin =/= local),
+      fun({local, From, Change, At}, Acc) ->
+              Waiter = new_waiter(
+                         From, otel_ctx:new(), Change, Acc#s.ns, false),
               {Acc1, []} = park_ingress(
-                             NormalizedOrigin, awaiting_turn,
+                             local, awaiting_turn,
+                             Waiter, Change, At, Acc),
+              Acc1;
+         ({relayed, Peer, TargetSlot, Change, At}, Acc) ->
+              Ref = test_relay_ref(Peer, Change, TargetSlot, Acc),
+              Origin = {relayed, Ref},
+              Waiter = new_waiter(
+                         {relay, Ref}, otel_ctx:new(), Change, Acc#s.ns, true),
+              {Acc1, []} = park_ingress(
+                             Origin, awaiting_turn,
                              Waiter, Change, At, Acc),
               Acc1
       end, S, Items);
@@ -1001,61 +1019,146 @@ test_vote_journal(#s{vote_journal = Journal}) -> Journal.
 %% clock-controlled drain/expiry.
 test_append(From, Change, S) ->
     handle_append(new_waiter(From, otel_ctx:new(), Change, S#s.ns, false), Change, S).
-test_relayed_append({relay, _Peer, _ReqId} = ReplyTo, Change, S) ->
+test_relayed_append(Peer, Change, S) ->
     TargetSlot = S#s.approved + 1,
-    test_relayed_append(ReplyTo, TargetSlot, Change, S).
-test_relayed_append({relay, _Peer, _ReqId} = ReplyTo,
-                    TargetSlot, Change, S) ->
+    test_relayed_append(Peer, TargetSlot, Change, S).
+test_relayed_append(Peer, TargetSlot, Change, S) ->
+    Ref = test_relay_ref(Peer, Change, TargetSlot, S),
     handle_relayed_append(
-      new_waiter(ReplyTo, otel_ctx:new(), Change, S#s.ns, true),
-      TargetSlot, Change, S).
+      new_waiter({relay, Ref}, otel_ctx:new(), Change, S#s.ns, true),
+      Ref, Change, S).
+test_relay_ref(Peer, Change, TargetSlot,
+               #s{ns = Ns, self = Self, committee_id = CommitteeId0}) ->
+    {ok, Submission} = quod_transaction:submission(Ns, Change),
+    SubmissionId = quod_transaction:submission_id(Submission),
+    CommitteeId =
+        case CommitteeId0 of
+            undefined -> <<0:256>>;
+            Cid -> Cid
+        end,
+    AttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, CommitteeId, TargetSlot, Self),
+    #relay_ref{peer = Peer, submission_id = SubmissionId,
+               attempt_id = AttemptId, committee_id = CommitteeId,
+               target_slot = TargetSlot}.
+test_relay_origin(Peer, TargetSlot, Change, S) ->
+    {relayed,
+     test_relay_ref(Peer, Change, TargetSlot, S)}.
 test_ingress(#s{ingress = Q, ingress_count = C, ingress_bytes = B,
                 ingress_authors = Authors}) ->
     {C, B, Authors,
      [{test_origin(O), Ch#transaction.tx_id, T}
       || #ingress_item{origin = O, change = Ch, enqueued_at = T} <- queue:to_list(Q)]}.
 test_origin(local) -> local;
-test_origin({relayed, _TargetSlot}) -> relayed.
+test_origin({relayed, #relay_ref{}}) -> relayed.
 test_drain(S) -> drain_ingress(S, ingress_route_key(S)).
 test_expire_ingress(S) -> expire_ingress(S).
 test_relay_pending(#s{relay_pending = Pending}) ->
-    [{ReqId, Target, TargetSlot, Deadline}
-     || {ReqId, #relay_pending{target = Target, target_slot = TargetSlot,
-                              deadline = Deadline}}
+    [{relay_wire_id(Relay), Target, TargetSlot, Deadline}
+     || {_Key, #relay_pending{target = Target, target_slot = TargetSlot,
+                             deadline = Deadline} = Relay}
             <- maps:to_list(Pending)].
 test_relay_pending_detail(#s{relay_pending = Pending}) ->
-    [{ReqId, Target, TargetSlot, Deadline, NextRetry, Accepted}
-     || {ReqId, #relay_pending{target = Target, target_slot = TargetSlot,
-                              deadline = Deadline,
-                              next_retry = NextRetry, accepted = Accepted}}
+    [{relay_wire_id(Relay), Target, TargetSlot, Deadline, NextRetry, Accepted}
+     || {_Key, #relay_pending{target = Target, target_slot = TargetSlot,
+                             deadline = Deadline,
+                             next_retry = NextRetry, accepted = Accepted} = Relay}
             <- maps:to_list(Pending)].
-test_relay_result(Peer, ReqId, Result, S) ->
-    handle_relay_result(Peer, ReqId, Result, S).
-test_relay_accepted(Peer, ReqId, S) ->
-    handle_relay_accepted(Peer, ReqId, S).
+relay_wire_id(#relay_pending{attempt_id = AttemptId}) ->
+    AttemptId.
+test_relay_result(Peer, AttemptId, Result,
+                  S = #s{relay_pending = Pending}) ->
+    case maps:get(AttemptId, Pending, undefined) of
+        #relay_pending{submission_id = SubmissionId,
+                       committee_id = CommitteeId,
+                       target_slot = TargetSlot} ->
+            handle_relay_result(
+              Peer, SubmissionId, AttemptId, CommitteeId,
+              TargetSlot, Result, S);
+        undefined ->
+            S
+    end.
+test_relay_accepted(Peer, AttemptId,
+                    S = #s{relay_pending = Pending}) ->
+    case maps:get(AttemptId, Pending, undefined) of
+        #relay_pending{submission_id = SubmissionId,
+                       committee_id = CommitteeId,
+                       target_slot = TargetSlot} ->
+            handle_relay_accepted(
+              Peer, SubmissionId, AttemptId, CommitteeId,
+              TargetSlot, S);
+        undefined ->
+            S
+    end.
 test_dispatch_relay(Peer, Msg, S) ->
     dispatch_relay(Peer, Msg, S).
 test_put_pending_relay(Target, TargetSlot,
-                       S = #s{relay_pending = Pending}) ->
-    ReqId = term_to_binary(make_ref()),
+                       S = #s{ns = Ns, relay_pending = Pending}) ->
+    <<SubmissionId:16/binary, _/binary>> =
+        crypto:hash(sha256, term_to_binary(make_ref())),
+    CommitteeId =
+        case S#s.committee_id of
+            undefined -> <<0:256>>;
+            Cid -> Cid
+        end,
+    AttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, SubmissionId, CommitteeId, TargetSlot, Target),
     Relay = #relay_pending{from = test, target = Target,
-                           target_slot = TargetSlot, frame = <<>>,
+                           target_slot = TargetSlot,
+                           submission_id = SubmissionId,
+                           attempt_id = AttemptId,
+                           committee_id = CommitteeId,
+                           frame = <<>>,
                            deadline = 0, next_retry = 0},
-    case put_pending_relay(ReqId, Relay, Pending) of
+    case put_pending_relay(AttemptId, Relay, Pending) of
         {ok, Pending1} -> {ok, S#s{relay_pending = Pending1}};
         {error, _} = Error -> Error
     end.
+test_relay_state_keys(#s{relay_pending = Pending, relay_inflight = Inflight,
+                         relay_results = Results}) ->
+    {lists:sort(maps:keys(Pending)),
+     lists:sort(maps:keys(Inflight)),
+     lists:sort(maps:keys(Results))}.
+test_relay_result_entries(#s{relay_results = Results}) ->
+    lists:sort(
+      [{Key, Reply, Expires}
+       || {Key, {_Ref, Reply, Expires}} <- maps:to_list(Results)]).
+test_expire_relay_results(S = #s{relay_results = Results}) ->
+    Expired =
+        maps:map(
+          fun(_Key, {Ref, Reply, _Expires}) ->
+                  {Ref, Reply, quod_time:mono_ms() - 1}
+          end, Results),
+    S#s{relay_results = Expired}.
+test_redrive_relays(S = #s{relay_pending = Pending}) ->
+    DueAt = quod_time:mono_ms() - 1,
+    Due =
+        maps:map(
+          fun(_Key, Relay) ->
+                  Relay#relay_pending{next_retry = DueAt}
+          end, Pending),
+    redrive_relays(S#s{relay_pending = Due}).
+test_reply_relay(
+  Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, Reply, S) ->
+    reply_relay(
+      #relay_ref{peer = Peer, submission_id = SubmissionId,
+                 attempt_id = AttemptId,
+                 committee_id = CommitteeId, target_slot = TargetSlot},
+      Reply, S).
+test_outbox(#s{outbox = Outbox}) -> Outbox.
 test_ingress_needs_drain(S0, S1) ->
     ingress_drain_key(S0, S1) =/= none.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
 test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
-test_ingress_gates(#s{relay_protocol = Protocol,
-                      ingress_retarget = Retarget}) ->
-    {Protocol, Retarget}.
+test_ingress_gates(#s{ingress_retarget = Retarget}) -> Retarget.
 test_valid_cfg(Config) ->
     valid_cfg(Config, maps:merge(?DEFAULTS, Config)).
 test_log_projection(Ns, Entries, Seed) ->
     log_projection(Ns, Entries, Seed).
+test_apply_catchup_window(Source, Entries, S) ->
+    apply_catchup_window(Source, Entries, S).
 -endif.
 
 callback_mode() -> [state_functions].
@@ -1136,7 +1239,6 @@ init_store(Ns, Cfg, Id) ->
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
             chan = Chan, relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
-            relay_protocol = maps:get(relay_protocol, Cfg),
             ingress_retarget = maps:get(ingress_retarget, Cfg),
             detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
     %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
@@ -1251,13 +1353,17 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
 %% overlay together (`quod_prolog:terms_to_diff/1` — a hand-built `{Head, true}` clause would be malformed).
 %% The founding set is `[]` ⇒ self-only (N=1) or a list of co-founders; each entry is a bare pubkey (address
 %% unknown until it links) or a `{Pubkey, Host, Port}` tuple. Only the pubkey is load-bearing for consensus;
-%% the address is a dial hint the join path fills in later.
+%% the address is a dial hint the join path fills in later. The sorted first founder is the canonical
+%% unsigned genesis author, making the complete genesis entry byte-identical on every co-founder.
 genesis_tx(Cfg, Ns, Self) ->
-    PeerTerms  = [{peer_admitted, Pk, Host, Port, Pk} || {Pk, Host, Port} <- founding(Cfg, Self)],
+    Founders   = founding(Cfg, Self),
+    [{GenesisAuthor, _, _} | _] = Founders,
+    PeerTerms  = [{peer_admitted, Pk, Host, Port, Pk}
+                  || {Pk, Host, Port} <- Founders],
     FileTerms  = case genesis_file(Cfg) of none -> []; File -> quod_prolog:read_terms(File) end,
     Diff       = quod_prolog:terms_to_diff(PeerTerms ++ FileTerms),
     #transaction{tx_id = <<"genesis:", Ns/binary>>, caller_ns = Ns, diff = Diff,
-                 read_check = #{}, author = Self, sig = none}.
+                 read_check = #{}, author = GenesisAuthor, sig = none}.
 
 %% The founding members as `{Pubkey, Host, Port}` (sorted, self included). `Host`/`Port` are a dial hint the
 %% join path fills in — `undefined` when only a bare pubkey is configured; consensus needs only the pubkey.
@@ -1337,12 +1443,7 @@ running_impl(cast, rebuild, S0) ->
 %% sender's authenticated node_id (pubkey); the address is a routing hint we ignore. Processing it can
 %% advance/skip the head; `keep_progress/3` reconciles the explicit head watchdog afterward.
 running_impl(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = #s{chan = Chan}) ->
-    %% Only a committee member acts on consensus traffic. A node that is still joining, or caught up but
-    %% not (yet) admitted, is a read-only observer — it stays current via catch-up + its KB, never by
-    %% voting — so it drops the committee's propose/share/cert stream (also guards `leader/2` on `[]`).
     case is_participant(S0) of
-        false ->
-            {keep_state, S0};
         true ->
             SIn = track_inbound(Peer, InLink, S0),
             case quod_relay:decode_frame(Payload, S0#s.ns) of
@@ -1354,6 +1455,18 @@ running_impl(info, {quod_message, {{Peer, _Addr}, InLink}, Chan, Payload}, S0 = 
                     keep_progress(S0, S1, []);
                 error ->
                     keep_progress(S0, SIn, [])
+            end;
+        false ->
+            %% A former proposer remains able to reconstruct an old attempt
+            %% from its durable target slot after demotion/restart. It parses
+            %% only the bounded safe relay grammar; unrestricted consensus ETF
+            %% stays behind the participant gate above.
+            case quod_relay:decode_relay_frame(Payload, S0#s.ns) of
+                {relay, Relay} ->
+                    {S1, Actions} = dispatch_relay(Peer, Relay, S0),
+                    keep_progress(S0, S1, Actions);
+                error ->
+                    {keep_state, S0}
             end
     end;
 running_impl(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
@@ -1475,8 +1588,8 @@ handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
             'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id)}),
     append_entry(local, From, Change, S).
 
-handle_relayed_append(Waiter, TargetSlot, Change, S) ->
-    append_entry({relayed, TargetSlot}, Waiter, Change, S).
+handle_relayed_append(Waiter, Ref = #relay_ref{}, Change, S) ->
+    append_entry({relayed, Ref}, Waiter, Change, S).
 
 %% Live arrival: stamp the mono-ms anchor so parking cannot reset ingress or relay
 %% lifetime, then compute the route and execute it.
@@ -1510,7 +1623,7 @@ append_entry(Origin, From, Change, S) ->
 %% the depth-one pipeline occupied forever and starve the committee transition.
 %%
 %% Origin fixes the trust shape: only the author may relay its own submission
-%% (dispatch_relay verifies Peer =:= Author), so `{relay,_,_}` is constructible
+%% (dispatch_relay verifies Peer =:= Author), so a relay reference is constructible
 %% for LOCAL origin only. A relayed change never leaves its authenticated target
 %% proposer: it enters that exact slot, waits for it, or is rejected.
 
@@ -1540,7 +1653,7 @@ route(Pass, local, Change, S) ->
                     end
             end
     end;
-route(Pass, {relayed, _TargetSlot} = Origin, Change, S) ->
+route(Pass, {relayed, #relay_ref{}} = Origin, Change, S) ->
     case ingress_change_acceptable(Change, S) of
         false -> {reject, bad_change};
         true ->
@@ -1567,13 +1680,18 @@ route(Pass, {relayed, _TargetSlot} = Origin, Change, S) ->
 %% Validate exact-slot ownership before readiness or membership barriers can
 %% park the request. Recovery may delay work this node owns; it must never make
 %% the node acknowledge a misrouted or already-closed relay.
-relay_target_open({relayed, TargetSlot}, S = #s{self = Self}) ->
+relay_target_open(
+  {relayed, #relay_ref{committee_id = CommitteeId,
+                       target_slot = TargetSlot}},
+  S = #s{self = Self, committee_id = CommitteeId}) ->
     Floor = S#s.approved + 1,
     Vals = active_validators(S),
     leader(TargetSlot, Vals) =:= Self
         andalso (TargetSlot > Floor
                  orelse (TargetSlot =:= Floor
-                         andalso not proposal_visible(Floor, S))).
+                         andalso not proposal_visible(Floor, S)));
+relay_target_open({relayed, #relay_ref{}}, _S) ->
+    false.
 
 %% A local unsigned submission is accepted only while this process may vote; Prolog
 %% itself is normally unavailable during recovery. An authenticated relayed submission
@@ -1598,7 +1716,7 @@ place(Pass, Origin, Change, S = #s{self = Self}) ->
             Vals = active_validators(S),
             case Origin of
                 local   -> place_local(Pass, Change, Floor, Self, Vals, S);
-                {relayed, TargetSlot} ->
+                {relayed, #relay_ref{target_slot = TargetSlot}} ->
                     place_relayed(Pass, TargetSlot, Change, Floor, S)
             end
     end.
@@ -1656,7 +1774,7 @@ place_relayed(Pass, TargetSlot, Change, Floor, S) ->
 relay_lane(_Floor, #s{relay_pending = Pending}) when map_size(Pending) =:= 0 ->
     empty;
 relay_lane(Floor, #s{relay_pending = Pending} = S) ->
-    {_ReqId, #relay_pending{target = Target, target_slot = TargetSlot}, _Iter} =
+    {_AttemptId, #relay_pending{target = Target, target_slot = TargetSlot}, _Iter} =
         maps:next(maps:iterator(Pending)),
     case lists:member(Target, active_validators(S)) of
         false -> blocked;
@@ -1706,7 +1824,8 @@ execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
 sign_then(From, Change, S, Then) ->
     case sign_local_change(Change, S) of
         {error, _}       -> reject_append(From, bad_change, S);
-        {ok, Signed, S1} -> Then(From, Signed, S1)
+        {ok, Signed, S1} ->
+            Then(bind_waiter_submission(From, Signed, S1#s.ns), Signed, S1)
     end.
 
 count_forwarded(drain, S) -> S#s{ingress_forwarded = S#s.ingress_forwarded + 1};
@@ -1963,6 +2082,7 @@ ingress_route_key(S = #s{approved = Approved, collecting = Collecting}) ->
     {may_lead(S),
      S#s.slot,
      Approved,
+     S#s.committee_id,
      active_validators(S),
      proposal_visible(Floor, S),
      proposal_slot(S),
@@ -1998,89 +2118,106 @@ expire_ingress(Cutoff, S = #s{ingress_count = C}) when C > 0 ->
 expire_ingress(_Cutoff, S) ->
     S.
 
-%% Recovery re-seat / shutdown of the volatile window: parked callers are nacked
-%% retryably, exactly like a discarded collecting batch.
-nack_ingress(S = #s{ingress_count = 0}) -> S;
-nack_ingress(S) ->
-    S1 = lists:foldl(
-           fun(#ingress_item{waiter = Waiter}, Acc) ->
-                   reply_waiter(Waiter, {error, skipped}, Acc)
-           end, S, queue:to_list(S#s.ingress)),
-    S1#s{ingress = queue:new(), ingress_count = 0,
-         ingress_bytes = 0, ingress_authors = #{}}.
-
 redirect_append(From, Leader, S) ->
     reply_now(From, {error, not_in_charge, Leader},
               S#s{r_redirect = S#s.r_redirect + 1}).
 
-reply_now(Waiter = #waiter{reply_to = {relay, _Peer, _ReqId}}, Reply, S) ->
+reply_now(Waiter = #waiter{reply_to = {relay, #relay_ref{}}}, Reply, S) ->
     {reply_waiter(Waiter, Reply, S), []};
 reply_now(Waiter = #waiter{reply_to = From}, Reply, S) ->
     finish_waiter_trace(Waiter, Reply),
     {S, [{reply, From, Reply}]};
-reply_now({relay, Peer, ReqId}, Reply, S) ->
-    {reply_relay(Peer, ReqId, Reply, S), []}.
+reply_now({relay, RelayRef = #relay_ref{}}, Reply, S) ->
+    {reply_relay(RelayRef, Reply, S), []}.
 
 %% `Anchor` = the submission's ORIGINAL arrival time (mono ms): a drained item's park
 %% wait counts against the relay cleanup deadline. The caller may stop waiting first
-%% and receive `outcome_unknown`; the pending relay then remains briefly to absorb a
-%% racing final result before its bounded state is reaped.
+%% and receive `outcome_unknown`; pending state then remains briefly so a racing
+%% local finality event can still classify the attempt before bounded cleanup.
 relay_append(From, Leader, TargetSlot, Change, Anchor,
              S = #s{ns = Ns, relay_pending = Pending,
-                    relay_timeout_ms = RelayTimeout}) ->
+                    relay_timeout_ms = RelayTimeout,
+                    committee_id = CommitteeId}) ->
     case quod_transaction:submission(Ns, Change) of
         {error, _} ->
             reject_append(From, bad_change, S);
         {ok, Submission} ->
-            ReqId = quod_transaction:submission_id(Submission),
-            case {maps:is_key(ReqId, Pending),
-                  map_size(Pending) >= ?MAX_RELAY_PENDING} of
-                {true, _} ->
-                    reject_append(From, bad_change, S);
-                {false, true} ->
-                    reject_append(From, busy, S);
-                {false, false} ->
-                    TraceCtx = waiter_trace_ctx(From),
-                    Frame = quod_relay:encode(
-                              Ns, {relay_submit, ReqId, TargetSlot, Submission,
-                                   quod_trace:inject(TraceCtx)}),
-                    Relay = #relay_pending{
-                               from = From, target = Leader,
-                               target_slot = TargetSlot,
-                               frame = Frame,
-                               deadline = Anchor + RelayTimeout,
-                               next_retry = quod_time:mono_ms() + ?RELAY_RETRY_MS},
-                    case put_pending_relay(ReqId, Relay, Pending) of
-                        {error, Conflict} ->
-                            logger:error(
-                              "quod[~s]: refusing divergent relay lane: ~0p",
-                              [Ns, Conflict]),
-                            reply_now(From, {error, skipped}, S);
-                        {ok, Pending1} ->
-                            _ = quod_trace:add_event(
-                                  TraceCtx, <<"consensus.relayed">>,
-                                  #{'quod.relay.target' => trace_node_id(Leader)}),
-                            S1 = send_frame(Leader, Frame, S),
-                            {S1#s{relay_pending = Pending1}, []}
+            SubmissionId = quod_transaction:submission_id(Submission),
+            TraceCtx = waiter_trace_ctx(From),
+            case outbound_relay(
+                   Ns, SubmissionId, CommitteeId, TargetSlot,
+                   Leader, Submission, quod_trace:inject(TraceCtx)) of
+                error ->
+                    %% A missing/malformed committee view cannot create a
+                    %% placement whose identity would be ambiguous.
+                    reply_now(From, {error, not_in_charge, unavailable}, S);
+                {ok, AttemptId, Frame} ->
+                    case {maps:is_key(AttemptId, Pending),
+                          map_size(Pending) >= ?MAX_RELAY_PENDING} of
+                        {true, _} ->
+                            reject_append(From, bad_change, S);
+                        {false, true} ->
+                            reject_append(From, busy, S);
+                        {false, false} ->
+                            Relay = #relay_pending{
+                                       from = From, target = Leader,
+                                       target_slot = TargetSlot,
+                                       submission_id = SubmissionId,
+                                       attempt_id = AttemptId,
+                                       committee_id = CommitteeId,
+                                       frame = Frame,
+                                       deadline = Anchor + RelayTimeout,
+                                       next_retry =
+                                           quod_time:mono_ms()
+                                           + ?RELAY_RETRY_MS},
+                            case put_pending_relay(
+                                   AttemptId, Relay, Pending) of
+                                {error, Conflict} ->
+                                    logger:error(
+                                      "quod[~s]: refusing divergent relay lane: ~0p",
+                                      [Ns, Conflict]),
+                                    reply_now(From, {error, skipped}, S);
+                                {ok, Pending1} ->
+                                    _ = quod_trace:add_event(
+                                          TraceCtx, <<"consensus.relayed">>,
+                                          #{'quod.relay.target' =>
+                                                trace_node_id(Leader)}),
+                                    S1 = send_frame(Leader, Frame, S),
+                                    {S1#s{relay_pending = Pending1}, []}
+                            end
                     end
             end
+    end.
+
+outbound_relay(Ns, SubmissionId, CommitteeId, TargetSlot, Target,
+               Submission, TraceCarrier) ->
+    case quod_transaction:relay_attempt_id(
+           Ns, SubmissionId, CommitteeId, TargetSlot, Target) of
+        AttemptId when is_binary(AttemptId) ->
+            Frame =
+                quod_relay:encode(
+                  Ns, {relay_submit, SubmissionId, AttemptId,
+                       CommitteeId, TargetSlot, Submission, TraceCarrier}),
+            {ok, AttemptId, Frame};
+        error ->
+            error
     end.
 
 %% There is one outbound author per node, so all unresolved requests deliberately
 %% share one exact target and slot. Enforce that invariant at the only creation
 %% point in O(1); later updates preserve both fields and removals cannot violate it.
-put_pending_relay(ReqId,
+put_pending_relay(AttemptId,
                   Relay = #relay_pending{target = Target,
                                          target_slot = TargetSlot},
                   Pending) ->
     case maps:next(maps:iterator(Pending)) of
         none ->
-            {ok, Pending#{ReqId => Relay}};
-        {_ExistingReqId,
+            {ok, Pending#{AttemptId => Relay}};
+        {_ExistingAttemptId,
          #relay_pending{target = Target, target_slot = TargetSlot},
          _Iter} ->
-            {ok, Pending#{ReqId => Relay}};
-        {_ExistingReqId,
+            {ok, Pending#{AttemptId => Relay}};
+        {_ExistingAttemptId,
          #relay_pending{target = ExistingTarget,
                         target_slot = ExistingSlot},
          _Iter} ->
@@ -2320,7 +2457,7 @@ resolve_committed_relays(_Payload, _Slot, S = #s{relay_pending = Pending})
   when map_size(Pending) =:= 0 ->
     S;
 resolve_committed_relays(Payload, Slot, S = #s{relay_pending = Pending}) ->
-    RequestIds =
+    SubmissionIds =
         maps:from_keys(
           [quod_transaction:submission_id(Submission)
            || Transaction <- Payload,
@@ -2328,12 +2465,13 @@ resolve_committed_relays(Payload, Slot, S = #s{relay_pending = Pending}) ->
                                                                Transaction)]],
           true),
     maps:fold(
-      fun(ReqId, #relay_pending{from = From}, Acc) ->
-              case maps:is_key(ReqId, RequestIds) of
+      fun(Key, #relay_pending{from = From,
+                             submission_id = SubmissionId}, Acc) ->
+              case maps:is_key(SubmissionId, SubmissionIds) of
                   true ->
                       reply_waiter(
                         From, {ok, Slot},
-                        remove_pending_relay(ReqId, Acc));
+                        remove_pending_relay(Key, Acc));
                   false ->
                       Acc
               end
@@ -2454,18 +2592,17 @@ nack_collecting_le(_Slot, S) -> S.
 %% at this or an older slot lost placement and must be retried immediately.
 nack_relays_le(Slot, S = #s{relay_pending = Pending}) ->
     maps:fold(
-      fun(ReqId, #relay_pending{from = From, target_slot = TargetSlot}, Acc)
+      fun(AttemptId, #relay_pending{from = From, target_slot = TargetSlot}, Acc)
             when TargetSlot =< Slot ->
-              finish_relay(ReqId, From, {error, skipped}, Acc);
-         (_ReqId, _Relay, Acc) ->
+              finish_relay(AttemptId, From, {error, skipped}, Acc);
+         (_AttemptId, _Relay, Acc) ->
               Acc
       end, S, Pending).
 
 nack_collecting(S = #s{collecting = #batch{items_rev = Items}}) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
                        {error, skipped}, S),
-    S1#s{collecting = none};
-nack_collecting(S) -> S.
+    S1#s{collecting = none}.
 
 reply_waiters(Waiters, Reply, S) ->
     lists:foldl(fun(Waiter, Acc) -> reply_waiter(Waiter, Reply, Acc) end,
@@ -2474,8 +2611,8 @@ reply_waiters(Waiters, Reply, S) ->
 reply_waiter(Waiter = #waiter{reply_to = ReplyTo}, Reply, S) ->
     finish_waiter_trace(Waiter, Reply),
     reply_waiter(ReplyTo, Reply, S);
-reply_waiter({relay, Peer, ReqId}, Reply, S) ->
-    reply_relay(Peer, ReqId, Reply, S);
+reply_waiter({relay, RelayRef = #relay_ref{}}, Reply, S) ->
+    reply_relay(RelayRef, Reply, S);
 reply_waiter(From, Reply, S) ->
     gen_statem:reply(From, Reply),
     S.
@@ -2489,7 +2626,18 @@ new_waiter(ReplyTo, ParentCtx, Change, Ns, Relayed) ->
                             #{'quod.namespace' => Ns,
                               'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id),
                               'quod.relay.hop' => Relayed}),
-    #waiter{reply_to = ReplyTo, trace_ctx = TraceCtx, trace_span = SpanCtx}.
+    #waiter{reply_to = ReplyTo,
+            submission_id = change_submission_id(Ns, Change),
+            trace_ctx = TraceCtx, trace_span = SpanCtx}.
+
+bind_waiter_submission(Waiter = #waiter{}, Change, Ns) ->
+    Waiter#waiter{submission_id = change_submission_id(Ns, Change)}.
+
+change_submission_id(Ns, Change) ->
+    case quod_transaction:submission(Ns, Change) of
+        {ok, Submission} -> quod_transaction:submission_id(Submission);
+        {error, _} -> undefined
+    end.
 
 finish_waiter_trace(#waiter{trace_ctx = TraceCtx, trace_span = SpanCtx}, Reply) ->
     _ = quod_trace:add_event(
@@ -2501,14 +2649,11 @@ trace_reply_attributes({ok, Slot}) ->
 trace_reply_attributes({error, Reason}) when is_atom(Reason) ->
     #{'quod.outcome' => atom_to_binary(Reason, utf8)};
 trace_reply_attributes({error, not_in_charge, _Hint}) ->
-    #{'quod.outcome' => <<"not_in_charge">>};
-trace_reply_attributes(_) ->
-    #{'quod.outcome' => <<"unknown">>}.
+    #{'quod.outcome' => <<"not_in_charge">>}.
 
 trace_node_id(Id) when is_binary(Id) -> binary:encode_hex(Id, lowercase);
 trace_node_id({Host, Port}) ->
-    iolist_to_binary(io_lib:format("~ts:~B", [Host, Port]));
-trace_node_id(_) -> <<"unknown">>.
+    iolist_to_binary(io_lib:format("~ts:~B", [Host, Port])).
 
 trace_context_for_slot(Slot, #s{local_proposals = Local}) ->
     case maps:get(Slot, Local, undefined) of
@@ -3986,152 +4131,319 @@ dial_deadline() -> quod_time:mono_ms() + ?DIAL_TIMEOUT_MS.
 %%% transaction relay
 %%%===================================================================
 
-dispatch_relay(Peer, {relay_submit, ReqId, TargetSlot,
-                      {submit, Author, _Signature, _Canonical} = Submission,
-                      TraceCarrier},
-               S = #s{relay_results = Results, relay_inflight = Inflight}) ->
-    case ReqId =:= quod_transaction:submission_id(Submission) of
+dispatch_relay(
+  Peer, {relay_submit, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+         {submit, Author, _Signature, _Canonical} = Submission, TraceCarrier},
+  S0 = #s{ns = Ns, self = Self}) ->
+    DerivedSubmissionId = quod_transaction:submission_id(Submission),
+    DerivedAttemptId =
+        quod_transaction:relay_attempt_id(
+          Ns, DerivedSubmissionId, CommitteeId, TargetSlot, Self),
+    case Peer =:= Author
+         andalso SubmissionId =:= DerivedSubmissionId
+         andalso AttemptId =:= DerivedAttemptId of
         false ->
-            {S, []};
+            {S0, []};
         true ->
-            case maps:get(ReqId, Results, undefined) of
-                {Peer, Reply, _Expires} ->
-                    {send_relay_result(Peer, ReqId, Reply, S), []};
-                _ ->
-                    case Peer =:= Author andalso
-                         lists:member(Peer, active_validators(S)) of
-                        false ->
-                            reply_now({relay, Peer, ReqId},
-                                      {error, bad_change}, S);
-                        true ->
-                            case maps:is_key(ReqId, Inflight) of
-                                true ->
-                                    {send_relay_accepted(Peer, ReqId,
-                                         S#s{relay_duplicates =
-                                                 S#s.relay_duplicates + 1}), []};
-                                false ->
-                                    verify_and_accept_relay(
-                                      Peer, ReqId, TargetSlot,
-                                      Submission, TraceCarrier, S)
-                            end
-                    end
+            Ref = #relay_ref{peer = Peer, submission_id = SubmissionId,
+                             attempt_id = AttemptId,
+                             committee_id = CommitteeId,
+                             target_slot = TargetSlot},
+            case verify_relay_submission(Ns, Submission) of
+                false ->
+                    %% Invalid opaque bytes cannot prune/read/populate either
+                    %% volatile recovery state or the durable target slot.
+                    {S0, []};
+                true ->
+                    dispatch_relay_submit(
+                      Ref, Author, Submission, TraceCarrier,
+                      prune_relay_results(S0))
             end
     end;
-dispatch_relay(Peer, {relay_result, ReqId, Result}, S) ->
-    {handle_relay_result(Peer, ReqId, Result, S), []};
-dispatch_relay(Peer, {relay_accepted, ReqId}, S) ->
-    {handle_relay_accepted(Peer, ReqId, S), []};
-%% Relay framing may learn a new, safely decoded version before this state
-%% machine serves it. Compatibility deployment must fail closed instead of
-%% letting an authenticated but unsupported frame crash the consensus owner.
+dispatch_relay(
+  Peer, {relay_result, SubmissionId, AttemptId, CommitteeId,
+         TargetSlot, Result}, S) ->
+    {handle_relay_result(
+       Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result, S), []};
+dispatch_relay(
+  Peer, {relay_accepted, SubmissionId, AttemptId, CommitteeId,
+         TargetSlot}, S) ->
+    {handle_relay_accepted(
+       Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, S), []};
 dispatch_relay(_Peer, _Unsupported, S) ->
     {S, []}.
 
-verify_and_accept_relay(Peer, ReqId, TargetSlot, Submission, TraceCarrier,
-                        S = #s{ns = Ns}) ->
+verify_relay_submission(Ns, Submission) ->
     Started = erlang:monotonic_time(),
     Valid = quod_transaction:verify_submission(Submission),
     quod_metrics:observe_transaction_signature(
       Ns, Valid, erlang:monotonic_time() - Started),
-    case Valid of
-        false ->
-            reply_now({relay, Peer, ReqId}, {error, bad_change}, S);
-        true ->
-            case quod_transaction:decode_verified_submission(Ns, Submission) of
-                {ok, Change} ->
-                    Inflight = (S#s.relay_inflight)#{ReqId => Peer},
-                    ParentCtx = quod_trace:extract(TraceCarrier),
-                    Waiter = new_waiter(
-                               {relay, Peer, ReqId}, ParentCtx, Change, Ns, true),
-                    _ = quod_trace:add_event(
-                          waiter_trace_ctx(Waiter), <<"consensus.relay_received">>,
-                          #{'quod.relay.source' => trace_node_id(Peer)}),
-                    {S1, Actions} = handle_relayed_append(
-                                      Waiter, TargetSlot, Change,
-                                      S#s{relay_inflight = Inflight}),
-                    case maps:is_key(ReqId, S1#s.relay_inflight) of
-                        true  -> {send_relay_accepted(Peer, ReqId, S1), Actions};
-                        false -> {S1, Actions}
-                    end;
-                {error, _} ->
-                    reply_now({relay, Peer, ReqId}, {error, bad_change}, S)
+    Valid.
+
+dispatch_relay_submit(
+  Ref = #relay_ref{}, Author, Submission, TraceCarrier,
+  S = #s{relay_results = Results, relay_inflight = Inflight}) ->
+    Key = Ref#relay_ref.attempt_id,
+    case maps:get(Key, Results, undefined) of
+        {Ref, Reply, _Expires} ->
+            %% A completed old-view attempt remains answerable from the exact
+            %% immutable context that admitted it.
+            {send_relay_result(Ref, Reply, S), []};
+        {_OtherRef, _Reply, _Expires} ->
+            %% A digest collision or divergent metadata can never overwrite or
+            %% borrow an existing attempt.
+            {S, []};
+        undefined ->
+            case maps:get(Key, Inflight, undefined) of
+                Ref ->
+                    {send_relay_accepted(
+                       Ref,
+                       S#s{relay_duplicates = S#s.relay_duplicates + 1}), []};
+                #relay_ref{} ->
+                    {S, []};
+                undefined ->
+                    case durable_relay_result(
+                           Ref#relay_ref.submission_id,
+                           Ref#relay_ref.target_slot, S) of
+                        {final, Reply} ->
+                            {reply_relay(Ref, Reply, S), []};
+                        pending ->
+                            first_admit_relay(
+                              Ref, Author, Submission, TraceCarrier, S);
+                        unknown ->
+                            %% A durable slot that cannot be read or decoded is
+                            %% ambiguous. Silence is safer than fabricating an
+                            %% exclusion that could retry a committed write.
+                            {S, []}
+                    end
             end
     end.
 
-handle_relay_result(Peer, ReqId, Result,
-                    S = #s{relay_pending = Pending}) ->
-    case maps:get(ReqId, Pending, undefined) of
-        #relay_pending{from = From, target = Peer} ->
-            case Result of
-                %% The exact target slot closed or this peer does not own it.
-                %% Re-prove against the new frontier instead of trusting a
-                %% peer-supplied redirect hint.
-                {error, not_in_charge, _Hint} ->
-                    finish_relay(ReqId, From, {error, skipped}, S);
-                _ -> finish_relay(ReqId, From, Result, S)
+durable_relay_result(
+  SubmissionId, TargetSlot,
+  #s{ns = Ns, store = Store, slot = DurableHead})
+  when TargetSlot =< DurableHead ->
+    case catch quod_ledger_store:read_at(Store, TargetSlot) of
+        {ok, #entry{data = Data}} ->
+            case quod_ledger:payload(Data) of
+                {ok, Payload} ->
+                    case payload_has_submission(Ns, SubmissionId, Payload) of
+                        true ->
+                            {final, {ok, TargetSlot}};
+                        false ->
+                            {final, {error, not_in_charge, none}}
+                    end;
+                error when Data =:= noop ->
+                    {final, {error, not_in_charge, none}};
+                error ->
+                    unknown
             end;
         _ ->
+            unknown
+    end;
+durable_relay_result(_SubmissionId, _TargetSlot, _S) ->
+    pending.
+
+payload_has_submission(Ns, SubmissionId, Payload) ->
+    lists:any(
+      fun(Transaction) ->
+              case quod_transaction:submission(Ns, Transaction) of
+                  {ok, Submission} ->
+                      quod_transaction:submission_id(Submission)
+                          =:= SubmissionId;
+                  {error, _} ->
+                      false
+              end
+      end, Payload).
+
+first_admit_relay(
+  Ref = #relay_ref{peer = Peer, committee_id = CommitteeId},
+  Author, Submission, TraceCarrier,
+  S = #s{committee_id = CurrentCommitteeId}) ->
+    case Peer =:= Author andalso
+         lists:member(Peer, active_validators(S)) of
+        false ->
+            reply_now(relay_reply_to(Ref), {error, bad_change}, S);
+        true when CommitteeId =/= CurrentCommitteeId ->
+            reply_now(
+              relay_reply_to(Ref), {error, not_in_charge, none}, S);
+        true ->
+            case relay_target_open({relayed, Ref}, S) of
+                false ->
+                    reply_now(
+                      relay_reply_to(Ref),
+                      {error, not_in_charge, none}, S);
+                true ->
+                    decode_and_accept_verified_relay(
+                      Ref, Submission, TraceCarrier, S)
+            end
+    end.
+
+decode_and_accept_verified_relay(
+  Ref = #relay_ref{peer = Peer},
+  Submission, TraceCarrier, S = #s{ns = Ns}) ->
+    case quod_transaction:decode_verified_submission(Ns, Submission) of
+        {ok, Change} ->
+            Key = Ref#relay_ref.attempt_id,
+            Inflight = (S#s.relay_inflight)#{Key => Ref},
+            ParentCtx = quod_trace:extract(TraceCarrier),
+            Waiter = new_waiter(
+                       relay_reply_to(Ref), ParentCtx,
+                       Change, Ns, true),
+            _ = quod_trace:add_event(
+                  waiter_trace_ctx(Waiter), <<"consensus.relay_received">>,
+                  #{'quod.relay.source' => trace_node_id(Peer)}),
+            {S1, Actions} = handle_relayed_append(
+                              Waiter, Ref, Change,
+                              S#s{relay_inflight = Inflight}),
+            case maps:get(Key, S1#s.relay_inflight, undefined) of
+                Ref -> {send_relay_accepted(Ref, S1), Actions};
+                _   -> {S1, Actions}
+            end;
+        {error, _} ->
+            reply_now(
+              relay_reply_to(Ref), {error, bad_change}, S)
+    end.
+
+handle_relay_result(
+  Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot, Result,
+  S = #s{relay_pending = Pending}) ->
+    Key = AttemptId,
+    case maps:get(Key, Pending, undefined) of
+        #relay_pending{target = Peer,
+                       submission_id = SubmissionId,
+                       attempt_id = AttemptId,
+                       committee_id = CommitteeId,
+                       target_slot = TargetSlot} = Relay ->
+            case valid_relay_result(Result, TargetSlot) of
+                false ->
+                    S;
+                true ->
+                    %% A destination result is an authenticated hint, not
+                    %% finality evidence. Keep source ownership until the
+                    %% origin's durable log includes SubmissionId or finalizes
+                    %% TargetSlot without it. This prevents a Byzantine target
+                    %% from fabricating either success or a safe retry.
+                    accept_pending_relay(Key, Relay, S)
+            end;
+        _ ->
+            %% Delayed or foreign replies are never compared with the current
+            %% committee view; they simply fail the stored attempt match.
             S
     end.
 
-finish_relay(ReqId, From, Result, S) ->
-    reply_waiter(From, Result, remove_pending_relay(ReqId, S)).
+valid_relay_result({ok, Slot}, TargetSlot) -> Slot =:= TargetSlot;
+valid_relay_result(_Result, _TargetSlot) -> true.
 
-remove_pending_relay(ReqId, S = #s{relay_pending = Pending}) ->
-    S#s{relay_pending = maps:remove(ReqId, Pending)}.
+finish_relay(Key, From, Result, S) ->
+    reply_waiter(From, Result, remove_pending_relay(Key, S)).
 
-handle_relay_accepted(Peer, ReqId,
-                      S = #s{relay_pending = Pending}) ->
-    case maps:get(ReqId, Pending, undefined) of
-        #relay_pending{target = Peer, accepted = false} = Relay ->
-            Relay1 = Relay#relay_pending{
-                       accepted = true,
-                       next_retry = quod_time:mono_ms() + ?RELAY_ACCEPTED_RETRY_MS},
-            S#s{relay_pending = Pending#{ReqId => Relay1},
-                relay_accepted = S#s.relay_accepted + 1};
-        #relay_pending{target = Peer, accepted = true} = Relay ->
-            %% A duplicate acknowledgement answers a slow status retry. Push the
-            %% next recovery probe out again while the destination still holds it.
-            Relay1 = Relay#relay_pending{
-                       next_retry = quod_time:mono_ms() + ?RELAY_ACCEPTED_RETRY_MS},
-            S#s{relay_pending = Pending#{ReqId => Relay1}};
+remove_pending_relay(Key, S = #s{relay_pending = Pending}) ->
+    S#s{relay_pending = maps:remove(Key, Pending)}.
+
+handle_relay_accepted(
+  Peer, SubmissionId, AttemptId, CommitteeId, TargetSlot,
+  S = #s{relay_pending = Pending}) ->
+    Key = AttemptId,
+    case maps:get(Key, Pending, undefined) of
+        #relay_pending{target = Peer,
+                       submission_id = SubmissionId,
+                       attempt_id = AttemptId,
+                       committee_id = CommitteeId,
+                       target_slot = TargetSlot} = Relay ->
+            accept_pending_relay(Key, Relay, S);
         _ ->
             S
     end.
 
-reply_relay(Peer, ReqId, Reply, S) ->
-    S1 = send_relay_result(Peer, ReqId, Reply, S),
-    Results1 = quod_relay:put_result(
-                 ReqId,
-                 {Peer, Reply,
-                  quod_time:mono_ms() + S1#s.relay_timeout_ms},
-                 S1#s.relay_results),
-    S1#s{relay_inflight = maps:remove(ReqId, S1#s.relay_inflight),
-         relay_results = Results1}.
+accept_pending_relay(Key,
+                     Relay = #relay_pending{accepted = Accepted}, S) ->
+    Relay1 = Relay#relay_pending{
+               accepted = true,
+               next_retry =
+                   quod_time:mono_ms() + ?RELAY_ACCEPTED_RETRY_MS},
+    S#s{relay_pending = (S#s.relay_pending)#{Key => Relay1},
+        relay_accepted =
+            S#s.relay_accepted
+            + case Accepted of false -> 1; true -> 0 end}.
 
-send_relay_result(Peer, ReqId, Reply, S = #s{ns = Ns}) ->
-    send_frame(Peer, quod_relay:encode(Ns, {relay_result, ReqId, Reply}), S).
+reply_relay(Ref, Reply, S) ->
+    Key = Ref#relay_ref.attempt_id,
+    S0 = prune_relay_results(S),
+    case maps:get(Key, S0#s.relay_results, undefined) of
+        undefined ->
+            S1 = send_relay_result(Ref, Reply, S0),
+            Results1 = quod_relay:put_result(
+                         Key,
+                         {Ref, Reply,
+                          quod_time:mono_ms() + S1#s.relay_timeout_ms},
+                         S1#s.relay_results),
+            S1#s{
+              relay_inflight = maps:remove(Key, S1#s.relay_inflight),
+              relay_results = Results1};
+        {Ref, Reply, _Expires} ->
+            %% Repeating the exact terminal transition may re-send the stored
+            %% answer, but it must not turn the cache TTL into a sliding lease.
+            S1 = send_relay_result(Ref, Reply, S0),
+            S1#s{relay_inflight =
+                     maps:remove(Key, S1#s.relay_inflight)};
+        {_StoredRef, _StoredReply, _Expires} ->
+            %% A same-key divergent context/result is an invariant violation
+            %% (or digest collision). Do not emit contradictory wire state and
+            %% never overwrite the write-once cache. Drop volatile ownership so
+            %% the origin observes ambiguity through its existing deadline.
+            logger:error(
+              "quod[~s]: refusing divergent relay terminal state for ~0p",
+              [S0#s.ns, Key]),
+            S0#s{relay_inflight =
+                     maps:remove(Key, S0#s.relay_inflight)}
+    end.
 
-send_relay_accepted(Peer, ReqId, S = #s{ns = Ns}) ->
-    send_frame(Peer, quod_relay:encode(Ns, {relay_accepted, ReqId}), S).
+send_relay_result(
+  #relay_ref{peer = Peer, submission_id = SubmissionId,
+             attempt_id = AttemptId,
+             committee_id = CommitteeId, target_slot = TargetSlot},
+  Reply, S = #s{ns = Ns}) ->
+    send_frame(
+      Peer,
+      quod_relay:encode(
+        Ns, {relay_result, SubmissionId, AttemptId, CommitteeId,
+             TargetSlot, Reply}), S).
+
+send_relay_accepted(
+  #relay_ref{peer = Peer, submission_id = SubmissionId,
+             attempt_id = AttemptId,
+             committee_id = CommitteeId, target_slot = TargetSlot},
+  S = #s{ns = Ns}) ->
+    send_frame(
+      Peer,
+      quod_relay:encode(
+        Ns, {relay_accepted, SubmissionId, AttemptId, CommitteeId,
+             TargetSlot}), S).
+
+relay_reply_to(Ref = #relay_ref{}) ->
+    {relay, Ref}.
+
+prune_relay_results(S = #s{relay_results = Results}) ->
+    S#s{relay_results = quod_relay:prune_results(Results)}.
 
 redrive_relays(S = #s{relay_pending = Pending, relay_results = Results}) ->
     Now = quod_time:mono_ms(),
     S1 = S#s{relay_results = quod_relay:prune_results(Results)},
     Validators = active_validators(S1),
     maps:fold(
-      fun(ReqId,
+      fun(Key,
           #relay_pending{from = From, target = Target, frame = Frame,
                          deadline = Deadline, next_retry = Retry,
                          accepted = Accepted} = Relay,
           Acc) ->
               case not lists:member(Target, Validators) of
                   true ->
-                      finish_relay(ReqId, From, {error, skipped}, Acc);
+                      finish_relay(Key, From, {error, skipped}, Acc);
                   false when Now >= Deadline ->
                       reply_waiter(
                         From, {error, not_in_charge, unavailable},
-                        remove_pending_relay(ReqId, Acc));
+                        remove_pending_relay(Key, Acc));
                   false when Now >= Retry ->
                       Acc1 = send_frame(Target, Frame, Acc),
                       Relay1 = Relay#relay_pending{
@@ -4141,7 +4453,7 @@ redrive_relays(S = #s{relay_pending = Pending, relay_results = Results}) ->
                                                  false -> ?RELAY_RETRY_MS
                                              end},
                       Acc1#s{relay_pending =
-                                 (Acc1#s.relay_pending)#{ReqId => Relay1},
+                                 (Acc1#s.relay_pending)#{Key => Relay1},
                              relay_redrives = Acc1#s.relay_redrives + 1};
                   false ->
                       Acc
@@ -4678,6 +4990,7 @@ apply_catchup_window(
                 log_projection(
                   Ns, Es,
                   {Vs, CommitteeId, S#s.last_ts, S#s.author_seqs}),
+            Included = committed_submission_slots(Ns, Es),
             %% only re-walk the window for dial hints when it actually changed the committee — the common
             %% content-only window (Vs1 =:= Vs) skips the whole flatmap. (A same-window remove+re-add nets
             %% Vs1 =:= Vs and is skipped — the accepted address-refresh residual; heals via a header hint.)
@@ -4692,13 +5005,16 @@ apply_catchup_window(
             %% `catchup_membership_transition` emits the S5b false->true notice. The caller
             %% (`sink_catchup`) passes the result through `keep_progress/3`, so the discarded head state
             %% cancels its named watchdog before voting resumes.
-            S1 = reseat_engine(
-                   Slot, S#s{store = Store1, validators = Vs1,
-                             committee_id = CommitteeId1, slot = Slot,
-                             last_ts = Ts1, author_seqs = Seqs1,
-                             next_author_seq =
-                                 max(S#s.next_author_seq,
-                                     maps:get(S#s.self, Seqs1, 0) + 1)}),
+            Recovered =
+                settle_recovery_relays(
+                  Slot, Included,
+                  S#s{store = Store1, validators = Vs1,
+                      committee_id = CommitteeId1, slot = Slot,
+                      last_ts = Ts1, author_seqs = Seqs1,
+                      next_author_seq =
+                          max(S#s.next_author_seq,
+                              maps:get(S#s.self, Seqs1, 0) + 1)}),
+            S1 = reseat_engine(Slot, Recovered, Included),
             S2 = catchup_membership_transition(S, S1),
             {apply_committed(S2, catchup_origin(Source)), ok}
     end
@@ -4710,6 +5026,45 @@ catchup_origin(_)            -> replay.
 %% Drop entries whose `#entry.index` is `=< LastI` (already durable) — keep only the genuinely-new tail so a
 %% window that straddles a prefix the live engine committed meanwhile still appends contiguously.
 drop_index_le(LastI, Es) -> [E || E <- Es, E#entry.index > LastI].
+
+committed_submission_slots(Ns, Entries) ->
+    lists:foldl(
+      fun(#entry{index = Slot, data = Data}, Acc0) ->
+              case quod_ledger:payload(Data) of
+                  {ok, Payload} ->
+                      lists:foldl(
+                        fun(Transaction, Acc) ->
+                                case quod_transaction:submission(
+                                       Ns, Transaction) of
+                                    {ok, Submission} ->
+                                        Acc#{
+                                          quod_transaction:submission_id(
+                                            Submission) => Slot};
+                                    {error, _} ->
+                                        Acc
+                                end
+                        end, Acc0, Payload);
+                  error ->
+                      Acc0
+              end
+      end, #{}, Entries).
+
+settle_recovery_relays(
+  NewHead, Included, S = #s{relay_pending = Pending}) ->
+    maps:fold(
+      fun(Key,
+          #relay_pending{from = From, submission_id = SubmissionId,
+                         target_slot = TargetSlot},
+          Acc) ->
+              case maps:find(SubmissionId, Included) of
+                  {ok, CommitSlot} ->
+                      finish_relay(Key, From, {ok, CommitSlot}, Acc);
+                  error when TargetSlot =< NewHead ->
+                      finish_relay(Key, From, {error, skipped}, Acc);
+                  error ->
+                      Acc
+              end
+      end, S, Pending).
 
 %% Learn dial hints from a REPLAYED catch-up window (`learn_if_absent` — historical addresses fill a void,
 %% never clobber a live header hint; polarity verified: the reply-link header teaches the fresh address
@@ -4749,8 +5104,13 @@ catchup_membership_transition(S0, S1) ->
 %% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
 %% member gap-filling — the caller (`sink_catchup`) passes this through `keep_progress/3` to cancel a stale
 %% head watchdog when `head_progress` is cleared here (a no-op where it is already idle).
+-ifdef(TEST).
 reseat_engine(NewHead, S) ->
-    S1 = prune_consensus_links(nack_inflight(S)),
+    reseat_engine(NewHead, S, #{}).
+-endif.
+
+reseat_engine(NewHead, S, Included) ->
+    S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
     {ok, Journal1} = prune_vote_journal(NewHead, S1#s.vote_journal),
     S1#s{eng             = eng_new(active_validators(S1), NewHead),
           vote_journal    = Journal1,
@@ -4763,9 +5123,75 @@ reseat_engine(NewHead, S) ->
 
 %% A recovery re-seat intentionally discards the whole volatile consensus window.
 %% Its fresh engine cannot safely retain proposals or votes from the old base.
-nack_inflight(S0 = #s{local_proposals = Local}) ->
-    S1 = lists:foldl(fun nack_local/2, S0, maps:keys(Local)),
-    nack_collecting(nack_ingress(S1)).
+nack_inflight(S0 = #s{local_proposals = Local}, NewHead, Included) ->
+    S1 =
+        maps:fold(
+          fun(Slot, #local_proposal{waiters = Waiters}, Acc) ->
+                  reply_recovery_waiters(
+                    Waiters, {proposal, Slot}, NewHead, Included, Acc)
+          end, S0, Local),
+    S2 =
+        case S1#s.collecting of
+            #batch{items_rev = Items} ->
+                reply_recovery_waiters(
+                  [Waiter || {Waiter, _Change} <- Items],
+                  unpublished, NewHead, Included, S1);
+            none ->
+                S1
+        end,
+    S3 =
+        lists:foldl(
+          fun(#ingress_item{waiter = Waiter}, Acc) ->
+                  reply_recovery_waiter(
+                    Waiter, unpublished, NewHead, Included, Acc)
+          end, S2, queue:to_list(S2#s.ingress)),
+    S3#s{local_proposals = #{}, collecting = none,
+         ingress = queue:new(), ingress_count = 0,
+         ingress_bytes = 0, ingress_authors = #{},
+         relay_inflight = #{}}.
+
+reply_recovery_waiters(Waiters, Context, NewHead, Included, S) ->
+    lists:foldl(
+      fun(Waiter, Acc) ->
+              reply_recovery_waiter(
+                Waiter, Context, NewHead, Included, Acc)
+      end, S, Waiters).
+
+reply_recovery_waiter(
+  Waiter = #waiter{submission_id = SubmissionId},
+  Context, NewHead, Included, S)
+  when is_binary(SubmissionId) ->
+    case maps:find(SubmissionId, Included) of
+        {ok, CommitSlot} ->
+            reply_waiter(Waiter, {ok, CommitSlot}, S);
+        error ->
+            reply_recovery_exclusion(
+              Waiter, Context, NewHead, S)
+    end;
+reply_recovery_waiter(Waiter, Context, NewHead, _Included, S) ->
+    reply_recovery_exclusion(Waiter, Context, NewHead, S).
+
+reply_recovery_exclusion(
+  Waiter = #waiter{
+             reply_to =
+                 {relay, #relay_ref{target_slot = TargetSlot}}},
+  _Context, NewHead, S) when TargetSlot > NewHead ->
+    %% This attempt may still finalize in the live network. Forget volatile
+    %% ownership and let the immutable source redrive reconstruct it; emitting
+    %% a retryable result here could duplicate a write after this node restarts
+    %% and loses that non-durable answer.
+    finish_waiter_trace(
+      Waiter, {error, not_in_charge, unavailable}),
+    S;
+reply_recovery_exclusion(
+  Waiter = #waiter{}, {proposal, Slot}, NewHead, S)
+  when Slot > NewHead ->
+    %% A sealed local proposal beyond the recovered durable head may still win.
+    %% Surface ambiguity, never a retry instruction.
+    reply_waiter(
+      Waiter, {error, not_in_charge, unavailable}, S);
+reply_recovery_exclusion(Waiter, _Context, _NewHead, S) ->
+    reply_waiter(Waiter, {error, skipped}, S).
 
 local_genesis_hash(#s{store = Store}) ->
     case quod_ledger_store:read_at(Store, 1) of
@@ -4966,25 +5392,20 @@ valid_cfg(Config, Cfg) ->
 
 valid_batch_window(Cfg) ->
     case maps:get(batch_window_ms, Cfg) of
-        N when is_integer(N), N >= 0, N =< 1000 -> valid_relay_protocol(Cfg);
+        N when is_integer(N), N >= 0, N =< 1000 ->
+            valid_ingress_retarget(Cfg);
         Other -> {error, {bad_batch_window_ms, Other}}
     end.
 
-valid_relay_protocol(Cfg) ->
-    case maps:get(relay_protocol, Cfg) of
-        v1    -> valid_ingress_retarget(v1, Cfg);
-        v2    -> valid_ingress_retarget(v2, Cfg);
-        Other -> {error, {bad_relay_protocol, Other}}
-    end.
-
-valid_ingress_retarget(Protocol, Cfg) ->
+valid_ingress_retarget(Cfg) ->
     case maps:get(ingress_retarget, Cfg) of
         false ->
             valid_committee(Cfg);
-        true when Protocol =:= v2 ->
-            valid_committee(Cfg);
         true ->
-            {error, ingress_retarget_requires_relay_v2};
+            %% The flag is deliberately inert until retained custody lands.
+            %% Refuse it rather than let an operator believe slot closure is
+            %% being handled internally when callers still receive `skipped`.
+            {error, ingress_retarget_not_supported};
         Other ->
             {error, {bad_ingress_retarget, Other}}
     end.
@@ -5033,7 +5454,6 @@ status_map(S) ->
     ProposalSlot = S#s.approved + 1,
     #{role => Role, committee => S#s.validators,
       committee_id => S#s.committee_id,
-      relay_protocol => S#s.relay_protocol,
       ingress_retarget => S#s.ingress_retarget,
       slot => S#s.slot,
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,

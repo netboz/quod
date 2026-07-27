@@ -118,6 +118,16 @@ commits_across_committee(Config) ->
     %% all four co-founded the same 4-validator committee via ONE genesis block (slot 1) whose transaction
     %% asserts every co-founder's peer_admitted fact — byte-identical, so all four start at height 1.
     [ ?assertEqual(1, slot(Peer)) || {Peer, _} <- Nodes ],
+    ?assertMatch(
+       [_],
+       lists:usort(
+         [peer:call(Peer, quod_simplex, genesis_hash, [?NS])
+          || {Peer, _} <- Nodes])),
+    ?assertMatch(
+       [_],
+       lists:usort(
+         [maps:get(committee_id, status(Peer))
+          || {Peer, _} <- Nodes])),
     %% ONE write on the correct rotating leader for slot 2 commits across the committee. Retried because
     %% quod_prolog answers {error,rebuilding} until its async post-boot replay marks ready; {error,rebuilding}
     %% never reaches consensus, so retrying still yields exactly one committed write (no over-shoot).

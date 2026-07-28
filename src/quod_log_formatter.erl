@@ -46,12 +46,26 @@ format(#{level := Level, msg := Msg, meta := Meta}, _Config) ->
 %% Encode, but never let a bad term crash the handler: fall back to a minimal
 %% line that still carries ts/level and names the failure.
 encode(Event, Base) ->
-    try iolist_to_binary(json:encode(Event))
+    try encode_json(Event)
     catch C:R ->
         Fallback = Base#{msg => iolist_to_binary(
                                   io_lib:format("log encode failure ~p:~p", [C, R]))},
-        iolist_to_binary(json:encode(Fallback))
+        encode_json(Fallback)
     end.
+
+%% `logger_std_h` ultimately writes through the release's standard-I/O device.
+%% Keep that boundary ASCII-only: a deployed startup notice showed that one
+%% release log path can rewrite a raw UTF-8 codepoint after JSON encoding as the
+%% Erlang-only `\x{...}` notation, corrupting the line. JSON's standard
+%% `\uXXXX` escapes preserve the exact Unicode message and remain valid through
+%% every output-device encoding.
+encode_json(Term) ->
+    iolist_to_binary(json:encode(Term, fun encode_ascii/2)).
+
+encode_ascii(Value, _Encode) when is_binary(Value) ->
+    json:encode_binary_escape_all(Value);
+encode_ascii(Value, Encode) ->
+    json:encode_value(Value, Encode).
 
 -spec render_msg(term()) -> binary().
 render_msg({string, Str})              -> unicode:characters_to_binary(Str);

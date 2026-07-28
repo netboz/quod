@@ -2,9 +2,10 @@
 -moduledoc """
 Canonical transaction-author signatures.
 
-The signature format is a protocol contract: it is domain-separated, versioned,
-and bound to the target ontology supplied by the validating committee. Every
-committed transaction field except `sig` is covered.
+The signature format is a protocol contract with one fixed domain/schema tag,
+bound to the target ontology supplied by the validating committee. Every
+committed transaction field except `sig` is covered; no alternate tag is
+accepted.
 """.
 
 -include("quod_ledger.hrl").

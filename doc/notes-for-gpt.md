@@ -7,6 +7,28 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-28 — first Stage-2 ingress extraction slice reviewed and committed
+
+The pure routing snapshot, placement planner, bounded parked queue, accounting,
+and drain fingerprints now live in `quod_ingress_state`; `quod_simplex`
+executes effects and remains authoritative for ordering, voting, finality,
+custody, and relay ownership. Shared batch limits moved to one header. This is
+a coherent extraction boundary, not the complete Stage 2 process split.
+
+The same pass removed several measured hot-path costs: same-author parked
+bursts no longer rescan the queue quadratically; internal drain stability
+compares routing state rather than queue depth; validator tuple/set
+canonicalization is reused; duplicate transaction IDs validate in O(n);
+membership and author-sequence classification have one source of truth; the
+approved-parent sequence floor reuses the batch cache; and action assembly
+uses one reverse accumulator without concatenation.
+
+The implementation landed in `adef79d`; release `0.7.46` carries it. Claude's
+read-only review found no blocker or should-fix and declared the slice safe to
+commit. Exact-tree gates were EUnit 509/509, focused ingress/Simplex EUnit
+171/171, Common Test 47/47, production compile clean, Dialyzer clean, xref
+clean, and `git diff --check` clean.
+
 ## 2026-07-28 — definitive ingress relay stream reviewed and committed
 
 All relay submits, accepted acknowledgements, and results now use the

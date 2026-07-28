@@ -1,6 +1,6 @@
 # Ingress ownership and signed-submission retargeting
 
-Status: Stage 1 is committed; Stage 2 pure-state extraction is in progress
+Status: Stage 1 and the first Stage 2 pure-state extraction slice are committed
 Scope: transaction custody and relay; no change to Simplex ordering, voting, or proposer selection
 
 ## Why this change exists

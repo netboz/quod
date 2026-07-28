@@ -174,14 +174,14 @@ gate_truth_table_test() ->
     S1 = st(Base#{sync => ready}),
     ?assert(quod_simplex:caught_up(S1)),
     ?assert(quod_simplex:may_vote(S1)),
-    ?assert(quod_simplex:may_lead(S1)),
+    ?assert(quod_simplex:may_vote(S1)),
 
     %% A resuming member remains a participant for ingress, but has no voting capability.
     S2 = st(Base#{sync => unconfirmed}),
     ?assert(quod_simplex:is_participant(S2)),
     ?assertNot(quod_simplex:caught_up(S2)),
     ?assertNot(quod_simplex:may_vote(S2)),
-    ?assertNot(quod_simplex:may_lead(S2)),
+    ?assertNot(quod_simplex:may_vote(S2)),
 
     ?assertNot(quod_simplex:caught_up(st(Base#{sync => {pulling, self()}}))),
     ?assertNot(quod_simplex:caught_up(st(Base#{sync => ready, eng => EngBehind}))),
@@ -190,7 +190,7 @@ gate_truth_table_test() ->
     Obs = st(Base#{validators => [<<"a">>], sync => ready}),
     ?assert(quod_simplex:caught_up(Obs)),
     ?assertNot(quod_simplex:may_vote(Obs)),
-    ?assertNot(quod_simplex:may_lead(Obs)).
+    ?assertNot(quod_simplex:may_vote(Obs)).
 
 %% Load-robust self-corroboration: applying a LIVE quorum-cert finalization (commit_block/skip_block)
 %% flips an `unconfirmed` member to `ready` — so a member that keeps up with a busy head via the live
@@ -1489,25 +1489,101 @@ batch_caps_reject_oversized_and_park_test() ->
     %% oversized single transaction (> MAX_BLOCK_BYTES = 256 KiB) => too_large, never batched, never parked
     Big  = #transaction{tx_id = <<"big">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
                         diff = [{assert, {{blob, binary:copy(<<0>>, 300 * 1024)}, true}}]},
-    {keep_state, _, A1} = quod_simplex:running({call, From}, {append, Big}, st(Base)),
+    {keep_state, _, A1} =
+        quod_simplex:running(
+          {call, From}, {append, Big, otel_ctx:new()}, st(Base)),
     ?assert(lists:member({reply, From, {error, too_large}}, A1)),
     %% depth-one pipeline already full (committed 3, approved 5 => gap 2, the max): the append PARKS —
     %% no reply action, no busy, one queued item under this author.
     Small = #transaction{tx_id = <<"s">>, caller_ns = <<"t">>, author = Me, sig = none, read_check = #{},
                          diff = [{assert, {{k, v}, true}}]},
     {keep_state, SParked, A2} =
-        quod_simplex:running({call, From}, {append, Small}, st(Base#{approved => 5})),
+        quod_simplex:running(
+          {call, From}, {append, Small, otel_ctx:new()},
+          st(Base#{approved => 5})),
     ?assertEqual([], [R || {reply, _, _} = R <- A2]),
     {1, _, Authors, [{local, <<"s">>, _}]} = quod_simplex:test_ingress(SParked),
     ?assertEqual(#{Me => 1}, Authors),
     ?assertEqual(0, maps:get(r_busy, quod_simplex:stats_map(SParked))),
     %% a change whose tx_id is already in the collecting batch is rejected (no double-apply of one write)
-    {keep_state, S1, _} = quod_simplex:running({call, From}, {append, Small}, st(Base)),   %% collect Small
-    {keep_state, S2, A3} = quod_simplex:running({call, From}, {append, Small}, S1),       %% same tx_id
+    {keep_state, S1, _} =
+        quod_simplex:running(
+          {call, From}, {append, Small, otel_ctx:new()}, st(Base)),   %% collect Small
+    {keep_state, S2, A3} =
+        quod_simplex:running(
+          {call, From}, {append, Small, otel_ctx:new()}, S1),         %% same tx_id
     ?assert(lists:member({reply, From, {error, bad_change}}, A3)),
     %% The rejected second signing attempt cannot leave a dead custody record.
     [{_SubmissionId, 1, _Submission, {local, 4}, _Deadline, 1}] =
         quod_simplex:test_custody(S2).
+
+batch_rejects_duplicate_author_sequence_without_mutation_test() ->
+    Ns = <<"t">>,
+    [{Author, AuthorId}] = Committee = committee(1),
+    First =
+        signed_tx_seq(
+          Ns, <<"same-sequence-a">>, 7,
+          [{assert, {{same_sequence, a}, true}}],
+          {Author, AuthorId}),
+    Second =
+        signed_tx_seq(
+          Ns, <<"same-sequence-b">>, 7,
+          [{assert, {{same_sequence, b}, true}}],
+          {Author, AuthorId}),
+    S0 =
+        st(#{self => Author, id => AuthorId,
+             validators => pubs(Committee), sync => ready,
+             slot => 3, approved => 3, author_seqs => #{Author => 6},
+             eng => quod_simplex:eng_with_certs(3, []),
+             relay_conns => #{Author => {self(), make_ref()}}}),
+    {S1, _} = quod_simplex:test_relayed_append(Author, First, S0),
+    BatchBefore = quod_simplex:test_batch(S1),
+    StatsBefore = quod_simplex:stats_map(S1),
+    {S2, []} = quod_simplex:test_relayed_append(Author, Second, S1),
+    ?assertEqual(BatchBefore, quod_simplex:test_batch(S2)),
+    ?assertEqual(maps:get(appends, StatsBefore),
+                 maps:get(appends, quod_simplex:stats_map(S2))),
+    ?assertEqual(maps:get(r_stale, StatsBefore) + 1,
+                 maps:get(r_stale, quod_simplex:stats_map(S2))),
+    ?assertMatch(
+       {relay_result, _SubmissionId, _AttemptId, _CommitteeId, 4,
+        {error, stale_seq}},
+       receive_relay_control(Ns)).
+
+batch_flushes_exactly_at_256_cached_items_test() ->
+    Ns = <<"t">>,
+    [{Author, AuthorId}] = Committee = committee(1),
+    S0 =
+        st(#{self => Author, id => AuthorId,
+             validators => pubs(Committee), sync => ready,
+             slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    Transactions =
+        [signed_tx_seq(
+           Ns, <<"batch-", (integer_to_binary(N))/binary>>, N,
+           [{assert, {{batch_item, N}, true}}],
+           {Author, AuthorId})
+         || N <- lists:seq(1, 256)],
+    {First255, _} =
+        lists:foldl(
+          fun(Change, {Acc, _Actions}) ->
+                  quod_simplex:test_relayed_append(
+                    Author, Change, Acc)
+          end, {S0, []}, lists:sublist(Transactions, 255)),
+    #{count := 255, tx_ids := TxIds, sequences := Sequences} =
+        quod_simplex:test_batch(First255),
+    ?assertEqual(255, map_size(TxIds)),
+    ?assertEqual(255, map_size(Sequences)),
+    Last = lists:nth(256, Transactions),
+    {Flushed, Actions} =
+        quod_simplex:test_relayed_append(
+          Author, Last, First255),
+    ?assertEqual(none, quod_simplex:test_batch(Flushed)),
+    ?assert(lists:member({{timeout, batch}, cancel}, Actions)),
+    Stats = quod_simplex:stats_map(Flushed),
+    ?assertEqual(256, maps:get(appends, Stats)),
+    ?assertEqual(256, maps:get(batched_txs, Stats)),
+    ?assertEqual(1, maps:get(proposals, Stats)).
 
 %%%===================================================================
 %%% ingress park queue — park, drain, forward, expire (event-driven ingress)
@@ -1517,6 +1593,24 @@ lt(N) -> #transaction{tx_id = <<"lt", N>>, caller_ns = <<"t">>, author = undefin
                       sig = none, read_check = #{},
                       diff = [{assert, {{loadfact, N}, true}}]}.
 lt(N, Author) -> (lt(N))#transaction{author = Author}.
+
+keep_progress_retains_unchanged_ingress_view_test() ->
+    {Me, Id} = id(),
+    S0 =
+        st(#{self => Me, id => Id, validators => [Me],
+             sync => ready, slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    ?assertEqual(undefined,
+                 quod_simplex:test_ingress_view_source(S0)),
+    {keep_state, Cached, _} =
+        quod_simplex:test_keep_progress_transition(S0, S0),
+    Source = quod_simplex:test_ingress_view_source(Cached),
+    ?assertNotEqual(undefined, Source),
+    {keep_state, CachedAgain, _} =
+        quod_simplex:test_keep_progress_transition(Cached, Cached),
+    ?assertEqual(
+       Source,
+       quod_simplex:test_ingress_view_source(CachedAgain)).
 
 %% Two parked items drain into ONE immediately-sealed block the moment the pipeline
 %% opens — no micro-batch window for backlog that already waited a full flight.
@@ -1598,7 +1692,7 @@ queued_membership_stops_the_drain_test() ->
     OrdinaryOrigin =
         quod_simplex:test_relay_origin(AuthorB, 5, Ordinary, Queued),
     ?assertEqual({collect, 5},
-                 quod_simplex:route(
+                 quod_simplex:test_route(
                    drain, OrdinaryOrigin, Ordinary, Queued)),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {2, _, #{AuthorA := 1, AuthorB := 1},
@@ -1648,11 +1742,11 @@ blocked_author_does_not_block_other_authors_test() ->
     A2Origin = quod_simplex:test_relay_origin(AuthorA, 4, A2, Queued),
     BOrigin = quod_simplex:test_relay_origin(AuthorB, 4, B, Queued),
     ?assertMatch({park, _},
-                 quod_simplex:route(drain, A1Origin, A1, Queued)),
+                 quod_simplex:test_route(drain, A1Origin, A1, Queued)),
     ?assertEqual({collect, 4},
-                 quod_simplex:route(drain, A2Origin, A2, Queued)),
+                 quod_simplex:test_route(drain, A2Origin, A2, Queued)),
     ?assertEqual({collect, 4},
-                 quod_simplex:route(drain, BOrigin, B, Queued)),
+                 quod_simplex:test_route(drain, BOrigin, B, Queued)),
     {Drained, _Actions} = quod_simplex:test_drain(Queued),
     {2, _, #{AuthorA := 2},
      [{relayed, <<"a-large">>, _}, {relayed, <<"a-small">>, _}]} =
@@ -1732,11 +1826,11 @@ queued_work_survives_temporary_unready_state_test() ->
     Origin5 =
         quod_simplex:test_relay_origin(Author, 5, Tx, Recovering),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, Origin4, Tx, Recovering)),
+                 quod_simplex:test_route(entry, Origin4, Tx, Recovering)),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(drain, Origin4, Tx, Recovering)),
+                 quod_simplex:test_route(drain, Origin4, Tx, Recovering)),
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, Origin5, Tx, Recovering)),
+                 quod_simplex:test_route(entry, Origin5, Tx, Recovering)),
     {Held, []} = quod_simplex:test_drain(Recovering),
     {1, _, _, [{relayed, <<"recovering-queue">>, _}]} =
         quod_simplex:test_ingress(Held),
@@ -1865,7 +1959,7 @@ all_authors_target_earliest_seat_test() ->
                       validators => Validators, sync => ready,
                       slot => 3, approved => 3,
                       eng => quod_simplex:eng_with_certs(3, [])}),
-             case quod_simplex:route(entry, local, lt($d, Author), S) of
+             case quod_simplex:test_route(entry, local, lt($d, Author), S) of
                  {collect, 4} -> quod_simplex:leader(4, Validators);
                  {relay, Target, 4} -> Target
              end
@@ -1987,7 +2081,7 @@ closed_target_slot_is_rejected_test() ->
     ClosedOrigin =
         quod_simplex:test_relay_origin(Author, 4, Tx, Closed),
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, ClosedOrigin, Tx, Closed)),
+                 quod_simplex:test_route(entry, ClosedOrigin, Tx, Closed)),
     {Rejected, []} = quod_simplex:test_relayed_append(
                        Author, 4, Tx, Closed),
     {0, 0, #{}, []} = quod_simplex:test_ingress(Rejected),
@@ -2010,17 +2104,17 @@ route_decision_cells_test() ->
     Origin7 = quod_simplex:test_relay_origin(Author, 7, Tx, Open),
     %% This node does not own target slot 4, so it refuses that placement.
     ?assertEqual(redirect,
-                 quod_simplex:route(entry, Origin4, Tx, Open)),
+                 quod_simplex:test_route(entry, Origin4, Tx, Open)),
     %% It does own target slot 7 and may safely hold it until that slot opens.
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, Origin7, Tx, Open)),
+                 quod_simplex:test_route(entry, Origin7, Tx, Open)),
     %% The same exact-slot rule holds while the pipeline is full.
     Blocked = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
                    slot => 3, approved => 5, eng => quod_simplex:eng_with_certs(3, [])}),
     BlockedOrigin7 =
         quod_simplex:test_relay_origin(Author, 7, Tx, Blocked),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, BlockedOrigin7, Tx, Blocked)),
+                 quod_simplex:test_route(entry, BlockedOrigin7, Tx, Blocked)),
     %% Another participant accepts only the slot it actually owns.
     {Far, FarId} = lists:keyfind(L(9), 1, Committee),
     BlockedFar = st(#{self => Far, id => FarId, validators => Validators,
@@ -2031,7 +2125,7 @@ route_decision_cells_test() ->
     FarOrigin =
         quod_simplex:test_relay_origin(Author, 9, FarTx, BlockedFar),
     ?assertEqual({park, awaiting_turn},
-                 quod_simplex:route(entry, FarOrigin, FarTx, BlockedFar)),
+                 quod_simplex:test_route(entry, FarOrigin, FarTx, BlockedFar)),
     %% membership barrier: park UNCONDITIONALLY, both origins — the post-adoption
     %% schedule is unknowable until the committee block commits
     {MPub, MId} = id(),
@@ -2048,9 +2142,9 @@ route_decision_cells_test() ->
     BarrierOrigin =
         quod_simplex:test_relay_origin(Author, 7, Tx, Barrier),
     ?assertEqual({park, barrier},
-                 quod_simplex:route(entry, BarrierOrigin, Tx, Barrier)),
+                 quod_simplex:test_route(entry, BarrierOrigin, Tx, Barrier)),
     ?assertEqual({park, barrier},
-                 quod_simplex:route(entry, local, lt($m, Me), Barrier)),
+                 quod_simplex:test_route(entry, local, lt($m, Me), Barrier)),
     %% FIFO egress: with a live queue a local ENTRY joins the tail (ordered dispatch),
     %% while the DRAIN pass relays that same item to the first seat's leader
     Queued = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
@@ -2058,9 +2152,9 @@ route_decision_cells_test() ->
                   ingress => [{local, {self(), make_ref()}, lt($q, Me),
                                quod_time:mono_ms()}]}),
     ?assertEqual({park, fifo},
-                 quod_simplex:route(entry, local, lt($n, Me), Queued)),
+                 quod_simplex:test_route(entry, local, lt($n, Me), Queued)),
     ?assertEqual({relay, L(4), 4},
-                 quod_simplex:route(drain, local, lt($q, Me), Queued)).
+                 quod_simplex:test_route(drain, local, lt($q, Me), Queued)).
 
 %% The round-phase probe follows an own proposal: stamped when the proposal seals
 %% (mono-ms, approval mark still `none`), and pruned by finalize/2 — which both the
@@ -2088,7 +2182,7 @@ round_probe_lifecycle_test() ->
     ?assertEqual(#{}, quod_simplex:test_round_probe(Finalized)).
 
 %% Creation owns the one-lane invariant: a future call site cannot silently add
-%% a different target or slot to the map that relay_lane/2 reads in O(1).
+%% a different target or slot to the map projected into the ingress view.
 relay_lane_creation_rejects_divergent_target_test() ->
     Target4 = <<1:256>>,
     Target5 = <<2:256>>,
@@ -2240,8 +2334,8 @@ retained_custody_relay_capacity_defers_without_reply_test() ->
           FreedAttemptId, Deferred),
     ?assertEqual(
        2047, length(quod_simplex:test_relay_pending(Relieved))),
-    %% Capacity relief leaves the lane and slot unchanged. The pending-count
-    %% component of custody_route_key must nevertheless wake the real
+    %% Capacity relief leaves the lane and slot unchanged. The capacity
+    %% boundary in the custody fingerprint must nevertheless wake the real
     %% keep_progress drain and fill the newly available position.
     Retried =
         running_state(
@@ -2255,8 +2349,8 @@ retained_custody_relay_capacity_defers_without_reply_test() ->
 
 %% A stale exact attempt collision is distinct from lane divergence: the
 %% retained submission must neither overwrite the pending owner nor release its
-%% caller. Removing that exact entry changes the pending-count route key and
-%% must wake the real keep_progress drain.
+%% caller. Removing that exact entry while another same-lane relay remains must
+%% wake the real keep_progress drain even though lane and capacity stay stable.
 retained_custody_duplicate_attempt_defers_and_wakes_test() ->
     {Target, From, SubmissionId, Submission, Deadline, Ready} =
         ready_custody_fixture($f),
@@ -2274,13 +2368,23 @@ retained_custody_duplicate_attempt_defers_and_wakes_test() ->
        quod_transaction:relay_attempt_id(
          <<"t">>, SubmissionId, CommitteeId, 5, Target),
        AttemptId),
+    {ok, WithOther} =
+        quod_simplex:test_put_pending_relay(Target, 5, Placed),
+    PendingBefore =
+        quod_simplex:test_relay_pending(WithOther),
+    ?assertEqual(2, length(PendingBefore)),
+    [OtherAttemptId] =
+        [Id || {Id, _, 5, _} <- PendingBefore,
+               Id =/= AttemptId],
     Collision =
-        quod_simplex:test_copy_relay_pending(Placed, Ready),
+        quod_simplex:test_copy_relay_pending(WithOther, Ready),
 
     {Deferred, []} = drain_custody_within(Collision),
-    ?assertEqual(
-       [{AttemptId, Target, 5, Deadline}],
-       quod_simplex:test_relay_pending(Deferred)),
+    DeferredPending =
+        quod_simplex:test_relay_pending(Deferred),
+    ?assertEqual(2, length(DeferredPending)),
+    ?assert(lists:keymember(AttemptId, 1, DeferredPending)),
+    ?assert(lists:keymember(OtherAttemptId, 1, DeferredPending)),
     ?assertEqual(
        [{SubmissionId, 1, Submission, ready, Deadline, 1}],
        quod_simplex:test_custody(Deferred)),
@@ -2293,6 +2397,8 @@ retained_custody_duplicate_attempt_defers_and_wakes_test() ->
     Relieved =
         quod_simplex:test_remove_pending_relay(
           AttemptId, Deferred),
+    [{OtherAttemptId, Target, 5, _OtherDeadline}] =
+        quod_simplex:test_relay_pending(Relieved),
     Retried =
         running_state(
           quod_simplex:test_keep_progress_transition(
@@ -2301,9 +2407,11 @@ retained_custody_duplicate_attempt_defers_and_wakes_test() ->
       {relay, RetriedAttemptId, Target, 5, CommitteeId}, Deadline, 2}] =
         quod_simplex:test_custody(Retried),
     ?assertEqual(AttemptId, RetriedAttemptId),
-    ?assertEqual(
-       [{AttemptId, Target, 5, Deadline}],
-       quod_simplex:test_relay_pending(Retried)),
+    RetriedPending =
+        quod_simplex:test_relay_pending(Retried),
+    ?assertEqual(2, length(RetriedPending)),
+    ?assert(lists:keymember(AttemptId, 1, RetriedPending)),
+    ?assert(lists:keymember(OtherAttemptId, 1, RetriedPending)),
     assert_no_reply(From).
 
 %% During deep recovery the approved frontier can arrive before its block.
@@ -2329,7 +2437,7 @@ retained_custody_approved_block_arrival_wakes_drain_test() ->
     ?assertNot(maps:is_key(4, quod_simplex:eng_tree(EmptyEng))),
     ?assertEqual(
        {park, awaiting_turn},
-       quod_simplex:route(
+       quod_simplex:test_route(
          drain, {custody, SubmissionId}, Change, Gap0)),
     {Held, []} = quod_simplex:test_drain_custody(Gap0),
     ?assertEqual(
@@ -2338,7 +2446,7 @@ retained_custody_approved_block_arrival_wakes_drain_test() ->
 
     %% Insert the approved block through the real engine. It is below the
     %% routing Floor (5), contains no membership transition, and has no
-    %% finalizer cert, so ingress_route_key/1 remains identical.
+    %% finalizer cert, so the ordinary-ingress view remains identical.
     RecoveryCommittee = committee(4),
     B4 = blk(4),
     {E1, []} =
@@ -2355,7 +2463,7 @@ retained_custody_approved_block_arrival_wakes_drain_test() ->
     ?assertNot(quod_simplex:test_ingress_needs_drain(Held, Recovered)),
     ?assertEqual(
        {relay, Target, 5},
-       quod_simplex:route(
+       quod_simplex:test_route(
          drain, {custody, SubmissionId}, Change, Recovered)),
 
     Retried =
@@ -2385,10 +2493,10 @@ retained_custody_demotion_remains_ambiguous_until_deadline_test() ->
     %% view is ambiguity, never retroactive bad input.
     Capable =
         quod_simplex:test_state_set(validators, [Author], Sent),
-    ?assert(quod_simplex:may_lead(Capable)),
+    ?assert(quod_simplex:may_vote(Capable)),
     ?assertEqual(
        {park, awaiting_turn},
-       quod_simplex:route(
+       quod_simplex:test_route(
          drain, {custody, SubmissionId},
          Change#transaction{caller_ns = <<"other">>}, Capable)),
 
@@ -2480,7 +2588,7 @@ committee_view_lane_conflict_parks_without_bad_change_test() ->
     Next = lt($w, Me),
     ?assertEqual(
        {park, awaiting_turn},
-       quod_simplex:route(entry, local, Next, NewView)),
+       quod_simplex:test_route(entry, local, Next, NewView)),
 
     {Parked, []} =
         quod_simplex:test_append(From2, Next, NewView),
@@ -2524,7 +2632,7 @@ stable_relay_lane_preserves_author_order_test() ->
     ?assert(quod_simplex:proposal_visible(4, Advanced)),
     ?assertEqual(
        {relay, Target5, 5},
-       quod_simplex:route(entry, local, lt($x, Me),
+       quod_simplex:test_route(entry, local, lt($x, Me),
                           quod_simplex:test_state_set(eng, E2, S))),
     {Sent2, []} =
         quod_simplex:test_append(From2, lt($s, Me), Advanced),
@@ -2669,7 +2777,7 @@ same_lane_partial_completion_and_finalization_retargets_cohort_test() ->
          end, Remaining)),
     ?assertEqual(
        {park, fifo},
-       quod_simplex:route(
+       quod_simplex:test_route(
          entry, local, lt($5, Me), OneExpired)),
 
     Finalized = quod_simplex:finalize(4, OneExpired),
@@ -2740,7 +2848,7 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
           FillerAuthor, Filler, Current),
     ?assertEqual(
        {collect, 5},
-       quod_simplex:route(entry, local, Small, ControlBatch)),
+       quod_simplex:test_route(entry, local, Small, ControlBatch)),
 
     LowerFrom = {self(), make_ref()},
     Before =
@@ -2764,7 +2872,7 @@ ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
           FillerAuthor, Filler, Ready),
     ?assertEqual(
        {park, awaiting_turn},
-       quod_simplex:route(
+       quod_simplex:test_route(
          drain, {custody, SubmissionId}, SignedLower, WithBatch)),
 
     SmallFrom = {self(), make_ref()},

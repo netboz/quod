@@ -1,6 +1,6 @@
 # Transaction-author signatures
 
-**Status:** implemented 2026-07-18; fresh-ledger deployment pending.
+**Status:** implemented and deployed on a fresh ledger.
 
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.
@@ -41,10 +41,12 @@ term_to_binary(
   [deterministic]).
 ```
 
-The domain tag and format version prevent cross-protocol reuse and permit an
-explicit future format transition. `TargetNs` comes from the validating
-committee's context, never from a transaction claim. Deterministic ETF gives
-maps such as `ReadCheck` a canonical key order.
+The tuple prefix `{quod_transaction, 2}` is the fixed cryptographic
+domain/schema tag. It prevents cross-protocol reuse; changing it is a
+ledger-breaking protocol change that requires a fresh network, and no alternate
+tag is accepted. `TargetNs` comes from the validating committee's context,
+never from a transaction claim. Deterministic ETF gives maps such as
+`ReadCheck` a canonical key order.
 
 `Goal` and `Result` are covered because they are part of the committed audit
 record shown by the Explorer. `sig` is the sole excluded field.
@@ -57,7 +59,8 @@ record shown by the Explorer. `sig` is the sole excluded field.
 1. requires `author` to equal its own public key and `sig` to be `none`;
 2. assigns the next local `author_seq`;
 3. signs the canonical bytes using its already-owned identity key;
-4. stamps the signature before size accounting, batching, or relay.
+4. reserves bounded signature-growth headroom while the request is unsigned,
+   then stamps the signature before custody, batching, or relay.
 
 Structural validation remains independent of namespace context. It requires a
 32-byte author, a 64-byte signature, bounded canonical fields, a valid read

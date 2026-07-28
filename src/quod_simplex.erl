@@ -85,6 +85,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 """.
 
 -include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
 
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/3 signs slots as unsigned 64-bit integers
 
@@ -110,14 +111,14 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          ahead_cert_ceiling/1, eng_with_certs/2, eng_buffered_commit/4,
                                                      %% Slice 1: the gap detector's pure core
-         is_participant/1, may_vote/1, caught_up/1, may_lead/1, should_sync/1, syncing/1, confirm_live/1,
-         initial_sync/1, tip_quorum/3, maybe_arm_sync/1, pace_tick/1, arm_ready/1, backoff/1,
+         is_participant/1, may_vote/1, caught_up/1, should_sync/1, syncing/1, confirm_live/1,
+         initial_sync/1, tip_quorum/3, pace_tick/1, arm_ready/1, backoff/1,
          recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
          catchup_origin/1,
          test_state/1, test_arm/1, test_sync/1,
          restore_vote_rounds/1,
          proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
-         reconcile_head_progress/1, resume_ready_rounds/1, resume_ready_slot/2,
+         reconcile_head_progress/1, resume_ready_rounds/1,
          on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
          settle_readiness/2, prune_consensus_links/1,
          dispatch/3, reconcile_block_requests/1,
@@ -133,7 +134,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
          test_append/3, test_relayed_append/3, test_relayed_append/4,
          test_relay_origin/4,
-         test_ingress/1, test_drain/1,
+         test_ingress/1, test_ingress_view_source/1,
+         test_batch/1, test_drain/1,
          test_expire_ingress/1, test_state_set/3, test_relay_pending/1,
          test_relay_pending_detail/1, test_relay_result/4,
          test_relay_accepted/3, test_dispatch_relay/3,
@@ -148,10 +150,10 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_expire_custody/1,
          test_outbox/1,
          test_ingress_needs_drain/2,
-         test_round_probe/1, route/4,
+         test_round_probe/1, test_route/4,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1,
-         test_valid_cfg/1, test_log_projection/3,
+         test_log_projection/3,
          test_apply_catchup_window/3,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
@@ -646,7 +648,7 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
 -doc """
 The deterministic leader (proposer) for a slot: **round-robin** over the sorted validator set,
 `sort(V)[(Slot-1) rem N]`. Every node computes the same leader for a given slot from the same frozen
-set. Ingress routing (`route/4`) binds each relay to the earliest usable slot, while
+set. `quod_ingress_state:route/5` binds each relay to the earliest usable slot, while
 a complaint-skip of slot `v` moves slot `v+1` to a *different* leader: that rotation is the failover.
 `Slot ≥ 1` (genesis is 0). Stable per-epoch leaders (keeping one leader for K slots) remain
 deliberately unused because a dead tenured leader would cost K complaint rounds instead of one.
@@ -731,9 +733,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
--define(MAX_BATCH_TXS, 256).                    %% hard count cap; bounds per-block apply work
--define(MAX_BLOCK_BYTES, (256 * 1024)).         %% an implicit proof may carry one child below the 1 MiB cap
--define(BATCH_ENVELOPE_BYTES, 6).               %% exact singleton-list ETF overhead beyond term_to_binary(Tx)
 -define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
 -define(RELAY_RETRY_MS, 300).                    %% retry until the destination acknowledges receipt
 -define(RELAY_ACCEPTED_RETRY_MS, 5000).          %% after receipt, a slow status retry recovers a lost
@@ -741,10 +740,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(MAX_RELAY_PENDING, 2048).                 %% bound parked callers and redrive state
 -define(MAX_CUSTODY, 2048).                       %% bound origin-owned signed submissions/callers
 -define(MAX_CUSTODY_BYTES, (8 * ?MAX_BLOCK_BYTES)). %% independent retained-envelope byte bound
--define(MAX_INGRESS_TXS, 512).                    %% ingress park queue: shared item bound (2x a full block)
--define(MAX_INGRESS_BYTES, (2 * ?MAX_BLOCK_BYTES)).  %% ingress park queue: shared byte bound
--define(MAX_INGRESS_PER_AUTHOR, 64).              %% fairness: one authenticated member cannot capture the
-                                                  %% queue by flooding — its overflow rejects, others park
 -define(INGRESS_TTL_MS, 7000).                    %% parked-item cutoff. One eligible slot may burn a full
                                                   %% quorum-flap complaint cycle
                                                   %% (Δ×(1+?MAX_QUORUM_REARMS) = 4s) before the skip lands;
@@ -752,8 +747,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                   %% wait yet stays under the caller's 8s append timeout,
                                                   %% so a REAL stall still fails visibly (busy) while the
                                                   %% caller can still hear it — the queue never hides a wedge
--define(SIGNED_GROWTH_BYTES, 96).                 %% capacity headroom for an unsigned local item growing at
-                                                  %% sign time (64B Ed25519 sig + author_seq + ETF framing)
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
 -define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
 -define(READINESS_MS, 1000).                      %% readiness refresh; at or below the default Delta
@@ -770,7 +763,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(batch, {slot :: slot(),
                 parent :: slot(),
                 items_rev = [] :: [{term(), #transaction{}}],
+                count = 0 :: non_neg_integer(),
                 bytes = 0 :: non_neg_integer(),
+                tx_ids = #{} :: #{binary() => true},
+                sequences = #{} :: #{{node_id(), pos_integer()} => true},
+                sequence_floor = #{} :: #{node_id() => non_neg_integer()},
                 opened_at = 0 :: integer()}).   %% monotonic ms; measures collection wait on this proposer
 
 -record(waiter, {reply_to :: term(),
@@ -824,23 +821,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                   placement = ready :: custody_placement(),
                   attempts = 0 :: non_neg_integer(),
                   bytes :: pos_integer()}).
-
-%% One parked append in the bounded, per-author-ordered ingress queue. `origin`
-%% fixes the trust shape (`local` = this node's own still-UNSIGNED
-%% transaction — signed exactly once, on the pass that leaves the queue; `relayed` = an
-%% author-signed submission verify_and_accept_relay already admitted). `enqueued_at` is
-%% BOTH the TTL clock and the relay-deadline anchor: draining cannot reset a request's
-%% lifetime. Relay state is reaped about one second after Prolog's local wait ends; that
-%% cleanup bound does not turn the caller's earlier unknown outcome into a failure.
--type ingress_origin() ::
-        local
-      | {custody, binary()}
-      | {relayed, #relay_ref{}}.
--record(ingress_item, {origin :: ingress_origin(),
-                       waiter :: #waiter{},
-                       change :: #transaction{},
-                       bytes  :: pos_integer(),     %% batch-capacity accounting, incl. sign growth
-                       enqueued_at :: integer()}).  %% mono ms
 
 -record(s, {ns           :: binary(),
             self         :: node_id(),               %% our pubkey == node_id
@@ -901,13 +881,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             block_requests = #{} :: #{{slot(), binary()} =>
                                        {non_neg_integer(), integer()}},
                                                      %% certified block anti-entropy: attempt + next retry time
-            %% Appends that cannot enter a batch now wait here and drain from keep_progress.
-            %% A drain preserves order per author but may pass a blocked author to fill the
-            %% block with another author's ready work. Bounded by items, bytes, and author.
-            ingress = queue:new() :: queue:queue(#ingress_item{}),
-            ingress_count = 0 :: non_neg_integer(),
-            ingress_bytes = 0 :: non_neg_integer(),
-            ingress_authors = #{} :: #{node_id() => pos_integer()},
+            %% Pure routing view + bounded park queue. Consensus-private facts
+            %% are projected into this state; signing, I/O, replies, and batch
+            %% effects remain in this process.
+            ingress = quod_ingress_state:new()
+              :: quod_ingress_state:state(),
             relay_timeout_ms = 31000 :: pos_integer(),
             batch_window_ms = 25 :: 0..1000,
             detailed_metrics = false :: boolean(),
@@ -1019,7 +997,6 @@ test_state_set(relay_inbound_conns, V, S) ->
 test_state_set(relay_dialing, V, S) -> S#s{relay_dialing = V};
 test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
-test_state_set(relay_pending, V, S) -> S#s{relay_pending = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
@@ -1033,24 +1010,32 @@ test_state_set(ingress, Items, S) ->
       fun({local, From, Change, At}, Acc) ->
               Waiter = new_waiter(
                          From, otel_ctx:new(), Change, Acc#s.ns, false),
+              {_Decision, Request, Routed} =
+                  ingress_route(entry, local, Change, Acc),
               {Acc1, []} = park_ingress(
                              local, awaiting_turn,
-                             Waiter, Change, At, Acc),
+                             Waiter, Request, At, Routed),
               Acc1;
          ({relayed, Peer, TargetSlot, Change, At}, Acc) ->
               Ref = test_relay_ref(Peer, Change, TargetSlot, Acc),
               Origin = {relayed, Ref},
               Waiter = new_waiter(
                          {relay, Ref}, otel_ctx:new(), Change, Acc#s.ns, true),
+              {_Decision, Request, Routed} =
+                  ingress_route(entry, Origin, Change, Acc),
               {Acc1, []} = park_ingress(
                              Origin, awaiting_turn,
-                             Waiter, Change, At, Acc),
+                             Waiter, Request, At, Routed),
               Acc1
       end, S, Items);
-test_state_set(rounds, V, S)     -> S#s{rounds = V};
-test_state_set(collecting, {Slot, Froms}, S) ->   %% a not-yet-sealed batch parking these callers
-    S#s{collecting = #batch{slot = Slot, parent = Slot - 1,
-                            items_rev = [{From, noop} || From <- Froms], bytes = 0}};
+test_state_set(collecting, {Slot, Froms}, S) ->
+    %% Plant a not-yet-sealed batch that owns these test callers.
+    S#s{collecting = #batch{
+                       slot = Slot,
+                       parent = Slot - 1,
+                       items_rev = [{From, noop} || From <- Froms],
+                       count = length(Froms),
+                       bytes = 0}};
 test_state_set(sync_arm, V, S)   -> S#s{sync_arm = V}.
 test_arm(#s{sync_arm = A})       -> A.   %% read the pacing tuple back out of a state (record is private)
 test_sync(#s{sync = Sy})         -> Sy.
@@ -1148,15 +1133,32 @@ test_relay_ref(Peer, Change, TargetSlot,
 test_relay_origin(Peer, TargetSlot, Change, S) ->
     {relayed,
      test_relay_ref(Peer, Change, TargetSlot, S)}.
-test_ingress(#s{ingress = Q, ingress_count = C, ingress_bytes = B,
-                ingress_authors = Authors}) ->
-    {C, B, Authors,
-     [{test_origin(O), Ch#transaction.tx_id, T}
-      || #ingress_item{origin = O, change = Ch, enqueued_at = T} <- queue:to_list(Q)]}.
+test_ingress(#s{ingress = Ingress}) ->
+    #{count := Count, bytes := Bytes, authors := Authors} =
+        quod_ingress_state:summary(Ingress),
+    {Count, Bytes, Authors,
+     [begin
+          {Origin, _Waiter, Request, Anchor} =
+              quod_ingress_state:item(Item),
+          Change = quod_ingress_state:request_change(Request),
+          {test_origin(Origin), Change#transaction.tx_id, Anchor}
+      end || Item <- quod_ingress_state:items(Ingress)]}.
+test_ingress_view_source(#s{ingress = Ingress}) ->
+    quod_ingress_state:view_source(Ingress).
+test_batch(#s{collecting = none}) ->
+    none;
+test_batch(
+  #s{collecting =
+         #batch{count = Count, bytes = Bytes, tx_ids = TxIds,
+                sequences = Sequences}}) ->
+    #{count => Count, bytes => Bytes,
+      tx_ids => TxIds, sequences => Sequences}.
 test_origin(local) -> local;
-test_origin({custody, _SubmissionId}) -> custody;
 test_origin({relayed, #relay_ref{}}) -> relayed.
-test_drain(S) -> drain_ingress(S, ingress_route_key(S)).
+test_drain(S0) ->
+    S = refresh_ingress_view(S0),
+    drain_ingress(
+      S, quod_ingress_state:route_fingerprint(S#s.ingress)).
 test_expire_ingress(S) -> expire_ingress(S).
 test_relay_pending(#s{relay_pending = Pending}) ->
     [{relay_wire_id(Relay), Target, TargetSlot, Deadline}
@@ -1297,11 +1299,15 @@ test_expire_custody(S = #s{custody = Custody}) ->
           custody_deadlines = Deadlines}).
 test_outbox(#s{outbox = Outbox}) -> Outbox.
 test_ingress_needs_drain(S0, S1) ->
-    ingress_drain_key(S0, S1) =/= none.
+    Before = (refresh_ingress_view(S0))#s.ingress,
+    After = (refresh_ingress_view(S1))#s.ingress,
+    ingress_drain_decision(Before, After) =/= none.
+test_route(Pass, Origin, Change, S) ->
+    {Decision, _Request, _S1} =
+        ingress_route(Pass, Origin, Change, S),
+    Decision.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
 test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
-test_valid_cfg(Config) ->
-    valid_cfg(Config, maps:merge(?DEFAULTS, Config)).
 test_log_projection(Ns, Entries, Seed) ->
     log_projection(Ns, Entries, Seed).
 test_apply_catchup_window(Source, Entries, S) ->
@@ -1561,7 +1567,6 @@ timed_step(#s{ns = Ns}, Step, Fun) ->
       Ns, Step, erlang:monotonic_time(microsecond) - T0),
     Result.
 
-event_class({call, _}, {append, _})            -> append;
 event_class({call, _}, {append, _, _})         -> append;
 event_class({call, _}, _)                      -> call;
 event_class(info, {quod_message, _, _, _})     -> frame;
@@ -1575,8 +1580,6 @@ event_class(_, {'DOWN', _, _, _, _})           -> link;
 event_class(cast, _)                           -> cast;
 event_class(_, _)                              -> other.
 
-running_impl({call, From}, {append, Change}, S0) ->
-    running_impl({call, From}, {append, Change, otel_ctx:new()}, S0);
 running_impl({call, From}, {append, Change, TraceCtx}, S0) ->
     Waiter = new_waiter(From, TraceCtx, Change, S0#s.ns, false),
     {S1, Reply} = handle_append(
@@ -1779,7 +1782,7 @@ terminate(
 %%% append (propose) → engine → commit → apply
 %%%===================================================================
 
-%% Appends collect for a few milliseconds into one block. A sealed proposal owns its
+%% Appends collect for the configured bounded window into one block. A sealed proposal owns its
 %% parked callers until commit/skip; the next slot may open as soon as that block is
 %% notarized, even though the durable committed frontier has not caught up yet.
 handle_append(From = #waiter{trace_ctx = TraceCtx}, Change,
@@ -1797,318 +1800,181 @@ handle_relayed_append(Waiter, Ref = #relay_ref{}, Change, S) ->
 %% lifetime, then compute the route and execute it.
 append_entry(Origin, From, Change, S) ->
     Anchor = quod_time:mono_ms(),
-    execute(entry, Origin, From, Change, Anchor, route(entry, Origin, Change, S), S).
+    {Decision, Request, S1} =
+        ingress_route(entry, Origin, Change, S),
+    execute(
+      entry, Origin, From, Request, Anchor, Decision, S1).
 
 %% ---------------------------------------------------------------------------
-%% Consensus ingress routing: COMPUTE the decision, then EXECUTE it.
-%%
-%% `route/4` is the single pure decision function for every change entering
-%% consensus — live arrivals (`entry`) and the park-queue drain (`drain`), local
-%% authorship and relayed submissions alike — so admission and routing can never
-%% fork into drifting paths (the former `drain_dispatchable` preview mirror is
-%% gone: the drain executes the SAME decision it previewed). `execute/7` owns
-%% every side effect (signing, parking, wire frames, counters), which is what
-%% keeps the decision previewable: a `{park,_}` head simply stays parked.
-%%
-%% The author computes the first still-usable seat: `Floor` (`approved+1`) while
-%% its proposal is open, otherwise `Floor+1`. Both the destination and that exact
-%% target slot travel in the relay frame. The receiver verifies that it owns the
-%% declared slot, parks only until that slot opens, and rejects it once the slot is
-%% past. It never derives a new target from its own, potentially different frontier.
-%%
-%% While one exact-slot relay lane remains usable, later local submissions use the
-%% same destination and slot. The receiver's per-author queue then preserves signed
-%% sequence order without serializing the author's workload one transaction at a time.
-%% A membership barrier parks unconditionally because the post-adoption schedule
-%% is unknowable until the committee block commits. A queued membership change is
-%% itself a drain barrier: letting ordinary writes continually pass it could keep
-%% the depth-one pipeline occupied forever and starve the committee transition.
-%%
-%% Origin fixes the trust shape: only the author may relay its own submission
-%% (dispatch_relay verifies Peer =:= Author), so a relay reference is constructible
-%% for LOCAL origin only. A relayed change never leaves its authenticated target
-%% proposer: it enters that exact slot, waits for it, or is rejected.
+%% Consensus-private state is projected once into `quod_ingress_state`; its
+%% cached canonical view owns every routing and wake decision. This adapter supplies
+%% the current validation verdict and translates private relay references.
+ingress_route(Pass, Origin, Change, S0) ->
+    Request = quod_ingress_state:request(Change),
+    {Decision, Prepared, S1} =
+        ingress_route_request(Pass, Origin, Request, S0),
+    {Decision, Prepared, S1}.
 
--type park_cause() :: barrier | fifo | awaiting_turn.
--type route_decision() ::
-        {reject, bad_change | too_large | stale_seq}
-      | redirect
-      | {park, park_cause()}
-      | {collect, slot()}
-      | {relay, node_id(), slot()}.                   %% target + demand slot; LOCAL origin only
--type ingress_capability() :: accept | hold | reject.
+ingress_route_request(Pass, Origin, Request, S0) ->
+    S = refresh_ingress_view(S0),
+    Change = quod_ingress_state:request_change(Request),
+    Validate =
+        fun() ->
+                case route_change_acceptable(Origin, Change, S) of
+                    true ->
+                        Membership =
+                            case quod_ingress_state:request_membership(
+                                   Request) of
+                                unknown ->
+                                    is_membership_change(Change);
+                                Cached ->
+                                    Cached
+                            end,
+                        {valid, Membership};
+                    false ->
+                        invalid
+                end
+        end,
+    {Decision, Prepared} =
+        quod_ingress_state:route(
+          Pass, ingress_route_origin(Origin), Request, Validate,
+          S#s.ingress),
+    {Decision, Prepared, S}.
 
--spec route(entry | drain, ingress_origin(), #transaction{}, #s{}) -> route_decision().
-route(Pass, local, Change, S) ->
-    case ingress_capability(Pass, local, S) of
-        reject ->
-            redirect;
-        hold ->
-            {park, awaiting_turn};
-        accept ->
-            case local_change_acceptable(Change, S) of
-                false -> {reject, bad_change};
-                true ->
-                    case oversized(Change) of
-                        true  -> {reject, too_large};
-                        false -> place(Pass, local, Change, S)
-                    end
-            end
-    end;
-route(Pass, {custody, _SubmissionId} = Origin, Change, S) ->
-    %% Once retained, the exact signed submission may already be committing
-    %% elsewhere. A current-view rejection cannot prove exclusion: preserve
-    %% custody to its original deadline, without redirecting or blaming input.
-    case ingress_capability(Pass, Origin, S) of
-        reject ->
-            {park, awaiting_turn};
-        hold ->
-            {park, awaiting_turn};
-        accept ->
-            case ingress_change_acceptable(Change, S) of
-                false ->
-                    {park, awaiting_turn};
-                true ->
-                    case custody_sequence_status(Change, S) of
-                        stale ->
-                            {reject, stale_seq};
-                        hold ->
-                            {park, awaiting_turn};
-                        current ->
-                            case oversized(Change) of
-                                true  -> {reject, too_large};
-                                false -> place(Pass, Origin, Change, S)
-                            end
-                    end
-            end
-    end;
-route(Pass, {relayed, #relay_ref{}} = Origin, Change, S) ->
-    case ingress_change_acceptable(Change, S) of
-        false -> {reject, bad_change};
-        true ->
-            case oversized(Change) of
-                true ->
-                    %% reachable only at the envelope edge of the relay's own byte cap,
-                    %% but the gate must hold for BOTH origins, and the caller deserves
-                    %% too_large, not a doomed batch
-                    {reject, too_large};
-                false ->
-                    case relay_target_open(Origin, S) of
-                        false ->
-                            redirect;
-                        true ->
-                            case ingress_capability(Pass, Origin, S) of
-                                reject -> redirect;
-                                hold   -> {park, awaiting_turn};
-                                accept -> place(Pass, Origin, Change, S)
-                            end
-                    end
-            end
-    end.
+route_change_acceptable(local, Change, S) ->
+    local_change_acceptable(Change, S);
+route_change_acceptable({custody, _SubmissionId}, Change, S) ->
+    ingress_change_acceptable(Change, S);
+route_change_acceptable({relayed, #relay_ref{}}, Change, S) ->
+    ingress_change_acceptable(Change, S).
 
-%% Validate exact-slot ownership before readiness or membership barriers can
-%% park the request. Recovery may delay work this node owns; it must never make
-%% the node acknowledge a misrouted or already-closed relay.
-relay_target_open(
+ingress_route_origin(local) ->
+    local;
+ingress_route_origin({custody, _SubmissionId}) ->
+    custody;
+ingress_route_origin(
   {relayed, #relay_ref{committee_id = CommitteeId,
-                       target_slot = TargetSlot}},
-  S = #s{self = Self, committee_id = CommitteeId}) ->
-    Floor = S#s.approved + 1,
-    Vals = active_validators(S),
-    leader(TargetSlot, Vals) =:= Self
-        andalso (TargetSlot > Floor
-                 orelse (TargetSlot =:= Floor
-                         andalso not proposal_visible(Floor, S)));
-relay_target_open({relayed, #relay_ref{}}, _S) ->
-    false.
+                       target_slot = TargetSlot}}) ->
+    {relayed, CommitteeId, TargetSlot}.
 
-%% A local unsigned submission is accepted only while this process may vote; Prolog
-%% itself is normally unavailable during recovery. An authenticated relayed submission
-%% transfers custody, so a still-admitted participant accepts and holds it across a
-%% temporary recovery or cert-before-block reorder. A node removed from the committee
-%% cannot recover that capability and rejects/nacks instead.
--spec ingress_capability(entry | drain, ingress_origin(), #s{}) -> ingress_capability().
-ingress_capability(entry, local, S) ->
-    case may_lead(S) of true -> accept; false -> reject end;
-ingress_capability(_Pass, _Origin, S) ->
-    case is_participant(S) of
-        false -> reject;
-        true  -> case may_lead(S) of true -> accept; false -> hold end
-    end.
-
-place(Pass, Origin, Change, S = #s{self = Self}) ->
-    case membership_barrier(S) of
+refresh_ingress_view(S = #s{ingress = Ingress}) ->
+    Source = ingress_view_source(S),
+    case quod_ingress_state:view_source(Ingress) =:= Source of
         true ->
-            {park, barrier};
+            S;
         false ->
-            Floor = S#s.approved + 1,   %% the exact Next when open; the floor while blocked
-            Vals = active_validators(S),
-            case Origin of
-                local   -> place_local(Pass, Origin, Change, Floor, Self, Vals, S);
-                {custody, _} ->
-                    place_local(Pass, Origin, Change, Floor, Self, Vals, S);
-                {relayed, #relay_ref{target_slot = TargetSlot}} ->
-                    place_relayed(Pass, TargetSlot, Change, Floor, S)
-            end
+            S#s{
+              ingress =
+                  quod_ingress_state:put_view(
+                    Source, ingress_view_facts(S), Ingress)}
     end.
 
-place_local(Pass, Origin, Change, Floor, Self, Vals, S) ->
-    case Pass =:= entry andalso S#s.ingress_count > 0 of
-        true ->
-            %% A live queue is the one ordered dispatcher for local egress.
-            {park, fifo};
-        false ->
-            case origin_lane(Floor, Origin, S) of
-                {target, Target, TargetSlot} ->
-                    case Target =:= Self of
-                        true ->
-                            case TargetSlot =:= Floor
-                                     andalso proposal_slot(S) =:= {ok, Floor}
-                                     andalso admissible_for(Pass, Change, S) of
-                                true  -> {collect, Floor};
-                                false -> {park, awaiting_turn}
-                            end;
-                        false ->
-                            {relay, Target, TargetSlot}
-                    end;
-                blocked ->
-                    %% The previous target slot closed or its proposer left the
-                    %% committee. Durable finalization/the relay sweep first makes
-                    %% retained work ready; keep later sequences behind it meanwhile.
-                    {park, fifo};
-                placement_conflict ->
-                    %% The route was computed under a newer committee view than
-                    %% the still-active custody lane. Reconciliation retires that
-                    %% lane before this exact signed submission may be placed
-                    %% again; this is waiting, never malformed content.
-                    {park, awaiting_turn};
-                empty ->
-                    Seat = first_seat(Floor, S),
-                    case leader(Seat, Vals) of
-                        Self ->
-                            case Seat =:= Floor
-                                     andalso proposal_slot(S) =:= {ok, Floor}
-                                     andalso admissible_for(Pass, Change, S) of
-                                true  -> {collect, Floor};
-                                false -> {park, awaiting_turn}
-                            end;
-                        none ->
-                            redirect;                   %% empty committee
-                        Leader ->
-                            {relay, Leader, Seat}
-                    end
-            end
+%% The token contains only immutable references or O(1) projections. An
+%% unrelated mailbox event reuses it exactly and avoids rebuilding/sorting the
+%% route view. Any fact consumed by ingress_view_facts/1 must have a source here.
+ingress_view_source(
+  S = #s{self = Self, slot = Durable,
+         approved = Approved, committee_id = CommitteeId,
+         validators = Validators, sync = Sync,
+         eng = #eng{base = EngineBase, certs = Certs, tree = Tree},
+         local_proposals = Local, commit_buf = CommitBuf,
+         custody_lane = CustodyLane, custody_ready = CustodyReady,
+         relay_pending = Pending, author_seqs = AuthorSeqs}) ->
+    Floor = Approved + 1,
+    CustodyReadyCount = gb_sets:size(CustodyReady),
+    CustodyPendingCount =
+        custody_pending_count(CustodyReady, Pending),
+    CustodyAuthorSeqs =
+        case CustodyReadyCount of
+            0 -> inactive;
+            _ -> AuthorSeqs
+        end,
+    {Self, Durable, Approved, CommitteeId, Validators, Sync,
+     EngineBase, Certs, Tree,
+     proposal_visible(Floor, S),
+     maps:is_key(Floor, Local),
+     maps:is_key(Floor, CommitBuf),
+     collecting_gate(S#s.collecting),
+     CustodyLane, CustodyReadyCount,
+     pending_relay_lane(Pending),
+     CustodyPendingCount, CustodyAuthorSeqs}.
+
+ingress_view_facts(
+  S = #s{self = Self, slot = Durable,
+         approved = Approved, committee_id = CommitteeId,
+         custody_lane = CustodyLane, custody_ready = CustodyReady,
+         relay_pending = Pending}) ->
+    Floor = Approved + 1,
+    Validators = active_validators(S),
+    Barrier = membership_barrier(S),
+    #{self => Self,
+      capability => ingress_capability(S),
+      committee_id => CommitteeId,
+      validators => Validators,
+      durable_head => Durable,
+      approved => Approved,
+      proposal_visible => proposal_visible(Floor, S),
+      proposal_slot => proposal_slot(S, Barrier),
+      membership_barrier => Barrier,
+      approved_author_seqs =>
+          custody_author_sequence_floor(CustodyReady, S),
+      collecting => collecting_gate(S#s.collecting),
+      custody_lane => CustodyLane,
+      custody_ready => gb_sets:size(CustodyReady),
+      relay_lane => pending_relay_lane(Pending),
+      relay_pending_count =>
+          custody_pending_count(CustodyReady, Pending)}.
+
+custody_author_sequence_floor(CustodyReady, S) ->
+    case gb_sets:is_empty(CustodyReady) of
+        true  -> inactive;
+        false -> approved_author_seqs(S)
     end.
 
-place_relayed(Pass, TargetSlot, Change, Floor, S) ->
-    case TargetSlot > Floor of
-        true ->
-            {park, awaiting_turn};
-        false ->
-            %% relay_target_open/2 already established exact ownership and an
-            %% unclosed slot for this same event.
-            case proposal_slot(S) =:= {ok, Floor}
-                     andalso admissible_for(Pass, Change, S) of
-                true  -> {collect, Floor};
-                false -> {park, awaiting_turn}
-            end
+custody_pending_count(CustodyReady, Pending) ->
+    case gb_sets:is_empty(CustodyReady) of
+        true  -> inactive;
+        false -> map_size(Pending)
     end.
 
-%% Non-custodied membership relays still use their pending attempt as the
-%% exact-slot lane. Ordinary signed content uses `custody_lane`; clearing or
-%% excluding its final placement atomically opens the next lane.
-relay_lane(_Floor, #s{relay_pending = Pending}) when map_size(Pending) =:= 0 ->
+pending_relay_lane(Pending) when map_size(Pending) =:= 0 ->
     empty;
-relay_lane(Floor, #s{relay_pending = Pending} = S) ->
-    {_AttemptId, #relay_pending{target = Target, target_slot = TargetSlot}, _Iter} =
-        maps:next(maps:iterator(Pending)),
-    case lists:member(Target, active_validators(S)) of
-        false -> blocked;
-        true when TargetSlot < Floor -> blocked;
-        true when TargetSlot =:= Floor ->
-            case proposal_visible(Floor, S) of
-                true  -> blocked;
-                false -> {target, Target, TargetSlot}
-            end;
-        true  -> {target, Target, TargetSlot}
-    end.
-
-%% One origin custody lane spans local collection, a sealed local proposal, and
-%% an outbound relay. New unsigned requests may join it only while that exact
-%% target slot is still open. A ready retained submission gets first claim on a
-%% fresh lane; later unsigned work waits behind it.
-origin_lane(Floor, Origin, S = #s{custody_lane = CustodyLane,
-                                  custody_ready = Ready}) ->
-    %% A ready retained sequence always precedes newly unsigned local work.
-    %% This remains true while an earlier retained sequence already occupies the
-    %% active lane: otherwise a smaller later transaction could fit the batch,
-    %% get a higher author_seq, and overtake the ready predecessor.
-    case {Origin, gb_sets:is_empty(Ready)} of
-        {local, false} ->
-            blocked;
-        _ ->
-            case CustodyLane of
-                empty ->
-                    relay_lane(Floor, S);
-                {Target, TargetSlot, PlacementCommitteeId} ->
-                    lane_status(
-                      Floor, Target, TargetSlot,
-                      PlacementCommitteeId, S)
-            end
-    end.
-
-lane_status(
-  _Floor, _Target, _TargetSlot, PlacementCommitteeId,
-  #s{committee_id = CurrentCommitteeId})
-  when PlacementCommitteeId =/= CurrentCommitteeId ->
-    placement_conflict;
-lane_status(Floor, Target, TargetSlot, _PlacementCommitteeId, S) ->
-    case lists:member(Target, active_validators(S)) of
-        false ->
-            blocked;
-        true when TargetSlot < Floor ->
-            blocked;
-        true when TargetSlot =:= Floor ->
-            case proposal_visible(Floor, S) of
-                true  -> blocked;
-                false -> {target, Target, TargetSlot}
-            end;
-        true ->
-            {target, Target, TargetSlot}
-    end.
-
-%% The first slot a change can still enter, as seen from here: the pipeline floor
-%% itself, or one later once the floor's proposal is already out.
-first_seat(Floor, S) ->
-    case proposal_visible(Floor, S) of
-        true  -> Floor + 1;
-        false -> Floor
-    end.
+pending_relay_lane(Pending) ->
+    {_AttemptId,
+     #relay_pending{target = Target, target_slot = TargetSlot},
+     _Iterator} = maps:next(maps:iterator(Pending)),
+    {Target, TargetSlot}.
 
 %% Executor: the ONLY place a decision becomes effects. Entry parks to the queue
 %% TAIL; the drain never executes `{park,_}` (drain_loop holds the head instead),
 %% so a drained item can never re-park.
-execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
+execute(Pass, Origin, From, Request, Anchor, Decision, S) ->
+    Change = quod_ingress_state:request_change(Request),
+    Membership =
+        quod_ingress_state:request_membership(Request),
     case Decision of
         {reject, Why} ->
             reject_append(From, Why, S);
         redirect ->
             redirect_append(From, none, S);
         {park, Cause} ->
-            park_ingress(Origin, Cause, From, Change, Anchor, S);
+            park_ingress(Origin, Cause, From, Request, Anchor, S);
         {collect, Slot} when element(1, Origin) =:= relayed ->
-            collect_append(From, Change, Slot, S);
+            collect_append(From, Change, Membership, Slot, S);
         {collect, Slot} when element(1, Origin) =:= custody ->
-            collect_custody(Origin, From, Change, Slot, S);
+            collect_custody(
+              Origin, From, Change, Membership, Slot, S);
         {collect, Slot} ->
-            sign_then(From, Change, Anchor, S,
+            sign_then(From, Change, Membership, Anchor, S,
                       fun(OwnedOrigin, F, Signed, S1) ->
                           case OwnedOrigin of
                               local ->
-                                  collect_append(F, Signed, Slot, S1);
+                                  collect_append(
+                                    F, Signed, Membership, Slot, S1);
                               {custody, _} ->
                                   collect_custody(
-                                    OwnedOrigin, F, Signed, Slot, S1)
+                                    OwnedOrigin, F, Signed,
+                                    Membership, Slot, S1)
                           end
                       end);
         {relay, Leader, WatchSlot} when element(1, Origin) =:= custody ->
@@ -2116,7 +1982,7 @@ execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
               Origin, From, Leader, WatchSlot, Change, Anchor,
               watch_requested(WatchSlot, count_forwarded(Pass, S)));
         {relay, Leader, WatchSlot} ->   %% fresh LOCAL origin only
-            sign_then(From, Change, Anchor, S,
+            sign_then(From, Change, Membership, Anchor, S,
                       fun(OwnedOrigin, F, Signed, S1) ->
                           S2 = watch_requested(
                                  WatchSlot, count_forwarded(Pass, S1)),
@@ -2135,73 +2001,91 @@ execute(Pass, Origin, From, Change, Anchor, Decision, S) ->
 %% Sign exactly once, on the pass that leaves the unsigned queue. Ordinary
 %% content immediately enters origin custody; membership changes deliberately
 %% keep their terminal skip/re-proof contract.
-sign_then(From, Change, Anchor, S, Then) ->
+sign_then(From, Change, Membership, Anchor, S, Then)
+  when is_boolean(Membership) ->
     case sign_local_change(Change, S) of
         {error, _} ->
             reject_append(From, bad_change, S);
         {ok, Signed, S1} ->
-            Bound = bind_waiter_submission(From, Signed, S1#s.ns),
-            case is_membership_change(Signed) of
-                true ->
-                    Then(local, Bound, Signed, S1);
-                false ->
-                    case retain_custody(Bound, Signed, Anchor, S1) of
-                        {ok, Origin, Marker, S2} ->
-                            Then(Origin, Marker, Signed, S2);
-                        {error, busy, S2} ->
-                            reject_append(Bound, busy, S2);
-                        {error, bad_change, S2} ->
-                            reject_append(Bound, bad_change, S2)
+            case prepare_submission(S1#s.ns, Signed) of
+                {error, _} ->
+                    reject_append(From, bad_change, S1);
+                {ok, Submission, SubmissionId, Bytes} ->
+                    Bound =
+                        bind_waiter_submission_id(
+                          From, SubmissionId),
+                    %% Signing changes only author identity, sequence, and
+                    %% signature. Reuse the diff classification already
+                    %% established by the routing validation pass.
+                    case Membership of
+                        true ->
+                            Then(local, Bound, Signed, S1);
+                        false ->
+                            case retain_custody(
+                                   Bound, Signed, Submission,
+                                   SubmissionId, Bytes, Anchor, S1) of
+                                {ok, Origin, Marker, S2} ->
+                                    Then(Origin, Marker, Signed, S2);
+                                {error, busy, S2} ->
+                                    reject_append(Bound, busy, S2);
+                                {error, bad_change, S2} ->
+                                    reject_append(Bound, bad_change, S2)
+                            end
                     end
             end
     end.
 
-retain_custody(Waiter, Change, Anchor,
-               S = #s{ns = Ns, custody = Custody,
+prepare_submission(Ns, Change) ->
+    case quod_transaction:submission(Ns, Change) of
+        {error, _} = Error ->
+            Error;
+        {ok, Submission} ->
+            {ok, Submission,
+             quod_transaction:submission_id(Submission),
+             byte_size(term_to_binary(Submission, [deterministic]))}
+    end.
+
+retain_custody(Waiter, Change, Submission, SubmissionId, Bytes, Anchor,
+               S = #s{custody = Custody,
                       custody_deadlines = Deadlines,
                       custody_bytes = CustodyBytes,
                       relay_timeout_ms = RelayTimeout}) ->
-    case quod_transaction:submission(Ns, Change) of
-        {error, _} ->
+    case {maps:is_key(SubmissionId, Custody),
+          map_size(Custody) >= ?MAX_CUSTODY,
+          CustodyBytes + Bytes > ?MAX_CUSTODY_BYTES} of
+        {true, _, _} ->
             {error, bad_change, S};
-        {ok, Submission} ->
-            SubmissionId = quod_transaction:submission_id(Submission),
-            Bytes = byte_size(term_to_binary(Submission, [deterministic])),
-            case {maps:is_key(SubmissionId, Custody),
-                  map_size(Custody) >= ?MAX_CUSTODY,
-                  CustodyBytes + Bytes > ?MAX_CUSTODY_BYTES} of
-                {true, _, _} ->
-                    {error, bad_change, S};
-                {false, true, _} ->
-                    {error, busy, S};
-                {false, false, true} ->
-                    {error, busy, S};
-                {false, false, false} ->
-                    Deadline = Anchor + RelayTimeout,
-                    Record =
-                        #custody{waiter = Waiter, change = Change,
-                                 submission = Submission,
-                                 original_arrival = Anchor,
-                                 deadline = Deadline, bytes = Bytes},
-                    Marker =
-                        Waiter#waiter{
-                          reply_to = {custody, SubmissionId},
-                          submission_id = SubmissionId},
-                    {ok, {custody, SubmissionId}, Marker,
-                     S#s{custody = Custody#{SubmissionId => Record},
-                         custody_deadlines =
-                             gb_sets:add_element(
-                               {Deadline, SubmissionId}, Deadlines),
-                         custody_bytes = S#s.custody_bytes + Bytes}}
-            end
+        {false, true, _} ->
+            {error, busy, S};
+        {false, false, true} ->
+            {error, busy, S};
+        {false, false, false} ->
+            Deadline = Anchor + RelayTimeout,
+            Record =
+                #custody{waiter = Waiter, change = Change,
+                         submission = Submission,
+                         original_arrival = Anchor,
+                         deadline = Deadline, bytes = Bytes},
+            Marker =
+                Waiter#waiter{
+                  reply_to = {custody, SubmissionId},
+                  submission_id = SubmissionId},
+            {ok, {custody, SubmissionId}, Marker,
+             S#s{custody = Custody#{SubmissionId => Record},
+                 custody_deadlines =
+                     gb_sets:add_element(
+                       {Deadline, SubmissionId}, Deadlines),
+                 custody_bytes = S#s.custody_bytes + Bytes}}
     end.
 
-collect_custody({custody, SubmissionId}, Marker, Change, Slot, S) ->
+collect_custody(
+  {custody, SubmissionId}, Marker, Change, Membership, Slot, S) ->
     case place_custody(
            SubmissionId,
            {local, Slot, S#s.committee_id}, S) of
         {ok, S1} ->
-            collect_append(Marker, Change, Slot, S1);
+            collect_append(
+              Marker, Change, Membership, Slot, S1);
         {conflict, S1} ->
             {defer_custody_placement(SubmissionId, S1), []};
         {error, S1} ->
@@ -2269,7 +2153,7 @@ place_custody(SubmissionId, Placement,
 %% A temporary placement refusal changes only where retained work may go; it
 %% says nothing about the transaction's validity. Keep the exact submission in
 %% the ordered ready set. The current drain pass then seals instead of selecting
-%% the same key again; a later view/lane/capacity route-key transition retries it.
+%% the same key again; a later view/lane/capacity fingerprint transition retries it.
 defer_custody_placement(
   SubmissionId,
   S = #s{custody = Custody, custody_ready = Ready}) ->
@@ -2299,64 +2183,17 @@ custody_marker(
 count_forwarded(drain, S) -> S#s{ingress_forwarded = S#s.ingress_forwarded + 1};
 count_forwarded(entry, S) -> S.
 
-%% ONE size accounting for a change entering consensus. `signed_size` = encoded bytes
-%% plus the sign-time growth headroom of a still-unsigned local item; `item_bytes` adds
-%% the once-per-block envelope. The oversize gate, the park-queue byte bound, and batch
-%% admission (which adds to a batch already carrying the envelope) all read these, so
-%% they can never disagree about how big a change is.
-signed_size(Change) ->
-    encoded_change_size(Change) + signing_growth(Change).
-
-item_bytes(Change) ->
-    ?BATCH_ENVELOPE_BYTES + signed_size(Change).
-
-%% A change that cannot fit even an EMPTY block can never be admitted — terminal, never parked.
-oversized(Change) ->
-    item_bytes(Change) > ?MAX_BLOCK_BYTES.
-
-%% Would this change enter the batch RIGHT NOW? The single admission predicate shared by
-%% live entry and the drain pre-check (so "can it go in" has exactly one definition).
-%% Capacity and membership gating only — sequence/duplicate problems are CONTENT verdicts
-%% (`stale_seq` / `bad_change`) decided in collect_append, not reasons to wait. Strict
-%% A non-empty park queue makes every live arrival join the tail. The drain itself is
-%% work-conserving across authors and bypasses this entry-only guard.
-admissible_now(Change, S = #s{collecting = Collecting}) ->
-    S#s.ingress_count =:= 0
-        andalso membership_can_enter(Change, S)
-        andalso case Collecting of
-                    none ->
-                        true;   %% oversized/1 already rejected what can't fit alone
-                    #batch{items_rev = Items, bytes = Bytes} ->
-                        not is_membership_change(Change)   %% membership seals alone
-                            andalso length(Items) < ?MAX_BATCH_TXS
-                            andalso Bytes + signed_size(Change) =< ?MAX_BLOCK_BYTES
-                end.
-
-%% The drain bypasses the queue-nonempty guard: it IS the queue. The route consults
-%% this Pass-aware form so a drained item can never re-park behind its own queue-mates
-%% (the no-re-park invariant — the entry guard would otherwise see the still-non-empty
-%% queue and bounce the head straight back).
-admissible_for(entry, Change, S) -> admissible_now(Change, S);
-admissible_for(drain, Change, S) -> drain_admissible(Change, S).
-
-drain_admissible(Change, S) -> admissible_now(Change, S#s{ingress_count = 0}).
-
-signing_growth(#transaction{sig = none}) -> ?SIGNED_GROWTH_BYTES;
-signing_growth(#transaction{})           -> 0.
-
 %% Is the current slot's proposal already out, as seen from this node? True once we
 %% supported it or it notarized — O(1) on existing latches. If the proposal exists but
 %% has not reached us yet, relaying is still right: it joins the leader's open batch.
 proposal_visible(Next, S = #s{eng = #eng{tree = Tree}}) ->
     (round_state(Next, S))#round.supporting =/= none
-        orelse maps:is_key(Next, Tree);
-proposal_visible(_Next, _S) ->
-    false.
+        orelse maps:is_key(Next, Tree).
 
 %% The local append API accepts only a structurally valid unsigned transaction
-%% authored by this node. Sign after the cheap rejection/park routing but before
-%% byte accounting, batching, or relay, so no unsigned live transaction crosses
-%% the consensus boundary.
+%% authored by this node. Routing reserves bounded signature-growth headroom;
+%% the item is signed exactly once when it leaves the unsigned queue, before it
+%% enters custody, batching, or relay.
 local_change_acceptable(
   #transaction{author = Self, sig = none} = Change,
   #s{self = Self} = S) ->
@@ -2392,63 +2229,42 @@ reject_append(From, busy, S) ->
 %%%===================================================================
 
 %% Park one append at the queue tail. Overflow of any bound is the real backpressure
-%% boundary; together with TTL expiry it is the only live source of `{error, busy}`.
-park_ingress(Origin, Cause, Waiter, Change, Anchor,
-             S = #s{ingress_authors = Authors}) ->
-    Author = Change#transaction.author,
-    Bytes = item_bytes(Change),
-    PerAuthor = maps:get(Author, Authors, 0),
-    case S#s.ingress_count >= ?MAX_INGRESS_TXS
-         orelse S#s.ingress_bytes + Bytes > ?MAX_INGRESS_BYTES
-         orelse PerAuthor >= ?MAX_INGRESS_PER_AUTHOR of
-        true ->
+%% boundary. Custody and relay maps have independent bounds.
+park_ingress(Origin, Cause, Waiter, Request, Anchor,
+             S = #s{ingress = Ingress}) ->
+    case quod_ingress_state:enqueue(
+           Origin, Waiter, Request, Anchor, Ingress) of
+        full ->
             {S1, Actions} = reject_append(Waiter, busy, S),
             {S1#s{ingress_overflow = S1#s.ingress_overflow + 1}, Actions};
-        false ->
+        {ok, Depth, Ingress1} ->
             _ = quod_trace:add_event(
                   waiter_trace_ctx(Waiter), <<"consensus.parked">>,
-                  #{'quod.ingress.depth' => S#s.ingress_count + 1,
+                  #{'quod.ingress.depth' => Depth,
                     'quod.ingress.cause' => Cause}),
-            Item = #ingress_item{origin = Origin, waiter = Waiter, change = Change,
-                                 bytes = Bytes, enqueued_at = Anchor},
-            S1 = S#s{ingress = queue:in(Item, S#s.ingress),
-                     ingress_count = S#s.ingress_count + 1,
-                     ingress_bytes = S#s.ingress_bytes + Bytes,
-                     ingress_authors = Authors#{Author => PerAuthor + 1}},
+            S1 = S#s{ingress = Ingress1},
             %% Parked demand arms the head watchdog constructively: every park is a
             %% claim that the pipeline floor must move, so register it as demand
             %% instead of relying on the park cause to coincide with head evidence.
             {watch_requested(S1#s.approved + 1, S1), []}
     end.
 
-ingress_take_head(S = #s{ingress = Q}) ->
-    {{value, Item}, Q1} = queue:out(Q),
-    ingress_remove(Item, S#s{ingress = Q1}).
-
-ingress_remove(#ingress_item{change = Change, bytes = Bytes},
-               S = #s{ingress_authors = Authors}) ->
-    Author = Change#transaction.author,
-    Authors1 = case maps:get(Author, Authors) of
-                   1 -> maps:remove(Author, Authors);
-                   N -> Authors#{Author => N - 1}
-               end,
-    S#s{ingress_count = S#s.ingress_count - 1,
-        ingress_bytes = S#s.ingress_bytes - Bytes,
-        ingress_authors = Authors1}.
-
 %% Retained signed work drains before unsigned ingress. The ordered ready set
 %% contains only origin-local submissions whose exact prior slot is durably
 %% excluded; its `{author_seq, SubmissionId}` keys keep every exclusion cohort
 %% in global author order, including across repeated partial retargets.
+-ifdef(TEST).
 drain_custody(S) ->
-    drain_custody(S, [], 0).
+    {S1, ActionsRev} = drain_custody_rev(S, [], 0),
+    {S1, lists:reverse(ActionsRev)}.
+-endif.
 
-drain_custody(
+drain_custody_rev(
   S = #s{custody_ready = Ready, custody = Custody},
   ActionsRev, N) ->
     case gb_sets:is_empty(Ready) of
         true ->
-            seal_drained(S, ActionsRev, N);
+            seal_drained_rev(S, ActionsRev, N);
         false ->
             ReadyKey = {_AuthorSeq, SubmissionId} =
                 gb_sets:smallest(Ready),
@@ -2463,23 +2279,28 @@ drain_custody(
                                    SubmissionId,
                                    {error, not_in_charge, unavailable},
                                    S1),
-                            drain_custody(S2, ActionsRev, N);
+                            drain_custody_rev(S2, ActionsRev, N);
                         false ->
                             Origin = {custody, SubmissionId},
-                            case route(drain, Origin, Change, S) of
+                            {Decision, Request, SRoute} =
+                                ingress_route(
+                                  drain, Origin, Change, S),
+                            case Decision of
                                 {park, _Cause} ->
-                                    seal_drained(S, ActionsRev, N);
-                                Decision ->
+                                    seal_drained_rev(
+                                      SRoute, ActionsRev, N);
+                                _ ->
                                     Marker =
                                         custody_marker(
                                           SubmissionId, Record),
                                     S1 =
                                         drop_custody_ready(
-                                          ReadyKey, S),
+                                          ReadyKey, SRoute),
                                     {S2, Actions} =
                                         execute(
                                           drain, Origin, Marker,
-                                          Change, Anchor, Decision, S1),
+                                          Request, Anchor,
+                                          Decision, S1),
                                     ActionsRev1 =
                                         lists:reverse(
                                           Actions, ActionsRev),
@@ -2496,15 +2317,16 @@ drain_custody(
                                             %% Stop this pass: immediately
                                             %% selecting it again would spin
                                             %% forever in one statem callback.
-                                            %% A later route-key transition
-                                            %% (including relay capacity
-                                            %% relief) wakes the drain.
-                                            seal_drained(
+                                            %% A later custody-fingerprint
+                                            %% transition (including removal
+                                            %% of an obstructing relay) wakes
+                                            %% the drain.
+                                            seal_drained_rev(
                                               defer_custody_placement(
                                                 SubmissionId, S2),
                                               ActionsRev1, N);
                                         _ ->
-                                            drain_custody(
+                                            drain_custody_rev(
                                               S2, ActionsRev1, N + 1)
                                     end
                             end
@@ -2512,7 +2334,7 @@ drain_custody(
                 _ ->
                     %% Fail closed on impossible index drift: rebuild from
                     %% custody instead of choosing a later sequence.
-                    drain_custody(
+                    drain_custody_rev(
                       S#s{custody_ready =
                               custody_ready_index(Custody)},
                       ActionsRev, N)
@@ -2536,66 +2358,95 @@ custody_ready_index(Custody) ->
 %% deliberately global: an in-flight membership barrier or a queued membership change
 %% stops the pass so the pipeline must quiesce and the committee transition cannot
 %% starve. Held items retain their relative order, so TTL expiry remains oldest-first.
-drain_ingress(S, RouteKey) ->
-    drain_until_stable(S, RouteKey, []).
+-ifdef(TEST).
+drain_ingress(S, Fingerprint) ->
+    {S1, ActionsRev} =
+        drain_ingress_rev(S, Fingerprint, []),
+    {S1, lists:reverse(ActionsRev)}.
+-endif.
 
-drain_until_stable(S, RouteKey, ActionsRev0) ->
-    {S1, Actions, N} =
-        drain_loop(S, S#s.ingress_count, #{}, [], [], 0),
-    ActionsRev1 = lists:reverse(Actions, ActionsRev0),
-    case N > 0 andalso S1#s.ingress_count > 0 of
+drain_ingress_rev(S, RouteFingerprint, ActionsRev0) ->
+    Remaining = quod_ingress_state:count(S#s.ingress),
+    {S1, ActionsRev1, N} =
+        drain_loop(
+          S, Remaining, #{}, [], ActionsRev0, 0),
+    SView = refresh_ingress_view(S1),
+    case N > 0
+         andalso quod_ingress_state:count(SView#s.ingress) > 0 of
         true ->
-            NextRouteKey = ingress_route_key(S1),
-            case NextRouteKey =/= RouteKey of
-                true  -> drain_until_stable(S1, NextRouteKey, ActionsRev1);
-                false -> {S1, lists:reverse(ActionsRev1)}
+            NextRouteFingerprint =
+                quod_ingress_state:route_fingerprint(
+                  SView#s.ingress),
+            case NextRouteFingerprint =/= RouteFingerprint of
+                true ->
+                    drain_ingress_rev(
+                      SView, NextRouteFingerprint, ActionsRev1);
+                false ->
+                    {SView, ActionsRev1}
             end;
         false ->
-            {S1, lists:reverse(ActionsRev1)}
+            {SView, ActionsRev1}
     end.
 
 drain_loop(S, 0, _BlockedAuthors, HeldRev, ActionsRev, N) ->
-    {S1, Actions} = seal_drained(restore_held(S, HeldRev), ActionsRev, N),
-    {S1, Actions, N};
-drain_loop(S = #s{ingress = Q}, Remaining, BlockedAuthors,
+    {S1, ActionsRev1} =
+        seal_drained_rev(
+          restore_held(S, HeldRev), ActionsRev, N),
+    {S1, ActionsRev1, N};
+drain_loop(S = #s{ingress = Ingress}, Remaining, BlockedAuthors,
            HeldRev, ActionsRev, N) ->
-    {{value, Item = #ingress_item{origin = Origin, waiter = Waiter,
-                                  change = Change, enqueued_at = Anchor}}, Q1} =
-        queue:out(Q),
+    {Item, Ingress1} =
+        quod_ingress_state:detach_front(Ingress),
+    {QueuedContext, Waiter, Request, Anchor} =
+        quod_ingress_state:item(Item),
+    Change = quod_ingress_state:request_change(Request),
     Author = Change#transaction.author,
-    SWithoutHead = S#s{ingress = Q1},
+    Origin = QueuedContext,
+    SWithoutHead = S#s{ingress = Ingress1},
     case maps:is_key(Author, BlockedAuthors) of
         true ->
             drain_loop(SWithoutHead, Remaining - 1, BlockedAuthors,
                        [Item | HeldRev], ActionsRev, N);
         false ->
-            case route(drain, Origin, Change, S) of
+            {Decision, RoutedRequest, SRoute} =
+                ingress_route_request(
+                  drain, Origin, Request, SWithoutHead),
+            case Decision of
                 {park, barrier} ->
-                    {S1, Actions} =
-                        seal_drained(
-                          restore_held(SWithoutHead, [Item | HeldRev]),
+                    {S1, ActionsRev1} =
+                        seal_drained_rev(
+                          restore_held(SRoute, [Item | HeldRev]),
                           ActionsRev, N),
-                    {S1, Actions, N};
+                    {S1, ActionsRev1, N};
                 {park, _Cause} ->
-                    case is_membership_change(Change) of
+                    case quod_ingress_state:request_membership(
+                           RoutedRequest) of
                         true ->
-                            {S1, Actions} =
-                                seal_drained(
-                                  restore_held(SWithoutHead, [Item | HeldRev]),
+                            {S1, ActionsRev1} =
+                                seal_drained_rev(
+                                  restore_held(SRoute, [Item | HeldRev]),
                                   ActionsRev, N),
-                            {S1, Actions, N};
+                            {S1, ActionsRev1, N};
                         false ->
-                            drain_loop(SWithoutHead, Remaining - 1,
+                            drain_loop(SRoute, Remaining - 1,
                                        BlockedAuthors#{Author => true},
                                        [Item | HeldRev], ActionsRev, N)
                     end;
-                Decision ->
-                    S1 = ingress_remove(Item, SWithoutHead),
+                _ ->
+                    ConsumedIngress =
+                        quod_ingress_state:consume_detached(
+                          Item, SRoute#s.ingress),
+                    SConsumed =
+                        SRoute#s{ingress = ConsumedIngress},
                     _ = quod_trace:add_event(
                           waiter_trace_ctx(Waiter), <<"consensus.drained">>,
-                          #{'quod.ingress.depth' => S1#s.ingress_count}),
+                          #{'quod.ingress.depth' =>
+                                quod_ingress_state:count(
+                                  ConsumedIngress)}),
                     {S2, Actions} =
-                        execute(drain, Origin, Waiter, Change, Anchor, Decision, S1),
+                        execute(
+                          drain, Origin, Waiter, RoutedRequest,
+                          Anchor, Decision, SConsumed),
                     drain_loop(S2, Remaining - 1, BlockedAuthors, HeldRev,
                                lists:reverse(Actions, ActionsRev), N + 1)
             end
@@ -2603,71 +2454,60 @@ drain_loop(S = #s{ingress = Q}, Remaining, BlockedAuthors,
 
 restore_held(S, []) ->
     S;
-restore_held(S = #s{ingress = Q}, HeldRev) ->
+restore_held(S = #s{ingress = Ingress}, HeldRev) ->
     %% No callback can append concurrently while this gen_statem event is running.
-    %% Q contains only entries not part of this pass (normally none).
-    Held = lists:reverse(HeldRev),
-    S#s{ingress = queue:join(queue:from_list(Held), Q)}.
+    %% The queue contains only entries not part of this pass (normally none).
+    S#s{
+      ingress =
+          quod_ingress_state:restore_detached_front_rev(
+            HeldRev, Ingress)}.
 
 %% A multi-item drain seals its batch NOW: the backlog already waited a full flight, a
 %% configured window would only re-add latency (block N+1 = what arrived during block N
 %% is already the natural batch). A SINGLETON drain keeps the normal micro-batch window so relays
 %% landing in the same slot-open moment can still join it.
-seal_drained(S = #s{collecting = #batch{slot = Slot}}, ActionsRev, N) when N >= 2 ->
-    {flush_batch(Slot, S), lists:reverse([{{timeout, batch}, cancel} | ActionsRev])};
-seal_drained(S, ActionsRev, _N) ->
-    {S, lists:reverse(ActionsRev)}.
+seal_drained_rev(
+  S = #s{collecting = #batch{slot = Slot}}, ActionsRev, N)
+  when N >= 2 ->
+    {flush_batch(Slot, S),
+     [{{timeout, batch}, cancel} | ActionsRev]};
+seal_drained_rev(S, ActionsRev, _N) ->
+    {S, ActionsRev}.
 
-%% The universal transition hook sees every vote, readiness refresh, relay duplicate,
-%% and timer. A blocked queue must not be rescanned after events that cannot change a
-%% routing decision: doing O(queue length) work per mailbox message recreates the
-%% saturation feedback loop this ingress refactor is meant to remove. The key contains
-%% every state component consulted by `route/4`, `relay_target_open/2`, `place/6`, and
-%% `admissible_for/3`; adding a routing input requires adding it here and a route-key
-%% transition test. A queue length change also wakes the drain so a new author can pass
-%% an already-blocked one.
-ingress_drain_key(_S0, #s{ingress_count = 0}) ->
-    none;
-ingress_drain_key(#s{ingress_count = C0}, S1 = #s{ingress_count = C1})
-  when C0 =/= C1 ->
-    {drain, ingress_route_key(S1)};
-ingress_drain_key(S0, S1) ->
-    Key1 = ingress_route_key(S1),
-    case ingress_route_key(S0) =:= Key1 of
-        true  -> none;
-        false -> {drain, Key1}
-    end.
-
-custody_drain_key(
-  S0 = #s{custody_ready = Ready0},
-  S1 = #s{custody_ready = Ready1}) ->
-    case gb_sets:is_empty(Ready1) of
-        true ->
+%% A canonical route change or useful queue-work revision wakes the bounded
+%% scan. Same-author tail appends do not: the item that blocked that author
+%% blocks its successors too. Raw consensus changes that project to the same
+%% route view remain O(1).
+ingress_drain_decision(Before, After) ->
+    case quod_ingress_state:count(After) of
+        0 ->
             none;
-        false ->
-            Key1 = custody_route_key(S1),
-            case gb_sets:size(Ready0) =/= gb_sets:size(Ready1)
-                 orelse custody_route_key(S0) =/= Key1 of
-                true  -> {drain, Key1};
-                false -> none
+        _ ->
+            Fingerprint =
+                quod_ingress_state:fingerprint(After),
+            case quod_ingress_state:fingerprint(Before)
+                     =:= Fingerprint of
+                true  -> none;
+                false ->
+                    {drain,
+                     quod_ingress_state:route_fingerprint(After)}
             end
     end.
 
-custody_route_key(S = #s{approved = Approved}) ->
-    Floor = Approved + 1,
-    {ingress_route_key(S),
-     origin_lane(Floor, {custody, <<>>}, S),
-     %% In a deep-recovery gap, custody_sequence_status/2 holds until the
-     %% approved block itself arrives. That block is below Floor, so none of
-     %% ingress_route_key/1's Floor-facing tree latches observes its arrival.
-     approved_block_present(Approved, S),
-     %% O(1): removing a full-map or exact-attempt obstruction must wake
-     %% retained work even when the committee, target, and slot stay fixed.
-     map_size(S#s.relay_pending),
-     S#s.author_seqs}.
-
-approved_block_present(Approved, #s{eng = #eng{tree = Tree}}) ->
-    maps:is_key(Approved, Tree).
+custody_drain_decision(
+  Before, After, Ready) ->
+    case gb_sets:is_empty(Ready) of
+        true ->
+            none;
+        false ->
+            Fingerprint =
+                quod_ingress_state:custody_fingerprint(After),
+            case quod_ingress_state:custody_fingerprint(Before)
+                     =:= Fingerprint of
+                true  -> none;
+                false -> {drain, Fingerprint}
+            end
+    end.
 
 %% A committed committee transition invalidates every still-active placement
 %% created under the prior view, even when the same target remains a member.
@@ -2726,46 +2566,41 @@ mark_custody_lane_ready(
         custody_ready = gb_sets:from_list(ReadyKeys),
         relay_pending = Pending1}.
 
-ingress_route_key(S = #s{approved = Approved, collecting = Collecting}) ->
-    Floor = Approved + 1,
-    {may_lead(S),
-     S#s.slot,
-     Approved,
-     S#s.committee_id,
-     active_validators(S),
-     proposal_visible(Floor, S),
-     proposal_slot(S),
-     membership_barrier(S),
-     origin_lane(Floor, local, S),
-     collecting_gate(Collecting)}.
-
 collecting_gate(none) ->
     none;
-collecting_gate(#batch{slot = Slot, items_rev = Items, bytes = Bytes}) ->
-    {Slot, length(Items), Bytes}.
+collecting_gate(#batch{slot = Slot, count = Count, bytes = Bytes}) ->
+    {Slot, Count, Bytes}.
 
-%% TTL sweep, on the consensus tick. FIFO + constant TTL make expiry order = queue
-%% order, so this peeks the HEAD only — O(expired), free when nothing expired. It walks
-%% the ingress queue EXCLUSIVELY: every other waiter container (collecting batch,
-%% local_proposals, relay_pending) has its own lifecycle, and expiring any of them here
-%% would double-reply. An expiring stall must fail visibly: `busy` to the caller.
-expire_ingress(S = #s{ingress_count = 0}) -> S;
-expire_ingress(S) ->
-    expire_ingress(quod_time:mono_ms() - ?INGRESS_TTL_MS, S).
-
-expire_ingress(Cutoff, S = #s{ingress_count = C}) when C > 0 ->
-    case queue:peek(S#s.ingress) of
-        {value, #ingress_item{enqueued_at = T, waiter = Waiter}} when T =< Cutoff ->
-            _ = quod_trace:add_event(
-                  waiter_trace_ctx(Waiter), <<"consensus.expired">>, #{}),
-            S1 = reply_waiter(Waiter, {error, busy}, ingress_take_head(S)),
-            expire_ingress(Cutoff, S1#s{ingress_expired = S1#s.ingress_expired + 1,
-                                        r_busy = S1#s.r_busy + 1});
+%% FIFO + one lifetime make expiry O(expired), free when the head is fresh.
+%% Other waiter containers have independent lifecycles and are never swept here.
+expire_ingress(S = #s{ingress = Ingress}) ->
+    case quod_ingress_state:count(Ingress) of
+        0 ->
+            S;
         _ ->
-            S
-    end;
-expire_ingress(_Cutoff, S) ->
-    S.
+            expire_ingress(
+              quod_time:mono_ms() - ?INGRESS_TTL_MS, S)
+    end.
+
+expire_ingress(Cutoff, S = #s{ingress = Ingress}) ->
+    {Expired, Ingress1} =
+        quod_ingress_state:take_expired(
+          Cutoff, Ingress),
+    lists:foldl(
+      fun(Item, Acc) ->
+              {_Origin, Waiter, _Request, _Anchor} =
+                  quod_ingress_state:item(Item),
+              _ = quod_trace:add_event(
+                    waiter_trace_ctx(Waiter),
+                    <<"consensus.expired">>, #{}),
+              Acc1 =
+                  reply_waiter(
+                    Waiter, {error, busy}, Acc),
+              Acc1#s{
+                ingress_expired =
+                    Acc1#s.ingress_expired + 1,
+                r_busy = Acc1#s.r_busy + 1}
+      end, S#s{ingress = Ingress1}, Expired).
 
 %% Custody lifetimes are anchored at the original unsigned arrival and never
 %% reset by retargeting. The ordered deadline index is updated on both insert
@@ -3029,14 +2864,19 @@ put_pending_relay(AttemptId,
 %% A depth-one pipeline permits proposing H+2 after H+1 is approved but before it
 %% commits. It stops there until commit catches up. Membership blocks are barriers,
 %% and a complaint-finalized slot waiting behind an earlier commit is not reopened.
-proposal_slot(S = #s{slot = Committed, approved = Approved, collecting = Collecting,
-                     local_proposals = Local, commit_buf = Buf}) ->
+proposal_slot(S = #s{}) ->
+    proposal_slot(S, membership_barrier(S)).
+
+proposal_slot(#s{slot = Committed, approved = Approved,
+                 collecting = Collecting,
+                 local_proposals = Local, commit_buf = Buf},
+              MembershipBarrier) ->
     Next = Approved + 1,
     HasBatch = case Collecting of #batch{slot = Next} -> true; _ -> false end,
     Open = live_pipeline_slot(Next, Committed)
            andalso (HasBatch orelse not maps:is_key(Next, Local))
            andalso not maps:is_key(Next, Buf)
-           andalso not membership_barrier(S),
+           andalso not MembershipBarrier,
     case Open of true -> {ok, Next}; false -> blocked end.
 
 %% One definition owns the complete volatile consensus window: the durable head's successor plus the
@@ -3046,94 +2886,146 @@ proposal_slot(S = #s{slot = Committed, approved = Approved, collecting = Collect
 live_pipeline_slot(Slot, Committed) ->
     Slot > Committed andalso Slot =< Committed + ?PIPELINE_DEPTH + 1.
 
-%% Capacity and membership gating live in the router (`admissible_now/2` — inadmissible
-%% parks, it no longer rejects), so only CONTENT verdicts remain here: a sequence below
+%% Capacity and membership gating live in `quod_ingress_state` — inadmissible
+%% work parks rather than rejecting. Only CONTENT verdicts remain here: a sequence below
 %% the floor is `stale_seq` (retryable — newer approved history won first, while the
 %% content remains valid), and a duplicate tx_id is `bad_change` (terminal).
-collect_append(From, Change, Slot, S = #s{collecting = none}) ->
+collect_append(
+  From, Change, Membership, Slot,
+  S = #s{collecting = none})
+  when is_boolean(Membership) ->
     Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
-    case sequence_payload_ok([Change], S) of
-        false ->
+    case approved_author_seqs(S) of
+        error ->
             reject_append(From, stale_seq, S);
-        true ->
-            _ = quod_trace:add_event(
-                  waiter_trace_ctx(From), <<"consensus.queued">>,
-                  #{'quod.consensus.slot' => Slot}),
-            Batch = #batch{slot = Slot, parent = S#s.approved,
-                           items_rev = [{From, Change}], bytes = Bytes,
-                           opened_at = quod_time:mono_ms()},
-            S1 = S#s{collecting = Batch, appends = S#s.appends + 1},
-            case is_membership_change(Change) orelse S#s.batch_window_ms =:= 0 of
-                true  -> {flush_batch(Slot, S1), [{{timeout, batch}, cancel}]};
-                false -> {S1, [{{timeout, batch}, S#s.batch_window_ms,
-                                {flush_batch, Slot}}]}
+        {ok, SequenceFloor} ->
+            case advance_transaction_sequence(
+                   Change, SequenceFloor, #{}) of
+                error ->
+                    reject_append(From, stale_seq, S);
+                {ok, Sequences} ->
+                    _ = quod_trace:add_event(
+                          waiter_trace_ctx(From), <<"consensus.queued">>,
+                          #{'quod.consensus.slot' => Slot}),
+                    TxId = Change#transaction.tx_id,
+                    Batch = #batch{
+                               slot = Slot, parent = S#s.approved,
+                               items_rev = [{From, Change}], count = 1,
+                               bytes = Bytes, tx_ids = #{TxId => true},
+                               sequences = Sequences,
+                               sequence_floor = SequenceFloor,
+                               opened_at = quod_time:mono_ms()},
+                    S1 = S#s{collecting = Batch,
+                             appends = S#s.appends + 1},
+                    case Membership
+                             orelse S#s.batch_window_ms =:= 0 of
+                        true ->
+                            {flush_batch(Slot, S1),
+                             [{{timeout, batch}, cancel}]};
+                        false ->
+                            {S1,
+                             [{{timeout, batch}, S#s.batch_window_ms,
+                               {flush_batch, Slot}}]}
+                    end
             end
     end;
-collect_append(From, Change, Slot,
-               S = #s{collecting = #batch{slot = Slot, items_rev = Items, bytes = Bytes} = Batch}) ->
+collect_append(From, Change, _Membership, Slot,
+               S = #s{collecting = #batch{slot = Slot, items_rev = Items,
+                                          count = Count, bytes = Bytes,
+                                          tx_ids = TxIds,
+                                          sequences = Sequences,
+                                          sequence_floor = SequenceFloor} = Batch}) ->
     Added = encoded_change_size(Change),
-    Duplicate = lists:any(fun({_From, T}) -> T#transaction.tx_id =:= Change#transaction.tx_id end, Items),
-    Candidate = [T || {_Waiter, T} <- lists:reverse([{From, Change} | Items])],
-    case {Duplicate, sequence_payload_ok(Candidate, S)} of
-        {true, _}      -> reject_append(From, bad_change, S);
-        {false, false} -> reject_append(From, stale_seq, S);
-        {false, true} ->
-            _ = quod_trace:add_event(
-                  waiter_trace_ctx(From), <<"consensus.queued">>,
-                  #{'quod.consensus.slot' => Slot}),
-            Batch1 = Batch#batch{items_rev = [{From, Change} | Items], bytes = Bytes + Added},
-            S1 = S#s{collecting = Batch1, appends = S#s.appends + 1},
-            case length(Batch1#batch.items_rev) >= ?MAX_BATCH_TXS of
-                true  -> {flush_batch(Slot, S1), [{{timeout, batch}, cancel}]};
-                false -> {S1, []}
+    TxId = Change#transaction.tx_id,
+    case maps:is_key(TxId, TxIds) of
+        true ->
+            reject_append(From, bad_change, S);
+        false ->
+            case advance_transaction_sequence(
+                   Change, SequenceFloor, Sequences) of
+                error ->
+                    reject_append(From, stale_seq, S);
+                {ok, Sequences1} ->
+                    _ = quod_trace:add_event(
+                          waiter_trace_ctx(From), <<"consensus.queued">>,
+                          #{'quod.consensus.slot' => Slot}),
+                    Batch1 =
+                        Batch#batch{
+                          items_rev = [{From, Change} | Items],
+                          count = Count + 1, bytes = Bytes + Added,
+                          tx_ids = TxIds#{TxId => true},
+                          sequences = Sequences1},
+                    S1 = S#s{
+                           collecting = Batch1,
+                           appends = S#s.appends + 1},
+                    case Batch1#batch.count >= ?MAX_BATCH_TXS of
+                        true ->
+                            {flush_batch(Slot, S1),
+                             [{{timeout, batch}, cancel}]};
+                        false ->
+                            {S1, []}
+                    end
             end
     end.
 
+advance_transaction_sequence(
+  #transaction{author = Author, author_seq = Seq},
+  SequenceFloor, Seen)
+  when is_integer(Seq), Seq > 0 ->
+    Key = {Author, Seq},
+    case Seq > maps:get(Author, SequenceFloor, 0)
+             andalso not maps:is_key(Key, Seen) of
+        true  -> {ok, Seen#{Key => true}};
+        false -> error
+    end;
+advance_transaction_sequence(_Change, _SequenceFloor, _Seen) ->
+    error.
+
 flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
                                               items_rev = ItemsRev,
+                                              count = Count,
                                               opened_at = OpenedAt}}) ->
     Items = lists:reverse(ItemsRev),
     Payload = [Change || {_From, Change} <- Items],
     case acceptable_collected_payload(Payload, S) of
-        false -> reject_collected_batch(Items, S);
-        true  -> propose_batch(Slot, Parent, Items, Payload,
+        false -> reject_collected_batch(Items, Count, S);
+        true  -> propose_batch(Slot, Parent, Items, Payload, Count,
                                max(0, quod_time:mono_ms() - OpenedAt), S)
     end;
 flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 
-propose_batch(Slot, Parent, Items, Payload, WaitMs, S) ->
+propose_batch(Slot, Parent, Items, Payload, Count, WaitMs, S) ->
     Waiters = [From || {From, _Change} <- Items],
     Block = #block{slot = Slot, parent = Parent, payload = Payload,
                    timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
     BH = block_hash(Block),
-    _ = [quod_trace:add_event(
-           waiter_trace_ctx(Waiter), <<"consensus.proposed">>,
-           #{'quod.consensus.slot' => Slot,
-             'quod.batch.transactions' => length(Payload),
-             'quod.batch.wait_ms' => WaitMs})
-         || {Waiter, _Change} <- Items],
-    quod_metrics:observe_batch(S#s.ns, length(Payload), WaitMs),
+    lists:foreach(
+      fun({Waiter, _Change}) ->
+              quod_trace:add_event(
+                waiter_trace_ctx(Waiter), <<"consensus.proposed">>,
+                #{'quod.consensus.slot' => Slot,
+                  'quod.batch.transactions' => Count,
+                  'quod.batch.wait_ms' => WaitMs})
+      end, Items),
+    quod_metrics:observe_batch(S#s.ns, Count, WaitMs),
     Local = #local_proposal{hash = BH, waiters = Waiters,
                             trace_ctxs = [waiter_trace_ctx(W) || W <- Waiters]},
     S1 = S#s{collecting = none,
              local_proposals = (S#s.local_proposals)#{Slot => Local},
              proposals = S#s.proposals + 1,
-             batched_txs = S#s.batched_txs + length(Payload),
+             batched_txs = S#s.batched_txs + Count,
              round_probe = (S#s.round_probe)#{Slot => {quod_time:mono_ms(), none}}},
     S2 = broadcast({propose, Block}, S1),
     S3 = engine_step([{block, BH, Block}], S2),
     watch_proposal(Slot, support_or_validate(Block, BH, S3)).
 
-reject_collected_batch(Items, S) ->
+reject_collected_batch(Items, Count, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
                        {error, bad_change}, S),
-    S1#s{collecting = none, r_bad = S1#s.r_bad + length(Items)}.
+    S1#s{collecting = none, r_bad = S1#s.r_bad + Count}.
 
 encoded_change_size(Change) ->
     byte_size(term_to_binary(Change, [deterministic])).
-
-membership_can_enter(Change, #s{approved = A, slot = C}) ->
-    not is_membership_change(Change) orelse A =:= C.
 
 membership_barrier(#s{slot = Committed, eng = #eng{tree = Tree}}) ->
     lists:any(fun({Sl, #block{payload = Payload}}) ->
@@ -3234,17 +3126,15 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                                       fun() -> persist_entry(Store, E, Slot, S) end),
             timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
             SCommitted = timed_step(S, resolve, fun() ->
-                             resolve_committed_relays(
+                             resolve_committed_submissions(
                                Payload, Slot,
-                               resolve_committed_custody(
-                                 Payload, Slot,
-                                 S#s{store = Store1,
-                                     commits = S#s.commits + 1,
-                                     last_ts = max(S#s.last_ts, BlockTs),
-                                     author_seqs =
-                                         advance_author_seqs(
-                                           Payload,
-                                           S#s.author_seqs)}))
+                               S#s{store = Store1,
+                                   commits = S#s.commits + 1,
+                                   last_ts = max(S#s.last_ts, BlockTs),
+                                   author_seqs =
+                                       advance_author_seqs(
+                                         Payload,
+                                         S#s.author_seqs)})
                          end),
             S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
             %% Capture the hash while the finalized block is still present in the
@@ -3260,27 +3150,36 @@ persist_entry(Store, Entry, Slot, S) ->
       #{'quod.namespace' => S#s.ns, 'quod.consensus.slot' => Slot},
       fun() -> quod_ledger_store:append(Store, [Entry]) end).
 
+resolve_committed_submissions(
+  _Payload, _Slot,
+  S = #s{custody = Custody, relay_pending = Pending})
+  when map_size(Custody) =:= 0, map_size(Pending) =:= 0 ->
+    S;
+resolve_committed_submissions(Payload, Slot, S = #s{ns = Ns}) ->
+    Included = payload_submission_ids(Ns, Payload),
+    resolve_committed_relays(
+      Included, Slot,
+      resolve_committed_custody(Included, Slot, S)).
+
 resolve_committed_custody(
-  _Payload, _Slot, S = #s{custody = Custody})
+  _Included, _Slot, S = #s{custody = Custody})
   when map_size(Custody) =:= 0 ->
     S;
-resolve_committed_custody(Payload, Slot, S) ->
-    Included = payload_submission_ids(S#s.ns, Payload),
+resolve_committed_custody(Included, Slot, S) ->
     maps:fold(
       fun(SubmissionId, _Present, Acc) ->
               complete_custody(
                 SubmissionId, {ok, Slot}, Acc)
       end, S, Included).
 
-resolve_committed_relays(_Payload, _Slot, S = #s{relay_pending = Pending})
+resolve_committed_relays(_Included, _Slot, S = #s{relay_pending = Pending})
   when map_size(Pending) =:= 0 ->
     S;
-resolve_committed_relays(Payload, Slot, S = #s{relay_pending = Pending}) ->
-    SubmissionIds = payload_submission_ids(S#s.ns, Payload),
+resolve_committed_relays(Included, Slot, S = #s{relay_pending = Pending}) ->
     maps:fold(
       fun(Key, #relay_pending{from = From,
                              submission_id = SubmissionId}, Acc) ->
-              case maps:is_key(SubmissionId, SubmissionIds) of
+              case maps:is_key(SubmissionId, Included) of
                   true ->
                       reply_waiter(
                         From, {ok, Slot},
@@ -3557,17 +3456,22 @@ waiter_trace_ctx(#waiter{trace_ctx = TraceCtx}) -> TraceCtx;
 waiter_trace_ctx(_) -> otel_ctx:new().
 
 new_waiter(ReplyTo, ParentCtx, Change, Ns, Relayed) ->
+    new_waiter(
+      ReplyTo, ParentCtx, Change, Ns, Relayed,
+      change_submission_id(Ns, Change)).
+
+new_waiter(ReplyTo, ParentCtx, Change, Ns, Relayed, SubmissionId) ->
     {TraceCtx, SpanCtx} = quod_trace:start_span(
                             ParentCtx, <<"quod.consensus.append">>, internal,
                             #{'quod.namespace' => Ns,
                               'quod.tx.id' => quod_trace:tx_id(Change#transaction.tx_id),
                               'quod.relay.hop' => Relayed}),
     #waiter{reply_to = ReplyTo,
-            submission_id = change_submission_id(Ns, Change),
+            submission_id = SubmissionId,
             trace_ctx = TraceCtx, trace_span = SpanCtx}.
 
-bind_waiter_submission(Waiter = #waiter{}, Change, Ns) ->
-    Waiter#waiter{submission_id = change_submission_id(Ns, Change)}.
+bind_waiter_submission_id(Waiter = #waiter{}, SubmissionId) ->
+    Waiter#waiter{submission_id = SubmissionId}.
 
 change_submission_id(Ns, Change) ->
     case quod_transaction:submission(Ns, Change) of
@@ -3722,8 +3626,7 @@ well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) -
 well_formed_block(_) -> false.
 
 well_formed_block_payload(Pl) ->
-    proper_transaction_list(Pl)
-        andalso length(Pl) =< ?MAX_BATCH_TXS
+    bounded_transaction_list(Pl)
         andalso byte_size(term_to_binary(Pl, [deterministic])) =< ?MAX_BLOCK_BYTES
         andalso lists:all(fun well_formed_transaction/1, Pl)
         andalso unique_tx_ids(Pl).
@@ -4040,6 +3943,8 @@ keep_progress(S0, S1, Actions) ->
     keep_progress(S0, S1, Actions, normal).
 
 keep_progress(S0, S1, Actions, TimerMode) ->
+    ActionsRev0 = lists:reverse(Actions),
+    BeforeIngress = (refresh_ingress_view(S0))#s.ingress,
     SReady = timed_step(S1, readiness,
                         fun() -> settle_readiness(S0, maybe_mark_ready(S1)) end),
     SRecovered = timed_step(SReady, reconcile,
@@ -4048,34 +3953,41 @@ keep_progress(S0, S1, Actions, TimerMode) ->
         timed_step(
           SRecovered, custody_reconcile,
           fun() -> reconcile_custody_lane(SRecovered) end),
+    SCustodyView = refresh_ingress_view(SCustodyReady),
     %% Durable exclusion becomes a new placement only here: the complete
     %% contiguous commit prefix, committee adoption, author floor, and recovery
     %% state have all settled. Retained signed work drains before unsigned
     %% ingress so a later author sequence cannot overtake it.
-    {SCustody, CustodyActions} =
+    {SCustody, ActionsRev1} =
         timed_step(
-          SRecovered, custody_drain,
+          SCustodyView, custody_drain,
           fun() ->
-                  case custody_drain_key(S0, SCustodyReady) of
-                      {drain, _RouteKey} ->
-                          drain_custody(SCustodyReady);
+                  case custody_drain_decision(
+                         BeforeIngress, SCustodyView#s.ingress,
+                         SCustodyView#s.custody_ready) of
+                      {drain, _Fingerprint} ->
+                          drain_custody_rev(
+                            SCustodyView, ActionsRev0, 0);
                       none ->
-                          {SCustodyReady, []}
+                          {SCustodyView, ActionsRev0}
                   end
           end),
     %% Drain BEFORE head reconciliation and the timer diff: a drain-created
     %% proposal moves head_progress, and the watchdog must be armed against the
-    %% post-drain head. The routing key avoids a full queue scan after unrelated
+    %% post-drain head. The fingerprint avoids a full queue scan after unrelated
     %% mailbox traffic.
-    {SDrained, DrainActions} =
+    SIngressView = refresh_ingress_view(SCustody),
+    {SDrained, ActionsRev2} =
         timed_step(
-          SCustody, drain,
+          SIngressView, drain,
           fun() ->
-                  case ingress_drain_key(S0, SCustody) of
-                      {drain, RouteKey} ->
-                          drain_ingress(SCustody, RouteKey);
+                  case ingress_drain_decision(
+                         BeforeIngress, SIngressView#s.ingress) of
+                      {drain, Fingerprint} ->
+                          drain_ingress_rev(
+                            SIngressView, Fingerprint, ActionsRev1);
                       none ->
-                          {SCustody, []}
+                          {SIngressView, ActionsRev1}
                   end
           end),
     SAdvertised = timed_step(SDrained, advertise,
@@ -4088,7 +4000,7 @@ keep_progress(S0, S1, Actions, TimerMode) ->
                        normal -> progress_timer_actions(S0, S2)
                    end,
     {keep_state, S2,
-     Actions ++ CustodyActions ++ DrainActions ++ TimerActions}.
+     lists:reverse(ActionsRev2, TimerActions)}.
 
 %% Readiness is consensus state, so advertise it on the authenticated consensus channel rather than infer
 %% it from socket existence or a separate dissemination process. Capability/height changes go immediately;
@@ -4632,16 +4544,8 @@ ts_acceptable(Ts, Last, Now) ->
 %% honest validator can endorse. The recursive diff check also rejects an improper list such as
 %% `[Op | junk]`, which a shallow cons-cell match would otherwise admit from the untrusted wire.
 acceptable_payload([#transaction{} | _] = Payload, S = #s{ns = Ns}) ->
-    proper_transaction_list(Payload)
-        andalso length(Payload) =< ?MAX_BATCH_TXS
-        andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
-        andalso lists:all(
-                  fun(Change) -> ingress_change_acceptable(Change, S) end,
-                  Payload)
-        andalso verify_transaction_signatures(Ns, Payload, live)
-        andalso unique_tx_ids(Payload)
-        andalso sequence_payload_ok(Payload, S)
-        andalso membership_payload_ok(Payload, S);
+    acceptable_payload_content(Payload, S)
+        andalso verify_transaction_signatures(Ns, Payload, live);
 acceptable_payload(_Payload, _S) -> false.
 
 %% Transactions entering this node's local batch have one of two trusted
@@ -4652,16 +4556,18 @@ acceptable_payload(_Payload, _S) -> false.
 %% over opaque bytes before decode. Every other validator independently verifies
 %% the complete proposed batch in acceptable_payload/2 before voting.
 acceptable_collected_payload([#transaction{} | _] = Payload, S) ->
-    proper_transaction_list(Payload)
-        andalso length(Payload) =< ?MAX_BATCH_TXS
+    acceptable_payload_content(Payload, S);
+acceptable_collected_payload(_Payload, _S) ->
+    false.
+
+acceptable_payload_content(Payload, S) ->
+    bounded_transaction_list(Payload)
         andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
         andalso lists:all(fun(Change) -> ingress_change_acceptable(Change, S) end,
                           Payload)
         andalso unique_tx_ids(Payload)
         andalso sequence_payload_ok(Payload, S)
-        andalso membership_payload_ok(Payload, S);
-acceptable_collected_payload(_Payload, _S) ->
-    false.
+        andalso membership_payload_ok(Payload, S).
 
 ingress_change_acceptable(#transaction{caller_ns = Ns, author = Author} = Change,
                           #s{ns = Ns, validators = Vs}) ->
@@ -4669,13 +4575,29 @@ ingress_change_acceptable(#transaction{caller_ns = Ns, author = Author} = Change
 ingress_change_acceptable(_Change, _S) ->
     false.
 
-proper_transaction_list([#transaction{} | Rest]) -> proper_transaction_list(Rest);
-proper_transaction_list([]) -> true;
-proper_transaction_list(_) -> false.
+bounded_transaction_list(Transactions) ->
+    bounded_transaction_list(Transactions, 0).
+
+bounded_transaction_list([], _Count) ->
+    true;
+bounded_transaction_list([#transaction{} | Rest], Count)
+  when Count < ?MAX_BATCH_TXS ->
+    bounded_transaction_list(Rest, Count + 1);
+bounded_transaction_list(_Other, _Count) ->
+    false.
 
 unique_tx_ids(Payload) ->
-    Ids = [Id || #transaction{tx_id = Id} <- Payload],
-    length(Ids) =:= length(lists:usort(Ids)).
+    unique_tx_ids(Payload, #{}).
+
+unique_tx_ids([], _Seen) ->
+    true;
+unique_tx_ids([#transaction{tx_id = Id} | Rest], Seen) ->
+    case maps:is_key(Id, Seen) of
+        true  -> false;
+        false -> unique_tx_ids(Rest, Seen#{Id => true})
+    end;
+unique_tx_ids(_Payload, _Seen) ->
+    false.
 
 %% Exact committed replay protection. A signed sequence may skip values, but it
 %% must be newer than that author's approved history and unique within the block.
@@ -4683,40 +4605,35 @@ unique_tx_ids(Payload) ->
 %% H+2 cannot reuse a sequence notarized in H+1 while H+1 is not durable yet.
 sequence_payload_ok(Payload, S) ->
     case approved_author_seqs(S) of
-        {ok, Floor} -> sequence_payload_ok(Payload, Floor, #{});
+        {ok, Floor} -> transaction_sequences_ok(Payload, Floor, #{});
         error       -> false
     end.
 
-sequence_payload_ok([], _Floor, _Seen) ->
+transaction_sequences_ok([], _Floor, _Seen) ->
     true;
-sequence_payload_ok(
-  [#transaction{author = Author, author_seq = Seq} | Rest], Floor, Seen)
-  when is_integer(Seq), Seq > 0 ->
-    Seq > maps:get(Author, Floor, 0)
-        andalso not maps:is_key({Author, Seq}, Seen)
-        andalso sequence_payload_ok(Rest, Floor, Seen#{{Author, Seq} => true});
-sequence_payload_ok(_Payload, _Floor, _Seen) ->
-    false.
-
-custody_sequence_status(
-  #transaction{author = Author, author_seq = Seq}, S)
-  when is_integer(Seq), Seq > 0 ->
-    case approved_author_seqs(S) of
-        {ok, Floor} ->
-            case Seq > maps:get(Author, Floor, 0) of
-                true  -> current;
-                false -> stale
-            end;
+transaction_sequences_ok(
+  [#transaction{} = Change | Rest], Floor, Seen) ->
+    case advance_transaction_sequence(Change, Floor, Seen) of
+        {ok, Seen1} ->
+            transaction_sequences_ok(Rest, Floor, Seen1);
         error ->
-            hold
+            false
     end;
-custody_sequence_status(_Change, _S) ->
-    stale.
+transaction_sequences_ok(_Payload, _Floor, _Seen) ->
+    false.
 
 approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
                         slot = Committed})
   when Approved =:= Committed ->
     {ok, Seqs};
+approved_author_seqs(
+  #s{approved = Approved,
+     collecting =
+         #batch{parent = Approved, sequence_floor = Floor}}) ->
+    %% The batch opened from this exact approved parent. Reuse the immutable
+    %% floor it already validated instead of folding the parent payload again
+    %% after every collecting count/byte change.
+    {ok, Floor};
 approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
                         eng = #eng{tree = Tree}}) ->
     case maps:get(Approved, Tree, undefined) of
@@ -4740,18 +4657,24 @@ advance_author_seqs(_Data, Seqs) ->
     Seqs.
 
 membership_payload_ok(Payload, #s{approved = Approved, slot = Committed}) ->
-    Membership = [T || T <- Payload, is_membership_change(T)],
-    case Membership of
-        []  -> true;
-        [_] -> membership_batch_shape_ok(Payload) andalso Approved =:= Committed;
-        _   -> false
+    case membership_payload_shape(Payload) of
+        none -> true;
+        singleton -> Approved =:= Committed;
+        invalid -> false
     end.
 
 membership_batch_shape_ok(Payload) ->
-    case [T || T <- Payload, is_membership_change(T)] of
-        []  -> true;
-        [_] -> length(Payload) =:= 1;
-        _   -> false
+    membership_payload_shape(Payload) =/= invalid.
+
+membership_payload_shape([Change]) ->
+    case is_membership_change(Change) of
+        true -> singleton;
+        false -> none
+    end;
+membership_payload_shape(Payload) ->
+    case lists:any(fun is_membership_change/1, Payload) of
+        true -> invalid;
+        false -> none
     end.
 
 payload_touches_committee(Payload) ->
@@ -4805,9 +4728,8 @@ valid_history_entry(_Ns, I, noop, _Committee) when is_integer(I), I > 1 ->
     true;
 valid_history_entry(Ns, I, {batch, Payload}, Committee)
   when is_binary(Ns), is_integer(I), I > 1, is_list(Committee) ->
-    proper_transaction_list(Payload)
+    bounded_transaction_list(Payload)
         andalso Payload =/= []
-        andalso length(Payload) =< ?MAX_BATCH_TXS
         andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
         andalso lists:all(
                   fun(Change) ->
@@ -5279,7 +5201,8 @@ payload_has_submission(Ns, SubmissionId, Payload) ->
       end, Payload).
 
 first_admit_relay(
-  Ref = #relay_ref{peer = Peer, committee_id = CommitteeId},
+  Ref = #relay_ref{peer = Peer, committee_id = CommitteeId,
+                   target_slot = TargetSlot},
   Author, Submission, TraceCarrier,
   S = #s{committee_id = CurrentCommitteeId}) ->
     case Peer =:= Author andalso
@@ -5290,19 +5213,22 @@ first_admit_relay(
             reply_now(
               relay_reply_to(Ref), {error, not_in_charge, none}, S);
         true ->
-            case relay_target_open({relayed, Ref}, S) of
+            SView = refresh_ingress_view(S),
+            case quod_ingress_state:relay_target_open(
+                   {CommitteeId, TargetSlot},
+                   SView#s.ingress) of
                 false ->
                     reply_now(
                       relay_reply_to(Ref),
-                      {error, not_in_charge, none}, S);
+                      {error, not_in_charge, none}, SView);
                 true ->
                     decode_and_accept_verified_relay(
-                      Ref, Submission, TraceCarrier, S)
+                      Ref, Submission, TraceCarrier, SView)
             end
     end.
 
 decode_and_accept_verified_relay(
-  Ref = #relay_ref{peer = Peer},
+  Ref = #relay_ref{peer = Peer, submission_id = SubmissionId},
   Submission, TraceCarrier, S = #s{ns = Ns}) ->
     case quod_transaction:decode_verified_submission(Ns, Submission) of
         {ok, Change} ->
@@ -5311,7 +5237,7 @@ decode_and_accept_verified_relay(
             ParentCtx = quod_trace:extract(TraceCarrier),
             Waiter = new_waiter(
                        relay_reply_to(Ref), ParentCtx,
-                       Change, Ns, true),
+                       Change, Ns, true, SubmissionId),
             _ = quod_trace:add_event(
                   waiter_trace_ctx(Waiter), <<"consensus.relay_received">>,
                   #{'quod.relay.source' => trace_node_id(Peer)}),
@@ -6129,10 +6055,17 @@ caught_up(_S) -> false.
 confirm_live(S = #s{sync = unconfirmed}) -> S#s{sync = ready, sync_arm = reset_pace()};
 confirm_live(S)                          -> S.
 
-%% Voting and leading share one capability boundary. Leadership remains a named predicate because callers
-%% express intent, but neither can drift from the recovery policy.
-may_vote(S) -> is_participant(S) andalso caught_up(S).
-may_lead(S) -> may_vote(S).
+%% Compute the shared participation/capability facts once for ingress views;
+%% voting and proposal admission cannot drift onto different recovery rules.
+ingress_capability(S) ->
+    case {is_participant(S), caught_up(S)} of
+        {false, _} -> reject;
+        {true, false} -> hold;
+        {true, true} -> accept
+    end.
+
+may_vote(S) ->
+    ingress_capability(S) =:= accept.
 
 %% An unconfirmed node always recovers. A ready member recovers when a verified finalizer is beyond its
 %% approved frontier, including a finalized next block whose content never reached this node.
@@ -6615,20 +6548,22 @@ nack_inflight(S0 = #s{local_proposals = Local}, NewHead, Included) ->
             none ->
                 S1
         end,
+    {IngressItems, ClearedIngress} =
+        quod_ingress_state:take_all(S2#s.ingress),
     S3 =
         lists:foldl(
-          fun(#ingress_item{waiter = Waiter}, Acc) ->
+          fun(Item, Acc) ->
+                  {_Context, Waiter, _Request, _Anchor} =
+                      quod_ingress_state:item(Item),
                   reply_recovery_waiter(
                     Waiter, unpublished, NewHead, Included, Acc)
-          end, S2, queue:to_list(S2#s.ingress)),
+          end, S2#s{ingress = ClearedIngress}, IngressItems),
     %% Recovery discards accepted inbound relay state and future-slot terminal
     %% cache entries. Reset each affected source stream at the same boundary,
     %% so it reconnects and replays its full retained author prefix before a
     %% later submission can enter this fresh incarnation alone.
     S4 = invalidate_relay_generation(NewHead, S3),
     S4#s{local_proposals = #{}, collecting = none,
-         ingress = queue:new(), ingress_count = 0,
-         ingress_bytes = 0, ingress_authors = #{},
          relay_inflight = #{}}.
 
 reply_recovery_waiters(Waiters, Context, NewHead, Included, S) ->
@@ -6778,21 +6713,9 @@ committee_view_id(Ns, AdoptionSlot, AdoptionBlockHash, NewValidators) ->
 historical_sequences_ok(1, {batch, [_Genesis]}, _Seqs) ->
     true;
 historical_sequences_ok(_I, {batch, Payload}, Seqs) ->
-    historical_payload_sequences_ok(Payload, Seqs, #{});
+    transaction_sequences_ok(Payload, Seqs, #{});
 historical_sequences_ok(_I, noop, _Seqs) ->
     true.
-
-historical_payload_sequences_ok([], _Seqs, _Seen) ->
-    true;
-historical_payload_sequences_ok(
-  [#transaction{author = Author, author_seq = Seq} | Rest], Seqs, Seen)
-  when is_integer(Seq), Seq > 0 ->
-    Seq > maps:get(Author, Seqs, 0)
-        andalso not maps:is_key({Author, Seq}, Seen)
-        andalso historical_payload_sequences_ok(
-                  Rest, Seqs, Seen#{{Author, Seq} => true});
-historical_payload_sequences_ok(_Payload, _Seqs, _Seen) ->
-    false.
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). Each transaction folds its diff (the validator id is the 4th arg / 5th element
@@ -6818,6 +6741,14 @@ committee_transaction(#transaction{diff = Diff}, Acc) ->
 committee_op({assert,  {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {addq(Pk, A), R -- [Pk]};
 committee_op({retract, {{peer_admitted, _Id, _H, _P, Pk}, _B}}, {A, R}) -> {A -- [Pk], addq(Pk, R)};
 committee_op(_Op, Acc)                                                  -> Acc.
+
+%% Set-like accumulation; callers sort before exposing the result, so prepend
+%% avoids copying the growing list while preserving idempotence.
+addq(M, L) ->
+    case lists:member(M, L) of
+        true  -> L;
+        false -> [M | L]
+    end.
 
 %% The dial hints carried by one committed payload: each `peer_admitted` ASSERT's `{Pk, {Host, Port}}`.
 %% Kept separate from the pure pubkey-set fold consumed by catch-up induction and live membership.
@@ -6846,9 +6777,7 @@ proper_list(_)          -> false.
 %% agrees byte-for-byte) and idempotent (a re-asserted member is a no-op).
 apply_committee_delta(Change, V) ->
     {Adds, Removes} = committee_delta(Change),
-    lists:usort(lists:foldl(fun addq/2, V, Adds) -- Removes).
-
-addq(M, L) -> case lists:member(M, L) of true -> L; false -> L ++ [M] end.   %% idempotent add
+    lists:usort(lists:reverse(Adds, V) -- Removes).
 
 -doc """
 The **active voting set** for consensus right now — the set that signs/verifies shares, forms quorums,
@@ -6951,6 +6880,7 @@ recovery_phase(Phase) -> Phase.
 
 stats_map(S) ->
     {ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
+    IngressQueued = quod_ingress_state:count(S#s.ingress),
     #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
       pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
@@ -6961,7 +6891,7 @@ stats_map(S) ->
       requested_slot => case S#s.requested_slot of none -> 0; Requested -> Requested end,
       r_busy => S#s.r_busy, r_redirect => S#s.r_redirect, r_bad => S#s.r_bad,
       r_stale => S#s.r_stale,
-      ingress_queued => S#s.ingress_count,
+      ingress_queued => IngressQueued,
       ingress_overflow => S#s.ingress_overflow,
       ingress_expired => S#s.ingress_expired,
       ingress_forwarded => S#s.ingress_forwarded,
@@ -7013,5 +6943,5 @@ missing_certified_block_count(#s{slot = Committed, eng = Eng}) ->
                block_for(BH, Eng) =:= undefined]).
 
 pending_count(#s{collecting = Collecting, local_proposals = Local}) ->
-    CollectingN = case Collecting of #batch{items_rev = Items} -> length(Items); none -> 0 end,
+    CollectingN = case Collecting of #batch{count = Count} -> Count; none -> 0 end,
     CollectingN + lists:sum([length(P#local_proposal.waiters) || P <- maps:values(Local)]).

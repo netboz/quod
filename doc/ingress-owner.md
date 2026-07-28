@@ -1,6 +1,6 @@
 # Ingress ownership and signed-submission retargeting
 
-Status: retained custody and the definitive relay-stream split are reviewed and committed
+Status: Stage 1 is committed; Stage 2 pure-state extraction is in progress
 Scope: transaction custody and relay; no change to Simplex ordering, voting, or proposer selection
 
 ## Why this change exists
@@ -28,7 +28,7 @@ Three identifiers have different jobs and must not be conflated:
 - `SubmissionId` identifies the exact signed submission. It is stable across
   every placement and is used to match a committed payload.
 - `AttemptId` identifies one placement of that submission. It is a
-  version/domain-separated digest of the namespace, `SubmissionId`, committee
+  domain-separated digest of the namespace, `SubmissionId`, committee
   view identity, exact target slot, and target public key. The committee view
   identity includes the adoption revision/anchor as well as the validator set:
   hashing only the members would collide if the same set recurs later.
@@ -162,7 +162,7 @@ both state machines. Moving relay decoding and custody out of that mailbox is
 the Stage 3 process extraction below.
 
 Ingress and Simplex must share an explicit incarnation contract. Every route
-view carries a fresh Simplex incarnation token and monotonic version. After a
+view carries a fresh Simplex incarnation token and monotonic revision. After a
 Simplex restart, ingress pauses new placement; a fresh route view alone is not
 enough. Every attempt accepted under the previous incarnation remains
 ambiguous until local catch-up/finality classifies its exact target slot.
@@ -247,19 +247,11 @@ an incarnation-bound ambiguity until Stage 3; it must never be surfaced as a
 retryable exclusion. The durable author-sequence lease below is still required
 before custody moves into a separately supervised process.
 
-Protocol rollout is deliberately quiesced. Stop new writes, let every pending
-write and relay result cache drain, deploy the definitive binary across the
-whole committee, require identical committee identity on every member, and only
-then resume writes. A timeout is ambiguous and must not create a second attempt
-for the same placement.
-Rollback uses the same boundary—quiesce writes, wait for custody and attempt
-caches to drain, then replace the fleet as one protocol generation.
-
 ### Stage 2 — isolate pure ingress state
 
 - Move custody/routing transitions into a pure ingress state module without
   changing process ownership.
-- Add a cached, versioned Simplex route view.
+- Add a cached canonical Simplex route view keyed by a complete source token.
 
 ### Stage 3 — sequence durability and process extraction
 
@@ -276,6 +268,69 @@ caches to drain, then replace the fleet as one protocol generation.
 Cached status/committee/stats reads are a useful independent mailbox reduction,
 but they are not the redirect fix. Consensus sharding is deferred until ingress
 traffic has been removed and the remaining statem mailbox is remeasured.
+
+## API that should emerge
+
+There should be one write path, not an old item API beside a new batch API.
+The current `quod_simplex:append/2` remains internal only until the process
+split is ready; it is then replaced outright.
+
+The application-facing owner is:
+
+```erlang
+quod_ingress:submit(Ns, UnsignedTransaction) ->
+    {ok, Slot}
+  | {error, retry, busy | stale_seq}
+  | {error, rejected, bad_change | skipped}
+  | {error, not_in_charge, Node | unavailable}
+  | {error, outcome_unknown, SubmissionId}.
+```
+
+`quod_prolog` is the sole production caller. HTTP maps these typed outcomes to
+responses; it does not reinterpret remote relay hints as caller results.
+`outcome_unknown` is resolved by the exact signed-submission identity. The
+committed-ledger/Explorer lookup must expose that identity before this API
+replaces the current call path. A pending-status API must wait for a durable
+ingress index; an in-memory answer would be unsafe across restart.
+
+Simplex publishes two ordered inputs to ingress:
+
+```erlang
+quod_ingress:route_view(
+  Ns, Incarnation, Revision,
+  #{capability := accept | hold | reject,
+    committee_id := CommitteeId,
+    validators := Validators,
+    committed := Committed,
+    approved := Approved,
+    proposal_slot := blocked | {open, Slot, Proposer},
+    membership_barrier := boolean(),
+    approved_author_seqs := error | {ok, map()}}).
+
+quod_ingress:finalized(
+  Ns, Incarnation, Slot, CommitteeId, IncludedSubmissionIds).
+```
+
+The route view answers where work may go; the finalization stream is the only
+authority that resolves inclusion or exclusion. Ingress ignores a view from an
+older incarnation and pauses placement across an incarnation change until
+catch-up supplies a current view.
+
+Ingress sends Simplex one ordering command:
+
+```erlang
+quod_simplex:offer_batch(
+  Ns, Incarnation, CommitteeId, ExactSlot, SignedSubmissions).
+```
+
+The offer is sealed: Simplex either accepts that exact batch for that exact
+slot or rejects the whole offer. There is no per-item ordering alternative.
+Simplex still revalidates namespace, author, signature, sequence floor,
+committee barrier, count, and byte bounds before proposing.
+
+Metrics follow ownership. Ingress reports queue, custody, relay, retarget, and
+submission-latency metrics. Simplex reports proposal, vote, round, batch, and
+finality metrics. The old metric names are deleted when ownership moves.
 
 ## Verification
 

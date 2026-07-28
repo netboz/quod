@@ -57,7 +57,7 @@ encode(Event, Base) ->
 render_msg({string, Str})              -> unicode:characters_to_binary(Str);
 render_msg({report, Report})           -> iolist_to_binary(io_lib:format("~p", [Report]));
 render_msg({Format, Args}) when is_list(Format) ->
-    iolist_to_binary(io_lib:format(Format, Args)).
+    unicode:characters_to_binary(io_lib:format(Format, Args)).
 
 -spec truncate(binary()) -> binary().
 truncate(Bin) when byte_size(Bin) =< ?MSG_MAX_BYTES -> Bin;

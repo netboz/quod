@@ -339,6 +339,36 @@ authenticated proof subjects; private unlisted routes need neither feature.
 The implementation contract, bounds, failure semantics and acceptance tests are in
 `network-directory-plan.md`.
 
+### Remote-read load test
+
+`scripts/cross-ontology-loadtest.sh` measures only the remote `::` path: it
+submits a read through a source ontology and requires that the target namespace
+is *not* co-hosted by that source endpoint. A successful result therefore
+exercises directory resolution, the key-pinned dial, and streamed answers rather
+than the local fast path. It needs an already-configured two-ontology fleet:
+
+```sh
+SOURCE_ENDPOINTS=http://source-host:14569 \
+SOURCE_NS=quod:bench_source TARGET_NS=quod:bench_target \
+GOAL='benchmark_echo(ok)' REQUESTS=2000 CONCURRENCY=64 \
+scripts/cross-ontology-loadtest.sh
+```
+
+The script intentionally sends no writes. Consensus throughput remains the job
+of `perf-test.sh` and `loadtest.sh`.
+
+The Nomad job exposes an opt-in two-host demo topology. It is disabled by
+default and leaves quod:root unchanged. Before enabling it, obtain the
+selected existing allocations' persistent keys from their `/api/summary`
+(`.node.pubkey`) and configure the normal root allowlist plus a non-empty,
+stable `directory_bootstraps` list. Then set cross_ontology_enabled=true,
+distinct source/target allocation indexes, and those exact source/target
+keys. The directory uses that bootstrap list to disseminate the two new
+routes; without it, the script will correctly remain in preflight instead of
+silently measuring a local call. After the rolling deployment, pass the source
+allocation explorer endpoint to the script above. The two single-host demo
+ontologies are a directory/ask benchmark, not a second consensus benchmark.
+
 ## 11. Non-goals — deliberately NOT in this milestone
 
 - **Changing another ontology's facts.** Writes stay home-only (`foreign_write_unsupported`

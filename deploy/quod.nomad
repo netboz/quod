@@ -82,6 +82,48 @@ variable "directory_bootstraps" {
   description = "Small stable list of host:port seeds for the directory control plane. Runtime membership is learned through signed records; do not render the live Consul service set here."
 }
 
+variable "cross_ontology_enabled" {
+  type        = bool
+  default     = false
+  description = "Opt in to the two-host remote-read benchmark topology. It adds one source and one target demo ontology on distinct quod-node allocation indexes; it never changes quod:root."
+}
+
+variable "cross_ontology_source_namespace" {
+  type        = string
+  default     = "quod:bench_source"
+  description = "Namespace hosted by cross_ontology_source_alloc_index for the remote-read benchmark."
+}
+
+variable "cross_ontology_target_namespace" {
+  type        = string
+  default     = "quod:bench_target"
+  description = "Namespace hosted by cross_ontology_target_alloc_index for the remote-read benchmark."
+}
+
+variable "cross_ontology_source_alloc_index" {
+  type        = number
+  default     = 0
+  description = "quod-node allocation index that hosts the benchmark source ontology. It must differ from the target index."
+}
+
+variable "cross_ontology_target_alloc_index" {
+  type        = number
+  default     = 1
+  description = "quod-node allocation index that hosts the benchmark target ontology. It must differ from the source index."
+}
+
+variable "cross_ontology_source_node_keys" {
+  type        = list(string)
+  default     = []
+  description = "Exact persistent Ed25519 public key(s) allowed to advertise the benchmark source namespace. Supply the key of the selected source allocation."
+}
+
+variable "cross_ontology_target_node_keys" {
+  type        = list(string)
+  default     = []
+  description = "Exact persistent Ed25519 public key(s) allowed to advertise the benchmark target namespace. Supply the key of the selected target allocation."
+}
+
 variable "otel_exporter_otlp_endpoint" {
   type        = string
   default     = "http://192.168.1.11:4318"
@@ -263,14 +305,34 @@ directory {
     "${endpoint}",
 %{endfor~}
   ]
-  allowlist = [{
-    namespace = "quod:root"
-    node_keys = [
+  allowlist = [
+    {
+      namespace = "quod:root"
+      node_keys = [
 %{for node_key in var.directory_node_keys~}
-      "${node_key}",
+        "${node_key}",
 %{endfor~}
-    ]
-  }]
+      ]
+    },
+%{if var.cross_ontology_enabled~}
+    {
+      namespace = "${var.cross_ontology_source_namespace}"
+      node_keys = [
+%{for node_key in var.cross_ontology_source_node_keys~}
+        "${node_key}",
+%{endfor~}
+      ]
+    },
+    {
+      namespace = "${var.cross_ontology_target_namespace}"
+      node_keys = [
+%{for node_key in var.cross_ontology_target_node_keys~}
+        "${node_key}",
+%{endfor~}
+      ]
+    },
+%{endif~}
+  ]
 }
 # `content` is a LIST: further ontologies are added as extra entries, each with its own
 # mode/anchor (founded once by a single create deploy, then joined fleet-wide with the
@@ -305,6 +367,36 @@ content = [
     ]
 %{endif}
   }
+%{if var.cross_ontology_enabled~}
+{{- if eq (env "NOMAD_ALLOC_INDEX") "${var.cross_ontology_source_alloc_index}" }}
+  , {
+    namespace = "${var.cross_ontology_source_namespace}"
+    mode         = create
+    genesis_file = "ontologies/cross_benchmark_source.pl"
+    data_dir     = "/quod/data"
+    seeds        = []
+    max_proof_workers = ${var.max_proof_workers}
+    max_ask_workers = ${var.max_ask_workers}
+    proof_timeout_ms = ${var.proof_timeout_ms}
+    ask_timeout_ms = ${var.ask_timeout_ms}
+    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+  }
+{{- end }}
+{{- if eq (env "NOMAD_ALLOC_INDEX") "${var.cross_ontology_target_alloc_index}" }}
+  , {
+    namespace = "${var.cross_ontology_target_namespace}"
+    mode         = create
+    genesis_file = "ontologies/cross_benchmark_target.pl"
+    data_dir     = "/quod/data"
+    seeds        = []
+    max_proof_workers = ${var.max_proof_workers}
+    max_ask_workers = ${var.max_ask_workers}
+    proof_timeout_ms = ${var.proof_timeout_ms}
+    ask_timeout_ms = ${var.ask_timeout_ms}
+    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+  }
+{{- end }}
+%{endif~}
 ]
 EOT
         destination = "${NOMAD_TASK_DIR}/quod.conf"
@@ -482,6 +574,43 @@ explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
+}
+directory {
+  # Satellites independently validate every directory record they receive.
+  # Bootstrap addresses are static operator inputs, never the live Consul set.
+  bootstraps = [
+%{for endpoint in var.directory_bootstraps~}
+    "${endpoint}",
+%{endfor~}
+  ]
+  allowlist = [
+    {
+      namespace = "quod:root"
+      node_keys = [
+%{for node_key in var.directory_node_keys~}
+        "${node_key}",
+%{endfor~}
+      ]
+    },
+%{if var.cross_ontology_enabled~}
+    {
+      namespace = "${var.cross_ontology_source_namespace}"
+      node_keys = [
+%{for node_key in var.cross_ontology_source_node_keys~}
+        "${node_key}",
+%{endfor~}
+      ]
+    },
+    {
+      namespace = "${var.cross_ontology_target_namespace}"
+      node_keys = [
+%{for node_key in var.cross_ontology_target_node_keys~}
+        "${node_key}",
+%{endfor~}
+      ]
+    },
+%{endif~}
+  ]
 }
 # `content` is a LIST — extra ontologies join here too (see the quod-node group's note).
 content = [

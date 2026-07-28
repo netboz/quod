@@ -7,7 +7,7 @@ PEM-fallback badmatch).
 
 Production sets the identity env (`identity_cert`/`identity_key`) via
 `quod_app:apply_identity`; the PEM file pair (`certfile`/`keyfile`) is only the
-legacy/test fallback, and a missing, empty, or malformed file there is now
+explicit configuration-free test fallback, and a missing, empty, or malformed file there is
 reported, not crashed on.
 """.
 -include_lib("eunit/include/eunit.hrl").

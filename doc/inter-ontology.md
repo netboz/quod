@@ -8,8 +8,9 @@ Plain language on purpose; the technical anchors are in the boxed notes and file
 Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
 review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
 co-hosted asks, cross-node asks, shared-snapshot worker execution, atom-safe transport, and
-default link following are implemented. A network-wide ontology directory and transport-level
-stream prioritization remain future work.
+default link following are implemented. The network ontology directory contract is approved
+and its first system/private slice is implemented (§10); transport-level stream
+prioritization remains future work.
 
 ---
 
@@ -49,9 +50,8 @@ Everyone will want a `door` ontology. So the name itself disambiguates and shows
 
 **Resolution rule.** In a qualified name, the longest prefix that names a *known* ontology is
 the ontology; whatever follows is the name inside it. A prefix that names no known ontology is
-the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" today = hosted
-locally or reachable through the configured contacts; a network-wide ontology directory is a
-later milestone, §10.)
+the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" = hosted
+locally or present in the live directory/direct-route index; §10.)
 
 **Ownership enforcement is NOT in this milestone.** The rule "only user_xxx may create
 `user_xxx:*`" is creation-time permission checking; it needs author-signed writes and the
@@ -297,7 +297,49 @@ a partial result never looks complete.
 | concurrent client proofs per ontology | 64 (configurable) | `busy` |
 | rejected remote opens sent per ontology | 32/s | excess rejection replies are dropped |
 
-## 10. Non-goals — deliberately NOT in this milestone
+## 10. Network ontology directory — implemented first slice
+
+The directory resolves a ground ontology name to a bounded set of live routes. It is exposed
+inside `quod:root` as the read-only external predicate:
+
+```prolog
+directory_host(+Ontology, ?NodeKey, ?Host, ?Port).
+```
+
+Its answers come directly from a local Erlang ETS index using Erlog compiled-predicate
+backtracking. Endpoint churn is network-observed soft state: it is never committed ontology
+content, a lease transaction, a consensus input, or a `quod_runtime` state-handler projection.
+The `::` resolver reads that same index directly rather than recursively asking Prolog how to
+route a Prolog ask.
+
+The first slice has two explicit route sources:
+
+- root-authorised system hosts publish signed, expiring advertisements;
+- private ontologies are reached through local direct seeds and are never published.
+
+A node derives its public advertisement from system namespaces that are
+actually running locally. Namespace start/stop replaces the complete signed
+set; an empty set withdraws it. Periodic reconciliation repairs missed
+notifications, while any number of private local ontologies remain outside the
+32-name public-advertisement limit.
+
+Every receiver independently verifies an advertisement's original Ed25519 node signature,
+restart-safe epoch/sequence freshness, exact namespace allowlist and bounds. System routes dial
+the advertised endpoint through a scoped transport operation pinned to the signed node key.
+Pinned and private-seed-confirmation links suppress the ordinary link-header address-cache
+learning through their whole `quod_quic` → `quod_conn` → `quod_link` path, so directory
+addresses cannot contaminate consensus/feed dialing. Ordinary links retain auto-learning.
+
+A route does not certify a read answer. In the first slice, answer integrity rests on the
+operator's exact allowlist of trusted system hosts. Self-managed discoverable ontologies are
+deferred until both advertisement authority and answer authority are designed (for example,
+committee-only answering or certified answers). User-specific hidden discovery also waits for
+authenticated proof subjects; private unlisted routes need neither feature.
+
+The implementation contract, bounds, failure semantics and acceptance tests are in
+`network-directory-plan.md`.
+
+## 11. Non-goals — deliberately NOT in this milestone
 
 - **Changing another ontology's facts.** Writes stay home-only (`foreign_write_unsupported`
   stays). Cross-ontology writes need author-signed transactions first (the signing
@@ -307,12 +349,9 @@ a partial result never looks complete.
 - **Notification precision finer than per-predicate.** Known, accepted coarseness.
 - **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Arrives with
   signing; the naming convention lands now (§2).
-- **A network-wide "which nodes host ontology X" directory.** The demo fleet co-hosts the
-  ontologies on every node; routing is local-first with the existing static-seeds fallback.
-  The directory becomes necessary only when ontologies stop being co-hosted everywhere.
 - **Deeper name paths** (`thing:cat:max` as data). Parked.
 
-## 11. What this changes for consensus: nothing
+## 12. What this changes for consensus: nothing
 
 Cross-ontology asks happen while a question **runs**, on the node running it
 (prove-before-broadcast). What the committee agrees on is the finished list of changes; apply

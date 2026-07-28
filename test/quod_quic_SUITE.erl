@@ -11,14 +11,28 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
          channel_stream_reset_isolated/1,
          non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1,
-         resolve_and_dial_by_pubkey/1]).
+         mismatched_header_cannot_poison_cache/1,
+         authenticated_coalesced_header_payload_delivered_once/1,
+         no_learn_is_monotone_across_streams/1,
+         resolve_and_dial_by_pubkey/1, pinned_dial_suppresses_hint_learning/1,
+         pinned_reverse_stream_suppresses_hint_learning/1,
+         seed_dial_suppresses_hint_learning/1, ordinary_dial_still_learns_hint/1,
+         pinned_dial_rejects_wrong_cert/1]).
 
 -define(PORT, 14599).
 -define(SELF, {"127.0.0.1", ?PORT}).
 
 all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
           channel_stream_reset_isolated, non_dialable_node_id,
-          unacked_stream_no_link_up, dialer_presents_cert, resolve_and_dial_by_pubkey].
+          unacked_stream_no_link_up, dialer_presents_cert,
+          mismatched_header_cannot_poison_cache,
+          authenticated_coalesced_header_payload_delivered_once,
+          no_learn_is_monotone_across_streams,
+          resolve_and_dial_by_pubkey,
+          pinned_dial_suppresses_hint_learning,
+          pinned_reverse_stream_suppresses_hint_learning,
+          seed_dial_suppresses_hint_learning,
+          ordinary_dial_still_learns_hint, pinned_dial_rejects_wrong_cert].
 
 init_per_suite(Config) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -206,6 +220,145 @@ peercert_retry(Conn, N) ->
         _           -> timer:sleep(50), peercert_retry(Conn, N - 1)
     end.
 
+%% A structurally valid header is not authenticated until its claimed key is
+%% compared with the connection's client certificate. Learning before that bind
+%% lets one valid-cert node overwrite another key's shared address hint.
+mismatched_header_cannot_poison_cache(_Config) ->
+    {ActualPub, _} = ActualKeyPair = quod_identity:generate(),
+    ActualCert = quod_identity:mint_cert(ActualKeyPair),
+    ActualKey = quod_identity:key_term(ActualKeyPair),
+    ForgedPub = crypto:strong_rand_bytes(32),
+    true = ForgedPub =/= ActualPub,
+    Existing = {"127.0.0.1", 14448},
+    Claimed = {"127.0.0.1", 24448},
+    Channel = <<"forged-header">>,
+    Payload = <<"must-not-escape-before-auth">>,
+    true = quod_reg:subscribe({channel, Channel}),
+    ok = quod_quic:learn(ForgedPub, Existing),
+    try
+        {ok, Conn} = quic:connect(
+                       element(1, ?SELF), element(2, ?SELF),
+                       #{verify => false, cert => ActualCert, key => ActualKey,
+                         alpn => [<<"quod">>]}, self()),
+        receive
+            {quic, Conn, {connected, _}} -> ok
+        after 5000 -> ct:fail(no_mismatch_connection)
+        end,
+        {ok, Sid} = quic:open_stream(Conn),
+        Header = quod_link:header(
+                   {ForgedPub, Claimed}, Channel, learn),
+        Packet = <<Header/binary,
+                   (quod_link:frame(Payload))/binary>>,
+        ok = quic:send_data(Conn, Sid, Packet, false),
+        receive
+            {quod_message, _, Channel, Payload} ->
+                ct:fail(payload_published_before_identity_bind)
+        after 200 ->
+            ok
+        end,
+        {ok, Existing} = quod_quic:resolve(ForgedPub),
+        _ = catch quic:close(Conn, normal),
+        ok
+    after
+        true = quod_reg:unsubscribe({channel, Channel})
+    end.
+
+%% Header authentication is a barrier, not a payload drop: a matching client
+%% certificate/header pair may publish coalesced bytes exactly once after bind.
+authenticated_coalesced_header_payload_delivered_once(_Config) ->
+    {ActualPub, _} = ActualKeyPair = quod_identity:generate(),
+    ActualCert = quod_identity:mint_cert(ActualKeyPair),
+    ActualKey = quod_identity:key_term(ActualKeyPair),
+    Channel = <<"authenticated-coalesced">>,
+    Payload = <<"after-auth-only">>,
+    true = quod_reg:subscribe({channel, Channel}),
+    try
+        {ok, Conn} = quic:connect(
+                       element(1, ?SELF), element(2, ?SELF),
+                       #{verify => false, cert => ActualCert, key => ActualKey,
+                         alpn => [<<"quod">>]}, self()),
+        receive
+            {quic, Conn, {connected, _}} -> ok
+        after 5000 -> ct:fail(no_authenticated_connection)
+        end,
+        {ok, Sid} = quic:open_stream(Conn),
+        Header = quod_link:header(
+                   {ActualPub, {"127.0.0.1", 24449}},
+                   Channel, no_learn),
+        Packet = <<Header/binary,
+                   (quod_link:frame(Payload))/binary>>,
+        ok = quic:send_data(Conn, Sid, Packet, false),
+        receive
+            {quod_message, {{ActualPub, _}, _}, Channel, Payload} ->
+                ok
+        after 5000 ->
+            ct:fail(authenticated_coalesced_payload_not_delivered)
+        end,
+        receive
+            {quod_message, _, Channel, Payload} ->
+                ct:fail(authenticated_coalesced_payload_duplicated)
+        after 100 ->
+            ok
+        end,
+        _ = catch quic:close(Conn, normal),
+        ok
+    after
+        true = quod_reg:unsubscribe({channel, Channel})
+    end.
+
+%% no_learn is connection-wide and monotone. A later authenticated stream
+%% cannot flip it back to learn and overwrite the shared address cache.
+no_learn_is_monotone_across_streams(_Config) ->
+    {ActualPub, _} = ActualKeyPair = quod_identity:generate(),
+    ActualCert = quod_identity:mint_cert(ActualKeyPair),
+    ActualKey = quod_identity:key_term(ActualKeyPair),
+    Existing = {"127.0.0.1", 24450},
+    FirstChannel = <<"no-learn-latch">>,
+    SecondChannel = <<"learn-cannot-reenable">>,
+    true = quod_reg:subscribe({channel, FirstChannel}),
+    true = quod_reg:subscribe({channel, SecondChannel}),
+    ok = quod_quic:learn(ActualPub, Existing),
+    try
+        {ok, Conn} = quic:connect(
+                       element(1, ?SELF), element(2, ?SELF),
+                       #{verify => false, cert => ActualCert, key => ActualKey,
+                         alpn => [<<"quod">>]}, self()),
+        receive
+            {quic, Conn, {connected, _}} -> ok
+        after 5000 -> ct:fail(no_monotone_policy_connection)
+        end,
+        send_raw_header_payload(
+          Conn, ActualPub, {"127.0.0.1", 24451},
+          FirstChannel, no_learn, <<"latch">>),
+        receive
+            {quod_message, {{ActualPub, _}, _},
+             FirstChannel, <<"latch">>} -> ok
+        after 5000 -> ct:fail(no_no_learn_latch_message)
+        end,
+        {ok, Existing} = quod_quic:resolve(ActualPub),
+        send_raw_header_payload(
+          Conn, ActualPub, {"127.0.0.1", 24452},
+          SecondChannel, learn, <<"cannot-reenable">>),
+        receive
+            {quod_message, {{ActualPub, _}, _},
+             SecondChannel, <<"cannot-reenable">>} -> ok
+        after 5000 -> ct:fail(no_second_authenticated_message)
+        end,
+        {ok, Existing} = quod_quic:resolve(ActualPub),
+        _ = catch quic:close(Conn, normal),
+        ok
+    after
+        true = quod_reg:unsubscribe({channel, FirstChannel}),
+        true = quod_reg:unsubscribe({channel, SecondChannel})
+    end.
+
+send_raw_header_payload(Conn, Pubkey, Endpoint, Channel, Policy, Payload) ->
+    {ok, Sid} = quic:open_stream(Conn),
+    Header = quod_link:header({Pubkey, Endpoint}, Channel, Policy),
+    quic:send_data(
+      Conn, Sid,
+      <<Header/binary, (quod_link:frame(Payload))/binary>>, false).
+
 %% A PUBKEY target (the production id form) is resolved to an endpoint via a learned hint,
 %% then dialed — the resolver path end to end through the real transport. (We map a fresh
 %% pubkey to our own loopback listener so the dial connects.)
@@ -216,6 +369,107 @@ resolve_and_dial_by_pubkey(_Config) ->
     receive
         {link_up, PK, <<"chan-pk">>, LinkPid} when is_pid(LinkPid) -> ok
     after 5000 -> ct:fail(no_link_up_by_pubkey)
+    end.
+
+%% A successful pinned directory link must suppress the receiver's normal
+%% header-driven Pubkey=>Addr learning. Preloading a divergent value makes the
+%% assertion non-vacuous: an ordinary header would overwrite it with ?SELF.
+pinned_dial_suppresses_hint_learning(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Existing = {"127.0.0.1", 14444},
+    ok = quod_quic:learn(Pub, Existing),
+    Ref = quod_quic:open_link_pinned(
+            Pub, ?SELF, <<"chan-pinned-no-learn">>),
+    receive
+        {link_up, Ref, Pub, <<"chan-pinned-no-learn">>, LinkPid}
+          when is_pid(LinkPid) -> ok
+    after 5000 -> ct:fail(no_pinned_link_up)
+    end,
+    {ok, Existing} = quod_quic:resolve(Pub).
+
+%% no_learn belongs to the isolated connection, not merely its first stream.
+%% Force its accepted side to open a reverse stream: if the policy were not
+%% inherited, that header would overwrite the deliberately divergent cache value.
+pinned_reverse_stream_suppresses_hint_learning(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Forward = <<"chan-pinned-forward">>,
+    Reverse = <<"chan-pinned-reverse">>,
+    Existing = {"127.0.0.1", 14447},
+    true = quod_reg:subscribe({channel, Forward}),
+    Ref = quod_quic:open_link_pinned(Pub, ?SELF, Forward),
+    OutLink = receive
+                  {link_up, Ref, Pub, Forward, L} -> L
+              after 5000 -> ct:fail(no_pinned_forward_link)
+              end,
+    ok = quod_link:send(OutLink, <<"find-inbound-connection">>),
+    InLink = receive
+                 {quod_message, {_, In}, Forward, <<"find-inbound-connection">>} -> In
+             after 5000 -> ct:fail(no_pinned_forward_message)
+             end,
+    {links, [InboundConn]} = process_info(InLink, links),
+    %% Publication happens only after the connection owner has authenticated
+    %% the header and latched no_learn.
+    ok = quod_quic:learn(Pub, Existing),
+    ok = quod_conn:open_link(InboundConn, Reverse, self()),
+    receive
+        {link_up, _, Reverse, ReverseLink} when is_pid(ReverseLink) -> ok
+    after 5000 -> ct:fail(no_pinned_reverse_link)
+    end,
+    {ok, Existing} = quod_quic:resolve(Pub).
+
+%% Private-seed TOFU derives the actual certificate key but keeps it route-local;
+%% its no-learn header must not touch the shared address cache either.
+seed_dial_suppresses_hint_learning(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Existing = {"127.0.0.1", 14445},
+    ok = quod_quic:learn(Pub, Existing),
+    Ref = quod_quic:open_link_seed(?SELF, <<"chan-seed-no-learn">>),
+    receive
+        {link_up, Ref, Pub, <<"chan-seed-no-learn">>, LinkPid}
+          when is_pid(LinkPid) -> ok
+    after 5000 -> ct:fail(no_seed_link_up)
+    end,
+    {ok, Existing} = quod_quic:resolve(Pub).
+
+%% The new directory policy is scoped: existing endpoint/cache links keep
+%% learning the authenticated header address exactly as before.
+ordinary_dial_still_learns_hint(Config) ->
+    Pub = ?config(self_pubkey, Config),
+    Existing = {"127.0.0.1", 14446},
+    ok = quod_quic:learn(Pub, Existing),
+    ok = quod_quic:open_link(?SELF, <<"chan-ordinary-learn">>),
+    receive
+        {link_up, ?SELF, <<"chan-ordinary-learn">>, LinkPid} when is_pid(LinkPid) -> ok
+    after 5000 -> ct:fail(no_ordinary_link_up)
+    end,
+    {ok, ?SELF} = quod_quic:resolve(Pub).
+
+%% Dialing the right endpoint is insufficient: a different valid Ed25519
+%% certificate must fail before any stream becomes usable.
+pinned_dial_rejects_wrong_cert(Config) ->
+    Expected = ?config(self_pubkey, Config),
+    {_WrongPub, _} = WrongKP = quod_identity:generate(),
+    WrongCert = quod_identity:mint_cert(WrongKP),
+    WrongKey = quod_identity:key_term(WrongKP),
+    Handler = fun(_Conn) ->
+                  {ok, spawn(fun Ignore() -> receive _ -> Ignore() end end)}
+              end,
+    Port = 14596,
+    Endpoint = {"127.0.0.1", Port},
+    {ok, _} = quic:start_server(pinned_wrong_cert, Port,
+                                #{cert => WrongCert, key => WrongKey, verify => true,
+                                  alpn => [<<"quod">>], connection_handler => Handler}),
+    try
+        Ref = quod_quic:open_link_pinned(
+                Expected, Endpoint, <<"chan-pinned-wrong-cert">>),
+        receive
+            {link_error, Ref, Expected, <<"chan-pinned-wrong-cert">>} -> ok;
+            {link_up, Ref, Expected, <<"chan-pinned-wrong-cert">>, _} ->
+                ct:fail(pinned_dial_accepted_wrong_cert)
+        after 5000 -> ct:fail(no_pinned_mismatch_result)
+        end
+    after
+        _ = quic:stop_server(pinned_wrong_cert)
     end.
 
 %% A view id that is not a dialable {Host, Port} must be refused with link_error,

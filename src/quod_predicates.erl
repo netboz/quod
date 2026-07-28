@@ -100,11 +100,14 @@ load(#est{db = Db0} = Est) ->
     Est#est{db = Db1}.
 
 %% The governed predicates, in registration order. Their class + real handler is in registry/1.
-governed() -> [{peer_ready, 1}, {admit, 3}, {remove, 1}, {effect_noop, 0},
+governed() -> [{peer_ready, 1}, {directory_host, 4},
+               {admit, 3}, {remove, 1}, {effect_noop, 0},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
 registry({peer_ready, 1}) -> {query,   quod_committee_predicates, peer_ready_1};
+registry({directory_host, 4}) ->
+    {query, quod_directory_predicates, directory_host_4};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
 registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
 registry({effect_noop, 0})-> {effect,  ?MODULE,                   effect_noop_0};

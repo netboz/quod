@@ -22,15 +22,16 @@ There is **no CA** — a peer key is trusted because the committee admitted it
 CertificateVerify (proof the peer holds the key), which `quic` checks without a
 chain, so a self-signed per-node cert authenticates cleanly.
 
-> #### Signing (Phase B) {: .info }
+> #### Signing {: .info }
 >
-> `sign/2` / `verify/3` (Ed25519 over canonical bytes) and the per-block quorum
-> certificate land with the signing phase; this module owns the keypair they use.
+> `sign/2` / `verify/3` provide Ed25519 signatures over canonical bytes. Consensus
+> quorum certificates and signed directory records share this node keypair.
 """.
 
 -include_lib("public_key/include/public_key.hrl").
 
--export([ensure/1, generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
+-export([ensure/1, advance_directory_epoch/1,
+         generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
          sign/2, verify/3]).
 
 -export_type([pubkey/0, seed/0, keypair/0, key_term/0, signer/0, identity/0]).
@@ -47,6 +48,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 -type identity() :: #{pubkey := pubkey(), cert := binary(), key := key_term()}.
 
 -define(KEYFILE, "node.key").
+-define(DIRECTORY_EPOCH_FILE, "directory.epoch").
 
 %% ======================================================================
 %% API
@@ -69,6 +71,30 @@ ensure(Dir) ->
                 ok    -> {ok, from_seed(Seed)};
                 Error -> Error
             end;
+        {error, _} = Error ->
+            Error
+    end.
+
+-doc """
+Durably advance and return the node's directory-serving lifetime counter.
+
+The counter lives beside `node.key` and is persisted before a directory
+service may advertise. A corrupt counter is a boot error rather than a silent
+rollback that could make fresh announcements look stale.
+""".
+-spec advance_directory_epoch(file:filename_all()) ->
+          {ok, pos_integer()} | {error, term()}.
+advance_directory_epoch(Dir) ->
+    Path = filename:join(Dir, ?DIRECTORY_EPOCH_FILE),
+    case read_epoch(Path) of
+        {ok, Previous} when Previous < 16#FFFFFFFFFFFFFFFF ->
+            Next = Previous + 1,
+            case write_atomic(Path, <<Next:64/unsigned-big>>, 8#600) of
+                ok -> {ok, Next};
+                {error, _} = Error -> Error
+            end;
+        {ok, _} ->
+            {error, directory_epoch_exhausted};
         {error, _} = Error ->
             Error
     end.
@@ -181,22 +207,25 @@ read_seed(Path) ->
 %%     umask-default world-readable mode.
 %% Returns `{error, _}` (never a badmatch crash) so `ensure/1` can relay a failure.
 write_secret(Path, Seed) ->
+    write_atomic(Path, Seed, 8#600).
+
+write_atomic(Path, Bytes, Mode) ->
     case filelib:ensure_dir(Path) of
         ok ->
-            Tmp = Path ++ ".tmp",
+            Tmp = unicode:characters_to_list([Path, ".tmp"]),
             _ = file:delete(Tmp),                      %% clear any stale/leftover tmp
-            try write_tmp(Tmp, Path, Seed)
+            try write_tmp(Tmp, Path, Bytes, Mode)
             catch throw:{error, _} = Err -> _ = file:delete(Tmp), Err end;
         {error, _} = Error ->
             Error
     end.
 
-write_tmp(Tmp, Path, Seed) ->
+write_tmp(Tmp, Path, Bytes, Mode) ->
     case file:open(Tmp, [write, raw, binary, exclusive]) of
         {ok, Fd} ->
             try
-                ok_(file:change_mode(Tmp, 8#600)),     %% lock down BEFORE the secret lands
-                ok_(file:write(Fd, Seed)),
+                ok_(file:change_mode(Tmp, Mode)),      %% lock down BEFORE bytes land
+                ok_(file:write(Fd, Bytes)),
                 ok_(file:datasync(Fd))
             after
                 _ = file:close(Fd)
@@ -206,6 +235,14 @@ write_tmp(Tmp, Path, Seed) ->
             ok;
         {error, _} = E ->
             E
+    end.
+
+read_epoch(Path) ->
+    case file:read_file(Path) of
+        {ok, <<Epoch:64/unsigned-big>>} -> {ok, Epoch};
+        {ok, _} -> {error, bad_directory_epoch_file};
+        {error, enoent} -> {ok, 0};
+        {error, _} = Error -> Error
     end.
 
 ok_(ok)               -> ok;

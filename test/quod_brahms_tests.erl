@@ -71,7 +71,7 @@ pick_contact_isolated_test() ->
     ?assertEqual(none, quod_brahms:pick_contact([], [?SELF, ?SELF], ?SELF)).      %% dup self seeds
 
 pick_contact_no_self_addr_test() ->
-    %% node_addr unset (legacy/test boot): nothing is filtered, the seeds stay usable
+    %% node_addr unset (configuration-free test boot): seeds stay usable
     ?assertEqual(?OTHER, quod_brahms:pick_contact([], [?OTHER], undefined)).
 
 %% --- reconstruct prioritizes the mixed candidates over OldV (no sort bias)

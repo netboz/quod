@@ -2,8 +2,9 @@
 -moduledoc """
 quod top-level supervisor.
 
-Boots the QUIC transport. Brahms/Tendermint/Prolog layers get added as children
-here.
+Owns transport, directory control, namespace supervision, metrics, and the
+explorer. Each ontology's consensus and Prolog processes live under
+`quod_ns_sup`.
 """.
 
 -behaviour(supervisor).
@@ -21,6 +22,12 @@ init([]) ->
     ChildSpecs =
         [#{id => quod_quic,
            start => {quod_quic, start_link, []},
+           type => worker},
+         #{id => quod_directory,
+           start => {quod_directory, start_link, []},
+           type => worker},
+         #{id => quod_directory_control,
+           start => {quod_directory_control, start_link, []},
            type => worker},
          #{id => quod_brahms_sup,
            start => {quod_brahms_sup, start_link, []},

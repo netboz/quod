@@ -430,7 +430,7 @@ handle_info({ask_lifetime_kill, WorkerMRef, Token}, S = #s{ask_workers = Workers
 %% Remote asks arrive on the fixed channel owned by this ontology. The request link is
 %% deliberately kept separate from the answer link; its monitor is the cancellation
 %% signal for the target-side worker.
-handle_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload},
+handle_info({quod_message, {{Peer, Addr}, RequestLink}, Channel, Payload},
             S = #s{ns = Ns}) ->
     case Channel =:= quod_ask:ask_channel(Ns) of
         true  ->
@@ -442,10 +442,13 @@ handle_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload},
                         {ok, AskId} ->
                             {noreply, remote_next(AskId, S)};
                         error ->
-                            {noreply, handle_remote_ask(Peer, RequestLink, Payload, S)}
+                            {noreply, handle_remote_ask(
+                                        Peer, Addr, RequestLink, Payload, S)}
                     end
             end;
-        false -> handle_response_info({quod_message, {{Peer, _Addr}, RequestLink}, Channel, Payload}, S)
+        false -> handle_response_info(
+                   {quod_message, {{Peer, Addr}, RequestLink}, Channel, Payload},
+                   S)
     end;
 %% A parked write whose verdict never arrived (leader change / lost block): stop
 %% retaining its caller, but do NOT claim failure. Consensus cannot cancel a change
@@ -478,7 +481,7 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
 handle_info(Info, S) ->
     handle_response_info(Info, S).
 
-handle_remote_ask(Peer, RequestLink, Payload,
+handle_remote_ask(Peer, PeerEndpoint, RequestLink, Payload,
                   S = #s{ns = Ns, ready = Ready, ask_workers = AW, ask_ids = Ids,
                          max_ask_workers = Max}) ->
     case quod_ask:decode_open(Payload) of
@@ -487,13 +490,16 @@ handle_remote_ask(Peer, RequestLink, Payload,
             case maps:is_key(AskId, Ids) of
                 true -> S; %% duplicate request frame: the existing run owns this id
                 false when not Ready ->
-                    reject_remote(Peer, AnswerCh, AskId, rebuilding, S);
+                    reject_remote(
+                      Peer, PeerEndpoint, AnswerCh, AskId, rebuilding, S);
                 false when map_size(AW) >= Max ->
-                    reject_remote(Peer, AnswerCh, AskId, busy, S);
+                    reject_remote(
+                      Peer, PeerEndpoint, AnswerCh, AskId, busy, S);
                 false when is_pid(RequestLink) ->
                     Stream = quod_ask:start_answer_remote(Ns, S#s.est, S#s.applied,
                                                           Goal, Chain, AskId, Peer,
-                                                          AnswerCh, self()),
+                                                          PeerEndpoint, AnswerCh,
+                                                          self()),
                     WorkerMRef = monitor(process, Stream),
                     RequestMRef = monitor(process, RequestLink),
                     Worker = new_ask_worker(Stream, WorkerMRef, RequestMRef,
@@ -508,15 +514,17 @@ handle_remote_ask(Peer, RequestLink, Payload,
             end
     end.
 
-reject_remote(Peer, AnswerCh, AskId, Reason,
+reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, Reason,
               S = #s{reject_window = Window, reject_count = Count}) ->
     Now = erlang:monotonic_time(millisecond),
     case Window =:= 0 orelse Now - Window >= 1000 of
         true ->
-            quod_ask:reject_remote(Peer, AnswerCh, AskId, Reason),
+            quod_ask:reject_remote(
+              Peer, PeerEndpoint, AnswerCh, AskId, Reason),
             S#s{reject_window = Now, reject_count = 1};
         false when Count < ?MAX_ASK_REJECTS_PER_SECOND ->
-            quod_ask:reject_remote(Peer, AnswerCh, AskId, Reason),
+            quod_ask:reject_remote(
+              Peer, PeerEndpoint, AnswerCh, AskId, Reason),
             S#s{reject_count = Count + 1};
         false -> S
     end.

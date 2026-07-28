@@ -70,6 +70,18 @@ variable "detailed_consensus_metrics" {
   description = "Enable expensive per-event consensus timing and mailbox probes for a short diagnostic run. Keep false during normal operation and throughput tests."
 }
 
+variable "directory_node_keys" {
+  type        = list(string)
+  default     = []
+  description = "Exact Ed25519 node-key allowlist for the discoverable quod:root directory. Supply the persistent fleet keys as 64-character hex strings; empty disables shared publication without weakening validation."
+}
+
+variable "directory_bootstraps" {
+  type        = list(string)
+  default     = []
+  description = "Small stable list of host:port seeds for the directory control plane. Runtime membership is learned through signed records; do not render the live Consul service set here."
+}
+
 variable "otel_exporter_otlp_endpoint" {
   type        = string
   default     = "http://192.168.1.11:4318"
@@ -241,6 +253,24 @@ explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
+}
+directory {
+  # Bootstrap addresses only establish the first scoped TOFU/no-learn link.
+  # Every route learned through it is independently signature-checked against
+  # the exact allowlist below, then used through a key-pinned dial.
+  bootstraps = [
+%{for endpoint in var.directory_bootstraps~}
+    "${endpoint}",
+%{endfor~}
+  ]
+  allowlist = [{
+    namespace = "quod:root"
+    node_keys = [
+%{for node_key in var.directory_node_keys~}
+      "${node_key}",
+%{endfor~}
+    ]
+  }]
 }
 # `content` is a LIST: further ontologies are added as extra entries, each with its own
 # mode/anchor (founded once by a single create deploy, then joined fleet-wide with the

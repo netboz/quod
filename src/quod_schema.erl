@@ -26,6 +26,7 @@ roots() ->
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
     , {explorer, hoconsc:mk(hoconsc:ref(?MODULE, explorer), #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
+    , {directory, hoconsc:mk(hoconsc:ref(?MODULE, directory), #{default => #{}})}
       %% A LIST: a node may host several ontologies side by side (each entry founds or
       %% joins one namespace, with its own mode/genesis/anchor). One entry is the common case.
     , {content,  hoconsc:mk(hoconsc:array(hoconsc:ref(?MODULE, content)), #{default => [#{}]})}
@@ -62,6 +63,25 @@ fields(identity) ->
     %% boot and persisted under `dir`. `dir = ""` ⇒ `<content.data_dir>/identity` (or the
     %% quod_simplex user_cache default), so identity shares the ledger's durability domain.
     [ {dir, hoconsc:mk(binary(), #{default => <<"">>})}
+    ];
+fields(directory) ->
+    [ {bootstraps, hoconsc:mk(hoconsc:array(binary()), #{default => []})}
+    , {allowlist,
+       hoconsc:mk(
+         hoconsc:array(hoconsc:ref(?MODULE, directory_allow)),
+         #{default => []})}
+    , {direct_seeds,
+       hoconsc:mk(
+         hoconsc:array(hoconsc:ref(?MODULE, directory_direct)),
+         #{default => []})}
+    ];
+fields(directory_allow) ->
+    [ {namespace, hoconsc:mk(binary())}
+    , {node_keys, hoconsc:mk(hoconsc:array(binary()), #{default => []})}
+    ];
+fields(directory_direct) ->
+    [ {namespace, hoconsc:mk(binary())}
+    , {seeds, hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     ];
 fields(content) ->
     %% One ontology this node founds (create) or joins at boot — `content` is a LIST of

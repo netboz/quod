@@ -14,13 +14,15 @@ dies with it — and each link's death is the disconnect signal its holder
 monitors.
 """.
 
--export([start_outbound/7, start_inbound/2, open_link/3, send/3]).
+-export([start_outbound/8, start_inbound/2, open_link/3, send/3]).
 
 -record(s, {conn, self, peer = undefined,
+            expected_peer = undefined,  %% pinned outbound identity, `any` for directory-seed TOFU
+            learn_hint = learn,         %% what our outbound stream headers ask the receiver to do
             streams = #{},   %% StreamId => LinkPid   (every link, for routing inbound data)
             chans   = #{},   %% Channel  => LinkPid   (our OUTBOUND links only, for send reuse/dedup)
             pending = #{},   %% Channel  => {StreamId, [ReplyTo]} (outbound opens in flight)
-            sendq   = #{}}). %% Channel  => [Frame]   (fire-and-forget sends buffered while a link opens)
+            sendq   = #{}}). %% Channel => {Count, ReverseFrames} while a link opens
 
 -define(CONNECT_TIMEOUT_MS, 5000).
 -define(MAX_SENDQ, 1024).   %% per-channel cap on frames buffered while an outbound link opens
@@ -35,8 +37,8 @@ CA chain); the peer authenticates US, and we authenticate it when it dials back 
 directed pair is server-verifies-client.
 """.
 -spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), [binary()],
-                     term(), term()) -> pid().
-start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
+                     term(), term(), map()) -> pid().
+start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy) ->
     spawn(fun() ->
         process_flag(trap_exit, true),
         %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection, from
@@ -49,7 +51,17 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
             {ok, Conn} ->
                 receive
                     {quic, Conn, {connected, _}} ->
-                        run(#s{conn = Conn, self = Self, peer = Peer});
+                        case outbound_identity(Conn, Peer, Policy) of
+                            {ok, BoundPeer, ExpectedPeer, LearnHint} ->
+                                run(#s{conn = Conn, self = Self, peer = BoundPeer,
+                                       expected_peer = ExpectedPeer, learn_hint = LearnHint});
+                            {error, Reason} ->
+                                logger:warning(
+                                  "quod: dropping outbound connection to ~p — peer identity ~p",
+                                  [Peer, Reason]),
+                                _ = catch quic:close(Conn, normal),
+                                fail_queued_opens(Peer)
+                        end;
                     {quic, Conn, {closed, R}} ->
                         logger:debug("quod: connect ~p:~p closed: ~p", [Host, Port, R]),
                         fail_queued_opens(Peer)
@@ -71,7 +83,7 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key) ->
 fail_queued_opens(Peer) ->
     receive
         {open_link, Channel, ReplyTo} ->
-            ReplyTo ! {link_error, Peer, Channel},
+            notify_link_error(ReplyTo, Peer, Channel),
             fail_queued_opens(Peer)
     after 50 -> ok
     end.
@@ -85,7 +97,7 @@ start_inbound(Conn, Self) ->
     end).
 
 -doc "Ask this connection to open (or reuse) a link for `Channel`, replying to `ReplyTo`.".
--spec open_link(pid(), binary(), pid()) -> ok.
+-spec open_link(pid(), binary(), pid() | {pid(), reference()}) -> ok.
 open_link(ConnPid, Channel, ReplyTo) ->
     ConnPid ! {open_link, Channel, ReplyTo},
     ok.
@@ -155,7 +167,20 @@ loop(S = #s{conn = Conn}) ->
         {quic, Conn, _Other} ->                  %% connected, send_ready, timer, ...
             loop(S);
         {link_up, Channel, RemotePeer, LinkPid, Origin} ->
-            loop(handle_link_up(Channel, RemotePeer, LinkPid, Origin, S));
+            loop(handle_link_up(
+                   Channel, RemotePeer, LinkPid, Origin, undefined, S));
+        {authenticate_link, LinkPid, Ref, _Channel, RemotePeer, LearnHint}
+          when is_pid(LinkPid), is_reference(Ref) ->
+            case authenticate_inbound(RemotePeer, LearnHint, S) of
+                {ok, S1} ->
+                    LinkPid ! {link_authenticated, self(), Ref},
+                    loop(S1);
+                {error, Reason} ->
+                    logger:warning(
+                      "quod: dropping inbound connection — peer identity ~p",
+                      [Reason]),
+                    exit({shutdown, {peer_identity, Reason}})
+            end;
         {'EXIT', LinkPid, _Reason} ->
             loop(drop_link(LinkPid, S));
         _Other ->
@@ -184,7 +209,9 @@ handle_open(Channel, ReplyTo, S = #s{peer = Peer, chans = Chans, pending = Pendi
     case maps:get(Channel, Chans, undefined) of
         LinkPid when is_pid(LinkPid) ->
             case is_process_alive(LinkPid) of
-                true  -> ReplyTo ! {link_up, Peer, Channel, LinkPid}, S;   %% reuse
+                true  ->
+                    notify_link_up(ReplyTo, Peer, Channel, LinkPid),
+                    S;
                 false -> open_new(Channel, [ReplyTo], S#s{chans = maps:remove(Channel, Chans)})
             end;
         undefined ->
@@ -211,18 +238,26 @@ handle_send(Channel, Frame, S = #s{chans = Chans}) ->
     end.
 
 buffer_send(Channel, Frame, S = #s{pending = Pending, sendq = SendQ}) ->
-    Buf = maps:get(Channel, SendQ, []),
-    S1  = S#s{sendq = SendQ#{Channel => lists:sublist(Buf ++ [Frame], ?MAX_SENDQ)}},
+    {Count, Buf} = maps:get(Channel, SendQ, {0, []}),
+    %% Buffers are reverse-FIFO so adding a frame is O(1). At the hard cap,
+    %% preserve the already accepted oldest frames and drop the newcomer.
+    Buffered = case Count < ?MAX_SENDQ of
+               true -> {Count + 1, [Frame | Buf]};
+               false -> {Count, Buf}
+           end,
+    S1  = S#s{sendq = SendQ#{Channel => Buffered}},
     case maps:is_key(Channel, Pending) of
         true  -> S1;                          %% an open is already in flight; flush on link-up
         false -> open_new(Channel, [], S1)    %% start the open with no link_up waiter (we buffer instead)
     end.
 
 open_new(Channel, Waiters, S = #s{conn = Conn, peer = Peer, self = Self,
+                                  learn_hint = LearnHint,
                                   streams = Streams, pending = Pending, sendq = SendQ}) ->
     case quic:open_stream(Conn) of
         {ok, Sid} ->
-            L = quod_link:start_outbound(Conn, Sid, Peer, Channel, Self, self()),
+            L = quod_link:start_outbound(
+                  Conn, Sid, Peer, Channel, Self, self(), LearnHint),
             link(L),
             S#s{streams = Streams#{Sid => L},
                 pending = Pending#{Channel => {Sid, Waiters}}};
@@ -231,30 +266,40 @@ open_new(Channel, Waiters, S = #s{conn = Conn, peer = Peer, self = Self,
             %% and DROP any fire-and-forget frames buffered for this channel — with no stream and no
             %% pending entry they would otherwise sit in sendq until a later send retries (fire-and-forget
             %% callers retry at the app layer). Keeps sendq from orphaning a frame on open failure.
-            _ = [W ! {link_error, Peer, Channel} || W <- Waiters],
+            lists:foreach(
+              fun(Waiter) ->
+                  notify_link_error(Waiter, Peer, Channel)
+              end, Waiters),
             S#s{sendq = maps:remove(Channel, SendQ)}
     end.
 
-%% A link finished its header handshake. We cache only the links WE opened (`out`) in
-%% `chans` — those are the ones `handle_open` reuses for our sends. An inbound link
-%% (`in`, a stream the peer opened) is NEVER cached for sending: we reply on our own
-%% outbound stream instead, because sending "backwards" on a peer's stream silently
-%% stops delivering across role changes with no DOWN (the phantom-link bug). An inbound
-%% link still routes received data (via `streams`); here it only teaches us the peer id
-%% so future dials adopt this connection.
-handle_link_up(_Channel, RemotePeer, _LinkPid, in, S = #s{conn = Conn}) ->
+%% Authenticate a peer-opened stream before its link ACKs or publishes payload.
+%% Inbound links are never cached for sending: replies use our own outbound
+%% connection rather than the lesser-tested server-initiated stream path.
+authenticate_inbound(RemotePeer, LearnHint,
+                     S = #s{conn = Conn,
+                            expected_peer = ExpectedPeer}) ->
     %% Identity bind: a peer dialed US (we are the TLS server, verify=>true), so its header
     %% claims a pubkey AND mutual TLS proved one via `quic:peercert/1`. They must match — else
     %% the peer is lying about who it is, or presented no cert. Drop the whole connection.
     %% Malformed or non-keyed headers are rejected before they reach upper layers.
-    case bind_ok(RemotePeer, Conn) of
-        ok ->
-            ensure_peer(RemotePeer, S);
-        {fail, Reason} ->
-            logger:warning("quod: dropping inbound connection — peer identity ~p", [Reason]),
-            exit({shutdown, {peer_identity, Reason}})
-    end;
-handle_link_up(Channel, RemotePeer, LinkPid, out, S = #s{chans = Chans, pending = Pending}) ->
+    case {bind_ok(RemotePeer, Conn), expected_peer_ok(RemotePeer, ExpectedPeer)} of
+        {ok, true} ->
+            %% Cache learning is deliberately after the certificate/header bind:
+            %% a mismatched valid-cert peer must not write a forged key's hint,
+            %% even transiently.
+            EffectivePolicy = effective_learn_policy(LearnHint, S),
+            maybe_learn_remote(EffectivePolicy, RemotePeer),
+            {ok, (ensure_peer(RemotePeer, S))#s{
+                   learn_hint = EffectivePolicy}};
+        {{fail, Reason}, _} ->
+            {error, Reason};
+        {ok, false} ->
+            {error, expected_peer_mismatch}
+    end.
+
+handle_link_up(Channel, RemotePeer, LinkPid, out, _LearnHint,
+               S = #s{chans = Chans, pending = Pending}) ->
     case maps:get(Channel, Chans, undefined) of
         Existing when is_pid(Existing), Existing =/= LinkPid ->
             case is_process_alive(Existing) of
@@ -272,7 +317,10 @@ handle_link_up(Channel, RemotePeer, LinkPid, out, S = #s{chans = Chans, pending 
 adopt_link(Channel, RemotePeer, LinkPid, S = #s{chans = Chans, pending = Pending, sendq = SendQ}) ->
     S1 = ensure_peer(RemotePeer, S),
     notify_waiters(Channel, RemotePeer, LinkPid, Pending),
-    _ = [quod_link:send(LinkPid, F) || F <- maps:get(Channel, SendQ, [])],   %% flush buffered fire-and-forget sends
+    {_Count, ReverseFrames} = maps:get(Channel, SendQ, {0, []}),
+    lists:foreach(
+      fun(Frame) -> quod_link:send(LinkPid, Frame) end,
+      lists:reverse(ReverseFrames)),
     S1#s{chans   = Chans#{Channel => LinkPid},
          pending = maps:remove(Channel, Pending),
          sendq   = maps:remove(Channel, SendQ)}.
@@ -284,7 +332,10 @@ notify_waiters(Channel, RemotePeer, LinkPid, Pending) ->
                   {_Sid, Ws} -> Ws;
                   undefined  -> []
               end,
-    _ = [W ! {link_up, RemotePeer, Channel, LinkPid} || W <- Waiters],
+    lists:foreach(
+      fun(Waiter) ->
+          notify_link_up(Waiter, RemotePeer, Channel, LinkPid)
+      end, Waiters),
     ok.
 
 %% a peer reset a stream -> kill the link serving it.
@@ -297,28 +348,41 @@ drop_stream(Sid, S = #s{streams = Streams}) ->
 %% a link died -> drop it from both indexes, fail any pending waiters on it, and discard any frames
 %% buffered for the channel it was opening (their fire-and-forget send is lost; the caller retries).
 drop_link(LinkPid, S = #s{streams = Streams, chans = Chans, pending = Pending, sendq = SendQ, peer = Peer}) ->
-    DeadChans = dead_channels(LinkPid, Streams, Chans, Pending),
+    DeadSids =
+        maps:from_keys(
+          [Sid || {Sid, Pid} <- maps:to_list(Streams),
+                  Pid =:= LinkPid],
+          true),
+    {Pending1, PendingChans} =
+        partition_pending(Peer, DeadSids, Pending),
+    DeadChans =
+        maps:fold(
+          fun(Channel, Pid, Acc) when Pid =:= LinkPid ->
+                  [Channel | Acc];
+             (_Channel, _Pid, Acc) ->
+                  Acc
+          end, PendingChans, Chans),
     S#s{streams = maps:filter(fun(_, P) -> P =/= LinkPid end, Streams),
         chans   = maps:filter(fun(_, P) -> P =/= LinkPid end, Chans),
-        pending = fail_pending(LinkPid, Peer, Streams, Pending),
+        pending = Pending1,
         sendq   = maps:without(DeadChans, SendQ)}.
 
-%% The channel(s) served by a dead link: its cached outbound channel plus any channel whose in-flight
-%% open used the link's stream. Their buffered sends can never flush, so they are dropped.
-dead_channels(LinkPid, Streams, Chans, Pending) ->
-    DeadSids = [Sid || {Sid, P} <- maps:to_list(Streams), P =:= LinkPid],
-    [Ch || {Ch, P} <- maps:to_list(Chans), P =:= LinkPid]
-        ++ [Ch || {Ch, {Sid, _}} <- maps:to_list(Pending), lists:member(Sid, DeadSids)].
-
-%% if the dead link was the one opening a pending channel, fail its waiters.
-fail_pending(LinkPid, Peer, Streams, Pending) ->
-    DeadSids = [Sid || {Sid, P} <- maps:to_list(Streams), P =:= LinkPid],
-    maps:filter(fun(Channel, {Sid, Waiters}) ->
-                    case lists:member(Sid, DeadSids) of
-                        true  -> _ = [W ! {link_error, Peer, Channel} || W <- Waiters], false;
-                        false -> true
-                    end
-                end, Pending).
+%% Partition pending opens once. Dead channels are returned for send-queue
+%% cleanup; live entries retain their original map values.
+partition_pending(Peer, DeadSids, Pending) ->
+    maps:fold(
+      fun(Channel, {Sid, Waiters} = Entry, {Kept, DeadChannels}) ->
+          case maps:is_key(Sid, DeadSids) of
+              true ->
+                  lists:foreach(
+                    fun(Waiter) ->
+                        notify_link_error(Waiter, Peer, Channel)
+                    end, Waiters),
+                  {Kept, [Channel | DeadChannels]};
+              false ->
+                  {Kept#{Channel => Entry}, DeadChannels}
+          end
+      end, {#{}, []}, Pending).
 
 %% Learn (once) which peer this connection serves — used to tag link_up / link_error and
 %% to address sends. We no longer register a {conn, Peer} gproc name: connection adoption
@@ -340,3 +404,65 @@ bind_ok({Pubkey, _Addr}, Conn) when is_binary(Pubkey), byte_size(Pubkey) =:= 32 
         {error, _} -> {fail, no_peercert}
     end;
 bind_ok(_RemotePeer, _Conn) -> {fail, malformed_header_identity}.
+
+%% Directory dials are scoped: `ExpectedPeer` pins a known route key; `any` is the
+%% one-shot private-seed TOFU mode. Ordinary transport keeps its existing unpinned
+%% endpoint/cache behavior. The certificate is checked before any stream can open.
+outbound_identity(_Conn, Peer, #{expected_peer := undefined, learn_hint := LearnHint}) ->
+    {ok, Peer, undefined, LearnHint};
+outbound_identity(Conn, _Peer, #{expected_peer := Expected, learn_hint := LearnHint})
+  when Expected =:= any; is_binary(Expected) ->
+    case cert_pubkey(Conn) of
+        {ok, Actual} when Expected =:= any ->
+            {ok, Actual, any, LearnHint};
+        {ok, Expected} ->
+            {ok, Expected, Expected, LearnHint};
+        {ok, _Other} ->
+            {error, pubkey_mismatch};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+cert_pubkey(Conn) ->
+    case quic:peercert(Conn) of
+        {ok, Der} ->
+            case quod_identity:pubkey_of_cert(Der) of
+                {ok, Pubkey} -> {ok, Pubkey};
+                error -> {error, bad_peer_cert}
+            end;
+        {error, _} ->
+            {error, no_peercert}
+    end.
+
+expected_peer_ok(_RemotePeer, undefined) -> true;
+expected_peer_ok(_RemotePeer, any)       -> true;
+expected_peer_ok({Pubkey, _Addr}, Pubkey) -> true;
+expected_peer_ok(_RemotePeer, _Expected) -> false.
+
+notify_link_up({ReplyTo, Ref}, Peer, Channel, LinkPid)
+  when is_pid(ReplyTo), is_reference(Ref) ->
+    ReplyTo ! {link_up, Ref, Peer, Channel, LinkPid};
+notify_link_up(ReplyTo, Peer, Channel, LinkPid) when is_pid(ReplyTo) ->
+    ReplyTo ! {link_up, Peer, Channel, LinkPid}.
+
+notify_link_error({ReplyTo, Ref}, Peer, Channel)
+  when is_pid(ReplyTo), is_reference(Ref) ->
+    ReplyTo ! {link_error, Ref, Peer, Channel};
+notify_link_error(ReplyTo, Peer, Channel) when is_pid(ReplyTo) ->
+    ReplyTo ! {link_error, Peer, Channel}.
+
+maybe_learn_remote(learn, {Pubkey, Addr}) when is_binary(Pubkey) ->
+    _ = quod_quic:learn(Pubkey, Addr),
+    ok;
+maybe_learn_remote(_Policy, _Peer) ->
+    ok.
+
+%% A directory opener's no-learn policy covers the whole directed connection.
+%% Once any authenticated stream suppresses learning, a later stream cannot
+%% re-enable it before the policy is applied.
+effective_learn_policy(_HeaderPolicy, #s{learn_hint = no_learn}) ->
+    no_learn;
+effective_learn_policy(no_learn, _S) ->
+    no_learn;
+effective_learn_policy(learn, _S) ->
+    learn.

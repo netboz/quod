@@ -377,7 +377,7 @@ id_json(Pk) when is_binary(Pk) ->
     #{id => quod_identity:short(Pk), pubkey => binary:encode_hex(Pk, lowercase)};
 id_json({Pk, _Host, _Port}) when is_binary(Pk) ->
     id_json(Pk);
-id_json({Host, Port}) ->      %% legacy/test address-flavoured node id
+id_json({Host, Port}) ->      %% configuration-free test node id
     #{id => iolist_to_binary([text(Host), ":", integer_to_binary(Port)]), pubkey => null};
 id_json(undefined) ->
     null.

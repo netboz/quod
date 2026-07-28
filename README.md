@@ -152,8 +152,7 @@ to complete before advancing a rolling update.
   DispersedSimplex ordering layer, quorum certificates, trustless catch-up, live
   member recovery, bounded per-ontology transaction micro-batches, depth-one pipelining with
   implicit predecessor finality, signed transaction relay, inter-ontology asks,
-  runtime projection, metrics, and durable Docker/Nomad deployment.
-- **Next:** remove client re-proving when a proposal slot closes by giving ingress
-  one bounded owner that retains and retargets the signed transaction; then build
-  the network ontology directory and user/agent authorization described in
-  `doc/inter-ontology.md`, `doc/agent-fipa-plan.md`, and `doc/deferred.md`.
+  retained-custody ingress, the signed live ontology directory with private
+  direct routes, runtime projection, metrics, and durable Docker/Nomad deployment.
+- **Next:** build user/agent authorization and the functional AMS/DF layers
+  described in `doc/agent-fipa-plan.md` and `doc/deferred.md`.

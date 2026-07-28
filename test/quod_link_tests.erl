@@ -1,42 +1,65 @@
 -module(quod_link_tests).
 -include_lib("eunit/include/eunit.hrl").
 
-%% header/2, parse_header/1, frame/1 and parse/1 are exported only under -ifdef(TEST).
--import(quod_link, [header/2, parse_header/1, frame/1, parse/1]).
+%% header/3, parse_header/1, frame/1 and parse/1 are exported only under -ifdef(TEST).
+-import(quod_link, [header/3, parse_header/1, frame/1, parse/1]).
 
-%% --- header: <<NLen:16, NodeId, CLen:16, Channel>> ----------------------
+%% --- header: <<NLen:16, NodeId, CLen:16, Channel, LearnPolicy:8>> -------
 
 header_roundtrip_test() ->
     Addr = {"127.0.0.1", 14567},
-    Cases = [{{<<0:256>>, Addr}, <<"chan">>},
-             {{<<1:256>>, Addr}, <<"a/b">>}],
-    [?assertEqual({ok, NodeId, Ch, <<>>}, parse_header(header(NodeId, Ch)))
-     || {NodeId, Ch} <- Cases].
+    Cases = [{{<<0:256>>, Addr}, <<"chan">>, learn},
+             {{<<1:256>>, Addr}, <<"a/b">>, no_learn}],
+    [?assertEqual({ok, NodeId, Ch, Policy, <<>>},
+                  parse_header(header(NodeId, Ch, Policy)))
+     || {NodeId, Ch, Policy} <- Cases].
 
 %% the header consumes exactly its bytes; trailing payload frames are the Rest.
 header_keeps_remainder_test() ->
     Tail = frame(<<"payload">>),
     Id = {<<0:256>>, {"h", 1}},
-    Buf  = <<(header(Id, <<"c">>))/binary, Tail/binary>>,
-    ?assertEqual({ok, Id, <<"c">>, Tail}, parse_header(Buf)).
+    Buf  = <<(header(Id, <<"c">>, no_learn))/binary, Tail/binary>>,
+    ?assertEqual({ok, Id, <<"c">>, no_learn, Tail}, parse_header(Buf)).
 
 %% a header that arrives in pieces -> `more` until complete, then decoded.
 header_split_buffers_test() ->
     Id = {<<0:256>>, {"h", 1}},
-    Full = header(Id, <<"chan">>),
+    Full = header(Id, <<"chan">>, learn),
     Half = byte_size(Full) div 2,
     <<A:Half/binary, _/binary>> = Full,
     ?assertEqual(more, parse_header(A)),
-    ?assertEqual({ok, Id, <<"chan">>, <<>>}, parse_header(Full)).
+    ?assertEqual({ok, Id, <<"chan">>, learn, <<>>}, parse_header(Full)).
 
 %% a structurally complete header whose node id isn't a decodable term -> error
 %% (defensive decode), not a crash.
 header_bad_nodeid_rejected_test() ->
-    ?assertEqual(error, parse_header(<<3:16, "abc", 0:16>>)),
-    [?assertEqual(error, parse_header(header(Bad, <<"c">>)))
+    ?assertEqual(error, parse_header(<<3:16, "abc", 0:16, 1:8>>)),
+    [?assertEqual(error, parse_header(header(Bad, <<"c">>, learn)))
      || Bad <- [node_atom, 42, {a, b, c}, {{"h", 1}, {"h", 1}},
                 {<<"short">>, {"h", 1}},
-                {<<0:256>>, malformed_endpoint}]].
+                {<<0:256>>, malformed_endpoint},
+                {<<0:256>>, {<<>>, 1}},
+                {<<0:256>>, {[], 1}},
+                {<<0:256>>, {binary:copy(<<"h">>, 256), 1}},
+                {<<0:256>>, {lists:duplicate(256, $h), 1}},
+                {<<0:256>>, {{127, 0, 0, 999}, 1}},
+                {<<0:256>>, {{arbitrary, tuple}, 1}},
+                {<<0:256>>, {[0], 1}}]].
+
+header_bad_learn_policy_rejected_test() ->
+    Id = {<<0:256>>, {"h", 1}},
+    Valid = header(Id, <<"c">>, learn),
+    PrefixLen = byte_size(Valid) - 1,
+    <<Prefix:PrefixLen/binary, _Policy:8>> = Valid,
+    ?assertEqual(error, parse_header(<<Prefix/binary, 2:8>>)).
+
+compressed_header_identity_rejected_before_expansion_test() ->
+    Id = {<<0:256>>, {binary:copy(<<"h">>, 200), 1}},
+    Compressed = term_to_binary(Id, [{compressed, 9}]),
+    ?assertMatch(<<131, 80, _/binary>>, Compressed),
+    Header = <<(byte_size(Compressed)):16, Compressed/binary,
+               1:16, "c", 1:8>>,
+    ?assertEqual(error, parse_header(Header)).
 
 %% --- payload frames: <<PLen:32, Payload>> -------------------------------
 

@@ -13,13 +13,27 @@ start_link() ->
 
 -spec start_namespace(binary(), map()) -> supervisor:startchild_ret().
 start_namespace(Ns, Config) ->
-    supervisor:start_child(quod_reg:via({quod_ns_sup, node}), [Ns, Config]).
+    Result = supervisor:start_child(
+               quod_reg:via({quod_ns_sup, node}), [Ns, Config]),
+    case Result of
+        {ok, _Pid} -> quod_directory_control:namespace_changed();
+        {ok, _Pid, _Info} -> quod_directory_control:namespace_changed();
+        _ -> ok
+    end,
+    Result.
 
 -spec stop_namespace(binary()) -> ok | {error, not_found}.
 stop_namespace(Ns) ->
     case quod_reg:where({quod_ns, Ns}) of
         undefined -> {error, not_found};
-        Pid       -> supervisor:terminate_child(quod_reg:via({quod_ns_sup, node}), Pid)
+        Pid ->
+            Result = supervisor:terminate_child(
+                       quod_reg:via({quod_ns_sup, node}), Pid),
+            case Result of
+                ok -> quod_directory_control:namespace_changed();
+                _ -> ok
+            end,
+            Result
     end.
 
 namespaces() -> gproc:select([{{{n, l, {quod_ns, '$1'}}, '_', '_'}, [], ['$1']}]).

@@ -35,6 +35,9 @@ defaults_test() ->
     ?assertEqual(14567,           deep(C, [node, port])),
     ?assertEqual(14568,           deep(C, [metrics, port])),
     ?assertEqual(<<"">>,          deep(C, [identity, dir])),
+    ?assertEqual([],              deep(C, [directory, bootstraps])),
+    ?assertEqual([],              deep(C, [directory, allowlist])),
+    ?assertEqual([],              deep(C, [directory, direct_seeds])),
     B = content1(C),
     ?assertEqual(create,          maps:get(mode, B)),
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
@@ -61,6 +64,26 @@ two_ontologies_test() ->
 batch_window_parse_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\", batch_window_ms = 40 }]\n">>),
     ?assertEqual(40, maps:get(batch_window_ms, content1(C))).
+
+directory_schema_parse_test() ->
+    KeyHex = <<"00112233445566778899aabbccddeeff"
+               "00112233445566778899aabbccddeeff">>,
+    C = check(
+          <<"directory {\n"
+            "  bootstraps = [\"10.0.0.1:14567\"]\n"
+            "  allowlist = [{ namespace = \"quod:root\", node_keys = [\"",
+            KeyHex/binary, "\"] }]\n"
+            "  direct_seeds = [{ namespace = \"private:arm\", "
+            "seeds = [\"10.0.0.2:15555\"] }]\n"
+            "}\n"
+            "content = [{ namespace = \"quod:root\" }]\n">>),
+    D = maps:get(directory, C),
+    ?assertEqual([<<"10.0.0.1:14567">>], maps:get(bootstraps, D)),
+    [Allow] = maps:get(allowlist, D),
+    ?assertEqual(<<"quod:root">>, maps:get(namespace, Allow)),
+    ?assertEqual([KeyHex], maps:get(node_keys, Allow)),
+    [Direct] = maps:get(direct_seeds, D),
+    ?assertEqual(<<"private:arm">>, maps:get(namespace, Direct)).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -103,6 +126,50 @@ identity_dir_override_test() ->
         ?assertNot(filelib:is_regular(filename:join([Dir, "identity", "node.key"])))
     after
         reset_boot_env(),
+        _ = file:del_dir_r(Dir)
+    end.
+
+directory_boot_conversion_test() ->
+    _ = application:load(quod),
+    Dir = tmp_dir(),
+    Key = <<7:256>>,
+    KeyHex = binary:encode_hex(Key, lowercase),
+    ConfPath = filename:join(Dir, "directory.conf"),
+    try
+        ok = filelib:ensure_dir(filename:join(Dir, "x")),
+        ok = file:write_file(
+               ConfPath,
+               ["node { ip = \"127.0.0.1\", port = 14998 }\n",
+                "directory {\n",
+                "  bootstraps = [\"10.0.0.1:14567\"]\n",
+                "  allowlist = [{ namespace = \"quod:root\", node_keys = [\"",
+                KeyHex, "\"] }]\n",
+                "  direct_seeds = [{ namespace = \"private:arm\", ",
+                "seeds = [\"10.0.0.2:15555\"] }]\n",
+                "}\n",
+                "content = [{ namespace = \"quod:root\", data_dir = \"",
+                Dir, "\" }]\n"]),
+        os:putenv("QUOD_CONF", ConfPath),
+        clear_identity_env(),
+        _ = quod_app:load_config(),
+        {ok, Directory} = application:get_env(quod, directory),
+        ?assertEqual(
+           #{
+             <<"quod:root">> => [Key]
+            },
+           maps:get(allowlist, Directory)),
+        ?assertEqual(
+           [{"10.0.0.1", 14567}],
+           maps:get(bootstraps, Directory)),
+        ?assertEqual(
+           #{<<"private:arm">> => [{"10.0.0.2", 15555}]},
+           maps:get(direct_seeds, Directory)),
+        ?assertEqual(
+           filename:join(Dir, "identity"),
+           maps:get(identity_dir, Directory))
+    after
+        reset_boot_env(),
+        application:unset_env(quod, directory),
         _ = file:del_dir_r(Dir)
     end.
 

@@ -16,9 +16,9 @@ See `m:quod_schema` for the shape.
 identity** (a side effect: persists `node.key` under the identity dir and sets
 `node_pubkey`/`identity_cert`/`identity_key`; the identity dir derives from the first
 content entry that SETS a `data_dir` — one node, one identity, however many ontologies).
-**With no config file present, the app starts in legacy mode** — `sys.config` /
-`application:set_env` drive the transport, no content namespace is auto-started, and
-no identity is minted (this is what the multi-node test SUITE relies on).
+**With no config file present, the app starts in configuration-free test mode** —
+`sys.config` / `application:set_env` drive the transport, no content namespace is
+auto-started, and no identity is minted (this is what the multi-node test suite relies on).
 """.
 
 -behaviour(application).
@@ -32,9 +32,15 @@ start(_StartType, _StartArgs) ->
     ok = quiet_transport_logging(),
     Content   = load_config(),
     ok = tag_node_logs(),
+    %% A full application start is the lifecycle barrier: control starts before
+    %% the dynamic namespace children and must not recover a partial hosted set
+    %% from an earlier in-VM run. A control-child restart after this barrier
+    %% sees `true` and safely re-derives the live set.
+    application:set_env(quod, directory_tracking, false),
     {ok, Sup} = quod_sup:start_link(),
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
+    ok = maybe_start_directory_tracking(Content),
     {ok, Sup}.
 
 stop(_State) ->
@@ -44,7 +50,7 @@ stop(_State) ->
 %% carries `node_id` — the 30-node fleet's warnings become attributable per
 %% instance in Loki (`{job="docker"} |~ "quod\\[quod:" | json | node_id="kp_..."`).
 %% Uses the Ed25519 pubkey short-id (same identity the Prometheus `node_id` label
-%% uses); falls back to the BEAM node name in legacy/test mode where no identity
+%% uses); falls back to the BEAM node name in configuration-free test mode where no identity
 %% is minted. Runs after `load_config/0`, which is what sets `node_pubkey`.
 tag_node_logs() ->
     Id = case application:get_env(quod, node_pubkey) of
@@ -69,7 +75,7 @@ quiet_transport_logging() ->
 %% --- config: HOCON file primary, QUOD_ env vars override individual keys -----
 
 %% Returns the `content` config map, or `none` when no config file is present
-%% (legacy mode — see the moduledoc).
+%% (configuration-free test mode — see the moduledoc).
 load_config() ->
     case conf_path() of
         none -> none;
@@ -81,11 +87,8 @@ load_config() ->
                                           #{atom_key => true, apply_override_envs => true}),
             apply_transport_env(Cfg),
             apply_identity(Cfg),
+            apply_directory(Cfg),
             Blocks = maps:get(content, Cfg),
-            %% Remote asks may target an ontology that is not hosted locally. Until
-            %% the network-wide ontology directory exists, configured seeds are the
-            %% bounded bootstrap contacts for that first hop.
-            application:set_env(quod, ask_contacts, all_content_seeds(Blocks)),
             Blocks
     end.
 
@@ -103,7 +106,7 @@ drop_content_env_overrides() ->
 
 %% Load-or-create the node's Ed25519 identity and expose it in the application env
 %% (`node_pubkey`, the DER `identity_cert`, the `identity_key`). The pubkey becomes the
-%% `node_id` and the cert/key drive transport mutual TLS (wired in later steps). A node
+%% `node_id` and the cert/key drive transport mutual TLS and signed directory records. A node
 %% with no identity is useless, so a failure here is fatal — fail-fast like genesis.
 apply_identity(Cfg) ->
     Dir = identity_dir(Cfg),
@@ -139,6 +142,67 @@ content_data_dir(Cfg) ->
     case [D || D <- Dirs, D =/= <<>>] of
         [Dir | _] -> binary_to_list(Dir);
         []        -> filename:join(filename:basedir(user_cache, "quod"), "data")
+    end.
+
+%% Build the one explicit directory configuration. System publication uses
+%% exact namespace/key allowlists; private routes are namespace-scoped local
+%% seeds. There is deliberately no fallback to content/Brahms contacts.
+apply_directory(Cfg) ->
+    Raw = maps:get(directory, Cfg, #{}),
+    AllowEntries = maps:get(allowlist, Raw, []),
+    DirectEntries = maps:get(direct_seeds, Raw, []),
+    ensure_distinct(
+      directory_allowlist_namespace,
+      [maps:get(namespace, Entry) || Entry <- AllowEntries]),
+    ensure_distinct(
+      directory_direct_namespace,
+      [maps:get(namespace, Entry) || Entry <- DirectEntries]),
+    Allowlist = directory_allowlist(AllowEntries),
+    Bootstraps = required_endpoints(
+                   directory_bootstraps,
+                   maps:get(bootstraps, Raw, [])),
+    DirectSeeds =
+        maps:from_list(
+          [{maps:get(namespace, Entry),
+            required_endpoints(
+              {directory_direct_seeds, maps:get(namespace, Entry)},
+              maps:get(seeds, Entry, []))}
+           || Entry <- DirectEntries]),
+    application:set_env(
+      quod, directory,
+      #{allowlist => Allowlist,
+        bootstraps => Bootstraps,
+        direct_seeds => DirectSeeds,
+        identity_dir => identity_dir(Cfg)}),
+    ok.
+
+directory_allowlist(Entries) ->
+    maps:from_list(
+      [{maps:get(namespace, Entry),
+        [decode_node_key(Key) || Key <- maps:get(node_keys, Entry, [])]}
+       || Entry <- Entries]).
+
+decode_node_key(Hex) when is_binary(Hex), byte_size(Hex) =:= 64 ->
+    try
+        <<Key:32/binary>> = binary:decode_hex(Hex),
+        Key
+    catch
+        _:_ -> error({bad_directory_node_key, Hex})
+    end;
+decode_node_key(Value) ->
+    error({bad_directory_node_key, Value}).
+
+required_endpoints(Label, Values) ->
+    Parsed = lists:filtermap(fun parse_seed/1, Values),
+    case length(Parsed) =:= length(Values) of
+        true -> lists:usort(Parsed);
+        false -> error({bad_directory_endpoint, Label})
+    end.
+
+ensure_distinct(Label, Values) ->
+    case length(Values) =:= length(lists:usort(Values)) of
+        true -> ok;
+        false -> error({duplicate_directory_entry, Label})
     end.
 
 %% Bridge HOCON `node`/`metrics` onto the application env the transport reads.
@@ -214,6 +278,14 @@ maybe_start_ns(Blocks) ->
     ok = validate_blocks(Blocks),
     lists:foreach(fun start_ns_block/1, Blocks).
 
+maybe_start_directory_tracking(none) ->
+    ok;
+maybe_start_directory_tracking(_Blocks) ->
+    case quod_directory_control:start_tracking() of
+        ok -> ok;
+        {error, Reason} -> error({directory_tracking_failed, Reason})
+    end.
+
 %% Boot-config sanity for the content LIST — loud failures instead of a silently wrong
 %% network: duplicate namespaces (two blocks would fight over one committee), and a
 %% non-root entry that inherited the ROOT defaults — a bare `{ namespace = "animals" }`
@@ -278,7 +350,8 @@ log_genesis_anchor(_Ns, _Mode) -> ok.
 %% Build the per-namespace config map for quod_ns_sup:start_namespace/2. The ledger's
 %% `node_id` is the node's PUBKEY (from `apply_identity`) — its stable identity; the address
 %% is only a seed/hint (`seed_peers`, the link header). With no identity it falls back to the
-%% address (the legacy/test path). Brahms keeps using the address (see `maybe_join`).
+%% address (the configuration-free test path). Brahms keeps using the address
+%% (see `maybe_join`).
 build_ns_config(Content) ->
     Ns   = maps:get(namespace, Content),
     Self = application:get_env(quod, node_pubkey,
@@ -332,9 +405,6 @@ with_genesis_file(Content, Base) ->
 
 content_seeds(Content) ->
     lists:filtermap(fun parse_seed/1, maps:get(seeds, Content, [])).
-
-all_content_seeds(Blocks) ->
-    lists:usort(lists:append([content_seeds(B) || B <- Blocks])).
 
 default_node_id() ->
     {"127.0.0.1", application:get_env(quod, listen_port, 14567)}.

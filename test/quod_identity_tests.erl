@@ -92,6 +92,33 @@ bad_identity_file_test() ->
         rm_rf(Dir)
     end.
 
+directory_epoch_is_durable_and_strictly_increases_test() ->
+    Dir = tmp_dir(),
+    try
+        ?assertEqual({ok, 1}, quod_identity:advance_directory_epoch(Dir)),
+        ?assertEqual({ok, 2}, quod_identity:advance_directory_epoch(Dir)),
+        ?assertEqual(
+           {ok, <<2:64/unsigned-big>>},
+           file:read_file(filename:join(Dir, "directory.epoch"))),
+        ?assertNot(
+           filelib:is_regular(filename:join(Dir, "directory.epoch.tmp")))
+    after
+        rm_rf(Dir)
+    end.
+
+corrupt_directory_epoch_fails_closed_test() ->
+    Dir = tmp_dir(),
+    try
+        ok = filelib:ensure_dir(filename:join(Dir, "x")),
+        ok = file:write_file(
+               filename:join(Dir, "directory.epoch"), <<"bad">>),
+        ?assertEqual(
+           {error, bad_directory_epoch_file},
+           quod_identity:advance_directory_epoch(Dir))
+    after
+        rm_rf(Dir)
+    end.
+
 short_format_test() ->
     {Pub, _} = quod_identity:generate(),
     S = quod_identity:short(Pub),

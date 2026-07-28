@@ -847,8 +847,8 @@ count_tx_retry(_Ns, _Reason) ->
 %% --- labels --------------------------------------------------------------
 
 %% This node's stable identity for the constant `node_id` label. `node_pubkey` is set by
-%% quod_app:apply_identity before the supervisor (hence this process) starts; the `local` fallback covers
-%% the no-identity/legacy path.
+%% quod_app:apply_identity before the supervisor (hence this process) starts;
+%% the `local` fallback covers configuration-free tests.
 local_node_id() ->
     case application:get_env(quod, node_pubkey) of
         {ok, Pub} when is_binary(Pub) -> quod_identity:short(Pub);

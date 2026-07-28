@@ -17,6 +17,7 @@ all() -> [remote_stream, remote_symbol_safety, remote_peer_acl, remote_cancel].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
+    {WrongPub, _} = wrong_key_before(TargetPub),
     AskerKey = quod_identity:generate(),
     TargetAddr = {"127.0.0.1", ?TARGET_PORT},
     AskerAddr = {"127.0.0.1", ?ASKER_PORT},
@@ -25,7 +26,7 @@ init_per_suite(Config) ->
     TargetGenesis = filename:join(?config(priv_dir, Config), "remote_animals.pl"),
     ok = file:write_file(TargetGenesis, [AnimalsBin, "\necho(X).\nloop :- loop.\n"]),
     Target = start_node(target, ?TARGET_PORT, TargetKey, ?NS,
-                        TargetGenesis, [], Config),
+                        TargetGenesis, [], #{}, Config),
     PrivateGenesis = filename:join(?config(priv_dir, Config), "remote_private.pl"),
     ok = file:write_file(
            PrivateGenesis,
@@ -33,9 +34,22 @@ init_per_suite(Config) ->
             "secret(42).\n"]),
     start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
     start_brahms(Target, ?NS, TargetAddr, []),
+    DirectoryAllow = #{?NS => [WrongPub, TargetPub]},
     Asker = start_node(asker, ?ASKER_PORT, AskerKey, ?ASKER_NS,
                        filename:join(code:priv_dir(quod), "ontologies/pets.pl"),
-                       [TargetAddr], Config),
+                       [TargetAddr], DirectoryAllow, Config),
+    %% A lower-sorting route points at a valid server with the WRONG certificate:
+    %% the pinned dial must reject it and advance to the real route.
+    {ok, _} = peer:call(
+                Asker, quod_directory, install_record,
+                [WrongPub, TargetAddr, [?NS], 1, 1]),
+    {ok, _} = peer:call(
+                Asker, quod_directory, install_record,
+                [TargetPub, TargetAddr, [?NS], 1, 1]),
+    %% The private ontology is reachable only through an explicit local seed.
+    ok = peer:call(
+           Asker, quod_directory, add_direct_seed,
+           [?PRIVATE_NS, TargetAddr]),
     start_brahms(Asker, ?ASKER_NS, AskerAddr, [TargetAddr]),
     wait_ready(Target, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
@@ -82,7 +96,14 @@ remote_peer_acl(Config) ->
     Goal = {'::', ?PRIVATE_NS, {secret, {'X'}}},
     ?assertEqual({error, not_allowed},
                  peer:call(Asker, quod_prolog, prove,
-                           [?ASKER_NS, Goal, ?ASKER_NS], 60000)).
+                           [?ASKER_NS, Goal, ?ASKER_NS], 60000)),
+    {known, [Route]} = peer:call(
+                         Asker, quod_directory, resolve, [?PRIVATE_NS]),
+    ?assertEqual(direct, maps:get(scope, Route)),
+    ?assertEqual(confirmed, maps:get(status, Route)),
+    ?assertEqual([], peer:call(
+                       Asker, quod_directory, directory_hosts,
+                       [?PRIVATE_NS])).
 
 remote_cancel(Config) ->
     Target = ?config(target, Config),
@@ -94,7 +115,8 @@ remote_cancel(Config) ->
     true = peer:call(Asker, erlang, exit, [Caller, kill]),
     wait_ask_workers(Target, 0, 200).
 
-start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds, Config) ->
+start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
+           DirectoryAllowlist, Config) ->
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io,
                             args => ["-pa" | code:get_path()]}),
@@ -107,6 +129,7 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds, Config) ->
     Set(node_pubkey, Pub),
     Set(identity_key, Key),
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
+    Set(directory, #{allowlist => DirectoryAllowlist}),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config),
     Peer.
@@ -114,8 +137,9 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds, Config) ->
 start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config) ->
     DataDir = filename:join(
                 ?config(priv_dir, Config),
-                atom_to_list(peer:call(Peer, erlang, node, [])) ++
-                    "_" ++ binary_to_list(Ns)),
+                unicode:characters_to_list(
+                  [atom_to_list(peer:call(Peer, erlang, node, [])),
+                   "_", Ns])),
     Cfg = #{node_id => Pub, mode => create, role => member,
             data_dir => DataDir, seed_peers => Seeds,
             genesis_file => Genesis},
@@ -140,4 +164,11 @@ wait_ask_workers(Peer, Expected, Retries) ->
     case maps:get(ask_workers, Stats, undefined) of
         Expected -> ok;
         _ -> timer:sleep(10), wait_ask_workers(Peer, Expected, Retries - 1)
+    end.
+
+wrong_key_before(TargetPub) ->
+    {Pub, _} = Key = quod_identity:generate(),
+    case Pub < TargetPub of
+        true -> Key;
+        false -> wrong_key_before(TargetPub)
     end.

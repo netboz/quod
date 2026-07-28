@@ -4,6 +4,8 @@
 -include("quod_ledger.hrl").
 -import(quod_ct, [diff_for/1, change/3, batch/1, wait_until/2]).
 
+-export([init/1, callback_mode/0, handle_event/4]).
+
 %%%===================================================================
 %%% fixtures
 %%%===================================================================
@@ -83,6 +85,119 @@ outcome_unknown_timeout_test_() ->
          end
      end}.
 
+%% The retained-custody deadline is intentionally ambiguous: Simplex reports
+%% `unavailable`, but the exact signed transaction may still commit. Exercise a
+%% real asynchronous gen_statem append response and pin the Prolog contract:
+%% keep the caller parked, never retry or reject it, then return outcome_unknown
+%% only when the caller's own park TTL expires.
+unavailable_append_reply_waits_for_outcome_unknown_test_() ->
+    ParkTtl = 180,
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(gproc),
+         Ns = <<"unavailable-reply:",
+                (integer_to_binary(
+                   erlang:unique_integer([positive])))/binary>>,
+         {ok, Pid} = quod_prolog:start_link(
+                       Ns, #{node_id => {"127.0.0.1", 5000},
+                             park_ttl_ms => ParkTtl}),
+         ok = quod_prolog:mark_ready(Ns),
+         {Ns, Pid}
+     end,
+     fun cleanup/1,
+     fun({Ns, _Pid}) ->
+         fun() ->
+             {ok, Simplex} =
+                 gen_statem:start_link(
+                   quod_reg:via({quod_simplex, Ns}), ?MODULE,
+                   {fake_unavailable_simplex, self(), Ns}, []),
+             try
+                 Ref = make_ref(),
+                 Parent = self(),
+                 StartedAt = quod_time:mono_ms(),
+                 _Caller =
+                     spawn(
+                       fun() ->
+                           Parent !
+                               {Ref,
+                                quod_prolog:prove(
+                                  Ns,
+                                  {assertz,
+                                   {unavailable_fact, x}},
+                                  Ns)}
+                       end),
+
+                 {TxId, AppendReply} =
+                     receive
+                         {fake_unavailable_append, Simplex, 1,
+                          #transaction{tx_id = SeenTxId},
+                          SeenReply, ReplyStats} ->
+                             ?assertEqual(
+                                {error, not_in_charge, unavailable},
+                                SeenReply),
+                             %% The fake statem takes this snapshot only after
+                             %% gen_statem:reply/2 has reached quod_prolog.
+                             ?assertEqual(
+                                1, maps:get(parked, ReplyStats)),
+                             ?assertEqual(
+                                0, maps:get(
+                                     park_timeouts, ReplyStats)),
+                             {SeenTxId, SeenReply}
+                     after 1000 ->
+                         error(missing_unavailable_append_reply)
+                     end,
+                 ?assertEqual(
+                    {error, not_in_charge, unavailable}, AppendReply),
+
+                 %% No definite rejection and no resubmission may occur before
+                 %% the original caller deadline.
+                 receive
+                     {Ref, EarlyResult} ->
+                         error({early_append_result, EarlyResult});
+                     {fake_unavailable_append, Simplex, EarlyN,
+                      _, _, _} ->
+                         error({unexpected_append_retry, EarlyN})
+                 after 60 ->
+                     ok
+                 end,
+                 ?assertEqual(
+                    1, maps:get(parked, quod_prolog:stats(Ns))),
+
+                 Result =
+                     receive
+                         {Ref, FinalResult} -> FinalResult;
+                         {fake_unavailable_append, Simplex, RetryN,
+                          _, _, _} ->
+                             error({unexpected_append_retry, RetryN})
+                     after 1000 ->
+                         error(missing_outcome_unknown)
+                     end,
+                 ?assertEqual(
+                    {error, {outcome_unknown, TxId}}, Result),
+                 ?assert(
+                    quod_time:mono_ms() - StartedAt >= ParkTtl),
+                 ?assertEqual(
+                    #{parked => 0, park_timeouts => 1},
+                    maps:with(
+                      [parked, park_timeouts],
+                      quod_prolog:stats(Ns))),
+                 ?assertEqual(
+                    fail,
+                    quod_prolog:prove(
+                      Ns, {unavailable_fact, x}, Ns)),
+                 receive
+                     {fake_unavailable_append, Simplex, LateN,
+                      _, _, _} ->
+                         error({unexpected_append_retry, LateN})
+                 after 0 ->
+                     ok
+                 end
+             after
+                 gen_statem:stop(Simplex)
+             end
+         end
+     end}.
+
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
 setup_mem() ->
@@ -115,6 +230,30 @@ runtime_event_test_() ->
 %%%===================================================================
 %%% helpers
 %%%===================================================================
+
+%% Minimal real gen_statem used by the unavailable-reply contract test. Replying
+%% first and then synchronously reading Prolog stats creates a same-sender
+%% mailbox barrier: the notification observed by the test proves append_result/3
+%% already consumed the exact consensus response.
+init({fake_unavailable_simplex, Owner, Ns}) ->
+    {ok, running, #{owner => Owner, ns => Ns, appends => 0}}.
+
+callback_mode() ->
+    handle_event_function.
+
+handle_event(
+  {call, From}, {append, Change, _TransactionCtx}, running,
+  Data = #{owner := Owner, ns := Ns, appends := Count}) ->
+    Reply = {error, not_in_charge, unavailable},
+    gen_statem:reply(From, Reply),
+    Stats = quod_prolog:stats(Ns),
+    Count1 = Count + 1,
+    Owner !
+        {fake_unavailable_append, self(), Count1,
+         Change, Reply, Stats},
+    {keep_state, Data#{appends => Count1}};
+handle_event(_EventType, _EventContent, _State, _Data) ->
+    keep_state_and_data.
 
 
 %% Apply a block as a LIVE commit (the common case these tests simulate). Increment-2 tests that need

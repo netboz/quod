@@ -13,7 +13,11 @@ target the correct proposer per slot. `commits_across_committee` proves a write 
 `follower_relays` proves a non-leader transparently relays a write to its exact target proposer;
 `leader_failover` kills the next slot's leader
 **before it proposes**, so the slot can only advance by a `⅔` **complaint cert → skip** — after which
-the client retries on the rotated proposer. `over_fault_restart_recovers` uses an isolated second
+each origin internally retargets its retained signed submission to the rotated proposer.
+`consensus_commits_with_ingress_down` closes every currently tracked ingress
+stream and proves the live `{log,Ns}` committee still finalizes a leader-local
+write without reopening relay transport.
+`over_fault_restart_recovers` uses an isolated second
 committee to stop two validators (`>f`), keeps the head stalled past Δ, restarts both from their existing
 logs, and proves live finality resumes without a namespace-wide reboot. `quorum(4)=3` tolerates one down
 in normal operation; the latter case validates liveness recovery after deliberately exceeding that bound,
@@ -23,10 +27,12 @@ The Byzantine safety assumption remains at most `f` faulty validators.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
--import(quod_ct, [eventually/2, match_ok/1]).
+-import(quod_ct, [eventually/2, match_ok/1, ordinary_write_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([commits_across_committee/1, follower_relays/1, burst_commits_without_busy/1,
+-export([commits_across_committee/1, follower_relays/1,
+         consensus_commits_with_ingress_down/1,
+         burst_commits_without_busy/1,
          byzantine_retract_rejected/1, byzantine_admit_rejected/1, leader_failover/1,
          over_fault_restart_recovers/1]).
 
@@ -36,7 +42,9 @@ The Byzantine safety assumption remains at most `f` faulty validators.
                            %% pairwise QUIC links (so a healthy slot never spuriously skips), well below the
                            %% `eventually` budgets (so a genuinely stuck slot still skips fast)
 
-all() -> [commits_across_committee, follower_relays, burst_commits_without_busy,
+all() -> [commits_across_committee, follower_relays,
+          consensus_commits_with_ingress_down,
+          burst_commits_without_busy,
           byzantine_retract_rejected, byzantine_admit_rejected, leader_failover,
           over_fault_restart_recovers].
 
@@ -132,7 +140,11 @@ commits_across_committee(Config) ->
     %% quod_prolog answers {error,rebuilding} until its async post-boot replay marks ready; {error,rebuilding}
     %% never reaches consensus, so retrying still yields exactly one committed write (no over-shoot).
     {L2, _} = leader_peer(2, Config),
-    ?assert(eventually(fun() -> match_ok(prove(L2, {assertz, {capital, france, paris}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(L2, {assertz, {capital, france, paris}}))
+              end, 20000)),
     %% the commit propagates: every node reaches height 2 and reads the fact from its OWN kb
     [ begin
           ?assert(eventually(fun() -> slot(Peer) >= 2 end, 15000)),
@@ -150,10 +162,10 @@ commits_across_committee(Config) ->
 follower_relays(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
-    {_LeaderPeer, LeaderPub} = leader_peer(H + 1, Config),
-    %% pick a NON-leader by PUBKEY (element 2) — comparing the peer handle (element 1) would never match
-    %% a pubkey, leaving the leader itself in the candidate set.
-    {FollowerPeer, _} = hd([N || {_, Pub} = N <- Nodes, Pub =/= LeaderPub]),
+    %% `first_seat` is either Floor or Floor+1. Choose an author that leads
+    %% neither so this case cannot accidentally collect locally if the floor's
+    %% proposal becomes visible between height sampling and append routing.
+    {FollowerPeer, _} = relay_only_origin(H + 1, Nodes),
     ?assertMatch({ok, _, _},
                  prove(FollowerPeer, {assertz, {relayed, from_follower}})),
     [ ?assert(eventually(
@@ -161,6 +173,80 @@ follower_relays(Config) ->
                 10000))
       || {Peer, _} <- Nodes ],
     ?assertEqual(H + 1, synced_height(Nodes)).
+
+%% Relay transport is not a prerequisite for ordering. Establish and commit a
+%% real non-leader relay inside this case, then close its tracked ingress
+%% directions. Once every Simplex state has observed the DOWNs, commit a
+%% leader-local write using only the independent consensus streams. No relay
+%% stream should reopen.
+consensus_commits_with_ingress_down(Config) ->
+    Nodes = ?config(nodes, Config),
+    %% Standalone execution has not run `commits_across_committee`: explicitly
+    %% finish recovery and establish the consensus mesh before measuring the
+    %% independent ingress channel. In an ordered run the relay probe may reuse
+    %% a legitimate ingress stream established by the preceding case.
+    WarmHeight = synced_height(Nodes),
+    {WarmLeaderPeer, _WarmLeaderPub} =
+        leader_peer(WarmHeight + 1, Config),
+    WarmFact = {ingress_isolation_warmup, WarmHeight + 1},
+    ?assert(
+       eventually(
+         fun() ->
+                 ordinary_write_ok(
+                   prove(WarmLeaderPeer, {assertz, WarmFact}))
+         end, 20000)),
+    [begin
+         ?assert(
+            eventually(
+              fun() -> match_ok(prove(Peer, WarmFact)) end,
+              10000))
+     end || {Peer, _Pub} <- Nodes],
+    ?assertEqual(WarmHeight + 1, synced_height(Nodes)),
+
+    H0 = synced_height(Nodes),
+    %% As in `follower_relays`, exclude both slots `first_seat` can choose.
+    {RelayOriginPeer, _RelayOriginPub} =
+        relay_only_origin(H0 + 1, Nodes),
+    RelayFact = {ingress_stream_probe, H0 + 1},
+    ?assertMatch(
+       {ok, _, _},
+       prove(RelayOriginPeer, {assertz, RelayFact})),
+    [begin
+         ?assert(
+            eventually(
+              fun() -> match_ok(prove(Peer, RelayFact)) end,
+              10000))
+     end || {Peer, _Pub} <- Nodes],
+    ?assertEqual(H0 + 1, synced_height(Nodes)),
+    ?assert(
+       eventually(
+         fun() -> relay_transport_total(Nodes) > 0 end,
+         5000)),
+    %% More than two relay ticks: the active stream must remain eligible after
+    %% pending/inflight cleanup, not merely survive long enough to carry one
+    %% frame before an allowlist sweep closes it.
+    timer:sleep(700),
+    ?assert(relay_transport_total(Nodes) > 0),
+
+    %% Count and close the current generation in one state snapshot on each
+    %% node, then wait for all state machines to process every DOWN.
+    Closed = close_relay_transport(Nodes),
+    ?assert(lists:sum(Closed) > 0),
+    ?assert(
+       eventually(
+         fun() -> relay_transport_total(Nodes) =:= 0 end,
+         5000)),
+    H = synced_height(Nodes),
+    {LeaderPeer, _LeaderPub} = leader_peer(H + 1, Config),
+    Fact = {consensus_without_ingress, H + 1},
+    ?assertMatch({ok, _, _}, prove(LeaderPeer, {assertz, Fact})),
+    [begin
+         ?assert(
+            eventually(
+              fun() -> match_ok(prove(Peer, Fact)) end, 10000))
+     end || {Peer, _Pub} <- Nodes],
+    ?assertEqual(H + 1, synced_height(Nodes)),
+    ?assertEqual(0, relay_transport_total(Nodes)).
 
 %% A concurrent burst across every validator commits COMPLETELY with ZERO busy
 %% rejections: arrivals that miss a batch park in the bounded ingress queue and drain
@@ -174,7 +260,11 @@ burst_commits_without_busy(Config) ->
     H = synced_height(Nodes),
     {WarmLeader, _} = leader_peer(H + 1, Config),
     ?assert(eventually(
-              fun() -> match_ok(prove(WarmLeader, {assertz, {burst_warmup, ready}})) end,
+              fun() ->
+                      ordinary_write_ok(
+                        prove(WarmLeader,
+                              {assertz, {burst_warmup, ready}}))
+              end,
               20000)),
     [ ?assert(eventually(
                 fun() -> match_ok(prove(Peer, {burst_warmup, {'X'}})) end, 15000))
@@ -221,9 +311,21 @@ total_busy(Nodes) ->
     lists:sum([maps:get(r_busy, peer:call(Peer, quod_simplex, stats, [?NS]), 0)
                || {Peer, _} <- Nodes]).
 
-%% Retry only outcomes that are explicitly safe. In particular, outcome_unknown is
-%% terminal here: retrying it could commit the same non-idempotent goal twice. Busy
-%% also fails the test, whose fleet-wide counter assertion prevents it being hidden.
+close_relay_transport(Nodes) ->
+    [peer:call(Peer, quod_simplex, test_close_relay_transport, [?NS])
+     || {Peer, _Pub} <- Nodes].
+
+relay_transport_total(Nodes) ->
+    lists:sum(
+      [Outbound + Inbound
+       || {Peer, _Pub} <- Nodes,
+          {Outbound, Inbound} <-
+              [peer:call(
+                 Peer, quod_simplex,
+                 test_relay_transport_counts, [?NS])]]).
+
+%% Retry only outcomes that prove the write never entered usable custody.
+%% Slot closure, routing, overload, and ambiguity all fail the test.
 writer_retry(_Peer, _Goal, 0) -> {error, out_of_retries};
 writer_retry(Peer, Goal, N) ->
     case prove(Peer, Goal) of
@@ -232,12 +334,6 @@ writer_retry(Peer, Goal, N) ->
             timer:sleep(50),
             writer_retry(Peer, Goal, N - 1);
         {error, conflict_retry} ->
-            timer:sleep(50),
-            writer_retry(Peer, Goal, N - 1);
-        {error, retry} ->
-            timer:sleep(50),
-            writer_retry(Peer, Goal, N - 1);
-        {error, {not_leader, _}} ->
             timer:sleep(50),
             writer_retry(Peer, Goal, N - 1);
         Other ->
@@ -269,9 +365,10 @@ byzantine_admit_rejected(Config) ->
     Evil = tx([{assert, {{peer_admitted, NewPub, "10.9.9.9", 9000, NewPub}, true}}]),
     assert_membership_proposal_skipped(Config, Evil).
 
-%% Kill the next slot's leader BEFORE it proposes: the slot cannot commit (no proposer), so the three
-%% live validators complain and a ⅔ complaint cert SKIPS it. The stale exact-slot
-%% requests fail immediately, then a fresh submission commits on the rotated proposer.
+%% Kill the next slot's leader BEFORE it proposes: the slot cannot commit (no
+%% proposer), so the three live validators complain and a ⅔ complaint cert
+%% skips it. Each origin retains its exact signed submission and places it on
+%% the rotated proposer without returning a public slot-closure retry.
 leader_failover(Config) ->
     Nodes = ?config(nodes, Config),
     H = synced_height(Nodes),
@@ -280,8 +377,8 @@ leader_failover(Config) ->
     ok   = peer:stop(DeadPeer),
     Live = [N || {_, P} = N <- Nodes, P =/= DeadPub],
     Skips0 = total_skips(Live),
-    %% Submit on every live validator so all three arm demand for slot V. Every
-    %% request names that exact slot; none can commit because its proposer is dead.
+    %% Submit on every live validator so all three arm demand for slot V. None
+    %% can commit there because its proposer is dead; all must survive the skip.
     W = {assertz, {failover, done, yes}},
     Parent = self(),
     Tags =
@@ -295,16 +392,33 @@ leader_failover(Config) ->
     ?assert(eventually(fun() -> total_skips(Live) > Skips0 end, 10000)),
     Results =
         [receive {Tag, Result} -> Result
-         after 15000 -> ct:fail({stale_relay_did_not_finish, Tag})
+         after 15000 ->
+             ct:fail({retained_submission_did_not_finish, Tag})
          end || Tag <- Tags],
-    ?assert(lists:all(fun(Result) -> not match_ok(Result) end, Results)),
+    ?assert(lists:all(fun(Result) -> match_ok(Result) end, Results)),
     {ProbePeer, _} = hd(Live),
-    ?assertNot(match_ok(prove(ProbePeer, {failover, done, {'X'}}))),
+    ?assert(eventually(
+              fun() ->
+                      match_ok(
+                        prove(ProbePeer, {failover, done, {'X'}}))
+              end, 10000)),
     {NextLeader, _} = leader_peer(V + 1, Config),
-    ?assert(eventually(fun() -> match_ok(prove(NextLeader, W)) end, 20000)),
+    After = {assertz, {failover, after_rotation, yes}},
+    ?assert(eventually(
+              fun() -> ordinary_write_ok(prove(NextLeader, After)) end,
+              20000)),
     [ begin
           ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)),
-          ?assert(eventually(fun() -> match_ok(prove(P, {failover, done, {'X'}})) end, 10000))
+          ?assert(eventually(
+                    fun() ->
+                            match_ok(
+                              prove(P, {failover, done, {'X'}}))
+                    end, 10000)),
+          ?assert(eventually(
+                    fun() ->
+                            match_ok(
+                              prove(P, {failover, after_rotation, {'X'}}))
+                    end, 10000))
       end || {P, _} <- Live ],
     ?assert(eventually(
               fun() -> length(lists:usort([slot(P) || {P, _} <- Live])) =:= 1 end,
@@ -343,8 +457,11 @@ over_fault_restart_recovers(Config) ->
         {BaselineLeader, _} =
             lists:keyfind(leader_for(HBase + 1, Nodes0), 2, Nodes0),
         ?assert(eventually(
-                  fun() -> match_ok(prove(BaselineLeader, Ns,
-                                          {assertz, {before_over_f, durable}})) end,
+                  fun() ->
+                          ordinary_write_ok(
+                            prove(BaselineLeader, Ns,
+                                  {assertz, {before_over_f, durable}}))
+                  end,
                   20000)),
         ?assert(eventually(
                   fun() -> lists:all(fun({P, _}) -> slot(P, Ns) >= HBase + 1 end, Nodes0) end,
@@ -366,9 +483,18 @@ over_fault_restart_recovers(Config) ->
                             peer:call(SurvivorPeer, quod_simplex, stats, [Ns]), 0),
         [ok = peer:stop(P) || {P, _} <- Down],
 
-        %% The write reaches the real leader with only 2/4 validators alive. Its caller may time out while
-        %% quorum is absent; consensus still owns the signed proposal and must finish it after recovery.
-        _ = spawn(fun() -> _ = prove(LeaderPeer, Ns, {assertz, {over_f, recovered}}) end),
+        %% The write reaches the real leader with only 2/4 validators alive. Its
+        %% caller may report a typed unknown while quorum is absent; it must
+        %% never receive a retry/redirect that would discard retained custody.
+        Parent = self(),
+        WriteTag = make_ref(),
+        _ = spawn(
+              fun() ->
+                      Parent !
+                          {WriteTag,
+                           prove(LeaderPeer, Ns,
+                                 {assertz, {over_f, recovered}})}
+              end),
         ?assert(eventually(
                   fun() ->
                           LeaderStats = peer:call(
@@ -398,12 +524,31 @@ over_fault_restart_recovers(Config) ->
                                                 match_ok(prove(P, Ns, {over_f, {'X'}}))
                                         end, Nodes1)
                   end, 45000)),
+        InterruptedResult =
+            receive
+                {WriteTag, Result} ->
+                    Result
+            after 40000 ->
+                ct:fail(interrupted_write_caller_did_not_finish)
+            end,
+        case InterruptedResult of
+            {ok, _, _} ->
+                ok;
+            {error, {outcome_unknown, TxId}} when is_binary(TxId) ->
+                ok;
+            OtherInterrupted ->
+                ct:fail(
+                  {invalid_interrupted_write_result, OtherInterrupted})
+        end,
 
         H1 = synced_height(Nodes1, Ns),
         {NextLeader, _} = lists:keyfind(leader_for(H1 + 1, Nodes1), 2, Nodes1),
         ?assert(eventually(
-                  fun() -> match_ok(prove(NextLeader, Ns,
-                                          {assertz, {after_over_f, live}})) end,
+                  fun() ->
+                          ordinary_write_ok(
+                            prove(NextLeader, Ns,
+                                  {assertz, {after_over_f, live}}))
+                  end,
                   20000)),
         ?assert(eventually(
                   fun() -> lists:all(fun({P, _}) -> slot(P, Ns) >= H1 + 1 end, Nodes1) end,
@@ -449,7 +594,11 @@ assert_membership_proposal_skipped(Config, Evil) ->
     ?assert(eventually(fun() -> rejects_total(Nodes) > RejBefore end, 5000)),
     %% the namespace is not wedged: the rotated leader for V+1 commits an honest write
     {L, _} = leader_peer(V + 1, Config),
-    ?assert(eventually(fun() -> match_ok(prove(L, {assertz, {after_byzantine, V}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(L, {assertz, {after_byzantine, V}}))
+              end, 20000)),
     [ ?assert(eventually(fun() -> slot(P) >= V + 1 end, 15000)) || {P, _} <- Nodes ].
 
 %% a raw #transaction carrying an arbitrary diff (the Byzantine submitter path — no admit/remove predicate)
@@ -481,6 +630,12 @@ synced_height(Nodes, Ns) ->
 leader_for(Slot, Nodes) ->
     Sorted = lists:sort(pubs(Nodes)),
     lists:nth(((Slot - 1) rem length(Sorted)) + 1, Sorted).
+
+relay_only_origin(Floor, Nodes) ->
+    PossibleLeaders =
+        [leader_for(Floor, Nodes), leader_for(Floor + 1, Nodes)],
+    hd([Node || {_, Pub} = Node <- Nodes,
+                not lists:member(Pub, PossibleLeaders)]).
 
 leader_peer(Slot, Config) ->
     Nodes = ?config(nodes, Config),

@@ -29,17 +29,40 @@ sends the ACK back. This makes a link to a dead/unreachable peer fail to come up
 so the membership layer's probe correctly evicts it.
 """.
 
--export([start_outbound/6, start_inbound/3, send/2, send_reliable/3, close/1]).
+-export([start_outbound/6, start_inbound/3, send/2, send_ordered/2,
+         send_reliable/3, close/1]).
 
 -ifdef(TEST).
--export([header/2, parse_header/1, frame/1, parse/1]).
+-export([header/2, parse_header/1, frame/1, parse/1,
+         test_fail_next_ordered/2]).
 -endif.
 
 -define(HEADER_TIMEOUT_MS, 5000).
 -define(ACK_TIMEOUT_MS, 5000).   %% opener waits this long for the peer's ACK before failing the link
+-define(ORDERED_SEND_TIMEOUT_MS, 250).
 -define(MAX_FRAME_BYTES, (1 bsl 20)).
 
 -record(s, {conn, sid, channel, peer, buf = <<>>}).
+
+-ifdef(TEST).
+-define(ORDERED_SEND_RESULT(Conn, Sid, Frame, Deadline),
+        test_ordered_send_result(Conn, Sid, Frame, Deadline)).
+-define(TEST_ORDERED_FAILURE_KEY,
+        {?MODULE, test_ordered_failure}).
+-define(OTHER_LOOP_CLAUSES(S),
+        {test_fail_next_ordered, From, Ref, Reason} ->
+            _ = put(?TEST_ORDERED_FAILURE_KEY, Reason),
+            From ! {Ref, armed},
+            loop(S);
+        _Other ->
+            loop(S)).
+-else.
+-define(ORDERED_SEND_RESULT(Conn, Sid, Frame, Deadline),
+        send_until_accepted(Conn, Sid, Frame, Deadline)).
+-define(OTHER_LOOP_CLAUSES(S),
+        _Other ->
+            loop(S)).
+-endif.
 
 %% --- API -----------------------------------------------------------------
 
@@ -86,6 +109,38 @@ start_inbound(Conn, Sid, ConnProc) ->
 send(LinkPid, Payload) ->
     LinkPid ! {send, iolist_to_binary(Payload)},
     ok.
+
+-doc """
+Queue a payload whose successors must never pass it if local QUIC backpressure
+refuses the frame. The link retries transient refusal in mailbox order; if the
+frame is still not accepted within the bound, the link exits so every queued
+successor is discarded and its owner can reconnect and reconstruct the ordered
+prefix from retained state.
+""".
+-spec send_ordered(pid(), iodata()) -> ok.
+send_ordered(LinkPid, Payload) ->
+    LinkPid ! {send_ordered, iolist_to_binary(Payload)},
+    ok.
+
+-ifdef(TEST).
+%% Deterministically exercise the real ordered-send failure/reset/exit arm on
+%% an otherwise real link. The seam exists only in test builds; it changes no
+%% production wire or runtime behavior.
+test_fail_next_ordered(LinkPid, Reason) ->
+    Ref = make_ref(),
+    MRef = monitor(process, LinkPid),
+    LinkPid ! {test_fail_next_ordered, self(), Ref, Reason},
+    receive
+        {Ref, armed} ->
+            demonitor(MRef, [flush]),
+            ok;
+        {'DOWN', MRef, process, LinkPid, DownReason} ->
+            {error, DownReason}
+    after 1000 ->
+        demonitor(MRef, [flush]),
+        {error, timeout}
+    end.
+-endif.
 
 -doc """
 Send one frame and wait until the local QUIC connection accepts it. Transient
@@ -152,9 +207,25 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
             %% pacemaker of consensus latency and must be visible per receiving peer.
             case quic:send_data(Conn, Sid, frame(Payload), false) of
                 ok              -> ok;
-                {error, Reason} -> quod_metrics:count_link_send_drop(S#s.peer, Reason)
+                {error, Reason} ->
+                    quod_metrics:count_link_send_drop(
+                      S#s.peer, S#s.channel, Reason)
             end,
             loop(S);
+        {send_ordered, Payload} ->
+            Deadline =
+                erlang:monotonic_time(millisecond)
+                + ?ORDERED_SEND_TIMEOUT_MS,
+            case ?ORDERED_SEND_RESULT(
+                    Conn, Sid, frame(Payload), Deadline) of
+                ok ->
+                    loop(S);
+                {error, Reason} ->
+                    quod_metrics:count_link_send_drop(
+                      S#s.peer, S#s.channel, Reason),
+                    _ = catch quic:reset_stream(Conn, Sid, 0),
+                    exit({ordered_send_failed, Reason})
+            end;
         {send_reliable, From, Ref, Payload, Deadline} ->
             Result = send_until_accepted(Conn, Sid, frame(Payload), Deadline),
             From ! {Ref, Result},
@@ -162,9 +233,18 @@ loop(S = #s{conn = Conn, sid = Sid}) ->
         close ->
             _ = quic:reset_stream(Conn, Sid, 0),
             exit(normal);
-        _Other ->
-            loop(S)
+        ?OTHER_LOOP_CLAUSES(S)
     end.
+
+-ifdef(TEST).
+test_ordered_send_result(Conn, Sid, Frame, Deadline) ->
+    case erase(?TEST_ORDERED_FAILURE_KEY) of
+        undefined ->
+            send_until_accepted(Conn, Sid, Frame, Deadline);
+        Reason ->
+            {error, Reason}
+    end.
+-endif.
 
 send_until_accepted(Conn, Sid, Frame, Deadline) ->
     case erlang:monotonic_time(millisecond) < Deadline of

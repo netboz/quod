@@ -57,7 +57,7 @@ set -uo pipefail
 : "${TX_BASE_MS:=120}"                      # base delay between a validator's writes
 : "${TX_JITTER_MS:=180}"                    # + a random 0..JITTER ms per write (random pacing)
 : "${TX_PREDICATE:=loadtest}"               # fact predicate; use a fresh name for controlled A/B runs
-: "${WRITER_RETRIES:=16}"                   # bounded not_leader/retry retries per fact (covers a full leader rotation)
+: "${WRITER_RETRIES:=16}"                   # bounded explicit no-apply retries; ordinary slot closure should not consume them
 : "${WRITER_RETRY_MS:=40}"                  # sleep between those retries (a fraction of a slot)
 : "${PARK_TTL_MS:=30000}"                   # must match content.park_ttl_ms on the tested fleet
 : "${WRITER_HTTP_TIMEOUT_S:=}"              # empty => ceil(PARK_TTL_MS/1000)+1; proof time is deliberately excluded

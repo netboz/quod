@@ -93,8 +93,6 @@ fields(content) ->
        hoconsc:mk(integer(),
                   #{default => 25,
                     validator => fun(N) -> N >= 0 andalso N =< 1000 end})}
-    , {ingress_retarget,
-       hoconsc:mk(boolean(), #{default => false})}
     , {ask_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
     , {ask_step_timeout_ms,

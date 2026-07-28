@@ -112,9 +112,11 @@ vote, rebuild, and catch-up. Remaining, gated:
   (d) consider **upstreaming** the §10.1 fix to benoitc. **Rejected (don't revisit):** a loss/PTO-based
   DisconnectTimeout — it false-closes a *live* peer when only the return/ACK path drops.
 - **Stream prioritization for signaling (RFC 9218) — PROMOTED to the agent/runtime substrate plan.** quod
-  already gives each channel its own QUIC stream, so loss-induced head-of-line blocking is avoided, and
-  `quod_quic` now converges channels onto one connection per peer. All those streams still share one congestion
-  window, so feed, ACL, and future client traffic can contend with consensus. The pinned `quic` fork supports
+  gives each channel its own QUIC stream. Relay submit/accepted/result frames now use only the deterministic
+  `{ingress, Ns}` stream, while `{log, Ns}` is consensus-only; an ordered relay reset therefore cannot tear
+  down the consensus stream. `quod_quic` still converges both streams onto one connection per peer, so they
+  share one congestion window and relay, feed, ACL, and future client traffic can still contend with
+  consensus. The pinned `quic` fork supports
   `quic:set_stream_priority/4` (urgency 0–7); Slice 3 must define channel priority classes and prove under load
   that lower-priority producers cannot starve `{log}` consensus signaling. Future RFC 9221 datagrams share the
   same congestion window and pacing even though they do not head-of-line block streams, so they also require
@@ -486,8 +488,9 @@ fixes:
   21 ms to the median (44 to 65 ms) while removing all eight retries. The production
   default is therefore now a per-ontology 25 ms window, with batch-size, collection-wait,
   and caller-retry metrics. This is a measured batching correction, not the final
-  architecture: a later ingress owner should retain and retarget the same signed
-  transaction after a slot closes, instead of asking the client to run Prolog again.
+  architecture. The retained-custody milestone now unconditionally retargets
+  the same signed transaction after a slot closes instead of asking the client
+  to run Prolog again. There is one protocol behavior.
 
   A same-fleet A/B on 2026-07-27 removed the earlier fleet-age caveat. On the
   same aged N=8 committee, 1,920 fixed writes at 25 ms used 140 blocks and 405
@@ -512,11 +515,14 @@ fixes:
   work per pipeline slot. (a)+(b) are medium effort and low risk; (c)/(d) are real
   architecture changes.
 
-  The A/B above makes an ingress split a credible next milestone. Keep detailed probes
-  off by default. Extract the complete ingress contract together: local unsigned submissions,
-  authenticated relay envelopes, per-author sequence order, accepted acknowledgements,
-  result hints, and committee-change barriers must have one owner. The extraction is
-  deliberately staged after the definitive attempt relay and retained-custody semantics; see
+  The dedicated `{ingress, Ns}` stream is now separate from `{log, Ns}`, but both
+  subscriptions still feed the same `quod_simplex` process, so the channel split
+  alone does not reduce its serial mailbox. The next split is process ownership.
+  Keep detailed probes off by default. Extract the complete ingress contract
+  together: local unsigned submissions, authenticated relay envelopes,
+  per-author sequence order, accepted acknowledgements, result hints, and
+  committee-change barriers must have one owner. The extraction is deliberately
+  staged after the definitive attempt relay and retained-custody semantics; see
   [the ingress-owner contract](ingress-owner.md).
 
 - **Adaptive Δ instead of a fixed constant.** Δ is a single compile-time constant. It looks

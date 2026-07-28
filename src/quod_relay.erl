@@ -2,11 +2,13 @@
 -moduledoc """
 Transaction-relay wire framing and bounded completed-result cache.
 
-The outer consensus envelope is decoded once. Relay metadata uses safe ETF;
-ordinary consensus payloads retain the trusted-committee atom posture.
+Relay metadata uses safe ETF. Consensus payloads retain the
+trusted-committee atom posture, but each strict decoder accepts only its
+dedicated transport channel's envelope.
 """.
 
--export([encode/2, decode_frame/2, decode_relay_frame/2,
+-export([encode/2, decode_consensus_frame/2,
+         decode_relay_frame/2,
          put_result/3, prune_results/1]).
 
 -define(MAX_RESULTS, 2048).
@@ -17,17 +19,15 @@ encode(Ns, Relay) ->
     Inner = term_to_binary(Relay, [deterministic]),
     term_to_binary({sx_relay, Ns, Inner}, [deterministic]).
 
--spec decode_frame(binary(), binary()) ->
-        {relay, term()} | {consensus, term()} | error.
-decode_frame(Payload, Ns) ->
+-spec decode_consensus_frame(binary(), binary()) ->
+        {consensus, term()} | error.
+decode_consensus_frame(Payload, Ns) ->
     case decode_outer(Payload, Ns) of
-        {relay, Inner} ->
-            decode_relay_inner(Inner);
         {consensus, Inner} ->
             try {consensus, binary_to_term(Inner)}
             catch _:_ -> error
             end;
-        error ->
+        _ ->
             error
     end.
 

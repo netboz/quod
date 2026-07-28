@@ -7,14 +7,101 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
+## 2026-07-28 — definitive ingress relay stream implemented; final re-review pending
+
+All relay submits, accepted acknowledgements, and results now use the
+deterministic `{ingress, Ns}` QUIC stream. `{log, Ns}` accepts consensus
+envelopes only, `{ingress, Ns}` accepts the bounded relay grammar only, and
+there is no cross-channel fallback. The streams share the existing per-peer
+QUIC connection and congestion window, but an ordered-send timeout resets only
+the relay stream. It can no longer discard proposals, shares, certificates, or
+readiness on the consensus stream. Send-drop telemetry classifies only exact
+deterministic channel identities as `log` or `ingress`; all non-Simplex or
+malformed identities retain visibility under one bounded `other` label.
+
+Relay link-up reconstructs the complete retained author prefix. Recovery and
+link-generation replacement close only affected inbound relay streams, leaving
+consensus generations and readiness intact. Live inbound replacement is
+nonblocking: the superseded process stays monitor-tombstoned until `DOWN`, so
+its queued frames cannot reclaim the current generation. Synchronous close
+waits exist only after the statem has entered `terminate/3`. Relay still runs
+inside `quod_simplex`: both channel subscriptions feed the same statem mailbox.
+The later Stage-3 owner extraction, not this transport split, removes relay
+work from that serial process. The Stage-3 durable
+incarnation/author-sequence lease also remains required for an untrappable
+process or VM kill.
+
+Ingress capability is bounded to current committee peers and exact live
+pending/inflight peers. Removed sources do not receive a stateless durable
+lookup path; their origin-side durable prefix resolves retained custody. The
+sole `custody_ready` index stays O(1) on unrelated mailbox events, and whole
+lane retirement rebuilds it once in a single bounded pass. Duplicate same-pid
+`link_up` notifications are idempotent on both consensus and relay channels.
+A temporary placement refusal restores the exact ready key and seals the
+current drain pass instead of retrying forever in one callback. View, lane,
+author-floor, and relay-pending-count changes wake a later retry. The relay
+peer allowlist is built directly as a map union over committee, pending, and
+inflight ownership: no concatenated peer lists or sort.
+
+Claude's final re-review found one reachable lifecycle mislabel: after the
+origin was removed from the committee, retained custody was released as
+`bad_change`. Both current-capability and current-view rejection now preserve
+the already-issued signed submission until its original deadline; there is no
+redirect, retry, or malformed-workload counter, and the public result remains
+`outcome_unknown`. The adjacent deep-recovery wake now includes the O(1)
+presence bit for `Tree[Approved]`. Committee pruning and recovery invalidation
+also have end-to-end tests proving nonblocking retirement, stale-generation
+rejection, and monitor-`DOWN` tombstone cleanup.
+
+This is one channel contract, with no configuration switch or alternate wire
+path. The implementation is uncommitted. Exact-tree gates are green: EUnit
+494/494, Common Test 47/47, Dialyzer clean, xref clean, script syntax clean,
+dashboard JSON valid, and `git diff --check` clean. Focused evidence includes
+real QUIC same-connection reset isolation, a self-contained four-validator
+commit with every tracked ingress direction down, nonblocking stale-generation
+replacement, both membership-change directions, and bounded refusal/wake
+tests. The follow-up delta is ready for Claude's final read-only review.
+
+## 2026-07-27 — retained custody implemented
+
+Ordinary content writes now enter bounded origin custody immediately after
+signing. Slot exclusion retires only the placement: after the origin durably
+applies the finalized prefix and adopts any committee change, it places the
+same signed submission at the next earliest usable proposer. The caller sees
+neither a slot-closure retry nor a newly signed transaction. Membership changes
+remain the deliberately terminal re-proof class.
+
+The source keeps one ordered author prefix outside the generic consensus
+outbox. Link-up and redrive reconstruct that full prefix in author-sequence
+order. Ordered link sends either enter their dedicated relay stream in mailbox
+order or reset it, so a later sequence cannot pass a locally dropped
+predecessor. Recovery resets only affected relay generations, removes
+future-slot result cache entries, and rejects queued frames from retired link
+processes. Graceful Simplex termination closes tracked links; an untrappable
+process/VM kill still requires the Stage-3 durable incarnation/sequence lease
+and is never reported as safely retryable.
+
+A full test-tree audit removed false-green assumptions from the loopback suites.
+Dead-leader submissions must now survive the complaint skip and all return
+success. Ordinary-write polling retries only `rebuilding` and confirmed OCC
+conflict; `skipped`, `retry`, `not_leader`, overload, and ambiguity fail the
+test. The over-f suite also captures the interrupted caller and permits only
+success or typed `outcome_unknown`. Membership, observer, Byzantine proposal,
+destination-hint, and manually constructed non-custodied cleanup assertions
+remain intentionally distinct. The obsolete `slot_closed` retry metric label
+was removed; membership re-proof is reported as `membership_skipped`.
+
+The retained-custody baseline gates were EUnit 475/475, Common Test 45/45,
+Dialyzer clean, and xref clean. The later relay-stream delta is recorded in the
+newer entry above.
+
 ## 2026-07-27 — attempt-scoped relay safety foundation
 
 The relay now has one definitive wire contract, binding every attempt to its
 `SubmissionId`, `AttemptId`, `CommitteeId`, exact target slot, and target
 validator. Retired short forms and protocol-selection configuration were
-removed rather than retained as compatibility paths. Remote replies are hints
-only: inclusion, exclusion, catch-up, and reseating resolve callers exclusively
-from the origin's durable log.
+removed. Remote replies are hints only: inclusion, exclusion, catch-up, and
+reseating resolve callers exclusively from the origin's durable log.
 
 Destinations reconstruct completed attempts from the exact durable target slot,
 including after restart or demotion. The authenticated peer must equal the
@@ -34,7 +121,8 @@ proposer selection untouched. Post-review gates are green: EUnit 472/472,
 relay-path Common Test 16/16, Dialyzer, and xref; the complete 45-case Common
 Test suite was green immediately before the final ordering fix. This release is
 the safety/recovery prerequisite for retained-custody retargeting; it does not
-yet eliminate public redirects, and `ingress_retarget=true` remains rejected.
+yet eliminate public redirects. Retained custody is the unconditional next
+behavior.
 
 ## 2026-07-27 — same-fleet 25 ms vs 2 ms batch-window A/B
 

@@ -16,7 +16,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -ifdef(TEST).
 -include_lib("eunit/include/eunit.hrl").
 -endif.
--export([eventually/2, stop_all/1, match_ok/1, peer_prove/3,
+-export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
+         peer_prove/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1, wait_until/1, wait_until/2]).
 
@@ -46,6 +47,22 @@ match_ok({badrpc, timeout}) ->
 match_ok({ok, [_ | _], _}) -> true;
 match_ok(_)                -> false.
 
+%% Ordinary writes own their signed submission once accepted. A test may
+%% resubmit only when the first attempt provably never entered custody.
+%% In particular, skipped/retry/not_leader must fail the test: accepting any
+%% of them here would hide a regression back to public slot-closure retries.
+ordinary_write_ok({error, rebuilding}) ->
+    false;
+ordinary_write_ok({error, conflict_retry}) ->
+    false;
+ordinary_write_ok(Result) ->
+    case match_ok(Result) of
+        true ->
+            true;
+        false ->
+            throw({quod_retry_stop, {ordinary_write_failed, Result}})
+    end.
+
 -ifdef(TEST).
 eventually_stops_on_unknown_outcome_test() ->
     TxId = <<"uncertain">>,
@@ -64,6 +81,16 @@ eventually_stops_on_transport_timeout_test() ->
             erlang:error(transport_timeout_was_retried)
     catch
         error:{unsafe_retry, {transport_timeout, peer_call}} ->
+            ok
+    end.
+
+ordinary_write_does_not_retry_slot_closure_test() ->
+    try eventually(
+          fun() -> ordinary_write_ok({error, skipped}) end, 1000) of
+        _ ->
+            erlang:error(slot_closure_was_retried)
+    catch
+        error:{unsafe_retry, {ordinary_write_failed, {error, skipped}}} ->
             ok
     end.
 -endif.

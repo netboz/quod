@@ -78,39 +78,28 @@ outcome_unknown_is_pending_test() ->
        quod_explorer_http:prove_result({error, {outcome_unknown, TxId}})).
 
 %%%===================================================================
-%%% summary ingress observability
+%%% summary committee observability
 %%%===================================================================
 
-ingress_status_json_test() ->
+committee_status_json_test() ->
     CommitteeId = crypto:hash(sha256, <<"committee-view">>),
-    Fields = quod_explorer_http:ingress_status_json(
-               #{committee_id => CommitteeId,
-                 ingress_retarget => true}),
+    Fields = quod_explorer_http:committee_status_json(
+               #{committee_id => CommitteeId}),
     ?assertEqual(
-       #{committee_id => binary:encode_hex(CommitteeId, lowercase),
-         ingress_retarget => true},
+       #{committee_id => binary:encode_hex(CommitteeId, lowercase)},
        Fields),
-    %% Assert the HTTP representation, not only the Erlang map: the retarget
-    %% gate remains a JSON boolean.
+    %% Assert the HTTP representation, not only the Erlang map.
     Decoded = json:decode(quod_explorer_http:encode(Fields)),
-    ?assertEqual(true, maps:get(<<"ingress_retarget">>, Decoded)),
-    ?assertMatch(<<_:64/binary>>, maps:get(<<"committee_id">>, Decoded)),
-    ?assertEqual(
-       #{committee_id => binary:encode_hex(CommitteeId, lowercase),
-         ingress_retarget => false},
-       quod_explorer_http:ingress_status_json(
-         #{committee_id => CommitteeId,
-           ingress_retarget => false})).
+    ?assertMatch(<<_:64/binary>>, maps:get(<<"committee_id">>, Decoded)).
 
-ingress_status_invalid_values_fail_closed_test() ->
+committee_status_invalid_values_fail_closed_test() ->
     ?assertEqual(
-       #{committee_id => null, ingress_retarget => null},
-       quod_explorer_http:ingress_status_json(
-         #{committee_id => <<"not-a-committee-id">>,
-           ingress_retarget => enabled})),
+       #{committee_id => null},
+       quod_explorer_http:committee_status_json(
+         #{committee_id => <<"not-a-committee-id">>})),
     ?assertEqual(
-       #{committee_id => null, ingress_retarget => null},
-       quod_explorer_http:ingress_status_json(#{})).
+       #{committee_id => null},
+       quod_explorer_http:committee_status_json(#{})).
 
 %%%===================================================================
 %%% tx JSON + history paging over a real store

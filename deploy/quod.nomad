@@ -52,12 +52,6 @@ variable "batch_window_ms" {
   description = "Per-ontology time in milliseconds to collect ordinary transactions into one block. 0 seals immediately; 25 is the measured fleet default."
 }
 
-variable "ingress_retarget" {
-  type        = bool
-  default     = false
-  description = "Reserved for retained custody; must remain false until that behavior lands."
-}
-
 variable "ask_timeout_ms" {
   type        = number
   default     = 60000
@@ -264,7 +258,6 @@ content = [
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
-    ingress_retarget = ${var.ingress_retarget}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}
@@ -470,7 +463,6 @@ content = [
     proof_timeout_ms = ${var.proof_timeout_ms}
     park_ttl_ms = ${var.park_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
-    ingress_retarget = ${var.ingress_retarget}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}

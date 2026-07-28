@@ -9,13 +9,15 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([open_link_succeeds/1, message_roundtrip/1, bidirectional_reuse/1,
+         channel_stream_reset_isolated/1,
          non_dialable_node_id/1, unacked_stream_no_link_up/1, dialer_presents_cert/1,
          resolve_and_dial_by_pubkey/1]).
 
 -define(PORT, 14599).
 -define(SELF, {"127.0.0.1", ?PORT}).
 
-all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse, non_dialable_node_id,
+all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
+          channel_stream_reset_isolated, non_dialable_node_id,
           unacked_stream_no_link_up, dialer_presents_cert, resolve_and_dial_by_pubkey].
 
 init_per_suite(Config) ->
@@ -89,6 +91,56 @@ bidirectional_reuse(_Config) ->
         {quod_message, {_, OutLink}, <<"chan-c">>, <<"pong">>} -> ok
     after 5000 ->
         ct:fail(no_pong)
+    end.
+
+%% `{log,Ns}` consensus and `{ingress,Ns}` relay links are distinct streams on
+%% the same QUIC connection. Deterministically force the real relay link through
+%% its ordered-send failure arm: it counts the refusal, resets its actual QUIC
+%% Sid, and exits. Consensus must stay live and deliver after that reset.
+channel_stream_reset_isolated(_Config) ->
+    LogChan = <<"isolation-log">>,
+    IngressChan = <<"isolation-ingress">>,
+    true = quod_reg:subscribe({channel, LogChan}),
+    true = quod_reg:subscribe({channel, IngressChan}),
+    ok = quod_quic:open_link(?SELF, LogChan),
+    LogLink =
+        receive
+            {link_up, ?SELF, LogChan, LogPid} -> LogPid
+        after 5000 ->
+            ct:fail(no_log_link)
+        end,
+    ok = quod_quic:open_link(?SELF, IngressChan),
+    IngressLink =
+        receive
+            {link_up, ?SELF, IngressChan, IngressPid} -> IngressPid
+        after 5000 ->
+            ct:fail(no_ingress_link)
+        end,
+    true = LogLink =/= IngressLink,
+    ok = quod_link:send(LogLink, <<"before-reset">>),
+    receive
+        {quod_message, {_, _}, LogChan, <<"before-reset">>} -> ok
+    after 5000 ->
+        ct:fail(no_log_before_reset)
+    end,
+    IngressRef = monitor(process, IngressLink),
+    ok = quod_link:test_fail_next_ordered(
+           IngressLink, backpressure_timeout),
+    ok = quod_link:send_ordered(
+           IngressLink, <<"forced-ordered-failure">>),
+    receive
+        {'DOWN', IngressRef, process, IngressLink,
+         {ordered_send_failed, backpressure_timeout}} ->
+            ok
+    after 5000 ->
+        ct:fail(ingress_ordered_failure_did_not_reset)
+    end,
+    true = is_process_alive(LogLink),
+    ok = quod_link:send(LogLink, <<"after-reset">>),
+    receive
+        {quod_message, {_, _}, LogChan, <<"after-reset">>} -> ok
+    after 5000 ->
+        ct:fail(consensus_stream_died_with_ingress)
     end.
 
 %% A peer that completes the QUIC handshake but never ACKs the opened stream must

@@ -27,7 +27,7 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
--import(quod_ct, [eventually/2, match_ok/1]).
+-import(quod_ct, [eventually/2, match_ok/1, ordinary_write_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([joiner_catches_up/1, joiner_resumes_after_restart/1, joiner_promoted_to_voter/1,
@@ -63,7 +63,12 @@ init_per_suite(Config) ->
     %% shape), then commit one fact (slot 2).
     Founder = start_node(?FOUNDER_PORT, FKey, Config, founder_cfg()),
     ?assert(eventually(fun() -> slot(Founder) =:= 1 end, 10000)),   %% genesis committed
-    ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, france, paris}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(Founder,
+                              {assertz, {capital, france, paris}}))
+              end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),   %% the fact committed
 
     %% 2. the anchor: the founder's genesis block_hash, delivered to the joiner out-of-band (config), never
@@ -156,7 +161,12 @@ joiner_resumes_after_restart(Config) ->
 
     %% take the joiner down, then commit a second fact (height 3) it cannot have seen.
     ok = peer:stop(Joiner),
-    ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {population, france, 67}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(Founder,
+                              {assertz, {population, france, 67}}))
+              end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
 
     %% restart both on their SAME data_dirs (founder first so it is serving before the joiner resumes).

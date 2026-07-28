@@ -136,36 +136,53 @@ cached, and durable-recovery lookups retain their originally admitted metadata,
 so a later committee transition cannot change an old attempt's meaning. The
 inter-ontology ask symbol codec is never used for transaction relay.
 
-Relay uses the existing authenticated `{log, Ns}` links. The sender computes
-the first slot the submission can still enter and includes that exact target
-slot in the relay frame. The receiver verifies that it is the deterministic
-proposer for the declared slot. It may collect the request or park it until that
-slot opens, but it never derives a replacement destination from its own
-frontier.
+Every relay submit, accepted acknowledgement, and result uses the dedicated
+deterministic `term_to_binary({ingress, Ns}, [deterministic])` channel.
+Consensus uses `{log, Ns}` exclusively. The receiver rejects a relay envelope
+on the consensus channel and a consensus envelope on the ingress channel;
+there is no fallback path.
+
+The two channels are separate authenticated QUIC streams on the same per-peer
+connection. They still share that connection's congestion window, but a bounded
+ordered-send failure resets only the ingress stream and cannot tear down the
+consensus stream. The sender retains every pending submission and reconstructs
+the complete author-ordered prefix when the ingress stream reconnects.
+
+The sender computes the first slot the submission can still enter and includes
+that exact target slot in the relay frame. The receiver verifies that it is the
+deterministic proposer for the declared slot. It may collect the request or
+park it until that slot opens, but it never derives a replacement destination
+from its own frontier.
 
 While an unresolved target slot remains usable, later submissions from the
 same author reuse that destination and slot. If the slot finalizes, matching
-submissions resolve successfully and every remaining relay for it fails
-immediately; queued later sequences can then target the new frontier. This
-preserves signed sequence order without retaining a stale request for a full
-leader rotation.
+submissions resolve successfully. An excluded ordinary submission remains in
+origin custody and becomes eligible for a new placement only after the origin
+has durably applied the whole finalized prefix and adopted any committee
+change. Queued later sequences remain behind it. Membership-changing
+submissions keep their terminal skip/re-proof rule. This preserves signed
+sequence order without exposing slot closure as an ordinary caller retry.
 
 Once a destination holds the request, it sends `relay_accepted`. Before that
 acknowledgement the author retransmits the exact request every 300 ms to recover
-a dropped fire-and-forget link send. After acknowledgement it probes only every
-5 seconds to recover a lost result hint, avoiding request amplification
-during a slow commit. Attempt IDs remain in the receiver's inflight set, so both
-kinds of retransmit are idempotent. Destinations cache completed results for 30
-seconds. After restart, any member with the durable target slot—including a
-former proposer or observer—can reconstruct inclusion or proven exclusion from
-the ledger.
+a lost or reset ingress stream. After acknowledgement it probes only every 5
+seconds to recover a lost result hint, avoiding request amplification during a
+slow commit. Attempt IDs remain in the receiver's inflight set, so both kinds of
+retransmit are idempotent. Destinations cache completed results for 30 seconds.
+After restart, a destination with the durable target slot—including a former
+proposer now serving as an observer—can reconstruct inclusion or proven
+exclusion for a current committee source. A removed source with no exact live
+attempt is rejected before signature verification, cache access, or a ledger
+read; its own durable prefix resolves the retained caller.
 
 Destination results are authenticated hints, not finality evidence. The author
 resolves its pending relay only from its own durable log: inclusion succeeds,
-while target-slot finalization without the submission is a safe retry. A local
-caller deadline cannot cancel a transaction that may already be proposed: it
-returns `{error, {outcome_unknown, TxId}}`. That transaction id must be inspected
-in the ledger/explorer; automatically re-proving a non-idempotent goal is unsafe.
+while target-slot finalization without an ordinary submission retires that
+attempt and places the exact retained signed bytes at the next usable proposer.
+A local caller deadline cannot cancel a transaction that may already be
+proposed: it returns `{error, {outcome_unknown, TxId}}`. That transaction id
+must be inspected in the ledger/explorer; automatically re-proving a
+non-idempotent goal is unsafe.
 
 During an in-flight membership barrier every arrival parks unconditionally:
 the post-adoption schedule is unknowable. A membership change waiting for the
@@ -177,12 +194,12 @@ anchored at the submission's original arrival, so time parked at any hop counts
 against the same budget. Its one-second cleanup margin outlives the Prolog caller
 deadline only to absorb a racing relay result hint; it does not turn an unknown
 caller outcome into a safe retry.
-A submission whose signed sequence falls below the approved floor because a
-newer sequence became final first (for example after a skipped proposal and retry) resolves
-`{error, stale_seq}` — retryable by contract (the origin re-proves and
-re-signs), counted apart from malformed input; it is never a terminal
-rejection. Normal bursts cannot split consecutive sequences across target
-slots: the unresolved relay map is the source-side ordering lane.
+A locally confirmed submission whose signed sequence falls below the approved
+floor resolves `{error, stale_seq}` and requires a new proof/signature; it is
+counted apart from malformed input. The same label from a destination is only
+a hint and cannot release origin custody. Normal operation prevents this race:
+retained submissions and their unresolved relay attempts form one ordered
+source lane, so a later sequence cannot overtake an earlier one.
 
 ## Verification
 

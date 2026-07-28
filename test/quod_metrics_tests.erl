@@ -40,28 +40,56 @@ observe_tx_latency_test() ->
     end.
 
 %% The link-send drop counter makes quod_link's deliberately ignored backpressure
-%% returns visible, classified by reason, labelled by the receiving peer.
+%% returns visible, classified by reason, receiving peer, and a bounded channel
+%% class. Only exact deterministic Simplex channel identities get `log`/`ingress`;
+%% unrelated, malformed, and non-canonical identities all collapse to `other`.
 count_link_send_drop_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     Peer = binary:copy(<<16#ab>>, 32),
-    ok = quod_metrics:count_link_send_drop(Peer, send_queue_full),   %% no process: no-op
+    Ns = <<"drop:test">>,
+    LogChannel = term_to_binary({log, Ns}, [deterministic]),
+    IngressChannel = term_to_binary({ingress, Ns}, [deterministic]),
+    FeedChannel = term_to_binary({feed, Ns}, [deterministic]),
+    %% This decodes to {log, Ns}, but ATOM_EXT is not quod's deterministic
+    %% SMALL_ATOM_UTF8_EXT encoding and therefore must not acquire the log label.
+    NonCanonicalLog =
+        <<131, 104, 2, 100, 0, 3, "log", 109, (byte_size(Ns)):32, Ns/binary>>,
+    ok = quod_metrics:count_link_send_drop(
+           Peer, LogChannel, send_queue_full),   %% no process: no-op
     Placeholder = spawn(fun() -> receive stop -> ok end end),
     true = register(quod_metrics, Placeholder),
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
-        ok = quod_metrics:count_link_send_drop(Peer, {flow_control_blocked, connection}),
-        ok = quod_metrics:count_link_send_drop(Peer, {flow_control_blocked, {stream, 4}}),
-        ok = quod_metrics:count_link_send_drop(Peer, send_queue_full),
-        ok = quod_metrics:count_link_send_drop(Peer, {shutdown, whatever}),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, LogChannel, {flow_control_blocked, connection}),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, IngressChannel, {flow_control_blocked, {stream, 4}}),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, LogChannel, send_queue_full),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, IngressChannel, {shutdown, whatever}),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, FeedChannel, send_queue_full),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, NonCanonicalLog, send_queue_full),
+        ok = quod_metrics:count_link_send_drop(
+               Peer, <<"attacker-selected-label">>, send_queue_full),
         Short = quod_identity:short(Peer),
         ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
-                                                 [Short, <<"flow_control_conn">>])),
+                                                 [Short, <<"log">>,
+                                                  <<"flow_control_conn">>])),
         ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
-                                                 [Short, <<"flow_control_stream">>])),
+                                                 [Short, <<"ingress">>,
+                                                  <<"flow_control_stream">>])),
         ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
-                                                 [Short, <<"queue_full">>])),
+                                                 [Short, <<"log">>,
+                                                  <<"queue_full">>])),
         ?assertEqual(1, prometheus_counter:value(quod_link_send_drops_total,
-                                                 [Short, <<"other">>]))
+                                                 [Short, <<"ingress">>,
+                                                  <<"other">>])),
+        ?assertEqual(3, prometheus_counter:value(quod_link_send_drops_total,
+                                                 [Short, <<"other">>,
+                                                  <<"queue_full">>]))
     after
         Placeholder ! stop
     end.
@@ -159,14 +187,14 @@ batch_and_retry_metrics_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     Ns = <<"batch:test">>,
     ok = quod_metrics:observe_batch(Ns, 4, 25),
-    ok = quod_metrics:count_tx_retry(Ns, slot_closed),
+    ok = quod_metrics:count_tx_retry(Ns, membership_skipped),
     Placeholder = spawn(fun() -> receive stop -> ok end end),
     true = register(quod_metrics, Placeholder),
     try
         ok = quod_metrics:declare(<<"kp_testnode">>),
         ok = quod_metrics:observe_batch(Ns, 4, 25),
         ok = quod_metrics:observe_batch(Ns, 0, -1),
-        ok = quod_metrics:count_tx_retry(Ns, slot_closed),
+        ok = quod_metrics:count_tx_retry(Ns, membership_skipped),
         ok = quod_metrics:count_tx_retry(Ns, stale_sequence),
         ok = quod_metrics:count_tx_retry(Ns, unknown),
         {_, SizeSum} = prometheus_histogram:value(
@@ -176,9 +204,36 @@ batch_and_retry_metrics_test() ->
         ?assertEqual(4, SizeSum),
         ?assertEqual(25, WaitSum),
         ?assertEqual(1, prometheus_counter:value(
-                          quod_tx_retries_total, [Ns, <<"slot_closed">>])),
+                          quod_tx_retries_total,
+                          [Ns, <<"membership_skipped">>])),
         ?assertEqual(1, prometheus_counter:value(
                           quod_tx_retries_total, [Ns, <<"stale_sequence">>]))
+    after
+        Placeholder ! stop
+    end.
+
+%% Custody completion records the number of internal placement hops, including
+%% zero for a first-placement success. Invalid input and an absent metrics
+%% process are silent no-ops because caller completion cannot depend on metrics.
+ingress_custody_metrics_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"custody:test">>,
+    ok = quod_metrics:observe_ingress_retarget_hops(Ns, 2),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_ingress_retarget_hops(Ns, 0),
+        ok = quod_metrics:observe_ingress_retarget_hops(Ns, 2),
+        ok = quod_metrics:observe_ingress_retarget_hops(Ns, -1),
+        {BucketCounts, HopSum} = prometheus_histogram:value(
+                                   quod_consensus_ingress_retarget_hops, [Ns]),
+        ?assertEqual(2, lists:sum(BucketCounts)),
+        ?assertEqual(2, HopSum),
+        RequiredStats = [custody_depth, custody_ready, custody_bytes,
+                         ingress_retargets],
+        ?assertEqual(
+           [], RequiredStats -- quod_metrics:consensus_stat_keys())
     after
         Placeholder ! stop
     end.

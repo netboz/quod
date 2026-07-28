@@ -22,7 +22,8 @@ frame_dispatch_test() ->
          Slot, {ok, Slot}},
     [?assertEqual(
        {relay, Message},
-       quod_relay:decode_frame(quod_relay:encode(Ns, Message), Ns))
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Message), Ns))
      || Message <- [Submit, Accepted, Result]],
     [?assertEqual(
        {relay, Message},
@@ -32,20 +33,25 @@ frame_dispatch_test() ->
     MaxSlotSubmit = setelement(5, Submit, 16#FFFFFFFFFFFFFFFF),
     ?assertEqual(
        {relay, MaxSlotSubmit},
-       quod_relay:decode_frame(
+       quod_relay:decode_relay_frame(
          quod_relay:encode(Ns, MaxSlotSubmit), Ns)),
     ?assertEqual(
        error,
-       quod_relay:decode_frame(quod_relay:encode(Ns, Submit),
-                               <<"other:ontology">>)),
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Submit), <<"other:ontology">>)),
 
     Consensus = {share, example},
     Inner = term_to_binary(Consensus, [deterministic]),
     Frame = term_to_binary({sx, Ns, Inner}, [deterministic]),
     ?assertEqual({consensus, Consensus},
-                 quod_relay:decode_frame(Frame, Ns)),
+                 quod_relay:decode_consensus_frame(Frame, Ns)),
     ?assertEqual(error, quod_relay:decode_relay_frame(Frame, Ns)),
-    ?assertEqual(error, quod_relay:decode_frame(Frame, <<"other">>)).
+    ?assertEqual(
+       error, quod_relay:decode_consensus_frame(Frame, <<"other">>)),
+    ?assertEqual(
+       error,
+       quod_relay:decode_consensus_frame(
+         quod_relay:encode(Ns, Submit), Ns)).
 
 bounded_result_cache_test() ->
     Now = quod_time:mono_ms(),
@@ -79,7 +85,7 @@ frame_shape_rejection_test() ->
          {relay_result, Sid, {ok, Slot}}],
     [?assertEqual(
        error,
-       quod_relay:decode_frame(
+       quod_relay:decode_relay_frame(
          quod_relay:encode(Ns, Unsupported), Ns))
      || Unsupported <- UnsupportedShapes],
     BadSubmits =
@@ -97,7 +103,9 @@ frame_shape_rejection_test() ->
                     {submit, Author, Signature, <<0:(256 * 1024 + 1)/unit:8>>}),
          setelement(7, Submit, [{<<"baggage">>, <<"not-accepted">>}])],
     [?assertEqual(
-       error, quod_relay:decode_frame(quod_relay:encode(Ns, Bad), Ns))
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Bad), Ns))
      || Bad <- BadSubmits],
     Accepted = {relay_accepted, Sid, Aid, CommitteeId, Slot},
     Result = {relay_result, Sid, Aid, CommitteeId, Slot, {ok, Slot}},
@@ -113,5 +121,7 @@ frame_shape_rejection_test() ->
          setelement(6, Result, {ok, 0}),
          setelement(6, Result, {error, unknown})],
     [?assertEqual(
-       error, quod_relay:decode_frame(quod_relay:encode(Ns, Bad), Ns))
+       error,
+       quod_relay:decode_relay_frame(
+         quod_relay:encode(Ns, Bad), Ns))
      || Bad <- BadReplies].

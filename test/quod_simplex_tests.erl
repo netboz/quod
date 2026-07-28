@@ -158,24 +158,6 @@ initial_sync_test() ->
     ?assertEqual(unconfirmed, Init([<<"me">>, <<"b">>])),
     ?assertEqual(unconfirmed, Init([<<"b">>])).
 
-ingress_retarget_gate_validation_test() ->
-    Base = #{node_id => <<0:256>>},
-    ?assertEqual(ok, quod_simplex:test_valid_cfg(Base)),
-    ?assertEqual(
-       {error, ingress_retarget_not_supported},
-       quod_simplex:test_valid_cfg(
-         Base#{ingress_retarget => true})),
-    ?assertEqual(
-       {error, {bad_ingress_retarget, enabled}},
-       quod_simplex:test_valid_cfg(
-         Base#{ingress_retarget => enabled})),
-    Empty = st(#{}),
-    ?assertEqual(false, quod_simplex:test_ingress_gates(Empty)),
-    ?assertEqual(undefined, quod_simplex:test_committee_id(Empty)),
-    ?assertEqual(
-       true,
-       quod_simplex:test_ingress_gates(st(#{ingress_retarget => true}))).
-
 %% is_participant is FACTS-ONLY now — Self ∈ active_validators, with no sync/boot coupling.
 is_participant_test() ->
     P = fun(Self, Vs) -> quod_simplex:is_participant(st(#{self => Self, validators => Vs})) end,
@@ -550,6 +532,81 @@ committee_change_prunes_stale_links_test() ->
         exit(Keep, kill),
         exit(DropOut, kill),
         exit(DropIn, kill)
+    end.
+
+%% Membership pruning uses the same monitored retirement barrier as live
+%% generation replacement. Keep the removed process alive after `close` to
+%% prove the prune itself does not wait, then re-admit its peer before
+%% delivering a queued frame: the tombstone, rather than committee exclusion or
+%% process death, is what prevents the retired pid from reclaiming the stream.
+committee_prune_retirement_is_nonblocking_and_monotonic_test() ->
+    [{Self, _SelfId}, {Peer, _PeerId}] = committee(2),
+    Slot = 3,
+    {OldPid, OldToken} = spawn_stubborn_link(),
+    OldRef = erlang:monitor(process, OldPid),
+    try
+        Removed =
+            st(#{self => Self, validators => [Self],
+                 slot => Slot, approved => Slot, sync => ready,
+                 eng => quod_simplex:eng_with_certs(Slot, []),
+                 inbound_conns => #{Peer => {OldPid, OldRef}},
+                 peer_readiness =>
+                     #{Peer =>
+                           {OldPid, Slot, true,
+                            quod_time:mono_ms()}}}),
+        {PruneUs, Pruned} =
+            timer:tc(
+              fun() ->
+                      quod_simplex:prune_consensus_links(Removed)
+              end),
+        ?assert(PruneUs < 250000),
+        await_stubborn_close_requested(OldPid, OldToken),
+        ?assert(is_process_alive(OldPid)),
+        ?assertEqual(
+           {[], [], [], []},
+           quod_simplex:test_link_peers(Pruned)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(Pruned)),
+
+        %% Make the peer eligible again before its queued old-generation
+        %% readiness arrives. Without the retained tombstone, this live pid
+        %% would be adopted and counted as the new generation.
+        Readmitted =
+            quod_simplex:test_state_set(
+              validators, [Self, Peer], Pruned),
+        LogChan =
+            term_to_binary({log, <<"t">>}, [deterministic]),
+        ReadyPayload =
+            quod_simplex:encode(
+              <<"t">>, {readiness, Slot, true}),
+        AfterStale =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Peer, ignored}, OldPid},
+                 LogChan, ReadyPayload},
+                Readmitted)),
+        {_OutboundAfterStale, InboundAfterStale,
+         _OutboxAfterStale, _DialingAfterStale} =
+            quod_simplex:test_link_peers(AfterStale),
+        ?assertEqual([], InboundAfterStale),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AfterStale)),
+
+        OldDown =
+            release_stubborn_link(OldPid, OldToken, OldRef),
+        AfterOldDown =
+            running_state(
+              quod_simplex:running(
+                info, OldDown, AfterStale)),
+        ?assertEqual(
+           [],
+           quod_simplex:test_retired_inbound(AfterOldDown))
+    after
+        ensure_stubborn_link_closed(OldPid, OldToken)
     end.
 
 %% Exercise every watchdog decision boundary directly: a ready node with quorum complains, a ready node
@@ -1390,10 +1447,10 @@ fork_certs_cannot_coexist_test() ->
     ?assertMatch({ok, _}, quod_simplex:form_cert(commit, 5, BH5, Cmt2, Vals)),       %% child-commit cert forms
     ?assertEqual({error, insufficient}, quod_simplex:form_cert(complaint, 4, none, Cpl2, Vals)).
 
-%% A batch still being COLLECTED (not yet sealed into a proposal) whose slot is complaint-skipped must nack
-%% its parked callers {error, skipped} so they retry at once. Pre-fix, finalize/2 dropped the batch silently
-%% (clear_collecting_le) and the caller heard nothing, hanging until the ~30s park TTL; the former API then
-%% incorrectly reported failure instead of the immediate retryable {error, skipped}.
+%% This is the low-level cleanup path for a manually constructed collection
+%% with raw caller markers and no signed custody. Complaint-skipping its slot
+%% must nack those non-custodied callers instead of leaking them to the park
+%% deadline. Ordinary public writes use custody and are retargeted instead.
 skipped_batch_nacks_its_callers_test() ->
     Ref  = make_ref(),
     From = {self(), Ref},
@@ -1405,9 +1462,9 @@ skipped_batch_nacks_its_callers_test() ->
     after 0 -> ?assert(false)          %% no reply => the caller would hang to the park TTL (the bug)
     end.
 
-%% A competing block can notarize while this leader is still collecting its own batch for the same slot.
-%% The approval frontier then moves past the collection; it must be nacked immediately rather than leaving
-%% a stale batch that makes the next append miss every `collect_append` clause and crash the statem.
+%% The same raw, non-custodied cleanup applies when a competing block notarizes
+%% while the leader is collecting for that slot. The obsolete collection must
+%% be nacked rather than left able to crash the next collect_append.
 competing_notarization_nacks_collected_batch_test() ->
     Ref = make_ref(),
     From = {self(), Ref},
@@ -1446,8 +1503,11 @@ batch_caps_reject_oversized_and_park_test() ->
     ?assertEqual(0, maps:get(r_busy, quod_simplex:stats_map(SParked))),
     %% a change whose tx_id is already in the collecting batch is rejected (no double-apply of one write)
     {keep_state, S1, _} = quod_simplex:running({call, From}, {append, Small}, st(Base)),   %% collect Small
-    {keep_state, _, A3} = quod_simplex:running({call, From}, {append, Small}, S1),          %% same tx_id
-    ?assert(lists:member({reply, From, {error, bad_change}}, A3)).
+    {keep_state, S2, A3} = quod_simplex:running({call, From}, {append, Small}, S1),       %% same tx_id
+    ?assert(lists:member({reply, From, {error, bad_change}}, A3)),
+    %% The rejected second signing attempt cannot leave a dead custody record.
+    [{_SubmissionId, 1, _Submission, {local, 4}, _Deadline, 1}] =
+        quod_simplex:test_custody(S2).
 
 %%%===================================================================
 %%% ingress park queue — park, drain, forward, expire (event-driven ingress)
@@ -1650,8 +1710,9 @@ drain_rechecks_held_authors_after_route_change_test() ->
 
 %% A participant can temporarily lose voting capability while recovering or while a
 %% finality cert arrives before its block. Local unsigned work is refused, but an
-%% authenticated relay transfers custody and is held until readiness returns; re-seat
-%% owns explicit retry replies if recovery replaces the volatile window.
+%% authenticated relay attempt is held until readiness returns. If recovery
+%% replaces that volatile destination window, the source reconnects and replays
+%% its retained ordered prefix; no public retry is synthesized.
 queued_work_survives_temporary_unready_state_test() ->
     Committee = committee(2),
     Validators = pubs(Committee),
@@ -1760,8 +1821,12 @@ drain_forwards_to_next_leader_with_anchored_deadline_test() ->
     ?assertEqual(1, maps:get(ingress_forwarded, quod_simplex:stats_map(Drained))),
     %% the relay is pending toward leader(4) with its deadline anchored at the ORIGINAL
     %% enqueue time — park time counts against the caller's budget, not on top of it
-    {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(Drained),
-    ?assertEqual([TargetLeader], OutboxPeers),
+    ?assertEqual(
+       {[], [], [], []},
+       quod_simplex:test_link_peers(Drained)),
+    ?assertEqual(
+       {[], [], [TargetLeader]},
+       quod_simplex:test_relay_link_peers(Drained)),
     [{_AttemptId, Target, 4, Deadline}] =
         quod_simplex:test_relay_pending(Drained),
     ?assertEqual(TargetLeader, Target),
@@ -1870,17 +1935,25 @@ stale_seq_is_retryable_test() ->
                            [{assert, {{stale, fact}, true}}], {A, IdA}),
     S = st(#{self => A, id => IdA, validators => pubs(Committee), sync => ready,
              slot => 5, approved => 5, eng => quod_simplex:eng_with_certs(0, []),
+             relay_conns => #{A => {self(), make_ref()}},
              author_seqs => #{A => 9}}),   %% committed floor already past seq 2
     {S1, []} = quod_simplex:test_relayed_append(A, Signed, S),
-    %% the relay result frame carrying {error, stale_seq} is queued toward the origin
-    {_, _, OutboxPeers, _} = quod_simplex:test_link_peers(S1),
-    ?assertEqual([A], OutboxPeers),
+    %% The relay result stays on the dedicated ingress stream. Consensus
+    %% transport state remains completely untouched.
+    ?assertMatch(
+       {relay_result, _SubmissionId, _AttemptId, _CommitteeId,
+        _TargetSlot, {error, stale_seq}},
+       receive_relay_control(<<"t">>)),
+    ?assertEqual({[], [], [], []}, quod_simplex:test_link_peers(S1)),
+    ?assertEqual({[A], [], []},
+                 quod_simplex:test_relay_link_peers(S1)),
     %% counted as a ROUTING RACE, never as malformed input — r_bad is the loadtest's
     %% "malformed workload" alarm and must stay quiet for retryable races
     ?assertEqual(1, maps:get(r_stale, quod_simplex:stats_map(S1))),
     ?assertEqual(0, maps:get(r_bad, quod_simplex:stats_map(S1))).
 
-%% reseat (recovery) nacks the whole parked window retryably, like a discarded batch.
+%% Recovery nacks unsigned ingress that has not yet become signed custody. Any
+%% custodied submission is retained and reconstructed separately.
 reseat_nacks_parked_ingress_test() ->
     {Me, Id} = id(),
     From = {self(), make_ref()},
@@ -1892,8 +1965,9 @@ reseat_nacks_parked_ingress_test() ->
     receive {_Ref2, Reply2} -> ?assertEqual({error, skipped}, Reply2)
     after 0 -> ?assert(false) end.
 
-%% Delivery can race the selected slot closing. The receiver rejects the now-stale
-%% placement instead of silently retaining it until another full rotation.
+%% Delivery can race the selected slot closing. The destination rejects that
+%% attempt; the origin treats the response as a hint and retargets its retained
+%% submission after observing local exclusion.
 closed_target_slot_is_rejected_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
@@ -2027,8 +2101,401 @@ relay_lane_creation_rejects_divergent_target_test() ->
                    || {_AttemptId, Target, Slot, _Deadline} <-
                           quod_simplex:test_relay_pending(S2)])),
     ?assertEqual(
-       {error, {relay_lane_conflict, {Target4, 4}, {Target5, 5}}},
-       quod_simplex:test_put_pending_relay(Target5, 5, S2)).
+       {error, {relay_lane_conflict,
+                {Target4, 4, <<0:256>>},
+                {Target5, 5, <<0:256>>}}},
+       quod_simplex:test_put_pending_relay(Target5, 5, S2)),
+    NewCommitteeId = crypto:hash(sha256, <<"new-relay-lane-view">>),
+    NewView =
+        quod_simplex:test_state_set(committee_id, NewCommitteeId, S2),
+    ?assertEqual(
+       {error, {relay_lane_conflict,
+                {Target4, 4, <<0:256>>},
+                {Target4, 4, NewCommitteeId}}},
+       quod_simplex:test_put_pending_relay(Target4, 4, NewView)).
+
+%% A defensive relay-lane conflict cannot classify retained content as skipped.
+%% Keep the exact signed submission ready; once routed onto the extant lane it
+%% must proceed internally without a public reply or a new signature.
+retained_custody_relay_lane_conflict_defers_without_reply_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Leader4 = quod_simplex:leader(4, Validators),
+    Leader5 = quod_simplex:leader(5, Validators),
+    Leader6 = quod_simplex:leader(6, Validators),
+    {Leader4, Leader4Id} = lists:keyfind(Leader4, 1, Committee),
+    From = {self(), make_ref()},
+    S = st(#{self => Leader4, id => Leader4Id,
+             validators => Validators, sync => ready,
+             slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Collected, _BatchActions} =
+        quod_simplex:test_append(From, lt($c, Leader4), S),
+    [{SubmissionId, 1, Submission, {local, 4}, Deadline, 1}] =
+        quod_simplex:test_custody(Collected),
+    Ready0 = quod_simplex:finalize(4, Collected),
+    Ready = quod_simplex:test_state_set(approved, 4, Ready0),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Ready),
+    {ok, WithExistingLane} =
+        quod_simplex:test_put_pending_relay(Leader5, 5, Ready),
+    ExistingPending =
+        quod_simplex:test_relay_pending(WithExistingLane),
+
+    {Deferred, []} =
+        quod_simplex:test_relay_custody(
+          SubmissionId, Leader6, 6, WithExistingLane),
+    ?assertEqual(
+       ExistingPending, quod_simplex:test_relay_pending(Deferred)),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Deferred)),
+    ?assertEqual(0, maps:get(r_bad, quod_simplex:stats_map(Deferred))),
+    assert_no_reply(From),
+
+    %% The restored ready key is live, not merely retained in the custody map.
+    {Retried, []} = quod_simplex:test_drain_custody(Deferred),
+    [{SubmissionId, 1, Submission,
+      {relay, _AttemptId, Leader5, 5, _CommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Retried),
+    ?assertEqual(2, length(quod_simplex:test_relay_pending(Retried))),
+    assert_no_reply(From).
+
+%% A malformed committee view cannot name an exact relay attempt. That is a
+%% temporary placement refusal: the retained envelope must be re-indexed for an
+%% internal retry, never released or reported as malformed/busy.
+retained_custody_malformed_route_view_defers_without_reply_test() ->
+    {Target, From, SubmissionId, Submission, Deadline, Ready} =
+        ready_custody_fixture($d),
+    ValidCommitteeId = quod_simplex:test_committee_id(Ready),
+    MalformedView =
+        quod_simplex:test_state_set(committee_id, <<1>>, Ready),
+
+    %% Exercise the real ready-set drain while the refusal remains unchanged.
+    %% Before the no-progress guard this recursed on the same restored key
+    %% forever inside one consensus callback.
+    {Deferred, []} = drain_custody_within(MalformedView),
+    ?assertEqual([], quod_simplex:test_relay_pending(Deferred)),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Deferred)),
+    DeferredStats = quod_simplex:stats_map(Deferred),
+    ?assertEqual(1, maps:get(custody_ready, DeferredStats)),
+    ?assertEqual(0, maps:get(r_bad, DeferredStats)),
+    ?assertEqual(0, maps:get(r_busy, DeferredStats)),
+    assert_no_reply(From),
+
+    Restored =
+        quod_simplex:test_state_set(
+          committee_id, ValidCommitteeId, Deferred),
+    Retried =
+        running_state(
+          quod_simplex:test_keep_progress_transition(
+            Deferred, Restored)),
+    [{SubmissionId, 1, Submission,
+      {relay, _AttemptId, Target, 5, ValidCommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Retried),
+    ?assertEqual(1, length(quod_simplex:test_relay_pending(Retried))),
+    assert_no_reply(From).
+
+%% Relay-map saturation is capacity pressure, not durable exclusion. Exercise
+%% the exact 2048-entry bound, then remove only that synthetic condition and
+%% prove the re-indexed retained submission drains with unchanged signed bytes.
+retained_custody_relay_capacity_defers_without_reply_test() ->
+    {Target, From, SubmissionId, Submission, Deadline, Ready} =
+        ready_custody_fixture($e),
+    Full =
+        lists:foldl(
+          fun(_, Acc) ->
+                  {ok, Next} =
+                      quod_simplex:test_put_pending_relay(
+                        Target, 5, Acc),
+                  Next
+          end, Ready, lists:seq(1, 2048)),
+    ExistingPending = quod_simplex:test_relay_pending(Full),
+    ?assertEqual(2048, length(ExistingPending)),
+    CommitteeId = quod_simplex:test_committee_id(Full),
+    CustodyAttemptId =
+        quod_transaction:relay_attempt_id(
+          <<"t">>, SubmissionId, CommitteeId, 5, Target),
+    ?assertNot(lists:keymember(CustodyAttemptId, 1, ExistingPending)),
+
+    %% Keep the map exactly full while the real drain runs. It must return
+    %% promptly with the same retained key instead of retrying it in-place.
+    {Deferred, []} = drain_custody_within(Full),
+    ?assertEqual(2048, length(quod_simplex:test_relay_pending(Deferred))),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Deferred)),
+    DeferredStats = quod_simplex:stats_map(Deferred),
+    ?assertEqual(1, maps:get(custody_ready, DeferredStats)),
+    ?assertEqual(0, maps:get(r_bad, DeferredStats)),
+    ?assertEqual(0, maps:get(r_busy, DeferredStats)),
+    assert_no_reply(From),
+
+    [{FreedAttemptId, _FreedTarget, _FreedSlot, _FreedDeadline}
+     | _] = ExistingPending,
+    Relieved =
+        quod_simplex:test_remove_pending_relay(
+          FreedAttemptId, Deferred),
+    ?assertEqual(
+       2047, length(quod_simplex:test_relay_pending(Relieved))),
+    %% Capacity relief leaves the lane and slot unchanged. The pending-count
+    %% component of custody_route_key must nevertheless wake the real
+    %% keep_progress drain and fill the newly available position.
+    Retried =
+        running_state(
+          quod_simplex:test_keep_progress_transition(
+            Deferred, Relieved)),
+    [{SubmissionId, 1, Submission,
+      {relay, _AttemptId, Target, 5, _CommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Retried),
+    ?assertEqual(2048, length(quod_simplex:test_relay_pending(Retried))),
+    assert_no_reply(From).
+
+%% A stale exact attempt collision is distinct from lane divergence: the
+%% retained submission must neither overwrite the pending owner nor release its
+%% caller. Removing that exact entry changes the pending-count route key and
+%% must wake the real keep_progress drain.
+retained_custody_duplicate_attempt_defers_and_wakes_test() ->
+    {Target, From, SubmissionId, Submission, Deadline, Ready} =
+        ready_custody_fixture($f),
+    CommitteeId = quod_simplex:test_committee_id(Ready),
+
+    %% Derive the collision through the real relay-placement path, then copy
+    %% only its opaque pending map onto the original ready state. This avoids a
+    %% test-side reconstruction drifting from the production AttemptId recipe.
+    {Placed, []} =
+        quod_simplex:test_relay_custody(
+          SubmissionId, Target, 5, Ready),
+    [{AttemptId, Target, 5, Deadline}] =
+        quod_simplex:test_relay_pending(Placed),
+    ?assertEqual(
+       quod_transaction:relay_attempt_id(
+         <<"t">>, SubmissionId, CommitteeId, 5, Target),
+       AttemptId),
+    Collision =
+        quod_simplex:test_copy_relay_pending(Placed, Ready),
+
+    {Deferred, []} = drain_custody_within(Collision),
+    ?assertEqual(
+       [{AttemptId, Target, 5, Deadline}],
+       quod_simplex:test_relay_pending(Deferred)),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Deferred)),
+    DeferredStats = quod_simplex:stats_map(Deferred),
+    ?assertEqual(1, maps:get(custody_ready, DeferredStats)),
+    ?assertEqual(0, maps:get(r_bad, DeferredStats)),
+    ?assertEqual(0, maps:get(r_busy, DeferredStats)),
+    assert_no_reply(From),
+
+    Relieved =
+        quod_simplex:test_remove_pending_relay(
+          AttemptId, Deferred),
+    Retried =
+        running_state(
+          quod_simplex:test_keep_progress_transition(
+            Deferred, Relieved)),
+    [{SubmissionId, 1, Submission,
+      {relay, RetriedAttemptId, Target, 5, CommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Retried),
+    ?assertEqual(AttemptId, RetriedAttemptId),
+    ?assertEqual(
+       [{AttemptId, Target, 5, Deadline}],
+       quod_simplex:test_relay_pending(Retried)),
+    assert_no_reply(From).
+
+%% During deep recovery the approved frontier can arrive before its block.
+%% custody_sequence_status/2 must hold in that gap, then the exact transition
+%% from "approved block absent" to "present" must wake keep_progress even
+%% though every ordinary ingress-route component still has the same value.
+retained_custody_approved_block_arrival_wakes_drain_test() ->
+    {Target, From, SubmissionId, Submission, Deadline, Ready0} =
+        ready_custody_fixture($h),
+    {ok, Change} =
+        quod_transaction:decode_verified_submission(
+          <<"t">>, Submission),
+
+    %% Recreate the recovery-only shape: durable H=3, approved H+1=4, but
+    %% the locally retained notarized block for H+1 has not arrived yet.
+    EmptyEng = quod_simplex:eng_new([], 3),
+    Gap0 =
+        quod_simplex:test_state_set(
+          eng, EmptyEng,
+          quod_simplex:test_state_set(
+            approved, 4,
+            quod_simplex:test_state_set(slot, 3, Ready0))),
+    ?assertNot(maps:is_key(4, quod_simplex:eng_tree(EmptyEng))),
+    ?assertEqual(
+       {park, awaiting_turn},
+       quod_simplex:route(
+         drain, {custody, SubmissionId}, Change, Gap0)),
+    {Held, []} = quod_simplex:test_drain_custody(Gap0),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Held)),
+
+    %% Insert the approved block through the real engine. It is below the
+    %% routing Floor (5), contains no membership transition, and has no
+    %% finalizer cert, so ingress_route_key/1 remains identical.
+    RecoveryCommittee = committee(4),
+    B4 = blk(4),
+    {E1, []} =
+        quod_simplex:eng_offer(
+          {block, B4},
+          quod_simplex:eng_new(pubs(RecoveryCommittee), 3)),
+    {RecoveredEng, _} =
+        feed_shares(
+          supports(B4, RecoveryCommittee, 3), E1),
+    ?assert(maps:is_key(
+              4, quod_simplex:eng_tree(RecoveredEng))),
+    Recovered =
+        quod_simplex:test_state_set(eng, RecoveredEng, Held),
+    ?assertNot(quod_simplex:test_ingress_needs_drain(Held, Recovered)),
+    ?assertEqual(
+       {relay, Target, 5},
+       quod_simplex:route(
+         drain, {custody, SubmissionId}, Change, Recovered)),
+
+    Retried =
+        running_state(
+          quod_simplex:test_keep_progress_transition(
+            Held, Recovered)),
+    [{SubmissionId, 1, Submission,
+      {relay, _AttemptId, Target, 5, _CommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Retried),
+    ?assertEqual(1, length(quod_simplex:test_relay_pending(Retried))),
+    assert_no_reply(From).
+
+%% Demotion is not authoritative exclusion: the old exact relay attempt may
+%% already commit under the adopted committee. Retain its immutable submission
+%% to the original deadline, with no redirect, malformed alarm, or public retry.
+retained_custody_demotion_remains_ambiguous_until_deadline_test() ->
+    {Ns, OldCommitteeId, Slot, From, Target, Validators,
+     SubmissionId, AttemptId, _Frame, Sent} =
+        outbound_fixture(<<"custody-demotion">>),
+    [{SubmissionId, 1, Submission,
+      {relay, AttemptId, Target, Slot, OldCommitteeId}, Deadline, 1}] =
+        quod_simplex:test_custody(Sent),
+    {ok, Change = #transaction{author = Author}} =
+        quod_transaction:decode_verified_submission(Ns, Submission),
+
+    %% Also pin the defensive sibling: after custody, a changed local validity
+    %% view is ambiguity, never retroactive bad input.
+    Capable =
+        quod_simplex:test_state_set(validators, [Author], Sent),
+    ?assert(quod_simplex:may_lead(Capable)),
+    ?assertEqual(
+       {park, awaiting_turn},
+       quod_simplex:route(
+         drain, {custody, SubmissionId},
+         Change#transaction{caller_ns = <<"other">>}, Capable)),
+
+    Remaining = lists:delete(Author, Validators),
+    NewCommitteeId =
+        crypto:hash(sha256, <<"custody-demotion-new-view">>),
+    ?assertNotEqual(OldCommitteeId, NewCommitteeId),
+    Demoted =
+        quod_simplex:test_state_set(
+          committee_id, NewCommitteeId,
+          quod_simplex:test_state_set(
+            validators, Remaining, Sent)),
+    {keep_state, Parked, Actions} =
+        quod_simplex:test_keep_progress_transition(Sent, Demoted),
+    ?assertNot(lists:keymember(reply, 1, Actions)),
+    ?assertEqual([], quod_simplex:test_relay_pending(Parked)),
+    ?assertEqual(
+       [{SubmissionId, 1, Submission, ready, Deadline, 1}],
+       quod_simplex:test_custody(Parked)),
+    ParkedStats = quod_simplex:stats_map(Parked),
+    ?assertEqual(1, maps:get(custody_ready, ParkedStats)),
+    ?assertEqual(0, maps:get(r_bad, ParkedStats)),
+    ?assertEqual(0, maps:get(r_redirect, ParkedStats)),
+    ?assertEqual(0, maps:get(r_stale, ParkedStats)),
+    ?assertEqual({Parked, []}, quod_simplex:test_drain_custody(Parked)),
+    assert_no_reply(From),
+
+    Expired = quod_simplex:test_expire_custody(Parked),
+    ?assertEqual([], quod_simplex:test_custody(Expired)),
+    ?assertEqual([], quod_simplex:test_relay_pending(Expired)),
+    receive
+        {Tag, Reply} ->
+            ?assertEqual(element(2, From), Tag),
+            ?assertEqual({error, not_in_charge, unavailable}, Reply)
+    after 0 ->
+        ?assert(false)
+    end,
+    assert_no_reply(From).
+
+ready_custody_fixture(TxSuffix) ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Leader4 = quod_simplex:leader(4, Validators),
+    Target = quod_simplex:leader(5, Validators),
+    {Leader4, Leader4Id} = lists:keyfind(Leader4, 1, Committee),
+    From = {self(), make_ref()},
+    S = st(#{self => Leader4, id => Leader4Id,
+             validators => Validators, sync => ready,
+             slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Collected, _BatchActions} =
+        quod_simplex:test_append(From, lt(TxSuffix, Leader4), S),
+    [{SubmissionId, 1, Submission, {local, 4}, Deadline, 1}] =
+        quod_simplex:test_custody(Collected),
+    Ready =
+        quod_simplex:test_state_set(
+          approved, 4, quod_simplex:finalize(4, Collected)),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Ready),
+    {Target, From, SubmissionId, Submission, Deadline, Ready}.
+
+%% A committee-view change can race a locally collected custody lane before
+%% the normal reconciliation hook retires it. The next ordinary write must wait
+%% unsigned for that transition; a lane mismatch is placement state, not a
+%% malformed transaction and therefore must not increment r_bad or reply.
+committee_view_lane_conflict_parks_without_bad_change_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Me = quod_simplex:leader(4, Validators),
+    {Me, MyId} = lists:keyfind(Me, 1, Committee),
+    OldCommitteeId =
+        crypto:hash(sha256, <<"placement-conflict-old-view">>),
+    NewCommitteeId =
+        crypto:hash(sha256, <<"placement-conflict-new-view">>),
+    From1 = {self(), make_ref()},
+    From2 = {self(), make_ref()},
+    S = st(#{self => Me, id => MyId, validators => Validators,
+             committee_id => OldCommitteeId,
+             sync => ready, slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Collected, _BatchActions} =
+        quod_simplex:test_append(From1, lt($v, Me), S),
+    [{_SubmissionId, 1, _Submission, {local, 4},
+      _Deadline, 1}] =
+        quod_simplex:test_custody(Collected),
+    NewView =
+        quod_simplex:test_state_set(
+          committee_id, NewCommitteeId, Collected),
+    Next = lt($w, Me),
+    ?assertEqual(
+       {park, awaiting_turn},
+       quod_simplex:route(entry, local, Next, NewView)),
+
+    {Parked, []} =
+        quod_simplex:test_append(From2, Next, NewView),
+    [{_SameSubmissionId, 1, _SameSubmission, {local, 4},
+      _SameDeadline, 1}] =
+        quod_simplex:test_custody(Parked),
+    {1, _, #{Me := 1}, [{local, <<"ltw">>, _}]} =
+        quod_simplex:test_ingress(Parked),
+    ?assertEqual(0, maps:get(r_bad, quod_simplex:stats_map(Parked))),
+    {StillParked, _} = quod_simplex:test_drain(Parked),
+    {1, _, #{Me := 1}, [{local, <<"ltw">>, _}]} =
+        quod_simplex:test_ingress(StillParked),
+    ?assertEqual(0, maps:get(r_bad, quod_simplex:stats_map(StillParked))),
+    assert_no_reply(From1),
+    assert_no_reply(From2).
 
 %% A burst stays on one exact-slot lane while that slot is open. Once the local
 %% frontier sees it close, later sequences queue until the old lane resolves.
@@ -2041,8 +2508,14 @@ stable_relay_lane_preserves_author_order_test() ->
     {Me, MyId} = lists:keyfind(Me, 1, Committee),
     S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
              slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, [])}),
-    {Sent1, []} = quod_simplex:test_append({self(), make_ref()}, lt($r, Me), S),
-    [{_, LaneTarget, 4, _}] = quod_simplex:test_relay_pending(Sent1),
+    From1 = {self(), make_ref()},
+    From2 = {self(), make_ref()},
+    {Sent1, []} = quod_simplex:test_append(From1, lt($r, Me), S),
+    [{Attempt1, LaneTarget, 4, Deadline}] =
+        quod_simplex:test_relay_pending(Sent1),
+    [{Submission1, 1, Signed1,
+      {relay, Attempt1, LaneTarget, 4, _CommitteeId}, Deadline, 1}] =
+        quod_simplex:test_custody(Sent1),
     %% Locally, slot 4 closes and a fresh route would now choose leader(5).
     B4 = blk(4),
     {E1, _} = quod_simplex:eng_offer({block, B4}, quod_simplex:eng_new(Validators, 3)),
@@ -2054,18 +2527,378 @@ stable_relay_lane_preserves_author_order_test() ->
        quod_simplex:route(entry, local, lt($x, Me),
                           quod_simplex:test_state_set(eng, E2, S))),
     {Sent2, []} =
-        quod_simplex:test_append({self(), make_ref()}, lt($s, Me), Advanced),
-    [{_, LaneTarget, 4, _}] = quod_simplex:test_relay_pending(Sent2),
+        quod_simplex:test_append(From2, lt($s, Me), Advanced),
+    [{Attempt1, LaneTarget, 4, Deadline}] =
+        quod_simplex:test_relay_pending(Sent2),
     {1, _, _, [{local, <<"lts">>, _}]} = quod_simplex:test_ingress(Sent2),
     Finalized = quod_simplex:finalize(4, Sent2),
     ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
-    receive {_Tag, {error, skipped}} -> ok
-    after 0 -> ?assert(false)
+    [{Submission1, 1, Signed1, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Finalized),
+    assert_no_reply(From1),
+    assert_no_reply(From2),
+
+    %% Retained signed work drains before the later unsigned queue entry. The
+    %% first placement gets a new attempt id but keeps the exact signed envelope
+    %% and original deadline.
+    Open = quod_simplex:test_state_set(
+             outbox, #{},
+             quod_simplex:test_state_set(approved, 4, Finalized)),
+    {Retargeted, []} = quod_simplex:test_drain_custody(Open),
+    [{Attempt2, Target5, 5, Deadline}] =
+        quod_simplex:test_relay_pending(Retargeted),
+    ?assertNotEqual(Attempt1, Attempt2),
+    [{Submission1, 1, Signed1,
+      {relay, Attempt2, Target5, 5, _CommitteeId2}, Deadline, 2}] =
+        quod_simplex:test_custody(Retargeted),
+    {1, _, _, [{local, <<"lts">>, _}]} =
+        quod_simplex:test_ingress(Retargeted),
+
+    %% Only after sequence 1 is placed again may sequence 2 leave the unsigned
+    %% queue; both then share the same exact lane in author order.
+    {SentBoth, []} = quod_simplex:test_drain(Retargeted),
+    {0, 0, _, []} = quod_simplex:test_ingress(SentBoth),
+    ?assertEqual(
+       [1, 2],
+       lists:sort([Seq || {_Id, Seq, _Submission, _Placement,
+                           _Deadline, _Attempts} <-
+                              quod_simplex:test_custody(SentBoth)])),
+    ?assertEqual(
+       [{Target5, 5}, {Target5, 5}],
+       lists:sort([{Target, Slot}
+                   || {_Id, _Seq, _Submission,
+                       {relay, _Attempt, Target, Slot, _View},
+                       _Deadline, _Attempts} <-
+                          quod_simplex:test_custody(SentBoth)])),
+    ?assertEqual(
+       1, maps:get(ingress_retargets,
+                   quod_simplex:stats_map(SentBoth))),
+
+    %% Source submissions never enter the bounded consensus outbox. When the
+    %% link opens, the complete retained prefix is reconstructed from custody
+    %% and emitted in author-sequence order, with the exact signed envelopes.
+    ?assertEqual(#{}, quod_simplex:test_outbox(SentBoth)),
+    RelayChan = quod_simplex:test_relay_chan(SentBoth),
+    {keep_state, Linked, _Actions} =
+        quod_simplex:running(
+          info, {link_up, Target5, RelayChan, self()}, SentBoth),
+    Frames = [receive_ordered_frame(), receive_ordered_frame()],
+    BySeq =
+        maps:from_list(
+          [{Seq, Signed}
+           || {_Id, Seq, Signed, _Placement, _Deadline, _Attempts} <-
+                  quod_simplex:test_custody(SentBoth)]),
+    DecodedPrefix =
+        [begin
+             {relay,
+              {relay_submit, _SubmissionId, _AttemptId, _View,
+               5, Signed, _Carrier}} =
+                 quod_relay:decode_relay_frame(Frame, <<"t">>),
+             {ok, Tx} =
+                 quod_transaction:decode_verified_submission(
+                   <<"t">>, Signed),
+             {Tx#transaction.author_seq, Signed}
+         end || Frame <- Frames],
+    ?assertEqual(
+       [{1, maps:get(1, BySeq)}, {2, maps:get(2, BySeq)}],
+       DecodedPrefix),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Linked)),
+    flush_unordered_link_frames(),
+    assert_no_reply(From1),
+    assert_no_reply(From2).
+
+%% A lane may hold several exact signed placements. Expiring one member must
+%% retain the lane while others remain; finalizing that lane must derive the
+%% complete remaining cohort from custody, make every member ready, and clear
+%% the old lane so the cohort can retarget together.
+same_lane_partial_completion_and_finalization_retargets_cohort_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Target4 = quod_simplex:leader(4, Validators),
+    Target5 = quod_simplex:leader(5, Validators),
+    Me = hd(Validators -- [Target4, Target5]),
+    {Me, MyId} = lists:keyfind(Me, 1, Committee),
+    Base = st(#{self => Me, id => MyId, validators => Validators,
+                sync => ready, slot => 3, approved => 3,
+                eng => quod_simplex:eng_with_certs(3, [])}),
+    ExpiredFrom = {self(), make_ref()},
+    ExpiredAt = quod_time:mono_ms() - 60000,
+    Parked = quod_simplex:test_state_set(
+               ingress,
+               [{local, ExpiredFrom, lt($1, Me), ExpiredAt}],
+               Base),
+    {Sent1, []} = quod_simplex:test_drain(Parked),
+    From2 = {self(), make_ref()},
+    From3 = {self(), make_ref()},
+    From4 = {self(), make_ref()},
+    {Sent2, []} = quod_simplex:test_append(From2, lt($2, Me), Sent1),
+    {Sent3, []} = quod_simplex:test_append(From3, lt($3, Me), Sent2),
+    {Sent4, []} = quod_simplex:test_append(From4, lt($4, Me), Sent3),
+    ?assertEqual(
+       [1, 2, 3, 4],
+       lists:sort(
+         [Seq || {_Id, Seq, _Submission, _Placement,
+                  _Deadline, _Attempts} <-
+                     quod_simplex:test_custody(Sent4)])),
+
+    %% Make slot 4 visibly closed. With a surviving lane, a fresh local write
+    %% must remain behind it instead of independently choosing slot 5.
+    B4 = blk(4),
+    {E1, _} = quod_simplex:eng_offer(
+                {block, B4}, quod_simplex:eng_new(Validators, 3)),
+    {E2, _} = feed_shares(supports(B4, Committee, 3), E1),
+    Visible = quod_simplex:test_state_set(eng, E2, Sent4),
+    {keep_state, OneExpired, _TickActions} =
+        quod_simplex:running({timeout, tick}, tick, Visible),
+    receive
+        {Tag, Reply} when Tag =:= element(2, ExpiredFrom) ->
+            ?assertEqual({error, not_in_charge, unavailable}, Reply)
+    after 0 ->
+        ?assert(false)
     end,
-    {Retried, []} = quod_simplex:test_drain(
-                      quod_simplex:test_state_set(approved, 4, Finalized)),
-    [{_, Target5, 5, _}] = quod_simplex:test_relay_pending(Retried),
-    {0, 0, _, []} = quod_simplex:test_ingress(Retried).
+    Remaining = quod_simplex:test_custody(OneExpired),
+    ?assertEqual([2, 3, 4],
+                 lists:sort([Seq || {_Id, Seq, _Submission, _Placement,
+                                      _Deadline, _Attempts} <- Remaining])),
+    ?assert(
+       lists:all(
+         fun({_Id, _Seq, _Submission,
+              {relay, _Attempt, ActualTarget, 4, _View},
+              _Deadline, 1}) -> ActualTarget =:= Target4;
+            (_) -> false
+         end, Remaining)),
+    ?assertEqual(
+       {park, fifo},
+       quod_simplex:route(
+         entry, local, lt($5, Me), OneExpired)),
+
+    Finalized = quod_simplex:finalize(4, OneExpired),
+    Ready = quod_simplex:test_custody(Finalized),
+    ?assertEqual([2, 3, 4],
+                 lists:sort([Seq || {_Id, Seq, _Submission, ready,
+                                      _Deadline, 1} <- Ready])),
+    ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
+
+    {Retargeted, []} =
+        quod_simplex:test_drain_custody(
+          quod_simplex:test_state_set(approved, 4, Finalized)),
+    RetargetedCustody = quod_simplex:test_custody(Retargeted),
+    ?assertEqual([2, 3, 4],
+                 lists:sort([Seq || {_Id, Seq, _Submission, _Placement,
+                                      _Deadline, _Attempts} <-
+                                         RetargetedCustody])),
+    ?assert(
+       lists:all(
+         fun({_Id, _Seq, _Submission,
+              {relay, _Attempt, ActualTarget, 5, _View},
+              _Deadline, 2}) -> ActualTarget =:= Target5;
+            (_) -> false
+         end, RetargetedCustody)),
+    ?assertEqual(3, length(quod_simplex:test_relay_pending(Retargeted))),
+    assert_no_reply(From2),
+    assert_no_reply(From3),
+    assert_no_reply(From4).
+
+%% Ready custody always precedes this author's later unsigned ingress. In
+%% particular, a large lower sequence that cannot fit the remaining active
+%% batch must stop a later small write that otherwise could join and commit.
+ready_lower_sequence_capacity_block_prevents_local_overtake_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Target4 = quod_simplex:leader(4, Validators),
+    Me = quod_simplex:leader(5, Validators),
+    ?assertNotEqual(Target4, Me),
+    {Me, MyId} = lists:keyfind(Me, 1, Committee),
+    [{FillerAuthor, FillerId} | _] =
+        [Member || {Pub, _} = Member <- Committee, Pub =/= Me],
+    Lower =
+        #transaction{
+           tx_id = <<"ready-lower-large">>, caller_ns = <<"t">>,
+           author = Me, sig = none, read_check = #{},
+           diff =
+               [{assert,
+                 {{blob, binary:copy(<<1>>, 90000)}, true}}]},
+    Filler =
+        signed_tx(
+          <<"t">>, <<"ready-order-filler">>,
+          [{assert, {{blob, binary:copy(<<2>>, 190000)}, true}}],
+          {FillerAuthor, FillerId}),
+    Small =
+        #transaction{
+           tx_id = <<"later-small">>, caller_ns = <<"t">>,
+           author = Me, sig = none, read_check = #{},
+           diff = [{assert, {{later, small}, true}}]},
+    Current =
+        st(#{self => Me, id => MyId, validators => Validators,
+             sync => ready, slot => 4, approved => 4,
+             eng => quod_simplex:eng_with_certs(4, [])}),
+
+    %% The small write genuinely fits beside the filler when no retained lower
+    %% sequence owns priority.
+    {ControlBatch, _} =
+        quod_simplex:test_relayed_append(
+          FillerAuthor, Filler, Current),
+    ?assertEqual(
+       {collect, 5},
+       quod_simplex:route(entry, local, Small, ControlBatch)),
+
+    LowerFrom = {self(), make_ref()},
+    Before =
+        st(#{self => Me, id => MyId, validators => Validators,
+             sync => ready, slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Placed, []} =
+        quod_simplex:test_append(LowerFrom, Lower, Before),
+    [{SubmissionId, 1, Submission, _Placement, Deadline, 1}] =
+        quod_simplex:test_custody(Placed),
+    Ready =
+        quod_simplex:test_state_set(
+          approved, 4, quod_simplex:finalize(4, Placed)),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Ready),
+    {ok, SignedLower} =
+        quod_transaction:decode_verified_submission(
+          <<"t">>, Submission),
+    {WithBatch, _} =
+        quod_simplex:test_relayed_append(
+          FillerAuthor, Filler, Ready),
+    ?assertEqual(
+       {park, awaiting_turn},
+       quod_simplex:route(
+         drain, {custody, SubmissionId}, SignedLower, WithBatch)),
+
+    SmallFrom = {self(), make_ref()},
+    {ParkedSmall, []} =
+        quod_simplex:test_append(SmallFrom, Small, WithBatch),
+    {1, _, #{Me := 1}, [{local, <<"later-small">>, _}]} =
+        quod_simplex:test_ingress(ParkedSmall),
+    {CustodyHeld, []} =
+        quod_simplex:test_drain_custody(ParkedSmall),
+    {StillHeld, []} = quod_simplex:test_drain(CustodyHeld),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(StillHeld),
+    {1, _, #{Me := 1}, [{local, <<"later-small">>, _}]} =
+        quod_simplex:test_ingress(StillHeld),
+    ?assertEqual(1, maps:get(appends, quod_simplex:stats_map(StillHeld))),
+    assert_no_reply(LowerFrom),
+    assert_no_reply(SmallFrom).
+
+%% Membership is the deliberate contrast to retained ordinary writes. Drive
+%% both committee operations (admit/assert and remove/retract) through real
+%% local signing and outbound relay, then close the exact slot: neither
+%% direction may enter custody or retarget, and both retain terminal `skipped`.
+local_membership_exclusion_is_terminal_without_custody_test() ->
+    Ns = <<"t">>,
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Slot = 4,
+    Target = quod_simplex:leader(Slot, Validators),
+    {Me, MyId} =
+        hd([Member || {Pub, _} = Member <- Committee, Pub =/= Target]),
+    {NewMember, _NewMemberId} = id(),
+    RemovedMember = hd(Validators -- [Me]),
+    Cases =
+        [{<<"admit">>, [pa(NewMember)]},
+         {<<"remove">>, [rm(RemovedMember)]}],
+    _ =
+        [begin
+             CommitteeId =
+                 crypto:hash(
+                   sha256,
+                   <<"membership-no-custody-view:", Kind/binary>>),
+             From = {self(), make_ref()},
+             Change =
+                 #transaction{
+                    tx_id =
+                        <<"membership-no-custody-", Kind/binary>>,
+                    caller_ns = Ns, author = Me, sig = none,
+                    read_check = #{}, diff = Diff},
+             S = st(#{self => Me, id => MyId,
+                      validators => Validators,
+                      committee_id => CommitteeId,
+                      relay_conns =>
+                          #{Target => {self(), make_ref()}},
+                      sync => ready, slot => 3, approved => 3,
+                      eng =>
+                          quod_simplex:eng_with_certs(3, [])}),
+
+             {Sent, []} =
+                 quod_simplex:test_append(From, Change, S),
+             Frame = receive_ordered_frame(),
+             {relay,
+              {relay_submit, SubmissionId, AttemptId,
+               CommitteeId, Slot, Submission, _Carrier}} =
+                 quod_relay:decode_relay_frame(Frame, Ns),
+             ?assert(
+                quod_transaction:verify_submission(Submission)),
+             {ok, Signed} =
+                 quod_transaction:decode_verified_submission(
+                   Ns, Submission),
+             ?assert(quod_transaction:verify(Ns, Signed)),
+             ?assertEqual(Me, Signed#transaction.author),
+             ?assertEqual(1, Signed#transaction.author_seq),
+             ?assertEqual(Diff, Signed#transaction.diff),
+             ?assertEqual(
+                SubmissionId,
+                quod_transaction:submission_id(Submission)),
+             [{AttemptId, Target, Slot, _Deadline}] =
+                 quod_simplex:test_relay_pending(Sent),
+             ?assertEqual([], quod_simplex:test_custody(Sent)),
+
+             Finalized = quod_simplex:finalize(Slot, Sent),
+             ?assertEqual(
+                [], quod_simplex:test_relay_pending(Finalized)),
+             ?assertEqual(
+                [], quod_simplex:test_custody(Finalized)),
+             receive
+                 {Tag, Reply} when Tag =:= element(2, From) ->
+                     ?assertEqual({error, skipped}, Reply)
+             after 0 ->
+                 ?assert(false)
+             end,
+             {AfterDrain, []} =
+                 quod_simplex:test_drain_custody(Finalized),
+             ?assertEqual(
+                [], quod_simplex:test_custody(AfterDrain)),
+             ?assertEqual(
+                [], quod_simplex:test_relay_pending(AfterDrain)),
+             assert_no_reply(From)
+         end || {Kind, Diff} <- Cases],
+    ok.
+
+%% A locally collected ordinary write has the same custody semantics as an
+%% outbound relay. Finalizing its slot without inclusion does not answer the
+%% caller; the exact signed submission is placed at the next usable seat.
+local_exclusion_retains_exact_submission_test() ->
+    Committee = committee(4),
+    Validators = pubs(Committee),
+    Leader4 = quod_simplex:leader(4, Validators),
+    Leader5 = quod_simplex:leader(5, Validators),
+    {Leader4, Leader4Id} = lists:keyfind(Leader4, 1, Committee),
+    From = {self(), make_ref()},
+    S = st(#{self => Leader4, id => Leader4Id,
+             validators => Validators, sync => ready,
+             slot => 3, approved => 3,
+             eng => quod_simplex:eng_with_certs(3, [])}),
+    {Collected, _BatchActions} =
+        quod_simplex:test_append(From, lt($l, Leader4), S),
+    [{SubmissionId, 1, Submission, {local, 4}, Deadline, 1}] =
+        quod_simplex:test_custody(Collected),
+
+    Excluded = quod_simplex:finalize(4, Collected),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Excluded),
+    assert_no_reply(From),
+
+    {Placed, []} =
+        quod_simplex:test_drain_custody(
+          quod_simplex:test_state_set(approved, 4, Excluded)),
+    [{AttemptId, Leader5, 5, Deadline}] =
+        quod_simplex:test_relay_pending(Placed),
+    [{SubmissionId, 1, Submission,
+      {relay, AttemptId, Leader5, 5, _CommitteeId}, Deadline, 2}] =
+        quod_simplex:test_custody(Placed),
+    assert_no_reply(From).
 
 %% A request for the next slot may arrive early and wait at that exact proposer;
 %% when the parent approves it enters the intended block without another hop.
@@ -2095,18 +2928,25 @@ future_target_drains_at_declared_slot_test() ->
 
 %% A target refusal is only a recovery hint: a Byzantine destination cannot
 %% make the author retry an attempt that may still commit. The origin's own
-%% finalized slot is the authority that eventually makes the lane retryable.
+%% finalized slot is the authority that makes the retained submission eligible
+%% for an internal placement at the next usable seat.
 stale_target_hint_waits_for_local_finality_test() ->
     Committee = committee(4),
     Validators = pubs(Committee),
     Leader4 = quod_simplex:leader(4, Validators),
-    {Me, MyId} = hd([P || {Pub, _} = P <- Committee, Pub =/= Leader4]),
+    Leader5 = quod_simplex:leader(5, Validators),
+    {Me, MyId} =
+        hd([P || {Pub, _} = P <- Committee,
+                 Pub =/= Leader4, Pub =/= Leader5]),
     From = {self(), make_ref()},
     S = st(#{self => Me, id => MyId, validators => Validators, sync => ready,
              slot => 3, approved => 3, eng => quod_simplex:eng_with_certs(3, []),
              ingress => [{local, From, lt($u, Me), quod_time:mono_ms()}]}),
     {Sent, []} = quod_simplex:test_drain(S),
-    [{AttemptId, Target, 4, _}] = quod_simplex:test_relay_pending(Sent),
+    [{AttemptId, Target, 4, Deadline}] =
+        quod_simplex:test_relay_pending(Sent),
+    [{SubmissionId, 1, Submission, _Placement, Deadline, 1}] =
+        quod_simplex:test_custody(Sent),
     Hinted = quod_simplex:test_relay_result(
                Target, AttemptId, {error, not_in_charge, none}, Sent),
     [{AttemptId, Target, 4, _Deadline, _SlowRetry, true}] =
@@ -2119,11 +2959,18 @@ stale_target_hint_waits_for_local_finality_test() ->
     end,
     Finalized = quod_simplex:finalize(4, Hinted),
     ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
-    receive
-        {Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
-    after 0 ->
-        ?assert(false)
-    end.
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Finalized),
+    assert_no_reply(From),
+    {Retargeted, []} =
+        quod_simplex:test_drain_custody(
+          quod_simplex:test_state_set(approved, 4, Finalized)),
+    [{Attempt2, _Target2, 5, Deadline}] =
+        quod_simplex:test_relay_pending(Retargeted),
+    ?assertNotEqual(AttemptId, Attempt2),
+    [{SubmissionId, 1, Submission, _Placement2, Deadline, 2}] =
+        quod_simplex:test_custody(Retargeted),
+    assert_no_reply(From).
 
 %% Receipt acknowledgement changes relay recovery from the fast 300ms lost-send
 %% loop to a slow result-hint probe. A spoofed acknowledgement from another peer
@@ -2162,11 +3009,15 @@ duplicate_inflight_relay_is_acknowledged_test() ->
         relay_receiver_fixture(<<"duplicate-inflight">>),
     {Accepted, _Actions} = quod_simplex:test_dispatch_relay(
                              Author, Submit, S),
+    ?assertEqual(
+       {relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot},
+       receive_relay_control(Ns)),
     {Acked, []} = quod_simplex:test_dispatch_relay(
                     Author, Submit, Accepted),
     ?assertEqual(
-       [{relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot}],
-       relay_outbox(Ns, Author, Acked)),
+       {relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot},
+       receive_relay_control(Ns)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Acked)),
     ?assertEqual(1, maps:get(relay_duplicates, quod_simplex:stats_map(Acked))).
 
 %% An exact inflight attempt remains answerable after the current committee
@@ -2181,22 +3032,21 @@ inflight_attempt_is_answerable_after_view_change_test() ->
        {[], [AttemptId], []},
        quod_simplex:test_relay_state_keys(Accepted)),
     ?assertEqual(
-       [{relay_accepted, SubmissionId, AttemptId,
-         CommitteeId, Slot}],
-       relay_outbox(Ns, Author, Accepted)),
+       {relay_accepted, SubmissionId, AttemptId,
+        CommitteeId, Slot},
+       receive_relay_control(Ns)),
 
     NewCommitteeId = crypto:hash(sha256, <<"later-view">>),
     Advanced =
         quod_simplex:test_state_set(
-          outbox, #{},
-          quod_simplex:test_state_set(
-            committee_id, NewCommitteeId, Accepted)),
+          committee_id, NewCommitteeId, Accepted),
     {Duplicate, []} =
         quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
     ?assertEqual(
-       [{relay_accepted, SubmissionId, AttemptId,
-         CommitteeId, Slot}],
-       relay_outbox(Ns, Author, Duplicate)),
+       {relay_accepted, SubmissionId, AttemptId,
+        CommitteeId, Slot},
+       receive_relay_control(Ns)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Duplicate)),
     ?assertEqual(
        1, maps:get(relay_duplicates, quod_simplex:stats_map(Duplicate))).
 
@@ -2208,27 +3058,29 @@ cached_result_is_served_after_view_change_test() ->
      SubmissionId, AttemptId, Submit, S} =
         relay_receiver_fixture(<<"serve-cache">>),
     {Accepted, _} = quod_simplex:test_dispatch_relay(Author, Submit, S),
+    ?assertEqual(
+       {relay_accepted, SubmissionId, AttemptId, CommitteeId, Slot},
+       receive_relay_control(Ns)),
     Completed = quod_simplex:finalize(Slot, Accepted),
     ?assertEqual(
        {[], [], [AttemptId]},
        quod_simplex:test_relay_state_keys(Completed)),
-    ?assertMatch(
-       [{relay_result, SubmissionId, AttemptId, CommitteeId,
-         Slot, {error, skipped}} | _],
-       relay_outbox(Ns, Author, Completed)),
+    ?assertEqual(
+       {relay_result, SubmissionId, AttemptId, CommitteeId,
+        Slot, {error, skipped}},
+       receive_relay_control(Ns)),
 
     Advanced =
         quod_simplex:test_state_set(
-          outbox, #{},
-          quod_simplex:test_state_set(
-            committee_id, crypto:hash(sha256, <<"post-cache-view">>),
-            Completed)),
+          committee_id, crypto:hash(sha256, <<"post-cache-view">>),
+          Completed),
     {Replayed, []} =
         quod_simplex:test_dispatch_relay(Author, Submit, Advanced),
     ?assertEqual(
-       [{relay_result, SubmissionId, AttemptId, CommitteeId,
-         Slot, {error, skipped}}],
-       relay_outbox(Ns, Author, Replayed)).
+       {relay_result, SubmissionId, AttemptId, CommitteeId,
+        Slot, {error, skipped}},
+       receive_relay_control(Ns)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Replayed)).
 
 %% Destination relay caches are volatile. After a restart, the durable target
 %% slot is the authority: an included SubmissionId reconstructs the exact
@@ -2275,12 +3127,13 @@ destination_restart_reconstructs_committed_result_test() ->
             quod_simplex:running(
               info,
               {quod_message, {{Author, ignored}, self()},
-               undefined, Payload},
+               quod_simplex:test_relay_chan(Observer), Payload},
               Observer),
         ?assertEqual(
-           [{relay_result, SubmissionId, AttemptId, CommitteeId,
-             Slot, {ok, Slot}}],
-           relay_outbox(Ns, Author, Reconstructed)),
+           {relay_result, SubmissionId, AttemptId, CommitteeId,
+            Slot, {ok, Slot}},
+           receive_relay_control(Ns)),
+        ?assertEqual(#{}, quod_simplex:test_outbox(Reconstructed)),
         ?assertEqual(
            {[], [], [AttemptId]},
            quod_simplex:test_relay_state_keys(Reconstructed))
@@ -2326,6 +3179,7 @@ non_author_replay_cannot_poison_or_read_result_cache_test() ->
                        RejectedBeforeLookup)),
         ?assertEqual(#{},
                      quod_simplex:test_outbox(RejectedBeforeLookup)),
+        assert_no_relay_control(),
 
         {Recovered, []} =
             quod_simplex:test_dispatch_relay(
@@ -2333,11 +3187,11 @@ non_author_replay_cannot_poison_or_read_result_cache_test() ->
         ?assertEqual({[], [], [AttemptId]},
                      quod_simplex:test_relay_state_keys(Recovered)),
         ?assertEqual(
-           [{relay_result, SubmissionId, AttemptId, CommitteeId,
-             Slot, {ok, Slot}}],
-           relay_outbox(Ns, Author, Recovered)),
+           {relay_result, SubmissionId, AttemptId, CommitteeId,
+            Slot, {ok, Slot}},
+           receive_relay_control(Ns)),
 
-        Cached = quod_simplex:test_state_set(outbox, #{}, Recovered),
+        Cached = Recovered,
         CachedEntries = quod_simplex:test_relay_result_entries(Cached),
         {RejectedCachedReplay, []} =
             quod_simplex:test_dispatch_relay(Target, Submit, Cached),
@@ -2345,7 +3199,8 @@ non_author_replay_cannot_poison_or_read_result_cache_test() ->
                      quod_simplex:test_relay_result_entries(
                        RejectedCachedReplay)),
         ?assertEqual(#{},
-                     quod_simplex:test_outbox(RejectedCachedReplay))
+                     quod_simplex:test_outbox(RejectedCachedReplay)),
+        assert_no_relay_control()
     after
         quod_ledger_store:close(Store1),
         file:del_dir_r(Dir)
@@ -2391,6 +3246,10 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
                 quod_simplex:test_reply_relay(
                   Author, SeedSubmissionId, SeedAttemptId, CommitteeId,
                   Slot, {error, skipped}, Durable))),
+        ?assertEqual(
+           {relay_result, SeedSubmissionId, SeedAttemptId, CommitteeId,
+            Slot, {error, skipped}},
+           receive_relay_control(Ns)),
         [{SeedAttemptId, {error, skipped}, ExpiredAt}] =
             quod_simplex:test_relay_result_entries(WithExpiredResult),
         ?assert(ExpiredAt =< quod_time:mono_ms()),
@@ -2403,6 +3262,7 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
         ?assertEqual(
            {[], [], [SeedAttemptId]},
            quod_simplex:test_relay_state_keys(Rejected)),
+        assert_no_relay_control(),
 
         %% The observer mailbox uses the same guarded recovery path after a
         %% proposer is demoted; it must not reintroduce the pre-verify lookup.
@@ -2415,7 +3275,7 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
             quod_simplex:running(
               info,
               {quod_message, {{Author, ignored}, self()},
-               undefined, Payload},
+               quod_simplex:test_relay_chan(Observer), Payload},
               Observer),
         ?assertEqual(
            quod_simplex:test_relay_result_entries(Observer),
@@ -2423,8 +3283,8 @@ invalid_signature_precedes_cache_and_durable_recovery_test() ->
         ?assertEqual(
            {[], [], [SeedAttemptId]},
            quod_simplex:test_relay_state_keys(ObserverRejected)),
-        ?assertEqual(
-           [], relay_outbox(Ns, Author, ObserverRejected))
+        ?assertEqual(#{}, quod_simplex:test_outbox(ObserverRejected)),
+        assert_no_relay_control()
     after
         quod_ledger_store:close(Store1),
         file:del_dir_r(Dir)
@@ -2453,9 +3313,10 @@ destination_restart_reconstructs_excluded_result_test() ->
         {Reconstructed, []} =
             quod_simplex:test_dispatch_relay(Author, Submit, Restarted),
         ?assertEqual(
-           [{relay_result, SubmissionId, AttemptId, CommitteeId,
-             Slot, {error, not_in_charge, none}}],
-           relay_outbox(Ns, Author, Reconstructed)),
+           {relay_result, SubmissionId, AttemptId, CommitteeId,
+            Slot, {error, not_in_charge, none}},
+           receive_relay_control(Ns)),
+        ?assertEqual(#{}, quod_simplex:test_outbox(Reconstructed)),
         ?assertEqual(
            {[], [], [AttemptId]},
            quod_simplex:test_relay_state_keys(Reconstructed))
@@ -2469,7 +3330,7 @@ destination_restart_reconstructs_excluded_result_test() ->
 %% slot 5 contains this node's outbound signed submission. Recovery resolves
 %% both from durable SubmissionIds before discarding the volatile window.
 catchup_window_settles_inbound_and_outbound_relays_test() ->
-    {Ns, CommitteeId, InboundSlot = 4, Author, _AuthorId, Self, _Validators,
+    {Ns, CommitteeId, InboundSlot = 4, Author, _AuthorId, Self, Validators,
      InboundSubmissionId, InboundAttemptId,
      {relay_submit, InboundSubmissionId, InboundAttemptId, CommitteeId,
       InboundSlot, InboundSubmission, _InboundCarrier} = InboundSubmit,
@@ -2498,24 +3359,36 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
         ?assertEqual(
            {[], [InboundAttemptId], []},
            quod_simplex:test_relay_state_keys(WithInbound)),
+        ?assertEqual(
+           {relay_accepted, InboundSubmissionId, InboundAttemptId,
+            CommitteeId, InboundSlot},
+           receive_relay_control(Ns)),
 
         %% Once slot 4 is visibly proposed, the earliest usable seat is slot 5.
         %% Clear only captured wire output so the later result assertion is
         %% independent of the initial accepted acknowledgement.
         SourceFrom = {self(), make_ref()},
         SourceChange = lt($w, Self),
+        ExpectedSourceTarget =
+            quod_simplex:leader(InboundSlot + 1, Validators),
         {WithSource, []} =
             quod_simplex:test_append(
               SourceFrom, SourceChange,
-              quod_simplex:test_state_set(outbox, #{}, WithInbound)),
+              quod_simplex:test_state_set(
+                relay_conns,
+                #{Author => {self(), make_ref()},
+                  ExpectedSourceTarget => {self(), make_ref()}},
+                quod_simplex:test_state_set(
+                  outbox, #{}, WithInbound))),
         [{SourceAttemptId, SourceTarget, 5, _Deadline}] =
             quod_simplex:test_relay_pending(WithSource),
-        [SourceFrame] =
-            maps:get(SourceTarget, quod_simplex:test_outbox(WithSource)),
+        ?assertEqual(ExpectedSourceTarget, SourceTarget),
+        ?assertEqual(#{}, quod_simplex:test_outbox(WithSource)),
+        SourceFrame = receive_ordered_frame(),
         {relay,
          {relay_submit, SourceSubmissionId, SourceAttemptId, CommitteeId,
           5, SourceSubmission, _SourceCarrier}} =
-            quod_relay:decode_frame(SourceFrame, Ns),
+            quod_relay:decode_relay_frame(SourceFrame, Ns),
         {ok, SourceTx} =
             quod_transaction:decode_verified_submission(
               Ns, SourceSubmission),
@@ -2527,9 +3400,16 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
              #entry{index = 5,
                     data = quod_ledger:data([SourceTx]),
                     timestamp = 5}],
+        %% Drop only the source-submission link. The destination's result uses
+        %% its independent relay-only link back to the original author.
+        SourceOffline =
+            quod_simplex:test_state_set(
+              relay_conns,
+              #{Author => {self(), make_ref()}},
+              WithSource),
         {Recovered, ok} =
             quod_simplex:test_apply_catchup_window(
-              recovery, Entries, WithSource),
+              recovery, Entries, SourceOffline),
 
         receive
             {SourceTag, {ok, 5}} ->
@@ -2537,11 +3417,10 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
         after 0 ->
             ?assert(false)
         end,
-        ?assert(
-           lists:member(
-             {relay_result, InboundSubmissionId, InboundAttemptId,
-              CommitteeId, 4, {ok, 4}},
-             relay_outbox(Ns, Author, Recovered))),
+        ?assertEqual(
+           {relay_result, InboundSubmissionId, InboundAttemptId,
+            CommitteeId, 4, {ok, 4}},
+           receive_relay_control(Ns)),
         ?assertEqual(
            {[], [], [InboundAttemptId]},
            quod_simplex:test_relay_state_keys(Recovered)),
@@ -2559,6 +3438,722 @@ catchup_window_settles_inbound_and_outbound_relays_test() ->
         file:del_dir_r(Dir)
     end.
 
+%% The protocol cutover is definitive: `{log,Ns}` accepts consensus only and
+%% `{ingress,Ns}` accepts relay only. Neither wrong-channel frame may even
+%% replace the other channel's authenticated generation.
+relay_channel_cutover_is_strict_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     SubmissionId, AttemptId, Submit, Initial} =
+        relay_receiver_fixture(<<"strict-relay-channel">>),
+    LogChan = term_to_binary({log, Ns}, [deterministic]),
+    RelayChan = quod_simplex:test_relay_chan(Initial),
+    RelayPayload = quod_relay:encode(Ns, Submit),
+    ConsensusPayload =
+        quod_simplex:encode(
+          Ns, {readiness, Slot - 1, true}),
+
+    RelayOnLog =
+        running_state(
+          quod_simplex:running(
+            info,
+            {quod_message, {{Author, ignored}, self()},
+             LogChan, RelayPayload},
+            Initial)),
+    ?assertEqual(Initial, RelayOnLog),
+    ConsensusOnRelay =
+        running_state(
+          quod_simplex:running(
+            info,
+            {quod_message, {{Author, ignored}, self()},
+             RelayChan, ConsensusPayload},
+            RelayOnLog)),
+    ?assertEqual(Initial, ConsensusOnRelay),
+    assert_no_relay_control(),
+
+    Accepted =
+        running_state(
+          quod_simplex:running(
+            info,
+            {quod_message, {{Author, ignored}, self()},
+             RelayChan, RelayPayload},
+            ConsensusOnRelay)),
+    ?assertEqual(
+       {[], [AttemptId], []},
+       quod_simplex:test_relay_state_keys(Accepted)),
+    ?assertEqual(
+       {relay_accepted, SubmissionId, AttemptId,
+        CommitteeId, Slot},
+       receive_relay_control(Ns)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Accepted)).
+
+%% A former committee member that owns neither a current destination attempt
+%% nor an origin-side pending attempt has no relay capability. Reject it at the
+%% authenticated ingress mailbox boundary, close that stream, and do not even
+%% prune an expired cache entry (which would prove dispatch was reached).
+removed_relay_source_is_rejected_before_dispatch_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, _Target, Validators,
+     _SubmissionId, _AttemptId, Submit, Initial} =
+        relay_receiver_fixture(<<"removed-relay-source">>),
+    SeedSubmissionId = <<16#C1:128>>,
+    SeedAttemptId = <<16#C2:128>>,
+    Seeded =
+        quod_simplex:test_expire_relay_results(
+          quod_simplex:test_reply_relay(
+            Author, SeedSubmissionId, SeedAttemptId, CommitteeId,
+            Slot, {error, skipped}, Initial)),
+    ?assertEqual(
+       {relay_result, SeedSubmissionId, SeedAttemptId, CommitteeId,
+        Slot, {error, skipped}},
+       receive_relay_control(Ns)),
+    Removed =
+        quod_simplex:test_state_set(
+          validators, Validators -- [Author], Seeded),
+    ?assert(quod_simplex:is_participant(Removed)),
+    {InLink, Token} = spawn_close_aware_link(),
+    Payload = quod_relay:encode(Ns, Submit),
+    {keep_state, Rejected} =
+        quod_simplex:running(
+          info,
+          {quod_message, {{Author, ignored}, InLink},
+           quod_simplex:test_relay_chan(Removed), Payload},
+          Removed),
+    await_link_closed(InLink, Token),
+    ?assertEqual(Removed, Rejected),
+    [{SeedAttemptId, {error, skipped}, ExpiredAt}] =
+        quod_simplex:test_relay_result_entries(Rejected),
+    ?assert(ExpiredAt =< quod_time:mono_ms()),
+    assert_no_relay_control().
+
+%% quod_conn may resolve several open_link waiters with the same stream pid.
+%% Repeating that exact link_up is idempotent on both channels: it neither
+%% replaces the maps nor closes the already-adopted live stream.
+duplicate_same_pid_link_up_is_idempotent_test() ->
+    [{Self, _SelfId}, {Peer, _PeerId}] = committee(2),
+    {Consensus, ConsensusToken} = spawn_close_aware_link(),
+    {Relay, RelayToken} = spawn_close_aware_link(),
+    try
+        S =
+            st(#{self => Self, validators => [Self, Peer],
+                 sync => ready, slot => 3, approved => 3,
+                 eng => quod_simplex:eng_with_certs(3, []),
+                 conns =>
+                     #{Peer =>
+                           {Consensus,
+                            erlang:monitor(process, Consensus)}},
+                 relay_conns =>
+                     #{Peer =>
+                           {Relay,
+                            erlang:monitor(process, Relay)}}}),
+        LogChan = term_to_binary({log, <<"t">>}, [deterministic]),
+        RelayChan = quod_simplex:test_relay_chan(S),
+        AfterConsensus =
+            running_state(
+              quod_simplex:running(
+                info, {link_up, Peer, LogChan, Consensus}, S)),
+        AfterRelay =
+            running_state(
+              quod_simplex:running(
+                info, {link_up, Peer, RelayChan, Relay},
+                AfterConsensus)),
+        ?assertEqual(
+           quod_simplex:test_link_peers(S),
+           quod_simplex:test_link_peers(AfterRelay)),
+        ?assertEqual(
+           quod_simplex:test_relay_link_peers(S),
+           quod_simplex:test_relay_link_peers(AfterRelay)),
+        assert_link_not_closed(Consensus, ConsensusToken),
+        assert_link_not_closed(Relay, RelayToken)
+    after
+        ensure_close_aware_link_closed(Consensus, ConsensusToken),
+        ensure_close_aware_link_closed(Relay, RelayToken)
+    end.
+
+%% Relay pruning keeps the union of committee, outbound-attempt, and inbound-
+%% attempt owners. In particular, subtracting Self must not bind over the later
+%% unions: that precedence bug removed an active peer when the same peer also
+%% appeared in relay_pending, and discarded inflight-only peers entirely.
+relay_pruning_retains_pending_and_inflight_owners_test() ->
+    [{Self, SelfId}, {ActivePeer, _ActiveId},
+     {InflightPeer, InflightId}] = committee(3),
+    {ActivePid, ActiveToken} = spawn_stubborn_link(),
+    {InflightPid, InflightToken} = spawn_stubborn_link(),
+    try
+        Base =
+            st(#{self => Self, id => SelfId,
+                 validators => [Self, ActivePeer],
+                 sync => ready, slot => 3, approved => 3,
+                 eng => quod_simplex:eng_with_certs(3, []),
+                 relay_conns =>
+                     #{ActivePeer =>
+                           {ActivePid,
+                            erlang:monitor(process, ActivePid)},
+                       InflightPeer =>
+                           {InflightPid,
+                            erlang:monitor(process, InflightPid)}},
+                 relay_dialing =>
+                     #{ActivePeer => 101, InflightPeer => 202}}),
+        {ok, WithPending} =
+            quod_simplex:test_put_pending_relay(
+              ActivePeer, 4, Base),
+        InflightTx =
+            signed_tx(
+              <<"t">>, <<"prune-inflight-owner">>,
+              [{assert, {{prune, inflight_owner}, true}}],
+              {InflightPeer, InflightId}),
+        {relayed, InflightRef} =
+            quod_simplex:test_relay_origin(
+              InflightPeer, 4, InflightTx, WithPending),
+        InflightKey = make_ref(),
+        Owned =
+            quod_simplex:test_state_set(
+              relay_inflight,
+              #{InflightKey => InflightRef},
+              WithPending),
+        [{_PendingAttemptId, ActivePeer, 4, _Deadline}] =
+            quod_simplex:test_relay_pending(Owned),
+        {[_PendingKey], [InflightKey], []} =
+            quod_simplex:test_relay_state_keys(Owned),
+
+        Pruned = quod_simplex:test_prune_relay_links(Owned),
+        ExpectedPeers = lists:sort([ActivePeer, InflightPeer]),
+        ?assertEqual(
+           {ExpectedPeers, [], ExpectedPeers},
+           quod_simplex:test_relay_link_peers(Pruned)),
+        assert_stubborn_link_not_closed(ActivePid, ActiveToken),
+        assert_stubborn_link_not_closed(InflightPid, InflightToken)
+    after
+        ensure_stubborn_link_closed(ActivePid, ActiveToken),
+        ensure_stubborn_link_closed(InflightPid, InflightToken)
+    end.
+
+%% An ordered-send failure kills only the dedicated ingress stream. Its DOWN
+%% and link_error events cannot remove consensus links, readiness, queued
+%% evidence, or consensus dial state.
+relay_transport_failure_isolated_from_consensus_test() ->
+    [{Self, _SelfId}, {Peer, _PeerId}] = committee(2),
+    {ConsensusOut, ConsensusOutToken} = spawn_close_aware_link(),
+    {ConsensusIn, ConsensusInToken} = spawn_close_aware_link(),
+    {RelayOut, RelayOutToken} = spawn_close_aware_link(),
+    {RelayIn, RelayInToken} = spawn_close_aware_link(),
+    try
+        S =
+            st(#{self => Self, validators => [Self, Peer],
+                 sync => ready, slot => 3, approved => 3,
+                 eng => quod_simplex:eng_with_certs(3, []),
+                 conns =>
+                     #{Peer =>
+                           {ConsensusOut,
+                            erlang:monitor(process, ConsensusOut)}},
+                 inbound_conns =>
+                     #{Peer =>
+                           {ConsensusIn,
+                            erlang:monitor(process, ConsensusIn)}},
+                 peer_readiness =>
+                     #{Peer =>
+                           {ConsensusIn, 3, true,
+                            quod_time:mono_ms()}},
+                 outbox => #{Peer => [<<"consensus-evidence">>]},
+                 dialing => #{Peer => 101},
+                 relay_conns =>
+                     #{Peer =>
+                           {RelayOut,
+                            erlang:monitor(process, RelayOut)}},
+                 relay_inbound_conns =>
+                     #{Peer =>
+                           {RelayIn,
+                            erlang:monitor(process, RelayIn)}},
+                 relay_dialing => #{Peer => 202}}),
+        AfterDown =
+            running_state(
+              quod_simplex:running(
+                info,
+                {'DOWN', make_ref(), process, RelayOut,
+                 {ordered_send_failed, send_queue_full}},
+                S)),
+        ?assertEqual(
+           {[Peer], [Peer], [Peer], [Peer]},
+           quod_simplex:test_link_peers(AfterDown)),
+        ?assertEqual(
+           {[], [Peer], [Peer]},
+           quod_simplex:test_relay_link_peers(AfterDown)),
+        QuorumProbe =
+            quod_simplex:test_state_set(
+              head_progress,
+              {4, awaiting_proposal, false},
+              AfterDown),
+        ?assertEqual(
+           {4, awaiting_proposal, true},
+           quod_simplex:test_progress(
+             quod_simplex:reconcile_head_progress(QuorumProbe))),
+
+        RelayChan = quod_simplex:test_relay_chan(S),
+        AfterRelayError =
+            running_state(
+              quod_simplex:running(
+                info, {link_error, Peer, RelayChan}, S)),
+        ?assertEqual(
+           {[Peer], [Peer], [Peer], [Peer]},
+           quod_simplex:test_link_peers(AfterRelayError)),
+        ?assertEqual(
+           {[Peer], [Peer], []},
+           quod_simplex:test_relay_link_peers(AfterRelayError)),
+
+        LogChan = term_to_binary({log, <<"t">>}, [deterministic]),
+        AfterLogError =
+            running_state(
+              quod_simplex:running(
+                info, {link_error, Peer, LogChan}, S)),
+        ?assertEqual(
+           {[Peer], [Peer], [Peer], []},
+           quod_simplex:test_link_peers(AfterLogError)),
+        ?assertEqual(
+           {[Peer], [Peer], [Peer]},
+           quod_simplex:test_relay_link_peers(AfterLogError))
+    after
+        ensure_close_aware_link_closed(
+          ConsensusOut, ConsensusOutToken),
+        ensure_close_aware_link_closed(
+          ConsensusIn, ConsensusInToken),
+        ensure_close_aware_link_closed(
+          RelayOut, RelayOutToken),
+        ensure_close_aware_link_closed(
+          RelayIn, RelayInToken)
+    end.
+
+%% Recovery invalidation must also retire, rather than synchronously close and
+%% forget, an affected ingress generation. The old link deliberately ignores
+%% `close`; while it remains alive, its already-queued relay frame must not
+%% recreate the discarded inflight attempt. The real monitor DOWN is the only
+%% event that removes the tombstone.
+relay_recovery_invalidation_is_nonblocking_and_monotonic_test() ->
+    {Ns, _CommitteeId, Slot, Author, _AuthorId, _Target, _Validators,
+     _SubmissionId, AttemptId, Submit, Initial} =
+        relay_receiver_fixture(
+          <<"recovery-retirement-barrier">>),
+    {OldPid, OldToken} = spawn_stubborn_link(),
+    OldRef = erlang:monitor(process, OldPid),
+    try
+        Linked =
+            quod_simplex:test_state_set(
+              relay_inbound_conns,
+              #{Author => {OldPid, OldRef}},
+              Initial),
+        {WithInflight, _Actions} =
+            quod_simplex:test_dispatch_relay(
+              Author, Submit, Linked),
+        ?assertEqual(
+           {[], [AttemptId], []},
+           quod_simplex:test_relay_state_keys(WithInflight)),
+        _Accepted = receive_relay_control(Ns),
+
+        {InvalidateUs, Invalidated} =
+            timer:tc(
+              fun() ->
+                      quod_simplex:
+                          test_invalidate_relay_generation(
+                            Slot - 1, WithInflight)
+              end),
+        ?assert(InvalidateUs < 250000),
+        await_stubborn_close_requested(OldPid, OldToken),
+        ?assert(is_process_alive(OldPid)),
+        ?assertEqual(
+           {[Author], [], []},
+           quod_simplex:test_relay_link_peers(Invalidated)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(Invalidated)),
+
+        %% The peer is still a committee member and the exact attempt remains
+        %% inflight in this focused helper state. Without the tombstone, this
+        %% frame would re-adopt OldPid and emit another relay_accepted.
+        RelayPayload = quod_relay:encode(Ns, Submit),
+        AfterStale =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Author, ignored}, OldPid},
+                 quod_simplex:test_relay_chan(Invalidated),
+                 RelayPayload},
+                Invalidated)),
+        ?assertEqual(
+           {[], [AttemptId], []},
+           quod_simplex:test_relay_state_keys(AfterStale)),
+        ?assertEqual(
+           {[Author], [], []},
+           quod_simplex:test_relay_link_peers(AfterStale)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AfterStale)),
+        assert_no_relay_control(),
+
+        OldDown =
+            release_stubborn_link(OldPid, OldToken, OldRef),
+        AfterOldDown =
+            running_state(
+              quod_simplex:running(
+                info, OldDown, AfterStale)),
+        ?assertEqual(
+           [],
+           quod_simplex:test_retired_inbound(AfterOldDown))
+    after
+        ensure_stubborn_link_closed(OldPid, OldToken)
+    end.
+
+%% Recovery invalidates only sources whose volatile relay ownership was
+%% discarded. Their exact inbound generation is closed and forgotten; other
+%% authenticated links and their readiness claims remain usable. A relay frame
+%% already queued with the closed pid cannot resurrect the discarded attempt.
+reseat_invalidates_only_relay_affected_inbound_generation_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, Target, Validators,
+     SubmissionId, AttemptId, Submit, Initial} =
+        relay_receiver_fixture(<<"reseat-generation">>),
+    [KeepPeer1, KeepPeer2] = Validators -- [Target, Author],
+    {AffectedPid, AffectedToken} = spawn_close_aware_link(),
+    {AuthorConsensusPid, AuthorConsensusToken} =
+        spawn_close_aware_link(),
+    {KeepPid1, KeepToken1} = spawn_close_aware_link(),
+    {KeepPid2, KeepToken2} = spawn_close_aware_link(),
+    ConsensusLinks =
+        #{Author => {AuthorConsensusPid, make_ref()},
+          KeepPeer1 => {KeepPid1, make_ref()},
+          KeepPeer2 => {KeepPid2, make_ref()}},
+    RelayLinks =
+        #{Author => {AffectedPid, make_ref()}},
+    Readiness =
+        #{Author =>
+              {AuthorConsensusPid, Slot - 1, true,
+               quod_time:mono_ms()},
+          KeepPeer1 =>
+              {KeepPid1, Slot - 1, true, quod_time:mono_ms()},
+          KeepPeer2 =>
+              {KeepPid2, Slot - 1, true, quod_time:mono_ms()}},
+    try
+        Linked =
+            quod_simplex:test_state_set(
+              peer_readiness, Readiness,
+              quod_simplex:test_state_set(
+                relay_inbound_conns, RelayLinks,
+                quod_simplex:test_state_set(
+                  inbound_conns, ConsensusLinks, Initial))),
+        {WithInflight, _Actions} =
+            quod_simplex:test_dispatch_relay(
+              Author, Submit, Linked),
+        ?assertEqual(
+           {[], [AttemptId], []},
+           quod_simplex:test_relay_state_keys(WithInflight)),
+        ?assertEqual(
+           {relay_accepted, SubmissionId, AttemptId,
+            CommitteeId, Slot},
+           receive_relay_control(Ns)),
+
+        FutureSubmissionId = <<16#F1:128>>,
+        FutureAttemptId = <<16#F2:128>>,
+        HistoricalSubmissionId = <<16#A1:128>>,
+        HistoricalAttemptId = <<16#A2:128>>,
+        WithFutureResult =
+            quod_simplex:test_reply_relay(
+              Author, FutureSubmissionId, FutureAttemptId,
+              CommitteeId, Slot + 1, {error, skipped}, WithInflight),
+        ?assertEqual(
+           {relay_result, FutureSubmissionId, FutureAttemptId,
+            CommitteeId, Slot + 1, {error, skipped}},
+           receive_relay_control(Ns)),
+        WithResults =
+            quod_simplex:test_state_set(
+              outbox, #{},
+              quod_simplex:test_reply_relay(
+                KeepPeer1, HistoricalSubmissionId, HistoricalAttemptId,
+                CommitteeId, Slot - 1, {error, skipped},
+                WithFutureResult)),
+        ?assertEqual(
+           lists:sort([FutureAttemptId, HistoricalAttemptId]),
+           [Key || {Key, _Reply, _Expires} <-
+                       quod_simplex:test_relay_result_entries(WithResults)]),
+
+        Reseated = quod_simplex:reseat_engine(Slot - 1, WithResults),
+        await_link_closed(AffectedPid, AffectedToken),
+        ?assertNot(is_process_alive(AffectedPid)),
+        ?assert(is_process_alive(AuthorConsensusPid)),
+        ?assert(is_process_alive(KeepPid1)),
+        ?assert(is_process_alive(KeepPid2)),
+        {_, InboundPeers, _, _} =
+            quod_simplex:test_link_peers(Reseated),
+        ?assertEqual(
+           lists:sort([Author, KeepPeer1, KeepPeer2]), InboundPeers),
+        ?assertEqual(
+           {[Author], [], []},
+           quod_simplex:test_relay_link_peers(Reseated)),
+        ?assertEqual(
+           {[], [], [HistoricalAttemptId]},
+           quod_simplex:test_relay_state_keys(Reseated)),
+
+        %% Every consensus/readiness generation survives the relay-only reset.
+        QuorumProbe =
+            quod_simplex:test_state_set(
+              head_progress,
+              {Slot, awaiting_proposal, false},
+              Reseated),
+        ?assertEqual(
+           {Slot, awaiting_proposal, true},
+           quod_simplex:test_progress(
+             quod_simplex:reconcile_head_progress(QuorumProbe))),
+
+        QueuedPayload = quod_relay:encode(Ns, Submit),
+        BeforeOldFrame =
+            quod_simplex:test_relay_state_keys(Reseated),
+        {keep_state, AfterOldFrame, _OldActions} =
+            quod_simplex:running(
+              info,
+              {quod_message,
+               {{Author, ignored}, AffectedPid},
+               quod_simplex:test_relay_chan(Reseated), QueuedPayload},
+              Reseated),
+        ?assertEqual(
+           BeforeOldFrame,
+           quod_simplex:test_relay_state_keys(AfterOldFrame)),
+        {_, AfterOldInboundPeers, _, _} =
+            quod_simplex:test_link_peers(AfterOldFrame),
+        ?assertEqual(InboundPeers, AfterOldInboundPeers)
+    after
+        ensure_close_aware_link_closed(AffectedPid, AffectedToken),
+        ensure_close_aware_link_closed(
+          AuthorConsensusPid, AuthorConsensusToken),
+        ensure_close_aware_link_closed(KeepPid1, KeepToken1),
+        ensure_close_aware_link_closed(KeepPid2, KeepToken2)
+    end.
+
+%% Replacing a live inbound generation is non-blocking and monotonic. The old
+%% process deliberately ignores `close` and stays alive, so this pins both
+%% halves of the contract: replacement cannot wait for DOWN, and a queued frame
+%% from that still-live retired pid cannot reverse the generation.
+queued_old_inbound_frame_cannot_reverse_link_replacement_test() ->
+    {Ns, CommitteeId, Slot, Author, _AuthorId, Target, _Validators,
+     SubmissionId, AttemptId,
+     {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
+      {submit, Author, Signature, Canonical}, Carrier} = Submit,
+    Initial} =
+        relay_receiver_fixture(<<"replace-generation">>),
+    {ConsensusPid, ConsensusToken} = spawn_close_aware_link(),
+    {OldPid, OldToken} = spawn_stubborn_link(),
+    OldRef = erlang:monitor(process, OldPid),
+    {NewPid, NewToken} = spawn_close_aware_link(),
+    try
+        OldGeneration =
+            quod_simplex:test_state_set(
+              peer_readiness,
+              #{Author =>
+                    {ConsensusPid, Slot - 1, true,
+                     quod_time:mono_ms()}},
+              quod_simplex:test_state_set(
+                relay_inbound_conns,
+                #{Author => {OldPid, OldRef}},
+                quod_simplex:test_state_set(
+                  inbound_conns,
+                  #{Author => {ConsensusPid, make_ref()}},
+                  Initial))),
+        InvalidSubmission =
+            {submit, Author, flip1(Signature), Canonical},
+        InvalidSubmissionId =
+            quod_transaction:submission_id(InvalidSubmission),
+        InvalidAttemptId =
+            quod_transaction:relay_attempt_id(
+              Ns, InvalidSubmissionId, CommitteeId, Slot, Target),
+        ReplacementPayload =
+            quod_relay:encode(
+              Ns,
+              {relay_submit, InvalidSubmissionId, InvalidAttemptId,
+               CommitteeId, Slot, InvalidSubmission, Carrier}),
+        RelayChan = quod_simplex:test_relay_chan(OldGeneration),
+        {ReplaceUs, ReplaceResult} =
+            timer:tc(
+              fun() ->
+                      quod_simplex:running(
+                        info,
+                        {quod_message,
+                         {{Author, ignored}, NewPid},
+                         RelayChan, ReplacementPayload},
+                        OldGeneration)
+              end),
+        %% The removed implementation waited at least 500ms for DOWN. Leave a
+        %% generous scheduler margin while still proving this callback cannot
+        %% contain that synchronous wait.
+        ?assert(ReplaceUs < 250000),
+        Replaced = running_state(ReplaceResult),
+        await_stubborn_close_requested(OldPid, OldToken),
+        ?assert(is_process_alive(OldPid)),
+        ?assert(is_process_alive(NewPid)),
+        ?assert(is_process_alive(ConsensusPid)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(Replaced)),
+        ?assertEqual(
+           {[], [], []},
+           quod_simplex:test_relay_state_keys(Replaced)),
+        {[], [Author], [], _ConsensusDialsAfterReplace} =
+            quod_simplex:test_link_peers(Replaced),
+        ?assertEqual(
+           {[Author], [Author], []},
+           quod_simplex:test_relay_link_peers(Replaced)),
+
+        RelayPayload = quod_relay:encode(Ns, Submit),
+        AfterQueuedOld =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Author, ignored}, OldPid},
+                 RelayChan, RelayPayload},
+                Replaced)),
+        ?assertEqual(
+           {[], [], []},
+           quod_simplex:test_relay_state_keys(AfterQueuedOld)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AfterQueuedOld)),
+        ?assert(is_process_alive(NewPid)),
+        assert_no_relay_control(),
+
+        AcceptedOnNew =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Author, ignored}, NewPid},
+                 RelayChan, RelayPayload},
+                AfterQueuedOld)),
+        ?assertEqual(
+           {[], [AttemptId], []},
+           quod_simplex:test_relay_state_keys(AcceptedOnNew)),
+        ?assertMatch(
+           {relay_accepted, _, AttemptId, _, Slot},
+           receive_relay_control(Ns)),
+        {[], [Author], [], _ConsensusDialsAfterAccept} =
+            quod_simplex:test_link_peers(AcceptedOnNew),
+        ?assertEqual(
+           {[Author], [Author], []},
+           quod_simplex:test_relay_link_peers(AcceptedOnNew)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AcceptedOnNew)),
+
+        OldDown = release_stubborn_link(OldPid, OldToken, OldRef),
+        AfterOldDown =
+            running_state(
+              quod_simplex:running(info, OldDown, AcceptedOnNew)),
+        ?assertEqual(
+           [],
+           quod_simplex:test_retired_inbound(AfterOldDown)),
+        ?assert(is_process_alive(NewPid))
+    after
+        ensure_close_aware_link_closed(ConsensusPid, ConsensusToken),
+        ensure_stubborn_link_closed(OldPid, OldToken),
+        ensure_close_aware_link_closed(NewPid, NewToken)
+    end.
+
+%% Consensus/readiness uses the same retirement machinery but a distinct
+%% generation map. A stale live log-stream pid must neither block replacement
+%% nor overwrite the readiness reported on the new authenticated generation.
+stale_live_consensus_generation_cannot_block_or_reverse_test() ->
+    [{Self, _SelfId}, {Peer, _PeerId}] = Committee = committee(2),
+    Validators = pubs(Committee),
+    Slot = 3,
+    {OldPid, OldToken} = spawn_stubborn_link(),
+    OldRef = erlang:monitor(process, OldPid),
+    {NewPid, NewToken} = spawn_close_aware_link(),
+    try
+        OldGeneration =
+            st(#{self => Self, validators => Validators,
+                 slot => Slot, approved => Slot, sync => ready,
+                 eng => quod_simplex:eng_with_certs(Slot, []),
+                 head_progress =>
+                     {Slot + 1, awaiting_proposal, false},
+                 inbound_conns =>
+                     #{Peer => {OldPid, OldRef}},
+                 peer_readiness =>
+                     #{Peer =>
+                           {OldPid, Slot, true,
+                            quod_time:mono_ms()}}}),
+        LogChan = term_to_binary({log, <<"t">>}, [deterministic]),
+        ReadyPayload =
+            quod_simplex:encode(
+              <<"t">>, {readiness, Slot, true}),
+        {ReplaceUs, ReplaceResult} =
+            timer:tc(
+              fun() ->
+                      quod_simplex:running(
+                        info,
+                        {quod_message,
+                         {{Peer, ignored}, NewPid},
+                         LogChan, ReadyPayload},
+                        OldGeneration)
+              end),
+        ?assert(ReplaceUs < 250000),
+        Replaced = running_state(ReplaceResult),
+        await_stubborn_close_requested(OldPid, OldToken),
+        ?assert(is_process_alive(OldPid)),
+        ?assert(is_process_alive(NewPid)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(Replaced)),
+        ?assertEqual(
+           {Slot + 1, awaiting_proposal, true},
+           quod_simplex:test_progress(Replaced)),
+
+        %% If the old live pid were allowed to re-adopt itself, this false
+        %% readiness would bind to it and remove the quorum-ready edge.
+        StalePayload =
+            quod_simplex:encode(
+              <<"t">>, {readiness, Slot, false}),
+        AfterStale =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Peer, ignored}, OldPid},
+                 LogChan, StalePayload},
+                Replaced)),
+        ?assertEqual(
+           {Slot + 1, awaiting_proposal, true},
+           quod_simplex:test_progress(AfterStale)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AfterStale)),
+        assert_link_not_closed(NewPid, NewToken),
+
+        %% The same false readiness is accepted on the actual current pid,
+        %% proving stale rejection did not wedge or discard the replacement.
+        AfterNew =
+            running_state(
+              quod_simplex:running(
+                info,
+                {quod_message,
+                 {{Peer, ignored}, NewPid},
+                 LogChan, StalePayload},
+                AfterStale)),
+        ?assertEqual(
+           {Slot + 1, awaiting_proposal, false},
+           quod_simplex:test_progress(AfterNew)),
+        ?assertEqual(
+           [OldPid],
+           quod_simplex:test_retired_inbound(AfterNew)),
+
+        OldDown = release_stubborn_link(OldPid, OldToken, OldRef),
+        AfterOldDown =
+            running_state(
+              quod_simplex:running(info, OldDown, AfterNew)),
+        ?assertEqual(
+           [],
+           quod_simplex:test_retired_inbound(AfterOldDown)),
+        ?assertEqual(
+           {Slot + 1, awaiting_proposal, false},
+           quod_simplex:test_progress(AfterOldDown)),
+        ?assert(is_process_alive(NewPid))
+    after
+        ensure_stubborn_link_closed(OldPid, OldToken),
+        ensure_close_aware_link_closed(NewPid, NewToken)
+    end.
+
 %% Terminal result state is write-once. Repeating the identical completion may
 %% re-send it but cannot extend expiry; a same-key divergent context emits
 %% nothing and cannot replace the cached answer.
@@ -2569,17 +4164,26 @@ terminal_cache_is_write_once_test() ->
     AttemptId = <<3:128>>,
     CommitteeId = <<4:256>>,
     Slot = 7,
-    S = st(#{self => <<5:256>>, validators => [<<5:256>>]}),
+    S = st(#{self => <<5:256>>, validators => [<<5:256>>],
+             relay_conns => #{Peer => {self(), make_ref()}}}),
     First =
         quod_simplex:test_reply_relay(
           Peer, SubmissionId, AttemptId, CommitteeId, Slot,
           {error, skipped}, S),
+    ?assertEqual(
+       {relay_result, SubmissionId, AttemptId, CommitteeId,
+        Slot, {error, skipped}},
+       receive_relay_control(Ns)),
     [{Key = AttemptId, {error, skipped}, Expires}] =
         quod_simplex:test_relay_result_entries(First),
     Exact =
         quod_simplex:test_reply_relay(
           Peer, SubmissionId, AttemptId, CommitteeId, Slot,
           {error, skipped}, First),
+    ?assertEqual(
+       {relay_result, SubmissionId, AttemptId, CommitteeId,
+        Slot, {error, skipped}},
+       receive_relay_control(Ns)),
     ?assertEqual(
        [{Key, {error, skipped}, Expires}],
        quod_simplex:test_relay_result_entries(Exact)),
@@ -2592,7 +4196,8 @@ terminal_cache_is_write_once_test() ->
     ?assertEqual(
        [{Key, {error, skipped}, Expires}],
        quod_simplex:test_relay_result_entries(Divergent)),
-    ?assertEqual([], relay_outbox(Ns, Peer, Divergent)).
+    ?assertEqual(#{}, quod_simplex:test_outbox(Divergent)),
+    assert_no_relay_control().
 
 %% Only a brand-new attempt is gated on the current committee revision and this
 %% node's exact ownership of the declared slot.
@@ -2617,9 +4222,9 @@ first_admission_requires_current_view_and_exact_owner_test() ->
     {Stale, []} =
         quod_simplex:test_dispatch_relay(Author, StaleSubmit, S),
     ?assertEqual(
-       [{relay_result, SubmissionId, StaleAttemptId, StaleCommitteeId,
-         Slot, {error, not_in_charge, none}}],
-       relay_outbox(Ns, Author, Stale)),
+       {relay_result, SubmissionId, StaleAttemptId, StaleCommitteeId,
+        Slot, {error, not_in_charge, none}},
+       receive_relay_control(Ns)),
     ?assertEqual(
        {[], [], [StaleAttemptId]},
        quod_simplex:test_relay_state_keys(Stale)),
@@ -2637,21 +4242,27 @@ first_admission_requires_current_view_and_exact_owner_test() ->
     {WrongOwner, []} =
         quod_simplex:test_dispatch_relay(Author, WrongSubmit, S),
     ?assertEqual(
-       [{relay_result, SubmissionId, WrongAttemptId, CommitteeId,
-         WrongSlot, {error, not_in_charge, none}}],
-       relay_outbox(Ns, Author, WrongOwner)).
+       {relay_result, SubmissionId, WrongAttemptId, CommitteeId,
+        WrongSlot, {error, not_in_charge, none}},
+       receive_relay_control(Ns)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(WrongOwner)).
 
 %% Source hints bind to the stored peer, submission, attempt, committee, and
 %% slot—not the source's later current view. Even a perfectly matching success
 %% or error remains only a hint: the origin's durable log decides the outcome.
 source_ignores_foreign_metadata_and_waits_for_local_finality_test() ->
     {_Ns, CommitteeId, Slot, From, Target, Validators,
-     SubmissionId, AttemptId, Sent} =
+     SubmissionId, AttemptId, _InitialFrame, Sent} =
         outbound_fixture(<<"source-match">>),
+    [{SubmissionId, 1, Submission, _OriginalPlacement,
+      Deadline, 1}] =
+        quod_simplex:test_custody(Sent),
     [Other | _] = Validators -- [Target],
+    NewCommitteeId =
+        crypto:hash(sha256, <<"source-new-view">>),
     Advanced =
         quod_simplex:test_state_set(
-          committee_id, crypto:hash(sha256, <<"source-new-view">>), Sent),
+          committee_id, NewCommitteeId, Sent),
     BadAccepted =
         [{Other,
           {relay_accepted, SubmissionId, AttemptId,
@@ -2740,29 +4351,83 @@ source_ignores_foreign_metadata_and_waits_for_local_finality_test() ->
         ok
     end,
 
-    %% Local exclusion is authoritative and does complete the request.
+    %% Local exclusion is authoritative, but it makes the exact retained
+    %% submission ready for a new placement; it never manufactures a public
+    %% retry from either remote hint.
     Finalized = quod_simplex:finalize(Slot, ErrorHint),
     ?assertEqual([], quod_simplex:test_relay_pending(Finalized)),
+    [{SubmissionId, 1, Submission, ready, Deadline, 1}] =
+        quod_simplex:test_custody(Finalized),
+    assert_no_reply(From),
+    {Retargeted, []} =
+        quod_simplex:test_drain_custody(
+          quod_simplex:test_state_set(approved, Slot, Finalized)),
+    [{Attempt2, _Target2, Slot2, Deadline}] =
+        quod_simplex:test_relay_pending(Retargeted),
+    ?assertEqual(Slot + 1, Slot2),
+    ?assertNotEqual(AttemptId, Attempt2),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Retargeted)),
+    RetargetFrame = receive_ordered_frame(),
+    {relay,
+     {relay_submit, SubmissionId, Attempt2, NewCommitteeId, Slot2,
+      Submission, _RetargetCarrier}} =
+        quod_relay:decode_relay_frame(RetargetFrame, <<"t">>),
+    %% Hints never reset the original lifetime bound.
+    ?assert(Deadline > quod_time:mono_ms()).
+
+%% The custody deadline is anchored once at original arrival. Retargeting keeps
+%% that exact deadline, and expiry removes both custody and its active placement
+%% while sending one ambiguous `unavailable` signal upstream. `quod_prolog`
+%% deliberately keeps the public caller parked and eventually reports
+%% `outcome_unknown`.
+custody_deadline_survives_retarget_and_expires_once_test() ->
+    {Ns, _CommitteeId, Slot, From, _Target, _Validators,
+     SubmissionId, Attempt1, _InitialFrame, Sent} =
+        outbound_fixture(<<"custody-deadline">>),
+    [{SubmissionId, 1, Submission, _Placement1, Deadline, 1}] =
+        quod_simplex:test_custody(Sent),
+    Ready = quod_simplex:finalize(Slot, Sent),
+    {Retargeted, []} =
+        quod_simplex:test_drain_custody(
+          quod_simplex:test_state_set(approved, Slot, Ready)),
+    [{SubmissionId, 1, Submission, Placement2, Deadline, 2}] =
+        quod_simplex:test_custody(Retargeted),
+    case Placement2 of
+        {local, Slot2} ->
+            ?assertEqual(Slot + 1, Slot2);
+        {relay, Attempt2, _Target2, Slot2, _View2} ->
+            ?assertEqual(Slot + 1, Slot2),
+            ?assertNotEqual(Attempt1, Attempt2),
+            RetargetFrame = receive_ordered_frame(),
+            {relay,
+             {relay_submit, SubmissionId, Attempt2, _CommitteeId2,
+              Slot2, Submission, _Carrier}} =
+                quod_relay:decode_relay_frame(RetargetFrame, Ns)
+    end,
+
+    Expired = quod_simplex:test_expire_custody(Retargeted),
+    ?assertEqual([], quod_simplex:test_custody(Expired)),
+    ?assertEqual([], quod_simplex:test_relay_pending(Expired)),
     receive
-        {Tag, Result} ->
-            ?assertEqual({error, skipped}, Result)
+        {Tag, Reply} ->
+            ?assertEqual(element(2, From), Tag),
+            ?assertEqual({error, not_in_charge, unavailable}, Reply)
     after 0 ->
         ?assert(false)
     end,
-    %% Hints never reset the original lifetime bound.
-    ?assert(Deadline > quod_time:mono_ms()).
+    assert_no_reply(From).
 
 %% The emitted frame binds the signed envelope to one committee/slot/target
 %% attempt. Redrive reuses the exact bytes and original deadline.
 relay_emission_is_attempt_scoped_and_redrive_is_immutable_test() ->
     {Ns, CommitteeId, Slot, _From, Target, _Validators,
-     SubmissionId, AttemptId, Sent} =
+     SubmissionId, AttemptId, Frame, Sent} =
         outbound_fixture(<<"wire-attempt">>),
-    [Frame] = maps:get(Target, quod_simplex:test_outbox(Sent)),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Sent)),
     {relay,
      {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
       Submission, _TraceCarrier}} =
-        quod_relay:decode_frame(Frame, Ns),
+        quod_relay:decode_relay_frame(Frame, Ns),
     ?assertEqual(
        AttemptId,
        quod_transaction:relay_attempt_id(
@@ -2771,8 +4436,8 @@ relay_emission_is_attempt_scoped_and_redrive_is_immutable_test() ->
     [{AttemptId, Target, Slot, Deadline, _Retry, false}] =
         quod_simplex:test_relay_pending_detail(Sent),
     Redriven = quod_simplex:test_redrive_relays(Sent),
-    ?assertEqual([Frame],
-                 maps:get(Target, quod_simplex:test_outbox(Redriven))),
+    ?assertEqual(Frame, receive_ordered_frame()),
+    ?assertEqual(#{}, quod_simplex:test_outbox(Redriven)),
     [{AttemptId, Target, Slot, Deadline, _Retry2, false}] =
         quod_simplex:test_relay_pending_detail(Redriven),
     ?assertEqual(
@@ -2811,7 +4476,7 @@ signature_is_checked_before_canonical_decode_test() ->
         quod_relay:encode(
           Ns, {relay_submit, SubmissionId, AttemptId, CommitteeId,
                Slot, Submission, []}),
-    {relay, Decoded} = quod_relay:decode_frame(Wire, Ns),
+    {relay, Decoded} = quod_relay:decode_relay_frame(Wire, Ns),
     {Rejected, []} =
         quod_simplex:test_dispatch_relay(Author, Decoded, S),
     ?assertException(
@@ -3314,6 +4979,7 @@ relay_receiver_fixture(TxId) ->
          Slot, Submission, []},
     S = st(#{self => Target, id => TargetId,
              validators => Validators, committee_id => CommitteeId,
+             relay_conns => #{Author => {self(), make_ref()}},
              sync => ready, slot => 3, approved => 3,
              eng => quod_simplex:eng_with_certs(3, [])}),
     {Ns, CommitteeId, Slot, Author, AuthorId, Target, Validators,
@@ -3325,8 +4991,10 @@ outbound_fixture(TxId) ->
     Validators = pubs(Committee),
     Slot = 4,
     Target = quod_simplex:leader(Slot, Validators),
+    NextTarget = quod_simplex:leader(Slot + 1, Validators),
     {Me, MyId} =
-        hd([Member || {Pub, _} = Member <- Committee, Pub =/= Target]),
+        hd([Member || {Pub, _} = Member <- Committee,
+                      Pub =/= Target, Pub =/= NextTarget]),
     CommitteeId =
         crypto:hash(sha256, <<"outbound-view:", TxId/binary>>),
     Change =
@@ -3336,27 +5004,224 @@ outbound_fixture(TxId) ->
     From = {self(), make_ref()},
     S = st(#{self => Me, id => MyId, validators => Validators,
              committee_id => CommitteeId,
+             relay_conns => #{Target => {self(), make_ref()},
+                              NextTarget => {self(), make_ref()}},
              sync => ready, slot => 3, approved => 3,
              eng => quod_simplex:eng_with_certs(3, [])}),
     {Sent, []} = quod_simplex:test_append(From, Change, S),
-    [Frame] = maps:get(Target, quod_simplex:test_outbox(Sent)),
+    Frame = receive_ordered_frame(),
     {relay,
      {relay_submit, SubmissionId, AttemptId, CommitteeId, Slot,
       _Submission, _Carrier}} =
-        quod_relay:decode_frame(Frame, Ns),
+        quod_relay:decode_relay_frame(Frame, Ns),
     {Ns, CommitteeId, Slot, From, Target, Validators,
-     SubmissionId, AttemptId, Sent}.
-
-relay_outbox(Ns, Peer, S) ->
-    [Relay
-     || Frame <- maps:get(Peer, quod_simplex:test_outbox(S), []),
-        {relay, Relay} <- [quod_relay:decode_frame(Frame, Ns)]].
+     SubmissionId, AttemptId, Frame, Sent}.
 
 relay_store_dir(Suffix) ->
     filename:join(
       "/tmp",
       "quod_relay_restart_" ++ Suffix ++ "_"
       ++ integer_to_list(erlang:unique_integer([positive]))).
+
+assert_no_reply({_Pid, Tag}) ->
+    receive
+        {Tag, _Reply} -> ?assert(false)
+    after 0 ->
+        ok
+    end.
+
+drain_custody_within(S) ->
+    Parent = self(),
+    ReplyRef = make_ref(),
+    {Pid, MonitorRef} =
+        spawn_monitor(
+          fun() ->
+                  Parent !
+                      {ReplyRef,
+                       quod_simplex:test_drain_custody(S)}
+          end),
+    receive
+        {ReplyRef, Result} ->
+            receive
+                {'DOWN', MonitorRef, process, Pid, normal} ->
+                    Result;
+                {'DOWN', MonitorRef, process, Pid, Reason} ->
+                    error({custody_drain_failed, Reason})
+            after 1000 ->
+                exit(Pid, kill),
+                error(custody_drain_did_not_exit)
+            end;
+        {'DOWN', MonitorRef, process, Pid, Reason} ->
+            error({custody_drain_failed, Reason})
+    after 1000 ->
+        exit(Pid, kill),
+        receive
+            {'DOWN', MonitorRef, process, Pid, _Reason} -> ok
+        after 1000 ->
+            ok
+        end,
+        error(custody_drain_timed_out)
+    end.
+
+receive_ordered_frame() ->
+    receive
+        {send_ordered, Frame} -> Frame
+    after 0 ->
+        error(missing_ordered_relay_frame)
+    end.
+
+receive_relay_control(Ns) ->
+    receive
+        {send, Frame} ->
+            case quod_relay:decode_relay_frame(Frame, Ns) of
+                {relay, Relay} -> Relay;
+                error -> error({malformed_relay_control, Frame})
+            end
+    after 0 ->
+        error(missing_relay_control_frame)
+    end.
+
+assert_no_relay_control() ->
+    receive
+        {send, Frame} ->
+            error({unexpected_relay_control_frame, Frame})
+    after 0 ->
+        ok
+    end.
+
+running_state({keep_state, S}) -> S;
+running_state({keep_state, S, _Actions}) -> S.
+
+flush_unordered_link_frames() ->
+    receive
+        {send, _Frame} -> flush_unordered_link_frames()
+    after 0 ->
+        ok
+    end.
+
+spawn_close_aware_link() ->
+    Owner = self(),
+    Token = make_ref(),
+    Pid =
+        spawn(
+          fun Loop() ->
+                  receive
+                      close ->
+                          Owner ! {close_aware_link_closed,
+                                   Token, self()};
+                      _Other ->
+                          Loop()
+                  end
+          end),
+    {Pid, Token}.
+
+%% A superseded link can be slow to observe `close` (for example while its
+%% mailbox is occupied). Keep it alive until an explicit release so generation
+%% tests cannot pass merely because is_process_alive/1 rejects a dead pid.
+spawn_stubborn_link() ->
+    Owner = self(),
+    Token = make_ref(),
+    Pid =
+        spawn(
+          fun Loop() ->
+                  receive
+                      close ->
+                          Owner !
+                              {stubborn_link_close_requested,
+                               Token, self()},
+                          Loop();
+                      {release_stubborn_link, Token} ->
+                          ok;
+                      _Other ->
+                          Loop()
+                  end
+          end),
+    {Pid, Token}.
+
+await_stubborn_close_requested(Pid, Token) ->
+    receive
+        {stubborn_link_close_requested, Token, Pid} -> ok
+    after 1000 ->
+        error({stubborn_link_was_not_closed, Pid})
+    end.
+
+assert_stubborn_link_not_closed(Pid, Token) ->
+    receive
+        {stubborn_link_close_requested, Token, Pid} ->
+            error({live_stubborn_link_was_closed, Pid})
+    after 20 ->
+        ?assert(is_process_alive(Pid))
+    end.
+
+release_stubborn_link(Pid, Token, Ref) ->
+    Pid ! {release_stubborn_link, Token},
+    receive
+        {'DOWN', Ref, process, Pid, _Reason} = Down -> Down
+    after 1000 ->
+        error({stubborn_link_did_not_exit, Pid})
+    end.
+
+ensure_stubborn_link_closed(Pid, Token) ->
+    case is_process_alive(Pid) of
+        true ->
+            Ref = erlang:monitor(process, Pid),
+            Pid ! {release_stubborn_link, Token},
+            receive
+                {'DOWN', Ref, process, Pid, _Reason} -> ok
+            after 1000 ->
+                _ = erlang:demonitor(Ref, [flush]),
+                exit(Pid, kill)
+            end;
+        false ->
+            ok
+    end,
+    flush_stubborn_close_requested(Pid, Token),
+    flush_down_for(Pid).
+
+flush_stubborn_close_requested(Pid, Token) ->
+    receive
+        {stubborn_link_close_requested, Token, Pid} ->
+            flush_stubborn_close_requested(Pid, Token)
+    after 0 ->
+        ok
+    end.
+
+await_link_closed(Pid, Token) ->
+    receive
+        {close_aware_link_closed, Token, Pid} -> ok
+    after 1000 ->
+        error({link_was_not_closed, Pid})
+    end.
+
+assert_link_not_closed(Pid, Token) ->
+    receive
+        {close_aware_link_closed, Token, Pid} ->
+            error({live_link_was_closed, Pid})
+    after 20 ->
+        ?assert(is_process_alive(Pid))
+    end.
+
+ensure_close_aware_link_closed(Pid, Token) ->
+    case is_process_alive(Pid) of
+        true ->
+            Pid ! close,
+            await_link_closed(Pid, Token);
+        false ->
+            receive
+                {close_aware_link_closed, Token, Pid} -> ok
+            after 0 ->
+                ok
+            end
+    end,
+    flush_down_for(Pid).
+
+flush_down_for(Pid) ->
+    receive
+        {'DOWN', _Ref, process, Pid, _Reason} ->
+            flush_down_for(Pid)
+    after 0 ->
+        ok
+    end.
 
 take(N, L) -> lists:sublist(L, N).
 

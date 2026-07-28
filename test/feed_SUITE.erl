@@ -13,7 +13,7 @@ overlay-less.
 """.
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
--import(quod_ct, [eventually/2, match_ok/1]).
+-import(quod_ct, [eventually/2, match_ok/1, ordinary_write_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([follower_follows_live/1, follower_recovers_gap_via_anti_entropy/1]).
@@ -38,7 +38,12 @@ init_per_suite(Config) ->
     %% 1. founder: N=1, commit one fact (slot 2).
     Founder = start_node(?FOUNDER_PORT, FKey, Config, #{mode => create, committee => []}),
     ?assert(eventually(fun() -> slot(Founder) =:= 1 end, 10000)),
-    ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, france, paris}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(Founder,
+                              {assertz, {capital, france, paris}}))
+              end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),
 
     %% 2. follower: mode=join, catches up to the founder's height (2), then settles (`syncing=false`).
@@ -82,7 +87,12 @@ follower_follows_live(Config) ->
     ?assertNot(lists:member(?config(jpub, Config), peer:call(Follower, quod_simplex, committee, [?NS]))),
 
     %% the founder commits a NEW fact (slot 3) — the feed eager-pushes it to the overlay.
-    ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, spain, madrid}})) end, 20000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(Founder,
+                              {assertz, {capital, spain, madrid}}))
+              end, 20000)),
     ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
 
     %% the follower advances to 3 via the FEED (it is settled and never re-runs boot-sync), and the fact
@@ -111,7 +121,12 @@ follower_recovers_gap_via_anti_entropy(Config) ->
     Founder  = start_node(?AE_FOUNDER_PORT, FKey, Config, #{mode => create, committee => []}),
     try
         ?assert(eventually(fun() -> slot(Founder) =:= 1 end, 10000)),
-        ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, italy, rome}})) end, 20000)),
+        ?assert(eventually(
+                  fun() ->
+                          ordinary_write_ok(
+                            prove(Founder,
+                                  {assertz, {capital, italy, rome}}))
+                  end, 20000)),
         ?assert(eventually(fun() -> slot(Founder) =:= 2 end, 10000)),
         GH = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
         F2 = start_node(?AE_FOLLOWER_PORT, JKey, Config, #{mode => join, genesis_hash => GH, seed_peers => [FAddr]}),
@@ -124,7 +139,12 @@ follower_recovers_gap_via_anti_entropy(Config) ->
 
             %% commit the delta — the eager-push has an empty view and reaches nobody; recovery must come
             %% from the digest exchange alone.
-            ?assert(eventually(fun() -> match_ok(prove(Founder, {assertz, {capital, japan, tokyo}})) end, 20000)),
+            ?assert(eventually(
+                      fun() ->
+                              ordinary_write_ok(
+                                prove(Founder,
+                                      {assertz, {capital, japan, tokyo}}))
+                      end, 20000)),
             ?assert(eventually(fun() -> slot(Founder) =:= 3 end, 10000)),
             ?assert(eventually(fun() -> slot(F2) =:= 3 end, 30000)),          %% recovered via digest → pull
             ?assert(eventually(fun() -> match_ok(prove(F2, {capital, japan, {'X'}})) end, 15000)),

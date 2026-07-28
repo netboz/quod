@@ -14,7 +14,8 @@ Two collection paths:
   * **Event.** The LIVE `{committed, Ns}` event drives finalized-transaction size and
     author metrics (never replay — see `quod_simplex:publish_feed/3`). The submitting
     Prolog process records end-to-end latency and authoritative retry outcomes; the
-    proposer records one batching sample per proposed block.
+    proposer records one batching sample per proposed block; completion of an
+    origin-owned submission records how many internal retargets it needed.
 
 | metric | type | extra labels | what it means (plain) |
 | ------ | ---- | ------------ | --------------------- |
@@ -27,6 +28,9 @@ Two collection paths:
 | `quod_consensus_batch_size/batch_wait_ms{namespace}` | histogram | | transactions per proposed block and actual collection time |
 | `quod_consensus_pending{namespace}` | gauge | | change requests waiting to be made final right now |
 | `quod_consensus_append_busy/redirect/bad{namespace}` | gauge | | running totals of turned-away change requests, by reason |
+| `quod_consensus_custody_depth/custody_ready/custody_bytes{namespace}` | gauge | | origin-owned signed submissions retained until local durable resolution, the subset ready for placement, and their encoded byte budget |
+| `quod_consensus_ingress_retargets{namespace}` | gauge | | running total of retained submissions placed again after authoritative exclusion from an earlier slot |
+| `quod_consensus_ingress_retarget_hops{namespace}` | histogram | | internal retarget count per completed origin-owned submission; zero means its first placement resolved |
 | `quod_consensus_is_validator{namespace}` | gauge | | 1 if this node may vote (it actually votes only when `syncing` is 0) |
 | `quod_consensus_syncing{namespace}` | gauge | | 1 while catching up / confirming the latest block, 0 once up to date |
 | `quod_consensus_progress_slot/progress_phase/progress_quorum_ready{namespace}` | gauge | | oldest unfinished slot, its phase (0 idle, 1 proposal, 2 notarization, 3 commit), and whether enough connected validators have freshly reported they are caught up |
@@ -53,8 +57,8 @@ Two collection paths:
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
-| `quod_tx_retries_total{namespace}` | counter | `reason` | client writes explicitly told to prove and submit again |
-| `quod_link_send_drops_total` | counter | `peer`, `reason` | frames discarded at the QUIC send gate instead of transmitted (flow control / queue full) |
+| `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
+| `quod_link_send_drops_total` | counter | `peer`, `channel`, `reason` | frames discarded at the QUIC send gate instead of transmitted; channel is the bounded `log`, `ingress`, or `other` class |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
 | `quod_consensus_round_commit_ms{namespace}` | histogram | | own proposal: approval to final-and-durable here, this node's clock |
 | `quod_consensus_event_ms{namespace}` | histogram | `class` | opt-in wall time handling one consensus event, by event class |
@@ -67,9 +71,9 @@ Two collection paths:
 -behaviour(gen_server).
 
 -export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
-         observe_tx_latency/2, count_link_send_drop/2, observe_round_phase/3,
+         observe_tx_latency/2, count_link_send_drop/3, observe_round_phase/3,
          observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3,
-         observe_batch/3, count_tx_retry/2]).
+         observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -90,6 +94,7 @@ Two collection paths:
 -define(DIFF_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128]).                               %% asserts+retracts per tx
 -define(BATCH_SIZE_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128, 256]).
 -define(BATCH_WAIT_BUCKETS, [0, 1, 2, 5, 10, 15, 25, 40, 75, 100, 250, 500, 1000]).
+-define(RETARGET_HOPS_BUCKETS, [0, 1, 2, 3, 5, 8, 13, 21, 34]).
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
 -define(VOTE_SYNC_BUCKETS, [0.0001, 0.00025, 0.0005, 0.001, 0.0025,
@@ -177,12 +182,16 @@ declare(NodeId) ->
     _ = G(quod_consensus_ingress_overflow, "Total requests refused because the bounded ingress line (or one author's fair share of it) was full (only ever goes up)."),
     _ = G(quod_consensus_ingress_expired, "Total waiting requests cut loose because the cluster made no room for them within the ingress cutoff - a visible sign of a stall (only ever goes up)."),
     _ = G(quod_consensus_ingress_forwarded, "Total locally queued requests sent to the proposer of their exact target slot when the queue became dispatchable (only ever goes up)."),
+    _ = G(quod_consensus_custody_depth, "Origin-owned signed content submissions this node is retaining until its local durable log proves inclusion or exclusion."),
+    _ = G(quod_consensus_custody_ready, "Retained origin-owned submissions eligible for placement in the next usable consensus slot."),
+    _ = G(quod_consensus_custody_bytes, "Encoded bytes held by this node's origin-owned submission custody. It is bounded independently of the ordinary ingress queue."),
+    _ = G(quod_consensus_ingress_retargets, "Total times this node placed the same retained signed submission again after its local durable log excluded an earlier placement (only ever goes up)."),
     _ = G(quod_consensus_relay_accepted, "Total relayed requests whose destination acknowledged that it was holding or processing them. Once acknowledged, the sender stops its fast retry loop (only ever goes up)."),
     _ = G(quod_consensus_relay_redrives, "Total relay request retries. Before a destination acknowledges receipt they recover dropped sends quickly; after acknowledgement they run slowly only to recover a lost result hint (only ever goes up)."),
     _ = G(quod_consensus_relay_duplicates, "Total duplicate relay submissions received while the original request was already being processed. This should stay low; a high rate means retries are adding avoidable consensus-mailbox work (only ever goes up)."),
     _ = G(quod_consensus_append_redirect, "Total change requests refused because the local consensus process was unavailable, the receiver did not own the declared target slot, or that slot had already closed. This should stay near zero (only ever goes up)."),
     _ = G(quod_consensus_append_bad,      "Total change requests rejected because they were malformed or not allowed (only ever goes up)."),
-    _ = G(quod_consensus_append_stale,    "Total otherwise-valid requests whose author sequence had already been superseded by newer approved history, usually after a skipped proposal or retry. The caller can safely re-prove and retry (only ever goes up)."),
+    _ = G(quod_consensus_append_stale,    "Total otherwise-valid requests whose author sequence had already been superseded by newer approved history. This is a locally confirmed rejection, so the caller can safely re-prove with a fresh sequence (only ever goes up)."),
     _ = G(quod_consensus_membership_rejects, "Total requests to add or remove a voting node that this node judged invalid and refused (only ever goes up)."),
     _ = G(quod_consensus_redrives,        "Total times this node re-sent a proposal it was still waiting on instead of giving up. Climbing steadily means one of the voting nodes is not responding."),
     _ = G(quod_consensus_progress_slot,   "The oldest unfinished block slot watched by this node; 0 means no block is currently waiting for progress."),
@@ -247,6 +256,9 @@ declare(NodeId) ->
     _ = H(quod_consensus_batch_wait_ms,
           "How long, in milliseconds, this node kept each new block open to collect more transactions before proposing it. Full or membership blocks can seal early; ordinary quiet blocks should be close to the configured batch window.",
           ?BATCH_WAIT_BUCKETS),
+    _ = H(quod_consensus_ingress_retarget_hops,
+          "How many internal retargets each completed origin-owned submission needed. Zero means its first placement resolved; values above zero expose slot-boundary churn without turning it into a client retry.",
+          ?RETARGET_HOPS_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
@@ -284,7 +296,7 @@ declare(NodeId) ->
            {labels, [namespace]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_retries_total},
-           {help, "Total client writes explicitly told to prove and submit again, grouped by cause. slot_closed means the proposal slot closed before this transaction was included; stale_sequence means newer approved history overtook its signed author sequence. A high rate repeats Prolog work and directly raises latency."},
+           {help, "Total operations explicitly told to prove and submit again, grouped by cause. membership_skipped is the terminal membership re-proof path; stale_sequence means newer approved history overtook the signed author sequence. Ordinary retained content is internally retargeted after slot exclusion and does not increment this counter."},
            {labels, [namespace, reason]}, {constant_labels, CL}]),
     P = fun(Name, Help) ->
             prometheus_gauge:declare([{name, Name}, {help, Help}, {labels, [peer]},
@@ -306,8 +318,8 @@ declare(NodeId) ->
           "1 when the connection to this other node is recovering from data lost on the network, 0 otherwise."),
     _ = prometheus_counter:declare(
           [{name, quod_link_send_drops_total},
-           {help, "Total messages this node threw away instead of sending, grouped by which node they were meant for and why. 'flow_control' means that node was reading too slowly to accept more; 'queue_full' means this node's own outbound buffer was full. A thrown-away message is re-sent later by a timer, so a steady climb here quietly slows agreement down (only ever goes up)."},
-           {labels, [peer, reason]}, {constant_labels, CL}]),
+           {help, "Total messages this node threw away instead of sending, grouped by destination, bounded channel class, and reason. channel='log' is consensus, channel='ingress' is retained relay traffic, and channel='other' covers every non-Simplex or malformed channel without creating arbitrary labels. 'flow_control' means that node was reading too slowly to accept more; 'queue_full' means this node's own outbound buffer was full. A thrown-away message is re-sent later by a timer, so a steady climb here quietly slows agreement down (only ever goes up)."},
+           {labels, [peer, channel, reason]}, {constant_labels, CL}]),
     ok.
 
 %% Signature checks happen in the consensus and history-validation paths. Metrics
@@ -422,6 +434,8 @@ refresh_log_ns(Ns) ->
           membership_rejects := MR,
           ingress_queued := IQ, ingress_overflow := IO,
           ingress_expired := IE, ingress_forwarded := IF,
+          custody_depth := CD, custody_ready := CR, custody_bytes := CB,
+          ingress_retargets := IRT,
           relay_accepted := RA, relay_redrives := RRD,
           relay_duplicates := RDU,
           redrives := RV, progress_slot := PS, progress_phase_code := PP,
@@ -451,6 +465,10 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_ingress_overflow, IO),
             _ = S(quod_consensus_ingress_expired, IE),
             _ = S(quod_consensus_ingress_forwarded, IF),
+            _ = S(quod_consensus_custody_depth, CD),
+            _ = S(quod_consensus_custody_ready, CR),
+            _ = S(quod_consensus_custody_bytes, CB),
+            _ = S(quod_consensus_ingress_retargets, IRT),
             _ = S(quod_consensus_relay_accepted, RA),
             _ = S(quod_consensus_relay_redrives, RRD),
             _ = S(quod_consensus_relay_duplicates, RDU),
@@ -596,11 +614,14 @@ observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff}) 
 
 -doc """
 One frame discarded at the QUIC send gate (`m:quod_link` ignores backpressure by design;
-this makes the ignored return VISIBLE). Called from bare link processes on the send path,
-so — like every observe helper here — an absent metrics process makes it a no-op.
+this makes the ignored return VISIBLE). The transport channel is reduced to the fixed
+`log`, `ingress`, or `other` label set: only an exact deterministic `{log, Namespace}`
+or `{ingress, Namespace}` identity receives its named label. Called from bare link
+processes on the send path, so — like every observe helper here — an absent metrics
+process makes it a no-op.
 """.
--spec count_link_send_drop(binary() | term(), term()) -> ok.
-count_link_send_drop(Peer, Reason) ->
+-spec count_link_send_drop(binary() | term(), binary() | term(), term()) -> ok.
+count_link_send_drop(Peer, Channel, Reason) ->
     case whereis(?MODULE) of
         undefined ->
             ok;
@@ -608,10 +629,35 @@ count_link_send_drop(Peer, Reason) ->
             try
                 _ = prometheus_counter:inc(
                       quod_link_send_drops_total,
-                      [author_label(Peer), drop_reason(Reason)]),
+                      [author_label(Peer), link_channel_label(Channel),
+                       drop_reason(Reason)]),
                 ok
             catch _:_ -> ok
             end
+    end.
+
+%% Channels are opaque bytes at the transport boundary. Decode with `safe` so a
+%% peer-supplied identity can never intern atoms, then require byte-for-byte equality
+%% with quod's deterministic encoding. Labels themselves are fixed literals; unrelated,
+%% malformed, and non-canonical channels all share one bounded `other` value.
+link_channel_label(Channel) when is_binary(Channel) ->
+    try binary_to_term(Channel, [safe]) of
+        {log, Ns} when is_binary(Ns) ->
+            exact_channel_label(Channel, {log, Ns}, <<"log">>);
+        {ingress, Ns} when is_binary(Ns) ->
+            exact_channel_label(Channel, {ingress, Ns}, <<"ingress">>);
+        _ ->
+            <<"other">>
+    catch _:_ ->
+        <<"other">>
+    end;
+link_channel_label(_) ->
+    <<"other">>.
+
+exact_channel_label(Channel, Identity, Label) ->
+    case term_to_binary(Identity, [deterministic]) of
+        Channel -> Label;
+        _       -> <<"other">>
     end.
 
 drop_reason({flow_control_blocked, connection})  -> <<"flow_control_conn">>;
@@ -754,10 +800,35 @@ observe_batch(Ns, Size, WaitMs)
 observe_batch(_Ns, _Size, _WaitMs) ->
     ok.
 
--doc "Count one authoritative retry response returned to a write caller.".
--spec count_tx_retry(binary(), slot_closed | stale_sequence) -> ok.
+-doc """
+Record how many internal retargets an origin-owned submission needed before it
+resolved. Zero is a first-placement completion. Observability is never a
+dependency of caller resolution, including while the metrics process is absent
+or restarting.
+""".
+-spec observe_ingress_retarget_hops(binary(), non_neg_integer()) -> ok.
+observe_ingress_retarget_hops(Ns, Hops)
+  when is_binary(Ns), is_integer(Hops), Hops >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_consensus_ingress_retarget_hops,
+                      [label(Ns)], Hops),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_ingress_retarget_hops(_Ns, _Hops) ->
+    ok.
+
+-doc "Count one locally authoritative re-proof response returned to a caller.".
+-spec count_tx_retry(binary(), membership_skipped | stale_sequence) -> ok.
 count_tx_retry(Ns, Reason)
-  when is_binary(Ns), (Reason =:= slot_closed orelse Reason =:= stale_sequence) ->
+  when is_binary(Ns),
+       (Reason =:= membership_skipped orelse Reason =:= stale_sequence) ->
     case whereis(?MODULE) of
         undefined ->
             ok;
@@ -805,6 +876,7 @@ consensus_stat_keys() ->
      commits, submitted, skips, pending,
      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
+     custody_depth, custody_ready, custody_bytes, ingress_retargets,
      relay_accepted, relay_redrives, relay_duplicates,
      redrives, progress_slot, progress_phase_code, progress_quorum_ready,
      progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,

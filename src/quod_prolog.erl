@@ -854,12 +854,14 @@ append_result(Tx, {error, not_in_charge, unavailable}, S) ->
     request_completed(Tx, S);   %% ambiguous: ordered apply may still resolve it; the TTL reports unknown
 append_result(Tx, {error, not_in_charge, Hint}, S) ->
     reject_parked(Tx, {error, {not_leader, Hint}}, request_completed(Tx, S));
+%% Ordinary signed content is retained inside Simplex across exclusion. Only
+%% the deliberately non-custodied membership path reaches this terminal
+%% skip/re-proof response.
 append_result(Tx, {error, skipped}, S = #s{ns = Ns}) ->
-    quod_metrics:count_tx_retry(Ns, slot_closed),
+    quod_metrics:count_tx_retry(Ns, membership_skipped),
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));
-%% A newer author sequence reached approved history first, normally after a skipped
-%% proposal or retry. The content is fine: re-prove and sign with a fresh sequence,
-%% so surface it retryably, never terminal.
+%% A locally confirmed author sequence was superseded. The content is fine:
+%% re-prove and sign with a fresh sequence, so surface it retryably.
 append_result(Tx, {error, stale_seq}, S = #s{ns = Ns}) ->
     quod_metrics:count_tx_retry(Ns, stale_sequence),
     reject_parked(Tx, {error, retry}, request_completed(Tx, S));

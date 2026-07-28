@@ -20,7 +20,7 @@ admit runs the real Slice-C readiness gate. Ordered; state threads via `save_con
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
--import(quod_ct, [eventually/2, match_ok/1]).
+-import(quod_ct, [eventually/2, match_ok/1, ordinary_write_ok/1]).
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([policy_upgrade_live/1, admit_refused_mid_catchup/1,
@@ -87,7 +87,9 @@ policy_upgrade_live(Config) ->
     ?assert(eventually(fun() -> match_ok(prove(Founder, {acl_sovereign, {'X'}})) end, 20000)),  %% kb ready
     Rule    = {':-', {can_join, {'N'}, {'A'}, {'P'}}, {peer_ready, {'P'}}},
     Upgrade = {',', {retract, {can_join, {'X'}, {'Y'}, {'Z'}}}, {assertz, Rule}},
-    ?assert(eventually(fun() -> match_ok(prove(Founder, Upgrade)) end, 20000)),
+    ?assert(eventually(
+              fun() -> ordinary_write_ok(prove(Founder, Upgrade)) end,
+              20000)),
     %% the gate is now live: a ghost that never digested is refused (can_join :- peer_ready fails).
     {GhostPub, _} = quod_identity:generate(),
     ?assertEqual(fail, prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
@@ -166,7 +168,12 @@ rotation_sweep(Config) ->
                     Slot = H0 + I,
                     LPub = quod_simplex:leader(Slot, Pubs),   %% the real rotation fn (exported), not a copy
                     LPeer = peer_of(Config, Members, LPub),
-                    ?assert(eventually(fun() -> match_ok(prove(LPeer, {assertz, {rot, Slot}})) end, 20000)),
+                    ?assert(eventually(
+                              fun() ->
+                                      ordinary_write_ok(
+                                        prove(LPeer,
+                                              {assertz, {rot, Slot}}))
+                              end, 20000)),
                     ?assert(eventually(fun() -> synced_height(Peers) >= Slot end, 20000)),
                     LPub
                 end || I <- lists:seq(1, length(Pubs)) ],
@@ -219,10 +226,10 @@ dead_member_removed(Config) ->
     [ ?assert(eventually(fun() -> committee(P) =:= FivePubs end, 20000)) || P <- member_peers(Config, Five) ],
     probe(Config, Five, {five, alive}),   %% proves J4 votes at quorum(5)=4
 
-    %% kill J4; a probe on the four live members can only commit by complaint-skipping J4's slots first
-    %% (quorum(5)=4 = every live member) and then committing under a live leader — the retrying `probe`
-    %% handles the skip→rotate→commit exactly like simplex_SUITE's leader_failover. This proves the 4 live
-    %% still make progress with a corpse in the committee.
+    %% Kill J4. A probe that initially targets J4's slot can commit only after
+    %% the four live members complaint-skip it (quorum(5)=4) and retained
+    %% custody retargets the signed submission to a live leader. This proves the
+    %% four live members still make progress with a corpse in the committee.
     ok = peer:stop(J4Peer),
     Live = Prev,
     LivePeers = member_peers(Config, Live),
@@ -255,13 +262,13 @@ demote_to_observer(Config) ->
     {save_config, Remaining}.
 
 %%%===================================================================
-%%% growth helpers — commit a write/admit/remove through its exact target proposer (retried, zero pre-seed)
+%%% growth helpers — submit a write/admit/remove through a committee member (zero pre-seed)
 %%%===================================================================
 
-%% Commit `Goal` by trying it on every member until one exact-slot relay commits.
-%% Retried under
-%% `eventually`, so an admit that fails because the candidate is not digesting-fresh yet
-%% simply retries until it is.
+%% Commit `Goal` through a member. `eventually` may retry an explicit
+%% pre-consensus refusal (for example, an admit whose candidate is not yet
+%% digesting-fresh), but match_ok stops on an ambiguous outcome or transport
+%% timeout so an in-flight write is never resubmitted.
 commit(Peers, Goal, Budget) ->
     eventually(fun() -> lists:any(fun(P) -> match_ok(prove(P, Goal)) end, Peers) end, Budget).
 
@@ -278,7 +285,11 @@ remove(Config, Members, Pub) ->
 %% fact, weakening the check).
 probe(Config, Members, Fact) ->
     Peers = member_peers(Config, Members),
-    ?assert(commit(Peers, {assertz, Fact}, 40000)),
+    ?assert(eventually(
+              fun() ->
+                      ordinary_write_ok(
+                        prove(hd(Peers), {assertz, Fact}))
+              end, 40000)),
     [ ?assert(eventually(fun() -> match_ok(prove(P, Fact)) end, 20000)) || P <- Peers ].
 
 %%%===================================================================

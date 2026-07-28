@@ -25,7 +25,7 @@ the live stream, so a transaction renders identically live and from history.
 -export([summary/0, tx_json_full/2, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
 -ifdef(TEST).
 -export([prolog_text/1, txs_page/3, find_tx/2, parse_goal/1,
-         prove_result/1, ingress_status_json/1]).   %% pure surface driven directly by eunit
+         prove_result/1, committee_status_json/1]).   %% pure surface driven directly by eunit
 -endif.
 -include("quod_ledger.hrl").
 
@@ -217,23 +217,17 @@ ns_summary(Ns) ->
                          H when is_binary(H) -> binary:encode_hex(H, lowercase);
                          _ -> null
                      end},
-      ingress_status_json(St)).
+      committee_status_json(St)).
 
-%% Invalid/missing ingress state is exposed as `null`, so a fleet preflight
-%% fails closed instead of benchmarking divergent committee views or behavior.
-ingress_status_json(St) ->
+%% Invalid/missing committee identity is exposed as `null`, so a fleet
+%% preflight fails closed instead of benchmarking divergent committee views.
+committee_status_json(St) ->
     #{committee_id =>
           case maps:get(committee_id, St, undefined) of
               Id when is_binary(Id), byte_size(Id) =:= 32 ->
                   binary:encode_hex(Id, lowercase);
               _ ->
                   null
-          end,
-      ingress_retarget =>
-          case maps:get(ingress_retarget, St, undefined) of
-              true  -> true;
-              false -> false;
-              _     -> null
           end}.
 
 leader_json(Slot, Committee) when is_integer(Slot), Slot >= 1 ->

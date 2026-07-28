@@ -42,7 +42,6 @@ defaults_test() ->
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(park_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
-    ?assertEqual(false,           maps:get(ingress_retarget, B)),
     ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
@@ -62,11 +61,6 @@ two_ontologies_test() ->
 batch_window_parse_test() ->
     C = check(<<"content = [{ namespace = \"quod:root\", batch_window_ms = 40 }]\n">>),
     ?assertEqual(40, maps:get(batch_window_ms, content1(C))).
-
-ingress_retarget_parse_test() ->
-    C = check(<<"content = [{ namespace = \"quod:root\", "
-                "ingress_retarget = true }]\n">>),
-    ?assertEqual(true, maps:get(ingress_retarget, content1(C))).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -161,15 +155,7 @@ build_ns_config_genesis_hash_test() ->
     ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
     ?assertEqual(12345, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(false, maps:get(ingress_retarget, NsCfg)),
     ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
-
-build_ns_config_ingress_retarget_test() ->
-    Content = #{namespace => <<"quod:root">>, mode => create, role => member, seeds => [],
-                genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => <<"">>,
-                ingress_retarget => true},
-    {_, NsCfg} = quod_app:build_ns_config(Content),
-    ?assertEqual(true, maps:get(ingress_retarget, NsCfg)).
 
 %% A create node (blank genesis_hash) carries no anchor key at all — quod_simplex needs none.
 build_ns_config_no_genesis_hash_test() ->
@@ -182,7 +168,6 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(park_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(false, maps:get(ingress_retarget, NsCfg)),
     ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
 

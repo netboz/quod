@@ -7,7 +7,7 @@ still live in the normative `doc/*.md` set and in Yan's memory.
 
 ---
 
-## 2026-07-28 — definitive ingress relay stream implemented; final re-review pending
+## 2026-07-28 — definitive ingress relay stream reviewed and committed
 
 All relay submits, accepted acknowledgements, and results now use the
 deterministic `{ingress, Ns}` QUIC stream. `{log, Ns}` accepts consensus
@@ -54,13 +54,15 @@ also have end-to-end tests proving nonblocking retirement, stale-generation
 rejection, and monitor-`DOWN` tombstone cleanup.
 
 This is one channel contract, with no configuration switch or alternate wire
-path. The implementation is uncommitted. Exact-tree gates are green: EUnit
+path. The implementation landed in `3442f70`; release `0.7.45` carries it.
+Exact-tree gates are green: EUnit
 494/494, Common Test 47/47, Dialyzer clean, xref clean, script syntax clean,
 dashboard JSON valid, and `git diff --check` clean. Focused evidence includes
 real QUIC same-connection reset isolation, a self-contained four-validator
 commit with every tracked ingress direction down, nonblocking stale-generation
 replacement, both membership-change directions, and bounded refusal/wake
-tests. The follow-up delta is ready for Claude's final read-only review.
+tests. Claude's final read-only review found no blocker, should-fix, or test
+gap and declared the tree safe to commit.
 
 ## 2026-07-27 — retained custody implemented
 

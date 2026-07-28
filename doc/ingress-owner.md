@@ -1,6 +1,6 @@
 # Ingress ownership and signed-submission retargeting
 
-Status: retained custody and the definitive relay-stream split are implemented; final re-review pending
+Status: retained custody and the definitive relay-stream split are reviewed and committed
 Scope: transaction custody and relay; no change to Simplex ordering, voting, or proposer selection
 
 ## Why this change exists

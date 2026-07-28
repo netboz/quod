@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.44}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.45}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root

@@ -63,7 +63,7 @@ trusting the relay.
    - redirect authentication on the join path (signed `#join_reply` bound to a proven leader key);
    - pubkey-possession gate **before** `can_join` runs;
    - signed blocks + per-block **quorum certificate** + a verify API (the prerequisite for P2);
-   - authenticated remote reads on the `{prove, Ns}` endpoint;
+   - authenticated remote reads through the ontology-ask API;
    - re-tighten the non-`[safe]` decode for anything accepted from a relay (deferred.md §2).
 4. **Green + clean.** Existing suites unaffected (`quod_ledger_tests`, `join_SUITE`,
    `raft_safety_SUITE`, `replica_SUITE`, `quic_SUITE`); a new identity/signing suite; `xref` clean;
@@ -107,7 +107,7 @@ the deploy, ship + scale) then **(b) signing + certificates** (closes the securi
    **block / AppendEntries** quorum certificate (the P2 prerequisite)? Both? Define the verify API
    and where it runs (apply path vs relay-accept path).
 4. **Key management / provisioning in the deploy.** Where do node keypairs come from on the Nomad
-   cluster — generated on first boot and persisted to the per-node CSI volume, or provisioned via
+   cluster — generated on first boot and persisted to the per-node durable volume, or provisioned via
    config/secret? This directly shapes `deploy/quod.nomad` and the volume layout.
 5. **Staging.** One milestone in two shippable phases (identity+addressing, then signing) vs all at
    once. The deploy-scaling payoff lands at the end of phase (a).
@@ -119,7 +119,7 @@ the deploy, ship + scale) then **(b) signing + certificates** (closes the securi
 ## Constraints (must honor)
 
 - **Greenfield — NO backward compat.** Change `server_id`'s type, wire formats, records, the TLS
-  cert scheme, and volumes freely. Wipe the CSI volumes for a clean re-found. No migration machinery.
+  cert scheme, and volumes freely. Wipe the durable volumes for a clean re-found. No migration machinery.
 - **Versioning rule.** Every commit bumps **only the patch (last) digit** of the version (the deploy
   image tag in `deploy/quod.nomad` + the docker build tag). Never touch major/minor — Yan owns those.
   HEAD is `0.6.2`.
@@ -135,7 +135,8 @@ the deploy, ship + scale) then **(b) signing + certificates** (closes the securi
 `doc/deferred.md` (§1 + §2) → `include/quod_ledger.hrl` → `src/quod_ledger.erl` (server_id usage,
 `dispatch_join_request`, `handle_join_reply`, `start_admission`, the `conns`/dial path) →
 `src/quod_quic.erl` (TLS cert load) → `src/quod_link.erl` + `src/quod_conn.erl` →
-`src/quod_brahms.erl` (gossip NodeId) → `deploy/quod.nomad` + `deploy/volumes/*.hcl` →
+`src/quod_brahms.erl` (gossip NodeId) → `deploy/quod.nomad` +
+`deploy/volumes/quod-node-local.hcl` →
 `~/.claude/plans/delightful-giggling-reddy.md` (the reader arc this gate unblocks) → `CLAUDE.md` +
 the memory index.
 

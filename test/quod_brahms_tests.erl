@@ -184,6 +184,39 @@ graceful_leave_retires_endpoint() ->
     ?assertEqual(1, maps:get(estimated_n, quod_brahms:stats(Ns))),
     gen_statem:stop(B).
 
+outbound_endpoint_peer_is_not_split_test_() ->
+    {setup,
+     fun() -> {ok, Started} = application:ensure_all_started(gproc), Started end,
+     fun(Started) -> [application:stop(A) || A <- Started], ok end,
+     [{"an outbound endpoint-shaped peer retires the complete endpoint",
+       fun outbound_endpoint_peer_is_not_split/0}]}.
+
+outbound_endpoint_peer_is_not_split() ->
+    Ns = <<"ont:outbound-peer-shape">>,
+    SelfAddr = {"127.0.0.1", 65121},
+    PeerAddr = {"127.0.0.1", 65122},
+    {ok, B} = quod_brahms:start_link(
+                Ns, #{node_id => SelfAddr,
+                      seed_peers => [PeerAddr],
+                      round_ms => 10000,
+                      collect_ms => 100,
+                      jitter => 0.0}),
+    ?assert(lists:member(PeerAddr, quod_brahms:sample(Ns))),
+    B ! {quod_message, {PeerAddr, self()}, Ns,
+         encode({leave, PeerAddr, ignored_population_record})},
+    ?assertEqual(
+       ok,
+       wait_until(
+         fun() ->
+             not lists:member(PeerAddr, quod_brahms:view(Ns))
+                 andalso not lists:member(
+                           PeerAddr, quod_brahms:sample(Ns))
+         end, 20, 10)),
+    ?assertNot(lists:member(
+                 element(2, PeerAddr),
+                 quod_brahms:sample(Ns))),
+    gen_statem:stop(B).
+
 test_identity() ->
     {Pub, Seed} = quod_identity:generate(),
     #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}.
@@ -250,7 +283,9 @@ reconstruct_excludes_oldv_test() ->
 %% --- wire codec: roundtrip + defensive decode ---------------------------
 
 codec_roundtrip_test() ->
-    Msgs = [{push, <<"n1">>}, {pull_req, {"127.0.0.1", 14567}}, {pull_resp, <<"me">>, [a, b]}],
+    Msgs = [{push, <<"n1">>, ignored_population_record},
+            {pull_req, {"127.0.0.1", 14567}, ignored_population_record},
+            {pull_resp, <<"me">>, [a, b], []}],
     [?assertEqual(M, decode(encode(M))) || M <- Msgs].
 
 decode_garbage_is_safe_test() ->
@@ -401,7 +436,9 @@ tombstone_blocks_readmission() ->
     %% a live third party re-gossips the dead id via push -> must be ignored
     Live     = {"127.0.0.1", 65079},
     FakeLink = spawn(fun() -> receive stop -> ok end end),
-    [B ! {quod_message, {Live, FakeLink}, Ns, encode({push, Dead})} || _ <- lists:seq(1, 8)],
+    [B ! {quod_message, {Live, FakeLink}, Ns,
+          encode({push, Dead, ignored_population_record})}
+     || _ <- lists:seq(1, 8)],
     timer:sleep(250),
     ?assertNot(lists:member(Dead, quod_brahms:sample(Ns))),
     ?assertNot(lists:member(Dead, quod_brahms:view(Ns))),
@@ -472,7 +509,8 @@ idle_push_admitted() ->
     New      = {"127.0.0.1", 65035},
     FakeLink = spawn(fun() -> receive stop -> ok end end),
     [begin
-         B ! {quod_message, {New, FakeLink}, Ns, encode({push, New})},
+         B ! {quod_message, {New, FakeLink}, Ns,
+              encode({push, New, ignored_population_record})},
          timer:sleep(15)
      end || _ <- lists:seq(1, 12)],
     ?assertEqual(ok, wait_until(fun() -> lists:member(New, quod_brahms:view(Ns)) end, 30, 40)),
@@ -511,7 +549,8 @@ stale_link_peer_evicted() ->
     %% One inbound message from Dead caches its (still-alive) link in `conns` and
     %% stamps last_heard — exactly the warm-but-doomed link from the scale test.
     FakeLink = spawn(fun() -> receive stop -> ok end end),
-    B ! {quod_message, {Dead, FakeLink}, Ns, encode({push, Dead})},
+    B ! {quod_message, {Dead, FakeLink}, Ns,
+         encode({push, Dead, ignored_population_record})},
     ?assertEqual(ok, wait_until(fun() ->
                                     lists:member(Dead, quod_brahms:view(Ns)) andalso
                                     is_process_alive(FakeLink)
@@ -564,7 +603,8 @@ tombstone_refresh_keeps_dead_out() ->
     Live     = {"127.0.0.1", 65073},
     FakeLink = spawn(fun() -> receive stop -> ok end end),
     [begin
-         B ! {quod_message, {Live, FakeLink}, Ns, encode({push, Dead})},
+         B ! {quod_message, {Live, FakeLink}, Ns,
+              encode({push, Dead, ignored_population_record})},
          timer:sleep(40)
      end || _ <- lists:seq(1, 37)],
     timer:sleep(150),

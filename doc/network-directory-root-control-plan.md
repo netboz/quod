@@ -1,14 +1,19 @@
 # Root-driven directory control: implementation plan
 
+> **Implemented.** The implementation also closes the all-ports-moved case by
+> deriving anonymous recovery contacts from the root content seeds, as
+> described below. The source inventory remains as an audit trail.
+
 ## 1. Goal
 
 Replace the network directory's static `host:port` bootstrap configuration with
 the root ontology's committed membership truth.
 
 The root ontology decides **which node keys may seed and relay directory
-control traffic**. The transport's live address cache decides **where those
-keys are currently reachable**. Every directory-control connection is still
-pinned to its expected Ed25519 key.
+control traffic**. The root content block's existing seed endpoints recover a
+live key/address observation when the cache is stale; the transport cache
+accelerates later dials. Every retained directory-control connection is
+pinned to its authenticated Ed25519 key.
 
 This removes the failure mode where a Nomad restart changes every dynamic port
 while the directory keeps dialing addresses rendered before the restart.
@@ -22,7 +27,7 @@ The design deliberately separates durable truth from moving runtime state:
 
 - `peer_admitted/4` in `quod:root` is the committed authority for directory
   control peers.
-- `quod_quic:resolve/1` is the current local `NodeKey => Endpoint` observation.
+- `quod_quic:resolve/1` is one current local `NodeKey => Endpoint` observation.
   The root API deliberately returns only the node key; it does not treat the
   committed Host/Port arguments as durable routing truth. Existing consensus
   code does, however, seed the same address cache from those arguments:
@@ -30,10 +35,14 @@ The design deliberately separates durable truth from moving runtime state:
   commit, and `learn_member_endpoints/3` fills an absent hint while catching
   up. A boot re-fold reconstructs only the key set. Consequently `resolve/1`
   may initially return a stale committed endpoint after a deployment move.
-  An ordinary authenticated link-header observation overwrites that hint with
-  the live endpoint. Until then, a stale endpoint is availability-only:
-  `open_link_pinned/3` rejects an unreachable process or the wrong certificate
-  key, and control retries after the cache changes.
+- the existing root `content.seeds` are anonymous recovery contacts. Control
+  dials them with `open_link_identified/2`, which authenticates the TLS and
+  header key without learning into the shared cache. A result is accepted only
+  when that exact key is present in the latest successful
+  `directory_control_peer/1` proof. Control then explicitly learns the
+  authenticated contact endpoint and retains it as that key's control link.
+  This closes the all-ports-moved case without granting an address any
+  authority and without adding directory-specific bootstrap configuration.
 - `quod_quic:open_link_pinned/3` proves that the process reached at that
   endpoint owns the selected node key and preserves the directory no-learn
   isolation.
@@ -112,13 +121,15 @@ A failed or unready root proof adds no authority and is retried later.
 
 ## 4. Control-link state machine
 
-`quod_directory_control` keeps only the following discovery state:
+`quod_directory_control` keeps the following discovery state:
 
 ```text
 control_peers   current last-successful root key set
 dial_queue      exact {NodeKey, Endpoint} candidates awaiting a bounded open
 pending_links   NodeKey => {Endpoint, OpenRef, DeadlineTimerRef}
 control_links   NodeKey => {Endpoint, LinkPid, MonitorRef}
+root_contacts   bounded endpoints copied from the root content seeds
+pending_contacts Endpoint => {OpenRef, DeadlineTimerRef}
 peer_query      optional {Pid, MonitorRef, Token, TimerRef}
 peer_height     height of the last successful root proof
 ```
@@ -338,10 +349,11 @@ Replace the `bootstraps` control statistic with explicit
 `root_proof_height` and `root_proof_status` values. There is no deprecated
 stats alias.
 
-`open_link_seed/2` is still needed for private direct ontology seeds, but its
-system-bootstrap name and comments become stale. Rename it, its connection key,
-and its focused tests to `open_link_private_seed/2`. It remains the same scoped
-TOFU/no-learn mechanism; no second implementation is introduced.
+Identity discovery by endpoint is shared by private direct ontology seeds and
+root contacts. The transport primitive is named `open_link_identified/2`; it
+returns the mutually authenticated node key while suppressing automatic shared
+cache learning. Each caller applies its own authority rule before retaining or
+promoting the result, so no second link implementation is introduced.
 
 ## 7. Other Prolog simplification in this slice
 
@@ -413,9 +425,9 @@ Expected source scope:
   add/confirm and resolver ordering stay untouched;
 - `quod_schema`, `quod_app`, `config/quod.conf` and both directory blocks in
   `deploy/quod.nomad`: delete static bootstrap configuration;
-- `quod_quic` and `quod_ask`: private-seed-only API/connection-tag rename;
+- `quod_quic` and `quod_ask`: scoped identity-discovery API and connection tag;
 - `quod_directory_predicates_tests`, `quod_directory_control_tests`,
-  `quod_directory_SUITE`, `quod_schema_tests` and the private-seed cases in
+  `quod_directory_SUITE`, `quod_schema_tests` and identity-discovery cases in
   `quod_quic_SUITE`: focused contract changes;
 - directory/inter-ontology docs and affected module comments: remove stale
   system-bootstrap language.
@@ -434,7 +446,9 @@ Expected source scope:
 6. Remove `directory.bootstraps` from schema, application wiring, both Nomad
    directory templates, `config/quod.conf` and
    examples.
-7. Rename the remaining TOFU primitive to private-seed terminology.
+7. Expose the remaining TOFU operation as the generic, scoped
+   `open_link_identified/2` primitive; callers decide whether the authenticated
+   identity is authorised.
 8. Update `doc/network-directory-plan.md`, `doc/inter-ontology.md` and stale
    module comments to describe the implemented root-driven path.
 9. Run focused gates, obtain read-only review, then commit.
@@ -515,11 +529,11 @@ one atomic source change.
 - Signature, mixed-namespace, exact-allowlist and high-water tests remain
   unchanged and green.
 
-### Configuration and private seeds
+### Configuration and local direct seeds
 
 - A config containing `directory.bootstraps` is rejected.
 - Allowlist and direct-seed parsing remain unchanged.
-- Private-seed TOFU still confirms only after a successful namespace exchange,
+- Local direct-seed identity discovery still confirms only after a successful namespace exchange,
   does not enter the public directory and does not mutate the shared address
   cache.
 

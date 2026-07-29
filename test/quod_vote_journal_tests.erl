@@ -10,7 +10,7 @@ persists_and_reloads_votes_test() ->
               {ok, J2} = quod_vote_journal:record(J1, commit, 6, H1),
               {ok, J3} = quod_vote_journal:record(J2, complaint, 7, none),
               ok = quod_vote_journal:close(J3),
-              {ok, J4} = quod_vote_journal:open(Ns, Dir, 5),
+              {ok, J4} = quod_vote_journal:open(Ns, domain(), Dir, 5),
               ?assertEqual(#{6 => #{support => H1, final => {commit, H1}},
                              7 => #{support => none, final => complaint}},
                            quod_vote_journal:rounds(J4)),
@@ -57,7 +57,7 @@ conflicting_votes_remain_blocked_after_reload_test() ->
               {ok, J1} = quod_vote_journal:record(J0, support, 6, H1),
               {ok, J2} = quod_vote_journal:record(J1, commit, 7, H1),
               ok = quod_vote_journal:close(J2),
-              {ok, J3} = quod_vote_journal:open(Ns, Dir, 5),
+              {ok, J3} = quod_vote_journal:open(Ns, domain(), Dir, 5),
               ?assertError({vote_conflict, 6, {support, H1}, {support, H2}},
                            quod_vote_journal:record(J3, support, 6, H2)),
               ?assertError({vote_conflict, 7, {commit, H1}, complaint},
@@ -76,7 +76,7 @@ committed_rounds_are_filtered_and_compacted_test() ->
               {ok, J4} = quod_vote_journal:prune(J3, 6),
               J5 = quod_vote_journal:compact(J4),
               ok = quod_vote_journal:close(J5),
-              {ok, J6} = quod_vote_journal:open(Ns, Dir, 6),
+              {ok, J6} = quod_vote_journal:open(Ns, domain(), Dir, 6),
               ?assertEqual(#{7 => #{support => H2, final => none}},
                            quod_vote_journal:rounds(J6)),
               quod_vote_journal:close(J6)
@@ -91,14 +91,14 @@ torn_tail_is_trimmed_without_losing_synced_votes_test() ->
               Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "votes.0001"),
               {ok, Fd} = file:open(Path, [read, write, raw, binary]),
               {ok, _} = file:position(Fd, eof),
-              ok = file:write(Fd, <<16#51564A31:32, 200:32, 0:32, "torn">>),
+              ok = file:write(Fd, <<16#51564A32:32, 200:32, 0:32, "torn">>),
               ok = file:close(Fd),
-              {ok, J2} = quod_vote_journal:open(Ns, Dir, 5),
+              {ok, J2} = quod_vote_journal:open(Ns, domain(), Dir, 5),
               ?assertEqual(#{6 => #{support => H, final => none}},
                            quod_vote_journal:rounds(J2)),
               {ok, J3} = quod_vote_journal:record(J2, complaint, 7, none),
               ok = quod_vote_journal:close(J3),
-              {ok, J4} = quod_vote_journal:open(Ns, Dir, 5),
+              {ok, J4} = quod_vote_journal:open(Ns, domain(), Dir, 5),
               ?assertEqual(#{6 => #{support => H, final => none},
                              7 => #{support => none, final => complaint}},
                            quod_vote_journal:rounds(J4)),
@@ -118,7 +118,7 @@ interior_corruption_fail_stops_test() ->
               ok = file:pwrite(Fd, 12, <<0>>),
               ok = file:close(Fd),
               ?assertError({vote_journal_corruption, bad_crc, 0},
-                           quod_vote_journal:open(Ns, Dir, 5)),
+                           quod_vote_journal:open(Ns, domain(), Dir, 5)),
               closed
       end).
 
@@ -133,18 +133,87 @@ final_complete_record_corruption_fail_stops_test() ->
               ok = file:pwrite(Fd, 12, <<0>>),
               ok = file:close(Fd),
               ?assertError({vote_journal_corruption, bad_crc, 0},
-                           quod_vote_journal:open(Ns, Dir, 5)),
+                           quod_vote_journal:open(Ns, domain(), Dir, 5)),
               closed
+      end).
+
+wrong_domain_reopen_fails_without_mutation_test() ->
+    with_journal(
+      fun(Ns, Dir, J0) ->
+              H = hash(1),
+              {ok, J1} = quod_vote_journal:record(J0, support, 6, H),
+              ok = quod_vote_journal:close(J1),
+              Path = journal_path(Ns, Dir),
+              {ok, Before} = file:read_file(Path),
+              Domain = domain(),
+              OtherDomain = <<16#B6:256>>,
+              ?assertError(
+                 {vote_journal_domain_mismatch, Domain, OtherDomain},
+                 quod_vote_journal:open(Ns, OtherDomain, Dir, 5)),
+              ?assertEqual({ok, Before}, file:read_file(Path))
+      end).
+
+legacy_format_fails_without_mutation_test() ->
+    with_journal(
+      fun(Ns, Dir, J0) ->
+              ok = quod_vote_journal:close(J0),
+              Path = journal_path(Ns, Dir),
+              Legacy = legacy_frame(
+                         {quod_vote, 1, support, 6, hash(1)}),
+              ok = file:write_file(Path, Legacy),
+              ?assertError(
+                 {unsupported_vote_journal_format, 1},
+                 quod_vote_journal:open(Ns, domain(), Dir, 5)),
+              ?assertEqual({ok, Legacy}, file:read_file(Path))
+      end).
+
+short_legacy_header_fails_without_mutation_test() ->
+    with_journal(
+      fun(Ns, Dir, J0) ->
+              ok = quod_vote_journal:close(J0),
+              Path = journal_path(Ns, Dir),
+              LegacyMagic = <<"QVJ1">>,
+              ok = file:write_file(Path, LegacyMagic),
+              ?assertError(
+                 {unsupported_vote_journal_format, 1},
+                 quod_vote_journal:open(Ns, domain(), Dir, 5)),
+              ?assertEqual({ok, LegacyMagic}, file:read_file(Path))
+      end).
+
+short_legacy_tail_fails_without_mutation_test() ->
+    with_journal(
+      fun(Ns, Dir, J0) ->
+              {ok, J1} =
+                  quod_vote_journal:record(
+                    J0, support, 6, hash(1)),
+              ok = quod_vote_journal:close(J1),
+              Path = journal_path(Ns, Dir),
+              ok = file:write_file(Path, <<"QVJ1">>, [append]),
+              {ok, Before} = file:read_file(Path),
+              ?assertError(
+                 {unsupported_vote_journal_format, 1},
+                 quod_vote_journal:open(Ns, domain(), Dir, 5)),
+              ?assertEqual({ok, Before}, file:read_file(Path))
       end).
 
 with_journal(Fun) ->
     Ns = <<"journal:test">>,
     Dir = filename:join("/tmp", "quod_vote_journal_" ++
                                 integer_to_list(erlang:unique_integer([positive]))),
-    {ok, J0} = quod_vote_journal:open(Ns, Dir, 5),
+    {ok, J0} = quod_vote_journal:open(Ns, domain(), Dir, 5),
     try Fun(Ns, Dir, J0)
     after
         _ = file:del_dir_r(Dir)
     end.
+
+domain() -> <<16#A5:256>>.
+
+journal_path(Ns, Dir) ->
+    filename:join(quod_ledger_store:ns_dir(Dir, Ns), "votes.0001").
+
+legacy_frame(Term) ->
+    Payload = term_to_binary(Term, [deterministic]),
+    <<16#51564A31:32, (byte_size(Payload)):32,
+      (erlang:crc32(Payload)):32, Payload/binary>>.
 
 hash(N) -> crypto:hash(sha256, <<N:64>>).

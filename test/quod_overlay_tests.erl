@@ -99,6 +99,30 @@ read_after_local_abolish_is_tracked_test() ->
                  maps:keys(quod_erlog_db_local_prove:get_read_set(Ov1))),
     quod_erlog_db_local_prove:cleanup_read_set(W0).
 
+%% abolish/1 enumerates the committed clauses while extracting its retract
+%% operations, so the write itself depends on that committed generation. A
+%% concurrent assert must conflict even when the goal does not query the
+%% abolished predicate afterwards.
+write_only_abolish_conflicts_with_concurrent_change_test() ->
+    C = committed([{parent, tom, bob}]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    Ov0 = db_ref(W0),
+    {ok, Ov1} =
+        quod_erlog_db_local_prove:abolish_clauses(
+          Ov0, {parent, 2}),
+    ReadSet =
+        quod_erlog_db_local_prove:get_read_set(Ov1),
+    ?assertEqual([{parent, 2}], maps:keys(ReadSet)),
+    M = db_mod(C),
+    R = db_ref(C),
+    {succeed, _} =
+        erlog_int:prove_goal(
+          {assertz, {parent, tom, sue}}, C),
+    ?assertEqual(
+       {conflict, {parent, 2}},
+       quod_diff:validate(ReadSet, M, R)),
+    quod_erlog_db_local_prove:cleanup_read_set(W0).
+
 %%%===================================================================
 %%% a pure read stages nothing (empty write-set)
 %%%===================================================================

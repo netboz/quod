@@ -8,8 +8,9 @@ validator must durably record a support, commit, or complaint decision before it
 signature is allowed onto the network. Reloading these records after a crash keeps
 the independent one-support and commit-versus-complaint safety rules intact.
 
-The journal stores no knowledge-base or proposal payload data. Records are small
-CRC-framed terms in `votes.0001` under the namespace data directory. Appending a
+The journal stores no knowledge-base or proposal payload data. Every record is
+bound to the same namespace/genesis consensus domain as the signature it guards.
+Records are small CRC-framed terms in `votes.0001` under the namespace data directory. Appending a
 new decision performs one `datasync`. Finalized slots are removed from the
 in-memory view immediately; once the file reaches a bounded size, the remaining
 live decisions are rewritten to a temporary file and atomically renamed. A crash
@@ -18,14 +19,15 @@ complete live snapshot. An incomplete final frame is trimmed on recovery; a
 complete frame with an invalid checksum fail-stops instead of discarding a vote.
 """.
 
--export([open/3, close/1, record/4, prune/2, rounds/1]).
+-export([open/4, close/1, record/4, prune/2, rounds/1]).
 -export_type([handle/0, round/0, final_vote/0]).
 
 -ifdef(TEST).
 -export([compact/1]).
 -endif.
 
--define(MAGIC, 16#51564A31). %% "QVJ1"
+-define(OLD_MAGIC, 16#51564A31). %% "QVJ1" — rejected explicitly; no mixed signature formats
+-define(MAGIC,     16#51564A32). %% "QVJ2"
 -define(HDR_BYTES, 12).
 -define(MAX_FRAME_BYTES, 1024).
 -define(COMPACT_BYTES, (1024 * 1024)).
@@ -38,14 +40,16 @@ complete frame with an invalid checksum fail-stops instead of discarding a vote.
 
 -record(journal, {fd :: file:io_device(),
                   path :: file:filename_all(),
+                  domain :: <<_:256>>,
                   offset = 0 :: non_neg_integer(),
                   rounds = #{} :: rounds()}).
 -opaque handle() :: #journal{}.
 
 -doc "Open and recover one namespace journal, discarding decisions at or below `Committed`.".
--spec open(binary(), file:filename_all(), non_neg_integer()) -> {ok, handle()}.
-open(Ns, DataDir, Committed)
-  when is_binary(Ns), is_integer(Committed), Committed >= 0 ->
+-spec open(binary(), <<_:256>>, file:filename_all(), non_neg_integer()) -> {ok, handle()}.
+open(Ns, Domain, DataDir, Committed)
+  when is_binary(Ns), is_binary(Domain), byte_size(Domain) =:= 32,
+       is_integer(Committed), Committed >= 0 ->
     Dir = quod_ledger_store:ns_dir(DataDir, Ns),
     ok = filelib:ensure_path(Dir),
     Path = filename:join(Dir, "votes.0001"),
@@ -59,9 +63,10 @@ open(Ns, DataDir, Committed)
         false ->
             ok
     end,
-    {Offset, AllRounds} = scan(Fd),
+    {Offset, AllRounds} = scan(Fd, Domain),
     Live = maps:filter(fun(Slot, _Round) -> Slot > Committed end, AllRounds),
-    J0 = #journal{fd = Fd, path = Path, offset = Offset, rounds = Live},
+    J0 = #journal{fd = Fd, path = Path, domain = Domain,
+                  offset = Offset, rounds = Live},
     case Offset >= ?COMPACT_BYTES of
         true  -> {ok, compact(J0)};
         false -> {ok, J0}
@@ -84,14 +89,14 @@ caller instead of permitting equivocation.
 """.
 -spec record(handle(), support | commit | complaint, pos_integer(), block_hash() | none) ->
         {ok, handle()}.
-record(J = #journal{rounds = Rounds}, Kind, Slot, BlockHash) ->
+record(J = #journal{domain = Domain, rounds = Rounds}, Kind, Slot, BlockHash) ->
     ok = valid_vote(Kind, Slot, BlockHash),
     {Changed, Rounds1} = apply_vote(Kind, Slot, BlockHash, Rounds),
     case Changed of
         false ->
             {ok, J};
         true ->
-            Term = {quod_vote, 1, Kind, Slot, BlockHash},
+            Term = {quod_vote, 2, Domain, Kind, Slot, BlockHash},
             Frame = frame(term_to_binary(Term, [deterministic])),
             #journal{fd = Fd, offset = Offset} = J,
             ok = file:pwrite(Fd, Offset, Frame),
@@ -160,12 +165,17 @@ valid_vote(Kind, Slot, BH) -> error({invalid_vote, Kind, Slot, BH}).
 frame(Payload) when byte_size(Payload) =< ?MAX_FRAME_BYTES ->
     <<?MAGIC:32, (byte_size(Payload)):32, (erlang:crc32(Payload)):32, Payload/binary>>.
 
-scan(Fd) -> scan(Fd, 0, #{}).
+scan(Fd, Domain) -> scan(Fd, Domain, 0, #{}).
 
-scan(Fd, Offset, Rounds) ->
+scan(Fd, Domain, Offset, Rounds) ->
     case file:pread(Fd, Offset, ?HDR_BYTES) of
         eof ->
             {Offset, Rounds};
+        %% The four-byte magic alone identifies the incompatible journal.
+        %% Reject it before the generic torn-header repair so recovery never
+        %% truncates recognizable V1 bytes.
+        {ok, <<?OLD_MAGIC:32, _/binary>>} ->
+            error({unsupported_vote_journal_format, 1});
         {ok, Header} when byte_size(Header) < ?HDR_BYTES ->
             trim(Fd, Offset),
             {Offset, Rounds};
@@ -174,8 +184,8 @@ scan(Fd, Offset, Rounds) ->
                 {ok, Payload} when byte_size(Payload) =:= Len ->
                     case erlang:crc32(Payload) of
                         CRC ->
-                            Rounds1 = decode_record(Payload, Rounds),
-                            scan(Fd, Offset + ?HDR_BYTES + Len, Rounds1);
+                            Rounds1 = decode_record(Payload, Domain, Rounds),
+                            scan(Fd, Domain, Offset + ?HDR_BYTES + Len, Rounds1);
                         _ ->
                             error({vote_journal_corruption, bad_crc, Offset})
                     end;
@@ -196,16 +206,20 @@ scan(Fd, Offset, Rounds) ->
             error({vote_journal_io_error, Offset, Reason})
     end.
 
-decode_record(Payload, Rounds) ->
+decode_record(Payload, Domain, Rounds) ->
     try binary_to_term(Payload, [safe]) of
-        {quod_vote, 1, Kind, Slot, BH} ->
+        {quod_vote, 2, Domain, Kind, Slot, BH} ->
             ok = valid_vote(Kind, Slot, BH),
             {_Changed, Rounds1} = apply_vote(Kind, Slot, BH, Rounds),
             Rounds1;
+        {quod_vote, 2, OtherDomain, _Kind, _Slot, _BH}
+          when is_binary(OtherDomain), byte_size(OtherDomain) =:= 32 ->
+            error({vote_journal_domain_mismatch, OtherDomain, Domain});
         Other ->
             error({vote_journal_bad_record, Other})
     catch
         error:{vote_conflict, _, _, _} = Conflict -> error(Conflict);
+        error:{vote_journal_domain_mismatch, _, _} = Mismatch -> error(Mismatch);
         error:Reason -> error({vote_journal_bad_record, Reason})
     end.
 
@@ -218,12 +232,13 @@ trim(Fd, Offset) ->
 %%% bounded compaction
 %%%===================================================================
 
-compact(J = #journal{fd = OldFd, path = Path, rounds = Rounds}) ->
+compact(J = #journal{fd = OldFd, path = Path, domain = Domain,
+                     rounds = Rounds}) ->
     Tmp = Path ++ ".new",
     _ = file:delete(Tmp),
     {ok, TmpFd} = file:open(Tmp, [write, raw, binary, exclusive]),
     Data = iolist_to_binary([frame(term_to_binary(Term, [deterministic]))
-                             || Term <- round_terms(Rounds)]),
+                             || Term <- round_terms(Domain, Rounds)]),
     try
         ok = file:write(TmpFd, Data),
         ok = file:datasync(TmpFd)
@@ -236,20 +251,25 @@ compact(J = #journal{fd = OldFd, path = Path, rounds = Rounds}) ->
     {ok, Fd} = file:open(Path, [read, write, raw, binary]),
     J#journal{fd = Fd, offset = byte_size(Data)}.
 
-round_terms(Rounds) ->
+round_terms(Domain, Rounds) ->
     lists:flatmap(
       fun({Slot, #{support := Support, final := Final}}) ->
-              SupportTerms = case Support of
-                                 none -> [];
-                                 SupportBH -> [{quod_vote, 1, support, Slot, SupportBH}]
-                             end,
-              FinalTerms = case Final of
-                               none         -> [];
-                               complaint    -> [{quod_vote, 1, complaint, Slot, none}];
-                               {commit, CommitBH} ->
-                                   [{quod_vote, 1, commit, Slot, CommitBH}]
-                           end,
-              SupportTerms ++ FinalTerms
+              case {Support, Final} of
+                  {none, none} ->
+                      [];
+                  {SupportBH, none} ->
+                      [{quod_vote, 2, Domain, support, Slot, SupportBH}];
+                  {none, complaint} ->
+                      [{quod_vote, 2, Domain, complaint, Slot, none}];
+                  {SupportBH, complaint} ->
+                      [{quod_vote, 2, Domain, support, Slot, SupportBH},
+                       {quod_vote, 2, Domain, complaint, Slot, none}];
+                  {none, {commit, CommitBH}} ->
+                      [{quod_vote, 2, Domain, commit, Slot, CommitBH}];
+                  {SupportBH, {commit, CommitBH}} ->
+                      [{quod_vote, 2, Domain, support, Slot, SupportBH},
+                       {quod_vote, 2, Domain, commit, Slot, CommitBH}]
+              end
       end, lists:sort(maps:to_list(Rounds))).
 
 sync_dir(Dir) ->

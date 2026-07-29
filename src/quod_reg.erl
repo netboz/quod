@@ -16,8 +16,17 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | --------------------- | ------------------------------------------- |
 | `{transport, node}`   | the QUIC transport gen_server (singleton)   |
 | `{sup, node}`         | the root supervisor                         |
-| `{conn, NodeId}`      | a peer connection process (one per peer)    |
+| `{directory, node}`   | the local route-directory owner             |
+| `{directory_control, node}` | directory dissemination/control    |
+| `{namespace_manager, node}` | desired per-ontology process sets   |
+| `{quod_ns_sup, node}` | dynamic content-subtree supervisor          |
+| `{quod_brahms_sup, node}` | dynamic Brahms supervisor             |
+| `{quod_ns, Ns}`       | an ontology's content sub-supervisor        |
 | `{quod_brahms, Ns}`   | a namespace's Brahms statem (one per Ns)    |
+| `{quod_simplex, Ns}`  | a namespace's consensus statem              |
+| `{quod_prolog, Ns}`   | a namespace's committed fact engine         |
+| `{quod_runtime, Ns}`  | a namespace's derived runtime projection    |
+| `{conn_stats, local}` | connection metrics subscribers (property)   |
 | `{channel, Name}`     | a pub/sub channel (property only, no owner) |
 
 ## Example

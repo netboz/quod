@@ -1,6 +1,6 @@
 -module(quod_ns_SUITE).
 -moduledoc """
-Full-stack (`quod_simplex` + `quod_prolog` + `quod_prove`) N=1 integration for **committee admission** via
+Full-stack (`quod_simplex` + `quod_prolog`) N=1 integration for **committee admission** via
 the `admit`/`remove` external predicates. A founder proves `admit(Pubkey, Host, Port)`; the staged
 `peer_admitted` assert commits through the normal write path, and the founder's validator set GROWS to
 include the joiner (committee = a projection of the `peer_admitted` facts). `remove` of the sole member is

@@ -583,7 +583,10 @@ cluster-wide.
 **Identity stance.** *Updated 2026-07-14:* a node's `node_id`
 is now its **Ed25519 pubkey** (the address is a routing hint), and connections are bound
 to that key via **mutual TLS**. Simplex votes and quorum certificates are Ed25519-signed
-and verified. *Updated 2026-07-18:* every non-genesis transaction also carries a
+and verified against a locally derived namespace/genesis domain; an overlapping
+committee cannot replay consensus evidence from another ontology or differently
+anchored chain. The exact contract is
+[`consensus-signatures.md`](consensus-signatures.md). *Updated 2026-07-18:* every non-genesis transaction also carries a
 namespace-bound author signature, verified by receiving validators before
 voting and by every node during rebuild and catch-up;
 followers relay those exact signed bytes to the current leader. Still unfinished:
@@ -932,9 +935,12 @@ rotates one point-to-point request at a time through certificate signers and the
 Normal proposals and recovered blocks use one shared timestamp/payload admission predicate after their
 distinct position and certificate checks, so recovery cannot accept content that live voting would reject.
 Full proposals are not persisted and non-leaders do not flood them.
-A verified final certificate beyond the local approved frontier immediately revokes voting capability. If
-the finalized block itself never arrived, the ordinary durable-log recovery path fetches and verifies that
-entry; the node does not remain "ready" one block behind.
+A verified final certificate beyond the local approved frontier immediately revokes voting capability. Live
+blocks and votes are retained only for the durable head's two-slot depth-one window; a farther finalizer is
+reduced to one bounded recovery hint rather than retaining its peer-controlled certificate. If the finalized
+block itself never arrived, the ordinary durable-log recovery path fetches and verifies that entry; the node
+does not remain "ready" one block behind. Catch-up verifies contiguous history independently of the live
+window, using the same namespace/genesis signature domain.
 
 The leader still redrives its retained proposal through the bounded outbox. Committee transitions close
 obsolete inbound and outbound consensus links, discard readiness reports, and remove queued frames and

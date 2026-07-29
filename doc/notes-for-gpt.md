@@ -135,10 +135,11 @@ signatures leave the original state unchanged. Canonical decoding remains
 behind current membership/view/target gates for safe new admission.
 
 Committee identity binds the adoption slot, exact adoption-block hash, and
-sorted validator set. Cofounders now author genesis deterministically with the
-lexicographically first founder, producing byte-identical genesis blocks and
-committee identities. Recurring validator sets at later adoption slots retain
-distinct identities.
+sorted validator set. The lexicographically first founding key is now the sole
+slot-1 writer; it records a fresh random `consensus_incarnation/1` fact and the
+other founding members join its pinned anchor. Thus a wipe + re-found creates a
+new consensus domain, while recurring validator sets at later adoption slots
+retain distinct committee identities.
 
 Independent review found consensus ordering, voting, quorum, certificates, and
 proposer selection untouched. Post-review gates are green: EUnit 472/472,
@@ -194,7 +195,8 @@ cannot cancel a transaction that may already be proposed. Both APIs now report
 `{outcome_unknown, TxId}` instead of a false failure; HTTP returns `202 pending`, and
 automatic test retry is restricted to explicit `409`/`503` responses that say the write
 did not apply. A transport failure or timeout is unknown and is never resubmitted. The
-load-test HTTP deadline now derives from the deployed, configurable `park_ttl_ms` rather
+load-test HTTP deadline now derives from the deployed, configurable
+`transaction_ttl_ms` rather
 than assuming 30 seconds. Durable transparent retry still requires a stable client
 operation id and persistent lookup, tracked in `doc/deferred.md`.
 

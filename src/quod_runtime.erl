@@ -306,7 +306,7 @@ handle_cast(_Msg, S) -> {noreply, S}.
 %% A ready edge: the KB finished a rebuild (Id = RecoveryId, or `boot` for the quiet first
 %% ready transition). Reconcile exactly once per edge; a `boot` edge counts only while booting.
 handle_info({replay_ready, boot, _H}, S = #s{mode = booting}) ->
-    {noreply, attach_and_reconcile(boot, S)};
+    {noreply, replace_snapshot_and_reconcile(boot, S)};
 handle_info({replay_ready, boot, _H}, S) ->
     {noreply, S};
 handle_info({replay_ready, Id, _H}, S = #s{last_recovery = Id}) ->
@@ -314,7 +314,7 @@ handle_info({replay_ready, Id, _H}, S = #s{last_recovery = Id}) ->
 handle_info({replay_ready, Id, _H}, S = #s{runner = {_, _, _, _, _}}) ->
     {noreply, S#s{pending_edge = Id}};
 handle_info({replay_ready, Id, _H}, S) ->
-    {noreply, attach_and_reconcile(Id, S)};
+    {noreply, replace_snapshot_and_reconcile(Id, S)};
 handle_info({replay_started, Id, _From}, S = #s{mode = {replaying, Id}}) ->
     {noreply, S};
 handle_info({replay_started, Id, _From}, S) ->
@@ -420,6 +420,15 @@ attach_and_reconcile(Id, S) ->
             S#s{mode = booting}
     end.
 
+%% A ready edge replaces the snapshot generation. Quiesce every reader first,
+%% including heavy workers: replay_started normally does this earlier, but the
+%% ready boundary is independently safe if a start notification was delayed or
+%% lost. Awaiting every DOWN before attach prevents the new MVCC pin from
+%% invalidating an old worker's view.
+replace_snapshot_and_reconcile(Id, S) ->
+    attach_and_reconcile(
+      Id, (kill_runner(S))#s{pending_edge = none}).
+
 %% attach_runtime is a call into a sibling that may be crashing/restarting right now; that
 %% is indistinguishable from "not ready" for our purposes, and crashing here would burn
 %% supervisor restart intensity for nothing (rest_for_one restarts us with the KB anyway).
@@ -497,7 +506,7 @@ reconcile_finished({ok, FoundingCache, #{handlers := Hs, order := Order, index :
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
                                    pump_heavy(release_ready_waiters(S1#s{mode = live}))));
-        Id   -> attach_and_reconcile(Id, S1#s{pending_edge = none})
+        Id   -> replace_snapshot_and_reconcile(Id, S1)
     end;
 reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
     S1 = S0#s{reconcile_failures = S0#s.reconcile_failures + 1},
@@ -512,7 +521,7 @@ reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
             %% otherwise wait for — use it now instead of parking unhealthy
             logger:warning("quod_runtime[~s]: reconcile failed (~0p); retrying with the "
                            "newer ready edge", [Ns, Reason]),
-            attach_and_reconcile(Id, S1#s{pending_edge = none})
+            replace_snapshot_and_reconcile(Id, S1)
     end.
 
 %% Founding configuration errors are permanent (only new founding content or a code fix can
@@ -668,7 +677,7 @@ events_finished({error, Reason}, S) ->
 next_after_runner(S = #s{pending_edge = none}) ->
     maybe_run_events(S);
 next_after_runner(S = #s{pending_edge = Id}) ->
-    attach_and_reconcile(Id, S#s{pending_edge = none}).
+    replace_snapshot_and_reconcile(Id, S).
 
 %% Execution failure: collapse pending work into ONE reconciliation at the newest snapshot.
 %% Collapse ORDERING matters [DA M7]: any in-flight runner is killed first (its stale writes

@@ -2,6 +2,10 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
+-define(OLD_MAGIC, 16#915106AA).
+-define(MAGIC, 16#915106AB).
+-define(READ_CHUNK, 262144).
+
 %%%===================================================================
 %%% fixtures
 %%%===================================================================
@@ -25,13 +29,21 @@ store_test_() ->
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
       fun t_interior_corruption_fail_stops/1,
+      fun t_chunked_tail_detects_distant_magic/1,
+      fun t_chunked_tail_detects_split_magic/1,
+      fun t_chunked_marker_free_tail_trims/1,
       fun t_open_ro_reads/1,
       fun t_open_ro_non_truncating/1,
       fun t_checkpointed_reads/1,
       fun t_trim_across_checkpoints/1,
       fun t_rejects_wrong_first_index/1,
       fun t_fold_beyond_tail/1,
-      fun t_huge_len_tail_trimmed/1]}.
+      fun t_huge_len_tail_trimmed/1,
+      fun t_legacy_format_fails_without_mutation/1,
+      fun t_legacy_tail_fails_without_mutation/1,
+      fun t_short_legacy_header_fails_without_mutation/1,
+      fun t_short_legacy_tail_fails_without_mutation/1,
+      fun t_corrupt_v2_before_legacy_fails_without_mutation/1]}.
 
 %%%===================================================================
 %%% helpers
@@ -175,6 +187,51 @@ t_interior_corruption_fail_stops({Dir, Ns}) ->
         ?assertError({log_corruption, _, _}, quod_ledger_store:open(Ns, Dir))
     end.
 
+%% Interior-corruption detection must stay bounded without losing reach: a
+%% later frame marker beyond multiple read windows still prevents truncation.
+t_chunked_tail_detects_distant_magic({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        Filler = binary:copy(<<0>>, 2 * ?READ_CHUNK + 17),
+        Bytes = <<0:32, Filler/binary, ?MAGIC:32>>,
+        ok = file:write_file(Path, Bytes),
+        ?assertError(
+           {log_corruption, bad_magic, 0},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path))
+    end.
+
+%% The scanner overlaps windows by three bytes, covering every possible split
+%% of a four-byte V1 or V2 marker at a chunk boundary.
+t_chunked_tail_detects_split_magic({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        [begin
+             Filler = binary:copy(<<0>>, ?READ_CHUNK - PrefixBytes),
+             Bytes = <<0:32, Filler/binary, ?OLD_MAGIC:32>>,
+             ok = file:write_file(Path, Bytes),
+             ?assertError(
+                {log_corruption, bad_magic, 0},
+                quod_ledger_store:open(Ns, Dir)),
+             ?assertEqual({ok, Bytes}, file:read_file(Path))
+         end
+         || PrefixBytes <- [1, 2, 3]],
+        ok
+    end.
+
+%% A genuinely final corrupt frame with a large marker-free tail remains
+%% recoverable: after scanning every bounded window, the writer trims it.
+t_chunked_marker_free_tail_trims({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        Filler = binary:copy(<<0>>, 2 * ?READ_CHUNK + 17),
+        ok = file:write_file(Path, <<0:32, Filler/binary>>),
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        ?assertEqual(0, quod_ledger_store:last(Store)),
+        ok = quod_ledger_store:close(Store),
+        ?assertEqual(0, filelib:file_size(Path))
+    end.
+
 %% The index is SPARSE (one checkpointed offset per 256 entries): reads seek to the nearest
 %% checkpoint and hop frame headers forward. Exercise entries just before/on/after a checkpoint
 %% boundary, a read_range run crossing boundaries, the windowed fold/5 stream, and a reopen
@@ -272,7 +329,7 @@ t_huge_len_tail_trimmed({Dir, Ns}) ->
         LogPath = filename:join([Dir, base64url(Ns), "log.0001"]),
         {ok, Fd} = file:open(LogPath, [read, write, raw, binary]),
         {ok, _} = file:position(Fd, eof),
-        ok = file:write(Fd, <<16#915106AA:32, 16#7FFFFFFF:32, 0:32, "junk">>),   %% Len = 2 GiB
+        ok = file:write(Fd, <<?MAGIC:32, 16#7FFFFFFF:32, 0:32, "junk">>),   %% Len = 2 GiB
         ok = file:close(Fd),
         {ok, S2} = quod_ledger_store:open(Ns, Dir),
         ?assertEqual(2, quod_ledger_store:last(S2)),
@@ -280,10 +337,109 @@ t_huge_len_tail_trimmed({Dir, Ns}) ->
         ok = quod_ledger_store:close(S2)
     end.
 
+t_legacy_format_fails_without_mutation({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        Legacy = legacy_raw_frame(ent(1)),
+        ok = file:write_file(Path, Legacy),
+        ?assertEqual(
+           {error, {scan_failed, error,
+                    {unsupported_ledger_format, 1, 0}}},
+           quod_ledger_store:open_ro(Ns, Dir)),
+        ?assertEqual({ok, Legacy}, file:read_file(Path)),
+        ?assertError(
+           {unsupported_ledger_format, 1, 0},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, Legacy}, file:read_file(Path))
+    end.
+
+t_legacy_tail_fails_without_mutation({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        V2 = raw_frame(ent(1)),
+        Legacy = legacy_raw_frame(ent(2)),
+        Bytes = <<V2/binary, Legacy/binary>>,
+        LegacyOffset = byte_size(V2),
+        ok = file:write_file(Path, Bytes),
+        ?assertEqual(
+           {error, {scan_failed, error,
+                    {unsupported_ledger_format, 1, LegacyOffset}}},
+           quod_ledger_store:open_ro(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path)),
+        ?assertError(
+           {unsupported_ledger_format, 1, LegacyOffset},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path))
+    end.
+
+t_short_legacy_header_fails_without_mutation({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        LegacyMagic = <<?OLD_MAGIC:32>>,
+        ok = file:write_file(Path, LegacyMagic),
+        ?assertEqual(
+           {error, {scan_failed, error,
+                    {unsupported_ledger_format, 1, 0}}},
+           quod_ledger_store:open_ro(Ns, Dir)),
+        ?assertEqual({ok, LegacyMagic}, file:read_file(Path)),
+        ?assertError(
+           {unsupported_ledger_format, 1, 0},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, LegacyMagic}, file:read_file(Path))
+    end.
+
+t_short_legacy_tail_fails_without_mutation({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        V2 = raw_frame(ent(1)),
+        LegacyMagic = <<?OLD_MAGIC:32>>,
+        Bytes = <<V2/binary, LegacyMagic/binary>>,
+        LegacyOffset = byte_size(V2),
+        ok = file:write_file(Path, Bytes),
+        ?assertEqual(
+           {error, {scan_failed, error,
+                    {unsupported_ledger_format, 1, LegacyOffset}}},
+           quod_ledger_store:open_ro(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path)),
+        ?assertError(
+           {unsupported_ledger_format, 1, LegacyOffset},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path))
+    end.
+
+t_corrupt_v2_before_legacy_fails_without_mutation({Dir, Ns}) ->
+    fun() ->
+        Path = prepare_log_path(Dir, Ns),
+        Corrupt = bad_crc_raw_frame(ent(1)),
+        Legacy = legacy_raw_frame(ent(2)),
+        Bytes = <<Corrupt/binary, Legacy/binary>>,
+        ok = file:write_file(Path, Bytes),
+        ?assertError(
+           {log_corruption, bad_crc, 0},
+           quod_ledger_store:open(Ns, Dir)),
+        ?assertEqual({ok, Bytes}, file:read_file(Path))
+    end.
+
 %% mirror of quod_ledger_store's frame/1 for hand-crafting log files in tests
 raw_frame(Entry) ->
+    raw_frame(?MAGIC, Entry).
+
+legacy_raw_frame(Entry) ->
+    raw_frame(?OLD_MAGIC, Entry).
+
+raw_frame(Magic, Entry) ->
     P = term_to_binary(Entry, [deterministic]),
-    <<16#915106AA:32, (byte_size(P)):32, (erlang:crc32(P)):32, P/binary>>.
+    <<Magic:32, (byte_size(P)):32, (erlang:crc32(P)):32, P/binary>>.
+
+bad_crc_raw_frame(Entry) ->
+    P = term_to_binary(Entry, [deterministic]),
+    CRC = erlang:crc32(P) bxor 1,
+    <<?MAGIC:32, (byte_size(P)):32, CRC:32, P/binary>>.
+
+prepare_log_path(Dir, Ns) ->
+    LogDir = filename:join(Dir, base64url(Ns)),
+    ok = filelib:ensure_path(LogDir),
+    filename:join(LogDir, "log.0001").
 
 %% mirror of quod_ledger_store:base64url/1 for path construction in the torn-tail test
 base64url(Bin) ->

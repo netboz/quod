@@ -141,10 +141,18 @@ retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
             end
     end.
 
-abolish_clauses(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F) ->
+abolish_clauses(
+  #lp{out_db = #db{mod = M, ref = R},
+      local = L, read_ets = RS} = St,
+  F) ->
     case M:get_procedure_type(R, F) of
         built_in -> error;
-        _        -> {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
+        _ ->
+            %% The resulting retract set is derived from the committed
+            %% procedure later in get_local_changes/1. Therefore abolish is a
+            %% read-modify-write even when the Prolog goal never reads F.
+            record_read(RS, F, M, R),
+            {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
     end.
 
 get_procedure(St, F) ->

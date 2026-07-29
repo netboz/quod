@@ -365,8 +365,8 @@ clause_text({Head, Body}) -> <<(prolog_text(Head))/binary, " :- ", (prolog_text(
 goal_text(undefined) -> null;
 goal_text(G)         -> prolog_text(G).
 
-%% tx_id is opaque bytes for a live tx but readable text for genesis
-%% (`<<"genesis:", Ns>>`): show printable values as-is, other bytes as hex.
+%% A transaction id is opaque bytes. Show printable values as-is and encode
+%% binary protocol ids (including the versioned genesis id) as hexadecimal.
 tx_id_text(Id) when is_binary(Id) ->
     case printable(Id) of
         true  -> Id;

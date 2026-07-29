@@ -16,7 +16,8 @@ A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, last in the `m
   the F2 anti-entropy pull-source selection). Never on the replay/rebuild path, so catching up
   never re-broadcasts history (`content-layer-design.md` §14 live-vs-replay).
 - **Relay / follower** (a caught-up non-member — see `follows/4`): a gossiped `{block, Entry}` for slot
-  `H+1` is verified against the current committee (`quod_catchup:verify_forward/4`) and, if genuine,
+  `H+1` is verified against the current committee and this process's pinned
+  namespace/genesis domain (`quod_catchup:verify_forward/5`) and, if genuine,
   handed to `m:quod_simplex` to append+apply (the sole store writer); then eager-pushed onward. A
   duplicate (`slot ≤ H`) is dropped and **never re-pushed** (loop suppression); a gap (`slot > H+1`) is
   dropped and recovered by anti-entropy.
@@ -69,6 +70,7 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
                                          %% the window spans ≥2 periods so one lost digest can't drop a peer)
 
 -record(s, {ns       :: binary(),
+            genesis_hash :: <<_:256>>,
             self     :: node_id(),
             chan     :: binary(),                                       %% term_to_binary({feed, Ns}, [deterministic])
             digests  :: atom(),                  %% the per-ns liveness table (digest_table/1) this process owns
@@ -138,17 +140,23 @@ init({Ns, Config}) ->
     end.
 
 start(Ns, Config) ->
-    Self = maps:get(node_id, Config),
-    Chan = term_to_binary({feed, Ns}, [deterministic]),
-    quod_reg:subscribe({channel, Chan}),   %% gossiped blocks + digests on {feed, Ns}
-    quod_reg:subscribe({committed, Ns}),   %% local live commits from quod_simplex
-    %% the peer_ready liveness table: public so readers (`peer_ready/3`) never call into this process;
-    %% named so they can derive it from Ns alone; owned here, so it dies (and fails readers closed)
-    %% with the feed and is rebuilt empty on restart. Plain `set` — it is write-mostly (a digest per
-    %% follower per round) and read only rarely (per admit), so read_concurrency would tax the wrong path.
-    Digests = ets:new(digest_table(Ns), [named_table, public, set]),
-    arm_anti_entropy(),
-    {ok, #s{ns = Ns, self = Self, chan = Chan, digests = Digests}}.
+    case quod_simplex:genesis_hash(Ns) of
+        GenesisHash when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
+            Self = maps:get(node_id, Config),
+            Chan = term_to_binary({feed, Ns}, [deterministic]),
+            quod_reg:subscribe({channel, Chan}),   %% gossiped blocks + digests on {feed, Ns}
+            quod_reg:subscribe({committed, Ns}),   %% local live commits from quod_simplex
+            %% the peer_ready liveness table: public so readers (`peer_ready/3`) never call into this process;
+            %% named so they can derive it from Ns alone; owned here, so it dies (and fails readers closed)
+            %% with the feed and is rebuilt empty on restart. Plain `set` — it is write-mostly (a digest per
+            %% follower per round) and read only rarely (per admit), so read_concurrency would tax the wrong path.
+            Digests = ets:new(digest_table(Ns), [named_table, public, set]),
+            arm_anti_entropy(),
+            {ok, #s{ns = Ns, genesis_hash = GenesisHash, self = Self,
+                    chan = Chan, digests = Digests}};
+        _ ->
+            {stop, missing_consensus_anchor}
+    end.
 
 handle_call(get_stats, _From, S) ->
     {Tracked, Fresh} = digest_counts(S#s.digests),
@@ -221,7 +229,8 @@ inbound(Peer, Payload, S) ->
 %%   2. the cert is the proof: verify it against the committee AS-OF-its-slot (for the fast path,
 %%      slot = H+1, that IS our current validator set) before we apply or re-push.
 %% Never applies out of order — a gap is left for anti-entropy (F2).
-on_block(#entry{index = Slot, data = Data} = Entry, S0 = #s{ns = Ns, self = Self}) ->
+on_block(#entry{index = Slot, data = Data} = Entry,
+         S0 = #s{ns = Ns, genesis_hash = GenesisHash, self = Self}) ->
     {{Height, Committee, Syncing}, S} = current(S0),
     case follows(Self, Committee, Syncing, Height) of
         false -> drop(non_following, S);            %% a voter / still-syncing / unfounded node doesn't ingest pushes
@@ -230,7 +239,8 @@ on_block(#entry{index = Slot, data = Data} = Entry, S0 = #s{ns = Ns, self = Self
                 duplicate -> drop(duplicate, S);     %% already applied — loop suppression (benign gossip redundancy)
                 gap       -> drop(gap, S);           %% ahead of H+1 — anti-entropy will re-pull the missing prefix
                 next ->
-                    case quod_catchup:verify_forward(Ns, Committee, Slot, [Entry]) of
+                    case quod_catchup:verify_forward(
+                           Ns, GenesisHash, Committee, Slot, [Entry]) of
                         {ok, [_], _} ->
                             case ingest(Ns, [Entry], ?INGEST_MS, live) of
                                 ok         -> %% our height advanced to Slot — fold the snapshot forward too
@@ -250,8 +260,8 @@ drop(Reason, S = #s{dropped = D}) ->
 %% A node ingests pushed blocks (follows the feed) ONLY when it is a caught-up NON-member observer of a
 %% founded namespace:
 %%   - past genesis (`Height >= 1`): slot 1 and its committee are established only by the anchored
-%%     catch-up path; ingesting a slot-1 push would bypass the `genesis_hash` anchor (verify_forward
-%%     accepts a `cert=none` genesis on trust) and let a peer forge our origin;
+%%     catch-up owner. `verify_forward/5` also checks the slot-1 hash against `genesis_hash`, but the
+%%     feed must not race boot recovery or become a second genesis-ingestion path;
 %%   - not still syncing (`not Syncing`): quod_simplex's own boot-sync / gap-fill worker owns ingestion
 %%     while it runs — racing it on the store churns/aborts the sync. Once settled (`Syncing=false`) the
 %%     feed takes over as the observer's completeness path (F1 one-puller handoff);
@@ -427,16 +437,18 @@ digest_counts(Table) ->
 %% live sampled peer (`Contact = Addr`) instead of a boot seed: pull a window via quod_catchup, which
 %% verifies each entry's cert and transactions against the committee it folds forward, then sinks it
 %% through quod_simplex
-%% (the sole writer, contiguity-checked). `From > 1` here (a follower is past genesis), so the genesis
-%% anchor is skipped — every block is proven inductively from the committee we already hold. One worker
+%% (the sole writer, contiguity-checked). `From > 1` here (a follower is past genesis), but the pinned
+%% anchor still derives the signature domain for every mid-chain certificate. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
-start_pull(Peer, From, Committee, S = #s{ns = Ns}) ->
+start_pull(Peer, From, Committee,
+           S = #s{ns = Ns, genesis_hash = GenesisHash}) ->
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
             Sink  = fun(Es) -> ingest(Ns, Es, ?PULL_SINK_MS, replay) end,
             try
-                quod_catchup:catch_up(Ns, <<>>, Fetch, Sink, From, Committee)
+                quod_catchup:catch_up(
+                  Ns, GenesisHash, Fetch, Sink, From, Committee)
             after
                 %% Close even a failed or partial pull at its valid durable prefix. Simplex sent
                 %% every Prolog apply cast, so its ready edge cannot overtake the final apply.

@@ -1,7 +1,8 @@
 -module(quod_conn).
 -moduledoc """
-A **connection**: one process per peer, **owning** one pure-Erlang `quic`
-connection and routing its streams to `m:quod_link` processes.
+A **connection owner**: one process per pure-Erlang `quic` connection, routing
+its streams to `m:quod_link` processes. A physical peer can intentionally have
+separate ordinary, pinned, and identity-discovery connections.
 
 The `quic` owner model delivers every stream's events to this one process, so
 `quod_conn` is the demux point: `{quic, Conn, {stream_data, StreamId, Bin, Fin}}`
@@ -14,10 +15,10 @@ dies with it — and each link's death is the disconnect signal its holder
 monitors.
 """.
 
--export([start_outbound/8, start_inbound/2, open_link/3, send/3]).
+-export([start_outbound/9, start_inbound/3, open_link/3, send/3]).
 
--record(s, {conn, self, peer = undefined,
-            expected_peer = undefined,  %% pinned outbound identity, `any` for directory-seed TOFU
+-record(s, {conn, owner, self, peer = undefined,
+            expected_peer = undefined,  %% pinned outbound identity, `any` for identity discovery
             learn_hint = learn,         %% what our outbound stream headers ask the receiver to do
             streams = #{},   %% StreamId => LinkPid   (every link, for routing inbound data)
             chans   = #{},   %% Channel  => LinkPid   (our OUTBOUND links only, for send reuse/dedup)
@@ -32,14 +33,15 @@ monitors.
 -doc """
 Dial `Host:Port` (known node id `Peer`), become the connection owner, serve links.
 We present our own `Cert`/`Key` so the peer (the TLS server) can authenticate us via
-mutual TLS. `verify => false` skips validating the *peer's* self-signed server cert (no
-CA chain); the peer authenticates US, and we authenticate it when it dials back — every
-directed pair is server-verifies-client.
+mutual TLS. `verify => false` skips CA-chain validation of the peer's
+self-signed server certificate. The identity policy below still extracts its
+Ed25519 key and pins it whenever the caller supplied a node key.
 """.
 -spec start_outbound(inet:hostname(), inet:port_number(), term(), term(), [binary()],
-                     term(), term(), map()) -> pid().
-start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy) ->
+                     term(), term(), map(), pid()) -> pid().
+start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy, Owner) ->
     spawn(fun() ->
+        link(Owner),
         process_flag(trap_exit, true),
         %% QUIC liveness (idle_timeout + keep_alive_interval) for fast dead-peer detection, from
         %% config via `quod_quic:liveness_opts/0` — the SAME source the server listener uses, so
@@ -53,7 +55,8 @@ start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy) ->
                     {quic, Conn, {connected, _}} ->
                         case outbound_identity(Conn, Peer, Policy) of
                             {ok, BoundPeer, ExpectedPeer, LearnHint} ->
-                                run(#s{conn = Conn, self = Self, peer = BoundPeer,
+                                run(#s{conn = Conn, owner = Owner,
+                                       self = Self, peer = BoundPeer,
                                        expected_peer = ExpectedPeer, learn_hint = LearnHint});
                             {error, Reason} ->
                                 logger:warning(
@@ -89,11 +92,12 @@ fail_queued_opens(Peer) ->
     end.
 
 -doc "Own an accepted connection `Conn` (the `quic` listener transfers ownership to us).".
--spec start_inbound(pid(), term()) -> pid().
-start_inbound(Conn, Self) ->
+-spec start_inbound(pid(), term(), pid()) -> pid().
+start_inbound(Conn, Self, Owner) ->
     spawn(fun() ->
+        link(Owner),
         process_flag(trap_exit, true),
-        run(#s{conn = Conn, self = Self})
+        run(#s{conn = Conn, owner = Owner, self = Self})
     end).
 
 -doc "Ask this connection to open (or reuse) a link for `Channel`, replying to `ReplyTo`.".
@@ -166,9 +170,9 @@ loop(S = #s{conn = Conn}) ->
             exit({shutdown, conn_closed});
         {quic, Conn, _Other} ->                  %% connected, send_ready, timer, ...
             loop(S);
-        {link_up, Channel, RemotePeer, LinkPid, Origin} ->
+        {link_up, Channel, RemotePeer, LinkPid, out} ->
             loop(handle_link_up(
-                   Channel, RemotePeer, LinkPid, Origin, undefined, S));
+                   Channel, RemotePeer, LinkPid, S));
         {authenticate_link, LinkPid, Ref, _Channel, RemotePeer, LearnHint}
           when is_pid(LinkPid), is_reference(Ref) ->
             case authenticate_inbound(RemotePeer, LearnHint, S) of
@@ -179,8 +183,14 @@ loop(S = #s{conn = Conn}) ->
                     logger:warning(
                       "quod: dropping inbound connection — peer identity ~p",
                       [Reason]),
+                    _ = catch quic:close(Conn, normal),
                     exit({shutdown, {peer_identity, Reason}})
             end;
+        {'EXIT', Conn, Reason} ->
+            exit({shutdown, {conn_closed, Reason}});
+        {'EXIT', Owner, Reason} when Owner =:= S#s.owner ->
+            _ = catch quic:close(Conn, normal),
+            exit({shutdown, {transport_owner_down, Reason}});
         {'EXIT', LinkPid, _Reason} ->
             loop(drop_link(LinkPid, S));
         _Other ->
@@ -298,7 +308,7 @@ authenticate_inbound(RemotePeer, LearnHint,
             {error, expected_peer_mismatch}
     end.
 
-handle_link_up(Channel, RemotePeer, LinkPid, out, _LearnHint,
+handle_link_up(Channel, RemotePeer, LinkPid,
                S = #s{chans = Chans, pending = Pending}) ->
     case maps:get(Channel, Chans, undefined) of
         Existing when is_pid(Existing), Existing =/= LinkPid ->
@@ -405,9 +415,9 @@ bind_ok({Pubkey, _Addr}, Conn) when is_binary(Pubkey), byte_size(Pubkey) =:= 32 
     end;
 bind_ok(_RemotePeer, _Conn) -> {fail, malformed_header_identity}.
 
-%% Directory dials are scoped: `ExpectedPeer` pins a known route key; `any` is the
-%% one-shot private-seed TOFU mode. Ordinary transport keeps its existing unpinned
-%% endpoint/cache behavior. The certificate is checked before any stream can open.
+%% `ExpectedPeer` pins a known route key; `any` authenticates and returns the
+%% certificate key for identity discovery. A bare endpoint has no expected key
+%% and remains address-routed. The check completes before a stream can open.
 outbound_identity(_Conn, Peer, #{expected_peer := undefined, learn_hint := LearnHint}) ->
     {ok, Peer, undefined, LearnHint};
 outbound_identity(Conn, _Peer, #{expected_peer := Expected, learn_hint := LearnHint})

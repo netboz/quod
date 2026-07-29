@@ -5,7 +5,7 @@ the **connection authority**.
 
 It starts the `quic` server (each accepted connection is handed to a
 `m:quod_conn` owner via `connection_handler`), and serializes outbound
-connection creation per pool key (ordinary, pinned, or private-seed; no dial
+connection creation per pool key (ordinary, pinned, or identity-discovery; no dial
 race within a pool). Streams/links and message delivery live in
 `m:quod_conn` / `m:quod_link`.
 
@@ -33,7 +33,7 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 -behaviour(gen_server).
 
 -export([start_link/0, open_link/2, open_link_pinned/3,
-         open_link_private_seed/2,
+         open_link_identified/2,
          send/3, send_pinned/4,
          learn/2, learn_if_absent/2, resolve/1, valid_endpoint/1,
          liveness_opts/0]).
@@ -89,19 +89,19 @@ open_link_pinned(NodeKey, Endpoint, Channel) ->
     Ref.
 
 -doc """
-Open a private direct-seed link to `Endpoint`. The peer's TLS key is accepted
-as the route-local TOFU result and returned in
-`{link_up, Ref, NodeKey, Channel, LinkPid}`. The connection is isolated and
-suppresses address-hint learning.
+Open an identity-discovery link to `Endpoint`. The peer's TLS key is returned
+in `{link_up, Ref, NodeKey, Channel, LinkPid}` after certificate/header
+authentication. The isolated connection suppresses automatic address-hint
+learning; its caller decides whether the identity is authorised and retained.
 """.
--spec open_link_private_seed(
+-spec open_link_identified(
         {inet:hostname(), inet:port_number()}, binary()) ->
           reference().
-open_link_private_seed(Endpoint, Channel) ->
+open_link_identified(Endpoint, Channel) ->
     Ref = make_ref(),
     gen_server:cast(
       quod_reg:via(?KEY),
-      {open_link_private_seed, Endpoint, Channel, {self(), Ref}}),
+      {open_link_identified, Endpoint, Channel, {self(), Ref}}),
     Ref.
 
 -doc """
@@ -121,7 +121,7 @@ send_pinned(NodeKey, Endpoint, Channel, Frame) ->
 like `open_link/2`, but the caller never sees the link: the connection reuses a live link or **buffers**
 `Frame` until one is ready (`m:quod_conn`). Non-blocking; a resolve/connect failure silently drops the
 frame (the caller relies on its own retry/anti-entropy). This is the send path for endpoints that don't
-need the link lifecycle (`m:quod_prove`, `m:quod_catchup`, `m:quod_feed`); use `open_link/2` when you
+need the link lifecycle (`m:quod_catchup`, `m:quod_feed`); use `open_link/2` when you
 must monitor the link yourself (Brahms, consensus).
 """.
 -spec send(binary() | {inet:hostname(), inet:port_number()}, binary(), binary()) -> ok.
@@ -233,7 +233,11 @@ init([]) ->
 %% Bring up the listener once identity, address, and cert/key are all in hand.
 start_listener(Port, ALPN, {Pubkey0, Addr} = Self, Cert, Key) ->
     _ = ensure_cache(),
-    Handler = fun(Conn) -> {ok, quod_conn:start_inbound(Conn, Self)} end,
+    Authority = self(),
+    Handler =
+        fun(Conn) ->
+            {ok, quod_conn:start_inbound(Conn, Self, Authority)}
+        end,
     %% `verify => true` makes the server REQUEST + verify the client's cert: the TLS 1.3
     %% CertificateVerify proves the peer holds its keypair, WITHOUT a CA chain — so per-node
     %% self-signed Ed25519 certs authenticate the peer pubkey (read via `quic:peercert/1`,
@@ -276,7 +280,7 @@ handle_call(_Req, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
 %% The connection authority is created here. Ordinary targets resolve through
-%% the shared cache; pinned and private-seed targets carry an explicit endpoint.
+%% the shared cache; pinned and identity-discovery targets carry an explicit endpoint.
 handle_cast({open_link_pinned, NodeKey, Endpoint, Channel, ReplyTo}, State) ->
     case ensure_pinned_conn(NodeKey, Endpoint, State) of
         {ok, ConnPid, State1} ->
@@ -297,10 +301,10 @@ handle_cast({send_pinned, NodeKey, Endpoint, Channel, Frame}, State)
     end;
 handle_cast({send_pinned, _NodeKey, _Endpoint, _Channel, _Frame}, State) ->
     {noreply, State};
-handle_cast({open_link_private_seed, Endpoint, Channel, ReplyTo}, State) ->
+handle_cast({open_link_identified, Endpoint, Channel, ReplyTo}, State) ->
     case is_endpoint(Endpoint) of
         true ->
-            ConnKey = {private_seed, Endpoint},
+            ConnKey = {identified_endpoint, Endpoint},
             Policy = #{expected_peer => any, learn_hint => no_learn},
             {ConnPid, State1} =
                 ensure_conn(ConnKey, Endpoint, Endpoint, Policy, State),
@@ -313,7 +317,7 @@ handle_cast({open_link_private_seed, Endpoint, Channel, ReplyTo}, State) ->
 handle_cast({open_link, Target, Channel, ReplyTo}, State) ->
     case resolve(Target) of
         {ok, Endpoint} ->
-            Policy = #{expected_peer => undefined, learn_hint => learn},
+            Policy = ordinary_identity_policy(Target),
             {ConnPid, State1} = ensure_conn(Target, Target, Endpoint, Policy, State),
             quod_conn:open_link(ConnPid, Channel, ReplyTo),
             {noreply, State1};
@@ -328,7 +332,7 @@ handle_cast({open_link, Target, Channel, ReplyTo}, State) ->
 handle_cast({send, Target, Channel, Frame}, State) ->
     case resolve(Target) of
         {ok, Endpoint} ->
-            Policy = #{expected_peer => undefined, learn_hint => learn},
+            Policy = ordinary_identity_policy(Target),
             {ConnPid, State1} = ensure_conn(Target, Target, Endpoint, Policy, State),
             quod_conn:send(ConnPid, Channel, Frame),
             {noreply, State1};
@@ -359,7 +363,7 @@ terminate(_Reason, _State) ->
 %% own outgoing streams keeps us on the proven client-initiated path. The cost is one
 %% connection per direction (two per pair) instead of a shared one — cheap and reliable.
 %% `ConnKey` preserves the caller's trust mode: an ordinary target, an exact
-%% pinned key+endpoint, or a private seed endpoint. The dial always uses
+%% pinned key+endpoint, or an identity-discovery endpoint. The dial always uses
 %% `Endpoint`.
 ensure_conn(ConnKey, Peer, Endpoint, Policy, State = #state{conns = Conns}) ->
     case maps:get(ConnKey, Conns, undefined) of
@@ -390,13 +394,21 @@ ensure_pinned_conn(_NodeKey, _Endpoint, _State) ->
 start_conn(ConnKey, Peer, {Host, Port}, Policy,
            State = #state{conns = Conns, self = Self, alpn = ALPN,
                           cert = Cert, key = Key}) ->
-    Pid = quod_conn:start_outbound(Host, Port, Peer, Self, ALPN, Cert, Key, Policy),
+    Pid =
+        quod_conn:start_outbound(
+          Host, Port, Peer, Self, ALPN, Cert, Key, Policy, self()),
     _ = erlang:monitor(process, Pid),
     {Pid, State#state{conns = maps:put(ConnKey, Pid, Conns)}}.
 
 directory_link_error({ReplyTo, Ref}, Peer, Channel) ->
     ReplyTo ! {link_error, Ref, Peer, Channel},
     ok.
+
+ordinary_identity_policy(Target)
+  when is_binary(Target), byte_size(Target) =:= 32 ->
+    #{expected_peer => Target, learn_hint => learn};
+ordinary_identity_policy(_Target) ->
+    #{expected_peer => undefined, learn_hint => learn}.
 
 %% ======================================================================
 %% helpers

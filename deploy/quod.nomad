@@ -40,7 +40,7 @@ variable "proof_timeout_ms" {
   description = "Absolute lifetime of a client proof, including cross-ontology waits."
 }
 
-variable "park_ttl_ms" {
+variable "transaction_ttl_ms" {
   type        = number
   default     = 30000
   description = "How long a proved write waits locally for a final applied/rejected outcome. Expiry returns outcome_unknown and does not cancel consensus."
@@ -144,22 +144,29 @@ variable "bootstrap" {
 # One homogeneous fleet, one durable volume family, one rolling-update domain.
 #
 # Fresh bootstrap (the ONLY destructive action — gated on the explicit `-var bootstrap=true`):
-#   1. Create quod-node[0..N-1] from deploy/volumes/quod-node.hcl.
-#   2. nomad job run -var image_tag=TAG -var bootstrap=true deploy/quod.nomad
-#      bootstrap=true forces count=1 and mode=create — one founder writes genesis.
-#   3. Read the `genesis anchor` hash from that allocation's log.
-#   4. nomad job run -var image_tag=TAG -var node_count=N \
+#   1. Stop the job and delete every dynamic host volume named
+#      quod-node-local[N]. If cloud satellites have run, wipe their
+#      quod-node-cloud allocation subdirectories too. See
+#      doc/consensus-signatures.md for the canonical persistence contract.
+#   2. Recreate quod-node-local[0..N-1] with `nomad volume create` from
+#      deploy/volumes/quod-node-local.hcl, assigning the indices round-robin
+#      across the ready compute-node IDs.
+#   3. nomad job run -var image_tag=TAG -var bootstrap=true deploy/quod.nomad
+#      bootstrap=true forces count=1 and mode=create — one founder writes a
+#      fresh random incarnation into genesis.
+#   4. Read the `genesis anchor` hash from that allocation's log.
+#   5. nomad job run -var image_tag=TAG -var node_count=N \
 #        -var genesis_hash=HEX deploy/quod.nomad
-#      bootstrap defaults false ⇒ EVERY allocation runs in join mode: allocation
-#      zero resumes its durable ledger (its volume is the anchor), and every new
-#      allocation joins against the pinned history. All later deploys (image bumps,
-#      scaling) are this same join-mode form.
+#      bootstrap defaults false ⇒ EVERY allocation runs in join mode. Allocation
+#      zero resumes its durable ledger; every new allocation catches up as an
+#      observer and must then be admitted through the root ontology. All later
+#      deploys (image bumps, scaling) use this same anchored join-mode form.
 #
 # SAFETY: because founding is gated on `bootstrap` (a bool defaulting false), NOT on
 # an empty genesis_hash, a routine `nomad job run` that forgets `-var genesis_hash`
 # can never collapse the fleet to one node or re-found a divergent chain — it stays a
 # non-destructive join-mode deploy (mode=join never writes genesis; existing volumes
-# just resume). Set `bootstrap=true` ONLY against freshly provisioned volumes.
+# just resume). Set `bootstrap=true` ONLY against empty host volumes.
 #
 # The `update` stanza applies per task group: `max_parallel=1` rolls the home fleet one
 # node at a time, and the (count=1) cloud group independently.
@@ -191,14 +198,16 @@ job "quod" {
     }
 
     # Fast LOCAL storage: a per-alloc dynamic host volume (mkdir plugin) on each compute
-    # node's local disk (~2ms fdatasync vs Ceph RBD's 40-137ms). This carries EVERYTHING
+    # node's local disk. This carries EVERYTHING
     # for the node — identity, vote journal, and the block ledger — on one fast disk, so
     # every consensus sync is local. Safe because the durability domains are unified: a
     # host that survives keeps all three (restart resumes with its votes remembered); a
     # host that dies loses all three together, so the node can only return as a fresh
     # validator (no identity kept while votes are lost — the equivocation hazard cannot
-    # arise). The volumes are pre-created pinned per alloc index; identities were migrated
-    # off the old Ceph volumes before this switch, so the committee is unchanged.
+    # arise). Each indexed dynamic volume is explicitly created and pinned to a compute
+    # node from deploy/volumes/quod-node-local.hcl before the job runs; ordinary
+    # reschedules reuse it, while a deliberate re-found deletes and recreates every
+    # instance.
     volume "quod-data" {
       type      = "host"
       source    = "quod-node-local"
@@ -334,7 +343,7 @@ content = [
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
-    park_ttl_ms = ${var.park_ttl_ms}
+    transaction_ttl_ms = ${var.transaction_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}
@@ -466,7 +475,7 @@ EOT
 
   # Cloud satellite(s): same node software, same join semantics, placed on `cloud`-class
   # clients (VMs reached over the tailnet). Deltas from quod-node, all forced by the WAN seam:
-  #   - host volume instead of Ceph CSI (no RBD attach across the tunnel);
+  #   - host volume, with no network-storage dependency across the tunnel;
   #   - ALWAYS join mode with NO allocation-zero exemption — a satellite is never the
   #     resume-anchor and never founds (count drops to 0 on a founding deploy);
   #   - satellites MAY stack on one cloud host (no distinct_hosts): each alloc isolates its
@@ -600,7 +609,7 @@ content = [
     max_proof_workers = ${var.max_proof_workers}
     max_ask_workers = ${var.max_ask_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
-    park_ttl_ms = ${var.park_ttl_ms}
+    transaction_ttl_ms = ${var.transaction_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
     ask_timeout_ms = ${var.ask_timeout_ms}
     ask_step_timeout_ms = ${var.ask_step_timeout_ms}

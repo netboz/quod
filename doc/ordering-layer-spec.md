@@ -4,8 +4,16 @@
 > layer (`quod_ledger`), which has since been **removed**. quod's consensus is now a hand-rolled
 > **DispersedSimplex** BFT (`quod_simplex`); the authoritative sources are `doc/simplex_extended.pdf`
 > (§2 = the spec) and the module docs (`quod_simplex`, `quod_vote_journal`, `quod_ledger_store`,
-> `quod_prolog`). §4 below remains broadly accurate. §3 describes the retired Raft store rather than
-> today's committed log plus vote journal; §§1–3 and the M1–M5 build plan are kept only as history.
+> `quod_prolog`). The entire document is historical; even §4 contains retired
+> API shapes and reply semantics. §3 describes the retired Raft store rather than
+> today's committed log plus vote journal; §§1–4 and the M1–M5 build plan are kept only as history.
+> The supervision examples in §5 are also historical: current dynamic children
+> use stable ids and permanent restart semantics, while
+> `quod_namespace_manager` retains desired content/Brahms configurations and
+> reconciles them after either pool supervisor is replaced.
+>
+> The current normative consensus-signature and bounded-live-state contract is
+> [`consensus-signatures.md`](consensus-signatures.md).
 
 This document is the single, unified Phase-1 build spec for quod's ordering/content layer, realizing
 `doc/content-layer-design.md` §13. The decisions it fixes: a **hand-rolled lean Raft** over `quod_link`
@@ -1029,7 +1037,7 @@ start_link(Ns, Config) ->
 namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 -define(DEFAULTS, #{node_id => undefined,
-                    park_ttl_ms => 30000,
+                    transaction_ttl_ms => 30000,
                     validation_ttl_ms => 2000,
                     max_proof_workers => 64}).
 ```
@@ -1242,6 +1250,11 @@ to zero after the corresponding workers finish is a useful stuck-query signal.
 ---
 
 ## 5. `quod_ns_sup` lifecycle + membership
+
+> **Historical section.** The `simple_one_for_one`/`transient` examples below
+> describe Phase 1 and must not be copied. Current code uses empty
+> `one_for_one` dynamic supervisors, stable per-namespace child ids, permanent
+> children, and `quod_namespace_manager` as the desired-state owner.
 
 ### 5.1 `quod_ns_sup` — subtree root (`src/quod_ns_sup.erl`)
 

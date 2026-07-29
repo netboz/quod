@@ -30,6 +30,29 @@ direct_seed_is_local_and_precedes_system_test() ->
           ?assertEqual(key(2), maps:get(node_key, Confirmed))
       end).
 
+ambiguous_direct_seed_promotion_fails_without_owner_crash_test() ->
+    Ns = <<"quod:agent">>,
+    Seed = {<<"private">>, 2003},
+    with_directory(
+      #{direct_seeds => #{Ns => [Seed]}},
+      fun(Pid) ->
+          _ = sys:replace_state(
+                Pid,
+                fun(State) ->
+                    true = ets:insert(
+                             quod_directory_routes,
+                             {Ns, direct, {direct_seed, Seed}, undefined,
+                              Seed, provisional, infinity, 1, 1}),
+                    State
+                end),
+          ?assertEqual(
+             {error, ambiguous_seed},
+             quod_directory:confirm_direct_seed(Ns, Seed, key(22))),
+          ?assert(is_process_alive(Pid)),
+          {known, Routes} = quod_directory:resolve(Ns),
+          ?assertEqual(2, length(Routes))
+      end).
+
 mixed_allowlist_record_is_rejected_whole_test() ->
     A = <<"quod:agent">>,
     B = <<"quod:root">>,
@@ -46,6 +69,23 @@ mixed_allowlist_record_is_rejected_whole_test() ->
           ?assertEqual(unknown, quod_directory:resolve(B)),
           ?assertEqual(#{routes => 0, highwater => 0, known => 0},
                        quod_directory:stats())
+      end).
+
+snapshot_batch_preserves_position_aligned_admission_test() ->
+    Ns = <<"quod:agent">>,
+    Allowed = key(31),
+    Denied = key(32),
+    with_directory(
+      #{allowlist => #{Ns => [Allowed]}},
+      fun(_Pid) ->
+          {ok, [{ok, Expiry}, {error, not_allowed}]} =
+              quod_directory:install_records(
+                [{Allowed, {<<"allowed">>, 1031}, [Ns], 1, 1},
+                 {Denied, {<<"denied">>, 1032}, [Ns], 1, 1}]),
+          ?assert(is_integer(Expiry)),
+          ?assertEqual(
+             [{Allowed, <<"allowed">>, 1031}],
+             quod_directory:directory_hosts(Ns))
       end).
 
 highwater_survives_expiry_and_blocks_replay_test() ->

@@ -42,7 +42,7 @@ defaults_test() ->
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
     ?assertEqual(64,              maps:get(max_ask_workers, B)),
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
-    ?assertEqual(30000,           maps:get(park_ttl_ms, B)),
+    ?assertEqual(30000,           maps:get(transaction_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
     ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
@@ -219,12 +219,12 @@ genesis_hash_parse_test() ->
 build_ns_config_genesis_hash_test() ->
     Raw = crypto:strong_rand_bytes(32),
     Content = #{namespace => <<"quod:root">>, mode => join, role => member, seeds => [<<"1.2.3.4:14567">>],
-                park_ttl_ms => 12345,
+                transaction_ttl_ms => 12345,
                 genesis_file => <<"">>, data_dir => <<"">>, genesis_hash => binary:encode_hex(Raw)},
     {<<"quod:root">>, NsCfg} = quod_app:build_ns_config(Content),
     ?assertEqual(join, maps:get(mode, NsCfg)),
     ?assertEqual(Raw,  maps:get(genesis_hash, NsCfg)),
-    ?assertEqual(12345, maps:get(park_ttl_ms, NsCfg)),
+    ?assertEqual(12345, maps:get(transaction_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
     ?assertEqual([{"1.2.3.4", 14567}], maps:get(seed_peers, NsCfg)).
 
@@ -237,10 +237,20 @@ build_ns_config_no_genesis_hash_test() ->
     ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
     ?assertEqual(64, maps:get(max_ask_workers, NsCfg)),
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
-    ?assertEqual(30000, maps:get(park_ttl_ms, NsCfg)),
+    ?assertEqual(30000, maps:get(transaction_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
     ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
+
+root_recovery_contacts_ignore_invalid_content_seed_test() ->
+    Cfg =
+        #{content =>
+              [#{namespace => <<"quod:root">>,
+                 seeds => [<<"10.0.0.1:14567">>, <<":14567">>,
+                           <<"bad">>, <<"10.0.0.1:14567">>]}]},
+    ?assertEqual(
+       [{"10.0.0.1", 14567}],
+       quod_app:root_contacts(Cfg)).
 
 deep(Map, Path) -> lists:foldl(fun(K, M) -> maps:get(K, M) end, Map, Path).
 

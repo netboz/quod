@@ -15,9 +15,9 @@ quod_brahms (gen_statem, one per namespace Ns) ── view V + min-wise sampler
    │   gossips on channel Ns; open_link / quod_link:send / monitor(LinkPid)
    ▼
 quod_quic (gen_server, singleton) ──────────────── server + dialer + authority
-   │   one connection per peer (no dial race); pure-Erlang QUIC
+   │   one connection per pool key (no dial race within a pool); pure-Erlang QUIC
    ▼
-quod_conn (one process per peer) ───────────────── OWNS the QUIC connection
+quod_conn (one process per QUIC connection) ────── OWNS that connection
    │   demuxes {stream_data, StreamId, ..} to the right link
    ▼
 quod_link (one process per (peer, channel)) ────── framing + publish + send
@@ -28,10 +28,10 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | ------ | ---- |
 | `quod_brahms` | per-namespace membership statem (push/pull/reconstruct rounds) |
 | `quod_brahms_sampler` | secret-keyed min-wise uniform sampler (HMAC-SHA256) |
-| `quod_quic` | QUIC server + dialer + one-connection-per-peer authority |
-| `quod_conn` | per-peer connection owner; routes stream data to links |
+| `quod_quic` | QUIC server + dialer; serializes ordinary, pinned, and identity-discovery pools |
+| `quod_conn` | per-connection owner; routes stream data to links |
 | `quod_link` | per-(peer, channel) stream: header handshake + length-prefixed frames |
-| `quod_reg` | gproc nomenclature (`{conn,NodeId}`, `{channel,Ns}`, `{quod_brahms,Ns}`, …) |
+| `quod_reg` | gproc nomenclature (`{channel,Ns}`, `{quod_brahms,Ns}`, `{quod_ns,Ns}`, …) |
 | `quod_app` | env-driven boot (config from the orchestrator) |
 | `quod_simplex` | per-namespace BFT ordering, batching, failover, and recovery |
 | `quod_transaction` | namespace-bound canonical transaction signing and relay envelopes |
@@ -46,10 +46,17 @@ The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}`
 and **mutual TLS** binds the connection to that key (`quic:peercert/1` must match the
 claimed pubkey). The committee is identified by pubkeys; Brahms discovery still works in
 addresses (it reads the `Addr` from the header). Consensus shares, finality
-certificates, and every non-genesis transaction are Ed25519-signed. A write sent
+certificates, and every non-genesis transaction are Ed25519-signed. Consensus
+signatures are bound to the ontology namespace and its pinned genesis hash, so
+an overlapping committee cannot replay a vote or certificate from another
+ontology or differently anchored chain. The sole founder records a fresh,
+queryable `consensus_incarnation/1` nonce in slot 1, so wiping and re-founding
+the same namespace produces a new signature domain. A write sent
 to a non-leader validator is transparently relayed to the proposer of its exact
 earliest usable slot using the signed canonical bytes; signatures authenticate
 authors but do not replace the still-deferred user/agent authorization policy.
+The canonical consensus signature contract is
+[`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 
 **Message contract.** A consumer of channel `Ns`:
 
@@ -84,15 +91,11 @@ quod_brahms:sample(<<"ont:test">>).   %% a uniform sample
 
 ## Configuration
 
-A release reads its config from the environment (so a node is configured by its
-orchestrator, no custom `sys.config`):
-
-| env var | effect |
-| ------- | ------ |
-| `QUOD_PORT` | QUIC `listen_port` (and the port of this node's `node_id`) |
-| `QUOD_NODE_IP` | `node_id = {QUOD_NODE_IP, QUOD_PORT}` — the dialable id |
-| `QUOD_NAMESPACE` | ontology namespace to join on boot |
-| `QUOD_SEEDS` | space/comma-separated `ip:port` bootstrap peers |
+Each release reads its HOCON configuration file (normally `config/quod.conf`,
+rendered by the orchestrator). Scalar settings may be overridden with `QUOD_`
+environment variables using `__` for nesting; content namespaces remain file
+configured because `content` is a list. See `config/quod.conf` for the current
+configuration surface.
 
 Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 `14568`): `quod_up` and per-namespace `quod_brahms_{view_size,sample_size,links,rounds}`.
@@ -119,32 +122,79 @@ deploying on substantially larger dedicated resources.
 ## Deploy (Docker + Nomad)
 
 ```bash
-TAG=0.7.1
+set -euo pipefail
+
+TAG=0.7.49
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# Provision one clean CSI ledger per allocation.
-for i in $(seq 0 $((NODE_COUNT - 1))); do
-  sed "s/quod-node\[0\]/quod-node[$i]/; s/quod-node-0/quod-node-$i/" \
-    deploy/volumes/quod-node.hcl | nomad volume create -
-done
+# This release is a hard persistence break. Stop the fleet, then delete every
+# dynamic compute volume named quod-node-local[N]. Obtain and verify the IDs
+# before deleting them; /quod/data is the allocation mount, not the host path.
+nomad job stop -purge quod
+nomad volume status -type host
+nomad volume status -type host -json |
+  jq -r '.[] | select(.Name | test("^quod-node-local\\[[0-9]+\\]$")) | .ID' |
+  while IFS= read -r volume_id; do
+    nomad volume delete -type host "$volume_id"
+  done
+[ "$(nomad volume status -type host -json |
+       jq '[.[] | select(.Name | test("^quod-node-local\\[[0-9]+\\]$"))] | length')" -eq 0 ]
 
-# No anchor means bootstrap: the jobspec forces one allocation in create mode.
-nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" deploy/quod.nomad
+# Recreate one empty mkdir-plugin host volume per allocation index, distributed
+# deterministically across the ready compute nodes.
+mapfile -t COMPUTE_NODE_IDS < <(
+  nomad node status -json |
+    jq -r '.[] |
+      select(.NodeClass == "compute" and
+             .Status == "ready" and
+             .SchedulingEligibility == "eligible") |
+      .ID' |
+    sort
+)
+[ "${#COMPUTE_NODE_IDS[@]}" -gt 0 ]
+COMPUTE_NODE_COUNT="${#COMPUTE_NODE_IDS[@]}"
+for i in $(seq 0 $((NODE_COUNT - 1))); do
+  node_id="${COMPUTE_NODE_IDS[$((i % COMPUTE_NODE_COUNT))]}"
+  sed -e "s/quod-node-local\\[0\\]/quod-node-local[$i]/" \
+      -e "s/__COMPUTE_NODE_ID__/$node_id/" \
+    deploy/volumes/quod-node-local.hcl | nomad volume create -
+done
+nomad volume status -type host
+[ "$(nomad volume status -type host -json |
+       jq '[.[] |
+         select((.Name | test("^quod-node-local\\[[0-9]+\\]$")) and
+                .PluginID == "mkdir" and .State == "ready")] |
+         length')" -eq "$NODE_COUNT" ]
+
+# Founding is explicit: one allocation creates a fresh random incarnation.
+nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
+  -var bootstrap=true -var cloud_node_count=0 deploy/quod.nomad
 
 # Copy the logged genesis anchor, then expand the same homogeneous group.
+read -r -p "Genesis anchor (64 hexadecimal characters): " GENESIS_HASH
+[[ "$GENESIS_HASH" =~ ^[0-9A-Fa-f]{64}$ ]]
 nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
-  -var node_count="$NODE_COUNT" -var genesis_hash=<hex> deploy/quod.nomad
+  -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
+  -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad
+
+# The new allocations join as observers. Once each is caught up, submit one
+# admit(Pubkey, Host, Port) transaction from a validator, until N validators
+# are present.
 ```
 
-The clean ledger format has no pre-`0.7` compatibility path, so bootstrap it on
-fresh `quod-node` volumes. The founder is only the first event: after the anchor
-is supplied, every allocation belongs to the same `quod-node` task group and
-runs with `mode=join`. A single task group makes `max_parallel=1` fleet-wide.
-Each node has its own CSI-backed ledger, and Nomad waits for consensus recovery
-to complete before advancing a rolling update.
+The complete persistence and wipe contract is
+[`doc/consensus-signatures.md`](doc/consensus-signatures.md). If cloud
+satellites have previously run, wipe their `quod-node-cloud` allocation
+subdirectories too before they join the new anchor. The founder is only the
+first event: after the anchor is supplied, every allocation belongs to the same
+`quod-node` task group and runs with `mode=join`; new nodes remain observers
+until explicitly admitted. Each compute allocation has its own dynamic host
+volume mounted at `/quod/data`. A single task group makes `max_parallel=1`
+fleet-wide, and Nomad waits for consensus recovery before advancing an ordinary
+anchored rolling update.
 
 ## Status / next steps
 

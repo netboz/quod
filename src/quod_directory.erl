@@ -26,7 +26,8 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 -export([start_link/0, start_link/1]).
 -export([resolve/1, directory_hosts/1,
          add_direct_seed/2, confirm_direct_seed/3,
-         install_record/5, expire/1, stats/0]).
+         install_record/5, install_records/1,
+         expire/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -define(KEY, {directory, node}).
@@ -36,8 +37,6 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 
 -define(DEFAULT_RENEW_MIN_MS, 5000).
 -define(DEFAULT_EXPIRE_TICK_MS, 1000).
--define(DEFAULT_MAX_ROUTES_PER_NS, 8).
--define(DEFAULT_MAX_ROUTES, 2048).
 -record(s, {
     routes,
     highwater,
@@ -48,8 +47,8 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
     renew_min_ms = ?DEFAULT_RENEW_MIN_MS,
     expire_tick_ms = ?DEFAULT_EXPIRE_TICK_MS,
     max_namespaces = ?DIRECTORY_MAX_NAMESPACES,
-    max_routes_per_ns = ?DEFAULT_MAX_ROUTES_PER_NS,
-    max_routes = ?DEFAULT_MAX_ROUTES,
+    max_routes_per_ns = ?DIRECTORY_MAX_ROUTES_PER_NS,
+    max_routes = ?DIRECTORY_MAX_ROUTES,
     last_accept = #{}
 }).
 
@@ -137,6 +136,27 @@ install_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence) ->
       {install_record, NodeKey, Endpoint, Namespaces, Epoch, Sequence,
        quod_time:mono_ms()}).
 
+-doc """
+Install one bounded snapshot page in a single writer-mailbox turn.
+
+Each record is admitted independently and the result list is position-aligned
+with the input. This preserves ordinary record semantics while preventing a
+resync page from multiplying synchronous control-plane waits.
+""".
+-spec install_records(
+        [{binary(), term(), [binary()], non_neg_integer(),
+          non_neg_integer()}]) ->
+          {ok, [{ok, integer()} | {error, term()}]}
+        | {error, bad_batch}.
+install_records(Records)
+  when is_list(Records),
+       length(Records) =< ?DIRECTORY_MAX_RESYNC_RECORDS ->
+    gen_server:call(
+      quod_reg:via(?KEY),
+      {install_records, Records, quod_time:mono_ms()});
+install_records(_Records) ->
+    {error, bad_batch}.
+
 -doc "Expire system routes at or before `Now`; high-water/known indexes remain.".
 -spec expire(integer()) -> ok.
 expire(Now) ->
@@ -202,6 +222,10 @@ handle_call({install_record, NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now
         {ok, Expiry, S1} -> {reply, {ok, Expiry}, S1};
         {error, Reason} -> {reply, {error, Reason}, S}
     end;
+handle_call({install_records, Records, Now}, _From, S)
+  when is_list(Records), is_integer(Now) ->
+    {Results, S1} = accept_records(Records, Now, S, []),
+    {reply, {ok, Results}, S1};
 handle_call({expire, Now}, _From, S) when is_integer(Now) ->
     {reply, ok, expire_routes(Now, S)};
 handle_call(_Request, _From, S) ->
@@ -265,7 +289,12 @@ confirm_seed(Ns, Endpoint, NodeKey, S = #s{routes = Routes})
             true = ets:delete_object(Routes, OldRow),
             {ok, S};
         [] ->
-            {error, unknown_seed}
+            {error, unknown_seed};
+        _ ->
+            %% A direct-seed key must have exactly one generation. Refuse an
+            %% ambiguous promotion without changing the route table or taking
+            %% down the directory owner.
+            {error, ambiguous_seed}
     end;
 confirm_seed(_Ns, _Endpoint, _NodeKey, _S) ->
     {error, bad_node_key}.
@@ -299,6 +328,21 @@ accept_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) ->
         {error, _} = Error ->
             Error
     end.
+
+accept_records([], _Now, S, Acc) ->
+    {lists:reverse(Acc), S};
+accept_records(
+  [{NodeKey, Endpoint, Namespaces, Epoch, Sequence} | Rest],
+  Now, S, Acc) ->
+    case accept_record(
+           NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) of
+        {ok, Expiry, S1} ->
+            accept_records(Rest, Now, S1, [{ok, Expiry} | Acc]);
+        {error, Reason} ->
+            accept_records(Rest, Now, S, [{error, Reason} | Acc])
+    end;
+accept_records([_Malformed | Rest], Now, S, Acc) ->
+    accept_records(Rest, Now, S, [{error, bad_record} | Acc]).
 
 record_shape(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now,
              #s{max_namespaces = MaxNamespaces})
@@ -467,9 +511,9 @@ config(Opts) ->
                                  ?DIRECTORY_MAX_NAMESPACES),
                     max_routes_per_ns =>
                         maps:get(max_routes_per_ns, Opts,
-                                 ?DEFAULT_MAX_ROUTES_PER_NS),
+                                 ?DIRECTORY_MAX_ROUTES_PER_NS),
                     max_routes =>
-                        maps:get(max_routes, Opts, ?DEFAULT_MAX_ROUTES)},
+                        maps:get(max_routes, Opts, ?DIRECTORY_MAX_ROUTES)},
             case valid_config(Cfg) of
                 true -> {ok, Cfg};
                 false -> {error, bad_limits}
@@ -488,8 +532,8 @@ valid_config(#{allowlist := Allowlist, allowed_keys := AllowedKeys,
     lists:all(fun(N) -> is_integer(N) andalso N > 0 end,
               [Ttl, MinRenew, Tick, MaxNs, PerNs, Max]) andalso
         MaxNs =< ?DIRECTORY_MAX_NAMESPACES andalso
-        PerNs =< ?DEFAULT_MAX_ROUTES_PER_NS andalso
-        Max =< ?DEFAULT_MAX_ROUTES andalso
+        PerNs =< ?DIRECTORY_MAX_ROUTES_PER_NS andalso
+        Max =< ?DIRECTORY_MAX_ROUTES andalso
         map_size(Allowlist) =< Max andalso
         map_size(AllowedKeys) =< Max andalso
         direct_seed_count(DirectSeeds) =< Max andalso

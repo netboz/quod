@@ -52,7 +52,7 @@
 %% Bitcoin nTime / Ethereum block.timestamp / CometBFT block.Time). It is hashed with the rest of the block
 %% (`block_hash/1` hashes the whole record), so a committed block's timestamp is covered by its cert. The
 %% leader sets it monotonic (≥ the parent block's timestamp); validators reject a proposal that goes
-%% backwards. 0 = genesis/origin (kept deterministic so co-founders agree). Future hardening: a
+%% backwards. 0 = genesis/origin; the sole creator fixes it in the anchored slot-1 block. Future hardening: a
 %% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
 -record(block, {slot      :: slot(),
                 parent    :: slot(),
@@ -62,7 +62,8 @@
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
 %% `complaint` (timeout→skip the slot). `block_hash` binds a support/commit share to a specific
 %% block (`none` for a complaint — it is slot-only). `signer` = the validator's pubkey (node_id);
-%% `sig` = Ed25519 over the canonical share bytes (`quod_simplex:share_bytes/3`).
+%% `sig` = Ed25519 over the canonical share bytes (`quod_simplex:share_bytes/4`),
+%% including the locally-derived namespace/genesis consensus domain.
 -record(share, {kind       :: support | commit | complaint,
                 slot       :: slot(),
                 block_hash :: binary() | none,
@@ -70,9 +71,9 @@
                 sig        :: binary()}).
 
 %% A quorum certificate = a bag of ≥⅔ `share`s of the SAME (kind, slot, block_hash) from distinct
-%% validators. `sigs` = `[{signer_pubkey, sig}]`. Self-verifying against the known validator set —
-%% this IS the P2 relayed-commit proof: a subscriber verifies a block by its commit cert without
-%% trusting the relay.
+%% validators. `sigs` = `[{signer_pubkey, sig}]`. Verification requires both the known validator set
+%% and the trusted local namespace/genesis domain — this IS the P2 relayed-commit proof: a subscriber
+%% verifies a block without trusting the relay or accepting a certificate from another ontology/chain.
 -record(cert, {kind       :: support | commit | complaint,
                slot       :: slot(),
                block_hash :: binary() | none,

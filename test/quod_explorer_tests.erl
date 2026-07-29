@@ -182,7 +182,8 @@ compiled_clause_test() ->
                   #{op => retract, clause => <<"rule(X) :- peer_ready(X)">>}],
                  maps:get(diff, J)).
 
-genesis_tx_id_test() ->
-    %% genesis ids are readable text; live ids are raw bytes and hex out
-    ?assertEqual(<<"genesis:ont:test">>, quod_explorer_http:tx_id_text(<<"genesis:ont:test">>)),
+printable_tx_id_test() ->
+    %% Printable opaque ids stay readable; binary protocol ids are hexadecimal.
+    ?assertEqual(<<"client-readable">>,
+                 quod_explorer_http:tx_id_text(<<"client-readable">>)),
     ?assertEqual(<<"00000000000000ff">>, quod_explorer_http:tx_id_text(<<255:64>>)).

@@ -704,7 +704,7 @@ will accept a particular request.
 4. The ordered `quod_runtime` tier performs only bounded index updates and
    enqueue operations. Heavy P runs in independent bounded resource workers.
 5. E workers are supervised and concurrency-limited per namespace and agent.
-6. The one connection per peer uses channel priority classes. Consensus
+6. Each transport pool connection uses channel priority classes. Consensus
    signaling is highest urgency; catch-up/control are bounded separately; feed,
    ACL, and future client state cannot consume consensus's priority under
    congestion. This requires the pinned QUIC fork's RFC 9218 stream priority

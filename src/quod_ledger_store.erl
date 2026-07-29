@@ -55,7 +55,8 @@ the full log always rescans at open.
 
 -export_type([handle/0]).
 
--define(MAGIC, 16#915106AA).
+-define(OLD_MAGIC, 16#915106AA). %% V1 certificates were not namespace/genesis-bound; reject, never trim
+-define(MAGIC,     16#915106AB). %% V2 consensus-signature format
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -266,15 +267,23 @@ skip_frames(Fd, Off, N) ->
 %% pread per few hundred frames instead of two per frame). next_frame/2 parses the frame at
 %% the cursor: `{frame, Payload, Cursor'}` with `Payload` a zero-copy sub-binary, or
 %% `{stop, Why, Off}` — `eof` (clean end exactly at Off) | `short` (torn: bytes exist but
-%% not a whole frame) | `bad_magic` | `bad_crc` | `{frame_too_big, Len}` | `{io_error, R}`.
+%% not a whole frame) | `{unsupported_format, 1}` | `bad_magic` | `bad_crc` |
+%% `{frame_too_big, Len}` | `{io_error, R}`.
 %% The framing rules live exactly once, here; the scans and reads only dispatch on `Why`.
 next_frame(Fd, {Off, Buf0}) ->
     case fill(Fd, Off, Buf0, ?HDR_BYTES) of
         {short, <<>>} -> {stop, eof, Off};
+        %% Four legacy-magic bytes are already an unambiguous V1 segment,
+        %% even when the rest of its header was torn. Never reinterpret that
+        %% identifiable incompatible format as a trimmable V2 append tail.
+        {short, <<?OLD_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 1}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
             case Buf1 of
+                <<?OLD_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 1}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
@@ -331,6 +340,8 @@ scan(Fd, Cur = {Off, _}, Cps, LastI, Mode) ->
             end;
         {stop, eof, EndOff} -> {Cps, LastI, EndOff};
         {stop, short, At}   -> scan_torn(Fd, At, Cps, LastI, Mode);
+        {stop, {unsupported_format, Version}, At} ->
+            error({unsupported_ledger_format, Version, At});
         {stop, {io_error, R}, At} -> scan_io_error(At, Cps, LastI, R, Mode);
         {stop, Why, At}     -> scan_bad(Fd, At, Cps, LastI, Why, Mode)   %% bad_magic | bad_crc | frame_too_big
     end.
@@ -368,15 +379,46 @@ trim(Fd, Off, Cps, LastI) ->
 %% magic in payload bytes only over-triggers fail-stop on a genuine torn tail — conservative
 %% (recover from peers), never data loss.
 trim_or_fail(Fd, Off, Cps, LastI, Reason) ->
-    {ok, Size} = file:position(Fd, eof),
-    From = Off + 4,   %% skip this frame's own magic
-    case From < Size andalso file:pread(Fd, From, Size - From) of
-        {ok, Tail} ->
-            case binary:match(Tail, <<?MAGIC:32>>) of
-                nomatch -> trim(Fd, Off, Cps, LastI);            %% nothing follows ⇒ torn tail
-                _       -> error({log_corruption, Reason, Off})  %% a frame follows ⇒ interior
+    case file:position(Fd, eof) of
+        {ok, Size} ->
+            From = Off + 4,   %% skip this frame's own magic
+            case tail_contains_magic(Fd, From, Size) of
+                false ->
+                    trim(Fd, Off, Cps, LastI);                    %% nothing intact follows
+                true ->
+                    error({log_corruption, Reason, Off});         %% interior damage
+                {error, At, R} ->
+                    error({log_io_error, At, R})
             end;
-        _ -> trim(Fd, Off, Cps, LastI)                          %% at EOF ⇒ torn tail
+        {error, R} ->
+            error({log_io_error, Off, R})
+    end.
+
+%% Scan a suspect tail in bounded windows. Consecutive reads overlap by three
+%% bytes so either four-byte magic is detected even when split across a chunk
+%% boundary. The size probe above promised every requested byte: EOF or a short
+%% read is therefore an I/O failure, never permission to discard committed data.
+tail_contains_magic(_Fd, Pos, Size) when Pos >= Size ->
+    false;
+tail_contains_magic(Fd, Pos, Size) ->
+    Len = min(?READ_CHUNK, Size - Pos),
+    case file:pread(Fd, Pos, Len) of
+        {ok, Bin} when byte_size(Bin) =:= Len ->
+            case binary:match(
+                   Bin, [<<?MAGIC:32>>, <<?OLD_MAGIC:32>>]) of
+                nomatch when Pos + Len >= Size ->
+                    false;
+                nomatch ->
+                    tail_contains_magic(Fd, Pos + Len - 3, Size);
+                _ ->
+                    true
+            end;
+        {ok, _Short} ->
+            {error, Pos, unexpected_eof};
+        eof ->
+            {error, Pos, unexpected_eof};
+        {error, R} ->
+            {error, Pos, R}
     end.
 
 assert_contiguous(LastI, Entries) ->

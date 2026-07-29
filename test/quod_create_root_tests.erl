@@ -89,7 +89,11 @@ t_create_root({_Dir, Ns, Content}) ->
         ?assertMatch({ok, [#{}], _}, rp(Ns, {can_read, foo, bar, baz})),
         %% the founder is on its own committee, as a peer_admitted fact in the genesis kb
         ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, {'_'}})),
-        %% ONE genesis block (slot 1): the committee's peer_admitted facts + the root content
+        %% The fresh network incarnation is ordinary, queryable ontology truth.
+        ?assertMatch(
+           {ok, [#{'Nonce' := <<_:256>>}], _},
+           rp(Ns, {consensus_incarnation, {'Nonce'}})),
+        %% ONE genesis block (slot 1): incarnation + committee + root content
         ?assertMatch(#{committed := 1, last_applied := 1},
                      quod_simplex:stats(Ns))
     end.
@@ -99,12 +103,17 @@ t_create_root_restart({_Dir, Ns, Content}) ->
         {Ns, NsCfg} = quod_app:build_ns_config(Content),
         Pid1 = start_ns(Ns, NsCfg),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),
+        {ok, [#{'Nonce' := Incarnation}], _} =
+            rp(Ns, {consensus_incarnation, {'Nonce'}}),
         #{committed := CI1} = quod_simplex:stats(Ns),
         stop_ns(Pid1),
         %% restart from the same data_dir is a JOIN: replay the local ledger (the
         %% genesis is already there) — do NOT re-read the .pl, do NOT re-create.
         _Pid2 = start_ns(Ns, NsCfg),
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),
+        ?assertMatch(
+           {ok, [#{'Nonce' := Incarnation}], _},
+           rp(Ns, {consensus_incarnation, {'Nonce'}})),
         #{committed := CI2} = quod_simplex:stats(Ns),
         ?assertEqual(CI1, CI2)   %% no extra genesis block appended
     end.

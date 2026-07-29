@@ -317,13 +317,17 @@ The first slice has two explicit route sources:
 - root-authorised system hosts publish signed, expiring advertisements;
 - private ontologies are reached through local direct seeds and are never published.
 
-Directory-control peers are not configured as static addresses. The
+Directory-control authority is not configured as static addresses. The
 root-context-only external predicate
 `directory_control_peer(?NodeKey)` projects their identities from committed
-`quod:root` `peer_admitted/4` facts. The control process resolves those keys
-through the transport's live address observations and opens key-pinned links
-for announcement, fanout and resync. This local root proof does not use
-`directory_host/4` or `::`, so discovery has no directory cycle.
+`quod:root` `peer_admitted/4` facts. To recover moving endpoints, the control
+process first treats the root ontology's existing `content.seeds` as anonymous
+contacts: it authenticates the contacted TLS/header key, accepts it only if
+that key is in the root proof, then records the live endpoint and continues on
+a key-pinned control link. Existing authenticated transport observations are
+also tried directly. This local root proof does not use `directory_host/4` or
+`::`, so discovery has no directory cycle, and the contact address never
+becomes authority by itself.
 
 A node derives its public advertisement from system namespaces that are
 actually running locally. Namespace start/stop replaces the complete signed
@@ -334,7 +338,7 @@ notifications, while any number of private local ontologies remain outside the
 Every receiver independently verifies an advertisement's original Ed25519 node signature,
 restart-safe epoch/sequence freshness, exact namespace allowlist and bounds. System routes dial
 the advertised endpoint through a scoped transport operation pinned to the signed node key.
-Pinned and private-seed-confirmation links suppress the ordinary link-header address-cache
+Pinned and identity-discovery links suppress the ordinary link-header address-cache
 learning through their whole `quod_quic` → `quod_conn` → `quod_link` path, so directory
 addresses cannot contaminate consensus/feed dialing. Ordinary links retain auto-learning.
 
@@ -372,8 +376,8 @@ selected existing allocations' persistent keys from their `/api/summary`
 `cross_ontology_source_node_keys` / `cross_ontology_target_node_keys`
 allowlists, then enable `cross_ontology_enabled` with distinct source and
 target allocation indexes. The existing root ledger supplies the control peer
-keys through `directory_control_peer/1`; live authenticated root traffic
-supplies their current endpoints, and pinned control links disseminate the two
+keys through `directory_control_peer/1`; the root content seeds recover their
+current endpoints after a port rollover, and pinned control links disseminate the two
 new routes. There is no `directory_bootstraps` option or compatibility
 fallback. After the rolling deployment, pass the source allocation explorer
 endpoint to the script above. The two single-host demo ontologies are a

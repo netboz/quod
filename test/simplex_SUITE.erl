@@ -6,9 +6,10 @@ with its own `quod_quic` listener on a distinct port and its own Ed25519 identit
 proposal / share / cert / complaint traffic between them is genuine loopback QUIC, exactly the
 deployment shape.
 
-The four co-found the same committee (`mode=create`, `committee` = the four `{pubkey, addr}`; the genesis
-block asserts every co-founder's `peer_admitted` fact, so their logs are byte-identical). The committee is
-derived from those facts. The leader for a slot **rotates** round-robin over the sorted set, so tests
+The lexicographically first validator is the sole `mode=create` genesis writer. Its slot-1 block asserts
+all four founding validators' `peer_admitted` facts; the other three start as `mode=join`, pin that exact
+block hash, and derive the already-four-member committee from it. The leader for a slot **rotates**
+round-robin over the sorted set, so tests
 target the correct proposer per slot. `commits_across_committee` proves a write commits everywhere;
 `follower_relays` proves a non-leader transparently relays a write to its exact target proposer;
 `leader_failover` kills the next slot's leader
@@ -59,8 +60,9 @@ init_per_suite(Config) ->
                             key => quod_identity:key_term({Pub, Seed})}}
                     || {Pub, Seed} <- Keys]),
     Addrs = [{P, {"127.0.0.1", Port}} || {{P, _}, Port} <- lists:zip(Keys, ?PORTS)],
-    Nodes = [start_member(Port, Key, Addrs, Config)
-             || {Port, Key} <- lists:zip(?PORTS, Keys)],
+    {Nodes, _BootModes, _GenesisHash} =
+        start_founding_committee(
+          ?NS, "sx_", ?PORTS, Keys, Addrs, Config, untracked),
     [{nodes, Nodes}, {identities, Identities} | Config].
 
 end_per_suite(Config) ->
@@ -68,24 +70,22 @@ end_per_suite(Config) ->
     ok.
 
 %% Start one validator in its own OS node: its own identity (env), its own QUIC listener on Port, a fast
-%% Δ_timeout, the resolver pre-seeded with every peer's pubkey→addr (so consensus can dial by pubkey),
-%% then the namespace as a co-founder of the shared committee. Returns {Peer, Pubkey}.
-start_member(Port, {Pub, Seed}, Addrs, Config) ->
-    start_member(?NS, "sx_", Port, {Pub, Seed}, Addrs, Config).
-
-start_member(Ns, NamePrefix, Port, {Pub, Seed}, Addrs, Config) ->
+%% Δ_timeout, and the resolver pre-seeded with every peer's pubkey→addr. `BootMode` is either the sole
+%% canonical creator or a join pinned to that creator's slot-1 hash. Returns {Peer, Pubkey}.
+start_member(Ns, NamePrefix, Port, {Pub, Seed}, Addrs, BootMode, Config) ->
     Name = list_to_atom(NamePrefix ++ integer_to_list(Port)),
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io, args => ["-pa" | code:get_path()]}),
     try
-        configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, Config)
+        configure_member(
+          Peer, Ns, Port, {Pub, Seed}, Addrs, BootMode, Config)
     catch
         Class:Reason:Stack ->
             _ = catch peer:stop(Peer),
             erlang:raise(Class, Reason, Stack)
     end.
 
-configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, Config) ->
+configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, BootMode, Config) ->
     _ = peer:call(Peer, logger, set_primary_config, [level, warning]),
     _ = peer:call(Peer, application, load, [quod]),
     KeyTerm = quod_identity:key_term({Pub, Seed}),
@@ -98,23 +98,92 @@ configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, Config) ->
     Set(simplex_delta_ms, ?DELTA_MS),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     %% pre-seed the pubkey→addr resolver for the OTHER validators (the first dial needs it; later
-    %% ones ride the link header). Then co-found the namespace.
+    %% ones ride the link header).
     _ = [peer:call(Peer, quod_quic, learn, [Pj, Addr]) || {Pj, Addr} <- Addrs, Pj =/= Pub],
     DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
-    Cfg = #{mode => create, node_id => Pub,
-            identity  => #{pubkey => Pub, key => KeyTerm},
-            %% co-founders as {Pubkey, Host, Port} — genesis asserts each one's peer_admitted with its
-            %% address, so every founder's genesis transaction is byte-identical (bootstrap adds Self via
-            %% node_addr). Consensus needs only the pubkeys; the addresses are the dial hint the KB carries.
-            committee => [{Pj, Hj, Pt} || {Pj, {Hj, Pt}} <- Addrs, Pj =/= Pub],
-            data_dir  => DataDir},
+    BaseCfg = #{node_id => Pub,
+                identity => #{pubkey => Pub, key => KeyTerm},
+                data_dir => DataDir},
+    Cfg = namespace_boot_config(BootMode, Pub, Addrs, BaseCfg),
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
     {Peer, Pub}.
 
-start_tracked_member(Ns, NamePrefix, Port, Key, Addrs, Config) ->
-    Node = start_member(Ns, NamePrefix, Port, Key, Addrs, Config),
+namespace_boot_config(create, Pub, Addrs, BaseCfg) ->
+    %% One canonical writer creates slot 1 with the complete validator set.
+    %% Every other founding validator obtains this exact block through join.
+    FoundingPeers =
+        [{Pj, Host, PeerPort}
+         || {Pj, {Host, PeerPort}} <- Addrs, Pj =/= Pub],
+    BaseCfg#{mode => create, committee => FoundingPeers};
+namespace_boot_config({join, GenesisHash, CreatorAddr}, _Pub, _Addrs, BaseCfg) ->
+    BaseCfg#{mode => join, genesis_hash => GenesisHash,
+             seed_peers => [CreatorAddr]}.
+
+start_tracked_member(
+  Ns, NamePrefix, Port, Key, Addrs, BootMode, Config) ->
+    Node = start_member(
+             Ns, NamePrefix, Port, Key, Addrs, BootMode, Config),
     put(over_f_nodes, [Node | case get(over_f_nodes) of undefined -> []; L -> L end]),
     Node.
+
+%% Start the one canonical creator first, read the anchor from its durable slot 1,
+%% then start every other founding validator through the normal pinned join path.
+%% `BootModes` is retained by pubkey so a later OS-node restart cannot accidentally
+%% turn a joiner into an independent creator.
+start_founding_committee(
+  Ns, NamePrefix, Ports, Keys, Addrs, Config, Tracking) ->
+    Specs = lists:zip(Ports, Keys),
+    {CreatorPort, {CreatorPub, _} = CreatorKey} =
+        canonical_creator(Specs),
+    Creator =
+        start_committee_member(
+          Tracking, Ns, NamePrefix, CreatorPort, CreatorKey,
+          Addrs, create, Config),
+    GenesisHash =
+        peer:call(
+          element(1, Creator), quod_simplex, genesis_hash, [Ns]),
+    32 = byte_size(GenesisHash),
+    {ok, CreatorAddr} = maps:find(
+                          CreatorPub, maps:from_list(Addrs)),
+    JoinMode = {join, GenesisHash, CreatorAddr},
+    JoinSpecs =
+        [Spec || Spec = {_Port, {Pub, _Seed}} <- Specs,
+                 Pub =/= CreatorPub],
+    Joiners =
+        [start_committee_member(
+           Tracking, Ns, NamePrefix, Port, Key,
+           Addrs, JoinMode, Config)
+         || {Port, Key} <- JoinSpecs],
+    Nodes = [Creator | Joiners],
+    true =
+        eventually(
+          fun() ->
+                  lists:all(
+                    fun({Peer, _Pub}) ->
+                            slot(Peer, Ns) =:= 1
+                    end, Nodes)
+          end, 30000),
+    BootModes =
+        maps:from_list(
+          [{CreatorPub, create}
+           | [{Pub, JoinMode} || {_Port, {Pub, _Seed}} <- JoinSpecs]]),
+    {Nodes, BootModes, GenesisHash}.
+
+canonical_creator([_ | _] = Specs) ->
+    CreatorPub =
+        lists:min(
+          [Pub || {_Port, {Pub, _Seed}} <- Specs]),
+    hd([Spec || Spec = {_Port, {Pub, _Seed}} <- Specs,
+                Pub =:= CreatorPub]).
+
+start_committee_member(
+  tracked, Ns, NamePrefix, Port, Key, Addrs, BootMode, Config) ->
+    start_tracked_member(
+      Ns, NamePrefix, Port, Key, Addrs, BootMode, Config);
+start_committee_member(
+  untracked, Ns, NamePrefix, Port, Key, Addrs, BootMode, Config) ->
+    start_member(
+      Ns, NamePrefix, Port, Key, Addrs, BootMode, Config).
 
 %%%===================================================================
 %%% tests
@@ -123,8 +192,8 @@ start_tracked_member(Ns, NamePrefix, Port, Key, Addrs, Config) ->
 %% A write submitted to a slot's (rotating) leader commits across the whole committee, fact in every KB.
 commits_across_committee(Config) ->
     Nodes = ?config(nodes, Config),
-    %% all four co-founded the same 4-validator committee via ONE genesis block (slot 1) whose transaction
-    %% asserts every co-founder's peer_admitted fact — byte-identical, so all four start at height 1.
+    %% The creator wrote one slot-1 block containing all four validator facts;
+    %% the other three joined that exact pinned block.
     [ ?assertEqual(1, slot(Peer)) || {Peer, _} <- Nodes ],
     ?assertMatch(
        [_],
@@ -347,18 +416,18 @@ writer_retry(Peer, Goal, N) ->
 %% notarizing quorum. The slot is complaint-skipped, the committee is unchanged, and the namespace still
 %% commits honest writes.
 %%
-%% Case 1 — a fabricated-address RETRACT of a real founder (the retract-ejection the Slice A review flagged):
+%% Case 1 — a fabricated-address RETRACT of a founding validator (the retract-ejection the Slice A review flagged):
 %% the crafted op carries the victim's pubkey but a wrong Host/Port, so it would drop the victim from the
 %% validator-set projection while MISSING in the KB. The verdict's exact-clause check (`has_clause`) rejects
 %% it — no honest support, the slot skips, the committee keeps all four.
 byzantine_retract_rejected(Config) ->
     Nodes  = ?config(nodes, Config),
-    Victim = element(2, hd(Nodes)),   %% a real founder's pubkey, retracted with a WRONG address
+    Victim = element(2, hd(Nodes)),   %% a real validator's pubkey, retracted with a WRONG address
     Evil   = tx([{retract, {{peer_admitted, Victim, "wrong-host", 9999, Victim}, true}}]),
     assert_membership_proposal_skipped(Config, Evil).
 
-%% Case 2 — an unauthorized ADMIT of a newcomer the join policy does not allow. This committee co-founds
-%% with no `can_join` clause (no genesis ontology), so admission is fail-closed: the verdict re-proves
+%% Case 2 — an unauthorized ADMIT of a newcomer the join policy does not allow. This committee's genesis
+%% has no `can_join` clause (no genesis ontology), so admission is fail-closed: the verdict re-proves
 %% `can_join` and it fails, rejecting the admit. No honest support, the slot skips, the committee keeps four.
 byzantine_admit_rejected(Config) ->
     {NewPub, _} = quod_identity:generate(),
@@ -441,8 +510,9 @@ over_fault_restart_recovers(Config) ->
     Addrs = [{P, {"127.0.0.1", Port}} || {{P, _}, Port} <- lists:zip(Keys, Ports)],
     put(over_f_nodes, []),
     try
-        Nodes0 = [start_tracked_member(Ns, "sxr_", Port, Key, Addrs, Config)
-                  || {Port, Key} <- lists:zip(Ports, Keys)],
+        {Nodes0, BootModes, _GenesisHash} =
+            start_founding_committee(
+              Ns, "sxr_", Ports, Keys, Addrs, Config, tracked),
         ?assert(eventually(
                   fun() ->
                           lists:all(
@@ -512,7 +582,8 @@ over_fault_restart_recovers(Config) ->
 
         DownPubs = [Pub || {_P, Pub} <- Down],
         Restarted = [start_tracked_member(
-                       Ns, "sxr_", Port, Key, Addrs, Config)
+                       Ns, "sxr_", Port, Key, Addrs,
+                       maps:get(Pub, BootModes), Config)
                      || {Port, {Pub, _} = Key} <- lists:zip(Ports, Keys),
                         lists:member(Pub, DownPubs)],
         Nodes1 = [N || N <- Nodes0, not lists:member(element(2, N), DownPubs)] ++ Restarted,

@@ -60,7 +60,7 @@ outcome_unknown_timeout_test_() ->
                                      erlang:unique_integer([positive])))/binary>>,
          {ok, Pid} = quod_prolog:start_link(
                        Ns, #{node_id => {"127.0.0.1", 5000},
-                             park_ttl_ms => 30}),
+                             transaction_ttl_ms => 30}),
          ok = quod_prolog:mark_ready(Ns),
          {Ns, Pid}
      end,
@@ -89,9 +89,9 @@ outcome_unknown_timeout_test_() ->
 %% `unavailable`, but the exact signed transaction may still commit. Exercise a
 %% real asynchronous gen_statem append response and pin the Prolog contract:
 %% keep the caller parked, never retry or reject it, then return outcome_unknown
-%% only when the caller's own park TTL expires.
+%% only when the caller's transaction TTL expires.
 unavailable_append_reply_waits_for_outcome_unknown_test_() ->
-    ParkTtl = 180,
+    TransactionTtl = 180,
     {setup,
      fun() ->
          {ok, _} = application:ensure_all_started(gproc),
@@ -100,7 +100,7 @@ unavailable_append_reply_waits_for_outcome_unknown_test_() ->
                    erlang:unique_integer([positive])))/binary>>,
          {ok, Pid} = quod_prolog:start_link(
                        Ns, #{node_id => {"127.0.0.1", 5000},
-                             park_ttl_ms => ParkTtl}),
+                             transaction_ttl_ms => TransactionTtl}),
          ok = quod_prolog:mark_ready(Ns),
          {Ns, Pid}
      end,
@@ -175,7 +175,7 @@ unavailable_append_reply_waits_for_outcome_unknown_test_() ->
                  ?assertEqual(
                     {error, {outcome_unknown, TxId}}, Result),
                  ?assert(
-                    quod_time:mono_ms() - StartedAt >= ParkTtl),
+                    quod_time:mono_ms() - StartedAt >= TransactionTtl),
                  ?assertEqual(
                     #{parked => 0, park_timeouts => 1},
                     maps:with(

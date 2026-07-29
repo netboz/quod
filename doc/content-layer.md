@@ -211,6 +211,10 @@ agrees on every change.
   slot deep, and membership changes stop it until they are durably committed. Demand
   already received for that next slot is retained while the parent finishes, then
   becomes the watched head without requiring the client to submit it again.
+  The live engine therefore retains only the two slots above its durable head,
+  one block per slot, and one vote per signer/kind/slot. A valid farther commit
+  or skip certificate becomes a single recovery hint rather than retained
+  peer-controlled state; historical catch-up remains unbounded by this live window.
 - If the one in charge stalls or goes quiet, the others **agree to skip it** and move
   on to the next, in a second or two. No human involved.
 - Each node keeps one explicit watchdog on the **oldest unfinished slot**. It follows
@@ -338,7 +342,10 @@ The committee protocol now handles both computers that **crash** and computers t
 **lie**. Every vote is signed with the member's Ed25519 identity, and a block is final
 only with a certificate containing distinct signatures from more than two-thirds of
 the current committee. With `3f+1` members, this preserves one history while up to `f`
-members are Byzantine.
+members are Byzantine. Each vote also includes the ontology namespace and pinned
+genesis hash in its signature domain, preventing cross-ontology and
+different-anchor certificate replay. See
+[`consensus-signatures.md`](consensus-signatures.md).
 
 That does not make every write authorized. Every non-genesis transaction is now
 signed by its author and bound to its ontology, but signatures prove identity,

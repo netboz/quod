@@ -6,7 +6,9 @@ namespace; the committee (validator set) is the set of **`peer_admitted` FACTS**
 derived from the committed log — asserted in the genesis block at bootstrap, then
 changed by committed transactions whose diff asserts/retracts `peer_admitted`
 (adopted live, in-process, at the slot boundary). The KB (`quod_prolog`) is the
-other projection of the same log; the two never drift. See the approved plan and
+other projection of the same log; the two never drift. Slot 1 also carries a
+fresh queryable `consensus_incarnation/1` fact, making every re-founding a new
+consensus signature domain. See the approved plan and
 `doc/simplex_extended.pdf` (§2 = the spec).
 
 ## The protocol (per slot `v`)
@@ -26,7 +28,8 @@ committed neither `v` nor its child `v+1`). Because a commit **implicitly finali
 cert (its own OR its child's) and a complaint cert: any two `⅔`-quorums overlap on ≥1 honest party, who
 would then have both complained `v` and committed `v` or `v+1` — impossible. Hence a committed block is
 unique and irreversible. Everything is plain **Ed25519**: a certificate is a bag of `⅔` signatures,
-self-verifying against the validator set — which is exactly the P2 relayed-commit proof a subscriber checks.
+verified against both the validator set and a locally derived namespace/genesis domain — which is exactly
+the P2 relayed-commit proof a subscriber checks without accepting cross-ontology evidence.
 
 The runtime keeps two frontiers: **approved** (support-certified, safe to extend) and
 **committed** (durable and externally visible). Leaders micro-batch ordered transactions
@@ -87,17 +90,23 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
 
--define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/3 signs slots as unsigned 64-bit integers
+-define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/4 signs slots as unsigned 64-bit integers
+-define(PIPELINE_DEPTH, 1).               %% at most one approved parent may remain uncommitted
+-define(SHARE_DOMAIN_VERSION, 1).
+-define(SHARE_DOMAIN_TAG, <<"quod/simplex/domain">>).
+-define(SHARE_MESSAGE_TAG, <<"quod/simplex/share">>).
+-define(GENESIS_TX_VERSION, 1).
+-define(GENESIS_TX_TAG, "quod/genesis").
 
 -behaviour(gen_statem).
 
 %% Pure consensus core (also used by the gen_statem below, the catch-up verifier, and the tests).
 -export([quorum/1, leader/2,
-         block_hash/1, block_from_entry/1, share_bytes/3,
-         make_share/4, verify_share/1,
-         form_cert/5, verify_cert/2,
-         may_commit/2, may_complain/2, well_formed_block/1, well_formed_cert/1,
-         well_formed_transaction/1, valid_history_entry/4,
+         block_hash/1, block_from_entry/1, consensus_domain/2, share_bytes/4,
+         make_share/5, verify_share/2,
+         verify_cert/3,
+         may_commit/2, may_complain/2, well_formed_block/1,
+         valid_history_entry/4,
          committee_delta/1, apply_committee_delta/2]).   %% committee = projection of peer_admitted facts
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
@@ -106,10 +115,12 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 
 -ifdef(TEST).
 %% consensus-engine surface driven by eunit (the #eng record is otherwise private)
--export([eng_new/2, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
+-export([form_cert/6,
+         eng_new/3, eng_offer/2, eng_prune/2, eng_tree/1, eng_committed/1, ts_acceptable/3,
          prune_dials/2, membership_change_ok/2, change_acceptable/2, complaint_amplified/3,
          admitted_endpoints/1, persisted_cert/4, eng_evict_final/4, eng_set_validators/2,
          ahead_cert_ceiling/1, eng_with_certs/2, eng_buffered_commit/4,
+         eng_pool_sizes/1, eng_retained_block/2,
                                                      %% Slice 1: the gap detector's pure core
          is_participant/1, may_vote/1, caught_up/1, should_sync/1, syncing/1, confirm_live/1,
          initial_sync/1, tip_quorum/3, pace_tick/1, arm_ready/1, backoff/1,
@@ -162,13 +173,13 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 %% typed record can still carry malformed fields at runtime). Dialyzer trusts the declared field types
 %% and consequently marks their reject branches unreachable; weakening the canonical record types would
 %% hide useful mistakes everywhere else.
--dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1, well_formed_cert/1,
+-dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1,
                              valid_read_check/1, valid_diff/1, committee_transaction/2,
-                             transaction_endpoints/1, proper_signatures/1, proper_list/1,
+                             transaction_endpoints/1, proper_list/1,
                              change_acceptable/2]}).
 
 %% A node's SIGNING identity: the subset of `t:quod_identity:identity/0` consensus needs (pubkey +
-%% private key), without the TLS cert. `make_share/4` signs with `key`; the share's signer is `pubkey`.
+%% private key), without the TLS cert. `make_share/5` signs with `key`; the share's signer is `pubkey`.
 -type signer() :: quod_identity:signer().
 
 %%%===================================================================
@@ -194,15 +205,32 @@ block_hash(#block{} = B) ->
     crypto:hash(sha256, term_to_binary(B, [deterministic])).
 
 -doc """
-The canonical bytes a share is signed over: a 1-byte **domain-separation tag** (so a `support`
-signature can never be replayed as a `commit` or `complaint`), the slot, and the bound block hash
-(empty for a slot-only `complaint`).
+Derive the fixed-size signature domain for one consensus chain. It binds both the
+ontology namespace and its pinned genesis block, so a vote from another ontology
+or from a chain with a different anchored genesis cannot verify here.
 """.
--spec share_bytes(support | commit | complaint, slot(), binary() | none) -> binary().
-share_bytes(Kind, Slot, BlockHash)
-  when is_integer(Slot), Slot >= 0, Slot =< ?MAX_SLOT ->
+-spec consensus_domain(binary(), binary()) -> <<_:256>>.
+consensus_domain(Ns, GenesisHash)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
+    crypto:hash(
+      sha256,
+      <<?SHARE_DOMAIN_TAG/binary, 0, ?SHARE_DOMAIN_VERSION:8,
+        (byte_size(Ns)):32, Ns/binary, GenesisHash/binary>>).
+
+-doc """
+The canonical bytes a share signs: a versioned protocol tag, the 32-byte
+namespace/genesis consensus domain, a one-byte vote-kind tag (so a `support`
+signature cannot be replayed as a `commit` or `complaint`), the slot, and the
+bound block hash (empty for a slot-only `complaint`).
+""".
+-spec share_bytes(<<_:256>>, support | commit | complaint, slot(), binary() | none) -> binary().
+share_bytes(Domain, Kind, Slot, BlockHash)
+  when is_binary(Domain), byte_size(Domain) =:= 32,
+       is_integer(Slot), Slot >= 0, Slot =< ?MAX_SLOT ->
     BH = case BlockHash of none -> <<>>; H when is_binary(H) -> H end,
-    <<(tag(Kind)):8, Slot:64, BH/binary>>.
+    <<?SHARE_MESSAGE_TAG/binary, 0, ?SHARE_DOMAIN_VERSION:8,
+      Domain/binary, (tag(Kind)):8, Slot:64, BH/binary>>.
 
 tag(support)   -> $S;
 tag(commit)    -> $C;
@@ -212,10 +240,11 @@ tag(complaint) -> $X.
 %%% shares
 %%%===================================================================
 
--doc "Build and Ed25519-sign one share of `Kind` for `Slot`/`BlockHash` with this node's signing key.".
--spec make_share(support | commit | complaint, slot(), binary() | none, signer()) -> #share{}.
-make_share(Kind, Slot, BlockHash, #{pubkey := Pub, key := Key}) ->
-    Sig = quod_identity:sign(share_bytes(Kind, Slot, BlockHash), Key),
+-doc "Build and Ed25519-sign one domain-bound share of `Kind` for `Slot`/`BlockHash`.".
+-spec make_share(<<_:256>>, support | commit | complaint, slot(),
+                 binary() | none, signer()) -> #share{}.
+make_share(Domain, Kind, Slot, BlockHash, #{pubkey := Pub, key := Key}) ->
+    Sig = quod_identity:sign(share_bytes(Domain, Kind, Slot, BlockHash), Key),
     #share{kind = Kind, slot = Slot, block_hash = BlockHash, signer = Pub, sig = Sig}.
 
 -doc """
@@ -224,12 +253,14 @@ Is a share well-formed AND its Ed25519 signature valid for its own signer? Well-
 malformed share (e.g. a complaint carrying a hash, or a support with a bogus-length hash) is rejected
 before it can be aggregated. (Set-membership is checked separately, in the cert functions.)
 """.
--spec verify_share(#share{}) -> boolean().
-verify_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer, sig = Sig}) ->
+-spec verify_share(<<_:256>>, #share{}) -> boolean().
+verify_share(Domain, #share{kind = K, slot = Sl, block_hash = BH,
+                            signer = Signer, sig = Sig}) ->
     is_slot(Sl)
         andalso valid_signer_signature(Signer, Sig)
         andalso valid_shape(K, BH)
-        andalso quod_identity:verify(Sig, share_bytes(K, Sl, BH), Signer).
+        andalso quod_identity:verify(
+                  Sig, share_bytes(Domain, K, Sl, BH), Signer).
 
 %% A share/cert is well-formed iff its block_hash matches its kind: a 32-byte block hash binds a
 %% support/commit; a complaint is slot-only (`none`). Guards the trustless path against malformed input.
@@ -242,21 +273,23 @@ valid_shape(_K, _BH) -> false.
 %%% certificates
 %%%===================================================================
 
+-ifdef(TEST).
 -doc """
 Form a certificate from a pool of shares: keep the shares of the SAME `(Kind, Slot, BlockHash)` that
 are from **distinct validators in the set** and whose signatures verify; if that reaches `quorum(N)`,
 return `{ok, #cert{}}`, else `{error, insufficient}`. A Byzantine node's duplicate/extra shares can't
 inflate the count — signers are deduplicated.
 """.
--spec form_cert(support | commit | complaint, slot(), binary() | none, [#share{}], [node_id()]) ->
+-spec form_cert(<<_:256>>, support | commit | complaint, slot(),
+                binary() | none, [#share{}], [node_id()]) ->
           {ok, #cert{}} | {error, insufficient}.
-form_cert(_Kind, _Slot, _BlockHash, _Shares, []) ->
+form_cert(_Domain, _Kind, _Slot, _BlockHash, _Shares, []) ->
     {error, insufficient};                       %% no validators yet ⇒ no quorum (never quorum(0))
-form_cert(Kind, Slot, BlockHash, Shares, Validators) ->
+form_cert(Domain, Kind, Slot, BlockHash, Shares, Validators) ->
     case is_slot(Slot) andalso valid_shape(Kind, BlockHash) of
         false -> {error, insufficient};          %% malformed (kind/block_hash mismatch)
         true  ->
-            Msg  = share_bytes(Kind, Slot, BlockHash),
+            Msg  = share_bytes(Domain, Kind, Slot, BlockHash),
             Sigs = distinct_valid([{S#share.signer, S#share.sig}
                                     || S <- Shares,
                                        S#share.kind =:= Kind,
@@ -268,24 +301,24 @@ form_cert(Kind, Slot, BlockHash, Shares, Validators) ->
                 false -> {error, insufficient}
             end
     end.
+-endif.
 
 -doc """
-Verify a certificate independently against a known validator set: it carries `≥ quorum(N)` signatures
-from **distinct** set members that all verify over the certificate's `(kind, slot, block_hash)`. This
+Verify a certificate independently against a trusted local consensus domain and known validator set: it
+carries `≥ quorum(N)` signatures from **distinct** set members that all verify over the certificate's
+`(domain, kind, slot, block_hash)`. This
 is the trustless check — a subscriber/relay-receiver validates a committed block by its commit cert
 without trusting whoever handed it over.
 """.
--spec verify_cert(#cert{}, [node_id()]) -> boolean().
+-spec verify_cert(<<_:256>>, #cert{}, [node_id()]) -> boolean().
 %% Reject before any signature work: an empty set has no quorum (never quorum(0)); and a legitimate
 %% cert never carries MORE than |Validators| signatures — capping the length first stops a hostile
 %% relay from forcing thousands of Ed25519 verifications (a CPU-amplification DoS on the trustless path).
-verify_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs}, Validators) ->
-    N = length(Validators),
-    N > 0
-        andalso is_slot(Sl)
-        andalso valid_shape(K, BH)
-        andalso bounded_signatures(Sigs, N)
-        andalso length(distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators)) >= quorum(N).
+verify_cert(Domain, #cert{} = Cert, Validators) ->
+    case sanitize_cert(Domain, Cert, Validators) of
+        {ok, _Clean} -> true;
+        error        -> false
+    end.
 
 %% A certificate can carry at most one signature per validator. This bounded recursive check both
 %% rejects improper tails before any list BIF can raise and caps hostile crypto work before verification.
@@ -293,11 +326,6 @@ bounded_signatures([], _Remaining) -> true;
 bounded_signatures([{Signer, Sig} | Rest], Remaining) when Remaining > 0 ->
     valid_signer_signature(Signer, Sig) andalso bounded_signatures(Rest, Remaining - 1);
 bounded_signatures(_MalformedOrTooLong, _Remaining) -> false.
-
-proper_signatures([{Signer, Sig} | Rest]) ->
-    valid_signer_signature(Signer, Sig) andalso proper_signatures(Rest);
-proper_signatures([]) -> true;
-proper_signatures(_)  -> false.
 
 valid_signer_signature(Signer, Sig) ->
     is_binary(Signer) andalso byte_size(Signer) =:= 32
@@ -357,45 +385,60 @@ may_complain(Slot, CommittedSlots) ->
 %% complete **block tree** (§2.3.2); and emits the events the driver acts on. Pure + deterministic — no
 %% clock, no transport (the gen_statem owns those). Stage 2a uses **direct dispersal**: a proposal
 %% carries the whole block, so a block joins the tree on (support cert + parent present) — no erasure
-%% fragment decode (that is Stage 4). The pool's distinct-signer `⅔` check reuses `form_cert/5`.
+%% fragment decode (that is Stage 4). The pool's distinct-signer `⅔` check uses the
+%% same domain-bound signature encoding as the public certificate API.
 %%
 %% Events: `{broadcast, Cert}` (a cert we just formed or first learned — re-disseminate),
 %% `{notarized, Block}` (a block joined the tree), `{committed, Slot, Block}` (a block is final → apply).
 
--record(eng, {validators   :: [node_id()],
+-record(eng, {domain       :: <<_:256>>,
+              validators   :: [node_id()],
               base     = 0   :: slot(),                                %% durable committed floor: slots =<
                                                                        %% base are final (in the store) and
                                                                        %% pruned from the maps below; a
                                                                        %% commit advances it (eng_prune/2)
-              blocks   = #{} :: #{binary() => #block{}},               %% block_hash => proposed block
+              blocks   = #{} :: #{binary() => #block{}},               %% at most one retained block per live slot
+              block_slots = #{} :: #{slot() => binary()},              %% slot => the retained block hash
               shares   = #{} :: #{share_key() => #{node_id() => #share{}}},
+              seen_votes = #{} :: #{{support | commit | complaint,
+                                      slot(), node_id()} => binary() | none},
+                                                                       %% first valid hash per signer/kind/slot
               certs    = #{} :: #{share_key() => #cert{}},
               tree     = #{} :: #{slot() => #block{}},                 %% notarized blocks (in-flight window)
               tree_hashes = #{} :: #{slot() => binary()},              %% slot => verified key in `blocks`
               committed = #{} :: #{slot() => #block{}},                %% committed (final) in-flight blocks
-              skipped  = #{} :: #{slot() => true}}).                   %% slots a complaint cert has skipped
+              skipped  = #{} :: #{slot() => true},                     %% slots a complaint cert has skipped
+              ahead_finalizer = 0 :: slot()}).                          %% highest verified commit/complaint
+                                                                        %% beyond the retained depth-one window;
+                                                                        %% O(1) recovery evidence, never a pool item
 
 -type share_key() :: {support | commit | complaint, slot(), binary() | none}.
 -type eng_event() :: {broadcast, #cert{}} | {notarized, #block{}}
                    | {committed, slot(), #block{}} | {skipped, slot()}.
 
 -doc """
-A fresh engine for a validator set (the active voting set — `active_validators/1`; at epoch length 1 that
-is the current committee), with `Base` = the durable committed floor (the last slot already final in the
-store). Blocks `=< Base` are treated as committed history so a new proposal's parent resolves without the
-engine holding the whole chain.
+A fresh engine for one namespace/genesis signature `Domain` and validator set
+(the active voting set — `active_validators/1`; at epoch length 1 that is the
+current committee), with `Base` = the durable committed floor. Blocks `=< Base`
+are treated as committed history so a new proposal's parent resolves without
+the engine holding the whole chain.
 """.
--spec eng_new([node_id()], slot()) -> #eng{}.
-eng_new(Validators, Base) ->
-    #eng{validators = Validators, base = Base}.
+-spec eng_new(<<_:256>>, [node_id()], slot()) -> #eng{}.
+eng_new(Domain, Validators, Base)
+  when is_binary(Domain), byte_size(Domain) =:= 32 ->
+    #eng{domain = Domain, validators = Validators, base = Base}.
 
 %% Swap the engine's voting set to the ACTIVE validator set (`active_validators/1`) when `adopt_committee/2`
 %% crosses a boundary. Today (epoch length 1) the active set IS the committee facts, so this fires on every
 %% committee-changing commit; under real epochs it fires only at an epoch boundary, and a mid-epoch facts
-%% change leaves the engine's set untouched. Safe at the slot boundary: the just-committed slot is already
-%% pruned (`base` raised), so no in-flight share/cert is re-verified under the new set; the next slot's
-%% shares/certs verify against it.
-eng_set_validators(Validators, Eng) -> Eng#eng{validators = Validators}.
+%% change leaves the engine's set untouched. Retained share buckets are projected onto the new set when
+%% forming a certificate, and existing certificates must pass `persisted_cert/4` against it before durable
+%% use. The signature-free far-finalizer hint cannot be revalidated, so it is cleared here.
+eng_set_validators(Validators, Eng) ->
+    %% A far-finalizer hint was verified only against the former set and carries
+    %% no retained signatures with which to revalidate it. A committee boundary
+    %% therefore invalidates that hint; fresh traffic can establish a new one.
+    Eng#eng{validators = Validators, ahead_finalizer = Eng#eng.base}.
 
 %% The certificate to PERSIST on a finalized `#entry`, captured before `finalize`→`eng_prune` drops it from
 %% the pool. NOT the raw pool cert: we re-minimise it to the distinct VALID signatures of the committee
@@ -405,9 +448,12 @@ eng_set_validators(Validators, Eng) -> Eng#eng{validators = Validators}.
 %% `none` only if the pool cert lacks a quorum under the current set — a lagging node that finalized under a
 %% STALE committee (the mid-flight committee-change hazard; see doc/deferred.md §3).
 persisted_cert(Kind, Slot, BH, #eng{certs = Certs, validators = Vs}) ->
-    case maps:get({Kind, Slot, BH}, Certs, none) of
-        none            -> none;
-        #cert{sigs = S} ->
+    case {Vs, maps:get({Kind, Slot, BH}, Certs, none)} of
+        {[], _} ->
+            none;
+        {_, none} ->
+            none;
+        {_, #cert{sigs = S}} ->
             %% Every cert is sanitized on engine ingress, so signatures are already cryptographically
             %% verified and unique. A committee transition only requires re-filtering signer membership.
             Min = [{Signer, Sig} || {Signer, Sig} <- S, lists:member(Signer, Vs)],
@@ -455,32 +501,65 @@ the single ingestion point — a proposed `{block, B}`, a `{share, S}` (own or a
 %% Anything for an already-final slot (`=< base`) is stale — a replay or a peer relaying an old cert —
 %% and must be dropped: it is pruned from the maps, so re-admitting it would re-notarize/re-commit a
 %% committed slot (and drive a non-contiguous store append).
-eng_offer({block, #block{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
-eng_offer({share, #share{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
-eng_offer({cert,  #cert{slot = Sl}},  #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
+eng_offer({block, #block{slot = Sl}}, #eng{base = Base} = Eng)
+  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+eng_offer({share, #share{slot = Sl}}, #eng{base = Base} = Eng)
+  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+eng_offer({cert, #cert{slot = Sl}}, #eng{base = Base} = Eng) when Sl =< Base ->
+    {Eng, []};
+%% A finalizer beyond the volatile depth-one window is useful only as proof that
+%% this node is behind. Verify it once when it raises the ceiling, retain only
+%% that scalar, and let recovery fetch the contiguous history. Blocks, shares,
+%% and support certs beyond the window carry no such finality signal and are
+%% dropped by the adjacent clauses without allocating engine state.
+eng_offer({cert, #cert{kind = Kind, slot = Sl} = Cert},
+          Eng = #eng{base = Base, ahead_finalizer = Ahead})
+  when Sl > Base + ?PIPELINE_DEPTH + 1,
+       (Kind =:= commit orelse Kind =:= complaint) ->
+    case Sl =< Ahead of
+        true ->
+            {Eng, []};
+        false ->
+            case sanitize_cert(Eng#eng.domain, Cert, Eng#eng.validators) of
+                {ok, _Clean} -> {Eng#eng{ahead_finalizer = Sl}, []};
+                error        -> {Eng, []}
+            end
+    end;
+eng_offer({cert, #cert{slot = Sl}}, #eng{base = Base} = Eng)
+  when Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
 eng_offer({block, #block{} = B}, Eng) ->
     eng_offer_hashed(block_hash(B), B, Eng);
-eng_offer({share, #share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh}, Eng) ->
+eng_offer({share, #share{kind = K, slot = Sl, block_hash = BH,
+                         signer = Signer} = Sh},
+          Eng = #eng{domain = Domain}) ->
     Key = {K, Sl, BH},
     Bucket = maps:get(Key, Eng#eng.shares, #{}),
+    VoteKey = {K, Sl, Signer},
     %% Reject outsiders before Ed25519 work. A duplicate is already trusted in the bucket, so do not verify
     %% it again; it can still trigger re-formation after `weak_cert_wait` evicted a stale old-committee cert.
+    %% The first verified hash per signer/kind/slot wins. Without that O(N)-bounded latch, one Byzantine
+    %% validator could sign arbitrarily many hashes and create an unbounded number of live share buckets.
     case lists:member(Signer, Eng#eng.validators) of
         false -> {Eng, []};
-        true  -> case maps:is_key(Signer, Bucket) of
-                     true  -> maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng);
-                     false -> case verify_share(Sh) of
-                                  true  -> ingest_share(Sh, Bucket, Eng);
-                                  false -> {Eng, []}
-                              end
-                 end
+        true  ->
+            case maps:get(VoteKey, Eng#eng.seen_votes, undefined) of
+                BH ->
+                    maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng);
+                undefined ->
+                    case verify_share(Domain, Sh) of
+                        true  -> ingest_share(Sh, Bucket, Eng);
+                        false -> {Eng, []}
+                    end;
+                _ConflictingHash ->
+                    {Eng, []}
+            end
     end;
-eng_offer({cert, #cert{} = C}, Eng) ->
+eng_offer({cert, #cert{} = C}, Eng = #eng{domain = Domain}) ->
     Key = cert_key(C),
     case maps:is_key(Key, Eng#eng.certs) of
         true -> {Eng, []};
         false ->
-            case sanitize_cert(C, Eng#eng.validators) of
+            case sanitize_cert(Domain, C, Eng#eng.validators) of
                 error -> settle(Eng);
                 {ok, Clean} ->
                     {Eng1, Evs} = settle(Eng#eng{certs = (Eng#eng.certs)#{Key => Clean}}),
@@ -490,16 +569,45 @@ eng_offer({cert, #cert{} = C}, Eng) ->
 
 %% The state-machine driver already computed the proposal hash for signing. Keep that trusted fast path
 %% private; external users of the pure engine enter through `eng_offer({block,B}, ...)`, which derives it.
-eng_offer_hashed(_BH, #block{slot = Sl}, #eng{base = Base} = Eng) when Sl =< Base -> {Eng, []};
-eng_offer_hashed(BH, #block{} = B, Eng) ->
-    settle(Eng#eng{blocks = (Eng#eng.blocks)#{BH => B}}).
+eng_offer_hashed(_BH, #block{slot = Sl}, #eng{base = Base} = Eng)
+  when Sl =< Base; Sl > Base + ?PIPELINE_DEPTH + 1 -> {Eng, []};
+eng_offer_hashed(BH, #block{slot = Sl} = B,
+                 Eng = #eng{blocks = Blocks, block_slots = Slots,
+                            tree = Tree}) ->
+    case maps:get(Sl, Slots, undefined) of
+        undefined ->
+            settle(Eng#eng{blocks = Blocks#{BH => B},
+                           block_slots = Slots#{Sl => BH}});
+        BH ->
+            settle(Eng);
+        OldBH ->
+            %% Ordinary leader traffic is first-block-wins, bounding equivocation
+            %% state to one block per live slot. A later quorum-certified block may
+            %% replace an unnotarized first copy: certified-block recovery always
+            %% ingests and verifies its support cert before offering the payload.
+            %% If the old block is already in the tree, accepting a second support
+            %% path would require the quorum-intersection safety assumption to have
+            %% failed, so keep the existing notarized value.
+            case not maps:is_key(Sl, Tree)
+                 andalso not maps:is_key(Sl, Eng#eng.committed)
+                 andalso not maps:is_key(Sl, Eng#eng.skipped)
+                 andalso persisted_cert(support, Sl, BH, Eng) =/= none of
+                true ->
+                    settle(Eng#eng{blocks = (maps:remove(OldBH, Blocks))#{BH => B},
+                                   block_slots = Slots#{Sl => BH}});
+                false ->
+                    {Eng, []}
+            end
+    end.
 
 %% Add a verified share to its (kind, slot, block) bucket; if that reaches the `⅔` quorum for the first
 %% time, form the cert and re-disseminate it, then settle the tree/commits.
 ingest_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Signer} = Sh, Bucket, Eng) ->
     Key    = {K, Sl, BH},
     Bucket1 = Bucket#{Signer => Sh},
-    Eng1   = Eng#eng{shares = (Eng#eng.shares)#{Key => Bucket1}},
+    Seen1 = (Eng#eng.seen_votes)#{{K, Sl, Signer} => BH},
+    Eng1   = Eng#eng{shares = (Eng#eng.shares)#{Key => Bucket1},
+                     seen_votes = Seen1},
     maybe_form_bucket_cert(K, Sl, BH, Bucket1, Eng1).
 
 maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
@@ -521,13 +629,16 @@ maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
             {Eng1, [{broadcast, Cert} | Evs]}
     end.
 
-sanitize_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C, Validators) ->
+sanitize_cert(Domain,
+              #cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C,
+              Validators) ->
     N = length(Validators),
     case N > 0 andalso is_slot(Sl) andalso valid_shape(K, BH)
          andalso bounded_signatures(Sigs, N) of
         false -> error;
         true  ->
-            Valid = distinct_valid(Sigs, share_bytes(K, Sl, BH), Validators),
+            Valid = distinct_valid(
+                      Sigs, share_bytes(Domain, K, Sl, BH), Validators),
             case length(Valid) >= quorum(N) of
                 true  -> {ok, C#cert{sigs = Valid}};
                 false -> error
@@ -638,12 +749,20 @@ eng_prune(Committed, Eng = #eng{base = Base}) ->
     Above = fun(Sl) -> Sl > Committed end,
     Eng#eng{base      = max(Committed, Base),
             blocks    = maps:filter(fun(_BH, #block{slot = Sl}) -> Above(Sl) end, Eng#eng.blocks),
+            block_slots = maps:filter(fun(Sl, _BH) -> Above(Sl) end, Eng#eng.block_slots),
             shares    = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.shares),
+            seen_votes = maps:filter(fun({_K, Sl, _Signer}, _BH) -> Above(Sl) end,
+                                     Eng#eng.seen_votes),
             certs     = maps:filter(fun({_K, Sl, _BH}, _) -> Above(Sl) end, Eng#eng.certs),
             tree      = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree),
             tree_hashes = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.tree_hashes),
             committed = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.committed),
-            skipped   = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.skipped)}.
+            skipped   = maps:filter(fun(Sl, _) -> Above(Sl) end, Eng#eng.skipped),
+            ahead_finalizer =
+                case Eng#eng.ahead_finalizer > Committed of
+                    true  -> Eng#eng.ahead_finalizer;
+                    false -> max(Committed, Base)
+                end}.
 
 -doc """
 The deterministic leader (proposer) for a slot: **round-robin** over the sorted validator set,
@@ -663,12 +782,22 @@ leader(Slot, Validators) ->
 -ifdef(TEST).
 eng_tree(#eng{tree = T})           -> T.           %% slot => notarized #block{}
 eng_committed(#eng{committed = C}) -> C.           %% slot => committed #block{}
-%% Build an #eng with a given `base` and a list of `{Kind, Slot}` certs planted directly into the pool
-%% (bypassing verify) — for ahead_cert_ceiling/1's pure test only.
+eng_pool_sizes(#eng{blocks = Blocks, shares = Shares, seen_votes = Seen,
+                    certs = Certs}) ->
+    #{blocks => map_size(Blocks), share_buckets => map_size(Shares),
+      seen_votes => map_size(Seen), certs => map_size(Certs)}.
+eng_retained_block(Slot, Eng = #eng{block_slots = Slots}) ->
+    case maps:get(Slot, Slots, undefined) of
+        undefined -> undefined;
+        BH -> block_for(BH, Eng)
+    end.
+%% Build a minimal test engine with selected cert keys planted without
+%% verification. Pure gate/state fixtures use it when certificate presence,
+%% rather than cryptographic formation, is the condition under test.
 eng_with_certs(Base, KindSlots) ->
     Certs = maps:from_list([{{K, Sl, <<>>}, #cert{kind = K, slot = Sl, block_hash = <<>>, sigs = []}}
                             || {K, Sl} <- KindSlots]),
-    #eng{validators = [], base = Base, certs = Certs}.
+    #eng{domain = <<0:256>>, validators = [], base = Base, certs = Certs}.
 
 %% Reconstruct the exact engine half of an out-of-order commit already emitted to the FSM: the valid
 %% certificate and committed latch exist, while the FSM separately holds the block in commit_buf.
@@ -698,9 +827,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(DEFAULTS,
         #{node_id      => undefined,   %% our pubkey == node_id; REQUIRED
           mode         => create,      %% create = found genesis; join = trustlessly catch up from a contact
-          committee    => [],          %% co-founders; `[]` = self-only (N=1), a list = a multi-validator committee
+          committee    => [],          %% complete founding set besides self; only its smallest key may create
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
-          genesis_hash => undefined,   %% join only: the out-of-band-pinned slot-1 block_hash (the trust anchor)
+          genesis_hash => undefined,   %% join config pin; resolved to the immutable slot-1 anchor in every mode
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
           data_dir     => undefined}).
 
@@ -733,7 +862,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -define(SYNC_BACKOFF_MAX, 20). %% failure backoff cap (ticks) — exp-doubled, ±20% jittered, single-flight-paced
 -define(APPLY_SYNC_EVERY, 256).  %% streamed replay: drain quod_prolog (sync barrier) every this many casts
 -define(MAX_FUTURE_MS, (2 * 60 * 60 * 1000)).  %% block-timestamp future skew tolerance (2h, cf. Bitcoin MAX_FUTURE_BLOCK_TIME)
--define(PIPELINE_DEPTH, 1).                     %% at most one approved parent may remain uncommitted
 -define(RELAY_RETRY_MS, 300).                    %% retry until the destination acknowledges receipt
 -define(RELAY_ACCEPTED_RETRY_MS, 5000).          %% after receipt, a slow status retry recovers a lost
                                                   %% result hint without flooding the consensus mailbox
@@ -757,7 +885,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -type final_vote_trigger() :: notarized | complaint_evidence | timeout | rejected.
 -record(round, {supporting = none :: none | binary(),
                 final = none :: final_vote(),
-                invalid = false :: boolean(),
+                invalid = none :: none | binary(),
                 validating = none :: none | binary()}).
 
 -record(batch, {slot :: slot(),
@@ -823,6 +951,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                   bytes :: pos_integer()}).
 
 -record(s, {ns           :: binary(),
+            consensus_domain :: <<_:256>> | undefined,
             self         :: node_id(),               %% our pubkey == node_id
             id           :: signer() | undefined,    %% signing identity (pubkey + private key)
             store        :: quod_ledger_store:handle() | undefined,
@@ -900,7 +1029,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             sync         = unconfirmed :: unconfirmed | {pulling, pid()} | ready,
             sync_arm     = {0, 0, 0} :: {non_neg_integer(), non_neg_integer(), non_neg_integer()},
                                         %% {behind-hysteresis ticks, backoff cooldown ticks, backoff interval ticks}
-            genesis_hash = undefined :: binary() | undefined,  %% join trust anchor: the pinned slot-1 block_hash
+            genesis_hash = undefined :: binary() | undefined,  %% pinned slot-1 block hash for every mode
             last_ts    = 0 :: non_neg_integer(),  %% timestamp of the most recent committed block (monotonic bound for the next propose)
             appends = 0  :: non_neg_integer(),
             proposals = 0 :: non_neg_integer(),
@@ -946,6 +1075,9 @@ test_state(Overrides) ->
                      (K, V, Acc) -> test_state_set(K, V, Acc)
                   end,
                   #s{ns = <<"t">>, self = <<"self">>,
+                     consensus_domain =
+                         consensus_domain(<<"t">>, <<0:256>>),
+                     genesis_hash = <<0:256>>,
                      chan = term_to_binary({log, <<"t">>}, [deterministic]),
                      relay_chan =
                          term_to_binary({ingress, <<"t">>}, [deterministic]),
@@ -961,6 +1093,7 @@ test_state(Overrides) ->
     end.
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
+test_state_set(consensus_domain, V, S) -> S#s{consensus_domain = V};
 test_state_set(validators, V, S) -> S#s{validators = V};
 test_state_set(slot, V, S)       -> S#s{slot = V, approved = V};
 test_state_set(approved, V, S)   -> S#s{approved = V};
@@ -1360,7 +1493,7 @@ status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
 
--doc "The `block_hash` of this node's local genesis block (slot 1) — the anchor a joiner must pin (config).".
+-doc "The immutable 32-byte slot-1 genesis anchor for this consensus process, including before a fresh joiner has downloaded slot 1.".
 -spec genesis_hash(binary()) -> binary() | undefined.
 genesis_hash(Ns) -> call(Ns, get_genesis_hash, undefined).
 
@@ -1400,13 +1533,27 @@ init_store(Ns, Cfg, Id) ->
     try load_or_bootstrap(S0, Cfg) of
         S1 ->
             Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
-            {ok, Journal} = quod_vote_journal:open(Ns, data_dir(Cfg), Committed),
-            S2 = restore_vote_rounds(S1#s{vote_journal = Journal}),
-            Eng = eng_new(active_validators(S2), Committed),   %% seed the engine's voting set (active set)
-            %% One periodic tick drives everything post-boot: peer redials AND the sync armer (`maybe_arm_sync`)
-            %% that kicks boot-sync/gap-fill. A fresh `mode=join` node boots `unconfirmed`, so `should_sync`
-            %% arms its catch-up at the first tick — no separate join kick.
-            {ok, running, S2#s{last_applied = 0, approved = Committed, eng = Eng}, [tick_timeout()]}
+            case consensus_anchor(S1, Cfg) of
+                {error, Reason} ->
+                    {stop, {bad_config, Reason}};
+                {ok, GenesisHash} ->
+                    Domain = consensus_domain(Ns, GenesisHash),
+                    {ok, Journal} =
+                        quod_vote_journal:open(
+                          Ns, Domain, data_dir(Cfg), Committed),
+                    S2 = restore_vote_rounds(
+                           S1#s{vote_journal = Journal,
+                                genesis_hash = GenesisHash,
+                                consensus_domain = Domain}),
+                    Eng = eng_new(
+                            Domain, active_validators(S2), Committed),
+                    %% One periodic tick drives everything post-boot: peer redials AND the sync armer
+                    %% (`maybe_arm_sync`) that kicks boot-sync/gap-fill. A fresh `mode=join` node
+                    %% boots `unconfirmed`, so `should_sync` arms its catch-up at the first tick.
+                    {ok, running,
+                     S2#s{last_applied = 0, approved = Committed, eng = Eng},
+                     [tick_timeout()]}
+            end
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
@@ -1434,7 +1581,7 @@ signing_key(Cfg) ->
     end.
 
 relay_timeout_ms(Cfg) ->
-    case maps:get(park_ttl_ms, Cfg, 30000) of
+    case maps:get(transaction_ttl_ms, Cfg, 30000) of
         N when is_integer(N), N > 0 -> N + 1000;
         _                           -> 31000
     end.
@@ -1448,13 +1595,15 @@ relay_timeout_ms(Cfg) ->
 %% `last/1` gives the height in O(1). Both projections derive from the same committed log, so they can't drift.
 %% Derive the durable state, then decide by mode — `mode` is read HERE ONCE and then discarded (it is boot
 %% config, not running state). `create` founds genesis when fresh (slot 0) or just re-derives on restart;
-%% `join` records the pinned `genesis_hash` anchor and starts UNFOUNDED (slot 0) or RESUMES a partial prefix
-%% (slot≥1) — either way it catches up via the tick's `should_sync` arm (from slot+1, so a retry never
+%% `join` starts UNFOUNDED (slot 0) or RESUMES a partial prefix (slot≥1) — either way it catches up via
+%% the tick's `should_sync` arm (from slot+1, so a retry never
 %% re-appends disk-present bytes, and `maybe_mark_ready` stays gated on recovery reaching `ready`).
+%% `init_store/3` resolves and installs the configured/local genesis anchor
+%% after this projection, so the boot pin is never copied into intermediate state.
 %%
 %% The initial recovery state is seeded PURELY FROM THE FACTS, not the mode: only the sole validator can
 %% trust its head is the tip (`active_validators == [Self]` — nobody else could have moved it). Everyone
-%% else — a co-founder, a joiner, a resuming member — boots `unconfirmed` and runs recovery. So `mode`
+%% else — a founding joiner, a later joiner, or a resuming member — boots `unconfirmed` and runs recovery. So `mode`
 %% leaves zero running-state residual.
 load_or_bootstrap(S0 = #s{ns = Ns, store = Store}, Cfg) ->
     Base = case quod_ledger_store:last(Store) of
@@ -1469,12 +1618,35 @@ load_or_bootstrap(S0 = #s{ns = Ns, store = Store}, Cfg) ->
                              slot = LastI, last_ts = Ts, author_seqs = Seqs}
            end,
     S1 = case {maps:get(mode, Cfg), Base#s.slot} of
-             {join,   _} -> Base#s{genesis_hash = maps:get(genesis_hash, Cfg)};
              {create, 0} -> bootstrap(Cfg, Base);   %% fresh founder
-             {create, _} -> Base                    %% restarted founder / admitted member
+             {_Mode, _}  -> Base                    %% join, or restarted founder/admitted member
          end,
     S1#s{sync = initial_sync(S1),
          next_author_seq = maps:get(S1#s.self, S1#s.author_seqs, 0) + 1}.
+
+%% Resolve the one immutable chain anchor used by every vote in this process.
+%% A founder derives it from its durable slot-1 block. A fresh joiner uses the
+%% configured out-of-band pin; once any prefix exists, that pin must equal the
+%% locally reconstructed genesis or startup fails before a vote can be restored.
+consensus_anchor(#s{slot = 0}, #{mode := join, genesis_hash := GenesisHash})
+  when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
+    {ok, GenesisHash};
+consensus_anchor(S = #s{slot = Slot}, Cfg) when Slot >= 1 ->
+    case {local_genesis_hash(S), maps:get(mode, Cfg)} of
+        {GenesisHash, create}
+          when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
+            {ok, GenesisHash};
+        {GenesisHash, join}
+          when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
+            case maps:get(genesis_hash, Cfg) of
+                GenesisHash -> {ok, GenesisHash};
+                _Other      -> {error, genesis_anchor_mismatch}
+            end;
+        _ ->
+            {error, invalid_local_genesis}
+    end;
+consensus_anchor(_S, _Cfg) ->
+    {error, missing_genesis_anchor}.
 
 %% The sole validator is ready immediately because no other node could have committed past its durable head.
 %% Every other shape must corroborate its tip through recovery before it can emit consensus evidence.
@@ -1484,18 +1656,16 @@ initial_sync(#s{self = Self} = S) ->
         _      -> unconfirmed
     end.
 
-%% Fresh create: durably commit ONE genesis block (slot 1) whose transaction asserts each founding
-%% member's `peer_admitted` fact — the committee, as facts — followed by the root ontology content (if a
-%% `.pl` is configured). The committee is then DERIVED from that same transaction (`apply_committee_delta`),
-%% so bootstrap and the restart re-fold can never disagree. `quod_prolog:genesis_diff/1` is evaluated as
-%% part of building the tx (it may throw `{genesis_failed,_}`), and the whole thing lands in ONE atomic
-%% append — a bad `.pl` persists NOTHING: init stops and the next boot retries fresh.
-%%
-%% REQUIREMENT for a multi-member CO-FOUNDING committee: every co-founder MUST be configured with the SAME
-%% `committee` AND the SAME `genesis_file` (or all none), so their genesis transactions are byte-identical
-%% and every founder boots at the same height 1 under the same committee.
+%% Fresh create: the canonical founder mints a random incarnation and durably commits ONE genesis block
+%% (slot 1). Its transaction asserts `consensus_incarnation/1`, every founding member's
+%% `peer_admitted` fact, and the root ontology content (if a `.pl` is configured). The incarnation makes
+%% two fresh foundings cryptographically distinct even when every operator input is byte-identical.
+%% The committee is then DERIVED from that same transaction (`apply_committee_delta`), so bootstrap and
+%% restart re-fold cannot disagree. `quod_prolog:read_terms/1` may throw `{genesis_failed,_}`; the whole
+%% transaction lands in ONE atomic append, so a bad `.pl` persists nothing and the next boot retries fresh.
 bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
-    GenesisTx = genesis_tx(Cfg, Ns, Self),
+    Incarnation = crypto:strong_rand_bytes(32),
+    GenesisTx = genesis_tx(Cfg, Ns, Self, Incarnation),
     E = #entry{index = 1, data = quod_ledger:data([GenesisTx])},
     {ok, Store1} = quod_ledger_store:append(Store, [E]),
     {Validators, CommitteeId, _Ts, _Seqs} =
@@ -1503,22 +1673,60 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     S#s{store = Store1, validators = Validators,
         committee_id = CommitteeId, slot = 1}.
 
-%% The genesis transaction: assert each founding member's `peer_admitted/4` fact (the committee as facts),
-%% then the root ontology content from the `.pl` (if any). Facts + content are compiled through the erlog
-%% overlay together (`quod_prolog:terms_to_diff/1` — a hand-built `{Head, true}` clause would be malformed).
-%% The founding set is `[]` ⇒ self-only (N=1) or a list of co-founders; each entry is a bare pubkey (address
-%% unknown until it links) or a `{Pubkey, Host, Port}` tuple. Only the pubkey is load-bearing for consensus;
-%% the address is a dial hint the join path fills in later. The sorted first founder is the canonical
-%% unsigned genesis author, making the complete genesis entry byte-identical on every co-founder.
-genesis_tx(Cfg, Ns, Self) ->
+%% The genesis transaction compiles the incarnation, founding committee, and optional `.pl` content
+%% through the erlog overlay together. `consensus_incarnation/1` is therefore ordinary queryable ontology
+%% truth as well as part of the anchor. The predicate is reserved to this one generated fact.
+%% The founding set is `[]` => self-only (N=1) or a list of founding members; each entry is a bare pubkey
+%% or `{Pubkey, Host, Port}`. The lexicographically-smallest pubkey is both the sole permitted creator and
+%% the unsigned transaction author. All other founding members start in `mode=join` against its anchor.
+genesis_tx(Cfg, Ns, Self, Incarnation) ->
     Founders   = founding(Cfg, Self),
     [{GenesisAuthor, _, _} | _] = Founders,
-    PeerTerms  = [{peer_admitted, Pk, Host, Port, Pk}
-                  || {Pk, Host, Port} <- Founders],
     FileTerms  = case genesis_file(Cfg) of none -> []; File -> quod_prolog:read_terms(File) end,
-    Diff       = quod_prolog:terms_to_diff(PeerTerms ++ FileTerms),
-    #transaction{tx_id = <<"genesis:", Ns/binary>>, caller_ns = Ns, diff = Diff,
-                 read_check = #{}, author = GenesisAuthor, sig = none}.
+    PeerAndFileTerms =
+        lists:foldr(
+          fun({Pk, Host, Port}, Acc) ->
+                  [{peer_admitted, Pk, Host, Port, Pk} | Acc]
+          end, FileTerms, Founders),
+    Diff = quod_prolog:terms_to_diff(
+             [{consensus_incarnation, Incarnation} | PeerAndFileTerms]),
+    Genesis =
+        #transaction{tx_id = genesis_tx_id(Ns, Incarnation), caller_ns = Ns,
+                     diff = Diff, read_check = #{},
+                     author = GenesisAuthor, sig = none},
+    ExpectedFounders = [Pk || {Pk, _Host, _Port} <- Founders],
+    case valid_genesis_transaction(Ns, Genesis, ExpectedFounders) of
+        true ->
+            Genesis;
+        false ->
+            throw({genesis_failed,
+                   invalid_generated_genesis})
+    end.
+
+genesis_tx_id(Ns, Incarnation)
+  when is_binary(Ns), is_binary(Incarnation), byte_size(Incarnation) =:= 32 ->
+    <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
+      (byte_size(Ns)):32, Ns/binary, Incarnation/binary>>.
+
+decode_genesis_tx_id(Ns, TxId) when is_binary(Ns), is_binary(TxId) ->
+    NsLen = byte_size(Ns),
+    case TxId of
+        <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8, NsLen:32,
+          Ns:NsLen/binary, Incarnation:32/binary>> ->
+            {ok, Incarnation};
+        _ ->
+            error
+    end.
+
+genesis_incarnation_matches(Diff, Incarnation) ->
+    case [Op || Op = {_Action, {Head, _Body}} <- Diff,
+                is_tuple(Head), tuple_size(Head) > 0,
+                element(1, Head) =:= consensus_incarnation] of
+        [{assert, {{consensus_incarnation, Incarnation}, _CompiledBody}}] ->
+            true;
+        _ ->
+            false
+    end.
 
 %% The founding members as `{Pubkey, Host, Port}` (sorted, self included). `Host`/`Port` are a dial hint the
 %% join path fills in — `undefined` when only a bare pubkey is configured; consensus needs only the pubkey.
@@ -1745,7 +1953,8 @@ running_impl({call, From}, finish_feed_replay, S) ->
     {keep_state, S, [{reply, From, ok}]};
 running_impl({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running_impl({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
-running_impl({call, From}, get_genesis_hash, S) -> {keep_state, S, [{reply, From, local_genesis_hash(S)}]};
+running_impl({call, From}, get_genesis_hash, S) ->
+    {keep_state, S, [{reply, From, S#s.genesis_hash}]};
 running_impl({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
@@ -1876,7 +2085,8 @@ ingress_view_source(
   S = #s{self = Self, slot = Durable,
          approved = Approved, committee_id = CommitteeId,
          validators = Validators, sync = Sync,
-         eng = #eng{base = EngineBase, certs = Certs, tree = Tree},
+         eng = #eng{base = EngineBase, ahead_finalizer = AheadFinalizer,
+                    certs = Certs, tree = Tree},
          local_proposals = Local, commit_buf = CommitBuf,
          custody_lane = CustodyLane, custody_ready = CustodyReady,
          relay_pending = Pending, author_seqs = AuthorSeqs}) ->
@@ -1888,9 +2098,9 @@ ingress_view_source(
         case CustodyReadyCount of
             0 -> inactive;
             _ -> AuthorSeqs
-        end,
+    end,
     {Self, Durable, Approved, CommitteeId, Validators, Sync,
-     EngineBase, Certs, Tree,
+     EngineBase, AheadFinalizer, Certs, Tree,
      proposal_visible(Floor, S),
      maps:is_key(Floor, Local),
      maps:is_key(Floor, CommitBuf),
@@ -2066,10 +2276,7 @@ retain_custody(Waiter, Change, Submission, SubmissionId, Bytes, Anchor,
                          submission = Submission,
                          original_arrival = Anchor,
                          deadline = Deadline, bytes = Bytes},
-            Marker =
-                Waiter#waiter{
-                  reply_to = {custody, SubmissionId},
-                  submission_id = SubmissionId},
+            Marker = custody_marker(SubmissionId, Record),
             {ok, {custody, SubmissionId}, Marker,
              S#s{custody = Custody#{SubmissionId => Record},
                  custody_deadlines =
@@ -3017,7 +3224,10 @@ propose_batch(Slot, Parent, Items, Payload, Count, WaitMs, S) ->
              round_probe = (S#s.round_probe)#{Slot => {quod_time:mono_ms(), none}}},
     S2 = broadcast({propose, Block}, S1),
     S3 = engine_step([{block, BH, Block}], S2),
-    watch_proposal(Slot, support_or_validate(Block, BH, S3)).
+    case block_for(BH, S3#s.eng) of
+        #block{} -> watch_proposal(Slot, support_or_validate(Block, BH, S3));
+        undefined -> S3
+    end.
 
 reject_collected_batch(Items, Count, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
@@ -3057,12 +3267,11 @@ apply_events([Event | Rest], S) -> apply_events(Rest, apply_event(Event, S)).
 apply_event({broadcast, Cert}, S) ->
     broadcast({cert, Cert}, S);
 %% A block was notarized: sign + emit our commit share — UNLESS we already complaint-signed this slot
-%% (`may_commit` guard) OR we judged its membership change INVALID (`#round.invalid`). Recording
+%% (`may_commit` guard) OR we judged this exact membership block INVALID (`#round.invalid`). Recording
 %% the round's `commit` latch makes the symmetric `may_complain` guard hold, so an honest node contributes to at
-%% most one of {commit cert, complaint cert} per slot — the safety rule. The `invalid` guard is
-%% belt-and-braces: a node that evaluated a membership proposal and rejected it never endorses at ANY phase,
-%% even if the block notarized via others (an absent verdict, by contrast, must NOT bar a commit share — a
-%% support cert already proves ≥ f+1 honest validations).
+%% most one of {commit cert, complaint cert} per slot — the safety rule. The hash-scoped `invalid` guard is
+%% belt-and-braces: a node that evaluated a membership proposal and rejected that block never endorses it at
+%% ANY phase. It cannot poison a different quorum-certified block after leader equivocation.
 apply_event({notarized, #block{} = Block}, S0) ->
     choose_final_vote(Block#block.slot, notarized, approve_block(Block, S0));
 %% A block is final: apply it, in slot order (out-of-order finalizations are buffered — contiguous apply).
@@ -3581,10 +3790,11 @@ drain_commits(S = #s{slot = H, commit_buf = Buf}) ->
 %%% transport ({log, Ns} channel over quod_link)
 %%%===================================================================
 
-%% Route one inbound consensus message into the engine. A hostile peer can put any term on the wire, so
-%% every message is SHAPE-VALIDATED first — a record with a malformed field (e.g. a non-integer slot)
-%% would otherwise crash the statem downstream (share_bytes packs `Slot:64`). Malformed ⇒ silently dropped.
-dispatch(Peer, {propose, #block{} = B}, S) -> case well_formed_block(B) of true -> on_propose(Peer, B, S); false -> S end;
+%% Route one inbound consensus message into the engine. A hostile peer can put any term on the wire.
+%% Cheap source/slot/hash gates may drop it first; anything that reaches consensus state is then either
+%% fully validated or an exact hash of a block already validated and retained locally.
+dispatch(Peer, {propose, #block{} = B}, S) ->
+    preflight_proposal(Peer, B, S);
 dispatch(_Peer, {share, #share{} = Sh}, S) ->
     case well_formed_share(Sh) of
         true ->
@@ -3606,24 +3816,25 @@ dispatch(_Peer, {share, #share{} = Sh}, S) ->
             maybe_join_complaint(Sh, engine_step([{share, Sh}], S));
         false -> S
     end;
-dispatch(_Peer, {cert,  #cert{}  = C},  S) -> case well_formed_cert(C)  of true -> engine_step([{cert, C}], S);   false -> S end;
+dispatch(_Peer, {cert, #cert{} = C}, S) ->
+    engine_step([{cert, C}], S);
 dispatch(Peer, {block_request, Slot, BH}, S)
   when is_integer(Slot), Slot >= 1, is_binary(BH), byte_size(BH) =:= 32 ->
     serve_certified_block(Peer, Slot, BH, S);
 dispatch(Peer, {certified_block, #block{} = Block, #cert{} = Cert}, S) ->
-    case well_formed_block(Block) andalso well_formed_cert(Cert) of
-        true  -> ingest_certified_block(Peer, Block, Cert, S);
-        false -> S
-    end;
+    ingest_certified_block(Peer, Block, Cert, S);
 dispatch(Peer, {readiness, Height, Ready}, S)
   when is_integer(Height), Height >= 0, is_boolean(Ready) ->
     record_peer_readiness(Peer, Height, Ready, S);
 dispatch(_Peer, _Other, S)                 -> S.
 
 well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
-    is_slot(Sl) andalso is_slot(P) andalso is_slot(Ts)
+    well_formed_block_header(Sl, P, Ts)
         andalso well_formed_block_payload(Pl);
 well_formed_block(_) -> false.
+
+well_formed_block_header(Slot, Parent, Timestamp) ->
+    is_slot(Slot) andalso is_slot(Parent) andalso is_slot(Timestamp).
 
 well_formed_block_payload(Pl) ->
     bounded_transaction_list(Pl)
@@ -3633,9 +3844,6 @@ well_formed_block_payload(Pl) ->
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
     is_slot(Sl) andalso valid_shape(K, BH) andalso valid_signer_signature(Sg, Sig);
 well_formed_share(_) -> false.
-well_formed_cert(#cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs}) ->
-    is_slot(Sl) andalso valid_shape(K, BH) andalso proper_signatures(Sigs);
-well_formed_cert(_) -> false.
 is_slot(X) -> is_integer(X) andalso X >= 0 andalso X =< ?MAX_SLOT.
 
 %% A support certificate authorizes block retrieval from any committee member: the sender is only a
@@ -3653,36 +3861,47 @@ serve_certified_block(Peer, Slot, BH, S = #s{eng = Eng}) ->
             end
     end.
 
-%% Responses are accepted only for a currently outstanding exact request. This keeps an authenticated but
-%% faulty validator from making the consensus process repeatedly validate unsolicited full blocks.
-ingest_certified_block(Peer, Block = #block{slot = Slot}, Cert,
-                       S = #s{block_requests = Requests}) ->
-    BH = block_hash(Block),
-    case maps:is_key({Slot, BH}, Requests)
-             andalso lists:member(Peer, active_validators(S))
-             andalso certified_block_context(Block, Cert, S) of
+%% Responses are accepted only for a currently outstanding exact request. Cheap
+%% source/header/certificate-shape gates precede one block hash and one shared content
+%% validation, so an authenticated faulty validator cannot amplify unsolicited
+%% recovery traffic or make the same payload pass twice.
+ingest_certified_block(
+  Peer, Block = #block{slot = Slot, parent = Parent, timestamp = Timestamp},
+  Cert = #cert{kind = support, slot = Slot, block_hash = ExpectedBH},
+  S = #s{block_requests = Requests})
+  when is_binary(ExpectedBH), byte_size(ExpectedBH) =:= 32 ->
+    Preflight =
+        maps:is_key({Slot, ExpectedBH}, Requests)
+        andalso lists:member(Peer, active_validators(S))
+        andalso well_formed_block_header(Slot, Parent, Timestamp),
+    case Preflight andalso block_hash(Block) =:= ExpectedBH
+         andalso certified_block_context(Block, ExpectedBH, S) of
         false ->
             S;
         true ->
             %% Ingest the certificate first. The engine sanitizes every signature against the current
             %% committee; only a certificate that survives that boundary may authorize a non-leader block.
             S1 = engine_step([{cert, Cert}], S),
-            case persisted_cert(support, Slot, BH, S1#s.eng) of
+            case persisted_cert(support, Slot, ExpectedBH, S1#s.eng) of
                 #cert{} ->
-                    Requests1 = maps:remove({Slot, BH}, S1#s.block_requests),
-                    engine_step([{block, BH, Block}], S1#s{block_requests = Requests1});
+                    Requests1 =
+                        maps:remove({Slot, ExpectedBH}, S1#s.block_requests),
+                    engine_step(
+                      [{block, ExpectedBH, Block}],
+                      S1#s{block_requests = Requests1});
                 none ->
                     S1
             end
-    end.
+    end;
+ingest_certified_block(_Peer, _Block, _Cert, S) ->
+    S.
 
 certified_block_context(
   #block{slot = Slot, parent = Parent} = Block,
-  #cert{kind = support, slot = Slot, block_hash = BH},
+  BH,
   S = #s{slot = Committed}) ->
     ContextValid = live_pipeline_slot(Slot, Committed)
                    andalso Parent =:= Slot - 1
-                   andalso block_hash(Block) =:= BH
                    andalso compatible_local_final_vote(Slot, BH, S),
     case ContextValid andalso recoverable_parent_timestamp(Parent, S) of
         false ->
@@ -3691,9 +3910,7 @@ certified_block_context(
             false;
         ParentTs ->
             block_admissible(Block, ParentTs, S)
-    end;
-certified_block_context(_Block, _Cert, _S) ->
-    false.
+    end.
 
 recoverable_parent_timestamp(Parent, #s{slot = Parent, last_ts = LastTs}) -> LastTs;
 recoverable_parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
@@ -3710,29 +3927,63 @@ compatible_local_final_vote(Slot, BH, S) ->
         _ -> true
     end.
 
-%% A leader's proposal: accept it only from the slot's actual leader and at the next APPROVED slot,
-%% extending that approved parent. At most one uncommitted approved parent may be extended,
-%% and the payload is a bounded, structurally valid transaction batch. This prevents future-slot flooding
-%% and ensures commit_block only receives blocks whose full apply shape was checked before voting.
-%% Reject a non-leader before transaction verification. Keep the explicit positive
-%% slot guard before leader/2 so a crafted slot 0 cannot reach lists:nth/2.
-on_propose(Peer, #block{slot = Sl} = Block, S) ->
-    BH = block_hash(Block),
-    %% A redrive of the exact block we already supported was fully validated on
-    %% first receipt. Check the hash latch first to avoid repeating every
-    %% transaction's Ed25519 verification on each delta timeout.
-    FromLeader = is_integer(Sl) andalso Sl >= 1
-                 andalso leader(Sl, active_validators(S)) =:= Peer,
-    Valid = FromLeader
-            andalso (known_proposal(Sl, BH, S) orelse valid_proposal(Block, S)),
-    case Valid of
+%% Reject unauthorised and repeated-heavy proposal traffic at the cheapest
+%% available boundary. A non-leader is rejected before hashing or walking the
+%% payload. For the authenticated leader, the first block pays structural and
+%% transaction validation once; an exact retained redrive is already trusted,
+%% while a different hash for that slot is dropped before signature work.
+%% Certified recovery has its own support-certificate-authorized replacement
+%% path and does not enter here.
+preflight_proposal(
+  Peer, #block{slot = Sl} = Block,
+  S = #s{slot = Committed, approved = Approved,
+         eng = #eng{block_slots = BlockSlots}}) ->
+    PotentiallyLive =
+        maps:is_key(Sl, BlockSlots)
+        orelse (Sl =:= Approved + 1
+                andalso live_pipeline_slot(Sl, Committed)),
+    FromLeader =
+        PotentiallyLive
+        andalso is_slot(Sl) andalso Sl >= 1
+        andalso leader(Sl, active_validators(S)) =:= Peer,
+    case FromLeader of
+        false ->
+            S;
+        true ->
+            BH = block_hash(Block),
+            case maps:get(Sl, BlockSlots, undefined) of
+                undefined ->
+                    on_propose(BH, Block, false, S);
+                BH ->
+                    on_propose(BH, Block, true, S);
+                _OtherBH ->
+                    S
+            end
+    end.
+
+%% A new leader proposal is valid only at the next approved slot, extending
+%% that approved parent, with one bounded transaction batch. A retained exact
+%% redrive bypasses the checks already paid before that block entered the
+%% engine. In both cases, recovery may retain evidence while only a ready voter
+%% starts local validation, timers, or signatures.
+on_propose(BH, #block{slot = Sl} = Block, Known, S) ->
+    case Known orelse valid_proposal(Block, S) of
         %% Recovery may ingest the block and certificates as evidence, but only a ready voter starts local
         %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
-        true  -> S1 = engine_step([{block, BH, Block}], S),
-                 case may_vote(S1) of
-                     true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
-                     false -> S1
-                 end;
+        true  ->
+            S1 = engine_step([{block, BH, Block}], S),
+            %% A Byzantine leader may equivocate indefinitely. The engine retains
+            %% only the first ordinary block for this slot, so validation and
+            %% signing continue only if this exact hash was admitted.
+            case block_for(BH, S1#s.eng) of
+                #block{} ->
+                    case may_vote(S1) of
+                        true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
+                        false -> S1
+                    end;
+                undefined ->
+                    S1
+            end;
         false -> S
     end.
 
@@ -3745,13 +3996,13 @@ on_propose(Peer, #block{slot = Sl} = Block, S) ->
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
 support_or_validate(#block{slot = Sl}, _BH, S) when Sl =< S#s.slot -> S;   %% cert raced ahead: slot already final
-%% Slot already judged INVALID: we never endorse it at any phase, so a REDRIVEN copy must not re-request
-%% a verdict (it would re-prove per Δ and double-count the reject). Checked before hashing — no work.
-support_or_validate(#block{slot = Sl}, _BH, S) ->
+%% This exact block was already judged INVALID: never endorse or re-prove it. The hash scope matters:
+%% an equivocated block for the same slot may later arrive with a valid quorum support certificate.
+support_or_validate(#block{slot = Sl}, BH, S) ->
     case (round_state(Sl, S))#round.invalid of
-        true -> S;
-        false -> timed_step(S, support,
-                            fun() -> support_or_validate_ready(Sl, _BH, S) end)
+        BH -> S;
+        _  -> timed_step(S, support,
+                         fun() -> support_or_validate_ready(Sl, BH, S) end)
     end.
 
 support_or_validate_ready(Sl, BH, S) ->
@@ -3776,7 +4027,7 @@ support_or_validate_ready(Sl, BH, S) ->
     end.
 
 %% The KB verdict for a membership proposal we deferred, correlated to the exact block by `{Sl, BH}`: `valid`
-%% ⇒ emit the deferred support share; `invalid` ⇒ latch `#round.invalid` (so we never endorse it at any phase —
+%% ⇒ emit the deferred support share; `invalid` ⇒ latch its hash in `#round.invalid` (so we never endorse it at any phase —
 %% see `apply_event({notarized,...})`) and count it; `abstain` ⇒ neither (a peer-formed support cert may still
 %% notarize; if enough nodes abstain the slot Δ-skips). A verdict is acted on ONLY if `{Sl, BH}` still matches
 %% what we are validating AND `Sl` is still head+1 — so a stale verdict (slot finalized, or a DIFFERENT block
@@ -3792,7 +4043,7 @@ on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= 
                                     _                -> S1
                                 end;
                 {invalid, _} ->
-                    S2 = put_round(Sl, (round_state(Sl, S1))#round{invalid = true},
+                    S2 = put_round(Sl, (round_state(Sl, S1))#round{invalid = BH},
                                    S1#s{membership_rejects = S1#s.membership_rejects + 1}),
                     choose_final_vote(Sl, rejected, S2);
                 abstain      -> S1
@@ -4139,13 +4390,13 @@ on_pre_notarization_timeout(V, S) ->
 held_unsupported_proposal(V, S = #s{eng = #eng{blocks = Blocks}}) ->
     Round = round_state(V, S),
     case {Round#round.supporting, Round#round.validating, Round#round.invalid} of
-        {none, BH, false} when is_binary(BH) ->
+        {none, BH, Invalid} when is_binary(BH), Invalid =/= BH ->
             validating;
-        {none, none, false} ->
+        {none, none, Invalid} ->
             Candidates = lists:sort(
                            [{BH, Block}
                             || {BH, #block{slot = Sl} = Block} <- maps:to_list(Blocks),
-                               Sl =:= V, valid_proposal(Block, S)]),
+                               Sl =:= V, BH =/= Invalid, valid_proposal(Block, S)]),
             case Candidates of
                 [{BH, Block} | _] -> {resume, Block, BH};
                 []                -> none
@@ -4163,8 +4414,8 @@ retry_supported_proposal(
                                                phase = awaiting_notarization,
                                                support_grace_used = false}}) ->
     case round_state(V, S) of
-        #round{supporting = BH, final = Final, invalid = false}
-          when is_binary(BH), Final =/= complaint ->
+        #round{supporting = BH, final = Final, invalid = Invalid}
+          when is_binary(BH), Final =/= complaint, Invalid =/= BH ->
             case block_for(BH, S#s.eng) of
                 #block{} = Block ->
                     S1 = S#s{head_progress = P#head_progress{support_grace_used = true}},
@@ -4414,9 +4665,10 @@ choose_unlatched_final_vote(V, {CommitPolicy, Fallback}, Round, S) ->
         true ->
             emit_final_vote(complaint, V, none, S);
         false ->
-            case {Round#round.invalid, notarized_hash(V, S),
+            case {notarized_hash(V, S),
                   may_commit(V, complained_slots(S))} of
-                {false, {ok, BH}, true} when CommitPolicy =:= commit ->
+                {{ok, BH}, true}
+                  when CommitPolicy =:= commit, Round#round.invalid =/= BH ->
                     emit_final_vote(commit, V, BH, S);
                 _ when Fallback =:= complaint, CanComplain =:= true ->
                     emit_final_vote(complaint, V, none, S);
@@ -4466,7 +4718,7 @@ record_share(Kind, Slot, BlockHash, S = #s{vote_journal = Journal}) ->
                          complaint -> Round#round{final = complaint}
                      end,
             S1 = put_round(Slot, Round1, S#s{vote_journal = Journal1}),
-            {ok, make_share(Kind, Slot, BlockHash, S#s.id), S1}
+            {ok, make_share(S#s.consensus_domain, Kind, Slot, BlockHash, S#s.id), S1}
     end.
 
 record_vote(_Ns, memory, _Kind, _Slot, _BlockHash) -> {ok, memory};
@@ -4480,11 +4732,11 @@ record_vote(Ns, Journal, Kind, Slot, BlockHash) ->
 
 %% Reconstruct already-durable evidence for retransmission. The latch check is part of this function,
 %% so no caller can turn it into an unjournaled share constructor by supplying arbitrary arguments.
-%% Tests and certificate verification use `make_share/4` directly; normal first emission must pass
+%% Tests and certificate verification use `make_share/5` directly; normal first emission must pass
 %% through `record_share/4` above.
-own_share(Kind, Slot, BlockHash, #s{id = Id} = S) ->
+own_share(Kind, Slot, BlockHash, #s{id = Id, consensus_domain = Domain} = S) ->
     case may_vote(S) andalso vote_is_latched(Kind, BlockHash, round_state(Slot, S)) of
-        true  -> {ok, make_share(Kind, Slot, BlockHash, Id)};
+        true  -> {ok, make_share(Domain, Kind, Slot, BlockHash, Id)};
         false -> blocked
     end.
 
@@ -4508,16 +4760,10 @@ block_admissible(#block{payload = Payload, timestamp = Ts}, ParentTs, S) ->
         andalso ts_acceptable(Ts, ParentTs, quod_time:now_ms())
         andalso acceptable_payload(Payload, S).
 
-%% A leader redrive for an already-supported in-flight block is accepted even after
-%% the approved frontier moved past it. The locally latched hash makes this exact and
-%% cannot authorize a different block for the same slot.
-known_proposal(Sl, BH, S) when Sl > S#s.slot ->
-    (round_state(Sl, S))#round.supporting =:= BH;
-known_proposal(_Sl, _BH, _S) -> false.
-
-%% A proposed block's `timestamp` is acceptable iff it is a non-negative integer (`well_formed_block`
-%% guarantees this for wire input, but we re-check so the predicate is total + directly testable),
-%% MONOTONIC (≥ the parent block's time `Last`), and not implausibly far in the FUTURE relative to the
+%% A proposed block's `timestamp` is acceptable iff it is a non-negative integer. The check lives here
+%% so ordinary proposal admission is total without a duplicate structural pass, while certified recovery
+%% can share the same predicate after its own wire-shape gate. It must also be MONOTONIC
+%% (≥ the parent block's time `Last`) and not implausibly far in the FUTURE relative to the
 %% verifier's clock (`Now + ?MAX_FUTURE_MS`). Without the future bound, one Byzantine proposal could pin
 %% `last_ts` decades ahead and freeze block-time forever (max/2 at propose never comes back down); cf.
 %% Bitcoin's MAX_FUTURE_BLOCK_TIME (+2h). The skew is deliberately generous to avoid false-rejecting an
@@ -4723,7 +4969,7 @@ Only the explicitly positioned slot-1 genesis transaction may be unsigned.
 -spec valid_history_entry(binary(), pos_integer(), term(), [node_id()]) -> boolean().
 valid_history_entry(Ns, 1, {batch, [#transaction{caller_ns = Ns, sig = none} = Genesis]}, [])
   when is_binary(Ns) ->
-    well_formed_transaction(Genesis);
+    valid_genesis_transaction(Ns, Genesis);
 valid_history_entry(_Ns, I, noop, _Committee) when is_integer(I), I > 1 ->
     true;
 valid_history_entry(Ns, I, {batch, Payload}, Committee)
@@ -4741,6 +4987,38 @@ valid_history_entry(Ns, I, {batch, Payload}, Committee)
         andalso membership_batch_shape_ok(Payload);
 valid_history_entry(_Ns, _I, _Data, _Committee) ->
     false.
+
+valid_genesis_transaction(Ns, Genesis) ->
+    valid_genesis_transaction(Ns, Genesis, any_founding_set).
+
+valid_genesis_transaction(
+  Ns, #transaction{tx_id = TxId, goal = undefined, result = undefined,
+                   diff = Diff, read_check = #{}, author = Author,
+                   author_seq = 0, submitted_at = 0} = Genesis,
+  ExpectedFounders) ->
+    well_formed_transaction(Genesis)
+        andalso valid_genesis_identity(
+                  decode_genesis_tx_id(Ns, TxId), Diff, Author,
+                  Genesis, ExpectedFounders);
+valid_genesis_transaction(_Ns, _Genesis, _ExpectedFounders) ->
+    false.
+
+valid_genesis_identity(
+  {ok, Incarnation}, Diff, Author, Genesis, ExpectedFounders) ->
+    {Adds, Removes} = committee_delta(Genesis),
+    genesis_incarnation_matches(Diff, Incarnation)
+        andalso Removes =:= []
+        andalso Adds =/= []
+        andalso Author =:= lists:min(Adds)
+        andalso founding_set_matches(ExpectedFounders, Adds);
+valid_genesis_identity(
+  error, _Diff, _Author, _Genesis, _ExpectedFounders) ->
+    false.
+
+founding_set_matches(any_founding_set, _Adds) ->
+    true;
+founding_set_matches(ExpectedFounders, Adds) ->
+    lists:sort(Adds) =:= ExpectedFounders.
 
 historical_change_shape_acceptable(
   Ns, #transaction{caller_ns = Ns, author = Author, author_seq = Seq} = Change,
@@ -4861,9 +5139,9 @@ callable_head(Head) when is_atom(Head) -> true;
 callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 -> is_atom(element(1, Head));
 callable_head(_) -> false.
 
-%% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Legacy/manual
-%% transactions may carry a legal source body instead; `quod_diff` normalizes that
-%% deterministically before applying it. Validate both representations completely.
+%% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Explicitly
+%% constructed transactions may carry a legal source body instead; `quod_diff`
+%% normalizes it deterministically before applying it. Validate both forms fully.
 valid_clause_body(Body) -> valid_compiled_body(Body) orelse valid_raw_body(Body).
 
 valid_compiled_body({Code, HasCut}) when is_boolean(HasCut) -> valid_code(Code);
@@ -5474,7 +5752,7 @@ custody_submission_id(_) ->
 
 encode(Ns, Msg) ->
     Inner = term_to_binary(Msg, [deterministic]),
-    term_to_binary({sx, Ns, Inner}, [deterministic]).
+    term_to_binary({sx2, Ns, Inner}, [deterministic]).
 
 %% Our outbound consensus link to a peer opened: adopt it (monitor + flush the
 %% consensus outbox), unless we already hold a
@@ -5661,20 +5939,25 @@ track_relay_inbound(
 track_relay_inbound(_Peer, _LinkPid, S) ->
     S.
 
-%% Current committee sources and exact peers already named by this attempt are
-%% the only ones that own a tracked ingress generation. Lookups stay O(1) on
-%% the duplicate hot path; no scan across the bounded attempt maps is needed.
-relay_peer_owned(
+%% A current committee member owns the relay channel for every relay frame,
+%% including a routine result that arrives after its local attempt was already
+%% resolved. Exact stored attempts additionally keep their peer answerable
+%% across a committee transition. The per-attempt fallback stays O(1); there is
+%% no scan across the bounded maps.
+relay_peer_owned(Peer, Relay, S) ->
+    lists:member(Peer, active_validators(S))
+        orelse relay_attempt_owned(Peer, Relay, S).
+
+relay_attempt_owned(
   Peer,
   {relay_submit, _SubmissionId, AttemptId, _CommitteeId,
    _TargetSlot, _Submission, _Carrier},
   S) ->
-    lists:member(Peer, active_validators(S))
-    orelse case maps:get(AttemptId, S#s.relay_inflight, undefined) of
-               #relay_ref{peer = Peer} -> true;
-               _ -> false
-           end;
-relay_peer_owned(
+    case maps:get(AttemptId, S#s.relay_inflight, undefined) of
+        #relay_ref{peer = Peer} -> true;
+        _ -> false
+    end;
+relay_attempt_owned(
   Peer,
   {relay_result, _SubmissionId, AttemptId, _CommitteeId,
    _TargetSlot, _Result},
@@ -5683,7 +5966,7 @@ relay_peer_owned(
         #relay_pending{target = Peer} -> true;
         _ -> false
     end;
-relay_peer_owned(
+relay_attempt_owned(
   Peer,
   {relay_accepted, _SubmissionId, AttemptId, _CommitteeId,
    _TargetSlot},
@@ -5692,7 +5975,7 @@ relay_peer_owned(
         #relay_pending{target = Peer} -> true;
         _ -> false
     end;
-relay_peer_owned(_Peer, _Relay, _S) ->
+relay_attempt_owned(_Peer, _Relay, _S) ->
     false.
 
 close_untracked_relay_link(Pid) when Pid =:= self() ->
@@ -6011,20 +6294,23 @@ maybe_mark_ready(S) -> S.   %% already marked ready, or recovery has not reached
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
 %%%===================================================================
 
-%% The highest slot for which a FINALIZER cert (commit | complaint — the certs that advance the committed
-%% height; a bare support cert only notarizes) sits in the pool ABOVE `base`. A finalizer cert is quorum-signed,
-%% so a single Byzantine node cannot forge one — this is the VERIFIED "the committed head has moved past me"
-%% signal, never a monotone `observed_head` integer a lying peer could poison. Seeded with `base` so an empty
-%% pool yields `base` (no `lists:max([])` crash). See `behind/1`.
+%% The highest slot proved by a FINALIZER cert (commit | complaint — a bare support cert only notarizes).
+%% Near finalizers remain in the bounded live pool; a valid far finalizer is reduced to the O(1)
+%% `ahead_finalizer` recovery hint. A single Byzantine node cannot forge either signal. Seeded with `base`
+%% so an empty pool/latch yields `base` (no `lists:max([])` crash). See `behind/1`.
 -spec ahead_cert_ceiling(#eng{}) -> slot().
-ahead_cert_ceiling(#eng{certs = Certs, base = Base}) ->
-    lists:max([Base | [Sl || {K, Sl, _BH} <- maps:keys(Certs),
-                             Sl > Base, (K =:= commit orelse K =:= complaint)]]).
+ahead_cert_ceiling(#eng{certs = Certs, base = Base,
+                        ahead_finalizer = Ahead}) ->
+    lists:max([Base, Ahead |
+               [Sl || {K, Sl, _BH} <- maps:keys(Certs),
+                      Sl > Base,
+                      (K =:= commit orelse K =:= complaint)]]).
 
 %% True iff a finalizer cert proves the committed head is beyond our approved frontier. If the cert names
 %% the very next slot but its block is absent, this node is already behind: it must recover the durable entry
-%% rather than remain vote-capable at a stale frontier. Recomputed on demand (never a stored latch), so it is
-%% self-correcting: as a pull raises `slot`/`base`, `eng_prune` drops those certs and the ceiling falls.
+%% rather than remain vote-capable at a stale frontier. The near-pool part is recomputed on demand; the far
+%% O(1) latch is cleared when the durable base reaches it, on engine reseat, or when its verifying committee
+%% changes. Thus recovery evidence cannot retain unbounded peer objects or survive beyond its authority.
 %% Deliberately compare with `approved`, not mere raw block presence: a block held without its support path is
 %% not a parent this validator may extend. A cert-before-block reorder can therefore revoke voting briefly;
 %% synchronous engine settlement restores it as soon as the authenticated block reaches the tree.
@@ -6509,7 +6795,7 @@ catchup_membership_transition(S0, S1) ->
 %% Those slots are now decided history, so a lingering local proposal/timer would wedge the leader or
 %% redrive a `=< base` slot; parked appends for discarded slots are nacked so the caller
 %% retries. Called UNCONDITIONALLY from every catch-up window (`apply_catchup_window`), replacing the former
-%% separate catch-up and promotion re-arms with one `eng_new/2` path. At
+%% separate catch-up and promotion re-arms with one `eng_new/3` path. At
 %% a joiner/observer site the latch resets are no-ops (no live-slot state); they are load-bearing for a VOTING
 %% member gap-filling — the caller (`sink_catchup`) passes this through `keep_progress/3` to cancel a stale
 %% head watchdog when `head_progress` is cleared here (a no-op where it is already idle).
@@ -6521,7 +6807,8 @@ reseat_engine(NewHead, S) ->
 reseat_engine(NewHead, S, Included) ->
     S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
     {ok, Journal1} = prune_vote_journal(NewHead, S1#s.vote_journal),
-    S1#s{eng             = eng_new(active_validators(S1), NewHead),
+    S1#s{eng             = eng_new(S1#s.consensus_domain,
+                                    active_validators(S1), NewHead),
           vote_journal    = Journal1,
           approved        = NewHead,
           commit_buf      = #{},
@@ -6796,14 +7083,18 @@ what the seam buys is that those read sites don't have to be hunted down and con
 -spec active_validators(#s{}) -> [node_id()].
 active_validators(#s{validators = V}) -> V.
 
-%% Config validation: `node_id` is required; `committee` must be a list — `[]` = self-only (N=1), a
-%% list of co-founders = a multi-validator committee (the founding validator set is frozen from it);
-%% `batch_window_ms` is bounded below the append deadline; `mode` must be create|join, and a `join`
-%% node MUST carry the out-of-band `genesis_hash` anchor.
+%% Config validation: `node_id` is required; `committee` is the complete founding set besides self
+%% (`[]` = self-only). Only the smallest founding pubkey may use `mode=create`; every other founding
+%% member uses `mode=join` pinned to the creator's anchor. `batch_window_ms` is bounded below the append
+%% deadline, and every joiner must carry that out-of-band `genesis_hash`.
 valid_cfg(Config, Cfg) ->
     case maps:get(node_id, Config, undefined) of
-        undefined -> {error, missing_node_id};
-        _         -> valid_batch_window(Cfg)
+        undefined ->
+            {error, missing_node_id};
+        Pk when is_binary(Pk), byte_size(Pk) =:= 32 ->
+            valid_batch_window(Cfg);
+        Other ->
+            {error, {bad_node_id, Other}}
     end.
 
 valid_batch_window(Cfg) ->
@@ -6827,19 +7118,31 @@ valid_committee(Cfg) ->
 %% fall through to `create` and silently found a divergent genesis.
 valid_mode(Cfg) ->
     case maps:get(mode, Cfg) of
-        create -> ok;
+        create -> valid_creator(Cfg);
         join   -> case maps:get(genesis_hash, Cfg) of
-                      H when is_binary(H) -> ok;
+                      H when is_binary(H), byte_size(H) =:= 32 -> ok;
                       _                   -> {error, join_requires_genesis_hash}
                   end;
         Other  -> {error, {bad_mode, Other}}
     end.
 
-%% A committee element is a bare pubkey or a `{Pubkey, Host, Port}` tuple — checked here so `founding/2`'s
-%% `normalize_member/1` never function_clause-crashes `init` on a bad config.
-valid_member(Pk)                when is_binary(Pk)   -> true;
-valid_member({Pk, _Host, _Port}) when is_binary(Pk)  -> true;
-valid_member(_)                                      -> false.
+valid_creator(Cfg) ->
+    Self = maps:get(node_id, Cfg),
+    [{Canonical, _, _} | _] = founding(Cfg, Self),
+    case Self =:= Canonical of
+        true  -> ok;
+        false -> {error, {create_requires_canonical_founder, Canonical}}
+    end.
+
+%% A committee element is a 32-byte public key or a `{Pubkey, Host, Port}` tuple — checked here so
+%% canonical-founder ordering is always byte ordering over real Ed25519 key shapes.
+valid_member(Pk) when is_binary(Pk), byte_size(Pk) =:= 32 ->
+    true;
+valid_member({Pk, _Host, _Port})
+  when is_binary(Pk), byte_size(Pk) =:= 32 ->
+    true;
+valid_member(_) ->
+    false.
 
 data_dir(Cfg) -> quod_ledger_store:data_dir(Cfg).
 

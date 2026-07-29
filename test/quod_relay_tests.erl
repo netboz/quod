@@ -25,11 +25,6 @@ frame_dispatch_test() ->
        quod_relay:decode_relay_frame(
          quod_relay:encode(Ns, Message), Ns))
      || Message <- [Submit, Accepted, Result]],
-    [?assertEqual(
-       {relay, Message},
-       quod_relay:decode_relay_frame(
-         quod_relay:encode(Ns, Message), Ns))
-     || Message <- [Submit, Accepted, Result]],
     MaxSlotSubmit = setelement(5, Submit, 16#FFFFFFFFFFFFFFFF),
     ?assertEqual(
        {relay, MaxSlotSubmit},
@@ -42,7 +37,7 @@ frame_dispatch_test() ->
 
     Consensus = {share, example},
     Inner = term_to_binary(Consensus, [deterministic]),
-    Frame = term_to_binary({sx, Ns, Inner}, [deterministic]),
+    Frame = term_to_binary({sx2, Ns, Inner}, [deterministic]),
     ?assertEqual({consensus, Consensus},
                  quod_relay:decode_consensus_frame(Frame, Ns)),
     ?assertEqual(error, quod_relay:decode_relay_frame(Frame, Ns)),
@@ -51,7 +46,9 @@ frame_dispatch_test() ->
     ?assertEqual(
        error,
        quod_relay:decode_consensus_frame(
-         quod_relay:encode(Ns, Submit), Ns)).
+         quod_relay:encode(Ns, Submit), Ns)),
+    OldFrame = term_to_binary({sx, Ns, Inner}, [deterministic]),
+    ?assertEqual(error, quod_relay:decode_consensus_frame(OldFrame, Ns)).
 
 bounded_result_cache_test() ->
     Now = quod_time:mono_ms(),

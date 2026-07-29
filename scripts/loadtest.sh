@@ -59,8 +59,8 @@ set -uo pipefail
 : "${TX_PREDICATE:=loadtest}"               # fact predicate; use a fresh name for controlled A/B runs
 : "${WRITER_RETRIES:=16}"                   # bounded explicit no-apply retries; ordinary slot closure should not consume them
 : "${WRITER_RETRY_MS:=40}"                  # sleep between those retries (a fraction of a slot)
-: "${PARK_TTL_MS:=30000}"                   # must match content.park_ttl_ms on the tested fleet
-: "${WRITER_HTTP_TIMEOUT_S:=}"              # empty => ceil(PARK_TTL_MS/1000)+1; proof time is deliberately excluded
+: "${TRANSACTION_TTL_MS:=30000}"            # must match content.transaction_ttl_ms on the tested fleet
+: "${WRITER_HTTP_TIMEOUT_S:=}"              # empty => ceil(TRANSACTION_TTL_MS/1000)+1; proof time is deliberately excluded
 
 # bursts (fired from here during the chaos loop, on every validator)
 : "${BURST_PROB:=35}"                       # % chance, each chaos tick, of a burst
@@ -128,8 +128,8 @@ Load and chaos:
   --tx-predicate ATOM       predicate receiving generated facts (TX_PREDICATE)
   --writer-retries N        retries per write (WRITER_RETRIES)
   --writer-retry-ms MS      delay between retries (WRITER_RETRY_MS)
-  --park-ttl-ms MS           deployed write-result wait (PARK_TTL_MS)
-  --writer-http-timeout SEC HTTP deadline; default/min is ceil(park TTL)+1s (WRITER_HTTP_TIMEOUT_S)
+  --transaction-ttl-ms MS   deployed write-result wait (TRANSACTION_TTL_MS)
+  --writer-http-timeout SEC HTTP deadline; default/min is ceil(transaction TTL)+1s (WRITER_HTTP_TIMEOUT_S)
   --burst-prob PCT          burst probability per tick (BURST_PROB)
   --burst-size N            concurrent writes per burst (BURST_SIZE)
   --churn-prob PCT          observer churn probability (CHURN_PROB)
@@ -187,7 +187,7 @@ parse_args() {
       --tx-predicate|--tx-predicate=*) take_value "$@"; TX_PREDICATE=$ARG_VALUE ;;
       --writer-retries|--writer-retries=*) take_value "$@"; WRITER_RETRIES=$ARG_VALUE ;;
       --writer-retry-ms|--writer-retry-ms=*) take_value "$@"; WRITER_RETRY_MS=$ARG_VALUE ;;
-      --park-ttl-ms|--park-ttl-ms=*) take_value "$@"; PARK_TTL_MS=$ARG_VALUE ;;
+      --transaction-ttl-ms|--transaction-ttl-ms=*) take_value "$@"; TRANSACTION_TTL_MS=$ARG_VALUE ;;
       --writer-http-timeout|--writer-http-timeout=*) take_value "$@"; WRITER_HTTP_TIMEOUT_S=$ARG_VALUE ;;
       --burst-prob|--burst-prob=*) take_value "$@"; BURST_PROB=$ARG_VALUE ;;
       --burst-size|--burst-size=*) take_value "$@"; BURST_SIZE=$ARG_VALUE ;;
@@ -226,12 +226,12 @@ validate_config() {
     die "tx-predicate must be an unquoted Prolog atom of at most 64 characters"
   validate_uint writer-retries "$WRITER_RETRIES"
   validate_uint writer-retry-ms "$WRITER_RETRY_MS"
-  validate_uint park-ttl-ms "$PARK_TTL_MS"
-  local min_writer_timeout=$(( (PARK_TTL_MS + 999) / 1000 + 1 ))
+  validate_uint transaction-ttl-ms "$TRANSACTION_TTL_MS"
+  local min_writer_timeout=$(( (TRANSACTION_TTL_MS + 999) / 1000 + 1 ))
   [ -n "$WRITER_HTTP_TIMEOUT_S" ] || WRITER_HTTP_TIMEOUT_S=$min_writer_timeout
   validate_uint writer-http-timeout "$WRITER_HTTP_TIMEOUT_S"
   [ "$WRITER_HTTP_TIMEOUT_S" -ge "$min_writer_timeout" ] ||
-    die "writer-http-timeout must be >=${min_writer_timeout}s for park-ttl-ms=$PARK_TTL_MS"
+    die "writer-http-timeout must be >=${min_writer_timeout}s for transaction-ttl-ms=$TRANSACTION_TTL_MS"
   validate_uint burst-size "$BURST_SIZE"
   validate_uint churn-max "$CHURN_MAX"
   validate_uint random-churn-prob "$RANDOM_CHURN_PROB"
@@ -841,7 +841,8 @@ LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_T
 if [ "$SCALE" = "1" ]; then
   LOG "scaling homogeneous job to $NODES nodes..."
   nomad job run -var image_tag="$IMAGE_TAG" -var image_registry="$IMAGE_REGISTRY" \
-    -var node_count="$NODES" -var park_ttl_ms="$PARK_TTL_MS" \
+    -var node_count="$NODES" \
+    -var transaction_ttl_ms="$TRANSACTION_TTL_MS" \
     -var genesis_hash="$GENESIS_HASH" "$NOMAD_FILE" 2>&1 | tail -3
 fi
 

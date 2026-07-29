@@ -146,7 +146,7 @@ Start (join) Brahms membership for an ontology namespace `Ns`. `Config` needs
 """.
 -spec start_namespace(binary(), map()) -> supervisor:startchild_ret().
 start_namespace(Ns, Config) ->
-    supervisor:start_child(quod_reg:via({quod_brahms_sup, node}), [Ns, Config]).
+    quod_namespace_manager:start_brahms(Ns, Config).
 
 -doc "Start the per-namespace statem (called by `m:quod_brahms_sup`, not directly).".
 -spec start_link(binary(), map()) -> gen_statem:start_ret().
@@ -335,20 +335,47 @@ do_round(D0 = #d{self = Self, view = V, counts = {L1, L2, _}, cfg = Cfg,
 
 handle_inbound(_Peer, Payload, _Mode, D) when byte_size(Payload) > ?MAX_GOSSIP_BYTES ->
     D;                                             %% oversized gossip -> drop
-handle_inbound({{RemoteIdentity, RemoteNodeId}, ReplyLink}, Payload, Mode,
-               D0 = #d{self = Self}) ->
-    case decode(Payload) of
-        {leave, RemoteNodeId, Leave} when RemoteNodeId =/= Self ->
-            %% A signed departure is not liveness. Merge its population record,
-            %% then retire the endpoint without feeding it back into the view.
-            retire_departed(RemoteNodeId,
-                            merge_sender_population(RemoteIdentity, Leave, D0));
-        Message ->
-            handle_live_inbound(RemoteIdentity, RemoteNodeId, ReplyLink,
-                                Message, Mode, D0)
+handle_inbound(Peer, Payload, Mode, D0 = #d{self = Self}) ->
+    case brahms_peer(Peer) of
+        {ok, RemoteIdentity, RemoteNodeId, ReplyLink} ->
+            case decode(Payload) of
+                {leave, RemoteNodeId, Leave}
+                  when RemoteNodeId =/= Self ->
+                    %% A departure is not liveness. Merge its signed stable
+                    %% identity when the link supplied one, then retire the
+                    %% exact address that sent the frame.
+                    retire_departed(
+                      RemoteNodeId,
+                      merge_sender_population(
+                        RemoteIdentity, Leave, D0));
+                Message ->
+                    handle_live_inbound(
+                      RemoteIdentity, RemoteNodeId, ReplyLink,
+                      Message, Mode, D0)
+            end;
+        error ->
+            D0
+    end.
+
+%% An inbound stream carries the authenticated header identity
+%% `{NodeKey, Endpoint}`. An ordinary stream we opened is reported under its
+%% original endpoint target; its TLS identity is not exposed in that outbound
+%% message shape, but the complete endpoint must remain one Brahms node id.
+%% Never destructure `{Host,Port}` as two identity fields.
+brahms_peer({{NodeKey, Endpoint}, ReplyLink})
+  when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
+       is_pid(ReplyLink) ->
+    case quod_quic:valid_endpoint(Endpoint) of
+        true -> {ok, NodeKey, Endpoint, ReplyLink};
+        false -> error
     end;
-handle_inbound(_MalformedPeer, _Payload, _Mode, D) ->
-    D.
+brahms_peer({Endpoint, ReplyLink}) when is_pid(ReplyLink) ->
+    case quod_quic:valid_endpoint(Endpoint) of
+        true -> {ok, undefined, Endpoint, ReplyLink};
+        false -> error
+    end;
+brahms_peer(_) ->
+    error.
 
 handle_live_inbound(RemoteIdentity, RemoteNodeId, ReplyLink, Message, Mode,
                     D0 = #d{self = Self}) ->
@@ -365,18 +392,11 @@ handle_live_inbound(RemoteIdentity, RemoteNodeId, ReplyLink, Message, Mode,
         {push, Id, Heartbeat} when Id =/= Self ->
             D1 = merge_sender_population(RemoteIdentity, Heartbeat, D),
             handle_push(Id, D1);
-        {push, Id} when Id =/= Self ->
-            handle_push(Id, D);
         {pull_req, From, Heartbeat} when From =/= Self ->
             reply_view(ReplyLink, D),
             merge_sender_population(RemoteIdentity, Heartbeat, observe(From, D));
-        {pull_req, From} when From =/= Self ->
-            reply_view(ReplyLink, D),              %% old peer during rolling upgrade
-            observe(From, D);
         {pull_resp, From, Ids, Heartbeats} ->
             handle_pull_response(From, Ids, Heartbeats, Mode, D);
-        {pull_resp, From, Ids} ->
-            handle_pull_response(From, Ids, [], Mode, D);
         _ ->
             D                                      %% bad/unknown -> drop
     end.
@@ -537,8 +557,8 @@ take_random(N, List) when N >= length(List) -> shuffle(List);
 take_random(N, List) -> take(N, shuffle(List)).
 
 -doc """
-One download **contact** for `Ns` — the shared contact selection for the pull-shaped clients
-(`m:quod_catchup`, `m:quod_prove`): a uniform pick from the **Byzantine-resistant** Brahms
+One download **contact** for `Ns` — the contact selection for the pull-shaped
+catch-up client: a uniform pick from the **Byzantine-resistant** Brahms
 `sample/1` (address-based, so it tracks dynamic-port rot), falling back to the static `Seeds` on a
 cold start (sampler empty / Brahms not running for `Ns`), and `none` when both are empty.
 

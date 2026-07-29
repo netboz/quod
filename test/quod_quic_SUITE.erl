@@ -15,8 +15,10 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
          authenticated_coalesced_header_payload_delivered_once/1,
          no_learn_is_monotone_across_streams/1,
          resolve_and_dial_by_pubkey/1, pinned_dial_suppresses_hint_learning/1,
+         ordinary_pubkey_dial_rejects_wrong_cert/1,
+         connection_is_owned_by_transport/1,
          pinned_reverse_stream_suppresses_hint_learning/1,
-         private_seed_dial_suppresses_hint_learning/1,
+         identified_dial_suppresses_hint_learning/1,
          ordinary_dial_still_learns_hint/1,
          pinned_dial_rejects_wrong_cert/1]).
 
@@ -30,9 +32,11 @@ all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
           authenticated_coalesced_header_payload_delivered_once,
           no_learn_is_monotone_across_streams,
           resolve_and_dial_by_pubkey,
+          ordinary_pubkey_dial_rejects_wrong_cert,
+          connection_is_owned_by_transport,
           pinned_dial_suppresses_hint_learning,
           pinned_reverse_stream_suppresses_hint_learning,
-          private_seed_dial_suppresses_hint_learning,
+          identified_dial_suppresses_hint_learning,
           ordinary_dial_still_learns_hint, pinned_dial_rejects_wrong_cert].
 
 init_per_suite(Config) ->
@@ -246,6 +250,7 @@ mismatched_header_cannot_poison_cache(_Config) ->
         after 5000 -> ct:fail(no_mismatch_connection)
         end,
         {ok, Sid} = quic:open_stream(Conn),
+        ConnRef = monitor(process, Conn),
         Header = quod_link:header(
                    {ForgedPub, Claimed}, Channel, learn),
         Packet = <<Header/binary,
@@ -258,7 +263,11 @@ mismatched_header_cannot_poison_cache(_Config) ->
             ok
         end,
         {ok, Existing} = quod_quic:resolve(ForgedPub),
-        _ = catch quic:close(Conn, normal),
+        receive
+            {'DOWN', ConnRef, process, Conn, _} -> ok
+        after 5000 ->
+            ct:fail(rejected_identity_connection_not_closed)
+        end,
         ok
     after
         true = quod_reg:unsubscribe({channel, Channel})
@@ -363,14 +372,49 @@ send_raw_header_payload(Conn, Pubkey, Endpoint, Channel, Policy, Payload) ->
 %% A PUBKEY target (the production id form) is resolved to an endpoint via a learned hint,
 %% then dialed — the resolver path end to end through the real transport. (We map a fresh
 %% pubkey to our own loopback listener so the dial connects.)
-resolve_and_dial_by_pubkey(_Config) ->
-    PK = crypto:strong_rand_bytes(32),
+resolve_and_dial_by_pubkey(Config) ->
+    PK = ?config(self_pubkey, Config),
     ok = quod_quic:learn(PK, ?SELF),
     ok = quod_quic:open_link(PK, <<"chan-pk">>),
     receive
         {link_up, PK, <<"chan-pk">>, LinkPid} when is_pid(LinkPid) -> ok
     after 5000 -> ct:fail(no_link_up_by_pubkey)
     end.
+
+%% An ordinary public-key target is still an identity claim, not merely a
+%% cache lookup. Resolving that key to a live endpoint whose certificate
+%% carries another key must fail before any stream becomes usable.
+ordinary_pubkey_dial_rejects_wrong_cert(Config) ->
+    Actual = ?config(self_pubkey, Config),
+    Expected = crypto:strong_rand_bytes(32),
+    true = Expected =/= Actual,
+    ok = quod_quic:learn(Expected, ?SELF),
+    Channel = <<"chan-ordinary-wrong-cert">>,
+    ok = quod_quic:open_link(Expected, Channel),
+    receive
+        {link_error, Expected, Channel} -> ok;
+        {link_up, Expected, Channel, _} ->
+            ct:fail(ordinary_pubkey_dial_accepted_wrong_cert)
+    after 5000 ->
+        ct:fail(no_ordinary_pubkey_mismatch_result)
+    end.
+
+%% Every connection owner is linked to the transport authority. This makes a
+%% transport restart one ownership boundary: old connections and their streams
+%% cannot survive as an untracked duplicate generation.
+connection_is_owned_by_transport(_Config) ->
+    Channel = <<"chan-owned-connection">>,
+    ok = quod_quic:open_link(?SELF, Channel),
+    Link =
+        receive
+            {link_up, ?SELF, Channel, Pid} -> Pid
+        after 5000 ->
+            ct:fail(no_owned_link)
+        end,
+    {links, [ConnOwner]} = process_info(Link, links),
+    Authority = quod_reg:where({transport, node}),
+    {links, OwnerLinks} = process_info(ConnOwner, links),
+    true = lists:member(Authority, OwnerLinks).
 
 %% A successful pinned directory link must suppress the receiver's normal
 %% header-driven Pubkey=>Addr learning. Preloading a divergent value makes the
@@ -418,18 +462,18 @@ pinned_reverse_stream_suppresses_hint_learning(Config) ->
     end,
     {ok, Existing} = quod_quic:resolve(Pub).
 
-%% Private direct-seed TOFU derives the actual certificate key but keeps it route-local;
-%% its no-learn header must not touch the shared address cache either.
-private_seed_dial_suppresses_hint_learning(Config) ->
+%% Identity discovery derives the actual certificate key but leaves promotion
+%% to its caller; its no-learn header must not touch the shared address cache.
+identified_dial_suppresses_hint_learning(Config) ->
     Pub = ?config(self_pubkey, Config),
     Existing = {"127.0.0.1", 14445},
     ok = quod_quic:learn(Pub, Existing),
-    Channel = <<"chan-private-seed-no-learn">>,
-    Ref = quod_quic:open_link_private_seed(?SELF, Channel),
+    Channel = <<"chan-identified-no-learn">>,
+    Ref = quod_quic:open_link_identified(?SELF, Channel),
     receive
         {link_up, Ref, Pub, Channel, LinkPid}
           when is_pid(LinkPid) -> ok
-    after 5000 -> ct:fail(no_private_seed_link_up)
+    after 5000 -> ct:fail(no_identified_link_up)
     end,
     {ok, Existing} = quod_quic:resolve(Pub).
 

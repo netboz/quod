@@ -4,6 +4,8 @@
 -include("quod_ledger.hrl").
 
 -define(NS, <<"test:transactions">>).
+-define(GENESIS_TX_VERSION, 1).
+-define(GENESIS_TX_TAG, "quod/genesis").
 
 identity() ->
     {Pub, Seed} = quod_identity:generate(),
@@ -78,16 +80,46 @@ malformed_and_wrong_author_test() ->
 
 history_genesis_exemption_test() ->
     {Pub, Identity} = identity(),
+    Nonce = <<7:256>>,
     Genesis = (unsigned(Pub))#transaction{
-                tx_id = <<"genesis:test">>, diff = [], read_check = #{},
-                author_seq = 0, sig = none},
+                tx_id = genesis_id(?NS, Nonce),
+                goal = undefined, result = undefined,
+                diff = [
+                  {assert, {{consensus_incarnation, Nonce}, true}},
+                  {assert, {{peer_admitted, Pub, undefined, undefined, Pub}, true}}
+                ],
+                read_check = #{},
+                author_seq = 0, submitted_at = 0, sig = none},
     ?assert(quod_simplex:valid_history_entry(?NS, 1, {batch, [Genesis]}, [])),
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{tx_id = <<"genesis:test">>}]}, [])),
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{tx_id = genesis_id(?NS, <<8:256>>)}]}, [])),
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{
+                    diff = [{assert,
+                             {{peer_admitted, Pub, undefined, undefined, Pub},
+                              true}}]}]}, [])),
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{author_seq = 1}]}, [])),
     ?assertNot(quod_simplex:valid_history_entry(?NS, 2, {batch, [Genesis]}, [Pub])),
     {ok, Signed} = quod_transaction:sign(
-                     ?NS, Genesis#transaction{author_seq = 1}, Identity),
+                     ?NS, (unsigned(Pub))#transaction{author_seq = 1}, Identity),
     ?assert(quod_simplex:valid_history_entry(?NS, 2, {batch, [Signed]}, [Pub])),
     ?assertNot(quod_simplex:valid_history_entry(
                  <<"other">>, 2, {batch, [Signed]}, [Pub])).
+
+genesis_id(Ns, Nonce) ->
+    <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
+      (byte_size(Ns)):32, Ns/binary, Nonce/binary>>.
 
 relay_submission_roundtrip_test() ->
     {Tx, _Identity} = signed(),

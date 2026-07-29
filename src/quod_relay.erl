@@ -48,7 +48,7 @@ decode_relay_frame(Payload, Ns) ->
 decode_outer(Payload, Ns) ->
     try binary_to_term(Payload, [safe]) of
         {sx_relay, Ns, Inner} when is_binary(Inner) -> {relay, Inner};
-        {sx, Ns, Inner} when is_binary(Inner) -> {consensus, Inner};
+        {sx2, Ns, Inner} when is_binary(Inner) -> {consensus, Inner};
         _ -> error
     catch
         _:_ -> error

@@ -11,16 +11,21 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
 -include_lib("stdlib/include/assert.hrl").
 -include("quod_ledger.hrl").
 
+-define(GENESIS_TX_VERSION, 1).
+-define(GENESIS_TX_TAG, "quod/genesis").
+
 -export([all/0, init_per_testcase/2, end_per_testcase/2]).
 -export([t_founder_bootstrap/1, t_genesis_seeds_content/1, t_append_commits_and_persists/1,
          t_restart_replays/1, t_unsigned_history_rejected/1, t_status_stats/1,
          t_multi_member_accepted/1, t_commit_carries_cert/1,
-         t_concurrent_appends_batch/1]).
+         t_concurrent_appends_batch/1, t_join_anchor_validation/1,
+         t_fresh_foundings_are_distinct/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
      t_restart_replays, t_unsigned_history_rejected, t_status_stats,
-     t_multi_member_accepted, t_commit_carries_cert, t_concurrent_appends_batch].
+     t_multi_member_accepted, t_commit_carries_cert, t_concurrent_appends_batch,
+     t_join_anchor_validation, t_fresh_foundings_are_distinct].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -53,9 +58,8 @@ t_founder_bootstrap(Cfg) ->
     ?assertEqual(1, maps:get(slot, St)),
     ?assertEqual(1, maps:get(committed, St)).
 
-%% On create the founder commits ONE genesis block (slot 1): the transaction asserts the committee's
-%% `peer_admitted` fact(s) AND the genesis `.pl` content. Read the block back off disk to confirm it holds
-%% the genesis transaction with a non-empty diff (not an empty/wrong block that would still bump the height).
+%% On create the founder commits ONE genesis block (slot 1): the transaction records the random
+%% incarnation, asserts the committee's `peer_admitted` fact(s), and includes the genesis `.pl` content.
 t_genesis_seeds_content(Cfg) ->
     Ns   = ?config(ns, Cfg),
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
@@ -66,20 +70,32 @@ t_genesis_seeds_content(Cfg) ->
     {ok, Store} = quod_ledger_store:open(Ns, ?config(dir, Cfg)),
     try
         {ok, #entry{data = {batch, [Tx]}}} = quod_ledger_store:read_at(Store, 1),
-        ?assertMatch(#transaction{tx_id = <<"genesis:", _/binary>>}, Tx),
-        %% the diff carries at least the founder's peer_admitted fact + the root content
-        ?assert(length(Tx#transaction.diff) >= 2)
+        {ok, Incarnation} = decode_genesis_id(Ns, Tx#transaction.tx_id),
+        ?assertEqual(
+           [Incarnation],
+           [Nonce
+            || {assert, {{consensus_incarnation, Nonce}, _Body}} <-
+                   Tx#transaction.diff]),
+        %% incarnation + founder peer_admitted + root content
+        ?assert(length(Tx#transaction.diff) >= 3)
     after quod_ledger_store:close(Store) end.
 
-%% Stage 2 ACCEPTS a multi-member committee (co-founders): the founder bootstraps the full validator
-%% set from it. (Reaching a ⅔ quorum needs the peers — that is the multi-node CT; here we just check
-%% the config is accepted and the committee is seeded.)
+%% The canonical (smallest-key) founder may seed the complete validator set.
+%% Another configured member cannot independently create a competing genesis.
 t_multi_member_accepted(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
-    {P2, _} = quod_identity:generate(),
-    _ = start(Cfg, #{committee => [P2]}),
-    ?assertEqual(lists:usort([Self, P2]), quod_simplex:committee(Ns)).
+    Lower = <<0:256>>,
+    ?assert(Lower < Self),
+    ?assertMatch(
+       {error, {bad_config, {create_requires_canonical_founder, Lower}}},
+       failed_start(
+         Ns, maps:merge(?config(base_cfg, Cfg),
+                        #{mode => create, committee => [Lower]}))),
+    Higher = binary:copy(<<16#ff>>, 32),
+    ?assert(Self < Higher),
+    _ = start(Cfg, #{committee => [Higher]}),
+    ?assertEqual([Self, Higher], quod_simplex:committee(Ns)).
 
 %% Each append commits (N=1: on its own fsync) and advances the height by one.
 t_append_commits_and_persists(Cfg) ->
@@ -106,10 +122,12 @@ t_restart_replays(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
     _ = start(Cfg, #{}),
+    GenesisHash = quod_simplex:genesis_hash(Ns),
     ?assertEqual({ok, 2}, quod_simplex:append(Ns, tx(Ns, Self, <<"a">>))),
     ?assertEqual({ok, 3}, quod_simplex:append(Ns, tx(Ns, Self, <<"b">>))),
     stop(Ns),
     _ = start(Cfg, #{}),                       %% durable state present ⇒ from_durable, not bootstrap
+    ?assertEqual(GenesisHash, quod_simplex:genesis_hash(Ns)),
     St = quod_simplex:status(Ns),
     ?assertEqual(3, maps:get(slot, St)),
     ?assertEqual(3, maps:get(committed, St)),
@@ -121,6 +139,26 @@ t_restart_replays(Cfg) ->
             quod_ledger_store:read_at(Store, 4),
         ?assertEqual(3, T#transaction.author_seq)
     after quod_ledger_store:close(Store) end.
+
+%% A new ledger is a new consensus incarnation even when namespace, identity,
+%% committee, and ontology content are otherwise identical.
+t_fresh_foundings_are_distinct(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    _ = start(Cfg, #{}),
+    First = quod_simplex:genesis_hash(Ns),
+    stop(Ns),
+    Dir2 = lists:flatten([?config(dir, Cfg), "_second"]),
+    Config2 = maps:put(data_dir, Dir2, ?config(base_cfg, Cfg)),
+    try
+        {ok, Pid} = quod_simplex:start_link(Ns, Config2),
+        unlink(Pid),
+        Second = quod_simplex:genesis_hash(Ns),
+        ?assertEqual(32, byte_size(Second)),
+        ?assertNotEqual(First, Second)
+    after
+        stop(Ns),
+        _ = file:del_dir_r(Dir2)
+    end.
 
 %% Signature enforcement also applies while rebuilding the node's own durable
 %% log. Replacing a valid slot with an otherwise-identical unsigned transaction
@@ -178,7 +216,9 @@ t_commit_carries_cert(Cfg) ->
         %% mirrored in the entry) so a joiner recomputes the same hash to check the cert names THIS block.
         {ok, PersistedBlock} = quod_simplex:block_from_entry(E2),
         ?assertEqual(quod_simplex:block_hash(PersistedBlock), Cert#cert.block_hash),
-        ?assert(quod_simplex:verify_cert(Cert, [Self]))                    %% ⅔ (=1) valid sig vs the committee
+        GenesisHash = quod_simplex:genesis_hash(Ns),
+        Domain = quod_simplex:consensus_domain(Ns, GenesisHash),
+        ?assert(quod_simplex:verify_cert(Domain, Cert, [Self]))            %% ⅔ (=1) valid sig vs the committee
     after quod_ledger_store:close(Store) end.
 
 %% Concurrent callers are sealed into one consensus slot and all receive that slot's
@@ -209,6 +249,32 @@ t_concurrent_appends_batch(Cfg) ->
     ?assertEqual(50, maps:get(batch_window_ms, Stats)),
     ?assertEqual(0, maps:get(pending, Stats)).
 
+%% Once a node has durable history, a join configuration must pin the exact
+%% slot-1 anchor reconstructed from that history. A typo must fail before the
+%% vote journal is restored, while the correct anchor resumes the same chain.
+t_join_anchor_validation(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    _ = start(Cfg, #{}),
+    GenesisHash = quod_simplex:genesis_hash(Ns),
+    ?assertEqual(32, byte_size(GenesisHash)),
+    stop(Ns),
+    WrongHash = crypto:hash(sha256, <<"wrong consensus anchor">>),
+    ?assertNotEqual(GenesisHash, WrongHash),
+    Base = ?config(base_cfg, Cfg),
+    ?assertEqual(
+       {error, {bad_config, genesis_anchor_mismatch}},
+       failed_start(
+         Ns, maps:merge(Base, #{mode => join, genesis_hash => WrongHash}))),
+    ?assertEqual(
+       {error, {bad_config, join_requires_genesis_hash}},
+       failed_start(
+         Ns, maps:merge(Base, #{mode => join, genesis_hash => <<1, 2, 3>>}))),
+    {ok, Pid} = quod_simplex:start_link(
+                  Ns, maps:merge(Base, #{mode => join,
+                                         genesis_hash => GenesisHash})),
+    unlink(Pid),
+    ?assertEqual(GenesisHash, quod_simplex:genesis_hash(Ns)).
+
 %%%===================================================================
 %%% helpers
 %%%===================================================================
@@ -227,5 +293,27 @@ stop(Ns) ->
         Pid       -> _ = catch gen_statem:stop(Pid, shutdown, 5000), ok
     end.
 
+%% A failed `start_link` exits its transient child while the caller is still
+%% linked. Trap that expected signal locally so the CT process can assert the
+%% returned configuration error without weakening production startup.
+failed_start(Ns, Config) ->
+    WasTrapping = process_flag(trap_exit, true),
+    try
+        quod_simplex:start_link(Ns, Config)
+    after
+        receive {'EXIT', _Pid, _Reason} -> ok after 0 -> ok end,
+        process_flag(trap_exit, WasTrapping)
+    end.
+
 tx(Ns, Author, Id) ->
     #transaction{tx_id = Id, caller_ns = Ns, diff = [], read_check = #{}, author = Author, sig = none}.
+
+decode_genesis_id(Ns, TxId) ->
+    NsLen = byte_size(Ns),
+    case TxId of
+        <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8, NsLen:32,
+          Ns:NsLen/binary, Nonce:32/binary>> ->
+            {ok, Nonce};
+        _ ->
+            error
+    end.

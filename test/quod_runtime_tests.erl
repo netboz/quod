@@ -573,6 +573,43 @@ replay_quiesces_snapshot_readers_test_() ->
         after cleanup_founded(F) end
     end}.
 
+%% A ready boundary is independently safe. replay_started normally arrives
+%% first, but a delayed start must not let re-attach move the MVCC pin while an
+%% old heavy reader remains alive.
+ready_without_started_quiesces_snapshot_readers_test_() ->
+    {timeout, 120, fun() ->
+        F = setup_founded(<<"slow(0).\n"
+                            "slow(N) :- N > 0, N1 is N - 1, slow(N1).\n">>),
+        {_, Ns, _} = F,
+        try
+            ok = wait_stats(
+                   Ns,
+                   fun(#{mode := live}) -> true;
+                      (_) -> false
+                   end),
+            H = quod_prolog:applied(Ns),
+            R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
+            ok = quod_runtime:enqueue_heavy(
+                   Ns, defensive_ready, H, {slow, 20000000}),
+            ok = wait_stats(
+                   Ns,
+                   fun(#{heavy_running := 1}) -> true;
+                      (_) -> false
+                   end),
+            Runtime = quod_reg:where({quod_runtime, Ns}),
+            Runtime ! {replay_ready, {synthetic, make_ref()}, H},
+            ok = wait_stats(
+                   Ns,
+                   fun(#{mode := live, reconciles := R,
+                         heavy_running := 0}) ->
+                           R > R0;
+                      (_) -> false
+                   end)
+        after
+            cleanup_founded(F)
+        end
+    end}.
+
 %%%===================================================================
 %%% helpers
 %%%===================================================================

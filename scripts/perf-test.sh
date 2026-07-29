@@ -503,7 +503,7 @@ echo
 echo "result"
 echo "  operations:$TOTAL"
 echo "  HTTP tries:$ATTEMPTS ($((ATTEMPTS - TOTAL)) safe retries)"
-echo "  retries:   retry=$RETRY_RETRY busy=$RETRY_BUSY other=$RETRY_OTHER (legacy classes)"
+echo "  retries:   retry=$RETRY_RETRY busy=$RETRY_BUSY other=$RETRY_OTHER (summary classes)"
 echo "  retry reasons:"
 RETRY_REASON_SUMMARY=$(
   awk -F'\t' '

@@ -7,8 +7,10 @@ immutable signed records, while the bounded directory service remains the
 sole ETS writer.
 Directory-control authority comes from the local root ontology's committed
 `peer_admitted/4` facts. A monitored worker reads that snapshot without
-blocking this process; live transport hints locate the resulting keys, and
-every directory link pins the peer key while suppressing address-cache learns.
+blocking this process. Live transport hints locate known keys; the root
+ontology's existing join contacts can also discover an authenticated key, but
+the link is retained and its endpoint promoted only when that exact key occurs
+in the proved root set. Both paths suppress automatic address-cache learning.
 Public snapshot reads do not confer ingest authority: this process accepts
 snapshot replies only on its exact current outbound control links, and accepts
 relayed announcements only from a current root control peer.
@@ -36,9 +38,9 @@ relayed announcements only from a current root control peer.
 -define(PEER_QUERY_TIMEOUT_MS, 5000).
 -define(CONTROL_DIAL_LIMIT, 4).
 -define(CONTROL_DIAL_TIMEOUT_MS, 11000).
+-define(MAX_ROOT_CONTACTS, 128).
 -define(MAX_CONTROL_BYTES, (1 bsl 20)).
 -define(MAX_ANNOUNCE_FRAME_BYTES, (17 * 1024)).
--define(MAX_RESYNC_RECORDS, 128).
 -define(MAX_RESYNC_BYTES, (900 * 1024)).
 -define(RESYNC_MIN_MS, 5000).
 -define(RESYNC_SESSION_TTL_MS, 30000).
@@ -54,10 +56,12 @@ relayed announcements only from a current root control peer.
     hosted = [],
     allowlist = #{},
     allowed_keys = #{},
+    root_contacts = [],
     records = #{},
     control_peers = #{},
     dial_queue = {[], []},
     pending_links = #{},
+    pending_contacts = #{},
     control_links = #{},
     peer_query = undefined,
     peer_height = undefined,
@@ -141,6 +145,7 @@ test_control_state() ->
     #{control_peers => S#s.control_peers,
       dial_queue => queue:to_list(S#s.dial_queue),
       pending_links => S#s.pending_links,
+      pending_contacts => S#s.pending_contacts,
       control_links => S#s.control_links,
       peer_query => S#s.peer_query,
       peer_height => S#s.peer_height,
@@ -190,6 +195,7 @@ init(Opts) ->
                       self_key = local_node_key(),
                       allowlist = maps:get(allowlist, Cfg),
                       allowed_keys = maps:get(allowed_keys, Cfg),
+                      root_contacts = maps:get(root_contacts, Cfg),
                       renew_ms = maps:get(renew_ms, Cfg)},
             case serving_identity(Cfg) of
                 disabled ->
@@ -226,6 +232,9 @@ handle_call(stats, _From, S) ->
               control_peer_count => map_size(S#s.control_peers),
               control_link_count => map_size(S#s.control_links),
               control_pending_count => map_size(S#s.pending_links),
+              root_contact_count => length(S#s.root_contacts),
+              root_contact_pending_count =>
+                  map_size(S#s.pending_contacts),
               root_proof_height => S#s.peer_height,
               root_proof_status => S#s.peer_status,
               epoch => S#s.epoch,
@@ -260,6 +269,10 @@ handle_info(
   {directory_control_dial_timeout, NodeKey, Endpoint, OpenRef}, S) ->
     {noreply,
      handle_control_dial_timeout(NodeKey, Endpoint, OpenRef, S)};
+handle_info(
+  {directory_contact_dial_timeout, Endpoint, OpenRef}, S) ->
+    {noreply,
+     handle_contact_dial_timeout(Endpoint, OpenRef, S)};
 handle_info(recover_tracking, S) ->
     case observed_hosted(S) of
         {ok, Hosted} ->
@@ -287,12 +300,11 @@ handle_info(recover_directory, S) ->
     end;
 handle_info({link_up, Ref, PeerKey, Channel, LinkPid},
             S = #s{channel = Channel}) ->
-    {noreply, handle_control_link_up(
+    {noreply, handle_directory_link_up(
                 Ref, PeerKey, LinkPid, S)};
 handle_info({link_error, Ref, PeerKey, Channel},
-            S = #s{channel = Channel})
-  when is_binary(PeerKey), byte_size(PeerKey) =:= 32 ->
-    {noreply, handle_control_link_error(PeerKey, Ref, S)};
+            S = #s{channel = Channel}) ->
+    {noreply, handle_directory_link_error(PeerKey, Ref, S)};
 handle_info({quod_message, {{PeerKey, PeerEndpoint}, LinkPid}, Channel, Payload},
             S = #s{channel = Channel})
   when is_binary(PeerKey), byte_size(PeerKey) =:= 32,
@@ -487,7 +499,49 @@ maintain_directory_control(S) ->
     send_control_resyncs(S2).
 
 maintain_control_links(S) ->
-    pump_control_dials(refresh_control_endpoints(S)).
+    S1 = refresh_control_endpoints(S),
+    S2 = pump_root_contacts(S1),
+    pump_control_dials(S2).
+
+%% Root contacts are the root ontology's existing join endpoints, not directory
+%% authorities. Dial them without automatic cache learning, authenticate the
+%% returned key, and promote the endpoint only after the local root proof says
+%% that exact key is a current control peer. Contacts are tried before stale
+%% key-cache candidates so a completely rotated fleet can recover.
+pump_root_contacts(S = #s{root_contacts = Contacts}) ->
+    lists:foldl(fun maybe_open_root_contact/2, S, Contacts).
+
+maybe_open_root_contact(
+  Endpoint,
+  S = #s{pending_contacts = Pending, control_links = Links}) ->
+    case total_pending(S) < ?CONTROL_DIAL_LIMIT
+         andalso not maps:is_key(Endpoint, Pending)
+         andalso not live_control_at_endpoint(Endpoint, Links) of
+        false ->
+            S;
+        true ->
+            OpenRef = quod_quic:open_link_identified(
+                        Endpoint, S#s.channel),
+            TimerRef = erlang:send_after(
+                         ?CONTROL_DIAL_TIMEOUT_MS, self(),
+                         {directory_contact_dial_timeout,
+                          Endpoint, OpenRef}),
+            S#s{pending_contacts =
+                    Pending#{Endpoint => {OpenRef, TimerRef}}}
+    end.
+
+live_control_at_endpoint(Endpoint, Links) ->
+    maps:fold(
+      fun(_NodeKey, {Endpoint0, LinkPid, _MonitorRef}, Found) ->
+              Found orelse
+                  (Endpoint0 =:= Endpoint
+                   andalso is_pid(LinkPid)
+                   andalso is_process_alive(LinkPid))
+      end, false, Links).
+
+total_pending(#s{pending_links = Pending,
+                 pending_contacts = Contacts}) ->
+    map_size(Pending) + map_size(Contacts).
 
 refresh_control_endpoints(
   S = #s{control_peers = Peers, self_key = SelfKey,
@@ -548,11 +602,15 @@ control_candidate_current(NodeKey, Endpoint, Peers, SelfKey) ->
         andalso maps:is_key(NodeKey, Peers)
         andalso quod_quic:resolve(NodeKey) =:= {ok, Endpoint}.
 
-pump_control_dials(
-  S = #s{pending_links = Pending})
-  when map_size(Pending) >= ?CONTROL_DIAL_LIMIT ->
-    S;
-pump_control_dials(S = #s{dial_queue = Queue}) ->
+pump_control_dials(S) ->
+    case total_pending(S) >= ?CONTROL_DIAL_LIMIT of
+        true ->
+            S;
+        false ->
+            pump_control_dial_queue(S)
+    end.
+
+pump_control_dial_queue(S = #s{dial_queue = Queue}) ->
     case queue:out(Queue) of
         {empty, _} ->
             S;
@@ -560,7 +618,7 @@ pump_control_dials(S = #s{dial_queue = Queue}) ->
             S0 = S#s{dial_queue = Rest},
             case should_open_control(NodeKey, Endpoint, S0) of
                 false ->
-                    pump_control_dials(S0);
+                    pump_control_dial_queue(S0);
                 true ->
                     OpenRef = quod_quic:open_link_pinned(
                                 NodeKey, Endpoint, S0#s.channel),
@@ -602,6 +660,91 @@ handle_control_dial_timeout(
         _ ->
             S
     end.
+
+handle_contact_dial_timeout(
+  Endpoint, OpenRef,
+  S = #s{pending_contacts = Pending}) ->
+    case maps:get(Endpoint, Pending, undefined) of
+        {OpenRef, TimerRef} ->
+            cancel_timer(TimerRef),
+            pump_control_dials(
+              S#s{pending_contacts =
+                      maps:remove(Endpoint, Pending)});
+        _ ->
+            S
+    end.
+
+handle_directory_link_error(Peer, OpenRef, S) ->
+    case take_pending_contact(OpenRef, S) of
+        {ok, _Endpoint, S0} ->
+            %% Do not immediately redial the failed endpoint in this mailbox
+            %% turn. Other queued key candidates may proceed; the next normal
+            %% control tick retries contacts.
+            pump_control_dials(S0);
+        error when is_binary(Peer), byte_size(Peer) =:= 32 ->
+            handle_control_link_error(Peer, OpenRef, S);
+        error ->
+            S
+    end.
+
+handle_directory_link_up(OpenRef, PeerKey, LinkPid, S) ->
+    case take_pending_contact(OpenRef, S) of
+        {ok, Endpoint, S0} ->
+            handle_root_contact_link_up(
+              Endpoint, PeerKey, LinkPid, S0);
+        error ->
+            handle_control_link_up(
+              OpenRef, PeerKey, LinkPid, S)
+    end.
+
+take_pending_contact(
+  OpenRef, S = #s{pending_contacts = Pending}) ->
+    case pending_contact_by_ref(OpenRef, Pending) of
+        {ok, Endpoint, TimerRef} ->
+            cancel_timer(TimerRef),
+            {ok, Endpoint,
+             S#s{pending_contacts =
+                     maps:remove(Endpoint, Pending)}};
+        error ->
+            error
+    end.
+
+pending_contact_by_ref(OpenRef, Pending) ->
+    maps:fold(
+      fun(Endpoint, {Ref, TimerRef}, error)
+            when Ref =:= OpenRef ->
+              {ok, Endpoint, TimerRef};
+         (_Endpoint, _Entry, Acc) ->
+              Acc
+      end, error, Pending).
+
+handle_root_contact_link_up(
+  Endpoint, PeerKey, LinkPid,
+  S = #s{root_contacts = Contacts, control_peers = Peers,
+         self_key = SelfKey})
+  when is_binary(PeerKey), byte_size(PeerKey) =:= 32,
+       is_pid(LinkPid) ->
+    case lists:member(Endpoint, Contacts)
+         andalso PeerKey =/= SelfKey
+         andalso maps:is_key(PeerKey, Peers) of
+        true ->
+            %% Promotion is deliberate and occurs only after transport
+            %% authentication plus root-Prolog authorization. This live
+            %% observation also repairs the shared key cache used by root.
+            ok = quod_quic:learn(PeerKey, Endpoint),
+            S1 = install_control_link(
+                   PeerKey, Endpoint, LinkPid, S),
+            pump_control_dials(
+              pump_root_contacts(
+                refresh_control_endpoints(S1)));
+        false ->
+            _ = quod_link:close(LinkPid),
+            pump_control_dials(S)
+    end;
+handle_root_contact_link_up(
+  _Endpoint, _PeerKey, LinkPid, S) ->
+    _ = quod_link:close(LinkPid),
+    pump_control_dials(S).
 
 handle_control_link_error(
   NodeKey, OpenRef, S = #s{pending_links = Pending}) ->
@@ -728,7 +871,7 @@ control_link_current(
 
 cleanup_control_state(
   #s{peer_query = PeerQuery, pending_links = Pending,
-     control_links = Links}) ->
+     pending_contacts = Contacts, control_links = Links}) ->
     case PeerQuery of
         {Pid, MonitorRef, _Token, TimerRef} ->
             cancel_timer(TimerRef),
@@ -741,6 +884,10 @@ cleanup_control_state(
       fun(_NodeKey, {_Endpoint, _OpenRef, TimerRef}) ->
           cancel_timer(TimerRef)
       end, Pending),
+    maps:foreach(
+      fun(_Endpoint, {_OpenRef, TimerRef}) ->
+          cancel_timer(TimerRef)
+      end, Contacts),
     maps:foreach(
       fun(_NodeKey, {_Endpoint, _LinkPid, MonitorRef}) ->
           demonitor(MonitorRef, [flush])
@@ -811,33 +958,22 @@ set_normalized_hosted(Hosted, S) ->
         false ->
             S1;
         true ->
-            publish_hosted(S1, S1#s.self_key)
+            publish_hosted(S1)
     end.
 
-publish_hosted(S, NodeKey) ->
-    case sign_current(S) of
-        {ok, SignedRecord, S1} ->
-            case accept_signed(
-                   SignedRecord, {direct, NodeKey, S#s.endpoint},
-                   false, S1) of
-                {ok, S2} ->
-                    send_control_frame(
-                      announce_frame(SignedRecord),
-                      NodeKey, S2);
-                {error, rate_limited} ->
-                    %% `hosted` is already the desired complete set. The single
-                    %% periodic renewal retries it after the admission window.
-                    S1;
-                {error, Reason} ->
-                    logger:warning(
-                      "quod: local directory hosted-set update rejected: ~p",
-                      [Reason]),
-                    S1
-            end;
-        {error, Reason} ->
+publish_hosted(S) ->
+    case advertise_current(S) of
+        {ok, S1} ->
+            S1;
+        {error, rate_limited, S1} ->
+            %% `hosted` is already the desired complete set. The single
+            %% periodic renewal retries it after the admission window.
+            S1;
+        {error, Reason, S1} ->
             logger:warning(
-              "quod: directory hosted-set signing failed: ~p", [Reason]),
-            S
+              "quod: local directory hosted-set update rejected: ~p",
+              [Reason]),
+            S1
     end.
 
 directory_tick(S = #s{renew_ms = RenewMs}) ->
@@ -853,26 +989,14 @@ directory_tick(S = #s{renew_ms = RenewMs}) ->
 renew_advertisement(S) ->
     case reconcile_observed_hosted(S) of
         {ok, S0} ->
-            case sign_current(S0) of
-                {ok, SignedRecord, S1} ->
-                    case accept_signed(
-                           SignedRecord,
-                           {direct, S1#s.self_key, S1#s.endpoint},
-                           false, S1) of
-                        {ok, S2} ->
-                            send_control_frame(
-                              announce_frame(SignedRecord),
-                              S2#s.self_key, S2);
-                        {error, Reason} ->
-                            logger:warning(
-                              "quod: local directory renewal rejected: ~p",
-                              [Reason]),
-                            S1
-                    end;
-                {error, Reason} ->
+            case advertise_current(S0) of
+                {ok, S1} ->
+                    S1;
+                {error, Reason, S1} ->
                     logger:warning(
-                      "quod: directory renewal signing failed: ~p", [Reason]),
-                    S0
+                      "quod: local directory renewal rejected: ~p",
+                      [Reason]),
+                    S1
             end;
         {error, Reason} ->
             %% Never extend an advertisement when the node cannot prove its
@@ -880,6 +1004,25 @@ renew_advertisement(S) ->
             logger:warning(
               "quod: directory renewal skipped: ~p", [Reason]),
             S
+    end.
+
+advertise_current(S) ->
+    case sign_current(S) of
+        {ok, SignedRecord, S1} ->
+            case accept_signed(
+                   SignedRecord,
+                   {direct, S1#s.self_key, S1#s.endpoint},
+                   false, S1) of
+                {ok, S2} ->
+                    {ok,
+                     send_control_frame(
+                       announce_frame(SignedRecord),
+                       S2#s.self_key, S2)};
+                {error, Reason} ->
+                    {error, Reason, S1}
+            end;
+        {error, Reason} ->
+            {error, Reason, S}
     end.
 
 can_advertise(#s{enabled = true, self_key = NodeKey,
@@ -923,12 +1066,8 @@ accept_decoded(Record, SignedRecord, Source, Disseminate, S) ->
             NodeKey = quod_directory_record:node_key(Record),
             case install_directory_record(Record) of
                 {ok, ExpiresAt} ->
-                    %% Cache the directory owner's exact receiver-local
-                    %% lease deadline; control never reconstructs TTL policy.
-                    S1 = S#s{records =
-                                (S#s.records)#{
-                                  NodeKey =>
-                                      {SignedRecord, ExpiresAt}}},
+                    S1 = cache_installed_record(
+                           NodeKey, SignedRecord, ExpiresAt, S),
                     case Disseminate of
                         true ->
                             {ok,
@@ -944,6 +1083,67 @@ accept_decoded(Record, SignedRecord, Source, Disseminate, S) ->
         false ->
             {error, source_mismatch}
     end.
+
+install_snapshot_records(SignedRecords, Source, S) ->
+    Prepared =
+        lists:filtermap(
+          fun(SignedRecord) ->
+              case quod_directory_record:decode(SignedRecord) of
+                  {ok, Record} ->
+                      case source_matches(Record, Source, S) of
+                          true -> {true, {SignedRecord, Record}};
+                          false -> false
+                      end;
+                  {error, _} ->
+                      false
+              end
+          end, SignedRecords),
+    case install_directory_records(
+           [directory_record_fields(Record)
+            || {_SignedRecord, Record} <- Prepared]) of
+        {ok, Results} ->
+            cache_snapshot_results(Prepared, Results, S);
+        {error, _} ->
+            S
+    end.
+
+install_directory_records([]) ->
+    {ok, []};
+install_directory_records(Records) ->
+    try quod_directory:install_records(Records)
+    catch exit:_ -> {error, directory_unavailable}
+    end.
+
+directory_record_fields(Record) ->
+    {quod_directory_record:node_key(Record),
+     quod_directory_record:endpoint(Record),
+     quod_directory_record:namespaces(Record),
+     quod_directory_record:epoch(Record),
+     quod_directory_record:sequence(Record)}.
+
+cache_snapshot_results(
+  [{SignedRecord, Record} | Prepared],
+  [{ok, ExpiresAt} | Results], S) ->
+    cache_snapshot_results(
+      Prepared, Results,
+      cache_installed_record(
+        quod_directory_record:node_key(Record),
+        SignedRecord, ExpiresAt, S));
+cache_snapshot_results(
+  [_PreparedRecord | Prepared], [{error, _} | Results], S) ->
+    cache_snapshot_results(Prepared, Results, S);
+cache_snapshot_results([], [], S) ->
+    S;
+cache_snapshot_results(_Prepared, _Results, S) ->
+    %% The directory batch API guarantees position-aligned results. Fail
+    %% closed if that internal contract is ever broken.
+    S.
+
+cache_installed_record(NodeKey, SignedRecord, ExpiresAt, S) ->
+    %% Cache the directory owner's exact receiver-local lease deadline;
+    %% control never reconstructs TTL policy.
+    S#s{records =
+            (S#s.records)#{NodeKey => {SignedRecord, ExpiresAt}}}.
 
 install_directory_record(Record) ->
     try
@@ -966,15 +1166,11 @@ source_matches(
     maps:is_key(PeerKey, Peers);
 source_matches(
   _Record, {resync, PeerKey, LinkPid}, S) ->
-    control_link_current(PeerKey, LinkPid, S);
-source_matches(_Record, _Source, _S) ->
-    false.
+    control_link_current(PeerKey, LinkPid, S).
 
 source_peer_key({direct, PeerKey, _Endpoint}) ->
     PeerKey;
 source_peer_key({relay, PeerKey}) ->
-    PeerKey;
-source_peer_key({resync, PeerKey, _LinkPid}) ->
     PeerKey.
 
 fanout(
@@ -1035,15 +1231,8 @@ inbound(Payload, Source, S) ->
                 error ->
                     S;
                 {ok, ResyncSource, LinkPid} ->
-                    S1 = lists:foldl(
-                           fun(SignedRecord, Acc) ->
-                               case accept_signed(
-                                      SignedRecord, ResyncSource,
-                                      false, Acc) of
-                                   {ok, Accepted} -> Accepted;
-                                   {error, _} -> Acc
-                               end
-                           end, S, Records),
+                    S1 = install_snapshot_records(
+                           Records, ResyncSource, S),
                     maybe_request_next(LinkPid, Next),
                     S1
             end;
@@ -1117,7 +1306,7 @@ resync_allowed(_Cursor, _Now, _Session) ->
 
 resync_capacity(PeerKey, Sessions) ->
     maps:is_key(PeerKey, Sessions) orelse
-        map_size(Sessions) < 2048.
+        map_size(Sessions) < ?DIRECTORY_MAX_RESYNC_SESSIONS.
 
 active_resync_sessions(Now, Sessions) ->
     maps:filter(
@@ -1140,7 +1329,7 @@ snapshot_page(Cursor, RecordsMap) ->
     Ordered = lists:keysort(1, maps:to_list(RecordsMap)),
     Remaining = drop(Cursor, Ordered),
     {PagePairs, More} = take_page(
-                          Remaining, ?MAX_RESYNC_RECORDS,
+                          Remaining, ?DIRECTORY_MAX_RESYNC_RECORDS,
                           ?MAX_RESYNC_BYTES, []),
     Page = [Record || {_NodeKey, {Record, _ExpiresAt}} <-
                           lists:reverse(PagePairs)],
@@ -1200,7 +1389,8 @@ decode_control(Payload)
           when is_integer(Cursor), Cursor >= 0 ->
             {resync_request, Cursor};
         {ok, {quod_directory_snapshot, Records, Next}}
-          when is_list(Records), length(Records) =< ?MAX_RESYNC_RECORDS,
+          when is_list(Records),
+               length(Records) =< ?DIRECTORY_MAX_RESYNC_RECORDS,
                (Next =:= done orelse
                     (is_integer(Next) andalso Next >= 0)) ->
             case lists:all(fun is_binary/1, Records) of
@@ -1215,14 +1405,17 @@ decode_control(_) ->
 
 control_config(Opts) when is_map(Opts) ->
     RenewMs = maps:get(renew_ms, Opts, ?RENEW_MS),
-    case quod_directory_auth:normalize_allowlist(
-           maps:get(allowlist, Opts, #{})) of
-        {ok, Allowlist}
+    case {quod_directory_auth:normalize_allowlist(
+            maps:get(allowlist, Opts, #{})),
+          normalize_root_contacts(
+            maps:get(root_contacts, Opts, []))} of
+        {{ok, Allowlist}, {ok, RootContacts}}
           when is_integer(RenewMs), RenewMs >= ?RENEW_MS ->
             {ok, #{allowlist => Allowlist,
                    allowed_keys =>
                        quod_directory_auth:node_key_index(
                          Allowlist),
+                   root_contacts => RootContacts,
                    renew_ms => RenewMs,
                    identity_dir =>
                        maps:get(identity_dir, Opts, undefined)}};
@@ -1232,7 +1425,20 @@ control_config(Opts) when is_map(Opts) ->
 control_config(_) ->
     {error, bad_config}.
 
+normalize_root_contacts(Contacts) when is_list(Contacts) ->
+    Normalized = lists:usort(Contacts),
+    case length(Normalized) =< ?MAX_ROOT_CONTACTS
+         andalso lists:all(
+                   fun quod_quic:valid_endpoint/1, Normalized) of
+        true -> {ok, Normalized};
+        false -> error
+    end;
+normalize_root_contacts(_) ->
+    error.
+
 serving_identity(#{identity_dir := undefined}) ->
+    %% Test-only non-serving mode. Production configuration always supplies
+    %% the node identity directory through quod_app:apply_directory/1.
     disabled;
 serving_identity(#{identity_dir := IdentityDir}) ->
     case {application:get_env(quod, node_pubkey),
@@ -1309,7 +1515,7 @@ recover_directory_state(S) ->
     case {S1#s.tracking, can_advertise(S1),
           reconcile_observed_hosted(S1)} of
         {true, true, {ok, S2}} ->
-            publish_hosted(S2, S2#s.self_key);
+            publish_hosted(S2);
         _ ->
             S1
     end.

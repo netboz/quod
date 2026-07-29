@@ -23,31 +23,27 @@ vote, rebuild, and catch-up. Remaining, gated:
   epoch-frozen voting sets, and a `can_replicate` policy for private
   read-replicas. Per-node `can_join` re-validation and signed membership
   transactions are already live.
-- **Authenticated + rate-limited remote reads.** The `{prove, Ns}` endpoint accepts a link from any node
-  (reads are open; content is gated per-clause by `can_read`). *Bounded now:* `?MAX_INFLIGHT` proofs,
-  `?MAX_FRAME_BYTES` per frame. → `quod_prove`.
+- **Remote reads use ontology asks.** The unused `{prove, Ns}` endpoint was
+  removed: it trusted a caller-supplied ontology name and duplicated the
+  authenticated `::` path. Remote reads now have one API, whose answering side
+  checks `can_read` against both the ontology chain and the TLS-authenticated
+  peer key.
 
 ## 2. Transport hardening (hostile-net)
 
-- **Mutual TLS is opportunistic at the lib level, but quod now binds it.** `verify => true` only
-  *requests* a client cert (an empty cert still completes the handshake, `peer_cert = undefined`).
-  **Closed in A.3:** `quod_conn:bind_ok/2` rejects an inbound connection whose link-header pubkey is a
-  real 32-byte key but whose `quic:peercert/1` is missing or mismatched — so an unauthenticated /
-  impersonating peer can't speak on a pubkey identity. *Still open:* the bind is skipped for non-pubkey
-  (no-identity/test) ids, so it only bites once a node has a real keypair (the production path).
-- **Non-`[safe]` decode** (`quod_prove:inbound`; and the DispersedSimplex `{log, Ns}` transport once it
-  lands in Stage 2). Any on-channel speaker can deliver arbitrary terms (atom-table growth). Deliberate
-  so fact atoms decode; closed by signed/validated payloads (§1). Size-bounded: `quod_prove` caps frames
-  at 1 MiB.
+- **Mutual TLS is opportunistic at the library level, but quod binds it.**
+  `quod_conn:bind_ok/2` rejects every inbound header without an exact 32-byte
+  key and matching peer certificate. Ordinary outbound dials by public key
+  also pin that expected certificate key; directory routes use the stricter
+  isolated key+endpoint pool. Bare endpoint contacts have no key to pin and
+  remain address-routed until a higher layer performs identity discovery.
+- **Non-`[safe]` decode** (the DispersedSimplex `{log, Ns}` transport).
+  Any on-channel speaker can deliver arbitrary terms (atom-table growth).
+  Deliberate so fact atoms decode; close it with signed/validated payloads (§1).
 - **Per-peer reassembly heap** (chunk reassembly on the consensus `{log, Ns}` channel — reintroduced with
   the Stage-2 transport). Spoofed peers each start an incomplete chunked message → unbounded buffering.
   Needs a per-message timeout / a cap on concurrent reassemblies. (The removed Raft transport had this
   gap; carry the fix into `quod_simplex`'s Stage-2 wire.)
-- **`quod_prove` large results.** A prove result > 1 MiB (`?MAX_FRAME_BYTES`) is dropped — no app-level
-  chunking. Add chunking if large read results are ever needed.
-- **`quod_prove` outbox on `link_error`.** A buffered read is dropped and the caller times out (5 s)
-  then can retry. Intended eventual behavior; an app-level retry/backoff in `remote/5` would fail
-  faster.
 - **Resolver cache dies with the transport.** `?ADDR_CACHE` (pubkey→endpoint hints) is owned by the
   `quod_quic` gen_server with **no `heir`**; a transport crash (it is `permanent` under `one_for_one`)
   destroys every learned hint and `init` re-seeds nothing (the old `addr_hints` seed hook was removed as
@@ -62,7 +58,8 @@ vote, rebuild, and catch-up. Remaining, gated:
   dies with a namespace teardown; a write before the table exists is a fail-closed no-op. Fix when needed:
   give the ETS table an `heir`, or re-seed on `init` from a persisted/config source.
 - **Cold-start address bootstrap — LANDED as a dial HINT (Slice D), deliberately not an address book.** A
-  node dials a peer by pubkey via the resolver, populated by inbound link headers (`quod_link:learn_hint`)
+  node dials a peer by pubkey via the resolver, populated after authenticated
+  inbound link headers (`quod_conn:maybe_learn_remote/2`)
   AND now by the committed `peer_admitted` fact's address: `quod_simplex:learn_addresses` learns each
   admit's `{Pk,{Host,Port}}` at the live commit (`adopt_committee`, OVERWRITE — the fact just passed
   quorum-many readiness verdicts, it's fresh) and on catch-up replay (`apply_catchup_window`,
@@ -70,14 +67,14 @@ vote, rebuild, and catch-up. Remaining, gated:
   the never-met-member hop (at 2→3, member J1 dials brand-new J2 whose address it learned only by folding
   J2's admit out of the log) — `growth_SUITE` proves 1→4 growth with ZERO resolver pre-seeding. It is a
   HINT, not an address book: `peer_admitted` addresses ROT on dynamic Nomad host ports (see member address
-  refresh below), and rot-recovery stays Consul seeds + inbound headers + Brahms. The co-founder scaffold
-  still pre-seeds (`bootstrap/2` never learns, since genesis addresses are the co-founders' own config) —
-  so `simplex_SUITE`'s pre-seeds remain correct, not papering over a gap.
-- **~~`quod_catchup`/`quod_feed` transport duplicates `quod_prove`~~ — DONE (transport `send` verb).**
+  refresh below), and rot-recovery stays Consul seeds + inbound headers + Brahms. The N=4 founding CT
+  still pre-seeds its isolated loopback resolver so the sole creator can reach the three pinned joiners;
+  this is transport setup, not a second genesis path.
+- **~~Catch-up/feed duplicated transport link bookkeeping~~ — DONE (`send` verb).**
   The copy-pasted per-endpoint `send`/`conns`/`outbox`/`link_up`/`link_error`/`DOWN` skeleton is GONE:
   the transport now exposes **`quod_quic:send/3`** (fire-and-forget send to a target on a channel), backed
   by a per-channel frame buffer in `quod_conn` (dial on demand, buffer until the link is up, flush, reuse —
-  the connection owns the link lifecycle). `quod_prove`, `quod_catchup`, and `quod_feed` each dropped their
+  the connection owns the link lifecycle). `quod_catchup` and `quod_feed` dropped their
   link bookkeeping and just call `send/3`; peer-random selection reuses `quod_brahms:take_random/2` (promoted
   to public). Endpoints that must monitor the link themselves (Brahms, consensus) keep `open_link/2`.
 - **Restarted-peer feed lag (~1–3 min) — DIAGNOSED; self-heals, fast-drop deferred.**
@@ -114,9 +111,11 @@ vote, rebuild, and catch-up. Remaining, gated:
 - **Stream prioritization for signaling (RFC 9218) — PROMOTED to the agent/runtime substrate plan.** quod
   gives each channel its own QUIC stream. Relay submit/accepted/result frames now use only the deterministic
   `{ingress, Ns}` stream, while `{log, Ns}` is consensus-only; an ordered relay reset therefore cannot tear
-  down the consensus stream. `quod_quic` still converges both streams onto one connection per peer, so they
-  share one congestion window and relay, feed, ACL, and future client traffic can still contend with
-  consensus. The pinned `quic` fork supports
+  down the consensus stream. Channels sharing a `quod_quic` pool key converge
+  on one connection, while ordinary, pinned and identity-discovery pool keys
+  can create separate connections to the same peer. Traffic sharing a
+  connection also shares its congestion window, so relay, feed, ACL, and
+  future client traffic can still contend with consensus. The pinned `quic` fork supports
   `quic:set_stream_priority/4` (urgency 0–7); Slice 3 must define channel priority classes and prove under load
   that lower-priority producers cannot starve `{log}` consensus signaling. Future RFC 9221 datagrams share the
   same congestion window and pacing even though they do not head-of-line block streams, so they also require
@@ -235,10 +234,11 @@ stages, not carried forward:
   - **~~HOCON `genesis_hash` plumbing~~ — DONE** (the schema field + `quod_app` passthrough landed; a
     production `mode=join` node supplies the anchor via config — the Nomad job renders it, see
     `deploy/quod.nomad`).
-  - **The co-founder scaffold STAYS** (decided 2026-07-05): the `committee` config + `simplex_SUITE`
-    co-founding is the ONLY way to stand up the 4-node BFT **failover** committee in a test, and join can't
-    replace that (a live namespace grows 1→N via sequential admits — `growth_SUITE` — but the failover CT
-    needs an instant N=4). Keep it.
+  - **Instant N-member founding stays; independent creators are gone.** The `committee` config lets one
+    canonical creator place the complete N=4 validator set in slot 1. `simplex_SUITE` then starts the
+    other three validators through ordinary pinned join, so failover is testable immediately without
+    allowing several nodes to invent competing slot-1 blocks. Live 1→N growth remains covered separately
+    by `growth_SUITE`.
   - **Read-replica (stay-synced) tier** — a caught-up (`ready`, non-`syncing`) non-member already TRACKS
     the head off the feed: it drops the consensus `{log,Ns}` traffic (not a voter), but `quod_feed` carries it forward —
     eager-push when it has a Brahms overlay, and (since the readiness gate) digest→verified-pull off the
@@ -255,12 +255,13 @@ stages, not carried forward:
     DIFFERENT catch-up windows keeps the FIRST address (learn-if-absent skips the later re-add) — healed by
     the header-overwrite path on first live contact; harmless (a wrong hint is at worst a failed dial, mTLS
     binds every connection to the expected pubkey).
-- **Multi-founder genesis is not enforced byte-identical.** Each co-founder builds its slot-1 genesis from
-  its OWN config, with no parent-hash chain to catch a mismatch (slot 1 is self-committed; consensus starts
-  at slot 2). Mismatched co-founder addresses → divergent `peer_admitted` addresses per KB (the
-  pubkey-committee stays consistent, so consensus is unaffected). `simplex_SUITE` passes matching
-  `{Pk,Host,Port}` so genesis is identical; a real multi-founder deploy must too, or add a genesis-hash
-  cross-check. Also: **`can_join` must stay side-effect-free** — the proof overlay captures every staged
+- **~~Independent multi-founder genesis~~ — REMOVED.** Exactly the lexicographically-smallest founding
+  pubkey may run fresh `mode=create`; it generates a 32-byte incarnation, records it in the versioned
+  genesis transaction id and the queryable `consensus_incarnation/1` fact, and commits the complete
+  founding committee. Every other founding member joins that pinned anchor. A byte-identical wipe +
+  re-found therefore gets a distinct consensus domain, while restart reuses the durable incarnation.
+  There is no nonce-less reader or compatibility branch. Also: **`can_join` must stay side-effect-free** —
+  the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
 - **~~Vote-latch persistence across restart~~ — DONE (2026-07-22).** `quod_vote_journal` now owns one
@@ -583,9 +584,10 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
     the parked "adaptive sizing" bucket (with the Brahms view/sample sizes). Use the new signed
     `estimated_n` population metric only after its error and churn response are measured at scale.
     Watch `feed_dropped{reason=duplicate}` vs `ingested` to tune `k`.
-- **P3 — bounded-cache subscribers (the millions tier).** Predicate cache (warmup = root schema +
-  system-ontology registry) + consume the P2 feed + invalidate touched predicates on *live* commit
-  (never replay) + lazy-refetch via remote-prove (P1) on miss.
+- **P3 — bounded-cache subscribers (the millions tier).** Predicate cache
+  (warmup = root schema + system-ontology registry) + consume the P2 feed +
+  invalidate touched predicates on *live* commit (never replay) + lazy refetch
+  through the authenticated ontology-ask API on miss.
 - **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
   debounce, onia §10). The `quod_diff` functor-hash read-set already produces the per-predicate keys.
 

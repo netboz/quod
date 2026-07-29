@@ -1,11 +1,13 @@
 -module(quod_ns_sup).
 -moduledoc """
-Root of the content-layer subtree: a `simple_one_for_one` parent that starts one
-`quod_ns` per ontology namespace. Mirrors `m:quod_brahms_sup`. See
-`doc/ordering-layer-spec.md` §5.1.
+Dynamic supervisor for one `quod_ns` subtree per ontology. Child specs have
+stable namespace ids and permanent restart semantics. Desired configurations
+are owned separately by `m:quod_namespace_manager`, which reconstructs these
+children if this supervisor process itself is replaced.
 """.
 -behaviour(supervisor).
--export([start_link/0, start_namespace/2, stop_namespace/1, namespaces/0]).
+-export([start_link/0, start_namespace/2, stop_namespace/1, namespaces/0,
+         start_child/2, stop_child/1, children/0]).
 -export([init/1]).
 
 start_link() ->
@@ -13,33 +15,41 @@ start_link() ->
 
 -spec start_namespace(binary(), map()) -> supervisor:startchild_ret().
 start_namespace(Ns, Config) ->
-    Result = supervisor:start_child(
-               quod_reg:via({quod_ns_sup, node}), [Ns, Config]),
-    case Result of
-        {ok, _Pid} -> quod_directory_control:namespace_changed();
-        {ok, _Pid, _Info} -> quod_directory_control:namespace_changed();
-        _ -> ok
-    end,
-    Result.
+    quod_namespace_manager:start_content(Ns, Config).
 
--spec stop_namespace(binary()) -> ok | {error, not_found}.
+-spec stop_namespace(binary()) -> ok | {error, term()}.
 stop_namespace(Ns) ->
-    case quod_reg:where({quod_ns, Ns}) of
-        undefined -> {error, not_found};
-        Pid ->
-            Result = supervisor:terminate_child(
-                       quod_reg:via({quod_ns_sup, node}), Pid),
-            case Result of
-                ok -> quod_directory_control:namespace_changed();
-                _ -> ok
-            end,
-            Result
+    quod_namespace_manager:stop_content(Ns).
+
+start_child(Ns, Config) ->
+    supervisor:start_child(
+      quod_reg:via({quod_ns_sup, node}),
+      #{id => {quod_ns, Ns},
+        start => {quod_ns, start_link, [Ns, Config]},
+        restart => permanent,
+        type => supervisor}).
+
+stop_child(Ns) ->
+    Sup = quod_reg:via({quod_ns_sup, node}),
+    Id = {quod_ns, Ns},
+    case supervisor:terminate_child(Sup, Id) of
+        ok -> supervisor:delete_child(Sup, Id);
+        {error, not_found} = Error -> Error;
+        Error -> Error
+    end.
+
+children() ->
+    try maps:from_list(
+          [{Ns, Pid}
+           || {{quod_ns, Ns}, Pid, _Type, _Modules} <-
+                  supervisor:which_children(
+                    quod_reg:via({quod_ns_sup, node})),
+              is_pid(Pid)])
+    catch exit:_ -> #{}
     end.
 
 namespaces() -> gproc:select([{{{n, l, {quod_ns, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 init([]) ->
-    Flags = #{strategy => simple_one_for_one, intensity => 10, period => 10},
-    Child = #{id => quod_ns, start => {quod_ns, start_link, []},
-              restart => transient, type => supervisor},
-    {ok, {Flags, [Child]}}.
+    Flags = #{strategy => one_for_one, intensity => 10, period => 10},
+    {ok, {Flags, []}}.

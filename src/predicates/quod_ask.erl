@@ -267,7 +267,7 @@ open_remote_routes(Target, GoalTerm, Chain, [Route | Rest]) ->
 
 open_route(#{scope := direct, status := provisional,
              namespace := Ns, endpoint := Endpoint}, Channel) ->
-    case open_link_private_seed(Endpoint, Channel) of
+    case open_link_identified(Endpoint, Channel) of
         {ok, LinkPid, NodeKey} ->
             {ok, LinkPid, NodeKey, {confirm_direct, Ns, Endpoint, NodeKey}};
         {error, _} = Error ->
@@ -292,8 +292,8 @@ open_link_pinned(NodeKey, Endpoint, Channel) ->
     after ?NEXT_TIMEOUT_MS -> {error, no_progress}
     end.
 
-open_link_private_seed(Endpoint, Channel) ->
-    Ref = quod_quic:open_link_private_seed(Endpoint, Channel),
+open_link_identified(Endpoint, Channel) ->
+    Ref = quod_quic:open_link_identified(Endpoint, Channel),
     receive
         {link_up, Ref, NodeKey, Channel, LinkPid}
           when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
@@ -519,7 +519,7 @@ start_answer(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
     %% legitimately die with an untrusted transport peer, and that failure must stop
     %% at the worker boundary.
     spawn(fun() ->
-        _ = watch_engine(Engine, self()),
+        _ = quod_process:kill_when_owner_dies(Engine, self()),
         try answer_init(Ns, Est, Height, Goal, Chain, Asker, Engine)
         catch
             Class:Reason:Stack ->
@@ -535,7 +535,7 @@ start_answer(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
 start_answer_remote(Ns, Est, Height, Goal, Chain, AskId,
                     Peer, PeerEndpoint, AnswerCh, Engine) ->
     spawn(fun() ->
-        _ = watch_engine(Engine, self()),
+        _ = quod_process:kill_when_owner_dies(Engine, self()),
         case open_link_pinned(Peer, PeerEndpoint, AnswerCh) of
             {ok, Link, Peer, none} ->
                 %% Force-killing the worker must also reset its private answer stream.
@@ -552,22 +552,6 @@ start_answer_remote(Ns, Est, Height, Goal, Chain, AskId,
                         sink_close(Asker)
                 end;
             {error, _} -> ok
-        end
-    end).
-
-%% Links propagate failure in both directions, which is wrong at this trust
-%% boundary. This one-shot watcher gives us directional ownership and can still
-%% kill a worker that is stuck inside erlog and unable to receive an engine DOWN.
-watch_engine(Engine, Worker) ->
-    spawn(fun() ->
-        EngineRef = monitor(process, Engine),
-        WorkerRef = monitor(process, Worker),
-        receive
-            {'DOWN', EngineRef, process, Engine, _Reason} ->
-                exit(Worker, kill);
-            {'DOWN', WorkerRef, process, Worker, _Reason} ->
-                demonitor(EngineRef, [flush]),
-                ok
         end
     end).
 

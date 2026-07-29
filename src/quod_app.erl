@@ -25,7 +25,7 @@ auto-started, and no identity is minted (this is what the multi-node test suite 
 
 -export([start/2, stop/1]).
 -ifdef(TEST).
--export([build_ns_config/1, load_config/0]).
+-export([build_ns_config/1, load_config/0, root_contacts/1]).
 -endif.
 
 start(_StartType, _StartArgs) ->
@@ -37,6 +37,12 @@ start(_StartType, _StartArgs) ->
     %% from an earlier in-VM run. A control-child restart after this barrier
     %% sees `true` and safely re-derives the live set.
     application:set_env(quod, directory_tracking, false),
+    %% Desired dynamic children survive their own supervisor/manager restarts,
+    %% but a full application start is a new lifecycle and rebuilds intent from
+    %% the freshly loaded content configuration below.
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{}, brahms => #{}}),
     {ok, Sup} = quod_sup:start_link(),
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
@@ -146,8 +152,9 @@ content_data_dir(Cfg) ->
 
 %% Build the operator-controlled directory configuration. System publication
 %% uses exact namespace/key allowlists; private routes are namespace-scoped
-%% local seeds. Root-derived control-peer discovery has no static endpoint
-%% configuration.
+%% local seeds. Directory control reuses the root ontology's own join contacts
+%% for endpoint discovery; they grant no authority and are not a second
+%% directory-bootstrap configuration.
 apply_directory(Cfg) ->
     Raw = maps:get(directory, Cfg, #{}),
     AllowEntries = maps:get(allowlist, Raw, []),
@@ -170,8 +177,23 @@ apply_directory(Cfg) ->
       quod, directory,
       #{allowlist => Allowlist,
         direct_seeds => DirectSeeds,
+        root_contacts => root_contacts(Cfg),
         identity_dir => identity_dir(Cfg)}),
     ok.
+
+root_contacts(Cfg) ->
+    Roots =
+        [Block
+         || Block <- maps:get(content, Cfg, []),
+            maps:get(namespace, Block) =:= <<"quod:root">>],
+    case Roots of
+        [] ->
+            [];
+        [Root] ->
+            recovery_contacts(maps:get(seeds, Root, []));
+        _ ->
+            error({duplicate_content_namespace, <<"quod:root">>})
+    end.
 
 directory_allowlist(Entries) ->
     maps:from_list(
@@ -195,6 +217,24 @@ required_endpoints(Label, Values) ->
         true -> lists:usort(Parsed);
         false -> error({bad_directory_endpoint, Label})
     end.
+
+%% Root content seeds are operational recovery hints, with the same tolerance
+%% as the seeds used by consensus and Brahms. They carry no directory authority:
+%% an authenticated key is promoted only after the local root proof approves it.
+%% A transient empty Consul template entry must therefore not abort node boot.
+recovery_contacts(Values) ->
+    lists:usort(
+      lists:filtermap(
+        fun(Value) ->
+            case parse_seed(Value) of
+                {true, Endpoint} -> {true, Endpoint};
+                false ->
+                    logger:warning(
+                      "quod: ignoring invalid root recovery contact: ~p",
+                      [Value]),
+                    false
+            end
+        end, Values)).
 
 ensure_distinct(Label, Values) ->
     case length(Values) =:= length(lists:usort(Values)) of
@@ -359,7 +399,8 @@ build_ns_config(Content) ->
              max_proof_workers => maps:get(max_proof_workers, Content, 64),
              max_ask_workers => maps:get(max_ask_workers, Content, 64),
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
-             park_ttl_ms => maps:get(park_ttl_ms, Content, 30000),
+             transaction_ttl_ms =>
+                 maps:get(transaction_ttl_ms, Content, 30000),
              batch_window_ms => maps:get(batch_window_ms, Content, 25),
              ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
              ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),

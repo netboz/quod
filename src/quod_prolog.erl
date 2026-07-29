@@ -6,8 +6,8 @@ order. One `gen_server` per namespace.
 
 - **Every proof runs in its own bounded WORKER process** — the engine never blocks
   on a proof (doc/inter-ontology.md §4.1). The worker gets a small shared-store snapshot
-  handle, never the knowledge base. A wedged proof wedges only its worker (killed after
-  past its configured absolute lifetime, and the per-proof overlay dies with it.
+  handle, never the knowledge base. A wedged proof wedges only its worker, which is
+  killed after its configured absolute lifetime; the per-proof overlay dies with it.
 - **Reads** run on a copy-on-write overlay (`m:quod_erlog_db_local_prove`) so the
   committed kb is never touched; the answer is bindings (stamped with the height the
   frozen view was taken at), returned to the caller.
@@ -15,7 +15,7 @@ order. One `gen_server` per namespace.
   become a `#transaction{}` submitted to `quod_simplex`; the caller is parked and
   replied to when the block applies (or reaped by a per-tx TTL if the verdict never
   arrives).
-- **`apply_block/3`** is the deterministic state machine `quod_simplex` drives on every
+- **`apply_block/4`** is the deterministic state machine `quod_simplex` drives on every
   member: re-check the read-set against the committed kb (OCC), then apply the diff
   or reject — identical verdict on every member. A **committee-changing** transaction
   (its diff asserts/retracts `peer_admitted`) is the exception: it applies
@@ -25,7 +25,8 @@ order. One `gen_server` per namespace.
 
 Proves are gated until an initial **rebuild** completes (`ready`), so a freshly
 (re)started engine never answers from a half-built kb. The kb is built with the
-erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
+erlog flag `unknown = fail`. The runtime projection contract is specified in
+`doc/agent-fipa-plan.md` §7.
 """.
 -behaviour(gen_server).
 -include_lib("erlog/src/erlog_int.hrl").
@@ -44,7 +45,7 @@ erlog flag `unknown = fail`. See `doc/ordering-layer-spec.md` §4.
 %% The membership-verdict park budget: a verdict parked past the slot's Δ complaint-skip is moot, so this
 %% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
--define(DEFAULTS, #{node_id => undefined, park_ttl_ms => 30000,
+-define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
                     validation_ttl_ms => 2000, max_proof_workers => 64,
                     max_ask_workers => 64, proof_timeout_ms => 60000,
                     ask_timeout_ms => 60000, ask_step_timeout_ms => 30000}).
@@ -208,9 +209,9 @@ runtime_detach(Ns) ->
 
 -doc """
 Synchronous no-op barrier: returns once every message already in this kb's queue — in
-particular a burst of `apply_block/3` casts — has been consumed. `quod_simplex`'s streamed
+particular a burst of `apply_block/4` casts — has been consumed. `quod_simplex`'s streamed
 replay calls this every few hundred casts so a long rebuild can't flood the mailbox with
-the whole log (backpressure); the applies themselves must stay casts (see `apply_block/3`).
+the whole log (backpressure); the applies themselves must stay casts (see `apply_block/4`).
 Deadlock-safe from the replay: it only runs while this kb is UNREADY, and an unready kb
 refuses proves, so it can never be parked in an `append` back into `quod_simplex`.
 """.
@@ -254,7 +255,8 @@ init({Ns, Config}) ->
     MaxAskWorkers = positive_limit(max_ask_workers, maps:get(max_ask_workers, Cfg)),
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            requests = gen_statem:reqids_new(),
-           ttl = maps:get(park_ttl_ms, Cfg), vttl = maps:get(validation_ttl_ms, Cfg),
+           ttl = maps:get(transaction_ttl_ms, Cfg),
+           vttl = maps:get(validation_ttl_ms, Cfg),
            max_proof_workers = MaxProofWorkers, max_ask_workers = MaxAskWorkers,
            proof_timeout_ms = positive_limit(proof_timeout_ms,
                                              maps:get(proof_timeout_ms, Cfg)),
@@ -276,8 +278,6 @@ init({Ns, Config}) ->
 %% A ready engine SPAWNS a worker per proof and returns immediately — the engine never
 %% blocks on a proof (doc/inter-ontology.md §4.1); the worker reports its result back
 %% to this engine, which owns the single reply path to the caller.
-handle_call({prove, Goal, CallerNs}, From, S) ->
-    handle_call({prove, Goal, CallerNs, otel_ctx:new()}, From, S);
 handle_call({prove, _G, _C, _TraceCtx}, _From, S = #s{ready = false}) ->
     {reply, {error, rebuilding}, S};
 handle_call({prove, _Goal, _CallerNs, _TraceCtx}, _From,
@@ -286,10 +286,9 @@ handle_call({prove, _Goal, _CallerNs, _TraceCtx}, _From,
     {reply, {error, busy}, S};
 handle_call({prove, Goal, CallerNs, TraceCtx}, From, S) ->
     {noreply, spawn_proof(prove, Goal, CallerNs, From, TraceCtx, S)};
-%% Read-only prove (the remote-read path): identical to a read, but a goal that stages a WRITE
-%% is REFUSED ({error, read_only}) instead of submitted — a remote reader can never write through
-%% a Member's responder. Reads carry the committed height of the frozen view they were proved
-%% against (the freshness contract). Gated on readiness like {prove}.
+%% Read-only prove for trusted local subsystems: identical to a read, but a goal
+%% that stages a write is refused instead of submitted. Reads carry the
+%% committed height of the frozen view and are gated on readiness like prove.
 handle_call({prove_ro, _G, _C}, _From, S = #s{ready = false}) ->
     {reply, {error, rebuilding}, S};
 handle_call({prove_ro, _Goal, _CallerNs}, _From,
@@ -603,7 +602,7 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% read), proves against that view, and reports one correlated result to the engine. The
 %% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
 proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
-    _ = watch_engine(Engine, self()),
+    _ = quod_process:kill_when_owner_dies(Engine, self()),
     Ctx = quod_predicates:proof_context(Ns, Applied, undefined),   %% Subject: none until §10 signed subjects
     Result = quod_trace:with_span(
                TraceCtx, <<"quod.prolog.prove">>, internal,
@@ -758,17 +757,6 @@ new_ask_worker(Pid, WorkerMRef, OwnerMRef, AskId, Height,
                               {ask_lifetime_kill, WorkerMRef, Token}),
     #ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId, height = Height,
                 lifetime_timer = Timer, lifetime_token = Token}.
-
-watch_engine(Engine, Worker) ->
-    spawn(fun() ->
-        EngineRef = monitor(process, Engine),
-        WorkerRef = monitor(process, Worker),
-        receive
-            {'DOWN', EngineRef, process, Engine, _Reason} -> exit(Worker, kill);
-            {'DOWN', WorkerRef, process, Worker, _Reason} ->
-                demonitor(EngineRef, [flush])
-        end
-    end).
 
 kill_worker(Pid) ->
     unlink(Pid),
@@ -959,7 +947,9 @@ apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, Index, Origin,
         true ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             S1 = release(Tx, {ok, {applied, Index}},
-                         fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                         fun(From, B, _ReadHeight) ->
+                             gen_server:reply(From, {ok, B, Index})
+                         end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
             {S1, outcome_applied(Change, Index, Origin, S1)};
         false ->
@@ -992,7 +982,9 @@ apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, I
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             S1 = release(Tx, {ok, {applied, Index}},
-                         fun(From, B, H) -> gen_server:reply(From, {ok, B, H}) end,
+                         fun(From, B, _ReadHeight) ->
+                             gen_server:reply(From, {ok, B, Index})
+                         end,
                          S#s{est = Est1, applies = S#s.applies + 1}),
             {S1, outcome_applied(Change, Index, Origin, S1)};
         {conflict, _F} ->
@@ -1251,8 +1243,9 @@ deliver_verdict(ReplyTo, Tag, Verdict) -> ReplyTo ! {membership_verdict, Tag, Ve
 Build the genesis write-set from a `.pl` file — `terms_to_diff(read_terms(File))`.
 
 Used at create only: the founder reads the root `.pl`, and `quod_simplex` prepends the
-founding committee's `peer_admitted/4` facts, compiling both into one genesis
-transaction it commits as slot 1. A missing/unparseable file throws `{genesis_failed, _}`,
+generated `consensus_incarnation/1` fact and founding committee's
+`peer_admitted/4` facts, compiling them into one genesis transaction at slot 1.
+A missing/unparseable file throws `{genesis_failed, _}`,
 which `quod_simplex:init/1` turns into `{stop, _}` (fail-fast — a node with no root is
 useless).
 """.
@@ -1268,7 +1261,7 @@ compiles the body (`well_form_body`, yielding `{Body, HasCut}`); we capture the 
 with the `m:quod_erlog_db_local_prove` overlay, exactly as `run_proof/2` does for a live
 write. Hand-building `{Head, true}` would store a malformed clause and crash on the first
 prove — the body must be the compiled form, not raw `true`. Used to build the genesis
-transaction (the committee's `peer_admitted` facts + the root content).
+transaction (incarnation + committee facts + root content).
 """.
 -spec terms_to_diff([term()]) -> [op()].
 terms_to_diff(Terms) ->

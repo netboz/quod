@@ -67,7 +67,9 @@ t_write_read({Dir, Ns, Cfg}) ->
     fun() ->
         _Pid = start_ns(Ns, Cfg),
         %% a write goes prove -> stage -> append -> commit -> apply -> reply
-        ?assertMatch({ok, [#{}], _}, rp(Ns, {assertz, {parent, tom, bob}})),
+        ?assertEqual(
+           {ok, [#{}], 2},
+           rp(Ns, {assertz, {parent, tom, bob}})),
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         %% an unknown predicate fails (does not crash) — unknown=fail
         ?assertEqual(fail, rp(Ns, {grandparent, tom, {'Y'}})),
@@ -96,7 +98,12 @@ t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
                    end) || N <- lists:seq(1, Count)],
         Results = [receive {write_result, N, R} -> {N, R} after 5000 -> timeout end
                    || N <- lists:seq(1, Count)],
-        ?assert(lists:all(fun({_N, {ok, [#{}], 1}}) -> true; (_) -> false end, Results)),
+        ?assert(
+           lists:all(
+             fun({_N, {ok, [#{}], 2}}) -> true;
+                (_) -> false
+             end,
+             Results)),
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
             {ok, #entry{data = {batch, Transactions}}} = quod_ledger_store:read_at(Store, 2),

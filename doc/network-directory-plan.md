@@ -113,8 +113,8 @@ On restart the owner recreates configured direct seeds. The system-route table
 begins empty; once namespace startup is complete, the control process signs and
 installs the allowlisted part of the live hosted set. It obtains the current
 directory-control keys from the already-running root ontology, opens pinned
-links to their currently observed endpoints, and refills peer records through
-announcement and resync. Nothing is persisted for route records: this is
+links to their last authenticated, self-advertised endpoints, and refills peer
+records through announcement and resync. Nothing is persisted for route records: this is
 rebuildable network-observed soft state by design. The separate, tiny per-node
 `Epoch` counter in section 5 persists only to make a sender's announcements
 replay-safe across its own restart.
@@ -127,6 +127,8 @@ add_direct_seed(Ontology, Addr)   -> provisional route
 confirm_direct_seed(Ontology, Addr, Peer) -> route is usable
 install_record(Peer, Addr, Namespaces, Epoch, Sequence)
                                       -> {ok, ReceiverExpiry} | {error, Reason}
+install_records([Record])             -> one position-aligned result per
+                                         record in one bounded writer turn
 expire(Now)
 ```
 
@@ -234,16 +236,24 @@ a root proof that is booting, rebuilding or delayed cannot block directory
 renewal or message handling. A failed proof retains the last successful peer
 set; a successful proof, including an empty result, replaces it exactly.
 
-The predicate returns identities, not addresses. For each remote key the
-control process uses the transport's current `NodeKey => Endpoint`
-observation, then opens `open_link_pinned/3`. A live committed membership
-change may initially seed that cache from `peer_admitted/4`'s Host/Port, and an
-ordinary authenticated root link later overwrites it with the live endpoint.
-A stale observation can therefore delay convergence, but the pinned
-connection rejects an unreachable endpoint or the wrong certificate and is
-retried when the observation changes. This discovery path does not call
-`directory_host/4`, `::`, or any directory route, so there is no bootstrap
-cycle and no static directory-bootstrap configuration.
+The predicate returns identities, not addresses. The control process has two
+ways to reach them:
+
+1. it first tries the root ontology's existing `content.seeds` as anonymous
+   contact endpoints, using an isolated identity-discovery connection;
+2. it also tries any current `NodeKey => Endpoint` transport observation with
+   `open_link_pinned/3`.
+
+A contact is promoted only after TLS and the link header agree on its Ed25519
+key and that exact key is present in the latest successful root proof. Only
+then does control publish the authenticated `Key => contact endpoint`
+observation to the ordinary transport cache and retain the link. Thus a full
+dynamic-port rollover can recover from the root contacts even when every
+cached committed endpoint is stale. Contacts are address hints, never control
+authority; the root predicate remains the sole authority.
+
+This path does not call `directory_host/4`, `::`, or any directory route, so
+there is no bootstrap cycle and no static directory-bootstrap configuration.
 
 ## 5. System advertisements and authority
 
@@ -261,8 +271,10 @@ SignedRecord = {
 It travels over authenticated links to the current root control peers obtained
 from `directory_control_peer/1`. `Signature` is the node key's Ed25519
 signature over the canonical encoding of every preceding field. At direct
-ingress, the transport header's authenticated `NodeKey` and observed endpoint
-must exactly match the signed `NodeKey` and `Endpoint`. At fanout/resync,
+ingress, the transport header's authenticated `NodeKey` and self-advertised
+endpoint must exactly match the signed `NodeKey` and `Endpoint`. The key is
+certificate-bound; the address remains the author's routing claim and is
+availability-only because later use is key-pinned. At fanout/resync,
 receivers verify that same original signature; relays cannot alter the
 endpoint, namespaces, epoch, or sequence, and cannot invent a high-water mark
 for another host.
@@ -327,8 +339,11 @@ lower-preference records rather than silently evicting a live route. A host
 coalesces its current served namespace set into the next permitted renewal
 rather than sending an unbounded stream of changes.
 
-The local signed set is derived from namespaces actually registered under
-`quod_ns_sup`, intersected with this node's exact system allowlist. Private
+The local signed set is derived from namespaces actually running under
+`quod_ns_sup`, intersected with this node's exact system allowlist. Desired
+namespace configurations are retained by `quod_namespace_manager`, which
+reconstructs both content and Brahms children if either dynamic supervisor is
+replaced. Private
 local namespaces do not consume the 32-name public-announcement budget. A
 successful namespace start or stop notifies the control process; each accepted
 update replaces the complete previous set, and an empty signed set is an
@@ -374,7 +389,7 @@ read path. Private direct seeds never enter a snapshot.
 The initial implementation is simple bounded fanout plus periodic
 renewal/resync, not a new consensus or general gossip subsystem. The
 directory tick refreshes the committed root peer set, reconciles currently
-observed endpoints and resyncs every active control link. Pinned opens are
+known self-advertised endpoints and resyncs every active control link. Pinned opens are
 bounded and independent, so an unresolved or stale peer does not prevent
 attempts to other peers. Endpoint replacement installs the new exact link
 before retiring the old one, and stale open results or process-down messages
@@ -556,13 +571,14 @@ an unauthenticated Prolog argument.
 - `quod_directory_auth` / `quod_directory_limits.hrl`: shared exact
   authorisation and namespace bounds.
 - `quod_directory_record`: canonical Ed25519 signed record codec.
-- `quod_directory_control` / `quod_ns_sup`: live hosted-set reconciliation,
-  signed withdrawal, asynchronous root-peer discovery, pinned control links,
+- `quod_directory_control` / `quod_namespace_manager` / `quod_ns_sup`: live
+  hosted-set reconciliation, root-contact endpoint recovery, signed
+  withdrawal, asynchronous root-peer discovery, pinned control links,
   authorised fanout and bounded resync.
 - `quod_directory_predicates`: root-only `directory_host/4` and
   `directory_control_peer/1`, both with normal Erlog backtracking.
 - `quod_safe_term`: bounded, atom-safe, compression-free external-term decode
   for directory, ask and transport-header inputs.
-- `quod_quic` / `quod_conn` / `quod_link`: pinned and TOFU no-learn transport
-  policy.
+- `quod_quic` / `quod_conn` / `quod_link`: pinned and identity-discovery
+  no-learn transport policy.
 - `quod_ask`: local → direct → system resolution and pinned request/answer legs.

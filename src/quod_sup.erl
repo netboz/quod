@@ -4,7 +4,8 @@ quod top-level supervisor.
 
 Owns transport, directory control, namespace supervision, metrics, and the
 explorer. Each ontology's consensus and Prolog processes live under
-`quod_ns_sup`.
+`quod_ns_sup`; `quod_namespace_manager` owns the desired content and Brahms
+sets and restores them if either dynamic supervisor is replaced.
 """.
 
 -behaviour(supervisor).
@@ -35,6 +36,9 @@ init([]) ->
          #{id => quod_ns_sup,
            start => {quod_ns_sup, start_link, []},
            type => supervisor},
+         #{id => quod_namespace_manager,
+           start => {quod_namespace_manager, start_link, []},
+           type => worker},
          #{id => quod_metrics,
            start => {quod_metrics, start_link, []},
            type => worker},

@@ -489,12 +489,12 @@ place_local(Pass, Origin, Request, Floor, View, QueueCount) ->
     end.
 
 place_relayed(Pass, TargetSlot, Request, Floor, View, QueueCount) ->
-    case TargetSlot > Floor of
+    case TargetSlot =:= Floor of
         true ->
-            {park, awaiting_turn};
-        false ->
             collect_or_park(
-              Pass, Floor, Floor, Request, View, QueueCount)
+              Pass, TargetSlot, Floor, Request, View, QueueCount);
+        false ->
+            {park, awaiting_turn}
     end.
 
 collect_or_park(Pass, TargetSlot, Floor, Request, View, QueueCount) ->

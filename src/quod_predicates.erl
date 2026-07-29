@@ -53,11 +53,11 @@ The context *kinds* are `proof` (a normal client proof or a staged write),
 %% registration + dispatch
 -export([load/1, dispatch/3]).
 %% context read/write on an #est{}
--export([set_context/2, context/1, clear_context/1, in_verdict/1]).
+-export([set_context/2, context/1, in_verdict/1]).
 %% context constructors (proof + verdict are used today; projection/effect land with their slices)
 -export([proof_context/3, proof_context/4, verdict_context/2]).
 %% context accessors
--export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_subject/1, ctx_chain/1, ctx_id/1]).
+-export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
 -export([class/1, allowed/2]).
@@ -205,11 +205,6 @@ context(#est{fs = Fs}) ->
         false               -> undefined
     end.
 
--doc "Drop any execution context from an `#est{}`.".
--spec clear_context(tuple()) -> tuple().
-clear_context(#est{fs = Fs} = Est) ->
-    Est#est{fs = lists:keydelete(?CTX_FLAG, 1, Fs)}.
-
 -doc """
 Whether the `#est{}` carries a `verdict` context. Read by the inter-ontology ask
 handler (which refuses a hop mid-verdict) and by the proof overlay (which disables
@@ -259,14 +254,6 @@ ctx_ns(undefined)      -> undefined.
 ctx_height(#qctx{height = H}) -> H;
 ctx_height(undefined)         -> undefined.
 
--spec ctx_subject(ctx()) -> term().
-ctx_subject(#qctx{subject = S}) -> S;
-ctx_subject(undefined)          -> undefined.
-
 -spec ctx_chain(ctx()) -> [binary()].
 ctx_chain(#qctx{chain = C}) -> C;
 ctx_chain(undefined)        -> [].
-
--spec ctx_id(ctx()) -> term().
-ctx_id(#qctx{id = Id}) -> Id;
-ctx_id(undefined)      -> undefined.

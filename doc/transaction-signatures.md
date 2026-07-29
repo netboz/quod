@@ -5,7 +5,7 @@
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.
 Existing unsigned non-genesis history is deliberately incompatible; deployment
-requires a clean ledger/CSI restart.
+requires a clean persistence reset and re-found.
 
 ## Invariants
 
@@ -87,8 +87,12 @@ transaction id. Rejected submissions may leave gaps and never block progress.
 ## Genesis and historical validation
 
 Genesis is constructed locally and trusted through the explicitly pinned slot-1
-block hash. Its transaction remains `sig = none`. No normal proposal, later log
-entry, or generic structural branch accepts an unsigned transaction.
+block hash. Its transaction remains `sig = none`, but the exemption is otherwise
+exact: the versioned id binds the namespace and 32-byte founding incarnation,
+the diff contains the matching `consensus_incarnation/1` fact and a non-empty
+founding committee, and the author is that committee's smallest key. The old
+nonce-less form is invalid. No normal proposal, later log entry, or generic
+structural branch accepts an unsigned transaction.
 
 Local rebuild verifies transaction signatures and author-sequence monotonicity
 before applying stored entries. Peer catch-up verifies finality evidence before
@@ -221,5 +225,5 @@ matching Grafana panels and user-facing help text.
 
 Signatures, relay, Explorer authentication details, Prometheus metrics, and
 Grafana panels are implemented together. Full tests and benchmarks precede the
-commit. Deployment then purges Quod CSI volumes and starts once from fresh
+commit. Deployment then purges Quod host volumes and starts once from fresh
 genesis; there is no unsigned-history compatibility mode.

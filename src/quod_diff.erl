@@ -82,8 +82,8 @@ apply_op(M, R, {retract, Clause}) ->
     end.
 
 %% Live proofs already emit Erlog's durable `{Code, HasCut}` body. Normalize the
-%% legal source-body form used by legacy/manual transactions so every node stores
-%% and compares the same compiled clause representation.
+%% legal source-body form accepted from explicitly constructed transactions so
+%% every node stores and compares the same compiled clause representation.
 normalize_clause({Head, Body}) -> {Head, normalize_body(Body)}.
 
 normalize_body({Code, HasCut} = Body) when is_list(Code), is_boolean(HasCut) -> Body;

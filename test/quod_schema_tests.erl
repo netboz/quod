@@ -35,7 +35,6 @@ defaults_test() ->
     ?assertEqual(14567,           deep(C, [node, port])),
     ?assertEqual(14568,           deep(C, [metrics, port])),
     ?assertEqual(<<"">>,          deep(C, [identity, dir])),
-    ?assertEqual([],              deep(C, [directory, bootstraps])),
     ?assertEqual([],              deep(C, [directory, allowlist])),
     ?assertEqual([],              deep(C, [directory, direct_seeds])),
     B = content1(C),
@@ -70,7 +69,6 @@ directory_schema_parse_test() ->
                "00112233445566778899aabbccddeeff">>,
     C = check(
           <<"directory {\n"
-            "  bootstraps = [\"10.0.0.1:14567\"]\n"
             "  allowlist = [{ namespace = \"quod:root\", node_keys = [\"",
             KeyHex/binary, "\"] }]\n"
             "  direct_seeds = [{ namespace = \"private:arm\", "
@@ -78,12 +76,21 @@ directory_schema_parse_test() ->
             "}\n"
             "content = [{ namespace = \"quod:root\" }]\n">>),
     D = maps:get(directory, C),
-    ?assertEqual([<<"10.0.0.1:14567">>], maps:get(bootstraps, D)),
     [Allow] = maps:get(allowlist, D),
     ?assertEqual(<<"quod:root">>, maps:get(namespace, Allow)),
     ?assertEqual([KeyHex], maps:get(node_keys, Allow)),
     [Direct] = maps:get(direct_seeds, D),
     ?assertEqual(<<"private:arm">>, maps:get(namespace, Direct)).
+
+removed_directory_bootstraps_rejected_test() ->
+    ?assertException(
+       throw,
+       {quod_schema,
+        [#{reason := unknown_fields, path := "directory",
+           unknown := "bootstraps"}]},
+       check(
+         <<"directory { bootstraps = [\"10.0.0.1:14567\"] }\n"
+           "content = [{ namespace = \"quod:root\" }]\n">>)).
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -141,7 +148,6 @@ directory_boot_conversion_test() ->
                ConfPath,
                ["node { ip = \"127.0.0.1\", port = 14998 }\n",
                 "directory {\n",
-                "  bootstraps = [\"10.0.0.1:14567\"]\n",
                 "  allowlist = [{ namespace = \"quod:root\", node_keys = [\"",
                 KeyHex, "\"] }]\n",
                 "  direct_seeds = [{ namespace = \"private:arm\", ",
@@ -158,9 +164,7 @@ directory_boot_conversion_test() ->
              <<"quod:root">> => [Key]
             },
            maps:get(allowlist, Directory)),
-        ?assertEqual(
-           [{"10.0.0.1", 14567}],
-           maps:get(bootstraps, Directory)),
+        ?assertNot(maps:is_key(bootstraps, Directory)),
         ?assertEqual(
            #{<<"private:arm">> => [{"10.0.0.2", 15555}]},
            maps:get(direct_seeds, Directory)),

@@ -5,8 +5,9 @@ the **connection authority**.
 
 It starts the `quic` server (each accepted connection is handed to a
 `m:quod_conn` owner via `connection_handler`), and serializes outbound
-connection creation so there is **one connection per peer** (no dial race).
-Streams/links and message delivery live in `m:quod_conn` / `m:quod_link`.
+connection creation per pool key (ordinary, pinned, or private-seed; no dial
+race within a pool). Streams/links and message delivery live in
+`m:quod_conn` / `m:quod_link`.
 
 Upper layers pick one of two send models:
 
@@ -31,7 +32,8 @@ quod_link:send(LinkPid, Payload)              %% then send on the LinkPid direct
 
 -behaviour(gen_server).
 
--export([start_link/0, open_link/2, open_link_pinned/3, open_link_seed/2,
+-export([start_link/0, open_link/2, open_link_pinned/3,
+         open_link_private_seed/2,
          send/3, send_pinned/4,
          learn/2, learn_if_absent/2, resolve/1, valid_endpoint/1,
          liveness_opts/0]).
@@ -87,18 +89,19 @@ open_link_pinned(NodeKey, Endpoint, Channel) ->
     Ref.
 
 -doc """
-Open the first, operator-seeded directory link to `Endpoint`. The peer's TLS key
-is accepted as the TOFU result and returned in `{link_up, Ref, NodeKey,
-Channel, LinkPid}`. The connection is isolated and suppresses address-hint
-learning.
+Open a private direct-seed link to `Endpoint`. The peer's TLS key is accepted
+as the route-local TOFU result and returned in
+`{link_up, Ref, NodeKey, Channel, LinkPid}`. The connection is isolated and
+suppresses address-hint learning.
 """.
--spec open_link_seed({inet:hostname(), inet:port_number()}, binary()) ->
+-spec open_link_private_seed(
+        {inet:hostname(), inet:port_number()}, binary()) ->
           reference().
-open_link_seed(Endpoint, Channel) ->
+open_link_private_seed(Endpoint, Channel) ->
     Ref = make_ref(),
     gen_server:cast(
       quod_reg:via(?KEY),
-      {open_link_seed, Endpoint, Channel, {self(), Ref}}),
+      {open_link_private_seed, Endpoint, Channel, {self(), Ref}}),
     Ref.
 
 -doc """
@@ -272,9 +275,8 @@ self_addr(NodeAddr, Pubkey) ->
 handle_call(_Req, _From, State) ->
     {reply, {error, unknown_request}, State}.
 
-%% the connection authority: one connection per peer, created here. Resolve the target
-%% to an endpoint first (a pubkey via the cache, an endpoint directly); a miss ⇒
-%% `link_error` so the caller retries once the address is learned (header / gossip).
+%% The connection authority is created here. Ordinary targets resolve through
+%% the shared cache; pinned and private-seed targets carry an explicit endpoint.
 handle_cast({open_link_pinned, NodeKey, Endpoint, Channel, ReplyTo}, State) ->
     case ensure_pinned_conn(NodeKey, Endpoint, State) of
         {ok, ConnPid, State1} ->
@@ -295,10 +297,10 @@ handle_cast({send_pinned, NodeKey, Endpoint, Channel, Frame}, State)
     end;
 handle_cast({send_pinned, _NodeKey, _Endpoint, _Channel, _Frame}, State) ->
     {noreply, State};
-handle_cast({open_link_seed, Endpoint, Channel, ReplyTo}, State) ->
+handle_cast({open_link_private_seed, Endpoint, Channel, ReplyTo}, State) ->
     case is_endpoint(Endpoint) of
         true ->
-            ConnKey = {directory_seed, Endpoint},
+            ConnKey = {private_seed, Endpoint},
             Policy = #{expected_peer => any, learn_hint => no_learn},
             {ConnPid, State1} =
                 ensure_conn(ConnKey, Endpoint, Endpoint, Policy, State),
@@ -356,8 +358,9 @@ terminate(_Reason, _State) ->
 %% lesser-tested path with its own flow-control limits. Always being the client for our
 %% own outgoing streams keeps us on the proven client-initiated path. The cost is one
 %% connection per direction (two per pair) instead of a shared one — cheap and reliable.
-%% Keyed by `Target` (the pubkey for a member, or the endpoint for a bootstrap seed) so the
-%% caller and reuse stay consistent with how it asked; the dial goes to the resolved `Endpoint`.
+%% `ConnKey` preserves the caller's trust mode: an ordinary target, an exact
+%% pinned key+endpoint, or a private seed endpoint. The dial always uses
+%% `Endpoint`.
 ensure_conn(ConnKey, Peer, Endpoint, Policy, State = #state{conns = Conns}) ->
     case maps:get(ConnKey, Conns, undefined) of
         Pid when is_pid(Pid) ->
@@ -392,7 +395,8 @@ start_conn(ConnKey, Peer, {Host, Port}, Policy,
     {Pid, State#state{conns = maps:put(ConnKey, Pid, Conns)}}.
 
 directory_link_error({ReplyTo, Ref}, Peer, Channel) ->
-    ReplyTo ! {link_error, Ref, Peer, Channel}.
+    ReplyTo ! {link_error, Ref, Peer, Channel},
+    ok.
 
 %% ======================================================================
 %% helpers

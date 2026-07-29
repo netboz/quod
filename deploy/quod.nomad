@@ -76,12 +76,6 @@ variable "directory_node_keys" {
   description = "Exact Ed25519 node-key allowlist for the discoverable quod:root directory. Supply the persistent fleet keys as 64-character hex strings; empty disables shared publication without weakening validation."
 }
 
-variable "directory_bootstraps" {
-  type        = list(string)
-  default     = []
-  description = "Small stable list of host:port seeds for the directory control plane. Runtime membership is learned through signed records; do not render the live Consul service set here."
-}
-
 variable "cross_ontology_enabled" {
   type        = bool
   default     = false
@@ -297,14 +291,6 @@ explorer {
   port    = 14569
 }
 directory {
-  # Bootstrap addresses only establish the first scoped TOFU/no-learn link.
-  # Every route learned through it is independently signature-checked against
-  # the exact allowlist below, then used through a key-pinned dial.
-  bootstraps = [
-%{for endpoint in var.directory_bootstraps~}
-    "${endpoint}",
-%{endfor~}
-  ]
   allowlist = [
     {
       namespace = "quod:root"
@@ -577,12 +563,6 @@ explorer {
 }
 directory {
   # Satellites independently validate every directory record they receive.
-  # Bootstrap addresses are static operator inputs, never the live Consul set.
-  bootstraps = [
-%{for endpoint in var.directory_bootstraps~}
-    "${endpoint}",
-%{endfor~}
-  ]
   allowlist = [
     {
       namespace = "quod:root"

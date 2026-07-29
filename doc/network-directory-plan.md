@@ -52,9 +52,12 @@ be served by three hosts, producing at most three live route records.
    the peer's mutual-TLS node key must equal the route's expected `NodeKey`.
    A stale route can produce `unreachable`; it cannot grant write permission
    or change a committee.
-5. **No compatibility layer.** Explicit bootstrap seeds and directory/direct
-   routes are the only remote resolver. The deployment configuration moved in
-   the same change; no secondary resolver remains.
+5. **No compatibility layer.** Signed system routes learned through
+   root-derived control peers, plus local direct routes, are the only inputs to
+   remote resolution. Static directory bootstrap addresses were removed
+   outright: `directory.bootstraps` is invalid configuration, with no
+   fallback parser or secondary resolver. Namespace `seeds` used to join
+   consensus are a separate mechanism and are unchanged.
 6. **No atom creation from directory input.** Namespace IDs, node IDs and
    addresses are bounded binaries at every directory/wire boundary.
 
@@ -108,11 +111,13 @@ TLS connection pinned to the signed `NodeKey` succeeds.
 
 On restart the owner recreates configured direct seeds. The system-route table
 begins empty; once namespace startup is complete, the control process signs and
-installs the allowlisted part of the live hosted set, while peer announcements
-refill the rest. Nothing is persisted for route records: this is rebuildable
-network-observed soft state by design. The separate, tiny per-node `Epoch`
-counter in section 5 persists only to make a sender's announcements replay-safe
-across its own restart.
+installs the allowlisted part of the live hosted set. It obtains the current
+directory-control keys from the already-running root ontology, opens pinned
+links to their currently observed endpoints, and refills peer records through
+announcement and resync. Nothing is persisted for route records: this is
+rebuildable network-observed soft state by design. The separate, tiny per-node
+`Epoch` counter in section 5 persists only to make a sender's announcements
+replay-safe across its own restart.
 
 The internal service API is:
 
@@ -212,9 +217,33 @@ A confirmed direct seed intentionally shadows a shared system route for the
 same name. This is local-administrator authority: it is useful for private
 composition and explicit overrides, and must not surprise an operator.
 
-Bootstrap itself is explicit configuration: nodes receive a small list of
-root-system seed addresses so they can join the directory control plane. There
-is no secondary resolver.
+### 4.4 Root-derived control peers
+
+Directory-control discovery is a local query over the already-running root
+ontology:
+
+```prolog
+directory_control_peer(?NodeKey).
+```
+
+The external predicate projects the distinct exact 32-byte keys from the
+proof snapshot's committed `peer_admitted/4` facts. It is available only in a
+`quod:root` execution context and stages no write or network effect. The
+control process calls it through a monitored, timed local read-only proof, so
+a root proof that is booting, rebuilding or delayed cannot block directory
+renewal or message handling. A failed proof retains the last successful peer
+set; a successful proof, including an empty result, replaces it exactly.
+
+The predicate returns identities, not addresses. For each remote key the
+control process uses the transport's current `NodeKey => Endpoint`
+observation, then opens `open_link_pinned/3`. A live committed membership
+change may initially seed that cache from `peer_admitted/4`'s Host/Port, and an
+ordinary authenticated root link later overwrites it with the live endpoint.
+A stale observation can therefore delay convergence, but the pinned
+connection rejects an unreachable endpoint or the wrong certificate and is
+retried when the observation changes. This discovery path does not call
+`directory_host/4`, `::`, or any directory route, so there is no bootstrap
+cycle and no static directory-bootstrap configuration.
 
 ## 5. System advertisements and authority
 
@@ -229,13 +258,14 @@ SignedRecord = {
 }
 ```
 
-It travels over an authenticated link to configured root-system bootstrap
-nodes. `Signature` is the node key's Ed25519 signature over the canonical encoding of
-every preceding field. At direct ingress, the transport header's authenticated
-`NodeKey` and observed endpoint must exactly match the signed `NodeKey` and
-`Endpoint`. At fanout/resync, receivers verify that same original signature;
-relays cannot alter the endpoint, namespaces, epoch, or sequence, and cannot
-invent a high-water mark for another host.
+It travels over authenticated links to the current root control peers obtained
+from `directory_control_peer/1`. `Signature` is the node key's Ed25519
+signature over the canonical encoding of every preceding field. At direct
+ingress, the transport header's authenticated `NodeKey` and observed endpoint
+must exactly match the signed `NodeKey` and `Endpoint`. At fanout/resync,
+receivers verify that same original signature; relays cannot alter the
+endpoint, namespaces, epoch, or sequence, and cannot invent a high-water mark
+for another host.
 
 For the first slice, authorisation is deployment configuration owned by the
 platform operator:
@@ -261,19 +291,19 @@ record from resurrecting a namespace removed by a newer record. An identical
 or older frame does not extend expiry. Expiry is derived from the receiver's
 monotonic clock only after acceptance. This makes duplicate/replayed frames
 harmless for the lifetime of the receiver and survives a sender restart. A
-receiver restart rebuilds its soft state only from configured,
-cryptographically authenticated bootstrap peers or allowlisted control-plane
-relays, never from a persisted route table or a public reader.
+receiver restart rebuilds its soft state from its local signed record and from
+records received or resynced over exact authenticated root control links,
+never from a persisted route table or a public reader.
 
 The `{Epoch, Sequence}` high-water marks are retained separately from live
 route records and survive route expiry for the lifetime of the directory
 service, under the same bounded key budget. Thus an expired route is not
 transiently resurrected by a late duplicate. A service restart discards all
-soft indexes; only a configured bootstrap or allowlisted control-plane relay
-may refill them. A compromised authorised source can replay an older
-still-valid signature before a current record arrives, but the resulting
-route remains pinned to the allowlisted author's TLS key and can therefore
-cause only temporary `unreachable`, not false read identity or write
+soft indexes; only the local author, an authenticated direct author, or a
+current root control peer may refill them. A compromised authorised relay can
+replay an older still-valid signature before a current record arrives, but the
+resulting route remains pinned to the allowlisted author's TLS key and can
+therefore cause only temporary `unreachable`, not false read identity or write
 authority. Removing that availability-only replay window would require signed
 validity time or durable receiver high-water and is deliberately outside this
 soft-state slice.
@@ -309,15 +339,24 @@ recovery cannot publish an empty or partially started set from an earlier
 in-VM run. If the namespace supervisor is unavailable, the node skips renewal
 and lets its remote routes expire rather than renewing stale claims.
 
-Accepted signed records are disseminated as live directory updates to nodes
-participating in the root-system control plane. Every receiving node — direct
-ingress, fanout, or resync — independently verifies the original signature and
-checks the carried `{Namespace, NodeKey}` against its own exact allowlist
-before mutating any table. It does not trust a relay's earlier validation.
-Relayed announcements are accepted only from an allowlisted system host or a
-configured bootstrap. A relay therefore cannot introduce a non-allowlisted
-answerer, alter an allowlisted route, or poison that route's high-water mark;
-an authorised relay can only delay, drop, or replay a valid record.
+Every node maintains best-effort pinned links to all currently resolvable
+remote keys returned by `directory_control_peer/1`; self remains in the
+authority set but is not dialled. A host sends its current signed record over
+those links. A receiver forwards an accepted third-party record to each active
+root control link except the signed author and authenticated immediate source,
+only while its own key is a current control peer. Nodes that are not current
+control peers send their own record and consume resync, but do not relay
+third-party records.
+
+Every receiving node — direct ingress, fanout, or resync — independently
+verifies the original signature and checks every carried
+`{Namespace, NodeKey}` against its own exact allowlist before mutating any
+table. It does not trust a relay's earlier validation. A relayed announcement
+is accepted only when the authenticated source key is in the receiver's
+current root-derived control-peer set. Root membership grants relay authority,
+not authority to author or alter a record. A relay therefore cannot introduce
+a non-allowlisted answerer, alter an allowlisted route, or poison that route's
+high-water mark; it can only delay, drop, or replay a valid record.
 
 If any namespace in a signed record is not allowed for its `NodeKey`, that
 receiver rejects the entire record rather than accepting a partial subset.
@@ -325,18 +364,21 @@ receiver rejects the entire record rather than accepting a partial subset.
 Snapshot read access is deliberately separate from advertisement authority.
 Any mutually authenticated node may resync these intentionally discoverable
 system routes; being able to read a record does not allow that node to publish
-one or feed a captured snapshot back into another reader. A receiver ingests
-snapshot pages only on a link to one of its configured bootstrap bindings.
-Per-key rate limits, a 2,048-session cap, 30-second idle-session pruning,
-bounded pages and bounded records constrain the public read path. Private
-direct seeds never enter a snapshot.
+one or feed a captured snapshot back into another reader. A receiver ingests a
+snapshot page only when its source key, link process and monitor identify the
+exact current outbound control link tracked for that peer; a stale or unrelated
+link is rejected. Per-key rate limits, a 2,048-session cap, 30-second
+idle-session pruning, bounded pages and bounded records constrain the public
+read path. Private direct seeds never enter a snapshot.
 
 The initial implementation is simple bounded fanout plus periodic
-renewal/resync, not a new consensus or general gossip subsystem. A node
-periodically resyncs from bootstrap peers after their first TOFU exchange,
-using the bound key for every later attempt; this keeps a temporarily
-unadvertised participant current and retries an unavailable initial seed. A
-restarted node obtains the current active set through the same bounded path.
+renewal/resync, not a new consensus or general gossip subsystem. The
+directory tick refreshes the committed root peer set, reconciles currently
+observed endpoints and resyncs every active control link. Pinned opens are
+bounded and independent, so an unresolved or stale peer does not prevent
+attempts to other peers. Endpoint replacement installs the new exact link
+before retiring the old one, and stale open results or process-down messages
+cannot remove a newer generation.
 
 Directory messages are advisory.  Loss or temporary disagreement between two
 directory views may delay a route or cause `unreachable`, but cannot change
@@ -388,10 +430,13 @@ no global directory change is required.
 ### A. Controlled system ontology
 
 1. The operator adds node `K` to the configured allowlist for
-   `quod:agent` and deploys it with the root-system bootstrap seeds.
+   `quod:agent` and deploys it with the already-running root ontology.
 2. `K` starts serving `quod:agent` and renews its authenticated directory
    advertisement.
-3. Nodes learn the live route.  A proof using
+3. Each node derives directory-control identities from committed root
+   membership and uses its live transport observations to reach them; no
+   directory bootstrap address is configured. Nodes learn the live route. A
+   proof using
    `quod:agent::some_goal(...)` opens an ask directly to `K` (or another
    eligible route), without static contacts for that target.
 4. Removing `K` from the allowlist or allowing its renewal to expire makes it
@@ -443,7 +488,8 @@ The implementation must include focused tests for these observable contracts:
    checks hold identically for direct ingress, fanout and resync, and a
    mixed `A`/`B` signed record is rejected as a whole, without installing `A`.
    A public reader cannot relay a captured announcement or inject a captured
-   snapshot; snapshot ingestion is bootstrap-link-only.
+   snapshot; snapshot ingestion requires the exact current outbound root
+   control link.
 6. A direct seed is local-only, becomes confirmed only after a successful
    target exchange, and never appears through `directory_host/4`.
 7. Ask routing has the exact local → direct → system order, tries another
@@ -466,6 +512,21 @@ The implementation must include focused tests for these observable contracts:
     auto-learn as before.
 12. Directory churn produces no transaction, block, membership change, or
     consensus action.
+13. `directory_control_peer/1` is registered as a query predicate, succeeds
+    only in a root execution context, and enumerates the distinct exact
+    32-byte keys from committed `peer_admitted/4` facts through normal Prolog
+    backtracking. A real local `prove_ro/3` call must distinguish a legitimate
+    successful-empty result from an absent or failed predicate.
+14. Root proof work does not block the control process. A failed, timed-out or
+    stale proof retains the last successful peer set; the next successful
+    result replaces it exactly. Control opens and process-down handling are
+    matched to their exact current endpoint, open reference, link process and
+    monitor, so stale generations cannot replace or remove a newer link.
+15. After a live committed admission has demonstrably seeded `K => E_old` in
+    the shared address cache, an ordinary authenticated root link from the
+    same persistent key at `E_new` overwrites it. Directory control then opens
+    a pinned link and converges at `E_new` without a directory configuration
+    change or a test-only cache write.
 
 Focused EUnit/CT covers the resolver, external predicate and control-plane
 codec. Release validation also includes the normal full gate.
@@ -476,12 +537,13 @@ Self-managed discoverable ontologies require a different authority source:
 their own agreed policy must say which keys may advertise hosts, and the
 directory must validate a signed/revocable proof of that policy.  That is a
 security-sensitive distributed protocol, not a small extension of the system
-allowlist.  It includes key rotation, revocation, bootstrap trust and bounded
-proof validation. It must also define **read-answer authority**: either a
-verifiable committee/threshold signature over each answer (and its relevant
-snapshot), or a rule that only appropriate committee members may serve reads.
-An ontology-authorised host alone is not enough: without this, it can fabricate
-answers. This protocol should be designed separately before implementation.
+allowlist.  It includes key rotation, revocation, initial-discovery trust and
+bounded proof validation. It must also define **read-answer authority**:
+either a verifiable committee/threshold signature over each answer (and its
+relevant snapshot), or a rule that only appropriate committee members may
+serve reads. An ontology-authorised host alone is not enough: without this, it
+can fabricate answers. This protocol should be designed separately before
+implementation.
 
 Likewise, user-specific hidden discovery waits for the authenticated-subject
 work already identified in `doc/agent-fipa-plan.md`; it must not be faked with
@@ -495,9 +557,10 @@ an unauthenticated Prolog argument.
   authorisation and namespace bounds.
 - `quod_directory_record`: canonical Ed25519 signed record codec.
 - `quod_directory_control` / `quod_ns_sup`: live hosted-set reconciliation,
-  signed withdrawal, renewal, bootstrap TOFU, fanout and bounded resync.
-- `quod_directory_predicates`: root-only `directory_host/4` with normal Erlog
-  backtracking.
+  signed withdrawal, asynchronous root-peer discovery, pinned control links,
+  authorised fanout and bounded resync.
+- `quod_directory_predicates`: root-only `directory_host/4` and
+  `directory_control_peer/1`, both with normal Erlog backtracking.
 - `quod_safe_term`: bounded, atom-safe, compression-free external-term decode
   for directory, ask and transport-header inputs.
 - `quod_quic` / `quod_conn` / `quod_link`: pinned and TOFU no-learn transport

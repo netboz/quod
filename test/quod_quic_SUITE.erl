@@ -16,7 +16,8 @@ and observed via the gproc `{channel, _}` property as `{quod_message, ...}`.
          no_learn_is_monotone_across_streams/1,
          resolve_and_dial_by_pubkey/1, pinned_dial_suppresses_hint_learning/1,
          pinned_reverse_stream_suppresses_hint_learning/1,
-         seed_dial_suppresses_hint_learning/1, ordinary_dial_still_learns_hint/1,
+         private_seed_dial_suppresses_hint_learning/1,
+         ordinary_dial_still_learns_hint/1,
          pinned_dial_rejects_wrong_cert/1]).
 
 -define(PORT, 14599).
@@ -31,7 +32,7 @@ all() -> [open_link_succeeds, message_roundtrip, bidirectional_reuse,
           resolve_and_dial_by_pubkey,
           pinned_dial_suppresses_hint_learning,
           pinned_reverse_stream_suppresses_hint_learning,
-          seed_dial_suppresses_hint_learning,
+          private_seed_dial_suppresses_hint_learning,
           ordinary_dial_still_learns_hint, pinned_dial_rejects_wrong_cert].
 
 init_per_suite(Config) ->
@@ -417,17 +418,18 @@ pinned_reverse_stream_suppresses_hint_learning(Config) ->
     end,
     {ok, Existing} = quod_quic:resolve(Pub).
 
-%% Private-seed TOFU derives the actual certificate key but keeps it route-local;
+%% Private direct-seed TOFU derives the actual certificate key but keeps it route-local;
 %% its no-learn header must not touch the shared address cache either.
-seed_dial_suppresses_hint_learning(Config) ->
+private_seed_dial_suppresses_hint_learning(Config) ->
     Pub = ?config(self_pubkey, Config),
     Existing = {"127.0.0.1", 14445},
     ok = quod_quic:learn(Pub, Existing),
-    Ref = quod_quic:open_link_seed(?SELF, <<"chan-seed-no-learn">>),
+    Channel = <<"chan-private-seed-no-learn">>,
+    Ref = quod_quic:open_link_private_seed(?SELF, Channel),
     receive
-        {link_up, Ref, Pub, <<"chan-seed-no-learn">>, LinkPid}
+        {link_up, Ref, Pub, Channel, LinkPid}
           when is_pid(LinkPid) -> ok
-    after 5000 -> ct:fail(no_seed_link_up)
+    after 5000 -> ct:fail(no_private_seed_link_up)
     end,
     {ok, Existing} = quod_quic:resolve(Pub).
 

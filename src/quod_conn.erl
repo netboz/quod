@@ -441,15 +441,19 @@ expected_peer_ok(_RemotePeer, _Expected) -> false.
 
 notify_link_up({ReplyTo, Ref}, Peer, Channel, LinkPid)
   when is_pid(ReplyTo), is_reference(Ref) ->
-    ReplyTo ! {link_up, Ref, Peer, Channel, LinkPid};
+    ReplyTo ! {link_up, Ref, Peer, Channel, LinkPid},
+    ok;
 notify_link_up(ReplyTo, Peer, Channel, LinkPid) when is_pid(ReplyTo) ->
-    ReplyTo ! {link_up, Peer, Channel, LinkPid}.
+    ReplyTo ! {link_up, Peer, Channel, LinkPid},
+    ok.
 
 notify_link_error({ReplyTo, Ref}, Peer, Channel)
   when is_pid(ReplyTo), is_reference(Ref) ->
-    ReplyTo ! {link_error, Ref, Peer, Channel};
+    ReplyTo ! {link_error, Ref, Peer, Channel},
+    ok;
 notify_link_error(ReplyTo, Peer, Channel) when is_pid(ReplyTo) ->
-    ReplyTo ! {link_error, Peer, Channel}.
+    ReplyTo ! {link_error, Peer, Channel},
+    ok.
 
 maybe_learn_remote(learn, {Pubkey, Addr}) when is_binary(Pubkey) ->
     _ = quod_quic:learn(Pubkey, Addr),

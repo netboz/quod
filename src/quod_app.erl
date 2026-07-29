@@ -144,9 +144,10 @@ content_data_dir(Cfg) ->
         []        -> filename:join(filename:basedir(user_cache, "quod"), "data")
     end.
 
-%% Build the one explicit directory configuration. System publication uses
-%% exact namespace/key allowlists; private routes are namespace-scoped local
-%% seeds. There is deliberately no fallback to content/Brahms contacts.
+%% Build the operator-controlled directory configuration. System publication
+%% uses exact namespace/key allowlists; private routes are namespace-scoped
+%% local seeds. Root-derived control-peer discovery has no static endpoint
+%% configuration.
 apply_directory(Cfg) ->
     Raw = maps:get(directory, Cfg, #{}),
     AllowEntries = maps:get(allowlist, Raw, []),
@@ -158,9 +159,6 @@ apply_directory(Cfg) ->
       directory_direct_namespace,
       [maps:get(namespace, Entry) || Entry <- DirectEntries]),
     Allowlist = directory_allowlist(AllowEntries),
-    Bootstraps = required_endpoints(
-                   directory_bootstraps,
-                   maps:get(bootstraps, Raw, [])),
     DirectSeeds =
         maps:from_list(
           [{maps:get(namespace, Entry),
@@ -171,7 +169,6 @@ apply_directory(Cfg) ->
     application:set_env(
       quod, directory,
       #{allowlist => Allowlist,
-        bootstraps => Bootstraps,
         direct_seeds => DirectSeeds,
         identity_dir => identity_dir(Cfg)}),
     ok.

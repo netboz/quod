@@ -30,81 +30,166 @@ direct_ingress_binds_author_and_endpoint_test() ->
 
 relay_and_resync_reverify_original_signature_test() ->
     {Pub, Signer} = signer(),
+    Relay = key(30),
     Ns = <<"quod:agent">>,
     Endpoint = {<<"node-b">>, 5002},
     with_control(
       #{allowlist => #{Ns => [Pub]}},
       fun() ->
-          {ok, Record1} = quod_directory_record:sign(
-                            Pub, Endpoint, [Ns], 3, 1, Signer),
-          ok = quod_directory_control:test_ingest(Record1, relay),
-          ?assertEqual(
-             [{Pub, <<"node-b">>, 5002}],
-             quod_directory:directory_hosts(Ns)),
-          timer:sleep(2),
-          {ok, Record2} = quod_directory_record:sign(
-                            Pub, Endpoint, [Ns], 3, 2, Signer),
-          ok = quod_directory_control:test_ingest(Record2, resync),
-          ?assertEqual(1, maps:get(records, quod_directory_control:stats()))
+          Link = link_sink(),
+          try
+              ok = quod_directory_control:test_set_control_peers([Relay]),
+              ok = quod_directory_control:test_set_control_link(
+                     Relay, {<<"relay">>, 5030}, Link),
+              {ok, Record1} = quod_directory_record:sign(
+                                Pub, Endpoint, [Ns], 3, 1, Signer),
+              ok = quod_directory_control:test_ingest(
+                     Record1, {relay, Relay}),
+              ?assertEqual(
+                 [{Pub, <<"node-b">>, 5002}],
+                 quod_directory:directory_hosts(Ns)),
+              timer:sleep(2),
+              {ok, Record2} = quod_directory_record:sign(
+                                Pub, Endpoint, [Ns], 3, 2, Signer),
+              ok = quod_directory_control:test_ingest(
+                     Record2, {resync, Relay, Link}),
+              ?assertEqual(
+                 1, maps:get(
+                      records, quod_directory_control:stats()))
+          after
+              exit(Link, kill)
+          end
       end).
 
 tampered_record_is_rejected_for_every_ingress_kind_test() ->
     lists:foreach(
       fun(SourceKind) ->
           {Pub, Signer} = signer(),
+          Relay = key(31),
           Ns = <<"quod:root">>,
           Endpoint = {<<"node-c">>, 5003},
           with_control(
             #{allowlist => #{Ns => [Pub]}},
             fun() ->
-                {ok, Record} = quod_directory_record:sign(
-                                 Pub, Endpoint, [Ns], 5, 1, Signer),
-                Tampered = flip_last_byte(Record),
-                Source = case SourceKind of
-                             direct -> {direct, Pub, Endpoint};
-                             relay -> relay;
-                             resync -> resync
-                         end,
-                ?assertMatch(
-                   {error, _},
-                   quod_directory_control:test_ingest(Tampered, Source)),
-                ?assertEqual([], quod_directory:directory_hosts(Ns)),
-                ?assertEqual(
-                   #{routes => 0, highwater => 0, known => 0},
-                   quod_directory:stats())
+                Link = link_sink(),
+                try
+                    ok = quod_directory_control:test_set_control_peers(
+                           [Relay]),
+                    ok = quod_directory_control:test_set_control_link(
+                           Relay, {<<"relay">>, 5031}, Link),
+                    {ok, Record} = quod_directory_record:sign(
+                                     Pub, Endpoint, [Ns], 5, 1, Signer),
+                    Tampered = tamper_signature(Record),
+                    Source = case SourceKind of
+                                 direct -> {direct, Pub, Endpoint};
+                                 relay -> {relay, Relay};
+                                 resync -> {resync, Relay, Link}
+                             end,
+                    ?assertEqual(
+                       {error, bad_signature},
+                       quod_directory_control:test_ingest(
+                         Tampered, Source)),
+                    ?assertEqual([], quod_directory:directory_hosts(Ns)),
+                    ?assertEqual(
+                       #{routes => 0, highwater => 0, known => 0},
+                       quod_directory:stats())
+                after
+                    exit(Link, kill)
+                end
             end)
       end,
       [direct, relay, resync]).
 
+relay_fanout_skips_author_and_immediate_source_test() ->
+    {Author, Signer} = signer(),
+    SelfKey = key(33),
+    Relay = key(34),
+    Other = key(35),
+    Ns = <<"quod:fanout">>,
+    Endpoint = {<<"author">>, 5033},
+    SavedEnv = save_env([node_pubkey]),
+    try
+        application:set_env(quod, node_pubkey, SelfKey),
+        with_control(
+          #{allowlist => #{Ns => [Author]}},
+          fun() ->
+              Control = quod_reg:where({directory, control}),
+              Channel = quod_directory_control:channel(),
+              AuthorLink = link_probe(self()),
+              RelayLink = link_probe(self()),
+              OtherLink = link_probe(self()),
+              try
+                  ok = quod_directory_control:test_set_control_peers(
+                         [SelfKey, Author, Relay, Other]),
+                  ok = quod_directory_control:test_set_control_link(
+                         Author, Endpoint, AuthorLink),
+                  ok = quod_directory_control:test_set_control_link(
+                         Relay, {<<"relay">>, 5034}, RelayLink),
+                  ok = quod_directory_control:test_set_control_link(
+                         Other, {<<"other">>, 5035}, OtherLink),
+                  {ok, Record} = quod_directory_record:sign(
+                                   Author, Endpoint, [Ns], 1, 1, Signer),
+                  Announce = term_to_binary(
+                               {quod_directory_announce, Record},
+                               [deterministic]),
+                  Control !
+                      {quod_message, {Relay, RelayLink},
+                       Channel, Announce},
+                  _ = sys:get_state(Control),
+                  ?assertEqual(
+                     [{Author, <<"author">>, 5033}],
+                     quod_directory:directory_hosts(Ns)),
+                  ?assertEqual(
+                     ok, wait_for_announce(OtherLink, Record, 100)),
+                  assert_no_announce(AuthorLink),
+                  assert_no_announce(RelayLink)
+              after
+                  exit(AuthorLink, kill),
+                  exit(RelayLink, kill),
+                  exit(OtherLink, kill)
+              end
+          end)
+    after
+        restore_env(SavedEnv)
+    end.
+
 mixed_authorization_is_rejected_after_valid_signature_test() ->
     {Pub, Signer} = signer(),
+    Relay = key(32),
     A = <<"quod:a">>,
     B = <<"quod:b">>,
     with_control(
       #{allowlist => #{A => [Pub]}},
       fun() ->
+          ok = quod_directory_control:test_set_control_peers([Relay]),
           {ok, Record} = quod_directory_record:sign(
                            Pub, {<<"node-d">>, 5004}, [A, B],
                            1, 1, Signer),
           ?assertEqual(
              {error, not_allowed},
-             quod_directory_control:test_ingest(Record, relay)),
+             quod_directory_control:test_ingest(
+               Record, {relay, Relay})),
           ?assertEqual([], quod_directory:directory_hosts(A)),
           ?assertEqual(unknown, quod_directory:resolve(A))
       end).
 
 public_reader_cannot_relay_or_push_captured_snapshot_test() ->
     {Author, Signer} = signer(),
-    Relay = key(41),
+    AllowlistedNonControl = key(41),
     Reader = key(42),
+    ControlKey = key(43),
     Ns = <<"quod:published">>,
     RelayNs = <<"quod:relay">>,
     Endpoint = {<<"author">>, 5041},
     with_control(
-      #{allowlist => #{Ns => [Author], RelayNs => [Relay]}},
+      #{allowlist =>
+            #{Ns => [Author],
+              RelayNs => [AllowlistedNonControl]}},
       fun() ->
           Control = quod_reg:where({directory, control}),
           Channel = quod_directory_control:channel(),
+          ok = quod_directory_control:test_set_control_peers(
+                 [ControlKey]),
           {ok, Record} = quod_directory_record:sign(
                            Author, Endpoint, [Ns], 1, 1, Signer),
           Announce = term_to_binary(
@@ -115,7 +200,7 @@ public_reader_cannot_relay_or_push_captured_snapshot_test() ->
                        [deterministic]),
 
           %% A public reader is authenticated enough to request a snapshot,
-          %% but is neither a bootstrap nor an allowlisted relay.
+          %% but has neither direct-author nor root-relay authority.
           Control !
               {quod_message,
                {{Reader, {<<"reader">>, 5042}}, self()},
@@ -135,16 +220,345 @@ public_reader_cannot_relay_or_push_captured_snapshot_test() ->
           ?assertEqual(
              0, maps:get(records, quod_directory_control:stats())),
 
-          %% An allowlisted system host may relay the same immutable signed
-          %% record; the receiver still verifies the author and namespace.
+          %% Merely being allowlisted for another namespace does not grant
+          %% relay authority for a third-party record.
           Control !
               {quod_message,
-               {{Relay, {<<"relay">>, 5043}}, self()},
+               {{AllowlistedNonControl,
+                 {<<"non-control">>, 5043}}, self()},
+               Channel, Announce},
+          _ = sys:get_state(Control),
+          ?assertEqual([], quod_directory:directory_hosts(Ns)),
+
+          %% The exact same signed bytes are accepted from a current committed
+          %% root control key.
+          Control !
+              {quod_message,
+               {{ControlKey, {<<"control">>, 5044}}, self()},
                Channel, Announce},
           _ = sys:get_state(Control),
           ?assertEqual(
              [{Author, <<"author">>, 5041}],
              quod_directory:directory_hosts(Ns))
+      end).
+
+root_peer_proof_result_validation_test() ->
+    Peer = key(50),
+    ?assertEqual(
+       {ok, 7, #{Peer => true}},
+       quod_directory_control:test_validate_peer_proof(
+         {ok, [#{'DirectoryControlKeys' => [Peer]}], 7})),
+    ?assertEqual(
+       {ok, 8, #{}},
+       quod_directory_control:test_validate_peer_proof(
+         {ok, [#{'DirectoryControlKeys' => []}], 8})),
+    ?assertEqual(
+       {error, malformed_peer_keys},
+       quod_directory_control:test_validate_peer_proof(
+         {ok, [#{'DirectoryControlKeys' => [<<1>>, Peer]}], 9})),
+    ?assertEqual(
+       {error, malformed_peer_keys},
+       quod_directory_control:test_validate_peer_proof(
+         {ok, [#{'DirectoryControlKeys' => [Peer, Peer]}], 9})),
+    ?assertEqual(
+       {error, rebuilding},
+       quod_directory_control:test_validate_peer_proof(
+         {error, rebuilding})),
+    ?assertEqual(
+       {error, fail},
+       quod_directory_control:test_validate_peer_proof(fail)).
+
+successful_empty_replaces_failed_proof_retains_test() ->
+    Peer = key(51),
+    Endpoint = {<<"root-peer">>, 6051},
+    with_control(
+      #{},
+      fun() ->
+          Link = link_probe(self()),
+          try
+              ok = quod_directory_control:test_set_control_peers(
+                     [Peer]),
+              ok = quod_directory_control:test_set_control_link(
+                     Peer, Endpoint, Link),
+              ok = quod_directory_control:test_set_pending_link(
+                     Peer, Endpoint, make_ref()),
+              ok = quod_directory_control:test_apply_peer_result(
+                     {error, rebuilding}),
+              Failed =
+                  quod_directory_control:test_control_state(),
+              ?assertEqual(
+                 #{Peer => true},
+                 maps:get(control_peers, Failed)),
+              ?assert(
+                 maps:is_key(
+                   Peer, maps:get(control_links, Failed))),
+              ?assert(
+                 maps:is_key(
+                   Peer, maps:get(pending_links, Failed))),
+              ?assertEqual(
+                 {error, rebuilding},
+                 maps:get(peer_status, Failed)),
+              ?assertEqual(
+                 ok, assert_no_link_close(Link)),
+
+              ok = quod_directory_control:test_apply_peer_result(
+                     {ok, 19, #{}}),
+              Empty =
+                  quod_directory_control:test_control_state(),
+              ?assertEqual(
+                 #{}, maps:get(control_peers, Empty)),
+              ?assertEqual(
+                 #{}, maps:get(control_links, Empty)),
+              ?assertEqual(
+                 #{}, maps:get(pending_links, Empty)),
+              ?assertEqual(
+                 19, maps:get(peer_height, Empty)),
+              ?assertEqual(ok, maps:get(peer_status, Empty)),
+              ?assertEqual(ok, wait_for_link_close(Link, 100))
+          after
+              exit(Link, kill)
+          end
+      end).
+
+root_proof_worker_does_not_block_control_mailbox_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Parent = self(),
+    Blocker =
+        spawn(
+          fun() ->
+              true = quod_reg:reg(
+                       {quod_prolog, <<"quod:root">>}),
+              Parent ! root_blocker_ready,
+              receive stop -> ok end
+          end),
+    receive root_blocker_ready -> ok end,
+    try
+        with_control(
+          #{},
+          fun() ->
+              ?assertEqual(
+                 ok,
+                 wait_until(
+                   fun() ->
+                       maps:get(
+                         root_proof_status,
+                         quod_directory_control:stats())
+                           =:= querying
+                   end, 100)),
+              {Micros, Stats} = timer:tc(
+                                  quod_directory_control,
+                                  stats, []),
+              ?assert(is_map(Stats)),
+              ?assert(Micros < 250000)
+          end)
+    after
+        Blocker ! stop
+    end.
+
+snapshot_and_down_require_the_exact_current_link_test() ->
+    {Author, Signer} = signer(),
+    ControlKey = key(52),
+    OtherKey = key(53),
+    Ns = <<"quod:exact-link">>,
+    Endpoint = {<<"exact-author">>, 5052},
+    with_control(
+      #{allowlist => #{Ns => [Author]}},
+      fun() ->
+          Control = quod_reg:where({directory, control}),
+          Channel = quod_directory_control:channel(),
+          OldLink = link_probe(self()),
+          CurrentLink = link_probe(self()),
+          OtherLink = link_sink(),
+          try
+              ok = quod_directory_control:test_set_control_peers(
+                     [ControlKey]),
+              ok = quod_directory_control:test_set_control_link(
+                     ControlKey, {<<"old-control">>, 6052},
+                     OldLink),
+              OldState = quod_directory_control:test_control_state(),
+              {_OldEndpoint, OldLink, OldMonitor} =
+                  maps:get(
+                    ControlKey,
+                    maps:get(control_links, OldState)),
+              ok = quod_directory_control:test_install_control_link(
+                     ControlKey, {<<"current-control">>, 7052},
+                     CurrentLink),
+              CurrentState =
+                  quod_directory_control:test_control_state(),
+              CurrentEntry =
+                  {_CurrentEndpoint, CurrentLink, CurrentMonitor} =
+                  maps:get(
+                    ControlKey,
+                    maps:get(control_links, CurrentState)),
+              ?assertEqual(
+                 ok, wait_for_link_close(OldLink, 100)),
+              ?assertEqual(
+                 ok, wait_for_resync_cursor(
+                       CurrentLink, 0, 100)),
+              {ok, Record} = quod_directory_record:sign(
+                               Author, Endpoint, [Ns], 1, 1,
+                               Signer),
+              Snapshot = term_to_binary(
+                           {quod_directory_snapshot,
+                            [Record], 7},
+                           [deterministic]),
+
+              Control !
+                  {quod_message,
+                   {ControlKey, OldLink}, Channel, Snapshot},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 [], quod_directory:directory_hosts(Ns)),
+              Control !
+                  {quod_message,
+                   {OtherKey, OtherLink}, Channel, Snapshot},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 [], quod_directory:directory_hosts(Ns)),
+              Control !
+                  {quod_message,
+                   {ControlKey, CurrentLink}, Channel, Snapshot},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 [{Author, <<"exact-author">>, 5052}],
+                 quod_directory:directory_hosts(Ns)),
+              ?assertEqual(
+                 ok,
+                 wait_for_resync_cursor(CurrentLink, 7, 100)),
+
+              %% A retired link's stale DOWN cannot evict its replacement.
+              Control !
+                  {'DOWN', OldMonitor, process, OldLink, normal},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 CurrentEntry,
+                 maps:get(
+                   ControlKey,
+                   maps:get(
+                     control_links,
+                     quod_directory_control:test_control_state()))),
+              Control !
+                  {'DOWN', CurrentMonitor, process,
+                   CurrentLink, normal},
+              _ = sys:get_state(Control),
+              ?assertNot(
+                 maps:is_key(
+                   ControlKey,
+                   maps:get(
+                     control_links,
+                     quod_directory_control:test_control_state())))
+          after
+              exit(OldLink, kill),
+              exit(CurrentLink, kill),
+              exit(OtherLink, kill)
+          end
+      end).
+
+late_reused_link_and_dial_timeout_are_non_destructive_test() ->
+    ControlKey = key(54),
+    Endpoint = {<<"control">>, 7054},
+    with_control(
+      #{},
+      fun() ->
+          Control = quod_reg:where({directory, control}),
+          Channel = quod_directory_control:channel(),
+          Link = link_sink(),
+          try
+              ok = quod_directory_control:test_set_control_peers(
+                     [ControlKey]),
+              ok = quod_directory_control:test_set_control_link(
+                     ControlKey, Endpoint, Link),
+              Before = maps:get(
+                         ControlKey,
+                         maps:get(
+                           control_links,
+                           quod_directory_control:test_control_state())),
+              _ = quod_quic:ensure_cache(),
+              ok = quod_quic:learn(ControlKey, Endpoint),
+              CurrentOpenRef = make_ref(),
+              ok = quod_directory_control:test_set_pending_link(
+                     ControlKey, Endpoint, CurrentOpenRef),
+              Control !
+                  {link_up, make_ref(), ControlKey, Channel, Link},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 Before,
+                 maps:get(
+                   ControlKey,
+                   maps:get(
+                     control_links,
+                     quod_directory_control:test_control_state()))),
+              ?assert(is_process_alive(Link)),
+              ?assert(
+                 maps:is_key(
+                   ControlKey,
+                   maps:get(
+                     pending_links,
+                     quod_directory_control:test_control_state()))),
+              Control !
+                  {link_up, CurrentOpenRef,
+                   ControlKey, Channel, Link},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 Before,
+                 maps:get(
+                   ControlKey,
+                   maps:get(
+                     control_links,
+                     quod_directory_control:test_control_state()))),
+              ?assertEqual(
+                 #{},
+                 maps:get(
+                   pending_links,
+                   quod_directory_control:test_control_state())),
+              ?assert(is_process_alive(Link)),
+
+              OpenRef = make_ref(),
+              ok = quod_directory_control:test_set_pending_link(
+                     ControlKey, Endpoint, OpenRef),
+              Control !
+                  {directory_control_dial_timeout,
+                   ControlKey, Endpoint, make_ref()},
+              _ = sys:get_state(Control),
+              ?assert(
+                 maps:is_key(
+                   ControlKey,
+                   maps:get(
+                     pending_links,
+                     quod_directory_control:test_control_state()))),
+              Control !
+                  {directory_control_dial_timeout,
+                   ControlKey, Endpoint, OpenRef},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 #{},
+                 maps:get(
+                   pending_links,
+                   quod_directory_control:test_control_state())),
+              ErrorRef = make_ref(),
+              ok = quod_directory_control:test_set_pending_link(
+                     ControlKey, Endpoint, ErrorRef),
+              Control !
+                  {link_error, ErrorRef, key(99), Channel},
+              _ = sys:get_state(Control),
+              ?assert(
+                 maps:is_key(
+                   ControlKey,
+                   maps:get(
+                     pending_links,
+                     quod_directory_control:test_control_state()))),
+              Control !
+                  {link_error, ErrorRef, ControlKey, Channel},
+              _ = sys:get_state(Control),
+              ?assertEqual(
+                 #{},
+                 maps:get(
+                   pending_links,
+                   quod_directory_control:test_control_state())),
+              ?assert(is_process_alive(Link))
+          after
+              exit(Link, kill)
+          end
       end).
 
 directory_owner_restart_requires_fresh_peer_lease_test() ->
@@ -160,7 +574,9 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
         {ok, Record} = quod_directory_record:sign(
                          Pub, {<<"node-e">>, 5005}, [Ns],
                          1, 1, Signer),
-        ok = quod_directory_control:test_ingest(Record, relay),
+        ok = quod_directory_control:test_ingest(
+               Record,
+               {direct, Pub, {<<"node-e">>, 5005}}),
         ?assertEqual(
            [{Pub, <<"node-e">>, 5005}],
            quod_directory:directory_hosts(Ns)),
@@ -176,7 +592,9 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
         {ok, Renewal} = quod_directory_record:sign(
                           Pub, {<<"node-e">>, 5005}, [Ns],
                           1, 2, Signer),
-        ok = quod_directory_control:test_ingest(Renewal, relay),
+        ok = quod_directory_control:test_ingest(
+               Renewal,
+               {direct, Pub, {<<"node-e">>, 5005}}),
         ?assertEqual(
            ok,
            wait_until(
@@ -201,7 +619,9 @@ retained_peer_record_expires_for_resync_test() ->
           {ok, Record} = quod_directory_record:sign(
                            Pub, {<<"short-lived">>, 5007}, [Ns],
                            1, 1, Signer),
-          ok = quod_directory_control:test_ingest(Record, relay),
+          ok = quod_directory_control:test_ingest(
+                 Record,
+                 {direct, Pub, {<<"short-lived">>, 5007}}),
           ?assertEqual(
              1, maps:get(records, quod_directory_control:stats())),
           timer:sleep(30),
@@ -366,6 +786,97 @@ flip_last_byte(Binary) ->
     PrefixSize = byte_size(Binary) - 1,
     <<Prefix:PrefixSize/binary, Last>> = Binary,
     <<Prefix/binary, (Last bxor 1)>>.
+
+tamper_signature(Record) ->
+    {quod_directory_record, 1, Body, Signature} =
+        binary_to_term(Record, [safe]),
+    term_to_binary(
+      {quod_directory_record, 1, Body,
+       flip_last_byte(Signature)},
+      [deterministic]).
+
+link_sink() ->
+    spawn(fun link_sink_loop/0).
+
+link_sink_loop() ->
+    receive
+        _Message -> link_sink_loop()
+    end.
+
+link_probe(Parent) ->
+    spawn(fun() -> link_probe_loop(Parent) end).
+
+link_probe_loop(Parent) ->
+    receive
+        Message ->
+            Parent ! {link_probe, self(), Message},
+            link_probe_loop(Parent)
+    end.
+
+wait_for_resync_cursor(_Link, _Cursor, 0) ->
+    timeout;
+wait_for_resync_cursor(Link, Cursor, Retries) ->
+    receive
+        {link_probe, Link, {send, Payload}} ->
+            case quod_directory_control:decode_control(Payload) of
+                {resync_request, Cursor} ->
+                    ok;
+                _ ->
+                    wait_for_resync_cursor(
+                      Link, Cursor, Retries - 1)
+            end
+    after 10 ->
+        wait_for_resync_cursor(Link, Cursor, Retries - 1)
+    end.
+
+wait_for_announce(_Link, _Record, 0) ->
+    timeout;
+wait_for_announce(Link, Record, Retries) ->
+    receive
+        {link_probe, Link, {send, Payload}} ->
+            case quod_directory_control:decode_control(Payload) of
+                {announce, Record} ->
+                    ok;
+                _ ->
+                    wait_for_announce(
+                      Link, Record, Retries - 1)
+            end
+    after 10 ->
+        wait_for_announce(Link, Record, Retries - 1)
+    end.
+
+assert_no_announce(Link) ->
+    receive
+        {link_probe, Link, {send, Payload}} ->
+            case quod_directory_control:decode_control(Payload) of
+                {announce, _Record} ->
+                    erlang:error(unexpected_announcement_echo);
+                _ ->
+                    assert_no_announce(Link)
+            end
+    after 30 ->
+        ok
+    end.
+
+wait_for_link_close(_Link, 0) ->
+    timeout;
+wait_for_link_close(Link, Retries) ->
+    receive
+        {link_probe, Link, close} ->
+            ok;
+        {link_probe, Link, _Other} ->
+            wait_for_link_close(Link, Retries - 1)
+    after 10 ->
+        wait_for_link_close(Link, Retries - 1)
+    end.
+
+assert_no_link_close(Link) ->
+    receive
+        {link_probe, Link, close} ->
+            erlang:error(link_closed_on_failed_proof)
+    after 30 ->
+        ok
+    end.
 
 wait_until(_Fun, 0) ->
     timeout;

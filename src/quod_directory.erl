@@ -24,7 +24,7 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 -include("quod_directory_limits.hrl").
 
 -export([start_link/0, start_link/1]).
--export([resolve/1, directory_hosts/1, system_routes/0,
+-export([resolve/1, directory_hosts/1,
          add_direct_seed/2, confirm_direct_seed/3,
          install_record/5, expire/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -111,20 +111,6 @@ directory_hosts(Ns) when is_binary(Ns) ->
     end;
 directory_hosts(_) ->
     [].
-
--doc "All active system routes, deduplicated by node key and endpoint.".
--spec system_routes() -> [{binary(), term()}].
-system_routes() ->
-    try
-        Now = quod_time:mono_ms(),
-        lists:usort(
-          [{NodeKey, Endpoint}
-           || {_Ns, system, _RouteKey, NodeKey, Endpoint, confirmed,
-               Expiry, _Epoch, _Sequence} <- ets:tab2list(?ROUTES),
-              Expiry > Now])
-    catch
-        error:badarg -> []
-    end.
 
 -spec add_direct_seed(binary(), term()) -> ok | {error, term()}.
 add_direct_seed(Ns, Endpoint) ->

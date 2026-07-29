@@ -317,6 +317,14 @@ The first slice has two explicit route sources:
 - root-authorised system hosts publish signed, expiring advertisements;
 - private ontologies are reached through local direct seeds and are never published.
 
+Directory-control peers are not configured as static addresses. The
+root-context-only external predicate
+`directory_control_peer(?NodeKey)` projects their identities from committed
+`quod:root` `peer_admitted/4` facts. The control process resolves those keys
+through the transport's live address observations and opens key-pinned links
+for announcement, fanout and resync. This local root proof does not use
+`directory_host/4` or `::`, so discovery has no directory cycle.
+
 A node derives its public advertisement from system namespaces that are
 actually running locally. Namespace start/stop replaces the complete signed
 set; an empty set withdraws it. Periodic reconciliation repairs missed
@@ -360,14 +368,16 @@ of `perf-test.sh` and `loadtest.sh`.
 The Nomad job exposes an opt-in two-host demo topology. It is disabled by
 default and leaves quod:root unchanged. Before enabling it, obtain the
 selected existing allocations' persistent keys from their `/api/summary`
-(`.node.pubkey`) and configure the normal root allowlist plus a non-empty,
-stable `directory_bootstraps` list. Then set cross_ontology_enabled=true,
-distinct source/target allocation indexes, and those exact source/target
-keys. The directory uses that bootstrap list to disseminate the two new
-routes; without it, the script will correctly remain in preflight instead of
-silently measuring a local call. After the rolling deployment, pass the source
-allocation explorer endpoint to the script above. The two single-host demo
-ontologies are a directory/ask benchmark, not a second consensus benchmark.
+(`.node.pubkey`). Set `directory_node_keys` and the exact
+`cross_ontology_source_node_keys` / `cross_ontology_target_node_keys`
+allowlists, then enable `cross_ontology_enabled` with distinct source and
+target allocation indexes. The existing root ledger supplies the control peer
+keys through `directory_control_peer/1`; live authenticated root traffic
+supplies their current endpoints, and pinned control links disseminate the two
+new routes. There is no `directory_bootstraps` option or compatibility
+fallback. After the rolling deployment, pass the source allocation explorer
+endpoint to the script above. The two single-host demo ontologies are a
+directory/ask benchmark, not a second consensus benchmark.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 

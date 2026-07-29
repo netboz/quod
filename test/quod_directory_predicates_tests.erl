@@ -3,10 +3,48 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
-directory_host_enumerates_live_system_routes_test() ->
-    Ns = <<"quod:agent">>,
+directory_control_peer_is_registered_root_snapshot_query_test() ->
     K1 = key(1),
     K2 = key(2),
+    BadShort = <<3>>,
+    Facts = [peer_fact(K2, <<"old-b">>, 3002),
+             peer_fact(K1, <<"old-a">>, 3001),
+             peer_fact(K1, <<"duplicate-address">>, 3999),
+             peer_fact(BadShort, <<"malformed">>, 3003)],
+    ?assertEqual(
+       query, quod_predicates:class({directory_control_peer, 1})),
+    Erl0 = proof_erlog(<<"quod:root">>, Facts),
+    Goal = {directory_control_peer, {'Key'}},
+    {{succeed, First}, Erl1} = erlog:prove(Goal, Erl0),
+    {{succeed, Second}, Erl2} = erlog:next_solution(Erl1),
+    {fail, _} = erlog:next_solution(Erl2),
+    %% The real dispatcher reaches the handler; duplicate membership keys are
+    %% emitted once and malformed binary keys never enter the root API.
+    ?assertEqual([[{'Key', K1}], [{'Key', K2}]], [First, Second]),
+    {fail, _} = erlog:prove(
+                  {directory_control_peer, BadShort}, Erl0),
+    %% The execution namespace, not the caller process, is the boundary.
+    {fail, _} = erlog:prove(
+                  Goal, proof_erlog(<<"private:body">>, Facts)).
+
+directory_control_peer_tracks_membership_snapshots_test() ->
+    K1 = key(11),
+    K2 = key(12),
+    ?assertEqual(
+       [K1],
+       control_keys([peer_fact(K1, <<"first-address">>, 4011)])),
+    ?assertEqual(
+       [K1, K2],
+       control_keys([peer_fact(K1, <<"changed-address">>, 4999),
+                     peer_fact(K2, <<"second">>, 4012)])),
+    ?assertEqual(
+       [K2],
+       control_keys([peer_fact(K2, <<"second">>, 4012)])).
+
+directory_host_enumerates_live_system_routes_test() ->
+    Ns = <<"quod:agent">>,
+    K1 = key(21),
+    K2 = key(22),
     {Goal, Erl0} = with_directory(
       #{allowlist => #{Ns => [K1, K2]}},
       fun(Pid) ->
@@ -66,13 +104,33 @@ private_seed_is_not_visible_to_predicate_test() ->
       end).
 
 proof_erlog(ContextNs) ->
+    proof_erlog(ContextNs, []).
+
+proof_erlog(ContextNs, Facts) ->
     {ok, Erl0} = erlog:new(erlog_db_dict, null),
     Est0 = element(3, Erl0),
     Est1 = quod_predicates:load(Est0),
-    Est2 = quod_predicates:set_context(
-             Est1,
+    Est2 =
+        lists:foldl(
+          fun(Fact, Est) ->
+              {succeed, Est1a} =
+                  erlog_int:prove_goal({assertz, Fact}, Est),
+              Est1a
+          end, Est1, Facts),
+    Est3 = quod_predicates:set_context(
+             Est2,
              quod_predicates:proof_context(ContextNs, 0, undefined)),
-    setelement(3, Erl0, Est2).
+    setelement(3, Erl0, Est3).
+
+control_keys(Facts) ->
+    Goal = {findall, {'Key'},
+            {directory_control_peer, {'Key'}}, {'Keys'}},
+    {{succeed, Bindings}, _} =
+        erlog:prove(Goal, proof_erlog(<<"quod:root">>, Facts)),
+    proplists:get_value('Keys', Bindings).
+
+peer_fact(Key, Host, Port) ->
+    {peer_admitted, Key, Host, Port, Key}.
 
 with_directory(Opts, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),

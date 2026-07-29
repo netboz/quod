@@ -65,8 +65,7 @@ fields(identity) ->
     [ {dir, hoconsc:mk(binary(), #{default => <<"">>})}
     ];
 fields(directory) ->
-    [ {bootstraps, hoconsc:mk(hoconsc:array(binary()), #{default => []})}
-    , {allowlist,
+    [ {allowlist,
        hoconsc:mk(
          hoconsc:array(hoconsc:ref(?MODULE, directory_allow)),
          #{default => []})}

@@ -267,7 +267,7 @@ open_remote_routes(Target, GoalTerm, Chain, [Route | Rest]) ->
 
 open_route(#{scope := direct, status := provisional,
              namespace := Ns, endpoint := Endpoint}, Channel) ->
-    case open_link_seed(Endpoint, Channel) of
+    case open_link_private_seed(Endpoint, Channel) of
         {ok, LinkPid, NodeKey} ->
             {ok, LinkPid, NodeKey, {confirm_direct, Ns, Endpoint, NodeKey}};
         {error, _} = Error ->
@@ -292,8 +292,8 @@ open_link_pinned(NodeKey, Endpoint, Channel) ->
     after ?NEXT_TIMEOUT_MS -> {error, no_progress}
     end.
 
-open_link_seed(Endpoint, Channel) ->
-    Ref = quod_quic:open_link_seed(Endpoint, Channel),
+open_link_private_seed(Endpoint, Channel) ->
+    Ref = quod_quic:open_link_private_seed(Endpoint, Channel),
     receive
         {link_up, Ref, NodeKey, Channel, LinkPid}
           when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->

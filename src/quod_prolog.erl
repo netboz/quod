@@ -481,36 +481,43 @@ handle_info(Info, S) ->
     handle_response_info(Info, S).
 
 handle_remote_ask(Peer, PeerEndpoint, RequestLink, Payload,
-                  S = #s{ns = Ns, ready = Ready, ask_workers = AW, ask_ids = Ids,
-                         max_ask_workers = Max}) ->
+                  S) ->
     case quod_ask:decode_open(Payload) of
         error -> S;
         {ok, AskId, Goal, Chain, AnswerCh} ->
-            case maps:is_key(AskId, Ids) of
-                true -> S; %% duplicate request frame: the existing run owns this id
-                false when not Ready ->
-                    reject_remote(
-                      Peer, PeerEndpoint, AnswerCh, AskId, rebuilding, S);
-                false when map_size(AW) >= Max ->
-                    reject_remote(
-                      Peer, PeerEndpoint, AnswerCh, AskId, busy, S);
-                false when is_pid(RequestLink) ->
-                    Stream = quod_ask:start_answer_remote(Ns, S#s.est, S#s.applied,
-                                                          Goal, Chain, AskId, Peer,
-                                                          PeerEndpoint, AnswerCh,
-                                                          self()),
-                    WorkerMRef = monitor(process, Stream),
-                    RequestMRef = monitor(process, RequestLink),
-                    Worker = new_ask_worker(Stream, WorkerMRef, RequestMRef,
-                                            AskId, S#s.applied, S),
-                    AW1 = AW#{WorkerMRef => Worker},
-                    AC1 = (S#s.ask_callers)#{RequestMRef => WorkerMRef},
-                    AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
-                    AI1 = Ids#{AskId => WorkerMRef},
-                    S#s{ask_workers = AW1, ask_callers = AC1,
-                        ask_pids = AP1, ask_ids = AI1, proves = S#s.proves + 1};
-                false -> S
+            case AnswerCh =:= quod_ask:answer_channel(Peer) of
+                false -> S;
+                true -> handle_remote_ask_open(
+                          Peer, PeerEndpoint, RequestLink, AskId, Goal, Chain, AnswerCh,
+                          S)
             end
+    end.
+
+handle_remote_ask_open(Peer, PeerEndpoint, RequestLink, AskId, Goal, Chain, AnswerCh,
+                       S = #s{ns = Ns, ready = Ready, ask_workers = AW,
+                              ask_ids = Ids, max_ask_workers = Max}) ->
+    case maps:is_key(AskId, Ids) of
+        true -> S; %% duplicate request frame: the existing run owns this id
+        false when not Ready ->
+            reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, rebuilding, S);
+        false when map_size(AW) >= Max ->
+            reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, busy, S);
+        false when is_pid(RequestLink) ->
+            Stream = quod_ask:start_answer_remote(Ns, S#s.est, S#s.applied,
+                                                  Goal, Chain, AskId, Peer,
+                                                  PeerEndpoint, AnswerCh,
+                                                  self()),
+            WorkerMRef = monitor(process, Stream),
+            RequestMRef = monitor(process, RequestLink),
+            Worker = new_ask_worker(Stream, WorkerMRef, RequestMRef,
+                                    AskId, S#s.applied, S),
+            AW1 = AW#{WorkerMRef => Worker},
+            AC1 = (S#s.ask_callers)#{RequestMRef => WorkerMRef},
+            AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
+            AI1 = Ids#{AskId => WorkerMRef},
+            S#s{ask_workers = AW1, ask_callers = AC1,
+                ask_pids = AP1, ask_ids = AI1, proves = S#s.proves + 1};
+        false -> S
     end.
 
 reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, Reason,

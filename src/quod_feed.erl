@@ -48,6 +48,7 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
+-include("quod_transport_limits.hrl").
 
 -export([start_link/2, stats/1, peer_ready/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -58,7 +59,6 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -endif.
 
 -define(PUSH_FANOUT,     4).             %% eager-push targets per fresh block (best-effort; anti-entropy backstops)
--define(MAX_FRAME_BYTES, (1 bsl 20)).    %% drop an inbound frame ≥ 1 MiB before decode (matches quod_link)
 -define(INGEST_MS,       5000).          %% budget for ONE fast-path block's append+apply through quod_simplex
 -define(PULL_SINK_MS,    30000).         %% budget for a whole anti-entropy WINDOW (up to ?WINDOW entries;
                                          %% matches quod_simplex's ?SINK_MS for the identical sink)
@@ -208,7 +208,7 @@ terminate(_Reason, #s{ns = Ns, chan = Chan}) ->
 %%% inbound gossip: verify → ingest → relay (per-hop Byzantine check)
 %%%===================================================================
 
-inbound(_Peer, Payload, S) when byte_size(Payload) > ?MAX_FRAME_BYTES ->
+inbound(_Peer, Payload, S) when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
     drop(oversized, S);   %% drop oversized BEFORE decode — bound binary_to_term memory
 inbound(Peer, Payload, S) ->
     case decode(Payload, S#s.ns) of
@@ -475,7 +475,7 @@ finish_pull_replay(Ns) ->
 %% degraded) — then this is a no-op, exactly right for a solo/founder node.
 eager_push(#entry{} = Entry, S = #s{ns = Ns, chan = Chan}) ->
     Frame = encode(Ns, {block, Entry}),
-    case byte_size(Frame) =< ?MAX_FRAME_BYTES of
+    case byte_size(Frame) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
         false ->
             %% A block whose framed size exceeds quod_link's 1 MiB cap would EXIT the RECEIVER's link
             %% (not merely be dropped), so we never push it — the pull path (with chunking) carries an

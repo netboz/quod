@@ -137,9 +137,9 @@ guarded by an engine-owned no-progress timer. An independent absolute lifetime b
 worker and its MVCC snapshot even while answers keep flowing. It dies with its ask, engine,
 or either timeout.
 
-1. **Open.** The asking side allocates a fresh **ask id**, subscribes to its answer channel,
-   and sends the ask — target ontology, the goal, and the asking chain (§6) — on the
-   target ontology's fixed ask channel.
+1. **Open.** The asking side allocates a fresh **ask id**, registers it with its node-local
+   return router, and sends the ask — target ontology, the goal, and the asking chain (§6) —
+   on the target ontology's fixed ask channel.
 2. **Freeze.** The target takes its committed facts **as of that instant** as the run's view.
    The committed KB exists once in a versioned ETS store. A worker receives only the table id
    and height; predicate lookup resolves the newest version at or below that height. No whole KB
@@ -193,14 +193,17 @@ stream the peer opened, and a node only receives on channel names it subscribed.
   the ask id. Its control envelope is safe-decoded and malformed metadata is rejected at the
   boundary. Prolog terms use the bounded `quod_wire_term` codec; atom names cross as binaries
   and never allocate atoms in the receiving VM.
-- **Leg 2 (the answers):** the target opens its **own outbound link** named by that ask id —
-  which the asker subscribed before sending — and streams answers there.
+- **Leg 2 (the answers):** the target opens (or reuses) one authenticated outbound link to the
+  asking node's fixed return channel. Every answer still carries its ask id, and the asking
+  node's return router delivers it to that one proof worker. The channel is bound to the
+  request link's authenticated node key, so a caller cannot direct a reply to another node.
 
 Cancellation uses an ask-specific control frame on the shared request channel: the asker leaves
 that reusable channel open, while the target routes the cancel by ask id and kills the matching
-run's worker. The owner watcher sends the same frame if the asking proof worker dies. The target's
-answer link dying is already a monitored event on the asker. After **complete**, each side closes
-its per-ask leg; a finished ask leaves no per-ask worker, registration, or answer buffer behind.
+run's worker. The owner watcher sends the same frame if the asking proof worker dies. The return
+router monitors the shared answer link and fails its affected asks if it dies. After **complete**,
+the router removes that ask id; a finished ask leaves no per-ask worker, registration, or answer
+buffer behind.
 
 > **Technical notes.**
 > - **Backpressure is explicit for asks.** Managed ask links retry

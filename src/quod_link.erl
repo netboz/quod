@@ -30,6 +30,8 @@ it ACKs or publishes any coalesced payload bytes. This makes a link to a
 dead, unreachable, or wrongly authenticated peer fail to come up.
 """.
 
+-include("quod_transport_limits.hrl").
+
 -export([start_outbound/7, start_inbound/3, send/2, send_ordered/2,
          send_reliable/3, close/1]).
 
@@ -41,7 +43,6 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 -define(HEADER_TIMEOUT_MS, 5000).
 -define(ACK_TIMEOUT_MS, 5000).   %% opener waits this long for the peer's ACK before failing the link
 -define(ORDERED_SEND_TIMEOUT_MS, 250).
--define(MAX_FRAME_BYTES, (1 bsl 20)).
 
 -record(s, {conn, sid, channel, peer, buf = <<>>}).
 
@@ -350,7 +351,8 @@ frame(Payload) -> <<(byte_size(Payload)):32, Payload/binary>>.
 ack_frame() -> frame(<<>>).
 
 parse(Bin) -> parse(Bin, []).
-parse(<<PLen:32, _/binary>>, _Acc) when PLen > ?MAX_FRAME_BYTES -> {error, oversized};
+parse(<<PLen:32, _/binary>>, _Acc)
+  when PLen > ?QUOD_TRANSPORT_MAX_FRAME_BYTES -> {error, oversized};
 parse(<<PLen:32, Rest/binary>> = Bin, Acc) ->
     case Rest of
         <<Payload:PLen/binary, Tail/binary>> -> parse(Tail, [Payload | Acc]);

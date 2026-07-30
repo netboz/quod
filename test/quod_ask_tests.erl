@@ -49,6 +49,7 @@ ask_test_() ->
           ?_test(t_answer_worker_limit(Ctx)),
           ?_test(t_absolute_ask_lifetime(Ctx)),
           ?_test(t_frozen_stream_view(Ctx)),
+          ?_test(t_remote_return_router_multiplexes(Ctx)),
           ?_test(t_workers_are_reaped(Ctx))]
      end}.
 
@@ -57,6 +58,7 @@ setup() ->
     {Pub, Seed} = quod_identity:generate(),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(quod, identity_key, quod_identity:key_term({Pub, Seed})),
+    {ok, Router} = quod_ask_router:start_link(),
     Dir = filename:join("/tmp", "quod_ask_" ++
                        integer_to_list(erlang:unique_integer([positive]))),
     ok = filelib:ensure_dir(filename:join(Dir, "placeholder")),
@@ -81,11 +83,12 @@ setup() ->
     _ = prove_ready(P, {instance_of, pet, my_dog}),
     _ = prove_ready(Private, {secret, 42}),
     _ = prove_ready(Slow, {ping, ok}),
-    #{dir => Dir, namespaces => Namespaces, animals => A, pets => P,
+    #{dir => Dir, router => Router, namespaces => Namespaces, animals => A, pets => P,
       private => Private, slow => Slow}.
 
-cleanup(#{dir := Dir, namespaces := Namespaces}) ->
+cleanup(#{dir := Dir, router := Router, namespaces := Namespaces}) ->
     lists:foreach(fun stop_ns/1, Namespaces),
+    _ = catch gen_server:stop(Router),
     application:unset_env(quod, node_pubkey),
     application:unset_env(quod, identity_key),
     _ = file:del_dir_r(Dir),
@@ -263,6 +266,41 @@ t_frozen_stream_view(#{animals := A, pets := P}) ->
     receive {ask_solution, Stream, 2, {diet, dog, meat}} -> ok after 1000 -> ?assert(false) end,
     Stream ! {next, self()},
     receive {ask_complete, Stream, 3} -> ok after 1000 -> ?assert(false) end.
+
+%% Remote replies share one node-return channel.  Two independent ask ids on
+%% the same authenticated link must reach only their registered proof workers.
+t_remote_return_router_multiplexes(_Ctx) ->
+    {TargetKey, _} = quod_identity:generate(),
+    Ask1 = <<1:128>>,
+    Ask2 = <<2:128>>,
+    {ok, Channel} = quod_ask_router:register(Ask1, TargetKey),
+    {ok, Channel} = quod_ask_router:register(Ask2, TargetKey),
+    Bad = term_to_binary({quod_ask_answer, Ask1, 1, complete}, [deterministic]),
+    quod_reg:publish(
+      {channel, Channel},
+      {quod_message, {{<<0:256>>, {"127.0.0.1", 5000}}, self()}, Channel, Bad}),
+    receive
+        {quod_ask_answer, Ask1, _} -> ?assert(false)
+    after 20 -> ok
+    end,
+    Reply1 = term_to_binary({quod_ask_answer, Ask1, 1, complete}, [deterministic]),
+    Reply2 = term_to_binary({quod_ask_answer, Ask2, 1, complete}, [deterministic]),
+    quod_reg:publish(
+      {channel, Channel},
+      {quod_message, {{TargetKey, {"127.0.0.1", 5000}}, self()}, Channel, Reply1}),
+    quod_reg:publish(
+      {channel, Channel},
+      {quod_message, {{TargetKey, {"127.0.0.1", 5000}}, self()}, Channel, Reply2}),
+    receive
+        {quod_ask_answer, Ask1, {quod_ask_answer, Ask1, 1, complete}} -> ok
+    after 1000 -> ?assert(false)
+    end,
+    receive
+        {quod_ask_answer, Ask2, {quod_ask_answer, Ask2, 1, complete}} -> ok
+    after 1000 -> ?assert(false)
+    end,
+    ok = quod_ask_router:unregister(Ask1),
+    ok = quod_ask_router:unregister(Ask2).
 
 t_workers_are_reaped(#{namespaces := Namespaces}) ->
     lists:foreach(

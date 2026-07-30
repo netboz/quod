@@ -15,6 +15,7 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | `Key`                 | identifies                                  |
 | --------------------- | ------------------------------------------- |
 | `{transport, node}`   | the QUIC transport gen_server (singleton)   |
+| `{ask_router, node}`  | multiplexed remote-ask return router         |
 | `{sup, node}`         | the root supervisor                         |
 | `{directory, node}`   | the local route-directory owner             |
 | `{directory_control, node}` | directory dissemination/control    |

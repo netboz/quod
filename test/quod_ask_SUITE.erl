@@ -5,7 +5,8 @@
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([remote_stream/1, remote_symbol_safety/1, remote_peer_acl/1,
-         remote_cancel/1]).
+         remote_cancel/1, remote_return_stream_reuse/1]).
+-export([run_remote_proofs/3]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
@@ -13,7 +14,8 @@
 -define(ASKER_NS, <<"pets">>).
 -define(PRIVATE_NS, <<"private">>).
 
-all() -> [remote_stream, remote_symbol_safety, remote_peer_acl, remote_cancel].
+all() -> [remote_stream, remote_symbol_safety, remote_peer_acl, remote_cancel,
+          remote_return_stream_reuse].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
@@ -114,6 +116,44 @@ remote_cancel(Config) ->
     wait_ask_workers(Target, 1, 200),
     true = peer:call(Asker, erlang, exit, [Caller, kill]),
     wait_ask_workers(Target, 0, 200).
+
+%% A return stream belongs to the asking NODE, not one proof.  Two waves cross
+%% the old per-proof QUIC stream ceiling while each result remains attributable
+%% to its ask id through the return router.
+remote_return_stream_reuse(Config) ->
+    Target = ?config(target, Config),
+    Asker = ?config(asker, Config),
+    Goal = {'::', ?NS, {diet, dog, kibble}},
+    run_remote_wave(Asker, Goal, first),
+    wait_ask_workers(Target, 0, 200),
+    run_remote_wave(Asker, Goal, second),
+    wait_ask_workers(Target, 0, 200).
+
+run_remote_wave(Asker, Goal, Wave) ->
+    Results = peer:call(Asker, ?MODULE, run_remote_proofs, [?ASKER_NS, Goal, 64]),
+    case Results of
+        List when is_list(List), length(List) =:= 64 ->
+            lists:foreach(
+              fun({ok, [_], _}) -> ok;
+                 (Result) -> ct:fail({remote_proof_failed, Wave, Result})
+              end, List);
+        timeout -> ct:fail({remote_proof_timeout, Wave});
+        Other -> ct:fail({remote_proof_wave_failed, Wave, Other})
+    end.
+
+run_remote_proofs(Ns, Goal, Count) ->
+    Parent = self(),
+    _ = [spawn(fun() -> Parent ! {proof_done, quod_prolog:prove(Ns, Goal, Ns)} end)
+         || _ <- lists:seq(1, Count)],
+    collect_remote_proofs(Count, []).
+
+collect_remote_proofs(0, Results) -> lists:reverse(Results);
+collect_remote_proofs(Count, Results) ->
+    receive
+        {proof_done, Result} -> collect_remote_proofs(Count - 1, [Result | Results])
+    after 10000 ->
+        timeout
+    end.
 
 start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
            DirectoryAllowlist, Config) ->

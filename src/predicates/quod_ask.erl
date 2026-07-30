@@ -23,22 +23,23 @@ a silent failure.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
+-include("quod_transport_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3, follow_clear_2/3,
          start_answer/7, start_answer_remote/10,
          subscribe/1, ask_channel/1, decode_open/1, decode_next/1, decode_cancel/1,
-         reject_remote/5]).
+         reject_remote/5, answer_channel/1]).
 
 %% The ask-chain depth cap and the per-`next` no-progress budget (doc/inter-ontology.md §9).
 -define(MAX_CHAIN, 8).
 -define(NEXT_TIMEOUT_MS, 30000).
 -define(MAX_ANSWERS, 10000).
--define(MAX_ANSWER_BYTES, 1048576).
 -define(MAX_OPEN_RETRIES, 300).
 -define(OPEN_RETRY_MS, 100).
 
 -define(ASK_CHANNEL_TAG, quod_ask).
 -define(ANSWER_CHANNEL_TAG, quod_ask_answer).
+-define(MAX_ANSWER_CHANNEL_BYTES, 128).
 
 -doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
 -spec load(tuple()) -> tuple().
@@ -240,29 +241,38 @@ open_remote_routes(Target, _GoalTerm, _Chain, []) ->
 open_remote_routes(Target, GoalTerm, Chain, [Route | Rest]) ->
     AskId = crypto:strong_rand_bytes(16),
     AskCh = ask_channel(Target),
-    AnswerCh = answer_channel(AskId),
-    _ = quod_reg:subscribe({channel, AnswerCh}),
     case open_route(Route, AskCh) of
         {ok, AskLink, ExpectedKey, Confirmation} ->
+            open_remote_route(Target, GoalTerm, Chain, Rest, AskId, AskLink,
+                              AskCh, ExpectedKey, Confirmation);
+        {error, _} ->
+            open_remote_routes(Target, GoalTerm, Chain, Rest)
+    end.
+
+open_remote_route(Target, GoalTerm, Chain, Rest, AskId, AskLink, AskCh,
+                  ExpectedKey, Confirmation) ->
+    case quod_ask_router:register(AskId, ExpectedKey) of
+        {ok, AnswerCh} ->
             {ok, WireGoal} = quod_wire_term:encode(wire_term(GoalTerm)),
             Payload = term_to_binary(
                         {quod_ask_open, AskId, WireGoal, Chain, AnswerCh},
                         [deterministic]),
+            %% Start the owner guard before the remote open.  If this proof dies
+            %% at any point after registration, it cancels a target worker that
+            %% may already have accepted the frame; an early cancel is harmless.
+            Guard = watch_owner(self(), AskLink, AskId),
             case quod_link:send_reliable(
                    AskLink, Payload, ?NEXT_TIMEOUT_MS) of
                 ok ->
-                    Guard = watch_owner(self(), AskLink, AskId),
-                    {ok, {remote_stream, AskId, AskLink, AskCh, AnswerCh,
-                          undefined, undefined, 1, Guard,
+                    {ok, {remote_stream, AskId, AskLink, AskCh, 1, Guard,
                           ExpectedKey, Confirmation}};
                 {error, _} ->
-                    quod_link:close(AskLink),
-                    _ = unsubscribe(AnswerCh),
+                    stop_owner(Guard),
+                    ok = quod_ask_router:unregister(AskId),
                     open_remote_routes(Target, GoalTerm, Chain, Rest)
             end;
-        {error, _} ->
-            _ = unsubscribe(AnswerCh),
-            open_remote_routes(Target, GoalTerm, Chain, Rest)
+        {error, unavailable} ->
+            {error, no_progress}
     end.
 
 open_route(#{scope := direct, status := provisional,
@@ -306,14 +316,16 @@ open_link_identified(Endpoint, Channel) ->
 subscribe(Ns) -> quod_reg:subscribe({channel, ask_channel(Ns)}).
 
 ask_channel(Ns) -> term_to_binary({?ASK_CHANNEL_TAG, Ns}, [deterministic]).
-answer_channel(AskId) -> term_to_binary({?ANSWER_CHANNEL_TAG, AskId}, [deterministic]).
+answer_channel(NodeKey) when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
+    term_to_binary({?ANSWER_CHANNEL_TAG, NodeKey}, [deterministic]).
 
 decode_open(Payload) when is_binary(Payload) ->
     try safe_binary_to_term(Payload) of
         {quod_ask_open, AskId, WireGoal, Chain, AnswerCh}
           when is_binary(AskId), byte_size(AskId) =:= 16,
-               is_binary(AnswerCh), is_list(Chain) ->
-            case {AnswerCh =:= answer_channel(AskId) andalso valid_chain(Chain),
+               is_binary(AnswerCh), byte_size(AnswerCh) =< ?MAX_ANSWER_CHANNEL_BYTES,
+               is_list(Chain) ->
+            case {valid_chain(Chain),
                   quod_wire_term:decode_goal(WireGoal)} of
                 {true, {ok, Goal}} -> {ok, AskId, Goal, Chain, AnswerCh};
                 _ -> error
@@ -368,30 +380,19 @@ next({ask_stream, _Engine, Pid, MRef, Expected} = Stream) ->
         {error, no_progress}
     end;
 
-next(Stream = {remote_stream, AskId, AskLink, AskCh, AnswerCh,
-               AnswerLink, AnswerMRef, Expected, Guard,
+next(Stream = {remote_stream, AskId, AskLink, AskCh, Expected, Guard,
                ExpectedKey, Confirmation}) ->
     NextPayload = term_to_binary({quod_ask_next, AskId}),
     case quod_link:send_reliable(AskLink, NextPayload, ?NEXT_TIMEOUT_MS) of
         ok ->
             receive
-                {quod_message, {PeerIdentity, LinkPid}, AnswerCh, Payload} ->
-                    case answer_peer_key(PeerIdentity) =:= ExpectedKey of
-                        false ->
-                            close_stream(Stream),
-                            {error, broken_stream};
-                        true ->
-                          case remote_answer(Payload, AskId, Expected) of
+                {quod_ask_answer, AskId, Reply} ->
+                    case remote_answer(Reply, AskId, Expected) of
                         {solution, Sol} ->
                             confirm_route(Confirmation),
-                            case answer_link(LinkPid, AnswerLink, AnswerMRef) of
-                                {ok, LinkPid, _OldLink, MRef} ->
-                                    {solution, Sol,
-                                     {remote_stream, AskId, AskLink, AskCh, AnswerCh,
-                                      LinkPid, MRef, Expected + 1, Guard,
-                                      ExpectedKey, none}};
-                                error -> close_stream(Stream), {error, broken_stream}
-                            end;
+                            {solution, Sol,
+                             {remote_stream, AskId, AskLink, AskCh,
+                              Expected + 1, Guard, ExpectedKey, none}};
                         complete ->
                             confirm_route(Confirmation),
                             close_stream(Stream), complete;
@@ -399,10 +400,8 @@ next(Stream = {remote_stream, AskId, AskLink, AskCh, AnswerCh,
                             confirm_route(Confirmation),
                             close_stream(Stream), {error, Reason};
                         error -> close_stream(Stream), {error, broken_stream}
-                          end
                     end;
-                {'DOWN', AnswerMRef, process, _LinkPid, _Reason}
-                  when is_reference(AnswerMRef) ->
+                {quod_ask_stream_down, AskId} ->
                     close_stream(Stream), {error, broken_stream}
             after ?NEXT_TIMEOUT_MS ->
                 close_stream(Stream), {error, no_progress}
@@ -412,13 +411,8 @@ next(Stream = {remote_stream, AskId, AskLink, AskCh, AnswerCh,
             {error, broken_stream}
     end.
 
-answer_link(LinkPid, undefined, undefined) ->
-    {ok, LinkPid, undefined, monitor(process, LinkPid)};
-answer_link(LinkPid, LinkPid, MRef) -> {ok, LinkPid, LinkPid, MRef};
-answer_link(_, _, _) -> error.
-
-remote_answer(Payload, AskId, Expected) ->
-    try safe_binary_to_term(Payload) of
+remote_answer(Reply, AskId, Expected) ->
+    try case Reply of
         {quod_ask_answer, AskId, Expected, {solution, WireSol}} ->
             case quod_wire_term:decode(WireSol) of
                 {ok, Sol} -> {solution, Sol};
@@ -431,11 +425,12 @@ remote_answer(Payload, AskId, Expected) ->
                 _ -> error
             end;
         _ -> error
+    end
     catch _:_ -> error
     end.
 
 safe_binary_to_term(Payload) ->
-    case quod_safe_term:decode(Payload, ?MAX_ANSWER_BYTES) of
+    case quod_safe_term:decode(Payload, ?QUOD_TRANSPORT_MAX_FRAME_BYTES) of
         {ok, Term} -> Term;
         {error, Reason} -> error(Reason)
     end.
@@ -477,17 +472,14 @@ close_stream({ask_stream, Engine, Pid, MRef, _}) ->
     gen_server:cast(Engine, {ask_cancel, Pid}),
     demonitor(MRef, [flush]),
     ok;
-close_stream({remote_stream, AskId, AskLink, _AskCh, AnswerCh,
-              AnswerLink, AnswerMRef, _Expected, Guard,
+close_stream({remote_stream, AskId, AskLink, _AskCh, _Expected, Guard,
               _ExpectedKey, _Confirmation}) ->
-    %% The request channel is shared by all asks to this target. Cancel this ask
-    %% explicitly, but leave the reusable transport link alive.
+    %% Both control and answer links are shared. Cancellation is per ask id;
+    %% never close a shared stream merely because one proof finishes.
     _ = quod_link:send_reliable(
           AskLink, term_to_binary({quod_ask_cancel, AskId}), 1000),
     stop_owner(Guard),
-    case AnswerLink of undefined -> ok; Pid -> quod_link:close(Pid) end,
-    case AnswerMRef of undefined -> ok; Ref -> demonitor(Ref, [flush]) end,
-    _ = unsubscribe(AnswerCh),
+    ok = quod_ask_router:unregister(AskId),
     ok.
 
 watch_owner(Owner, AskLink, AskId) ->
@@ -503,9 +495,6 @@ watch_owner(Owner, AskLink, AskId) ->
     end).
 
 stop_owner(Pid) -> Pid ! stop, ok.
-
-unsubscribe(Channel) ->
-    try quod_reg:unsubscribe({channel, Channel}) catch _:_ -> ok end.
 
 %%%===================================================================
 %%% answering side — the demand-driven solution worker
@@ -530,16 +519,14 @@ start_answer(Ns, Est, Height, Goal, Chain, Asker, Engine) ->
     end).
 
 %% Remote target-side answer worker. The request link is monitored by quod_prolog;
-%% this worker owns only the answer link and therefore remains independent of the
-%% target engine's mailbox.
+%% reply links are multiplexed per asking node and owned by the transport, so this
+%% worker never closes one when its individual ask ends.
 start_answer_remote(Ns, Est, Height, Goal, Chain, AskId,
                     Peer, PeerEndpoint, AnswerCh, Engine) ->
     spawn(fun() ->
         _ = quod_process:kill_when_owner_dies(Engine, self()),
         case open_link_pinned(Peer, PeerEndpoint, AnswerCh) of
             {ok, Link, Peer, none} ->
-                %% Force-killing the worker must also reset its private answer stream.
-                link(Link),
                 Asker = {remote, AskId, Link},
                 try answer_init(Ns, Est, Height, Goal, Chain,
                                 [Peer | Chain], Asker, Engine)
@@ -557,16 +544,9 @@ start_answer_remote(Ns, Est, Height, Goal, Chain, AskId,
 
 reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, Reason) ->
     %% Rejections stay bounded under an open-frame flood: no helper process is
-    %% spawned, and the transport owns this one-shot answer link.
+    %% spawned, and the transport owns the shared answer link.
     quod_quic:send_pinned(
       Peer, PeerEndpoint, AnswerCh, encode_error(AskId, Reason)).
-
-answer_peer_key({NodeKey, _Endpoint}) when is_binary(NodeKey) ->
-    NodeKey;
-answer_peer_key(NodeKey) when is_binary(NodeKey) ->
-    NodeKey;
-answer_peer_key(_) ->
-    undefined.
 
 confirm_route({confirm_direct, Ns, Endpoint, NodeKey}) ->
     _ = quod_directory:confirm_direct_seed(Ns, Endpoint, NodeKey),
@@ -636,7 +616,7 @@ sink_solution(Asker, Seq, Sol) ->
         {ok, WireSol} ->
             case Asker of
                 Pid when is_pid(Pid) ->
-                    case erlang:external_size(WireSol) =< ?MAX_ANSWER_BYTES of
+                    case erlang:external_size(WireSol) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
                         true -> Pid ! {ask_solution, self(), Seq, Sol}, ok;
                         false -> too_big
                     end;
@@ -644,7 +624,7 @@ sink_solution(Asker, Seq, Sol) ->
                     Payload = term_to_binary(
                                 {quod_ask_answer, AskId, Seq, {solution, WireSol}},
                                 [deterministic]),
-                    case byte_size(Payload) =< ?MAX_ANSWER_BYTES of
+                    case byte_size(Payload) =< ?QUOD_TRANSPORT_MAX_FRAME_BYTES of
                         true ->
                             case quod_link:send_reliable(
                                    Link, Payload, ?NEXT_TIMEOUT_MS) of
@@ -674,7 +654,7 @@ reliable_sink_send(Link, Payload) ->
         {error, _} -> send_failed
     end.
 
-sink_close({remote, _AskId, Link}) -> quod_link:close(Link);
+sink_close({remote, _AskId, _Link}) -> ok;
 sink_close(_LocalAsker) -> ok.
 
 step({fresh, Goal, W}) -> drive(Goal, catch erlog_int:prove_goal(Goal, W));

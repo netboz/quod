@@ -25,6 +25,7 @@ the caller, not from trusting this transport.
 """.
 -behaviour(gen_server).
 -include("quod_ledger.hrl").
+-include("quod_transport_limits.hrl").
 
 -export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4,
          verify_forward/5, catch_up/4, catch_up/6]).
@@ -39,7 +40,6 @@ the caller, not from trusting this transport.
 -define(RESP_BUDGET,     (900 bsl 10)).  %% server: byte budget for the served entries — the whole response
                                          %% frame MUST fit quod_link's 1 MiB cap (it EXITs the link on a
                                          %% larger frame), so we leave headroom for the envelope
--define(MAX_FRAME_BYTES, (1 bsl 20)).    %% drop an inbound frame ≥ 1 MiB before decode (matches quod_link)
 
 -record(s, {ns       :: binary(),
             self     :: node_id(),
@@ -417,7 +417,7 @@ terminate(_Reason, #s{chan = Chan}) ->
 %%% wire / dispatch
 %%%===================================================================
 
-inbound(_Peer, Payload, S) when byte_size(Payload) > ?MAX_FRAME_BYTES ->
+inbound(_Peer, Payload, S) when byte_size(Payload) > ?QUOD_TRANSPORT_MAX_FRAME_BYTES ->
     S;   %% drop an oversized frame BEFORE decoding — bound binary_to_term memory (hostile peer)
 inbound(Peer, Payload, S) ->
     try binary_to_term(Payload, [safe]) of

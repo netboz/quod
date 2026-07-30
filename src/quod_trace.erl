@@ -113,6 +113,7 @@ outcome({ok, _, _}) -> {ok, <<"ok">>};
 outcome({ok, _}) -> {ok, <<"ok">>};
 outcome(ok) -> {ok, <<"ok">>};
 outcome(fail) -> {error, <<"fail">>};
+outcome({fail, _Reasons}) -> {error, <<"fail">>};
 outcome({error, Reason}) -> {error, reason(Reason)};
 outcome({error, Reason, _Detail}) -> {error, reason(Reason)};
 outcome(_) -> {ok, <<"ok">>}.

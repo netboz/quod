@@ -212,7 +212,8 @@ joiner_promoted_to_voter(Config) ->
     %% never digested — cold, dead, or still mid-catch-up (`follows/4` keeps it silent until it is settled).
     %% A failed proof commits nothing, so slot numbering below is unaffected.
     {GhostPub, _} = quod_identity:generate(),
-    ?assertEqual(fail, prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
+    ?assertMatch({fail, [_ | _]},
+                 prove(Founder, {admit, GhostPub, "127.0.0.1", 9999})),
 
     %% the founder admits the joiner (slot 4) — retried until the joiner's periodic digests (it has been
     %% feed-following since its restart) register as fresh in the founder's liveness table.

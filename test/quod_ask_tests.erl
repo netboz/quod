@@ -28,6 +28,24 @@ decode_guards_test() ->
     ?assertEqual(error, quod_ask:decode_cancel(
                           term_to_binary({quod_ask_cancel, <<0:136>>}))).
 
+completion_reason_validation_test() ->
+    AskId = <<0:128>>,
+    {ok, ValidWire} = quod_wire_term:encode([{blocked, bob}]),
+    ?assertEqual(
+       {complete, [{blocked, bob}]},
+       quod_ask:test_remote_answer(
+         {quod_ask_answer, AskId, 1, {complete, ValidWire}}, AskId, 1)),
+    Oversized = binary:copy(<<"x">>, 4097),
+    {ok, OversizedWire} = quod_wire_term:encode([Oversized]),
+    ?assertEqual(
+       error,
+       quod_ask:test_remote_answer(
+         {quod_ask_answer, AskId, 1, {complete, OversizedWire}}, AskId, 1)),
+    ?assertEqual(
+       error,
+       quod_ask:test_remote_answer(
+         {quod_ask_answer, AskId, 1, {complete, malformed}}, AskId, 1)).
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
@@ -41,6 +59,7 @@ ask_test_() ->
           ?_test(t_loud_routing_errors(Ctx)),
           ?_test(t_circular_ask(Ctx)),
           ?_test(t_permission_gate(Ctx)),
+          ?_test(t_failure_reasons_cross_local_ask(Ctx)),
           ?_test(t_completion_marker(Ctx)),
           ?_test(t_foreign_write_rejected(Ctx)),
           ?_test(t_target_engine_stays_responsive(Ctx)),
@@ -64,7 +83,9 @@ setup() ->
     ok = filelib:ensure_dir(filename:join(Dir, "placeholder")),
     PrivateFile = write_ontology(Dir, "private.pl",
         "can_read(secret(_), _Subject, _Ns).\n"
+        "can_read(blocked(_), _Subject, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
+        "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n"
         "secret(42).\n"
         "hidden(denied).\n"),
     SlowFile = write_ontology(Dir, "slow.pl",
@@ -124,7 +145,8 @@ t_repeated_follow_queries_are_independent(#{pets := P}) ->
 
 t_grounded_ask(#{pets := P}) ->
     ?assertMatch({ok, [#{}], _}, prove(P, {'::', animals, {diet, dog, meat}})),
-    ?assertEqual(fail, prove(P, {'::', animals, {diet, dog, grass}})).
+    ?assertMatch({fail, [_ | _]},
+                 prove(P, {'::', animals, {diet, dog, grass}})).
 
 t_self_ask(#{animals := A}) ->
     ?assertMatch({ok, [#{}], _}, prove(A, {'::', animals, {isa, dog, mammal}})).
@@ -146,8 +168,17 @@ t_permission_gate(#{pets := P}) ->
     ?assertEqual({error, not_allowed},
                  prove(P, {'::', private, {hidden, {'X'}}})).
 
-%% Completion is deliberately minimal: subscriptions are not implemented yet, so
-%% version/read-set material must not allocate or cross the wire as dead state.
+t_failure_reasons_cross_local_ask(#{pets := P}) ->
+    Remote = {'::', private, {blocked, bob}},
+    Recover = {';', Remote,
+               {get_fail_reasons,
+                [{'Outer'}, {blocked, bob}, {impossible_to_link, bob}]}},
+    ?assertMatch(
+       {ok, [#{'Outer' := Remote}], _},
+       prove(P, Recover)).
+
+%% Completion carries only the bounded diagnostic stack in addition to sequencing;
+%% subscriptions still allocate and send no version/read-set state.
 t_completion_marker(#{animals := A, pets := P}) ->
     Engine = quod_reg:where({quod_prolog, A}),
     {ok, Stream} = gen_server:call(Engine,
@@ -156,14 +187,14 @@ t_completion_marker(#{animals := A, pets := P}) ->
     receive {ask_solution, Stream, 1, {diet, cat, fish}} -> ok after 1000 -> ?assert(false) end,
     Stream ! {next, self()},
     receive
-        {ask_complete, Stream, 2} -> ok
+        {ask_complete, Stream, 2, Reasons} when is_list(Reasons) -> ok
     after 1000 -> ?assert(false)
     end.
 
 t_foreign_write_rejected(#{animals := A, pets := P}) ->
     ?assertEqual({error, foreign_write_unsupported},
                  prove(P, {'::', animals, {assertz, {stolen, fact}}})),
-    ?assertEqual(fail, prove(A, {stolen, fact})).
+    ?assertMatch({fail, [_ | _]}, prove(A, {stolen, fact})).
 
 %% A target answer can be stuck deriving its first solution without blocking the
 %% ontology engine from serving an unrelated local proof.
@@ -265,7 +296,10 @@ t_frozen_stream_view(#{animals := A, pets := P}) ->
     Stream ! {next, self()},
     receive {ask_solution, Stream, 2, {diet, dog, meat}} -> ok after 1000 -> ?assert(false) end,
     Stream ! {next, self()},
-    receive {ask_complete, Stream, 3} -> ok after 1000 -> ?assert(false) end.
+    receive
+        {ask_complete, Stream, 3, Reasons} when is_list(Reasons) -> ok
+    after 1000 -> ?assert(false)
+    end.
 
 %% Remote replies share one node-return channel.  Two independent ask ids on
 %% the same authenticated link must reach only their registered proof workers.
@@ -275,7 +309,9 @@ t_remote_return_router_multiplexes(_Ctx) ->
     Ask2 = <<2:128>>,
     {ok, Channel} = quod_ask_router:register(Ask1, TargetKey),
     {ok, Channel} = quod_ask_router:register(Ask2, TargetKey),
-    Bad = term_to_binary({quod_ask_answer, Ask1, 1, complete}, [deterministic]),
+    {ok, EmptyReasons} = quod_wire_term:encode([]),
+    Complete = {complete, EmptyReasons},
+    Bad = term_to_binary({quod_ask_answer, Ask1, 1, Complete}, [deterministic]),
     quod_reg:publish(
       {channel, Channel},
       {quod_message, {{<<0:256>>, {"127.0.0.1", 5000}}, self()}, Channel, Bad}),
@@ -283,8 +319,8 @@ t_remote_return_router_multiplexes(_Ctx) ->
         {quod_ask_answer, Ask1, _} -> ?assert(false)
     after 20 -> ok
     end,
-    Reply1 = term_to_binary({quod_ask_answer, Ask1, 1, complete}, [deterministic]),
-    Reply2 = term_to_binary({quod_ask_answer, Ask2, 1, complete}, [deterministic]),
+    Reply1 = term_to_binary({quod_ask_answer, Ask1, 1, Complete}, [deterministic]),
+    Reply2 = term_to_binary({quod_ask_answer, Ask2, 1, Complete}, [deterministic]),
     quod_reg:publish(
       {channel, Channel},
       {quod_message, {{TargetKey, {"127.0.0.1", 5000}}, self()}, Channel, Reply1}),
@@ -292,11 +328,11 @@ t_remote_return_router_multiplexes(_Ctx) ->
       {channel, Channel},
       {quod_message, {{TargetKey, {"127.0.0.1", 5000}}, self()}, Channel, Reply2}),
     receive
-        {quod_ask_answer, Ask1, {quod_ask_answer, Ask1, 1, complete}} -> ok
+        {quod_ask_answer, Ask1, {quod_ask_answer, Ask1, 1, Complete}} -> ok
     after 1000 -> ?assert(false)
     end,
     receive
-        {quod_ask_answer, Ask2, {quod_ask_answer, Ask2, 1, complete}} -> ok
+        {quod_ask_answer, Ask2, {quod_ask_answer, Ask2, 1, Complete}} -> ok
     after 1000 -> ?assert(false)
     end,
     ok = quod_ask_router:unregister(Ask1),

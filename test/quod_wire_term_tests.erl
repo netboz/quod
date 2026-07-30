@@ -25,3 +25,8 @@ unknown_predicate_becomes_fail_only_functor_test() ->
 depth_limit_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
     ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).
+
+flat_list_spine_does_not_consume_depth_test() ->
+    Flat = lists:seq(1, 1000),
+    {ok, Wire} = quod_wire_term:encode(Flat),
+    ?assertEqual({ok, Flat}, quod_wire_term:decode(Wire)).

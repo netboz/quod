@@ -266,7 +266,11 @@ root_peer_proof_result_validation_test() ->
          {error, rebuilding})),
     ?assertEqual(
        {error, fail},
-       quod_directory_control:test_validate_peer_proof(fail)).
+       quod_directory_control:test_validate_peer_proof(fail)),
+    ?assertEqual(
+       {error, fail},
+       quod_directory_control:test_validate_peer_proof(
+         {fail, [{directory_control_peer, unbound}]})).
 
 successful_empty_replaces_failed_proof_retains_test() ->
     Peer = key(51),

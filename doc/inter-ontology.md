@@ -152,7 +152,10 @@ or either timeout.
    the moment it is found** — no batches, no waiting. The asking rule's choice point consumes
    them as they arrive; backtracking into the ask waits for the next answer. First answer =
    fastest possible, even when later answers are slow to derive.
-5. **Complete.** When the answers run out, a sequenced **complete** marker closes the run.
+5. **Complete.** When the answers run out, a sequenced **complete** marker carries the
+   target proof's bounded failure-reason stack and closes the run. The asker merges those
+   reasons before the `::` goal fails, so its next Prolog alternative can inspect and
+   recover from a target-provided reason.
    If the rule stops early instead — or the asking proof dies — the ask is cancelled and the
    target kills the run on the spot.
 
@@ -226,11 +229,12 @@ buffer behind.
 
 ## 5. Completion and future subscriptions
 
-The **complete** marker carries only its sequence number. Earlier drafts also carried a frozen
-version and target read fingerprint, but no implemented component consumed them. Keeping that
-dead contract allocated an ETS read-set per served ask and allowed the final frame to grow past
-the transport limit. The future "tell me when it changes" milestone will add a bounded,
-purpose-built subscription record when there is a consumer for it.
+The **complete** marker carries its sequence number and the target proof's bounded diagnostic
+stack. It carries no frozen version or target read fingerprint: no implemented component
+consumes them, and served asks therefore allocate no dead read-set state. Failure reasons are
+bounded to 32 KiB, atom-safe encoded like other Prolog values, strictly validated by the asker,
+and never enter consensus or the ledger. The future "tell me when it changes" milestone will
+add a bounded, purpose-built subscription record when there is a consumer for it.
 
 ## 6. The chain: circles, depth, permission
 

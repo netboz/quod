@@ -5,6 +5,8 @@
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([remote_stream/1, remote_symbol_safety/1, remote_peer_acl/1,
+         remote_failure_reasons/1, remote_deep_failure_reasons/1,
+         remote_structural_reason_truncation/1,
          remote_cancel/1, remote_return_stream_reuse/1]).
 -export([run_remote_proofs/3]).
 
@@ -14,8 +16,10 @@
 -define(ASKER_NS, <<"pets">>).
 -define(PRIVATE_NS, <<"private">>).
 
-all() -> [remote_stream, remote_symbol_safety, remote_peer_acl, remote_cancel,
-          remote_return_stream_reuse].
+all() -> [remote_stream, remote_symbol_safety, remote_peer_acl,
+          remote_failure_reasons, remote_deep_failure_reasons,
+          remote_structural_reason_truncation,
+          remote_cancel, remote_return_stream_reuse].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
@@ -26,7 +30,13 @@ init_per_suite(Config) ->
     Animals = filename:join(code:priv_dir(quod), "ontologies/animals.pl"),
     {ok, AnimalsBin} = file:read_file(Animals),
     TargetGenesis = filename:join(?config(priv_dir, Config), "remote_animals.pl"),
-    ok = file:write_file(TargetGenesis, [AnimalsBin, "\necho(X).\nloop :- loop.\n"]),
+    ok = file:write_file(
+           TargetGenesis,
+           [AnimalsBin,
+            "\necho(X).\n"
+            "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
+            deep_failure_rules(),
+            "loop :- loop.\n"]),
     Target = start_node(target, ?TARGET_PORT, TargetKey, ?NS,
                         TargetGenesis, [], #{}, Config),
     PrivateGenesis = filename:join(?config(priv_dir, Config), "remote_private.pl"),
@@ -89,7 +99,7 @@ remote_symbol_safety(Config) ->
                  peer:call(Target, quod_wire_term, decode,
                            [{0, <<"asker_only_symbol">>}])),
     Unknown = {'::', ?NS, {asker_only_predicate, x}},
-    ?assertEqual(fail,
+    ?assertMatch({fail, [_ | _]},
                  peer:call(Asker, quod_prolog, prove,
                            [?ASKER_NS, Unknown, ?ASKER_NS], 60000)).
 
@@ -106,6 +116,35 @@ remote_peer_acl(Config) ->
     ?assertEqual([], peer:call(
                        Asker, quod_directory, directory_hosts,
                        [?PRIVATE_NS])).
+
+remote_failure_reasons(Config) ->
+    Asker = ?config(asker, Config),
+    Remote = {'::', ?NS, {blocked, bob}},
+    Recover = {';', Remote,
+               {get_fail_reasons,
+                [{'Outer'}, {blocked, bob}, {impossible_to_link, bob}]}},
+    ?assertMatch(
+       {ok, [#{'Outer' := Remote}], _},
+       peer:call(Asker, quod_prolog, prove,
+                 [?ASKER_NS, Recover, ?ASKER_NS], 60000)).
+
+remote_deep_failure_reasons(Config) ->
+    Asker = ?config(asker, Config),
+    Remote = {'::', ?NS, {deep_failure, 70}},
+    {fail, Reasons} = peer:call(
+                        Asker, quod_prolog, prove,
+                        [?ASKER_NS, Remote, ?ASKER_NS], 60000),
+    ?assert(length(Reasons) > 64),
+    ?assertEqual(Remote, hd(Reasons)),
+    ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)).
+
+remote_structural_reason_truncation(Config) ->
+    Asker = ?config(asker, Config),
+    Remote = {'::', ?NS, deep_reason},
+    ?assertEqual(
+       {fail, [Remote, fail_reasons_truncated]},
+       peer:call(Asker, quod_prolog, prove,
+                 [?ASKER_NS, Remote, ?ASKER_NS], 60000)).
 
 remote_cancel(Config) ->
     Target = ?config(target, Config),
@@ -212,3 +251,11 @@ wrong_key_before(TargetPub) ->
         true -> Key;
         false -> wrong_key_before(TargetPub)
     end.
+
+deep_failure_rules() ->
+    DeepReason = lists:foldl(fun(_, Term) -> [Term] end,
+                             deep_bottom, lists:seq(1, 70)),
+    [[io_lib:format("deep_failure(~B) :- deep_failure(~B).~n", [N, N - 1])
+      || N <- lists:seq(70, 1, -1)],
+     "deep_failure(0) :- fail_with_reason(deep_bottom).\n",
+     io_lib:format("deep_reason :- fail_with_reason(~p).~n", [DeepReason])].

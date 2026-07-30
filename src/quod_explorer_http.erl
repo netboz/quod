@@ -165,6 +165,9 @@ prove_result({ok, Bindings, Height}) ->
     {200, #{result => ok, height => Height, bindings => [bindings_json(B) || B <- Bindings]}};
 prove_result(fail) ->
     {200, #{result => fail}};
+prove_result({fail, Reasons}) when is_list(Reasons) ->
+    {200, #{result => fail,
+            reasons => [prolog_text(Reason) || Reason <- Reasons]}};
 prove_result({error, {not_leader, Hint}}) ->
     Leader = case Hint of none -> null; _ -> id_json(Hint) end,
     {409, #{error => not_leader, leader => Leader}};

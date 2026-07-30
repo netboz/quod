@@ -126,7 +126,7 @@ start_link(Ns, Config) ->
 
 -doc "Prove `Goal` (emitted from `CallerNs`) against namespace `TargetNs`.".
 -spec prove(binary(), term(), binary()) ->
-        {ok, [map()], log_index()} | {error, term()} | fail.
+        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
 prove(TargetNs, Goal, CallerNs) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
@@ -137,7 +137,7 @@ prove(TargetNs, Goal, CallerNs) ->
 
 -doc "Read-only prove: like `prove/3` but a write goal is refused (`{error, read_only}`).".
 -spec prove_ro(binary(), term(), binary()) ->
-        {ok, [map()], log_index()} | {error, term()} | fail.
+        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
 prove_ro(TargetNs, Goal, CallerNs) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
@@ -616,7 +616,8 @@ proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
                #{'quod.namespace' => Ns, 'quod.kb.height' => Applied,
                  'quod.proof.mode' => atom_to_binary(Kind, utf8)},
                fun(SpanCtx) ->
-                   R = run_proof_est(Goal, quod_predicates:set_context(Est, Ctx)),
+                   R = run_proof_est_annotated(
+                         Goal, quod_predicates:set_context(Est, Ctx)),
                    _ = quod_trace:result(SpanCtx, R),
                    R
                end),
@@ -627,7 +628,8 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
         error -> S;
         {{From, Applied, TraceCtx}, S1} ->
             case {Kind, Result} of
-                {_, fail} -> gen_server:reply(From, fail), S1;
+                {_, {fail, []}} -> gen_server:reply(From, fail), S1;
+                {_, {fail, Reasons}} -> gen_server:reply(From, {fail, Reasons}), S1;
                 {_, {error, _} = E} -> gen_server:reply(From, E), S1;
                 {_, {ok, Bindings, [], _ReadSet}} ->
                     gen_server:reply(From, {ok, [Bindings], Applied}), S1;
@@ -784,6 +786,14 @@ reads can race history pruning.
 prove_est(Goal, Est) -> run_proof_est(Goal, Est).
 
 run_proof_est(Goal, Est) ->
+    case run_proof_est_annotated(Goal, Est) of
+        {fail, _Reasons} -> fail;
+        Result -> Result
+    end.
+
+%% Only public proof workers expose diagnostic failure state. Consensus verdicts
+%% and runtime projections continue through run_proof_est/2 and retain bare fail.
+run_proof_est_annotated(Goal, Est) ->
     Vs = erlog:vars_in(Goal),
     W0 = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => true}),
     try erlog_int:prove_goal(Goal, W0) of
@@ -792,7 +802,7 @@ run_proof_est(Goal, Est) ->
             {ok, bindings_map(erlog_int:dderef(Vs, Final#est.bs)),
              quod_erlog_db_local_prove:get_local_changes(Ov),
              quod_erlog_db_local_prove:get_read_set(Ov)};
-        {fail, _}            -> fail;
+        {fail, Final}        -> {fail, Final#est.fail_reasons};
         {erlog_error, E, _}  -> {error, {erlog, E}}
     catch
         %% A cross-ontology `::` ask raises a distinct, loud error (doc/inter-ontology.md §8);

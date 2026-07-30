@@ -390,6 +390,8 @@ validate_peer_proof({error, Reason}) ->
     {error, Reason};
 validate_peer_proof(fail) ->
     {error, fail};
+validate_peer_proof({fail, _Reasons}) ->
+    {error, fail};
 validate_peer_proof(_) ->
     {error, malformed_peer_proof}.
 

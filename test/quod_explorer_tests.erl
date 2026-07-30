@@ -77,6 +77,13 @@ outcome_unknown_is_pending_test() ->
        {202, #{result => pending, tx_id => <<"00010203">>}},
        quod_explorer_http:prove_result({error, {outcome_unknown, TxId}})).
 
+failure_reasons_are_rendered_test() ->
+    ?assertEqual(
+       {200, #{result => fail,
+               reasons => [<<"outer(bob)">>, <<"missing(bob)">>]}},
+       quod_explorer_http:prove_result(
+         {fail, [{outer, bob}, {missing, bob}]})).
+
 %%%===================================================================
 %%% summary committee observability
 %%%===================================================================

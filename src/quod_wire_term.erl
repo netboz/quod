@@ -7,8 +7,9 @@ already known; otherwise it returns the opaque `{'$quod_symbol', Binary}` value.
 opaque value re-encodes as the original atom symbol, so a symbol introduced by the
 asker can pass through a target rule and return without allocating an atom there.
 
-Only Prolog's data shapes are accepted. Node, depth, and symbol-size caps make the
-post-ETF validation cost deterministic.
+Only Prolog's data shapes are accepted. Node, structural-depth, and symbol-size caps
+make the post-ETF validation cost deterministic. A list spine is iterative structure,
+not nesting; its elements and an improper tail still increase structural depth.
 """.
 
 -export([encode/1, decode/1, decode_goal/1]).
@@ -66,13 +67,17 @@ encode([], _Depth, Nodes) ->
 encode([Head | Tail], Depth, Nodes) ->
     case encode(Head, Depth + 1, Nodes + 1) of
         {ok, Head1, Nodes1} ->
-            case encode(Tail, Depth + 1, Nodes1) of
+            case encode_list_tail(Tail, Depth, Nodes1) of
                 {ok, Tail1, Nodes2} -> {ok, {6, Head1, Tail1}, Nodes2};
                 error -> error
             end;
         error -> error
     end;
 encode(_, _, _) -> error.
+
+encode_list_tail([], Depth, Nodes) -> encode([], Depth, Nodes);
+encode_list_tail([_ | _] = Tail, Depth, Nodes) -> encode(Tail, Depth, Nodes);
+encode_list_tail(Tail, Depth, Nodes) -> encode(Tail, Depth + 1, Nodes).
 
 encode_list([], _Depth, Nodes, Acc) -> {ok, lists:reverse(Acc), Nodes};
 encode_list([Head | Tail], Depth, Nodes, Acc) ->
@@ -104,13 +109,17 @@ decode({5}, _Depth, Nodes) ->
 decode({6, Head, Tail}, Depth, Nodes) ->
     case decode(Head, Depth + 1, Nodes + 1) of
         {ok, Head1, Nodes1} ->
-            case decode(Tail, Depth + 1, Nodes1) of
+            case decode_list_tail(Tail, Depth, Nodes1) of
                 {ok, Tail1, Nodes2} -> {ok, [Head1 | Tail1], Nodes2};
                 error -> error
             end;
         error -> error
     end;
 decode(_, _, _) -> error.
+
+decode_list_tail({5} = Tail, Depth, Nodes) -> decode(Tail, Depth, Nodes);
+decode_list_tail({6, _, _} = Tail, Depth, Nodes) -> decode(Tail, Depth, Nodes);
+decode_list_tail(Tail, Depth, Nodes) -> decode(Tail, Depth + 1, Nodes).
 
 decode_list([], _Depth, Nodes, Acc) -> {ok, lists:reverse(Acc), Nodes};
 decode_list([Head | Tail], Depth, Nodes, Acc) ->

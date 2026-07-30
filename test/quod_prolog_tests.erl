@@ -26,6 +26,7 @@ cleanup({_Ns, Pid}) ->
 prolog_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_unknown_fails/1,
+      fun t_explicit_failure_reason_and_internal_bare_fail/1,
       fun t_apply_and_read/1,
       fun t_occ_reject/1,
       fun t_batch_apply/1,
@@ -73,7 +74,8 @@ outcome_unknown_timeout_test_() ->
              ?assert(is_binary(TxId)),
              ?assert(byte_size(TxId) > 0),
              ?assertEqual(1, maps:get(park_timeouts, quod_prolog:stats(Ns))),
-             ?assertEqual(fail, quod_prolog:prove(Ns, {timeout_fact, x}, Ns)),
+             ?assertMatch({fail, [_ | _]},
+                          quod_prolog:prove(Ns, {timeout_fact, x}, Ns)),
              %% The local deadline only reaps the caller/request alias. Consensus may
              %% still commit that exact transaction later; applying it must update the
              %% KB normally without trying to reply to the departed caller.
@@ -181,8 +183,8 @@ unavailable_append_reply_waits_for_outcome_unknown_test_() ->
                     maps:with(
                       [parked, park_timeouts],
                       quod_prolog:stats(Ns))),
-                 ?assertEqual(
-                    fail,
+                 ?assertMatch(
+                    {fail, [_ | _]},
                     quod_prolog:prove(
                       Ns, {unavailable_fact, x}, Ns)),
                  receive
@@ -266,11 +268,26 @@ ab(Ns, Index, Change) -> quod_prolog:apply_block(Ns, Index, Change, live).
 
 t_unknown_fails({Ns, _}) ->
     fun() ->
-        %% a goal over a predicate the ontology doesn't define → fail, not crash
-        ?assertEqual(fail, quod_prolog:prove(Ns, {nonexistent, foo}, Ns)),
+        %% A missing predicate fails with its call as the default diagnostic.
+        ?assertEqual(
+           {fail, [{nonexistent, foo}]},
+           quod_prolog:prove(Ns, {nonexistent, foo}, Ns)),
         %% routing: unknown namespace is distinct from goal-failure
         ?assertEqual({error, no_such_namespace},
                      quod_prolog:prove(<<"nope">>, {anything, x}, <<"nope">>))
+    end.
+
+t_explicit_failure_reason_and_internal_bare_fail({Ns, _}) ->
+    fun() ->
+        Rule = {':-', {blocked, {'X'}},
+                       {fail_with_reason, {impossible_to_link, {'X'}}}},
+        ok = ab(Ns, 1, batch(change(Ns, diff_for(Rule), #{}))),
+        ?assertEqual(
+           {fail, [{blocked, bob}, {impossible_to_link, bob}]},
+           quod_prolog:prove(Ns, {blocked, bob}, Ns)),
+        {ok, Est, 1} = quod_prolog:attach_runtime(Ns),
+        ?assertEqual(fail, quod_prolog:prove_est({blocked, bob}, Est)),
+        quod_prolog:runtime_detach(Ns)
     end.
 
 t_apply_and_read({Ns, _}) ->
@@ -294,7 +311,7 @@ t_occ_reject({Ns, _}) ->
         %% is FIFO-ordered before the following prove call, so the effect is visible.
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
         ok = ab(Ns, 2, batch(Stale)),
-        ?assertEqual(fail, quod_prolog:prove(Ns, {sibling, x}, Ns)),
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x}, Ns)),
         %% a non-stale read-set (parent/2 matches its real hash) commits fine
         M = real_hash(Ns, {parent, 2}),
         Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => M}),
@@ -315,7 +332,8 @@ t_batch_apply({Ns, _}) ->
         %% An improper batch is rejected as a whole: no prefix transaction can leak into the KB.
         Partial = change(Ns, diff_for({must_not_apply, x}), #{}),
         ok = ab(Ns, 2, {batch, [Partial | bad_tail]}),
-        ?assertEqual(fail, quod_prolog:prove(Ns, {must_not_apply, x}, Ns)),
+        ?assertMatch({fail, [_ | _]},
+                     quod_prolog:prove(Ns, {must_not_apply, x}, Ns)),
         Stats2 = quod_prolog:stats(Ns),
         ?assertEqual(2, maps:get(applied, Stats2)),
         ?assertEqual(2, maps:get(applies, Stats2))
@@ -441,7 +459,7 @@ t_lockstep({Ns, _}) ->
         %% content tx with an equally-stale read_check → still rejected (widget/z never asserted)
         StaleContent = change(Ns, diff_for({widget, z}), #{{widget, 1} => 12345}),
         ok = ab(Ns, 3, batch(StaleContent)),
-        ?assertEqual(fail, quod_prolog:prove(Ns, {widget, z}, Ns))
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {widget, z}, Ns))
     end.
 
 %% A cast that does NOT advance the height — an already-applied no-op (Index =< applied) or a forward
@@ -508,7 +526,7 @@ t_live_reject_emits_event({Ns, _}) ->
         ?assertNot(maps:is_key(diff, Env)),
         ok = refute_rt(applied_live),
         %% and the rejected diff did not touch D
-        ?assertEqual(fail, quod_prolog:prove(Ns, {sibling, x}, Ns))
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x}, Ns))
     end.
 
 %% (b) a REPLAY apply rebuilds D (fact readable) but publishes NO applied_live event — only the

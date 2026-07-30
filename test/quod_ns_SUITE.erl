@@ -51,7 +51,8 @@ t_admit_grows_committee(Cfg) ->
     {Joiner, _} = quod_ct:generate_key_gt(Self),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     %% the readiness gate refuses a never-seen candidate...
-    ?assertEqual(fail, rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
+    ?assertMatch({fail, [_ | _]},
+                 rp(Ns, {admit, Joiner, "10.0.0.9", 9000})),
     %% ...so stamp a fresh digest for it in the feed's liveness table, as if it had been feed-following
     %% (the real end-to-end digest flow is join_SUITE's) — covering BOTH proofs: the submitter's admit
     %% and the validator's verdict re-proof.
@@ -78,7 +79,7 @@ t_cannot_remove_last(Cfg) ->
     Ns   = ?config(ns, Cfg),
     Self = ?config(node_id, Cfg),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
-    ?assertEqual(fail, rp(Ns, {remove, Self})),
+    ?assertMatch({fail, [_ | _]}, rp(Ns, {remove, Self})),
     ?assertEqual([Self], quod_simplex:committee(Ns)),
     ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})).   %% still serving proves
 

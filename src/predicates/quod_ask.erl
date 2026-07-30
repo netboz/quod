@@ -13,8 +13,8 @@ The `::` **ask** operator — a goal in one ontology proved inside another
   the goal there, demand-driven: one solution per `{next,_}` request, so a slow consumer
   never makes it buffer. The target engine monitors the asker and can kill this worker
   even during an unbounded derivation. Reads are gated by `can_read` for every ontology
-  in the supplied chain and, remotely, for the authenticated peer key; completion is a
-  minimal sequenced marker.
+  in the supplied chain and, remotely, for the authenticated peer key; completion carries
+  the sequence and the target's bounded diagnostic stack.
 
 Errors are surfaced as `throw({quod_ask_error, Reason})`, which `quod_prolog`'s proof
 runner turns into `{error, Reason}` — the loud, distinct catalog of `doc/inter-ontology.md`
@@ -29,6 +29,9 @@ a silent failure.
          start_answer/7, start_answer_remote/10,
          subscribe/1, ask_channel/1, decode_open/1, decode_next/1, decode_cancel/1,
          reject_remote/5, answer_channel/1]).
+-ifdef(TEST).
+-export([test_remote_answer/3]).
+-endif.
 
 %% The ask-chain depth cap and the per-`next` no-progress budget (doc/inter-ontology.md §9).
 -define(MAX_CHAIN, 8).
@@ -40,6 +43,10 @@ a silent failure.
 -define(ASK_CHANNEL_TAG, quod_ask).
 -define(ANSWER_CHANNEL_TAG, quod_ask_answer).
 -define(MAX_ANSWER_CHANNEL_BYTES, 128).
+
+-if(?ERLOG_MAX_FAILURE_REASONS_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
+-error("failure reason stack must stay below the transport frame bound").
+-endif.
 
 -doc "Register the `::` handler onto a freshly-built kb (`#est{}`).".
 -spec load(tuple()) -> tuple().
@@ -123,7 +130,11 @@ drive_stream(Stream, GoalTerm, Target, Next, St) ->
     case next(Stream) of
         {solution, Sol, Stream1} ->
             emit(Stream1, GoalTerm, Target, Sol, Next, St);
-        complete -> erlog_int:fail(St);
+        {complete, Reasons} ->
+            case erlog_int:merge_failure_reasons(Reasons, St) of
+                {ok, St1} -> erlog_int:fail(St1);
+                error -> ask_error(broken_stream)
+            end;
         {error, R} -> ask_error(R)
     end.
 
@@ -364,10 +375,13 @@ next({ask_stream, _Engine, Pid, MRef, Expected} = Stream) ->
         {ask_solution, Pid, _Wrong, _Sol} ->
             close_stream(Stream),
             {error, broken_stream};
-        {ask_complete, Pid, Expected} ->
+        {ask_complete, Pid, Expected, Reasons} ->
             demonitor(MRef, [flush]),
-            complete;
-        {ask_complete, Pid, _Wrong} ->
+            case checked_completion(Reasons) of
+                {complete, _} = Complete -> Complete;
+                error -> {error, broken_stream}
+            end;
+        {ask_complete, Pid, _Wrong, _Reasons} ->
             close_stream(Stream),
             {error, broken_stream};
         {ask_error, Pid, R} ->
@@ -393,9 +407,9 @@ next(Stream = {remote_stream, AskId, AskLink, AskCh, Expected, Guard,
                             {solution, Sol,
                              {remote_stream, AskId, AskLink, AskCh,
                               Expected + 1, Guard, ExpectedKey, none}};
-                        complete ->
+                        {complete, Reasons} ->
                             confirm_route(Confirmation),
-                            close_stream(Stream), complete;
+                            close_stream(Stream), {complete, Reasons};
                         {error, Reason} ->
                             confirm_route(Confirmation),
                             close_stream(Stream), {error, Reason};
@@ -418,7 +432,11 @@ remote_answer(Reply, AskId, Expected) ->
                 {ok, Sol} -> {solution, Sol};
                 _ -> error
             end;
-        {quod_ask_answer, AskId, Expected, complete} -> complete;
+        {quod_ask_answer, AskId, Expected, {complete, WireReasons}} ->
+            case quod_wire_term:decode(WireReasons) of
+                {ok, Reasons} -> checked_completion(Reasons);
+                _ -> error
+            end;
         {quod_ask_answer, AskId, error, WireReason} ->
             case quod_wire_term:decode(WireReason) of
                 {ok, Reason} -> decode_remote_error(Reason);
@@ -427,6 +445,17 @@ remote_answer(Reply, AskId, Expected) ->
         _ -> error
     end
     catch _:_ -> error
+    end.
+
+-ifdef(TEST).
+test_remote_answer(Reply, AskId, Expected) ->
+    remote_answer(Reply, AskId, Expected).
+-endif.
+
+checked_completion(Reasons) ->
+    case erlog_int:merge_failure_reasons(Reasons, #est{}) of
+        {ok, _} -> {complete, Reasons};
+        error -> error
     end.
 
 safe_binary_to_term(Payload) ->
@@ -603,8 +632,8 @@ answer_once(State, Asker, Count, Seq, Engine) ->
         {solution, _Sol, _State1} ->
             _ = sink_send(Asker, {error, too_many_answers}),
             sink_close(Asker);
-        done ->
-            _ = sink_send(Asker, {complete, Seq}),
+        {done, Reasons} ->
+            _ = sink_send(Asker, {complete, Seq, Reasons}),
             sink_close(Asker);
         {error, R} ->
             _ = sink_send(Asker, {error, R}),
@@ -637,16 +666,29 @@ sink_solution(Asker, Seq, Sol) ->
         {error, bad_term} -> too_big
     end.
 
-sink_send(Asker, {complete, Seq}) when is_pid(Asker) ->
-    _ = Asker ! {ask_complete, self(), Seq}, ok;
-sink_send({remote, AskId, Link}, {complete, Seq}) ->
+sink_send(Asker, {complete, Seq, Reasons}) when is_pid(Asker) ->
+    _ = Asker ! {ask_complete, self(), Seq, Reasons}, ok;
+sink_send({remote, AskId, Link}, {complete, Seq, Reasons}) ->
+    WireReasons = completion_wire(Reasons),
     reliable_sink_send(
-      Link, term_to_binary({quod_ask_answer, AskId, Seq, complete},
-                           [deterministic]));
+      Link, term_to_binary(
+              {quod_ask_answer, AskId, Seq, {complete, WireReasons}},
+              [deterministic]));
 sink_send(Asker, {error, Reason}) when is_pid(Asker) ->
     _ = Asker ! {ask_error, self(), Reason}, ok;
 sink_send({remote, AskId, Link}, {error, Reason}) ->
     reliable_sink_send(Link, encode_error(AskId, Reason)).
+
+completion_wire(Reasons) ->
+    case quod_wire_term:encode(Reasons) of
+        {ok, WireReasons} -> WireReasons;
+        %% Erlog's byte bounds are independent of the transport's structural
+        %% depth bound. Preserve logical failure and report bounded diagnostic
+        %% truncation if an otherwise-valid local reason cannot cross the wire.
+        {error, bad_term} ->
+            {ok, Truncated} = quod_wire_term:encode([fail_reasons_truncated]),
+            Truncated
+    end.
 
 reliable_sink_send(Link, Payload) ->
     case quod_link:send_reliable(Link, Payload, ?NEXT_TIMEOUT_MS) of
@@ -665,7 +707,7 @@ drive(Goal, {succeed, St}) ->
         [] -> {solution, erlog_int:dderef(Goal, St#est.bs), {more, Goal, St}};
         _  -> {error, foreign_write_unsupported}
     end;
-drive(_Goal, {fail, _})            -> done;
+drive(_Goal, {fail, St})           -> {done, St#est.fail_reasons};
 drive(_Goal, {quod_ask_error, R})  -> {error, R};   %% a nested `::` inside Goal raised it
 drive(_Goal, {erlog_error, E, _})  -> {error, {erlog, E}};
 drive(_Goal, {erlog_error, E})     -> {error, {erlog, E}};

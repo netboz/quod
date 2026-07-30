@@ -19,13 +19,15 @@ The multi-validator BFT path (shares/certs/complaint) is Stage 2's `simplex_SUIT
          t_restart_replays/1, t_unsigned_history_rejected/1, t_status_stats/1,
          t_multi_member_accepted/1, t_commit_carries_cert/1,
          t_concurrent_appends_batch/1, t_join_anchor_validation/1,
-         t_fresh_foundings_are_distinct/1]).
+         t_fresh_foundings_are_distinct/1,
+         t_genesis_hash_is_lock_free_and_lifetime_bound/1]).
 
 all() ->
     [t_founder_bootstrap, t_genesis_seeds_content, t_append_commits_and_persists,
      t_restart_replays, t_unsigned_history_rejected, t_status_stats,
      t_multi_member_accepted, t_commit_carries_cert, t_concurrent_appends_batch,
-     t_join_anchor_validation, t_fresh_foundings_are_distinct].
+     t_join_anchor_validation, t_fresh_foundings_are_distinct,
+     t_genesis_hash_is_lock_free_and_lifetime_bound].
 
 init_per_testcase(_TC, Cfg) ->
     {ok, _} = application:ensure_all_started(gproc),
@@ -159,6 +161,25 @@ t_fresh_foundings_are_distinct(Cfg) ->
         stop(Ns),
         _ = file:del_dir_r(Dir2)
     end.
+
+%% The feed starts after `quod_prolog` asks simplex to replay the committed ledger. That replay can
+%% legitimately occupy simplex's mailbox, but the anchor was already validated at init and is immutable.
+%% Suspending the statem makes a mailbox-backed accessor return its timeout default; this direct read
+%% must still work. Stopping the owner then proves the table cannot leak an anchor into a re-founding.
+t_genesis_hash_is_lock_free_and_lifetime_bound(Cfg) ->
+    Ns = ?config(ns, Cfg),
+    Pid = start(Cfg, #{}),
+    GenesisHash = quod_simplex:genesis_hash(Ns),
+    ok = sys:suspend(Pid),
+    try
+        %% Establish the premise: a state-machine call cannot pass the suspended mailbox.
+        ?assertEqual(undefined, quod_simplex:stats(Ns)),
+        ?assertEqual(GenesisHash, quod_simplex:genesis_hash(Ns))
+    after
+        ok = sys:resume(Pid)
+    end,
+    ok = stop(Ns),
+    ?assertEqual(undefined, quod_simplex:genesis_hash(Ns)).
 
 %% Signature enforcement also applies while rebuilding the node's own durable
 %% log. Replacing a valid slot with an otherwise-identical unsigned transaction

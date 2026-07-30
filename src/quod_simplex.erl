@@ -1495,12 +1495,28 @@ stats(Ns)     -> call(Ns, get_stats, undefined).
 
 -doc "The immutable 32-byte slot-1 genesis anchor for this consensus process, including before a fresh joiner has downloaded slot 1.".
 -spec genesis_hash(binary()) -> binary() | undefined.
-genesis_hash(Ns) -> call(Ns, get_genesis_hash, undefined).
+genesis_hash(Ns) ->
+    %% This deliberately does not call the statem: rebuilding the Prolog projection can keep its
+    %% mailbox busy for seconds, while the anchor was validated before `init/1` returned and never
+    %% changes. The protected table remains directly readable but dies with its simplex owner, so a
+    %% re-found namespace cannot inherit a stale anchor from the prior process.
+    try ets:lookup(binary_to_existing_atom(genesis_table_name(Ns), utf8), anchor) of
+        [{anchor, <<_:256>> = GenesisHash}] -> GenesisHash;
+        _ -> undefined
+    catch
+        error:badarg -> undefined
+    end.
 
 namespaces() -> gproc:select([{{{n, l, {quod_simplex, '$1'}}, '_', '_'}, [], ['$1']}]).
 
 call(Ns, Req, Default) ->
     try gen_statem:call(quod_reg:via({quod_simplex, Ns}), Req, 1000) catch exit:_ -> Default end.
+
+%% The writer creates this after resolving the immutable anchor; readers only resolve an existing
+%% table name, which fails closed while the namespace is down or being initialized.
+genesis_table(Ns) -> binary_to_atom(genesis_table_name(Ns), utf8).
+
+genesis_table_name(Ns) -> <<"quod_simplex_genesis_", Ns/binary>>.
 
 %%%===================================================================
 %%% init
@@ -1538,6 +1554,12 @@ init_store(Ns, Cfg, Id) ->
                     {stop, {bad_config, Reason}};
                 {ok, GenesisHash} ->
                     Domain = consensus_domain(Ns, GenesisHash),
+                    %% One table per operator-created namespace. `genesis_hash/1` uses
+                    %% binary_to_existing_atom/2, so readers never mint table-name atoms.
+                    GenesisTable = ets:new(
+                                     genesis_table(Ns),
+                                     [named_table, protected, set]),
+                    true = ets:insert(GenesisTable, {anchor, GenesisHash}),
                     {ok, Journal} =
                         quod_vote_journal:open(
                           Ns, Domain, data_dir(Cfg), Committed),
@@ -1953,8 +1975,6 @@ running_impl({call, From}, finish_feed_replay, S) ->
     {keep_state, S, [{reply, From, ok}]};
 running_impl({call, From}, get_status, S)       -> {keep_state, S, [{reply, From, status_map(S)}]};
 running_impl({call, From}, get_committee, S)    -> {keep_state, S, [{reply, From, S#s.validators}]};
-running_impl({call, From}, get_genesis_hash, S) ->
-    {keep_state, S, [{reply, From, S#s.genesis_hash}]};
 running_impl({call, From}, get_stats, S)        -> {keep_state, S, [{reply, From, stats_map(S)}]};
 running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 

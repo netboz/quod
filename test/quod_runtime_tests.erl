@@ -16,10 +16,10 @@ d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
 %% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
 %% other unbound variable, because a queue entry must be stable and fully ground.
 anonymous_projection_argument_refused_test() ->
-    ?assertNot(quod_runtime_predicates:is_ground({'_'})),
-    ?assertNot(quod_runtime_predicates:is_ground({job, {'_'}})),
-    ?assertNot(quod_runtime_predicates:is_ground([resource, {'X'}])),
-    ?assert(quod_runtime_predicates:is_ground({job, [resource, 1]})).
+    ?assertNot(quod_predicates:is_ground({'_'})),
+    ?assertNot(quod_predicates:is_ground({job, {'_'}})),
+    ?assertNot(quod_predicates:is_ground([resource, {'X'}])),
+    ?assert(quod_predicates:is_ground({job, [resource, 1]})).
 
 %%%===================================================================
 %%% pure core: plan_handlers/2

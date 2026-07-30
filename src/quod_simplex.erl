@@ -829,6 +829,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
           mode         => create,      %% create = found genesis; join = trustlessly catch up from a contact
           committee    => [],          %% complete founding set besides self; only its smallest key may create
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
+          genesis_terms => undefined,  %% in-memory ontology terms to seed on create (mutually exclusive)
           genesis_hash => undefined,   %% join config pin; resolved to the immutable slot-1 anchor in every mode
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
           data_dir     => undefined}).
@@ -1680,11 +1681,12 @@ initial_sync(#s{self = Self} = S) ->
 
 %% Fresh create: the canonical founder mints a random incarnation and durably commits ONE genesis block
 %% (slot 1). Its transaction asserts `consensus_incarnation/1`, every founding member's
-%% `peer_admitted` fact, and the root ontology content (if a `.pl` is configured). The incarnation makes
+%% `peer_admitted` fact, and the ontology's configured initial content. The incarnation makes
 %% two fresh foundings cryptographically distinct even when every operator input is byte-identical.
 %% The committee is then DERIVED from that same transaction (`apply_committee_delta`), so bootstrap and
-%% restart re-fold cannot disagree. `quod_prolog:read_terms/1` may throw `{genesis_failed,_}`; the whole
-%% transaction lands in ONE atomic append, so a bad `.pl` persists nothing and the next boot retries fresh.
+%% restart re-fold cannot disagree. Loading or compiling initial content may throw
+%% `{genesis_failed,_}`; the whole transaction lands in ONE atomic append, so bad
+%% content persists nothing and the next boot retries fresh.
 bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     Incarnation = crypto:strong_rand_bytes(32),
     GenesisTx = genesis_tx(Cfg, Ns, Self, Incarnation),
@@ -1695,7 +1697,7 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     S#s{store = Store1, validators = Validators,
         committee_id = CommitteeId, slot = 1}.
 
-%% The genesis transaction compiles the incarnation, founding committee, and optional `.pl` content
+%% The genesis transaction compiles the incarnation, founding committee, and optional content
 %% through the erlog overlay together. `consensus_incarnation/1` is therefore ordinary queryable ontology
 %% truth as well as part of the anchor. The predicate is reserved to this one generated fact.
 %% The founding set is `[]` => self-only (N=1) or a list of founding members; each entry is a bare pubkey
@@ -1704,14 +1706,14 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
 genesis_tx(Cfg, Ns, Self, Incarnation) ->
     Founders   = founding(Cfg, Self),
     [{GenesisAuthor, _, _} | _] = Founders,
-    FileTerms  = case genesis_file(Cfg) of none -> []; File -> quod_prolog:read_terms(File) end,
-    PeerAndFileTerms =
+    InitialTerms = genesis_terms(Cfg),
+    PeerAndInitialTerms =
         lists:foldr(
           fun({Pk, Host, Port}, Acc) ->
                   [{peer_admitted, Pk, Host, Port, Pk} | Acc]
-          end, FileTerms, Founders),
+          end, InitialTerms, Founders),
     Diff = quod_prolog:terms_to_diff(
-             [{consensus_incarnation, Incarnation} | PeerAndFileTerms]),
+             [{consensus_incarnation, Incarnation} | PeerAndInitialTerms]),
     Genesis =
         #transaction{tx_id = genesis_tx_id(Ns, Incarnation), caller_ns = Ns,
                      diff = Diff, read_check = #{},
@@ -7112,9 +7114,18 @@ valid_cfg(Config, Cfg) ->
         undefined ->
             {error, missing_node_id};
         Pk when is_binary(Pk), byte_size(Pk) =:= 32 ->
-            valid_batch_window(Cfg);
+            valid_genesis_source(Cfg);
         Other ->
             {error, {bad_node_id, Other}}
+    end.
+
+valid_genesis_source(Cfg) ->
+    case {genesis_file(Cfg), maps:get(genesis_terms, Cfg, undefined)} of
+        {none, undefined} -> valid_batch_window(Cfg);
+        {none, Terms} when is_list(Terms) -> valid_batch_window(Cfg);
+        {none, _InvalidTerms} -> {error, invalid_genesis_terms};
+        {_File, undefined} -> valid_batch_window(Cfg);
+        {_File, _Terms} -> {error, multiple_genesis_sources}
     end.
 
 valid_batch_window(Cfg) ->
@@ -7172,6 +7183,20 @@ genesis_file(Cfg) ->
         <<>>      -> none;
         ""        -> none;
         File      -> File
+    end.
+
+genesis_terms(Cfg) ->
+    case {genesis_file(Cfg), maps:get(genesis_terms, Cfg, undefined)} of
+        {none, undefined} ->
+            [];
+        {none, Terms} when is_list(Terms) ->
+            Terms;
+        {File, undefined} ->
+            quod_prolog:read_terms(File);
+        {none, _InvalidTerms} ->
+            throw({genesis_failed, invalid_genesis_terms});
+        {_File, _Terms} ->
+            throw({genesis_failed, multiple_genesis_sources})
     end.
 
 status_map(S) ->

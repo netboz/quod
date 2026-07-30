@@ -15,7 +15,7 @@ recovered.
 -behaviour(gen_server).
 
 -export([start_link/0,
-         start_content/2, stop_content/1,
+         start_content/2, start_new_content/2, stop_content/1,
          start_brahms/2, stop_brahms/1]).
 -export([init/1, handle_call/3, handle_cast/2,
          handle_info/2, terminate/2]).
@@ -39,6 +39,12 @@ start_link() ->
 start_content(Ns, Config) ->
     start_child(content, Ns, Config).
 
+%% Runtime creation is an admission, not an idempotent ensure. Keep insert,
+%% start, and rollback inside the desired-state owner so a failed newcomer can
+%% never remove an older ontology with the same name.
+start_new_content(Ns, Config) ->
+    start_new_child(content, Ns, Config).
+
 stop_content(Ns) ->
     stop_child(content, Ns).
 
@@ -55,6 +61,13 @@ start_child(Kind, Ns, Config)
 start_child(_Kind, _Ns, _Config) ->
     {error, bad_config}.
 
+start_new_child(Kind, Ns, Config)
+  when Kind =:= content, is_binary(Ns), is_map(Config) ->
+    gen_server:call(
+      quod_reg:via(?KEY), {start_new, Kind, Ns, Config}, 15000);
+start_new_child(_Kind, _Ns, _Config) ->
+    {error, bad_config}.
+
 stop_child(Kind, Ns) when is_binary(Ns) ->
     gen_server:call(
       quod_reg:via(?KEY), {stop, Kind, Ns}, 15000);
@@ -66,6 +79,44 @@ init([]) ->
     self() ! reconcile,
     {ok, #s{desired = Desired}}.
 
+handle_call(
+  {start_new, content, Ns, Config}, _From,
+  S = #s{desired = Desired}) ->
+    Content = maps:get(content, Desired),
+    case {maps:is_key(Ns, Content), running_pid(content, Ns)} of
+        {true, _Pid} ->
+            {reply, {error, {already_configured, Ns}}, S};
+        {false, Pid} when is_pid(Pid) ->
+            %% A failed earlier stop can leave an undesired child alive. Never
+            %% attach a new config to a process that was started under another.
+            {reply, {error, {already_configured, Ns}}, S};
+        {false, undefined} ->
+            Desired1 = Desired#{content => Content#{Ns => Config}},
+            persist_desired(Desired1),
+            S0 = S#s{desired = Desired1},
+            Result = start_one(content, Ns, Config),
+            case Result of
+                {ok, Pid} when is_pid(Pid) ->
+                    {reply, Result, S0};
+                {ok, Pid, _Info} when is_pid(Pid) ->
+                    {reply, Result, S0};
+                {error, {already_started, _Pid}} ->
+                    rollback_new_content(
+                      Ns, Config, Desired, S0,
+                      {error, {already_configured, Ns}});
+                {error, already_present} ->
+                    rollback_new_content(
+                      Ns, Config, Desired, S0,
+                      {error, {already_configured, Ns}});
+                {error, {already_present, _Child}} ->
+                    rollback_new_content(
+                      Ns, Config, Desired, S0,
+                      {error, {already_configured, Ns}});
+                _ ->
+                    rollback_new_content(
+                      Ns, Config, Desired, S0, Result)
+            end
+    end;
 handle_call(
   {start, Kind, Ns, Config}, _From,
   S = #s{desired = Desired})
@@ -108,6 +159,19 @@ handle_call(
     end;
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
+
+rollback_new_content(Ns, Config, PreviousDesired,
+                     S = #s{desired = CurrentDesired}, Reply) ->
+    CurrentContent = maps:get(content, CurrentDesired),
+    %% The gen_server serializes mutations, but retain the exact-value check so
+    %% this rollback can never grow into a broad "remove by name" cleanup.
+    case maps:get(Ns, CurrentContent, undefined) of
+        Config ->
+            persist_desired(PreviousDesired),
+            {reply, Reply, S#s{desired = PreviousDesired}};
+        _ ->
+            {reply, Reply, S}
+    end.
 
 handle_cast(_Message, S) ->
     {noreply, S}.

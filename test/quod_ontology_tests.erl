@@ -1,0 +1,308 @@
+-module(quod_ontology_tests).
+
+-include_lib("eunit/include/eunit.hrl").
+
+-define(ROOT_NS, <<"quod:root">>).
+
+ontology_creation_test_() ->
+    {setup,
+     fun setup/0,
+     fun cleanup/1,
+     fun(Fixture) ->
+         [?_test(create_and_resume(Fixture)),
+          ?_test(validation_precedes_mutation(Fixture)),
+          ?_test(collisions_preserve_existing_state(Fixture)),
+          ?_test(failed_admission_rolls_back(Fixture)),
+          ?_test(effect_boundary_and_reasons(Fixture))]
+     end}.
+
+setup() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Suffix = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_ontology_" ++ Suffix),
+    Saved = save_env(
+              [node_pubkey, identity_key, node_addr,
+               namespace_desired, content_data_dirs]),
+    {Pub, Seed} = quod_identity:generate(),
+    application:set_env(quod, node_pubkey, Pub),
+    application:set_env(
+      quod, identity_key, quod_identity:key_term({Pub, Seed})),
+    application:set_env(quod, node_addr, {"127.0.0.1", 14567}),
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{}, brahms => #{}}),
+    application:set_env(quod, content_data_dirs, #{}),
+    {ok, BrahmsSup} = quod_brahms_sup:start_link(),
+    unlink(BrahmsSup),
+    {ok, NsSup} = quod_ns_sup:start_link(),
+    unlink(NsSup),
+    {ok, Manager} = quod_namespace_manager:start_link(),
+    unlink(Manager),
+    RootBlock =
+        #{namespace => ?ROOT_NS, mode => create,
+          genesis_file => <<>>, data_dir => list_to_binary(Dir),
+          seeds => []},
+    {?ROOT_NS, RootConfig} = quod_app:build_ns_config(RootBlock),
+    {ok, _RootPid} =
+        quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
+    ok = wait_ready(?ROOT_NS, 200),
+    #{dir => Dir, saved => Saved, manager => Manager,
+      ns_sup => NsSup, brahms_sup => BrahmsSup,
+      root_config => RootConfig}.
+
+cleanup(#{dir := Dir, saved := Saved, manager := Manager,
+          ns_sup := NsSup, brahms_sup := BrahmsSup}) ->
+    Desired = application:get_env(
+                quod, namespace_desired,
+                #{content => #{}, brahms => #{}}),
+    Content = maps:get(content, Desired, #{}),
+    lists:foreach(
+      fun(Ns) ->
+          _ = quod_namespace_manager:stop_content(Ns)
+      end, maps:keys(Content)),
+    stop_process(Manager),
+    stop_process(NsSup),
+    stop_process(BrahmsSup),
+    restore_env(Saved),
+    _ = file:del_dir_r(Dir),
+    ok.
+
+create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
+    Ns = unique_ns(<<"created">>),
+    Terms =
+        [{note, welcome},
+         {':-', {welcomes, {'Who'}}, {note, {'Who'}}}],
+    {ok, created, Ns, GenesisHash} =
+        quod_ontology:create(Ns, Terms),
+    ?assertEqual(32, byte_size(GenesisHash)),
+    ok = wait_ready(Ns, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {note, welcome}, Ns)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {welcomes, welcome}, Ns)),
+    ?assertMatch(
+       {ok, [_], _},
+       quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Nonce'}}, Ns)),
+    ?assertMatch(
+       {ok, [_], _},
+       quod_prolog:prove_ro(
+         Ns, {peer_admitted, {'Id'}, {'Host'}, {'Port'}, {'Key'}}, Ns)),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    CreatedConfig = maps:get(Ns, maps:get(content, Desired)),
+    ?assertEqual(
+       quod_ledger_store:data_dir(RootConfig),
+       quod_ledger_store:data_dir(CreatedConfig)),
+    ?assertEqual(
+       quod_ledger_store:ledger_dir(RootConfig),
+       quod_ledger_store:ledger_dir(CreatedConfig)),
+    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    ?assertEqual(
+       quod_ledger_store:ledger_dir(CreatedConfig),
+       maps:get(Ns, Dirs)),
+    ?assert(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns))),
+    ok = quod_namespace_manager:stop_content(Ns),
+    {ok, resumed, Ns, GenesisHash} =
+        quod_ontology:create(Ns, [{note, must_not_appear}]),
+    ok = wait_ready(Ns, 200),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(Ns, {note, must_not_appear}, Ns)),
+    ?assertMatch(
+       #{committed := 1},
+       quod_simplex:stats(Ns)).
+
+validation_precedes_mutation(#{dir := Dir}) ->
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    InvalidNames =
+        [<<>>, <<255>>, binary:copy(<<"a">>, 129),
+         <<"quod">>, <<"quod:private">>],
+    lists:foreach(
+      fun(Name) ->
+          ?assertMatch({error, _}, quod_ontology:create(Name, [])),
+          case Name of
+              <<>> -> ok;
+              _ ->
+                  ?assertNot(filelib:is_dir(
+                               quod_ledger_store:ns_dir(Dir, Name)))
+          end
+      end, InvalidNames),
+    ReservedNs = unique_ns(<<"reserved-head">>),
+    ?assertEqual(
+       {error,
+        {invalid_initial_term,
+         {consensus_incarnation, forged}}},
+       quod_ontology:create(
+         ReservedNs, [{consensus_incarnation, forged}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, ReservedNs))),
+    ReservedPeerNs = unique_ns(<<"reserved-peer-head">>),
+    ReservedPeer =
+        {peer_admitted, <<0:256>>, "127.0.0.1", 14567, <<0:256>>},
+    ?assertEqual(
+       {error, {invalid_initial_term, ReservedPeer}},
+       quod_ontology:create(ReservedPeerNs, [ReservedPeer])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, ReservedPeerNs))),
+    BadTermsNs = unique_ns(<<"bad-terms">>),
+    ?assertEqual(
+       {error, invalid_initial_terms},
+       quod_ontology:create(BadTermsNs, [{"not-a-functor", x}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, BadTermsNs))),
+    ImproperTermsNs = unique_ns(<<"improper-terms">>),
+    ?assertEqual(
+       {error, invalid_initial_terms},
+       quod_ontology:create(
+         ImproperTermsNs, [{valid_fact, true} | improper_tail])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, ImproperTermsNs))),
+    ?assertEqual(
+       Desired0,
+       application:get_env(quod, namespace_desired, #{})).
+
+collisions_preserve_existing_state(_Fixture) ->
+    Ns = unique_ns(<<"collision">>),
+    {ok, created, Ns, _} = quod_ontology:create(Ns, [{kept, true}]),
+    ok = wait_ready(Ns, 200),
+    Pid0 = quod_reg:where({quod_ns, Ns}),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    ?assertEqual(
+       {error, {already_configured, Ns}},
+       quod_ontology:create(Ns, [{replacement, forbidden}])),
+    ?assertEqual(Pid0, quod_reg:where({quod_ns, Ns})),
+    ?assert(is_process_alive(Pid0)),
+    ?assertEqual(
+       Desired0,
+       application:get_env(quod, namespace_desired, #{})),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {kept, true}, Ns)).
+
+failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
+    Ns = unique_ns(<<"failed-start">>),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    ?assertMatch(
+       {error, _},
+       quod_namespace_manager:start_new_content(
+         Ns, #{data_dir => Dir})),
+    ?assertEqual(
+       Desired0,
+       application:get_env(quod, namespace_desired, #{})),
+    ?assertEqual(undefined, quod_reg:where({quod_ns, Ns})),
+    %% #s.retry is field 7. A failed normal start would arm this timer.
+    ?assertEqual(undefined, element(7, sys:get_state(Manager))),
+    OrphanNs = unique_ns(<<"orphan">>),
+    Parent = self(),
+    Orphan =
+        spawn(
+          fun() ->
+              true = gproc:reg({n, l, {quod_ns, OrphanNs}}),
+              Parent ! {orphan_ready, self()},
+              receive stop -> ok end
+          end),
+    receive {orphan_ready, Orphan} -> ok after 1000 -> error(orphan_timeout) end,
+    try
+        ?assertEqual(
+           {error, {already_configured, OrphanNs}},
+           quod_namespace_manager:start_new_content(
+             OrphanNs, #{data_dir => Dir})),
+        ?assertEqual(
+           Desired0,
+           application:get_env(quod, namespace_desired, #{})),
+        ?assert(is_process_alive(Orphan))
+    after
+        Orphan ! stop
+    end.
+
+effect_boundary_and_reasons(_Fixture) ->
+    Ns = unique_ns(<<"effect-created">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:effect(
+         ?ROOT_NS,
+         {create_ontology, Ns, [{effect_fact, works}]})),
+    ok = wait_ready(Ns, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {effect_fact, works}, Ns)),
+    ?assertMatch(
+       {error, {erlog, {context_violation, _, effect, proof}}},
+       quod_prolog:prove(
+         ?ROOT_NS, {create_ontology, unique_ns(<<"forbidden">>), []},
+         ?ROOT_NS)),
+    ?assertEqual(
+       {error, effect_staged_write},
+       quod_prolog:effect(?ROOT_NS, {assertz, {not_committed, true}})),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(?ROOT_NS, {not_committed, true}, ?ROOT_NS)),
+    RootOnlyTarget = Ns,
+    {fail, RootOnlyReasons} =
+        quod_prolog:effect(
+          RootOnlyTarget,
+          {create_ontology, unique_ns(<<"root-only">>), []}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, root_only},
+         RootOnlyReasons)),
+    {fail, InvalidTermReasons} =
+        quod_prolog:effect(
+          ?ROOT_NS,
+          {create_ontology, unique_ns(<<"invalid-terms">>),
+           [{member, x, []}]}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, invalid_initial_terms},
+         InvalidTermReasons)),
+    {fail, ImproperTermReasons} =
+        quod_prolog:effect(
+          ?ROOT_NS,
+          {create_ontology, unique_ns(<<"improper-terms">>),
+           [{valid_fact, true} | improper_tail]}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, invalid_initial_terms},
+         ImproperTermReasons)),
+    Large = binary:copy(<<"x">>, 5000),
+    {fail, Reasons} =
+        quod_prolog:effect(
+          ?ROOT_NS,
+          {create_ontology, <<"quod:forbidden">>, [{payload, Large}]}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, reserved_system_namespace},
+         Reasons)),
+    ?assert(lists:member(fail_reasons_truncated, Reasons)).
+
+wait_ready(_Ns, 0) ->
+    {error, timeout};
+wait_ready(Ns, N) ->
+    case quod_prolog:prove_ro(Ns, true, Ns) of
+        {ok, _, _} -> ok;
+        _ ->
+            timer:sleep(10),
+            wait_ready(Ns, N - 1)
+    end.
+
+unique_ns(Prefix) ->
+    <<Prefix/binary, ":",
+      (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
+
+stop_process(Pid) when is_pid(Pid) ->
+    case is_process_alive(Pid) of
+        true -> gen_server:stop(Pid);
+        false -> ok
+    end.
+
+save_env(Keys) ->
+    [{Key, application:get_env(quod, Key)} || Key <- Keys].
+
+restore_env(Saved) ->
+    lists:foreach(
+      fun({Key, {ok, Value}}) ->
+              application:set_env(quod, Key, Value);
+         ({Key, undefined}) ->
+              application:unset_env(quod, Key)
+      end, Saved).

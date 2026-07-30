@@ -24,8 +24,9 @@ auto-started, and no identity is minted (this is what the multi-node test suite 
 -behaviour(application).
 
 -export([start/2, stop/1]).
+-export([build_ns_config/1, publish_data_dir/2]).
 -ifdef(TEST).
--export([build_ns_config/1, load_config/0, root_contacts/1]).
+-export([load_config/0, root_contacts/1]).
 -endif.
 
 start(_StartType, _StartArgs) ->

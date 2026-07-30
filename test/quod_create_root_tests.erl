@@ -46,7 +46,8 @@ create_root_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_create_root/1,
       fun t_create_root_restart/1,
-      fun t_genesis_failure/1]}.
+      fun t_genesis_failure/1,
+      fun t_genesis_sources_are_exclusive/1]}.
 
 %% genesis_diff compiles the real quod_root.pl into write-set ops (compiled clause
 %% bodies, the on-disk form). Every op is an assert; the acl_sovereign head is present.
@@ -126,6 +127,15 @@ t_genesis_failure({_Dir, Ns, Content}) ->
         %% start (fail-fast). Run it in a trap-exit helper so the failed supervisor's
         %% link doesn't take down the eunit test process.
         ?assertMatch({error, _}, start_link_isolated(Ns, NsCfg))
+    end.
+
+t_genesis_sources_are_exclusive({Dir, Ns, Content}) ->
+    fun() ->
+        {Ns, NsCfg0} = quod_app:build_ns_config(Content),
+        NsCfg = NsCfg0#{genesis_terms => [{should_not_land, true}]},
+        ?assertMatch({error, _}, start_link_isolated(Ns, NsCfg)),
+        ?assertNot(
+           filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
     end.
 
 start_link_isolated(Ns, NsCfg) ->

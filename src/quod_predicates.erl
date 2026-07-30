@@ -40,9 +40,7 @@ The typed **external-predicate contract** and the per-run **execution context**
    predicate's class against the running context's *kind* and **fails closed**:
    a wrong-context call throws a distinct `{context_violation, …}` error rather
    than silently succeeding. `effect`-class predicates are therefore never
-   reachable from an ordinary ontology proof. No `effect` context is entered yet
-   (that arrives with `quod_runtime`, §7); the `effect_noop/0` stub exists so the
-   enforcement path is real and testable today.
+   reachable from an ordinary ontology proof.
 
 The context *kinds* are `proof` (a normal client proof or a staged write),
 `verdict` (a committee membership re-proof — strictly local, following disabled),
@@ -54,15 +52,14 @@ The context *kinds* are `proof` (a normal client proof or a staged write),
 -export([load/1, dispatch/3]).
 %% context read/write on an #est{}
 -export([set_context/2, context/1, in_verdict/1]).
-%% context constructors (proof + verdict are used today; projection/effect land with their slices)
--export([proof_context/3, proof_context/4, verdict_context/2]).
+%% context constructors
+-export([proof_context/3, proof_context/4, verdict_context/2, effect_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
--export([class/1, allowed/2]).
-%% the stub effect predicate (only reachable from an `effect` context, which does not exist yet)
--export([effect_noop_0/3, projection_noop_1/3]).
+-export([class/1, allowed/2, is_ground/1]).
+-export([projection_noop_1/3]).
 
 -define(CTX_FLAG, '$quod_ctx').
 
@@ -102,7 +99,7 @@ load(#est{db = Db0} = Est) ->
 %% The governed predicates, in registration order. Their class + real handler is in registry/1.
 governed() -> [{peer_ready, 1}, {directory_host, 4},
                {directory_control_peer, 1},
-               {admit, 3}, {remove, 1}, {effect_noop, 0},
+               {admit, 3}, {remove, 1}, {create_ontology, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
@@ -113,7 +110,8 @@ registry({directory_control_peer, 1}) ->
     {query, quod_directory_predicates, directory_control_peer_1};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
 registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
-registry({effect_noop, 0})-> {effect,  ?MODULE,                   effect_noop_0};
+registry({create_ontology, 2}) ->
+    {effect, quod_ontology_predicates, create_ontology_predicate};
 %% arity 1: a handler ConvergeGoal is invoked with the scope argument appended, so the
 %% declared atom `projection_noop` reaches the KB as {projection_noop, Scope}.
 registry({projection_noop, 1}) -> {projection, ?MODULE, projection_noop_1};
@@ -177,10 +175,17 @@ allowed(projection, _Kind)       -> false;
 allowed(effect,     effect)      -> true;
 allowed(effect,     _Kind)       -> false.
 
-%% A no-op effect: only reachable once an `effect` context exists (§9). Today it is always
-%% refused by `dispatch/3` in a `proof`/`verdict` context — the enforcement path made real.
--spec effect_noop_0(term(), term(), tuple()) -> term().
-effect_noop_0(_Goal, Next, St) -> erlog_int:prove_body(Next, St).
+-doc "Whether an Erlog term contains no unbound variable (including anonymous `_`).".
+-spec is_ground(term()) -> boolean().
+is_ground(T) when is_tuple(T), tuple_size(T) =:= 1 -> false;
+is_ground(T) when is_tuple(T) ->
+    lists:all(fun is_ground/1, tuple_to_list(T));
+is_ground([H | T]) ->
+    is_ground(H) andalso is_ground(T);
+is_ground([]) ->
+    true;
+is_ground(_) ->
+    true.
 
 %% The no-op projection ConvergeGoal (`m:quod_runtime` handlers, Slice 2): succeeds under a
 %% `projection` context, refused everywhere else by `dispatch/3`. Real P-mutating projection
@@ -231,6 +236,12 @@ proof_context(Ns, Height, Subject, Chain) ->
 -spec verdict_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 verdict_context(Ns, Height) ->
     #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined, chain = [Ns]}.
+
+-doc "An `effect` context for a live, explicitly-invoked external operation.".
+-spec effect_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
+effect_context(Ns, Height) ->
+    #qctx{kind = effect, ns = Ns, height = Height, subject = undefined,
+          chain = [Ns]}.
 
 -doc """
 A `projection` context: a `m:quod_runtime` handler converging its piece of P against the

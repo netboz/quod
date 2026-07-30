@@ -194,10 +194,10 @@ context. Effect predicates are never callable from ordinary ontology proofs.
 > secret). Today's fields are fine to expose (`ns`/`height`/`kind`/`chain` are
 > already visible to `can_read` policies), but the authenticated **subject** (§10)
 > must be carried out-of-band — the `#lp{}`-overlay pattern (as for
-> `follow_disabled`), not this readable flag. Only `proof` and
-> `verdict` are constructed today (`peer_ready`/`admit`/`remove` + the
-> `effect_noop/0` stub); `projection`/`effect` kinds exist in the class matrix but
-> get their constructors with `quod_runtime` (§7) and the effect layer (§9). The
+> `follow_disabled`), not this readable flag. All four kinds now have concrete
+> constructors: normal proofs and membership verdicts, runtime projections, and
+> the explicit snapshot-pinned `quod_prolog:effect/2` path used by
+> `create_ontology/2`. The
 > four process-dictionary values (`$quod_ns`/`$quod_applied`/`$quod_ask_chain`/
 > `$quod_in_verdict`) are removed, not retained as a second mechanism.
 

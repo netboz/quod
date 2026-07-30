@@ -97,4 +97,6 @@ staging_refused_in_verdict_test() ->
     ?assertEqual(context_violation, scope(Est, {admit, <<1>>, "h", 1})).
 
 effect_refused_in_proof_test() ->
-    ?assertEqual(context_violation, scope(ctx(<<"cp:eff">>, kb([])), effect_noop)).
+    ?assertEqual(
+       context_violation,
+       scope(ctx(<<"cp:eff">>, kb([])), {create_ontology, demo, []})).

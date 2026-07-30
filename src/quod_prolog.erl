@@ -32,7 +32,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, prove/3, prove_ro/3, applied/1, apply_block/4, mark_ready/1, sync/1,
+-export([start_link/2, prove/3, prove_ro/3, effect/2,
+         applied/1, apply_block/4, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
          request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
@@ -142,6 +143,22 @@ prove_ro(TargetNs, Goal, CallerNs) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
         Pid -> try gen_server:call(Pid, {prove_ro, Goal, CallerNs}, infinity)
+               catch exit:_ -> fail end
+    end.
+
+-doc """
+Run an explicitly requested live effect against `TargetNs`.
+
+The goal uses the same bounded, snapshot-pinned proof worker as ordinary
+proofs, but carries an `effect` execution context and may not stage a Prolog
+write.
+""".
+-spec effect(binary(), term()) ->
+        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
+effect(TargetNs, Goal) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Pid -> try gen_server:call(Pid, {effect, Goal}, infinity)
                catch exit:_ -> fail end
     end.
 
@@ -297,6 +314,15 @@ handle_call({prove_ro, _Goal, _CallerNs}, _From,
     {reply, {error, busy}, S};
 handle_call({prove_ro, Goal, CallerNs}, From, S) ->
     {noreply, spawn_proof(prove_ro, Goal, CallerNs, From, otel_ctx:new(), S)};
+%% Explicit live effects share the proof-worker budget and readiness gate.
+handle_call({effect, _Goal}, _From, S = #s{ready = false}) ->
+    {reply, {error, rebuilding}, S};
+handle_call({effect, _Goal}, _From,
+            S = #s{workers = Workers, max_proof_workers = Max})
+  when map_size(Workers) >= Max ->
+    {reply, {error, busy}, S};
+handle_call({effect, Goal}, From, S = #s{ns = Ns}) ->
+    {noreply, spawn_proof(effect, Goal, Ns, From, otel_ctx:new(), S)};
 
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
@@ -610,7 +636,7 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
 proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
-    Ctx = quod_predicates:proof_context(Ns, Applied, undefined),   %% Subject: none until §10 signed subjects
+    Ctx = worker_context(Kind, Ns, Applied),
     Result = quod_trace:with_span(
                TraceCtx, <<"quod.prolog.prove">>, internal,
                #{'quod.namespace' => Ns, 'quod.kb.height' => Applied,
@@ -622,6 +648,12 @@ proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
                    R
                end),
     gen_server:cast(Engine, {proof_result, Ref, Kind, Goal, CallerNs, Result}).
+
+worker_context(effect, Ns, Applied) ->
+    quod_predicates:effect_context(Ns, Applied);
+worker_context(_ProofKind, Ns, Applied) ->
+    %% Subject remains none until signed subjects land.
+    quod_predicates:proof_context(Ns, Applied, undefined).
 
 finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
     case take_proof_worker(Ref, S) of
@@ -635,6 +667,8 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
                     gen_server:reply(From, {ok, [Bindings], Applied}), S1;
                 {prove_ro, {ok, _B, _Diff, _RS}} ->
                     gen_server:reply(From, {error, read_only}), S1;
+                {effect, {ok, _B, _Diff, _RS}} ->
+                    gen_server:reply(From, {error, effect_staged_write}), S1;
                 {prove, {ok, Bindings, Diff, RS}} ->
                     case submit_write(From, Goal, Bindings, Diff, RS, CallerNs,
                                       TraceCtx, S1) of

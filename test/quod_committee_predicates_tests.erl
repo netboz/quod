@@ -99,4 +99,5 @@ staging_refused_in_verdict_test() ->
 effect_refused_in_proof_test() ->
     ?assertEqual(
        context_violation,
-       scope(ctx(<<"cp:eff">>, kb([])), {create_ontology, demo, []})).
+       scope(ctx(<<"cp:eff">>, kb([])),
+             {create_ontology_effect, demo, []})).

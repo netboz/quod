@@ -6,11 +6,11 @@ Keep one ontology-creation operation and make its second argument an ordered
 list of input options:
 
 ```prolog
-create_ontology(user:notes, [
+goal(create_ontology(user:notes, [
     source_file("./test.pl"),
     source_file("./test2.pl"),
     source("note(inline).")
-]).
+])).
 ```
 
 The corresponding Erlang representation is:
@@ -52,11 +52,11 @@ The list is intentionally not converted to a map: repeated sources and their
 order are meaningful, and later options such as identity or visibility need
 not change the input-loading pipeline.
 
-The Prolog predicate continues to require its two arguments to be ground.
+The creation action's external adapter requires its two arguments to be ground.
 Consequently `{terms, Terms}` can carry ground facts from Prolog but not
 clauses containing caller variables. `source/1` and `source_file/1` are the
 normal way to supply rules: variables are parsed as data inside the source,
-not mistaken for variables of the `create_ontology/2` call.
+not mistaken for variables of the `goal(create_ontology/2)` call.
 
 ## One creation pipeline
 
@@ -154,7 +154,7 @@ The option loader handles every documented `erlog_io:read_file/1` result:
 `{exit, einval, Reason}`. The two crash-shaped results are detailed file errors,
 never a `case_clause` escape.
 
-The external predicate exposes only bounded, portable reasons:
+The external creation adapter exposes only bounded, portable reasons:
 
 ```prolog
 ontology_creation_failed(invalid_options)

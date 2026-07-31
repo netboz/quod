@@ -1353,9 +1353,28 @@ build_kb() ->
     %% unknown predicate => fail (not error): a goal over an undefined predicate just
     %% has no solution, rather than crashing.
     {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
-    %% register the governed external predicates (admit/remove/peer_ready, class-enforced by
-    %% `m:quod_predicates`) and the `::` cross-ontology ask (`doc/inter-ontology.md`).
+    %% Register every static Erlang predicate BEFORE loading the shared interpreted
+    %% clauses. A collision in common_predicates.pl then fails as an attempted
+    %% modification of a static procedure instead of shadowing a governed boundary.
     Est2 = quod_predicates:load(Est1),
-    quod_ask:load(Est2).
+    Est3 = quod_ask:load(Est2),
+    load_common_predicates(Est3).
+
+load_common_predicates(#est{db = Db0} = Est) ->
+    File = filename:join(code:priv_dir(quod),
+                         "ontologies/common_predicates.pl"),
+    Terms =
+        try read_terms(File)
+        catch
+            throw:{genesis_failed, ReadReason} ->
+                throw({common_predicates_failed, ReadReason})
+        end,
+    try
+        Db1 = lists:foldl(fun erlog_int:assertz_clause/2, Db0, Terms),
+        Est#est{db = Db1}
+    catch
+        Class:LoadReason ->
+            throw({common_predicates_failed, {Class, LoadReason}})
+    end.
 
 tx_id(Self) -> <<(erlang:phash2(Self)):32, (erlang:unique_integer([positive])):64>>.

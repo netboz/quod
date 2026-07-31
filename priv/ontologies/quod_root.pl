@@ -13,6 +13,19 @@ acl_sovereign(quod:root).
 %% fail-closes (unknown-predicate ⇒ deny). Narrow this per-ontology as needed.
 can_read(_Goal, _Subject, _Ns).
 
+%% Node-local ontology lifecycle. The external operation is the final ordered
+%% prerequisite; the action effect is true because hosting state is volatile on
+%% this node and must not be asserted into root's replicated ledger.
+action(create_ontology(Name, Options),
+       [ontology_join_state(Name, not_hosted),
+        create_ontology_effect(Name, Options)],
+       true).
+
+action(join_ontology(Name, GenesisHash, Seeds),
+       [ontology_join_state(Name, not_hosted),
+        join_ontology_effect(Name, GenesisHash, Seeds)],
+       true).
+
 %% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
 %% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own
 %% kb before it will support-sign the membership change (`quod_prolog:request_membership_verdict/5`) —

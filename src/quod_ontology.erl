@@ -1,15 +1,18 @@
 -module(quod_ontology).
 -moduledoc """
-Runtime creation of a local, self-founded ontology.
+Runtime creation of a local, self-founded ontology and joining of an existing
+ontology through its pinned genesis anchor.
 
 Creation deliberately reuses the normal namespace manager, namespace
 supervision tree, genesis builder, and root storage placement. It adds no
 catalogue or durable hosting manifest: a full application restart forgets the
 runtime hosting intent, and calling `create/2` again resumes the existing
 ledger.
+Joining uses that same lifecycle asynchronously: acceptance starts the existing
+catch-up process, and `local_state/1` reports its local progress.
 """.
 
--export([create/2]).
+-export([create/2, join/3, local_state/1]).
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(MAX_NAMESPACE_BYTES, 128).
@@ -19,6 +22,12 @@ ledger.
         {ok, created | resumed, binary(), binary()} |
         {error, term()}.
 
+-type joining() ::
+        {ok, joining | resumed, binary(), binary()} |
+        {error, term()}.
+
+-type local_state() :: not_hosted | starting | joining | ready | stopping.
+
 -type input_option() ::
         {source_file, file:filename()} |
         {source, unicode:chardata()} |
@@ -26,7 +35,7 @@ ledger.
 
 -spec create(term(), [input_option()]) -> creation().
 create(Name, Options) ->
-    case canonical_name(Name) of
+    case canonical_user_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
@@ -39,6 +48,32 @@ create(Name, Options) ->
                         {error, _} = Error -> Error
                     end
             end
+    end.
+
+-spec join(term(), unicode:chardata(), [term()]) -> joining().
+join(Name, GenesisHash, Seeds) ->
+    case canonical_user_name(Name) of
+        {error, _} = Error ->
+            Error;
+        {ok, Ns} ->
+            case normalize_genesis_hash(GenesisHash) of
+                {error, _} = Error ->
+                    Error;
+                {ok, GenesisHex, RawGenesisHash} ->
+                    case normalize_seeds(Seeds) of
+                        {error, _} = Error -> Error;
+                        {ok, SeedPeers} ->
+                            join_validated(
+                              Ns, GenesisHex, RawGenesisHash, SeedPeers)
+                    end
+            end
+    end.
+
+-spec local_state(term()) -> {ok, local_state()} | {error, term()}.
+local_state(Name) ->
+    case canonical_name(Name) of
+        {error, _} = Error -> Error;
+        {ok, Ns} -> {ok, local_state_validated(Ns)}
     end.
 
 load_options(Options) ->
@@ -155,32 +190,60 @@ create_validated(Ns, InitialTerms) ->
                 {error, _} = Error ->
                     Error;
                 Status ->
-                    start(Ns, Config, Status)
+                    start(Ns, Config, Status, any)
             end
     end.
 
-start(Ns, Config, Status) ->
+join_validated(Ns, GenesisHex, RawGenesisHash, SeedPeers) ->
+    case root_storage() of
+        {error, _} = Error ->
+            Error;
+        {ok, Storage} ->
+            {_Ns, BaseConfig0} =
+                quod_app:build_ns_config(
+                  #{namespace => Ns, mode => join,
+                    genesis_file => <<>>, genesis_hash => GenesisHex,
+                    seeds => []}),
+            %% Validation above makes build_ns_config's malformed-hex fallback
+            %% unreachable; retain the already-decoded anchor explicitly.
+            BaseConfig = BaseConfig0#{genesis_hash => RawGenesisHash},
+            Config = maps:merge(
+                       BaseConfig,
+                       Storage#{seed_peers => SeedPeers}),
+            case existing_ledger(Ns, Config) of
+                {error, _} = Error -> Error;
+                created -> start(Ns, Config, joining, RawGenesisHash);
+                resumed -> start(Ns, Config, resumed, RawGenesisHash)
+            end
+    end.
+
+start(Ns, Config, Status, ExpectedGenesisHash) ->
     Result =
         try quod_namespace_manager:start_new_content(Ns, Config)
         catch exit:_ -> {error, manager_unavailable}
         end,
     case Result of
         {ok, Pid} when is_pid(Pid) ->
-            creation_started(Ns, Config, Status);
+            hosting_started(Ns, Config, Status, ExpectedGenesisHash);
         {ok, Pid, _Info} when is_pid(Pid) ->
-            creation_started(Ns, Config, Status);
+            hosting_started(Ns, Config, Status, ExpectedGenesisHash);
         {error, {already_configured, Ns}} = Error ->
             Error;
         {error, Reason} ->
             {error, {start_failed, Reason}}
     end.
 
-creation_started(Ns, Config, Status) ->
+hosting_started(Ns, Config, Status, ExpectedGenesisHash) ->
     case quod_simplex:genesis_hash(Ns) of
-        Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
+        Hash when is_binary(Hash), byte_size(Hash) =:= 32,
+                  ExpectedGenesisHash =:= any orelse Hash =:= ExpectedGenesisHash ->
             ok = quod_app:publish_data_dir(Ns, Config),
             {ok, Status, Ns, Hash};
+        Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
+            _ = quod_namespace_manager:stop_content(Ns),
+            {error, genesis_mismatch};
         _ ->
+            _ = quod_namespace_manager:stop_content(Ns),
             {error, genesis_unavailable}
     end.
 
@@ -198,16 +261,85 @@ validate_name(<<>>) ->
     {error, invalid_name};
 validate_name(Ns) when byte_size(Ns) > ?MAX_NAMESPACE_BYTES ->
     {error, invalid_name};
-validate_name(<<"quod">>) ->
-    {error, reserved_system_namespace};
-validate_name(<<"quod:", _/binary>>) ->
-    {error, reserved_system_namespace};
 validate_name(Ns) ->
     try unicode:characters_to_binary(Ns, utf8, utf8) of
         Ns -> {ok, Ns};
         _ -> {error, invalid_name}
     catch _:_ ->
         {error, invalid_name}
+    end.
+
+canonical_user_name(Name) ->
+    case canonical_name(Name) of
+        {ok, <<"quod">>} -> {error, reserved_system_namespace};
+        {ok, <<"quod:", _/binary>>} ->
+            {error, reserved_system_namespace};
+        Other -> Other
+    end.
+
+normalize_genesis_hash(Value) ->
+    try unicode:characters_to_binary(Value) of
+        Hex when is_binary(Hex), byte_size(Hex) =:= 64 ->
+            try binary:decode_hex(Hex) of
+                Raw when byte_size(Raw) =:= 32 -> {ok, Hex, Raw}
+            catch _:_ -> {error, invalid_genesis_hash}
+            end;
+        _ ->
+            {error, invalid_genesis_hash}
+    catch _:_ ->
+        {error, invalid_genesis_hash}
+    end.
+
+normalize_seeds(Seeds) ->
+    normalize_seeds(Seeds, 0, #{}, []).
+
+normalize_seeds([], 0, _Seen, _AccRev) ->
+    {error, invalid_seeds};
+normalize_seeds([], _Count, _Seen, AccRev) ->
+    {ok, lists:reverse(AccRev)};
+normalize_seeds([_ | _], 32, _Seen, _AccRev) ->
+    {error, invalid_seeds};
+normalize_seeds([{seed, Host0, Port} | Rest], Count, Seen, AccRev)
+  when is_integer(Port), Port >= 1, Port =< 65535 ->
+    case normalize_host(Host0) of
+        {ok, Host} ->
+            Endpoint = {Host, Port},
+            case maps:is_key(Endpoint, Seen) of
+                true -> {error, invalid_seeds};
+                false ->
+                    normalize_seeds(
+                      Rest, Count + 1, Seen#{Endpoint => true},
+                      [Endpoint | AccRev])
+            end;
+        error ->
+            {error, invalid_seeds}
+    end;
+normalize_seeds(_Invalid, _Count, _Seen, _AccRev) ->
+    {error, invalid_seeds}.
+
+normalize_host(Host0) ->
+    try unicode:characters_to_list(Host0) of
+        Host when is_list(Host), Host =/= [] -> {ok, Host};
+        _ -> error
+    catch _:_ -> error
+    end.
+
+local_state_validated(Ns) ->
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Content = maps:get(content, Desired, #{}),
+    Wanted = maps:is_key(Ns, Content),
+    NamespacePid = quod_reg:where({quod_ns, Ns}),
+    SimplexPid = quod_reg:where({quod_simplex, Ns}),
+    case {Wanted, is_pid(NamespacePid), is_pid(SimplexPid)} of
+        {false, false, false} -> not_hosted;
+        {false, _, _} -> stopping;
+        {true, false, false} -> starting;
+        {true, _, false} -> starting;
+        {true, _, true} ->
+            case quod_simplex:status(Ns) of
+                #{syncing := false} -> ready;
+                _ -> joining
+            end
     end.
 
 validate_initial_terms(Terms) when is_list(Terms) ->

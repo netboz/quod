@@ -99,7 +99,10 @@ load(#est{db = Db0} = Est) ->
 %% The governed predicates, in registration order. Their class + real handler is in registry/1.
 governed() -> [{peer_ready, 1}, {directory_host, 4},
                {directory_control_peer, 1},
-               {admit, 3}, {remove, 1}, {create_ontology, 2},
+               {admit, 3}, {remove, 1},
+               {create_ontology_effect, 2},
+               {join_ontology_effect, 3},
+               {ontology_join_state, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
@@ -110,8 +113,15 @@ registry({directory_control_peer, 1}) ->
     {query, quod_directory_predicates, directory_control_peer_1};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
 registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
-registry({create_ontology, 2}) ->
-    {effect, quod_ontology_predicates, create_ontology_predicate};
+registry({create_ontology_effect, 2}) ->
+    {effect, quod_ontology_predicates,
+     create_ontology_effect_predicate};
+registry({join_ontology_effect, 3}) ->
+    {effect, quod_ontology_predicates,
+     join_ontology_effect_predicate};
+registry({ontology_join_state, 2}) ->
+    {query, quod_ontology_predicates,
+     ontology_join_state_predicate};
 %% arity 1: a handler ConvergeGoal is invoked with the scope argument appended, so the
 %% declared atom `projection_noop` reaches the KB as {projection_noop, Scope}.
 registry({projection_noop, 1}) -> {projection, ?MODULE, projection_noop_1};

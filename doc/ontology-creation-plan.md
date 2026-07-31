@@ -3,8 +3,8 @@
 ## Goal
 
 Add one Erlang API that creates and starts a local N=1 ontology from ordered
-term, inline-source, and file-source inputs, and one external Erlang predicate
-that calls it.
+term, inline-source, and file-source inputs, and one root action whose thin
+external Erlang adapter calls it.
 
 ```erlang
 quod_ontology:create(
@@ -109,15 +109,20 @@ automatically reopen dynamically created ontologies.  Calling `create/2` again
 with an existing local ledger resumes it as `mode = create`; automatic durable
 hosting intent is deliberately deferred rather than introducing a manifest.
 
-## External predicate
+## Action and external adapter
 
-Register one governed predicate in `quod_ontology_predicates`:
+Root exposes creation as an ordinary action:
 
 ```prolog
-create_ontology(Name, Options).
+action(create_ontology(Name, Options),
+       [ontology_join_state(Name, not_hosted),
+        create_ontology_effect(Name, Options)],
+       true).
 ```
 
-Its compiled handler is named `create_ontology_predicate/3`: every Erlang
+The public call is `goal(create_ontology(Name, Options))`. The governed
+external adapter is `create_ontology_effect/2`, and its compiled handler is
+named `create_ontology_effect_predicate/3`: every Erlang
 function entered by Erlog will use the `_predicate` suffix from now on.  It is
 an `effect` predicate.  The handler itself checks
 `ctx_ns(Context) =:= <<"quod:root">>` before doing any work; registration as an
@@ -150,13 +155,13 @@ It does not copy arbitrary Erlang error terms into Prolog: child-start errors
 may contain PIDs, references, paths, or other non-portable implementation
 details. The Erlang API retains its detailed `{error, Reason}` for operators;
 the predicate maps that result to the bounded, always-ground public reason
-above. The
-interpreter then adds the exhausted `create_ontology(Name, Options)` call
+above. The interpreter then adds the exhausted
+`goal(create_ontology(Name, Options))` call
 as the outer diagnostic frame. A caller may recover normally:
 
 ```prolog
 create_or_recover(Name, Options) :-
-    create_ontology(Name, Options).
+    goal(create_ontology(Name, Options)).
 create_or_recover(_Name, _Options) :-
     get_fail_reasons(Reasons),
     member(ontology_creation_failed(Why), Reasons),
@@ -222,8 +227,10 @@ than being caller variables.
    retry. An undesired live child proves that supervisor collisions are not
    adopted or stopped; the manager applies that same rollback and collision
    classification to `already_started` and `already_present` start results.
-5. The external `create_ontology/2` effect calls the same API. A call outside
-   `quod:root` fails with
+5. `goal(create_ontology/2)` reaches the external
+   `create_ontology_effect/2` adapter, which calls the same API. A direct call
+   to the removed external `create_ontology/2` functor cannot perform the
+   lifecycle operation. An adapter call outside `quod:root` fails with
    `ontology_creation_failed(root_only)` before side effects. Invalid input and
    start errors return `{fail, Reasons}` containing the matching stable
    `ontology_creation_failed/1` reason, and a fallback clause finds it with

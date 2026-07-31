@@ -31,19 +31,21 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([joiner_catches_up/1, joiner_resumes_after_restart/1, joiner_promoted_to_voter/1,
-         self_seeded_joiner_catches_up/1]).
+         runtime_join_action_catches_up/1, self_seeded_joiner_catches_up/1]).
 
 -define(NS, <<"join:s5a">>).
 -define(FOUNDER_PORT,  15840).
 -define(JOINER_PORT,   15841).
 -define(OBSERVER_PORT, 15842).
+-define(ACTION_PORT,   15843).
 
 %% Ordered: the joiner first catches up (height 2), then — after being STOPPED and the founder committing a
 %% NEW fact while it is down — a restart RESUMES catch-up from its persisted height and picks up the delta;
-%% then the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b); finally a
-%% fresh observer with a USELESS (self-only) seed list catches up via the Brahms view (the wedge regression).
+%% then the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b). A fresh
+%% node next exercises that same join through the public root action. Finally, an observer with a USELESS
+%% (self-only) seed list catches up via the Brahms view (the wedge regression).
 all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter,
-          self_seeded_joiner_catches_up].
+          runtime_join_action_catches_up, self_seeded_joiner_catches_up].
 
 %%%===================================================================
 %%% suite setup: found N=1, commit a fact, then start a mode=join node
@@ -100,6 +102,14 @@ end_per_suite(Config) ->
 %% Start one node in its own OS node: its own identity (env), its own QUIC listener on Port, then the
 %% namespace with the given extra config (mode/committee/genesis_hash/seed_peers). Returns the peer handle.
 start_node(Port, {Pub, Seed}, Config, Extra) ->
+    {Peer, DataDir} = start_app_node(Port, {Pub, Seed}, Config),
+    KeyTerm = quod_identity:key_term({Pub, Seed}),
+    Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
+                     Extra),
+    {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),
+    Peer.
+
+start_app_node(Port, {Pub, Seed}, Config) ->
     Name = list_to_atom("join_" ++ integer_to_list(Port)),
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io, args => ["-pa" | code:get_path()]}),
@@ -114,10 +124,7 @@ start_node(Port, {Pub, Seed}, Config, Extra) ->
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
-    Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
-                     Extra),
-    {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),
-    Peer.
+    {Peer, DataDir}.
 
 %%%===================================================================
 %%% test
@@ -254,7 +261,7 @@ joiner_promoted_to_voter(Config) ->
 %% fail (Brahms starts just after the namespace ⇒ no view, no usable seed ⇒ {error,no_contact}), which
 %% also exercises the quiet re-sample-on-retry path.
 self_seeded_joiner_catches_up(Config) ->
-    {joiner_promoted_to_voter, Saved} = ?config(saved_config, Config),
+    {runtime_join_action_catches_up, Saved} = ?config(saved_config, Config),
     Founder = ?config(founder2, Saved),
     FAddr   = ?config(faddr, Config),
     OKey    = quod_identity:generate(),
@@ -277,6 +284,72 @@ self_seeded_joiner_catches_up(Config) ->
         catch peer:stop(Obs)
     end.
 
+%% The public root action uses quod_ontology:join/3 rather than a second join
+%% implementation. A fresh node founds its own root, invokes the asynchronous
+%% action, then catches up the existing ontology through genuine loopback QUIC.
+runtime_join_action_catches_up(Config) ->
+    {joiner_promoted_to_voter, Saved} = ?config(saved_config, Config),
+    Founder = ?config(founder2, Saved),
+    Joiner = ?config(joiner2, Saved),
+    GenesisHash = peer:call(Founder, quod_simplex, genesis_hash, [?NS]),
+    Target = slot(Founder),
+    Key = quod_identity:generate(),
+    {ActionNode, DataDir} = start_app_node(?ACTION_PORT, Key, Config),
+    RootNs = <<"quod:root">>,
+    try
+        RootContent =
+            #{namespace => RootNs, mode => create,
+              genesis_file => <<"ontologies/quod_root.pl">>,
+              data_dir => list_to_binary(DataDir), seeds => []},
+        {RootNs, RootConfig} =
+            peer:call(ActionNode, quod_app, build_ns_config, [RootContent]),
+        {ok, _} =
+            peer:call(
+              ActionNode, quod_namespace_manager, start_content,
+              [RootNs, RootConfig]),
+        ?assert(
+           eventually(
+             fun() ->
+                 match_ok(
+                   peer:call(
+                     ActionNode, quod_prolog, prove_ro,
+                     [RootNs, true, RootNs]))
+             end, 10000)),
+        Goal =
+            {goal,
+             {join_ontology, ?NS, binary:encode_hex(GenesisHash),
+              [{seed, "127.0.0.1", ?FOUNDER_PORT}]}},
+        ?assertMatch(
+           {ok, [#{}], _},
+           peer:call(ActionNode, quod_prolog, effect, [RootNs, Goal])),
+        ?assert(
+           eventually(
+             fun() ->
+                 peer:call(
+                   ActionNode, quod_ontology, local_state, [?NS])
+                     =:= {ok, ready}
+             end, 60000)),
+        ?assert(eventually(fun() -> slot_on(ActionNode, ?NS) >= Target end, 10000)),
+        ?assert(
+           eventually(
+             fun() ->
+                 match_ok(
+                   quod_ct:peer_prove(
+                     ActionNode, ?NS, {capital, france, {'X'}}))
+             end, 15000)),
+        ?assertEqual(observer,
+                     maps:get(role,
+                              peer:call(ActionNode, quod_simplex, status, [?NS]))),
+        %% A second call fails as the declared action; it cannot fall through
+        %% into the generic fact catch-all and become effect_staged_write.
+        ?assertMatch(
+           {fail, [_ | _]},
+           peer:call(ActionNode, quod_prolog, effect, [RootNs, Goal])),
+        {save_config, [{founder2, Founder}, {joiner2, Joiner}]}
+    after
+        catch peer:stop(ActionNode)
+    end.
+
 %%%===================================================================
 %%% helpers
 %%%===================================================================
@@ -296,6 +369,8 @@ founder_cfg() ->
 
 status(Peer) -> peer:call(Peer, quod_simplex, status, [?NS]).
 slot(Peer)   -> maps:get(slot, status(Peer), -1).
+slot_on(Peer, Ns) ->
+    maps:get(slot, peer:call(Peer, quod_simplex, status, [Ns]), -1).
 prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).
 pub_of(Peer) -> peer:call(Peer, application, get_env, [quod, node_pubkey, undefined]).
 

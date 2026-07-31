@@ -85,6 +85,9 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
   directory policies.
 - Erlang external predicates as narrow adapters where Prolog cannot directly
   observe or affect the runtime.
+- BBSvx/Onia's `goal/1` action resolution over
+  `action(Action, Prerequisites, Effect)`, with Quod's forward-only guard for
+  declared action names.
 
 ### Rejected
 
@@ -93,7 +96,6 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
 - Replaying effects from transaction history.
 - A generic effect dispatcher that can invoke any compiled predicate by functor.
 - Fire-and-forget event workers without ownership or a durable delivery policy.
-- BBSvx/Onia `goal/1` reverse action lookup and catch-all action resolution.
 - Storing every FIPA envelope in one consensus-ordered global ontology.
 - Consensus facts containing volatile socket addresses as if they were stable
   identities.
@@ -197,7 +199,7 @@ context. Effect predicates are never callable from ordinary ontology proofs.
 > `follow_disabled`), not this readable flag. All four kinds now have concrete
 > constructors: normal proofs and membership verdicts, runtime projections, and
 > the explicit snapshot-pinned `quod_prolog:effect/2` path used by
-> `create_ontology/2`. The
+> `goal(create_ontology(...))` and `goal(join_ontology(...))`. The
 > four process-dictionary values (`$quod_ns`/`$quod_applied`/`$quod_ask_chain`/
 > `$quod_in_verdict`) are removed, not retained as a second mechanism.
 
@@ -206,31 +208,45 @@ context. Effect predicates are never callable from ordinary ontology proofs.
 The framework action interface is:
 
 ```prolog
-action(Action, Subject, Result).
+action(Action, Prerequisites, Effect).
+goal(Action).
 ```
 
-Domain ontologies define ordinary clauses for this predicate. A clause:
+`goal/1` resolves a declared action, checks its prerequisites from left to
+right, and applies its effect. It also supports reverse lookup from a desired
+effect, specific actions before the generic `assert_fact/1` and
+`remove_fact/1` actions, then a direct `call/1` fallback. These common clauses
+are loaded by `quod_prolog:build_kb/0` into every ontology's code baseline;
+they are not copied into genesis transactions.
 
-1. checks the subject and domain policy;
-2. proves its preconditions;
-3. stages its own assert/retract operations;
-4. returns a result term.
+Quod adds one safety guard to the reference pattern: `true` is never reverse
+resolved, and a term that is itself a declared action name is forward-only.
+Failed lifecycle prerequisites therefore remain failures instead of falling
+through to the generic fact action.
+
+Domain ontologies define ordinary `action/3` clauses. A clause:
+
+1. expresses authorization and policy as prerequisites;
+2. orders those prerequisites explicitly;
+3. declares the resulting fact, retract, or `true` no-op effect.
 
 Example:
 
 ```prolog
-action(rename_agent(Agent, Name), Subject, renamed(Agent, Name)) :-
-    may_manage_agent(Subject, Agent),
-    valid_agent_name(Name),
-    retract(agent_name(Agent, _)),
-    assertz(agent_name(Agent, Name)).
+action(rename_agent(Agent, Name),
+       [may_manage_agent(Agent), valid_agent_name(Name)],
+       agent_name(Agent, Name)).
 ```
 
-There is no generic reverse lookup from desired final fact to action, no
-catch-all mutation action, and no fallback that calls an arbitrary goal.
+The authenticated subject will be read by authorization prerequisites from
+the engine-owned execution context; it is not a positional field of
+`action/3`.
 
-An action changes durable reality. Runtime consequences are derived from its
-committed diff by P and E handlers.
+Most actions change durable reality and their runtime consequences are derived
+from the committed diff by P and E handlers. Explicit node-local lifecycle
+actions run only through the effect context, place their external adapter last
+in the prerequisite list, and use `true` as the effect so volatile hosting
+state is not asserted into consensus.
 
 ## 7. Apply, replay, reconciliation, and events
 
@@ -654,7 +670,8 @@ is accepted. Conversation IDs are globally unique and non-empty.
 ### Mapping to Quod
 
 - `request(Action)` asks the receiver to execute
-  `action(Action, Subject, Result)` in its owning ontology.
+  `goal(Action)` in its owning ontology under the authenticated subject
+  context.
 - `query_if(Goal)` uses a bounded target proof and returns an `inform`.
 - `query_ref(Goal)` streams target answers into one or more `inform` messages.
 - `subscribe(Goal)` will use durable subscription state and completion/read-set

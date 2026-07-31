@@ -22,13 +22,12 @@ create_ontology_predicate(Goal, Next, #est{bs = Bs} = St) ->
             fail_with(root_only, St)
     end.
 
-create({create_ontology, Name, InitialFacts}, Next, St)
-  when is_list(InitialFacts) ->
-    case quod_predicates:is_ground({Name, InitialFacts}) of
+create({create_ontology, Name, Options}, Next, St) ->
+    case quod_predicates:is_ground({Name, Options}) of
         false ->
             fail_with(invalid_arguments, St);
         true ->
-            case quod_ontology:create(Name, InitialFacts) of
+            case quod_ontology:create(Name, Options) of
                 {ok, _Status, _Ns, _GenesisHash} ->
                     erlog_int:prove_body(Next, St);
                 {error, Reason} ->
@@ -40,8 +39,13 @@ create(_Goal, _Next, St) ->
 
 public_reason(invalid_name) -> invalid_name;
 public_reason(reserved_system_namespace) -> reserved_system_namespace;
+public_reason(invalid_options) -> invalid_options;
 public_reason(invalid_initial_terms) -> invalid_initial_terms;
 public_reason({invalid_initial_term, _Term}) -> invalid_initial_terms;
+public_reason({source_error, Index, Line, _Detail}) ->
+    {invalid_source, Index, Line};
+public_reason({source_file_error, Index, _Path, _Reason}) ->
+    {source_file_error, Index};
 public_reason(_Reason) -> start_failed.
 
 fail_with(Reason, St) ->

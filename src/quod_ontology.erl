@@ -19,17 +19,123 @@ ledger.
         {ok, created | resumed, binary(), binary()} |
         {error, term()}.
 
--spec create(term(), [term()]) -> creation().
-create(Name, InitialTerms) ->
+-type input_option() ::
+        {source_file, file:filename()} |
+        {source, unicode:chardata()} |
+        {terms, [term()]}.
+
+-spec create(term(), [input_option()]) -> creation().
+create(Name, Options) ->
     case canonical_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
-            case validate_initial_terms(InitialTerms) of
-                ok -> create_validated(Ns, InitialTerms);
-                {error, _} = Error -> Error
+            case load_options(Options) of
+                {error, _} = Error ->
+                    Error;
+                {ok, InitialTerms} ->
+                    case validate_initial_terms(InitialTerms) of
+                        ok -> create_validated(Ns, InitialTerms);
+                        {error, _} = Error -> Error
+                    end
             end
     end.
+
+load_options(Options) ->
+    load_options(Options, 1, []).
+
+load_options([], _Index, AccRev) ->
+    {ok, lists:reverse(AccRev)};
+load_options([Option | Rest], Index, AccRev) ->
+    case load_option(Option, Index) of
+        {ok, Terms} ->
+            load_options(Rest, Index + 1, lists:reverse(Terms, AccRev));
+        {error, _} = Error ->
+            Error
+    end;
+load_options(_ImproperOrNonList, _Index, _AccRev) ->
+    {error, invalid_options}.
+
+load_option({terms, Terms}, _Index) ->
+    case proper_list(Terms) of
+        true -> {ok, Terms};
+        false -> {error, invalid_options}
+    end;
+load_option({source, Text}, Index) ->
+    case source_chars(Text) of
+        {ok, Chars} -> read_source(Chars, Index);
+        error -> {error, invalid_options}
+    end;
+load_option({source_file, Path0}, Index) ->
+    case source_path(Path0) of
+        {ok, Path} -> read_source_file(Path, Index);
+        error -> {error, invalid_options}
+    end;
+load_option(_Unknown, _Index) ->
+    {error, invalid_options}.
+
+proper_list([]) -> true;
+proper_list([_ | Rest]) -> proper_list(Rest);
+proper_list(_) -> false.
+
+source_chars(Text) ->
+    try unicode:characters_to_list(Text) of
+        Chars when is_list(Chars) -> {ok, Chars};
+        _ -> error
+    catch _:_ -> error
+    end.
+
+source_path(Path) ->
+    try unicode:characters_to_binary(Path) of
+        <<>> -> error;
+        Binary when is_binary(Binary) -> {ok, Binary};
+        _ -> error
+    catch _:_ -> error
+    end.
+
+read_source(Chars, Index) ->
+    Result =
+        try erlog_io:read_string_terms(Chars)
+        catch CatchClass:CatchReason -> {caught, CatchClass, CatchReason}
+        end,
+    case Result of
+        {ok, Terms} when is_list(Terms) ->
+            {ok, Terms};
+        {error, {Line, Module, Detail}} when is_integer(Line) ->
+            {error, {source_error, Index, Line, {Module, Detail}}};
+        {error, ErrorReason} ->
+            {error, {source_error, Index, 0, ErrorReason}};
+        {caught, ErrorClass, ErrorReason} ->
+            {error, {source_error, Index, 0, {ErrorClass, ErrorReason}}}
+    end.
+
+read_source_file(Path, Index) ->
+    Result =
+        try erlog_io:read_file(Path)
+        catch CatchClass:CatchReason -> {caught, CatchClass, CatchReason}
+        end,
+    case Result of
+        {ok, Terms} ->
+            case proper_list(Terms) of
+                true -> {ok, Terms};
+                false -> source_file_error(Index, Path, invalid_terms)
+            end;
+        {error, {Line, Module, Detail}} when is_integer(Line) ->
+            {error, {source_error, Index, Line, {Module, Detail}}};
+        {error, ErrorReason} ->
+            source_file_error(Index, Path, ErrorReason);
+        {error, einval, ErrorReason} ->
+            source_file_error(Index, Path, {error, einval, ErrorReason});
+        {exit, einval, ErrorReason} ->
+            source_file_error(Index, Path, {exit, einval, ErrorReason});
+        {caught, ErrorClass, ErrorReason} ->
+            source_file_error(Index, Path, {ErrorClass, ErrorReason});
+        Other ->
+            source_file_error(Index, Path, {unexpected, Other})
+    end.
+
+source_file_error(Index, Path, Reason) ->
+    {error, {source_file_error, Index, Path, Reason}}.
 
 create_validated(Ns, InitialTerms) ->
     case root_storage() of
@@ -108,13 +214,9 @@ validate_initial_terms(Terms) when is_list(Terms) ->
     case first_reserved_term(Terms) of
         none ->
             compile_initial_terms(Terms);
-        improper ->
-            {error, invalid_initial_terms};
         Term ->
             invalid_initial_term(Term)
-    end;
-validate_initial_terms(_Terms) ->
-    {error, invalid_initial_terms}.
+    end.
 
 first_reserved_term([]) ->
     none;
@@ -122,9 +224,7 @@ first_reserved_term([Term | Rest]) ->
     case reserved_clause_head(clause_head(Term)) of
         true -> Term;
         false -> first_reserved_term(Rest)
-    end;
-first_reserved_term(_ImproperTail) ->
-    improper.
+    end.
 
 clause_head({':-', Head, _Body}) -> Head;
 clause_head(Fact) -> Fact.

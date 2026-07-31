@@ -1,6 +1,7 @@
 -module(quod_ontology_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
 
@@ -69,11 +70,19 @@ cleanup(#{dir := Dir, saved := Saved, manager := Manager,
 
 create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     Ns = unique_ns(<<"created">>),
-    Terms =
-        [{note, welcome},
-         {':-', {welcomes, {'Who'}}, {note, {'Who'}}}],
+    SourceOne = filename:join(Dir, "ontology-source-one.pl"),
+    SourceTwo = filename:join(Dir, "ontology-source-two.pl"),
+    ok = file:write_file(SourceOne, <<"ordered(file_one).">>),
+    ok = file:write_file(SourceTwo, <<"ordered(file_two).\n">>),
+    Options =
+        [{terms, [{ordered, terms_first}, {note, welcome}]},
+         {source_file, SourceOne},
+         {source_file, list_to_binary(SourceTwo)},
+         {source,
+          <<"ordered(inline).\n"
+            "welcomes(Who) :- note(Who).">>}],
     {ok, created, Ns, GenesisHash} =
-        quod_ontology:create(Ns, Terms),
+        quod_ontology:create(Ns, Options),
     ?assertEqual(32, byte_size(GenesisHash)),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
@@ -82,6 +91,12 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:prove_ro(Ns, {welcomes, welcome}, Ns)),
+    lists:foreach(
+      fun(Value) ->
+          ?assertMatch(
+             {ok, [#{}], _},
+             quod_prolog:prove_ro(Ns, {ordered, Value}, Ns))
+      end, [terms_first, file_one, file_two, inline]),
     ?assertMatch(
        {ok, [_], _},
        quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Nonce'}}, Ns)),
@@ -91,6 +106,16 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
          Ns, {peer_admitted, {'Id'}, {'Host'}, {'Port'}, {'Key'}}, Ns)),
     Desired = application:get_env(quod, namespace_desired, #{}),
     CreatedConfig = maps:get(Ns, maps:get(content, Desired)),
+    {ok, Store} =
+        quod_ledger_store:open_ro(
+          Ns, quod_ledger_store:ledger_dir(CreatedConfig)),
+    {ok, #entry{data = {batch, [#transaction{diff = Diff}]}}} =
+        quod_ledger_store:read_at(Store, 1),
+    ok = quod_ledger_store:close(Store),
+    OrderedValues =
+        [Value || {assert, {{ordered, Value}, _Body}} <- Diff],
+    ?assertEqual(
+       [terms_first, file_one, file_two, inline], OrderedValues),
     ?assertEqual(
        quod_ledger_store:data_dir(RootConfig),
        quod_ledger_store:data_dir(CreatedConfig)),
@@ -104,7 +129,8 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ?assert(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns))),
     ok = quod_namespace_manager:stop_content(Ns),
     {ok, resumed, Ns, GenesisHash} =
-        quod_ontology:create(Ns, [{note, must_not_appear}]),
+        quod_ontology:create(
+          Ns, [{terms, [{note, must_not_appear}]}]),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {fail, _},
@@ -115,6 +141,7 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
 
 validation_precedes_mutation(#{dir := Dir}) ->
     Desired0 = application:get_env(quod, namespace_desired, #{}),
+    DataDirs0 = application:get_env(quod, content_data_dirs, #{}),
     InvalidNames =
         [<<>>, <<255>>, binary:copy(<<"a">>, 129),
          <<"quod">>, <<"quod:private">>],
@@ -134,7 +161,7 @@ validation_precedes_mutation(#{dir := Dir}) ->
         {invalid_initial_term,
          {consensus_incarnation, forged}}},
        quod_ontology:create(
-         ReservedNs, [{consensus_incarnation, forged}])),
+         ReservedNs, [{terms, [{consensus_incarnation, forged}]}])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ReservedNs))),
     ReservedPeerNs = unique_ns(<<"reserved-peer-head">>),
@@ -142,35 +169,105 @@ validation_precedes_mutation(#{dir := Dir}) ->
         {peer_admitted, <<0:256>>, "127.0.0.1", 14567, <<0:256>>},
     ?assertEqual(
        {error, {invalid_initial_term, ReservedPeer}},
-       quod_ontology:create(ReservedPeerNs, [ReservedPeer])),
+       quod_ontology:create(ReservedPeerNs, [{terms, [ReservedPeer]}])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ReservedPeerNs))),
     BadTermsNs = unique_ns(<<"bad-terms">>),
     ?assertEqual(
        {error, invalid_initial_terms},
-       quod_ontology:create(BadTermsNs, [{"not-a-functor", x}])),
+       quod_ontology:create(
+         BadTermsNs, [{terms, [{"not-a-functor", x}]}])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, BadTermsNs))),
     ImproperTermsNs = unique_ns(<<"improper-terms">>),
     ?assertEqual(
-       {error, invalid_initial_terms},
+       {error, invalid_options},
        quod_ontology:create(
-         ImproperTermsNs, [{valid_fact, true} | improper_tail])),
+         ImproperTermsNs,
+         [{terms, [{valid_fact, true} | improper_tail]}])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ImproperTermsNs))),
+    LegacyTermsNs = unique_ns(<<"legacy-terms">>),
+    ?assertEqual(
+       {error, invalid_options},
+       quod_ontology:create(LegacyTermsNs, [{legacy_fact, rejected}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, LegacyTermsNs))),
+    InlineReservedNs = unique_ns(<<"inline-reserved">>),
+    ?assertMatch(
+       {error, {invalid_initial_term, _}},
+       quod_ontology:create(
+         InlineReservedNs,
+         [{source, <<"consensus_incarnation(forged).">>}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, InlineReservedNs))),
+    ReservedFile = filename:join(Dir, "reserved-source.pl"),
+    ok = file:write_file(
+           ReservedFile,
+           <<"peer_admitted(a, b, c, d).">>),
+    FileReservedNs = unique_ns(<<"file-reserved">>),
+    ?assertMatch(
+       {error, {invalid_initial_term, _}},
+       quod_ontology:create(
+         FileReservedNs, [{source_file, ReservedFile}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, FileReservedNs))),
+    BadLaterNs = unique_ns(<<"bad-later-source">>),
+    ?assertMatch(
+       {error, {source_error, 2, 2, _}},
+       quod_ontology:create(
+         BadLaterNs,
+         [{terms, [{would_be_partial, true}]},
+          {source, <<"valid.\nbroken(">>}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, BadLaterNs))),
+    MissingFileNs = unique_ns(<<"missing-file">>),
+    ?assertMatch(
+       {error, {source_file_error, 1, _, _}},
+       quod_ontology:create(
+         MissingFileNs,
+         [{source_file,
+           filename:join(Dir, "does-not-exist.pl")}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, MissingFileNs))),
+    InvalidUtf8Ns = unique_ns(<<"invalid-utf8">>),
+    ?assertEqual(
+       {error, invalid_options},
+       quod_ontology:create(
+         InvalidUtf8Ns, [{source, <<255>>}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, InvalidUtf8Ns))),
+    MalformedNs = unique_ns(<<"malformed-option">>),
+    ?assertEqual(
+       {error, invalid_options},
+       quod_ontology:create(MalformedNs, [{source, <<"ok.">>, extra}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, MalformedNs))),
+    ImproperOptionsNs = unique_ns(<<"improper-options">>),
+    ?assertEqual(
+       {error, invalid_options},
+       quod_ontology:create(
+         ImproperOptionsNs, [{terms, []} | improper_tail])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, ImproperOptionsNs))),
     ?assertEqual(
        Desired0,
-       application:get_env(quod, namespace_desired, #{})).
+       application:get_env(quod, namespace_desired, #{})),
+    ?assertEqual(
+       DataDirs0,
+       application:get_env(quod, content_data_dirs, #{})).
 
 collisions_preserve_existing_state(_Fixture) ->
     Ns = unique_ns(<<"collision">>),
-    {ok, created, Ns, _} = quod_ontology:create(Ns, [{kept, true}]),
+    {ok, created, Ns, _} =
+        quod_ontology:create(Ns, [{terms, [{kept, true}]}]),
     ok = wait_ready(Ns, 200),
     Pid0 = quod_reg:where({quod_ns, Ns}),
     Desired0 = application:get_env(quod, namespace_desired, #{}),
     ?assertEqual(
        {error, {already_configured, Ns}},
-       quod_ontology:create(Ns, [{replacement, forbidden}])),
+       quod_ontology:create(
+         Ns, [{terms, [{replacement, forbidden}]}])),
     ?assertEqual(Pid0, quod_reg:where({quod_ns, Ns})),
     ?assert(is_process_alive(Pid0)),
     ?assertEqual(
@@ -222,11 +319,17 @@ effect_boundary_and_reasons(_Fixture) ->
        {ok, [#{}], _},
        quod_prolog:effect(
          ?ROOT_NS,
-         {create_ontology, Ns, [{effect_fact, works}]})),
+         {create_ontology, Ns,
+          [{source,
+            <<"effect_fact(works).\n"
+              "effect_rule(X) :- effect_fact(X).">>}]})),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:prove_ro(Ns, {effect_fact, works}, Ns)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {effect_rule, works}, Ns)),
     ?assertMatch(
        {error, {erlog, {context_violation, _, effect, proof}}},
        quod_prolog:prove(
@@ -251,7 +354,7 @@ effect_boundary_and_reasons(_Fixture) ->
         quod_prolog:effect(
           ?ROOT_NS,
           {create_ontology, unique_ns(<<"invalid-terms">>),
-           [{member, x, []}]}),
+           [{terms, [{member, x, []}]}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, invalid_initial_terms},
@@ -260,16 +363,36 @@ effect_boundary_and_reasons(_Fixture) ->
         quod_prolog:effect(
           ?ROOT_NS,
           {create_ontology, unique_ns(<<"improper-terms">>),
-           [{valid_fact, true} | improper_tail]}),
+           [{terms, [{valid_fact, true} | improper_tail]}]}),
     ?assert(
        lists:member(
-         {ontology_creation_failed, invalid_initial_terms},
+         {ontology_creation_failed, invalid_options},
          ImproperTermReasons)),
+    {fail, InvalidSourceReasons} =
+        quod_prolog:effect(
+          ?ROOT_NS,
+          {create_ontology, unique_ns(<<"invalid-source">>),
+           [{terms, [{valid, first}]},
+            {source, "valid.\nbroken("}]}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, {invalid_source, 2, 2}},
+         InvalidSourceReasons)),
+    {fail, InvalidOptionsReasons} =
+        quod_prolog:effect(
+          ?ROOT_NS,
+          {create_ontology, unique_ns(<<"invalid-options">>),
+           [{unknown_option, value}]}),
+    ?assert(
+       lists:member(
+         {ontology_creation_failed, invalid_options},
+         InvalidOptionsReasons)),
     Large = binary:copy(<<"x">>, 5000),
     {fail, Reasons} =
         quod_prolog:effect(
           ?ROOT_NS,
-          {create_ontology, <<"quod:forbidden">>, [{payload, Large}]}),
+          {create_ontology, <<"quod:forbidden">>,
+           [{terms, [{payload, Large}]}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, reserved_system_namespace},

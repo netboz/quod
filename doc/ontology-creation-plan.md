@@ -2,14 +2,16 @@
 
 ## Goal
 
-Add one Erlang API that creates and starts a local N=1 ontology from its
-initial Prolog terms, and one external Erlang predicate that calls it.
+Add one Erlang API that creates and starts a local N=1 ontology from ordered
+term, inline-source, and file-source inputs, and one external Erlang predicate
+that calls it.
 
 ```erlang
 quod_ontology:create(
   {':', user_alice, notes},
-  [{can_read, {'Goal'}, {'Subject'}, {'Ns'}},
-   {note, welcome}]).
+  [{terms, [{note, welcome}]},
+   {source, <<"can_read(Goal, Subject, Ns) :- policy(Goal, Subject, Ns).">>},
+   {source_file, <<"/srv/quod/notes.pl">>}]).
 ```
 
 The created namespace owns its own slot-1 ledger.  Its genesis contains the
@@ -23,7 +25,7 @@ this slice.
 ## Public API
 
 ```erlang
-quod_ontology:create(Name, InitialTerms) ->
+quod_ontology:create(Name, Options) ->
     {ok, created | resumed, Namespace, GenesisHash} | {error, Reason}.
 ```
 
@@ -35,13 +37,16 @@ quod_ontology:create(Name, InitialTerms) ->
   currently-declared `quod:root`. This grammar also bounds the two existing
   ETS-name atoms created for a running namespace; the wider atom/economic
   policy remains a separate design.
-- `InitialTerms` is a list of Prolog facts or rules in Erlog's normal Erlang
-  representation.  It becomes the user-controlled part of slot 1.
+- `Options` is a proper ordered list of repeatable `{terms, Terms}`,
+  `{source, Text}`, and `{source_file, Path}` inputs. Their parsed terms are
+  combined in exact option/source order and become the user-controlled part of
+  slot 1. The complete input and error contract is documented in
+  `doc/ontology-creation-input-plan.md`.
 - Before compilation, the API rejects a user clause whose head is
   `consensus_incarnation/1` or `peer_admitted/4`.  Those facts are generated
   exactly once by the genesis builder and cannot be overridden by
-  `InitialTerms`.
-- The API then pre-compiles `InitialTerms` with
+  the combined terms.
+- The API then pre-compiles the combined terms with
   `quod_prolog:terms_to_diff/1` **before** it calls the namespace manager. A
   compilation error is returned as `{error, Reason}`.  If
   `terms_to_diff/1` throws `{genesis_failed, {assert, Term, InterpreterState}}`,
@@ -96,7 +101,7 @@ quod_ontology:create(Name, InitialTerms) ->
   a failed start publishes nothing.
 - The API checks the local ledger before start.  A fresh slot-0/no-log path
   returns `created`; an existing valid slot-1 path returns `resumed`.  In the
-  latter case `InitialTerms` are not applied and the explicit result prevents
+  latter case the supplied options are not applied and the explicit result prevents
   a caller from mistaking resume for a new creation.
 
 For this first test slice, a whole application restart does **not**
@@ -109,7 +114,7 @@ hosting intent is deliberately deferred rather than introducing a manifest.
 Register one governed predicate in `quod_ontology_predicates`:
 
 ```prolog
-create_ontology(Name, InitialFacts).
+create_ontology(Name, Options).
 ```
 
 Its compiled handler is named `create_ontology_predicate/3`: every Erlang
@@ -124,7 +129,7 @@ the reason and immediately fails through normal Prolog backtracking. This
 follows the thin in-repo external-predicate boundary used by
 `quod_committee_predicates`, `quod_directory_predicates`, and
 `quod_runtime_predicates`; it keeps genesis and lifecycle work out of the Erlog
-handler. Invalid names or initial facts therefore make the predicate fail as
+handler. Invalid names or inputs therefore make the predicate fail as
 well as making the Erlang API return `{error, Reason}`.
 
 The predicate exposes a small, stable Prolog reason vocabulary:
@@ -134,7 +139,10 @@ ontology_creation_failed(invalid_arguments)
 ontology_creation_failed(root_only)
 ontology_creation_failed(invalid_name)
 ontology_creation_failed(reserved_system_namespace)
+ontology_creation_failed(invalid_options)
 ontology_creation_failed(invalid_initial_terms)
+ontology_creation_failed(invalid_source(OptionIndex, Line))
+ontology_creation_failed(source_file_error(OptionIndex))
 ontology_creation_failed(start_failed)
 ```
 
@@ -143,13 +151,13 @@ may contain PIDs, references, paths, or other non-portable implementation
 details. The Erlang API retains its detailed `{error, Reason}` for operators;
 the predicate maps that result to the bounded, always-ground public reason
 above. The
-interpreter then adds the exhausted `create_ontology(Name, InitialFacts)` call
+interpreter then adds the exhausted `create_ontology(Name, Options)` call
 as the outer diagnostic frame. A caller may recover normally:
 
 ```prolog
-create_or_recover(Name, InitialFacts) :-
-    create_ontology(Name, InitialFacts).
-create_or_recover(_Name, _InitialFacts) :-
+create_or_recover(Name, Options) :-
+    create_ontology(Name, Options).
+create_or_recover(_Name, _Options) :-
     get_fail_reasons(Reasons),
     member(ontology_creation_failed(Why), Reasons),
     recover_creation(Why).
@@ -177,41 +185,10 @@ Normal `prove/3`, `prove_ro/3`, served asks, and the explorer prove endpoint do
 not enter an effect context, so they cannot accidentally trigger the predicate.
 `quod eval` can call `quod_prolog:effect/2` while testing.
 
-`InitialFacts` is initially a proper list of ground facts.  This keeps the
-external predicate unambiguous and avoids coupling caller variables to genesis
-compilation.  Rules and variables are supported through the Erlang API, where
-they are ordinary parsed Erlog terms.
-
-## Source binary, later
-
-The future convenience API is deliberately an adapter, not a second creator:
-
-```erlang
-quod_ontology:create_source(Name, PrologSourceBinary).
-```
-
-It will parse a multi-term UTF-8 Prolog source binary with an
-`erlog_scan:tokens/3` continuation loop, then call exactly
-`create(Name, Terms)`. A file upload or copy/paste therefore supplies the same
-slot-1 terms and never creates a parallel file-based lifecycle or temporary
-file. It is not needed to prove the first creation path, so this slice does not
-add that parser yet.
-
-Erlog scanner/parser errors already carry their source line
-(`{Line, erlog_scan | erlog_parse, Detail}`). `create_source/2` will preserve
-that line in its detailed Erlang error:
-
-```erlang
-{error, {invalid_prolog_source, Line, Detail}}
-```
-
-If exposed through a later source-creation predicate, its bounded Prolog reason
-will be `ontology_creation_failed(invalid_prolog_source(Line))`; the raw scanner
-detail remains on the Erlang side. Erlog currently emits its legacy line
-`9999` for three end-of-input parser failures: `premature_end`, `no_term`, and
-`{expected, Token}`. The adapter replaces line `9999` with the scanner's actual
-ending line for all three, not just `premature_end`; genuine reported source
-lines are preserved.
+The predicate requires the complete option list to be ground. Ground facts can
+be supplied with `terms/1`; rules containing variables should use `source/1` or
+`source_file/1`, where variables are parsed inside the new ontology rather
+than being caller variables.
 
 ## Explicit non-goals
 
@@ -226,14 +203,14 @@ lines are preserved.
 ## Tests
 
 1. `quod_ontology:create/2` creates an N=1 namespace whose slot 1 contains the
-   supplied facts/rules, exactly one generated incarnation and founding-member
+   supplied ordered inputs, exactly one generated incarnation and founding-member
    fact, and an available genesis anchor. Its operational config comes from
    `build_ns_config/1`, its resolved data/ledger paths equal root's, and the
    explorer data-directory map is published after the successful start.
 2. Empty, invalid-UTF-8, over-128-byte, and `quod:` system names are rejected
    before manager/filesystem work. Each starts no child, creates no ledger
    directory, and leaves the desired map unchanged.
-3. Malformed initial terms, improper term lists, and user-supplied
+3. Malformed options or terms, bad source/file input, and user-supplied
    `consensus_incarnation/1` or `peer_admitted/4` clause heads are rejected
    before the manager. The detailed API error identifies the offending term
    without containing an Erlog interpreter state, and no retry timer or desired

@@ -13,18 +13,27 @@ acl_sovereign(quod:root).
 %% fail-closes (unknown-predicate ⇒ deny). Narrow this per-ontology as needed.
 can_read(_Goal, _Subject, _Ns).
 
-%% Node-local ontology lifecycle. The external operation is the final ordered
-%% prerequisite; the action effect is true because hosting state is volatile on
-%% this node and must not be asserted into root's replicated ledger.
+%% Node-local ontology lifecycle. Prolog proves authorization and hosting state;
+%% the action runner performs the external operation only after this proof has
+%% succeeded without staging a replicated write.
 action(create_ontology(Name, Options),
-       [ontology_join_state(Name, not_hosted),
-        create_ontology_effect(Name, Options)],
+       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
+        ontology_join_state(Name, not_hosted)],
        true).
 
 action(join_ontology(Name, GenesisHash, Seeds),
-       [ontology_join_state(Name, not_hosted),
-        join_ontology_effect(Name, GenesisHash, Seeds)],
+       [authorized_ontology_lifecycle(
+            join_ontology(Name, GenesisHash, Seeds)),
+        ontology_join_state(Name, not_hosted)],
        true).
+
+%% First-slice host authority: a node may change only its own hosting state and
+%% only while its key is a currently admitted validator of quod:root.
+can_create_ontology(node(NodeKey), _Name, _Options) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
+
+can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
 
 %% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
 %% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own

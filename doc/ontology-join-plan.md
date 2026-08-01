@@ -5,21 +5,22 @@
 Let the root ontology on a node start hosting an existing ontology through the
 normal pinned-genesis join and catch-up path.
 
-```prolog
-goal(
-    join_ontology(
-        user_alice:notes,
-        "5f8c...64 hexadecimal characters...",
-        [seed("192.168.1.11", 14567)])).
+```erlang
+quod_prolog:run_action(
+  <<"quod:root">>,
+  {join_ontology,
+   {':', user_alice, notes},
+   "5f8c...64 hexadecimal characters...",
+   [{seed, "192.168.1.11", 14567}]}).
 ```
 
 The operation is deliberately small: one Erlang API builds the same `mode =
-join` configuration used at boot, and one thin external Erlang effect predicate
-calls that API. The shared `goal/1` action pattern from BBSVX and Onia resolves
-an explicit root-ontology `action(Action, Prerequisites, Effect)` clause. It does
-not create a second join implementation.
+join` configuration used at boot, and the dedicated lifecycle runner calls
+that API after proving an explicit root-ontology
+`action(Action, Prerequisites, true)` clause. It does not create a second join
+implementation.
 
-Joining is asynchronous. Success of `goal(join_ontology(...))` means that the
+Joining is asynchronous. Success of `quod_prolog:run_action/2` means that the
 local, pinned join was accepted and its supervised catch-up process was
 started; it does **not** claim that catch-up has finished. A separate read-only
 predicate reports the local progress:
@@ -81,15 +82,15 @@ After validation, `join/3`:
    `joining`; an existing log gives `resumed`. Supplied input never overwrites
    an existing ledger.
 4. Calls `quod_namespace_manager:start_new_content/2`, never
-   `quod_ns_sup:start_child/2` directly. This preserves the manager's atomic
-   desired-state insertion, exact rollback on start failure, collision safety,
-   supervisor recovery, and deliberate lack of directory advertisement for a
-   private runtime ontology.
-5. Verifies that `quod_simplex:genesis_hash/1` exposes the exact pinned anchor,
-   then calls the existing `quod_app:publish_data_dir/2`. Publication therefore
-   happens only after the local join process accepted the anchor. This check
-   does not wait for slot 1 to download: the current lock-free genesis table is
-   explicitly available on a fresh joiner before catch-up.
+   `quod_ns_sup:start_child/2` directly. The manager first rejects desired/live
+   collisions, starts the child while the name is still unadmitted, verifies
+   that `quod_simplex:genesis_hash/1` exposes the exact pinned anchor, and only
+   then persists desired state and publishes the explorer data-directory entry
+   before replying. A failed start or anchor check records no desire and
+   publishes nothing; only the just-started child is stopped. This check does
+   not wait for slot 1 to download: the lock-free genesis table is available
+   on a fresh joiner before catch-up. Network-directory advertisement remains
+   deliberately absent for a private runtime ontology.
 
 The existing catch-up/feed/consensus processes do everything after that point.
 An unavailable seed leaves the ontology in `joining`; when a valid seed becomes
@@ -199,10 +200,10 @@ This gives two precise semantics:
 - `goal(true)` is handled only by the final direct `call/1` fallback. It never
   reverse-selects every lifecycle action whose intentionally empty effect is
   `true`.
-- a term declared as an action name is forward-only. If its prerequisites or
-  external adapter fail, reverse lookup cannot reinterpret that same term as a
+- a term declared as an action name is forward-only. If its prerequisites
+  fail, reverse lookup cannot reinterpret that same term as a
   fact for the `assert_fact/1` catch-all. The original failure reasons survive
-  and the effect runner never receives a junk staged write.
+  and no caller receives a junk staged write.
 
 Reverse lookup by a genuine desired effect is unchanged: for example an
 `instance_of/2` effect can still locate a specific `create_instance/2` action,
@@ -216,85 +217,81 @@ in Quod's common baseline.
 This replaces the former `doc/agent-fipa-plan.md` design that rejected the
 BBSVX/Onia `goal/1` pattern and used a subject/result-shaped `action/3`.
 Keep that document's action section and later FIPA request mapping aligned with
-this one action definition. Also keep
-`doc/ontology-creation-plan.md` and
-`doc/ontology-creation-input-plan.md` for the renamed creation adapter and the
-new `goal(create_ontology(...))` entry point. Identities remain available to
-action prerequisites through the proof subject/context; they do not require
-changing the action's three fields.
+this one action definition. Also keep `doc/ontology-creation-plan.md` and
+`doc/ontology-creation-input-plan.md` aligned with the shared
+`quod_prolog:run_action/2` entry. The node-local slice carries its engine-owned
+principal in the private overlay; the later authenticated `subject/3` design
+can use the same policy and action shapes.
 
 ## Root lifecycle actions
 
-Add these ordinary clauses to the root ontology:
+Root contains these ordinary action and policy clauses:
 
 ```prolog
 action(create_ontology(Name, Options),
-       [ontology_join_state(Name, not_hosted),
-        create_ontology_effect(Name, Options)],
+       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
+        ontology_join_state(Name, not_hosted)],
        true).
 
 action(join_ontology(Name, GenesisHash, Seeds),
-       [ontology_join_state(Name, not_hosted),
-        join_ontology_effect(Name, GenesisHash, Seeds)],
+       [authorized_ontology_lifecycle(
+            join_ontology(Name, GenesisHash, Seeds)),
+        ontology_join_state(Name, not_hosted)],
        true).
+
+can_create_ontology(node(NodeKey), _Name, _Options) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
+
+can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
 ```
 
-`satisfy_prereq/2` calls these entries from left to right. The live state check
-therefore runs before the Erlang effect. The manager still performs the
-authoritative atomic collision check, closing a race between the Prolog
-prerequisite and start.
+`quod_prolog:run_action/2` accepts only a fully ground root
+`create_ontology/2` or `join_ontology/3` term. The engine derives
+`node(NodePublicKey)` from its own identity and stores it in the private proof
+overlay; neither the caller nor ontology code supplies it. The first-slice
+policy permits only a node whose key is currently self-admitted in the
+committed root snapshot.
 
-The external operation is the final prerequisite and the declared action
-effect is `true`. That is intentional: starting a local supervised namespace is
-volatile node state, not a durable ontology fact. Asserting a fake
-`joining(...)` fact would immediately become stale and would be replicated to
-nodes whose local state differs. `ontology_join_state/2` reads the real local
-runtime instead.
+The bounded worker first verifies that the committed root declares the exact
+action with literal effect `true`, then proves its prerequisites left to right
+in a read-only overlay. Authorization therefore runs before the live state
+check, and no lifecycle IO occurs in this proof phase. The literal `true`
+remains important: starting a local supervised namespace is volatile node
+state, not a durable ontology fact. `ontology_join_state/2` reads the real
+local runtime instead of relying on a replicated `joining(...)` fact.
 
-The first clause moves the existing creation effect behind the same public
-`goal/1` boundary now, rather than leaving two lifecycle conventions. The
-Erlang `quod_ontology:create/2` API itself is unchanged.
+After proof success, the executor re-runs the same authorization helper against
+the captured committed snapshot and only then calls the original typed
+`quod_ontology:create/2` or `quod_ontology:join/3` action. This second check
+prevents a committed action declaration that accidentally omitted its visible
+authorization prerequisite from becoming a bypass. The manager remains the
+authoritative atomic collision check, closing the state-check/start race.
 
-Creation and joining remain open in this testing slice. When identities land,
-root can prepend authorization predicates to either prerequisite list without
-changing `goal/1`, the external adapters, or the lifecycle APIs.
+`authorized_ontology_lifecycle/1` is the sole governed lifecycle authorization
+predicate and is effect-class, so it is available only inside the action
+worker. It performs no IO. `ontology_join_state/2` remains a query-class,
+root-only local-state predicate. The old inline-IO creation/join effect
+functors and handlers are removed, with no compatibility registrations.
 
-Register three governed adapter predicates in the existing
-`quod_ontology_predicates` module:
+Both authorization checks use an isolated committed view in the existing
+verdict context. Cross-ontology asks, followers, staging, projection, and
+effect calls are disabled there; the overlay also rejects every assert,
+retract, and abolish at the first mutation. A policy denial, error, missing
+clause, or mutation attempt therefore fails before lifecycle IO.
 
-```prolog
-create_ontology_effect(Name, Options).                  % effect
-join_ontology_effect(Name, GenesisHash, Seeds).          % effect
-ontology_join_state(Name, State).                        % query
-```
+The low-level `quod_ontology:create/2` and `join/3` APIs remain trusted
+same-VM APIs. They do not authenticate remote callers and must not be exposed
+directly as network endpoints. A later authenticated `subject/3` principal can
+reuse the same policy and action shapes without changing these APIs.
 
-There is no compatibility registration for the old external
-`create_ontology/2` functor. The semantic public entry becomes
-`goal(create_ontology(...))`; tests and documentation change together.
-
-Their Erlang handlers use the established `_predicate` suffix:
-`create_ontology_effect_predicate/3`, `join_ontology_effect_predicate/3`, and
-`ontology_join_state_predicate/3`.
-
-All handlers require the executing namespace to be `quod:root`. The join
-adapter requires its three inputs to be ground and calls only
-`quod_ontology:join/3`; accepted `joining` and `resumed` API results both satisfy
-the prerequisite. The creation adapter similarly delegates to
-`quod_ontology:create/2`; `created` and `resumed` both satisfy it. The state
-handler requires a ground name, calls only `quod_ontology:local_state/1`, and
-unifies `State` through Erlog's normal unification path; `State` need not be
-ground.
-
-On an invalid call or API error, an effect adapter proves
-`fail_with_reason/1`, which records the reason and immediately fails through
-normal backtracking. There is no Quod-private error stack and no use of the old
-`set_fail_reason` name.
-
-The predicate exposes only this bounded, ground vocabulary:
+The lifecycle-specific join vocabulary includes:
 
 ```prolog
 ontology_join_failed(invalid_arguments)
 ontology_join_failed(root_only)
+ontology_join_failed(not_authorized)
+ontology_join_failed(action_not_declared)
 ontology_join_failed(invalid_name)
 ontology_join_failed(reserved_system_namespace)
 ontology_join_failed(invalid_genesis_hash)
@@ -306,22 +303,23 @@ ontology_join_failed(start_failed)
 
 Detailed Erlang start errors remain available from `quod_ontology:join/3`, but
 PIDs, paths, references and nested supervisor terms never cross into Prolog.
-The interpreter retains the failed adapter, the failed state prerequisite when
-applicable, and the outer `goal(join_ontology(...))` call in its normal bounded
-failure stack.
+Prerequisite failures retain the normal bounded failure-reason stack;
+post-proof executor failures are returned explicitly in the same bounded
+vocabulary. Generic runner states remain engine errors, and ambiguous
+manager/action-worker completion is `{error, outcome_unknown}`.
 
-While the creation adapter is being renamed, a manager race returning
-`{already_configured, Namespace}` is likewise mapped to the bounded
+A manager race returning `{already_configured, Namespace}` is mapped to the bounded
 `ontology_creation_failed(already_hosted)` reason instead of the generic
-`start_failed`. The Prolog precondition normally catches it; the manager remains
+`start_failed` on create, and to `ontology_join_failed(already_hosted)` on join.
+The Prolog precondition normally catches it; the manager remains
 the authoritative race closure for both lifecycle operations.
 
 Invalid arguments to `ontology_join_state/2` similarly fail with a bounded
 `ontology_state_failed(invalid_arguments | root_only | invalid_name)` reason.
 `not_hosted` is a successful state answer, not an error.
 
-The action prerequisite is useful beyond join: it prevents both create and
-join from reaching their effect adapters when this node already hosts or is
+The state prerequisite is useful beyond join: it prevents both create and
+join from reaching the typed executor when this node already hosts or is
 starting the namespace. `start_new_content/2` remains the authoritative
 race-safe check inside Erlang; the Prolog prerequisite expresses policy and
 gives the caller the failed state goal, while the manager closes the
@@ -364,47 +362,48 @@ automatic admission and restart orchestration are separate future work.
    collides with a compiled functor is rejected. Building a fresh KB does not
    duplicate common clauses, and `terms_to_diff/1` never returns them in a
    genesis diff.
-3. The effect adapters are root-only and effect-only. Wrong scope, ordinary
-   proof context, non-ground arguments and API errors produce the exact bounded
-   failure reason through the normal stack. The creation action still covers
-   every existing ordered input and failure case after its adapter rename.
-4. The two root `action/3` clauses prove their `not_hosted` prerequisite before
-   invoking an effect. An already `starting`, `joining`, `ready`, or `stopping`
-   namespace never reaches the adapter; `goal(join_ontology(...))` returns its
-   bounded failure stack, stages no junk fact, and is never reported as
-   `effect_staged_write`. A race after that proof is still rejected by
-   `start_new_content/2`. `goal(true)` succeeds with an empty diff and invokes
-   no lifecycle adapter, while reverse lookup for genuine effects and the
-   ordinary undeclared-fact catch-all remain functional.
+3. The action entry is root-only and requires a fully ground action. Wrong
+   scope, non-ground arguments, authorization denial, missing declarations,
+   and definite API failures produce the exact bounded reason; ambiguous
+   completion remains `{error, outcome_unknown}`. Ordinary proofs and the
+   removed inline-IO effect functors perform no lifecycle IO.
+4. The two root `action/3` clauses prove authorization before `not_hosted` in a
+   read-only phase. An already `starting`, `joining`, `ready`, or `stopping`
+   namespace never reaches the typed executor. A staged write or mutation
+   attempt fails before IO, and a declaration missing its visible authorization
+   check is still denied by the executor's mandatory second check. A race after
+   that proof is rejected by `start_new_content/2`. The ordinary `goal/1`
+   reverse lookup and undeclared-fact catch-all remain functional but are never
+   used by `run_action/2`.
 5. A real founder commits a fact. A second node invokes
-   `goal(join_ontology(...))` with
+   `quod_prolog:run_action/2` with
    the founder's anchor and endpoint, observes
    `joining` (or `ready` if loopback catch-up wins the race), eventually
    observes `ready`, and proves the fact from its own applied KB. Its role
    remains observer.
-6. Stop the founder before starting the joiner. The goal still succeeds,
+6. Stop the founder before starting the joiner. The action is still accepted,
    `ontology_join_state/2` reports `joining`, and no worker is blocked. Restart
    the founder at the same authenticated endpoint; the existing join process
    reaches `ready` without a second predicate call. This non-vacuously proves
    the asynchronous contract and reuse of existing retries.
 7. A collision with a live or desired namespace leaves its PID, config and
-   desired map unchanged. A synchronous child-start failure rolls back only the
-   new desired entry and leaves no reconciliation retry, using the manager's
-   existing `start_new_content/2` guarantees.
+   desired map unchanged. A synchronous child-start failure admits no desired
+   entry and leaves no reconciliation retry when cleanup succeeds, using the
+   manager's `start_new_content/2` guarantees.
 8. Stop and rejoin against the same local ledger: the API returns `resumed`,
    no second genesis is written, catch-up continues from the durable prefix,
-   and the data-directory map is republished only after successful start.
-   Rejoining that ledger with a different anchor fails, rolls back the exact
-   attempted desire, and leaves the existing ledger byte-for-byte unchanged.
+   and the data-directory map is republished only after validated start.
+   Rejoining that ledger with a different anchor fails without admitting
+   desire and leaves the existing ledger byte-for-byte unchanged.
 9. `ontology_join_state/2` covers `not_hosted`, `joining` and `ready` through
    real lifecycle transitions; focused manager tests cover the short
    `starting` / `stopping` races without adding sleeps to production code. A
    live process whose status call returns `#{}` reports `joining`; calling the
    predicate from a non-root ontology fails with `root_only`.
-10. The removed direct external `create_ontology/2` functor cannot perform a
-    lifecycle effect. Creation succeeds only through
-    `goal(create_ontology(...))`, with all existing source-input tests retained
-    at that public boundary.
+10. The removed inline-IO lifecycle functors have no compiled registration or
+    handler and cannot perform IO. Creation and joining succeed through the
+    dedicated `run_action/2` boundary, with all existing source-input tests
+    retained there.
 
 Use focused EUnit plus the existing real-QUIC join suite while implementing.
 Run the full compile, xref, Dialyzer, EUnit and CT release gate only once the
@@ -416,6 +415,7 @@ slice is ready for commit.
 - No automatic committee admission or `can_join/3` bypass.
 - No directory publication; dynamically joined ontologies remain private.
 - No durable hosting manifest or automatic restart rejoin.
-- No creation/join authorisation, identity ownership, payment or quota model.
+- No user/agent identity, ontology ownership, payment or quota model beyond
+  the node-local self-admitted-validator policy.
 - No blocking `wait_until_joined` predicate and no polling loop inside Erlog.
 - No backward-compatibility signature or alternate input form.

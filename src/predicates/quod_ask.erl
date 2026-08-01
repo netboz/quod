@@ -62,7 +62,7 @@ load(#est{db = Db0} = Est) ->
 %%%===================================================================
 
 %% Fires when a proof reaches `Ns::Goal` (parsed as `{'::' ,Ns,Goal}`). Runs in the
-%% asking proof's worker (see quod_prolog:proof_worker/8).
+%% asking proof worker owned by `quod_prolog`.
 ask_2(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {'::', NsTerm, Inner} -> do_ask(NsTerm, Inner, Next, St);

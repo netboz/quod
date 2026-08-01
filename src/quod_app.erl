@@ -24,7 +24,7 @@ auto-started, and no identity is minted (this is what the multi-node test suite 
 -behaviour(application).
 
 -export([start/2, stop/1]).
--export([build_ns_config/1, publish_data_dir/2]).
+-export([build_ns_config/1]).
 -ifdef(TEST).
 -export([load_config/0, root_contacts/1]).
 -endif.
@@ -347,7 +347,6 @@ check_block_defaults(B = #{namespace := Ns}) ->
 
 start_ns_block(Content) ->
     {Ns, NsCfg} = build_ns_config(Content),
-    ok = publish_data_dir(Ns, NsCfg),
     Mode = maps:get(mode, NsCfg),
     case quod_ns_sup:start_namespace(Ns, NsCfg) of
         {ok, _} ->
@@ -363,14 +362,6 @@ start_ns_block(Content) ->
             logger:error("quod[~s]: content namespace start failed: ~p", [Ns, Error])
     end,
     ok.
-
-%% Record where each namespace's ledger lives (`content_data_dirs :: #{Ns => Dir}`) so the
-%% explorer (a singleton outside the per-ns subtree) can open read-only store views without
-%% re-deriving per-block config. Resolved exactly as the store users resolve it.
-publish_data_dir(Ns, NsCfg) ->
-    Dir = quod_ledger_store:ledger_dir(NsCfg),   %% store views must follow the LEDGER home
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
-    application:set_env(quod, content_data_dirs, Dirs#{Ns => Dir}).
 
 %% After a founder (create) stands up its namespace, log its genesis block hash — the anchor a mode=join
 %% node must pin in `content.genesis_hash`. Logged at `notice` so it stands out in the boot log: this is

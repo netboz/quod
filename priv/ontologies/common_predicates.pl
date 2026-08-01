@@ -10,9 +10,18 @@ goal(Goal, Visited) :- member_eq(Goal, Visited), !, fail.
 
 %% Forward lookup by declared action name.
 goal(Goal, Visited) :-
-    action(Goal, Prerequisites, Effect),
-    satisfy_prereq(Prerequisites, [Goal | Visited]),
+    resolve_forward_action(Goal, Visited, Effect),
     assert_effect(Effect).
+
+%% Prepare a node-local lifecycle action without lifecycle IO or staged writes.
+%% Only literal-true action declarations are eligible; the Erlang action runner
+%% owns the external operation after this prerequisite proof succeeds.
+prepare_lifecycle_action(Action) :-
+    resolve_forward_action(Action, [], true).
+
+resolve_forward_action(Action, Visited, Effect) :-
+    action(Action, Prerequisites, Effect),
+    satisfy_prereq(Prerequisites, [Action | Visited]).
 
 %% Reverse lookup by a specific declared effect.
 goal(Goal, Visited) :-

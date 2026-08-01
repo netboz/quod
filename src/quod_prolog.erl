@@ -15,6 +15,10 @@ order. One `gen_server` per namespace.
   become a `#transaction{}` submitted to `quod_simplex`; the caller is parked and
   replied to when the block applies (or reaped by a per-tx TTL if the verdict never
   arrives).
+- **Lifecycle actions** accept only ground root `create_ontology/2` and
+  `join_ontology/3` requests. A bounded worker proves authorization and local
+  prerequisites read-only, then re-authorizes and dispatches the original typed
+  request; Prolog backtracking never owns an external-operation descriptor.
 - **`apply_block/4`** is the deterministic state machine `quod_simplex` drives on every
   member: re-check the read-set against the committed kb (OCC), then apply the diff
   or reject — identical verdict on every member. A **committee-changing** transaction
@@ -32,13 +36,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, prove/3, prove_ro/3, effect/2,
+-export([start_link/2, prove/3, prove_ro/3, run_action/2,
          applied/1, apply_block/4, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
          request_membership_verdict/5, stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
--export([prove_est/2]).            %% prove against a raw #est{} handle (quod_runtime's read path)
+-export([prove_est/2, prove_est_read_only/2]).
+%% prove against a raw #est{} handle (runtime + isolated policy reads)
 -ifdef(TEST).
 -export([membership_verdict/2]).   %% the pure verdict over #s.est — driven directly by eunit
 -endif.
@@ -50,12 +55,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                     validation_ttl_ms => 2000, max_proof_workers => 64,
                     max_ask_workers => 64, proof_timeout_ms => 60000,
                     ask_timeout_ms => 60000, ask_step_timeout_ms => 30000}).
+-define(ROOT_NS, <<"quod:root">>).
 
 %% Busy/rebuilding replies are deliberately rate-limited: an authenticated peer can
 %% still flood valid open frames, and rejecting them must not create unbounded work.
 -define(MAX_ASK_REJECTS_PER_SECOND, 32).
 
 -record(proof_worker, {pid         :: pid(),
+                       kind        :: prove | prove_ro | action,
                        worker_mref :: reference(),
                        caller_mref :: reference(),
                        from        :: gen_server:from(),
@@ -147,20 +154,74 @@ prove_ro(TargetNs, Goal, CallerNs) ->
     end.
 
 -doc """
-Run an explicitly requested live effect against `TargetNs`.
+Authorize and execute one node-local ontology lifecycle action.
 
-The goal uses the same bounded, snapshot-pinned proof worker as ordinary
-proofs, but carries an `effect` execution context and may not stage a Prolog
-write.
+Only fully-ground `create_ontology/2` and `join_ontology/3` actions targeting
+`quod:root` are accepted. A bounded worker first proves the committed root
+action and its prerequisites without lifecycle IO, then re-authorizes the
+engine-owned node principal and dispatches the original typed action. A worker
+loss is outcome-unknown because the namespace manager may already have accepted
+the operation; inspect `ontology_join_state/2` before retrying.
 """.
--spec effect(binary(), term()) ->
+-spec run_action(binary(), term()) ->
         {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
-effect(TargetNs, Goal) ->
-    case quod_reg:where({quod_prolog, TargetNs}) of
-        undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(Pid, {effect, Goal}, infinity)
-               catch exit:_ -> fail end
+run_action(TargetNs, Action) ->
+    case validate_action_request(TargetNs, Action) of
+        ok ->
+            case quod_reg:where({quod_prolog, TargetNs}) of
+                undefined -> {error, no_such_namespace};
+                Pid ->
+                    try gen_server:call(Pid, {run_action, Action}, infinity)
+                    catch exit:_ -> {error, outcome_unknown}
+                    end
+            end;
+        {error, Reason} ->
+            {error, Reason};
+        {fail, Reason} ->
+            {fail, [Reason]}
     end.
+
+validate_action_request(?ROOT_NS, Action) ->
+    case action_shape(Action) of
+        true ->
+            case quod_predicates:is_ground(Action) of
+                true -> validate_action_name(Action);
+                false ->
+                    {fail,
+                     quod_ontology_predicates:failure_reason(
+                       Action, invalid_arguments)}
+            end;
+        false ->
+            {error, invalid_action}
+    end;
+validate_action_request(_TargetNs, Action) ->
+    case action_shape(Action) of
+        true ->
+            {fail,
+             quod_ontology_predicates:failure_reason(Action, root_only)};
+        false ->
+            {error, invalid_action}
+    end.
+
+action_shape({create_ontology, _, _}) -> true;
+action_shape({join_ontology, _, _, _}) -> true;
+action_shape(_) -> false.
+
+validate_action_name({create_ontology, Name, _Options} = Action) ->
+    action_name_result(Action, quod_ontology:normalize_user_name(Name));
+validate_action_name({join_ontology, Name, _GenesisHash, _Seeds} = Action) ->
+    action_name_result(Action, quod_ontology:normalize_user_name(Name)).
+
+action_name_result(_Action, {ok, _Ns}) ->
+    ok;
+action_name_result(Action, {error, Reason}) ->
+    {fail, quod_ontology_predicates:failure_reason(Action, Reason)}.
+
+lifecycle_principal(NodeKey)
+  when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
+    {ok, {node, NodeKey}};
+lifecycle_principal(_InvalidEngineIdentity) ->
+    error.
 
 -doc "The committed log index this kb has applied (the freshness height for a read).".
 -spec applied(binary()) -> log_index().
@@ -314,15 +375,28 @@ handle_call({prove_ro, _Goal, _CallerNs}, _From,
     {reply, {error, busy}, S};
 handle_call({prove_ro, Goal, CallerNs}, From, S) ->
     {noreply, spawn_proof(prove_ro, Goal, CallerNs, From, otel_ctx:new(), S)};
-%% Explicit live effects share the proof-worker budget and readiness gate.
-handle_call({effect, _Goal}, _From, S = #s{ready = false}) ->
+%% Lifecycle actions share the proof-worker budget and readiness gate. The
+%% node principal is derived here from engine state, never from the request.
+handle_call({run_action, _Action}, _From, S = #s{ready = false}) ->
     {reply, {error, rebuilding}, S};
-handle_call({effect, _Goal}, _From,
+handle_call({run_action, _Action}, _From,
             S = #s{workers = Workers, max_proof_workers = Max})
   when map_size(Workers) >= Max ->
     {reply, {error, busy}, S};
-handle_call({effect, Goal}, From, S = #s{ns = Ns}) ->
-    {noreply, spawn_proof(effect, Goal, Ns, From, otel_ctx:new(), S)};
+handle_call({run_action, Action}, From,
+            S = #s{ns = Ns, self = Self}) ->
+    case lifecycle_principal(Self) of
+        {ok, Principal} ->
+            {noreply,
+             spawn_proof(action, Action, Ns, From, otel_ctx:new(),
+                         Principal, S)};
+        error ->
+            {reply,
+             {fail,
+              [quod_ontology_predicates:failure_reason(
+                 Action, not_authorized)]},
+             S}
+    end;
 
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
@@ -423,7 +497,8 @@ handle_info(Info = {'DOWN', MRef, process, _Pid, Reason}, S) ->
         unhandled -> handle_response_info(Info, S);
         Reply     -> Reply
     end;
-%% A proof outlived its kill budget: end it (the DOWN above replies no_progress).
+%% A proof outlived its kill budget: end it. The DOWN above returns the
+%% proof-kind-specific timeout result.
 handle_info({proof_kill, Ref, Token}, S = #s{workers = W}) ->
     case W of
         #{Ref := #proof_worker{pid = Pid, token = Token}} -> kill_worker(Pid);
@@ -610,17 +685,23 @@ terminate(_Reason, #s{ns = Ns, workers = W, ask_workers = AW}) ->
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
 spawn_proof(Kind, Goal, CallerNs, From, TraceCtx,
+            S) ->
+    spawn_proof(Kind, Goal, CallerNs, From, TraceCtx, undefined, S).
+
+spawn_proof(Kind, Goal, CallerNs, From, TraceCtx, Principal,
             S = #s{ns = Ns, est = Est, applied = Applied,
                    proof_timeout_ms = ProofTimeout}) ->
     Engine = self(),
     Ref = make_ref(),
     {Pid, MRef} = spawn_opt(fun() ->
-        proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx)
+        proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied,
+                     TraceCtx, Principal)
     end, [monitor]),
     CallerMRef = monitor(process, element(1, From)),
     Token = make_ref(),
     KillRef = erlang:send_after(ProofTimeout, Engine, {proof_kill, Ref, Token}),
-    Worker = #proof_worker{pid = Pid, worker_mref = MRef, caller_mref = CallerMRef,
+    Worker = #proof_worker{pid = Pid, kind = Kind,
+                           worker_mref = MRef, caller_mref = CallerMRef,
                            from = From, timer = KillRef, token = Token,
                            trace_ctx = TraceCtx,
                            height = Applied},
@@ -634,7 +715,8 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% (`m:quod_predicates` — the namespace, applied height, and ask chain the external predicates
 %% read), proves against that view, and reports one correlated result to the engine. The
 %% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
-proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
+proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx,
+             Principal) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
     Ctx = worker_context(Kind, Ns, Applied),
     Result = quod_trace:with_span(
@@ -642,18 +724,64 @@ proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx) ->
                #{'quod.namespace' => Ns, 'quod.kb.height' => Applied,
                  'quod.proof.mode' => atom_to_binary(Kind, utf8)},
                fun(SpanCtx) ->
-                   R = run_proof_est_annotated(
-                         Goal, quod_predicates:set_context(Est, Ctx)),
+                   R = run_worker(
+                         Kind, Goal, Principal, Ns, Applied,
+                         quod_predicates:set_context(Est, Ctx)),
                    _ = quod_trace:result(SpanCtx, R),
                    R
                end),
     gen_server:cast(Engine, {proof_result, Ref, Kind, Goal, CallerNs, Result}).
 
-worker_context(effect, Ns, Applied) ->
+worker_context(action, Ns, Applied) ->
     quod_predicates:effect_context(Ns, Applied);
 worker_context(_ProofKind, Ns, Applied) ->
     %% Subject remains none until signed subjects land.
     quod_predicates:proof_context(Ns, Applied, undefined).
+
+run_worker(action, Action, Principal, Ns, Applied, Est) ->
+    %% Action prerequisites may use the ordinary live query bridges. Only the
+    %% authorization sub-proof is isolated in the hermetic verdict context.
+    case quod_ontology_predicates:action_declared(Action, Est, Ns, Applied) of
+        true ->
+            Prepared = run_proof_est_annotated(
+                         {prepare_lifecycle_action, Action}, Est,
+                         #{lifecycle_principal => Principal,
+                           read_only => true}),
+            complete_lifecycle_action(
+              Action, Principal, Ns, Applied, Est, Prepared);
+        false ->
+            {fail,
+             [quod_ontology_predicates:failure_reason(
+                Action, action_not_declared)]};
+        {error, _Reason} ->
+            {error, action_declaration_failed}
+    end;
+run_worker(_Kind, Goal, _Principal, _Ns, _Applied, Est) ->
+    run_proof_est_annotated(Goal, Est).
+
+complete_lifecycle_action(Action, Principal, Ns, Applied, Est,
+                          {ok, _Bindings, [], _ReadSet} = Success) ->
+    case quod_ontology_predicates:authorize_lifecycle(
+           Action, Principal, Est, Ns, Applied) of
+        ok ->
+            case quod_ontology_predicates:execute_lifecycle(Action) of
+                ok -> Success;
+                {error, outcome_unknown} -> {error, outcome_unknown};
+                {error, Reason} -> {fail, [Reason]}
+            end;
+        {error, Reason} ->
+            {fail, [Reason]}
+    end;
+complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est,
+                          {ok, _Bindings, _Diff, _ReadSet}) ->
+    {error, effect_staged_write};
+complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est,
+                          {error, {erlog,
+                                   {permission_error, modify,
+                                    static_procedure, _Predicate}}}) ->
+    {error, effect_staged_write};
+complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est, Result) ->
+    Result.
 
 finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
     case take_proof_worker(Ref, S) of
@@ -667,8 +795,6 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
                     gen_server:reply(From, {ok, [Bindings], Applied}), S1;
                 {prove_ro, {ok, _B, _Diff, _RS}} ->
                     gen_server:reply(From, {error, read_only}), S1;
-                {effect, {ok, _B, _Diff, _RS}} ->
-                    gen_server:reply(From, {error, effect_staged_write}), S1;
                 {prove, {ok, Bindings, Diff, RS}} ->
                     case submit_write(From, Goal, Bindings, Diff, RS, CallerNs,
                                       TraceCtx, S1) of
@@ -708,10 +834,10 @@ handle_worker_down(MRef, Reason,
 
 handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
     case find_proof_monitor(MRef, W) of
-        {worker, Ref, From} ->
+        {worker, Ref, From, Kind} ->
             case take_proof_worker(Ref, S) of
                 {{_From, _Height, _TraceCtx}, S1} ->
-                    Reply = case Reason of killed -> {error, no_progress}; _ -> {error, prove_failed} end,
+                    Reply = proof_down_reply(Kind, Reason),
                     gen_server:reply(From, Reply),
                     {noreply, S1};
                 error -> {noreply, S}
@@ -727,14 +853,19 @@ handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
 
 find_proof_monitor(MRef, W) ->
     maps:fold(
-      fun(Ref, #proof_worker{pid = Pid, worker_mref = WorkerMRef,
+      fun(Ref, #proof_worker{pid = Pid, kind = Kind,
+                             worker_mref = WorkerMRef,
                              caller_mref = CallerMRef, from = From}, Acc) ->
           case Acc of
-              false when WorkerMRef =:= MRef -> {worker, Ref, From};
+              false when WorkerMRef =:= MRef -> {worker, Ref, From, Kind};
               false when CallerMRef =:= MRef -> {caller, Ref, Pid};
               _ -> Acc
           end
       end, false, W).
+
+proof_down_reply(action, _Reason) -> {error, outcome_unknown};
+proof_down_reply(_Kind, killed) -> {error, no_progress};
+proof_down_reply(_Kind, _Reason) -> {error, prove_failed}.
 
 cancel_ask(Pid, S = #s{ask_pids = Pids}) ->
     case maps:get(Pid, Pids, undefined) of
@@ -819,8 +950,17 @@ reads can race history pruning.
           {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
 prove_est(Goal, Est) -> run_proof_est(Goal, Est).
 
+-doc "Prove against a raw committed state while rejecting every database mutation.".
+-spec prove_est_read_only(term(), tuple()) ->
+          {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
+prove_est_read_only(Goal, Est) ->
+    run_proof_est(Goal, Est, #{read_only => true}).
+
 run_proof_est(Goal, Est) ->
-    case run_proof_est_annotated(Goal, Est) of
+    run_proof_est(Goal, Est, #{}).
+
+run_proof_est(Goal, Est, OverlayOpts) ->
+    case run_proof_est_annotated(Goal, Est, OverlayOpts) of
         {fail, _Reasons} -> fail;
         Result -> Result
     end.
@@ -828,8 +968,12 @@ run_proof_est(Goal, Est) ->
 %% Only public proof workers expose diagnostic failure state. Consensus verdicts
 %% and runtime projections continue through run_proof_est/2 and retain bare fail.
 run_proof_est_annotated(Goal, Est) ->
+    run_proof_est_annotated(Goal, Est, #{}).
+
+run_proof_est_annotated(Goal, Est, OverlayOpts) ->
     Vs = erlog:vars_in(Goal),
-    W0 = quod_erlog_db_local_prove:wrap_state(Est, #{read_set => true}),
+    W0 = quod_erlog_db_local_prove:wrap_state(
+           Est, OverlayOpts#{read_set => true}),
     try erlog_int:prove_goal(Goal, W0) of
         {succeed, Final} ->
             Ov = (Final#est.db)#db.ref,

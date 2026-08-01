@@ -10,6 +10,10 @@ mirrored in the application environment so a manager restart does not forget
 it. A full application start clears that mirror before the supervision tree is
 created; only namespaces requested during the current application lifetime are
 recovered.
+
+This process is also the sole publisher of the explorer's namespace-to-ledger
+projection. A caller may die or time out after a start request is accepted, so
+post-start genesis validation and publication must not live in that caller.
 """.
 
 -behaviour(gen_server).
@@ -39,9 +43,9 @@ start_link() ->
 start_content(Ns, Config) ->
     start_child(content, Ns, Config).
 
-%% Runtime creation is an admission, not an idempotent ensure. Keep insert,
-%% start, and rollback inside the desired-state owner so a failed newcomer can
-%% never remove an older ontology with the same name.
+%% Runtime creation is an admission, not an idempotent ensure. The manager
+%% starts and validates the newcomer before recording its desired state, so a
+%% failed admission cannot remove or replace an older ontology with the name.
 start_new_content(Ns, Config) ->
     start_new_child(content, Ns, Config).
 
@@ -91,30 +95,20 @@ handle_call(
             %% attach a new config to a process that was started under another.
             {reply, {error, {already_configured, Ns}}, S};
         {false, undefined} ->
-            Desired1 = Desired#{content => Content#{Ns => Config}},
-            persist_desired(Desired1),
-            S0 = S#s{desired = Desired1},
             Result = start_one(content, Ns, Config),
             case Result of
                 {ok, Pid} when is_pid(Pid) ->
-                    {reply, Result, S0};
+                    complete_new_content(Ns, Config, S);
                 {ok, Pid, _Info} when is_pid(Pid) ->
-                    {reply, Result, S0};
+                    complete_new_content(Ns, Config, S);
                 {error, {already_started, _Pid}} ->
-                    rollback_new_content(
-                      Ns, Config, Desired, S0,
-                      {error, {already_configured, Ns}});
+                    {reply, {error, {already_configured, Ns}}, S};
                 {error, already_present} ->
-                    rollback_new_content(
-                      Ns, Config, Desired, S0,
-                      {error, {already_configured, Ns}});
+                    {reply, {error, {already_configured, Ns}}, S};
                 {error, {already_present, _Child}} ->
-                    rollback_new_content(
-                      Ns, Config, Desired, S0,
-                      {error, {already_configured, Ns}});
+                    {reply, {error, {already_configured, Ns}}, S};
                 _ ->
-                    rollback_new_content(
-                      Ns, Config, Desired, S0, Result)
+                    {reply, Result, S}
             end
     end;
 handle_call(
@@ -128,11 +122,15 @@ handle_call(
                 Desired#{Kind => KindDesired#{Ns => Config}},
             persist_desired(Desired1),
             S0 = S#s{desired = Desired1},
-            {Result, S1} = ensure_one(Kind, Ns, Config, S0),
+            {RawResult, S1} = ensure_one(Kind, Ns, Config, S0),
+            Result = complete_started_child(
+                       Kind, Ns, Config, RawResult),
             maybe_notify_directory(Kind, Result),
             {reply, Result, schedule_reconcile_if_error(Result, S1)};
         Config ->
-            {Result, S1} = ensure_one(Kind, Ns, Config, S),
+            {RawResult, S1} = ensure_one(Kind, Ns, Config, S),
+            Result = complete_started_child(
+                       Kind, Ns, Config, RawResult),
             maybe_notify_directory(Kind, Result),
             {reply, Result, schedule_reconcile_if_error(Result, S1)};
         _OtherConfig ->
@@ -160,18 +158,44 @@ handle_call(
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
-rollback_new_content(Ns, Config, PreviousDesired,
-                     S = #s{desired = CurrentDesired}, Reply) ->
-    CurrentContent = maps:get(content, CurrentDesired),
-    %% The gen_server serializes mutations, but retain the exact-value check so
-    %% this rollback can never grow into a broad "remove by name" cleanup.
-    case maps:get(Ns, CurrentContent, undefined) of
-        Config ->
-            persist_desired(PreviousDesired),
-            {reply, Reply, S#s{desired = PreviousDesired}};
-        _ ->
-            {reply, Reply, S}
+complete_new_content(Ns, Config,
+                     S = #s{desired = Desired}) ->
+    case started_genesis(Ns, Config) of
+        {ok, GenesisHash} ->
+            Content = maps:get(content, Desired),
+            Desired1 = Desired#{content => Content#{Ns => Config}},
+            persist_desired(Desired1),
+            publish_data_dir(Ns, Config),
+            {reply, {ok, GenesisHash}, S#s{desired = Desired1}};
+        {error, Reason} ->
+            stop_rejected_new_content(Ns, S, Reason)
     end.
+
+started_genesis(Ns, Config) ->
+    case quod_simplex:genesis_hash(Ns) of
+        Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
+            case maps:get(mode, Config, undefined) of
+                join ->
+                    case maps:get(genesis_hash, Config, undefined) of
+                        Hash -> {ok, Hash};
+                        _ -> {error, genesis_mismatch}
+                    end;
+                create ->
+                    {ok, Hash};
+                _ ->
+                    {error, genesis_unavailable}
+            end;
+        _ ->
+            {error, genesis_unavailable}
+    end.
+
+stop_rejected_new_content(Ns, S, Reason) ->
+    %% No desired entry exists yet, so a manager crash cannot resurrect this
+    %% rejected admission. The replacement manager will also stop any child
+    %% left behind by a failed cleanup.
+    StopResult = normalize_stop(stop_one(content, Ns)),
+    {reply, {error, Reason},
+     schedule_reconcile_if_stop_error(StopResult, S)}.
 
 handle_cast(_Message, S) ->
     {noreply, S}.
@@ -271,12 +295,21 @@ reconcile_kind(Kind, Desired, S) ->
                  || {Ns, Config} <- maps:to_list(Desired),
                     not maps:is_key(Ns, Running)],
             Results =
-                [start_one(Kind, Ns, Config)
+                [{Ns, start_one(Kind, Ns, Config)}
                  || {Ns, Config} <- Missing],
+            {Ready, Validated} = complete_running_children(Kind, Desired),
             Changed = lists:any(fun stop_succeeded/1, StopResults)
-                orelse lists:any(fun start_succeeded/1, Results),
+                orelse lists:any(
+                         fun({Ns, Result}) ->
+                             completed_start_succeeded(
+                               Kind, Ns, Result, Validated)
+                         end, Results),
             Complete = lists:all(fun stop_succeeded/1, StopResults)
-                andalso lists:all(fun start_succeeded/1, Results),
+                andalso lists:all(
+                          fun({_Ns, Result}) ->
+                              start_succeeded(Result)
+                          end, Results)
+                andalso Ready,
             {Changed, Complete, S}
     end.
 
@@ -342,6 +375,68 @@ maybe_notify_directory(content, Result) ->
     end;
 maybe_notify_directory(brahms, _Result) ->
     ok.
+
+complete_started_child(content, Ns, Config, Result) ->
+    case start_succeeded(Result) of
+        true ->
+            case validate_and_publish_content(Ns, Config) of
+                ok -> Result;
+                {error, _} = Error -> Error
+            end;
+        false ->
+            Result
+    end;
+complete_started_child(brahms, _Ns, _Config, Result) ->
+    Result.
+
+complete_running_children(brahms, _Desired) ->
+    {true, #{}};
+complete_running_children(content, Desired) ->
+    Dirs0 = application:get_env(quod, content_data_dirs, #{}),
+    {Complete, Dirs, Validated} =
+        maps:fold(
+          fun(Ns, Config, {Complete0, DirsAcc, ValidAcc}) ->
+              case running_pid(content, Ns) of
+                  Pid when is_pid(Pid) ->
+                      case started_genesis(Ns, Config) of
+                          {ok, _GenesisHash} ->
+                              Dir = quod_ledger_store:ledger_dir(Config),
+                              {Complete0, DirsAcc#{Ns => Dir},
+                               ValidAcc#{Ns => true}};
+                          {error, _} ->
+                              {false, DirsAcc, ValidAcc}
+                      end;
+                  undefined ->
+                      {false, DirsAcc, ValidAcc}
+              end
+          end, {true, Dirs0, #{}}, Desired),
+    case Dirs =:= Dirs0 of
+        true -> ok;
+        false -> application:set_env(quod, content_data_dirs, Dirs)
+    end,
+    {Complete, Validated}.
+
+completed_start_succeeded(content, Ns, Result, Validated) ->
+    start_succeeded(Result) andalso maps:is_key(Ns, Validated);
+completed_start_succeeded(brahms, _Ns, Result, _Validated) ->
+    start_succeeded(Result).
+
+validate_and_publish_content(Ns, Config) ->
+    case started_genesis(Ns, Config) of
+        {ok, _GenesisHash} ->
+            publish_data_dir(Ns, Config),
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+%% The manager serializes every writer of this projection. Stopped ontologies
+%% deliberately remain addressable by the explorer, so entries are not removed
+%% when hosting intent is removed.
+publish_data_dir(Ns, Config) ->
+    Dir = quod_ledger_store:ledger_dir(Config),
+    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    application:set_env(quod, content_data_dirs, Dirs#{Ns => Dir}).
 
 schedule_reconcile_if_error(Result, S) ->
     case start_succeeded(Result) of

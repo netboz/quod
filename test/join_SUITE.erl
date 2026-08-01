@@ -315,13 +315,13 @@ runtime_join_action_catches_up(Config) ->
                      ActionNode, quod_prolog, prove_ro,
                      [RootNs, true, RootNs]))
              end, 10000)),
-        Goal =
-            {goal,
-             {join_ontology, ?NS, binary:encode_hex(GenesisHash),
-              [{seed, "127.0.0.1", ?FOUNDER_PORT}]}},
+        Action =
+            {join_ontology, ?NS, binary:encode_hex(GenesisHash),
+             [{seed, "127.0.0.1", ?FOUNDER_PORT}]},
         ?assertMatch(
            {ok, [#{}], _},
-           peer:call(ActionNode, quod_prolog, effect, [RootNs, Goal])),
+           peer:call(ActionNode, quod_prolog, run_action,
+                     [RootNs, Action])),
         ?assert(
            eventually(
              fun() ->
@@ -340,11 +340,12 @@ runtime_join_action_catches_up(Config) ->
         ?assertEqual(observer,
                      maps:get(role,
                               peer:call(ActionNode, quod_simplex, status, [?NS]))),
-        %% A second call fails as the declared action; it cannot fall through
-        %% into the generic fact catch-all and become effect_staged_write.
+        %% A second call fails its declared not_hosted prerequisite; the typed
+        %% runner never falls through into goal/1's generic fact machinery.
         ?assertMatch(
            {fail, [_ | _]},
-           peer:call(ActionNode, quod_prolog, effect, [RootNs, Goal])),
+           peer:call(ActionNode, quod_prolog, run_action,
+                     [RootNs, Action])),
         {save_config, [{founder2, Founder}, {joiner2, Joiner}]}
     after
         catch peer:stop(ActionNode)

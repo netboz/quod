@@ -44,7 +44,8 @@ The typed **external-predicate contract** and the per-run **execution context**
 
 The context *kinds* are `proof` (a normal client proof or a staged write),
 `verdict` (a committee membership re-proof — strictly local, following disabled),
-`projection` (a runtime P handler, §8), and `effect` (a live E effect, §9).
+`projection` (a runtime P handler, §8), and `effect` (the action-only boundary
+used by lifecycle authorization now and live E handlers in §9).
 """.
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -100,8 +101,7 @@ load(#est{db = Db0} = Est) ->
 governed() -> [{peer_ready, 1}, {directory_host, 4},
                {directory_control_peer, 1},
                {admit, 3}, {remove, 1},
-               {create_ontology_effect, 2},
-               {join_ontology_effect, 3},
+               {authorized_ontology_lifecycle, 1},
                {ontology_join_state, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
@@ -113,12 +113,12 @@ registry({directory_control_peer, 1}) ->
     {query, quod_directory_predicates, directory_control_peer_1};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
 registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
-registry({create_ontology_effect, 2}) ->
+%% Read-only itself, but deliberately action-only: only the lifecycle runner
+%% carries an effect context, so ordinary proofs cannot probe its private
+%% engine-owned principal.
+registry({authorized_ontology_lifecycle, 1}) ->
     {effect, quod_ontology_predicates,
-     create_ontology_effect_predicate};
-registry({join_ontology_effect, 3}) ->
-    {effect, quod_ontology_predicates,
-     join_ontology_effect_predicate};
+     authorized_ontology_lifecycle_predicate};
 registry({ontology_join_state, 2}) ->
     {query, quod_ontology_predicates,
      ontology_join_state_predicate};
@@ -247,7 +247,7 @@ proof_context(Ns, Height, Subject, Chain) ->
 verdict_context(Ns, Height) ->
     #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined, chain = [Ns]}.
 
--doc "An `effect` context for a live, explicitly-invoked external operation.".
+-doc "An `effect` context for action-only authorization and live E handlers.".
 -spec effect_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 effect_context(Ns, Height) ->
     #qctx{kind = effect, ns = Ns, height = Height, subject = undefined,

@@ -25,7 +25,8 @@ agree bit-for-bit.
          asserta_clause/4, assertz_clause/4, retract_clause/3, abolish_clauses/2,
          get_procedure/2, get_procedure_type/2, get_interpreted_functors/1]).
 %% overlay API
--export([wrap_state/1, wrap_state/2, get_local_changes/1, get_read_set/1,
+-export([wrap_state/1, wrap_state/2, lifecycle_principal/1,
+         committed_state/1, get_local_changes/1, get_read_set/1,
          cleanup_read_set/1]).
 
 -record(fstate, {abolished = false :: boolean(),
@@ -41,7 +42,13 @@ agree bit-for-bit.
              %% (a vote must never make network hops). Snapshotted from the `#est{}`'s
              %% execution context at wrap time — the db callback layer cannot see `#est.fs`,
              %% so the flag is carried here rather than read per-lookup.
-             follow_disabled = false :: boolean()}).
+             follow_disabled = false :: boolean(),
+             %% Engine-owned lifecycle authority. It is deliberately outside
+             %% `#est.fs`, whose values ontology code can enumerate.
+             lifecycle_principal = undefined :: term(),
+             %% Policy sub-proofs must reject the first attempted mutation,
+             %% including changes whose eventual net diff would be empty.
+             read_only = false :: boolean()}).
 
 %%%===================================================================
 %%% wrapping + extraction
@@ -50,20 +57,64 @@ agree bit-for-bit.
 -doc "Wrap a committed `#est{}` so a proof stages onto a private overlay.".
 -spec wrap_state(tuple()) -> tuple().
 wrap_state(#est{db = #db{mod = OutMod, ref = OutRef,
-                         assert_hooks = AH, retract_hooks = RH}} = St) ->
-    Overlay = (new({OutRef, OutMod}))#lp{follow_disabled = quod_predicates:in_verdict(St)},
+                         assert_hooks = AH, retract_hooks = RH} = OutDb} = St) ->
+    Overlay = (new({OutRef, OutMod}))#lp{
+                out_db = OutDb,
+                follow_disabled = quod_predicates:in_verdict(St)},
     St#est{db = #db{mod = ?MODULE, ref = Overlay, loc = [],
                     assert_hooks = AH, retract_hooks = RH}}.
 
--doc "As `wrap_state/1`; `#{read_set => true}` also tracks the read-set.".
+-doc """
+As `wrap_state/1`, with private overlay options:
+
+- `read_set => true` tracks the committed read-set;
+- `lifecycle_principal => Principal` carries engine-owned lifecycle authority;
+- `read_only => true` rejects every interpreted database mutation.
+""".
 -spec wrap_state(tuple(), map()) -> tuple().
 wrap_state(St, Opts) ->
     #est{db = #db{ref = Ov} = Db} = Wrapped = wrap_state(St),
-    case maps:get(read_set, Opts, false) of
-        true  -> Ets = ets:new(quod_read_set, [set, private]),
-                 Wrapped#est{db = Db#db{ref = Ov#lp{read_ets = Ets}}};
-        false -> Wrapped
-    end.
+    ReadOnly = boolean_option(read_only, Opts),
+    Principal = maps:get(lifecycle_principal, Opts, undefined),
+    Ov1 = Ov#lp{lifecycle_principal = Principal, read_only = ReadOnly},
+    Ov2 =
+        case maps:get(read_set, Opts, false) of
+            true  -> Ets = ets:new(quod_read_set, [set, private]),
+                     Ov1#lp{read_ets = Ets};
+            false -> Ov1
+        end,
+    %% Erlog invokes clause hooks before database callbacks. A strict read-only
+    %% overlay therefore removes mutation hooks so every attempt reaches the
+    %% rejecting callbacks below. Ordinary overlays retain the hooks unchanged.
+    Db1 = case ReadOnly of
+              true  -> Db#db{assert_hooks = #{}, retract_hooks = #{}};
+              false -> Db
+          end,
+    Wrapped#est{db = Db1#db{ref = Ov2}}.
+
+-doc "Return the engine-owned lifecycle principal carried by a wrapped state.".
+-spec lifecycle_principal(tuple()) -> {ok, term()} | undefined.
+lifecycle_principal(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{lifecycle_principal = Principal}}})
+  when Principal =/= undefined ->
+    {ok, Principal};
+lifecycle_principal(_) ->
+    undefined.
+
+-doc """
+Return a fresh proof frame over a wrapped state's captured committed view.
+
+Bindings, choice points, and failure diagnostics belong to the caller's proof
+and are reset; the execution-context flags are retained for the isolated
+sub-proof.
+""".
+-spec committed_state(tuple()) -> tuple().
+committed_state(
+  #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
+    St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
+           fail_reasons = [], fail_reason_bytes = 0,
+           fail_reasons_truncated = false, fail_boundaries = 0}.
 
 -doc "The write-set: the proof's asserts/retracts as content-only ops.".
 -spec get_local_changes(#lp{}) -> [{assert | retract, {term(), term()}}].
@@ -102,6 +153,8 @@ new({OutRef, OutMod}) ->
 add_built_in(St, _Functor)            -> St.
 add_compiled_proc(St, _F, _M, _Fn)    -> {ok, St}.
 
+asserta_clause(#lp{read_only = true}, _F, _Head, _Body) ->
+    error;
 asserta_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
     case modifiable(St, F) of
         false -> error;
@@ -111,6 +164,8 @@ asserta_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
+assertz_clause(#lp{read_only = true}, _F, _Head, _Body) ->
+    error;
 assertz_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
     case modifiable(St, F) of
         false -> error;
@@ -120,6 +175,8 @@ assertz_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
+retract_clause(#lp{read_only = true}, _F, _Tag) ->
+    error;
 retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
     case M:get_procedure_type(R, F) of
         built_in -> error;
@@ -141,6 +198,8 @@ retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
             end
     end.
 
+abolish_clauses(#lp{read_only = true}, _F) ->
+    error;
 abolish_clauses(
   #lp{out_db = #db{mod = M, ref = R},
       local = L, read_ets = RS} = St,
@@ -270,6 +329,12 @@ get_interpreted_functors(#lp{out_db = #db{mod = M, ref = R}, local = L} = St) ->
 %%%===================================================================
 %%% internals
 %%%===================================================================
+
+boolean_option(Key, Opts) ->
+    case maps:get(Key, Opts, false) of
+        true  -> true;
+        false -> false
+    end.
 
 %% A pure write doesn't create a read-dependency: check the committed type
 %% directly (no read-set recording) rather than through get_procedure/2.

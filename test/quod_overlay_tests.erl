@@ -131,3 +131,97 @@ pure_read_no_writes_test() ->
     C = committed([{parent, tom, bob}]),
     {Changes, _ReadSet} = scope(C, {parent, tom, {'X'}}),
     ?assertEqual([], Changes).
+
+%%%===================================================================
+%%% private lifecycle authority + isolated committed view
+%%%===================================================================
+
+lifecycle_principal_is_private_overlay_state_test() ->
+    C0 = committed([]),
+    C = quod_predicates:set_context(
+          C0, quod_predicates:effect_context(<<"quod:root">>, 7)),
+    Principal = {node, <<42:256>>},
+    W = quod_erlog_db_local_prove:wrap_state(
+          C, #{lifecycle_principal => Principal}),
+    ?assertEqual({ok, Principal},
+                 quod_erlog_db_local_prove:lifecycle_principal(W)),
+    ?assertEqual(undefined,
+                 quod_erlog_db_local_prove:lifecycle_principal(C)),
+    %% Carrying authority does not alter the Prolog-visible flag store.
+    ?assertEqual(C#est.fs, W#est.fs).
+
+committed_state_drops_staged_data_and_resets_proof_frame_test() ->
+    C0 = committed([{parent, tom, bob}]),
+    %% The first solution leaves a live choicepoint which would turn a later
+    %% failing goal into success if committed_state/1 inherited it.
+    {succeed, C1} = erlog_int:prove_goal({';', true, true}, C0),
+    ?assertMatch([_ | _], C1#est.cps),
+    W0 = quod_erlog_db_local_prove:wrap_state(C1),
+    {succeed, W1} = erlog_int:prove_goal({assertz, {child, bob}}, W0),
+    Committed = quod_erlog_db_local_prove:committed_state(W1),
+    ?assertEqual([], Committed#est.cps),
+    ?assertEqual(undefined, proc(Committed, {child, 1})),
+    ?assertMatch({clauses, _}, proc(Committed, {parent, 2})),
+    ?assertMatch({fail, _}, erlog_int:prove_goal(fail, Committed)).
+
+%%%===================================================================
+%%% strict read-only policy overlays
+%%%===================================================================
+
+read_only_rejects_every_mutation_at_first_attempt_test() ->
+    C = committed([{parent, tom, bob}]),
+    Goals = [{assert, {child, bob}},
+             {asserta, {child, bob}},
+             {assertz, {child, bob}},
+             {retract, {parent, tom, bob}},
+             {abolish, {'/', parent, 2}},
+             %% This would have an empty eventual diff on an ordinary overlay;
+             %% the first assert must fail before retract can run.
+             {',', {assertz, {temporary, value}},
+                    {retract, {temporary, value}}}],
+    lists:foreach(fun(Goal) -> assert_read_only_rejects(C, Goal) end, Goals).
+
+read_only_bypasses_mutation_hooks_but_ordinary_overlay_keeps_them_test() ->
+    C0 = committed([]),
+    #est{db = Db0} = C0,
+    Hooks = #{{child, 1} => {hook_must_not_run, mutation}},
+    C = C0#est{db = Db0#db{assert_hooks = Hooks,
+                            retract_hooks = Hooks}},
+    Ordinary = quod_erlog_db_local_prove:wrap_state(C),
+    ?assertEqual(Hooks, (Ordinary#est.db)#db.assert_hooks),
+    ?assertEqual(Hooks, (Ordinary#est.db)#db.retract_hooks),
+    ReadOnly = quod_erlog_db_local_prove:wrap_state(C, #{read_only => true}),
+    ?assertEqual(#{}, (ReadOnly#est.db)#db.assert_hooks),
+    ?assertEqual(#{}, (ReadOnly#est.db)#db.retract_hooks),
+    Result = catch erlog_int:prove_goal({assertz, {child, bob}}, ReadOnly),
+    ?assertMatch(
+       {erlog_error,
+        {permission_error, modify, static_procedure, {'/', child, 1}}},
+       Result).
+
+read_only_does_not_control_follower_policy_test() ->
+    C = committed([]),
+    Proof = quod_predicates:set_context(
+              C, quod_predicates:proof_context(<<"test:proof">>, 0, undefined)),
+    ProofW = quod_erlog_db_local_prove:wrap_state(Proof, #{read_only => true}),
+    ?assertMatch(
+       {clauses, [_ | _]},
+       quod_erlog_db_local_prove:get_procedure(db_ref(ProofW), {foreign, 1})),
+    Verdict = quod_predicates:set_context(
+                C, quod_predicates:verdict_context(<<"test:verdict">>, 0)),
+    VerdictW = quod_erlog_db_local_prove:wrap_state(
+                 Verdict, #{read_only => true}),
+    ?assertEqual(
+       undefined,
+       quod_erlog_db_local_prove:get_procedure(db_ref(VerdictW), {foreign, 1})).
+
+assert_read_only_rejects(C, Goal) ->
+    W = quod_erlog_db_local_prove:wrap_state(C, #{read_only => true}),
+    Result = catch erlog_int:prove_goal(Goal, W),
+    ?assertMatch(
+       {erlog_error,
+        {permission_error, modify, static_procedure, _}},
+       Result),
+    ?assertEqual(
+       [],
+       quod_erlog_db_local_prove:get_local_changes(db_ref(W))).

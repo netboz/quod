@@ -1,46 +1,143 @@
 -module(quod_ontology_predicates).
 -moduledoc """
-Thin Erlog boundary for local ontology creation, joining, and lifecycle state.
+The governed Prolog boundary for node-local ontology lifecycle policy and
+state.
 
-The two lifecycle adapters are explicit live effects. The state predicate is a
-read-only view of this node. All three are available only while executing
-`quod:root` and delegate their work to `m:quod_ontology`.
+`authorized_ontology_lifecycle/1` is an action-only authorization check. It
+reads the engine-owned lifecycle principal from the private proof overlay and
+proves root policy against an isolated, read-only committed view. It never
+performs lifecycle IO. The actual create/join call is made only by
+`quod_prolog:run_action/2` after the complete action proof succeeds.
+
+`ontology_join_state/2` remains a read-only view of this node. The low-level
+`quod_ontology` APIs and `execute_lifecycle/1` are trusted same-VM APIs, not
+remote authorization boundaries.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([create_ontology_effect_predicate/3,
-         join_ontology_effect_predicate/3,
+-export([authorized_ontology_lifecycle_predicate/3,
          ontology_join_state_predicate/3]).
+-export([authorize_lifecycle/5, action_declared/4,
+         execute_lifecycle/1, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
 
--spec create_ontology_effect_predicate(term(), term(), tuple()) -> term().
-create_ontology_effect_predicate(Goal, Next, #est{bs = Bs} = St) ->
+-spec authorized_ontology_lifecycle_predicate(term(), term(), tuple()) -> term().
+authorized_ontology_lifecycle_predicate(Goal, Next, #est{bs = Bs} = St) ->
     case quod_predicates:ctx_ns(quod_predicates:context(St)) of
         ?ROOT_NS ->
-            create(erlog_int:dderef(Goal, Bs), Next, St);
+            authorize_predicate(erlog_int:dderef(Goal, Bs), Next, St);
         _ ->
-            fail_with(ontology_creation_failed, root_only, St)
+            fail_reason(action_failure(Goal, root_only), St)
     end.
 
-create({create_ontology_effect, Name, Options}, Next, St) ->
-    case quod_predicates:is_ground({Name, Options}) of
+authorize_predicate({authorized_ontology_lifecycle, Action}, Next, St) ->
+    case quod_predicates:is_ground(Action) of
         false ->
-            fail_with(
-              ontology_creation_failed, invalid_arguments, St);
+            fail_reason(failure_reason(Action, invalid_arguments), St);
         true ->
-            case quod_ontology:create(Name, Options) of
-                {ok, _Status, _Ns, _GenesisHash} ->
-                    erlog_int:prove_body(Next, St);
-                {error, Reason} ->
-                    fail_with(
-                      ontology_creation_failed,
-                      creation_reason(Reason), St)
+            case quod_erlog_db_local_prove:lifecycle_principal(St) of
+                {ok, Principal} ->
+                    Base = quod_erlog_db_local_prove:committed_state(St),
+                    Ctx = quod_predicates:context(St),
+                    case authorize_lifecycle(
+                           Action, Principal, Base,
+                           quod_predicates:ctx_ns(Ctx),
+                           quod_predicates:ctx_height(Ctx)) of
+                        ok -> erlog_int:prove_body(Next, St);
+                        {error, Reason} -> fail_reason(Reason, St)
+                    end;
+                undefined ->
+                    fail_reason(failure_reason(Action, not_authorized), St)
             end
     end;
-create(_Goal, _Next, St) ->
-    fail_with(ontology_creation_failed, invalid_arguments, St).
+authorize_predicate(_Goal, _Next, St) ->
+    fail_reason({ontology_lifecycle_failed, invalid_arguments}, St).
+
+-doc """
+Authorize one already-ground lifecycle action against the captured committed
+root state. The node principal is engine-owned; callers cannot supply it
+through Prolog. Policy runs in the existing strictly-local verdict context and
+through the overlay's read-only mode.
+""".
+-spec authorize_lifecycle(term(), term(), tuple(), binary(), non_neg_integer()) ->
+          ok | {error, term()}.
+authorize_lifecycle(Action, {node, NodeKey} = Principal, CommittedEst,
+                    ?ROOT_NS, Height)
+  when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
+       is_integer(Height), Height >= 0 ->
+    case policy_goal(Action, Principal) of
+        {ok, Goal} ->
+            VerdictEst = verdict_state(CommittedEst, Height),
+            case quod_prolog:prove_est_read_only(Goal, VerdictEst) of
+                {ok, _Bindings, [], _ReadSet} -> ok;
+                _ -> {error, failure_reason(Action, not_authorized)}
+            end;
+        error ->
+            {error, failure_reason(Action, invalid_arguments)}
+    end;
+authorize_lifecycle(Action, _Principal, _CommittedEst, _Ns, _Height) ->
+    {error, failure_reason(Action, not_authorized)}.
+
+policy_goal({create_ontology, Name, Options}, Principal) ->
+    {ok, {can_create_ontology, Principal, Name, Options}};
+policy_goal({join_ontology, Name, GenesisHash, Seeds}, Principal) ->
+    {ok, {can_join_ontology, Principal, Name, GenesisHash, Seeds}};
+policy_goal(_Action, _Principal) ->
+    error.
+
+-doc "Whether the captured root declares this exact ground action with literal effect `true`.".
+-spec action_declared(term(), tuple(), binary(), non_neg_integer()) ->
+          true | false | {error, term()}.
+action_declared(Action, CommittedEst, ?ROOT_NS, Height)
+  when is_integer(Height), Height >= 0 ->
+    VerdictEst = verdict_state(CommittedEst, Height),
+    Goal = {action, Action, {'Prerequisites'}, true},
+    case quod_prolog:prove_est_read_only(Goal, VerdictEst) of
+        {ok, _Bindings, [], _ReadSet} -> true;
+        fail -> false;
+        {error, _} = Error -> Error
+    end;
+action_declared(_Action, _CommittedEst, _Ns, _Height) ->
+    false.
+
+verdict_state(CommittedEst, Height) ->
+    quod_predicates:set_context(
+      CommittedEst,
+      quod_predicates:verdict_context(?ROOT_NS, Height)).
+
+-doc "Execute one validated and authorized lifecycle action in this VM.".
+-spec execute_lifecycle(term()) -> ok | {error, term()}.
+execute_lifecycle({create_ontology, Name, Options} = Action) ->
+    case quod_ontology:create(Name, Options) of
+        {ok, _Status, _Ns, _GenesisHash} -> ok;
+        {error, outcome_unknown} -> {error, outcome_unknown};
+        {error, Reason} ->
+            {error, failure_reason(Action, creation_reason(Reason))}
+    end;
+execute_lifecycle({join_ontology, Name, GenesisHash, Seeds} = Action) ->
+    case quod_ontology:join(Name, GenesisHash, Seeds) of
+        {ok, _Status, _Ns, _RawGenesisHash} -> ok;
+        {error, outcome_unknown} -> {error, outcome_unknown};
+        {error, Reason} ->
+            {error, failure_reason(Action, join_reason(Reason))}
+    end;
+execute_lifecycle(_Action) ->
+    {error, {ontology_lifecycle_failed, invalid_action}}.
+
+-spec failure_reason(term(), term()) -> term().
+failure_reason({create_ontology, _, _}, Reason) ->
+    {ontology_creation_failed, Reason};
+failure_reason({join_ontology, _, _, _}, Reason) ->
+    {ontology_join_failed, Reason};
+failure_reason(_Action, Reason) ->
+    {ontology_lifecycle_failed, Reason}.
+
+action_failure({authorized_ontology_lifecycle, Action}, Reason) ->
+    failure_reason(Action, Reason);
+action_failure(_Goal, Reason) ->
+    {ontology_lifecycle_failed, Reason}.
 
 creation_reason(invalid_name) -> invalid_name;
 creation_reason(reserved_system_namespace) -> reserved_system_namespace;
@@ -54,29 +151,6 @@ creation_reason({source_file_error, Index, _Path, _Reason}) ->
 creation_reason({already_configured, _Ns}) -> already_hosted;
 creation_reason(_Reason) -> start_failed.
 
--spec join_ontology_effect_predicate(term(), term(), tuple()) -> term().
-join_ontology_effect_predicate(Goal, Next, #est{bs = Bs} = St) ->
-    case quod_predicates:ctx_ns(quod_predicates:context(St)) of
-        ?ROOT_NS -> join(erlog_int:dderef(Goal, Bs), Next, St);
-        _ -> fail_with(ontology_join_failed, root_only, St)
-    end.
-
-join({join_ontology_effect, Name, GenesisHash, Seeds}, Next, St) ->
-    case quod_predicates:is_ground({Name, GenesisHash, Seeds}) of
-        false ->
-            fail_with(ontology_join_failed, invalid_arguments, St);
-        true ->
-            case quod_ontology:join(Name, GenesisHash, Seeds) of
-                {ok, _Status, _Ns, _RawGenesisHash} ->
-                    erlog_int:prove_body(Next, St);
-                {error, Reason} ->
-                    fail_with(
-                      ontology_join_failed, join_reason(Reason), St)
-            end
-    end;
-join(_Goal, _Next, St) ->
-    fail_with(ontology_join_failed, invalid_arguments, St).
-
 join_reason(invalid_name) -> invalid_name;
 join_reason(reserved_system_namespace) -> reserved_system_namespace;
 join_reason(invalid_genesis_hash) -> invalid_genesis_hash;
@@ -89,25 +163,24 @@ join_reason(_Reason) -> start_failed.
 ontology_join_state_predicate(Goal, Next, #est{bs = Bs} = St) ->
     case quod_predicates:ctx_ns(quod_predicates:context(St)) of
         ?ROOT_NS -> state(erlog_int:dderef(Goal, Bs), Next, St);
-        _ -> fail_with(ontology_state_failed, root_only, St)
+        _ -> fail_reason({ontology_state_failed, root_only}, St)
     end.
 
 state({ontology_join_state, Name, State}, Next, St) ->
     case quod_predicates:is_ground(Name) of
         false ->
-            fail_with(ontology_state_failed, invalid_arguments, St);
+            fail_reason({ontology_state_failed, invalid_arguments}, St);
         true ->
             case quod_ontology:local_state(Name) of
                 {ok, LocalState} ->
                     erlog_int:prove_body(
                       [{'=', State, LocalState} | Next], St);
                 {error, _Reason} ->
-                    fail_with(ontology_state_failed, invalid_name, St)
+                    fail_reason({ontology_state_failed, invalid_name}, St)
             end
     end;
 state(_Goal, _Next, St) ->
-    fail_with(ontology_state_failed, invalid_arguments, St).
+    fail_reason({ontology_state_failed, invalid_arguments}, St).
 
-fail_with(Functor, Reason, St) ->
-    erlog_int:prove_body(
-      [{fail_with_reason, {Functor, Reason}}], St).
+fail_reason(Reason, St) ->
+    erlog_int:prove_body([{fail_with_reason, Reason}], St).

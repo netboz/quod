@@ -10,9 +10,13 @@ runtime hosting intent, and calling `create/2` again resumes the existing
 ledger.
 Joining uses that same lifecycle asynchronously: acceptance starts the existing
 catch-up process, and `local_state/1` reports its local progress.
+
+These functions are trusted same-VM APIs; they do not authenticate a remote
+caller. Node-local Prolog lifecycle requests must enter through
+`quod_prolog:run_action/2`, which proves root policy before calling them.
 """.
 
--export([create/2, join/3, local_state/1]).
+-export([create/2, join/3, local_state/1, normalize_user_name/1]).
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(MAX_NAMESPACE_BYTES, 128).
@@ -35,7 +39,7 @@ catch-up process, and `local_state/1` reports its local progress.
 
 -spec create(term(), [input_option()]) -> creation().
 create(Name, Options) ->
-    case canonical_user_name(Name) of
+    case normalize_user_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
@@ -52,7 +56,7 @@ create(Name, Options) ->
 
 -spec join(term(), unicode:chardata(), [term()]) -> joining().
 join(Name, GenesisHash, Seeds) ->
-    case canonical_user_name(Name) of
+    case normalize_user_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
@@ -190,7 +194,7 @@ create_validated(Ns, InitialTerms) ->
                 {error, _} = Error ->
                     Error;
                 Status ->
-                    start(Ns, Config, Status, any)
+                    start(Ns, Config, Status)
             end
     end.
 
@@ -212,39 +216,29 @@ join_validated(Ns, GenesisHex, RawGenesisHash, SeedPeers) ->
                        Storage#{seed_peers => SeedPeers}),
             case existing_ledger(Ns, Config) of
                 {error, _} = Error -> Error;
-                created -> start(Ns, Config, joining, RawGenesisHash);
-                resumed -> start(Ns, Config, resumed, RawGenesisHash)
+                created -> start(Ns, Config, joining);
+                resumed -> start(Ns, Config, resumed)
             end
     end.
 
-start(Ns, Config, Status, ExpectedGenesisHash) ->
+start(Ns, Config, Status) ->
     Result =
         try quod_namespace_manager:start_new_content(Ns, Config)
-        catch exit:_ -> {error, manager_unavailable}
+        catch exit:_ -> {error, outcome_unknown}
         end,
     case Result of
-        {ok, Pid} when is_pid(Pid) ->
-            hosting_started(Ns, Config, Status, ExpectedGenesisHash);
-        {ok, Pid, _Info} when is_pid(Pid) ->
-            hosting_started(Ns, Config, Status, ExpectedGenesisHash);
+        {ok, Hash} when is_binary(Hash), byte_size(Hash) =:= 32 ->
+            {ok, Status, Ns, Hash};
         {error, {already_configured, Ns}} = Error ->
+            Error;
+        {error, outcome_unknown} = Error ->
+            Error;
+        {error, genesis_mismatch} = Error ->
+            Error;
+        {error, genesis_unavailable} = Error ->
             Error;
         {error, Reason} ->
             {error, {start_failed, Reason}}
-    end.
-
-hosting_started(Ns, Config, Status, ExpectedGenesisHash) ->
-    case quod_simplex:genesis_hash(Ns) of
-        Hash when is_binary(Hash), byte_size(Hash) =:= 32,
-                  ExpectedGenesisHash =:= any orelse Hash =:= ExpectedGenesisHash ->
-            ok = quod_app:publish_data_dir(Ns, Config),
-            {ok, Status, Ns, Hash};
-        Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
-            _ = quod_namespace_manager:stop_content(Ns),
-            {error, genesis_mismatch};
-        _ ->
-            _ = quod_namespace_manager:stop_content(Ns),
-            {error, genesis_unavailable}
     end.
 
 canonical_name(Name) ->
@@ -269,7 +263,9 @@ validate_name(Ns) ->
         {error, invalid_name}
     end.
 
-canonical_user_name(Name) ->
+-doc "Canonicalize a non-system ontology name without touching hosting state or storage.".
+-spec normalize_user_name(term()) -> {ok, binary()} | {error, term()}.
+normalize_user_name(Name) ->
     case canonical_name(Name) of
         {ok, <<"quod">>} -> {error, reserved_system_namespace};
         {ok, <<"quod:", _/binary>>} ->

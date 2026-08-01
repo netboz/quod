@@ -3,14 +3,15 @@
 ## Goal
 
 Keep one ontology-creation operation and make its second argument an ordered
-list of input options:
+list of input options. The node-local authorized action entry is:
 
-```prolog
-goal(create_ontology(user:notes, [
-    source_file("./test.pl"),
-    source_file("./test2.pl"),
-    source("note(inline).")
-])).
+```erlang
+quod_prolog:run_action(
+  <<"quod:root">>,
+  {create_ontology, {':', user, notes},
+   [{source_file, "./test.pl"},
+    {source_file, "./test2.pl"},
+    {source, "note(inline)."}]}).
 ```
 
 The corresponding Erlang representation is:
@@ -23,7 +24,7 @@ quod_ontology:create(
    {source, <<"note(inline).">>}]).
 ```
 
-This is a breaking replacement for the current raw term-list argument. There
+This was a breaking replacement for the former raw term-list argument. There
 is no `create_source/2`, legacy argument detection, or compatibility branch.
 All inputs converge before validation and use the existing atomic creation
 path.
@@ -52,11 +53,11 @@ The list is intentionally not converted to a map: repeated sources and their
 order are meaningful, and later options such as identity or visibility need
 not change the input-loading pipeline.
 
-The creation action's external adapter requires its two arguments to be ground.
-Consequently `{terms, Terms}` can carry ground facts from Prolog but not
+The lifecycle action runner requires the complete action to be ground.
+Consequently `{terms, Terms}` can carry ground facts in the action term but not
 clauses containing caller variables. `source/1` and `source_file/1` are the
 normal way to supply rules: variables are parsed as data inside the source,
-not mistaken for variables of the `goal(create_ontology/2)` call.
+not mistaken for variables of the action request.
 
 ## One creation pipeline
 
@@ -154,7 +155,7 @@ The option loader handles every documented `erlog_io:read_file/1` result:
 `{exit, einval, Reason}`. The two crash-shaped results are detailed file errors,
 never a `case_clause` escape.
 
-The external creation adapter exposes only bounded, portable reasons:
+Its lifecycle-specific input failures use bounded, portable reasons:
 
 ```prolog
 ontology_creation_failed(invalid_options)
@@ -167,10 +168,13 @@ All existing name, root-only, protected-fact, and start-failure mappings remain
 available. No raw source, path, parser detail, PID, or interpreter state enters
 the Prolog failure stack.
 
-`source_file/1` is reachable only through the existing root-only effect
-context. Ordinary proofs, served cross-ontology asks, consensus projections,
-and the explorer prove endpoint cannot execute it. This slice does not add a
-new remote effect endpoint.
+`source_file/1` is reachable from the authorized lifecycle path only
+through the dedicated root action runner. That runner derives a private node
+principal, proves policy in a read-only committed view, re-authorizes, and then
+calls the typed executor. Ordinary proofs, served cross-ontology asks,
+consensus projections, and the explorer prove endpoint cannot execute it. The
+low-level creation API is trusted same-VM code and is not a remote
+authorization boundary.
 
 ## Tests
 
@@ -193,7 +197,7 @@ new remote effect endpoint.
 1. A mixed ordered list of `terms`, two `source_file` entries, and `source`
    produces one genesis containing every clause in order.
 2. A source rule containing variables can be queried after creation.
-3. The Prolog predicate accepts the same option list and creates that rule; the
+3. The action runner accepts the same option list and creates that rule; the
    former raw term-list call is rejected as `invalid_options`.
 4. A missing file, invalid UTF-8 source, malformed option, improper list, and
    syntax error in a later source leave the desired map, child set, explorer
@@ -204,7 +208,7 @@ new remote effect endpoint.
    `terms`, inline source, or a file.
 7. Repeated file/source options prove order is preserved without a duplicate
    option being discarded.
-8. Existing collision, rollback, resume, root-only effect, and staged-write
+8. Existing collision, failed-admission, resume, root-only action, authorization, and staged-write
    tests remain green under the new option shape.
 
 Run focused Erlog and Quod tests first, then compile, xref, Dialyzer, full

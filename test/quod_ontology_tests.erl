@@ -11,10 +11,13 @@ ontology_creation_test_() ->
      fun cleanup/1,
      fun(Fixture) ->
          [?_test(create_and_resume(Fixture)),
+          ?_test(reconcile_republishes_running_content(Fixture)),
           ?_test(validation_precedes_mutation(Fixture)),
           ?_test(collisions_preserve_existing_state(Fixture)),
           ?_test(failed_admission_rolls_back(Fixture)),
-          ?_test(effect_boundary_and_reasons(Fixture)),
+          ?_test(action_boundary_and_reasons(Fixture)),
+          ?_test(lifecycle_authorization_guards(Fixture)),
+          ?_test(action_timeout_is_outcome_unknown(Fixture)),
           ?_test(join_validation_and_state(Fixture)),
           ?_test(join_resume_anchor_is_exact(Fixture))]
      end}.
@@ -46,7 +49,8 @@ setup() ->
           genesis_file => <<"ontologies/quod_root.pl">>,
           data_dir => list_to_binary(Dir),
           seeds => []},
-    {?ROOT_NS, RootConfig} = quod_app:build_ns_config(RootBlock),
+    {?ROOT_NS, RootConfig0} = quod_app:build_ns_config(RootBlock),
+    RootConfig = RootConfig0#{proof_timeout_ms => 500},
     {ok, _RootPid} =
         quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
     ok = wait_ready(?ROOT_NS, 200),
@@ -106,7 +110,7 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
        {ok, [#{}], _},
        quod_prolog:prove(Ns, goal({common_fact, asserted}), Ns)),
     {fail, BlockedReasons} =
-        quod_prolog:effect(Ns, goal(blocked_action)),
+        quod_prolog:prove(Ns, goal(blocked_action), Ns),
     ?assert(lists:member(blocked_by_policy, BlockedReasons)),
     ?assertMatch(
        {fail, _},
@@ -354,24 +358,23 @@ failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
         Orphan ! stop
     end.
 
-effect_boundary_and_reasons(_Fixture) ->
-    Ns = unique_ns(<<"effect-created">>),
+action_boundary_and_reasons(#{dir := Dir}) ->
+    Ns = unique_ns(<<"action-created">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:effect(
+       quod_prolog:run_action(
          ?ROOT_NS,
-         goal(
-           {create_ontology, Ns,
-            [{source,
-              <<"effect_fact(works).\n"
-                "effect_rule(X) :- effect_fact(X).">>}]}))),
+          {create_ontology, Ns,
+          [{source,
+            <<"action_fact(works).\n"
+              "action_rule(X) :- action_fact(X).">>}]})),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {effect_fact, works}, Ns)),
+       quod_prolog:prove_ro(Ns, {action_fact, works}, Ns)),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {effect_rule, works}, Ns)),
+       quod_prolog:prove_ro(Ns, {action_rule, works}, Ns)),
     ?assertMatch(
        {error, {erlog, {context_violation, _, effect, proof}}},
        quod_prolog:prove(
@@ -379,83 +382,264 @@ effect_boundary_and_reasons(_Fixture) ->
          goal({create_ontology, unique_ns(<<"forbidden">>), []}),
          ?ROOT_NS)),
     ?assertEqual(
-       {error, effect_staged_write},
-       quod_prolog:effect(?ROOT_NS, {assertz, {not_committed, true}})),
+       {error, invalid_action},
+       quod_prolog:run_action(
+         ?ROOT_NS, {assertz, {not_committed, true}})),
     ?assertMatch(
        {fail, _},
        quod_prolog:prove_ro(?ROOT_NS, {not_committed, true}, ?ROOT_NS)),
-    %% The old direct functor has no compiled compatibility path.
+    DesiredBeforeInvalidName =
+        application:get_env(quod, namespace_desired, #{}),
+    ?assertEqual(
+       {fail, [{ontology_creation_failed, invalid_name}]},
+       quod_prolog:run_action(
+         ?ROOT_NS, {create_ontology, <<>>, []})),
+    ?assertEqual(
+       {fail, [{ontology_join_failed, invalid_name}]},
+       quod_prolog:run_action(
+         ?ROOT_NS,
+         {join_ontology, <<255>>, binary:encode_hex(<<0:256>>),
+          [{seed, "127.0.0.1", 14567}]})),
+    ?assertEqual(
+       DesiredBeforeInvalidName,
+       application:get_env(quod, namespace_desired, #{})),
+    %% The old direct functor has no compiled or action compatibility path.
+    %% goal/1 still treats any unknown ground term as an ordinary fact action;
+    %% proving that path may stage the term, but cannot invoke lifecycle IO.
+    RemovedNs = unique_ns(<<"removed-action">>),
+    RemovedAction = {create_ontology_effect, RemovedNs, []},
+    ?assertEqual(
+       {error, invalid_action},
+       quod_prolog:run_action(?ROOT_NS, RemovedAction)),
     ?assertMatch(
        {fail, _},
-       quod_prolog:effect(
-         ?ROOT_NS,
-         {create_ontology, unique_ns(<<"removed-direct">>), []})),
+       quod_prolog:prove(?ROOT_NS, RemovedAction, ?ROOT_NS)),
+    DesiredBeforeRemovedGoal =
+        application:get_env(quod, namespace_desired, #{}),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:effect(?ROOT_NS, goal(true))),
+       quod_prolog:prove(?ROOT_NS, goal(RemovedAction), ?ROOT_NS)),
+    ?assertEqual(
+       DesiredBeforeRemovedGoal,
+       application:get_env(quod, namespace_desired, #{})),
+    ?assertNot(
+       filelib:is_dir(quod_ledger_store:ns_dir(Dir, RemovedNs))),
+    commit_root({retract, RemovedAction}),
     RootOnlyTarget = Ns,
     {fail, RootOnlyReasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           RootOnlyTarget,
-          {create_ontology_effect,
-           unique_ns(<<"root-only">>), []}),
+          {create_ontology, unique_ns(<<"root-only">>), []}),
     ?assert(
        lists:member(
          {ontology_creation_failed, root_only},
          RootOnlyReasons)),
     {fail, InvalidTermReasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           ?ROOT_NS,
-          goal(
-            {create_ontology, unique_ns(<<"invalid-terms">>),
-             [{terms, [{member, x, []}]}]})),
+          {create_ontology, unique_ns(<<"invalid-terms">>),
+           [{terms, [{member, x, []}]}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, invalid_initial_terms},
          InvalidTermReasons)),
     {fail, ImproperTermReasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           ?ROOT_NS,
-          goal(
-            {create_ontology, unique_ns(<<"improper-terms">>),
-             [{terms, [{valid_fact, true} | improper_tail]}]})),
+          {create_ontology, unique_ns(<<"improper-terms">>),
+           [{terms, [{valid_fact, true} | improper_tail]}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, invalid_options},
          ImproperTermReasons)),
     {fail, InvalidSourceReasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           ?ROOT_NS,
-          goal(
-            {create_ontology, unique_ns(<<"invalid-source">>),
-             [{terms, [{valid, first}]},
-              {source, "valid.\nbroken("}]})),
+          {create_ontology, unique_ns(<<"invalid-source">>),
+           [{terms, [{valid, first}]},
+            {source, "valid.\nbroken("}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, {invalid_source, 2, 2}},
          InvalidSourceReasons)),
     {fail, InvalidOptionsReasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           ?ROOT_NS,
-          goal(
-            {create_ontology, unique_ns(<<"invalid-options">>),
-             [{unknown_option, value}]})),
+          {create_ontology, unique_ns(<<"invalid-options">>),
+           [{unknown_option, value}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, invalid_options},
          InvalidOptionsReasons)),
     Large = binary:copy(<<"x">>, 5000),
     {fail, Reasons} =
-        quod_prolog:effect(
+        quod_prolog:run_action(
           ?ROOT_NS,
-          goal(
-            {create_ontology, <<"quod:forbidden">>,
-             [{terms, [{payload, Large}]}]})),
+          {create_ontology, <<"quod:forbidden">>,
+           [{terms, [{payload, Large}]}]}),
     ?assert(
        lists:member(
          {ontology_creation_failed, reserved_system_namespace},
-         Reasons)),
-    ?assert(lists:member(fail_reasons_truncated, Reasons)).
+         Reasons)).
+
+lifecycle_authorization_guards(#{dir := Dir}) ->
+    {ok, SelfKey} = application:get_env(quod, node_pubkey),
+    PolicyProbe = unique_ns(<<"policy-probe">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {can_create_ontology, {node, SelfKey}, PolicyProbe, []},
+         ?ROOT_NS)),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {can_create_ontology, {node, <<0:256>>}, PolicyProbe, []},
+         ?ROOT_NS)),
+    ?assertEqual(
+       effect,
+       quod_predicates:class({authorized_ontology_lifecycle, 1})),
+    ?assertEqual(undefined,
+                 quod_predicates:class({create_ontology_effect, 2})),
+    ?assertEqual(undefined,
+                 quod_predicates:class({join_ontology_effect, 3})),
+
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    ?assertEqual(
+       {fail, [{ontology_creation_failed, invalid_arguments}]},
+       quod_prolog:run_action(
+         ?ROOT_NS, {create_ontology, {'Name'}, []})),
+    ?assertEqual(Desired0,
+                 application:get_env(quod, namespace_desired, #{})),
+
+    DirectAction =
+        {create_ontology, unique_ns(<<"direct-auth">>), []},
+    ?assertMatch(
+       {error, {erlog, {context_violation,
+                        {authorized_ontology_lifecycle, 1}, effect, proof}}},
+       quod_prolog:prove(
+         ?ROOT_NS,
+         {authorized_ontology_lifecycle, DirectAction},
+         ?ROOT_NS)),
+
+    %% Even if committed root content accidentally omits the visible
+    %% authorization prerequisite, the typed executor performs the same check
+    %% again immediately before IO.
+    NoGateNs = unique_ns(<<"missing-visible-gate">>),
+    NoGateAction =
+        {action, {create_ontology, NoGateNs, []},
+         [{ontology_join_state, NoGateNs, not_hosted}], true},
+    CreatePolicy = root_create_policy(),
+    commit_root(
+      {',', {retract, CreatePolicy}, {asserta, NoGateAction}}),
+    try
+        {fail, NoGateReasons} =
+            quod_prolog:run_action(
+              ?ROOT_NS, {create_ontology, NoGateNs, []}),
+        ?assert(lists:member(
+                  {ontology_creation_failed, not_authorized},
+                  NoGateReasons)),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, NoGateNs)))
+    after
+        commit_root({assertz, CreatePolicy})
+    end,
+
+    %% Authorization policy itself is strictly read-only. The first assert is
+    %% rejected, so an assert/retract pair cannot authorize through a net-empty
+    %% diff and cannot fall through to the general allow rule.
+    PolicyWriteNs = unique_ns(<<"policy-write">>),
+    Marker = {policy_write_marker, PolicyWriteNs},
+    PolicyWriteRule =
+        {':-',
+         {can_create_ontology, {node, {'K'}}, PolicyWriteNs, []},
+         {',', {assertz, Marker},
+          {',', {retract, Marker},
+           {peer_admitted, {'K'}, {'_'}, {'_'}, {'K'}}}}},
+    commit_root(
+      {',', {retract, CreatePolicy}, {asserta, PolicyWriteRule}}),
+    try
+        {fail, PolicyWriteReasons} =
+            quod_prolog:run_action(
+              ?ROOT_NS, {create_ontology, PolicyWriteNs, []}),
+        ?assert(lists:member(
+                  {ontology_creation_failed, not_authorized},
+                  PolicyWriteReasons)),
+        ?assertMatch(
+           {fail, _},
+           quod_prolog:prove_ro(?ROOT_NS, Marker, ?ROOT_NS)),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, PolicyWriteNs)))
+    after
+        commit_root(
+          {',', {retract, PolicyWriteRule}, {assertz, CreatePolicy}})
+    end,
+
+    %% The whole action-preparation phase is read-only as well; a declaration
+    %% that tries to stage a fact aborts before the typed executor.
+    PhaseWriteNs = unique_ns(<<"phase-write">>),
+    PhaseMarker = {phase_write_marker, PhaseWriteNs},
+    PhaseWriteAction =
+        {action, {create_ontology, PhaseWriteNs, []},
+         [{assertz, PhaseMarker}], true},
+    CreateDeclaration = root_creation_action(),
+    commit_root(
+      {',', {retract, CreateDeclaration}, {asserta, PhaseWriteAction}}),
+    try
+        ?assertEqual(
+           {error, effect_staged_write},
+           quod_prolog:run_action(
+             ?ROOT_NS, {create_ontology, PhaseWriteNs, []})),
+        ?assertMatch(
+           {fail, _},
+           quod_prolog:prove_ro(?ROOT_NS, PhaseMarker, ?ROOT_NS)),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, PhaseWriteNs)))
+    after
+        commit_root(
+          {',', {retract, PhaseWriteAction},
+           {assertz, CreateDeclaration}})
+    end,
+
+    %% A root founded without the matching literal-true declaration fails with
+    %% a stable public reason, not an internal preparer frame.
+    MissingActionNs = unique_ns(<<"missing-action">>),
+    commit_root({retract, CreateDeclaration}),
+    try
+        ?assertEqual(
+           {fail, [{ontology_creation_failed, action_not_declared}]},
+           quod_prolog:run_action(
+             ?ROOT_NS, {create_ontology, MissingActionNs, []})),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, MissingActionNs)))
+    after
+        commit_root({assertz, CreateDeclaration})
+    end.
+
+action_timeout_is_outcome_unknown(#{manager := Manager}) ->
+    Ns = unique_ns(<<"action-timeout">>),
+    ok = sys:suspend(Manager),
+    Result =
+        try
+            quod_prolog:run_action(
+              ?ROOT_NS, {create_ontology, Ns, []})
+        after
+            ok = sys:resume(Manager)
+        end,
+    ?assertEqual({error, outcome_unknown}, Result),
+    %% The manager may already hold the accepted request after the worker was
+    %% killed. Polling local state is therefore the only safe retry decision.
+    ok = wait_ready(Ns, 200),
+    ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
+    GenesisHash = quod_simplex:genesis_hash(Ns),
+    ?assertEqual(32, byte_size(GenesisHash)),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Config = maps:get(Ns, maps:get(content, Desired)),
+    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    ?assertEqual(
+       quod_ledger_store:ledger_dir(Config),
+       maps:get(Ns, Dirs)).
 
 join_validation_and_state(#{dir := Dir}) ->
     Ns = unique_ns(<<"join-validation">>),
@@ -503,9 +687,9 @@ join_validation_and_state(#{dir := Dir}) ->
     {ok, created, StateNs, _} = quod_ontology:create(StateNs, []),
     ok = wait_ready(StateNs, 200),
     {fail, StateReasons} =
-        quod_prolog:effect(
+        quod_prolog:prove_ro(
           StateNs,
-          {ontology_join_state, StateNs, {'State'}}),
+          {ontology_join_state, StateNs, {'State'}}, StateNs),
     ?assert(
        lists:member(
          {ontology_state_failed, root_only}, StateReasons)),
@@ -570,6 +754,37 @@ join_resume_anchor_is_exact(#{dir := Dir}) ->
        quod_prolog:prove_ro(Ns, {durable, original}, Ns)),
     ok = quod_namespace_manager:stop_content(Ns).
 
+commit_root(Goal) ->
+    ?assertMatch(
+       {ok, [_ | _], _},
+       quod_prolog:prove(?ROOT_NS, Goal, ?ROOT_NS)),
+    ok.
+
+reconcile_republishes_running_content(#{manager := Manager}) ->
+    Ns = unique_ns(<<"reconcile-publish">>),
+    {ok, created, Ns, _GenesisHash} = quod_ontology:create(Ns, []),
+    ok = wait_ready(Ns, 200),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Config = maps:get(Ns, maps:get(content, Desired)),
+    ExpectedDir = quod_ledger_store:ledger_dir(Config),
+    application:set_env(quod, content_data_dirs, #{}),
+    Manager ! reconcile,
+    ok = wait_data_dir(Ns, ExpectedDir, 200).
+
+root_creation_action() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Declaration] =
+        [Term || {action, {create_ontology, _, _}, _, true} = Term <-
+                     quod_prolog:read_terms(File)],
+    Declaration.
+
+root_create_policy() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Policy] =
+        [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
+                     quod_prolog:read_terms(File)],
+    Policy.
+
 wait_ready(_Ns, 0) ->
     {error, timeout};
 wait_ready(Ns, N) ->
@@ -578,6 +793,17 @@ wait_ready(Ns, N) ->
         _ ->
             timer:sleep(10),
             wait_ready(Ns, N - 1)
+    end.
+
+wait_data_dir(_Ns, _Expected, 0) ->
+    {error, timeout};
+wait_data_dir(Ns, Expected, N) ->
+    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    case maps:get(Ns, Dirs, undefined) of
+        Expected -> ok;
+        _ ->
+            timer:sleep(10),
+            wait_data_dir(Ns, Expected, N - 1)
     end.
 
 unique_ns(Prefix) ->

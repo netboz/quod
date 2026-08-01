@@ -198,8 +198,9 @@ context. Effect predicates are never callable from ordinary ontology proofs.
 > must be carried out-of-band — the `#lp{}`-overlay pattern (as for
 > `follow_disabled`), not this readable flag. All four kinds now have concrete
 > constructors: normal proofs and membership verdicts, runtime projections, and
-> the explicit snapshot-pinned `quod_prolog:effect/2` path used by
-> `goal(create_ontology(...))` and `goal(join_ontology(...))`. The
+> the dedicated snapshot-pinned `quod_prolog:run_action/2` lifecycle path. That
+> path derives its node principal in the engine and carries it privately in the
+> overlay; ordinary `goal/1` proofs cannot execute lifecycle IO. The
 > four process-dictionary values (`$quod_ns`/`$quod_applied`/`$quod_ask_chain`/
 > `$quod_in_verdict`) are removed, not retained as a second mechanism.
 
@@ -244,9 +245,11 @@ the engine-owned execution context; it is not a positional field of
 
 Most actions change durable reality and their runtime consequences are derived
 from the committed diff by P and E handlers. Explicit node-local lifecycle
-actions run only through the effect context, place their external adapter last
-in the prerequisite list, and use `true` as the effect so volatile hosting
-state is not asserted into consensus.
+actions run only through `quod_prolog:run_action/2`. Its effect-context worker
+proves the literal-`true` declaration and ordered prerequisites in a read-only
+overlay, re-authorizes the private engine-owned principal against the same
+committed snapshot, and only then invokes the typed create/join executor. The
+`true` effect ensures volatile hosting state is not asserted into consensus.
 
 ## 7. Apply, replay, reconciliation, and events
 

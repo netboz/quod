@@ -100,4 +100,5 @@ effect_refused_in_proof_test() ->
     ?assertEqual(
        context_violation,
        scope(ctx(<<"cp:eff">>, kb([])),
-             {create_ontology_effect, demo, []})).
+             {authorized_ontology_lifecycle,
+              {create_ontology, demo, []}})).

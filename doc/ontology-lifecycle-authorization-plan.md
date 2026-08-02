@@ -2,8 +2,7 @@
 
 **Status:** the node-local authorization foundation is committed and deployed
 in 0.7.57. The target-driven action correction, prepared-genesis seam, and
-transaction checkpoint support exist only in the uncommitted working trees and
-await review.
+transaction checkpoint support landed in Quod 0.7.58.
 
 ## 1. Goal
 

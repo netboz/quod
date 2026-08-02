@@ -46,6 +46,19 @@ completion_reason_validation_test() ->
        quod_ask:test_remote_answer(
          {quod_ask_answer, AskId, 1, {complete, malformed}}, AskId, 1)).
 
+write_rejection_precedes_answer_limit_test() ->
+    {ok, Erl} = erlog:new(erlog_db_dict, null),
+    Scope0 = quod_proof_scope:open(
+               {assertz, {staged, answer}}, element(3, Erl), #{}),
+    try
+        {solution, _Solution, Scope1} = quod_proof_scope:next(Scope0),
+        ?assertEqual(
+           {error, foreign_write_unsupported},
+           quod_ask:test_solution_disposition(Scope1, at_limit))
+    after
+        quod_proof_scope:close(Scope0)
+    end.
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->

@@ -2,7 +2,7 @@
 
 **Status:** APPROVED (Yan, 2026-07-17). Slices 1 and 2 are delivered; Slice 3
 and later remain pending. The corrected target-driven action/transaction
-prerequisite exists only in the uncommitted working trees.
+prerequisite landed in Quod 0.7.58.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.

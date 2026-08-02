@@ -219,10 +219,8 @@ authorization boundary.
 Run focused Erlog and Quod tests first, then compile, xref, Dialyzer, full
 EUnit, and full CT.
 
-The Erlog parser/EOF correction followed that workflow and is already reviewed,
-merged into the public `quod` branch, and pinned by released Quod at
-`2d7356c`. The separate transaction-checkpoint work now in the working trees
-must likewise be reviewed before either repository is committed or pushed.
+The Erlog parser/EOF correction and transaction-checkpoint support followed
+that workflow, were reviewed, and landed in Quod 0.7.58's exact Erlog pin.
 
 ## Non-goals
 

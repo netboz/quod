@@ -1,8 +1,8 @@
 # Uniform distributed Prolog proofs and atomic ontology writes
 
 **Status:** architecture reviewed; implementation in progress. Step 1's local
-`action/3` and `transaction/1` foundation exists only in the uncommitted
-working trees. Distributed steps 2-6 are not implemented or deployed.
+`action/3` and `transaction/1` foundation landed in Quod 0.7.58. Distributed
+steps 2-6 are not implemented or deployed.
 
 This plan is the prerequisite correction for the action work in
 `minimal-agent-delivery-plan.md`. It is deliberately complete: it does not ship

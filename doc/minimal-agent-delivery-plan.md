@@ -1,9 +1,9 @@
 # Minimal durable agent delivery — Slices 3 and 4
 
 **Status:** the architecture is reviewed. Delivery implementation waits for
-distributed-proof steps 1--6; step 1's target-driven `action/3` and local
-`transaction/1` foundation exists only in the uncommitted working trees. No
-agent-delivery component is implemented or deployed.
+distributed-proof steps 2--6; step 1's target-driven `action/3` and local
+`transaction/1` foundation landed in Quod 0.7.58. No agent-delivery component
+is implemented or deployed.
 
 ## 1. Why this is next
 

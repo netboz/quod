@@ -30,7 +30,7 @@ a silent failure.
          subscribe/1, ask_channel/1, decode_open/1, decode_next/1, decode_cancel/1,
          reject_remote/5, answer_channel/1]).
 -ifdef(TEST).
--export([test_remote_answer/3]).
+-export([test_remote_answer/3, test_solution_disposition/2]).
 -endif.
 
 %% The ask-chain depth cap and the per-`next` no-progress budget (doc/inter-ontology.md §9).
@@ -598,7 +598,9 @@ answer_init(Ns, Est, Height, Goal, Chain, AuthorizedSubjects, Asker, Engine) ->
         false ->
             _ = sink_send(Asker, {error, not_allowed}),
             sink_close(Asker);
-        true  -> answer_loop({fresh, Goal, W}, Asker, 0, 1, Engine)
+        true  -> answer_loop(
+                   quod_proof_scope:open_wrapped(Goal, W),
+                   Asker, 0, 1, Engine)
     end.
 
 answer_loop(State, Asker, Count, Seq, Engine) ->
@@ -613,33 +615,52 @@ answer_loop(State, Asker, Count, Seq, Engine) ->
                 _ ->
                     answer_loop(State, Asker, Count, Seq, Engine)
             end;
-        {stop, Asker} -> sink_close(Asker)
-    after ?NEXT_TIMEOUT_MS -> sink_close(Asker)    %% asker went silent (its monitor also covers death)
+        {stop, Asker} -> close_answer(State, Asker)
+    after ?NEXT_TIMEOUT_MS ->
+        close_answer(State, Asker)    %% asker went silent (its monitor also covers death)
     end.
 
 answer_once(State, Asker, Count, Seq, Engine) ->
-    case step(State) of
-        {solution, Sol, State1} when Count < ?MAX_ANSWERS ->
-            case sink_solution(Asker, Seq, Sol) of
-                ok ->
-                    Engine ! {ask_step_finished, self()},
-                    answer_loop(State1, Asker, Count + 1, Seq + 1, Engine);
-                too_big ->
-                    _ = sink_send(Asker, {error, answer_too_big}),
-                    sink_close(Asker);
-                send_failed ->
-                    sink_close(Asker)
+    case quod_proof_scope:next(State) of
+        {solution, Sol, State1} ->
+            case solution_disposition(State1, Count) of
+                send ->
+                    case sink_solution(Asker, Seq, Sol) of
+                        ok ->
+                            Engine ! {ask_step_finished, self()},
+                            answer_loop(
+                              State1, Asker, Count + 1, Seq + 1, Engine);
+                        too_big ->
+                            _ = sink_send(Asker, {error, answer_too_big}),
+                            close_answer(State1, Asker);
+                        send_failed ->
+                            close_answer(State1, Asker)
+                    end;
+                {error, Reason} ->
+                    _ = sink_send(Asker, {error, Reason}),
+                    close_answer(State1, Asker)
             end;
-        {solution, _Sol, _State1} ->
-            _ = sink_send(Asker, {error, too_many_answers}),
-            sink_close(Asker);
-        {done, Reasons} ->
+        {complete, Reasons, State1} ->
             _ = sink_send(Asker, {complete, Seq, Reasons}),
-            sink_close(Asker);
-        {error, R} ->
+            close_answer(State1, Asker);
+        {error, R, State1} ->
             _ = sink_send(Asker, {error, R}),
-            sink_close(Asker)
+            close_answer(State1, Asker)
     end.
+
+solution_disposition(State, Count) ->
+    case quod_proof_scope:local_changes(State) of
+        [] when Count < ?MAX_ANSWERS -> send;
+        [] -> {error, too_many_answers};
+        _ -> {error, foreign_write_unsupported}
+    end.
+
+-ifdef(TEST).
+test_solution_disposition(State, at_limit) ->
+    solution_disposition(State, ?MAX_ANSWERS);
+test_solution_disposition(State, Count) ->
+    solution_disposition(State, Count).
+-endif.
 
 sink_solution(Asker, Seq, Sol) ->
     case quod_wire_term:encode(Sol) of
@@ -700,19 +721,9 @@ reliable_sink_send(Link, Payload) ->
 sink_close({remote, _AskId, _Link}) -> ok;
 sink_close(_LocalAsker) -> ok.
 
-step({fresh, Goal, W}) -> drive(Goal, catch erlog_int:prove_goal(Goal, W));
-step({more, Goal, St}) -> drive(Goal, catch erlog_int:fail(St)).
-
-drive(Goal, {succeed, St}) ->
-    case quod_erlog_db_local_prove:get_local_changes((St#est.db)#db.ref) of
-        [] -> {solution, erlog_int:dderef(Goal, St#est.bs), {more, Goal, St}};
-        _  -> {error, foreign_write_unsupported}
-    end;
-drive(_Goal, {fail, St})           -> {done, St#est.fail_reasons};
-drive(_Goal, {quod_ask_error, R})  -> {error, R};   %% a nested `::` inside Goal raised it
-drive(_Goal, {erlog_error, E, _})  -> {error, {erlog, E}};
-drive(_Goal, {erlog_error, E})     -> {error, {erlog, E}};
-drive(_Goal, _Other)               -> {error, prove_failed}.
+close_answer(State, Asker) ->
+    quod_proof_scope:close(State),
+    sink_close(Asker).
 
 %% Every declared ontology on the path and the authenticated remote peer must be
 %% authorized. This prevents a peer laundering access through an invented chain.

@@ -1011,36 +1011,8 @@ run_proof_est_annotated(Goal, Est) ->
     run_proof_est_annotated(Goal, Est, #{}).
 
 run_proof_est_annotated(Goal, Est, OverlayOpts) ->
-    Vs = erlog:vars_in(Goal),
-    W0 = quod_erlog_db_local_prove:wrap_state(
-           Est, OverlayOpts#{read_set => true}),
-    try erlog_int:prove_goal(Goal, W0) of
-        {succeed, Final} ->
-            Ov = (Final#est.db)#db.ref,
-            {ok, bindings_map(erlog_int:dderef(Vs, Final#est.bs)),
-             quod_erlog_db_local_prove:get_local_changes(Ov),
-             quod_erlog_db_local_prove:get_read_set(Ov)};
-        {fail, Final}        -> {fail, Final#est.fail_reasons};
-        {erlog_error, E, _}  -> {error, {erlog, E}}
-    catch
-        %% A cross-ontology `::` ask raises a distinct, loud error (doc/inter-ontology.md §8);
-        %% surface it verbatim rather than as a generic failure.
-        throw:{quod_ask_error, R}   -> {error, R};
-        %% erlog_error/2 THROWS — without these clauses every typed error a predicate
-        %% raises would collapse into the catch-all {error, prove_failed} and be invisible.
-        throw:{erlog_error, E, _St} -> {error, {erlog, E}};
-        throw:{erlog_error, E}      -> {error, {erlog, E}};
-        Class:Reason ->
-            logger:warning("quod_prolog[~p]: prove crashed: ~p:~p", [self(), Class, Reason]),
-            {error, prove_failed}
-    after
-        %% the read-set table lives in the overlay created above; reclaim it on
-        %% EVERY exit path (success, fail, error, crash).
-        quod_erlog_db_local_prove:cleanup_read_set(W0)
-    end.
-
-bindings_map(Pairs) when is_list(Pairs) -> maps:from_list(Pairs);
-bindings_map(_)                         -> #{}.
+    quod_proof_scope:run_first(
+      Goal, Est, OverlayOpts#{read_set => true}).
 
 %% Only own-namespace writes. Submit with OTP's asynchronous gen_statem request API,
 %% then park the caller until ordered apply (or a definite consensus rejection). This

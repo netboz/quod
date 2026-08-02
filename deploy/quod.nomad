@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.59"
+  default     = "0.7.60"
   description = "Quod image tag in the cluster registry. Routine upgrades resume the existing anchored quod-node host volumes."
 }
 

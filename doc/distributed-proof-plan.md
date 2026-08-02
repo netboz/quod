@@ -1,8 +1,9 @@
 # Uniform distributed Prolog proofs and atomic ontology writes
 
 **Status:** architecture reviewed; implementation in progress. Step 1's local
-`action/3` and `transaction/1` foundation landed in Quod 0.7.58. Distributed
-steps 2-6 are not implemented or deployed.
+`action/3` and `transaction/1` foundation landed in Quod 0.7.58. Step 2's
+shared proof context and recursive co-hosted scopes are implemented. Steps 3-6
+are not implemented, and no partial distributed semantics are deployed.
 
 This plan is the prerequisite correction for the action work in
 `minimal-agent-delivery-plan.md`. It is deliberately complete: it does not ship
@@ -583,6 +584,11 @@ Logical predicate failure alone participates in ordinary Prolog backtracking
 and one-boundary-at-a-time failure-reason propagation. Infrastructure loss is
 not converted into logical `fail`: the origin poisons the `ProofId`, closes all
 scopes, discards every volatile overlay, and returns the typed definite error.
+Before that cleanup, an errored invocation advances a scope only with state
+actually returned by Erlog. An error carrying no interpreter state keeps the
+last published revision; it must never reinstall an older pre-step revision
+over nested work. This retention is deterministic cleanup state, not recovery:
+the poisoned proof still commits nothing.
 This deliberately simple pre-Begin rule avoids retaining descendant C writes
 when B disappears before A acknowledges B's result. `send_reliable` queue
 acceptance is never treated as proof-state acceptance, and there is no hidden

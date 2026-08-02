@@ -133,7 +133,7 @@ memory_words(#ref{table = Table}) ->
     try ets:info(Table, memory) catch error:badarg -> 0 end.
 
 %% Predicates are included here only while more than one committed version must
-%% remain readable by a proof or `::` answer worker holding an older snapshot.
+%% remain readable by a proof scope holding an older snapshot.
 -spec history_predicates(ref()) -> non_neg_integer().
 history_predicates(#ref{table = Table}) ->
     try map_size(history_index(Table)) catch error:badarg -> 0 end.

@@ -59,6 +59,39 @@ write_rejection_precedes_answer_limit_test() ->
         quod_proof_scope:close(Scope0)
     end.
 
+nested_source_binding_test() ->
+    ProofId = crypto:strong_rand_bytes(32),
+    Anchor = crypto:strong_rand_bytes(32),
+    Parent = self(),
+    Registered = spawn(fun() -> forward_messages(Parent) end),
+    Stranger = spawn(fun() -> forward_messages(Parent) end),
+    _Context = quod_proof_context:start(ProofId, false),
+    try
+        {ok, registered_scope} = quod_proof_context:get_or_open_scope(
+                                   {<<"quod:nested-source-test">>, Anchor},
+                                   fun() -> {ok, Registered, registered_scope} end),
+        WrongProof = crypto:strong_rand_bytes(32),
+        WrongRef = make_ref(),
+        ok = quod_ask:test_serve_nested(
+               {proof_nested_open, WrongProof, Registered, WrongRef,
+                <<"quod:any">>, true, [<<"quod:caller">>]}),
+        ?assertEqual(
+           {proof_nested_reply, WrongProof, WrongRef, {error, not_allowed}},
+           receive_forwarded(Registered)),
+        StrangerRef = make_ref(),
+        ok = quod_ask:test_serve_nested(
+               {proof_nested_open, ProofId, Stranger, StrangerRef,
+                <<"quod:any">>, true, [<<"quod:caller">>]}),
+        ?assertEqual(
+           {proof_nested_reply, ProofId, StrangerRef, {error, not_allowed}},
+           receive_forwarded(Stranger))
+    after
+        quod_proof_context:stop(fun(_Scope) -> ok end,
+                                fun(_Proxy) -> ok end),
+        exit(Registered, kill),
+        exit(Stranger, kill)
+    end.
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
@@ -70,7 +103,17 @@ ask_test_() ->
           ?_test(t_grounded_ask(Ctx)),
           ?_test(t_self_ask(Ctx)),
           ?_test(t_loud_routing_errors(Ctx)),
-          ?_test(t_circular_ask(Ctx)),
+          ?_test(t_recursive_selection(Ctx)),
+          ?_test(t_three_scope_chain(Ctx)),
+          ?_test(t_failed_foreign_branch_retains_state(Ctx)),
+          ?_test(t_reentrant_scope_reuse(Ctx)),
+          ?_test(t_origin_scope_reentry_commits_write(Ctx)),
+          ?_test(t_nested_failure_reasons(Ctx)),
+          ?_test(t_read_only_tree_rejects_first_write(Ctx)),
+          ?_test(t_scope_session_binding(Ctx)),
+          ?_test(t_stateless_scope_error_keeps_published_revision(Ctx)),
+          ?_test(t_scope_owner_death_reaps_session(Ctx)),
+          ?_test(t_scope_worker_crash_is_broken_stream(Ctx)),
           ?_test(t_permission_gate(Ctx)),
           ?_test(t_failure_reasons_cross_local_ask(Ctx)),
           ?_test(t_completion_marker(Ctx)),
@@ -106,19 +149,37 @@ setup() ->
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
         "loop :- loop.\n"
         "ping(ok).\n"),
+    ChainBFile = write_ontology(Dir, "chain_b.pl",
+        "can_read(_Goal, _Subject, _Ns).\n"
+        "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
+        "via_c(X) :- chain_c::leaf(X).\n"
+        "stage_and_fail :- assertz(shared_mark), fail.\n"
+        "shared_mark_visible :- shared_mark.\n"
+        "via_c_back(X) :- assertz(reentry_mark), chain_c::back_to_b(X).\n"
+        "reentry_visible(ok) :- reentry_mark.\n"
+        "via_origin_write :- pets::assertz(origin_callback_write).\n"
+        "via_c_failure :- chain_c::blocked.\n"),
+    ChainCFile = write_ontology(Dir, "chain_c.pl",
+        "can_read(_Goal, _Subject, _Ns).\n"
+        "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
+        "leaf(ok).\n"
+        "back_to_b(X) :- chain_b::reentry_visible(X).\n"
+        "blocked :- fail_with_reason(c_blocked).\n"),
     Namespaces = [
         start_ns(<<"animals">>, <<"ontologies/animals.pl">>, Dir),
         start_ns(<<"pets">>, <<"ontologies/pets.pl">>, Dir),
         start_ns(<<"private">>, list_to_binary(PrivateFile), Dir),
-        start_ns(<<"slow">>, list_to_binary(SlowFile), Dir)
+        start_ns(<<"slow">>, list_to_binary(SlowFile), Dir),
+        start_ns(<<"chain_b">>, list_to_binary(ChainBFile), Dir),
+        start_ns(<<"chain_c">>, list_to_binary(ChainCFile), Dir)
     ],
-    [A, P, Private, Slow] = Namespaces,
+    [A, P, Private, Slow, ChainB, ChainC] = Namespaces,
     _ = prove_ready(A, {isa, dog, mammal}),
     _ = prove_ready(P, {instance_of, pet, my_dog}),
     _ = prove_ready(Private, {secret, 42}),
     _ = prove_ready(Slow, {ping, ok}),
     #{dir => Dir, router => Router, namespaces => Namespaces, animals => A, pets => P,
-      private => Private, slow => Slow}.
+      private => Private, slow => Slow, chain_b => ChainB, chain_c => ChainC}.
 
 cleanup(#{dir := Dir, router := Router, namespaces := Namespaces}) ->
     lists:foreach(fun stop_ns/1, Namespaces),
@@ -170,10 +231,216 @@ t_loud_routing_errors(#{pets := P}) ->
     ?assertMatch({error, {bad_name, _}},
                  prove(P, {'::', {bad, a, name}, {diet, dog, {'D'}}})).
 
-t_circular_ask(#{pets := P}) ->
-    ?assertEqual({error, {circular_ask, <<"pets">>}},
+t_recursive_selection(#{pets := P}) ->
+    ?assertMatch({ok, [#{'N' := rex}], _},
                  prove(P, {'::', animals,
                            {'::', pets, {attribute, my_dog, name, {'N'}}}})).
+
+t_three_scope_chain(#{pets := P}) ->
+    ?assertMatch({ok, [#{'X' := ok}], _},
+                 prove(P, {'::', chain_b, {via_c, {'X'}}})).
+
+%% A failed invocation's writes remain in B's shared proof scope, exactly as
+%% ordinary local Prolog backtracking preserves database writes.
+t_failed_foreign_branch_retains_state(#{pets := P}) ->
+    Goal = {';', {'::', chain_b, stage_and_fail},
+                 {'::', chain_b, shared_mark_visible}},
+    ?assertEqual({error, foreign_write_unsupported}, prove(P, Goal)).
+
+%% C calls back into the already-suspended B scope. The B write must be visible
+%% there; opening a second B overlay would make the proof fail instead.
+t_reentrant_scope_reuse(#{pets := P}) ->
+    ?assertEqual({error, foreign_write_unsupported},
+                 prove(P, {'::', chain_b, {via_c_back, ok}})).
+
+%% B selects the already-running origin scope A. The write belongs to A's
+%% ordinary transaction diff; no second A overlay is opened.
+t_origin_scope_reentry_commits_write(#{pets := P}) ->
+    ?assertMatch({ok, [#{}], _},
+                 prove(P, {'::', chain_b, via_origin_write})),
+    ?assertMatch({ok, [#{}], _}, prove(P, origin_callback_write)).
+
+t_nested_failure_reasons(#{pets := P}) ->
+    {fail, Reasons} = prove(P, {'::', chain_b, via_c_failure}),
+    ?assert(lists:member(c_blocked, Reasons)).
+
+t_read_only_tree_rejects_first_write(#{animals := A, pets := P}) ->
+    LocalMarker = {read_only_local_write, blocked},
+    ?assertEqual(
+       {error, read_only},
+       quod_prolog:prove_ro(P, {assertz, LocalMarker}, P)),
+    ?assertMatch({fail, [_ | _]}, prove(P, LocalMarker)),
+    ForeignMarker = {read_only_foreign_write, blocked},
+    ?assertEqual(
+       {error, read_only},
+       quod_prolog:prove_ro(P, {'::', animals, {assertz, ForeignMarker}}, P)),
+    ?assertMatch({fail, [_ | _]}, prove(A, ForeignMarker)).
+
+t_scope_session_binding(#{animals := A}) ->
+    Engine = quod_reg:where({quod_prolog, A}),
+    Anchor = quod_simplex:genesis_hash(A),
+    ProofId = crypto:strong_rand_bytes(32),
+    {ok, Handle} = gen_server:call(
+                     Engine, {scope_open, ProofId, Anchor, false}),
+    try
+        {quod_scope_session, ScopePid, ProofId, SessionRef, A, Anchor} = Handle,
+        InvocationId = make_ref(),
+        Goal = {diet, cat, {'D'}},
+        Chain = [<<"pets">>],
+        ScopePid ! {scope_invoke_open, self(), <<0:256>>, SessionRef,
+                    make_ref(), InvocationId, Goal, Chain},
+        assert_no_scope_reply(ScopePid, ProofId, SessionRef),
+        ScopePid ! {scope_invoke_open, self(), ProofId, make_ref(),
+                    make_ref(), InvocationId, Goal, Chain},
+        assert_no_scope_reply(ScopePid, ProofId, SessionRef),
+        Stranger = spawn(fun() -> ok end),
+        ScopePid ! {scope_invoke_open, Stranger, ProofId, SessionRef,
+                    make_ref(), InvocationId, Goal, Chain},
+        assert_no_scope_reply(ScopePid, ProofId, SessionRef),
+        OpenRef = make_ref(),
+        ScopePid ! {scope_invoke_open, self(), ProofId, SessionRef,
+                    OpenRef, InvocationId, Goal, Chain},
+        assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
+        WrongSeqRef = make_ref(),
+        ok = quod_scope_session:next(Handle, WrongSeqRef, InvocationId, 2),
+        ?assertEqual({error, broken_stream, false},
+                     receive_scope_reply(Handle, WrongSeqRef)),
+        NextRef = make_ref(),
+        ok = quod_scope_session:next(Handle, NextRef, InvocationId, 1),
+        ?assertMatch({solution, 1, {diet, cat, fish}, false},
+                     receive_scope_reply(Handle, NextRef)),
+        ok = quod_scope_session:cancel(Handle, InvocationId),
+        ?assertEqual(
+           {ok, Handle},
+           gen_server:call(Engine, {scope_open, ProofId, Anchor, false})),
+        ?assertEqual(
+           {error, {anchor_conflict, A}},
+           gen_server:call(Engine, {scope_open, ProofId, <<0:256>>, false})),
+        ?assertEqual(
+           {error, scope_mode_conflict},
+           gen_server:call(Engine, {scope_open, ProofId, Anchor, true})),
+        ?assertEqual(
+           {error, {anchor_conflict, A}},
+           gen_server:call(
+             Engine, {scope_open, crypto:strong_rand_bytes(32),
+                      <<0:256>>, false}))
+    after
+        ok = quod_scope_session:close(Handle),
+        ok = wait_workers(A, 0, ?WAIT_RETRIES)
+    end.
+
+%% The scope publishes its write before asking the origin to open the nested
+%% target. A state-less nested error must not rewind that published revision.
+t_stateless_scope_error_keeps_published_revision(
+  #{pets := P, chain_b := ChainB}) ->
+    Engine = quod_reg:where({quod_prolog, ChainB}),
+    Anchor = quod_simplex:genesis_hash(ChainB),
+    ProofId = crypto:strong_rand_bytes(32),
+    {ok, Handle} = gen_server:call(
+                     Engine, {scope_open, ProofId, Anchor, false}),
+    try
+        InvocationId = make_ref(),
+        OpenRef = make_ref(),
+        Goal = {',', {assertz, {published_before_error, retained}},
+                     {'::', chain_c, {leaf, ok}}},
+        ok = quod_scope_session:open(
+               Handle, OpenRef, InvocationId, Goal, [P]),
+        assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
+        NextRef = make_ref(),
+        ok = quod_scope_session:next(Handle, NextRef, InvocationId, 1),
+        ScopePid = quod_scope_session:pid(Handle),
+        receive
+            {proof_nested_open, ProofId, ScopePid, NestedRef,
+             <<"chain_c">>, {leaf, ok}, _Chain} ->
+                ScopePid ! {proof_nested_reply, ProofId, NestedRef,
+                            {error, forced_scope_error}}
+        after 1000 ->
+            ?assert(false)
+        end,
+        ?assertEqual(
+           {error, forced_scope_error, true},
+           receive_scope_reply(Handle, NextRef))
+    after
+        ok = quod_scope_session:close(Handle),
+        ok = wait_workers(ChainB, 0, ?WAIT_RETRIES)
+    end.
+
+t_scope_owner_death_reaps_session(#{animals := A}) ->
+    Parent = self(),
+    Engine = quod_reg:where({quod_prolog, A}),
+    Anchor = quod_simplex:genesis_hash(A),
+    Owner = spawn(fun() ->
+        Result = gen_server:call(
+                   Engine, {scope_open, crypto:strong_rand_bytes(32),
+                            Anchor, false}),
+        Parent ! {owner_scope, self(), Result},
+        receive stop -> ok end
+    end),
+    {ok, Handle} = receive
+                       {owner_scope, Owner, Result} -> Result
+                   after 1000 -> error(scope_open_timeout)
+                   end,
+    ScopePid = quod_scope_session:pid(Handle),
+    ScopeMRef = monitor(process, ScopePid),
+    exit(Owner, kill),
+    receive
+        {'DOWN', ScopeMRef, process, ScopePid, _Reason} -> ok
+    after 1000 -> ?assert(false)
+    end,
+    ?assertEqual(ok, wait_workers(A, 0, ?WAIT_RETRIES)).
+
+t_scope_worker_crash_is_broken_stream(#{pets := P, slow := Slow}) ->
+    Engine = quod_reg:where({quod_prolog, Slow}),
+    Anchor = quod_simplex:genesis_hash(Slow),
+    ProofId = crypto:strong_rand_bytes(32),
+    {ok, Handle} = gen_server:call(
+                     Engine, {scope_open, ProofId, Anchor, false}),
+    InvocationId = make_ref(),
+    OpenRef = make_ref(),
+    ok = quod_scope_session:open(
+           Handle, OpenRef, InvocationId, loop, [P]),
+    assert_scope_reply(Handle, OpenRef, {opened, InvocationId}),
+    NextRef = make_ref(),
+    ok = quod_scope_session:next(Handle, NextRef, InvocationId, 1),
+    exit(quod_scope_session:pid(Handle), kill),
+    ?assertEqual(
+       {error, broken_stream},
+       quod_ask:test_await_scope_reply(Handle, NextRef)),
+    ?assertEqual(ok, wait_workers(Slow, 0, ?WAIT_RETRIES)),
+    ?assertMatch({ok, [#{}], _}, prove(Slow, {ping, ok})).
+
+assert_scope_reply(
+  Handle,
+  RequestRef, Expected) ->
+    ?assertEqual(Expected, receive_scope_reply(Handle, RequestRef)).
+
+assert_no_scope_reply(Pid, ProofId, SessionRef) ->
+    receive
+        {scope_reply, Pid, ProofId, SessionRef, _RequestRef, _Reply} ->
+            ?assert(false)
+    after 20 -> ok
+    end.
+
+receive_scope_reply(
+  {quod_scope_session, Pid, ProofId, SessionRef, _Ns, _Anchor}, RequestRef) ->
+    receive
+        {scope_reply, Pid, ProofId, SessionRef, RequestRef, Reply} -> Reply
+    after 1000 -> error(scope_reply_timeout)
+    end.
+
+forward_messages(Parent) ->
+    receive
+        Message ->
+            Parent ! {forwarded, self(), Message},
+            forward_messages(Parent)
+    end.
+
+receive_forwarded(Pid) ->
+    receive
+        {forwarded, Pid, Message} -> Message
+    after 1000 ->
+        error(nested_reply_timeout)
+    end.
 
 t_permission_gate(#{pets := P}) ->
     ?assertMatch({ok, [#{'X' := 42}], _},

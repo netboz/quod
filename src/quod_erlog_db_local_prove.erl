@@ -27,11 +27,13 @@ agree bit-for-bit.
          choicepoint_checkpoint/1, choicepoint_restore/2]).
 %% overlay API
 -export([wrap_state/1, wrap_state/2, lifecycle_principal/1,
+         proof_context/1, fresh_proof_state/1,
+         revision/1, replace_revision/2,
          committed_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, get_read_set/1,
          cleanup_read_set/1]).
--export_type([checkpoint/0, read_only_frame/0]).
+-export_type([revision/0, checkpoint/0, read_only_frame/0]).
 
 -record(fstate, {abolished = false :: boolean(),
                  asserta   = []    :: [{integer(), term(), term()}],
@@ -51,6 +53,9 @@ agree bit-for-bit.
              %% Engine-owned lifecycle authority. It is deliberately outside
              %% `#est.fs`, whose values ontology code can enumerate.
              lifecycle_principal = undefined :: term(),
+             %% Worker-owned distributed-proof state. Like lifecycle authority,
+             %% this must never enter the Prolog-visible flag store.
+             proof_context = undefined :: term(),
              %% Policy sub-proofs must reject the first attempted mutation,
              %% including changes whose eventual net diff would be empty.
              read_only = false :: boolean()}).
@@ -62,6 +67,12 @@ agree bit-for-bit.
                      local    :: #{term() => #fstate{}},
                      next_tag :: integer()}).
 -opaque checkpoint() :: #checkpoint{}.
+
+%% An immutable overlay revision. It shares the committed database and read-set
+%% table; taking or installing one copies no clause data.
+-record(revision, {scope_id :: reference(),
+                   overlay  :: #lp{}}).
+-opaque revision() :: #revision{}.
 
 -record(read_only_frame, {scope_id      :: reference(),
                           read_only     :: boolean(),
@@ -88,6 +99,7 @@ As `wrap_state/1`, with private overlay options:
 
 - `read_set => true` tracks the committed read-set;
 - `lifecycle_principal => Principal` carries engine-owned lifecycle authority;
+- `proof_context => Context` carries worker-owned proof/session authority;
 - `read_only => true` rejects every interpreted database mutation.
 """.
 -spec wrap_state(tuple(), map()) -> tuple().
@@ -95,7 +107,10 @@ wrap_state(St, Opts) ->
     #est{db = #db{ref = Ov} = Db} = Wrapped = wrap_state(St),
     ReadOnly = boolean_option(read_only, Opts),
     Principal = maps:get(lifecycle_principal, Opts, undefined),
-    Ov1 = Ov#lp{lifecycle_principal = Principal, read_only = ReadOnly},
+    ProofContext = maps:get(proof_context, Opts, undefined),
+    Ov1 = Ov#lp{lifecycle_principal = Principal,
+                proof_context = ProofContext,
+                read_only = ReadOnly},
     Ov2 =
         case maps:get(read_set, Opts, false) of
             true  -> Ets = ets:new(quod_read_set, [set, private]),
@@ -120,6 +135,47 @@ lifecycle_principal(
     {ok, Principal};
 lifecycle_principal(_) ->
     undefined.
+
+-doc "Return the worker-owned proof context carried by a wrapped state.".
+-spec proof_context(tuple()) -> {ok, term()} | undefined.
+proof_context(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{proof_context = Context}}})
+  when Context =/= undefined ->
+    {ok, Context};
+proof_context(_) ->
+    undefined.
+
+-doc "Reset interpreter-local proof data while retaining the current overlay revision.".
+-spec fresh_proof_state(tuple()) -> tuple().
+fresh_proof_state(
+  #est{db = #db{mod = ?MODULE} = Db} = St) ->
+    St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0,
+           db = Db#db{loc = []},
+           fail_reasons = [], fail_reason_bytes = 0,
+           fail_reasons_truncated = false, fail_boundaries = 0,
+           checkpoint_depth = 0};
+fresh_proof_state(_St) ->
+    erlang:error(badarg).
+
+-doc "Capture the current immutable overlay revision in O(1).".
+-spec revision(tuple()) -> revision().
+revision(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{scope_id = ScopeId} = Overlay}}) ->
+    #revision{scope_id = ScopeId, overlay = Overlay};
+revision(_St) ->
+    erlang:error(badarg).
+
+-doc "Replace only a proof frame's overlay revision, retaining its continuation and context.".
+-spec replace_revision(tuple(), revision()) -> tuple().
+replace_revision(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{scope_id = ScopeId}} = Db} = St,
+  #revision{scope_id = ScopeId, overlay = Overlay}) ->
+    St#est{db = Db#db{ref = Overlay}};
+replace_revision(_St, _Revision) ->
+    erlang:error(badarg).
 
 -doc """
 Return a fresh proof frame over a wrapped state's captured committed view.

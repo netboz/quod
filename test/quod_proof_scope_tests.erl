@@ -47,7 +47,7 @@ ordinary_failed_branch_keeps_its_scope_write_test() ->
         quod_proof_scope:close(Scope0)
     end.
 
-erlog_error_is_preserved_test() ->
+stateless_erlog_error_is_preserved_test() ->
     Scope0 = quod_proof_scope:open(
                {assertz, true}, committed([]), #{read_set => true}),
     try
@@ -55,7 +55,7 @@ erlog_error_is_preserved_test() ->
            {error,
             {erlog,
              {permission_error, modify, static_procedure,
-              {'/', true, 0}}}, _},
+              {'/', true, 0}}}, _, keep_current},
            quod_proof_scope:next(Scope0))
     after
         quod_proof_scope:close(Scope0)

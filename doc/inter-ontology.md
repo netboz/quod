@@ -12,6 +12,10 @@ default link following are implemented. The network ontology directory contract 
 and its first system/private slice is implemented (§10); transport-level stream
 prioritization remains future work.
 
+Implementation transition: the co-hosted path now uses the recursive reusable proof scopes
+specified by `distributed-proof-plan.md` §4. The QUIC path is replaced in that plan's next
+internal slice; no partially mixed implementation is deployed.
+
 ---
 
 ## 1. The two marks
@@ -131,11 +135,17 @@ them as stored clauses.
 
 ## 4. The ask, start to finish
 
-One ask = one frozen run on the target = one stream of answers back. Its worker waits only
-between explicit demand messages, for at most the idle timeout; while deriving an answer it is
-guarded by an engine-owned no-progress timer. An independent absolute lifetime bounds the
-worker and its MVCC snapshot even while answers keep flowing. It dies with its ask, engine,
-or either timeout.
+For a co-hosted target, each selection runs in that ontology's reusable proof scope; repeated
+and re-entrant selections share its frozen snapshot and private staged view. The current network
+transport instead runs each selection as one demand-driven invocation with its own frozen
+snapshot. In both cases, answers stream back as Prolog finds them. A worker waits only between
+explicit demand messages, for at most the idle timeout; while deriving an answer it is guarded
+by an engine-owned no-progress timer. An independent absolute lifetime bounds the worker and
+its MVCC snapshot even while answers keep flowing. It dies with its ask, engine, or either
+timeout.
+
+The numbered flow below describes the current network transport. A co-hosted selection skips
+the ask id, router, and wire, and opens an invocation directly in its reusable target scope.
 
 1. **Open.** The asking side allocates a fresh **ask id**, registers it with its node-local
    return router, and sends the ask — target ontology, the goal, and the asking chain (§6) —
@@ -159,13 +169,14 @@ or either timeout.
    If the rule stops early instead — or the asking proof dies — the ask is cancelled and the
    target kills the run on the spot.
 
-### 4.1 Where the work runs: one worker per proof
+### 4.1 Where the work runs: one worker per ontology scope
 
-The ontology's engine process **never runs proofs**. Every proof — a served ask AND the
-engine's own client proofs — runs in its **own small worker process** holding a shared-store
-snapshot handle and private staging overlay. The engine stays free for commits and
-coordination; a wedged ask wedges only its worker; cancel = kill the worker; two ontologies
-asking each other simultaneously each block only their own workers, so nothing deadlocks.
+The ontology's engine process **never runs proofs**. A top-level proof has an origin worker;
+each selected co-hosted ontology has one reusable scope worker holding a shared-store snapshot
+handle and one private staged view. Repeated and re-entrant selections reuse that scope. The
+engine stays free for commits and coordination, and cancellation kills only bounded workers.
+The current QUIC transport still uses one demand-driven worker per invocation until its scope
+session wire replacement lands.
 
 Quick local proofs behave exactly as today (spawn, prove, reply — one extra process spawn).
 
@@ -177,12 +188,12 @@ Quick local proofs behave exactly as today (spawn, prove, reply — one extra pr
 > - *No KB copy:* the committed database callback is `quod_erlog_db_mvcc`. Interpreted
 >   predicates live in one shared ETS table; the `#est{}` sent to a worker contains only a
 >   table/height handle, flags, and hooks. A commit publishes only changed predicates.
-> - *The per-proof read-set table* (a real ETS table today, `quod_erlog_db_local_prove.erl:56-61`)
+> - *The per-scope read-set table* (a real ETS table today, `quod_erlog_db_local_prove.erl`)
 >   is **owned by the worker**, so an abandoned client proof can never leak it. Served asks
->   do not allocate one: completion subscriptions are not implemented yet.
+>   on the current network path do not allocate one.
 > - *The membership-vote re-proof keeps its own synchronous path*, and link-following is
 >   **disabled** inside it: a committee vote must never make network hops mid-verdict.
-> - Answer workers are monitored, not linked, by the ontology engine. A one-shot lifecycle
+> - Scope and network answer workers are monitored, not linked, by the ontology engine. A lifecycle
 >   watcher gives directional ownership: engine death kills the worker, but an untrusted
 >   transport or worker failure cannot propagate into the engine.
 
@@ -224,24 +235,22 @@ buffer behind.
 >   `broken_stream` error — a lost answer can never masquerade as a complete result.
 > - **Ask streams never starve votes:** when wired, ask channels get lower stream priority
 >   than consensus `{log, Ns}` (the unused RFC 9218 knob — `deferred.md` §2).
-> - Co-hosted asks (target ontology on the same node) skip the wire entirely: same handler,
->   worker-to-worker message stream, same semantics.
+> - Co-hosted asks skip the wire entirely and select the proof's existing target scope.
 
 ## 5. Completion and future subscriptions
 
 The **complete** marker carries its sequence number and the target proof's bounded diagnostic
-stack. It carries no frozen version or target read fingerprint: no implemented component
-consumes them, and served asks therefore allocate no dead read-set state. Failure reasons are
+stack. It carries no frozen version or target read fingerprint. Failure reasons are
 bounded to 32 KiB, atom-safe encoded like other Prolog values, strictly validated by the asker,
 and never enter consensus or the ledger. The future "tell me when it changes" milestone will
 add a bounded, purpose-built subscription record when there is a consumer for it.
 
-## 6. The chain: circles, depth, permission
+## 6. The chain: recursion, depth, permission
 
 Every ask carries the **chain** — the list of ontologies already involved in producing it.
 
-- **No circles.** If the target is already in the chain, the ask is refused: `circular_ask`.
-  An endless A→B→A loop would compute nothing and quietly burn both sides.
+- **Recursion is allowed.** A→B→A is treated like recursive local Prolog and re-enters A's
+  existing proof scope. The absolute proof lifetime and depth cap bound unproductive recursion.
 - **Bounded depth.** A chain longer than the cap (§9) is refused: `too_deep`.
 - **Self-ask exception.** `A::x` written inside A itself is answered in place — no
   round-trip, no chain growth.
@@ -260,8 +269,8 @@ Every ask carries the **chain** — the list of ontologies already involved in p
 
 ## 7. Freshness
 
-The target answers from one frozen view. A commit landing mid-stream neither upgrades nor
-invalidates that stream. An explicit minimum-version request is deferred: log heights belong to
+The target scope keeps one pinned committed base plus the proof's staged view. A commit landing
+mid-proof neither upgrades nor invalidates it. An explicit minimum-version request is deferred: log heights belong to
 individual ontologies and are not comparable without a target-specific version contract. The wire
 therefore carries no unused freshness field, and completion does not claim a version (§5).
 
@@ -276,10 +285,9 @@ a partial result never looks complete.
 | `bad_name` | the name/ask term is malformed |
 | `unreachable` | the target ontology is known but no node serving it can be reached |
 | `not_allowed` | the target's `can_read` refused an asking ontology or the authenticated peer |
-| `circular_ask` | the target is already in the asking chain |
 | `too_deep` | the chain exceeds the depth cap |
 | `too_many_answers` | the run passed the total-answer cap — "narrow your question" |
-| `answer_too_big` | one answer exceeds the frame limit — refused **on the sender** |
+| `answer_too_big` | one answer exceeds its path's size cap (§9) — rejected before delivery |
 | `broken_stream` | a sequence gap, the target's link died, or the target crashed mid-run |
 | `no_progress` | the absolute proof lifetime or an answer-step timeout expired |
 | `foreign_write_unsupported` | an asked goal tries to change the target ontology |
@@ -295,7 +303,8 @@ a partial result never looks complete.
 | limit | value | on breach |
 |---|---|---|
 | answers per ask | 10 000 | `too_many_answers` |
-| one answer's size | 1 MiB (existing frame limit) | `answer_too_big` (sender-side) |
+| one co-hosted proof-scope answer | 64 KiB (`quod_proof_limits.hrl`) | `answer_too_big` |
+| one network answer frame | 1 MiB (`quod_transport_limits.hrl`) | `answer_too_big` (sender-side) |
 | chain depth | 8 | `too_deep` |
 | client proof lifetime | 60 s absolute (configurable) | `no_progress` |
 | served ask lifetime | 60 s absolute (configurable) | worker and snapshot are killed |
@@ -392,9 +401,9 @@ directory/ask benchmark, not a second consensus benchmark.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 
-- **Changing another ontology's facts.** Writes stay home-only (`foreign_write_unsupported`
-  stays). Cross-ontology writes need author-signed transactions first (the signing
-  milestone), then the owner-executes model in `content-layer.md` §5.
+- **Committing another ontology's facts in this deployed milestone.** The reusable scope can
+  stage them, but durable multi-ontology commit is enabled only after the complete protocol in
+  `distributed-proof-plan.md` has passed its re-found/deployment gate.
 - **The notification system** ("tell me when what I read changes"). Later milestone; §5
   explains why its storage is not prebuilt as dead per-ask state.
 - **Notification precision finer than per-predicate.** Known, accepted coarseness.

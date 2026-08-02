@@ -7,7 +7,8 @@ order. One `gen_server` per namespace.
 - **Every proof runs in its own bounded WORKER process** — the engine never blocks
   on a proof (doc/inter-ontology.md §4.1). The worker gets a small shared-store snapshot
   handle, never the knowledge base. A wedged proof wedges only its worker, which is
-  killed after its configured absolute lifetime; the per-proof overlay dies with it.
+  killed after its configured absolute lifetime; its private origin and selected-scope
+  overlays die with their bounded workers.
 - **Reads** run on a copy-on-write overlay (`m:quod_erlog_db_local_prove`) so the
   committed kb is never touched; the answer is bindings (stamped with the height the
   frozen view was taken at), returned to the caller.
@@ -76,6 +77,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -record(ask_worker, {pid        :: pid(),
                      owner_mref :: reference(),
                      id = undefined :: binary() | undefined,
+                     scope_key = undefined :: term(),
                      height = 0 :: non_neg_integer(),
                      timer = undefined :: reference() | undefined,
                      token = undefined :: reference() | undefined,
@@ -123,6 +125,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             ask_callers = #{} :: map(),
             ask_pids = #{} :: map(),
             ask_ids = #{} :: map(),
+            scope_sessions = #{} :: map(),
             reject_window = 0 :: integer(),
             reject_count = 0 :: non_neg_integer()}).
 
@@ -399,10 +402,22 @@ handle_call(get_stats, _From, S) ->
 
 handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier (sync/1)
 
-%% A co-hosted `::` ask (quod_ask:open/3): spawn a demand-driven answer worker holding this
-%% kb's shared snapshot handle, and hand its pid back to the asker. The engine only
-%% spawns — it never runs the ask, so it stays free (doc/inter-ontology.md §4.1). Gated on
-%% readiness like a prove.
+%% One co-hosted scope session per origin proof and pinned ontology identity.
+%% The origin pid is derived from `From`; it is never accepted from the payload.
+handle_call({scope_open, _ProofId, _Anchor, _ReadOnly}, _From,
+            S = #s{ready = false}) ->
+    {reply, {error, not_ready}, S};
+handle_call({scope_open, ProofId, Anchor, ReadOnly}, From, S)
+  when is_binary(ProofId), byte_size(ProofId) =:= 32,
+       is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_boolean(ReadOnly) ->
+    Origin = element(1, From),
+    open_scope_session(Origin, ProofId, Anchor, ReadOnly, S);
+handle_call({scope_open, _ProofId, _Anchor, _ReadOnly}, _From, S) ->
+    {reply, {error, bad_request}, S};
+
+%% The one-invocation ask path remains for the network-session slice and isolated
+%% tests. Co-hosted top-level proofs use `scope_open` above.
 handle_call({ask_open, _G, _C, _A}, _From, S = #s{ready = false}) ->
     {reply, {error, not_ready}, S};
 handle_call({ask_open, _Goal, _Chain, _Asker}, _From,
@@ -568,6 +583,61 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
 handle_info(Info, S) ->
     handle_response_info(Info, S).
 
+open_scope_session(Origin, ProofId, Anchor, ReadOnly,
+                   S = #s{scope_sessions = Sessions}) ->
+    Key = {Origin, ProofId},
+    case maps:find(Key, Sessions) of
+        {ok, {Handle, WorkerMRef, ExistingReadOnly}} ->
+            case quod_scope_session:identity(Handle) of
+                {Ns, ExistingAnchor} when ExistingAnchor =/= Anchor ->
+                    {reply, {error, {anchor_conflict, Ns}}, S};
+                {_Ns, Anchor} when ExistingReadOnly =/= ReadOnly ->
+                    {reply, {error, scope_mode_conflict}, S};
+                {_Ns, Anchor} ->
+                    case is_process_alive(quod_scope_session:pid(Handle)) of
+                        true -> {reply, {ok, Handle}, S};
+                        false -> open_new_scope_session(
+                                   Origin, ProofId, Anchor, ReadOnly,
+                                   drop_ask(WorkerMRef, S))
+                    end
+            end;
+        error ->
+            open_new_scope_session(Origin, ProofId, Anchor, ReadOnly, S)
+    end.
+
+open_new_scope_session(_Origin, _ProofId, _Anchor, _ReadOnly,
+                       S = #s{ask_workers = Workers,
+                              max_ask_workers = Max})
+  when map_size(Workers) >= Max ->
+    {reply, {error, busy}, S};
+open_new_scope_session(Origin, ProofId, Anchor, ReadOnly,
+                       S = #s{ns = Ns, est = Est, applied = Height,
+                              scope_sessions = Sessions}) ->
+    case quod_simplex:genesis_hash(Ns) of
+        Anchor ->
+            {Handle, WorkerMRef} = quod_scope_session:start(
+                                     ProofId, Origin, Ns, Anchor, Height,
+                                     Est, self(), #{read_only => ReadOnly}),
+            Pid = quod_scope_session:pid(Handle),
+            OwnerMRef = monitor(process, Origin),
+            Key = {Origin, ProofId},
+            Worker0 = new_ask_worker(
+                        Pid, WorkerMRef, OwnerMRef,
+                        undefined, Height, S),
+            Worker = Worker0#ask_worker{scope_key = Key},
+            {reply, {ok, Handle},
+             bump_proves(
+               S#s{ask_workers = (S#s.ask_workers)#{WorkerMRef => Worker},
+                   ask_callers = (S#s.ask_callers)#{OwnerMRef => WorkerMRef},
+                   ask_pids = (S#s.ask_pids)#{Pid => WorkerMRef},
+                   scope_sessions = Sessions#{
+                     Key => {Handle, WorkerMRef, ReadOnly}}})};
+        <<_:256>> ->
+            {reply, {error, {anchor_conflict, Ns}}, S};
+        undefined ->
+            {reply, {error, not_ready}, S}
+    end.
+
 handle_remote_ask(Peer, PeerEndpoint, RequestLink, Payload,
                   S) ->
     case quod_ask:decode_open(Payload) of
@@ -680,8 +750,9 @@ spawn_proof(Kind, Goal, CallerNs, From, TraceCtx, Principal,
                    proof_timeout_ms = ProofTimeout}) ->
     Engine = self(),
     Ref = make_ref(),
+    ProofId = crypto:strong_rand_bytes(32),
     {Pid, MRef} = spawn_opt(fun() ->
-        proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied,
+        proof_worker(Engine, Ref, ProofId, Kind, Goal, CallerNs, Ns, Est, Applied,
                      TraceCtx, Principal)
     end, [monitor]),
     CallerMRef = monitor(process, element(1, From)),
@@ -701,8 +772,8 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% Runs in the worker process. Sets the run's execution context on the frozen `#est{}`
 %% (`m:quod_predicates` — the namespace, applied height, and ask chain the external predicates
 %% read), proves against that view, and reports one correlated result to the engine. The
-%% per-proof read-set ETS table is created here, so an abandoned/killed run can never leak it.
-proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx,
+%% origin-scope read-set ETS table is created here, so an abandoned/killed run can never leak it.
+proof_worker(Engine, Ref, ProofId, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx,
              Principal) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
     Ctx = worker_context(Kind, Ns, Applied),
@@ -712,7 +783,7 @@ proof_worker(Engine, Ref, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx,
                  'quod.proof.mode' => atom_to_binary(Kind, utf8)},
                fun(SpanCtx) ->
                    R = run_worker(
-                         Kind, Goal, Principal, Ns, Applied,
+                         Kind, ProofId, Goal, Principal, Ns, Applied,
                          quod_predicates:set_context(Est, Ctx)),
                    _ = quod_trace:result(SpanCtx, R),
                    R
@@ -725,7 +796,7 @@ worker_context(_ProofKind, Ns, Applied) ->
     %% Subject remains none until signed subjects land.
     quod_predicates:proof_context(Ns, Applied, undefined).
 
-run_worker(action, {Action, Structural}, Principal, Ns, Applied, Est) ->
+run_worker(action, _ProofId, {Action, Structural}, Principal, Ns, Applied, Est) ->
     %% Reject an absent or malformed declaration and authorize the private node
     %% principal before reading any caller-selected source path.
     case quod_ontology_predicates:action_declared(Action, Est, Ns, Applied) of
@@ -739,8 +810,79 @@ run_worker(action, {Action, Structural}, Principal, Ns, Applied, Est) ->
         {error, _Reason} ->
             {error, action_declaration_failed}
     end;
-run_worker(_Kind, Goal, _Principal, _Ns, _Applied, Est) ->
-    run_proof_est_annotated(Goal, Est).
+run_worker(Kind, ProofId, Goal, _Principal, Ns, Applied, Est) ->
+    run_origin_proof(Kind, ProofId, Goal, Ns, Applied, Est).
+
+run_origin_proof(Kind, ProofId, Goal, Ns, _Applied, Est) ->
+    case quod_simplex:genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            run_pinned_origin_proof(Kind, ProofId, Goal, Ns, Anchor, Est);
+        undefined ->
+            %% Isolated unit/runtime engines have no consensus identity and
+            %% therefore cannot own foreign scopes. Their local proof contract
+            %% remains the same shared-session interpreter.
+            normalize_read_only_result(
+              Kind,
+              quod_proof_session:run_first(
+                Goal, Est, #{read_set => true,
+                             read_only => Kind =:= prove_ro}))
+    end.
+
+run_pinned_origin_proof(Kind, ProofId, Goal, Ns, Anchor, Est) ->
+    ReadOnly = Kind =:= prove_ro,
+    OriginHandle = quod_proof_context:start(ProofId, ReadOnly),
+    Session = quod_proof_session:start(
+                Est, #{read_set => true,
+                       read_only => ReadOnly,
+                       proof_context => {origin, OriginHandle}}),
+    Height = quod_predicates:ctx_height(quod_predicates:context(Est)),
+    RootScope = {local_scope, Ns, Anchor, Height, Session},
+    try
+        {ok, RootScope} = quod_proof_context:get_or_open_scope(
+                            {Ns, Anchor},
+                            fun() -> {ok, self(), RootScope} end),
+        InvocationId = make_ref(),
+        ok = quod_proof_session:open(
+               Session, InvocationId, Goal,
+               quod_predicates:context(Est)),
+        Result = normalize_read_only_result(
+                   Kind, origin_first_result(Session, InvocationId)),
+        case {Result, quod_proof_context:foreign_dirty()} of
+            {{ok, _Bindings, _Diff, _ReadSet}, true} ->
+                {error, foreign_write_unsupported};
+            _ ->
+                Result
+        end
+    after
+        quod_proof_context:stop(
+          fun close_origin_scope/1,
+          fun({_Owner, Invocation}) -> quod_ask:close_stream(Invocation) end),
+        quod_proof_session:stop(Session)
+    end.
+
+origin_first_result(Session, InvocationId) ->
+    case quod_proof_session:next(Session, InvocationId) of
+        {solution, _Solution} ->
+            {ok, Bindings} = quod_proof_session:bindings(Session, InvocationId),
+            {ok, Bindings,
+             quod_proof_session:local_changes(Session),
+             quod_proof_session:read_set(Session)};
+        {complete, Reasons} ->
+            {fail, Reasons};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+normalize_read_only_result(
+  prove_ro,
+  {error, {erlog,
+           {permission_error, modify, static_procedure, _Predicate}}}) ->
+    {error, read_only};
+normalize_read_only_result(_Kind, Result) ->
+    Result.
+
+close_origin_scope({local_scope, _Ns, _Anchor, _Height, _Session}) -> ok;
+close_origin_scope(Scope) -> quod_scope_session:close(Scope).
 
 prepare_lifecycle_input(Action, Structural, Principal, Ns, Applied, Est) ->
     case quod_ontology_predicates:authorize_lifecycle(
@@ -833,8 +975,6 @@ finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
                 {_, {error, _} = E} -> gen_server:reply(From, E), S1;
                 {_, {ok, Bindings, [], _ReadSet}} ->
                     gen_server:reply(From, {ok, [Bindings], Applied}), S1;
-                {prove_ro, {ok, _B, _Diff, _RS}} ->
-                    gen_server:reply(From, {error, read_only}), S1;
                 {prove, {ok, Bindings, Diff, RS}} ->
                     case submit_write(From, Goal, Bindings, Diff, RS, CallerNs,
                                       TraceCtx, S1) of
@@ -946,18 +1086,25 @@ kill_ask(WorkerMRef, S = #s{ask_workers = Workers}) ->
     end.
 
 drop_ask(WorkerMRef, S = #s{ask_workers = Workers, ask_callers = Callers,
-                             ask_pids = Pids, ask_ids = Ids}) ->
+                             ask_pids = Pids, ask_ids = Ids,
+                             scope_sessions = ScopeSessions}) ->
     case maps:take(WorkerMRef, Workers) of
         {#ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId,
+                     scope_key = ScopeKey,
                      timer = Timer, lifetime_timer = LifetimeTimer}, Workers1} ->
             cancel_ask_timer(Timer),
             cancel_ask_timer(LifetimeTimer),
             demonitor(WorkerMRef, [flush]),
             demonitor(OwnerMRef, [flush]),
             Ids1 = case AskId of undefined -> Ids; _ -> maps:remove(AskId, Ids) end,
+            ScopeSessions1 = case ScopeKey of
+                                 undefined -> ScopeSessions;
+                                 _ -> maps:remove(ScopeKey, ScopeSessions)
+                             end,
             S#s{ask_workers = Workers1,
                 ask_callers = maps:remove(OwnerMRef, Callers),
-                ask_pids = maps:remove(Pid, Pids), ask_ids = Ids1};
+                ask_pids = maps:remove(Pid, Pids), ask_ids = Ids1,
+                scope_sessions = ScopeSessions1};
         error -> S
     end.
 
@@ -1004,11 +1151,6 @@ run_proof_est(Goal, Est, OverlayOpts) ->
         {fail, _Reasons} -> fail;
         Result -> Result
     end.
-
-%% Only public proof workers expose diagnostic failure state. Consensus verdicts
-%% and runtime projections continue through run_proof_est/2 and retain bare fail.
-run_proof_est_annotated(Goal, Est) ->
-    run_proof_est_annotated(Goal, Est, #{}).
 
 run_proof_est_annotated(Goal, Est, OverlayOpts) ->
     quod_proof_scope:run_first(

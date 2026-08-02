@@ -4,39 +4,37 @@ The `::` **ask** operator — a goal in one ontology proved inside another
 (`doc/inter-ontology.md`). This module implements both co-hosted and QUIC-backed asks.
 
 - **Asking side** — `ask_2/3` is the erlog predicate registered on `{'::' ,2}`. It runs
-  inside the asking proof's worker process. It resolves the target namespace, guards the
-  ask (no circles, bounded depth, never during a membership vote), then STREAMS the
-  target's solutions into the local proof one at a time through an erlog compiled choice
-  point: the first solution unifies and continues; backtracking pulls the next.
-- **Answering side** — the target's `m:quod_prolog` spawns an `answer` worker (via
-  `start_answer/7`) holding the target's committed `#est{}` as a frozen view. It proves
-  the goal there, demand-driven: one solution per `{next,_}` request, so a slow consumer
-  never makes it buffer. The target engine monitors the asker and can kill this worker
-  even during an unbounded derivation. Reads are gated by `can_read` for every ontology
-  in the supplied chain and, remotely, for the authenticated peer key; completion carries
-  the sequence and the target's bounded diagnostic stack.
+  inside the asking proof's worker, enforces bounded depth and streams one solution per
+  Prolog choice point. Recursive selection is ordinary Prolog recursion, including
+  selecting an ontology already present in the semantic call chain.
+- **Co-hosted target** — one origin proof owns one reusable target scope per pinned
+  ontology. Repeated and re-entrant calls share its staged overlay while retaining
+  independent bounded continuations.
+- **Network target** — until the session wire slice replaces it, the current QUIC path
+  uses the bounded demand-driven answer worker below. Reads are gated by `can_read` for
+  the supplied chain and authenticated peer key.
 
 Errors are surfaced as `throw({quod_ask_error, Reason})`, which `quod_prolog`'s proof
 runner turns into `{error, Reason}` — the loud, distinct catalog of `doc/inter-ontology.md`
-§8 (`unknown_ontology`, `unreachable`, `circular_ask`, `too_deep`, `not_allowed`, …), never
+§8 (`unknown_ontology`, `unreachable`, `too_deep`, `not_allowed`, …), never
 a silent failure.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_transport_limits.hrl").
+-include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3, follow_clear_2/3,
          start_answer/7, start_answer_remote/10,
          subscribe/1, ask_channel/1, decode_open/1, decode_next/1, decode_cancel/1,
-         reject_remote/5, answer_channel/1]).
+         reject_remote/5, answer_channel/1, authorize_scope/5, close_stream/1]).
 -ifdef(TEST).
--export([test_remote_answer/3, test_solution_disposition/2]).
+-export([test_remote_answer/3, test_solution_disposition/2,
+         test_serve_nested/1, test_await_scope_reply/2]).
 -endif.
 
 %% The ask-chain depth cap and the per-`next` no-progress budget (doc/inter-ontology.md §9).
--define(MAX_CHAIN, 8).
 -define(NEXT_TIMEOUT_MS, 30000).
--define(MAX_ANSWERS, 10000).
 -define(MAX_OPEN_RETRIES, 300).
 -define(OPEN_RETRY_MS, 100).
 
@@ -116,26 +114,27 @@ guarded_ask(Self, Target, Inner, Next, St) ->
                 [] -> [Self];   %% no context (defensive): start the chain at this ontology
                 C  -> C
             end,
-    lists:member(Target, Chain) andalso ask_error({circular_ask, Target}),
-    length(Chain) >= ?MAX_CHAIN andalso ask_error({too_deep, Target}),
+    length(Chain) >= ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
+        ask_error({too_deep, Target}),
     InnerTerm = erlog_int:dderef(Inner, St#est.bs),
-    case open(Self, Target, InnerTerm, Chain) of
-        {ok, Stream} -> drive_stream(Stream, InnerTerm, Target, Next, St);
+    case open(Self, Target, InnerTerm, Chain, St) of
+        {ok, Stream, St1} ->
+            drive_stream(Stream, InnerTerm, Target, Next, St1);
         {error, R}   -> ask_error(R)
     end.
 
 %% Pull the next solution and either emit it (with a choice point for the one after) or,
 %% when the target is exhausted, fail back into the surrounding proof.
 drive_stream(Stream, GoalTerm, Target, Next, St) ->
-    case next(Stream) of
-        {solution, Sol, Stream1} ->
-            emit(Stream1, GoalTerm, Target, Sol, Next, St);
-        {complete, Reasons} ->
-            case erlog_int:merge_failure_reasons(Reasons, St) of
-                {ok, St1} -> erlog_int:fail(St1);
+    case stream_next(Stream, St) of
+        {solution, Sol, Stream1, St1} ->
+            emit(Stream1, GoalTerm, Target, Sol, Next, St1);
+        {complete, Reasons, St1} ->
+            case erlog_int:merge_failure_reasons(Reasons, St1) of
+                {ok, St2} -> erlog_int:fail(St2);
                 error -> ask_error(broken_stream)
             end;
-        {error, R} -> ask_error(R)
+        {error, R, _St1} -> ask_error(R)
     end.
 
 %% Unify one target solution into the local proof. The pushed choice point captures the
@@ -214,12 +213,36 @@ wire_list([H | T], Next, Names) ->
 ask_error(Reason) -> throw({quod_ask_error, Reason}).
 
 %%%===================================================================
-%%% co-hosted transport (asking-worker <-> answer-worker)
+%%% ask selection — reusable co-hosted scopes and bounded transport invocations
 %%%===================================================================
 
-%% Ask the target's engine to open a solution stream. A non-local target is
-%% resolved through the live directory below. Runs in the asking worker.
-open(_Self, Target, GoalTerm, Chain) ->
+%% A shared proof session routes every co-hosted selection through its one
+%% origin-owned scope map. Isolated policy/tests without a proof context and the
+%% current QUIC transport use the bounded single-invocation path below.
+open(_Self, Target, GoalTerm, Chain, St) ->
+    St1 = publish_session(St),
+    case session_metadata(St1) of
+        {origin, {quod_proof_context, _ProofId, Origin}} when Origin =:= self() ->
+            case origin_open(Target, GoalTerm, Chain, self()) of
+                {ok, Stream} -> {ok, Stream, refresh_session(St1)};
+                {error, _} = Error -> Error
+            end;
+        {scope, ProofId, Origin, _SessionRef, ScopePid}
+          when ScopePid =:= self(), is_pid(Origin) ->
+            case nested_open(Origin, ProofId, Target, GoalTerm, Chain) of
+                {ok, Stream} -> {ok, Stream, refresh_session(St1)};
+                {error, _} = Error -> Error
+            end;
+        _ ->
+            case open_transport_invocation(Target, GoalTerm, Chain) of
+                {ok, Stream} -> {ok, Stream, St1};
+                {error, _} = Error -> Error
+            end
+    end.
+
+%% Open one bounded transport invocation. The scope-session wire slice replaces
+%% the remote half of this function before the distributed-proof feature gate.
+open_transport_invocation(Target, GoalTerm, Chain) ->
     case quod_reg:where({quod_prolog, Target}) of
         undefined ->
             case quod_directory:resolve(Target) of
@@ -229,6 +252,360 @@ open(_Self, Target, GoalTerm, Chain) ->
                     open_remote_routes(Target, GoalTerm, Chain, Routes)
             end;
         _Engine -> open_local(Target, GoalTerm, Chain, ?MAX_OPEN_RETRIES)
+    end.
+
+origin_open(Target, Goal, Chain, Owner) ->
+    case origin_scope(Target) of
+        {ok, Scope} ->
+            case open_scope_invocation(Scope, Goal, Chain) of
+                {ok, Invocation} ->
+                    case quod_proof_context:new_proxy(Owner, Invocation) of
+                        {ok, Ref} -> {ok, {origin_scope_stream, Ref, 1}};
+                        {error, _} = Error ->
+                            close_stream(Invocation),
+                            Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        remote ->
+            case open_transport_invocation(Target, Goal, Chain) of
+                {ok, Stream} ->
+                    case quod_proof_context:new_proxy(
+                           Owner, {transport_invocation, Stream}) of
+                        {ok, Ref} -> {ok, {origin_scope_stream, Ref, 1}};
+                        {error, _} = Error ->
+                            close_stream(Stream),
+                            Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+origin_scope(Target) ->
+    case quod_reg:where({quod_prolog, Target}) of
+        undefined -> remote;
+        _Engine ->
+            case quod_simplex:genesis_hash(Target) of
+                <<_:256>> = Anchor ->
+                    Identity = {Target, Anchor},
+                    quod_proof_context:get_or_open_scope(
+                      Identity,
+                      fun() -> open_shared_scope(Target, Anchor,
+                                                 ?MAX_OPEN_RETRIES) end);
+                undefined ->
+                    {error, {unreachable, Target}}
+            end
+    end.
+
+open_shared_scope(Target, Anchor, Retries) ->
+    case quod_reg:where({quod_prolog, Target}) of
+        undefined -> {error, {unreachable, Target}};
+        Engine ->
+            ProofId = quod_proof_context:proof_id(),
+            ReadOnly = quod_proof_context:read_only(),
+            try gen_server:call(
+                  Engine, {scope_open, ProofId, Anchor, ReadOnly},
+                  ?NEXT_TIMEOUT_MS) of
+                {ok, Handle} ->
+                    {ok, quod_scope_session:pid(Handle), Handle};
+                {error, busy} when Retries > 0 ->
+                    timer:sleep(?OPEN_RETRY_MS),
+                    open_shared_scope(Target, Anchor, Retries - 1);
+                {error, busy} -> {error, no_progress};
+                {error, not_ready} -> {error, {unreachable, Target}};
+                {error, Reason} -> {error, Reason}
+            catch exit:_ -> {error, {unreachable, Target}}
+            end
+    end.
+
+open_scope_invocation(
+  {local_scope, Ns, _Anchor, Height, Session}, Goal, Chain) ->
+    case authorize_scope(Goal, Chain, Ns, Height, Session) of
+        false -> {error, not_allowed};
+        true ->
+            InvocationId = make_ref(),
+            Context = quod_predicates:proof_context(
+                        Ns, Height, undefined, [Ns | Chain]),
+            case quod_proof_session:open(
+                   Session, InvocationId, Goal, Context) of
+                ok -> {ok, {local_scope_invocation, Session, InvocationId, 1}};
+                {error, Reason} -> {error, Reason}
+            end
+    end;
+open_scope_invocation(Handle, Goal, Chain) ->
+    InvocationId = make_ref(),
+    RequestRef = make_ref(),
+    ok = quod_scope_session:open(
+           Handle, RequestRef, InvocationId, Goal, Chain),
+    case await_scope_reply(Handle, RequestRef) of
+        {opened, InvocationId} ->
+            {ok, {shared_scope_invocation, Handle, InvocationId, 1}};
+        {error, Reason} ->
+            quod_scope_session:cancel(Handle, InvocationId),
+            {error, Reason};
+        _ ->
+            quod_scope_session:cancel(Handle, InvocationId),
+            {error, broken_stream}
+    end.
+
+stream_next(Stream, St) ->
+    St1 = publish_session(St),
+    Result =
+        case Stream of
+            {origin_scope_stream, Ref, Expected} ->
+                origin_advance(Ref, self(), Expected);
+            {nested_scope_stream, Origin, ProofId, Ref, Expected} ->
+                nested_advance(Origin, ProofId, Ref, Expected);
+            _ ->
+                next(Stream)
+        end,
+    St2 = refresh_session(St1),
+    case Result of
+        {solution, Solution, NextStream} ->
+            {solution, Solution, NextStream, St2};
+        {complete, Reasons} ->
+            {complete, Reasons, St2};
+        {error, Reason} ->
+            {error, Reason, St2}
+    end.
+
+origin_advance(Ref, Owner, Expected) ->
+    case quod_proof_context:proxy(Ref, Owner) of
+        {ok, {shared_scope_invocation, Handle, InvocationId, Expected}} ->
+            RequestRef = make_ref(),
+            ok = quod_scope_session:next(
+                   Handle, RequestRef, InvocationId, Expected),
+            shared_advance_reply(
+              Ref, Owner, Handle, InvocationId, Expected,
+              await_scope_reply(Handle, RequestRef));
+        {ok, {local_scope_invocation, Session, InvocationId, Expected}} ->
+            local_advance_reply(
+              Ref, Owner, Session, InvocationId, Expected,
+              quod_proof_session:next(Session, InvocationId));
+        {ok, {transport_invocation, Transport}} ->
+            transport_advance_reply(Ref, Owner, next(Transport));
+        {ok, _WrongSequence} ->
+            {error, broken_stream};
+        {error, _} ->
+            {error, broken_stream}
+    end.
+
+shared_advance_reply(Ref, Owner, Handle, InvocationId, Expected,
+                     {solution, Expected, Solution, Dirty}) ->
+    Pid = quod_scope_session:pid(Handle),
+    ok = quod_proof_context:mark_dirty(Pid, Dirty),
+    Next = {shared_scope_invocation, Handle, InvocationId, Expected + 1},
+    ok = quod_proof_context:update_proxy(Ref, Owner, Next),
+    {solution, Solution, origin_stream(Ref, Expected + 1)};
+shared_advance_reply(Ref, Owner, Handle, _InvocationId, Expected,
+                     {complete, Expected, Reasons, Dirty}) ->
+    ok = quod_proof_context:mark_dirty(
+           quod_scope_session:pid(Handle), Dirty),
+    ok = quod_proof_context:drop_proxy(Ref, Owner),
+    {complete, Reasons};
+shared_advance_reply(Ref, Owner, Handle, _InvocationId, _Expected,
+                     {error, Reason, Dirty}) ->
+    %% The error aborts this proof, but retaining the final dirty bit keeps the
+    %% origin's scope accounting exact while cleanup runs.
+    ok = quod_proof_context:mark_dirty(
+           quod_scope_session:pid(Handle), Dirty),
+    _ = quod_proof_context:drop_proxy(Ref, Owner),
+    {error, Reason};
+shared_advance_reply(Ref, Owner, Handle, InvocationId, _Expected,
+                     {error, Reason}) ->
+    quod_scope_session:cancel(Handle, InvocationId),
+    _ = quod_proof_context:drop_proxy(Ref, Owner),
+    {error, Reason};
+shared_advance_reply(Ref, Owner, Handle, InvocationId, _Expected, _Reply) ->
+    quod_scope_session:cancel(Handle, InvocationId),
+    _ = quod_proof_context:drop_proxy(Ref, Owner),
+    {error, broken_stream}.
+
+local_advance_reply(Ref, Owner, Session, InvocationId, Expected,
+                    {solution, Solution}) ->
+    Next = {local_scope_invocation, Session, InvocationId, Expected + 1},
+    ok = quod_proof_context:update_proxy(Ref, Owner, Next),
+    {solution, Solution, origin_stream(Ref, Expected + 1)};
+local_advance_reply(Ref, Owner, _Session, _InvocationId, _Expected,
+                    {complete, Reasons}) ->
+    ok = quod_proof_context:drop_proxy(Ref, Owner),
+    {complete, Reasons};
+local_advance_reply(Ref, Owner, _Session, _InvocationId, _Expected,
+                    {error, Reason}) ->
+    _ = quod_proof_context:drop_proxy(Ref, Owner),
+    {error, Reason}.
+
+transport_advance_reply(Ref, Owner, {solution, Solution, Transport1}) ->
+    ok = quod_proof_context:update_proxy(
+           Ref, Owner, {transport_invocation, Transport1}),
+    {solution, Solution, origin_stream(Ref, undefined)};
+transport_advance_reply(Ref, Owner, {complete, Reasons}) ->
+    ok = quod_proof_context:drop_proxy(Ref, Owner),
+    {complete, Reasons};
+transport_advance_reply(Ref, Owner, {error, Reason}) ->
+    _ = quod_proof_context:drop_proxy(Ref, Owner),
+    {error, Reason}.
+
+origin_stream(Ref, Expected) -> {origin_scope_stream, Ref, Expected}.
+
+nested_open(Origin, ProofId, Target, Goal, Chain) ->
+    RequestRef = make_ref(),
+    Origin ! {proof_nested_open, ProofId, self(), RequestRef,
+              Target, Goal, Chain},
+    case await_nested_reply(Origin, ProofId, RequestRef) of
+        {opened, Ref} ->
+            {ok, {nested_scope_stream, Origin, ProofId, Ref, 1}};
+        {error, Reason} ->
+            {error, Reason};
+        _ ->
+            {error, broken_stream}
+    end.
+
+nested_advance(Origin, ProofId, Ref, Expected) ->
+    RequestRef = make_ref(),
+    Origin ! {proof_nested_next, ProofId, self(), RequestRef, Ref, Expected},
+    case await_nested_reply(Origin, ProofId, RequestRef) of
+        {solution, Expected, Solution} ->
+            {solution, Solution,
+             {nested_scope_stream, Origin, ProofId, Ref, Expected + 1}};
+        {complete, Expected, Reasons} ->
+            {complete, Reasons};
+        {error, Reason} ->
+            request_nested_cancel(Origin, ProofId, Ref),
+            {error, Reason};
+        _ ->
+            request_nested_cancel(Origin, ProofId, Ref),
+            {error, broken_stream}
+    end.
+
+await_nested_reply(Origin, ProofId, RequestRef) ->
+    receive
+        {proof_nested_reply, ProofId, RequestRef, Reply} ->
+            Reply;
+        Message = {scope_invoke_open, _, _, _, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_invoke_next, _, _, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_invoke_cancel, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_close, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef)
+    after ?NEXT_TIMEOUT_MS ->
+        {error, no_progress}
+    end.
+
+dispatch_reentrant(Message, Origin, ProofId, RequestRef) ->
+    case quod_scope_session:dispatch(Message) of
+        stop -> {error, no_progress};
+        _ -> await_nested_reply(Origin, ProofId, RequestRef)
+    end.
+
+await_scope_reply(Handle, RequestRef) ->
+    Pid = quod_scope_session:pid(Handle),
+    MRef = monitor(process, Pid),
+    try await_scope_reply_loop(Handle, RequestRef, MRef)
+    after demonitor(MRef, [flush])
+    end.
+
+await_scope_reply_loop(
+  {quod_scope_session, Pid, ProofId, SessionRef, _Ns, _Anchor} = Handle,
+  RequestRef, MRef) ->
+    receive
+        {scope_reply, Pid, ProofId, SessionRef, RequestRef, Reply} ->
+            Reply;
+        Message = {proof_nested_open, _, _, _, _, _, _} ->
+            serve_nested(Message),
+            await_scope_reply_loop(Handle, RequestRef, MRef);
+        Message = {proof_nested_next, _, _, _, _, _} ->
+            serve_nested(Message),
+            await_scope_reply_loop(Handle, RequestRef, MRef);
+        Message = {proof_nested_cancel, _, _, _} ->
+            serve_nested(Message),
+            await_scope_reply_loop(Handle, RequestRef, MRef);
+        {'DOWN', MRef, process, Pid, _Reason} ->
+            {error, broken_stream}
+    after ?NEXT_TIMEOUT_MS ->
+        {error, no_progress}
+    end.
+
+serve_nested({proof_nested_open, ProofId, From, RequestRef,
+              Target, Goal, Chain}) ->
+    Reply =
+        case valid_nested_source(ProofId, From) of
+            true ->
+                case origin_open(Target, Goal, Chain, From) of
+                    {ok, {origin_scope_stream, Ref, 1}} -> {opened, Ref};
+                    {error, Reason} -> {error, Reason}
+                end;
+            false -> {error, not_allowed}
+        end,
+    From ! {proof_nested_reply, ProofId, RequestRef, Reply},
+    ok;
+serve_nested({proof_nested_next, ProofId, From, RequestRef, Ref, Expected}) ->
+    Reply =
+        case valid_nested_source(ProofId, From) of
+            true -> nested_origin_reply(
+                      Expected, origin_advance(Ref, From, Expected));
+            false -> {error, not_allowed}
+        end,
+    From ! {proof_nested_reply, ProofId, RequestRef, Reply},
+    ok;
+serve_nested({proof_nested_cancel, ProofId, From, Ref}) ->
+    case valid_nested_source(ProofId, From) of
+        true ->
+            case cancel_origin_proxy(Ref, From) of
+                ok -> ok;
+                {error, _Reason} -> ok
+            end;
+        false -> ok
+    end.
+
+nested_origin_reply(Expected, {solution, Solution, _Stream}) ->
+    {solution, Expected, Solution};
+nested_origin_reply(Expected, {complete, Reasons}) ->
+    {complete, Expected, Reasons};
+nested_origin_reply(_Expected, {error, Reason}) ->
+    {error, Reason}.
+
+valid_nested_source(ProofId, From) ->
+    ProofId =:= quod_proof_context:proof_id() andalso
+        quod_proof_context:registered_scope(From).
+
+-ifdef(TEST).
+test_serve_nested(Message) -> serve_nested(Message).
+test_await_scope_reply(Handle, RequestRef) ->
+    await_scope_reply(Handle, RequestRef).
+-endif.
+
+cancel_origin_proxy(Ref, Owner) ->
+    case quod_proof_context:proxy(Ref, Owner) of
+        {ok, Invocation} ->
+            ok = close_stream(Invocation),
+            ok = quod_proof_context:drop_proxy(Ref, Owner),
+            ok;
+        {error, Reason} -> {error, Reason}
+    end.
+
+request_nested_cancel(Origin, ProofId, Ref) ->
+    Origin ! {proof_nested_cancel, ProofId, self(), Ref},
+    ok.
+
+session_metadata(St) ->
+    try quod_proof_session:context(St)
+    catch error:badarg -> undefined
+    end.
+
+publish_session(St) ->
+    case session_metadata(St) of
+        undefined -> St;
+        _ -> ok = quod_proof_session:publish(St), St
+    end.
+
+refresh_session(St) ->
+    case session_metadata(St) of
+        undefined -> St;
+        _ -> quod_proof_session:refresh(St)
     end.
 
 open_local(Target, GoalTerm, Chain, Retries) ->
@@ -479,7 +856,7 @@ allowed_remote_error(Reason) ->
                           ask_in_membership_verdict]) orelse
     case Reason of
         {Tag, _Detail} -> lists:member(Tag, [unknown_ontology, unreachable,
-                                             circular_ask, too_deep, bad_name,
+                                             too_deep, bad_name,
                                              erlog]);
         _ -> false
     end.
@@ -494,10 +871,22 @@ encode_error(AskId, Reason) ->
                  end,
     term_to_binary({quod_ask_answer, AskId, error, WireReason}, [deterministic]).
 
-valid_chain([_|_] = Chain) when length(Chain) =< ?MAX_CHAIN ->
+valid_chain([_|_] = Chain)
+  when length(Chain) =< ?QUOD_MAX_ACTIVE_PROOF_DEPTH ->
     lists:all(fun is_binary/1, Chain);
 valid_chain(_) -> false.
 
+close_stream({shared_scope_invocation, Handle, InvocationId, _Seq}) ->
+    quod_scope_session:cancel(Handle, InvocationId);
+close_stream({local_scope_invocation, Session, InvocationId, _Seq}) ->
+    quod_proof_session:cancel(Session, InvocationId);
+close_stream({transport_invocation, Stream}) ->
+    close_stream(Stream);
+close_stream({origin_scope_stream, Ref, _Expected}) ->
+    _ = try cancel_origin_proxy(Ref, self()) catch _:_ -> ok end,
+    ok;
+close_stream({nested_scope_stream, Origin, ProofId, Ref, _Expected}) ->
+    request_nested_cancel(Origin, ProofId, Ref);
 close_stream({ask_stream, Engine, Pid, MRef, _}) ->
     gen_server:cast(Engine, {ask_cancel, Pid}),
     demonitor(MRef, [flush]),
@@ -643,21 +1032,21 @@ answer_once(State, Asker, Count, Seq, Engine) ->
         {complete, Reasons, State1} ->
             _ = sink_send(Asker, {complete, Seq, Reasons}),
             close_answer(State1, Asker);
-        {error, R, State1} ->
+        {error, R, State1, _RevisionPolicy} ->
             _ = sink_send(Asker, {error, R}),
             close_answer(State1, Asker)
     end.
 
 solution_disposition(State, Count) ->
     case quod_proof_scope:local_changes(State) of
-        [] when Count < ?MAX_ANSWERS -> send;
+        [] when Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION -> send;
         [] -> {error, too_many_answers};
         _ -> {error, foreign_write_unsupported}
     end.
 
 -ifdef(TEST).
 test_solution_disposition(State, at_limit) ->
-    solution_disposition(State, ?MAX_ANSWERS);
+    solution_disposition(State, ?QUOD_MAX_ANSWERS_PER_INVOCATION);
 test_solution_disposition(State, Count) ->
     solution_disposition(State, Count).
 -endif.
@@ -730,6 +1119,21 @@ close_answer(State, Asker) ->
 %% Policies are proved against this ontology's committed KB.
 can_read_subjects(Goal, Subjects, Ns, W) ->
     lists:all(fun(Subject) -> prove_bool({can_read, Goal, Subject, Ns}, W) end, Subjects).
+
+-doc "Apply the existing committed-view admission rule before a shared scope invocation.".
+-spec authorize_scope(term(), [binary()], binary(), non_neg_integer(),
+                      quod_proof_session:session()) -> boolean().
+authorize_scope(Goal, Subjects, Ns, Height, Session)
+  when is_list(Subjects), is_binary(Ns), is_integer(Height), Height >= 0 ->
+    Ctx = quod_predicates:proof_context(
+            Ns, Height, undefined, [Ns | Subjects]),
+    Committed = quod_predicates:set_context(
+                  quod_proof_session:committed_state(Session), Ctx),
+    Wrapped = quod_erlog_db_local_prove:wrap_state(
+                Committed, #{read_set => false}),
+    try can_read_subjects(Goal, Subjects, Ns, Wrapped)
+    after quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
+    end.
 
 prove_bool(Goal, W) ->
     try erlog_int:prove_goal(Goal, W) of

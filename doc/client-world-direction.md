@@ -188,12 +188,13 @@ The server:
 1. binds the session to its authenticated user and wielded agent;
 2. verifies that the component/event exists in the projected current view;
 3. validates the payload against the component schema;
-4. maps the event through ontology policy to an explicit `action/3`;
+4. maps the event through ontology policy to a ground desired state whose
+   declared `action/3` transition is owned by that ontology;
 5. applies session, agent, and component rate limits.
 
 The client never supplies a Prolog goal. `SeenHeight` allows stale-interface
-rejection or refresh. `InputId` and the action's declared idempotency policy
-handle retries.
+rejection or refresh. `InputId` and the exact desired state make retries
+explicit and idempotent.
 
 ## 7. Editable voxel worlds
 
@@ -224,10 +225,27 @@ transaction with one stable `EditId` and one patch per affected chunk.
 The only mutation entry is:
 
 ```prolog
-action(edit_voxels(WorldId, ExpectedRevisions, EditId, Operation),
-       Subject,
-       voxel_edit_result(EditId, NewRevisions)).
+apply_voxel_edit(WorldId, ExpectedRevisions, EditId, Operation) :-
+    stage_voxel_edit(WorldId, ExpectedRevisions, EditId, Operation),
+    assertz(voxel_edit_applied(
+        WorldId, ExpectedRevisions, EditId, Operation)).
+
+action(apply_voxel_edit(WorldId, ExpectedRevisions, EditId, Operation),
+       [may_edit_voxels(WorldId),
+        valid_voxel_edit(WorldId, ExpectedRevisions, EditId, Operation)],
+       voxel_edit_applied(
+           WorldId, ExpectedRevisions, EditId, Operation)).
 ```
+
+The server asks for the ground desired state with `goal/1`; the client never
+chooses or invokes `apply_voxel_edit/4`. Authorization reads the authenticated
+subject from the engine-owned proof context rather than from an `action/3`
+argument. The named transition derives and stages the canonical patch and
+revision facts, then records the exact request state. Including the request
+identity in that state makes an exact retry idempotent without treating a
+different operation that reused `EditId` as success.
+This transition deliberately records its target as a fact; that is a domain
+choice in this example, not behavior supplied by the action framework.
 
 `Operation` uses deterministic integer or fixed-point geometry, such as explicit
 cell writes or a bounded fill/remove sphere. Validators derive identical
@@ -358,7 +376,8 @@ These milestones are intentionally outside the numbered agent/FIPA slices.
 - Negotiate a versioned protocol and authenticated subscription.
 - Deliver an atomic scene snapshot and model create/update/remove deltas.
 - Deliver one bounded versioned explosion cue.
-- Project one GUI tree and map one button event to `action/3`.
+- Project one GUI tree and map one button event to a declared
+  `goal(DesiredState)`.
 - Test disconnect, sequence gaps, owner failover, and slow clients.
 
 Success means reconnect reconstructs models/GUI without replaying cues; unknown
@@ -368,7 +387,8 @@ components, or submit goals; queues remain bounded.
 ### C2 -- hot simulation and editable voxel world
 
 - Generate a visual chunk and server collider without generated-block facts.
-- Perform bounded dig/place/explosion actions with revisioned chunk patches.
+- Establish bounded dig/place/explosion desired states through explicit
+  transitions with revisioned chunk patches.
 - Converge two clients through snapshots and multi-chunk deltas.
 - Run one authority and read-only ghosts over epoch/tick datagrams.
 - Reassign authority and rebuild from a checkpoint.

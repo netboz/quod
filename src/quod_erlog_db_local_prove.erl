@@ -23,11 +23,15 @@ agree bit-for-bit.
 %% erlog db callbacks
 -export([new/1, add_built_in/2, add_compiled_proc/4,
          asserta_clause/4, assertz_clause/4, retract_clause/3, abolish_clauses/2,
-         get_procedure/2, get_procedure_type/2, get_interpreted_functors/1]).
+         get_procedure/2, get_procedure_type/2, get_interpreted_functors/1,
+         choicepoint_checkpoint/1, choicepoint_restore/2]).
 %% overlay API
 -export([wrap_state/1, wrap_state/2, lifecycle_principal/1,
-         committed_state/1, get_local_changes/1, get_read_set/1,
+         committed_state/1, checkpoint/1, restore/2,
+         enter_read_only/1, leave_read_only/2,
+         get_local_changes/1, get_read_set/1,
          cleanup_read_set/1]).
+-export_type([checkpoint/0, read_only_frame/0]).
 
 -record(fstate, {abolished = false :: boolean(),
                  asserta   = []    :: [{integer(), term(), term()}],
@@ -35,6 +39,7 @@ agree bit-for-bit.
                  retracted = #{}   :: #{integer() => {term(), term()}}}).
 
 -record(lp, {out_db   :: #db{},
+             scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
              read_ets = undefined :: ets:tid() | undefined,
@@ -49,6 +54,20 @@ agree bit-for-bit.
              %% Policy sub-proofs must reject the first attempted mutation,
              %% including changes whose eventual net diff would be empty.
              read_only = false :: boolean()}).
+
+%% Both tokens retain immutable terms already owned by the overlay. Creating or
+%% restoring one therefore copies no clause data. The identity fields prevent a
+%% savepoint or mode frame from being applied to another proof's overlay.
+-record(checkpoint, {scope_id :: reference(),
+                     local    :: #{term() => #fstate{}},
+                     next_tag :: integer()}).
+-opaque checkpoint() :: #checkpoint{}.
+
+-record(read_only_frame, {scope_id      :: reference(),
+                          read_only     :: boolean(),
+                          assert_hooks  :: map(),
+                          retract_hooks :: map()}).
+-opaque read_only_frame() :: #read_only_frame{}.
 
 %%%===================================================================
 %%% wrapping + extraction
@@ -114,7 +133,57 @@ committed_state(
   #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
            fail_reasons = [], fail_reason_bytes = 0,
-           fail_reasons_truncated = false, fail_boundaries = 0}.
+           fail_reasons_truncated = false, fail_boundaries = 0,
+           checkpoint_depth = 0}.
+
+-doc "Capture the wrapped overlay's staged writes and assertion-order cursor in O(1).".
+-spec checkpoint(tuple()) -> checkpoint().
+checkpoint(
+  #est{db = #db{mod = ?MODULE, ref = Ov}}) ->
+    choicepoint_checkpoint(Ov).
+
+-doc "Restore staged writes from a checkpoint while retaining monotonic proof reads.".
+-spec restore(tuple(), checkpoint()) -> tuple().
+restore(
+  #est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St,
+  #checkpoint{} = Checkpoint) ->
+    %% `read_ets` deliberately comes from the current overlay. It is the same
+    %% table named by the token and contains the union of every read performed
+    %% since the checkpoint, including reads in discarded alternatives.
+    St#est{db = Db#db{ref = choicepoint_restore(Ov, Checkpoint)}};
+restore(_St, _Checkpoint) ->
+    erlang:error(badarg).
+
+-doc "Enter a nestable strict read-only frame on the current staged overlay.".
+-spec enter_read_only(tuple()) -> {read_only_frame(), tuple()}.
+enter_read_only(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{scope_id = ScopeId,
+                          read_only = ReadOnly} = Ov,
+                assert_hooks = AssertHooks,
+                retract_hooks = RetractHooks} = Db} = St) ->
+    Frame = #read_only_frame{scope_id = ScopeId,
+                             read_only = ReadOnly,
+                             assert_hooks = AssertHooks,
+                             retract_hooks = RetractHooks},
+    {Frame,
+     St#est{db = Db#db{ref = Ov#lp{read_only = true},
+                       assert_hooks = #{}, retract_hooks = #{}}}}.
+
+-doc "Leave a read-only frame without replacing its staged view or accumulated reads.".
+-spec leave_read_only(tuple(), read_only_frame()) -> tuple().
+leave_read_only(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{scope_id = ScopeId} = Ov} = Db} = St,
+  #read_only_frame{scope_id = ScopeId,
+                   read_only = ReadOnly,
+                   assert_hooks = AssertHooks,
+                   retract_hooks = RetractHooks}) ->
+    St#est{db = Db#db{ref = Ov#lp{read_only = ReadOnly},
+                      assert_hooks = AssertHooks,
+                      retract_hooks = RetractHooks}};
+leave_read_only(_St, _Frame) ->
+    erlang:error(badarg).
 
 -doc "The write-set: the proof's asserts/retracts as content-only ops.".
 -spec get_local_changes(#lp{}) -> [{assert | retract, {term(), term()}}].
@@ -146,7 +215,23 @@ cleanup_read_set(_) -> ok.
 %%%===================================================================
 
 new({OutRef, OutMod}) ->
-    #lp{out_db = #db{mod = OutMod, ref = OutRef, loc = []}}.
+    #lp{out_db = #db{mod = OutMod, ref = OutRef, loc = []},
+        scope_id = make_ref()}.
+
+%% Erlog's opt-in choice-point hooks reuse the same immutable overlay token as
+%% the explicit transaction entry savepoint. Neither callback traverses clause
+%% data; restore retains the current monotonic read-set and overlay metadata.
+choicepoint_checkpoint(
+  #lp{scope_id = ScopeId, local = Local, next_tag = NextTag}) ->
+    #checkpoint{scope_id = ScopeId, local = Local, next_tag = NextTag}.
+
+choicepoint_restore(
+  #lp{scope_id = ScopeId} = Ov,
+  #checkpoint{scope_id = ScopeId,
+              local = Local, next_tag = NextTag}) ->
+    Ov#lp{local = Local, next_tag = NextTag};
+choicepoint_restore(_Ov, _Checkpoint) ->
+    erlang:error(badarg).
 
 %% Built-ins/compiled procs already live in the committed db; the overlay never
 %% adds them (it is created over an already-built db).

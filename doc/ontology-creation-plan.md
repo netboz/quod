@@ -55,9 +55,13 @@ quod_ontology:create(Name, Options) ->
   mapped to a finite creation error; no `#est{}`, PID, reference, or stacktrace
   crosses the API.  Thus malformed content cannot enter the manager desired
   map, start a retry loop, or create even an empty namespace directory.
+- The deterministic encoding of that prepared content diff is limited by the
+  shared `MAX_GENESIS_INITIAL_DIFF_BYTES` value (192 KiB). Oversize input fails
+  as `initial_content_too_large` before manager or filesystem mutation; slot 1
+  remains subject to the complete 256 KiB block limit.
 - The API builds the self-only `mode = create` config by passing a small content
   descriptor through the existing `quod_app:build_ns_config/1`, then adding the
-  internal `genesis_terms` value. The descriptor copies the resolved
+  internal, already-compiled `genesis_diff` value. The descriptor copies the resolved
   `data_dir` and optional `ledger_dir` from the live `quod:root` content config
   in the manager's desired map; these paths are per-content settings, not
   node-wide settings. Because that manager config already contains converted
@@ -69,10 +73,11 @@ quod_ontology:create(Name, Options) ->
   limits without copying their defaults. It does not create a temporary `.pl`
   file.
 - `quod_simplex:genesis_tx/4` remains the single genesis builder used for both
-  boot-config and runtime creation.  Its existing optional content step gains
-  `genesis_terms`; it still compiles through `quod_prolog:terms_to_diff/1`.
-  Supplying both `genesis_file` and `genesis_terms` is a loud configuration
-  error, never a precedence rule.
+  boot-config and runtime creation. Runtime creation passes `genesis_diff`, so
+  namespace start never rereads or recompiles caller input. The builder compiles
+  only its generated incarnation/member facts and prepends them to the prepared
+  diff in one linear pass. `genesis_file` and `genesis_diff` are mutually
+  exclusive; both together are a loud configuration error.
 - Creation starts through a small atomic namespace-manager operation,
   `start_new_content/2`, never directly through `quod_ns_sup`. The manager
   accepts the call only if the namespace is neither desired nor live. It starts
@@ -116,10 +121,14 @@ hosting intent is deliberately deferred rather than introducing a manifest.
 Root declares creation as an ordinary policy action:
 
 ```prolog
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
 action(create_ontology(Name, Options),
        [authorized_ontology_lifecycle(create_ontology(Name, Options)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_hosted(Name)).
 ```
 
 The public node-local entry is:
@@ -136,17 +145,16 @@ identity and stores it only in the private proof overlay; callers and Prolog
 cannot provide or forge that principal. Root policy authorizes creation only
 when that key is currently self-admitted in the committed root snapshot.
 
-The bounded action worker first proves the literal-`true` action declaration
-and its ordered prerequisites in a read-only overlay. No lifecycle IO occurs
-in this phase, and the first attempted assert, retract, or abolish fails even
-if later backtracking would have left an empty diff. The shipped prerequisites
-are local; a future declaration that opts into an ordinary query bridge keeps
-that bridge's existing semantics. After logical success the runner checks the same committed policy
-again, then dispatches the original typed action directly to
-`quod_ontology:create/2`. The second authorization is mandatory, so an
-accidentally weakened action declaration cannot bypass policy. A missing
-literal-`true` declaration fails as `action_not_declared`; any staged write
-fails as `effect_staged_write` and executes nothing.
+The bounded action worker first validates the exact transition declaration and
+authorizes the engine-owned principal before reading caller-selected source
+paths. It compiles the source once into an opaque prepared descriptor, then a
+read-only Prolog preparer checks the selected desired state or the declaration's
+ordered prerequisites. The first attempted assert, retract, or abolish fails
+even if later backtracking would have left an empty diff. The runner
+re-authorizes before either idempotent success or execution; execution invokes
+only the typed prepared helper once and verifies `ontology_hosted(Name)`
+afterward. A missing valid declaration fails as `action_not_declared`; a staged
+write fails as `lifecycle_staged_write` and executes nothing.
 
 The low-level `quod_ontology:create/2` API remains available to trusted code in
 the same VM. It does not authenticate remote callers and must not be exposed as
@@ -163,6 +171,7 @@ ontology_creation_failed(invalid_name)
 ontology_creation_failed(reserved_system_namespace)
 ontology_creation_failed(invalid_options)
 ontology_creation_failed(invalid_initial_terms)
+ontology_creation_failed(initial_content_too_large)
 ontology_creation_failed(invalid_source(OptionIndex, Line))
 ontology_creation_failed(source_file_error(OptionIndex))
 ontology_creation_failed(already_hosted)

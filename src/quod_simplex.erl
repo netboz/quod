@@ -166,6 +166,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          committee_view_id/4, test_committee_id/1,
          test_log_projection/3,
          test_apply_catchup_window/3,
+         test_genesis_tx/4, test_valid_genesis_source/1,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -829,7 +830,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
           mode         => create,      %% create = found genesis; join = trustlessly catch up from a contact
           committee    => [],          %% complete founding set besides self; only its smallest key may create
           genesis_file => undefined,   %% root .pl to seed on create (founder only)
-          genesis_terms => undefined,  %% in-memory ontology terms to seed on create (mutually exclusive)
+          genesis_diff => undefined,   %% precompiled initial content (mutually exclusive with file)
           genesis_hash => undefined,   %% join config pin; resolved to the immutable slot-1 anchor in every mode
           batch_window_ms => 25,        %% per-ontology micro-batch collection window
           data_dir     => undefined}).
@@ -1697,23 +1698,31 @@ bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
     S#s{store = Store1, validators = Validators,
         committee_id = CommitteeId, slot = 1}.
 
-%% The genesis transaction compiles the incarnation, founding committee, and optional content
-%% through the erlog overlay together. `consensus_incarnation/1` is therefore ordinary queryable ontology
-%% truth as well as part of the anchor. The predicate is reserved to this one generated fact.
+%% The genesis transaction compiles caller-provided file/term content exactly once. Runtime creation
+%% instead supplies its already-compiled, bounded `genesis_diff`. Generated incarnation/committee facts
+%% are compiled separately, then prepended to that initial diff in one linear pass. This preserves the
+%% initial diff's clause/order contract without reading or compiling its source again.
+%% `consensus_incarnation/1` is therefore ordinary queryable ontology truth as well as part of the anchor.
+%% The predicate is reserved to this one generated fact.
 %% The founding set is `[]` => self-only (N=1) or a list of founding members; each entry is a bare pubkey
 %% or `{Pubkey, Host, Port}`. The lexicographically-smallest pubkey is both the sole permitted creator and
 %% the unsigned transaction author. All other founding members start in `mode=join` against its anchor.
 genesis_tx(Cfg, Ns, Self, Incarnation) ->
     Founders   = founding(Cfg, Self),
     [{GenesisAuthor, _, _} | _] = Founders,
-    InitialTerms = genesis_terms(Cfg),
-    PeerAndInitialTerms =
+    InitialDiff = genesis_initial_diff(Cfg),
+    GeneratedTerms =
         lists:foldr(
           fun({Pk, Host, Port}, Acc) ->
                   [{peer_admitted, Pk, Host, Port, Pk} | Acc]
-          end, InitialTerms, Founders),
-    Diff = quod_prolog:terms_to_diff(
-             [{consensus_incarnation, Incarnation} | PeerAndInitialTerms]),
+          end, [], Founders),
+    GeneratedDiff =
+        quod_prolog:terms_to_diff(
+          [{consensus_incarnation, Incarnation} | GeneratedTerms]),
+    %% `foldr` is the single list-spine copy needed to prepend generated ops;
+    %% InitialDiff itself is retained byte-for-byte and is never repeatedly appended.
+    Diff = lists:foldr(fun(Op, Acc) -> [Op | Acc] end,
+                       InitialDiff, GeneratedDiff),
     Genesis =
         #transaction{tx_id = genesis_tx_id(Ns, Incarnation), caller_ns = Ns,
                      diff = Diff, read_check = #{},
@@ -1726,6 +1735,14 @@ genesis_tx(Cfg, Ns, Self, Incarnation) ->
             throw({genesis_failed,
                    invalid_generated_genesis})
     end.
+
+-ifdef(TEST).
+test_genesis_tx(Config, Ns, Self, Incarnation) ->
+    genesis_tx(maps:merge(?DEFAULTS, Config), Ns, Self, Incarnation).
+
+test_valid_genesis_source(Config) ->
+    valid_genesis_source(maps:merge(?DEFAULTS, Config)).
+-endif.
 
 genesis_tx_id(Ns, Incarnation)
   when is_binary(Ns), is_binary(Incarnation), byte_size(Incarnation) =:= 32 ->
@@ -5018,7 +5035,8 @@ valid_genesis_transaction(
                    diff = Diff, read_check = #{}, author = Author,
                    author_seq = 0, submitted_at = 0} = Genesis,
   ExpectedFounders) ->
-    well_formed_transaction(Genesis)
+    genesis_payload_bounded(Genesis)
+        andalso well_formed_transaction(Genesis)
         andalso valid_genesis_identity(
                   decode_genesis_tx_id(Ns, TxId), Diff, Author,
                   Genesis, ExpectedFounders);
@@ -5041,6 +5059,12 @@ founding_set_matches(any_founding_set, _Adds) ->
     true;
 founding_set_matches(ExpectedFounders, Adds) ->
     lists:sort(Adds) =:= ExpectedFounders.
+
+genesis_payload_bounded(Genesis) ->
+    try byte_size(term_to_binary([Genesis], [deterministic])) =< ?MAX_BLOCK_BYTES
+    catch
+        _:_ -> false
+    end.
 
 historical_change_shape_acceptable(
   Ns, #transaction{caller_ns = Ns, author = Author, author_seq = Seq} = Change,
@@ -7120,12 +7144,43 @@ valid_cfg(Config, Cfg) ->
     end.
 
 valid_genesis_source(Cfg) ->
-    case {genesis_file(Cfg), maps:get(genesis_terms, Cfg, undefined)} of
-        {none, undefined} -> valid_batch_window(Cfg);
-        {none, Terms} when is_list(Terms) -> valid_batch_window(Cfg);
-        {none, _InvalidTerms} -> {error, invalid_genesis_terms};
-        {_File, undefined} -> valid_batch_window(Cfg);
-        {_File, _Terms} -> {error, multiple_genesis_sources}
+    case genesis_source(Cfg) of
+        {ok, _Source} -> valid_batch_window(Cfg);
+        {error, _} = Error -> Error
+    end.
+
+genesis_source(Cfg) ->
+    File = genesis_file(Cfg),
+    Diff = maps:get(genesis_diff, Cfg, undefined),
+    case [Source || Source <- [{file, File}, {diff, Diff}],
+                    source_present(Source)] of
+        [] ->
+            {ok, none};
+        [{file, SourceFile}] ->
+            {ok, {file, SourceFile}};
+        [{diff, SourceDiff}] ->
+            validate_genesis_diff(SourceDiff);
+        _Multiple ->
+            {error, multiple_genesis_sources}
+    end.
+
+source_present({file, none}) -> false;
+source_present({_Kind, undefined}) -> false;
+source_present({_Kind, _Value}) -> true.
+
+validate_genesis_diff(Diff) ->
+    case valid_diff(Diff) of
+        false ->
+            {error, invalid_genesis_diff};
+        true ->
+            try byte_size(term_to_binary(Diff, [deterministic])) of
+                Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES ->
+                    {ok, {diff, Diff}};
+                _TooLarge ->
+                    {error, initial_content_too_large}
+            catch
+                _:_ -> {error, invalid_genesis_diff}
+            end
     end.
 
 valid_batch_window(Cfg) ->
@@ -7185,18 +7240,22 @@ genesis_file(Cfg) ->
         File      -> File
     end.
 
-genesis_terms(Cfg) ->
-    case {genesis_file(Cfg), maps:get(genesis_terms, Cfg, undefined)} of
-        {none, undefined} ->
+genesis_initial_diff(Cfg) ->
+    case genesis_source(Cfg) of
+        {ok, none} ->
             [];
-        {none, Terms} when is_list(Terms) ->
-            Terms;
-        {File, undefined} ->
-            quod_prolog:read_terms(File);
-        {none, _InvalidTerms} ->
-            throw({genesis_failed, invalid_genesis_terms});
-        {_File, _Terms} ->
-            throw({genesis_failed, multiple_genesis_sources})
+        {ok, {diff, Diff}} ->
+            Diff;
+        {ok, {file, File}} ->
+            validate_compiled_genesis_diff(quod_prolog:genesis_diff(File));
+        {error, Reason} ->
+            throw({genesis_failed, Reason})
+    end.
+
+validate_compiled_genesis_diff(Diff) ->
+    case validate_genesis_diff(Diff) of
+        {ok, {diff, Diff}} -> Diff;
+        {error, Reason} -> throw({genesis_failed, Reason})
     end.
 
 status_map(S) ->

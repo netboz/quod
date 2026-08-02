@@ -16,7 +16,12 @@ caller. Node-local Prolog lifecycle requests must enter through
 `quod_prolog:run_action/2`, which proves root policy before calling them.
 """.
 
--export([create/2, join/3, local_state/1, normalize_user_name/1]).
+-include("quod_ingress_limits.hrl").
+
+-export([create/2, join/3,
+         validate_action/1, prepare_action/1, execute_prepared/1,
+         local_state/1, genesis_anchor/1]).
+-export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
 -define(MAX_NAMESPACE_BYTES, 128).
@@ -37,25 +42,65 @@ caller. Node-local Prolog lifecycle requests must enter through
         {source, unicode:chardata()} |
         {terms, [term()]}.
 
+-record(lifecycle_request, {
+    kind :: create | join,
+    namespace :: binary(),
+    payload :: term()
+}).
+
+-record(prepared_lifecycle, {
+    namespace :: binary(),
+    config :: map(),
+    status :: created | joining | resumed
+}).
+
+-opaque structural_descriptor() :: #lifecycle_request{}.
+-opaque prepared_descriptor() :: #prepared_lifecycle{}.
+
 -spec create(term(), [input_option()]) -> creation().
 create(Name, Options) ->
+    execute_action({create_ontology, Name, Options}).
+
+-spec join(term(), unicode:chardata(), [term()]) -> joining().
+join(Name, GenesisHash, Seeds) ->
+    execute_action({join_ontology, Name, GenesisHash, Seeds}).
+
+-doc """
+Validate a typed lifecycle action without reading source paths, compiling
+Prolog, inspecting storage, or changing hosting state.
+""".
+-spec validate_action(term()) ->
+          {ok, structural_descriptor()} | {error, term()}.
+validate_action(Action) ->
+    case Action of
+        {create_ontology, _, _} -> validate_typed_action(Action);
+        {join_ontology, _, _, _} -> validate_typed_action(Action);
+        _ -> {error, invalid_action}
+    end.
+
+validate_typed_action(Action) ->
+    case quod_predicates:is_ground(Action) of
+        true -> validate_ground_action(Action);
+        false -> {error, invalid_arguments}
+    end.
+
+validate_ground_action({create_ontology, Name, Options}) ->
     case normalize_user_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
-            case load_options(Options) of
+            case normalize_option_shapes(Options) of
+                {ok, NormalizedOptions} ->
+                    {ok,
+                     #lifecycle_request{
+                        kind = create,
+                        namespace = Ns, payload = NormalizedOptions}};
                 {error, _} = Error ->
-                    Error;
-                {ok, InitialTerms} ->
-                    case validate_initial_terms(InitialTerms) of
-                        ok -> create_validated(Ns, InitialTerms);
-                        {error, _} = Error -> Error
-                    end
+                    Error
             end
-    end.
-
--spec join(term(), unicode:chardata(), [term()]) -> joining().
-join(Name, GenesisHash, Seeds) ->
+    end;
+validate_ground_action(
+  {join_ontology, Name, GenesisHash, Seeds}) ->
     case normalize_user_name(Name) of
         {error, _} = Error ->
             Error;
@@ -63,13 +108,72 @@ join(Name, GenesisHash, Seeds) ->
             case normalize_genesis_hash(GenesisHash) of
                 {error, _} = Error ->
                     Error;
-                {ok, GenesisHex, RawGenesisHash} ->
+                {ok, _GenesisHex, RawGenesisHash} ->
                     case normalize_seeds(Seeds) of
-                        {error, _} = Error -> Error;
+                        {error, _} = Error ->
+                            Error;
                         {ok, SeedPeers} ->
-                            join_validated(
-                              Ns, GenesisHex, RawGenesisHash, SeedPeers)
+                            {ok,
+                             #lifecycle_request{
+                                kind = join,
+                                namespace = Ns,
+                                payload = {RawGenesisHash, SeedPeers}}}
                     end
+            end
+    end.
+
+-doc """
+Finish a structurally validated lifecycle request without mutating hosting
+state. The lifecycle runner calls this only after authorization; the trusted
+same-VM API calls it directly. Create sources are read, parsed, and compiled
+exactly once into the descriptor; join inputs are already normalized.
+""".
+-spec prepare_action(structural_descriptor()) ->
+          {ok, prepared_descriptor()} | {error, term()}.
+prepare_action(
+  #lifecycle_request{kind = create, namespace = Ns, payload = Options}) ->
+    case load_options(Options) of
+        {error, _} = Error ->
+            Error;
+        {ok, InitialTerms} ->
+            case validate_initial_terms(InitialTerms) of
+                {error, _} = Error ->
+                    Error;
+                {ok, InitialDiff} ->
+                    case initial_diff_size(InitialDiff) of
+                        ok -> prepare_create(Ns, InitialDiff);
+                        {error, _} = Error -> Error
+                    end
+            end
+    end;
+prepare_action(
+  #lifecycle_request{kind = join, namespace = Ns,
+                     payload = {RawGenesisHash, SeedPeers}})
+  when is_binary(RawGenesisHash), byte_size(RawGenesisHash) =:= 32,
+       is_list(SeedPeers) ->
+    prepare_join(Ns, RawGenesisHash, SeedPeers);
+prepare_action(_InvalidDescriptor) ->
+    {error, invalid_action}.
+
+-doc """
+Perform only the namespace-manager mutation described by a prepared lifecycle
+descriptor. It never re-reads or recompiles caller-controlled input.
+""".
+-spec execute_prepared(prepared_descriptor()) -> creation() | joining().
+execute_prepared(
+  #prepared_lifecycle{namespace = Ns, config = Config, status = Status}) ->
+    start(Ns, Config, Status);
+execute_prepared(_InvalidDescriptor) ->
+    {error, invalid_action}.
+
+execute_action(Action) ->
+    case validate_action(Action) of
+        {error, _} = Error ->
+            Error;
+        {ok, Structural} ->
+            case prepare_action(Structural) of
+                {error, _} = Error -> Error;
+                {ok, Prepared} -> execute_prepared(Prepared)
             end
     end.
 
@@ -79,6 +183,76 @@ local_state(Name) ->
         {error, _} = Error -> Error;
         {ok, Ns} -> {ok, local_state_validated(Ns)}
     end.
+
+-doc """
+Return the exact local 32-byte genesis anchor. A live Simplex anchor wins; while
+the namespace is starting, a pinned join anchor is read from the manager's
+serialized desired configuration.
+""".
+-spec genesis_anchor(term()) -> {ok, binary()} | {error, term()}.
+genesis_anchor(Name) ->
+    case canonical_name(Name) of
+        {error, _} = Error ->
+            Error;
+        {ok, Ns} ->
+            case quod_simplex:genesis_hash(Ns) of
+                Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
+                    {ok, Hash};
+                _ ->
+                    desired_genesis_anchor(Ns)
+            end
+    end.
+
+desired_genesis_anchor(Ns) ->
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Content =
+        case Desired of
+            #{content := Value} when is_map(Value) -> Value;
+            _ -> #{}
+        end,
+    case maps:get(Ns, Content, undefined) of
+        undefined ->
+            {error, not_hosted};
+        Config when is_map(Config) ->
+            case maps:get(genesis_hash, Config, undefined) of
+                Hash when is_binary(Hash), byte_size(Hash) =:= 32 ->
+                    {ok, Hash};
+                _ ->
+                    {error, genesis_unavailable}
+            end;
+        _ ->
+            {error, genesis_unavailable}
+    end.
+
+normalize_option_shapes(Options) ->
+    normalize_option_shapes(Options, []).
+
+normalize_option_shapes([], AccRev) ->
+    {ok, lists:reverse(AccRev)};
+normalize_option_shapes([{terms, Terms} | Rest], AccRev) ->
+    case proper_list(Terms) of
+        true ->
+            normalize_option_shapes(Rest, [{terms, Terms} | AccRev]);
+        false ->
+            {error, invalid_options}
+    end;
+normalize_option_shapes([{source, Text} | Rest], AccRev) ->
+    case source_chars(Text) of
+        {ok, Chars} ->
+            normalize_option_shapes(Rest, [{source, Chars} | AccRev]);
+        error ->
+            {error, invalid_options}
+    end;
+normalize_option_shapes([{source_file, Path0} | Rest], AccRev) ->
+    case source_path(Path0) of
+        {ok, Path} ->
+            normalize_option_shapes(
+              Rest, [{source_file, Path} | AccRev]);
+        error ->
+            {error, invalid_options}
+    end;
+normalize_option_shapes(_ImproperOrInvalid, _AccRev) ->
+    {error, invalid_options}.
 
 load_options(Options) ->
     load_options(Options, 1, []).
@@ -96,20 +270,11 @@ load_options(_ImproperOrNonList, _Index, _AccRev) ->
     {error, invalid_options}.
 
 load_option({terms, Terms}, _Index) ->
-    case proper_list(Terms) of
-        true -> {ok, Terms};
-        false -> {error, invalid_options}
-    end;
-load_option({source, Text}, Index) ->
-    case source_chars(Text) of
-        {ok, Chars} -> read_source(Chars, Index);
-        error -> {error, invalid_options}
-    end;
-load_option({source_file, Path0}, Index) ->
-    case source_path(Path0) of
-        {ok, Path} -> read_source_file(Path, Index);
-        error -> {error, invalid_options}
-    end;
+    {ok, Terms};
+load_option({source, Chars}, Index) when is_list(Chars) ->
+    read_source(Chars, Index);
+load_option({source_file, Path}, Index) when is_binary(Path) ->
+    read_source_file(Path, Index);
 load_option(_Unknown, _Index) ->
     {error, invalid_options}.
 
@@ -176,7 +341,7 @@ read_source_file(Path, Index) ->
 source_file_error(Index, Path, Reason) ->
     {error, {source_file_error, Index, Path, Reason}}.
 
-create_validated(Ns, InitialTerms) ->
+prepare_create(Ns, InitialDiff) ->
     case root_storage() of
         {error, _} = Error ->
             Error;
@@ -189,16 +354,19 @@ create_validated(Ns, InitialTerms) ->
                 maps:merge(
                   BaseConfig,
                   Storage#{committee => [],
-                           genesis_terms => InitialTerms}),
+                           genesis_diff => InitialDiff}),
             case existing_ledger(Ns, Config) of
                 {error, _} = Error ->
                     Error;
                 Status ->
-                    start(Ns, Config, Status)
+                    {ok,
+                     #prepared_lifecycle{
+                        namespace = Ns, config = Config,
+                        status = Status}}
             end
     end.
 
-join_validated(Ns, GenesisHex, RawGenesisHash, SeedPeers) ->
+prepare_join(Ns, RawGenesisHash, SeedPeers) ->
     case root_storage() of
         {error, _} = Error ->
             Error;
@@ -206,7 +374,8 @@ join_validated(Ns, GenesisHex, RawGenesisHash, SeedPeers) ->
             {_Ns, BaseConfig0} =
                 quod_app:build_ns_config(
                   #{namespace => Ns, mode => join,
-                    genesis_file => <<>>, genesis_hash => GenesisHex,
+                    genesis_file => <<>>,
+                    genesis_hash => binary:encode_hex(RawGenesisHash),
                     seeds => []}),
             %% Validation above makes build_ns_config's malformed-hex fallback
             %% unreachable; retain the already-decoded anchor explicitly.
@@ -216,8 +385,16 @@ join_validated(Ns, GenesisHex, RawGenesisHash, SeedPeers) ->
                        Storage#{seed_peers => SeedPeers}),
             case existing_ledger(Ns, Config) of
                 {error, _} = Error -> Error;
-                created -> start(Ns, Config, joining);
-                resumed -> start(Ns, Config, resumed)
+                created ->
+                    {ok,
+                     #prepared_lifecycle{
+                        namespace = Ns, config = Config,
+                        status = joining}};
+                resumed ->
+                    {ok,
+                     #prepared_lifecycle{
+                        namespace = Ns, config = Config,
+                        status = resumed}}
             end
     end.
 
@@ -363,12 +540,20 @@ reserved_clause_head(_) -> false.
 
 compile_initial_terms(Terms) ->
     try quod_prolog:terms_to_diff(Terms) of
-        _Diff -> ok
+        Diff -> {ok, Diff}
     catch
         throw:{genesis_failed, {assert, Term, _InterpreterState}} ->
             invalid_initial_term(Term);
         _Class:_Reason ->
             {error, invalid_initial_terms}
+    end.
+
+initial_diff_size(Diff) ->
+    try byte_size(term_to_binary(Diff, [deterministic])) of
+        Bytes when Bytes =< ?MAX_GENESIS_INITIAL_DIFF_BYTES -> ok;
+        _ -> {error, initial_content_too_large}
+    catch
+        _:_ -> {error, invalid_initial_terms}
     end.
 
 invalid_initial_term(Term) ->

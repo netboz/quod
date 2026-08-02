@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
 
 -define(ROOT_NS, <<"quod:root">>).
 
@@ -11,6 +12,7 @@ ontology_creation_test_() ->
      fun cleanup/1,
      fun(Fixture) ->
          [?_test(create_and_resume(Fixture)),
+          ?_test(prepared_input_is_single_use(Fixture)),
           ?_test(reconcile_republishes_running_content(Fixture)),
           ?_test(validation_precedes_mutation(Fixture)),
           ?_test(collisions_preserve_existing_state(Fixture)),
@@ -24,7 +26,11 @@ ontology_creation_test_() ->
 
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),
-    Suffix = integer_to_list(erlang:unique_integer([positive])),
+    %% The BEAM unique-integer counter restarts with each EUnit VM. A setup
+    %% failure skips cleanup, so include fresh entropy and never reopen that
+    %% abandoned ledger under a new test identity.
+    Suffix = binary_to_list(
+               binary:encode_hex(crypto:strong_rand_bytes(8))),
     Dir = filename:join("/tmp", "quod_ontology_" ++ Suffix),
     Saved = save_env(
               [node_pubkey, identity_key, node_addr,
@@ -83,16 +89,18 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ok = file:write_file(SourceTwo, <<"ordered(file_two).\n">>),
     Options =
         [{terms, [{ordered, terms_first}, {note, welcome},
-                  {allowed, reverse},
-                  {action, {make_marker, reverse},
-                   [{allowed, reverse}], {made, reverse}},
-                  {action, blocked_action,
-                   [{fail_with_reason, blocked_by_policy}], true}]},
+                  {allowed, reverse}]},
          {source_file, SourceOne},
          {source_file, list_to_binary(SourceTwo)},
          {source,
           <<"ordered(inline).\n"
-            "welcomes(Who) :- note(Who).">>}],
+            "welcomes(Who) :- note(Who).\n"
+            "make_marker(Value) :- assertz(made(Value)).\n"
+            "record_common_fact(Value) :- assertz(common_fact(Value)).\n"
+            "record_blocked_action :- assertz(blocked_action).\n"
+            "action(make_marker(reverse), [allowed(reverse)], made(reverse)).\n"
+            "action(record_common_fact(asserted), [], common_fact(asserted)).\n"
+            "action(record_blocked_action, [fail_with_reason(blocked_by_policy)], blocked_action).">>}],
     {ok, created, Ns, GenesisHash} =
         quod_ontology:create(Ns, Options),
     ?assertEqual(32, byte_size(GenesisHash)),
@@ -146,10 +154,15 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
        [Head || {assert, {Head, _}} <- Diff,
                 lists:member(
                   clause_functor(Head),
-                  [{goal, 1}, {goal, 2},
-                   {assert_effect, 1}, {satisfy_prereq, 2}])]),
+                  [{goal, 1}, {goal, 2}, {resolve_goal, 2},
+                   {prepare_lifecycle_action, 3},
+                   {prepare_lifecycle_candidate, 3},
+                   {check_prerequisites, 1},
+                   {satisfy_prerequisites, 2},
+                   {run_transition, 1}, {run_transitions, 1},
+                   {member_eq, 2}])]),
     ?assertEqual(
-       2,
+       3,
        length([Head || {assert, {Head, _}} <- Diff,
                        clause_functor(Head) =:= {action, 3}])),
     ?assertEqual(
@@ -172,6 +185,25 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
        {fail, _},
        quod_prolog:prove_ro(Ns, {note, must_not_appear}, Ns)),
     ?assert(maps:get(committed, quod_simplex:stats(Ns)) >= 3).
+
+prepared_input_is_single_use(#{dir := Dir}) ->
+    Ns = unique_ns(<<"prepared-once">>),
+    Source = filename:join(Dir, "prepared-once.pl"),
+    ok = file:write_file(Source, <<"prepared_value(original).">>),
+    Action = {create_ontology, Ns, [{source_file, Source}]},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    %% Execution must use the captured diff, not reopen mutable caller input.
+    ok = file:write_file(Source, <<"prepared_value(changed).">>),
+    {ok, created, Ns, _GenesisHash} =
+        quod_ontology:execute_prepared(Prepared),
+    ok = wait_ready(Ns, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(Ns, {prepared_value, original}, Ns)),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(Ns, {prepared_value, changed}, Ns)).
 
 validation_precedes_mutation(#{dir := Dir}) ->
     Desired0 = application:get_env(quod, namespace_desired, #{}),
@@ -282,10 +314,8 @@ validation_precedes_mutation(#{dir := Dir}) ->
        {error, invalid_initial_terms},
        quod_ontology:create(
          StaticCollisionNs,
-         [{terms,
-           [{':-',
-             {ontology_join_state, {'Name'}, {'State'}},
-             true}]}])),
+         [{source,
+           <<"ontology_join_state(Name, State) :- true.">>}])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, StaticCollisionNs))),
     ImproperOptionsNs = unique_ns(<<"improper-options">>),
@@ -295,6 +325,15 @@ validation_precedes_mutation(#{dir := Dir}) ->
          ImproperOptionsNs, [{terms, []} | improper_tail])),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ImproperOptionsNs))),
+    OversizedNs = unique_ns(<<"oversized-initial-content">>),
+    OversizedPayload =
+        binary:copy(<<"x">>, ?MAX_GENESIS_INITIAL_DIFF_BYTES),
+    ?assertEqual(
+       {error, initial_content_too_large},
+       quod_ontology:create(
+         OversizedNs, [{terms, [{oversized, OversizedPayload}]}])),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, OversizedNs))),
     ?assertEqual(
        Desired0,
        application:get_env(quod, namespace_desired, #{})),
@@ -375,12 +414,15 @@ action_boundary_and_reasons(#{dir := Dir}) ->
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:prove_ro(Ns, {action_rule, works}, Ns)),
+    ForbiddenNs = unique_ns(<<"forbidden">>),
     ?assertMatch(
-       {error, {erlog, {context_violation, _, effect, proof}}},
+       {fail, _},
        quod_prolog:prove(
          ?ROOT_NS,
-         goal({create_ontology, unique_ns(<<"forbidden">>), []}),
+         goal({create_ontology, ForbiddenNs, []}),
          ?ROOT_NS)),
+    ?assertNot(filelib:is_dir(
+                 quod_ledger_store:ns_dir(Dir, ForbiddenNs))),
     ?assertEqual(
        {error, invalid_action},
        quod_prolog:run_action(
@@ -403,9 +445,7 @@ action_boundary_and_reasons(#{dir := Dir}) ->
     ?assertEqual(
        DesiredBeforeInvalidName,
        application:get_env(quod, namespace_desired, #{})),
-    %% The old direct functor has no compiled or action compatibility path.
-    %% goal/1 still treats any unknown ground term as an ordinary fact action;
-    %% proving that path may stage the term, but cannot invoke lifecycle IO.
+    %% The old direct functor has no compiled, action, or generic-fact path.
     RemovedNs = unique_ns(<<"removed-action">>),
     RemovedAction = {create_ontology_effect, RemovedNs, []},
     ?assertEqual(
@@ -417,14 +457,13 @@ action_boundary_and_reasons(#{dir := Dir}) ->
     DesiredBeforeRemovedGoal =
         application:get_env(quod, namespace_desired, #{}),
     ?assertMatch(
-       {ok, [#{}], _},
+       {fail, _},
        quod_prolog:prove(?ROOT_NS, goal(RemovedAction), ?ROOT_NS)),
     ?assertEqual(
        DesiredBeforeRemovedGoal,
        application:get_env(quod, namespace_desired, #{})),
     ?assertNot(
        filelib:is_dir(quod_ledger_store:ns_dir(Dir, RemovedNs))),
-    commit_root({retract, RemovedAction}),
     RootOnlyTarget = Ns,
     {fail, RootOnlyReasons} =
         quod_prolog:run_action(
@@ -523,14 +562,37 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
          {authorized_ontology_lifecycle, DirectAction},
          ?ROOT_NS)),
 
+    AlreadyNs = unique_ns(<<"already-authorized">>),
+    AlreadyAction = {create_ontology, AlreadyNs, []},
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action(?ROOT_NS, AlreadyAction)),
+    ok = wait_ready(AlreadyNs, 200),
+    %% The exact desired state makes a repeated valid request idempotent.
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action(?ROOT_NS, AlreadyAction)),
+    %% Full input validation still precedes the target check.
+    {fail, AlreadyInvalidReasons} =
+        quod_prolog:run_action(
+          ?ROOT_NS,
+          {create_ontology, AlreadyNs,
+           [{source, "valid.\nbroken("}]}),
+    ?assert(lists:member(
+              {ontology_creation_failed, {invalid_source, 1, 2}},
+              AlreadyInvalidReasons)),
+
     %% Even if committed root content accidentally omits the visible
     %% authorization prerequisite, the typed executor performs the same check
     %% again immediately before IO.
     NoGateNs = unique_ns(<<"missing-visible-gate">>),
     NoGateAction =
         {action, {create_ontology, NoGateNs, []},
-         [{ontology_join_state, NoGateNs, not_hosted}], true},
+         [{ontology_join_state, NoGateNs, not_hosted}],
+         {ontology_hosted, NoGateNs}},
     CreatePolicy = root_create_policy(),
+    DeniedSourceNs = unique_ns(<<"denied-source">>),
+    MissingSource = filename:join(Dir, "must-not-be-read.pl"),
     commit_root(
       {',', {retract, CreatePolicy}, {asserta, NoGateAction}}),
     try
@@ -541,7 +603,21 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                   {ontology_creation_failed, not_authorized},
                   NoGateReasons)),
         ?assertNot(filelib:is_dir(
-                     quod_ledger_store:ns_dir(Dir, NoGateNs)))
+                     quod_ledger_store:ns_dir(Dir, NoGateNs))),
+        %% Authorization is required even when the target is already true.
+        ?assertEqual(
+           {fail, [{ontology_creation_failed, not_authorized}]},
+           quod_prolog:run_action(?ROOT_NS, AlreadyAction)),
+        %% A denied request cannot disclose whether an attacker-selected path
+        %% exists or parses: the path is never opened before authorization.
+        ?assertEqual(
+           {fail, [{ontology_creation_failed, not_authorized}]},
+           quod_prolog:run_action(
+             ?ROOT_NS,
+             {create_ontology, DeniedSourceNs,
+              [{source_file, MissingSource}]})),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, DeniedSourceNs)))
     after
         commit_root({assertz, CreatePolicy})
     end,
@@ -582,13 +658,13 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     PhaseMarker = {phase_write_marker, PhaseWriteNs},
     PhaseWriteAction =
         {action, {create_ontology, PhaseWriteNs, []},
-         [{assertz, PhaseMarker}], true},
+         [{assertz, PhaseMarker}], {ontology_hosted, PhaseWriteNs}},
     CreateDeclaration = root_creation_action(),
     commit_root(
       {',', {retract, CreateDeclaration}, {asserta, PhaseWriteAction}}),
     try
         ?assertEqual(
-           {error, effect_staged_write},
+           {error, lifecycle_staged_write},
            quod_prolog:run_action(
              ?ROOT_NS, {create_ontology, PhaseWriteNs, []})),
         ?assertMatch(
@@ -602,8 +678,8 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
            {assertz, CreateDeclaration}})
     end,
 
-    %% A root founded without the matching literal-true declaration fails with
-    %% a stable public reason, not an internal preparer frame.
+    %% A root without the matching transition declaration fails with a stable
+    %% public reason, not an internal preparer frame.
     MissingActionNs = unique_ns(<<"missing-action">>),
     commit_root({retract, CreateDeclaration}),
     try
@@ -615,6 +691,48 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                      quod_ledger_store:ns_dir(Dir, MissingActionNs)))
     after
         commit_root({assertz, CreateDeclaration})
+    end,
+
+    %% A literal-true desired state is malformed. Even when such a clause is
+    %% ordered before the valid generic declaration for the same transition,
+    %% selection skips it and executes the valid lifecycle action.
+    MixedNs = unique_ns(<<"mixed-true-state">>),
+    MixedAction = {create_ontology, MixedNs, []},
+    InvalidTrueDeclaration = {action, MixedAction, [], true},
+    commit_root({asserta, InvalidTrueDeclaration}),
+    try
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:run_action(?ROOT_NS, MixedAction)),
+        ok = wait_ready(MixedNs, 200),
+        ?assertEqual({ok, ready}, quod_ontology:local_state(MixedNs))
+    after
+        commit_root({retract, InvalidTrueDeclaration})
+    end,
+
+    %% A typed start followed by a false selected postcondition is ambiguous:
+    %% hosting changed, so the runner reports outcome_unknown rather than a
+    %% definite logical failure or trying another transition.
+    BadPostNs = unique_ns(<<"bad-postcondition">>),
+    BadPostAction = {create_ontology, BadPostNs, []},
+    FalsePostDeclaration =
+        {action, BadPostAction,
+         [{authorized_ontology_lifecycle, BadPostAction},
+          {ontology_join_state, BadPostNs, not_hosted}],
+         {never_reached, BadPostNs}},
+    commit_root(
+      {',', {retract, CreateDeclaration},
+       {asserta, FalsePostDeclaration}}),
+    try
+        ?assertEqual(
+           {error, outcome_unknown},
+           quod_prolog:run_action(?ROOT_NS, BadPostAction)),
+        ok = wait_ready(BadPostNs, 200),
+        ?assertEqual({ok, ready}, quod_ontology:local_state(BadPostNs))
+    after
+        commit_root(
+          {',', {retract, FalsePostDeclaration},
+           {assertz, CreateDeclaration}})
     end.
 
 action_timeout_is_outcome_unknown(#{manager := Manager}) ->
@@ -774,7 +892,8 @@ reconcile_republishes_running_content(#{manager := Manager}) ->
 root_creation_action() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     [Declaration] =
-        [Term || {action, {create_ontology, _, _}, _, true} = Term <-
+        [Term || {action, {create_ontology, _, _}, _,
+                  {ontology_hosted, _}} = Term <-
                      quod_prolog:read_terms(File)],
     Declaration.
 

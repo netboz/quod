@@ -47,7 +47,8 @@ create_root_test_() ->
      [fun t_create_root/1,
       fun t_create_root_restart/1,
       fun t_genesis_failure/1,
-      fun t_genesis_sources_are_exclusive/1]}.
+      fun t_genesis_sources_are_exclusive/1,
+      fun t_invalid_precompiled_genesis_is_preflighted/1]}.
 
 %% genesis_diff compiles the real quod_root.pl into write-set ops (compiled clause
 %% bodies, the on-disk form). Every op is an assert; the acl_sovereign head is present.
@@ -132,10 +133,23 @@ t_genesis_failure({_Dir, Ns, Content}) ->
 t_genesis_sources_are_exclusive({Dir, Ns, Content}) ->
     fun() ->
         {Ns, NsCfg0} = quod_app:build_ns_config(Content),
-        NsCfg = NsCfg0#{genesis_terms => [{should_not_land, true}]},
+        InitialDiff = quod_prolog:terms_to_diff([{should_not_land, true}]),
+        NsCfg = NsCfg0#{genesis_diff => InitialDiff},
         ?assertMatch({error, _}, start_link_isolated(Ns, NsCfg)),
         ?assertNot(
            filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
+    end.
+
+t_invalid_precompiled_genesis_is_preflighted({Dir, Ns, Content}) ->
+    fun() ->
+        {Ns, FileCfg} = quod_app:build_ns_config(Content),
+        DiffCfg =
+            (maps:remove(genesis_file, FileCfg))#{
+              genesis_diff => [{not_an_op, invalid}]},
+        ?assertMatch({error, _}, start_link_isolated(Ns, DiffCfg)),
+        %% Config validation runs before quod_ledger_store:open/2, so even the
+        %% namespace directory is never created for an invalid prepared diff.
+        ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns)))
     end.
 
 start_link_isolated(Ns, NsCfg) ->

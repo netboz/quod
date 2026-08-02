@@ -165,6 +165,39 @@ committed_state_drops_staged_data_and_resets_proof_frame_test() ->
     ?assertMatch({fail, _}, erlog_int:prove_goal(fail, Committed)).
 
 %%%===================================================================
+%%% O(1) write savepoints
+%%%===================================================================
+
+checkpoint_restores_all_write_kinds_but_not_reads_test() ->
+    C = committed([{parent, tom, bob}, {obsolete, value}]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    {succeed, W1} = erlog_int:prove_goal({assertz, {kept, baseline}}, W0),
+    Savepoint = quod_erlog_db_local_prove:checkpoint(W1),
+    Goal = {',', {asserta, {temporary, first}},
+            {',', {assertz, {temporary, last}},
+             {',', {retract, {parent, tom, bob}},
+                    {abolish, {'/', obsolete, 1}}}}},
+    {succeed, W2} = erlog_int:prove_goal(Goal, W1),
+    ?assert(length(quod_erlog_db_local_prove:get_local_changes(db_ref(W2))) > 1),
+    W3 = quod_erlog_db_local_prove:restore(W2, Savepoint),
+    ?assertMatch([{assert, {{kept, baseline}, _}}],
+                 quod_erlog_db_local_prove:get_local_changes(db_ref(W3))),
+    %% Reads made after the savepoint remain OCC dependencies even though the
+    %% corresponding staged writes have been discarded.
+    ?assertEqual([{no_follow, 1}, {obsolete, 1}, {parent, 2}],
+                 maps:keys(quod_erlog_db_local_prove:get_read_set(db_ref(W3)))),
+    quod_erlog_db_local_prove:cleanup_read_set(W3).
+
+checkpoint_is_bound_to_one_overlay_test() ->
+    C = committed([]),
+    %% No read-set table is needed for identity: distinct wrapped proof scopes
+    %% still reject each other's savepoints.
+    W1 = quod_erlog_db_local_prove:wrap_state(C),
+    W2 = quod_erlog_db_local_prove:wrap_state(C),
+    Savepoint = quod_erlog_db_local_prove:checkpoint(W1),
+    ?assertError(badarg, quod_erlog_db_local_prove:restore(W2, Savepoint)).
+
+%%%===================================================================
 %%% strict read-only policy overlays
 %%%===================================================================
 
@@ -214,6 +247,41 @@ read_only_does_not_control_follower_policy_test() ->
     ?assertEqual(
        undefined,
        quod_erlog_db_local_prove:get_procedure(db_ref(VerdictW), {foreign, 1})).
+
+read_only_frame_uses_same_staged_view_and_restores_writes_test() ->
+    C = committed([]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    {succeed, W1} = erlog_int:prove_goal({assertz, {staged, value}}, W0),
+    {Frame, ReadOnly} = quod_erlog_db_local_prove:enter_read_only(W1),
+    ?assertMatch({succeed, _}, erlog_int:prove_goal({staged, value}, ReadOnly)),
+    ?assertMatch(
+       {erlog_error,
+        {permission_error, modify, static_procedure, {'/', blocked, 1}}},
+       catch erlog_int:prove_goal({assertz, {blocked, value}}, ReadOnly)),
+    Writable = quod_erlog_db_local_prove:leave_read_only(ReadOnly, Frame),
+    {succeed, W2} = erlog_int:prove_goal({assertz, {allowed, value}}, Writable),
+    Changes = quod_erlog_db_local_prove:get_local_changes(db_ref(W2)),
+    ?assertEqual(2, length(Changes)),
+    ?assert(lists:any(fun({assert, {{staged, value}, _}}) -> true;
+                         (_) -> false
+                      end, Changes)),
+    ?assert(lists:any(fun({assert, {{allowed, value}, _}}) -> true;
+                         (_) -> false
+                      end, Changes)),
+    quod_erlog_db_local_prove:cleanup_read_set(W2).
+
+read_only_frames_are_nestable_test() ->
+    C = committed([]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C),
+    {Outer, W1} = quod_erlog_db_local_prove:enter_read_only(W0),
+    {Inner, W2} = quod_erlog_db_local_prove:enter_read_only(W1),
+    W3 = quod_erlog_db_local_prove:leave_read_only(W2, Inner),
+    ?assertMatch(
+       {erlog_error, {permission_error, modify, static_procedure, _}},
+       catch erlog_int:prove_goal({assertz, {still, blocked}}, W3)),
+    W4 = quod_erlog_db_local_prove:leave_read_only(W3, Outer),
+    ?assertMatch({succeed, _},
+                 erlog_int:prove_goal({assertz, {now, writable}}, W4)).
 
 assert_read_only_rejects(C, Goal) ->
     W = quod_erlog_db_local_prove:wrap_state(C, #{read_only => true}),

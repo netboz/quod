@@ -70,9 +70,11 @@ not mistaken for variables of the action request.
 3. Reject caller definitions of `consensus_incarnation/1` and
    `peer_admitted/4` across the combined terms.
 4. Pre-compile the combined terms with `quod_prolog:terms_to_diff/1`.
-5. Pass those same terms as `genesis_terms` through the existing
+5. Bound the deterministic prepared diff at the shared 192 KiB initial-content
+   ceiling, then pass that exact diff as `genesis_diff` through the existing
    `build_ns_config/1`, `start_new_content/2`, and
-   `quod_simplex:genesis_tx/4` path.
+   `quod_simplex:genesis_tx/4` path. Namespace start does not reread or
+   recompile it.
 6. Return the existing `{ok, created | resumed, Namespace, GenesisHash}` shape.
 
 Every option is loaded, parsed, validated, and pre-compiled before
@@ -160,6 +162,7 @@ Its lifecycle-specific input failures use bounded, portable reasons:
 ```prolog
 ontology_creation_failed(invalid_options)
 ontology_creation_failed(invalid_initial_terms)
+ontology_creation_failed(initial_content_too_large)
 ontology_creation_failed(invalid_source(OptionIndex, Line))
 ontology_creation_failed(source_file_error(OptionIndex))
 ```
@@ -210,16 +213,16 @@ authorization boundary.
    option being discarded.
 8. Existing collision, failed-admission, resume, root-only action, authorization, and staged-write
    tests remain green under the new option shape.
+9. A prepared diff at the shared initial-content boundary succeeds; one byte
+   beyond the boundary fails before manager, filesystem, or ledger mutation.
 
 Run focused Erlog and Quod tests first, then compile, xref, Dialyzer, full
 EUnit, and full CT.
 
-The Erlog parser change is developed on a new feature branch from its public
-`quod` branch, reviewed and committed there, then merged into and pushed on the
-Erlog `quod` branch. Quod updates both its dependency reference and lock entry
-to that public commit, so a clean Docker build proves the pin is reproducible.
-Quod then uses its two normal commits (feature, then patch release bump). Do
-not commit or push either repository before review.
+The Erlog parser/EOF correction followed that workflow and is already reviewed,
+merged into the public `quod` branch, and pinned by released Quod at
+`2d7356c`. The separate transaction-checkpoint work now in the working trees
+must likewise be reviewed before either repository is committed or pushed.
 
 ## Non-goals
 
@@ -228,9 +231,8 @@ not commit or push either repository before review.
   payment, quota, atom-accounting, deletion, or remote-hosting design.
 - No file watching, include directive, module system, or automatic source
   reload.
-- No new source-size or atom quota in this slice. As with boot's existing
-  `genesis_file`, the root operator is trusted not to construct an impractically
-  large slot-1 block; resource accounting remains a separate design.
-- No change to consensus ordering, genesis composition, or the namespace
-  manager beyond passing the combined validated terms through the existing
-  path.
+- No raw-source or atom quota in this slice. The compiled initial diff is capped
+  at 192 KiB and the complete slot-1 block remains capped at 256 KiB.
+- No change to consensus ordering or namespace-manager semantics. Genesis now
+  accepts one mutually exclusive prepared `genesis_diff` input so compilation
+  is not repeated.

@@ -1,7 +1,9 @@
 # Ontology lifecycle authorization
 
-**Status:** implemented in the working tree; validation and review are in
-progress. Nothing is committed or deployed.
+**Status:** the node-local authorization foundation is committed and deployed
+in 0.7.57. The target-driven action correction, prepared-genesis seam, and
+transaction checkpoint support exist only in the uncommitted working trees and
+await review.
 
 ## 1. Goal
 
@@ -61,7 +63,7 @@ is what closes user-command and validator-side write authorization.
 
 `quod_prolog:run_action/2` replaces the generic public effect entry. It accepts
 one high-level action term,
-invokes an internal forward-only action preparer, and derives the principal
+invokes the exact target-state lifecycle preparer, and derives the principal
 from its own `#s.self`:
 
 ```prolog
@@ -112,16 +114,24 @@ that reason.
 The root actions become:
 
 ```prolog
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
+ontology_joined(Name, GenesisHash) :-
+    ontology_hosted(Name),
+    ontology_genesis_anchor(Name, GenesisHash).
+
 action(create_ontology(Name, Options),
        [authorized_ontology_lifecycle(create_ontology(Name, Options)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_hosted(Name)).
 
 action(join_ontology(Name, GenesisHash, Seeds),
        [authorized_ontology_lifecycle(
             join_ontology(Name, GenesisHash, Seeds)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_joined(Name, GenesisHash)).
 ```
 
 `authorized_ontology_lifecycle/1` is a thin governed Erlang predicate. It reads
@@ -168,79 +178,48 @@ root policy that deliberately uses a query bridge also deliberately accepts
 that local, time-varying input. A policy error, mutation attempt, missing
 clause, or forbidden context transition denies authorization.
 
-### 3.3 Dedicated two-phase action runner
+### 3.3 Dedicated prepared action runner
 
-The removed generic effect path could detect a staged Prolog write only after a
-compiled effect predicate had already performed IO. The implementation does
-not patch individual adapters or store a pending descriptor in `#lp`: Erlog
-choice points
-restore bindings but deliberately do not restore database/overlay mutations,
-so a descriptor from a failed branch could survive backtracking.
+Lifecycle IO cannot run speculatively inside ordinary `goal/1`, so the public
+target-driven action model uses one narrow typed runner for create and join.
+It introduces no generic dispatcher or compatibility path.
 
-The dedicated lifecycle action pipeline is:
+The pipeline is:
 
-1. `run_action(TargetNs, Action)` accepts only the high-level action term;
-   callers cannot supply a conjunction or a low-level effect functor;
-2. the bounded worker proves the root action and its authorization/state
-   prerequisites. No predicate performs lifecycle IO during this phase;
-3. a failed proof or non-empty diff returns an error and executes nothing. If
-   the committed root has no matching `action(Action, _, true)`, the runner
-   emits the explicit bounded reason `ontology_creation_failed(action_not_declared)`
-   or `ontology_join_failed(action_not_declared)` according to the already
-   validated action shape. This fallback applies only when no matching
-   declaration exists; a declared action whose prerequisite fails retains that
-   prerequisite's normal failure stack;
-4. after logical success, a small typed executor matches the **original**
-   top-level action as `create_ontology/2` or `join_ontology/3`, reuses the same
-   committed-snapshot authorization helper, and only then calls
-   `quod_ontology:create/2` or `quod_ontology:join/3`;
-5. an unknown action shape is rejected, never dispatched through a dynamic
-   module/function pair;
-6. definite lifecycle/domain failures are mapped to the existing bounded
-   reasons; ambiguous manager or action-worker completion remains the explicit
-   `{error, outcome_unknown}` result.
+1. `run_action(TargetNs, Action)` accepts only a ground root
+   `create_ontology/2` or `join_ontology/3` term and performs structural
+   validation without reading a source path;
+2. the bounded worker verifies that the captured root declares that exact
+   transition with a valid, non-`true` desired state;
+3. the engine-owned principal is authorized before any caller-selected source
+   is read, so an undeclared or unauthorized request cannot expose file parse
+   results or timing;
+4. `quod_ontology:prepare_action/1` reads and compiles creation input exactly
+   once, or normalizes join input, into one opaque descriptor without manager
+   or ledger mutation. Full input validation deliberately precedes the desired
+   state check, so invalid input cannot become idempotent success;
+5. `prepare_lifecycle_action/3` selects that exact declaration read-only. It
+   returns `already` when its desired state is true, otherwise checks the same
+   declaration's ordered prerequisites and returns `execute`;
+6. the runner re-authorizes the private principal for either result. `already`
+   returns without lifecycle IO; `execute` calls only
+   `quod_ontology:execute_prepared/1` once and then verifies the selected
+   desired state read-only;
+7. a failed or missing declaration retains its bounded Prolog reasons, any
+   attempted preparation write returns `lifecycle_staged_write`, and a worker
+   loss or failed postcondition after accepted IO is `outcome_unknown`.
 
-Because phase-2 failures occur after the Prolog proof has succeeded, the runner
-constructs the documented public reason explicitly; it does not pretend that
-the old inline predicate's incidental internal failure frames still exist.
+The visible `authorized_ontology_lifecycle/1` prerequisite and the direct
+checks all use the same factored authorization helper. The direct preflight
+prevents source reads when a declaration accidentally omits its visible gate;
+the final check brackets potentially time-varying query-class policy before IO.
+All policy proofs are strict read-only views. Execution remains in the existing
+bounded proof worker, so the namespace engine itself never blocks.
 
-The original action is already engine request data; it is not Prolog mutable
-state and is unaffected by backtracking. The first slice needs only the two
-existing action shapes. It does not introduce a general plugin, callback, or
-descriptor framework.
-
-The logical entry is a small internal common predicate which resolves only a
-declared `action(Action, Prerequisites, true)` and proves its prerequisites.
-Requiring the literal `true` pins lifecycle actions as node-local operations
-with no ignored Prolog effect. It deliberately does not use `goal/1`'s
-direct-call or reverse-lookup fallbacks; the post-proof typed executor owns the
-external effect. Its forward prerequisite-resolution body is factored with
-`goal/1`, so the two paths do not drift.
-
-Execution remains in the already bounded proof worker, so the namespace engine
-does not block on filesystem or supervisor work.
-
-One authorization helper is used in two places:
-
-1. `authorized_ontology_lifecycle/1`, so the action expresses policy visibly in
-   its ordered prerequisites;
-2. the typed executor, immediately before lifecycle IO.
-
-The second check is required. A committed root action accidentally missing its
-visible prerequisite must not turn into an IO authorization bypass.
-
-Both checks use the committed snapshot, not facts staged in the effect overlay.
-The two-phase runner independently guarantees that any staged write prevents
-execution.
-
-The policy check is read-only. A policy that attempts a staged write or another
-effect fails before lifecycle IO. The one helper is shared rather than
-duplicating create and join policy engines.
-
-The obsolete inline-IO creation/join predicate registrations and handlers are
-removed, with no alternate paths retained. One typed execution helper in
-`quod_ontology_predicates` calls `quod_ontology:create/2` or `join/3` and owns
-the shared result-to-failure-reason mapping.
+The obsolete inline-IO creation/join registrations and handlers are removed.
+`quod_ontology_predicates` only maps prepared-helper results to bounded public
+reasons; it never rereads source input or dynamically dispatches a module and
+function.
 
 The low-level ontology APIs remain trusted same-VM APIs. Their documentation
 states that they do not authenticate a remote caller and must not be exposed
@@ -252,7 +231,7 @@ operator boundary; Quod cannot distinguish multiple same-VM callers.
 The first-slice authorization policy is evaluated at the committed root height
 captured when the action worker starts because it uses only
 `peer_admitted/4`. If removal commits just afterward, that already-running
-effect may finish. This is the same frozen-view rule as an ordinary proof and
+lifecycle operation may finish. This is the same frozen-view rule as an ordinary proof and
 avoids a second, racy live-state mechanism. A later policy that opts into one
 of the permitted local query bridges also opts into that bridge's live-local
 observation semantics.
@@ -350,22 +329,22 @@ calls. It must not be approximated by accepting a caller-provided tuple now.
 - `src/quod_prolog.erl`
   - the high-level `run_action/2` pipeline is the sole lifecycle entry;
   - it derives the node principal only for that action run;
-  - after proof success, it rejects staged writes before dispatching the
-    original
-    action through the typed lifecycle executor;
+  - it carries one opaque prepared descriptor through declaration, policy,
+    mode selection, typed execution, and postcondition verification;
 - `src/quod_predicates.erl`
   - registers the governed authorization predicate;
   - contains no inline-IO lifecycle predicate registrations;
 - `priv/ontologies/common_predicates.pl`
-  - factors forward action preparation and adds the internal no-fallback,
-    no-assert entry used only by `run_action/2`;
+  - implements the shared target-driven action relation and the exact,
+    read-only lifecycle selection entry used only by `run_action/2`;
 - `src/predicates/quod_ontology_predicates.erl`
   - contains one factored, isolated committed-snapshot policy check used by
-    both the visible prerequisite and the post-proof executor;
+    the visible prerequisite and direct lifecycle gates;
   - contains no obsolete inline-IO predicate handlers;
 - `src/quod_ontology.erl`
-  - retains the two trusted low-level APIs; typed dispatch and result
-    normalization stay at the governed lifecycle boundary;
+  - retains the two trusted low-level APIs and factors structural validation,
+    one-time preparation, and prepared execution without duplicating create and
+    join paths;
 - `src/quod_namespace_manager.erl`
   - owns start, genesis-anchor validation, desired-state admission, and
     explorer data-directory publication in that order;
@@ -390,15 +369,15 @@ No unrelated identity framework is added in this slice.
    or seed-state mutation.
 3. The removed low-level effect functors have no compiled compatibility path;
    supplying one as the action or through ordinary `goal/1` performs no IO.
-4. The action runner never reaches `goal/1`'s direct-call or reverse-action
-   fallbacks, rejects a declaration whose effect is not literal `true`, and
-   executes nothing when a declared prerequisite fails.
+4. The action runner never reaches an ordinary `goal/1` transition, rejects a
+   malformed declaration or literal-`true` desired state, and executes nothing
+   when a declared prerequisite fails.
 5. A committed root action with its visible authorization prerequisite removed
    still cannot bypass the executor's mandatory authorization check.
 6. A fake self `peer_admitted/4` staged in any logical branch cannot authorize
    the action, even if the goal later retracts it so the final diff is empty.
-7. Any staged write in an otherwise successful action proof causes
-   `effect_staged_write` and no lifecycle IO. Inside the authorization
+7. Any staged write in lifecycle preparation causes
+   `lifecycle_staged_write` and no lifecycle IO. Inside the authorization
    sub-proof, even an assert followed by its matching retract is rejected by
    the read-only overlay and performs no lifecycle IO.
 8. A failing/backtracked logical branch causes no IO; execution depends only on
@@ -406,13 +385,13 @@ No unrelated identity framework is added in this slice.
 9. The principal is absent from `current_prolog_flag/2` enumeration and cannot
    be created, replaced, or cleared by ontology content.
 10. An ordinary proof remains anonymous and cannot execute a lifecycle action.
-11. Authorization runs before `ontology_join_state/2` and before any filesystem
-   or manager lookup that would expose or mutate lifecycle state.
+11. Authorization runs before caller-selected source reads and before any
+    manager mutation; the final desired-state query remains read-only.
 12. Removal visible in a later committed root snapshot denies the next request.
 13. A fully ground action is required before the worker starts; an unbound
     name, option, hash, or seed returns the exact operation-specific
     `invalid_arguments` reason and executes nothing.
-14. A root snapshot with no matching literal-`true` lifecycle declaration
+14. A root snapshot with no matching valid target-state lifecycle declaration
     returns the exact operation-specific `action_not_declared` reason.
 15. A worker killed while a deliberately slowed namespace-manager call is in
     progress reports outcome unknown; polling state distinguishes

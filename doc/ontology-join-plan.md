@@ -17,13 +17,14 @@ quod_prolog:run_action(
 The operation is deliberately small: one Erlang API builds the same `mode =
 join` configuration used at boot, and the dedicated lifecycle runner calls
 that API after proving an explicit root-ontology
-`action(Action, Prerequisites, true)` clause. It does not create a second join
-implementation.
+`action(Transition, Prerequisites, DesiredState)` clause. It does not create a
+second join implementation.
 
-Joining is asynchronous. Success of `quod_prolog:run_action/2` means that the
-local, pinned join was accepted and its supervised catch-up process was
-started; it does **not** claim that catch-up has finished. A separate read-only
-predicate reports the local progress:
+Joining is asynchronous. Success of `quod_prolog:run_action/2` means either
+that the exact pinned target already held, or that the local join was accepted
+and its supervised catch-up process was started. It does **not** claim that a
+new catch-up has finished. A separate read-only predicate reports the local
+progress:
 
 ```prolog
 ontology_join_state(user_alice:notes, State).
@@ -162,82 +163,65 @@ consensus-code change, not an ontology transaction or a compatibility layer.
 
 ## Shared `goal/1` action pattern
 
-The common file carries the BBSVX/Onia action core, with one explicit Quod
-safety rule described below. Its basic forward path remains:
+`doc/distributed-proof-plan.md` sections 2.3 and 3 are normative. The common
+file exposes the same target-driven relation in every ontology:
 
 ```prolog
-goal(Goal) :- goal(Goal, []).
-
-goal(Goal, Visited) :- member_eq(Goal, Visited), !, fail.
-
-goal(Goal, Visited) :-
-    action(Goal, Prerequisites, Effect),
-    satisfy_prereq(Prerequisites, [Goal | Visited]),
-    assert_effect(Effect).
+action(Transition, Prerequisites, DesiredState).
+goal(DesiredState).
 ```
 
-The file carries the complete common mechanism, not a look-alike special case:
+`goal/1` checks the desired state read-only first. If it already holds, no
+transition runs. Otherwise it validates and tries each declaration reaching
+that state in Prolog order. A transition is one callable goal or a non-empty
+proper list of callable goals; prerequisites form a proper list. Ordinary
+prerequisites are read-only state checks, while explicit `goal(State)` and
+`Ns::goal(State)` prerequisites may establish another state recursively.
 
-1. cycle detection by term identity (`==`);
-2. forward lookup by action name;
-3. reverse lookup from a desired effect, trying specific actions first;
-4. catch-all `assert_fact/1` / `remove_fact/1` actions last;
-5. direct `call/1` fallback;
-6. ordered prerequisite evaluation through `call/1`;
-7. `true`, `retract(Term)`, and ordinary assertion effect handling.
+Each candidate's prerequisites, transition, and exact postcondition run inside
+`transaction/1`. That predicate is semidet: it adopts only the first complete
+inner solution and exposes no inner redo. A failed candidate restores every
+assertion, retraction, and abolish it staged before another declaration is
+tried; failure reasons remain available. Term-identity cycle detection prevents
+recursive state loops.
 
-Quod does not import the two unsafe fall-through cases verbatim. Both reverse
-lookup clauses first require:
-
-```prolog
-reverse_goal_allowed(Goal) :-
-    Goal \= true,
-    \+ action(Goal, _, _).
-```
-
-This gives two precise semantics:
-
-- `goal(true)` is handled only by the final direct `call/1` fallback. It never
-  reverse-selects every lifecycle action whose intentionally empty effect is
-  `true`.
-- a term declared as an action name is forward-only. If its prerequisites
-  fail, reverse lookup cannot reinterpret that same term as a
-  fact for the `assert_fact/1` catch-all. The original failure reasons survive
-  and no caller receives a junk staged write.
-
-Reverse lookup by a genuine desired effect is unchanged: for example an
-`instance_of/2` effect can still locate a specific `create_instance/2` action,
-and an undeclared ordinary fact can still reach the catch-all. This is a
-general action/fact separation rule, not a lifecycle-name exception.
+The old effect-oriented forward lookup, reverse-effect lookup,
+`assert_effect/1`, generic `assert_fact/1` / `remove_fact/1` actions, and direct
+fallback are removed rather than retained as compatibility paths. Ontologies
+use explicit named transitions; the desired state is proved, never inferred or
+automatically asserted by the framework.
 
 Only that framework core is brought across. Domain class, subscription,
 network-node and client-effect rules in BBSVX's larger common file do not belong
 in Quod's common baseline.
 
-This replaces the former `doc/agent-fipa-plan.md` design that rejected the
-BBSVX/Onia `goal/1` pattern and used a subject/result-shaped `action/3`.
-Keep that document's action section and later FIPA request mapping aligned with
-this one action definition. Also keep `doc/ontology-creation-plan.md` and
-`doc/ontology-creation-input-plan.md` aligned with the shared
-`quod_prolog:run_action/2` entry. The node-local slice carries its engine-owned
-principal in the private overlay; the later authenticated `subject/3` design
-can use the same policy and action shapes.
+The node-local slice carries its engine-owned principal in the private overlay;
+the later authenticated `subject/3` design can use the same policy and action
+shape.
 
 ## Root lifecycle actions
 
 Root contains these ordinary action and policy clauses:
 
 ```prolog
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
+ontology_joined(Name, GenesisHash) :-
+    ontology_hosted(Name),
+    ontology_genesis_anchor(Name, GenesisHash).
+
 action(create_ontology(Name, Options),
        [authorized_ontology_lifecycle(create_ontology(Name, Options)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_hosted(Name)).
 
 action(join_ontology(Name, GenesisHash, Seeds),
        [authorized_ontology_lifecycle(
             join_ontology(Name, GenesisHash, Seeds)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_joined(Name, GenesisHash)).
 
 can_create_ontology(node(NodeKey), _Name, _Options) :-
     peer_admitted(NodeKey, _, _, NodeKey).
@@ -253,20 +237,27 @@ overlay; neither the caller nor ontology code supplies it. The first-slice
 policy permits only a node whose key is currently self-admitted in the
 committed root snapshot.
 
-The bounded worker first verifies that the committed root declares the exact
-action with literal effect `true`, then proves its prerequisites left to right
-in a read-only overlay. Authorization therefore runs before the live state
-check, and no lifecycle IO occurs in this proof phase. The literal `true`
-remains important: starting a local supervised namespace is volatile node
-state, not a durable ontology fact. `ontology_join_state/2` reads the real
-local runtime instead of relying on a replicated `joining(...)` fact.
+The bounded worker structurally validates the ground request, verifies that the
+committed root declares that exact transition, and authorizes the private node
+principal before reading a caller-selected source path. It then prepares and
+normalizes the input exactly once. Invalid create input therefore cannot be
+hidden by an already-hosted target.
 
-After proof success, the executor re-runs the same authorization helper against
-the captured committed snapshot and only then calls the original typed
-`quod_ontology:create/2` or `quod_ontology:join/3` action. This second check
-prevents a committed action declaration that accidentally omitted its visible
-authorization prerequisite from becoming a bypass. The manager remains the
-authoritative atomic collision check, closing the state-check/start race.
+The common lifecycle preparer selects one exact declaration. It first checks
+the declaration's desired state; if that state already holds it reports
+`already` without proving a transition. Otherwise it proves the declaration's
+prerequisites left to right in a read-only overlay and reports `execute`.
+Authorization therefore always precedes source access and lifecycle IO, while
+ordinary prerequisite order remains explicit for an execution candidate.
+
+The executor re-runs the same authorization helper against the captured
+committed snapshot for both modes. `already` returns without lifecycle IO.
+`execute` passes the prepared descriptor to
+`quod_ontology:execute_prepared/1` exactly once, without rereading or
+recompiling caller input, then verifies the selected desired state. A failed
+postcondition after IO is `outcome_unknown`, because local state may already
+have changed. The manager remains the authoritative atomic collision check,
+closing the state-check/start race.
 
 `authorized_ontology_lifecycle/1` is the sole governed lifecycle authorization
 predicate and is effect-class, so it is available only inside the action
@@ -318,12 +309,13 @@ Invalid arguments to `ontology_join_state/2` similarly fail with a bounded
 `ontology_state_failed(invalid_arguments | root_only | invalid_name)` reason.
 `not_hosted` is a successful state answer, not an error.
 
-The state prerequisite is useful beyond join: it prevents both create and
-join from reaching the typed executor when this node already hosts or is
-starting the namespace. `start_new_content/2` remains the authoritative
-race-safe check inside Erlang; the Prolog prerequisite expresses policy and
-gives the caller the failed state goal, while the manager closes the
-check/start race.
+The desired-state check makes create idempotent for an already hosted namespace
+and makes an exact repeated join idempotent only when the live anchor matches.
+When the target is false, the `not_hosted` prerequisite prevents a conflicting
+create or wrong-anchor join from reaching the typed executor.
+`start_new_content/2` remains the authoritative race-safe check inside Erlang;
+the Prolog relation expresses policy while the manager closes the check/start
+race.
 
 These action clauses are part of `quod_root.pl`, whose content is committed only at
 root genesis. An existing root ledger does not re-read that file. Testing this
@@ -345,6 +337,11 @@ or full application restart, calling it with the same anchor resumes the local
 ledger. The existing join startup validation rejects a different anchor for an
 existing ledger; no migration or compatibility path is added.
 
+At the Prolog boundary, repeating the exact `join_ontology` action succeeds
+without calling `join/3` again because `ontology_joined(Name, GenesisHash)` is
+already true. Repeating it with a different anchor fails: the desired state is
+false and the namespace is not `not_hosted`.
+
 As with runtime creation, a full application restart forgets the dynamic
 hosting intention. Reissuing the join action resumes it. Durable manifests,
 automatic admission and restart orchestration are separate future work.
@@ -356,25 +353,29 @@ automatic admission and restart orchestration are separate future work.
    desired map and data-directory publication map remain byte-for-byte
    unchanged.
 2. A real Quod MVCC KB contains the common action core after static predicate
-   registration. It proves forward lookup, reverse-effect lookup,
-   specific-before-catch-all ordering, cycle rejection, direct fallback,
-   prerequisite order, and assert/retract/true effects. A common term that
-   collides with a compiled functor is rejected. Building a fresh KB does not
-   duplicate common clauses, and `terms_to_diff/1` never returns them in a
-   genesis diff.
+   registration. It proves target-first idempotence, declaration-order
+   alternatives sharing one desired state, single and ordered-list
+   transitions, prerequisite order, recursive `goal/1`, cycle rejection, and
+   rollback of assertions, retractions, and abolishes after transition or
+   postcondition failure. `transaction/1` keeps only its first complete inner
+   solution. A common term that collides with a compiled functor is rejected.
+   Building a fresh KB does not duplicate common clauses, and
+   `terms_to_diff/1` never returns them in a genesis diff.
 3. The action entry is root-only and requires a fully ground action. Wrong
    scope, non-ground arguments, authorization denial, missing declarations,
    and definite API failures produce the exact bounded reason; ambiguous
    completion remains `{error, outcome_unknown}`. Ordinary proofs and the
    removed inline-IO effect functors perform no lifecycle IO.
-4. The two root `action/3` clauses prove authorization before `not_hosted` in a
-   read-only phase. An already `starting`, `joining`, `ready`, or `stopping`
-   namespace never reaches the typed executor. A staged write or mutation
-   attempt fails before IO, and a declaration missing its visible authorization
-   check is still denied by the executor's mandatory second check. A race after
-   that proof is rejected by `start_new_content/2`. The ordinary `goal/1`
-   reverse lookup and undeclared-fact catch-all remain functional but are never
-   used by `run_action/2`.
+4. The two root `action/3` clauses use `ontology_hosted/1` and the
+   anchor-sensitive `ontology_joined/2` desired states. Declaration and
+   authorization checks precede source reads; valid input is prepared exactly
+   once. An authorized already-true target performs no lifecycle IO, an exact
+   repeated join succeeds, and a wrong-anchor repeat fails. For an execution
+   candidate, authorization precedes `not_hosted` in the read-only prerequisite
+   phase. A staged write or mutation attempt returns
+   `lifecycle_staged_write`, and a declaration missing its visible
+   authorization check is still denied by the executor's mandatory second
+   check. A race after that proof is rejected by `start_new_content/2`.
 5. A real founder commits a fact. A second node invokes
    `quod_prolog:run_action/2` with
    the founder's anchor and endpoint, observes

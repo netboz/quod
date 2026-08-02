@@ -16,9 +16,11 @@ order. One `gen_server` per namespace.
   replied to when the block applies (or reaped by a per-tx TTL if the verdict never
   arrives).
 - **Lifecycle actions** accept only ground root `create_ontology/2` and
-  `join_ontology/3` requests. A bounded worker proves authorization and local
-  prerequisites read-only, then re-authorizes and dispatches the original typed
-  request; Prolog backtracking never owns an external-operation descriptor.
+  `join_ontology/3` requests. A bounded worker validates the exact target-state
+  declaration, authorizes before source reads, carries one opaque prepared
+  descriptor through read-only mode selection, then re-authorizes, executes the
+  typed request once, and verifies its desired state. Prolog backtracking never
+  owns an external-operation descriptor.
 - **`apply_block/4`** is the deterministic state machine `quod_simplex` drives on every
   member: re-check the read-set against the committed kb (OCC), then apply the diff
   or reject — identical verdict on every member. A **committee-changing** transaction
@@ -157,21 +159,23 @@ prove_ro(TargetNs, Goal, CallerNs) ->
 Authorize and execute one node-local ontology lifecycle action.
 
 Only fully-ground `create_ontology/2` and `join_ontology/3` actions targeting
-`quod:root` are accepted. A bounded worker first proves the committed root
-action and its prerequisites without lifecycle IO, then re-authorizes the
-engine-owned node principal and dispatches the original typed action. A worker
-loss is outcome-unknown because the namespace manager may already have accepted
-the operation; inspect `ontology_join_state/2` before retrying.
+`quod:root` are accepted. A bounded worker validates the committed root
+transition, authorizes the engine-owned node principal before preparing input,
+selects the declaration's desired state or prerequisites read-only, and invokes
+only the prepared typed helper. A worker loss is outcome-unknown because the
+namespace manager may already have accepted the operation; inspect
+`ontology_join_state/2` before retrying.
 """.
 -spec run_action(binary(), term()) ->
         {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
 run_action(TargetNs, Action) ->
     case validate_action_request(TargetNs, Action) of
-        ok ->
+        {ok, Structural} ->
             case quod_reg:where({quod_prolog, TargetNs}) of
                 undefined -> {error, no_such_namespace};
                 Pid ->
-                    try gen_server:call(Pid, {run_action, Action}, infinity)
+                    try gen_server:call(
+                          Pid, {run_action, Action, Structural}, infinity)
                     catch exit:_ -> {error, outcome_unknown}
                     end
             end;
@@ -181,41 +185,22 @@ run_action(TargetNs, Action) ->
             {fail, [Reason]}
     end.
 
-validate_action_request(?ROOT_NS, Action) ->
-    case action_shape(Action) of
-        true ->
-            case quod_predicates:is_ground(Action) of
-                true -> validate_action_name(Action);
-                false ->
-                    {fail,
-                     quod_ontology_predicates:failure_reason(
-                       Action, invalid_arguments)}
-            end;
-        false ->
-            {error, invalid_action}
-    end;
-validate_action_request(_TargetNs, Action) ->
-    case action_shape(Action) of
-        true ->
+validate_action_request(TargetNs, Action) ->
+    case quod_ontology:validate_action(Action) of
+        {ok, Structural} when TargetNs =:= ?ROOT_NS ->
+            {ok, Structural};
+        {ok, _Structural} ->
             {fail,
              quod_ontology_predicates:failure_reason(Action, root_only)};
-        false ->
-            {error, invalid_action}
+        {error, invalid_action} ->
+            {error, invalid_action};
+        {error, Reason} when TargetNs =:= ?ROOT_NS ->
+            {fail,
+             quod_ontology_predicates:failure_reason(Action, Reason)};
+        {error, _Reason} ->
+            {fail,
+             quod_ontology_predicates:failure_reason(Action, root_only)}
     end.
-
-action_shape({create_ontology, _, _}) -> true;
-action_shape({join_ontology, _, _, _}) -> true;
-action_shape(_) -> false.
-
-validate_action_name({create_ontology, Name, _Options} = Action) ->
-    action_name_result(Action, quod_ontology:normalize_user_name(Name));
-validate_action_name({join_ontology, Name, _GenesisHash, _Seeds} = Action) ->
-    action_name_result(Action, quod_ontology:normalize_user_name(Name)).
-
-action_name_result(_Action, {ok, _Ns}) ->
-    ok;
-action_name_result(Action, {error, Reason}) ->
-    {fail, quod_ontology_predicates:failure_reason(Action, Reason)}.
 
 lifecycle_principal(NodeKey)
   when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
@@ -377,18 +362,20 @@ handle_call({prove_ro, Goal, CallerNs}, From, S) ->
     {noreply, spawn_proof(prove_ro, Goal, CallerNs, From, otel_ctx:new(), S)};
 %% Lifecycle actions share the proof-worker budget and readiness gate. The
 %% node principal is derived here from engine state, never from the request.
-handle_call({run_action, _Action}, _From, S = #s{ready = false}) ->
+handle_call({run_action, _Action, _Structural}, _From,
+            S = #s{ready = false}) ->
     {reply, {error, rebuilding}, S};
-handle_call({run_action, _Action}, _From,
+handle_call({run_action, _Action, _Structural}, _From,
             S = #s{workers = Workers, max_proof_workers = Max})
   when map_size(Workers) >= Max ->
     {reply, {error, busy}, S};
-handle_call({run_action, Action}, From,
+handle_call({run_action, Action, Structural}, From,
             S = #s{ns = Ns, self = Self}) ->
     case lifecycle_principal(Self) of
         {ok, Principal} ->
             {noreply,
-             spawn_proof(action, Action, Ns, From, otel_ctx:new(),
+             spawn_proof(action, {Action, Structural}, Ns, From,
+                         otel_ctx:new(),
                          Principal, S)};
         error ->
             {reply,
@@ -738,17 +725,13 @@ worker_context(_ProofKind, Ns, Applied) ->
     %% Subject remains none until signed subjects land.
     quod_predicates:proof_context(Ns, Applied, undefined).
 
-run_worker(action, Action, Principal, Ns, Applied, Est) ->
-    %% Action prerequisites may use the ordinary live query bridges. Only the
-    %% authorization sub-proof is isolated in the hermetic verdict context.
+run_worker(action, {Action, Structural}, Principal, Ns, Applied, Est) ->
+    %% Reject an absent or malformed declaration and authorize the private node
+    %% principal before reading any caller-selected source path.
     case quod_ontology_predicates:action_declared(Action, Est, Ns, Applied) of
         true ->
-            Prepared = run_proof_est_annotated(
-                         {prepare_lifecycle_action, Action}, Est,
-                         #{lifecycle_principal => Principal,
-                           read_only => true}),
-            complete_lifecycle_action(
-              Action, Principal, Ns, Applied, Est, Prepared);
+            prepare_lifecycle_input(
+              Action, Structural, Principal, Ns, Applied, Est);
         false ->
             {fail,
              [quod_ontology_predicates:failure_reason(
@@ -759,29 +742,86 @@ run_worker(action, Action, Principal, Ns, Applied, Est) ->
 run_worker(_Kind, Goal, _Principal, _Ns, _Applied, Est) ->
     run_proof_est_annotated(Goal, Est).
 
-complete_lifecycle_action(Action, Principal, Ns, Applied, Est,
-                          {ok, _Bindings, [], _ReadSet} = Success) ->
+prepare_lifecycle_input(Action, Structural, Principal, Ns, Applied, Est) ->
     case quod_ontology_predicates:authorize_lifecycle(
            Action, Principal, Est, Ns, Applied) of
         ok ->
-            case quod_ontology_predicates:execute_lifecycle(Action) of
-                ok -> Success;
-                {error, outcome_unknown} -> {error, outcome_unknown};
-                {error, Reason} -> {fail, [Reason]}
+            case quod_ontology:prepare_action(Structural) of
+                {ok, Prepared} ->
+                    Goal =
+                        {prepare_lifecycle_action, Action,
+                         {'DesiredState'}, {'Mode'}},
+                    Selection = run_proof_est_annotated(
+                                  Goal, Est,
+                                  #{lifecycle_principal => Principal,
+                                    read_only => true}),
+                    complete_lifecycle_action(
+                      Action, Prepared, Principal, Ns, Applied, Est,
+                      Selection);
+                {error, Reason} ->
+                    {fail,
+                     [quod_ontology_predicates:lifecycle_error(
+                        Action, Reason)]}
             end;
         {error, Reason} ->
             {fail, [Reason]}
+    end.
+
+complete_lifecycle_action(Action, Prepared, Principal, Ns, Applied, Est,
+                          {ok, Bindings, [], _ReadSet})
+  when is_map(Bindings) ->
+    case {maps:find('DesiredState', Bindings), maps:find('Mode', Bindings)} of
+        {{ok, DesiredState}, {ok, Mode}}
+          when Mode =:= already; Mode =:= execute ->
+            finish_lifecycle_action(
+              Action, Prepared, Principal, Ns, Applied, Est,
+              DesiredState, Mode);
+        _ ->
+            {error, action_declaration_failed}
     end;
-complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est,
-                          {ok, _Bindings, _Diff, _ReadSet}) ->
-    {error, effect_staged_write};
-complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est,
+complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
+                          _Est, {ok, _Bindings, _Diff, _ReadSet}) ->
+    {error, lifecycle_staged_write};
+complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
+                          _Est,
                           {error, {erlog,
                                    {permission_error, modify,
                                     static_procedure, _Predicate}}}) ->
-    {error, effect_staged_write};
-complete_lifecycle_action(_Action, _Principal, _Ns, _Applied, _Est, Result) ->
+    {error, lifecycle_staged_write};
+complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
+                          _Est, Result) ->
     Result.
+
+finish_lifecycle_action(Action, Prepared, Principal, Ns, Applied, Est,
+                        DesiredState, Mode) ->
+    case quod_predicates:is_ground(DesiredState) of
+        false ->
+            {error, action_declaration_failed};
+        true ->
+            case quod_ontology_predicates:authorize_lifecycle(
+                   Action, Principal, Est, Ns, Applied) of
+                {error, Reason} ->
+                    {fail, [Reason]};
+                ok when Mode =:= already ->
+                    lifecycle_success();
+                ok ->
+                    case quod_ontology_predicates:execute_prepared(
+                           Action, Prepared) of
+                        ok -> verify_lifecycle_state(DesiredState, Est);
+                        {error, outcome_unknown} -> {error, outcome_unknown};
+                        {error, Reason} -> {fail, [Reason]}
+                    end
+            end
+    end.
+
+verify_lifecycle_state(DesiredState, Est) ->
+    case run_proof_est_annotated(
+           DesiredState, Est, #{read_only => true}) of
+        {ok, _Bindings, [], _ReadSet} -> lifecycle_success();
+        _ -> {error, outcome_unknown}
+    end.
+
+lifecycle_success() -> {ok, #{}, [], #{}}.
 
 finish_proof(Ref, Kind, Goal, CallerNs, Result, S) ->
     case take_proof_worker(Ref, S) of
@@ -1502,7 +1542,9 @@ build_kb() ->
     %% modification of a static procedure instead of shadowing a governed boundary.
     Est2 = quod_predicates:load(Est1),
     Est3 = quod_ask:load(Est2),
-    load_common_predicates(Est3).
+    Est4 = quod_transaction_predicates:load(Est3),
+    Est5 = quod_action_predicates:load(Est4),
+    load_common_predicates(Est5).
 
 load_common_predicates(#est{db = Db0} = Est) ->
     File = filename:join(code:priv_dir(quod),

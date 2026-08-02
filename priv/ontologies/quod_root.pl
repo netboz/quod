@@ -16,16 +16,24 @@ can_read(_Goal, _Subject, _Ns).
 %% Node-local ontology lifecycle. Prolog proves authorization and hosting state;
 %% the action runner performs the external operation only after this proof has
 %% succeeded without staging a replicated write.
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
+ontology_joined(Name, GenesisHash) :-
+    ontology_hosted(Name),
+    ontology_genesis_anchor(Name, GenesisHash).
+
 action(create_ontology(Name, Options),
        [authorized_ontology_lifecycle(create_ontology(Name, Options)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_hosted(Name)).
 
 action(join_ontology(Name, GenesisHash, Seeds),
        [authorized_ontology_lifecycle(
             join_ontology(Name, GenesisHash, Seeds)),
         ontology_join_state(Name, not_hosted)],
-       true).
+       ontology_joined(Name, GenesisHash)).
 
 %% First-slice host authority: a node may change only its own hosting state and
 %% only while its key is a currently admitted validator of quod:root.

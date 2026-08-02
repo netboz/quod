@@ -284,9 +284,9 @@ self_seeded_joiner_catches_up(Config) ->
         catch peer:stop(Obs)
     end.
 
-%% The public root action uses quod_ontology:join/3 rather than a second join
-%% implementation. A fresh node founds its own root, invokes the asynchronous
-%% action, then catches up the existing ontology through genuine loopback QUIC.
+%% The public root action reuses the typed quod_ontology join pipeline rather
+%% than a second implementation. A fresh node founds its own root, invokes the
+%% asynchronous action, then catches up through genuine loopback QUIC.
 runtime_join_action_catches_up(Config) ->
     {joiner_promoted_to_voter, Saved} = ?config(saved_config, Config),
     Founder = ?config(founder2, Saved),
@@ -340,12 +340,22 @@ runtime_join_action_catches_up(Config) ->
         ?assertEqual(observer,
                      maps:get(role,
                               peer:call(ActionNode, quod_simplex, status, [?NS]))),
-        %% A second call fails its declared not_hosted prerequisite; the typed
-        %% runner never falls through into goal/1's generic fact machinery.
+        %% The exact desired state is already true, so the same join action is
+        %% idempotent and performs no second join. A different anchor remains
+        %% a different, unsatisfied target and fails.
+        ?assertMatch(
+           {ok, [#{}], _},
+           peer:call(ActionNode, quod_prolog, run_action,
+                     [RootNs, Action])),
+        <<First, Rest/binary>> = GenesisHash,
+        WrongAction =
+            {join_ontology, ?NS,
+             binary:encode_hex(<<(First bxor 1), Rest/binary>>),
+             [{seed, "127.0.0.1", ?FOUNDER_PORT}]},
         ?assertMatch(
            {fail, [_ | _]},
            peer:call(ActionNode, quod_prolog, run_action,
-                     [RootNs, Action])),
+                     [RootNs, WrongAction])),
         {save_config, [{founder2, Founder}, {joiner2, Joiner}]}
     after
         catch peer:stop(ActionNode)

@@ -148,9 +148,10 @@ emit(Stream, GoalTerm, Target, Sol, Next, St = #est{bs = Bs, vn = Vn}) ->
             Fail = fun(#cp{bs = Bs0, vn = Vn0}, Cps, FSt) ->
                        drive_stream(Stream, GoalTerm, Target, Next,
                                     FSt#est{bs = Bs0, vn = Vn0, cps = Cps})
-                   end,
+            end,
             Cp = #cp{type = compiled, data = Fail, next = Next, bs = Bs, vn = Vn},
-            erlog_int:prove_body(Next, St#est{bs = Bs1, vn = Vn1, cps = [Cp | St#est.cps]});
+            St1 = erlog_int:push_choicepoint(Cp, St),
+            erlog_int:prove_body(Next, St1#est{bs = Bs1, vn = Vn1});
         fail ->
             %% This solution doesn't unify with the (partially bound) goal — skip it.
             drive_stream(Stream, GoalTerm, Target, Next, St)

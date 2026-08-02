@@ -1,6 +1,8 @@
 # Quod agents and FIPA -- architecture and implementation plan
 
-**Status:** APPROVED (Yan, 2026-07-17). Implementation begins with Slice 1.
+**Status:** APPROVED (Yan, 2026-07-17). Slices 1 and 2 are delivered; Slice 3
+and later remain pending. The corrected target-driven action/transaction
+prerequisite exists only in the uncommitted working trees.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.
@@ -85,9 +87,9 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
   directory policies.
 - Erlang external predicates as narrow adapters where Prolog cannot directly
   observe or affect the runtime.
-- BBSvx/Onia's `goal/1` action resolution over
-  `action(Action, Prerequisites, Effect)`, with Quod's forward-only guard for
-  declared action names.
+- BBSvx/Onia's target-driven action idea, refined in Quod as
+  `action(Transition, Prerequisites, DesiredState)`: `goal(DesiredState)` tries
+  declared transitions transactionally.
 
 ### Rejected
 
@@ -170,10 +172,10 @@ Each predicate declares:
 - allowed execution contexts;
 - timeout or synchronous cost expectation.
 
-The current per-proof process-dictionary namespace values should be replaced by
+The former per-proof process-dictionary namespace values have been replaced by
 one explicit execution context carried in Erlog's `#est.fs` flags. These flags
 are created by the engine, survive the MVCC proof boundary, and are not
-caller-supplied. Conceptually the context per kind is:
+caller-supplied. The context per kind is:
 
 ```text
 proof(Namespace, Height, Subject)
@@ -209,32 +211,44 @@ context. Effect predicates are never callable from ordinary ontology proofs.
 The framework action interface is:
 
 ```prolog
-action(Action, Prerequisites, Effect).
-goal(Action).
+action(Transition, Prerequisites, DesiredState).
+goal(DesiredState).
 ```
 
-`goal/1` resolves a declared action, checks its prerequisites from left to
-right, and applies its effect. It also supports reverse lookup from a desired
-effect, specific actions before the generic `assert_fact/1` and
-`remove_fact/1` actions, then a direct `call/1` fallback. These common clauses
-are loaded by `quod_prolog:build_kb/0` into every ontology's code baseline;
-they are not copied into genesis transactions.
+`DesiredState` is the observable state the caller wants; it is not an effect
+that the framework asserts. `Transition` is either one callable goal or a
+non-empty proper list of callable goals executed left to right.
+`Prerequisites` is a proper list. Several declarations may reach the same
+desired state.
 
-Quod adds one safety guard to the reference pattern: `true` is never reverse
-resolved, and a term that is itself a declared action name is forward-only.
-Failed lifecycle prerequisites therefore remain failures instead of falling
-through to the generic fact action.
+`goal/1` first checks the desired state read-only. If it already holds, the goal
+succeeds without running a transition. Otherwise it validates each complete
+candidate before invoking it, then tries matching `action/3` clauses in Prolog
+declaration order. Normal prerequisites are read-only state checks; explicit
+`goal(State)` and `Ns::goal(State)` prerequisites may establish another state
+recursively. The prerequisites, transition, and final exact desired-state check
+run inside `transaction/1`.
 
-Domain ontologies define ordinary `action/3` clauses. A clause:
+`transaction/1` is semidet: it keeps the first complete inner solution and
+does not expose inner alternatives to its caller. A failed candidate restores
+every assertion, retraction, and abolish it staged before the next matching
+action is tried. Total failure restores the transaction's entry state; an
+Erlog error restores it before the same error propagates. A selected candidate
+succeeds only after its desired state has been proved again.
 
-1. expresses authorization and policy as prerequisites;
-2. orders those prerequisites explicitly;
-3. declares the resulting fact, retract, or `true` no-op effect.
+The common clauses are loaded by `quod_prolog:build_kb/0` into every ontology's
+code baseline; they are not copied into genesis transactions. There is no
+reverse-effect lookup, generic fact action, direct-call fallback, or
+`assert_effect/1` compatibility path. Domain changes use explicit named
+transitions.
 
 Example:
 
 ```prolog
-action(rename_agent(Agent, Name),
+record_agent_name(Agent, Name) :-
+    assertz(agent_name(Agent, Name)).
+
+action(record_agent_name(Agent, Name),
        [may_manage_agent(Agent), valid_agent_name(Name)],
        agent_name(Agent, Name)).
 ```
@@ -245,11 +259,19 @@ the engine-owned execution context; it is not a positional field of
 
 Most actions change durable reality and their runtime consequences are derived
 from the committed diff by P and E handlers. Explicit node-local lifecycle
-actions run only through `quod_prolog:run_action/2`. Its effect-context worker
-proves the literal-`true` declaration and ordered prerequisites in a read-only
-overlay, re-authorizes the private engine-owned principal against the same
-committed snapshot, and only then invokes the typed create/join executor. The
-`true` effect ensures volatile hosting state is not asserted into consensus.
+actions use the same desired-state declaration shape, for example
+`ontology_hosted(Name)` and `ontology_joined(Name, GenesisHash)`, but run only
+through the typed `quod_prolog:run_action/2` boundary.
+
+That runner validates the exact ground declaration and authorizes its private
+engine-owned principal before reading caller-selected source input. It prepares
+the input once, selects the desired state and prerequisites in a read-only
+view, and re-authorizes. An already-true target returns success without
+lifecycle IO. Otherwise the runner calls the typed create/join helper exactly
+once and verifies the exact desired state afterward. Once external IO starts it
+is never backtracked; an unobservable completion is `outcome_unknown`.
+Lifecycle IO is runner behavior, not the third argument of `action/3`, and no
+volatile hosting fact is asserted into consensus.
 
 ## 7. Apply, replay, reconciliation, and events
 
@@ -257,7 +279,8 @@ The existing `{committed, Namespace}` publication occurs before
 `quod_prolog` has applied the block. It remains suitable for dissemination and
 observability, but it must not become the agent event source.
 
-Replace the current undifferentiated apply interface with an explicit origin:
+The former undifferentiated apply interface has been replaced with an explicit
+origin:
 
 ```text
 apply(Index, Batch, live)
@@ -672,8 +695,8 @@ is accepted. Conversation IDs are globally unique and non-empty.
 
 ### Mapping to Quod
 
-- `request(Action)` asks the receiver to execute
-  `goal(Action)` in its owning ontology under the authenticated subject
+- `request(DesiredState)` asks the receiver to establish
+  `goal(DesiredState)` in its owning ontology under the authenticated subject
   context.
 - `query_if(Goal)` uses a bounded target proof and returns an `inform`.
 - `query_ref(Goal)` streams target answers into one or more `inform` messages.
@@ -750,9 +773,9 @@ Do not scaffold the end state. Slices 1--4 need only three new modules plus one
 narrowed existing one:
 
 - `quod_prolog` (existing, narrowed): D proof and committed projection only.
-- `quod_runtime` (new): ordered post-apply P orchestration and reconciliation.
-- `quod_outbox` (new): durable effect delivery and deduplication.
-- `quod_predicates` (new): predicate registration metadata and context
+- `quod_runtime` (existing): ordered post-apply P orchestration and reconciliation.
+- `quod_outbox` (future): durable effect delivery and deduplication.
+- `quod_predicates` (existing): predicate registration metadata and context
   enforcement.
 
 Reaction matching and scheduling may begin inside `quod_runtime`; split it only
@@ -874,7 +897,8 @@ This is the proof of the architecture and remains trusted-fleet-only.
 - Add minimal genesis content for `quod:user` and `quod:agent`.
 - Add one AP ontology with statically declared agent owners.
 - Reconcile one hosted-agent process on only its owner node.
-- Execute one explicit `action/3` that changes AP facts.
+- Execute one target-driven `goal(DesiredState)` whose selected transition
+  changes AP facts.
 - Deliver one durable outbox message between two agents.
 - Restart the runtime, agent process, and owner node during delivery.
 
@@ -923,7 +947,7 @@ Client/world validation milestones are kept separately in
 
 - Implement ACL encoding, validation, MTS routing, and conversation state.
 - Implement request/agree/refuse/failure/inform/not-understood/cancel.
-- Map requests to target-owned `action/3`.
+- Map requests to target-owned `goal(DesiredState)`.
 
 Acceptance:
 

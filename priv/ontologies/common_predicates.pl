@@ -3,69 +3,88 @@
 %% This file contains framework mechanics only. Domain rules belong in the
 %% ontology that owns them.
 
-goal(Goal) :- goal(Goal, []).
+%% action(Transition, Prerequisites, DesiredState).
+%%
+%% `goal/1` is target-driven: an already-true state needs no transition. When
+%% the state is false, every action that can reach it is tried in declaration
+%% order. Each candidate is transactional, so a failed transition or
+%% postcondition leaves no staged assertions, retractions, or abolishes behind.
+goal(DesiredState) :-
+    goal(DesiredState, []).
 
-%% A term already being resolved cannot recursively resolve itself.
-goal(Goal, Visited) :- member_eq(Goal, Visited), !, fail.
+goal(DesiredState, Visited) :-
+    '$quod_callable'(DesiredState),
+    resolve_goal(DesiredState, Visited).
 
-%% Forward lookup by declared action name.
-goal(Goal, Visited) :-
-    resolve_forward_action(Goal, Visited, Effect),
-    assert_effect(Effect).
+%% State checks precede cycle detection: a recursively requested state that has
+%% already been reached succeeds without attempting another transition.
+resolve_goal(DesiredState, _Visited) :-
+    '$quod_state_check'(DesiredState),
+    !.
+resolve_goal(DesiredState, Visited) :-
+    \+ member_eq(DesiredState, Visited),
+    action(Transition, Prerequisites, DesiredState),
+    %% Validate the complete candidate before invoking even its first
+    %% prerequisite. This keeps malformed declarations inert.
+    '$quod_action_shape'(Transition, Prerequisites, DesiredState),
+    transaction((satisfy_prerequisites(Prerequisites,
+                                       [DesiredState | Visited]),
+                 run_transition(Transition),
+                 '$quod_state_check'(DesiredState))),
+    !.
 
-%% Prepare a node-local lifecycle action without lifecycle IO or staged writes.
-%% Only literal-true action declarations are eligible; the Erlang action runner
-%% owns the external operation after this prerequisite proof succeeds.
-prepare_lifecycle_action(Action) :-
-    resolve_forward_action(Action, [], true).
+%% Prepare one exact node-local lifecycle declaration. Lifecycle IO remains in
+%% the typed Erlang runner: this relation only selects and checks a declaration.
+%% Unlike an ordinary action candidate, every prerequisite is checked strictly
+%% read-only because speculative lifecycle preparation may not stage D writes.
+prepare_lifecycle_action(Action, DesiredState, Mode) :-
+    action(Action, Prerequisites, DesiredState),
+    '$quod_action_shape'(Action, Prerequisites, DesiredState),
+    prepare_lifecycle_candidate(DesiredState, Prerequisites, Mode).
 
-resolve_forward_action(Action, Visited, Effect) :-
-    action(Action, Prerequisites, Effect),
-    satisfy_prereq(Prerequisites, [Action | Visited]).
+prepare_lifecycle_candidate(DesiredState, _Prerequisites, already) :-
+    '$quod_state_check'(DesiredState),
+    !.
+prepare_lifecycle_candidate(_DesiredState, Prerequisites, execute) :-
+    check_prerequisites(Prerequisites).
 
-%% Reverse lookup by a specific declared effect.
-goal(Goal, Visited) :-
-    reverse_goal_allowed(Goal),
-    action(Action, Prerequisites, Goal),
-    Action \= Goal,
-    \+ is_catchall_action(Action),
-    satisfy_prereq(Prerequisites, [Goal | Visited]),
-    assert_effect(Goal).
+check_prerequisites([]).
+check_prerequisites([Prerequisite | Rest]) :-
+    '$quod_state_check'(Prerequisite),
+    check_prerequisites(Rest).
 
-%% Reverse lookup through the generic fact actions, after specific actions.
-goal(Goal, Visited) :-
-    reverse_goal_allowed(Goal),
-    action(Action, Prerequisites, Goal),
-    Action \= Goal,
-    is_catchall_action(Action),
-    satisfy_prereq(Prerequisites, [Goal | Visited]),
-    assert_effect(Goal).
+%% Explicit goal/1 prerequisites may themselves reach a state. Every other
+%% prerequisite is a strict state check over the candidate's current staged
+%% view. The selected-ontology form carries the same visited chain.
+satisfy_prerequisites([], _Visited).
+satisfy_prerequisites([goal(State) | Rest], Visited) :-
+    !,
+    goal(State, Visited),
+    satisfy_prerequisites(Rest, Visited).
+satisfy_prerequisites([Ns::goal(State) | Rest], Visited) :-
+    !,
+    Ns::goal(State, Visited),
+    satisfy_prerequisites(Rest, Visited).
+satisfy_prerequisites([Prerequisite | Rest], Visited) :-
+    '$quod_state_check'(Prerequisite),
+    satisfy_prerequisites(Rest, Visited).
 
-%% A declared action is forward-only. `true` is the no-op action effect and is
-%% handled only by the direct fallback, never by reverse action lookup.
-reverse_goal_allowed(Goal) :-
-    Goal \= true,
-    \+ action(Goal, _, _).
+run_transition([Transition | Rest]) :-
+    !,
+    call(Transition),
+    run_transitions(Rest).
+run_transition(Transition) :-
+    call(Transition).
 
-%% Bare Prolog goals remain usable through goal/1.
-goal(Goal, _Visited) :- call(Goal).
+run_transitions([]).
+run_transitions([Transition | Rest]) :-
+    call(Transition),
+    run_transitions(Rest).
 
-member_eq(X, [Y | _]) :- X == Y, !.
-member_eq(X, [_ | Rest]) :- member_eq(X, Rest).
-
-%% Prerequisites are raw checks and effects, evaluated in declaration order.
-satisfy_prereq([], _Visited).
-satisfy_prereq([Prerequisite | Rest], Visited) :-
-    call(Prerequisite),
-    satisfy_prereq(Rest, Visited).
-
-assert_effect(true) :- !.
-assert_effect(retract(Term)) :- !, retract(Term).
-assert_effect(Effect) :- assertz(Effect).
-
-%% Generic fact actions are deliberately last in reverse lookup.
-action(assert_fact(Fact), [\+ Fact], Fact).
-action(remove_fact(Fact), [Fact], retract(Fact)).
-
-is_catchall_action(assert_fact(_)).
-is_catchall_action(remove_fact(_)).
+%% Membership by term identity, not unification: distinct non-ground targets do
+%% not become false cycle matches merely because they could unify.
+member_eq(X, [Y | _]) :-
+    X == Y,
+    !.
+member_eq(X, [_ | Rest]) :-
+    member_eq(X, Rest).

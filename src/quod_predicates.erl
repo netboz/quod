@@ -102,7 +102,7 @@ governed() -> [{peer_ready, 1}, {directory_host, 4},
                {directory_control_peer, 1},
                {admit, 3}, {remove, 1},
                {authorized_ontology_lifecycle, 1},
-               {ontology_join_state, 2},
+               {ontology_join_state, 2}, {ontology_genesis_anchor, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
@@ -122,6 +122,9 @@ registry({authorized_ontology_lifecycle, 1}) ->
 registry({ontology_join_state, 2}) ->
     {query, quod_ontology_predicates,
      ontology_join_state_predicate};
+registry({ontology_genesis_anchor, 2}) ->
+    {query, quod_ontology_predicates,
+     ontology_genesis_anchor_predicate};
 %% arity 1: a handler ConvergeGoal is invoked with the scope argument appended, so the
 %% declared atom `projection_noop` reaches the KB as {projection_noop, Scope}.
 registry({projection_noop, 1}) -> {projection, ?MODULE, projection_noop_1};

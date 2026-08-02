@@ -10,16 +10,17 @@ performs lifecycle IO. The actual create/join call is made only by
 `quod_prolog:run_action/2` after the complete action proof succeeds.
 
 `ontology_join_state/2` remains a read-only view of this node. The low-level
-`quod_ontology` APIs and `execute_lifecycle/1` are trusted same-VM APIs, not
+`quod_ontology` APIs and `execute_prepared/2` are trusted same-VM APIs, not
 remote authorization boundaries.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([authorized_ontology_lifecycle_predicate/3,
-         ontology_join_state_predicate/3]).
+         ontology_join_state_predicate/3,
+         ontology_genesis_anchor_predicate/3]).
 -export([authorize_lifecycle/5, action_declared/4,
-         execute_lifecycle/1, failure_reason/2]).
+         execute_prepared/2, lifecycle_error/2, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
 
@@ -87,13 +88,17 @@ policy_goal({join_ontology, Name, GenesisHash, Seeds}, Principal) ->
 policy_goal(_Action, _Principal) ->
     error.
 
--doc "Whether the captured root declares this exact ground action with literal effect `true`.".
+-doc "Whether root has a valid, nontrivial declaration for this exact transition.".
 -spec action_declared(term(), tuple(), binary(), non_neg_integer()) ->
           true | false | {error, term()}.
 action_declared(Action, CommittedEst, ?ROOT_NS, Height)
   when is_integer(Height), Height >= 0 ->
     VerdictEst = verdict_state(CommittedEst, Height),
-    Goal = {action, Action, {'Prerequisites'}, true},
+    Goal =
+        {',',
+         {action, Action, {'Prerequisites'}, {'DesiredState'}},
+         {'$quod_action_shape', Action,
+          {'Prerequisites'}, {'DesiredState'}}},
     case quod_prolog:prove_est_read_only(Goal, VerdictEst) of
         {ok, _Bindings, [], _ReadSet} -> true;
         fail -> false;
@@ -107,24 +112,23 @@ verdict_state(CommittedEst, Height) ->
       CommittedEst,
       quod_predicates:verdict_context(?ROOT_NS, Height)).
 
--doc "Execute one validated and authorized lifecycle action in this VM.".
--spec execute_lifecycle(term()) -> ok | {error, term()}.
-execute_lifecycle({create_ontology, Name, Options} = Action) ->
-    case quod_ontology:create(Name, Options) of
-        {ok, _Status, _Ns, _GenesisHash} -> ok;
-        {error, outcome_unknown} -> {error, outcome_unknown};
-        {error, Reason} ->
-            {error, failure_reason(Action, creation_reason(Reason))}
-    end;
-execute_lifecycle({join_ontology, Name, GenesisHash, Seeds} = Action) ->
-    case quod_ontology:join(Name, GenesisHash, Seeds) of
+-doc "Execute one previously prepared lifecycle request without rereading its input.".
+-spec execute_prepared(term(), term()) -> ok | {error, term()}.
+execute_prepared(Action, Prepared) ->
+    case quod_ontology:execute_prepared(Prepared) of
         {ok, _Status, _Ns, _RawGenesisHash} -> ok;
         {error, outcome_unknown} -> {error, outcome_unknown};
-        {error, Reason} ->
-            {error, failure_reason(Action, join_reason(Reason))}
-    end;
-execute_lifecycle(_Action) ->
-    {error, {ontology_lifecycle_failed, invalid_action}}.
+        {error, Reason} -> {error, lifecycle_error(Action, Reason)}
+    end.
+
+-doc "Map a typed lifecycle API error to its bounded public Prolog reason.".
+-spec lifecycle_error(term(), term()) -> term().
+lifecycle_error({create_ontology, _, _} = Action, Reason) ->
+    failure_reason(Action, creation_reason(Reason));
+lifecycle_error({join_ontology, _, _, _} = Action, Reason) ->
+    failure_reason(Action, join_reason(Reason));
+lifecycle_error(Action, _Reason) ->
+    failure_reason(Action, invalid_action).
 
 -spec failure_reason(term(), term()) -> term().
 failure_reason({create_ontology, _, _}, Reason) ->
@@ -143,6 +147,7 @@ creation_reason(invalid_name) -> invalid_name;
 creation_reason(reserved_system_namespace) -> reserved_system_namespace;
 creation_reason(invalid_options) -> invalid_options;
 creation_reason(invalid_initial_terms) -> invalid_initial_terms;
+creation_reason(initial_content_too_large) -> initial_content_too_large;
 creation_reason({invalid_initial_term, _Term}) -> invalid_initial_terms;
 creation_reason({source_error, Index, Line, _Detail}) ->
     {invalid_source, Index, Line};
@@ -181,6 +186,58 @@ state({ontology_join_state, Name, State}, Next, St) ->
     end;
 state(_Goal, _Next, St) ->
     fail_reason({ontology_state_failed, invalid_arguments}, St).
+
+-spec ontology_genesis_anchor_predicate(term(), term(), tuple()) -> term().
+ontology_genesis_anchor_predicate(Goal, Next, #est{bs = Bs} = St) ->
+    case quod_predicates:ctx_ns(quod_predicates:context(St)) of
+        ?ROOT_NS -> genesis_anchor(erlog_int:dderef(Goal, Bs), Next, St);
+        _ -> fail_reason({ontology_anchor_failed, root_only}, St)
+    end.
+
+genesis_anchor({ontology_genesis_anchor, Name, Expected}, Next,
+               #est{bs = Bs} = St) ->
+    case quod_predicates:is_ground(Name) of
+        false ->
+            fail_reason({ontology_anchor_failed, invalid_arguments}, St);
+        true ->
+            case quod_ontology:genesis_anchor(Name) of
+                {ok, RawAnchor} ->
+                    match_genesis_anchor(Expected, RawAnchor, Next, Bs, St);
+                {error, not_hosted} ->
+                    erlog_int:fail(St);
+                {error, Reason} ->
+                    fail_reason({ontology_anchor_failed, Reason}, St)
+            end
+    end;
+genesis_anchor(_Goal, _Next, St) ->
+    fail_reason({ontology_anchor_failed, invalid_arguments}, St).
+
+match_genesis_anchor(Expected, RawAnchor, Next, Bs, St) ->
+    case erlog_int:deref(Expected, Bs) of
+        {_Variable} ->
+            erlog_int:prove_body([{'=', Expected, RawAnchor} | Next], St);
+        Value ->
+            case normalize_public_anchor(Value) of
+                {ok, RawAnchor} -> erlog_int:prove_body(Next, St);
+                {ok, _OtherAnchor} -> erlog_int:fail(St);
+                error ->
+                    fail_reason(
+                      {ontology_anchor_failed, invalid_genesis_hash}, St)
+            end
+    end.
+
+normalize_public_anchor(Raw) when is_binary(Raw), byte_size(Raw) =:= 32 ->
+    {ok, Raw};
+normalize_public_anchor(Value) ->
+    try unicode:characters_to_binary(Value) of
+        Hex when is_binary(Hex), byte_size(Hex) =:= 64 ->
+            try binary:decode_hex(Hex) of
+                Raw when byte_size(Raw) =:= 32 -> {ok, Raw}
+            catch _:_ -> error
+            end;
+        _ -> error
+    catch _:_ -> error
+    end.
 
 fail_reason(Reason, St) ->
     erlog_int:prove_body([{fail_with_reason, Reason}], St).

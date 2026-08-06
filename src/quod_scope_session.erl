@@ -329,7 +329,15 @@ authorize_and_open(InvocationId, Goal, Chain, Selection,
                             session = Session} = Runtime) ->
     case quod_ask:authorize_scope(
            Goal, Principal, Chain, {Ns, Anchor}, Height, Session) of
-        false -> {error, {not_allowed, Ns}};
+        false ->
+            %% Same peer-visible error as a failed admission recheck, so record
+            %% here that it was this ontology's own policy that refused. An
+            %% absent policy predicate reads as a refusal under `unknown=fail`.
+            logger:warning(
+              "quod_scope_session[~s]: can_read refused an invocation at "
+              "height ~p (chain depth ~p)",
+              [Ns, Height, length(Chain)]),
+            {error, {not_allowed, Ns}};
         true ->
             Context = quod_predicates:proof_context(
                         Ns, Height, undefined, [{Ns, Anchor} | Chain]),

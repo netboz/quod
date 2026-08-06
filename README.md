@@ -130,7 +130,20 @@ NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# This release is a hard persistence break. Stop the fleet, then delete every
+# ROUTINE UPGRADE — the common case. The ledger format is unchanged, so the
+# existing anchored volumes are resumed. One task group makes this a
+# fleet-wide max_parallel=1 roll that waits for consensus recovery between
+# allocations. Supply the anchor the fleet was founded with.
+nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
+  -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
+  -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad
+
+# ---------------------------------------------------------------------------
+# FOUNDING A NEW NETWORK — only when the release breaks the persisted format,
+# which each such release states explicitly. It destroys all ledger history.
+# Everything below is skipped by a routine upgrade.
+#
+# Stop the fleet, then delete every
 # dynamic compute volume named quod-node-local[N]. Obtain and verify the IDs
 # before deleting them; /quod/data is the allocation mount, not the host path.
 nomad job stop -purge quod

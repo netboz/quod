@@ -884,7 +884,8 @@ scope_admission_reason(_Mode, Anchor, #s{ns = Ns})
   when not is_binary(Anchor); byte_size(Anchor) =/= 32 ->
     {error, {anchor_conflict, Ns}};
 scope_admission_reason(Mode, Anchor,
-                       #s{ns = Ns, ready = Ready, self = Self, est = Est}) ->
+                       #s{ns = Ns, ready = Ready, self = Self, est = Est,
+                          applied = Applied}) ->
     case quod_simplex:genesis_hash(Ns) of
         Anchor when not Ready -> {error, {ontology_rebuilding, Ns}};
         Anchor when Mode =:= read_only -> ok;
@@ -893,7 +894,15 @@ scope_admission_reason(Mode, Anchor,
                    Self,
                    quod_committee_predicates:admitted_pubkeys(Est)) of
                 true -> ok;
-                false -> {error, {not_allowed, Ns}}
+                false ->
+                    %% The peer-visible error is deliberately the same as a
+                    %% policy refusal. Say here which of the two it was, or a
+                    %% stale route hint is indistinguishable from a denial.
+                    logger:warning(
+                      "quod_prolog[~s]: refused a writable scope — this node "
+                      "is not an admitted validator of it (applied=~p)",
+                      [Ns, Applied]),
+                    {error, {not_allowed, Ns}}
             end;
         <<_:256>> -> {error, {anchor_conflict, Ns}};
         undefined -> {error, {ontology_rebuilding, Ns}}

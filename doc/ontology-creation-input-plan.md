@@ -174,7 +174,7 @@ the Prolog failure stack.
 `source_file/1` is reachable from the authorized lifecycle path only
 through the dedicated root action runner. That runner derives a private node
 principal, proves policy in a read-only committed view, re-authorizes, and then
-calls the typed executor. Ordinary proofs, served cross-ontology asks,
+calls the typed executor. Ordinary proofs, selected-ontology scope sessions,
 consensus projections, and the explorer prove endpoint cannot execute it. The
 low-level creation API is trusted same-VM code and is not a remote
 authorization boundary.

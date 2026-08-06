@@ -45,22 +45,28 @@ directory_host_enumerates_live_system_routes_test() ->
     Ns = <<"quod:agent">>,
     K1 = key(21),
     K2 = key(22),
+    ?assertEqual(undefined, quod_predicates:class({directory_host, 4})),
+    ?assertEqual(query, quod_predicates:class({directory_host, 5})),
     {Goal, Erl0} = with_directory(
       #{allowlist => #{Ns => [K1, K2]}},
       fun(Pid) ->
           {ok, _} = quod_directory:install_record(
-                 K2, {<<"node-b">>, 4002}, [Ns], 1, 1),
+                 K2, {<<"node-b">>, 4002},
+                 [{Ns, anchor(2), observer}], 1, 1),
           {ok, _} = quod_directory:install_record(
-                 K1, {<<"node-a">>, 4001}, [Ns], 1, 1),
+                 K1, {<<"node-a">>, 4001},
+                 [{Ns, anchor(1), validator}], 1, 1),
           Erl0 = proof_erlog(<<"quod:root">>),
           Goal = {directory_host, {':', quod, agent},
-                  {'Key'}, {'Host'}, {'Port'}},
+                  {'Anchor'}, {'Key'}, {'Host'}, {'Port'}},
           {{succeed, First}, Erl1} = erlog:prove(Goal, Erl0),
           {{succeed, Second}, Erl2} = erlog:next_solution(Erl1),
           {fail, _} = erlog:next_solution(Erl2),
           ?assertEqual(
-             [[{'Host', <<"node-a">>}, {'Key', K1}, {'Port', 4001}],
-              [{'Host', <<"node-b">>}, {'Key', K2}, {'Port', 4002}]],
+             [[{'Anchor', anchor(1)}, {'Host', <<"node-a">>},
+               {'Key', K1}, {'Port', 4001}],
+              [{'Anchor', anchor(2)}, {'Host', <<"node-b">>},
+               {'Key', K2}, {'Port', 4002}]],
              [First, Second]),
 
           %% The read path is ETS-only and stays available with its owner blocked.
@@ -82,12 +88,13 @@ directory_host_is_root_only_and_ground_namespace_only_test() ->
       #{allowlist => #{Ns => [Key]}},
       fun(_Pid) ->
           {ok, _} = quod_directory:install_record(
-                 Key, {<<"node">>, 4003}, [Ns], 1, 1),
+                 Key, {<<"node">>, 4003},
+                 [{Ns, anchor(3), validator}], 1, 1),
           {fail, _} = erlog:prove(
-                        {directory_host, Ns, {'K'}, {'H'}, {'P'}},
+                        {directory_host, Ns, {'A'}, {'K'}, {'H'}, {'P'}},
                         proof_erlog(<<"private:body">>)),
           {fail, _} = erlog:prove(
-                        {directory_host, {'Ns'}, {'K'}, {'H'}, {'P'}},
+                        {directory_host, {'Ns'}, {'A'}, {'K'}, {'H'}, {'P'}},
                         proof_erlog(<<"quod:root">>))
       end).
 
@@ -99,7 +106,7 @@ private_seed_is_not_visible_to_predicate_test() ->
           ok = quod_directory:add_direct_seed(
                  Ns, {<<"private-node">>, 4004}),
           {fail, _} = erlog:prove(
-                        {directory_host, Ns, {'K'}, {'H'}, {'P'}},
+                        {directory_host, Ns, {'A'}, {'K'}, {'H'}, {'P'}},
                         proof_erlog(<<"quod:root">>))
       end).
 
@@ -146,3 +153,5 @@ with_directory(Opts, Fun) ->
     end.
 
 key(N) -> <<N:256>>.
+
+anchor(N) -> <<N:256>>.

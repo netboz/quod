@@ -7,7 +7,7 @@ forward the original encoded record unchanged; every receiver decodes it under
 the same byte/cardinality bounds and verifies the author's Ed25519 signature.
 """.
 
--export([sign/6, decode/1, node_key/1, endpoint/1, namespaces/1,
+-export([sign/6, decode/1, node_key/1, endpoint/1, hosted/1,
          epoch/1, sequence/1]).
 
 -include("quod_directory_limits.hrl").
@@ -17,16 +17,18 @@ the same byte/cardinality bounds and verifies the author's Ed25519 signature.
 
 -type record() :: #{node_key := binary(),
                     endpoint := {term(), inet:port_number()},
-                    namespaces := [binary()],
+                    hosted := [{binary(), <<_:256>>,
+                                validator | observer}],
                     epoch := non_neg_integer(),
                     sequence := non_neg_integer()}.
 
--spec sign(binary(), term(), [binary()], non_neg_integer(),
+-spec sign(binary(), term(),
+           [{binary(), <<_:256>>, validator | observer}], non_neg_integer(),
            non_neg_integer(), term()) -> {ok, binary()} | {error, term()}.
-sign(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Signer) ->
-    case validate(NodeKey, Endpoint, Namespaces, Epoch, Sequence) of
+sign(NodeKey, Endpoint, Hosted, Epoch, Sequence, Signer) ->
+    case validate(NodeKey, Endpoint, Hosted, Epoch, Sequence) of
         ok ->
-            Body = body(NodeKey, Endpoint, Namespaces, Epoch, Sequence),
+            Body = body(NodeKey, Endpoint, Hosted, Epoch, Sequence),
             Signature = quod_identity:sign(Body, Signer),
             Encoded = term_to_binary(
                         {quod_directory_record, ?VERSION, Body, Signature},
@@ -57,12 +59,12 @@ decode(_) ->
 decode_body(Body, Signature) ->
     case quod_safe_term:decode(Body, ?MAX_BYTES) of
         {ok, {quod_directory_body, ?VERSION, NodeKey, Host, Port,
-              Namespaces, Epoch, Sequence}} ->
+              Hosted, Epoch, Sequence}} ->
             Endpoint = {Host, Port},
-            case validate(NodeKey, Endpoint, Namespaces, Epoch, Sequence) of
+            case validate(NodeKey, Endpoint, Hosted, Epoch, Sequence) of
                 ok ->
                     Canonical = body(
-                                  NodeKey, Endpoint, Namespaces,
+                                  NodeKey, Endpoint, Hosted,
                                   Epoch, Sequence),
                     case Body =:= Canonical andalso
                              quod_identity:verify(
@@ -70,7 +72,7 @@ decode_body(Body, Signature) ->
                         true ->
                             {ok, #{node_key => NodeKey,
                                    endpoint => Endpoint,
-                                   namespaces => Namespaces,
+                                   hosted => Hosted,
                                    epoch => Epoch,
                                    sequence => Sequence}};
                         false ->
@@ -83,20 +85,20 @@ decode_body(Body, Signature) ->
             {error, bad_record}
     end.
 
-body(NodeKey, {Host, Port}, Namespaces, Epoch, Sequence) ->
+body(NodeKey, {Host, Port}, Hosted, Epoch, Sequence) ->
     term_to_binary(
       {quod_directory_body, ?VERSION, NodeKey, Host, Port,
-       Namespaces, Epoch, Sequence},
+       Hosted, Epoch, Sequence},
       [deterministic]).
 
-validate(NodeKey, Endpoint, Namespaces, Epoch, Sequence)
+validate(NodeKey, Endpoint, Hosted, Epoch, Sequence)
   when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
        is_integer(Epoch), Epoch >= 0,
        is_integer(Sequence), Sequence >= 0 ->
     case {quod_quic:valid_endpoint(Endpoint),
-          quod_directory_auth:validate_namespaces(
-            Namespaces, ?DIRECTORY_MAX_NAMESPACES)} of
-        {true, {ok, Namespaces}} -> ok;
+          quod_directory_auth:validate_hosted(
+            Hosted, ?DIRECTORY_MAX_NAMESPACES)} of
+        {true, {ok, Hosted}} -> ok;
         _ -> {error, bad_record}
     end;
 validate(_, _, _, _, _) ->
@@ -108,8 +110,9 @@ node_key(Record) -> maps:get(node_key, Record).
 -spec endpoint(record()) -> term().
 endpoint(Record) -> maps:get(endpoint, Record).
 
--spec namespaces(record()) -> [binary()].
-namespaces(Record) -> maps:get(namespaces, Record).
+-spec hosted(record()) ->
+          [{binary(), <<_:256>>, validator | observer}].
+hosted(Record) -> maps:get(hosted, Record).
 
 -spec epoch(record()) -> non_neg_integer().
 epoch(Record) -> maps:get(epoch, Record).

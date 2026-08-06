@@ -29,6 +29,7 @@ agree bit-for-bit.
 -export([wrap_state/1, wrap_state/2, lifecycle_principal/1,
          proof_context/1, fresh_proof_state/1,
          revision/1, replace_revision/2,
+         live_transaction_tokens/1,
          committed_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, get_read_set/1,
@@ -63,9 +64,11 @@ agree bit-for-bit.
 %% Both tokens retain immutable terms already owned by the overlay. Creating or
 %% restoring one therefore copies no clause data. The identity fields prevent a
 %% savepoint or mode frame from being applied to another proof's overlay.
+-type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
-                     next_tag :: integer()}).
+                     next_tag :: integer(),
+                     distributed = [] :: [distributed_token()]}).
 -opaque checkpoint() :: #checkpoint{}.
 
 %% An immutable overlay revision. It shares the committed database and read-set
@@ -177,6 +180,22 @@ replace_revision(
 replace_revision(_St, _Revision) ->
     erlang:error(badarg).
 
+-doc "Return transaction tokens retained by the invocation's live choice points.".
+-spec live_transaction_tokens(tuple()) -> [distributed_token()].
+live_transaction_tokens(#est{cps = Choicepoints}) ->
+    lists:usort(live_transaction_tokens(Choicepoints, []));
+live_transaction_tokens(_St) ->
+    erlang:error(badarg).
+
+live_transaction_tokens(
+  [#cp{db_checkpoint = {_Depth,
+                        #checkpoint{distributed = Tokens}}} | Rest], Acc) ->
+    live_transaction_tokens(Rest, lists:reverse(Tokens, Acc));
+live_transaction_tokens([_ | Rest], Acc) ->
+    live_transaction_tokens(Rest, Acc);
+live_transaction_tokens([], Acc) ->
+    Acc.
+
 -doc """
 Return a fresh proof frame over a wrapped state's captured committed view.
 
@@ -279,12 +298,15 @@ new({OutRef, OutMod}) ->
 %% data; restore retains the current monotonic read-set and overlay metadata.
 choicepoint_checkpoint(
   #lp{scope_id = ScopeId, local = Local, next_tag = NextTag}) ->
-    #checkpoint{scope_id = ScopeId, local = Local, next_tag = NextTag}.
+    #checkpoint{scope_id = ScopeId, local = Local, next_tag = NextTag,
+                distributed = quod_transaction_scope:checkpoint_token()}.
 
 choicepoint_restore(
   #lp{scope_id = ScopeId} = Ov,
   #checkpoint{scope_id = ScopeId,
-              local = Local, next_tag = NextTag}) ->
+              local = Local, next_tag = NextTag,
+              distributed = Distributed}) ->
+    ok = quod_transaction_scope:restore_token(Distributed),
     Ov#lp{local = Local, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
     erlang:error(badarg).
@@ -392,7 +414,8 @@ add_followers(St, {Functor, Arity} = F, Base)
   when is_atom(Functor), is_integer(Arity), Arity > 0 ->
     case no_follow(St, F) of
         true  -> Base;
-        false -> clauses_or_undef(base_clauses(Base) ++ follower_clauses(F))
+        false -> clauses_or_undef(
+                   append_followers(base_clauses(Base), F))
     end;
 add_followers(_St, _F, Base) -> Base.
 
@@ -409,10 +432,16 @@ no_follow(St, {Functor, Arity}) ->
         _ -> false
     end.
 
-follower_clauses({Functor, Arity}) ->
-    [follower_clause(Functor, Arity, Pos) || Pos <- lists:seq(1, Arity)] ++
-    [follower_clear_clause(Functor, Arity),
-     follower_end_clause(Functor, Arity)].
+append_followers([Clause | Rest], F) ->
+    [Clause | append_followers(Rest, F)];
+append_followers([], {Functor, Arity}) ->
+    follower_clauses(Functor, Arity, 1).
+
+follower_clauses(Functor, Arity, Pos) when Pos =< Arity ->
+    [follower_clause(Functor, Arity, Pos) |
+     follower_clauses(Functor, Arity, Pos + 1)];
+follower_clauses(Functor, Arity, _Pos) ->
+    [follower_end_clause(Functor, Arity)].
 
 follower_clause(Functor, Arity, Pos) ->
     Ns = {'$quod_follow_ns'},
@@ -429,14 +458,8 @@ follower_clause(Functor, Arity, Pos) ->
             {',', {'::', Ns, Inner}, {'$quod_follow_unique', Head}}},
     {{'$quod_follower', Pos}, Head, erlog_int:well_form_body(Body, false, sture)}.
 
-%% Keep one clause after cleanup so Erlog retains the relation choice point while
-%% `$quod_follow_clear` recovers its stable label.
-follower_clear_clause(Functor, Arity) ->
-    Args = [{{'$quod_follow_end_arg', I}} || I <- lists:seq(1, Arity)],
-    Head = list_to_tuple([Functor | Args]),
-    Body = '$quod_follow_clear',
-    {'$quod_follower_clear', Head, erlog_int:well_form_body(Body, false, sture)}.
-
+%% Keep one terminal clause so every real follower runs with the relation's
+%% choice point present. Its owned dedup state disappears before this clause fails.
 follower_end_clause(Functor, Arity) ->
     Args = [{{'$quod_follow_fail_arg', I}} || I <- lists:seq(1, Arity)],
     Head = list_to_tuple([Functor | Args]),

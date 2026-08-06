@@ -9,10 +9,10 @@ An ontology name must be routable even when it is not co-hosted on every node.
 The directory answers a deliberately narrow question:
 
 ```prolog
-directory_host(Ontology, NodeKey, Host, Port).
+directory_host(Ontology, GenesisAnchor, NodeKey, Host, Port).
 ```
 
-It returns nodes that may *currently* serve `Ontology`.  It does not grant
+It returns anchored nodes that may *currently* serve `Ontology`. It does not grant
 access, decide membership, store ontology data, or order a transaction.
 
 This supports three intended modes:
@@ -38,9 +38,9 @@ be served by three hosts, producing at most three live route records.
    first system entrypoint lives in `quod:root`, but its answers come directly
    from an Erlang index.  No normal proof may make a blocking call to a
    directory server.
-3. **The ask resolver uses the same local Erlang index.** It does not make a
-   Prolog ask merely to learn where to send a Prolog ask.  This avoids a
-   resolution loop and keeps opening an ask bounded.
+3. **The `::` scope resolver uses the same local Erlang index.** It does not
+   make a Prolog selection merely to learn where to send that selection. This
+   avoids a resolution loop and keeps scope opening bounded.
 4. **A route is an authenticated routing hint, not write authority.** A
    caller still uses mutual TLS and the target's `can_read` policy, but those
    only identify the answering node and protect its data from the reader. They
@@ -50,8 +50,8 @@ be served by three hosts, producing at most three live route records.
    host's node-key signature and revalidates its exact allowlist — the same
    trust boundary as today's operator-configured contacts. At connection open,
    the peer's mutual-TLS node key must equal the route's expected `NodeKey`.
-   A stale route can produce `unreachable`; it cannot grant write permission
-   or change a committee.
+   A stale route can produce `{ontology_unreachable, Namespace}`; it cannot
+   grant write permission or change a committee.
 5. **No compatibility layer.** Signed system routes learned through
    root-derived control peers, plus local direct routes, are the only inputs to
    remote resolution. Static directory bootstrap addresses were removed
@@ -73,7 +73,7 @@ now:
 - **system namespaces**: root-controlled host authorisation plus live
   advertisements;
 - **private namespaces**: local, explicit direct seeds; they are never
-  advertised or returned by `directory_host/4`.
+  advertised or returned by `directory_host/5`.
 
 Self-advertised public/user ontologies are a later slice.  They need the
 ontology-owned authorisation and revocation model in section 10; they are not
@@ -91,23 +91,28 @@ can restrict discoverable entries without pretending that it exists today.
 
 The supervised application-level `quod_directory` service owns bounded,
 protected ETS route, high-water and known-name indexes. The owner is the only
-writer; proof workers and ask workers read the indexes directly.
+writer; proof and selected-scope workers read the indexes directly.
 
 Conceptual record:
 
 ```text
 {Ontology, NodeKey} => #{
-    endpoint  := {Host, Port},
-    scope     := system | direct,
-    expiry    := MonotonicMs,
-    status    := provisional | confirmed
+    genesis_anchor := 32-byte hash | undefined,
+    role           := validator | observer | undefined,
+    endpoint       := {Host, Port},
+    scope          := system | direct,
+    expiry         := MonotonicMs,
+    status         := provisional | confirmed
 }
 ```
 
-`Ontology` and `NodeKey` are binaries. A system endpoint is covered by the
-original author's signature. At direct ingress it must also equal the endpoint
-in the authenticated link header; after relay/resync it remains a hint until a
-TLS connection pinned to the signed `NodeKey` succeeds.
+`Ontology`, `GenesisAnchor`, and `NodeKey` are binaries. Every system descriptor
+`{Ontology, GenesisAnchor, validator | observer}` and the endpoint are covered
+by the original author's signature. Direct seeds remain unanchored until their
+separate authenticated identity exchange. At direct ingress a system endpoint
+must also equal the endpoint in the authenticated link header; after
+relay/resync it remains a hint until a TLS connection pinned to the signed
+`NodeKey` succeeds. The advertised role is a routing hint, never authority.
 
 On restart the owner recreates configured direct seeds. The system-route table
 begins empty; once namespace startup is complete, the control process signs and
@@ -124,8 +129,9 @@ The internal service API is:
 ```text
 resolve(Ontology)                 -> unknown | {known, [Route]}
 add_direct_seed(Ontology, Addr)   -> provisional route
-confirm_direct_seed(Ontology, Addr, Peer) -> route is usable
-install_record(Peer, Addr, Namespaces, Epoch, Sequence)
+confirm_direct_seed(Ontology, Addr, Peer, GenesisAnchor, Role)
+                                      -> route is usable
+install_record(Peer, Addr, HostedDescriptors, Epoch, Sequence)
                                       -> {ok, ReceiverExpiry} | {error, Reason}
 install_records([Record])             -> one position-aligned result per
                                          record in one bounded writer turn
@@ -133,21 +139,23 @@ expire(Now)
 ```
 
 `resolve/1` returns a bounded, deterministic preference order and never
-performs network I/O.  A failed attempt tries the next candidate.  The route is
-only confirmed after the target has actually answered on its namespace channel;
+performs network I/O. A failed attempt tries the next candidate. A route is
+confirmed only after the authenticated identity exchange has atomically pinned
+the target node key, exact ontology genesis anchor, and advertised role. A
+confirmed direct seed cannot change any of those fields in place;
 an address supplied by an operator is a seed, not proof that it serves that
 ontology.
 
 ### 4.2 Prolog interface
 
-Register `directory_host/4` as a `query`-class compiled predicate through the
+Register `directory_host/5` as a `query`-class compiled predicate through the
 existing `quod_predicates` dispatcher.  It is available only while proving in
 the `quod:root` namespace.
 
 Accepted mode in the first slice:
 
 ```prolog
-directory_host(+Ontology, ?NodeKey, ?Host, ?Port).
+directory_host(+Ontology, ?GenesisAnchor, ?NodeKey, ?Host, ?Port).
 ```
 
 `Ontology` must be a ground ontology-name term (`quod:agent`, a flat binary at
@@ -165,19 +173,19 @@ open sockets and therefore cannot be smuggled into a normal proof.
 
 ### 4.3 Route selection for `::`
 
-The remote ask path uses one resolver:
+The remote scope path uses one resolver:
 
 ```text
-1. target is co-hosted locally                  -> existing local ask path
-2. confirmed local direct seed for target       -> open target at that route
+1. target is co-hosted locally                  -> existing co-hosted scope path
+2. confirmed local direct seed for target       -> open a target scope at that route
 3. provisional local direct seed for target     -> one scoped TOFU attempt
 4. confirmed system-directory routes for target -> try routes in order
 5. target has never been known                   -> unknown_ontology
-6. target is known but no live route succeeds    -> unreachable
+6. target is known but no live route succeeds    -> ontology_unreachable
 ```
 
 The resolver calls `quod_directory:resolve/1` directly.  It does not invoke
-`quod:root::directory_host/4` while opening an ask; the latter is the Prolog
+`quod:root::directory_host/5` while opening a scope; the latter is the Prolog
 view of the same local index.
 
 System route `{NodeKey, Endpoint}` uses a dedicated pinned transport operation:
@@ -209,7 +217,7 @@ either learns the ordinary hint or suppresses it. The inbound link holds its
 ACK and all coalesced payload bytes behind that bind, so a rejected header
 cannot reach a channel subscriber. Receiving `no_learn` also
 makes reverse streams on that isolated connection carry `no_learn`; the
-separately opened answer leg uses the same policy. Existing non-directory
+separately opened return link uses the same policy. Existing non-directory
 links retain their current post-authentication auto-learn behaviour. A
 successful pinned handshake is therefore no more able to overwrite the shared
 cache than a failed one, and a mismatched ordinary header cannot transiently
@@ -252,7 +260,7 @@ dynamic-port rollover can recover from the root contacts even when every
 cached committed endpoint is stale. Contacts are address hints, never control
 authority; the root predicate remains the sole authority.
 
-This path does not call `directory_host/4`, `::`, or any directory route, so
+This path does not call `directory_host/5`, `::`, or any directory route, so
 there is no bootstrap cycle and no static directory-bootstrap configuration.
 
 ## 5. System advertisements and authority
@@ -264,7 +272,9 @@ ledger entry and not a content-layer feed block:
 directory_announce(SignedRecord)
 
 SignedRecord = {
-    NodeKey, Endpoint, HostedNamespaces, Epoch, Sequence, Signature
+    NodeKey, Endpoint,
+    [{Namespace, GenesisAnchor, validator | observer}],
+    Epoch, Sequence, Signature
 }
 ```
 
@@ -276,8 +286,9 @@ endpoint must exactly match the signed `NodeKey` and `Endpoint`. The key is
 certificate-bound; the address remains the author's routing claim and is
 availability-only because later use is key-pinned. At fanout/resync,
 receivers verify that same original signature; relays cannot alter the
-endpoint, namespaces, epoch, or sequence, and cannot invent a high-water mark
-for another host.
+endpoint, hosted descriptors, epoch, or sequence, and cannot invent a
+high-water mark for another host. Namespace-only signed payloads are rejected;
+there is no compatibility decoder.
 
 For the first slice, authorisation is deployment configuration owned by the
 platform operator:
@@ -315,8 +326,8 @@ soft indexes; only the local author, an authenticated direct author, or a
 current root control peer may refill them. A compromised authorised relay can
 replay an older still-valid signature before a current record arrives, but the
 resulting route remains pinned to the allowlisted author's TLS key and can
-therefore cause only temporary `unreachable`, not false read identity or write
-authority. Removing that availability-only replay window would require signed
+therefore cause only temporary route unavailability, not false read identity
+or write authority. Removing that availability-only replay window would require signed
 validity time or durable receiver high-water and is deliberately outside this
 soft-state slice.
 
@@ -396,8 +407,8 @@ before retiring the old one, and stale open results or process-down messages
 cannot remove a newer generation.
 
 Directory messages are advisory.  Loss or temporary disagreement between two
-directory views may delay a route or cause `unreachable`, but cannot change
-agreed state or authorisation at the target.
+directory views may delay a route or cause `{ontology_unreachable, Namespace}`,
+but cannot change agreed state or authorisation at the target.
 
 ## 6. Private direct seeds
 
@@ -462,7 +473,7 @@ no global directory change is required.
 
 1. `body` is configured with a direct seed for `character_42:arm`.
 2. The arm never announces itself to the shared directory.
-3. `body` asks the arm through its confirmed direct route.  A global
+3. `body` selects the arm through its confirmed direct route. A global
    `directory_host(character_42:arm, ...)` query produces no answer.
 4. Moving the arm means supplying body with a new seed; no platform-wide
    registration or durable transaction occurs.
@@ -470,7 +481,7 @@ no global directory change is required.
 ### C. Stale or hostile information
 
 1. A route expires or a target is down: the resolver tries another candidate;
-   if none work, the ask reports `unreachable`.
+   if none work, `::` reports `{ontology_unreachable, Namespace}`.
 2. An unknown namespace with no direct or directory route reports
    `unknown_ontology`.
 3. A node claiming an unapproved system namespace, another node's key, or a
@@ -482,9 +493,10 @@ no global directory change is required.
 
 The implementation must include focused tests for these observable contracts:
 
-1. `directory_host/4` accepts a ground namespace, yields each eligible route
-   once through normal Prolog backtracking, and rejects an unbound/bad name.
-2. `directory_host/4` and `resolve/1` still succeed while the directory owner
+1. `directory_host/5` accepts a ground namespace, yields each eligible anchored
+   route once through normal Prolog backtracking, and rejects an unbound/bad
+   name. The removed `/4` form is not registered.
+2. `directory_host/5` and `resolve/1` still succeed while the directory owner
    process is deliberately blocked, proving that the read path does not wait
    on it; both fail closed when its ETS table is gone.
 3. A valid system advertisement appears; renewal extends it; expiry removes
@@ -506,10 +518,11 @@ The implementation must include focused tests for these observable contracts:
    snapshot; snapshot ingestion requires the exact current outbound root
    control link.
 6. A direct seed is local-only, becomes confirmed only after a successful
-   target exchange, and never appears through `directory_host/4`.
-7. Ask routing has the exact local → direct → system order, tries another
+   target identity exchange pins its node key, genesis anchor, and role, cannot
+   be repinned in place, and never appears through `directory_host/5`.
+7. Scope routing has the exact local → direct → system order, tries another
    candidate after a transport failure, and distinguishes `unknown_ontology`
-   from `unreachable`.
+   from `ontology_unreachable`.
 8. A private ontology cannot be discovered through the shared directory but
    can be reached by its direct seed.
 9. All directory/wire decoding is bounded and uses binaries without minting
@@ -575,10 +588,10 @@ an unauthenticated Prolog argument.
   hosted-set reconciliation, root-contact endpoint recovery, signed
   withdrawal, asynchronous root-peer discovery, pinned control links,
   authorised fanout and bounded resync.
-- `quod_directory_predicates`: root-only `directory_host/4` and
+- `quod_directory_predicates`: root-only `directory_host/5` and
   `directory_control_peer/1`, both with normal Erlog backtracking.
 - `quod_safe_term`: bounded, atom-safe, compression-free external-term decode
-  for directory, ask and transport-header inputs.
+  for directory, proof-scope, and transport-header inputs.
 - `quod_quic` / `quod_conn` / `quod_link`: pinned and identity-discovery
   no-learn transport policy.
-- `quod_ask`: local → direct → system resolution and pinned request/answer legs.
+- `quod_ask`: local → direct → system resolution and pinned scope request/return links.

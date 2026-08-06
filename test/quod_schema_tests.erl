@@ -40,12 +40,12 @@ defaults_test() ->
     B = content1(C),
     ?assertEqual(create,          maps:get(mode, B)),
     ?assertEqual(64,              maps:get(max_proof_workers, B)),
-    ?assertEqual(64,              maps:get(max_ask_workers, B)),
+    ?assertEqual(64,              maps:get(max_scope_workers, B)),
     ?assertEqual(60000,           maps:get(proof_timeout_ms, B)),
     ?assertEqual(30000,           maps:get(transaction_ttl_ms, B)),
     ?assertEqual(25,              maps:get(batch_window_ms, B)),
-    ?assertEqual(60000,           maps:get(ask_timeout_ms, B)),
-    ?assertEqual(30000,           maps:get(ask_step_timeout_ms, B)),
+    ?assertEqual(60000,           maps:get(scope_timeout_ms, B)),
+    ?assertEqual(30000,           maps:get(scope_step_timeout_ms, B)),
     ?assertEqual(<<"ontologies/quod_root.pl">>, maps:get(genesis_file, B)),
     ?assertEqual([],              maps:get(seeds, B)).
 
@@ -91,6 +91,18 @@ removed_directory_bootstraps_rejected_test() ->
        check(
          <<"directory { bootstraps = [\"10.0.0.1:14567\"] }\n"
            "content = [{ namespace = \"quod:root\" }]\n">>)).
+
+removed_ask_scope_config_names_rejected_test_() ->
+    [?_assertException(
+        throw,
+        {quod_schema,
+         [#{reason := unknown_fields, unknown := OldName}]},
+        check(
+          iolist_to_binary(
+            ["content = [{ namespace = \"quod:root\", ",
+             OldName, " = 1 }]\n"])))
+     || OldName <- ["max_ask_workers", "ask_timeout_ms",
+                    "ask_step_timeout_ms"]].
 
 %% --- boot wiring: load_config generates + exposes the node identity ------
 
@@ -235,12 +247,12 @@ build_ns_config_no_genesis_hash_test() ->
     {_, NsCfg} = quod_app:build_ns_config(Content),
     ?assertNot(maps:is_key(genesis_hash, NsCfg)),
     ?assertEqual(64, maps:get(max_proof_workers, NsCfg)),
-    ?assertEqual(64, maps:get(max_ask_workers, NsCfg)),
+    ?assertEqual(64, maps:get(max_scope_workers, NsCfg)),
     ?assertEqual(60000, maps:get(proof_timeout_ms, NsCfg)),
     ?assertEqual(30000, maps:get(transaction_ttl_ms, NsCfg)),
     ?assertEqual(25, maps:get(batch_window_ms, NsCfg)),
-    ?assertEqual(60000, maps:get(ask_timeout_ms, NsCfg)),
-    ?assertEqual(30000, maps:get(ask_step_timeout_ms, NsCfg)).
+    ?assertEqual(60000, maps:get(scope_timeout_ms, NsCfg)),
+    ?assertEqual(30000, maps:get(scope_step_timeout_ms, NsCfg)).
 
 root_recovery_contacts_ignore_invalid_content_seed_test() ->
     Cfg =

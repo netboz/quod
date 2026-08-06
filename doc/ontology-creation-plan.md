@@ -189,7 +189,7 @@ definite failure reason. The existing Erlog failure-reason stack remains availab
 prerequisites; post-proof executor errors are returned explicitly in the same
 bounded term shape. There is no second error stack.
 
-Normal `prove/3`, `prove_ro/3`, served asks, the explorer prove endpoint, and
+Normal `prove/3`, `prove_ro/3`, selected scopes, the explorer prove endpoint, and
 ordinary `goal(create_ontology(...))` proofs cannot execute lifecycle IO. The
 complete action must be ground before the worker starts. Ground facts can be
 supplied with `terms/1`; rules containing variables should use `source/1` or

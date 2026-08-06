@@ -2,8 +2,10 @@
 
 **Status:** architecture reviewed; implementation in progress. Step 1's local
 `action/3` and `transaction/1` foundation landed in Quod 0.7.58. Step 2's
-shared proof context and recursive co-hosted scopes are implemented. Steps 3-6
-are not implemented, and no partial distributed semantics are deployed.
+shared proof context and recursive co-hosted scopes landed in Quod 0.7.60 but
+have not been deployed. Step 3's hard-break shared scope transport landed in
+Quod 0.7.61 and is not deployable on its own. Steps 4-6 are not implemented,
+and no partial distributed semantics are deployed.
 
 This plan is the prerequisite correction for the action work in
 `minimal-agent-delivery-plan.md`. It is deliberately complete: it does not ship
@@ -22,23 +24,22 @@ already has the expensive infrastructure that a uniform proof needs:
   demand-driven backtracking, safe term encoding, and the immediate-caller
   failure-reason boundary;
 - `quod_ask_router`, QUIC identity pinning, worker monitors, timeouts, and
-  cancellation provide the transport pieces, although router admission still
-  needs the explicit bounds below;
+  cancellation provide the transport pieces; Step 3 adds the explicit router
+  admission bounds below;
 - the normal `quod_prolog` path already builds the unsigned transaction and
   waits for ordered apply with the `outcome_unknown` contract;
   `quod_simplex:sign_local_change/2` reserves the author sequence and signs it.
 
-The mistake is narrower and directly visible in the code: ordinary local
-proofs use the one-shot `quod_prolog:run_proof_est_annotated`, while selected
-ontologies use a second, resumable proof loop in `quod_ask:answer_init` /
-`answer_loop` / `step` / `drive`. That second loop deliberately drops the read
-set and rejects any overlay change as `foreign_write_unsupported`. Build one
-reusable resumable scope runner from the latter's continuation/backtracking
-mechanics and the former's overlay setup, annotation, error mapping, and
-cleanup. Ordinary local and selected proofs both delegate to it;
-`prove_est*` remains only a thin synchronous wrapper for runtime/verdict calls.
-Then delete the separate answer interpreter and write-rejection branches. Do
-not add a third proof engine.
+The original mistake was narrower and directly visible in the old code:
+ordinary local proofs used the one-shot `quod_prolog:run_proof_est_annotated`,
+while selected ontologies used a second resumable loop in
+`quod_ask:answer_init` / `answer_loop` / `step` / `drive`. That second loop
+dropped the read set and rejected every overlay change. Steps 2 and 3 replace
+both with one reusable resumable scope runner combining the old continuation
+mechanics with the normal overlay setup, annotation, error mapping, and cleanup.
+Ordinary local and selected proofs delegate to it; `prove_est*` remains only a
+thin synchronous wrapper for runtime/verdict calls. The separate answer
+interpreter is deleted rather than preserved as a third proof engine.
 
 Across machines there must still be a worker process on the machine hosting the
 selected ontology. “The same proof process” therefore means the same worker
@@ -146,8 +147,10 @@ Its savepoint contains:
 
 - the current ontology's exact overlay state, including assertion order,
   retractions, and abolishes;
-- eventually, the distributed proof context's exact per-scope savepoint
-  generation.
+- from step 3 onward, the distributed proof context's exact per-scope
+  savepoint generation. The 0.7.58 local foundation checkpoints only its
+  initiating ontology; it is not the complete cross-ontology transaction
+  contract by itself.
 
 Before Erlog tries an alternative, the choice point restores the overlay that
 existed when that alternative was created. On the first complete solution, the
@@ -240,15 +243,14 @@ dispatcher or a claim that external IO is rollback-capable.
 
 ## 4. One proof context, one scope per ontology
 
-Factor the existing local `quod_prolog` proof worker and remote
-`quod_ask` answer worker into one proof-scope worker. Today those paths duplicate
-the proof loop and the remote copy adds the read-only policy. After this change,
-the same worker implementation owns the frozen view, overlay, Erlog state,
+The existing local `quod_prolog` proof worker and selected-ontology scope
+session now use one proof-scope runner. The duplicated `quod_ask` answer loop
+and its separate remote read-only policy have been removed. The same runner
+owns the frozen view, overlay, Erlog state,
 failure reasons, alternatives, and limits for an origin scope or a selected
 remote scope. Separate local/remote admission quotas remain a DoS boundary, not
-a semantic distinction. The ordinary top-level proof path also calls this same
-resumable runner; `run_proof_est_annotated` no longer remains as a parallel
-first-solution interpreter.
+a semantic distinction. The ordinary top-level proof path calls this same
+resumable runner; there is no parallel first-solution interpreter.
 
 `quod_proof_scope` is only the extracted worker-loop library run by the process
 that existing `quod_prolog` already spawns and monitors. It is not a new OTP
@@ -320,7 +322,11 @@ but its database reference is replaced with B's then-current overlay. The old
 resource bounds, not a special circular-call semantics.
 
 Local, co-hosted, and remote selection share this one handler. Location changes
-only transport.
+only transport. This selector authority belongs to engine-owned anchored
+content proofs and to the explicitly anchored, read-only prerequisite phase of
+`run_action`. Raw verdict, projection, and committed-policy adapters remain
+local deterministic boundaries and cannot manufacture origin authority from
+the content-readable execution context.
 
 ### 4.1 Scope sessions and continuations
 
@@ -334,9 +340,34 @@ The target stores the opaque session state server-side, bound to format version,
 base height, current overlay revision, and expiry. Each invocation separately
 carries the origin-constructed semantic call chain and current authenticated
 subject; a scope may legitimately be reached through several different chains.
-Sequence checks reject duplicate, skipped, cross-proof, and cross-node commands.
+The origin assigns one strictly increasing command sequence per remote scope
+and one unique bounded request id per command. The target advances its expected
+sequence when it accepts a command, before that command executes. At most one
+demand for a particular invocation is outstanding, but another invocation may
+run re-entrantly while the first is suspended in `::`; replies echo request id
+and accepted command sequence and may therefore arrive out of command order.
+The target assigns a separate event sequence in actual outbound-send order,
+while every invocation retains its own answer sequence. Duplicate, stale,
+skipped, cross-proof, and cross-node live-scope commands are protocol errors and
+never execute Prolog.
+QUIC stream delivery and `send_reliable/3` do not create an accepted-frame
+redrive path, and link loss poisons the volatile proof, so step 3 adds no reply
+replay cache. Durable DTX record idempotency in section 9 is a separate step-4
+mechanism. Scope command sequence, request correlation, target event sequence,
+invocation answer sequence, and scope overlay revision remain distinct.
 An old invocation continuation is not rejected merely because the scope overlay
 advanced: invocation answer sequence and scope overlay revision are separate.
+
+Every remote `opened`, solution, completion, bounded Erlog error, typed error,
+and savepoint checkpoint/restore/release acknowledgement carries the target
+scope's authoritative current boolean dirty state and overlay revision inside
+the authenticated envelope. Dirty is the current effective state, not an
+ever-dirty latch: restoring a write-empty revision may legitimately change it
+from true to false. The origin applies dirty updates only in authenticated
+target-event order before delivering the correlated event. A missing,
+malformed, stale, or inconsistently bound dirty value is a protocol error that
+poisons the proof; the step-3 final foreign-dirty gate never guesses that a
+remote scope is clean.
 
 Each scope has one current overlay plus bounded invocation continuations. When
 an older `::` choice point requests another answer after a later invocation
@@ -354,22 +385,28 @@ Likewise, action state checks temporarily enable `read_only` on the **same**
 overlay/read-set and disable mutation hooks, then restore the flag; they do not
 wrap an overlay inside another overlay or create a second dependency set.
 
-`transaction/1` checkpoints its current local overlay and asks the origin-owned
-context to open one correlated savepoint id. On the first use of another scope
-under that id, the origin sends that scope a serialized lazy-checkpoint command;
-a newly opened scope records an empty/pre-entry overlay. Rollback restores every
-touched scope's saved overlay revision. A scope first opened in the failed
-branch remains pinned and registered until the top-level proof ends, with its
-writes restored, because its monotonic read dependencies can still influence
-the surrounding proof. Success keeps each current overlay state.
+`transaction/1` checkpoints its current local overlay whether it begins in the
+origin or in a selected scope, then asks the origin-owned controller to open one
+correlated savepoint id. On the first use of another scope under that id, the
+origin sends that scope a lazy-checkpoint command; a newly opened scope records
+a write-empty pre-entry overlay over its pinned base. The initiating scope
+restores its own `#est{}` and is excluded from the controller-driven restore;
+the controller restores every other touched scope's saved overlay revision. A
+scope first opened in the failed branch remains pinned and registered until the
+top-level proof ends, with its writes restored, because its monotonic read
+dependencies can still influence the surrounding proof. Success keeps each
+current overlay state.
 
-Re-entrant ancestor invocations are serialized by the same origin dispatcher
-and may change an ancestor while it is suspended. On resumption the saved
-continuation receives that scope's current overlay reference. Savepoint commands
-therefore use explicit revisions and never assume a waiting ancestor is frozen.
-Savepoints retained solely by a cut-away continuation are reaped with the proof,
-so distributed savepoint cleanup needs no additional cut hook beyond step 1's
-opt-in Erlog choice-point checkpoint support.
+One scope worker executes only one derivation at a time, but re-entry means
+multiple invocation requests may be outstanding and their replies need not
+follow request order. The origin dispatcher correlates them independently. A
+re-entrant descendant may change an ancestor while its older invocation is
+suspended; on resumption the saved continuation receives that scope's current
+overlay reference. Savepoint commands therefore use explicit revisions and
+never assume a waiting ancestor is frozen. Savepoints retained solely by a
+cut-away continuation are reaped with the proof, so distributed savepoint
+cleanup needs no additional cut hook beyond step 1's opt-in Erlog choice-point
+checkpoint support.
 
 Only at final seal does each target validator sign its own immutable local plan.
 The origin never submits a caller-fabricated B or C diff.
@@ -485,13 +522,13 @@ call-chain data remain visible to ontology clauses.
 The origin-owned context records every opened scope monotonically for semantic
 reuse even when a transaction savepoint restores an older overlay revision. In
 addition, every scope open registers its handle immediately with
-the origin node's existing return router under `ProofId`, before executing the
+the origin node's bounded scope router under `ProofId`, before executing the
 first goal. That router is only a bounded ownership/cleanup registry; it holds
 no Prolog or overlay state. Therefore a B crash after opening C but before
 returning C's handle cannot orphan C or hide it from root-proof cleanup.
-The current router maps are not yet bounded merely because entries are
-monitored; this delta adds the table's explicit global/per-owner/per-peer
-admission caps and rejects before monitor/map insertion.
+The router maps have explicit global/per-owner/per-peer admission caps and
+reject before monitor/map insertion; monitoring alone is not treated as a
+bound.
 Normal completion, failure, cancellation, owner death, or deadline closes all
 touched scopes.
 Monitors perform immediate cleanup; the bounded scope lifetime is the crash
@@ -539,7 +576,8 @@ Starting limits are concrete and schema-validated:
 | one proof-scope worker heap | 64 MiB, converted once to VM heap words |
 | origin-router entries global / per proof owner / per peer | 512 / 8 / 16 |
 | inactive invocation continuations per scope | 64 |
-| nested transaction savepoints per proof | 32 |
+| retained activated distributed savepoint generations per proof | 1,024 |
+| materialized foreign-scope checkpoints | at most 1,024 per scope / 8,192 per proof, derived from the generation and scope limits |
 | answers per invocation | existing 10,000 |
 | complete proof / idle scope lifetime | existing configurable 60,000 ms |
 | one actively deriving step | existing configurable 30,000 ms |
@@ -564,7 +602,18 @@ The same constants are used by schema, producer, decoder, validator, replay,
 and tests; there are no duplicated magic values. A potentially writable goal is
 charged to its transcript/plan budget before it runs, so a valid invocation
 cannot succeed and only then discover that its own goal was intrinsically
-unsealable.
+unsealable. Every transaction-entry and transaction-mode choice-point
+generation that has crossed an ontology boundary counts against the 1,024
+retained-generation limit. An all-local transaction keeps only Erlog's existing
+immutable local checkpoint token and consumes no distributed-generation slot.
+On the first foreign selection, the currently reachable transaction tokens are
+activated before the selected goal executes; later transaction-mode choice
+points activate as they are created. A selected scope materializes at most one
+immutable revision reference for a generation; it never copies a KB.
+Generation release removes all of its per-scope references, while a cut-away
+generation may remain until transaction/proof cleanup and is therefore still
+counted. Activation or first materialization that would exceed the derived
+bound fails before changing any scope.
 
 ## 5. Timeout and error meanings
 
@@ -619,6 +668,7 @@ and `foreign_write_unsupported` results disappear:
 | `{error, {not_allowed, Target}}` | target `can_invoke/4` denied before running the goal; the proof is poisoned |
 | `{error, {bad_name, Term}}` | ontology selector is invalid |
 | `{error, {unknown_ontology, Ns}}` | directory has never learned the ontology |
+| `{error, {ask_requires_anchored_proof, Ns}}` | a raw internal proof attempted `::` without private engine-derived origin authority |
 | `{error, {anchor_conflict, Ns}}` | routes disagree on genesis identity |
 | `{error, {ontology_unreachable, Ns}}` | no pinned current-validator route succeeds |
 | `{error, {ontology_busy, Ns}}` | target admission quota is full |
@@ -628,6 +678,7 @@ and `foreign_write_unsupported` results disappear:
 | `{error, {scope_expired, Ns}}` | the bounded session expired while idle |
 | `{error, {proof_depth_exceeded, Max}}` | active cross-scope invocation depth is exhausted |
 | `{error, {scope_limit_exceeded, Max}}` | distinct-scope limit is exhausted |
+| `{error, {savepoint_limit_exceeded, Max}}` | retained distributed savepoint generations are exhausted before allocation or materialization |
 | `{error, {too_many_answers, Ns}}` | one invocation exceeded its answer cap |
 | `{error, {too_large, Kind}}` | named wire cap failed before decode, or generated-state cap failed before retention |
 | `{error, read_only}` | an explicit `prove_ro` tree attempted its first mutation |
@@ -911,23 +962,30 @@ prepared or decided.
 
 Break the directory record cleanly so every hosted namespace carries its
 32-byte genesis anchor. System authorization is exact over
-`{Namespace, GenesisAnchor, NodeKey}`. A private direct seed is configured as
-`{Namespace, GenesisAnchor, Endpoint}`. Two valid routes claiming different
-anchors for one namespace cause `anchor_conflict`; neither is selected. A route
-update cannot change an already pinned direct-seed anchor. The namespace->anchor
-pin/conflict high-water survives route expiry and service restart; switching a
-namespace to another genesis requires an explicit operator reset and cannot
-happen because stale routes aged out.
+`{Namespace, GenesisAnchor, NodeKey}`. A provisional private direct seed keeps
+the existing explicit `{Namespace, Endpoint}` TOFU boundary; its first
+authenticated non-executing identity exchange confirms and pins both `NodeKey` and
+`GenesisAnchor`, after which neither may change in place. Two eligible system
+routes claiming different anchors for one namespace cause `anchor_conflict`;
+neither is selected. A confirmed direct seed keeps its documented local
+override precedence. The namespace->anchor pin/conflict high-water survives
+route expiry and service restart; switching a namespace to another genesis
+requires an explicit operator reset and cannot happen because stale routes aged
+out.
 
 Replace the namespace-only public projection with
 `directory_host(Namespace, GenesisAnchor, NodeKey, Host, Port)`; remove the old
-`/4` form. For a writable scope, the resolver verifies the anchored ontology's
-current committee projection and accepts only a route whose `NodeKey` is a
+`/4` form. During step 3, the advertised validator/observer role is only a route
+hint: the target authoritatively rechecks that its own key is a current, ready
+validator before admitting a potentially writable scope, and the origin tries
+the next pinned route on an observer rejection. Step 4's bounded foreign-ledger
+verifier then lets the resolver independently verify the anchored ontology's
+current committee projection and accept only a route whose `NodeKey` is a
 current validator at the pinned base/committee id. A directory entry remains
-only an endpoint hint. Observer routes may serve explicit `prove_ro`, but are
-skipped for a potentially writable proof; exhaustion returns
-`ontology_unreachable`. A membership change invalidates the session or causes
-Prepare to abort under the namespace membership lock.
+only an endpoint hint in both steps. Observer routes may serve explicit
+`prove_ro`, but are skipped for a potentially writable proof; exhaustion
+returns `ontology_unreachable`. A membership change invalidates the session or
+causes Prepare to abort under the namespace membership lock.
 
 Add one bounded, read-only foreign-ledger verifier/cache. It reuses the existing
 catch-up page format, server bounds, and certificate-validation core, but not
@@ -1067,10 +1125,12 @@ Keep the change factored rather than adding phase exceptions throughout
 - `quod_proof_scope`: the one shared origin/selected proof worker, invocation
   continuations, namespace-lock/generation fencing against the engine's
   committed projection, overlay generations, sealing, limits, and cleanup;
+- `quod_scope_wire`: the sole bounded request/response scope-frame codec and
+  direction-aware safe decode boundary;
 - `quod_ask`: only the compiled `::` predicate, caller-side choice-point
-  streaming, variable grafting/failure merge, scope wire codec, and transport
-  calls into the router; remove its separate answer proof loop, old ask wire
-  decoders, and `watch_owner`/`stop_owner` cleanup path;
+  streaming, variable grafting/failure merge, and calls into the scope
+  wire/router boundary; its separate answer proof loop, old ask decoders, and
+  `watch_owner`/`stop_owner` cleanup path are removed;
 - `quod_ask_router`: become the sole bounded scope-frame correlation/proxy and
   cleanup registry, with a monotonic `ProofId` touched-scope ownership set;
 - `quod_prolog`: admit the shared workers, retain bounded scope sessions and
@@ -1102,7 +1162,7 @@ Keep the change factored rather than adding phase exceptions throughout
 - `quod_directory`: exact anchor-carrying routes and conflict rejection;
 - explorer/feed/runtime: group records and Finalize-only applied events.
 
-Reuse the current ask router, QUIC identity pinning, safe term codec, answer
+Reuse the scope router, QUIC identity pinning, safe term codec, scope
 backpressure, worker monitors, overlays, OCC validation plumbing, exact-slot ingress,
 retained relay submission, Simplex certificates, catch-up paging, and
 `outcome_unknown` contract.
@@ -1113,6 +1173,8 @@ Delete, rather than retain:
 - the `CallerNs =:= TargetNs` write gate and caller-supplied `CallerNs` API field;
 - served-ask `read_set => false`;
 - target-side `start_answer*`, `answer_init`, `answer_loop`, `step`, and `drive`;
+- `quod_proof_scope:run_first/3` once its engine-owned and raw-snapshot callers
+  both use `quod_proof_session:run_first/3`;
 - old `quod_ask_open`/`quod_ask_next`/`quod_ask_cancel` frames and decoders,
   `watch_owner`/`stop_owner`, superseded ask step timers/messages, and the old
   `#ask_worker`/id/caller maps after their state moves into the shared scope and
@@ -1183,6 +1245,199 @@ deployed:
 Each internal delta must compile and have its focused tests, but the feature is
 enabled only when step 6 proves the complete contract.
 
+### 12.1 Step 3 internal-delta contract
+
+Step 3 is a transport substitution, not a temporary remote-proof mode. It first
+completes the shared scope semantics that the transport must carry, then
+replaces the old QUIC ask protocol outright:
+
+1. **Complete cross-scope savepoints first.** `transaction/1` may begin in the
+   origin or in any selected scope. Its initiating scope checkpoints its own
+   `#est{}` and asks the origin-owned controller to allocate a bounded
+   transaction generation, using the same immediate-parent/origin routing
+   discipline as nested selection. Every Erlog choice point created while that
+   transaction's checkpoint mode is active obtains a correlated distributed
+   savepoint generation through the private scope checkpoint hook; this is what
+   restores foreign writes before a second alternative, not merely on total
+   transaction failure. Each other already-open selected scope is checkpointed
+   lazily on first use under that generation; a scope first opened inside it
+   records its write-empty pre-entry revision over its pinned committed base.
+   Commit releases the generations, while choice-point redo, failure, or Erlog
+   error restores assertions, retractions, abolishes, and assertion order in
+   every touched scope. The initiating scope is excluded from the
+   controller-driven restore because the existing Erlog/DB callback restores
+   its own `#est{}` directly. Read sets remain monotonic. This is new generic
+   private checkpoint-hook/controller wiring around the current local
+   `choicepoint_checkpoint/1`, not an existing distributed feature or a new
+   Erlog semantic. It is implemented and tested for co-hosted scopes before the
+   same checkpoint/restore/release commands cross QUIC; no Erlog database copy
+   or second transaction engine is added. Transaction-entry and
+   transaction-mode choice-point generations share the section 4.2 bound of
+   1,024 retained generations per proof. Each scope can materialize at most one
+   immutable revision reference per generation, so the existing eight-scope
+   limit derives a hard ceiling of 8,192 materialized references per proof.
+   Local-only checkpoint tokens do not enter the controller or consume this
+   distributed bound. The first foreign selection activates the currently
+   reachable tokens before the foreign goal executes; subsequent
+   transaction-mode choice points activate at creation. The controller checks
+   both activation and materialization before mutation; exceeding either
+   returns `{error, {savepoint_limit_exceeded, 1024}}`, poisons the pre-Begin
+   proof, and leaves every scope at its prior revision. No unbounded or full-KB
+   snapshot is hidden behind the hook.
+2. **Give every engine-owned proof the same anchored context, not every raw
+   snapshot.** Normal `prove`/`prove_ro` and lifecycle `run_action` workers use
+   one factored pinned-origin helper with their engine-generated `ProofId`,
+   bounded deadline, root `quod_proof_session`, and `quod_proof_context`.
+   Lifecycle preparation, foreign prerequisites, typed execution, and
+   post-state verification run as fresh invocations in that one read-only
+   anchored session, so repeated foreign prerequisites reuse their scopes.
+   Raw `prove_est*` remains a strictly one-ontology internal snapshot adapter
+   and delegates through `quod_proof_session:run_first`, not a parallel
+   interpreter. Runtime projection/heavy jobs and committed policy subproofs do
+   not acquire distributed origin authority merely because their
+   content-readable `#est.fs` context contains a namespace. Attempting a foreign
+   `::` without the private engine-derived anchored metadata fails before
+   resolution or dialing as `{ask_requires_anchored_proof, Namespace}`. A
+   self-selection remains ordinary local execution. Membership-verdict proofs
+   retain their earlier, stricter `ask_in_membership_verdict` refusal. There is
+   no context-less transport fallback and no second `::` implementation after
+   the legacy answer loop is deleted. Cross-ontology projection/effect
+   execution is not part of the D-proof selector and remains forbidden; only
+   `run_action`'s explicit read-only prerequisite proof receives this anchored
+   selection authority.
+3. **Use one hard-break scope wire.** A fixed-version, safe-ETF envelope carries
+   scope open/close, invocation open/next/cancel, nested-selection requests and
+   replies, and savepoint checkpoint/restore/release. It binds the authenticated origin key,
+   target key, `ProofId`, both anchored ontology identities, opaque binary
+   session/invocation/request ids, read-only mode, scope command sequence,
+   target event sequence, invocation answer sequence, remaining absolute
+   budget, canonical call chain, current monotonic overlay-generation integer,
+   and the
+   target-computed dirty boolean on every state-bearing reply. The wire never
+   carries the target's internal overlay revision, ETS handle, or Erlog state;
+   savepoints cross only as opaque bounded ids and are resolved to retained
+   revisions inside the target scope. Goal, answer,
+   Erlog-error, and failure-reason
+   terms use `quod_wire_term`; a goal remains an opaque bounded binary until
+   envelope, identity, anchor, rate, and quota checks pass. A missing or invalid
+   dirty field fails closed. Pids, references, interpreter state, overlays, and
+   diffs never cross the wire. Live-scope duplicates are rejected; no replay
+   cache or accepted-command redrive path is introduced.
+4. **Register before execution.** The origin router records a bounded pending
+   open before sending it. The target opens the shared `quod_scope_session`,
+   returns `opened`, and waits for the first explicit demand. Only after the
+   router atomically promotes the pending open to the `ProofId`'s monotonic
+   touched-scope set may an invocation run. Repeated selection of the same
+   `{Namespace, GenesisAnchor}` reuses that session. Nested B -> C selection is
+   correlated through the origin controller; B never receives a transferable C
+   capability.
+5. **Keep one worker and one router.** `quod_scope_session` gains a small
+   transport-neutral controller/sink boundary; its proof session, overlay,
+   continuations, re-entrant dispatcher, and local behavior remain single
+   implementations. `quod_ask_router` becomes the sole bounded network-frame
+   correlation and cleanup registry and owns no Prolog state. The namespace
+   engine remains the authenticated ingress adapter and owner of the target
+   worker monitor, MVCC pin, derivation timer, and lifetime timer. No new OTP
+   service, coordinator, or second session registry is introduced.
+6. **Make routing exact before opening a scope.** The directory signed record is
+   hard-broken from a namespace list to bounded hosted descriptors carrying
+   `{Namespace, GenesisAnchor, validator | observer}`. A provisional direct
+   seed first performs one bounded, authenticated, non-executing identity
+   exchange on the namespace channel; no proof worker, scope, monitor, or
+   session entry is created. That exchange confirms and pins both the node key
+   and returned anchor, after which the ordinary fully anchored scope-open wire
+   is used. Eligible system
+   routes for one namespace under different anchors yield `anchor_conflict`
+   before a dial. A confirmed direct seed remains the operator's explicit
+   override, establishes the locally selected identity, and shadows system
+   routes as specified by `network-directory-plan.md`; its pinned anchor can
+   never change in place.
+   Writable selection treats the advertised role only as a hint and the target
+   rechecks that its local key is a current, ready validator before admitting
+   the scope; an observer is skipped/rejected and the next pinned route is
+   tried. Explicit `prove_ro` may select an observer and propagates strict
+   read-only mode through every descendant scope.
+7. **Fail and clean up as one proof.** Once a target might have executed, link
+   loss, a malformed sequence, target death, or a scope timeout poisons the
+   pre-Begin `ProofId`; it is never retried or re-proved elsewhere. Owner death
+   closes every pending and accepted session. A remote target cannot monitor an
+   origin process, so its namespace engine binds the session to the exact
+   authenticated request-link/connection generation and monitors that local
+   link process; link `DOWN` immediately kills and removes the session. The
+   monitored outbound return link does the same from the other direction. Each
+   origin proof worker also monitors the router generation. Router `DOWN`
+   poisons the proof; the proof context's already-monotonic opaque scope handles
+   let its normal `after` cleanup send one direct close on each retained request
+   link without creating a second registry, and a restarted router never adopts
+   old sessions. If owner and router die together or a close cannot cross a
+   partition, request-link death or the absolute target lifetime reaps the
+   session. Idle and absolute scope lifetimes are bounded crash fallbacks, not
+   authority renewal. Cleanup is idempotently correlated
+   by `ProofId`, session id, link generation, monitor, and timer token, and
+   releases continuations, read-set ETS tables, workers, MVCC pins, monitors,
+   timers, router entries, and pending replies. The limits in section 4.2 are
+   enforced before goal decode, worker spawn, monitor creation, or map
+   insertion, including the worker heap limit and bounded rate-bucket table.
+8. **Delete the superseded network path in this delta.** Remove the old
+   `quod_ask_open`/`quod_ask_next`/`quod_ask_cancel` frames and decoders,
+   per-invocation remote streams, target `start_answer*`/`answer_*` proof loop,
+   `watch_owner`/`stop_owner`, AskId-only router entries, and their worker-map
+   branches, tests, metrics text, and comments. There is no dual decoder or
+   compatibility mode. Step 5 removes the remaining old ledger/API/domain and
+   documentation contracts, not a second ask protocol.
+
+This internal delta deliberately retains the origin's final
+`foreign_dirty() -> foreign_write_unsupported` feature gate. Remote scopes must
+stage writes so repeated-target, failure, re-entry, and rollback semantics can
+be verified, but no public proof may report success while those volatile writes
+would merely be discarded. Step 4 replaces that gate with target sealing and
+the one-ledger/group durable path. Likewise, step 3 carries the authenticated
+node principal and origin-built chain but uses the existing `can_read/3` only as
+an undeployed intermediate. The complete `can_invoke/4` hard break lands with
+step 4's policy-presence, Prepare re-validation, self-seal, API, and V3 genesis
+changes; there is never a compatibility alias.
+
+Step 3 is not deployed. It adds no plan signing, foreign transaction
+submission, Begin/Prepare/Decision/Finalize record, namespace lock, outcome
+index, cross-ledger visibility rule, recovery protocol, or distributed applied
+event. Those remain the immediately following implementation work, and step 6
+is the only deployment gate.
+
+Its focused gate proves, non-vacuously: co-hosted and remote cross-scope
+transaction rollback for assertions, retractions, abolishes, nested
+transactions, errors, and selected success, including a transaction initiated
+inside B that selects and rolls back C, and a scope first opened inside the
+transaction returning to its write-empty pinned-base revision; a read performed
+by a remotely rolled-back branch remains in that scope's monotonic OCC set, and
+a foreign write made by the first failed alternative is absent before the
+second alternative runs;
+remote repeated-B state and
+A -> B -> C -> B reuse exactly one session per ontology; local/co-hosted/remote
+solutions, reasons, Erlog errors, cuts, redo, failed-write retention, and
+read-only rejection agree; anchored lifecycle prerequisites use and reuse the
+shared session path, while raw local `prove_est` retains its exact
+bindings/diff/read-set contract and foreign `::` from raw runtime/projection,
+policy, or isolated state returns the exact typed refusal without a dial or
+target worker, while self-selection remains local;
+verdict `::` retains its stronger error; re-entrant commands for two invocations
+may be outstanding and complete out of request order with exact request/event
+correlation, while a duplicate injected while its original is suspended, or
+any stale/divergent/skipped command, poisons the proof without a second
+derivation or mutation; every bound is tested at its
+limit and at limit + 1, including proof that rejected opens never decode the
+goal or allocate a worker/monitor/map entry; wrong TLS key, identity, anchor,
+mode, `ProofId`, session, invocation, or sequence cannot command a captured
+scope; anchor conflict performs no dial and observer-first routing reaches a
+validator; request-link drop alone reaps the remote target session without a
+remote process monitor; and origin, answer-link, router, target-worker, and
+engine death plus idle and active-step timeout all leave zero sessions, workers,
+pins, read-set tables, monitors, timers, and router entries. A remote dirty
+proof must demonstrate its volatile state reuse, carry a valid target-bound
+dirty field on every state-bearing reply/acknowledgement, update true to false
+after rollback in target-event order, return the retained feature-gate error,
+and leave every committed ontology unchanged; missing or malformed dirty state
+poisons the proof.
+
 ## 13. Acceptance tests
 
 At minimum:
@@ -1234,11 +1489,15 @@ At minimum:
     or lock mutation. Reuse otherwise valid target plan/signatures under a
     second origin author sequence or coordination nonce; manifest validation
     rejects both before lock mutation.
-14. Two valid routes advertise one namespace under different anchors; resolution
-    returns `anchor_conflict`, opens no scope, and changes no route high-water.
-    A direct seed cannot change its pinned anchor.
-15. Duplicate and reordered frames are idempotent; commit/abort reversal,
-    finalize without Prepare, and GroupId reuse are rejected.
+14. Two valid eligible system routes advertise one namespace under different
+    anchors; resolution returns `anchor_conflict`, opens no scope, and changes
+    no route high-water. A confirmed direct seed keeps its documented local
+    override precedence and cannot change its pinned anchor.
+15. Any duplicate, stale, or skipped live scope command is rejected without
+    executing twice. Separately, an exact duplicate signed durable DTX record
+    returns its existing witness or no-ops idempotently; a different digest,
+    commit/abort reversal, Finalize without Prepare, and GroupId reuse are
+    rejected.
 16. Restart and fresh catch-up reconstruct exact active namespace locks, hidden plans,
     facts, committee projection, group status, and terminal index. Replay emits
     no reactions; live post-Finalize apply emits one.

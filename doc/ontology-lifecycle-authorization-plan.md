@@ -169,7 +169,7 @@ The sub-proof uses the existing verdict context. Cross-ontology `::` asks and
 read-time followers are disabled, and staging-, projection-, and effect-class
 predicates are unavailable. Existing query-class predicates remain callable
 and may read live node-local state (for example `peer_ready/1`,
-`directory_host/4`, `directory_control_peer/1`, and
+`directory_host/5`, `directory_control_peer/1`, and
 `ontology_join_state/2`); those observations are not part of `out_db`. The
 first-slice lifecycle rules deliberately use only committed
 `peer_admitted/4`, so their authorization result is snapshot-only. A future

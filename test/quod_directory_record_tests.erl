@@ -6,13 +6,14 @@ signed_record_roundtrip_and_tamper_rejection_test() ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = quod_identity:key_term({Pub, Seed}),
     Endpoint = {<<"node.example">>, 4555},
-    Namespaces = [<<"quod:agent">>, <<"quod:root">>],
+    Hosted = [{<<"quod:agent">>, anchor(1), observer},
+              {<<"quod:root">>, anchor(2), validator}],
     {ok, Encoded} = quod_directory_record:sign(
-                      Pub, Endpoint, Namespaces, 7, 11, Signer),
+                      Pub, Endpoint, Hosted, 7, 11, Signer),
     {ok, Record} = quod_directory_record:decode(Encoded),
     ?assertEqual(Pub, quod_directory_record:node_key(Record)),
     ?assertEqual(Endpoint, quod_directory_record:endpoint(Record)),
-    ?assertEqual(Namespaces, quod_directory_record:namespaces(Record)),
+    ?assertEqual(Hosted, quod_directory_record:hosted(Record)),
     ?assertEqual(7, quod_directory_record:epoch(Record)),
     ?assertEqual(11, quod_directory_record:sequence(Record)),
     Last = byte_size(Encoded) - 1,
@@ -28,7 +29,7 @@ wrong_author_signature_is_rejected_test() ->
     %% The key embedded in the body differs from the signing key.
     Body = term_to_binary(
              {quod_directory_body, 1, Pub, <<"node">>, 4556,
-              [<<"quod:root">>], 1, 1},
+              [{<<"quod:root">>, anchor(3), validator}], 1, 1},
              [deterministic]),
     Sig = quod_identity:sign(
             Body, BodySigner),
@@ -42,8 +43,10 @@ wrong_author_signature_is_rejected_test() ->
 bounds_and_shape_fail_closed_test() ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = quod_identity:key_term({Pub, Seed}),
-    AtLimit = [<<N:16>> || N <- lists:seq(1, 32)],
-    TooMany = [<<N:16>> || N <- lists:seq(1, 33)],
+    AtLimit = [{<<N:16>>, anchor(N), validator}
+               || N <- lists:seq(1, 32)],
+    TooMany = [{<<N:16>>, anchor(N), validator}
+               || N <- lists:seq(1, 33)],
     LongestName = binary:copy(<<"n">>, 255),
     TooLongName = binary:copy(<<"n">>, 256),
     ?assertMatch(
@@ -57,19 +60,41 @@ bounds_and_shape_fail_closed_test() ->
     ?assertMatch(
        {ok, _},
        quod_directory_record:sign(
-         Pub, {<<"node">>, 4557}, [LongestName], 1, 1, Signer)),
+         Pub, {<<"node">>, 4557},
+         [{LongestName, anchor(40), observer}], 1, 1, Signer)),
     ?assertEqual(
        {error, bad_record},
        quod_directory_record:sign(
-         Pub, {<<"node">>, 4557}, [TooLongName], 1, 1, Signer)),
+         Pub, {<<"node">>, 4557},
+         [{TooLongName, anchor(41), observer}], 1, 1, Signer)),
     ?assertEqual(
        {error, bad_record},
        quod_directory_record:sign(
-         Pub, {<<"node">>, 4557}, [<<"a">>, <<"a">>], 1, 1, Signer)),
+         Pub, {<<"node">>, 4557},
+         [{<<"a">>, anchor(42), validator},
+          {<<"a">>, anchor(43), observer}], 1, 1, Signer)),
     ?assertEqual(
        {error, bad_record},
        quod_directory_record:sign(
-         Pub, {<<"node">>, 4557}, [<<"b">>, <<"a">>], 1, 1, Signer)),
+         Pub, {<<"node">>, 4557},
+         [{<<"b">>, anchor(44), validator},
+          {<<"a">>, anchor(45), observer}], 1, 1, Signer)),
+    ?assertEqual(
+       {error, bad_record},
+       quod_directory_record:sign(
+         Pub, {<<"node">>, 4557},
+         [{<<"a">>, <<1, 2, 3>>, validator}], 1, 1, Signer)),
+    ?assertEqual(
+       {error, bad_record},
+       quod_directory_record:sign(
+         Pub, {<<"node">>, 4557},
+         [{<<"a">>, anchor(46), leader}], 1, 1, Signer)),
+    ?assertEqual(
+       {error, bad_record},
+       quod_directory_record:sign(
+         Pub, {<<"node">>, 4557},
+         [{<<"a">>, anchor(47), validator} | improper],
+         1, 1, Signer)),
     ?assertEqual(
        {error, too_large},
        quod_directory_record:decode(<<0:(16 * 1024 + 1)/unit:8>>)),
@@ -82,3 +107,19 @@ bounds_and_shape_fail_closed_test() ->
        quod_directory_record:decode(
          term_to_binary({quod_directory_record, 1, <<>>, <<>>, []},
                         [compressed]))).
+
+namespace_only_wire_format_is_rejected_test() ->
+    {Pub, Seed} = quod_identity:generate(),
+    Signer = quod_identity:key_term({Pub, Seed}),
+    Body = term_to_binary(
+             {quod_directory_body, 1, Pub, <<"old-node">>, 4558,
+              [<<"quod:root">>], 1, 1},
+             [deterministic]),
+    Signature = quod_identity:sign(Body, Signer),
+    Encoded = term_to_binary(
+                {quod_directory_record, 1, Body, Signature},
+                [deterministic]),
+    ?assertEqual(
+       {error, bad_record}, quod_directory_record:decode(Encoded)).
+
+anchor(N) -> <<N:256>>.

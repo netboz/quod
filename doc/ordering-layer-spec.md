@@ -1011,7 +1011,7 @@ predicates at a snapshot height. Built-ins and compiled procedures are immutable
             est       :: erlog_state(),  %% small #est{} with {ETS table, snapshot height}
             applied = 0 :: non_neg_integer(),
             workers   = #{} :: map(),
-            ask_workers = #{} :: map(),
+            scope_workers = #{} :: map(),
             parked    = #{} :: #{binary() => write_ctx()},        %% writes awaiting commit, by tx_id
             applies   = 0 :: non_neg_integer(),
             rejects   = 0 :: non_neg_integer(),
@@ -1042,66 +1042,19 @@ namespaces() -> gproc:select([{{{n, l, {quod_prolog, '$1'}}, '_', '_'}, [], ['$1
                     max_proof_workers => 64}).
 ```
 
-Child of `quod_ns`. `init({Ns, Config})` creates the shared store, subscribes to the ontology's ask
-channel, and remains unready while `quod_simplex` replays committed blocks (§4.6). Proves cannot observe a
-partially rebuilt KB.
+Child of `quod_ns`. `init({Ns, Config})` creates the shared store, subscribes to the ontology's proof-scope
+request channel, and remains unready while `quod_simplex` replays committed blocks (§4.6). Proofs cannot
+observe a partially rebuilt KB.
 
-### 4.3 Serving `prove` — copy-on-write overlays, no writer blocking
+### 4.3 Serving proofs — historical seam retired
 
-```erlang
--spec prove(TargetNs :: binary(), Goal :: term(), CallerNs :: binary())
-        -> {ok, Bindings :: [map()], ReadHeight :: non_neg_integer()}
-         | {error, no_such_namespace} | fail.
-prove(TargetNs, Goal, CallerNs) ->
-    case quod_reg:where({quod_prolog, TargetNs}) of
-        undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(Pid, {prove, Goal, CallerNs}, infinity)
-               catch exit:_ -> fail end
-    end.
-```
-
-`fail` is goal-failure; `{error, no_such_namespace}` is routing failure — distinct. The writer never blocks:
-`handle_call({prove, ...})` parks `From` and returns `{noreply, S}`; the reply is sent later (from
-`handle_cast({prove_result, ...})` for a read, or after commit for a write).
-
-`handle_call({prove, Goal, CallerNs}, From, S)`:
-
-1. **Capture the current table/height handle and wrap it in a per-proof overlay:**
-   ```erlang
-   #s{est = Snapshot, applied = HeightRead} = S,
-   Wrapped = quod_erlog_db_local_prove:wrap_state(Snapshot, #{read_set => true}),
-   ```
-   `local_prove` shadows asserts/retracts per functor in its own overlay; committed facts untouched.
-2. **Record `HeightRead = #kb.applied`** into the parked `prove_ctx()` (#7 — record height read).
-3. **Spawn + monitor the worker, arm the no-progress watchdog**, stash the worker and caller monitors,
-   frozen height, timer, and correlation token under the worker `Ref`, then return `{noreply, S1}`:
-   ```erlang
-   try erlog_int:prove_goal(Goal, Wrapped) of
-       {succeed, #est{bs = Bs} = Final} ->
-           Bindings = extract_bindings(Goal, Bs),
-           Db       = Final#est.db,
-           Changes  = quod_erlog_db_local_prove:get_local_changes(Db),
-           ReadSet  = quod_erlog_db_local_prove:get_read_set(Db),
-           gen_server:cast(Self, {proof_result, Ref, Kind, Goal, CallerNs,
-                                  {ok, Bindings, Changes, ReadSet}});
-       {fail, _} -> gen_server:cast(Self,
-                                    {proof_result, Ref, Kind, Goal, CallerNs, fail})
-   catch Class:Err -> gen_server:cast(Self, {prove_result, Ref, {error, {Class, Err}}})
-   after quod_erlog_db_local_prove:cleanup_read_set(Wrapped) end
-   ```
-4. **Classify after execution (#8)** in the correlated `proof_result` handler — remove the worker
-   record, cancel the timer, and demonitor both worker and caller:
-   - `fail` / `{error, _}` → reply `fail` (resp. `{error, prove_failed}`).
-   - `{ok, Bindings, [], _}` → **read** (empty write-set, #6). Reply `{ok, Bindings, HeightRead}`. Nothing
-     asserted, nothing committed. Bump `proves`.
-   - `{ok, Bindings, Changes, ReadSet}` with `Changes =/= []` → touched facts. **MVP: legal only if
-     `CallerNs == TargetNs == S#s.ns`** (#10). If so, hand off to the writer path (§4.5), keep `From` parked.
-     Else reject `{error, foreign_write_unsupported}`.
-
-**Concurrency:** multiple workers run on independent overlays over the same ETS table. Applying a block
-publishes only changed predicate versions at the new height. Existing workers retain their old height;
-history is reclaimed only below the oldest live worker. Ordinary proofs and served asks are independently
-capped at 64, providing bounded backpressure.
+> **Historical tombstone.** The Phase-1 per-request worker pseudocode, caller-namespace
+> write gate, and untyped worker-failure replies formerly recorded here do not describe
+> Quod's proof engine. Current proofs use one engine-owned anchored proof
+> context and bounded reusable selected-ontology scopes; local, co-hosted, and remote
+> execution differ only in transport. The normative proof, scope, write, and typed-error
+> contracts live in `doc/inter-ontology.md` and `doc/distributed-proof-plan.md`. This
+> historical Raft document deliberately keeps no parallel proof algorithm.
 
 ### 4.4 `apply_block` — deterministic OCC apply (#23, #25)
 
@@ -1152,46 +1105,21 @@ publish_snapshot(Index, #s{est = #est{db = #db{ref = Ref0} = Db} = Est0} = S) ->
   validator already re-proved the change against the parent-height KB before voting. Applying the
   membership diff unconditionally keeps `peer_admitted/4` facts and Simplex's validator projection in
   lockstep.
-- **Snapshot GC:** publication retains the version needed by the oldest live proof/ask plus newer versions.
+- **Snapshot GC:** publication retains the version needed by the oldest live proof or selected scope plus newer versions.
   A small retained-history index lets a later unrelated or no-op block reclaim released versions without
   scanning the full KB.
 
-### 4.5 Building a `#transaction{}` and submitting it
+### 4.5 Proof writes — historical seam retired
 
-A would-be writer (own-ns `prove` whose worker produced `Changes =/= []`) becomes a transaction. `From`
-stays parked; nothing is replied until the block applies on this node.
-
-1. The proof already ran on its staging overlay, capturing `Bindings`, `Changes`, and `ReadSet`.
-2. Build a `#transaction{}`:
-   ```erlang
-   Change = #transaction{tx_id = tx_id(Self), caller_ns = CallerNs,
-                         goal = Goal, result = Bindings,
-                         diff = Changes, read_check = ReadSet,
-                         author = Self, submitted_at = quod_time:now_ms(), sig = none}
-   ```
-   The overlay already emits content-only operations with local clause tags removed.
-3. Submit without blocking the engine, then park the caller under `tx_id` with a 30 s liveness timer:
-   ```erlang
-   ReqId = gen_statem:send_request(quod_reg:via({quod_simplex, Ns}),
-                                   {append, Change}),
-   Timer = erlang:send_after(Ttl, self(), {park_timeout, TxId}),
-   Parked1 = Parked#{TxId => {From, [Bindings], HeightRead, Timer, ReqId}}
-   ```
-   `quod_prolog` does not apply its own write directly — it waits for the block via `apply_block/3` in
-   committed order, applying via the same deterministic path as every member.
-4. **Release on apply.** When `apply_block` processes the block carrying this
-   `tx_id`, look up `parked`:
-   - applied → reply `{ok, Bindings, HeightRead}` to the parked `From`.
-   - rejected → reply `{error, conflict_retry}`.
-   Remove the `tx_id` entry either way. On other members the block has no parked entry, so `apply_block` just
-   mutates the KB. Definite asynchronous append errors unpark immediately; ambiguous transport/process loss
-   leaves the caller parked because the block may already have committed. If the local waiting deadline
-   expires first, return `{error, {outcome_unknown, TxId}}`, never a false failure: the client must inspect
-   that transaction id and must not automatically resubmit a non-idempotent operation.
+> The former own-namespace-only worker-to-transaction pseudocode belonged to the deleted
+> Phase-1 proof path. It is not a compatibility contract. The current volatile proof state,
+> target-authored plan, and durable multi-ontology commit sequence are specified only in
+> `doc/distributed-proof-plan.md`; the live write outcome contract is documented in
+> `doc/inter-ontology.md`.
 
 ### 4.6 Rebuild on start — replay the log / snapshot (#20, #29, #13)
 
-`init/1` builds an empty shared MVCC store, subscribes to asks, and remains unready. It then casts
+`init/1` builds an empty shared MVCC store, subscribes to proof-scope requests, and remains unready. It then casts
 `quod_simplex:rebuild/1`; the durable Simplex store is authoritative and the fact engine is always a
 projection of its committed prefix.
 
@@ -1220,32 +1148,24 @@ handle_call(get_stats, _From, S) ->
               conflicts => S#s.conflicts,
               parked => map_size(S#s.parked),
               proof_workers => map_size(S#s.workers),
-              ask_workers => map_size(S#s.ask_workers),
+              scope_workers => map_size(S#s.scope_workers),
               kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
               kb_history_predicates => quod_erlog_db_mvcc:history_predicates(StoreRef)}, S}.
 ```
 
 The Prometheus poller exports the applied height, apply/reject/prove/conflict counters, parked writes, and
-park timeout count per namespace. It also exports active proof/ask workers, shared KB ETS memory, and the
+park timeout count per namespace. It also exports active origin-proof/selected-scope workers, shared KB ETS memory, and the
 number of predicates retaining an older MVCC version for a frozen query. A history count that does not return
 to zero after the corresponding workers finish is a useful stuck-query signal.
 
-### 4.8 Edge cases
+### 4.8 Edge cases — historical proof table retired
 
-| Case | Handling |
-|---|---|
-| `prove` on unknown `TargetNs` | `quod_reg:where` → `undefined` → `{error, no_such_namespace}`. |
-| Goal fails | worker reports `fail`; reply `fail`; overlay dropped (not a conflict). |
-| Worker crashes / makes no progress | correlated `DOWN` → `{error, prove_failed}`; watchdog kill → `{error, no_progress}`. Caller death kills its worker. |
-| Foreign-ns write (`CallerNs =/= TargetNs`, `Changes =/= []`) | `{error, foreign_write_unsupported}` (#10). |
-| Duplicate/old `apply_block` | idempotent no-op. |
-| Forward apply gap | leave state unchanged and ask `quod_simplex` to rebuild the contiguous prefix. |
-| OCC conflict at apply | facts unchanged, `applied` advances, `rejects++`; submitter gets `{error, conflict_retry}`. |
-| Not the leader on submit | `{error, not_in_charge, Hint}` → `{error, {not_leader, Hint}}`, unpark. |
-| Proof/ask worker cap reached | reject immediately with `{error, busy}`; no unbounded queue or process growth. |
-| 1-voter committee | transparent: Simplex commits locally, then `apply_block` fires as in N-voter. |
-| Write waiting deadline expires | return `outcome_unknown` with its transaction id; it may still finalize, so automatic retry is unsafe. |
-| Restart mid-flight write | the client call exits with the engine and its outcome is unknown. A block that already committed is replayed from the durable Simplex store; inspect the original transaction id before deciding whether an application-level retry is safe. |
+> The former table mixed retired Raft/apply cases with an obsolete worker-error taxonomy
+> and caller-namespace write gate. It is deleted rather than translated into another
+> competing contract. Current proof/scope
+> failures and cleanup are specified in `doc/inter-ontology.md` and
+> `doc/distributed-proof-plan.md`; current consensus and apply behavior belongs to the
+> Simplex specification and module documentation.
 
 ---
 
@@ -1336,13 +1256,13 @@ client correlation by transaction id.
 `quod_simplex:rebuild/1`. Simplex streams its durable committed entries back through `apply_block/3`, with
 periodic `sync/1` barriers, and calls `mark_ready/1` only after the entire prefix is applied (§4.6).
 
-### 5.4 Routing `prove(TargetNs, Goal, CallerNs)`
+### 5.4 Proof routing — historical seam retired
 
-Reads do not go through the committee (#22). Routing is a gproc name lookup on `{quod_prolog, TargetNs}` (see
-§4.3 `prove/3`). `TargetNs == CallerNs` is own-namespace; `TargetNs /= CallerNs` is a cross-namespace read
-(MVP allows exactly these two, #10). Foreign writes are rejected at routing/classification time. The fact
-store is CP (#16): a node that cannot confirm `commit_index` is current cannot serve a guaranteed-latest
-read or any write.
+> The old three-argument router and own-versus-foreign write classification were removed.
+> Ontology selection now enters the same engine-owned proof/session API in every location;
+> local, co-hosted, and remote execution differ only in transport. See
+> `doc/inter-ontology.md` and `doc/distributed-proof-plan.md` for the normative route,
+> authority, and write semantics.
 
 ### 5.5 Committee write path: `append` / `apply`
 
@@ -1461,8 +1381,9 @@ milestone is demonstrable on its own and depends only on earlier ones.
 | `quod_prolog` | per-Ns facts engine: `apply`/`prove` | `{quod_prolog, Ns}` | `quod_ns` |
 | `quod_erlog_db_mvcc` | shared versioned committed KB; immutable proof snapshots | — | `quod_prolog` |
 | `quod_erlog_db_local_prove` | per-proof write/read overlay over an MVCC snapshot | — | proof worker |
-| `quod_ask` | local and remote inter-ontology solution streams | — | `quod_prolog` |
-| `quod_wire_term` | bounded atom-safe codec for remote Prolog terms | — | `quod_ask` |
+| `quod_scope_session` | one reusable local or remote selected-ontology proof scope | — | `quod_prolog` |
+| `quod_scope_wire` | authenticated hard-break command/event codec for remote proof scopes | — | `quod_prolog` / `quod_ask_router` |
+| `quod_wire_term` | bounded atom-safe codec for remote Prolog payloads | — | `quod_scope_wire` |
 | `quod_ledger_store` | on-disk persistence helper (library) | — | — |
 | `quod_diff` | pure differ: write-set op-log + read-set hashes | — | — |
 | `quod_ns` | per-Ns `rest_for_one` sub-sup | `{quod_ns, Ns}` | `quod_ns_sup` |

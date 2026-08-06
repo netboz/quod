@@ -423,7 +423,7 @@
     {
       "type": "timeseries",
       "id": 18,
-      "title": "Active queries & cross-ontology answers",
+      "title": "Active proofs & selected scopes",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -434,7 +434,7 @@
         "x": 0,
         "y": 33
       },
-      "description": "Queries running on this node, and cross-ontology answer streams it is serving. Each uses a frozen data view. Proof workers reaching the configured limit cause new queries to receive a busy response until one finishes.",
+      "description": "Origin proofs and reusable selected-ontology scopes running on this node. Each scope retains one frozen base plus its proof-local changes until the origin proof closes it.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -448,12 +448,12 @@
         {
           "refId": "A",
           "expr": "quod_prolog_proof_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "local queries \u00b7 {{node_id}}"
+          "legendFormat": "origin proofs \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
-          "expr": "quod_prolog_ask_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
-          "legendFormat": "cross-ontology answers \u00b7 {{node_id}}"
+          "expr": "quod_prolog_scope_workers{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "selected scopes \u00b7 {{node_id}}"
         }
       ]
     },

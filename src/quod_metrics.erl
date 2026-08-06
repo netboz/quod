@@ -46,7 +46,7 @@ Two collection paths:
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes whose final outcome was still unknown when their caller deadline elapsed |
-| `quod_prolog_proof_workers/ask_workers{namespace}` | gauge | | queries and cross-ontology answer streams currently using a frozen data snapshot |
+| `quod_prolog_proof_workers/scope_workers{namespace}` | gauge | | origin proofs and selected proof scopes currently using a frozen data snapshot |
 | `quod_prolog_kb_memory_words{namespace}` | gauge | | Erlang VM words used by the committed knowledge-base ETS table |
 | `quod_prolog_kb_history_predicates{namespace}` | gauge | | predicates retaining an older version because a query still needs it |
 | `quod_feed_pushed/ingested/pulled{namespace}` | gauge | | running totals of blocks spread / received / pulled to fill gaps |
@@ -232,9 +232,9 @@ declare(NodeId) ->
     _ = G(quod_prolog_parked,        "Write requests waiting here for their change to be made final right now."),
     _ = G(quod_prolog_park_timeouts, "Total write callers whose transaction still had no final result at the local waiting deadline. The transaction may finalize later, so inspect the returned transaction id instead of retrying the same non-idempotent operation (only ever goes up)."),
     _ = G(quod_prolog_proof_workers, "How many local queries are running right now. Each uses a frozen view of the data, so a value at the configured limit means new queries are being turned away until one finishes."),
-    _ = G(quod_prolog_ask_workers, "How many cross-ontology answer streams this node is serving right now. Each keeps a frozen view of the requested ontology until it finishes or is cancelled."),
+    _ = G(quod_prolog_scope_workers, "How many selected proof scopes this node is serving right now. Each keeps one reusable frozen-base session until the origin proof closes it."),
     _ = G(quod_prolog_kb_memory_words, "How much Erlang VM memory, in words, this ontology's shared knowledge-base table is using. Multiply by the VM word size (normally 8 bytes on a 64-bit node) for an approximate byte count."),
-    _ = G(quod_prolog_kb_history_predicates, "How many predicates are temporarily keeping an older data version because a running query or cross-ontology answer stream still needs its frozen view. It should return to 0 after those queries finish."),
+    _ = G(quod_prolog_kb_history_predicates, "How many predicates are temporarily keeping an older data version because a running origin proof or selected scope still needs it. It should return to 0 after those proof scopes finish."),
     %% Spreading finished blocks to the rest of the network.
     _ = G(quod_feed_pushed,   "Total final blocks this node produced and started sending out to the rest of the network (only ever goes up)."),
     _ = G(quod_feed_ingested, "Total blocks this node received from others, checked, applied, and passed along (only ever goes up)."),
@@ -543,7 +543,7 @@ set_transport_gauges(Peer, Stats) ->
 refresh_prolog_ns(Ns) ->
     case quod_prolog:stats(Ns) of
         #{applied := A, applies := AP, rejects := RJ, proves := PR, conflicts := CF,
-          parked := PK, park_timeouts := PT, proof_workers := PW, ask_workers := AW,
+          parked := PK, park_timeouts := PT, proof_workers := PW, scope_workers := SW,
           kb_memory_words := MW, kb_history_predicates := HP} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_prolog_applied,       A),
@@ -554,7 +554,7 @@ refresh_prolog_ns(Ns) ->
             _ = S(quod_prolog_parked,        PK),
             _ = S(quod_prolog_park_timeouts, PT),
             _ = S(quod_prolog_proof_workers, PW),
-            _ = S(quod_prolog_ask_workers, AW),
+            _ = S(quod_prolog_scope_workers, SW),
             _ = S(quod_prolog_kb_memory_words, MW),
             _ = S(quod_prolog_kb_history_predicates, HP),
             ok;

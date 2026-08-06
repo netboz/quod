@@ -49,7 +49,7 @@ absolute_proof_timeout_test_() ->
          Rule = {':-', loop, loop},
          ok = ab(
                 Ns, 1, batch(change(Ns, diff_for(Rule), #{}))),
-         ?_assertEqual({error, no_progress},
+         ?_assertEqual({error, {proof_limit_exceeded, Ns}},
                        quod_prolog:prove(Ns, loop, Ns))
      end}.
 

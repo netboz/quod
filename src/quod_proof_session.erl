@@ -19,9 +19,11 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 -include("quod_proof_limits.hrl").
 
 -export([start/2, stop/1,
-         open/4, next/2, cancel/2,
+         open/5, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          committed_state/1, local_changes/1, read_set/1, dirty/1,
+         checkpoint_many/2, restore_many/2, release_many/2,
+         overlay_generation/1,
          bindings/2, run_first/3]).
 
 -ifdef(TEST).
@@ -33,21 +35,28 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 -export_type([session/0]).
 
 -record(session_state, {
+          scope_id    :: <<_:128>>,
           current     :: tuple(),
-          invocations = #{} :: #{term() => invocation_state()}
+          invocations = #{} :: #{term() => invocation_state()},
+          savepoints  = #{} :: #{term() => quod_erlog_db_local_prove:revision()},
+          overlay_generation = 0 :: non_neg_integer()
          }).
 
--type invocation_state() :: active | {idle, quod_proof_scope:scope()}.
+-type invocation_state() ::
+        active |
+        {idle, quod_proof_scope:scope(), quod_transaction_scope:selection()}.
 
 -doc "Start one worker-local session over a committed ontology state.".
 -spec start(tuple(), map()) -> session().
 start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
     Handle = #session_ref{owner = self(), id = make_ref()},
+    ScopeId = session_scope_id(OverlayOpts),
     Metadata = maps:get(proof_context, OverlayOpts, undefined),
     PrivateContext = {session_ref, Handle, Metadata},
     Wrapped = quod_erlog_db_local_prove:wrap_state(
                 Committed, OverlayOpts#{proof_context => PrivateContext}),
-    put_session(Handle, #session_state{current = Wrapped}),
+    put_session(Handle, #session_state{scope_id = ScopeId,
+                                       current = Wrapped}),
     Handle.
 
 -doc "Stop a session and release its one shared read-set table. Idempotent.".
@@ -62,24 +71,41 @@ stop(Handle) ->
     end.
 
 -doc "Open a named invocation with a fresh proof frame and its semantic context.".
--spec open(session(), term(), term(), quod_predicates:ctx()) ->
-          ok | {error, already_open | too_many_invocations}.
-open(Handle, InvocationId, Goal, Context) ->
+-spec open(session(), term(), term(), quod_predicates:ctx(),
+           quod_transaction_scope:selection()) ->
+          ok | {error, {proof_limit_exceeded, binary()} |
+                       {protocol_error, bad_binding | bad_selection}}.
+open(Handle, InvocationId, Goal, Context, Selection) ->
     State = get_session(Handle),
     Invocations = State#session_state.invocations,
-    case maps:is_key(InvocationId, Invocations) of
-        true ->
-            {error, already_open};
-        false when map_size(Invocations) >= ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
-            {error, too_many_invocations};
-        false ->
+    case {is_binary(InvocationId) andalso byte_size(InvocationId) =:= 16,
+          maps:is_key(InvocationId, Invocations),
+          quod_transaction_scope:valid_selection(Selection)} of
+        {false, _, _} ->
+            {error, {protocol_error, bad_binding}};
+        {_, _, false} ->
+            {error, {protocol_error, bad_selection}};
+        {true, true, true} ->
+            {error, {protocol_error, bad_binding}};
+        {true, false, true} when map_size(Invocations) >=
+                           ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
+            invocation_limit_error(Context);
+        {true, false, true} ->
             Scope = quod_proof_scope:open_invocation(
-                      Goal, State#session_state.current, Context),
+                      Goal, State#session_state.current, Context,
+                      quod_transaction_scope:checkpoint_depth(Selection)),
             put_session(
               Handle,
               State#session_state{
-                invocations = Invocations#{InvocationId => {idle, Scope}}}),
+                invocations = Invocations#{
+                  InvocationId => {idle, Scope, Selection}}}),
             ok
+    end.
+
+invocation_limit_error(Context) ->
+    case quod_predicates:ctx_ns(Context) of
+        Ns when is_binary(Ns) -> {error, {proof_limit_exceeded, Ns}};
+        undefined -> {error, {protocol_error, bad_binding}}
     end.
 
 -doc "Derive one answer from an invocation, rebased onto the latest staged view.".
@@ -94,12 +120,16 @@ next(Handle, InvocationId) ->
             {error, unknown_invocation};
         {ok, active} ->
             {error, invocation_active};
-        {ok, {idle, Scope0}} ->
+        {ok, {idle, Scope0, Selection0}} ->
             Scope1 = quod_proof_scope:rebase(
                        Scope0, State0#session_state.current),
             mark_active(Handle, InvocationId, State0),
-            finish_step(
-              Handle, InvocationId, quod_proof_scope:next(Scope1))
+            Metadata = context(quod_proof_scope:state(Scope1)),
+            {Step, Selection1} = quod_transaction_scope:with_invocation(
+                                   {State0#session_state.scope_id, InvocationId},
+                                   Selection0, Metadata,
+                                   fun() -> quod_proof_scope:next(Scope1) end),
+            finish_step(Handle, InvocationId, Step, Selection1)
     end.
 
 -doc "Discard one continuation without rolling back staged ontology writes.".
@@ -119,7 +149,7 @@ publish(#est{} = St) ->
     Handle = state_handle(St),
     State = get_session(Handle),
     Current = install_state_revision(State#session_state.current, St),
-    put_session(Handle, State#session_state{current = Current}),
+    put_current(Handle, State, Current),
     ok.
 
 -doc "Refresh a suspended continuation after a nested hop advanced this ontology.".
@@ -157,13 +187,94 @@ read_set(Handle) ->
 -spec dirty(session()) -> boolean().
 dirty(Handle) -> local_changes(Handle) =/= [].
 
+-doc "Atomically retain one current immutable revision under bounded batch ids.".
+-spec checkpoint_many(session(), [term()]) ->
+          ok | {error, {savepoint_limit_exceeded, pos_integer()}}.
+checkpoint_many(Handle, SavepointIds0) when is_list(SavepointIds0) ->
+    State = get_session(Handle),
+    Savepoints = State#session_state.savepoints,
+    SavepointIds = lists:usort(SavepointIds0),
+    NewIds = [Id || Id <- SavepointIds,
+                    not maps:is_key(Id, Savepoints)],
+    case map_size(Savepoints) + length(NewIds) =<
+           ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF of
+        true ->
+            Revision = quod_erlog_db_local_prove:revision(
+                         State#session_state.current),
+            Retained = lists:foldl(
+                         fun(Id, Acc) -> Acc#{Id => Revision} end,
+                         Savepoints, NewIds),
+            put_session(
+              Handle,
+              State#session_state{savepoints = Retained}),
+            ok;
+        false ->
+            {error,
+             {savepoint_limit_exceeded,
+              ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}}
+    end.
+
+-doc "Atomically restore a set of ids that name the same immutable revision.".
+-spec restore_many(session(), [term()]) ->
+          ok | {error, unknown_savepoint | inconsistent_savepoint}.
+restore_many(Handle, SavepointIds0) when is_list(SavepointIds0) ->
+    State = get_session(Handle),
+    SavepointIds = lists:usort(SavepointIds0),
+    case retained_revision(SavepointIds, State#session_state.savepoints) of
+        none ->
+            ok;
+        {ok, Revision} ->
+            Current = quod_erlog_db_local_prove:replace_revision(
+                        State#session_state.current, Revision),
+            put_current(Handle, State, Current),
+            ok;
+        {error, _} = Error ->
+            Error
+    end.
+
+-doc "Forget retained batch revisions. Repeated release is harmless.".
+-spec release_many(session(), [term()]) -> ok.
+release_many(Handle, SavepointIds0) when is_list(SavepointIds0) ->
+    State = get_session(Handle),
+    SavepointIds = lists:usort(SavepointIds0),
+    Retained = lists:foldl(
+                 fun maps:remove/2,
+                 State#session_state.savepoints, SavepointIds),
+    put_session(
+      Handle,
+      State#session_state{savepoints = Retained}),
+    ok.
+
+retained_revision([], _Savepoints) ->
+    none;
+retained_revision([Id | Rest], Savepoints) ->
+    case maps:find(Id, Savepoints) of
+        {ok, Revision} -> retained_revision(Rest, Savepoints, Revision);
+        error -> {error, unknown_savepoint}
+    end.
+
+retained_revision([Id | Rest], Savepoints, Revision) ->
+    case maps:find(Id, Savepoints) of
+        {ok, Revision} -> retained_revision(Rest, Savepoints, Revision);
+        {ok, _Other} -> {error, inconsistent_savepoint};
+        error -> {error, unknown_savepoint}
+    end;
+retained_revision([], _Savepoints, Revision) ->
+    {ok, Revision}.
+
+-doc "Monotonic target-local number for correlating state-bearing events.".
+-spec overlay_generation(session()) -> non_neg_integer().
+overlay_generation(Handle) ->
+    (get_session(Handle))#session_state.overlay_generation.
+
 -doc "Return the bindings retained by a suspended invocation.".
 -spec bindings(session(), term()) ->
           {ok, map()} | {error, unknown_invocation | invocation_active}.
 bindings(Handle, InvocationId) ->
     State = get_session(Handle),
     case maps:find(InvocationId, State#session_state.invocations) of
-        {ok, {idle, Scope}} -> {ok, quod_proof_scope:bindings(Scope)};
+        {ok, {idle, Scope, _Selection}} ->
+            {ok, quod_proof_scope:bindings(Scope)};
         {ok, active} -> {error, invocation_active};
         error -> {error, unknown_invocation}
     end.
@@ -173,10 +284,11 @@ bindings(Handle, InvocationId) ->
           {ok, map(), list(), map()} | {fail, [term()]} | {error, term()}.
 run_first(Goal, #est{} = Est, OverlayOpts) when is_map(OverlayOpts) ->
     Handle = start(Est, OverlayOpts),
-    InvocationId = make_ref(),
+    InvocationId = crypto:strong_rand_bytes(16),
     try
-        ok = open(
-               Handle, InvocationId, Goal, quod_predicates:context(Est)),
+        ok = open(Handle, InvocationId, Goal,
+                  quod_predicates:context(Est),
+                  quod_transaction_scope:empty_selection()),
         case next(Handle, InvocationId) of
             {solution, _Solution} ->
                 {ok, Bindings} = bindings(Handle, InvocationId),
@@ -198,20 +310,24 @@ mark_active(Handle, InvocationId,
       State#session_state{
         invocations = Invocations#{InvocationId => active}}).
 
-finish_step(Handle, InvocationId, {solution, Solution, Scope}) ->
-    update_after_step(Handle, InvocationId, Scope, keep),
+finish_step(Handle, InvocationId, {solution, Solution, Scope}, Selection) ->
+    update_after_step(Handle, InvocationId, Scope, Selection, keep),
     {solution, Solution};
-finish_step(Handle, InvocationId, {complete, Reasons, Scope}) ->
-    update_after_step(Handle, InvocationId, Scope, remove),
+finish_step(Handle, InvocationId, {complete, Reasons, Scope}, Selection) ->
+    update_after_step(Handle, InvocationId, Scope, Selection, remove),
     {complete, Reasons};
-finish_step(Handle, InvocationId, {error, Reason, Scope, RevisionPolicy}) ->
-    update_after_step(Handle, InvocationId, Scope, remove, RevisionPolicy),
+finish_step(Handle, InvocationId,
+            {error, Reason, Scope, RevisionPolicy}, Selection) ->
+    update_after_step(
+      Handle, InvocationId, Scope, Selection, remove, RevisionPolicy),
     {error, Reason}.
 
-update_after_step(Handle, InvocationId, Scope, Retention) ->
-    update_after_step(Handle, InvocationId, Scope, Retention, adopt).
+update_after_step(Handle, InvocationId, Scope, Selection, Retention) ->
+    update_after_step(
+      Handle, InvocationId, Scope, Selection, Retention, adopt).
 
-update_after_step(Handle, InvocationId, Scope, Retention, RevisionPolicy) ->
+update_after_step(Handle, InvocationId, Scope, Selection,
+                  Retention, RevisionPolicy) ->
     %% Fetch again: nested selector handling may have opened or advanced other
     %% invocations while this step was suspended.
     State = get_session(Handle),
@@ -231,17 +347,28 @@ update_after_step(Handle, InvocationId, Scope, Retention, RevisionPolicy) ->
     Invocations1 =
         case maps:find(InvocationId, Invocations0) of
             {ok, active} when Retention =:= keep ->
-                Invocations0#{InvocationId => {idle, Scope}};
+                Invocations0#{InvocationId => {idle, Scope, Selection}};
             {ok, active} ->
                 maps:remove(InvocationId, Invocations0);
             %% A re-entrant cancellation wins and the continuation stays gone.
             _ ->
                 Invocations0
         end,
+    put_current(
+      Handle,
+      State#session_state{invocations = Invocations1},
+      Current).
+
+put_current(Handle, #session_state{current = Current} = State, Current) ->
+    %% Publishing an identical immutable revision does not create a new wire
+    %% generation. This keeps the number tied to actual canonical state change.
+    put_session(Handle, State);
+put_current(Handle, #session_state{overlay_generation = Generation} = State,
+            Current) ->
     put_session(
       Handle,
       State#session_state{current = Current,
-                          invocations = Invocations1}).
+                          overlay_generation = Generation + 1}).
 
 install_state_revision(Target, Source) ->
     quod_erlog_db_local_prove:replace_revision(
@@ -263,7 +390,8 @@ state_handle(St) ->
 test_invocation_state(Handle, InvocationId) ->
     State = get_session(Handle),
     case maps:find(InvocationId, State#session_state.invocations) of
-        {ok, {idle, Scope}} -> {ok, quod_proof_scope:state(Scope)};
+        {ok, {idle, Scope, _Selection}} ->
+            {ok, quod_proof_scope:state(Scope)};
         {ok, active} -> {error, invocation_active};
         error -> {error, unknown_invocation}
     end.
@@ -280,6 +408,12 @@ put_session(Handle, #session_state{} = State) ->
     ensure_owner(Handle),
     _ = put(session_key(Handle), State),
     ok.
+
+session_scope_id(
+  #{scope_id := <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>> = ScopeId}) ->
+    ScopeId;
+session_scope_id(_OverlayOpts) ->
+    crypto:strong_rand_bytes(?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8).
 
 session_key(#session_ref{id = Id}) -> {?MODULE, Id}.
 

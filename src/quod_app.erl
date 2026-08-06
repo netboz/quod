@@ -389,13 +389,13 @@ build_ns_config(Content) ->
              mode       => maps:get(mode, Content),
              role       => maps:get(role, Content, member),
              max_proof_workers => maps:get(max_proof_workers, Content, 64),
-             max_ask_workers => maps:get(max_ask_workers, Content, 64),
+             max_scope_workers => maps:get(max_scope_workers, Content, 64),
              proof_timeout_ms => maps:get(proof_timeout_ms, Content, 60000),
              transaction_ttl_ms =>
                  maps:get(transaction_ttl_ms, Content, 30000),
              batch_window_ms => maps:get(batch_window_ms, Content, 25),
-             ask_timeout_ms => maps:get(ask_timeout_ms, Content, 60000),
-             ask_step_timeout_ms => maps:get(ask_step_timeout_ms, Content, 30000),
+             scope_timeout_ms => maps:get(scope_timeout_ms, Content, 60000),
+             scope_step_timeout_ms => maps:get(scope_step_timeout_ms, Content, 30000),
              detailed_consensus_metrics =>
                  maps:get(detailed_consensus_metrics, Content, false),
              seed_peers => content_seeds(Content)},

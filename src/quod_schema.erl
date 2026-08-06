@@ -100,7 +100,7 @@ fields(content) ->
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}
     , {max_proof_workers,
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
-    , {max_ask_workers,
+    , {max_scope_workers,
        hoconsc:mk(integer(), #{default => 64, validator => fun(N) -> N > 0 end})}
     , {proof_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
@@ -112,9 +112,9 @@ fields(content) ->
        hoconsc:mk(integer(),
                   #{default => 25,
                     validator => fun(N) -> N >= 0 andalso N =< 1000 end})}
-    , {ask_timeout_ms,
+    , {scope_timeout_ms,
        hoconsc:mk(integer(), #{default => 60000, validator => fun(N) -> N > 0 end})}
-    , {ask_step_timeout_ms,
+    , {scope_step_timeout_ms,
        hoconsc:mk(integer(), #{default => 30000, validator => fun(N) -> N > 0 end})}
       %% Expensive per-event/per-substep Prometheus probes for short diagnostic runs.
       %% Disabled by default because they execute inside the serial consensus process.

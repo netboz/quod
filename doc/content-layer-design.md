@@ -179,23 +179,13 @@ onia already does this.
 
 ### Reads: a goal emitted from a caller ontology
 
-A goal is never free-floating — it carries the **caller namespace** (the emitting
-ontology), the way onia carries its `subject`. So the read API is just:
-
-```
-prove(TargetNs, Goal, CallerNs) -> bindings
-```
-
-A read **is** a proved scope with an empty write-set: proved against the local
-converged log, with **bindings returned to the caller** (not auto-asserted into
-it). `CallerNs` is first-class even in MVP — it is what the read-set→notification
-index (§3) and `::` ACL key on. The agent/client machinery (wielding, sessions)
-is onia's L3 concern; quod only exposes `prove`. **Cross-namespace reads see the
-target's latest committed state, recording the log height read** (§3) — no
-snapshots to retain. *Caveat (review):* reading two namespaces (B then C) can
-**mix moments** — B may move between the reads — so a cross-namespace read is
-**not** a consistent snapshot across ontologies (read skew). Tolerated for MVP;
-flagged in §12.
+> **Superseded API note.** The old `prove(TargetNs, Goal, CallerNs)` sketch and
+> latest-state-per-call semantics are retired. A top-level proof now carries an
+> engine-owned anchored origin identity; `::` selects an ontology through a bounded
+> reusable scope whose committed base is frozen on first use. Re-entrant calls share
+> that scope's staged state and bindings return through normal Prolog execution. The
+> normative authority, snapshot, and result contracts are in
+> `doc/inter-ontology.md` and `doc/distributed-proof-plan.md`.
 
 ---
 
@@ -264,13 +254,15 @@ cold-start bootstrap cycle (case 3 is the real entry point). See §12.
 | Layer | What it is | Lifetime |
 |---|---|---|
 | **Logical edge** | a relation fact (qualified name) | **durable** — replicated with the ontology, lives as long as the fact |
-| **Physical traversal** | a QUIC stream that walks the edge | **ephemeral** — one scope-prove (the "dialog room"; dies when the prover leaves) |
+| **Physical traversal** | a bounded selected-ontology proof scope carried over reusable authenticated links | **proof-scoped** — reused by that top-level proof and closed on completion, cancellation, expiry, or owner/link loss |
 
 An ontology is *not* a node — it is hosted by a **set** of nodes. To walk edge
-A→B, a node holding A opens a **per-proof stream** (`quod_link`) on the
-**already-standing per-peer connection** (`quod_conn`, kept alive by Brahms) to a
-node holding B. Connections are between nodes and reused; the graph itself is
-content, not wires. This stream replaces bbsvx's WebSocket `scope_ws`.
+A→B, the origin reuses one bounded selected-ontology scope for B within the
+top-level proof. Individual `::` invocations retain bounded continuations inside
+that scope; authenticated request/return links are transport, not the invocation
+lifetime. Connections remain between nodes and are reused; the graph itself is
+content, not wires. See `doc/inter-ontology.md` and
+`doc/distributed-proof-plan.md` for the normative lifecycle.
 
 ---
 
@@ -398,46 +390,16 @@ problem is deferred until foreign writes are actually needed.
 
 ### Backtracking
 
-> **Update (2026-07-16): the cursor model below is REJECTED — bbsvx/onia heritage.** Yan
-> declared those attempts deprecated; their session/cursor machinery (cursor held on the
-> answering side, InvocationId, `next`/`close` dialogs) is exactly the leak/DoS surface the
-> caveat below feared, and bbsvx's commit history confirms it. The replacement
-> (`doc/inter-ontology.md` §4): answers are **streamed** — the target runs the goal in a
-> per-ask worker against a frozen view and sends each answer as it is found; the asker's
-> choice point consumes them as they arrive; cancel = the ask's stream closing kills the
-> worker. **Nothing is ever parked on the answering side**, so the cursor-lifecycle problem
-> (§12 #9) is dissolved, not solved. The paragraphs below are history.
-
-A `::` call is not one-shot — the caller can backtrack into it for the next
-solution. The mechanism (bbsvx and onia §16 agree):
-
-- The **cursor lives on the answering side** — the choice points (`#erlog{}`
-  state) stay on the target, addressed by a unique **InvocationId** per `::` call.
-- The caller drives it with **`next`** (onia's dialog room: `prove` / `next` /
-  `close`). Each `next` advances that cursor and returns the **next bindings**
-  (the binding-return of §0). When the caller's engine backtracks into the `::`
-  choice point it sends a `next`; `close` (or the stream dying) ends it.
-
-> *Caveat (review):* an open cursor holds the **full interpreter state** on the
-> answering node until `close`/stream-death. Without per-caller caps + an idle
-> timeout that is a memory-leak / DoS surface — cursor lifecycle is a decision
-> owed (§12). *(Dissolved by the streamed design above.)*
-
-**Backtracking and staged writes — we stay ISO Prolog-compliant.** Verified in
-erlog: the choice point (`#cp{}`) captures bindings + variable counter but **not
-the db**, so backtracking does *not* undo `assert`/`retract` — they persist,
-exactly as standard Prolog (and bbsvx/onia) already behave. We adopt that as-is:
-**no savepoints, no db-rewind machinery** — the db behaviour module stays simple.
-
-The only consequence (a write from an abandoned search branch persists in the
-diff) is standard Prolog and is the rule author's concern, handled the usual way:
-**writes are effects applied *after* the solution is found, not interleaved with
-the search** (onia's effect model). Then backtracking only ever rewinds bindings —
-which erlog does natively — and there is nothing to undo. Savepoints stay in the
-back pocket only if we ever want true tentative-write-and-backtrack, which the MVP
-does not. (One ISO fine-print to confirm is erlog's *logical update view*
-conformance — whether an assert is visible to a call already iterating the same
-predicate — but that's an erlog detail, not a quod design decision.)
+> **Superseded design note.** A `::` call remains backtrackable, but it is not a
+> one-stream/one-cursor protocol. One bounded selected-ontology scope is reused for
+> each target in the top-level proof, and each invocation owns a bounded continuation
+> within that scope. `next` advances that continuation; cut, exhaustion, cancellation,
+> expiry, and owner/link loss close it deterministically. Distributed `transaction/1`
+> savepoints restore assertions, retractions, and abolishes when a branch fails, so the
+> abandoned-branch persistence described by the old proposal is no longer the contract.
+> The normative semantics and limits are in `doc/inter-ontology.md` and
+> `doc/distributed-proof-plan.md`; this historical document keeps no parallel cursor or
+> rollback design.
 
 ---
 
@@ -525,12 +487,11 @@ Everything rides the existing QUIC mesh (`quod_quic` / `quod_conn` /
 which also brought a GPL cliff).
 
 - **Facts / scope dialogs** → reliable, ordered **QUIC streams** (`quod_link`).
-  A scope dialog is one stream per prove invocation; the closed stream *is* the
-  "requester left, cancel" signal that MQTT needed a session hook for.
-  *(Update 2026-07-16: the per-ask-stream idea survives, but the mechanics are
-  TWO legs, not one bidirectional stream — quod's transport never replies
-  backwards on a peer-opened stream. The normative wire shape is
-  `doc/inter-ontology.md` §4.2.)*
+  Scope requests and returns use reusable authenticated links. A selected-ontology
+  scope belongs to the top-level proof, not to one stream or invocation, and retains
+  bounded invocation continuations. Explicit close plus owner/link monitors and
+  deadlines provide deterministic cleanup. The normative wire shape is in
+  `doc/inter-ontology.md` §4.2.
 - **Physics / dynamic state** → **QUIC datagrams** (`send_dgram`, already noted
   in the QUIC-optimizations memo). Unreliable, last-writer-wins, no log. This is
   the "UDP" instinct — placed on the dynamic half, where loss is fine.
@@ -546,7 +507,7 @@ connection.
 > **Update (2026-07-16): bbsvx and onia are DEPRECATED attempts — nothing is "ported" from
 > them conceptually.** The overlay/differ layers listed below were already rebuilt as quod's
 > own (`quod_erlog_db_local_prove`, `quod_diff`). The `pred_cross_ontology_call` row is
-> superseded by `doc/inter-ontology.md` (streamed asks, no scope sessions, no federated read
+> superseded by `doc/inter-ontology.md` (bounded reusable proof scopes, no federated read
 > path); at most its caller-side choice-point mechanics serve as a low-level reference.
 
 The staged-proved-scope model already exists in prototype in bbsvx, in layers
@@ -630,13 +591,12 @@ Current gaps and priorities live in `deferred.md`.
   per-functor content hashes (§2).
 - **`::` argument-position** — link-following predicates; trip only when one has
   the foreign name as its subject (§4).
-- **Reads** — `prove(TargetNs, Goal, CallerNs) → bindings`; a read is a
-  proved scope with an empty write-set (§2).
-- **Backtracking over staged writes** — stay ISO Prolog-compliant (asserts
-  persist on backtrack, as erlog/bbsvx/onia already do); no savepoints, db module
-  stays simple; speculative writes handled by the effects-after discipline (§5).
-- **Cross-namespace read consistency** — read the target's latest commit, record
-  the height; no snapshots (§2/§3).
+- **Reads** — now use the engine-owned anchored proof context and reusable selected-
+  ontology scopes described by the normative proof documents.
+- **Backtracking over staged writes** — distributed `transaction/1` savepoints restore
+  assertions, retractions, and abolishes on failed branches across touched scopes.
+- **Cross-namespace read consistency** — each selected ontology freezes one committed
+  base on first use and reuses it for that top-level proof.
 - **Consensus model** — per-namespace ordered log; CRDT dropped for the fact
   store (§6).
 
@@ -706,11 +666,11 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    you host its log. The replica set (and the `f` in "f+1 attestation") needs its
    own definition.
 
-9. **Cursor resource bounds.** ~~Open `::` dialogs hold full interpreter state on the
-   answering node; need per-caller caps + idle timeout~~ — **DISSOLVED (2026-07-16)**: the
-   streamed-ask design holds no server-side cursor at all (`doc/inter-ontology.md` §4).
-   What remains is the per-proof hop budget for link-following fan-out — specified there
-   (chain depth cap + per-position hops).
+9. **Scope-session resource bounds — closed.** The current design intentionally keeps
+   bounded server-side selected-ontology sessions and per-invocation continuations; it
+   does not pretend to be cursor-free. Worker/scope/continuation caps, proof deadlines,
+   owner/link monitors, explicit close, and finalization bound their lifetime. The
+   normative limits are in `doc/inter-ontology.md` and `doc/distributed-proof-plan.md`.
 
 10. **erlog engine concurrency model.** Likely one gen_server per namespace
     serializing commit/apply, with read-only proofs on copy-on-write overlays —

@@ -111,7 +111,7 @@ peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
     end.
 
 %% This node's namespace, read from the run's execution context (`m:quod_predicates`), which every proof,
-%% verdict, and served ask carries in `#est.fs`. `undefined` when no context is set — `admit_3` then fails
+%% verdict, and selected proof scope carries in `#est.fs`. `undefined` when no context is set — `admit_3` then fails
 %% closed rather than staging a half-formed fact.
 self_ns(St) -> quod_predicates:ctx_ns(quod_predicates:context(St)).
 

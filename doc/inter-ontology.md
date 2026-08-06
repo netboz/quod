@@ -7,14 +7,15 @@ Plain language on purpose; the technical anchors are in the boxed notes and file
 
 Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
 review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
-co-hosted asks, cross-node asks, shared-snapshot worker execution, atom-safe transport, and
-default link following are implemented. The network ontology directory contract is approved
-and its first system/private slice is implemented (§10); transport-level stream
-prioritization remains future work.
+default link following, recursive reusable proof scopes, cross-scope transactions, and the
+hard-break scope transport are implemented in the current working tree. The network ontology
+directory contract and its first system/private slice are implemented (§10). Durable
+multi-ontology commit remains disabled until `distributed-proof-plan.md` steps 4-6 land;
+transport-level stream prioritization remains future work.
 
-Implementation transition: the co-hosted path now uses the recursive reusable proof scopes
-specified by `distributed-proof-plan.md` §4. The QUIC path is replaced in that plan's next
-internal slice; no partially mixed implementation is deployed.
+There is one execution model for self, co-hosted, and remote selection. Location changes only
+how commands reach the selected ontology's proof scope; the deleted per-invocation ask
+protocol has no decoder, alias, or compatibility mode.
 
 ---
 
@@ -135,48 +136,51 @@ them as stored clauses.
 
 ## 4. The ask, start to finish
 
-For a co-hosted target, each selection runs in that ontology's reusable proof scope; repeated
-and re-entrant selections share its frozen snapshot and private staged view. The current network
-transport instead runs each selection as one demand-driven invocation with its own frozen
-snapshot. In both cases, answers stream back as Prolog finds them. A worker waits only between
-explicit demand messages, for at most the idle timeout; while deriving an answer it is guarded
-by an engine-owned no-progress timer. An independent absolute lifetime bounds the worker and
-its MVCC snapshot even while answers keep flowing. It dies with its ask, engine, or either
-timeout.
+Every engine-owned top-level proof has one generated `ProofId`, one absolute deadline, one
+anchored origin identity, and one origin-owned proof session. The first selection of another
+ontology opens one scope for its exact `{Namespace, GenesisAnchor}` identity. Every later or
+re-entrant selection of that identity reuses the same frozen committed base and private staged
+view, whether the scope is local, co-hosted, or remote.
 
-The numbered flow below describes the current network transport. A co-hosted selection skips
-the ask id, router, and wire, and opens an invocation directly in its reusable target scope.
+1. **Resolve and pin.** A co-hosted target is pinned to its live genesis anchor. A remote
+   target comes from the directory; the transport pins both the advertised endpoint and the
+   authenticated node key. Conflicting anchors fail before any goal runs. A provisional private
+   seed performs only the bounded identity exchange described in §10, then becomes an ordinary
+   pinned route.
+2. **Register and open.** The origin registers the bounded scope before execution. The target
+   freezes its committed KB height and opens one shared proof session. The committed KB remains
+   a versioned ETS store; a scope holds only its table/height handle and overlay, never a copy of
+   the whole ontology.
+3. **Authorize.** Before each invocation, the target checks the current interim `can_read/3`
+   policy against the origin-built ontology chain. A remote scope is also bound to the exact
+   mutually authenticated peer and request link, so another node cannot command it. The final
+   `can_invoke/4` subject policy is the step-4 hard break specified by
+   `distributed-proof-plan.md`; there is no compatibility policy beside it.
+4. **Invoke on demand.** The selected goal runs through the same `quod_proof_session` API in
+   every location. One explicit demand produces at most one solution. Backtracking into `::`
+   requests the next solution; cuts or caller cleanup cancel the retained continuation.
+5. **Return state as well as answers.** Each solution, completion, typed error, and savepoint
+   acknowledgement reports the target scope's current dirty bit and generation. This lets
+   repeated and re-entrant calls observe the same staged target state and lets `transaction/1`
+   restore assertions, retractions, abolishes, and assertion order across all touched scopes.
+6. **Finish once.** Exhaustion carries the target's bounded failure-reason stack. The immediate
+   caller merges it before its `::` goal fails, so ordinary Prolog alternatives may inspect and
+   recover. Infrastructure or authorization failures are typed errors, poison the whole
+   pre-commit proof, and are never retried as another proof after the target may have executed.
 
-1. **Open.** The asking side allocates a fresh **ask id**, registers it with its node-local
-   return router, and sends the ask — target ontology, the goal, and the asking chain (§6) —
-   on the target ontology's fixed ask channel.
-2. **Freeze.** The target takes its committed facts **as of that instant** as the run's view.
-   The committed KB exists once in a versioned ETS store. A worker receives only the table id
-   and height; predicate lookup resolves the newest version at or below that height. No whole KB
-   is copied into the worker, and answers can never be half-old, half-new. Old predicate
-   versions are reclaimed against the oldest live worker snapshot.
-3. **Permission.** Before running the goal, the target proves `can_read` for the asking
-   chain and, on a remote hop, the TLS-authenticated node key (§6). Refusal =
-   `not_allowed`, before any work.
-4. **Stream.** The run produces answers by normal Prolog backtracking; **each answer is sent
-   the moment it is found** — no batches, no waiting. The asking rule's choice point consumes
-   them as they arrive; backtracking into the ask waits for the next answer. First answer =
-   fastest possible, even when later answers are slow to derive.
-5. **Complete.** When the answers run out, a sequenced **complete** marker carries the
-   target proof's bounded failure-reason stack and closes the run. The asker merges those
-   reasons before the `::` goal fails, so its next Prolog alternative can inspect and
-   recover from a target-provided reason.
-   If the rule stops early instead — or the asking proof dies — the ask is cancelled and the
-   target kills the run on the spot.
+Step 3 deliberately stops before durable distributed commit. A selected scope may stage writes
+and later calls may read them, but a top-level proof that finishes with any foreign scope still
+dirty returns `foreign_write_unsupported`; all volatile scope state is discarded. Step 4
+replaces that single final gate with target-authored plans and durable commit. It does not add a
+second selector or proof engine.
 
 ### 4.1 Where the work runs: one worker per ontology scope
 
-The ontology's engine process **never runs proofs**. A top-level proof has an origin worker;
-each selected co-hosted ontology has one reusable scope worker holding a shared-store snapshot
-handle and one private staged view. Repeated and re-entrant selections reuse that scope. The
-engine stays free for commits and coordination, and cancellation kills only bounded workers.
-The current QUIC transport still uses one demand-driven worker per invocation until its scope
-session wire replacement lands.
+The ontology's engine process **never runs proofs or waits for them**. A top-level proof has an
+origin worker; each selected ontology has one reusable scope worker holding a shared-store
+snapshot handle, one private staged view, and bounded invocation continuations. The namespace
+engine owns admission, monitors, timers, and MVCC pin accounting. It stays free for commits and
+coordination while a selected goal derives.
 
 Quick local proofs behave exactly as today (spawn, prove, reply — one extra process spawn).
 
@@ -189,83 +193,85 @@ Quick local proofs behave exactly as today (spawn, prove, reply — one extra pr
 >   predicates live in one shared ETS table; the `#est{}` sent to a worker contains only a
 >   table/height handle, flags, and hooks. A commit publishes only changed predicates.
 > - *The per-scope read-set table* (a real ETS table today, `quod_erlog_db_local_prove.erl`)
->   is **owned by the worker**, so an abandoned client proof can never leak it. Served asks
->   on the current network path do not allocate one.
+>   is **owned by the worker**, so an abandoned proof can never leak it.
 > - *The membership-vote re-proof keeps its own synchronous path*, and link-following is
 >   **disabled** inside it: a committee vote must never make network hops mid-verdict.
-> - Scope and network answer workers are monitored, not linked, by the ontology engine. A lifecycle
->   watcher gives directional ownership: engine death kills the worker, but an untrusted
->   transport or worker failure cannot propagate into the engine.
+> - Scope workers are monitored, not linked, by the ontology engine. Engine or authenticated
+>   request-link death kills the owned scope, but an untrusted transport or worker failure cannot
+>   propagate into the engine.
+> - Every scope worker has the same 64 MiB heap ceiling and absolute proof deadline. A separate
+>   active-step timer bounds one deriving command; receiving more commands never renews either
+>   deadline.
 
 ### 4.2 How answers ride the wire
 
-quod's transport rules (deliberate, bug-history-backed): a node never replies backwards on a
-stream the peer opened, and a node only receives on channel names it subscribed. So an ask is
-**two legs**:
+Quod's QUIC streams are directional: a target does not reply backwards on the stream opened by
+the origin. A remote scope therefore uses a fixed request channel for target commands and a
+target-opened authenticated return channel for events. These are the two transport directions
+of one scope session, not the deleted per-invocation ask/answer protocol.
 
-- **Leg 1 (the ask):** on the target ontology's fixed, pre-subscribed ask channel — carrying
-  the ask id. Its control envelope is safe-decoded and malformed metadata is rejected at the
-  boundary. Prolog terms use the bounded `quod_wire_term` codec; atom names cross as binaries
-  and never allocate atoms in the receiving VM.
-- **Leg 2 (the answers):** the target opens (or reuses) one authenticated outbound link to the
-  asking node's fixed return channel. Every answer still carries its ask id, and the asking
-  node's return router delivers it to that one proof worker. The channel is bound to the
-  request link's authenticated node key, so a caller cannot direct a reply to another node.
+The hard-break scope envelope binds the authenticated origin and target keys, both anchored
+ontology identities, `ProofId`, scope id, mode, remaining absolute budget, canonical call chain,
+and opaque invocation/request ids. Commands have one strictly increasing scope sequence. Events
+have a separate send-order sequence; each invocation has its own answer sequence. This separation
+allows B to suspend while B→C→B runs and lets correlated replies arrive in a different order
+without executing a command twice.
 
-Cancellation uses an ask-specific control frame on the shared request channel: the asker leaves
-that reusable channel open, while the target routes the cancel by ask id and kills the matching
-run's worker. The owner watcher sends the same frame if the asking proof worker dies. The return
-router monitors the shared answer link and fails its affected asks if it dies. After **complete**,
-the router removes that ask id; a finished ask leaves no per-ask worker, registration, or answer
-buffer behind.
+The origin router is only a bounded correlation and cleanup registry. It records the pending
+scope before open, promotes it after the authenticated `opened` event, routes correlated events,
+and removes all of a proof's scopes on completion or owner death. Prolog state, overlays, and
+continuations remain exclusively in target scope workers. The target binds its scope to the exact
+request link; either request-link or return-link death poisons the volatile proof and reclaims the
+scope.
 
 > **Technical notes.**
-> - **Backpressure is explicit for asks.** Managed ask links retry
->   `flow_control_blocked`/`send_queue_full` until their bounded send timeout and fail
->   loudly if the local QUIC connection never accepts the frame. Gossip and feed traffic
->   retain their deliberately fire-and-forget delivery. An answer is sent only after its
->   corresponding `next` request, so demand-driven asks keep at most one answer in flight;
->   the target engine collapses duplicate demands into one bounded pending bit. Sequence
->   numbers still detect transport gaps as `broken_stream`.
+> - **Backpressure is explicit.** Managed scope links retry
+>   `flow_control_blocked`/`send_queue_full` only within the remaining proof budget and fail
+>   loudly if the local QUIC connection never accepts the frame. Gossip and feed traffic retain
+>   their deliberately fire-and-forget delivery. One demand permits at most one answer.
 > - **Authenticated is not trusted.** Every envelope is decoded with safe ETF, compressed ETF
->   is refused, and goals, answers, and errors use the bounded symbol codec. A target-local atom
->   unknown to the asker becomes `{'$quod_symbol', <<"name">>}`. It can unify and round-trip,
->   but cannot exhaust the asker's atom table.
-> - **Every answer carries a sequence number.** Any residual gap at the asker is the loud
->   `broken_stream` error — a lost answer can never masquerade as a complete result.
-> - **Ask streams never starve votes:** when wired, ask channels get lower stream priority
->   than consensus `{log, Ns}` (the unused RFC 9218 knob — `deferred.md` §2).
-> - Co-hosted asks skip the wire entirely and select the proof's existing target scope.
+>   is refused, and goals, answers, errors, and failure reasons use the bounded
+>   `quod_wire_term` codec. A target-local atom unknown to the origin becomes
+>   `{'$quod_symbol', <<"name">>}`; it can unify and round-trip but cannot exhaust the origin's
+>   atom table. Goal bytes remain opaque until identity, anchor, rate, and quota checks pass.
+> - A duplicate, stale, skipped, cross-proof, or cross-node command is a typed protocol error.
+>   It poisons the scope; there is no accepted-command redrive or compatibility decoder.
+> - Co-hosted selections skip QUIC and the node router, but call the same scope-session command
+>   boundary and keep identical continuation, transaction, and error semantics.
+> - Scope traffic must eventually receive lower transport priority than consensus `{log, Ns}`
+>   (the unused RFC 9218 knob — `deferred.md` §2).
 
 ## 5. Completion and future subscriptions
 
-The **complete** marker carries its sequence number and the target proof's bounded diagnostic
-stack. It carries no frozen version or target read fingerprint. Failure reasons are
-bounded to 32 KiB, atom-safe encoded like other Prolog values, strictly validated by the asker,
-and never enter consensus or the ledger. The future "tell me when it changes" milestone will
-add a bounded, purpose-built subscription record when there is a consumer for it.
+An invocation's **complete** event carries its answer sequence, the target scope's current
+dirty/generation state, and the bounded diagnostic stack. It closes only that invocation; the
+scope remains reusable until the top-level proof ends. Failure reasons are bounded to 32 KiB,
+atom-safe encoded like other Prolog values, strictly validated by the immediate caller, and
+never enter consensus or the ledger.
+
+There is no per-invocation subscription residue. The future "tell me when it changes" milestone
+will add a bounded, purpose-built subscription record when there is a consumer for it.
 
 ## 6. The chain: recursion, depth, permission
 
-Every ask carries the **chain** — the list of ontologies already involved in producing it.
+Every selection carries the **chain** — the anchored ontologies already involved in producing it.
 
 - **Recursion is allowed.** A→B→A is treated like recursive local Prolog and re-enters A's
   existing proof scope. The absolute proof lifetime and depth cap bound unproductive recursion.
-- **Bounded depth.** A chain longer than the cap (§9) is refused: `too_deep`.
+- **Bounded depth.** A chain longer than the cap (§9) is refused as
+  `{proof_depth_exceeded, 8}`.
 - **Self-ask exception.** `A::x` written inside A itself is answered in place — no
   round-trip, no chain growth.
-- **Permission uses the whole chain and authenticated peer.** The target proves `can_read`
-  for **every** ontology in the chain. On a remote hop it also proves the same policy for
-  the Ed25519 node key bound to the request connection by mutual TLS. The caller may describe
-  an ontology path, but cannot omit its real transport identity to launder a read through an
-  allowed name. The `can_read` policy is ordinary agreed content in the target ontology; the
-  shipped default remains open.
+- **The origin constructs the chain.** Content cannot replace it. Every entry carries the
+  ontology's immutable anchor internally, and a remote request is additionally bound to the
+  Ed25519 node key proved by mutual TLS. The interim `can_read/3` policy is ordinary agreed
+  content in the target ontology; the step-4 `can_invoke/4` policy consumes the complete subject
+  at this same boundary.
 
-> **Technical notes.** The chain travels in the engine run's flag store (it survives run
-> suspension and cannot be forged by content — the flag-setting builtins are whitelisted,
-> `erlog_int.erl:789-795`). On a committed write produced by an ask-capable proof, the
-> recorded asking-ontology field stays the existing single name = the **chain head**, so the
-> consensus validator's shape check (`quod_simplex.erl:1755-1757`) is untouched.
+> **Technical note.** `ProofId`, origin controller authority, authenticated principal, and
+> scope handles live in private worker/process state and never enter content-readable Erlog
+> flags. The semantic chain is copied into the proof context for policy and following, but only
+> the engine/router may construct or extend it.
 
 ## 7. Freshness
 
@@ -276,42 +282,65 @@ therefore carries no unused freshness field, and completion does not claim a ver
 
 ## 8. Errors — the complete catalog
 
-Every failure a rule author can see is **distinct and loud**. Silence is never an answer;
-a partial result never looks complete.
+Every failure is **distinct and loud**. Silence is never an answer and a partial result never
+looks complete. The final distributed-proof catalog is normative in
+`distributed-proof-plan.md` §5. During the Step-3 transport slice, `::` exposes these exact
+classes:
 
-| error | when |
+| result | when |
 |---|---|
-| `unknown_ontology` | the name's prefix matches no known ontology |
-| `bad_name` | the name/ask term is malformed |
-| `unreachable` | the target ontology is known but no node serving it can be reached |
-| `not_allowed` | the target's `can_read` refused an asking ontology or the authenticated peer |
-| `too_deep` | the chain exceeds the depth cap |
-| `too_many_answers` | the run passed the total-answer cap — "narrow your question" |
-| `answer_too_big` | one answer exceeds its path's size cap (§9) — rejected before delivery |
-| `broken_stream` | a sequence gap, the target's link died, or the target crashed mid-run |
-| `no_progress` | the absolute proof lifetime or an answer-step timeout expired |
-| `foreign_write_unsupported` | an asked goal tries to change the target ontology |
+| `{fail, Reasons}` | ordinary Prolog exhaustion, including bounded reasons returned by the immediate target |
+| `{error, {erlog, SafeError}}` | the target raised a bounded Erlog exception |
+| `{error, {bad_name, Term}}` | the selector name is malformed |
+| `{error, {unknown_ontology, Ns}}` | the directory has never learned the ontology |
+| `{error, {ask_requires_anchored_proof, Ns}}` | a raw internal snapshot attempted `::` without engine-owned origin authority |
+| `{error, {anchor_conflict, Ns}}` | eligible routes disagree on genesis identity |
+| `{error, {ontology_unreachable, Ns}}` | no exact pinned route can open the scope |
+| `{error, {ontology_busy, Ns}}` | the target's bounded scope-worker capacity is full |
+| `{error, {ontology_rate_limited, Ns}}` | the authenticated peer exceeded the scope-open rate |
+| `{error, {ontology_rebuilding, Ns}}` | the target is not ready to freeze a scope |
+| `{error, {not_allowed, Ns}}` | target admission or content policy refused the invocation |
+| `{error, {proof_limit_exceeded, Ns}}` | the selected worker exceeded a generated-state or heap bound |
+| `{error, {scope_expired, Ns}}` | the bounded target scope expired while idle |
+| `{error, {proof_depth_exceeded, Max}}` | active nested selection depth is exhausted |
+| `{error, {scope_limit_exceeded, Max}}` | the proof or peer has exhausted its distinct-scope bound |
+| `{error, {savepoint_limit_exceeded, Max}}` | distributed transaction generations are exhausted before mutation |
+| `{error, {too_many_answers, Ns}}` | one invocation exceeded its answer cap |
+| `{error, {too_large, Kind}}` | a named goal, answer, reason, error, or envelope size cap failed |
+| `{error, read_only}` | a strict `prove_ro` tree attempted its first mutation |
+| `{error, {protocol_error, Kind}}` | authenticated identity/session/sequence/payload validation failed |
+| `{error, foreign_write_unsupported}` | temporary Step-3 final gate: a foreign staged view remains dirty, so nothing is committed |
 
-> **Technical note — typed proof errors.** The old runner collapsed thrown erlog errors into
-> `prove_failed`. The worker runner now catches both erlog throw shapes explicitly, so the
-> taxonomy above reaches the rule author. Client calls wait for the proof worker's
-> absolute completion budget; streamed progress does not extend it. An abandoned,
-> slow-drip, or genuinely wedged proof receives `no_progress`.
+Infrastructure and authorization errors poison the volatile proof instead of becoming logical
+failure. A target-authored logical failure alone participates in normal Prolog backtracking.
+Internal scope/savepoint/controller faults are not public result classes; the authenticated
+boundary normalizes invariant violations to `{error, {protocol_error, Kind}}`.
+Progress messages do not renew the absolute deadline, and no timeout or link loss triggers an
+automatic retry after the target may have executed.
 
 ## 9. Limits (starting values — one table, tuned with real usage)
 
 | limit | value | on breach |
 |---|---|---|
-| answers per ask | 10 000 | `too_many_answers` |
-| one co-hosted proof-scope answer | 64 KiB (`quod_proof_limits.hrl`) | `answer_too_big` |
-| one network answer frame | 1 MiB (`quod_transport_limits.hrl`) | `answer_too_big` (sender-side) |
-| chain depth | 8 | `too_deep` |
-| client proof lifetime | 60 s absolute (configurable) | `no_progress` |
-| served ask lifetime | 60 s absolute (configurable) | worker and snapshot are killed |
-| answer-step no-progress timeout | 30 s (configurable) | worker is killed |
-| concurrent asks served per ontology | 64 (configurable) | asker waits/retries |
-| concurrent client proofs per ontology | 64 (configurable) | `busy` |
+| active nested invocation depth | 8 | `{proof_depth_exceeded, 8}` |
+| distinct ontology scopes per proof | 8 | `{scope_limit_exceeded, 8}` |
+| retained invocations per scope | 64 | bounded refusal before allocation |
+| answers per invocation | 10 000 | `{too_many_answers, Ns}` |
+| encoded nested goal / answer | 8 KiB / 64 KiB | `{too_large, goal}` or `{too_large, answer}` |
+| scope envelope / outer transport frame | 128 KiB / 1 MiB | `{too_large, scope_envelope}` or frame rejection |
+| complete reasons / one reason | 32 KiB / 4 KiB | bounded truncation |
+| retained distributed savepoint generations | 1 024 per proof | `{savepoint_limit_exceeded, 1024}` |
+| one scope worker heap | 64 MiB | `{proof_limit_exceeded, Ns}` |
+| scope lifetime / active command | 60 s / 30 s by default, configurable | typed timeout and scope cleanup |
+| concurrent scope workers per ontology | 64 by default, configurable | `{ontology_busy, Ns}` |
+| active remote scopes per authenticated peer | 16 | `{scope_limit_exceeded, 16}` |
+| origin router scopes global / per owner / per peer | 512 / 8 / 16 | bounded refusal before registration |
+| scope-open rate per peer/ontology | 32/s, burst 32 | `{ontology_rate_limited, Ns}` |
 | rejected remote opens sent per ontology | 32/s | excess rejection replies are dropped |
+
+`include/quod_proof_limits.hrl` is the one source for shared producer/decoder/test constants;
+schema owns the three configurable worker/deadline values. The larger aggregate transcript,
+plan, and future durable-record limits remain in `distributed-proof-plan.md` §4.2.
 
 ## 10. Network ontology directory — implemented first slice
 
@@ -319,7 +348,7 @@ The directory resolves a ground ontology name to a bounded set of live routes. I
 inside `quod:root` as the read-only external predicate:
 
 ```prolog
-directory_host(+Ontology, ?NodeKey, ?Host, ?Port).
+directory_host(+Ontology, ?GenesisAnchor, ?NodeKey, ?Host, ?Port).
 ```
 
 Its answers come directly from a local Erlang ETS index using Erlog compiled-predicate
@@ -341,13 +370,15 @@ process first treats the root ontology's existing `content.seeds` as anonymous
 contacts: it authenticates the contacted TLS/header key, accepts it only if
 that key is in the root proof, then records the live endpoint and continues on
 a key-pinned control link. Existing authenticated transport observations are
-also tried directly. This local root proof does not use `directory_host/4` or
+also tried directly. This local root proof does not use `directory_host/5` or
 `::`, so discovery has no directory cycle, and the contact address never
 becomes authority by itself.
 
 A node derives its public advertisement from system namespaces that are
-actually running locally. Namespace start/stop replaces the complete signed
-set; an empty set withdraws it. Periodic reconciliation repairs missed
+actually running locally. Every signed hosted descriptor carries the
+namespace's immutable 32-byte genesis anchor and current
+`validator | observer` routing hint. Namespace start/stop replaces the complete
+signed set; an empty set withdraws it. Periodic reconciliation repairs missed
 notifications, while any number of private local ontologies remain outside the
 32-name public-advertisement limit.
 

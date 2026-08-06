@@ -28,10 +28,10 @@ variable "max_proof_workers" {
   description = "Maximum concurrent client proof workers per ontology and allocation. Excess calls receive busy."
 }
 
-variable "max_ask_workers" {
+variable "max_scope_workers" {
   type        = number
   default     = 64
-  description = "Maximum concurrent foreign-answer workers per ontology and allocation. Excess asks receive busy."
+  description = "Maximum concurrent selected proof-scope workers per ontology and allocation. Excess scope opens are rejected."
 }
 
 variable "proof_timeout_ms" {
@@ -52,16 +52,16 @@ variable "batch_window_ms" {
   description = "Per-ontology time in milliseconds to collect ordinary transactions into one block. 0 seals immediately; 25 is the measured fleet default."
 }
 
-variable "ask_timeout_ms" {
+variable "scope_timeout_ms" {
   type        = number
   default     = 60000
-  description = "Absolute lifetime of a served foreign ask, even while it continues producing answers."
+  description = "Absolute lifetime of one selected proof scope."
 }
 
-variable "ask_step_timeout_ms" {
+variable "scope_step_timeout_ms" {
   type        = number
   default     = 30000
-  description = "No-progress timeout while a served ask derives one answer."
+  description = "Maximum runtime of one active selected-scope derivation."
 }
 
 variable "detailed_consensus_metrics" {
@@ -341,12 +341,12 @@ content = [
     # is no longer needed.
     data_dir  = "/quod/data"
     max_proof_workers = ${var.max_proof_workers}
-    max_ask_workers = ${var.max_ask_workers}
+    max_scope_workers = ${var.max_scope_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
     transaction_ttl_ms = ${var.transaction_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
-    ask_timeout_ms = ${var.ask_timeout_ms}
-    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    scope_timeout_ms = ${var.scope_timeout_ms}
+    scope_step_timeout_ms = ${var.scope_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}
 %{if var.bootstrap && var.genesis_hash == ""}
     mode         = create
@@ -371,10 +371,10 @@ content = [
     data_dir     = "/quod/data"
     seeds        = []
     max_proof_workers = ${var.max_proof_workers}
-    max_ask_workers = ${var.max_ask_workers}
+    max_scope_workers = ${var.max_scope_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
-    ask_timeout_ms = ${var.ask_timeout_ms}
-    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    scope_timeout_ms = ${var.scope_timeout_ms}
+    scope_step_timeout_ms = ${var.scope_step_timeout_ms}
   }
 {{- end }}
 {{- if eq (env "NOMAD_ALLOC_INDEX") "${var.cross_ontology_target_alloc_index}" }}
@@ -385,10 +385,10 @@ content = [
     data_dir     = "/quod/data"
     seeds        = []
     max_proof_workers = ${var.max_proof_workers}
-    max_ask_workers = ${var.max_ask_workers}
+    max_scope_workers = ${var.max_scope_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
-    ask_timeout_ms = ${var.ask_timeout_ms}
-    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    scope_timeout_ms = ${var.scope_timeout_ms}
+    scope_step_timeout_ms = ${var.scope_step_timeout_ms}
   }
 {{- end }}
 %{endif~}
@@ -607,12 +607,12 @@ content = [
     namespace = "quod:root"
     data_dir  = "/quod/data/{{ env "NOMAD_ALLOC_INDEX" }}"
     max_proof_workers = ${var.max_proof_workers}
-    max_ask_workers = ${var.max_ask_workers}
+    max_scope_workers = ${var.max_scope_workers}
     proof_timeout_ms = ${var.proof_timeout_ms}
     transaction_ttl_ms = ${var.transaction_ttl_ms}
     batch_window_ms = ${var.batch_window_ms}
-    ask_timeout_ms = ${var.ask_timeout_ms}
-    ask_step_timeout_ms = ${var.ask_step_timeout_ms}
+    scope_timeout_ms = ${var.scope_timeout_ms}
+    scope_step_timeout_ms = ${var.scope_step_timeout_ms}
     detailed_consensus_metrics = ${var.detailed_consensus_metrics}
     mode         = join
     genesis_hash = "${var.genesis_hash}"

@@ -18,6 +18,7 @@ dependencies. Ordinary Erlog proofs never enable checkpoint mode.
 -define(CALLER_ERROR, '$quod_transaction_caller_error').
 
 -record(tx, {ref              :: reference(),
+             scope_tx         :: disabled | <<_:128>>,
              entry            :: term(),
              parent_depth     :: non_neg_integer(),
              entry_bs         :: term(),
@@ -39,10 +40,12 @@ transaction_1(Goal, Next,
                    checkpoint_depth = ParentDepth,
                    db = #db{mod = DbMod, ref = DbRef}} = St) ->
     {transaction, Inner} = erlog_int:dderef(Goal, Bs),
+    ScopeTx = quod_transaction_scope:enter(St),
     Enabled = erlog_int:enter_choicepoint_checkpoints(St),
     Entry = DbMod:choicepoint_checkpoint(DbRef),
     Ref = make_ref(),
-    Tx = #tx{ref = Ref, entry = Entry, parent_depth = ParentDepth,
+    Tx = #tx{ref = Ref, scope_tx = ScopeTx,
+             entry = Entry, parent_depth = ParentDepth,
              entry_bs = Bs, entry_vn = Vn, outer_cps = OuterCps,
              caller_next = Next},
     Sentinel = #cp{type = compiled, label = {?MODULE, Ref},
@@ -68,7 +71,9 @@ run_inner(#tx{ref = Ref} = Tx, Inner, Active) ->
             erlog_int:erlog_error(Error, rollback(Active, Tx));
         Class:Reason:Stacktrace ->
             %% Non-Erlog exceptions abort the whole proof and carry no reusable
-            %% interpreter state. Preserve their exact class/reason/stack.
+            %% interpreter state. Release any distributed savepoint references;
+            %% proof cleanup remains authoritative if a peer is already gone.
+            ok = quod_transaction_scope:discard(Tx#tx.scope_tx),
             erlang:raise(Class, Reason, Stacktrace)
     end.
 
@@ -77,6 +82,7 @@ commit_1(Goal, _InternalNext, #est{bs = Bs, cps = Cps} = St) ->
     {?COMMIT, Ref} = erlog_int:dderef(Goal, Bs),
     case take_sentinel(Ref, Cps) of
         {ok, #tx{caller_next = CallerNext} = Tx, OuterCps} ->
+            ok = quod_transaction_scope:finish(Tx#tx.scope_tx),
             Writable = erlog_int:leave_choicepoint_checkpoints(
                          St#est{cps = OuterCps}),
             prove_caller(Tx, CallerNext, Writable);
@@ -98,8 +104,10 @@ transaction_failed(#cp{next = #tx{ref = Ref} = Tx}, OuterCps, St) ->
 
 rollback(#est{db = #db{mod = DbMod, ref = CurrentRef} = Db} = St,
          #tx{entry = Entry, parent_depth = ParentDepth,
+             scope_tx = ScopeTx,
              entry_bs = Bs, entry_vn = Vn, outer_cps = OuterCps}) ->
     RestoredRef = DbMod:choicepoint_restore(CurrentRef, Entry),
+    ok = quod_transaction_scope:finish(ScopeTx),
     St#est{db = Db#db{ref = RestoredRef}, cps = OuterCps,
            bs = Bs, vn = Vn, checkpoint_depth = ParentDepth}.
 

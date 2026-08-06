@@ -79,9 +79,11 @@ start_link(Opts) ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, Opts, []).
 
 -doc """
-Start advertising the complete allowlisted intersection of namespaces actually
-registered under `quod_ns_sup`. This is called once after application startup;
-later namespace changes and renewals re-read that live registry.
+Start advertising bounded descriptors for the complete allowlisted intersection
+of namespaces actually registered under `quod_ns_sup`. Each descriptor carries
+the namespace's immutable genesis anchor and current validator/observer role.
+This is called once after application startup; later namespace changes and
+renewals re-read that live state.
 """.
 -spec start_tracking() -> ok | {error, term()}.
 start_tracking() ->
@@ -936,20 +938,39 @@ set_observed_hosted(S) ->
             Error
     end.
 
-normalize_hosted(Namespaces, NodeKey, Allowlist) when is_list(Namespaces) ->
-    %% The wire cap applies to the public advertisement, not to every private
-    %% ontology this node may host locally.
-    Hosted = lists:usort(
-               [Ns || Ns <- Namespaces,
-                      quod_directory_auth:allowed(
-                        NodeKey, Ns, Allowlist)]),
-    case quod_directory_auth:validate_namespaces(
-           Hosted, ?DIRECTORY_MAX_NAMESPACES) of
-        {ok, _} = Valid -> Valid;
-        error -> {error, bad_namespaces}
+normalize_hosted(NodeKey, Allowlist) ->
+    %% Iterate the bounded public allowlist rather than every private ontology
+    %% this node may host. The wire cap applies only to the advertised subset.
+    Public = lists:sort(
+               maps:fold(
+                 fun(Ns, Keys, Acc) ->
+                     case maps:is_key(NodeKey, Keys)
+                              andalso is_pid(
+                                        quod_reg:where({quod_ns, Ns})) of
+                         true -> [Ns | Acc];
+                         false -> Acc
+                     end
+                 end, [], Allowlist)),
+    case length(Public) =< ?DIRECTORY_MAX_NAMESPACES of
+        true -> describe_hosted(Public, []);
+        false -> {error, bad_hosted}
+    end.
+
+describe_hosted([Ns | Rest], Acc) ->
+    case {quod_simplex:genesis_hash(Ns), quod_simplex:status(Ns)} of
+        {<<_:256>> = GenesisAnchor, #{role := Role}}
+          when Role =:= validator; Role =:= observer ->
+            describe_hosted(Rest, [{Ns, GenesisAnchor, Role} | Acc]);
+        _ ->
+            {error, {hosted_descriptor_unavailable, Ns}}
     end;
-normalize_hosted(_Namespaces, _NodeKey, _Allowlist) ->
-    {error, bad_namespaces}.
+describe_hosted([], Acc) ->
+    Hosted = lists:reverse(Acc),
+    case quod_directory_auth:validate_hosted(
+           Hosted, ?DIRECTORY_MAX_NAMESPACES) of
+        {ok, Hosted} -> {ok, Hosted};
+        error -> {error, bad_hosted}
+    end.
 
 set_normalized_hosted(Hosted, S = #s{tracking = true, hosted = Hosted}) ->
     S;
@@ -1119,7 +1140,7 @@ install_directory_records(Records) ->
 directory_record_fields(Record) ->
     {quod_directory_record:node_key(Record),
      quod_directory_record:endpoint(Record),
-     quod_directory_record:namespaces(Record),
+     quod_directory_record:hosted(Record),
      quod_directory_record:epoch(Record),
      quod_directory_record:sequence(Record)}.
 
@@ -1152,7 +1173,7 @@ install_directory_record(Record) ->
         quod_directory:install_record(
           quod_directory_record:node_key(Record),
           quod_directory_record:endpoint(Record),
-          quod_directory_record:namespaces(Record),
+          quod_directory_record:hosted(Record),
           quod_directory_record:epoch(Record),
           quod_directory_record:sequence(Record))
     catch
@@ -1488,10 +1509,7 @@ schedule_tracking_recovery() ->
 observed_hosted(#s{self_key = NodeKey, allowlist = Allowlist}) ->
     case quod_reg:where({quod_ns_sup, node}) of
         Pid when is_pid(Pid) ->
-            %% gproc names are unique already. Filter the potentially large
-            %% private set before sorting the bounded public subset.
-            normalize_hosted(
-              quod_ns_sup:namespaces(), NodeKey, Allowlist);
+            normalize_hosted(NodeKey, Allowlist);
         undefined ->
             {error, namespace_supervisor_unavailable}
     end.
@@ -1506,7 +1524,7 @@ reconcile_observed_hosted(S) ->
 
 hosted_ready(Hosted) ->
     lists:all(
-      fun(Ns) ->
+      fun({Ns, _GenesisAnchor, _Role}) ->
           quod_reg:where({quod_prolog, Ns}) =/= undefined
       end, Hosted).
 

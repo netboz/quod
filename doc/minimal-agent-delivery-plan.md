@@ -40,7 +40,7 @@ The Quod specifications were reread first and are normative, in particular
 `agent-fipa-plan.md`, `ontology-lifecycle-authorization-plan.md`,
 `inter-ontology.md`, `transaction-signatures.md`, `content-layer.md`, and the
 relevant identity/deferred notes. The current `quod_runtime`, `quod_prolog`,
-`quod_ns`, overlay, ask, wire, transport, schema, and Nomad paths were checked
+`quod_ns`, overlay, proof-scope, wire, transport, schema, and Nomad paths were checked
 against those documents rather than inferred from memory.
 
 Onia and BBSVX documentation/code are secondary pattern references only. This
@@ -934,8 +934,10 @@ the bounded in-memory receipt. The first product test uses one AP ontology
 replicated on both nodes, so these are local committed reads. Cross-AP directory
 routing is deliberately absent.
 
-Replies use the existing two-leg connection pattern used by remote asks. They
-never assume that a response may be sent backward on a peer-opened stream.
+Replies use the same two-leg connection rule as distributed proof scopes: a
+request channel keyed by ontology and a separately opened return channel keyed
+by the authenticated origin node. They never assume that a response may be
+sent backward on a peer-opened stream.
 
 ### 7.1 One stream-priority table
 
@@ -962,7 +964,7 @@ low priority.
 | directory `quod_directory_control` | 2 | false |
 | Brahms `{brahms, Ns}` | 2 | false |
 | feed `{feed, Ns}` | 4 | true |
-| ask `{quod_ask, Ns}` / answer `{quod_ask_answer, NodeKey}` | 4 | true |
+| proof scope `{quod_scope, Ns}` / return `{quod_scope_return, NodeKey}` | 4 | true |
 | agent `{agent_delivery, Ns}` | 6 | true |
 | unknown application channel | 6 | true |
 

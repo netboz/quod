@@ -3,9 +3,9 @@
 The typed **external-predicate contract** and the per-run **execution context**
 (`doc/agent-fipa-plan.md` §5). Two jobs, one module:
 
-1. **Context.** Every proof, membership verdict, and served ask runs with an
+1. **Context.** Every proof, membership verdict, and selected proof scope runs with an
    execution context — the namespace, the applied height, the authenticated
-   subject (none yet), and the inter-ontology ask chain. It rides in the erlog
+   subject (none yet), and the inter-ontology selection chain. It rides in the erlog
    flag store (`#est.fs`) as a single `none`-valued flag, so it survives the MVCC
    worker boundary and cannot be forged by ontology content: the flag-setting
    builtin `set_prolog_flag/2` refuses a `none`-valued flag
@@ -56,7 +56,8 @@ used by lifecycle authorization now and live E handlers in §9).
 %% context constructors
 -export([proof_context/3, proof_context/4, verdict_context/2, effect_context/2]).
 %% context accessors
--export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1]).
+-export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
+         with_chain/2]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
 -export([class/1, allowed/2, is_ground/1]).
@@ -70,7 +71,7 @@ used by lifecycle authorization now and live E handlers in §9).
                ns      :: binary() | undefined,
                height  = 0 :: non_neg_integer(),
                subject = undefined :: term(),
-               chain   = [] :: [binary()],
+               chain   = [] :: [quod_proof_context:identity()],
                %% the executing declaration: a state_handler id in a `projection` context
                %% (an effect/reaction id in an `effect` context, Slice 3). `undefined` elsewhere.
                id      = undefined :: term()}).
@@ -98,7 +99,7 @@ load(#est{db = Db0} = Est) ->
     Est#est{db = Db1}.
 
 %% The governed predicates, in registration order. Their class + real handler is in registry/1.
-governed() -> [{peer_ready, 1}, {directory_host, 4},
+governed() -> [{peer_ready, 1}, {directory_host, 5},
                {directory_control_peer, 1},
                {admit, 3}, {remove, 1},
                {authorized_ontology_lifecycle, 1},
@@ -107,8 +108,8 @@ governed() -> [{peer_ready, 1}, {directory_host, 4},
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
 registry({peer_ready, 1}) -> {query,   quod_committee_predicates, peer_ready_1};
-registry({directory_host, 4}) ->
-    {query, quod_directory_predicates, directory_host_4};
+registry({directory_host, 5}) ->
+    {query, quod_directory_predicates, directory_host_5};
 registry({directory_control_peer, 1}) ->
     {query, quod_directory_predicates, directory_control_peer_1};
 registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
@@ -236,25 +237,25 @@ in_verdict(Est) -> ctx_kind(context(Est)) =:= verdict.
 %%% context constructors + accessors
 %%%===================================================================
 
--doc "A `proof` context whose ask chain is just this ontology.".
+-doc "A local `proof` context without distributed selector authority.".
 -spec proof_context(binary() | undefined, non_neg_integer(), term()) -> #qctx{}.
-proof_context(Ns, Height, Subject) -> proof_context(Ns, Height, Subject, [Ns]).
+proof_context(Ns, Height, Subject) -> proof_context(Ns, Height, Subject, []).
 
--doc "A `proof` context with an explicit ask chain (a served ask carries the caller's chain).".
--spec proof_context(binary() | undefined, non_neg_integer(), term(), [binary()]) -> #qctx{}.
+-doc "A `proof` context with an exact anchored ontology call chain.".
+-spec proof_context(binary() | undefined, non_neg_integer(), term(),
+                    [quod_proof_context:identity()]) -> #qctx{}.
 proof_context(Ns, Height, Subject, Chain) ->
     #qctx{kind = proof, ns = Ns, height = Height, subject = Subject, chain = Chain}.
 
 -doc "A `verdict` context: a strictly-local membership re-proof at a parent height.".
 -spec verdict_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 verdict_context(Ns, Height) ->
-    #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined, chain = [Ns]}.
+    #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined}.
 
 -doc "An `effect` context for action-only authorization and live E handlers.".
 -spec effect_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 effect_context(Ns, Height) ->
-    #qctx{kind = effect, ns = Ns, height = Height, subject = undefined,
-          chain = [Ns]}.
+    #qctx{kind = effect, ns = Ns, height = Height, subject = undefined}.
 
 -doc """
 A `projection` context: a `m:quod_runtime` handler converging its piece of P against the
@@ -264,7 +265,14 @@ content via `current_prolog_flag`, like every context field — forge-resistant,
 -spec projection_context(binary() | undefined, non_neg_integer(), term()) -> #qctx{}.
 projection_context(Ns, Height, HandlerId) ->
     #qctx{kind = projection, ns = Ns, height = Height, subject = undefined,
-          chain = [Ns], id = HandlerId}.
+          id = HandlerId}.
+
+-doc "Install the engine-owned anchored call chain without changing context kind.".
+-spec with_chain(ctx(), [quod_proof_context:identity()]) -> ctx().
+with_chain(#qctx{} = Ctx, Chain) when is_list(Chain) ->
+    Ctx#qctx{chain = Chain};
+with_chain(undefined, _Chain) ->
+    undefined.
 
 -spec ctx_kind(ctx()) -> kind() | undefined.
 ctx_kind(#qctx{kind = K}) -> K;
@@ -278,6 +286,6 @@ ctx_ns(undefined)      -> undefined.
 ctx_height(#qctx{height = H}) -> H;
 ctx_height(undefined)         -> undefined.
 
--spec ctx_chain(ctx()) -> [binary()].
+-spec ctx_chain(ctx()) -> [quod_proof_context:identity()].
 ctx_chain(#qctx{chain = C}) -> C;
 ctx_chain(undefined)        -> [].

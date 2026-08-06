@@ -7,7 +7,7 @@ checks remain constant-time in both the ETS owner and dissemination process.
 """.
 
 -export([normalize_allowlist/1, node_key_index/1, allowed/3,
-         validate_namespaces/2, valid_namespace/1]).
+         validate_hosted/2, valid_namespace/1]).
 
 -include("quod_directory_limits.hrl").
 
@@ -43,20 +43,29 @@ node_key_index(Allowlist) ->
             end, Acc, Keys)
       end, #{}, Allowlist).
 
-validate_namespaces(Namespaces, MaxCount)
-  when is_list(Namespaces), is_integer(MaxCount), MaxCount >= 0 ->
-    case length(Namespaces) =< MaxCount of
-        false ->
-            error;
+validate_hosted(Hosted, MaxCount)
+  when is_list(Hosted), is_integer(MaxCount), MaxCount >= 0 ->
+    validate_hosted(Hosted, MaxCount, 0, #{}, []);
+validate_hosted(_, _) ->
+    error.
+
+validate_hosted([], _MaxCount, _Count, _Seen, Acc) ->
+    {ok, lists:sort(Acc)};
+validate_hosted([Descriptor = {Namespace, _Anchor, _Role} | Rest],
+                MaxCount, Count, Seen, Acc)
+  when Count < MaxCount ->
+    case valid_hosted(Descriptor) andalso
+             not maps:is_key(Namespace, Seen) of
         true ->
-            Unique = lists:usort(Namespaces),
-            case length(Unique) =:= length(Namespaces)
-                     andalso lists:all(fun valid_namespace/1, Unique) of
-                true -> {ok, Unique};
-                false -> error
-            end
+            validate_hosted(
+              Rest, MaxCount, Count + 1,
+              Seen#{Namespace => true}, [Descriptor | Acc]);
+        false ->
+            error
     end;
-validate_namespaces(_, _) ->
+validate_hosted([_Descriptor | _Rest], _MaxCount, _Count, _Seen, _Acc) ->
+    error;
+validate_hosted(_ImproperTail, _MaxCount, _Count, _Seen, _Acc) ->
     error.
 
 valid_namespace(Namespace) ->
@@ -65,3 +74,9 @@ valid_namespace(Namespace) ->
 
 valid_node_key(NodeKey) ->
     is_binary(NodeKey) andalso byte_size(NodeKey) =:= 32.
+
+valid_hosted({Namespace, <<_:256>>, Role})
+  when Role =:= validator; Role =:= observer ->
+    valid_namespace(Namespace);
+valid_hosted(_) ->
+    false.

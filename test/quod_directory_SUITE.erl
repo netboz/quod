@@ -18,7 +18,7 @@ when either dynamic supervisor or the manager itself is replaced.
 -export([all/0, init_per_suite/1, end_per_suite/1]).
 -export([root_control_resync_after_endpoint_move/1,
          namespace_manager_lifecycle/1]).
--export([hold_namespace/1, refresh_directory_control/0,
+-export([hold_namespace/3, refresh_directory_control/0,
          reconcile_namespace_manager/0]).
 
 -define(ROOT, <<"quod:root">>).
@@ -87,7 +87,7 @@ init_per_suite(Config) ->
     ok = peer:call(
            JoinerOld, quod_directory_control, start_tracking, []),
     ExpectedOldRoot =
-        [{JoinerPub, element(1, JoinerOldAddr),
+        [{GenesisHash, JoinerPub, element(1, JoinerOldAddr),
           element(2, JoinerOldAddr)}],
     ok = wait_directory_hosts(
            Target, ?ROOT, ExpectedOldRoot, 400),
@@ -128,7 +128,7 @@ init_per_suite(Config) ->
     ok = wait_control_endpoint(
            Target, JoinerPub, JoinerAddr, 400),
     ExpectedRoot =
-        [{JoinerPub, element(1, JoinerAddr),
+        [{GenesisHash, JoinerPub, element(1, JoinerAddr),
           element(2, JoinerAddr)}],
     ok = wait_directory_hosts(
            Target, ?ROOT, ExpectedRoot, 400),
@@ -150,8 +150,11 @@ root_control_resync_after_endpoint_move(Config) ->
     JoinerPub = ?config(joiner_pub, Config),
     TargetAddr = ?config(target_addr, Config),
     JoinerAddr = ?config(joiner_addr, Config),
+    GenesisHash = peer:call(
+                    Target, quod_simplex, genesis_hash, [?ROOT]),
     ExpectedRoot =
-        [{JoinerPub, element(1, JoinerAddr), element(2, JoinerAddr)}],
+        [{GenesisHash, JoinerPub,
+          element(1, JoinerAddr), element(2, JoinerAddr)}],
     ?assertEqual(
        ok,
        wait_directory_hosts(Target, ?ROOT, ExpectedRoot, 400)),
@@ -193,13 +196,16 @@ root_control_resync_after_endpoint_move(Config) ->
        wait_replaced_control_link(
          Joiner, TargetPub, OldLink, 400)),
 
+    AgentAnchor = crypto:hash(sha256, ?AGENT),
     _JoinerAgentHost = peer:call(
                          Joiner, erlang, spawn,
-                         [?MODULE, hold_namespace, [?AGENT]]),
+                         [?MODULE, hold_namespace,
+                          [?AGENT, AgentAnchor, observer]]),
     ok = peer:call(
            Joiner, quod_directory_control, namespace_changed, []),
     ExpectedAgent =
-        [{JoinerPub, element(1, JoinerAddr), element(2, JoinerAddr)}],
+        [{AgentAnchor, JoinerPub,
+          element(1, JoinerAddr), element(2, JoinerAddr)}],
     ?assertEqual(
        ok,
        wait_directory_hosts(Target, ?AGENT, ExpectedAgent, 400)),
@@ -375,9 +381,24 @@ reconcile_namespace_manager() ->
     _ = sys:get_state(Manager),
     ok.
 
-hold_namespace(Ns) ->
+hold_namespace(Ns, GenesisAnchor, Role) ->
     true = gproc:reg({n, l, {quod_ns, Ns}}),
-    receive stop -> ok end.
+    true = gproc:reg({n, l, {quod_simplex, Ns}}),
+    true = gproc:reg({n, l, {quod_prolog, Ns}}),
+    Table = binary_to_atom(
+              <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+    _ = ets:new(Table, [named_table, protected, set]),
+    true = ets:insert(Table, {anchor, GenesisAnchor}),
+    hold_namespace_loop(Role).
+
+hold_namespace_loop(Role) ->
+    receive
+        {'$gen_call', From, get_status} ->
+            gen:reply(From, #{role => Role}),
+            hold_namespace_loop(Role);
+        stop ->
+            ok
+    end.
 
 wait_root_peers(Peer, Expected, Retries) ->
     wait_root_peers(Peer, Expected, Retries, undefined).

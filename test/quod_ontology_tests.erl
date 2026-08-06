@@ -19,6 +19,7 @@ ontology_creation_test_() ->
           ?_test(failed_admission_rolls_back(Fixture)),
           ?_test(action_boundary_and_reasons(Fixture)),
           ?_test(lifecycle_authorization_guards(Fixture)),
+          ?_test(anchored_lifecycle_reuses_foreign_scope(Fixture)),
           ?_test(action_timeout_is_outcome_unknown(Fixture)),
           ?_test(join_validation_and_state(Fixture)),
           ?_test(join_resume_anchor_is_exact(Fixture))]
@@ -732,6 +733,46 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     after
         commit_root(
           {',', {retract, FalsePostDeclaration},
+           {assertz, CreateDeclaration}})
+    end.
+
+%% Both selected prerequisites and post-I/O verification execute through fresh
+%% root invocations, but their pinned target identity belongs to the one
+%% lifecycle proof context. Successful creation proves every foreign check ran;
+%% the target's proof counter proves they reused one read-only scope session.
+anchored_lifecycle_reuses_foreign_scope(_Fixture) ->
+    ForeignNs = unique_ns(<<"lifecycle-prerequisite">>),
+    {ok, created, ForeignNs, _ForeignAnchor} =
+        quod_ontology:create(
+          ForeignNs,
+          [{source,
+            <<"lifecycle_ready(yes).\n"
+              "can_read(_, _, _).\n">>}]),
+    ok = wait_ready(ForeignNs, 200),
+    TargetNs = unique_ns(<<"anchored-action">>),
+    Action = {create_ontology, TargetNs, []},
+    ForeignCheck = {'::', ForeignNs, {lifecycle_ready, yes}},
+    Declaration =
+        {action, Action,
+         [{authorized_ontology_lifecycle, Action},
+          {ontology_join_state, TargetNs, not_hosted},
+          ForeignCheck, ForeignCheck],
+         {',', {ontology_hosted, TargetNs}, ForeignCheck}},
+    CreateDeclaration = root_creation_action(),
+    commit_root(
+      {',', {retract, CreateDeclaration}, {asserta, Declaration}}),
+    Before = maps:get(proves, quod_prolog:stats(ForeignNs)),
+    try
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:run_action(?ROOT_NS, Action)),
+        ok = wait_ready(TargetNs, 200),
+        ?assertEqual(
+           Before + 1,
+           maps:get(proves, quod_prolog:stats(ForeignNs)))
+    after
+        commit_root(
+          {',', {retract, Declaration},
            {assertz, CreateDeclaration}})
     end.
 

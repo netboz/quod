@@ -41,7 +41,7 @@ extension.
 - `get_fail_reasons(?Reasons)` unifies `Reasons` with the current stack and
   continues normally. It does not clear the stack.
 - The stack is proof-local, newest-first, and append-only while that proof (or
-  served-ask stream) continues. It is intentionally retained over backtracking
+  selected-scope invocation) continues. It is intentionally retained over backtracking
   and cuts: otherwise a fallback clause could not inspect why the preceding
   alternative failed.
 - When a normal interpreted, compiled, or standard predicate exhausts, its
@@ -87,7 +87,7 @@ policy hooks.
    not a process-dictionary value, nested framework, or global table.
 2. Reset that field at the beginning of a fresh `erlog_int:prove_goal/2` run.
    Continuing a successful answer via `erlog_int:fail/1` retains it, which is
-   necessary for a demand-driven answer stream.
+   necessary for a demand-driven scope invocation.
 3. Add `{fail_with_reason,1}` and `{get_fail_reasons,1}` to
    `erlog_bips:load/1`, with their implementation in `erlog_bips`. The helper
    functions entered as those predicates are named
@@ -140,7 +140,7 @@ makes every recorded reason representable by Quod's atom-safe wire codec.
   failure into unbounded state or a crash.
 - Accounting uses `erlang:external_size/1`, so measuring does not serialize the
   term.
-- The 32 KiB stack ceiling stays far below Quod's 1 MiB ask frame ceiling. A
+- The 32 KiB stack ceiling stays far below Quod's 1 MiB outer transport frame ceiling. A
   compile-time assertion or test pins that relationship so a later bound
   change cannot silently make a valid reason stack unsendable.
 
@@ -157,8 +157,8 @@ value is only the list of reason terms (and possibly the truncation marker).
    `Reasons` may be empty). The proof-worker reply maps an empty list to public
    `fail` and a non-empty list to public `{fail, Reasons}`. Update tracing and
    the explorer response for that public annotated result.
-2. Extend the sequenced `quod_ask` **complete** marker to carry the bounded
-   reason stack. For co-hosted and remote asks, validate that stack through
+2. Carry the bounded reason stack in the sequenced proof-scope **complete** event.
+   For co-hosted and remote selections, validate that stack through
    `quod_wire_term`, merge it into the caller state through Erlog's exported
    helper, then fail into the caller's normal backtracking path. Transport and
    authorization failures stay on the existing `{error, Reason}` path.

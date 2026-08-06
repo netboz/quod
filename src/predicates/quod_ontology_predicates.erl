@@ -19,7 +19,7 @@ remote authorization boundaries.
 -export([authorized_ontology_lifecycle_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3]).
--export([authorize_lifecycle/5, action_declared/4,
+-export([authorize_lifecycle/5,
          execute_prepared/2, lifecycle_error/2, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -87,25 +87,6 @@ policy_goal({join_ontology, Name, GenesisHash, Seeds}, Principal) ->
     {ok, {can_join_ontology, Principal, Name, GenesisHash, Seeds}};
 policy_goal(_Action, _Principal) ->
     error.
-
--doc "Whether root has a valid, nontrivial declaration for this exact transition.".
--spec action_declared(term(), tuple(), binary(), non_neg_integer()) ->
-          true | false | {error, term()}.
-action_declared(Action, CommittedEst, ?ROOT_NS, Height)
-  when is_integer(Height), Height >= 0 ->
-    VerdictEst = verdict_state(CommittedEst, Height),
-    Goal =
-        {',',
-         {action, Action, {'Prerequisites'}, {'DesiredState'}},
-         {'$quod_action_shape', Action,
-          {'Prerequisites'}, {'DesiredState'}}},
-    case quod_prolog:prove_est_read_only(Goal, VerdictEst) of
-        {ok, _Bindings, [], _ReadSet} -> true;
-        fail -> false;
-        {error, _} = Error -> Error
-    end;
-action_declared(_Action, _CommittedEst, _Ns, _Height) ->
-    false.
 
 verdict_state(CommittedEst, Height) ->
     quod_predicates:set_context(

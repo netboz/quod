@@ -4,27 +4,30 @@
 -include_lib("stdlib/include/assert.hrl").
 
 -export([all/0, init_per_suite/1, end_per_suite/1]).
--export([remote_stream/1, remote_symbol_safety/1, remote_peer_acl/1,
-         remote_failure_reasons/1, remote_deep_failure_reasons/1,
-         remote_structural_reason_truncation/1,
-         remote_cancel/1, remote_return_stream_reuse/1]).
--export([run_remote_proofs/3]).
+-export([remote_scope_solutions/1, remote_scope_symbol_safety/1,
+         remote_scope_chain_policy/1, remote_scope_failure_reasons/1,
+         remote_scope_deep_failure_reasons/1,
+         remote_scope_structural_reason_rejection/1,
+         remote_scope_cancel/1, remote_scope_transport_reuse/1]).
+-export([run_scope_proofs/3]).
 
 -define(TARGET_PORT, 15970).
 -define(ASKER_PORT, 15971).
 -define(NS, <<"animals">>).
 -define(ASKER_NS, <<"pets">>).
 -define(PRIVATE_NS, <<"private">>).
+-define(SCOPE_WAVE_SIZE, 8).
 
-all() -> [remote_stream, remote_symbol_safety, remote_peer_acl,
-          remote_failure_reasons, remote_deep_failure_reasons,
-          remote_structural_reason_truncation,
-          remote_cancel, remote_return_stream_reuse].
+all() -> [remote_scope_solutions, remote_scope_symbol_safety,
+          remote_scope_chain_policy, remote_scope_failure_reasons,
+          remote_scope_deep_failure_reasons,
+          remote_scope_structural_reason_rejection,
+          remote_scope_cancel, remote_scope_transport_reuse].
 
 init_per_suite(Config) ->
     {TargetPub, _} = TargetKey = quod_identity:generate(),
     {WrongPub, _} = wrong_key_before(TargetPub),
-    AskerKey = quod_identity:generate(),
+    {AskerPub, _} = AskerKey = quod_identity:generate(),
     TargetAddr = {"127.0.0.1", ?TARGET_PORT},
     AskerAddr = {"127.0.0.1", ?ASKER_PORT},
     Animals = filename:join(code:priv_dir(quod), "ontologies/animals.pl"),
@@ -43,21 +46,26 @@ init_per_suite(Config) ->
     ok = file:write_file(
            PrivateGenesis,
            ["can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n",
-            "secret(42).\n"]),
+            "secret(42).\n"
+            "hidden(99).\n"]),
     start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
     start_brahms(Target, ?NS, TargetAddr, []),
     DirectoryAllow = #{?NS => [WrongPub, TargetPub]},
     Asker = start_node(asker, ?ASKER_PORT, AskerKey, ?ASKER_NS,
                        filename:join(code:priv_dir(quod), "ontologies/pets.pl"),
                        [TargetAddr], DirectoryAllow, Config),
+    TargetAnchor = peer:call(
+                     Target, quod_simplex, genesis_hash, [?NS]),
     %% A lower-sorting route points at a valid server with the WRONG certificate:
     %% the pinned dial must reject it and advance to the real route.
     {ok, _} = peer:call(
                 Asker, quod_directory, install_record,
-                [WrongPub, TargetAddr, [?NS], 1, 1]),
+                [WrongPub, TargetAddr,
+                 [{?NS, TargetAnchor, validator}], 1, 1]),
     {ok, _} = peer:call(
                 Asker, quod_directory, install_record,
-                [TargetPub, TargetAddr, [?NS], 1, 1]),
+                [TargetPub, TargetAddr,
+                 [{?NS, TargetAnchor, validator}], 1, 1]),
     %% The private ontology is reachable only through an explicit local seed.
     ok = peer:call(
            Asker, quod_directory, add_direct_seed,
@@ -66,19 +74,28 @@ init_per_suite(Config) ->
     wait_ready(Target, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Asker, ?ASKER_NS, {instance_of, pet, my_dog}),
-    %% Authorize the ontology name only. A remote request must additionally pass
-    %% can_read for the TLS-authenticated node key, which this policy omits.
-    ACL = {assertz, {can_read, {secret, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}},
-    ?assertMatch({ok, [_], _},
-                 peer:call(Target, quod_prolog, prove,
-                           [?PRIVATE_NS, ACL, ?PRIVATE_NS], 60000)),
+    %% Step 3 retains the existing policy until can_invoke/4 lands. It checks
+    %% both the authenticated node key and every ontology in the origin-built
+    %% chain. `secret/1` admits both. `hidden/1` deliberately omits the key, so
+    %% the negative case proves an ontology name cannot launder its transport.
+    ACLs = [
+        {assertz, {can_read, {secret, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}},
+        {assertz, {can_read, {secret, {'X'}}, AskerPub, ?PRIVATE_NS}},
+        {assertz, {can_read, {hidden, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}}
+    ],
+    lists:foreach(
+      fun(ACL) ->
+          ?assertMatch({ok, [_], _},
+                       peer:call(Target, quod_prolog, prove,
+                                 [?PRIVATE_NS, ACL, ?PRIVATE_NS], 60000))
+      end, ACLs),
     [{target, Target}, {asker, Asker} | Config].
 
 end_per_suite(Config) ->
     _ = [catch peer:stop(P) || P <- [?config(target, Config), ?config(asker, Config)]],
     ok.
 
-remote_stream(Config) ->
+remote_scope_solutions(Config) ->
     Asker = ?config(asker, Config),
     Goal = {'::', ?NS, {diet, dog, {'D'}}},
     ?assertMatch({ok, [#{'D' := {'$quod_symbol', <<"kibble">>}}], _},
@@ -88,7 +105,7 @@ remote_stream(Config) ->
                                   {'$quod_symbol', <<"meat">>}]}], _},
                  peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All, ?ASKER_NS], 60000)).
 
-remote_symbol_safety(Config) ->
+remote_scope_symbol_safety(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Echo = {'::', ?NS, {echo, asker_only_symbol}},
@@ -103,12 +120,17 @@ remote_symbol_safety(Config) ->
                  peer:call(Asker, quod_prolog, prove,
                            [?ASKER_NS, Unknown, ?ASKER_NS], 60000)).
 
-remote_peer_acl(Config) ->
+remote_scope_chain_policy(Config) ->
     Asker = ?config(asker, Config),
-    Goal = {'::', ?PRIVATE_NS, {secret, {'X'}}},
-    ?assertEqual({error, not_allowed},
+    Allowed = {'::', ?PRIVATE_NS, {secret, {'X'}}},
+    ?assertMatch(
+       {ok, [#{'X' := 42}], _},
+       peer:call(Asker, quod_prolog, prove,
+                 [?ASKER_NS, Allowed, ?ASKER_NS], 60000)),
+    Denied = {'::', ?PRIVATE_NS, {hidden, {'X'}}},
+    ?assertEqual({error, {not_allowed, ?PRIVATE_NS}},
                  peer:call(Asker, quod_prolog, prove,
-                           [?ASKER_NS, Goal, ?ASKER_NS], 60000)),
+                           [?ASKER_NS, Denied, ?ASKER_NS], 60000)),
     {known, [Route]} = peer:call(
                          Asker, quod_directory, resolve, [?PRIVATE_NS]),
     ?assertEqual(direct, maps:get(scope, Route)),
@@ -117,7 +139,7 @@ remote_peer_acl(Config) ->
                        Asker, quod_directory, directory_hosts,
                        [?PRIVATE_NS])).
 
-remote_failure_reasons(Config) ->
+remote_scope_failure_reasons(Config) ->
     Asker = ?config(asker, Config),
     Remote = {'::', ?NS, {blocked, bob}},
     Recover = {';', Remote,
@@ -128,7 +150,7 @@ remote_failure_reasons(Config) ->
        peer:call(Asker, quod_prolog, prove,
                  [?ASKER_NS, Recover, ?ASKER_NS], 60000)).
 
-remote_deep_failure_reasons(Config) ->
+remote_scope_deep_failure_reasons(Config) ->
     Asker = ?config(asker, Config),
     Remote = {'::', ?NS, {deep_failure, 70}},
     {fail, Reasons} = peer:call(
@@ -138,58 +160,60 @@ remote_deep_failure_reasons(Config) ->
     ?assertEqual(Remote, hd(Reasons)),
     ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)).
 
-remote_structural_reason_truncation(Config) ->
+remote_scope_structural_reason_rejection(Config) ->
     Asker = ?config(asker, Config),
     Remote = {'::', ?NS, deep_reason},
     ?assertEqual(
-       {fail, [Remote, fail_reasons_truncated]},
+       {error, {protocol_error, bad_payload}},
        peer:call(Asker, quod_prolog, prove,
                  [?ASKER_NS, Remote, ?ASKER_NS], 60000)).
 
-remote_cancel(Config) ->
+remote_scope_cancel(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Loop = {'::', ?NS, loop},
     Caller = peer:call(Asker, erlang, spawn,
                        [quod_prolog, prove, [?ASKER_NS, Loop, ?ASKER_NS]]),
-    wait_ask_workers(Target, 1, 200),
+    wait_scope_workers(Target, 1, 200),
     true = peer:call(Asker, erlang, exit, [Caller, kill]),
-    wait_ask_workers(Target, 0, 200).
+    wait_scope_workers(Target, 0, 200).
 
-%% A return stream belongs to the asking NODE, not one proof.  Two waves cross
-%% the old per-proof QUIC stream ceiling while each result remains attributable
-%% to its ask id through the return router.
-remote_return_stream_reuse(Config) ->
+%% Scope commands share the bounded node-level router without sharing proof
+%% state. Two full waves prove that completed scopes release every target worker
+%% and leave the transport reusable for independent proofs.
+remote_scope_transport_reuse(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Goal = {'::', ?NS, {diet, dog, kibble}},
-    run_remote_wave(Asker, Goal, first),
-    wait_ask_workers(Target, 0, 200),
-    run_remote_wave(Asker, Goal, second),
-    wait_ask_workers(Target, 0, 200).
+    run_scope_wave(Asker, Goal, first),
+    wait_scope_workers(Target, 0, 200),
+    run_scope_wave(Asker, Goal, second),
+    wait_scope_workers(Target, 0, 200).
 
-run_remote_wave(Asker, Goal, Wave) ->
-    Results = peer:call(Asker, ?MODULE, run_remote_proofs, [?ASKER_NS, Goal, 64]),
+run_scope_wave(Asker, Goal, Wave) ->
+    Results = peer:call(
+                Asker, ?MODULE, run_scope_proofs,
+                [?ASKER_NS, Goal, ?SCOPE_WAVE_SIZE]),
     case Results of
-        List when is_list(List), length(List) =:= 64 ->
+        List when is_list(List), length(List) =:= ?SCOPE_WAVE_SIZE ->
             lists:foreach(
               fun({ok, [_], _}) -> ok;
-                 (Result) -> ct:fail({remote_proof_failed, Wave, Result})
+                 (Result) -> ct:fail({scope_proof_failed, Wave, Result})
               end, List);
-        timeout -> ct:fail({remote_proof_timeout, Wave});
-        Other -> ct:fail({remote_proof_wave_failed, Wave, Other})
+        timeout -> ct:fail({scope_proof_timeout, Wave});
+        Other -> ct:fail({scope_proof_wave_failed, Wave, Other})
     end.
 
-run_remote_proofs(Ns, Goal, Count) ->
+run_scope_proofs(Ns, Goal, Count) ->
     Parent = self(),
     _ = [spawn(fun() -> Parent ! {proof_done, quod_prolog:prove(Ns, Goal, Ns)} end)
          || _ <- lists:seq(1, Count)],
-    collect_remote_proofs(Count, []).
+    collect_scope_proofs(Count, []).
 
-collect_remote_proofs(0, Results) -> lists:reverse(Results);
-collect_remote_proofs(Count, Results) ->
+collect_scope_proofs(0, Results) -> lists:reverse(Results);
+collect_scope_proofs(Count, Results) ->
     receive
-        {proof_done, Result} -> collect_remote_proofs(Count - 1, [Result | Results])
+        {proof_done, Result} -> collect_scope_proofs(Count - 1, [Result | Results])
     after 10000 ->
         timeout
     end.
@@ -237,12 +261,12 @@ wait_ready(Peer, Ns, Goal) ->
         Other -> ct:fail({not_ready, Ns, Other})
     end.
 
-wait_ask_workers(_Peer, _Expected, 0) -> ct:fail(ask_worker_timeout);
-wait_ask_workers(Peer, Expected, Retries) ->
+wait_scope_workers(_Peer, _Expected, 0) -> ct:fail(scope_worker_timeout);
+wait_scope_workers(Peer, Expected, Retries) ->
     Stats = peer:call(Peer, quod_prolog, stats, [?NS]),
-    case maps:get(ask_workers, Stats, undefined) of
+    case maps:get(scope_workers, Stats, undefined) of
         Expected -> ok;
-        _ -> timer:sleep(10), wait_ask_workers(Peer, Expected, Retries - 1)
+        _ -> timer:sleep(10), wait_scope_workers(Peer, Expected, Retries - 1)
     end.
 
 wrong_key_before(TargetPub) ->

@@ -50,7 +50,7 @@ The design deliberately separates durable truth from moving runtime state:
   high-water marks and route selection remain unchanged.
 
 There is no bootstrap cycle. The query is a local read of the already-running
-root knowledge base. It does not use `directory_host/4`, `::`, or any directory
+root knowledge base. It does not use `directory_host/5`, `::`, or any directory
 route.
 
 ## 3. Root API
@@ -357,12 +357,11 @@ promoting the result, so no second link implementation is introduced.
 
 ## 7. Other Prolog simplification in this slice
 
-`quod_directory_predicates:directory_host/4` currently implements its own
-compiled choice-point enumeration. Replace that custom walker with the
+`quod_directory_predicates:directory_host/5` delegates enumeration to the
 standard Erlog list predicate:
 
 ```prolog
-member([NodeKey, Host, Port], Candidates)
+member([GenesisAnchor, NodeKey, Host, Port], Candidates)
 ```
 
 The external handler still performs the root-context and ground-namespace
@@ -385,7 +384,7 @@ not be copied into the root ledger:
 - ETS route lookup used by the hot `::` path;
 - pinned socket opening, retry and fanout/resync effects.
 
-`directory_host/4` remains an external root query over the live ETS index.
+`directory_host/5` remains an external root query over the live ETS index.
 Routing a `::` call through a second root proof would add latency and create an
 unnecessary dependency in the hot path.
 
@@ -434,7 +433,7 @@ Expected source scope:
 
 1. Register both dispatcher halves, add, and test the root-context-only
    `directory_control_peer/1`.
-2. Replace `directory_host/4`'s custom enumeration with Erlog `member/2`.
+2. Replace `directory_host/5`'s custom enumeration with Erlog `member/2`.
 3. Add the non-blocking root-query and pinned control-link state machine,
    keeping successful-empty and failed query outcomes distinct.
 4. Change `inbound/3`, `control_source_allowed/2`, `record_source/2`,

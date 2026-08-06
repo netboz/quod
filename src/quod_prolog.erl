@@ -17,11 +17,11 @@ order. One `gen_server` per namespace.
   replied to when the block applies (or reaped by a per-tx TTL if the verdict never
   arrives).
 - **Lifecycle actions** accept only ground root `create_ontology/2` and
-  `join_ontology/3` requests. A bounded worker validates the exact target-state
-  declaration, authorizes before source reads, carries one opaque prepared
-  descriptor through read-only mode selection, then re-authorizes, executes the
-  typed request once, and verifies its desired state. Prolog backtracking never
-  owns an external-operation descriptor.
+  `join_ontology/3` requests. One read-only anchored proof session validates the
+  exact target-state declaration, authorizes before source reads, carries one
+  opaque prepared descriptor through prerequisite selection, then re-authorizes,
+  executes the typed request once, and verifies its desired state. Prolog
+  backtracking never owns an external-operation descriptor.
 - **`apply_block/4`** is the deterministic state machine `quod_simplex` drives on every
   member: re-check the read-set against the committed kb (OCC), then apply the diff
   or reject — identical verdict on every member. A **committee-changing** transaction
@@ -38,6 +38,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -behaviour(gen_server).
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
+-include("quod_proof_limits.hrl").
 
 -export([start_link/2, prove/3, prove_ro/3, run_action/2,
          applied/1, apply_block/4, mark_ready/1, sync/1,
@@ -48,7 +49,17 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([prove_est/2, prove_est_read_only/2]).
 %% prove against a raw #est{} handle (runtime + isolated policy reads)
 -ifdef(TEST).
--export([membership_verdict/2]).   %% the pure verdict over #s.est — driven directly by eunit
+-export([membership_verdict/2,
+         test_active_command_stack/1,
+         test_scope_capacity_available/3,
+         test_public_scope_reason/2,
+         test_scope_timeout_reason/2,
+         test_scope_command_budget_valid/3,
+         test_target_scope_lifetime_ms/2,
+         test_remote_timeout_correlation/3,
+         test_scope_worker_failure/2,
+         test_proof_down_reply/3]).
+%% Pure verdict and scope-correlation seams driven directly by EUnit.
 -endif.
 
 %% The membership-verdict park budget: a verdict parked past the slot's Δ complaint-skip is moot, so this
@@ -56,13 +67,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
                     validation_ttl_ms => 2000, max_proof_workers => 64,
-                    max_ask_workers => 64, proof_timeout_ms => 60000,
-                    ask_timeout_ms => 60000, ask_step_timeout_ms => 30000}).
+                    max_scope_workers => 64, proof_timeout_ms => 60000,
+                    scope_timeout_ms => 60000,
+                    scope_step_timeout_ms => 30000}).
 -define(ROOT_NS, <<"quod:root">>).
 
 %% Busy/rebuilding replies are deliberately rate-limited: an authenticated peer can
 %% still flood valid open frames, and rejecting them must not create unbounded work.
--define(MAX_ASK_REJECTS_PER_SECOND, 32).
+-define(MAX_SCOPE_REJECTS_PER_SECOND, 32).
 
 -record(proof_worker, {pid         :: pid(),
                        kind        :: prove | prove_ro | action,
@@ -74,17 +86,67 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                        trace_ctx   :: quod_trace:context(),
                        height = 0  :: non_neg_integer()}).
 
--record(ask_worker, {pid        :: pid(),
-                     owner_mref :: reference(),
-                     id = undefined :: binary() | undefined,
-                     scope_key = undefined :: term(),
-                     height = 0 :: non_neg_integer(),
-                     timer = undefined :: reference() | undefined,
-                     token = undefined :: reference() | undefined,
-                     lifetime_timer :: reference(),
-                     lifetime_token :: reference(),
-                     pending = false :: boolean(),
-                     queued = false :: boolean()}).
+%% One engine-owned top-level run. The engine chooses the proof id, frozen
+%% height, and absolute local deadline before spawning the worker; the worker
+%% then owns exactly one root session and proof context for the whole run.
+-record(pinned_origin, {
+          proof_id    :: <<_:256>>,
+          scope_id    :: <<_:128>>,
+          deadline_ms :: integer(),
+          kind        :: prove | prove_ro | action,
+          namespace   :: binary(),
+          anchor      :: <<_:256>>,
+          height      :: non_neg_integer(),
+          context     :: quod_predicates:ctx(),
+          session     :: quod_proof_session:session()
+         }).
+
+-record(scope_worker, {pid        :: pid(),
+                       owner_mref :: reference(),
+                       scope_key  :: term(),
+                       height = 0 :: non_neg_integer(),
+                       timer = undefined :: reference() | undefined,
+                       token = undefined :: reference() | undefined,
+                       lifetime_timer = undefined :: reference() | undefined,
+                       lifetime_token = undefined :: reference() | undefined,
+                       pending = false :: boolean(),
+                       terminating = false :: boolean()}).
+
+%% One target-owned remote scope.  All wire authority is fixed at scope_open:
+%% the authenticated peer, exact request link, both anchored identities, mode,
+%% proof/session ids, and the return link.  Goal payloads are decoded only after
+%% this record's binding and command sequence have matched.
+-record(remote_scope, {
+          binding      :: quod_scope_wire:binding(),
+          peer_key     :: <<_:256>>,
+          request_link :: pid(),
+          request_mref :: reference(),
+          return_channel :: binary(),
+          return_link = undefined :: undefined | pid(),
+          return_mref = undefined :: undefined | reference(),
+          open_ref     :: reference(),
+          open_request_id :: <<_:128>>,
+          %% Exact correlation of the last authenticated command accepted by
+          %% this target.  Absolute expiry can happen while the scope is idle,
+          %% when no ordinary request remains pending at the origin router.
+          %% The terminal target-authored event reuses this id and the last
+          %% accepted command sequence; there is no sentinel/legacy frame.
+          last_request_id :: <<_:128>>,
+          lifetime_timer = undefined :: undefined | reference(),
+          lifetime_token = undefined :: undefined | reference(),
+          handle = undefined :: undefined | quod_scope_session:handle(),
+          worker_mref = undefined :: undefined | reference(),
+          state = opening_return ::
+                    opening_return | opening_session | active | closing,
+          next_command_seq = 2 :: pos_integer(),
+          next_event_seq = 1 :: pos_integer(),
+          deadline_ms :: integer(),
+          dirty = false :: boolean(),
+          generation = 0 :: non_neg_integer(),
+          pending = #{} :: map(),
+          controllers = #{} :: map(),
+          active_commands = [] :: [{<<_:128>>, pos_integer()}]
+         }).
 
 -record(s, {ns        :: binary(),
             self      :: node_id(),
@@ -97,10 +159,10 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
-            max_ask_workers = 64 :: pos_integer(),
+            max_scope_workers = 64 :: pos_integer(),
             proof_timeout_ms = 60000 :: pos_integer(),
-            ask_timeout_ms = 60000 :: pos_integer(),
-            ask_step_timeout_ms = 30000 :: pos_integer(),
+            scope_timeout_ms = 60000 :: pos_integer(),
+            scope_step_timeout_ms = 30000 :: pos_integer(),
             applied   = 0  :: log_index(),
             %% the attached quod_runtime: {Pid, Monitor, Floor}. The floor joins oldest_snapshot/2
             %% so MVCC history >= floor survives for the runtime's queued work; DOWN clears it.
@@ -119,13 +181,19 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             park_timeouts = 0 :: non_neg_integer(),     %% writes still unresolved at their caller deadline
             %% Ref => #proof_worker{}
             workers   = #{} :: map(),
-            %% WorkerMon => #ask_worker{}. The reverse index makes both normal
-            %% completion and asker cancellation O(1), bounded by max_ask_workers.
-            ask_workers = #{} :: map(),
-            ask_callers = #{} :: map(),
-            ask_pids = #{} :: map(),
-            ask_ids = #{} :: map(),
+            %% WorkerMon => #scope_worker{}.  Co-hosted and remote scopes share
+            %% the same worker/session ownership and MVCC pin accounting.
+            scope_workers = #{} :: map(),
+            scope_owners = #{} :: map(),
+            scope_pids = #{} :: map(),
             scope_sessions = #{} :: map(),
+            remote_scopes = #{} :: map(),
+            remote_open_refs = #{} :: map(),
+            remote_request_mrefs = #{} :: map(),
+            remote_return_mrefs = #{} :: map(),
+            remote_internal_refs = #{} :: map(),
+            remote_peer_counts = #{} :: map(),
+            scope_open_rates = #{} :: map(),
             reject_window = 0 :: integer(),
             reject_count = 0 :: non_neg_integer()}).
 
@@ -318,19 +386,26 @@ positive_limit(Name, Value) -> error({bad_config, {Name, Value}}).
 init({Ns, Config}) ->
     Cfg  = maps:merge(?DEFAULTS, Config),
     MaxProofWorkers = positive_limit(max_proof_workers, maps:get(max_proof_workers, Cfg)),
-    MaxAskWorkers = positive_limit(max_ask_workers, maps:get(max_ask_workers, Cfg)),
+    MaxScopeWorkers = positive_limit(
+                        max_scope_workers,
+                        maps:get(max_scope_workers, Cfg)),
     S = #s{ns = Ns, self = maps:get(node_id, Cfg), est = build_kb(),
            requests = gen_statem:reqids_new(),
            ttl = maps:get(transaction_ttl_ms, Cfg),
            vttl = maps:get(validation_ttl_ms, Cfg),
-           max_proof_workers = MaxProofWorkers, max_ask_workers = MaxAskWorkers,
+           max_proof_workers = MaxProofWorkers,
+           max_scope_workers = MaxScopeWorkers,
            proof_timeout_ms = positive_limit(proof_timeout_ms,
                                              maps:get(proof_timeout_ms, Cfg)),
-           ask_timeout_ms = positive_limit(ask_timeout_ms, maps:get(ask_timeout_ms, Cfg)),
-           ask_step_timeout_ms = positive_limit(ask_step_timeout_ms,
-                                                maps:get(ask_step_timeout_ms, Cfg)),
+           scope_timeout_ms = positive_limit(
+                                scope_timeout_ms,
+                                maps:get(scope_timeout_ms, Cfg)),
+           scope_step_timeout_ms = positive_limit(
+                                     scope_step_timeout_ms,
+                                     maps:get(scope_step_timeout_ms, Cfg)),
            ready = false},
-    true = quod_ask:subscribe(Ns),
+    true = quod_reg:subscribe(
+             {channel, quod_scope_wire:request_channel(Ns)}),
     %% Ask quod_simplex (already up under the per-ns sub-sup) to replay committed blocks
     %% into this fresh kb; it casts mark_ready when the kb is caught up. Async, so
     %% init does not block on a callback.
@@ -396,7 +471,8 @@ handle_call(get_stats, _From, S) ->
               parked    => map_size(S#s.parked),        %% in-flight writes awaiting commit (liveness gauge)
               park_timeouts => S#s.park_timeouts,       %% final outcome unknown when caller deadline elapsed
               proof_workers => map_size(S#s.workers),
-              ask_workers => map_size(S#s.ask_workers),
+              scope_workers => map_size(S#s.scope_workers),
+              remote_scopes => map_size(S#s.remote_scopes),
               kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
               kb_history_predicates => quod_erlog_db_mvcc:history_predicates(StoreRef)}, S};
 
@@ -404,37 +480,26 @@ handle_call(sync, _From, S) -> {reply, ok, S};   %% replay backpressure barrier 
 
 %% One co-hosted scope session per origin proof and pinned ontology identity.
 %% The origin pid is derived from `From`; it is never accepted from the payload.
-handle_call({scope_open, _ProofId, _Anchor, _ReadOnly}, _From,
-            S = #s{ready = false}) ->
-    {reply, {error, not_ready}, S};
-handle_call({scope_open, ProofId, Anchor, ReadOnly}, From, S)
-  when is_binary(ProofId), byte_size(ProofId) =:= 32,
+handle_call({scope_open, _ScopeId, _ProofId, _Anchor, _ReadOnly, _DeadlineMs}, _From,
+            S = #s{ready = false, ns = Ns}) ->
+    {reply, {error, {ontology_rebuilding, Ns}}, S};
+handle_call({scope_open, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs}, From, S)
+  when is_binary(ScopeId), byte_size(ScopeId) =:= 16,
+       is_binary(ProofId), byte_size(ProofId) =:= 32,
        is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_boolean(ReadOnly) ->
+       is_boolean(ReadOnly), is_integer(DeadlineMs) ->
     Origin = element(1, From),
-    open_scope_session(Origin, ProofId, Anchor, ReadOnly, S);
-handle_call({scope_open, _ProofId, _Anchor, _ReadOnly}, _From, S) ->
+    Mode = case ReadOnly of true -> read_only; false -> read_write end,
+    case scope_admission_reason(Mode, Anchor, S) of
+        ok ->
+            open_scope_session(
+              Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs, S);
+        {error, Reason} ->
+            {reply, {error, Reason}, S}
+    end;
+handle_call({scope_open, _ScopeId, _ProofId, _Anchor, _ReadOnly, _DeadlineMs},
+            _From, S) ->
     {reply, {error, bad_request}, S};
-
-%% The one-invocation ask path remains for the network-session slice and isolated
-%% tests. Co-hosted top-level proofs use `scope_open` above.
-handle_call({ask_open, _G, _C, _A}, _From, S = #s{ready = false}) ->
-    {reply, {error, not_ready}, S};
-handle_call({ask_open, _Goal, _Chain, _Asker}, _From,
-            S = #s{ask_workers = AW, max_ask_workers = Max}) when map_size(AW) >= Max ->
-    {reply, {error, busy}, S};
-handle_call({ask_open, Goal, Chain, Asker}, _From, S) ->
-    Stream = quod_ask:start_answer(S#s.ns, S#s.est, S#s.applied,
-                                   Goal, Chain, Asker, self()),
-    WorkerMRef = monitor(process, Stream),
-    AskerMRef = monitor(process, Asker),
-    Worker = new_ask_worker(Stream, WorkerMRef, AskerMRef,
-                            undefined, S#s.applied, S),
-    AW1 = (S#s.ask_workers)#{WorkerMRef => Worker},
-    AC1 = (S#s.ask_callers)#{AskerMRef => WorkerMRef},
-    AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
-    {reply, {ok, Stream},
-     bump_proves(S#s{ask_workers = AW1, ask_callers = AC1, ask_pids = AP1})};
 
 %% Runtime attach (attach_runtime/1). Ready+live only — see the API doc for why a pin must
 %% never span a rebuild. Replacing an existing pin demonitors it first (a restarted runtime
@@ -457,8 +522,6 @@ handle_cast({apply_block, Index, Change, Origin}, S0) ->
 %% Workers report through the engine so exactly one process owns reply and lifecycle state.
 handle_cast({proof_result, Ref, Kind, Goal, CallerNs, Result}, S) ->
     {noreply, finish_proof(Ref, Kind, Goal, CallerNs, Result, S)};
-handle_cast({ask_cancel, Pid}, S) ->
-    {noreply, cancel_ask(Pid, S)};
 %% mark_ready closes any replay interval before serving proves or resuming steady-state handling.
 %% Simplex emits it after boot, member recovery, and observer anti-entropy; the first later live
 %% apply can also close a replay interval, handled in note_origin/4.
@@ -507,51 +570,71 @@ handle_info({proof_kill, Ref, Token}, S = #s{workers = W}) ->
         _ -> ok
     end,
     {noreply, S};
-%% Ask derivation is guarded outside the worker so cancellation and no-progress
-%% remain preemptive even while erlog is inside an unbounded goal.
-handle_info({ask_step_started, Pid}, S = #s{ask_pids = Pids}) ->
+%% Scope derivation is guarded outside the worker so cancellation and the
+%% target-owned execution budget remain preemptive even while Erlog is inside
+%% an unbounded goal.
+handle_info({scope_step_started, Pid}, S = #s{scope_pids = Pids}) ->
     case maps:get(Pid, Pids, undefined) of
-        WorkerMRef when is_reference(WorkerMRef) -> {noreply, arm_ask(WorkerMRef, S)};
+        WorkerMRef when is_reference(WorkerMRef) ->
+            {noreply, arm_scope_step(WorkerMRef, S)};
         _ -> {noreply, S}
     end;
-handle_info({ask_step_finished, Pid}, S = #s{ask_pids = Pids}) ->
+handle_info({scope_step_finished, Pid}, S = #s{scope_pids = Pids}) ->
     case maps:get(Pid, Pids, undefined) of
-        WorkerMRef when is_reference(WorkerMRef) -> {noreply, disarm_ask(WorkerMRef, S)};
+        WorkerMRef when is_reference(WorkerMRef) ->
+            {noreply, disarm_scope_step(WorkerMRef, S)};
         _ -> {noreply, S}
     end;
-handle_info({ask_step_kill, WorkerMRef, Token}, S = #s{ask_workers = Workers}) ->
+handle_info({scope_step_kill, WorkerMRef, Token},
+            S = #s{scope_workers = Workers}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
-        #ask_worker{token = Token} -> {noreply, kill_ask(WorkerMRef, S)};
+        #scope_worker{token = Token} ->
+            {noreply, expire_scope_worker(active, WorkerMRef, S)};
         _ -> {noreply, S}
     end;
-handle_info({ask_lifetime_kill, WorkerMRef, Token}, S = #s{ask_workers = Workers}) ->
+handle_info({scope_lifetime_kill, WorkerMRef, Token},
+            S = #s{scope_workers = Workers}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
-        #ask_worker{lifetime_token = Token} -> {noreply, kill_ask(WorkerMRef, S)};
+        #scope_worker{lifetime_token = Token} ->
+            {noreply, expire_scope_worker(idle, WorkerMRef, S)};
         _ -> {noreply, S}
     end;
-%% Remote asks arrive on the fixed channel owned by this ontology. The request link is
-%% deliberately kept separate from the answer link; its monitor is the cancellation
-%% signal for the target-side worker.
-handle_info({quod_message, {{Peer, Addr}, RequestLink}, Channel, Payload},
+%% One authenticated, fixed-version command stream owns every remote scope for
+%% this ontology.  The envelope is decoded once here; the goal remains opaque
+%% until exact binding, link, sequence, readiness, rate and quota checks pass.
+handle_info({quod_message, {{PeerKey, Endpoint}, RequestLink}, Channel, Payload},
             S = #s{ns = Ns}) ->
-    case Channel =:= quod_ask:ask_channel(Ns) of
-        true  ->
-            case quod_ask:decode_cancel(Payload) of
-                {ok, AskId} ->
-                    {noreply, handle_remote_cancel(AskId, S)};
-                error ->
-                    case quod_ask:decode_next(Payload) of
-                        {ok, AskId} ->
-                            {noreply, remote_next(AskId, S)};
-                        error ->
-                            {noreply, handle_remote_ask(
-                                        Peer, Addr, RequestLink, Payload, S)}
-                    end
-            end;
+    case Channel =:= quod_scope_wire:request_channel(Ns) of
+        true ->
+            {noreply,
+             handle_scope_frame(
+               PeerKey, Endpoint, RequestLink, Payload, S)};
         false -> handle_response_info(
-                   {quod_message, {{Peer, Addr}, RequestLink}, Channel, Payload},
+                   {quod_message,
+                    {{PeerKey, Endpoint}, RequestLink}, Channel, Payload},
                    S)
     end;
+handle_info({link_up, OpenRef, PeerKey, ReturnChannel, ReturnLink}, S) ->
+    {noreply,
+     handle_scope_return_link(
+       OpenRef, PeerKey, ReturnChannel, ReturnLink, S)};
+handle_info({link_error, OpenRef, PeerKey, ReturnChannel}, S) ->
+    {noreply,
+     handle_scope_return_error(OpenRef, PeerKey, ReturnChannel, S)};
+handle_info({remote_scope_expire, Binding, Token}, S) ->
+    {noreply, expire_remote_scope(Binding, Token, S)};
+handle_info({scope_reply, ScopePid, ProofId, SessionRef, InternalRef, Reply}, S) ->
+    {noreply,
+     handle_remote_scope_reply(
+       ScopePid, ProofId, SessionRef, InternalRef, Reply, S)};
+handle_info(Message = {proof_nested_open, _, _, _, _, _, _, _, _}, S) ->
+    {noreply, handle_remote_controller_request(Message, S)};
+handle_info(Message = {proof_nested_next, _, _, _, _, _, _, _}, S) ->
+    {noreply, handle_remote_controller_request(Message, S)};
+handle_info(Message = {proof_nested_cancel, _, _, _, _, _}, S) ->
+    {noreply, handle_remote_controller_request(Message, S)};
+handle_info(Message = {proof_tx_request, _, _, _, _, _, _}, S) ->
+    {noreply, handle_remote_controller_request(Message, S)};
 %% A parked write whose verdict never arrived (leader change / lost block): stop
 %% retaining its caller, but do NOT claim failure. Consensus cannot cancel a change
 %% that may already be proposed; it can still finalize after this local deadline.
@@ -583,9 +666,9 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
 handle_info(Info, S) ->
     handle_response_info(Info, S).
 
-open_scope_session(Origin, ProofId, Anchor, ReadOnly,
+open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                    S = #s{scope_sessions = Sessions}) ->
-    Key = {Origin, ProofId},
+    Key = {Origin, ProofId, ScopeId},
     case maps:find(Key, Sessions) of
         {ok, {Handle, WorkerMRef, ExistingReadOnly}} ->
             case quod_scope_session:identity(Handle) of
@@ -597,121 +680,1380 @@ open_scope_session(Origin, ProofId, Anchor, ReadOnly,
                     case is_process_alive(quod_scope_session:pid(Handle)) of
                         true -> {reply, {ok, Handle}, S};
                         false -> open_new_scope_session(
-                                   Origin, ProofId, Anchor, ReadOnly,
-                                   drop_ask(WorkerMRef, S))
+                                   Origin, ScopeId, ProofId, Anchor, ReadOnly,
+                                   DeadlineMs,
+                                   drop_scope_worker(WorkerMRef, S))
                     end
             end;
         error ->
-            open_new_scope_session(Origin, ProofId, Anchor, ReadOnly, S)
+            open_new_scope_session(
+              Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs, S)
     end.
 
-open_new_scope_session(_Origin, _ProofId, _Anchor, _ReadOnly,
-                       S = #s{ask_workers = Workers,
-                              max_ask_workers = Max})
-  when map_size(Workers) >= Max ->
-    {reply, {error, busy}, S};
-open_new_scope_session(Origin, ProofId, Anchor, ReadOnly,
-                       S = #s{ns = Ns, est = Est, applied = Height,
-                              scope_sessions = Sessions}) ->
-    case quod_simplex:genesis_hash(Ns) of
-        Anchor ->
+open_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
+                       S = #s{ns = Ns}) ->
+    case scope_capacity_available(S) of
+        false ->
+            {reply, {error, {ontology_busy, Ns}}, S};
+        true ->
+            start_new_scope_session(
+              Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs, S)
+    end.
+
+start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
+                        S = #s{ns = Ns, est = Est, applied = Height,
+                               scope_sessions = Sessions}) ->
+    case local_node_principal() of
+        {ok, Principal} ->
+            Now = quod_time:mono_ms(),
+            ScopeLifetime = target_scope_lifetime_ms(
+                              max(0, DeadlineMs - Now),
+                              S#s.scope_timeout_ms),
+            ScopeDeadline = Now + ScopeLifetime,
             {Handle, WorkerMRef} = quod_scope_session:start(
-                                     ProofId, Origin, Ns, Anchor, Height,
-                                     Est, self(), #{read_only => ReadOnly}),
+                                     ScopeId, ProofId, Origin,
+                                     Ns, Anchor, Height,
+                                     Est, self(),
+                                     #{read_only => ReadOnly,
+                                       principal => Principal,
+                                       deadline_ms => ScopeDeadline}),
             Pid = quod_scope_session:pid(Handle),
             OwnerMRef = monitor(process, Origin),
-            Key = {Origin, ProofId},
-            Worker0 = new_ask_worker(
-                        Pid, WorkerMRef, OwnerMRef,
-                        undefined, Height, S),
-            Worker = Worker0#ask_worker{scope_key = Key},
+            Key = {Origin, ProofId, ScopeId},
+            Worker = new_scope_worker(
+                       Pid, WorkerMRef, OwnerMRef, Key, Height,
+                       ScopeLifetime),
             {reply, {ok, Handle},
              bump_proves(
-               S#s{ask_workers = (S#s.ask_workers)#{WorkerMRef => Worker},
-                   ask_callers = (S#s.ask_callers)#{OwnerMRef => WorkerMRef},
-                   ask_pids = (S#s.ask_pids)#{Pid => WorkerMRef},
+               S#s{scope_workers =
+                       (S#s.scope_workers)#{WorkerMRef => Worker},
+                   scope_owners =
+                       (S#s.scope_owners)#{OwnerMRef => WorkerMRef},
+                   scope_pids = (S#s.scope_pids)#{Pid => WorkerMRef},
                    scope_sessions = Sessions#{
                      Key => {Handle, WorkerMRef, ReadOnly}}})};
-        <<_:256>> ->
-            {reply, {error, {anchor_conflict, Ns}}, S};
-        undefined ->
-            {reply, {error, not_ready}, S}
+        error ->
+            {reply, {error, {protocol_error, session_binding}}, S}
     end.
 
-handle_remote_ask(Peer, PeerEndpoint, RequestLink, Payload,
-                  S) ->
-    case quod_ask:decode_open(Payload) of
-        error -> S;
-        {ok, AskId, Goal, Chain, AnswerCh} ->
-            case AnswerCh =:= quod_ask:answer_channel(Peer) of
-                false -> S;
-                true -> handle_remote_ask_open(
-                          Peer, PeerEndpoint, RequestLink, AskId, Goal, Chain, AnswerCh,
-                          S)
+local_node_principal() ->
+    case application:get_env(quod, node_pubkey) of
+        {ok, <<_:256>> = Principal} -> {ok, Principal};
+        _ -> error
+    end.
+
+%% ------------------------------------------------------------------
+%% Authenticated remote scope ingress (hard-break scope wire)
+%% ------------------------------------------------------------------
+
+handle_scope_frame(PeerKey, Endpoint, RequestLink, Payload, S)
+  when is_binary(PeerKey), is_pid(RequestLink) ->
+    case quod_scope_wire:decode_request(Payload) of
+        {ok, Probe = {scope_identity_probe, _, _, _}} ->
+            handle_scope_identity_probe(PeerKey, Endpoint, Probe, S);
+        {ok, Command = {scope_command, _, _, _, _, _}} ->
+            handle_scope_command(
+              PeerKey, Endpoint, RequestLink, Command, S);
+        {error, _Reason} ->
+            %% An undecodable frame has no authenticated session binding to
+            %% which a reply could safely be correlated.
+            S
+    end;
+handle_scope_frame(_PeerKey, _Endpoint, _RequestLink, _Payload, S) ->
+    S.
+
+handle_scope_identity_probe(
+  PeerKey, Endpoint,
+  {scope_identity_probe, RequestId, PeerKey, Ns},
+  S = #s{ns = Ns, self = TargetKey, ready = true, est = Est})
+  when is_binary(TargetKey), byte_size(TargetKey) =:= 32 ->
+    case {quod_quic:valid_endpoint(Endpoint),
+          quod_simplex:genesis_hash(Ns)} of
+        {true, <<_:256>> = Anchor} ->
+            Role = case lists:member(
+                          TargetKey,
+                          quod_committee_predicates:admitted_pubkeys(Est)) of
+                       true -> validator;
+                       false -> observer
+                   end,
+            Response = {scope_identity_response, RequestId, TargetKey,
+                        {Ns, Anchor}, Role},
+            case quod_scope_wire:encode_identity_response(Response) of
+                {ok, Encoded} ->
+                    %% Discovery is a bounded authenticated exchange only: no
+                    %% scope, proof worker, session, timer or monitor exists.
+                    quod_quic:send_pinned(
+                      PeerKey, Endpoint,
+                      quod_scope_wire:return_channel(PeerKey), Encoded),
+                    S;
+                {error, _} -> S
+            end;
+        _ -> S
+    end;
+handle_scope_identity_probe(_PeerKey, _Endpoint, _Probe, S) ->
+    S.
+
+handle_scope_command(
+  PeerKey, Endpoint, RequestLink,
+  {scope_command, Binding, CommandSeq, RequestId, RemainingMs, Operation},
+  S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        error when Operation =:= scope_open ->
+            handle_remote_scope_open(
+              PeerKey, Endpoint, RequestLink, Binding,
+              CommandSeq, RequestId, RemainingMs, S);
+        error ->
+            reject_unknown_scope(
+              PeerKey, Endpoint, Binding, CommandSeq, RequestId, S);
+        {ok, Scope} ->
+            handle_bound_scope_command(
+              PeerKey, RequestLink, Binding, CommandSeq,
+              RequestId, RemainingMs, Operation, Scope, S)
+    end.
+
+handle_remote_scope_open(
+  PeerKey, Endpoint, RequestLink,
+  Binding = {scope_binding, OriginKey, TargetKey, _ProofId, _ScopeId,
+             _OriginIdentity, {Ns, Anchor}, Mode},
+  CommandSeq, RequestId, RemainingMs,
+  S = #s{ns = Ns, self = TargetKey}) ->
+    case PeerKey =:= OriginKey andalso
+         CommandSeq =:= 1 andalso RemainingMs > 0 andalso
+         quod_quic:valid_endpoint(Endpoint) of
+        false ->
+            S;
+        true ->
+            case remote_open_reason(Mode, Anchor, PeerKey, S) of
+                ok ->
+                    case charge_scope_open(PeerKey, {Ns, Anchor}, S) of
+                        {ok, S1} ->
+                            begin_remote_scope_open(
+                              PeerKey, Endpoint, RequestLink, Binding,
+                              RequestId, RemainingMs, S1);
+                        {error, S1} ->
+                            reject_scope_open(
+                              PeerKey, Endpoint, Binding, RequestId,
+                              {ontology_rate_limited, Ns}, S1)
+                    end;
+                {error, Reason} ->
+                    reject_scope_open(
+                      PeerKey, Endpoint, Binding, RequestId, Reason, S)
+            end
+    end;
+handle_remote_scope_open(
+  _PeerKey, _Endpoint, _RequestLink, _Binding,
+  _CommandSeq, _RequestId, _RemainingMs, S) ->
+    S.
+
+remote_open_reason(Mode, Anchor, PeerKey,
+                   S = #s{ns = Ns,
+                          remote_peer_counts = PeerCounts}) ->
+    case scope_admission_reason(Mode, Anchor, S) of
+        ok ->
+            case {scope_capacity_available(S),
+                  maps:get(PeerKey, PeerCounts, 0) <
+                      ?QUOD_MAX_ROUTER_SCOPES_PER_PEER} of
+                {false, _} -> {error, {ontology_busy, Ns}};
+                {_, false} ->
+                    {error,
+                     {scope_limit_exceeded,
+                      ?QUOD_MAX_ROUTER_SCOPES_PER_PEER}};
+                {true, true} -> ok
+            end;
+        {error, _} = Error -> Error
+    end.
+
+scope_capacity_available(
+  #s{max_scope_workers = Max, scope_workers = Workers,
+     remote_scopes = Remote}) ->
+    scope_capacity_available(
+      Max, map_size(Workers), pending_remote_scope_count(Remote)).
+
+scope_capacity_available(Max, Active, Pending) ->
+    Active + Pending < Max.
+
+pending_remote_scope_count(Remote) ->
+    maps:fold(
+      fun(_Binding, #remote_scope{worker_mref = undefined}, Count) ->
+              Count + 1;
+         (_Binding, _Scope, Count) ->
+              Count
+      end, 0, Remote).
+
+scope_admission_reason(_Mode, Anchor, #s{ns = Ns})
+  when not is_binary(Anchor); byte_size(Anchor) =/= 32 ->
+    {error, {anchor_conflict, Ns}};
+scope_admission_reason(Mode, Anchor,
+                       #s{ns = Ns, ready = Ready, self = Self, est = Est}) ->
+    case quod_simplex:genesis_hash(Ns) of
+        Anchor when not Ready -> {error, {ontology_rebuilding, Ns}};
+        Anchor when Mode =:= read_only -> ok;
+        Anchor when Mode =:= read_write ->
+            case lists:member(
+                   Self,
+                   quod_committee_predicates:admitted_pubkeys(Est)) of
+                true -> ok;
+                false -> {error, {not_allowed, Ns}}
+            end;
+        <<_:256>> -> {error, {anchor_conflict, Ns}};
+        undefined -> {error, {ontology_rebuilding, Ns}}
+    end.
+
+charge_scope_open(PeerKey, Identity,
+                  S = #s{scope_open_rates = Rates0}) ->
+    Now = quod_time:mono_ms(),
+    Key = {PeerKey, Identity},
+    Rates = maybe_prune_scope_open_rates(Now, Rates0),
+    case maps:find(Key, Rates) of
+        {ok, {Tokens0, LastRefill, _LastSeen}} ->
+            Capacity = ?QUOD_SCOPE_OPEN_RATE_BURST * 1000,
+            Tokens = min(
+                       Capacity,
+                       Tokens0 +
+                           max(0, Now - LastRefill) *
+                               ?QUOD_SCOPE_OPEN_RATE_PER_SECOND),
+            case Tokens >= 1000 of
+                true ->
+                    {ok,
+                     S#s{scope_open_rates = Rates#{
+                       Key => {Tokens - 1000, Now, Now}}}};
+                false ->
+                    {error,
+                     S#s{scope_open_rates = Rates#{
+                       Key => {Tokens, Now, Now}}}}
+            end;
+        error when map_size(Rates) >= ?QUOD_SCOPE_OPEN_MAX_BUCKETS ->
+            {error, S#s{scope_open_rates = Rates}};
+        error ->
+            Tokens = (?QUOD_SCOPE_OPEN_RATE_BURST - 1) * 1000,
+            {ok, S#s{scope_open_rates = Rates#{Key => {Tokens, Now, Now}}}}
+    end.
+
+maybe_prune_scope_open_rates(Now, Rates)
+  when map_size(Rates) >= ?QUOD_SCOPE_OPEN_MAX_BUCKETS ->
+    maps:filter(
+      fun(_Key, {_Tokens, _LastRefill, LastSeen}) ->
+          Now - LastSeen < ?QUOD_SCOPE_OPEN_BUCKET_IDLE_MS
+      end, Rates);
+maybe_prune_scope_open_rates(_Now, Rates) ->
+    Rates.
+
+begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
+                        RequestId, RemainingMs,
+                        S = #s{scope_timeout_ms = ScopeTimeout,
+                               remote_scopes = Remote,
+                               remote_open_refs = OpenRefs,
+                               remote_request_mrefs = RequestRefs,
+                               remote_peer_counts = PeerCounts}) ->
+    ReturnChannel = quod_scope_wire:return_channel(PeerKey),
+    OpenRef = quod_quic:open_link_pinned(
+                PeerKey, Endpoint, ReturnChannel),
+    RequestMRef = monitor(process, RequestLink),
+    Lifetime = target_scope_lifetime_ms(RemainingMs, ScopeTimeout),
+    Deadline = quod_time:mono_ms() + Lifetime,
+    Token = make_ref(),
+    Timer = erlang:send_after(
+              Lifetime, self(), {remote_scope_expire, Binding, Token}),
+    Scope = #remote_scope{
+               binding = Binding, peer_key = PeerKey,
+               request_link = RequestLink, request_mref = RequestMRef,
+               return_channel = ReturnChannel, open_ref = OpenRef,
+               open_request_id = RequestId,
+               last_request_id = RequestId,
+               lifetime_timer = Timer, lifetime_token = Token,
+               deadline_ms = Deadline},
+    S#s{remote_scopes = Remote#{Binding => Scope},
+        remote_open_refs = OpenRefs#{OpenRef => Binding},
+        remote_request_mrefs = RequestRefs#{RequestMRef => Binding},
+        remote_peer_counts = PeerCounts#{
+          PeerKey => maps:get(PeerKey, PeerCounts, 0) + 1}}.
+
+reject_unknown_scope(
+  PeerKey, Endpoint,
+  Binding = {scope_binding, PeerKey, TargetKey, _ProofId, _ScopeId,
+             _OriginIdentity, {Ns, _Anchor}, _Mode},
+  CommandSeq, RequestId, S = #s{ns = Ns, self = TargetKey})
+  when CommandSeq >= 1 ->
+    reject_scope_open(
+      PeerKey, Endpoint, Binding, RequestId,
+      {protocol_error, session_binding}, S);
+reject_unknown_scope(_PeerKey, _Endpoint, _Binding, _CommandSeq,
+                     _RequestId, S) ->
+    S.
+
+reject_scope_open(PeerKey, Endpoint, Binding, RequestId, Reason,
+                  S = #s{reject_window = Window, reject_count = Count}) ->
+    Now = quod_time:mono_ms(),
+    case Window =:= 0 orelse Now - Window >= 1000 of
+        true ->
+            send_scope_rejection(
+              PeerKey, Endpoint, Binding, RequestId, Reason),
+            S#s{reject_window = Now, reject_count = 1};
+        false when Count < ?MAX_SCOPE_REJECTS_PER_SECOND ->
+            send_scope_rejection(
+              PeerKey, Endpoint, Binding, RequestId, Reason),
+            S#s{reject_count = Count + 1};
+        false ->
+            S
+    end.
+
+send_scope_rejection(PeerKey, Endpoint, Binding, RequestId, Reason) ->
+    Event = {scope_event, Binding, 1, RequestId, 1, 0, false,
+             {scope_error, Reason}},
+    case quod_scope_wire:encode_event(Event) of
+        {ok, Encoded} ->
+            quod_quic:send_pinned(
+              PeerKey, Endpoint,
+              quod_scope_wire:return_channel(PeerKey), Encoded);
+        {error, _} ->
+            ok
+    end.
+
+handle_bound_scope_command(
+  PeerKey, RequestLink, Binding, CommandSeq, RequestId, RemainingMs,
+  Operation,
+  Scope = #remote_scope{peer_key = PeerKey,
+                        request_link = RequestLink,
+                        next_command_seq = CommandSeq,
+                        deadline_ms = Deadline}, S) ->
+    case {scope_command_budget_valid(Operation, RemainingMs, Deadline),
+          binding_admission_reason(Binding, S)} of
+        {true, ok} ->
+            Scope1 = accept_scope_command(
+                       Operation, RequestId, CommandSeq, Scope),
+            execute_remote_scope_command(
+              Binding, Operation, RequestId, CommandSeq,
+              put_remote_scope(Scope1, S));
+        {false, _} ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {scope_expired, target_namespace(Binding)}, S);
+        {true, {error, Reason}} ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq, Reason, S)
+    end;
+handle_bound_scope_command(
+  PeerKey, RequestLink, Binding, _CommandSeq, RequestId, _RemainingMs,
+  _Operation,
+  #remote_scope{peer_key = PeerKey, request_link = RequestLink,
+                next_command_seq = Expected}, S) ->
+    poison_remote_scope(
+      Binding, RequestId, max(1, Expected - 1),
+      {protocol_error, command_sequence}, S);
+handle_bound_scope_command(_PeerKey, _RequestLink, _Binding, _CommandSeq,
+                           _RequestId, _RemainingMs, _Operation, _Scope, S) ->
+    %% A frame on another authenticated link/key cannot revoke the real
+    %% origin's live scope.
+    S.
+
+%% Cleanup is an authenticated, sequence-bound command, not proof execution.
+%% It must remain usable after the origin's execution budget reaches zero so a
+%% completed/abandoned proof can release the target scope immediately instead
+%% of waiting for the lifetime fallback.
+scope_command_budget_valid(scope_close, _RemainingMs, _Deadline) -> true;
+scope_command_budget_valid(_Operation, RemainingMs, Deadline) ->
+    RemainingMs > 0 andalso quod_time:mono_ms() < Deadline.
+
+target_scope_lifetime_ms(RemainingMs, LocalLimitMs) ->
+    Budget = min(max(0, RemainingMs), LocalLimitMs),
+    ReplyGrace = min(?QUOD_SCOPE_TIMEOUT_REPLY_GRACE_MS, Budget div 2),
+    max(1, Budget - ReplyGrace).
+
+accept_scope_command(scope_close, RequestId, CommandSeq,
+                     Scope = #remote_scope{lifetime_timer = Timer}) ->
+    %% An exact close owns cleanup once accepted.  Retire the absolute timer
+    %% token now so an already-queued expiry cannot race cleanup and
+    %% convert successful cleanup into a proof failure.
+    cancel_scope_timer(Timer),
+    Scope#remote_scope{next_command_seq = CommandSeq + 1,
+                       last_request_id = RequestId,
+                       lifetime_timer = undefined,
+                       lifetime_token = undefined};
+accept_scope_command(_Operation, RequestId, CommandSeq, Scope) ->
+    Scope#remote_scope{next_command_seq = CommandSeq + 1,
+                       last_request_id = RequestId}.
+
+binding_admission_reason(
+  {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
+   _OriginIdentity, {_Ns, Anchor}, Mode}, S) ->
+    scope_admission_reason(Mode, Anchor, S).
+
+execute_remote_scope_command(Binding, scope_open, RequestId, CommandSeq, S) ->
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      {protocol_error, unexpected_scope_command}, S);
+execute_remote_scope_command(Binding, Operation, RequestId, CommandSeq,
+                             S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, #remote_scope{state = active} = Scope} ->
+            execute_active_scope_command(
+              Operation, RequestId, CommandSeq, Binding, Scope, S);
+        _ ->
+            %% The command was accepted against an opening session only if it
+            %% violated the explicit opened-before-demand boundary.
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {protocol_error, unexpected_scope_command}, S)
+    end.
+
+execute_active_scope_command(
+  scope_close, RequestId, CommandSeq, Binding, _Scope, S) ->
+    %% Closing is cancellation, not another proof step.  It must not queue a
+    %% state probe behind a currently-running derivation: that would make an
+    %% abandoned non-terminating goal keep its worker and MVCC pin until the
+    %% lifetime timer.  The last published generation is sufficient for the
+    %% terminal acknowledgement; then the common drop path stops the worker
+    %% and retains ownership until its monitored DOWN releases the pin.
+    S1 = emit_scope_event(
+           Binding, RequestId, CommandSeq, scope_closed, S),
+    drop_remote_scope(Binding, S1);
+execute_active_scope_command(
+  {invoke_open, InvocationId, Selection, Chain, GoalBlob},
+  RequestId, CommandSeq, Binding,
+  #remote_scope{handle = Handle, pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            emit_invocation_error(
+              Binding, RequestId, CommandSeq, InvocationId, 1,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            case quod_scope_wire:decode_payload(goal, GoalBlob) of
+                {ok, Goal} ->
+                    {ok, InternalRef} = quod_scope_session:invoke_open(
+                                          Handle, InvocationId,
+                                          Goal, Chain, Selection),
+                    add_remote_pending(
+                      Binding, InternalRef,
+                      {invoke_open, RequestId, CommandSeq, InvocationId}, S);
+                {error, Reason} ->
+                    poison_remote_invocation(
+                      Binding, RequestId, CommandSeq, InvocationId, 1,
+                      Reason, S)
+            end
+    end;
+execute_active_scope_command(
+  {invoke_next, InvocationId, ExpectedAnswerSeq},
+  RequestId, CommandSeq, Binding,
+  #remote_scope{handle = Handle, pending = Pending,
+                active_commands = Active}, S) ->
+    case {map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE,
+          length(Active) < ?QUOD_MAX_ACTIVE_PROOF_DEPTH} of
+        {false, _} ->
+            emit_invocation_error(
+              Binding, RequestId, CommandSeq, InvocationId,
+              ExpectedAnswerSeq,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        {_, false} ->
+            emit_invocation_error(
+              Binding, RequestId, CommandSeq, InvocationId,
+              ExpectedAnswerSeq,
+              {proof_depth_exceeded, ?QUOD_MAX_ACTIVE_PROOF_DEPTH}, S);
+        {true, true} ->
+            {ok, InternalRef} = quod_scope_session:invoke_next(
+                                  Handle, InvocationId,
+                                  ExpectedAnswerSeq),
+            S1 = add_remote_pending(
+                   Binding, InternalRef,
+                   {invoke_next, RequestId, CommandSeq,
+                    InvocationId, ExpectedAnswerSeq}, S),
+            update_remote_scope(
+              Binding,
+              fun(R) ->
+                  R#remote_scope{
+                    active_commands =
+                        active_stack_push(
+                          {RequestId, CommandSeq}, Active)}
+              end, S1)
+    end;
+execute_active_scope_command(
+  {invoke_cancel, InvocationId}, _RequestId, _CommandSeq, _Binding,
+  #remote_scope{handle = Handle}, S) ->
+    _ = quod_scope_session:invoke_cancel(Handle, InvocationId),
+    S;
+execute_active_scope_command(
+  {materialize, ControllerId, _ActorInvocationId, _Lineage, BatchIds},
+  RequestId, CommandSeq, Binding, Scope, S) ->
+    queue_scope_control(
+      Binding, checkpoint, BatchIds,
+      {materialized, RequestId, CommandSeq, ControllerId, BatchIds},
+      Scope, S);
+execute_active_scope_command(
+  {batch_restore, BatchIds}, RequestId, CommandSeq, Binding, Scope, S) ->
+    queue_scope_control(
+      Binding, restore, BatchIds,
+      {batch_restored, RequestId, CommandSeq, BatchIds}, Scope, S);
+execute_active_scope_command(
+  {batch_release, BatchIds}, RequestId, CommandSeq, Binding, Scope, S) ->
+    queue_scope_control(
+      Binding, release, BatchIds,
+      {batch_released, RequestId, CommandSeq, BatchIds}, Scope, S);
+execute_active_scope_command(Operation, _RequestId, _CommandSeq, Binding,
+                             _Scope, S)
+  when element(1, Operation) =:= nested_opened;
+       element(1, Operation) =:= nested_solution;
+       element(1, Operation) =:= nested_complete;
+       element(1, Operation) =:= nested_erlog_error;
+       element(1, Operation) =:= nested_error;
+       element(1, Operation) =:= tx_activated;
+       element(1, Operation) =:= tx_finished;
+       element(1, Operation) =:= savepoint_allocated;
+       element(1, Operation) =:= savepoint_restored;
+       element(1, Operation) =:= controller_error ->
+    deliver_remote_controller_reply(Binding, Operation, S);
+execute_active_scope_command(_Operation, RequestId, CommandSeq, Binding,
+                             _Scope, S) ->
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      {protocol_error, unexpected_scope_command}, S).
+
+queue_scope_state_probe(Binding, Purpose,
+                        Scope = #remote_scope{pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, purpose_request_id(Purpose),
+              purpose_command_seq(Purpose),
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            InternalRef = make_ref(),
+            send_scope_control(Scope, InternalRef, checkpoint, []),
+            add_remote_pending(
+              Binding, InternalRef, {state_probe, Purpose}, S)
+    end.
+
+queue_scope_control(Binding, Operation, BatchIds, Purpose,
+                    Scope = #remote_scope{pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, purpose_request_id(Purpose),
+              purpose_command_seq(Purpose),
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            InternalRef = make_ref(),
+            send_scope_control(Scope, InternalRef, Operation, BatchIds),
+            add_remote_pending(
+              Binding, InternalRef,
+              {scope_control, Purpose, Operation, BatchIds}, S)
+    end.
+
+send_scope_control(
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _ScopeId, ProofId,
+               SessionRef, _Ns, _Anchor}},
+  InternalRef, Operation, BatchIds) ->
+    Pid ! {scope_savepoint, self(), ProofId, SessionRef,
+           InternalRef, Operation, BatchIds},
+    ok.
+
+purpose_request_id({scope_opened, RequestId, _CommandSeq, _Height}) -> RequestId;
+purpose_request_id({materialized, RequestId, _CommandSeq, _Controller, _Ids}) ->
+    RequestId;
+purpose_request_id({batch_restored, RequestId, _CommandSeq, _Ids}) -> RequestId;
+purpose_request_id({batch_released, RequestId, _CommandSeq, _Ids}) -> RequestId;
+purpose_request_id({controller, RequestId, _CommandSeq, _Controller, _Event}) ->
+    RequestId.
+
+purpose_command_seq({scope_opened, _RequestId, CommandSeq, _Height}) -> CommandSeq;
+purpose_command_seq({materialized, _RequestId, CommandSeq, _Controller, _Ids}) ->
+    CommandSeq;
+purpose_command_seq({batch_restored, _RequestId, CommandSeq, _Ids}) -> CommandSeq;
+purpose_command_seq({batch_released, _RequestId, CommandSeq, _Ids}) -> CommandSeq;
+purpose_command_seq({controller, _RequestId, CommandSeq, _Controller, _Event}) ->
+    CommandSeq.
+
+handle_scope_return_link(OpenRef, PeerKey, ReturnChannel, ReturnLink,
+                         S = #s{remote_open_refs = OpenRefs,
+                                remote_scopes = Remote})
+  when is_pid(ReturnLink) ->
+    case maps:find(OpenRef, OpenRefs) of
+        {ok, Binding} ->
+            case maps:find(Binding, Remote) of
+                {ok,
+                 Scope = #remote_scope{
+                   peer_key = PeerKey, return_channel = ReturnChannel,
+                   state = opening_return}} ->
+                    start_remote_scope_session(
+                      Binding, ReturnLink, Scope,
+                      S#s{remote_open_refs = maps:remove(OpenRef, OpenRefs)});
+                _ ->
+                    S#s{remote_open_refs = maps:remove(OpenRef, OpenRefs)}
+            end;
+        error ->
+            S
+    end;
+handle_scope_return_link(_OpenRef, _PeerKey, _ReturnChannel, _ReturnLink, S) ->
+    S.
+
+handle_scope_return_error(OpenRef, PeerKey, ReturnChannel,
+                          S = #s{remote_open_refs = OpenRefs,
+                                 remote_scopes = Remote}) ->
+    case maps:find(OpenRef, OpenRefs) of
+        {ok, Binding} ->
+            case maps:find(Binding, Remote) of
+                {ok, #remote_scope{peer_key = PeerKey,
+                                   return_channel = ReturnChannel}} ->
+                    drop_remote_scope(Binding, S);
+                _ ->
+                    S#s{remote_open_refs = maps:remove(OpenRef, OpenRefs)}
+            end;
+        error ->
+            S
+    end.
+
+start_remote_scope_session(
+  Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
+             _OriginIdentity, {Ns, _Anchor}, _Mode},
+  ReturnLink,
+  Scope,
+  S = #s{scope_workers = Workers, max_scope_workers = Max}) ->
+    case {binding_admission_reason(Binding, S),
+          map_size(Workers) < Max} of
+        {ok, true} ->
+            start_admitted_remote_scope_session(
+              Binding, ReturnLink, Scope, S);
+        {{error, Reason}, _} ->
+            reject_return_link_open(Scope, ReturnLink, Reason, S);
+        {ok, false} ->
+            reject_return_link_open(
+              Scope, ReturnLink, {ontology_busy, Ns}, S)
+    end.
+
+start_admitted_remote_scope_session(
+  Binding = {scope_binding, OriginKey, _TargetKey, ProofId, ScopeId,
+             _OriginIdentity, {Ns, Anchor}, Mode},
+  ReturnLink,
+  Scope = #remote_scope{request_mref = RequestMRef,
+                        open_request_id = OpenRequestId},
+  S = #s{est = Est, applied = Height,
+         scope_workers = Workers, scope_pids = Pids,
+         remote_return_mrefs = ReturnRefs}) ->
+    ReadOnly = Mode =:= read_only,
+    ReturnMRef = monitor(process, ReturnLink),
+    {Handle, WorkerMRef} = quod_scope_session:start(
+                             ScopeId, ProofId, self(), Ns, Anchor, Height,
+                             Est, self(),
+                             #{read_only => ReadOnly,
+                               principal => OriginKey,
+                               deadline_ms => Scope#remote_scope.deadline_ms}),
+    Pid = quod_scope_session:pid(Handle),
+    Key = {remote, Binding},
+    Worker = new_scope_worker(
+               Pid, WorkerMRef, RequestMRef, Key, Height,
+               none),
+    Scope1 = Scope#remote_scope{
+               return_link = ReturnLink, return_mref = ReturnMRef,
+               handle = Handle, worker_mref = WorkerMRef,
+               state = opening_session},
+    S1 = put_remote_scope(
+           Scope1,
+           S#s{scope_workers = Workers#{WorkerMRef => Worker},
+               scope_pids = Pids#{Pid => WorkerMRef},
+               remote_return_mrefs = ReturnRefs#{ReturnMRef => Binding}}),
+    %% Probe inside the session worker so even the opening event carries the
+    %% target-owned generation/dirty pair rather than guessed constants.
+    queue_scope_state_probe(
+      Binding, {scope_opened, OpenRequestId, 1, Height},
+      Scope1, S1#s{proves = S1#s.proves + 1}).
+
+reject_return_link_open(
+  #remote_scope{binding = Binding, open_request_id = RequestId},
+  ReturnLink, Reason, S) ->
+    Event = {scope_event, Binding, 1, RequestId, 1, 0, false,
+             {scope_error,
+              public_scope_reason(Reason, target_namespace(Binding))}},
+    case quod_scope_wire:encode_event(Event) of
+        {ok, Encoded} -> quod_link:send_ordered(ReturnLink, Encoded);
+        {error, _} -> ok
+    end,
+    drop_remote_record(Binding, S).
+
+expire_remote_scope(Binding, Token, S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, #remote_scope{lifetime_token = Token}} ->
+            expire_remote_scope_with_reason(
+              Binding, {scope_expired, target_namespace(Binding)}, S);
+        _ ->
+            S
+    end.
+
+add_remote_pending(Binding, InternalRef, Entry,
+                   S = #s{remote_scopes = Remote,
+                          remote_internal_refs = InternalRefs}) ->
+    Scope = maps:get(Binding, Remote),
+    Pending = Scope#remote_scope.pending,
+    Scope1 = Scope#remote_scope{pending = Pending#{InternalRef => Entry}},
+    S#s{remote_scopes = Remote#{Binding => Scope1},
+        remote_internal_refs = InternalRefs#{InternalRef => Binding}}.
+
+take_remote_pending(InternalRef,
+                    S = #s{remote_internal_refs = InternalRefs,
+                           remote_scopes = Remote}) ->
+    case maps:take(InternalRef, InternalRefs) of
+        {Binding, InternalRefs1} ->
+            case maps:find(Binding, Remote) of
+                {ok, Scope} ->
+                    case maps:take(InternalRef, Scope#remote_scope.pending) of
+                        {Entry, Pending1} ->
+                            Scope1 = Scope#remote_scope{pending = Pending1},
+                            {ok, Binding, Scope1, Entry,
+                             S#s{remote_internal_refs = InternalRefs1,
+                                 remote_scopes = Remote#{Binding => Scope1}}};
+                        error ->
+                            error
+                    end;
+                error ->
+                    error
+            end;
+        error ->
+            error
+    end.
+
+handle_remote_scope_reply(ScopePid, ProofId, SessionRef, InternalRef, Reply, S) ->
+    case take_remote_pending(InternalRef, S) of
+        {ok, Binding, Scope, Entry, S1} ->
+            case scope_reply_bound(
+                   ScopePid, ProofId, SessionRef, Scope) of
+                true -> handle_bound_scope_reply(
+                          Binding, Scope, Entry, Reply, S1);
+                false -> poison_remote_scope(
+                           Binding, random_request_id(), 1,
+                           {protocol_error, session_binding}, S1)
+            end;
+        error ->
+            S
+    end.
+
+scope_reply_bound(
+  ScopePid, ProofId, SessionRef,
+  #remote_scope{
+     handle = {quod_scope_session, ScopePid, _ScopeId, ProofId,
+               SessionRef, _Ns, _Anchor}}) -> true;
+scope_reply_bound(_ScopePid, _ProofId, _SessionRef, _Scope) -> false.
+
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {state_probe, Purpose},
+  {savepoint, checkpoint, [], {ok, Dirty, Generation}}, S) ->
+    S1 = update_remote_state(Binding, Dirty, Generation, S),
+    finish_state_probe(Binding, Purpose, S1);
+handle_bound_scope_reply(Binding, _Scope,
+                         {state_probe, Purpose}, _Reply, S) ->
+    poison_remote_scope(
+      Binding, purpose_request_id(Purpose), purpose_command_seq(Purpose),
+      {protocol_error, proof_engine}, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {invoke_open, RequestId, CommandSeq, InvocationId},
+  {opened, InvocationId}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq,
+      {invocation_opened, InvocationId}, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {invoke_open, RequestId, CommandSeq, InvocationId},
+  {error, Reason}, S) ->
+    emit_invocation_error(
+      Binding, RequestId, CommandSeq, InvocationId, 1, Reason, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {invoke_open, RequestId, CommandSeq, InvocationId},
+  _Reply, S) ->
+    poison_remote_invocation(
+      Binding, RequestId, CommandSeq, InvocationId, 1,
+      {protocol_error, request_binding}, S);
+handle_bound_scope_reply(
+  Binding, Scope,
+  {invoke_next, RequestId, CommandSeq, InvocationId, ExpectedSeq},
+  Reply, S) ->
+    queue_scope_state_probe(
+      Binding,
+      {invoke_result, RequestId, CommandSeq,
+       InvocationId, ExpectedSeq, Reply}, Scope, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_control, Purpose, Operation, BatchIds},
+  {savepoint, Operation, BatchIds, {ok, Dirty, Generation}}, S) ->
+    S1 = update_remote_state(Binding, Dirty, Generation, S),
+    finish_scope_control(Binding, Purpose, S1);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_control, Purpose, _Operation, _BatchIds}, _Reply, S) ->
+    poison_remote_scope(
+      Binding, purpose_request_id(Purpose), purpose_command_seq(Purpose),
+      {protocol_error, proof_engine}, S).
+
+finish_state_probe(Binding,
+                   {scope_opened, RequestId, CommandSeq, Height}, S) ->
+    S1 = update_remote_scope(
+           Binding,
+           fun(Scope) -> Scope#remote_scope{state = active} end, S),
+    emit_scope_event(
+      Binding, RequestId, CommandSeq, {scope_opened, Height}, S1);
+finish_state_probe(
+  Binding,
+  {invoke_result, RequestId, CommandSeq,
+   InvocationId, ExpectedSeq, Reply}, S) ->
+    S1 = emit_invocation_result(
+           Binding, RequestId, CommandSeq,
+           InvocationId, ExpectedSeq, Reply, S),
+    pop_active_command(Binding, {RequestId, CommandSeq}, S1);
+finish_state_probe(Binding,
+                   {controller, RequestId, CommandSeq,
+                    _ControllerId, EventOperation}, S) ->
+    emit_scope_event(Binding, RequestId, CommandSeq, EventOperation, S).
+
+finish_scope_control(Binding,
+                     {materialized, RequestId, CommandSeq,
+                      ControllerId, BatchIds}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq,
+      {materialized, ControllerId, BatchIds}, S);
+finish_scope_control(Binding,
+                     {batch_restored, RequestId, CommandSeq, BatchIds}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq, {batch_restored, BatchIds}, S);
+finish_scope_control(Binding,
+                     {batch_released, RequestId, CommandSeq, BatchIds}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq, {batch_released, BatchIds}, S).
+
+emit_invocation_result(Binding, RequestId, CommandSeq,
+                       InvocationId, ExpectedSeq,
+                       {solution, ExpectedSeq, Solution, _Dirty}, S) ->
+    emit_payload_event(
+      answer, Solution,
+      fun(Blob) -> {solution, InvocationId, ExpectedSeq, Blob} end,
+      Binding, RequestId, CommandSeq,
+      InvocationId, ExpectedSeq, S);
+emit_invocation_result(Binding, RequestId, CommandSeq,
+                       InvocationId, ExpectedSeq,
+                       {complete, ExpectedSeq, Reasons, _Dirty}, S) ->
+    emit_payload_event(
+      failure_reasons, Reasons,
+      fun(Blob) -> {complete, InvocationId, ExpectedSeq, Blob} end,
+      Binding, RequestId, CommandSeq,
+      InvocationId, ExpectedSeq, S);
+emit_invocation_result(Binding, RequestId, CommandSeq,
+                       InvocationId, ExpectedSeq,
+                       {error, {erlog, Error}, _Dirty}, S) ->
+    emit_payload_event(
+      erlog_error, Error,
+      fun(Blob) -> {erlog_error, InvocationId, ExpectedSeq, Blob} end,
+      Binding, RequestId, CommandSeq,
+      InvocationId, ExpectedSeq, S);
+emit_invocation_result(Binding, RequestId, CommandSeq,
+                       InvocationId, ExpectedSeq,
+                       {error, Reason, _Dirty}, S) ->
+    emit_invocation_error(
+      Binding, RequestId, CommandSeq, InvocationId, ExpectedSeq, Reason, S);
+emit_invocation_result(Binding, RequestId, CommandSeq,
+                       InvocationId, ExpectedSeq, _Reply, S) ->
+    poison_remote_invocation(
+      Binding, RequestId, CommandSeq, InvocationId, ExpectedSeq,
+      {protocol_error, request_binding}, S).
+
+emit_payload_event(Kind, Term, BuildOperation,
+                   Binding, RequestId, CommandSeq,
+                   InvocationId, ExpectedSeq, S) ->
+    case quod_scope_wire:encode_payload(Kind, Term) of
+        {ok, Blob} ->
+            emit_scope_event(
+              Binding, RequestId, CommandSeq, BuildOperation(Blob), S);
+        {error, Reason} ->
+            emit_invocation_error(
+              Binding, RequestId, CommandSeq,
+              InvocationId, ExpectedSeq, Reason, S)
+    end.
+
+emit_invocation_error(Binding, RequestId, CommandSeq,
+                      InvocationId, AnswerSeq, Reason, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq,
+      {invocation_error, InvocationId, AnswerSeq,
+       public_scope_reason(Reason, target_namespace(Binding))}, S).
+
+poison_remote_invocation(Binding, RequestId, CommandSeq,
+                         InvocationId, AnswerSeq, Reason, S) ->
+    S1 = emit_invocation_error(
+           Binding, RequestId, CommandSeq,
+           InvocationId, AnswerSeq, Reason, S),
+    drop_remote_scope(Binding, S1).
+
+poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S) ->
+    S1 = emit_scope_event(
+           Binding, RequestId, max(1, CommandSeq),
+           {scope_error,
+            public_scope_reason(Reason, target_namespace(Binding))}, S),
+    drop_remote_scope(Binding, S1).
+
+emit_scope_event(Binding, RequestId, AcceptedCommandSeq, Operation,
+                 S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok,
+         Scope = #remote_scope{return_link = ReturnLink,
+                               next_event_seq = EventSeq,
+                               generation = Generation,
+                               dirty = Dirty}}
+          when is_pid(ReturnLink) ->
+            Event = {scope_event, Binding, EventSeq, RequestId,
+                     AcceptedCommandSeq, Generation, Dirty, Operation},
+            case quod_scope_wire:encode_event(Event) of
+                {ok, Encoded} ->
+                    %% Ordered send is non-blocking for the namespace engine;
+                    %% a local send failure resets the link, whose DOWN reaps
+                    %% every exact session bound to it.
+                    quod_link:send_ordered(ReturnLink, Encoded),
+                    put_remote_scope(
+                      Scope#remote_scope{next_event_seq = EventSeq + 1}, S);
+                {error, _} ->
+                    drop_remote_scope(Binding, S)
+            end;
+        _ ->
+            S
+    end.
+
+public_scope_reason(Reason, Ns) ->
+    Candidate = public_scope_candidate(Reason, Ns),
+    quod_scope_wire:normalize_public_error(Candidate, Ns).
+
+public_scope_candidate({erlog, _}, _Ns) -> {protocol_error, proof_engine};
+public_scope_candidate(unknown_invocation, _Ns) ->
+    {protocol_error, unexpected_scope_command};
+public_scope_candidate(invocation_active, _Ns) ->
+    {protocol_error, unexpected_scope_command};
+public_scope_candidate(already_open, _Ns) ->
+    {protocol_error, unexpected_scope_command};
+public_scope_candidate(not_allowed, Ns) -> {not_allowed, Ns};
+public_scope_candidate(too_many_answers, Ns) -> {too_many_answers, Ns};
+public_scope_candidate(Reason, _Ns)
+  when Reason =:= bad_request; Reason =:= unknown_lineage;
+       Reason =:= unknown_savepoint;
+       Reason =:= active_child_transaction;
+       Reason =:= transaction_scope_mismatch;
+       Reason =:= broken_transaction_controller ->
+    {protocol_error, request_binding};
+public_scope_candidate(Reason, _Ns) -> Reason.
+
+update_remote_state(Binding, Dirty, Generation, S) ->
+    update_remote_scope(
+      Binding,
+      fun(Scope) -> Scope#remote_scope{
+                        dirty = Dirty, generation = Generation}
+      end, S).
+
+put_remote_scope(Scope = #remote_scope{binding = Binding},
+                 S = #s{remote_scopes = Remote}) ->
+    S#s{remote_scopes = Remote#{Binding => Scope}}.
+
+update_remote_scope(Binding, Fun, S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, Scope} -> put_remote_scope(Fun(Scope), S);
+        error -> S
+    end.
+
+pop_active_command(Binding, Command,
+                   S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, Scope = #remote_scope{active_commands = Active}} ->
+            case active_stack_pop(Command, Active) of
+                {ok, Rest} ->
+                    put_remote_scope(
+                      Scope#remote_scope{active_commands = Rest}, S);
+                error ->
+                    drop_remote_scope(Binding, S)
+            end;
+        error ->
+            S
+    end.
+
+active_stack_push(Command, Active) -> [Command | Active].
+
+active_stack_pop(Command, [Command | Rest]) -> {ok, Rest};
+active_stack_pop(_Command, _Active) -> error.
+
+active_stack_top([Command | _]) -> {ok, Command};
+active_stack_top([]) -> error.
+
+-ifdef(TEST).
+test_active_command_stack(Operations) ->
+    test_active_command_stack(Operations, [], []).
+
+test_active_command_stack([{push, Command} | Rest], Stack, Observed) ->
+    test_active_command_stack(
+      Rest, active_stack_push(Command, Stack), Observed);
+test_active_command_stack([{pop, Command} | Rest], Stack, Observed) ->
+    case active_stack_pop(Command, Stack) of
+        {ok, Stack1} ->
+            test_active_command_stack(Rest, Stack1, Observed);
+        error -> error
+    end;
+test_active_command_stack([top | Rest], Stack, Observed) ->
+    case active_stack_top(Stack) of
+        {ok, Command} ->
+            test_active_command_stack(Rest, Stack, [Command | Observed]);
+        error -> error
+    end;
+test_active_command_stack([], Stack, Observed) ->
+    {ok, lists:reverse(Observed), Stack};
+test_active_command_stack(_Bad, _Stack, _Observed) -> error.
+
+test_scope_capacity_available(Max, Active, Pending) ->
+    scope_capacity_available(Max, Active, Pending).
+
+test_public_scope_reason(Reason, Ns) ->
+    public_scope_reason(Reason, Ns).
+
+test_scope_timeout_reason(Phase, Ns) ->
+    scope_timeout_reason(Phase, Ns).
+
+test_scope_command_budget_valid(Operation, RemainingMs, Deadline) ->
+    scope_command_budget_valid(Operation, RemainingMs, Deadline).
+
+test_target_scope_lifetime_ms(RemainingMs, LocalLimitMs) ->
+    target_scope_lifetime_ms(RemainingMs, LocalLimitMs).
+
+test_remote_timeout_correlation(LastRequestId, NextCommandSeq,
+                                ActiveCommands) ->
+    remote_timeout_correlation(
+      #remote_scope{last_request_id = LastRequestId,
+                    next_command_seq = NextCommandSeq,
+                    active_commands = ActiveCommands}).
+
+test_scope_worker_failure(Reason, Ns) ->
+    scope_worker_failure(Reason, Ns).
+
+test_proof_down_reply(Kind, Reason, Ns) ->
+    proof_down_reply(Kind, Reason, Ns).
+-endif.
+
+target_namespace({scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
+                  _OriginIdentity, {Ns, _Anchor}, _Mode}) -> Ns.
+
+random_request_id() ->
+    crypto:strong_rand_bytes(?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8).
+
+handle_remote_controller_request(Message, S = #s{scope_pids = Pids,
+                                                  scope_workers = Workers,
+                                                  remote_scopes = Remote}) ->
+    From = element(3, Message),
+    ProofId = element(2, Message),
+    case maps:find(From, Pids) of
+        {ok, WorkerMRef} ->
+            case maps:find(WorkerMRef, Workers) of
+                {ok, #scope_worker{scope_key = {remote, Binding}}} ->
+                    case maps:find(Binding, Remote) of
+                        {ok, Scope} ->
+                            case remote_controller_bound(
+                                   ProofId, From, Binding, Scope) of
+                                true ->
+                                    translate_remote_controller_request(
+                                      Message, Binding, Scope, S);
+                                false ->
+                                    drop_remote_scope(Binding, S)
+                            end;
+                        error -> S
+                    end;
+                _ -> S
+            end;
+        error -> S
+    end.
+
+remote_controller_bound(
+  ProofId, From,
+  {scope_binding, _OriginKey, _TargetKey, ProofId, ScopeId,
+   _OriginIdentity, _TargetIdentity, _Mode},
+  #remote_scope{
+     handle = {quod_scope_session, From, ScopeId, ProofId,
+               _SessionRef, _Ns, _Anchor},
+     active_commands = [{_RequestId, _CommandSeq} | _]}) -> true;
+remote_controller_bound(_ProofId, _From, _Binding, _Scope) -> false.
+
+translate_remote_controller_request(
+  {proof_nested_open, _ProofId, From, InternalRequestRef,
+   _Actor, _Selection, TargetNs, Goal, Chain},
+  Binding, Scope, S) ->
+    case quod_scope_wire:encode_payload(goal, Goal) of
+        {ok, GoalBlob} ->
+            ControllerId = new_controller_id(Scope),
+            Controllers = (Scope#remote_scope.controllers)#{
+              ControllerId =>
+                  {nested_open, From, InternalRequestRef}},
+            Scope1 = Scope#remote_scope{controllers = Controllers},
+            queue_controller_event(
+              Binding, ControllerId,
+              {nested_open, ControllerId, TargetNs, Chain, GoalBlob},
+              Scope1, put_remote_scope(Scope1, S));
+        {error, Reason} ->
+            From ! {proof_nested_reply, binding_proof_id(Binding),
+                    InternalRequestRef, {error, Reason}},
+            S
+    end;
+translate_remote_controller_request(
+  {proof_nested_next, _ProofId, From, InternalRequestRef,
+   _Actor, _Selection, ProxyId, ExpectedSeq},
+  Binding, Scope, S) ->
+    ControllerId = new_controller_id(Scope),
+    Controllers = (Scope#remote_scope.controllers)#{
+      ControllerId =>
+          {nested_next, From, InternalRequestRef, ProxyId, ExpectedSeq}},
+    Scope1 = Scope#remote_scope{controllers = Controllers},
+    queue_controller_event(
+      Binding, ControllerId,
+      {nested_next, ControllerId, ProxyId, ExpectedSeq},
+      Scope1, put_remote_scope(Scope1, S));
+translate_remote_controller_request(
+  {proof_nested_cancel, _ProofId, _From, _Actor, _Selection, ProxyId},
+  Binding, Scope, S) ->
+    ControllerId = new_controller_id(Scope),
+    emit_controller_event_now(
+      Binding, {nested_cancel, ControllerId, ProxyId}, S);
+translate_remote_controller_request(
+  {proof_tx_request, _ProofId, From, ScopeId, InvocationId,
+   InternalRequestRef, Operation},
+  Binding, Scope, S) ->
+    case ScopeId =:= binding_scope_id(Binding) of
+        false -> drop_remote_scope(Binding, S);
+        true ->
+            ControllerId = new_controller_id(Scope),
+            case tx_controller_event(
+                   ControllerId, InvocationId, Operation) of
+                {ok, EventOperation, ExpectedReply} ->
+                    Controllers = (Scope#remote_scope.controllers)#{
+                      ControllerId =>
+                          {tx, From, InvocationId,
+                           InternalRequestRef, ExpectedReply}},
+                    Scope1 = Scope#remote_scope{controllers = Controllers},
+                    queue_controller_event(
+                      Binding, ControllerId, EventOperation,
+                      Scope1, put_remote_scope(Scope1, S));
+                error ->
+                    From ! {proof_tx_reply, binding_proof_id(Binding),
+                            InvocationId, InternalRequestRef,
+                            {error, bad_request}},
+                    S
             end
     end.
 
-handle_remote_ask_open(Peer, PeerEndpoint, RequestLink, AskId, Goal, Chain, AnswerCh,
-                       S = #s{ns = Ns, ready = Ready, ask_workers = AW,
-                              ask_ids = Ids, max_ask_workers = Max}) ->
-    case maps:is_key(AskId, Ids) of
-        true -> S; %% duplicate request frame: the existing run owns this id
-        false when not Ready ->
-            reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, rebuilding, S);
-        false when map_size(AW) >= Max ->
-            reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, busy, S);
-        false when is_pid(RequestLink) ->
-            Stream = quod_ask:start_answer_remote(Ns, S#s.est, S#s.applied,
-                                                  Goal, Chain, AskId, Peer,
-                                                  PeerEndpoint, AnswerCh,
-                                                  self()),
-            WorkerMRef = monitor(process, Stream),
-            RequestMRef = monitor(process, RequestLink),
-            Worker = new_ask_worker(Stream, WorkerMRef, RequestMRef,
-                                    AskId, S#s.applied, S),
-            AW1 = AW#{WorkerMRef => Worker},
-            AC1 = (S#s.ask_callers)#{RequestMRef => WorkerMRef},
-            AP1 = (S#s.ask_pids)#{Stream => WorkerMRef},
-            AI1 = Ids#{AskId => WorkerMRef},
-            S#s{ask_workers = AW1, ask_callers = AC1,
-                ask_pids = AP1, ask_ids = AI1, proves = S#s.proves + 1};
-        false -> S
+queue_controller_event(Binding, ControllerId, EventOperation,
+                       Scope = #remote_scope{active_commands = Active}, S) ->
+    case active_stack_top(Active) of
+        {ok, {RequestId, CommandSeq}} ->
+            queue_scope_state_probe(
+              Binding,
+              {controller, RequestId, CommandSeq,
+               ControllerId, EventOperation},
+              Scope, S);
+        error ->
+            drop_remote_scope(Binding, S)
     end.
 
-reject_remote(Peer, PeerEndpoint, AnswerCh, AskId, Reason,
-              S = #s{reject_window = Window, reject_count = Count}) ->
-    Now = erlang:monotonic_time(millisecond),
-    case Window =:= 0 orelse Now - Window >= 1000 of
-        true ->
-            quod_ask:reject_remote(
-              Peer, PeerEndpoint, AnswerCh, AskId, Reason),
-            S#s{reject_window = Now, reject_count = 1};
-        false when Count < ?MAX_ASK_REJECTS_PER_SECOND ->
-            quod_ask:reject_remote(
-              Peer, PeerEndpoint, AnswerCh, AskId, Reason),
-            S#s{reject_count = Count + 1};
-        false -> S
-    end.
-
-handle_remote_cancel(AskId, S = #s{ask_ids = Ids}) ->
-    case maps:get(AskId, Ids, undefined) of
-        WorkerMRef when is_reference(WorkerMRef) -> kill_ask(WorkerMRef, S);
-        _ -> S
-    end.
-
-remote_next(AskId, S = #s{ask_ids = Ids, ask_workers = Workers}) ->
-    case maps:get(AskId, Ids, undefined) of
-        WorkerMRef when is_reference(WorkerMRef) ->
-            case maps:get(WorkerMRef, Workers, undefined) of
-                #ask_worker{pending = false, pid = Pid} ->
-                    Pid ! {next, AskId},
-                    arm_ask(WorkerMRef, S);
-                #ask_worker{pending = true} = Worker ->
-                    %% Collapse arbitrarily many premature/duplicate demands into one.
-                    S#s{ask_workers = Workers#{WorkerMRef => Worker#ask_worker{queued = true}}};
-                _ -> S
+emit_controller_event_now(
+  Binding, EventOperation,
+  S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, #remote_scope{active_commands = Active}} ->
+            case active_stack_top(Active) of
+                {ok, {RequestId, CommandSeq}} ->
+                    emit_scope_event(
+                      Binding, RequestId, CommandSeq, EventOperation, S);
+                error -> drop_remote_scope(Binding, S)
             end;
-        _ -> S
+        _ ->
+            drop_remote_scope(Binding, S)
+    end.
+
+tx_controller_event(ControllerId, InvocationId,
+                    {activate, ParentLineage, FrameIds}) ->
+    {ok,
+     {tx_activate, ControllerId, InvocationId, ParentLineage, FrameIds},
+     tx_activated};
+tx_controller_event(ControllerId, InvocationId, {allocate, Lineage}) ->
+    {ok,
+     {savepoint_allocate, ControllerId, InvocationId, Lineage},
+     savepoint_allocated};
+tx_controller_event(ControllerId, InvocationId,
+                    {restore, Lineage, BatchIds}) ->
+    {ok,
+     {savepoint_restore, ControllerId, InvocationId, Lineage, BatchIds},
+     savepoint_restored};
+tx_controller_event(ControllerId, InvocationId,
+                    {finish, Lineage, TxId}) ->
+    {ok,
+     {tx_finish, ControllerId, InvocationId, Lineage, TxId, finish},
+     tx_finished};
+tx_controller_event(ControllerId, InvocationId,
+                    {discard, Lineage, TxId}) ->
+    {ok,
+     {tx_finish, ControllerId, InvocationId, Lineage, TxId, discard},
+     tx_finished};
+tx_controller_event(_ControllerId, _InvocationId, _Operation) -> error.
+
+deliver_remote_controller_reply(Binding, Operation,
+                                S = #s{remote_scopes = Remote}) ->
+    ControllerId = element(2, Operation),
+    case maps:find(Binding, Remote) of
+        {ok, Scope} ->
+            case maps:take(ControllerId, Scope#remote_scope.controllers) of
+                {Controller, Controllers1} ->
+                    Scope1 = Scope#remote_scope{controllers = Controllers1},
+                    S1 = put_remote_scope(Scope1, S),
+                    case controller_reply(Controller, Operation, Binding) of
+                        {ok, Pid, ReplyMessage} ->
+                            Pid ! ReplyMessage,
+                            S1;
+                        {error, _} ->
+                            drop_remote_scope(Binding, S1)
+                    end;
+                error ->
+                    drop_remote_scope(Binding, S)
+            end;
+        error -> S
+    end.
+
+controller_reply(
+  {nested_open, Pid, RequestRef},
+  {nested_opened, _ControllerId, ProxyId}, Binding) ->
+    {ok, Pid,
+     {proof_nested_reply, binding_proof_id(Binding), RequestRef,
+      {opened, ProxyId}}};
+controller_reply(
+  {nested_next, Pid, RequestRef, ProxyId, ExpectedSeq},
+  {nested_solution, _ControllerId, ProxyId, ExpectedSeq, Blob}, Binding) ->
+    decoded_nested_reply(
+      answer, Blob, Pid, Binding, RequestRef,
+      fun(Solution) -> {solution, ExpectedSeq, Solution} end);
+controller_reply(
+  {nested_next, Pid, RequestRef, ProxyId, ExpectedSeq},
+  {nested_complete, _ControllerId, ProxyId, ExpectedSeq, Blob}, Binding) ->
+    decoded_nested_reply(
+      failure_reasons, Blob, Pid, Binding, RequestRef,
+      fun(Reasons) -> {complete, ExpectedSeq, Reasons} end);
+controller_reply(
+  {nested_next, Pid, RequestRef, ProxyId, ExpectedSeq},
+  {nested_erlog_error, _ControllerId, ProxyId, ExpectedSeq, Blob}, Binding) ->
+    decoded_nested_reply(
+      erlog_error, Blob, Pid, Binding, RequestRef,
+      fun(Error) -> {error, {erlog, Error}} end);
+controller_reply(
+  {nested_open, Pid, RequestRef},
+  {nested_error, _ControllerId, Reason}, Binding) ->
+    nested_error_reply(Pid, Binding, RequestRef, Reason);
+controller_reply(
+  {nested_next, Pid, RequestRef, _ProxyId, _ExpectedSeq},
+  {nested_error, _ControllerId, Reason}, Binding) ->
+    nested_error_reply(Pid, Binding, RequestRef, Reason);
+controller_reply(
+  {tx, Pid, InvocationId, RequestRef, tx_activated},
+  {tx_activated, _ControllerId, FinalLineage, Activated}, Binding) ->
+    tx_reply(Pid, Binding, InvocationId, RequestRef,
+             {ok, FinalLineage, Activated});
+controller_reply(
+  {tx, Pid, InvocationId, RequestRef, tx_finished},
+  {tx_finished, _ControllerId, ParentLineage}, Binding) ->
+    tx_reply(Pid, Binding, InvocationId, RequestRef,
+             {ok, ParentLineage});
+controller_reply(
+  {tx, Pid, InvocationId, RequestRef, savepoint_allocated},
+  {savepoint_allocated, _ControllerId, BatchId}, Binding) ->
+    tx_reply(Pid, Binding, InvocationId, RequestRef, {ok, BatchId});
+controller_reply(
+  {tx, Pid, InvocationId, RequestRef, savepoint_restored},
+  {savepoint_restored, _ControllerId, _BatchIds}, Binding) ->
+    tx_reply(Pid, Binding, InvocationId, RequestRef, ok);
+controller_reply(
+  {tx, Pid, InvocationId, RequestRef, _Expected},
+  {controller_error, _ControllerId, Reason}, Binding) ->
+    tx_reply(Pid, Binding, InvocationId, RequestRef, {error, Reason});
+controller_reply(_Controller, _Operation, _Binding) ->
+    {error, bad_reply}.
+
+decoded_nested_reply(Kind, Blob, Pid, Binding, RequestRef, BuildReply) ->
+    case quod_scope_wire:decode_payload(Kind, Blob) of
+        {ok, Term} ->
+            {ok, Pid,
+             {proof_nested_reply, binding_proof_id(Binding), RequestRef,
+              BuildReply(Term)}};
+        {error, _} ->
+            {error, bad_payload}
+    end.
+
+nested_error_reply(Pid, Binding, RequestRef, Reason) ->
+    {ok, Pid,
+     {proof_nested_reply, binding_proof_id(Binding), RequestRef,
+      {error, Reason}}}.
+
+tx_reply(Pid, Binding, InvocationId, RequestRef, Reply) ->
+    {ok, Pid,
+     {proof_tx_reply, binding_proof_id(Binding), InvocationId,
+      RequestRef, Reply}}.
+
+new_controller_id(#remote_scope{controllers = Controllers}) ->
+    new_controller_id_from(Controllers).
+
+new_controller_id_from(Controllers) ->
+    ControllerId = random_request_id(),
+    case maps:is_key(ControllerId, Controllers) of
+        true -> new_controller_id_from(Controllers);
+        false -> ControllerId
+    end.
+
+binding_proof_id({scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
+                  _OriginIdentity, _TargetIdentity, _Mode}) -> ProofId.
+
+binding_scope_id({scope_binding, _OriginKey, _TargetKey, _ProofId, ScopeId,
+                  _OriginIdentity, _TargetIdentity, _Mode}) -> ScopeId.
+
+drop_remote_scope(Binding, S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, #remote_scope{worker_mref = WorkerMRef}}
+          when is_reference(WorkerMRef) ->
+            kill_scope_worker(WorkerMRef, S);
+        {ok, _Scope} ->
+            drop_remote_record(Binding, S);
+        error -> S
+    end.
+
+drop_remote_record(
+  Binding,
+  S = #s{remote_scopes = Remote,
+         remote_open_refs = OpenRefs,
+         remote_request_mrefs = RequestRefs,
+         remote_return_mrefs = ReturnRefs,
+         remote_internal_refs = InternalRefs,
+         remote_peer_counts = PeerCounts}) ->
+    case maps:take(Binding, Remote) of
+        {#remote_scope{peer_key = PeerKey,
+                       request_mref = RequestMRef,
+                       return_mref = ReturnMRef,
+                       open_ref = OpenRef,
+                       lifetime_timer = LifetimeTimer,
+                       pending = Pending}, Remote1} ->
+            cancel_scope_timer(LifetimeTimer),
+            demonitor(RequestMRef, [flush]),
+            case ReturnMRef of
+                undefined -> ok;
+                _ -> demonitor(ReturnMRef, [flush])
+            end,
+            InternalRefs1 = lists:foldl(
+                              fun maps:remove/2, InternalRefs,
+                              maps:keys(Pending)),
+            Count = maps:get(PeerKey, PeerCounts, 1),
+            PeerCounts1 = case Count =< 1 of
+                              true -> maps:remove(PeerKey, PeerCounts);
+                              false -> PeerCounts#{PeerKey => Count - 1}
+                          end,
+            S#s{remote_scopes = Remote1,
+                remote_open_refs = maps:remove(OpenRef, OpenRefs),
+                remote_request_mrefs = maps:remove(
+                                         RequestMRef, RequestRefs),
+                remote_return_mrefs = case ReturnMRef of
+                    undefined -> ReturnRefs;
+                    _ -> maps:remove(ReturnMRef, ReturnRefs)
+                end,
+                remote_internal_refs = InternalRefs1,
+                remote_peer_counts = PeerCounts1};
+        error -> S
     end.
 
 handle_response_info(Info, S = #s{requests = Requests}) ->
@@ -728,10 +2070,14 @@ handle_response_info(Info, S = #s{requests = Requests}) ->
             {noreply, S}
     end.
 
-terminate(_Reason, #s{ns = Ns, workers = W, ask_workers = AW}) ->
+terminate(_Reason, #s{ns = Ns, workers = W, scope_workers = ScopeWorkers}) ->
     maps:foreach(fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end, W),
-    maps:foreach(fun(_WM, #ask_worker{pid = Pid}) -> kill_worker(Pid) end, AW),
-    _ = try quod_reg:unsubscribe({channel, quod_ask:ask_channel(Ns)}) catch _:_ -> ok end,
+    maps:foreach(
+      fun(_WM, #scope_worker{pid = Pid}) -> kill_worker(Pid) end,
+      ScopeWorkers),
+    _ = try quod_reg:unsubscribe(
+              {channel, quod_scope_wire:request_channel(Ns)})
+        catch _:_ -> ok end,
     ok.
 
 %%%===================================================================
@@ -751,13 +2097,15 @@ spawn_proof(Kind, Goal, CallerNs, From, TraceCtx, Principal,
     Engine = self(),
     Ref = make_ref(),
     ProofId = crypto:strong_rand_bytes(32),
+    Deadline = quod_time:mono_ms() + ProofTimeout,
     {Pid, MRef} = spawn_opt(fun() ->
-        proof_worker(Engine, Ref, ProofId, Kind, Goal, CallerNs, Ns, Est, Applied,
-                     TraceCtx, Principal)
+        proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, CallerNs,
+                     Ns, Est, Applied, TraceCtx, Principal)
     end, [monitor]),
     CallerMRef = monitor(process, element(1, From)),
     Token = make_ref(),
-    KillRef = erlang:send_after(ProofTimeout, Engine, {proof_kill, Ref, Token}),
+    KillDelay = max(1, Deadline - quod_time:mono_ms()),
+    KillRef = erlang:send_after(KillDelay, Engine, {proof_kill, Ref, Token}),
     Worker = #proof_worker{pid = Pid, kind = Kind,
                            worker_mref = MRef, caller_mref = CallerMRef,
                            from = From, timer = KillRef, token = Token,
@@ -770,11 +2118,11 @@ spawn_proof(Kind, Goal, CallerNs, From, TraceCtx, Principal,
 bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 
 %% Runs in the worker process. Sets the run's execution context on the frozen `#est{}`
-%% (`m:quod_predicates` — the namespace, applied height, and ask chain the external predicates
+%% (`m:quod_predicates` — the namespace, applied height, and call chain the external predicates
 %% read), proves against that view, and reports one correlated result to the engine. The
 %% origin-scope read-set ETS table is created here, so an abandoned/killed run can never leak it.
-proof_worker(Engine, Ref, ProofId, Kind, Goal, CallerNs, Ns, Est, Applied, TraceCtx,
-             Principal) ->
+proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, CallerNs, Ns, Est,
+             Applied, TraceCtx, Principal) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
     Ctx = worker_context(Kind, Ns, Applied),
     Result = quod_trace:with_span(
@@ -783,7 +2131,7 @@ proof_worker(Engine, Ref, ProofId, Kind, Goal, CallerNs, Ns, Est, Applied, Trace
                  'quod.proof.mode' => atom_to_binary(Kind, utf8)},
                fun(SpanCtx) ->
                    R = run_worker(
-                         Kind, ProofId, Goal, Principal, Ns, Applied,
+                         Kind, ProofId, Deadline, Goal, Principal, Ns, Applied,
                          quod_predicates:set_context(Est, Ctx)),
                    _ = quod_trace:result(SpanCtx, R),
                    R
@@ -796,27 +2144,19 @@ worker_context(_ProofKind, Ns, Applied) ->
     %% Subject remains none until signed subjects land.
     quod_predicates:proof_context(Ns, Applied, undefined).
 
-run_worker(action, _ProofId, {Action, Structural}, Principal, Ns, Applied, Est) ->
-    %% Reject an absent or malformed declaration and authorize the private node
-    %% principal before reading any caller-selected source path.
-    case quod_ontology_predicates:action_declared(Action, Est, Ns, Applied) of
-        true ->
-            prepare_lifecycle_input(
-              Action, Structural, Principal, Ns, Applied, Est);
-        false ->
-            {fail,
-             [quod_ontology_predicates:failure_reason(
-                Action, action_not_declared)]};
-        {error, _Reason} ->
-            {error, action_declaration_failed}
-    end;
-run_worker(Kind, ProofId, Goal, _Principal, Ns, Applied, Est) ->
-    run_origin_proof(Kind, ProofId, Goal, Ns, Applied, Est).
+run_worker(action, ProofId, Deadline, {Action, Structural}, Principal,
+           Ns, Applied, Est) ->
+    run_lifecycle_origin(
+      ProofId, Deadline, Action, Structural, Principal, Ns, Applied, Est);
+run_worker(Kind, ProofId, Deadline, Goal, _Principal, Ns, Applied, Est) ->
+    run_origin_proof(Kind, ProofId, Deadline, Goal, Ns, Applied, Est).
 
-run_origin_proof(Kind, ProofId, Goal, Ns, _Applied, Est) ->
+run_origin_proof(Kind, ProofId, Deadline, Goal, Ns, Applied, Est) ->
     case quod_simplex:genesis_hash(Ns) of
         <<_:256>> = Anchor ->
-            run_pinned_origin_proof(Kind, ProofId, Goal, Ns, Anchor, Est);
+            run_pinned_origin(
+              Kind, ProofId, Deadline, undefined, Ns, Applied, Anchor, Est,
+              fun(Origin) -> run_pinned_goal(Origin, Goal) end);
         undefined ->
             %% Isolated unit/runtime engines have no consensus identity and
             %% therefore cannot own foreign scopes. Their local proof contract
@@ -828,36 +2168,99 @@ run_origin_proof(Kind, ProofId, Goal, Ns, _Applied, Est) ->
                              read_only => Kind =:= prove_ro}))
     end.
 
-run_pinned_origin_proof(Kind, ProofId, Goal, Ns, Anchor, Est) ->
-    ReadOnly = Kind =:= prove_ro,
-    OriginHandle = quod_proof_context:start(ProofId, ReadOnly),
-    Session = quod_proof_session:start(
-                Est, #{read_set => true,
-                       read_only => ReadOnly,
-                       proof_context => {origin, OriginHandle}}),
-    Height = quod_predicates:ctx_height(quod_predicates:context(Est)),
-    RootScope = {local_scope, Ns, Anchor, Height, Session},
+run_lifecycle_origin(ProofId, Deadline, Action, Structural, Principal,
+                     Ns, Applied, Est) ->
+    case quod_simplex:genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            run_pinned_origin(
+              action, ProofId, Deadline, Principal, Ns, Applied, Anchor, Est,
+              fun(Origin) ->
+                  run_lifecycle_action(Action, Structural, Origin)
+              end);
+        undefined ->
+            %% A ready production engine always has its immutable genesis
+            %% anchor. A test-only bare engine cannot safely mint distributed
+            %% selector authority for a lifecycle effect.
+            {error, rebuilding}
+    end.
+
+run_pinned_origin(Kind, ProofId, Deadline, Principal, Ns, Applied, Anchor,
+                  Est, RunFun) ->
+    ReadOnly = Kind =:= prove_ro orelse Kind =:= action,
+    OriginIdentity = {Ns, Anchor},
+    OriginHandle = quod_proof_context:start(
+                     ProofId, ReadOnly, OriginIdentity, Deadline),
+    OverlayOpts0 = #{read_set => true,
+                     read_only => ReadOnly,
+                     proof_context => {origin, OriginHandle}},
+    OverlayOpts = case Principal of
+                      undefined -> OverlayOpts0;
+                      _ -> OverlayOpts0#{lifecycle_principal => Principal}
+                  end,
+    Context = quod_predicates:with_chain(
+                quod_predicates:context(Est), [OriginIdentity]),
     try
-        {ok, RootScope} = quod_proof_context:get_or_open_scope(
-                            {Ns, Anchor},
-                            fun() -> {ok, self(), RootScope} end),
-        InvocationId = make_ref(),
-        ok = quod_proof_session:open(
-               Session, InvocationId, Goal,
-               quod_predicates:context(Est)),
-        Result = normalize_read_only_result(
-                   Kind, origin_first_result(Session, InvocationId)),
-        case {Result, quod_proof_context:foreign_dirty()} of
-            {{ok, _Bindings, _Diff, _ReadSet}, true} ->
-                {error, foreign_write_unsupported};
-            _ ->
-                Result
+        {ok, ScopeId,
+         {local_scope, ScopeId, Ns, Anchor, Applied, Session}} =
+            quod_proof_context:get_or_open_scope(
+              OriginIdentity,
+              fun(NewScopeId) ->
+                  NewSession = quod_proof_session:start(
+                                 Est, OverlayOpts#{scope_id => NewScopeId}),
+                  {ok, self(),
+                   {local_scope, NewScopeId, Ns, Anchor,
+                    Applied, NewSession}}
+              end),
+        Origin = #pinned_origin{
+                    proof_id = ProofId, scope_id = ScopeId,
+                    deadline_ms = Deadline, kind = Kind,
+                    namespace = Ns, anchor = Anchor, height = Applied,
+                    context = Context, session = Session},
+        try finalize_pinned_result(RunFun(Origin))
+        after quod_proof_session:stop(Session)
         end
     after
         quod_proof_context:stop(
           fun close_origin_scope/1,
-          fun({_Owner, Invocation}) -> quod_ask:close_stream(Invocation) end),
-        quod_proof_session:stop(Session)
+          fun({_Owner, Invocation}) -> quod_ask:close_stream(Invocation) end)
+    end.
+
+finalize_pinned_result(Result) ->
+    case quod_proof_context:finalize() of
+        ok -> Result;
+        {error, Reason} -> {error, Reason}
+    end.
+
+run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
+    Result = normalize_read_only_result(
+               Kind, run_origin_invocation(Origin, Goal)),
+    case {Result, quod_proof_context:foreign_dirty()} of
+        {{ok, _Bindings, _Diff, _ReadSet}, true} ->
+            {error, foreign_write_unsupported};
+        _ ->
+            Result
+    end.
+
+run_origin_invocation(
+  #pinned_origin{scope_id = ScopeId,
+                 session = Session, context = Context}, Goal) ->
+    InvocationId = crypto:strong_rand_bytes(16),
+    Actor = {ScopeId, InvocationId},
+    Selection = quod_transaction_scope:empty_selection(),
+    case quod_proof_context:register_invocation(Actor, Selection) of
+        ok ->
+            try
+                case quod_proof_session:open(
+                       Session, InvocationId, Goal, Context, Selection) of
+                    ok -> origin_first_result(Session, InvocationId);
+                    {error, Reason} -> {error, Reason}
+                end
+            after
+                quod_proof_session:cancel(Session, InvocationId),
+                quod_proof_context:unregister_invocation(Actor)
+            end;
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 origin_first_result(Session, InvocationId) ->
@@ -881,25 +2284,56 @@ normalize_read_only_result(
 normalize_read_only_result(_Kind, Result) ->
     Result.
 
-close_origin_scope({local_scope, _Ns, _Anchor, _Height, _Session}) -> ok;
+close_origin_scope(
+  {local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session}) -> ok;
 close_origin_scope(Scope) -> quod_scope_session:close(Scope).
 
-prepare_lifecycle_input(Action, Structural, Principal, Ns, Applied, Est) ->
-    case quod_ontology_predicates:authorize_lifecycle(
-           Action, Principal, Est, Ns, Applied) of
+run_lifecycle_action(Action, Structural, Origin) ->
+    case lifecycle_action_declared(Action, Origin) of
+        true ->
+            prepare_lifecycle_input(Action, Structural, Origin);
+        false ->
+            {fail,
+             [quod_ontology_predicates:failure_reason(
+                Action, action_not_declared)]};
+        {error, _Reason} ->
+            {error, action_declaration_failed}
+    end.
+
+lifecycle_action_declared(Action, Origin) ->
+    Goal =
+        {',',
+         {action, Action, {'Prerequisites'}, {'DesiredState'}},
+         {'$quod_action_shape', Action,
+          {'Prerequisites'}, {'DesiredState'}}},
+    case run_origin_invocation(Origin, Goal) of
+        {ok, _Bindings, [], _ReadSet} -> true;
+        {fail, _Reasons} -> false;
+        {error, _} = Error -> Error
+    end.
+
+lifecycle_authorized(Action, Origin) ->
+    case run_origin_invocation(
+           Origin, {authorized_ontology_lifecycle, Action}) of
+        {ok, _Bindings, [], _ReadSet} ->
+            ok;
+        _ ->
+            {error,
+             quod_ontology_predicates:failure_reason(
+               Action, not_authorized)}
+    end.
+
+prepare_lifecycle_input(Action, Structural, Origin) ->
+    case lifecycle_authorized(Action, Origin) of
         ok ->
             case quod_ontology:prepare_action(Structural) of
                 {ok, Prepared} ->
                     Goal =
                         {prepare_lifecycle_action, Action,
                          {'DesiredState'}, {'Mode'}},
-                    Selection = run_proof_est_annotated(
-                                  Goal, Est,
-                                  #{lifecycle_principal => Principal,
-                                    read_only => true}),
+                    Selection = run_origin_invocation(Origin, Goal),
                     complete_lifecycle_action(
-                      Action, Prepared, Principal, Ns, Applied, Est,
-                      Selection);
+                      Action, Prepared, Origin, Selection);
                 {error, Reason} ->
                     {fail,
                      [quod_ontology_predicates:lifecycle_error(
@@ -909,39 +2343,34 @@ prepare_lifecycle_input(Action, Structural, Principal, Ns, Applied, Est) ->
             {fail, [Reason]}
     end.
 
-complete_lifecycle_action(Action, Prepared, Principal, Ns, Applied, Est,
+complete_lifecycle_action(Action, Prepared, Origin,
                           {ok, Bindings, [], _ReadSet})
   when is_map(Bindings) ->
     case {maps:find('DesiredState', Bindings), maps:find('Mode', Bindings)} of
         {{ok, DesiredState}, {ok, Mode}}
           when Mode =:= already; Mode =:= execute ->
             finish_lifecycle_action(
-              Action, Prepared, Principal, Ns, Applied, Est,
-              DesiredState, Mode);
+              Action, Prepared, Origin, DesiredState, Mode);
         _ ->
             {error, action_declaration_failed}
     end;
-complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
-                          _Est, {ok, _Bindings, _Diff, _ReadSet}) ->
+complete_lifecycle_action(_Action, _Prepared, _Origin,
+                          {ok, _Bindings, _Diff, _ReadSet}) ->
     {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
-                          _Est,
+complete_lifecycle_action(_Action, _Prepared, _Origin,
                           {error, {erlog,
                                    {permission_error, modify,
                                     static_procedure, _Predicate}}}) ->
     {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Principal, _Ns, _Applied,
-                          _Est, Result) ->
+complete_lifecycle_action(_Action, _Prepared, _Origin, Result) ->
     Result.
 
-finish_lifecycle_action(Action, Prepared, Principal, Ns, Applied, Est,
-                        DesiredState, Mode) ->
+finish_lifecycle_action(Action, Prepared, Origin, DesiredState, Mode) ->
     case quod_predicates:is_ground(DesiredState) of
         false ->
             {error, action_declaration_failed};
         true ->
-            case quod_ontology_predicates:authorize_lifecycle(
-                   Action, Principal, Est, Ns, Applied) of
+            case lifecycle_authorized(Action, Origin) of
                 {error, Reason} ->
                     {fail, [Reason]};
                 ok when Mode =:= already ->
@@ -949,16 +2378,15 @@ finish_lifecycle_action(Action, Prepared, Principal, Ns, Applied, Est,
                 ok ->
                     case quod_ontology_predicates:execute_prepared(
                            Action, Prepared) of
-                        ok -> verify_lifecycle_state(DesiredState, Est);
+                        ok -> verify_lifecycle_state(DesiredState, Origin);
                         {error, outcome_unknown} -> {error, outcome_unknown};
                         {error, Reason} -> {fail, [Reason]}
                     end
             end
     end.
 
-verify_lifecycle_state(DesiredState, Est) ->
-    case run_proof_est_annotated(
-           DesiredState, Est, #{read_only => true}) of
+verify_lifecycle_state(DesiredState, Origin) ->
+    case run_origin_invocation(Origin, DesiredState) of
         {ok, _Bindings, [], _ReadSet} -> lifecycle_success();
         _ -> {error, outcome_unknown}
     end.
@@ -1001,15 +2429,63 @@ take_proof_worker(Ref, S = #s{workers = W}) ->
 handle_worker_down(MRef, _Reason, S = #s{runtime_pin = {_Pid, MRef, _F}}) ->
     {noreply, S#s{runtime_pin = none}};
 handle_worker_down(MRef, Reason,
-                   S = #s{ask_workers = AW, ask_callers = AC}) ->
-    case maps:is_key(MRef, AW) of
-        true -> {noreply, drop_ask(MRef, S)};
-        false ->
-            case maps:get(MRef, AC, undefined) of
-                WorkerMRef when is_reference(WorkerMRef) ->
-                    {noreply, kill_ask(WorkerMRef, S)};
-                _ -> handle_proof_down(MRef, Reason, S)
+                   S = #s{scope_workers = Workers,
+                          scope_owners = Owners,
+                          remote_request_mrefs = RequestRefs,
+                          remote_return_mrefs = ReturnRefs}) ->
+    case maps:find(MRef, Workers) of
+        {ok, Worker} ->
+            {noreply, handle_scope_worker_down(MRef, Reason, Worker, S)};
+        error ->
+            case maps:get(MRef, RequestRefs, undefined) of
+                Binding when is_tuple(Binding) ->
+                    {noreply, drop_remote_scope(Binding, S)};
+                undefined ->
+                    case maps:get(MRef, ReturnRefs, undefined) of
+                        ReturnBinding when is_tuple(ReturnBinding) ->
+                            {noreply, drop_remote_scope(ReturnBinding, S)};
+                        undefined ->
+                            handle_scope_owner_down(
+                              MRef, Reason, Owners, S)
+                    end
             end
+    end.
+
+handle_scope_worker_down(MRef, _Reason,
+                         #scope_worker{terminating = true}, S) ->
+    drop_scope_worker(MRef, S);
+handle_scope_worker_down(
+  MRef, Reason, #scope_worker{scope_key = {remote, Binding}},
+  S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, Scope} ->
+            {RequestId, CommandSeq} = remote_timeout_correlation(Scope),
+            PublicReason = scope_worker_failure(
+                             Reason, target_namespace(Binding)),
+            S1 = emit_scope_event(
+                   Binding, RequestId, CommandSeq,
+                   {scope_error, PublicReason}, S),
+            drop_scope_worker(MRef, S1);
+        error ->
+            drop_scope_worker(MRef, S)
+    end;
+handle_scope_worker_down(MRef, _Reason, #scope_worker{}, S) ->
+    %% A co-hosted caller monitors this worker directly and receives its exact
+    %% typed exit reason; the engine only owns resource cleanup here.
+    drop_scope_worker(MRef, S).
+
+scope_worker_failure({scope_error, Reason}, Ns) ->
+    public_scope_reason(Reason, Ns);
+scope_worker_failure(killed, Ns) ->
+    {proof_limit_exceeded, Ns};
+scope_worker_failure(_Reason, _Ns) ->
+    {protocol_error, proof_engine}.
+
+handle_scope_owner_down(MRef, Reason, Owners, S) ->
+    case maps:get(MRef, Owners, undefined) of
+                WorkerMRef when is_reference(WorkerMRef) ->
+                    {noreply, kill_scope_worker(WorkerMRef, S)};
+                _ -> handle_proof_down(MRef, Reason, S)
     end.
 
 handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
@@ -1017,7 +2493,7 @@ handle_proof_down(MRef, Reason, S = #s{workers = W}) ->
         {worker, Ref, From, Kind} ->
             case take_proof_worker(Ref, S) of
                 {{_From, _Height, _TraceCtx}, S1} ->
-                    Reply = proof_down_reply(Kind, Reason),
+                    Reply = proof_down_reply(Kind, Reason, S#s.ns),
                     gen_server:reply(From, Reply),
                     {noreply, S1};
                 error -> {noreply, S}
@@ -1043,81 +2519,206 @@ find_proof_monitor(MRef, W) ->
           end
       end, false, W).
 
-proof_down_reply(action, _Reason) -> {error, outcome_unknown};
-proof_down_reply(_Kind, killed) -> {error, no_progress};
-proof_down_reply(_Kind, _Reason) -> {error, prove_failed}.
+proof_down_reply(action, _Reason, _Ns) ->
+    {error, outcome_unknown};
+proof_down_reply(_Kind, killed, Ns) ->
+    {error, {proof_limit_exceeded, Ns}};
+proof_down_reply(_Kind, _Reason, _Ns) ->
+    {error, {protocol_error, proof_worker_crash}}.
 
-cancel_ask(Pid, S = #s{ask_pids = Pids}) ->
-    case maps:get(Pid, Pids, undefined) of
-        WorkerMRef when is_reference(WorkerMRef) -> kill_ask(WorkerMRef, S);
-        _ -> S
-    end.
-
-arm_ask(WorkerMRef, S = #s{ask_workers = Workers,
-                            ask_step_timeout_ms = StepTimeout}) ->
+arm_scope_step(WorkerMRef, S = #s{scope_workers = Workers,
+                                   scope_step_timeout_ms = StepTimeout}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
-        #ask_worker{pending = false} = Worker ->
+        #scope_worker{pending = false, terminating = false} = Worker ->
             Token = make_ref(),
             Timer = erlang:send_after(StepTimeout, self(),
-                                      {ask_step_kill, WorkerMRef, Token}),
-            S#s{ask_workers = Workers#{WorkerMRef =>
-                Worker#ask_worker{pending = true, timer = Timer, token = Token}}};
+                                      {scope_step_kill, WorkerMRef, Token}),
+            S#s{scope_workers = Workers#{WorkerMRef =>
+                Worker#scope_worker{pending = true, timer = Timer,
+                                    token = Token}}};
         _ -> S
     end.
 
-disarm_ask(WorkerMRef, S0 = #s{ask_workers = Workers}) ->
+disarm_scope_step(WorkerMRef, S0 = #s{scope_workers = Workers}) ->
     case maps:get(WorkerMRef, Workers, undefined) of
-        #ask_worker{timer = Timer, queued = Queued, pid = Pid, id = AskId} = Worker ->
-            cancel_ask_timer(Timer),
-            Worker1 = Worker#ask_worker{pending = false, queued = false,
-                                        timer = undefined, token = undefined},
-            S1 = S0#s{ask_workers = Workers#{WorkerMRef => Worker1}},
-            case Queued andalso is_binary(AskId) of
-                true -> Pid ! {next, AskId}, arm_ask(WorkerMRef, S1);
-                false -> S1
-            end;
+        #scope_worker{timer = Timer} = Worker ->
+            cancel_scope_timer(Timer),
+            Worker1 = Worker#scope_worker{
+                        pending = false, timer = undefined,
+                        token = undefined},
+            S0#s{scope_workers = Workers#{WorkerMRef => Worker1}};
         _ -> S0
     end.
 
-kill_ask(WorkerMRef, S = #s{ask_workers = Workers}) ->
+%% Timeout ownership stays at the target engine.  Active derivations and idle
+%% lifetime expiry are deliberately different public failures; neither is
+%% inferred from an origin-side receive timeout.  Remote scopes publish the
+%% authenticated terminal event before their worker, timers, monitors and MVCC
+%% pin are removed.  Co-hosted scopes carry the same typed reason in the worker
+%% exit signal, which their direct caller monitor observes.
+expire_scope_worker(Phase, WorkerMRef,
+                    S = #s{ns = Ns, scope_workers = Workers,
+                           scope_sessions = Sessions}) ->
+    Reason = scope_timeout_reason(Phase, Ns),
     case maps:get(WorkerMRef, Workers, undefined) of
-        #ask_worker{pid = Pid} -> kill_worker(Pid), drop_ask(WorkerMRef, S);
+        #scope_worker{scope_key = {remote, Binding}} ->
+            expire_remote_scope_with_reason(Binding, Reason, S);
+        #scope_worker{pid = Pid, scope_key = ScopeKey} ->
+            notify_cohost_scope_timeout(
+              ScopeKey, Reason, Sessions),
+            exit_scope_worker(Pid, Reason),
+            mark_scope_worker_terminating(WorkerMRef, S);
+        undefined ->
+            S
+    end.
+
+scope_timeout_reason(active, Ns) -> {proof_limit_exceeded, Ns};
+scope_timeout_reason(idle, Ns) -> {scope_expired, Ns}.
+
+notify_cohost_scope_timeout(
+  {Origin, _ProofId, _ScopeId} = ScopeKey, Reason, Sessions)
+  when is_pid(Origin) ->
+    case maps:find(ScopeKey, Sessions) of
+        {ok, {Handle, _WorkerMRef, _ReadOnly}} ->
+            Origin ! {quod_scope_down, Handle, {scope_error, Reason}},
+            ok;
+        error ->
+            ok
+    end;
+notify_cohost_scope_timeout(_ScopeKey, _Reason, _Sessions) ->
+    ok.
+
+expire_remote_scope_with_reason(
+  Binding, Reason, S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, Scope = #remote_scope{worker_mref = WorkerMRef}}
+          when is_reference(WorkerMRef) ->
+            {RequestId, CommandSeq} = remote_timeout_correlation(Scope),
+            S1 = emit_scope_event(
+                   Binding, RequestId, CommandSeq,
+                   {scope_error,
+                    public_scope_reason(
+                      Reason, target_namespace(Binding))}, S),
+            case maps:get(WorkerMRef, S1#s.scope_workers, undefined) of
+                #scope_worker{pid = Pid, terminating = false} ->
+                    exit_scope_worker(Pid, Reason),
+                    mark_scope_worker_terminating(WorkerMRef, S1);
+                #scope_worker{} ->
+                    S1;
+                undefined ->
+                    drop_remote_record(Binding, S1)
+            end;
+        {ok, _OpeningScope} ->
+            %% No admitted proof worker exists yet, hence there is no MVCC pin
+            %% to retain and no authenticated return link on which to publish
+            %% a target event. Cleanup is immediate.
+            drop_remote_record(Binding, S);
+        error ->
+            S
+    end.
+
+remote_timeout_correlation(
+  #remote_scope{active_commands = [Current | _]}) ->
+    Current;
+remote_timeout_correlation(
+  #remote_scope{last_request_id = RequestId,
+                next_command_seq = NextCommandSeq}) ->
+    {RequestId, max(1, NextCommandSeq - 1)}.
+
+exit_scope_worker(Pid, Reason) ->
+    unlink(Pid),
+    exit(Pid, {scope_error, Reason}).
+
+kill_scope_worker(WorkerMRef, S = #s{scope_workers = Workers}) ->
+    case maps:get(WorkerMRef, Workers, undefined) of
+        #scope_worker{pid = Pid, terminating = false} ->
+            kill_worker(Pid),
+            mark_scope_worker_terminating(WorkerMRef, S);
+        #scope_worker{} ->
+            S;
         _ -> S
     end.
 
-drop_ask(WorkerMRef, S = #s{ask_workers = Workers, ask_callers = Callers,
-                             ask_pids = Pids, ask_ids = Ids,
-                             scope_sessions = ScopeSessions}) ->
+mark_scope_worker_terminating(
+  WorkerMRef,
+  S = #s{scope_workers = Workers, scope_sessions = ScopeSessions}) ->
+    case maps:get(WorkerMRef, Workers, undefined) of
+        #scope_worker{scope_key = ScopeKey,
+                      timer = Timer,
+                      lifetime_timer = LifetimeTimer} = Worker ->
+            cancel_scope_timer(Timer),
+            cancel_scope_timer(LifetimeTimer),
+            Worker1 = Worker#scope_worker{
+                        timer = undefined, token = undefined,
+                        lifetime_timer = undefined,
+                        lifetime_token = undefined,
+                        terminating = true},
+            S1 = S#s{
+                   scope_workers = Workers#{WorkerMRef => Worker1},
+                   scope_sessions = maps:remove(
+                                      ScopeKey, ScopeSessions)},
+            case ScopeKey of
+                {remote, Binding} -> retire_remote_scope_timer(Binding, S1);
+                _ -> S1
+            end;
+        undefined ->
+            S
+    end.
+
+retire_remote_scope_timer(Binding, S = #s{remote_scopes = Remote}) ->
+    case maps:find(Binding, Remote) of
+        {ok, Scope = #remote_scope{lifetime_timer = Timer}} ->
+            cancel_scope_timer(Timer),
+            put_remote_scope(
+              Scope#remote_scope{
+                lifetime_timer = undefined,
+                lifetime_token = undefined,
+                state = closing}, S);
+        error ->
+            S
+    end.
+
+drop_scope_worker(WorkerMRef,
+                  S = #s{scope_workers = Workers,
+                         scope_owners = Owners,
+                         scope_pids = Pids,
+                         scope_sessions = ScopeSessions}) ->
     case maps:take(WorkerMRef, Workers) of
-        {#ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId,
-                     scope_key = ScopeKey,
-                     timer = Timer, lifetime_timer = LifetimeTimer}, Workers1} ->
-            cancel_ask_timer(Timer),
-            cancel_ask_timer(LifetimeTimer),
+        {#scope_worker{pid = Pid, owner_mref = OwnerMRef,
+                       scope_key = ScopeKey,
+                       timer = Timer,
+                       lifetime_timer = LifetimeTimer}, Workers1} ->
+            cancel_scope_timer(Timer),
+            cancel_scope_timer(LifetimeTimer),
             demonitor(WorkerMRef, [flush]),
             demonitor(OwnerMRef, [flush]),
-            Ids1 = case AskId of undefined -> Ids; _ -> maps:remove(AskId, Ids) end,
-            ScopeSessions1 = case ScopeKey of
-                                 undefined -> ScopeSessions;
-                                 _ -> maps:remove(ScopeKey, ScopeSessions)
-                             end,
-            S#s{ask_workers = Workers1,
-                ask_callers = maps:remove(OwnerMRef, Callers),
-                ask_pids = maps:remove(Pid, Pids), ask_ids = Ids1,
-                scope_sessions = ScopeSessions1};
+            S1 = S#s{scope_workers = Workers1,
+                     scope_owners = maps:remove(OwnerMRef, Owners),
+                     scope_pids = maps:remove(Pid, Pids),
+                     scope_sessions = maps:remove(
+                                        ScopeKey, ScopeSessions)},
+            case ScopeKey of
+                {remote, Binding} -> drop_remote_record(Binding, S1);
+                _ -> S1
+            end;
         error -> S
     end.
 
-cancel_ask_timer(undefined) -> ok;
-cancel_ask_timer(Timer) -> _ = erlang:cancel_timer(Timer), ok.
+cancel_scope_timer(undefined) -> ok;
+cancel_scope_timer(Timer) -> _ = erlang:cancel_timer(Timer), ok.
 
-new_ask_worker(Pid, WorkerMRef, OwnerMRef, AskId, Height,
-               #s{ask_timeout_ms = AskTimeout}) ->
+new_scope_worker(Pid, _WorkerMRef, OwnerMRef, ScopeKey, Height, none) ->
+    #scope_worker{pid = Pid, owner_mref = OwnerMRef,
+                  scope_key = ScopeKey, height = Height};
+new_scope_worker(Pid, WorkerMRef, OwnerMRef, ScopeKey, Height,
+                 LifetimeMs) ->
     Token = make_ref(),
-    Timer = erlang:send_after(AskTimeout, self(),
-                              {ask_lifetime_kill, WorkerMRef, Token}),
-    #ask_worker{pid = Pid, owner_mref = OwnerMRef, id = AskId, height = Height,
-                lifetime_timer = Timer, lifetime_token = Token}.
+    Timer = erlang:send_after(
+              LifetimeMs, self(),
+              {scope_lifetime_kill, WorkerMRef, Token}),
+    #scope_worker{pid = Pid, owner_mref = OwnerMRef,
+                  scope_key = ScopeKey, height = Height,
+                  lifetime_timer = Timer, lifetime_token = Token}.
 
 kill_worker(Pid) ->
     unlink(Pid),
@@ -1126,12 +2727,13 @@ kill_worker(Pid) ->
 -doc """
 Prove `Goal` against a raw committed `#est{}` handle, in the calling process, through the
 local-prove overlay (staged writes never touch the shared KB table). Returns
-`{ok, Bindings, StagedChanges, ReadSet} | fail | {error, _}`. Used internally by every proof
-worker and by `m:quod_runtime`, whose handler runs prove against the snapshot handle carried
-in `{applied_live, Env, Est}` — set a context first via `quod_predicates:set_context/2`, and
-treat a non-empty `StagedChanges` as a violation in projection contexts. The caller must hold
-a snapshot guarantee for the est (a proof-worker height entry or the runtime floor pin), or
-reads can race history pruning.
+`{ok, Bindings, StagedChanges, ReadSet} | fail | {error, _}`. This is a strictly local adapter
+used by `m:quod_runtime` and committed policy subproofs; a foreign `::` returns
+`{error, {ask_requires_anchored_proof, Namespace}}`, while an exact self-selection stays
+in place. Runtime handlers set a semantic context via `quod_predicates:set_context/2` and
+treat a non-empty `StagedChanges` as a projection violation. The caller must hold a snapshot
+guarantee for the est (a proof-worker height entry or the runtime floor pin), or reads can
+race history pruning.
 """.
 -spec prove_est(term(), tuple()) ->
           {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
@@ -1153,7 +2755,7 @@ run_proof_est(Goal, Est, OverlayOpts) ->
     end.
 
 run_proof_est_annotated(Goal, Est, OverlayOpts) ->
-    quod_proof_scope:run_first(
+    quod_proof_session:run_first(
       Goal, Est, OverlayOpts#{read_set => true}).
 
 %% Only own-namespace writes. Submit with OTP's asynchronous gen_statem request API,
@@ -1315,14 +2917,21 @@ publish_snapshot(Index, S = #s{est = #est{db = #db{mod = quod_erlog_db_mvcc,
     Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
     S#s{est = Est#est{db = Db#db{ref = Ref1}}, applied = Index}.
 
-oldest_snapshot(Current, #s{workers = Workers, ask_workers = AskWorkers,
+oldest_snapshot(Current, #s{workers = Workers,
+                            scope_workers = ScopeWorkers,
                             runtime_pin = Pin}) ->
-    ProofHeights = [Height || {_Ref, #proof_worker{height = Height}}
-                                 <- maps:to_list(Workers)],
-    AskHeights = [Height || {_MRef, #ask_worker{height = Height}}
-                                <- maps:to_list(AskWorkers)],
-    PinFloor = case Pin of {_Pid, _MRef, F} -> [F]; none -> [] end,
-    lists:min([Current | ProofHeights ++ AskHeights ++ PinFloor]).
+    ProofFloor = maps:fold(
+                   fun(_Ref, #proof_worker{height = Height}, Floor) ->
+                       min(Height, Floor)
+                   end, Current, Workers),
+    ScopeFloor = maps:fold(
+                   fun(_Ref, #scope_worker{height = Height}, Floor) ->
+                       min(Height, Floor)
+                   end, ProofFloor, ScopeWorkers),
+    case Pin of
+        {_Pid, _MRef, PinFloor} -> min(PinFloor, ScopeFloor);
+        none -> ScopeFloor
+    end.
 
 %% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
 apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, Index, Origin, S) ->

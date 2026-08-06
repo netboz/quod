@@ -4,18 +4,19 @@ Live ontology-route directory.
 
 The directory is network-observed soft state: three protected ETS indexes owned
 by this process, rebuilt after restart, and never written to consensus. Proof
-workers and ask workers call `resolve/1` / `directory_hosts/1` directly; those
+Proof workers call `resolve/1` / `directory_hosts/1` directly; those
 read paths never call this gen_server and therefore remain available while its
 mailbox is busy.
 
-System advertisements replace one node's complete current namespace set
+System advertisements replace one node's complete current hosted-descriptor set
 without exposing an empty intermediate state to lock-free readers. The writer
 enforces exact per-namespace allowlists, strict epoch/sequence freshness,
 expiry and hard capacity bounds. High-water marks outlive routes so a late
 renewal cannot resurrect an expired endpoint.
 
 Private direct seeds are local-only. They begin `provisional`, become
-`confirmed` after the scoped TOFU transport exchange, take precedence over
+`confirmed` after the scoped identity exchange pins the node key, ontology
+anchor, and advertised role. They take precedence over
 system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 """.
 
@@ -25,7 +26,7 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 
 -export([start_link/0, start_link/1]).
 -export([resolve/1, directory_hosts/1,
-         add_direct_seed/2, confirm_direct_seed/3,
+         add_direct_seed/2, confirm_direct_seed/5,
          install_record/5, install_records/1,
          expire/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -96,15 +97,20 @@ resolve(_) ->
 Active public system hosts for the ground namespace, in deterministic key order.
 Private seeds are deliberately excluded.
 """.
--spec directory_hosts(binary()) -> [{binary(), term(), inet:port_number()}].
+-spec directory_hosts(binary()) ->
+          [{<<_:256>>, binary(), term(), inet:port_number()}].
 directory_hosts(Ns) when is_binary(Ns) ->
     try
         Now = quod_time:mono_ms(),
-        lists:sort(
-          [{NodeKey, Host, Port}
-           || {_Ns, system, _RouteKey, NodeKey, {Host, Port}, confirmed,
-               Expiry, _Epoch, _Sequence} <- ets:lookup(?ROUTES, Ns),
-              Expiry > Now])
+        [{GenesisAnchor, NodeKey, Host, Port}
+         || {NodeKey, GenesisAnchor, Host, Port} <-
+                lists:sort(
+                  [{NodeKey, GenesisAnchor, Host, Port}
+                   || {_Ns, system, _RouteKey, NodeKey,
+                       {Host, Port}, confirmed,
+                       GenesisAnchor, _Role, Expiry, _Epoch, _Sequence}
+                          <- ets:lookup(?ROUTES, Ns),
+                      Expiry > Now])]
     catch
         error:badarg -> []
     end;
@@ -115,25 +121,29 @@ directory_hosts(_) ->
 add_direct_seed(Ns, Endpoint) ->
     gen_server:call(quod_reg:via(?KEY), {add_direct_seed, Ns, Endpoint}).
 
--spec confirm_direct_seed(binary(), term(), binary()) -> ok | {error, term()}.
-confirm_direct_seed(Ns, Endpoint, NodeKey) ->
+-spec confirm_direct_seed(binary(), term(), binary(), <<_:256>>,
+                          validator | observer) -> ok | {error, term()}.
+confirm_direct_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role) ->
     gen_server:call(
-      quod_reg:via(?KEY), {confirm_direct_seed, Ns, Endpoint, NodeKey}).
+      quod_reg:via(?KEY),
+      {confirm_direct_seed, Ns, Endpoint, NodeKey, GenesisAnchor, Role}).
 
 -doc """
-Install one authenticated node's complete current system-namespace set.
+Install one authenticated node's complete current hosted-descriptor set.
 Signature/wire verification is performed by the control-plane decoder before
 this call; this writer independently rechecks shape, exact allowlist,
 freshness, rate and capacity before changing any index. The returned deadline
 is the exact receiver-local lease expiry installed in the route table.
 """.
--spec install_record(binary(), term(), [binary()], non_neg_integer(),
+-spec install_record(binary(), term(),
+                     [{binary(), <<_:256>>, validator | observer}],
+                     non_neg_integer(),
                      non_neg_integer()) ->
           {ok, integer()} | {error, term()}.
-install_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence) ->
+install_record(NodeKey, Endpoint, Hosted, Epoch, Sequence) ->
     gen_server:call(
       quod_reg:via(?KEY),
-      {install_record, NodeKey, Endpoint, Namespaces, Epoch, Sequence,
+      {install_record, NodeKey, Endpoint, Hosted, Epoch, Sequence,
        quod_time:mono_ms()}).
 
 -doc """
@@ -144,7 +154,8 @@ with the input. This preserves ordinary record semantics while preventing a
 resync page from multiplying synchronous control-plane waits.
 """.
 -spec install_records(
-        [{binary(), term(), [binary()], non_neg_integer(),
+        [{binary(), term(),
+          [{binary(), <<_:256>>, validator | observer}], non_neg_integer(),
           non_neg_integer()}]) ->
           {ok, [{ok, integer()} | {error, term()}]}
         | {error, bad_batch}.
@@ -211,14 +222,15 @@ handle_call({add_direct_seed, Ns, Endpoint}, _From, S) ->
         {ok, S1} -> {reply, ok, S1};
         {error, Reason} -> {reply, {error, Reason}, S}
     end;
-handle_call({confirm_direct_seed, Ns, Endpoint, NodeKey}, _From, S) ->
-    case confirm_seed(Ns, Endpoint, NodeKey, S) of
+handle_call({confirm_direct_seed, Ns, Endpoint, NodeKey, GenesisAnchor, Role},
+            _From, S) ->
+    case confirm_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role, S) of
         {ok, S1} -> {reply, ok, S1};
         {error, Reason} -> {reply, {error, Reason}, S}
     end;
-handle_call({install_record, NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now},
+handle_call({install_record, NodeKey, Endpoint, Hosted, Epoch, Sequence, Now},
             _From, S) ->
-    case accept_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) of
+    case accept_record(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, S) of
         {ok, Expiry, S1} -> {reply, {ok, Expiry}, S1};
         {error, Reason} -> {reply, {error, Reason}, S}
     end;
@@ -261,7 +273,8 @@ add_seed(Ns, Endpoint, S = #s{routes = Routes, known = Known}) ->
                             true = ets:insert(
                                      Routes,
                                      {Ns, direct, RouteKey, undefined, Endpoint,
-                                      provisional, infinity, 0, 0}),
+                                      provisional, undefined, undefined,
+                                      infinity, 0, 0}),
                             true = ets:insert(Known, {Ns}),
                             {ok, S};
                         {error, _} = Error ->
@@ -272,22 +285,33 @@ add_seed(Ns, Endpoint, S = #s{routes = Routes, known = Known}) ->
             {error, bad_seed}
     end.
 
-confirm_seed(Ns, Endpoint, NodeKey, S = #s{routes = Routes})
-  when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
+confirm_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role,
+             S = #s{routes = Routes})
+  when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
+       is_binary(GenesisAnchor), byte_size(GenesisAnchor) =:= 32,
+       (Role =:= validator orelse Role =:= observer) ->
     RouteKey = {direct_seed, Endpoint},
     case ets:match_object(
            Routes,
-           {Ns, direct, RouteKey, '_', Endpoint, '_', infinity, '_', '_'}) of
-        [OldRow] ->
+           {Ns, direct, RouteKey, '_', Endpoint, '_', '_', '_',
+            infinity, '_', '_'}) of
+        [{Ns, direct, RouteKey, undefined, Endpoint, provisional,
+          undefined, undefined, infinity, 0, 0} = OldRow] ->
             %% Keep the seed continuously visible to lock-free readers while
             %% promoting it. The confirmed row sorts before the provisional
             %% row during the tiny overlap.
             true = ets:insert(
                      Routes,
                      {Ns, direct, RouteKey, NodeKey, Endpoint,
-                      confirmed, infinity, 0, 0}),
+                      confirmed, GenesisAnchor, Role, infinity, 0, 0}),
             true = ets:delete_object(Routes, OldRow),
             {ok, S};
+        [{Ns, direct, RouteKey, NodeKey, Endpoint, confirmed,
+          GenesisAnchor, Role, infinity, 0, 0}] ->
+            {ok, S};
+        [{Ns, direct, RouteKey, _OtherKey, Endpoint, confirmed,
+          _OtherAnchor, _OtherRole, infinity, 0, 0}] ->
+            {error, seed_identity_conflict};
         [] ->
             {error, unknown_seed};
         _ ->
@@ -296,8 +320,8 @@ confirm_seed(Ns, Endpoint, NodeKey, S = #s{routes = Routes})
             %% down the directory owner.
             {error, ambiguous_seed}
     end;
-confirm_seed(_Ns, _Endpoint, _NodeKey, _S) ->
-    {error, bad_node_key}.
+confirm_seed(_Ns, _Endpoint, _NodeKey, _GenesisAnchor, _Role, _S) ->
+    {error, bad_seed_identity}.
 
 capacity_for_seed(Ns, #s{routes = Routes, known = Known,
                          max_routes_per_ns = PerNs, max_routes = Max}) ->
@@ -314,13 +338,13 @@ capacity_for_seed(Ns, #s{routes = Routes, known = Known,
 %%% authenticated system records
 %%%===================================================================
 
-accept_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) ->
-    case record_shape(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) of
-        {ok, Unique} ->
-            case preflight_record(NodeKey, Unique, Epoch, Sequence, Now, S) of
+accept_record(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, S) ->
+    case record_shape(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, S) of
+        {ok, Canonical} ->
+            case preflight_record(NodeKey, Canonical, Epoch, Sequence, Now, S) of
                 {ok, OldRows} ->
                     {S1, Expiry} = install_record_now(
-                                     NodeKey, Endpoint, Unique, Epoch,
+                                     NodeKey, Endpoint, Canonical, Epoch,
                                      Sequence, Now, OldRows, S),
                     {ok, Expiry, S1};
                 {error, _} = Error -> Error
@@ -332,10 +356,10 @@ accept_record(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) ->
 accept_records([], _Now, S, Acc) ->
     {lists:reverse(Acc), S};
 accept_records(
-  [{NodeKey, Endpoint, Namespaces, Epoch, Sequence} | Rest],
+  [{NodeKey, Endpoint, Hosted, Epoch, Sequence} | Rest],
   Now, S, Acc) ->
     case accept_record(
-           NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, S) of
+           NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, S) of
         {ok, Expiry, S1} ->
             accept_records(Rest, Now, S1, [{ok, Expiry} | Acc]);
         {error, Reason} ->
@@ -344,33 +368,32 @@ accept_records(
 accept_records([_Malformed | Rest], Now, S, Acc) ->
     accept_records(Rest, Now, S, [{error, bad_record} | Acc]).
 
-record_shape(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now,
+record_shape(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now,
              #s{max_namespaces = MaxNamespaces})
   when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
        is_integer(Epoch), Epoch >= 0,
        is_integer(Sequence), Sequence >= 0, is_integer(Now) ->
     case {quod_quic:valid_endpoint(Endpoint),
-          quod_directory_auth:validate_namespaces(
-            Namespaces, MaxNamespaces)} of
-        {true, {ok, Unique}} -> {ok, Unique};
+          quod_directory_auth:validate_hosted(Hosted, MaxNamespaces)} of
+        {true, {ok, Canonical}} -> {ok, Canonical};
         _ -> {error, bad_record}
     end;
-record_shape(_NodeKey, _Endpoint, _Namespaces, _Epoch, _Sequence, _Now, _S) ->
+record_shape(_NodeKey, _Endpoint, _Hosted, _Epoch, _Sequence, _Now, _S) ->
     {error, bad_record}.
 
-preflight_record(NodeKey, Namespaces, Epoch, Sequence, Now,
+preflight_record(NodeKey, Hosted, Epoch, Sequence, Now,
                  S = #s{allowlist = Allowlist, highwater = Highwater,
                         allowed_keys = AllowedKeys,
                         last_accept = LastAccept, renew_min_ms = MinRenew,
                         max_routes = MaxRoutes, known = Known}) ->
     Authorized =
-        case Namespaces of
+        case Hosted of
             [] -> maps:is_key(NodeKey, AllowedKeys) orelse
                       ets:member(Highwater, NodeKey);
             _ -> lists:all(
-                   fun(Ns) ->
+                   fun({Ns, _GenesisAnchor, _Role}) ->
                        quod_directory_auth:allowed(NodeKey, Ns, Allowlist)
-                   end, Namespaces)
+                   end, Hosted)
         end,
     case Authorized of
         false ->
@@ -386,15 +409,14 @@ preflight_record(NodeKey, Namespaces, Epoch, Sequence, Now,
                         _ ->
                             OldRows = system_rows_for_node(NodeKey, S#s.routes),
                             RouteCount = ets:info(S#s.routes, size) - length(OldRows)
-                                         + length(Namespaces),
+                                         + length(Hosted),
                             NewKnown =
-                                length([Ns || Ns <- Namespaces,
+                                length([Ns || {Ns, _Anchor, _Role} <- Hosted,
                                              not ets:member(Known, Ns)]),
                             case {RouteCount =< MaxRoutes,
                                   ets:info(Known, size) + NewKnown =< MaxRoutes,
                                   highwater_capacity(NodeKey, Highwater, MaxRoutes),
-                                  namespaces_have_capacity(
-                                    Namespaces, NodeKey, S)} of
+                                  hosted_have_capacity(Hosted, NodeKey, S)} of
                                 {true, true, true, true} -> {ok, OldRows};
                                 {_, _, _, false} -> {error, namespace_full};
                                 _ -> {error, directory_full}
@@ -403,7 +425,7 @@ preflight_record(NodeKey, Namespaces, Epoch, Sequence, Now,
             end
     end.
 
-install_record_now(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, OldRows,
+install_record_now(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, OldRows,
                    S = #s{routes = Routes, highwater = Highwater, known = Known,
                           ttl_ms = Ttl, last_accept = LastAccept}) ->
     Expiry = Now + Ttl,
@@ -413,11 +435,11 @@ install_record_now(NodeKey, Endpoint, Namespaces, Epoch, Sequence, Now, OldRows,
     true = ets:insert(
              Routes,
              [{Ns, system, {system, NodeKey}, NodeKey, Endpoint,
-               confirmed, Expiry, Epoch, Sequence}
-              || Ns <- Namespaces]),
+               confirmed, GenesisAnchor, Role, Expiry, Epoch, Sequence}
+              || {Ns, GenesisAnchor, Role} <- Hosted]),
     lists:foreach(fun(Row) -> true = ets:delete_object(Routes, Row) end,
                   OldRows),
-    true = ets:insert(Known, [{Ns} || Ns <- Namespaces]),
+    true = ets:insert(Known, [{Ns} || {Ns, _Anchor, _Role} <- Hosted]),
     true = ets:insert(Highwater, {NodeKey, Epoch, Sequence}),
     {S#s{last_accept = LastAccept#{NodeKey => Now}}, Expiry}.
 
@@ -432,22 +454,24 @@ highwater_newer(NodeKey, Epoch, Sequence, Highwater) ->
 highwater_capacity(NodeKey, Highwater, Max) ->
     ets:member(Highwater, NodeKey) orelse ets:info(Highwater, size) < Max.
 
-namespaces_have_capacity(Namespaces, NodeKey,
-                         #s{routes = Routes, max_routes_per_ns = Max}) ->
+hosted_have_capacity(Hosted, NodeKey,
+                     #s{routes = Routes, max_routes_per_ns = Max}) ->
     lists:all(
-      fun(Ns) ->
+      fun({Ns, _GenesisAnchor, _Role}) ->
           Rows = ets:lookup(Routes, Ns),
           Existing = length(
                        [ok || {_Ns, system, _Key, K, _Endpoint, _Status,
-                                _Expiry, _Epoch, _Sequence} <- Rows,
+                                _Anchor, _RouteRole, _Expiry, _Epoch, _Sequence}
+                                 <- Rows,
                               K =:= NodeKey]),
           length(Rows) - Existing + 1 =< Max
-      end, Namespaces).
+      end, Hosted).
 
 system_rows_for_node(NodeKey, Routes) ->
     ets:match_object(
       Routes,
-      {'_', system, {system, NodeKey}, NodeKey, '_', '_', '_', '_', '_'}).
+      {'_', system, {system, NodeKey}, NodeKey, '_', '_', '_', '_',
+       '_', '_', '_'}).
 
 %%%===================================================================
 %%% expiry + direct readers
@@ -456,21 +480,22 @@ system_rows_for_node(NodeKey, Routes) ->
 expire_routes(Now, S = #s{routes = Routes}) ->
     _ = ets:select_delete(
           Routes,
-          [{{'_', system, '_', '_', '_', '_', '$1', '_', '_'},
+          [{{'_', system, '_', '_', '_', '_', '_', '_', '$1', '_', '_'},
             [{'=<', '$1', Now}], [true]}]),
     S.
 
 route_active({_Ns, direct, _Key, _NodeKey, _Endpoint, _Status,
-              infinity, _Epoch, _Sequence}, _Now) ->
+              _Anchor, _Role, infinity, _Epoch, _Sequence}, _Now) ->
     true;
 route_active({_Ns, system, _Key, _NodeKey, _Endpoint, _Status,
-              Expiry, _Epoch, _Sequence}, Now) ->
+              _Anchor, _Role, Expiry, _Epoch, _Sequence}, Now) ->
     Expiry > Now.
 
 route_map({Ns, Scope, _RouteKey, NodeKey, Endpoint, Status,
-           Expiry, Epoch, Sequence}) ->
+           GenesisAnchor, Role, Expiry, Epoch, Sequence}) ->
     #{namespace => Ns, scope => Scope, node_key => NodeKey,
-      endpoint => Endpoint, status => Status, expiry => Expiry,
+      endpoint => Endpoint, status => Status,
+      genesis_anchor => GenesisAnchor, role => Role, expiry => Expiry,
       epoch => Epoch, sequence => Sequence}.
 
 route_before(A, B) ->
@@ -485,7 +510,9 @@ route_order(#{scope := system, node_key := NodeKey, endpoint := Endpoint}) ->
 
 has_route(Routes, Ns, Scope, RouteKey) ->
     ets:match_object(
-      Routes, {Ns, Scope, RouteKey, '_', '_', '_', '_', '_', '_'}) =/= [].
+      Routes,
+      {Ns, Scope, RouteKey, '_', '_', '_', '_', '_', '_', '_', '_'})
+        =/= [].
 
 %%%===================================================================
 %%% configuration

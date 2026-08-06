@@ -10,7 +10,7 @@ direct_ingress_binds_author_and_endpoint_test() ->
       #{allowlist => #{Ns => [Pub]}},
       fun() ->
           {ok, Record} = quod_directory_record:sign(
-                           Pub, Endpoint, [Ns], 1, 1, Signer),
+                           Pub, Endpoint, hosted(Ns), 1, 1, Signer),
           ?assertEqual(
              {error, source_mismatch},
              quod_directory_control:test_ingest(
@@ -24,7 +24,7 @@ direct_ingress_binds_author_and_endpoint_test() ->
           ok = quod_directory_control:test_ingest(
                  Record, {direct, Pub, Endpoint}),
           ?assertEqual(
-             [{Pub, <<"node-a">>, 5001}],
+             [host(Ns, Pub, <<"node-a">>, 5001)],
              quod_directory:directory_hosts(Ns))
       end).
 
@@ -42,15 +42,15 @@ relay_and_resync_reverify_original_signature_test() ->
               ok = quod_directory_control:test_set_control_link(
                      Relay, {<<"relay">>, 5030}, Link),
               {ok, Record1} = quod_directory_record:sign(
-                                Pub, Endpoint, [Ns], 3, 1, Signer),
+                                Pub, Endpoint, hosted(Ns), 3, 1, Signer),
               ok = quod_directory_control:test_ingest(
                      Record1, {relay, Relay}),
               ?assertEqual(
-                 [{Pub, <<"node-b">>, 5002}],
+                 [host(Ns, Pub, <<"node-b">>, 5002)],
                  quod_directory:directory_hosts(Ns)),
               timer:sleep(2),
               {ok, Record2} = quod_directory_record:sign(
-                                Pub, Endpoint, [Ns], 3, 2, Signer),
+                                Pub, Endpoint, hosted(Ns), 3, 2, Signer),
               ok = quod_directory_control:test_ingest(
                      Record2, {resync, Relay, Link}),
               ?assertEqual(
@@ -78,7 +78,7 @@ tampered_record_is_rejected_for_every_ingress_kind_test() ->
                     ok = quod_directory_control:test_set_control_link(
                            Relay, {<<"relay">>, 5031}, Link),
                     {ok, Record} = quod_directory_record:sign(
-                                     Pub, Endpoint, [Ns], 5, 1, Signer),
+                                     Pub, Endpoint, hosted(Ns), 5, 1, Signer),
                     Tampered = tamper_signature(Record),
                     Source = case SourceKind of
                                  direct -> {direct, Pub, Endpoint};
@@ -128,7 +128,7 @@ relay_fanout_skips_author_and_immediate_source_test() ->
                   ok = quod_directory_control:test_set_control_link(
                          Other, {<<"other">>, 5035}, OtherLink),
                   {ok, Record} = quod_directory_record:sign(
-                                   Author, Endpoint, [Ns], 1, 1, Signer),
+                                   Author, Endpoint, hosted(Ns), 1, 1, Signer),
                   Announce = term_to_binary(
                                {quod_directory_announce, Record},
                                [deterministic]),
@@ -137,7 +137,7 @@ relay_fanout_skips_author_and_immediate_source_test() ->
                        Channel, Announce},
                   _ = sys:get_state(Control),
                   ?assertEqual(
-                     [{Author, <<"author">>, 5033}],
+                     [host(Ns, Author, <<"author">>, 5033)],
                      quod_directory:directory_hosts(Ns)),
                   ?assertEqual(
                      ok, wait_for_announce(OtherLink, Record, 100)),
@@ -163,7 +163,7 @@ mixed_authorization_is_rejected_after_valid_signature_test() ->
       fun() ->
           ok = quod_directory_control:test_set_control_peers([Relay]),
           {ok, Record} = quod_directory_record:sign(
-                           Pub, {<<"node-d">>, 5004}, [A, B],
+                           Pub, {<<"node-d">>, 5004}, hosted([A, B]),
                            1, 1, Signer),
           ?assertEqual(
              {error, not_allowed},
@@ -191,7 +191,7 @@ public_reader_cannot_relay_or_push_captured_snapshot_test() ->
           ok = quod_directory_control:test_set_control_peers(
                  [ControlKey]),
           {ok, Record} = quod_directory_record:sign(
-                           Author, Endpoint, [Ns], 1, 1, Signer),
+                           Author, Endpoint, hosted(Ns), 1, 1, Signer),
           Announce = term_to_binary(
                        {quod_directory_announce, Record},
                        [deterministic]),
@@ -238,7 +238,7 @@ public_reader_cannot_relay_or_push_captured_snapshot_test() ->
                Channel, Announce},
           _ = sys:get_state(Control),
           ?assertEqual(
-             [{Author, <<"author">>, 5041}],
+             [host(Ns, Author, <<"author">>, 5041)],
              quod_directory:directory_hosts(Ns))
       end).
 
@@ -400,7 +400,7 @@ snapshot_and_down_require_the_exact_current_link_test() ->
                  ok, wait_for_resync_cursor(
                        CurrentLink, 0, 100)),
               {ok, Record} = quod_directory_record:sign(
-                               Author, Endpoint, [Ns], 1, 1,
+                               Author, Endpoint, hosted(Ns), 1, 1,
                                Signer),
               Snapshot = term_to_binary(
                            {quod_directory_snapshot,
@@ -424,7 +424,7 @@ snapshot_and_down_require_the_exact_current_link_test() ->
                    {ControlKey, CurrentLink}, Channel, Snapshot},
               _ = sys:get_state(Control),
               ?assertEqual(
-                 [{Author, <<"exact-author">>, 5052}],
+                 [host(Ns, Author, <<"exact-author">>, 5052)],
                  quod_directory:directory_hosts(Ns)),
               ?assertEqual(
                  ok,
@@ -576,13 +576,13 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
     {ok, Control} = quod_directory_control:start_link(Opts),
     try
         {ok, Record} = quod_directory_record:sign(
-                         Pub, {<<"node-e">>, 5005}, [Ns],
+                         Pub, {<<"node-e">>, 5005}, hosted(Ns),
                          1, 1, Signer),
         ok = quod_directory_control:test_ingest(
                Record,
                {direct, Pub, {<<"node-e">>, 5005}}),
         ?assertEqual(
-           [{Pub, <<"node-e">>, 5005}],
+           [host(Ns, Pub, <<"node-e">>, 5005)],
            quod_directory:directory_hosts(Ns)),
         ?assertEqual(
            1, maps:get(records, quod_directory_control:stats())),
@@ -594,7 +594,7 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
         ?assertEqual(
            0, maps:get(records, quod_directory_control:stats())),
         {ok, Renewal} = quod_directory_record:sign(
-                          Pub, {<<"node-e">>, 5005}, [Ns],
+                          Pub, {<<"node-e">>, 5005}, hosted(Ns),
                           1, 2, Signer),
         ok = quod_directory_control:test_ingest(
                Renewal,
@@ -604,7 +604,7 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
            wait_until(
              fun() ->
                  quod_directory:directory_hosts(Ns)
-                     =:= [{Pub, <<"node-e">>, 5005}]
+                     =:= [host(Ns, Pub, <<"node-e">>, 5005)]
              end, 100))
     after
         _ = catch gen_server:stop(Control),
@@ -621,7 +621,7 @@ retained_peer_record_expires_for_resync_test() ->
       #{allowlist => #{Ns => [Pub]}, ttl_ms => 20},
       fun() ->
           {ok, Record} = quod_directory_record:sign(
-                           Pub, {<<"short-lived">>, 5007}, [Ns],
+                           Pub, {<<"short-lived">>, 5007}, hosted(Ns),
                            1, 1, Signer),
           ok = quod_directory_control:test_ingest(
                  Record,
@@ -670,7 +670,7 @@ running_namespace_changes_replace_the_advertised_set_test() ->
         lists:foreach(
           fun(Ns) -> true = gproc:reg({n, l, {quod_ns, Ns}}) end,
           Private),
-        true = gproc:reg({n, l, {quod_ns, A}}),
+        AHost = start_hosted_namespace(A, validator),
         {ok, Control0} = quod_directory_control:start_link(Opts),
         try
             %% A stale notification before the application startup barrier
@@ -686,13 +686,13 @@ running_namespace_changes_replace_the_advertised_set_test() ->
                wait_until(
                  fun() ->
                      quod_directory:directory_hosts(A)
-                         =:= [{Pub, <<"self">>, 5006}]
+                         =:= [host(A, Pub, <<"self">>, 5006)]
                  end, 100)),
             SequenceA = maps:get(
                           sequence, quod_directory_control:stats()),
             timer:sleep(5),
-            true = gproc:unreg({n, l, {quod_ns, A}}),
-            true = gproc:reg({n, l, {quod_ns, B}}),
+            stop_hosted_namespace(AHost),
+            _BHost = start_hosted_namespace(B, observer),
             %% No lifecycle notification: the next renewal must still read the
             %% live registry and publish one complete replacement set.
             Control0 ! directory_tick,
@@ -702,11 +702,14 @@ running_namespace_changes_replace_the_advertised_set_test() ->
                  fun() ->
                      quod_directory:directory_hosts(A) =:= []
                          andalso quod_directory:directory_hosts(B)
-                             =:= [{Pub, <<"self">>, 5006}]
+                             =:= [host(B, Pub, <<"self">>, 5006)]
                  end, 100)),
             ?assert(
                maps:get(sequence, quod_directory_control:stats())
                    > SequenceA),
+            {known, [BRoute]} = quod_directory:resolve(B),
+            ?assertEqual(anchor(B), maps:get(genesis_anchor, BRoute)),
+            ?assertEqual(observer, maps:get(role, BRoute)),
             ?assertEqual({known, []}, quod_directory:resolve(A)),
 
             %% A directory-owner restart rebuilds the current desired self
@@ -718,34 +721,31 @@ running_namespace_changes_replace_the_advertised_set_test() ->
                wait_until(
                  fun() ->
                      quod_directory:directory_hosts(B)
-                         =:= [{Pub, <<"self">>, 5006}]
+                         =:= [host(B, Pub, <<"self">>, 5006)]
                  end, 100)),
 
             %% A control-child restart must use the current registry under a
             %% fresh epoch, never its previous B advertisement.
             Epoch0 = maps:get(epoch, quod_directory_control:stats()),
             ok = gen_server:stop(Control0),
-            true = gproc:unreg({n, l, {quod_ns, B}}),
+            stop_all_hosted_namespaces(),
             lists:foreach(
               fun(Ns) -> true = gproc:unreg({n, l, {quod_ns, Ns}}) end,
               Private),
-            true = gproc:reg({n, l, {quod_ns, A}}),
-            true = gproc:reg({n, l, {quod_prolog, A}}),
+            _AHost2 = start_hosted_namespace(A, validator),
             {ok, _Control1} = quod_directory_control:start_link(Opts),
             ?assertEqual(
                ok,
                wait_until(
                  fun() ->
                      quod_directory:directory_hosts(A)
-                         =:= [{Pub, <<"self">>, 5006}]
+                         =:= [host(A, Pub, <<"self">>, 5006)]
                          andalso quod_directory:directory_hosts(B) =:= []
                  end, 100)),
             ?assert(
                maps:get(epoch, quod_directory_control:stats()) > Epoch0)
         after
-            _ = catch gproc:unreg({n, l, {quod_ns, A}}),
-            _ = catch gproc:unreg({n, l, {quod_ns, B}}),
-            _ = catch gproc:unreg({n, l, {quod_prolog, A}}),
+            stop_all_hosted_namespaces(),
             _ = [catch gproc:unreg({n, l, {quod_ns, Ns}})
                  || Ns <- Private],
             _ = catch gen_server:stop(NsSup),
@@ -785,6 +785,72 @@ signer() ->
     {Pub, quod_identity:key_term({Pub, Seed})}.
 
 key(N) -> <<N:256>>.
+
+hosted(Ns) when is_binary(Ns) ->
+    [{Ns, anchor(Ns), validator}];
+hosted(Namespaces) when is_list(Namespaces) ->
+    [{Ns, anchor(Ns), validator} || Ns <- Namespaces].
+
+host(Ns, NodeKey, Hostname, Port) ->
+    {anchor(Ns), NodeKey, Hostname, Port}.
+
+anchor(Ns) ->
+    crypto:hash(sha256, Ns).
+
+start_hosted_namespace(Ns, Role) ->
+    Parent = self(),
+    Pid = spawn(
+            fun() ->
+                true = gproc:reg({n, l, {quod_ns, Ns}}),
+                true = gproc:reg({n, l, {quod_simplex, Ns}}),
+                true = gproc:reg({n, l, {quod_prolog, Ns}}),
+                Table = binary_to_atom(
+                          <<"quod_simplex_genesis_", Ns/binary>>, utf8),
+                _ = ets:new(Table, [named_table, protected, set]),
+                true = ets:insert(Table, {anchor, anchor(Ns)}),
+                Parent ! {hosted_namespace_ready, self()},
+                hosted_namespace_loop(Role)
+            end),
+    receive
+        {hosted_namespace_ready, Pid} -> ok
+    after 1000 ->
+        erlang:error(hosted_namespace_start_timeout)
+    end,
+    Existing = case get(hosted_namespace_pids) of
+                   undefined -> [];
+                   Pids -> Pids
+               end,
+    put(hosted_namespace_pids, [Pid | Existing]),
+    Pid.
+
+hosted_namespace_loop(Role) ->
+    receive
+        {'$gen_call', From, get_status} ->
+            gen:reply(From, #{role => Role}),
+            hosted_namespace_loop(Role);
+        stop ->
+            ok
+    end.
+
+stop_hosted_namespace(Pid) ->
+    Ref = monitor(process, Pid),
+    Pid ! stop,
+    receive
+        {'DOWN', Ref, process, Pid, _Reason} -> ok
+    after 1000 ->
+        erlang:error(hosted_namespace_stop_timeout)
+    end.
+
+stop_all_hosted_namespaces() ->
+    Pids = erase(hosted_namespace_pids),
+    lists:foreach(
+      fun(Pid) when is_pid(Pid) ->
+              case is_process_alive(Pid) of
+                  true -> stop_hosted_namespace(Pid);
+                  false -> ok
+              end
+      end,
+      case Pids of undefined -> []; _ -> Pids end).
 
 flip_last_byte(Binary) ->
     PrefixSize = byte_size(Binary) - 1,

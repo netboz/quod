@@ -3,7 +3,8 @@
 Read-only Prolog view of the live system ontology directory and its root
 control-peer authority.
 
-`directory_host(+Ontology, ?NodeKey, ?Host, ?Port)` is deliberately an
+`directory_host(+Ontology, ?GenesisAnchor, ?NodeKey, ?Host, ?Port)` is
+deliberately an
 external predicate: it enumerates the bounded ETS route index directly instead
 of copying moving network membership into the root ontology's consensus log.
 `directory_control_peer(?NodeKey)` projects the canonical public keys from the
@@ -14,23 +15,25 @@ by `quod_directory:directory_hosts/1`.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([directory_host_4/3, directory_control_peer_1/3]).
+-export([directory_host_5/3, directory_control_peer_1/3]).
 
 -define(ROOT_NS, <<"quod:root">>).
 
--spec directory_host_4(term(), term(), tuple()) -> term().
-directory_host_4(Goal, Next, #est{bs = Bs} = St) ->
+-spec directory_host_5(term(), term(), tuple()) -> term().
+directory_host_5(Goal, Next, #est{bs = Bs} = St) ->
     case {quod_predicates:ctx_ns(quod_predicates:context(St)),
           erlog_int:dderef(Goal, Bs)} of
-        {?ROOT_NS, {directory_host, NsTerm, NodeKey, Host, Port}} ->
+        {?ROOT_NS,
+         {directory_host, NsTerm, GenesisAnchor, NodeKey, Host, Port}} ->
             case quod_ontology_name:flatten(NsTerm) of
                 Ns when is_binary(Ns) ->
                     Candidates =
-                        [[K, H, P]
-                         || {K, H, P} <-
+                        [[Anchor, K, H, P]
+                         || {Anchor, K, H, P} <-
                                 quod_directory:directory_hosts(Ns)],
                     prove_member(
-                      [NodeKey, Host, Port], Candidates, Next, St);
+                      [GenesisAnchor, NodeKey, Host, Port],
+                      Candidates, Next, St);
                 error ->
                     erlog_int:fail(St)
             end;

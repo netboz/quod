@@ -88,11 +88,17 @@ head.
 This contract has no compatibility path:
 
 - consensus frames use the `sx2` envelope; the old `sx` envelope is rejected;
-- ledger frames use the V2 magic and explicitly reject V1 instead of treating
-  it as a torn tail;
-- vote journals use QVJ2 records
-  `{quod_vote, 2, Domain, Kind, Slot, BlockHash}` and reject QVJ1 or a different
-  domain.
+- ledger frames use the V3 magic and explicitly reject V1 and V2 — each as its
+  own identifiable format at its exact offset — instead of treating either as a
+  torn tail;
+- the consensus share domain is version 2, so no share, certificate or journal
+  entry signed under the V2-ledger domain verifies here;
+- committee-view identities are version 2;
+- vote journals use QVJ3 records
+  `{quod_vote, 2, Domain, Kind, Slot, BlockHash}` and reject QVJ1, QVJ2, or a
+  different domain — a journal binds the share domain, so an older one must
+  never be restored as equivocation history for a chain that no longer exists;
+- signed directory records and bodies are version 2.
 
 Deployment is stop, wipe, and re-found—not a rolling upgrade. Both `ledger_dir`
 and `data_dir` must be wiped when they differ; the current Nomad layout

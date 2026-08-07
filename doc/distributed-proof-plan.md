@@ -850,10 +850,24 @@ decoder or migration path.
 
 Make the break fail-fast at storage and every wire/signature boundary: bump the
 ledger frame magic to V3 and explicitly reject V1/V2 before replay; bump the
-ordinary transaction, Simplex payload/vote, directory record, scope-session,
-and DTX control domains; reject every older tag rather than trying to decode it.
+ordinary transaction, Simplex payload/vote, committee-view, vote-journal,
+directory record, scope-session, and DTX control domains; reject every older tag
+rather than trying to decode it. Every superseded magic and version stays named
+at its decoder so an old artefact is rejected as an identifiable format at its
+exact offset, never mistaken for corruption or a trimmable tail — including the
+vote journal, whose entries bind the consensus share domain and must not be
+restored as equivocation history for a chain that no longer exists.
 The release requires a fresh genesis and the documented `/quod/data` wipe. No
 dual decoder, migration scanner, or compatibility flag remains.
+
+One committed slot's `data` is an explicit tagged union enumerated in exactly
+one place, `quod_ledger:classify/1`. Consumers that react per variant —
+committee projection, author-sequence high-water, endpoint learning, the apply
+fold — dispatch on its result and enumerate every kind without a catch-all, so
+the control records below are introduced there once and fail loudly at any site
+that has not yet decided what they mean. A kind the running release does not
+recognize classifies as `invalid`, which untrusted catch-up and replay input
+tolerates; it is never silently folded as content or as the inert skip.
 
 ### 7.1 Begin
 
@@ -1163,6 +1177,8 @@ Keep the change factored rather than adding phase exceptions throughout
   no process separate from the owning namespace engine;
 - `quod_ledger_store`: use V3 frame magic, reject V1/V2 explicitly, and provide
   the ordered replay stream from which `quod_outcome` rebuilds;
+- `quod_ledger`: own `classify/1`, the single enumeration of committed
+  entry-data kinds that every per-variant consumer dispatches on;
 - `quod_foreign_log`: bounded anchored foreign-history verification and cache;
 - `quod_simplex`: accept the explicit record union, singleton control barriers,
   asynchronous validation hooks, mutually exclusive bounded `genesis_diff`
@@ -1543,10 +1559,13 @@ At minimum:
     transaction whose read set names a functor written earlier in the same
     block is rejected at its exact apply position on every node, while blind
     writes remain ordered and a self read-modify-write applies.
-26. V1/V2 ledger magic and every old transaction/directory/session/control
-    domain fail explicitly before replay/decode; only a fresh V3 genesis starts.
-    V3 genesis validation rejects policy omission, any non-assert operation,
-    and assert-then-retract attempts.
+26. V1/V2 ledger magic, superseded vote-journal magic, and every old
+    transaction/share/committee-view/directory/session/control domain fail
+    explicitly before replay/decode, at the exact offset and without mutating
+    the file; only a fresh V3 genesis starts. An entry-data kind the release
+    does not recognize classifies as invalid rather than as content or the
+    inert skip. V3 genesis validation rejects policy omission, any non-assert
+    operation, and assert-then-retract attempts.
 27. While Prepare is locked, direct append, batch collection, retained custody,
     relay re-drive, proposal validation, replay, and catch-up all refuse ordinary
     content; no ingress path commits a bypass.

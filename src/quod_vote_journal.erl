@@ -26,8 +26,13 @@ complete frame with an invalid checksum fail-stops instead of discarding a vote.
 -export([compact/1]).
 -endif.
 
--define(OLD_MAGIC, 16#51564A31). %% "QVJ1" — rejected explicitly; no mixed signature formats
--define(MAGIC,     16#51564A32). %% "QVJ2"
+%% Every superseded journal magic stays named: a journal records this node's own
+%% votes, which bind the consensus share domain, so a journal written under an
+%% older domain must be rejected rather than restored as equivocation history for
+%% a chain that no longer exists.
+-define(V1_MAGIC, 16#51564A31). %% "QVJ1" — pre-domain-bound signatures
+-define(V2_MAGIC, 16#51564A32). %% "QVJ2" — share domain v1 (V2 ledger)
+-define(MAGIC,    16#51564A33). %% "QVJ3" — share domain v2 (V3 ledger)
 -define(HDR_BYTES, 12).
 -define(MAX_FRAME_BYTES, 1024).
 -define(COMPACT_BYTES, (1024 * 1024)).
@@ -173,9 +178,11 @@ scan(Fd, Domain, Offset, Rounds) ->
             {Offset, Rounds};
         %% The four-byte magic alone identifies the incompatible journal.
         %% Reject it before the generic torn-header repair so recovery never
-        %% truncates recognizable V1 bytes.
-        {ok, <<?OLD_MAGIC:32, _/binary>>} ->
+        %% truncates recognizable bytes of an older format.
+        {ok, <<?V1_MAGIC:32, _/binary>>} ->
             error({unsupported_vote_journal_format, 1});
+        {ok, <<?V2_MAGIC:32, _/binary>>} ->
+            error({unsupported_vote_journal_format, 2});
         {ok, Header} when byte_size(Header) < ?HDR_BYTES ->
             trim(Fd, Offset),
             {Offset, Rounds};

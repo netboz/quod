@@ -858,10 +858,10 @@ flip_last_byte(Binary) ->
     <<Prefix/binary, (Last bxor 1)>>.
 
 tamper_signature(Record) ->
-    {quod_directory_record, 1, Body, Signature} =
+    {quod_directory_record, 2, Body, Signature} =
         binary_to_term(Record, [safe]),
     term_to_binary(
-      {quod_directory_record, 1, Body,
+      {quod_directory_record, 2, Body,
        flip_last_byte(Signature)},
       [deterministic]).
 

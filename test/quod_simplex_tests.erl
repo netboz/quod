@@ -63,7 +63,7 @@ committee_view_projection_test() ->
         crypto:hash(
           sha256,
           term_to_binary(
-            {quod_committee_view, 1, Ns, 1, GenesisHash,
+            {quod_committee_view, 2, Ns, 1, GenesisHash,
              lists:sort([A, B])},
             [deterministic])),
     Seed = {[], undefined, 0, #{}},

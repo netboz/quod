@@ -2,6 +2,9 @@
 
 -include_lib("eunit/include/eunit.hrl").
 
+-define(VERSION, 2).       %% current record/body version
+-define(OLD_VERSION, 1).   %% superseded by the V3 ledger break
+
 signed_record_roundtrip_and_tamper_rejection_test() ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = quod_identity:key_term({Pub, Seed}),
@@ -28,13 +31,13 @@ wrong_author_signature_is_rejected_test() ->
     BodySigner = quod_identity:key_term(Other),
     %% The key embedded in the body differs from the signing key.
     Body = term_to_binary(
-             {quod_directory_body, 1, Pub, <<"node">>, 4556,
+             {quod_directory_body, ?VERSION, Pub, <<"node">>, 4556,
               [{<<"quod:root">>, anchor(3), validator}], 1, 1},
              [deterministic]),
     Sig = quod_identity:sign(
             Body, BodySigner),
     Encoded = term_to_binary(
-                {quod_directory_record, 1, Body, Sig}, [deterministic]),
+                {quod_directory_record, ?VERSION, Body, Sig}, [deterministic]),
     ?assertEqual(
        {error, bad_signature},
        quod_directory_record:decode(Encoded)),
@@ -101,23 +104,40 @@ bounds_and_shape_fail_closed_test() ->
     ?assertEqual(
        {error, bad_record},
        quod_directory_record:decode(term_to_binary(
-                                      {quod_directory_record, 1, bad, bad}))),
+                                      {quod_directory_record, ?VERSION, bad, bad}))),
     ?assertEqual(
        {error, bad_record},
        quod_directory_record:decode(
-         term_to_binary({quod_directory_record, 1, <<>>, <<>>, []},
+         term_to_binary({quod_directory_record, ?VERSION, <<>>, <<>>, []},
                         [compressed]))).
 
 namespace_only_wire_format_is_rejected_test() ->
     {Pub, Seed} = quod_identity:generate(),
     Signer = quod_identity:key_term({Pub, Seed}),
     Body = term_to_binary(
-             {quod_directory_body, 1, Pub, <<"old-node">>, 4558,
+             {quod_directory_body, ?VERSION, Pub, <<"old-node">>, 4558,
               [<<"quod:root">>], 1, 1},
              [deterministic]),
     Signature = quod_identity:sign(Body, Signer),
     Encoded = term_to_binary(
-                {quod_directory_record, 1, Body, Signature},
+                {quod_directory_record, ?VERSION, Body, Signature},
+                [deterministic]),
+    ?assertEqual(
+       {error, bad_record}, quod_directory_record:decode(Encoded)).
+
+%% A record signed under the superseded version must not decode, even though it
+%% is otherwise well-formed and correctly signed: the V3 ledger break rebinds
+%% what a route attests.
+superseded_version_is_rejected_test() ->
+    {Pub, Seed} = quod_identity:generate(),
+    Signer = quod_identity:key_term({Pub, Seed}),
+    Body = term_to_binary(
+             {quod_directory_body, ?OLD_VERSION, Pub, <<"node">>, 4559,
+              [{<<"quod:root">>, anchor(4), validator}], 1, 1},
+             [deterministic]),
+    Signature = quod_identity:sign(Body, Signer),
+    Encoded = term_to_binary(
+                {quod_directory_record, ?OLD_VERSION, Body, Signature},
                 [deterministic]),
     ?assertEqual(
        {error, bad_record}, quod_directory_record:decode(Encoded)).

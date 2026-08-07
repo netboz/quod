@@ -92,7 +92,11 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/4 signs slots as unsigned 64-bit integers
 -define(PIPELINE_DEPTH, 1).               %% at most one approved parent may remain uncommitted
--define(SHARE_DOMAIN_VERSION, 1).
+%% v2: the V3 ledger break. A vote is bound to the format of the history it
+%% attests, so a share signed under the old entry/transaction formats can never
+%% verify against a V3 chain — no old share, cert or journal entry is decodable
+%% into a valid vote here.
+-define(SHARE_DOMAIN_VERSION, 2).
 -define(SHARE_DOMAIN_TAG, <<"quod/simplex/domain">>).
 -define(SHARE_MESSAGE_TAG, <<"quod/simplex/share">>).
 -define(GENESIS_TX_VERSION, 1).
@@ -4928,8 +4932,9 @@ approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
             error
     end.
 
-advance_author_seqs({batch, Payload}, Seqs) ->
-    advance_author_seqs(Payload, Seqs);
+%% Accepts either a raw proposal payload (a `#block`'s transaction list) or one
+%% committed entry's data. Every entry kind that can carry an author sequence must
+%% advance the high-water here, so the kinds are enumerated rather than defaulted.
 advance_author_seqs(Payload, Seqs) when is_list(Payload) ->
     lists:foldl(
       fun(#transaction{author = Author, author_seq = Seq}, Acc)
@@ -4938,8 +4943,12 @@ advance_author_seqs(Payload, Seqs) when is_list(Payload) ->
          (_, Acc) ->
               Acc
       end, Seqs, Payload);
-advance_author_seqs(_Data, Seqs) ->
-    Seqs.
+advance_author_seqs(Data, Seqs) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} -> advance_author_seqs(Transactions, Seqs);
+        noop    -> Seqs;
+        invalid -> Seqs
+    end.
 
 membership_payload_ok(Payload, #s{approved = Approved, slot = Committed}) ->
     case membership_payload_shape(Payload) of
@@ -7047,16 +7056,17 @@ committee_view_id(Ns, AdoptionSlot, AdoptionBlockHash, NewValidators) ->
     crypto:hash(
       sha256,
       term_to_binary(
-        {quod_committee_view, 1, Ns, AdoptionSlot, AdoptionBlockHash,
+        {quod_committee_view, 2, Ns, AdoptionSlot, AdoptionBlockHash,
          lists:sort(NewValidators)},
         [deterministic])).
 
-historical_sequences_ok(1, {batch, [_Genesis]}, _Seqs) ->
-    true;
-historical_sequences_ok(_I, {batch, Payload}, Seqs) ->
-    transaction_sequences_ok(Payload, Seqs, #{});
-historical_sequences_ok(_I, noop, _Seqs) ->
-    true.
+historical_sequences_ok(I, Data, Seqs) ->
+    case quod_ledger:classify(Data) of
+        {content, [_Genesis]} when I =:= 1 -> true;
+        {content, Payload} -> transaction_sequences_ok(Payload, Seqs, #{});
+        noop    -> true;
+        invalid -> false
+    end.
 
 %% The committee change carried by one committed payload: the `peer_admitted` pubkeys it asserts (added)
 %% and retracts (removed). Each transaction folds its diff (the validator id is the 4th arg / 5th element
@@ -7065,13 +7075,13 @@ historical_sequences_ok(_I, noop, _Seqs) ->
 %% (`log_projection/3`), so the running set can never drift from a fresh re-fold.
 committee_delta(#transaction{} = Transaction) ->
     committee_transaction(Transaction, {[], []});
-committee_delta({batch, _} = Batch) ->
-    case quod_ledger:payload(Batch) of
-        {ok, Transactions} -> lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
-        error              -> {[], []}
-    end;
-committee_delta(_) ->
-    {[], []}.
+committee_delta(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
+        noop    -> {[], []};
+        invalid -> {[], []}
+    end.
 
 committee_transaction(#transaction{diff = Diff}, Acc) ->
     case proper_list(Diff) of
@@ -7094,15 +7104,15 @@ addq(M, L) ->
 %% The dial hints carried by one committed payload: each `peer_admitted` ASSERT's `{Pk, {Host, Port}}`.
 %% Kept separate from the pure pubkey-set fold consumed by catch-up induction and live membership.
 %% Retracts yield nothing: a removal is a membership change, not a reachability change (no unlearn — a
-%% removed member stays a gossiped-with observer). The `_ -> []` clause is REQUIRED, not defensive: a
-%% catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
-admitted_endpoints({batch, _} = Batch) ->
-    case quod_ledger:payload(Batch) of
-        {ok, Transactions} -> lists:flatmap(fun transaction_endpoints/1, Transactions);
-        error              -> []
-    end;
-admitted_endpoints(_) ->
-    [].
+%% removed member stays a gossiped-with observer). The non-content kinds yield nothing by design, not
+%% defensively: a catch-up window routinely carries `noop` skip entries, and this walks raw window payloads.
+admitted_endpoints(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:flatmap(fun transaction_endpoints/1, Transactions);
+        noop    -> [];
+        invalid -> []
+    end.
 
 transaction_endpoints(#transaction{diff = Diff}) ->
     case proper_list(Diff) of

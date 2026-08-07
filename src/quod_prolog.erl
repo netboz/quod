@@ -299,8 +299,7 @@ It is decided by the `quod_simplex` path that obtained the block, never inferred
 apply publishes the post-apply `applied_live` event (`doc/agent-fipa-plan.md` §7), a `replay` apply
 rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
--spec apply_block(binary(), pos_integer(),
-                  {batch, [#transaction{}]} | noop, live | replay) -> ok.
+-spec apply_block(binary(), pos_integer(), entry_data(), live | replay) -> ok.
 apply_block(Ns, Index, Change, Origin) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change, Origin}).
 
@@ -2870,30 +2869,30 @@ apply_step(Index, _Change, _Origin, S = #s{applied = A}) when Index =< A ->
 apply_step(Index, _Change, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
     S;
-apply_step(Index, noop, _Origin, S) ->                     %% Index == applied+1
-    publish_snapshot(Index, S);
+%% Index == applied+1. Every committed entry kind is enumerated here: a kind this
+%% node cannot apply advances the cursor instead of restart-looping on old/corrupt
+%% data, but it is never confused with a kind that legitimately applies nothing.
+%%
 %% Outcome events are BUFFERED through the fold and flushed only after `publish_snapshot`
 %% commits the block's MVCC version: an event consumer (the runtime) must observe the tx's
 %% effects as committed state, and the snapshot handle sent with `applied_live` is only valid
 %% at the block height once the commit ran. All of a block's envelopes therefore share the
 %% block-final snapshot (plan §8: "frozen MVCC snapshot at the applied height" — the height is
 %% the block's).
-apply_step(Index, {batch, _} = Batch, Origin, S) ->
-    case quod_ledger:payload(Batch) of
-        {ok, Transactions} ->
+apply_step(Index, Data, Origin, S) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
             {S1, RevEvents} =
                 lists:foldl(fun(T, {Acc, Evs}) ->
                                     {Acc1, Ev} = apply_transaction(T, Index, Origin, Acc),
                                     {Acc1, [Ev | Evs]}
                             end, {S, []}, Transactions),
             flush_outcomes(lists:reverse(RevEvents), publish_snapshot(Index, S1));
-        error ->
-            skip_unexpected(Index, Batch, S)
-    end;
-%% Defensive: a committed payload that is neither `noop`, a transaction, nor a
-%% well-formed batch advances the cursor instead of restart-looping on old/corrupt data.
-apply_step(Index, Other, _Origin, S) ->
-    skip_unexpected(Index, Other, S).
+        noop ->
+            publish_snapshot(Index, S);
+        invalid ->
+            skip_unexpected(Index, Data, S)
+    end.
 
 apply_transaction(#transaction{tx_id = Tx, diff = Diff} = Change, Index, Origin, S) ->
     %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was

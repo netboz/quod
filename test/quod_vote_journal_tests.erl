@@ -1,6 +1,15 @@
 -module(quod_vote_journal_tests).
 -include_lib("eunit/include/eunit.hrl").
 
+-define(MAGIC, 16#51564A33).   %% "QVJ3" — current
+
+%% A journal records this node's own votes, which bind the consensus share
+%% domain; every superseded journal format must be rejected outright rather than
+%% restored as equivocation history for a chain that no longer exists.
+legacy_formats() ->
+    [{1, 16#51564A31, <<"QVJ1">>},
+     {2, 16#51564A32, <<"QVJ2">>}].
+
 persists_and_reloads_votes_test() ->
     with_journal(
       fun(Ns, Dir, J0) ->
@@ -91,7 +100,7 @@ torn_tail_is_trimmed_without_losing_synced_votes_test() ->
               Path = filename:join(quod_ledger_store:ns_dir(Dir, Ns), "votes.0001"),
               {ok, Fd} = file:open(Path, [read, write, raw, binary]),
               {ok, _} = file:position(Fd, eof),
-              ok = file:write(Fd, <<16#51564A32:32, 200:32, 0:32, "torn">>),
+              ok = file:write(Fd, <<?MAGIC:32, 200:32, 0:32, "torn">>),
               ok = file:close(Fd),
               {ok, J2} = quod_vote_journal:open(Ns, domain(), Dir, 5),
               ?assertEqual(#{6 => #{support => H, final => none}},
@@ -158,13 +167,16 @@ legacy_format_fails_without_mutation_test() ->
       fun(Ns, Dir, J0) ->
               ok = quod_vote_journal:close(J0),
               Path = journal_path(Ns, Dir),
-              Legacy = legacy_frame(
-                         {quod_vote, 1, support, 6, hash(1)}),
-              ok = file:write_file(Path, Legacy),
-              ?assertError(
-                 {unsupported_vote_journal_format, 1},
-                 quod_vote_journal:open(Ns, domain(), Dir, 5)),
-              ?assertEqual({ok, Legacy}, file:read_file(Path))
+              lists:foreach(
+                fun({Version, Magic, _Tag}) ->
+                    Legacy = legacy_frame(
+                               Magic, {quod_vote, 1, support, 6, hash(1)}),
+                    ok = file:write_file(Path, Legacy),
+                    ?assertError(
+                       {unsupported_vote_journal_format, Version},
+                       quod_vote_journal:open(Ns, domain(), Dir, 5)),
+                    ?assertEqual({ok, Legacy}, file:read_file(Path))
+                end, legacy_formats())
       end).
 
 short_legacy_header_fails_without_mutation_test() ->
@@ -172,12 +184,14 @@ short_legacy_header_fails_without_mutation_test() ->
       fun(Ns, Dir, J0) ->
               ok = quod_vote_journal:close(J0),
               Path = journal_path(Ns, Dir),
-              LegacyMagic = <<"QVJ1">>,
-              ok = file:write_file(Path, LegacyMagic),
-              ?assertError(
-                 {unsupported_vote_journal_format, 1},
-                 quod_vote_journal:open(Ns, domain(), Dir, 5)),
-              ?assertEqual({ok, LegacyMagic}, file:read_file(Path))
+              lists:foreach(
+                fun({Version, _Magic, Tag}) ->
+                    ok = file:write_file(Path, Tag),
+                    ?assertError(
+                       {unsupported_vote_journal_format, Version},
+                       quod_vote_journal:open(Ns, domain(), Dir, 5)),
+                    ?assertEqual({ok, Tag}, file:read_file(Path))
+                end, legacy_formats())
       end).
 
 short_legacy_tail_fails_without_mutation_test() ->
@@ -188,10 +202,11 @@ short_legacy_tail_fails_without_mutation_test() ->
                     J0, support, 6, hash(1)),
               ok = quod_vote_journal:close(J1),
               Path = journal_path(Ns, Dir),
-              ok = file:write_file(Path, <<"QVJ1">>, [append]),
+              [{Version, _Magic, Tag} | _] = legacy_formats(),
+              ok = file:write_file(Path, Tag, [append]),
               {ok, Before} = file:read_file(Path),
               ?assertError(
-                 {unsupported_vote_journal_format, 1},
+                 {unsupported_vote_journal_format, Version},
                  quod_vote_journal:open(Ns, domain(), Dir, 5)),
               ?assertEqual({ok, Before}, file:read_file(Path))
       end).
@@ -211,9 +226,9 @@ domain() -> <<16#A5:256>>.
 journal_path(Ns, Dir) ->
     filename:join(quod_ledger_store:ns_dir(Dir, Ns), "votes.0001").
 
-legacy_frame(Term) ->
+legacy_frame(Magic, Term) ->
     Payload = term_to_binary(Term, [deterministic]),
-    <<16#51564A31:32, (byte_size(Payload)):32,
+    <<Magic:32, (byte_size(Payload)):32,
       (erlang:crc32(Payload)):32, Payload/binary>>.
 
 hash(N) -> crypto:hash(sha256, <<N:64>>).

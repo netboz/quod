@@ -12,7 +12,10 @@ the same byte/cardinality bounds and verifies the author's Ed25519 signature.
 
 -include("quod_directory_limits.hrl").
 
--define(VERSION, 1).
+%% v2: the V3 ledger break. Routes advertise anchored hosted descriptors for a
+%% chain whose entry, transaction and vote formats all changed, so a record
+%% signed under v1 must not decode here.
+-define(VERSION, 2).
 -define(MAX_BYTES, 16 * 1024).
 
 -type record() :: #{node_key := binary(),

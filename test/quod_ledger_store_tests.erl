@@ -2,9 +2,15 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
 
--define(OLD_MAGIC, 16#915106AA).
--define(MAGIC, 16#915106AB).
+-define(V1_MAGIC, 16#915106AA).
+-define(V2_MAGIC, 16#915106AB).
+-define(MAGIC, 16#915106AC).
 -define(READ_CHUNK, 262144).
+
+%% Every superseded frame magic must be rejected as an identifiable format, at
+%% its exact offset, without mutating the file. Each legacy case below runs for
+%% all of them.
+legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}].
 
 %%%===================================================================
 %%% fixtures
@@ -43,7 +49,7 @@ store_test_() ->
       fun t_legacy_tail_fails_without_mutation/1,
       fun t_short_legacy_header_fails_without_mutation/1,
       fun t_short_legacy_tail_fails_without_mutation/1,
-      fun t_corrupt_v2_before_legacy_fails_without_mutation/1]}.
+      fun t_corrupt_current_before_legacy_fails_without_mutation/1]}.
 
 %%%===================================================================
 %%% helpers
@@ -208,7 +214,7 @@ t_chunked_tail_detects_split_magic({Dir, Ns}) ->
         Path = prepare_log_path(Dir, Ns),
         [begin
              Filler = binary:copy(<<0>>, ?READ_CHUNK - PrefixBytes),
-             Bytes = <<0:32, Filler/binary, ?OLD_MAGIC:32>>,
+             Bytes = <<0:32, Filler/binary, ?V1_MAGIC:32>>,
              ok = file:write_file(Path, Bytes),
              ?assertError(
                 {log_corruption, bad_magic, 0},
@@ -339,93 +345,105 @@ t_huge_len_tail_trimmed({Dir, Ns}) ->
 
 t_legacy_format_fails_without_mutation({Dir, Ns}) ->
     fun() ->
-        Path = prepare_log_path(Dir, Ns),
-        Legacy = legacy_raw_frame(ent(1)),
-        ok = file:write_file(Path, Legacy),
-        ?assertEqual(
-           {error, {scan_failed, error,
-                    {unsupported_ledger_format, 1, 0}}},
-           quod_ledger_store:open_ro(Ns, Dir)),
-        ?assertEqual({ok, Legacy}, file:read_file(Path)),
-        ?assertError(
-           {unsupported_ledger_format, 1, 0},
-           quod_ledger_store:open(Ns, Dir)),
-        ?assertEqual({ok, Legacy}, file:read_file(Path))
+        lists:foreach(
+          fun({Version, Magic}) ->
+              Path = prepare_log_path(Dir, Ns),
+              Legacy = raw_frame(Magic, ent(1)),
+              ok = file:write_file(Path, Legacy),
+              ?assertEqual(
+                 {error, {scan_failed, error,
+                          {unsupported_ledger_format, Version, 0}}},
+                 quod_ledger_store:open_ro(Ns, Dir)),
+              ?assertEqual({ok, Legacy}, file:read_file(Path)),
+              ?assertError(
+                 {unsupported_ledger_format, Version, 0},
+                 quod_ledger_store:open(Ns, Dir)),
+              ?assertEqual({ok, Legacy}, file:read_file(Path))
+          end, legacy_formats())
     end.
 
 t_legacy_tail_fails_without_mutation({Dir, Ns}) ->
     fun() ->
-        Path = prepare_log_path(Dir, Ns),
-        V2 = raw_frame(ent(1)),
-        Legacy = legacy_raw_frame(ent(2)),
-        Bytes = <<V2/binary, Legacy/binary>>,
-        LegacyOffset = byte_size(V2),
-        ok = file:write_file(Path, Bytes),
-        ?assertEqual(
-           {error, {scan_failed, error,
-                    {unsupported_ledger_format, 1, LegacyOffset}}},
-           quod_ledger_store:open_ro(Ns, Dir)),
-        ?assertEqual({ok, Bytes}, file:read_file(Path)),
-        ?assertError(
-           {unsupported_ledger_format, 1, LegacyOffset},
-           quod_ledger_store:open(Ns, Dir)),
-        ?assertEqual({ok, Bytes}, file:read_file(Path))
+        lists:foreach(
+          fun({Version, Magic}) ->
+              Path = prepare_log_path(Dir, Ns),
+              Current = raw_frame(ent(1)),
+              Legacy = raw_frame(Magic, ent(2)),
+              Bytes = <<Current/binary, Legacy/binary>>,
+              LegacyOffset = byte_size(Current),
+              ok = file:write_file(Path, Bytes),
+              ?assertEqual(
+                 {error, {scan_failed, error,
+                          {unsupported_ledger_format, Version, LegacyOffset}}},
+                 quod_ledger_store:open_ro(Ns, Dir)),
+              ?assertEqual({ok, Bytes}, file:read_file(Path)),
+              ?assertError(
+                 {unsupported_ledger_format, Version, LegacyOffset},
+                 quod_ledger_store:open(Ns, Dir)),
+              ?assertEqual({ok, Bytes}, file:read_file(Path))
+          end, legacy_formats())
     end.
 
 t_short_legacy_header_fails_without_mutation({Dir, Ns}) ->
     fun() ->
-        Path = prepare_log_path(Dir, Ns),
-        LegacyMagic = <<?OLD_MAGIC:32>>,
-        ok = file:write_file(Path, LegacyMagic),
-        ?assertEqual(
-           {error, {scan_failed, error,
-                    {unsupported_ledger_format, 1, 0}}},
-           quod_ledger_store:open_ro(Ns, Dir)),
-        ?assertEqual({ok, LegacyMagic}, file:read_file(Path)),
-        ?assertError(
-           {unsupported_ledger_format, 1, 0},
-           quod_ledger_store:open(Ns, Dir)),
-        ?assertEqual({ok, LegacyMagic}, file:read_file(Path))
+        lists:foreach(
+          fun({Version, Magic}) ->
+              Path = prepare_log_path(Dir, Ns),
+              LegacyMagic = <<Magic:32>>,
+              ok = file:write_file(Path, LegacyMagic),
+              ?assertEqual(
+                 {error, {scan_failed, error,
+                          {unsupported_ledger_format, Version, 0}}},
+                 quod_ledger_store:open_ro(Ns, Dir)),
+              ?assertEqual({ok, LegacyMagic}, file:read_file(Path)),
+              ?assertError(
+                 {unsupported_ledger_format, Version, 0},
+                 quod_ledger_store:open(Ns, Dir)),
+              ?assertEqual({ok, LegacyMagic}, file:read_file(Path))
+          end, legacy_formats())
     end.
 
 t_short_legacy_tail_fails_without_mutation({Dir, Ns}) ->
     fun() ->
-        Path = prepare_log_path(Dir, Ns),
-        V2 = raw_frame(ent(1)),
-        LegacyMagic = <<?OLD_MAGIC:32>>,
-        Bytes = <<V2/binary, LegacyMagic/binary>>,
-        LegacyOffset = byte_size(V2),
-        ok = file:write_file(Path, Bytes),
-        ?assertEqual(
-           {error, {scan_failed, error,
-                    {unsupported_ledger_format, 1, LegacyOffset}}},
-           quod_ledger_store:open_ro(Ns, Dir)),
-        ?assertEqual({ok, Bytes}, file:read_file(Path)),
-        ?assertError(
-           {unsupported_ledger_format, 1, LegacyOffset},
-           quod_ledger_store:open(Ns, Dir)),
-        ?assertEqual({ok, Bytes}, file:read_file(Path))
+        lists:foreach(
+          fun({Version, Magic}) ->
+              Path = prepare_log_path(Dir, Ns),
+              Current = raw_frame(ent(1)),
+              LegacyMagic = <<Magic:32>>,
+              Bytes = <<Current/binary, LegacyMagic/binary>>,
+              LegacyOffset = byte_size(Current),
+              ok = file:write_file(Path, Bytes),
+              ?assertEqual(
+                 {error, {scan_failed, error,
+                          {unsupported_ledger_format, Version, LegacyOffset}}},
+                 quod_ledger_store:open_ro(Ns, Dir)),
+              ?assertEqual({ok, Bytes}, file:read_file(Path)),
+              ?assertError(
+                 {unsupported_ledger_format, Version, LegacyOffset},
+                 quod_ledger_store:open(Ns, Dir)),
+              ?assertEqual({ok, Bytes}, file:read_file(Path))
+          end, legacy_formats())
     end.
 
-t_corrupt_v2_before_legacy_fails_without_mutation({Dir, Ns}) ->
+t_corrupt_current_before_legacy_fails_without_mutation({Dir, Ns}) ->
     fun() ->
-        Path = prepare_log_path(Dir, Ns),
-        Corrupt = bad_crc_raw_frame(ent(1)),
-        Legacy = legacy_raw_frame(ent(2)),
-        Bytes = <<Corrupt/binary, Legacy/binary>>,
-        ok = file:write_file(Path, Bytes),
-        ?assertError(
-           {log_corruption, bad_crc, 0},
-           quod_ledger_store:open(Ns, Dir)),
-        ?assertEqual({ok, Bytes}, file:read_file(Path))
+        lists:foreach(
+          fun({_Version, Magic}) ->
+              Path = prepare_log_path(Dir, Ns),
+              Corrupt = bad_crc_raw_frame(ent(1)),
+              Legacy = raw_frame(Magic, ent(2)),
+              Bytes = <<Corrupt/binary, Legacy/binary>>,
+              ok = file:write_file(Path, Bytes),
+              ?assertError(
+                 {log_corruption, bad_crc, 0},
+                 quod_ledger_store:open(Ns, Dir)),
+              ?assertEqual({ok, Bytes}, file:read_file(Path))
+          end, legacy_formats())
     end.
 
 %% mirror of quod_ledger_store's frame/1 for hand-crafting log files in tests
 raw_frame(Entry) ->
     raw_frame(?MAGIC, Entry).
-
-legacy_raw_frame(Entry) ->
-    raw_frame(?OLD_MAGIC, Entry).
 
 raw_frame(Magic, Entry) ->
     P = term_to_binary(Entry, [deterministic]),

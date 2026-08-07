@@ -55,8 +55,11 @@ the full log always rescans at open.
 
 -export_type([handle/0]).
 
--define(OLD_MAGIC, 16#915106AA). %% V1 certificates were not namespace/genesis-bound; reject, never trim
--define(MAGIC,     16#915106AB). %% V2 consensus-signature format
+%% Every superseded frame magic stays named here so an old segment is rejected
+%% as an identifiable format, never mistaken for corruption or a trimmable tail.
+-define(V1_MAGIC,  16#915106AA). %% certificates were not namespace/genesis-bound
+-define(V2_MAGIC,  16#915106AB). %% consensus-signature format; phash2 OCC read-sets
+-define(MAGIC,     16#915106AC). %% V3: mutation-version OCC tokens, explicit entry-data union
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -267,23 +270,27 @@ skip_frames(Fd, Off, N) ->
 %% pread per few hundred frames instead of two per frame). next_frame/2 parses the frame at
 %% the cursor: `{frame, Payload, Cursor'}` with `Payload` a zero-copy sub-binary, or
 %% `{stop, Why, Off}` — `eof` (clean end exactly at Off) | `short` (torn: bytes exist but
-%% not a whole frame) | `{unsupported_format, 1}` | `bad_magic` | `bad_crc` |
+%% not a whole frame) | `{unsupported_format, Version}` | `bad_magic` | `bad_crc` |
 %% `{frame_too_big, Len}` | `{io_error, R}`.
 %% The framing rules live exactly once, here; the scans and reads only dispatch on `Why`.
 next_frame(Fd, {Off, Buf0}) ->
     case fill(Fd, Off, Buf0, ?HDR_BYTES) of
         {short, <<>>} -> {stop, eof, Off};
-        %% Four legacy-magic bytes are already an unambiguous V1 segment,
+        %% Four legacy-magic bytes are already an unambiguous older segment,
         %% even when the rest of its header was torn. Never reinterpret that
-        %% identifiable incompatible format as a trimmable V2 append tail.
-        {short, <<?OLD_MAGIC:32, _/binary>>} ->
+        %% identifiable incompatible format as a trimmable current append tail.
+        {short, <<?V1_MAGIC:32, _/binary>>} ->
             {stop, {unsupported_format, 1}, Off};
+        {short, <<?V2_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 2}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
             case Buf1 of
-                <<?OLD_MAGIC:32, _/binary>> ->
+                <<?V1_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 1}, Off};
+                <<?V2_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 2}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
@@ -405,7 +412,7 @@ tail_contains_magic(Fd, Pos, Size) ->
     case file:pread(Fd, Pos, Len) of
         {ok, Bin} when byte_size(Bin) =:= Len ->
             case binary:match(
-                   Bin, [<<?MAGIC:32>>, <<?OLD_MAGIC:32>>]) of
+                   Bin, [<<?MAGIC:32>>, <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>]) of
                 nomatch when Pos + Len >= Size ->
                     false;
                 nomatch ->

@@ -102,6 +102,12 @@
                         child   :: #block{},
                         commit  :: #cert{}}).
 
+%% What one committed slot carries. The variants are enumerated in exactly one
+%% place — `quod_ledger:classify/1` — and every consumer that reacts per variant
+%% dispatches on its result, so a variant added later (step 4's distributed
+%% control records) cannot be silently folded as nothing at a site that forgot it.
+-type entry_data() :: {batch, [#transaction{}]} | noop.
+
 %% A committed log entry. `data` is a canonical `{batch, [#transaction{}]}` block payload,
 %% or the atom `noop` for a complaint-skipped slot. Genesis uses the same batch format.
 %% `cert` is the quorum certificate that finalized the slot —
@@ -111,7 +117,7 @@
 %% is the set of `peer_admitted` facts (`quod_simplex:log_projection/2`). `index` doubles as the
 %% slot number (commits are strictly in order, one entry per slot).
 -record(entry, {index       :: log_index(),
-                data        :: {batch, [#transaction{}]} | noop,
+                data        :: entry_data(),
                 timestamp = 0 :: non_neg_integer(), %% mirrors the committed block's `timestamp` — quod stores no header, so
                                                     %% catch-up rebuilds `#block{...}` from the entry and needs this to
                                                     %% reproduce the block_hash. 0 for a `noop` skip (no block) / genesis.

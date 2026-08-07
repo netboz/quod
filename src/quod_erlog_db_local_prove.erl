@@ -33,7 +33,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          live_transaction_tokens/1,
          committed_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
-         get_local_changes/1, get_read_set/1,
+         get_local_changes/1, get_read_set/1, absorb_read_set/2,
          cleanup_read_set/1]).
 -export_type([revision/0, checkpoint/0, read_only_frame/0]).
 
@@ -294,6 +294,34 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
 get_read_set(#lp{read_ets = undefined}) -> #{};
 get_read_set(#lp{read_ets = Ets})       -> maps:from_list(ets:tab2list(Ets)).
 
+-doc """
+Merge another proof's captured reads into this overlay's monotonic read set.
+
+An authorization proof runs on its own strict read-only frame over the same
+pinned committed base, so its tokens are identical to the ones this overlay
+would have captured. Absorbing them makes the policy a real OCC dependency of
+the plan this scope seals: a committed change to a policy predicate the decision
+read invalidates the transaction. First-read-wins is preserved — an existing
+entry is never overwritten.
+""".
+-spec absorb_read_set(tuple(), map()) -> ok.
+absorb_read_set(
+  #est{db = #db{mod = ?MODULE, ref = #lp{read_ets = Ets}}}, Reads)
+  when Ets =/= undefined ->
+    maps:foreach(
+      fun(Functor, Token) -> _ = ets:insert_new(Ets, {Functor, Token}), ok end,
+      Reads);
+absorb_read_set(_St, Reads) when map_size(Reads) =:= 0 ->
+    %% Nothing to absorb — a policy proof that read nothing committed.
+    ok;
+absorb_read_set(_St, _Reads) ->
+    %% The target overlay has no read-set table, so making the authorization
+    %% policy an OCC dependency is impossible — silently dropping it would let a
+    %% concurrently-revoked grant commit unconflicted. That "policy is an OCC
+    %% dependency" is a real invariant, not best-effort: fail loudly here rather
+    %% than at some later apply that no longer conflicts.
+    erlang:error(absorb_read_set_without_read_ets).
+
 -doc "Drop the read-set table for a finished proof (pass the final `#est{}`).".
 -spec cleanup_read_set(tuple()) -> ok.
 cleanup_read_set(#est{db = #db{ref = #lp{read_ets = Ets}}}) when Ets =/= undefined ->
@@ -388,7 +416,7 @@ abolish_clauses(
             %% The resulting retract set is derived from the committed
             %% procedure later in get_local_changes/1. Therefore abolish is a
             %% read-modify-write even when the Prolog goal never reads F.
-            record_read(RS, F, M, R),
+            record_read(RS, F, R),
             {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
     end.
 
@@ -403,17 +431,17 @@ raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS},
     FS = maps:get(F, L, #fstate{}),
     A = FS#fstate.asserta, Z = lists:reverse(FS#fstate.assertz_rev),
     case FS#fstate.abolished of
-        true  -> record_read(RS, F, M, R),
+        true  -> record_read(RS, F, R),
                  clauses_or_undef(A ++ Z);
         false ->
             case M:get_procedure(R, F) of
                 built_in     -> built_in;
                 {code, _} = C -> C;
                 {clauses, Cs} ->
-                    record_read(RS, F, M, R),
+                    record_read(RS, F, R),
                     clauses_or_undef(A ++ filter_retracted(Cs, FS#fstate.retracted) ++ Z);
                 undefined ->
-                    record_read(RS, F, M, R),
+                    record_read(RS, F, R),
                     clauses_or_undef(A ++ Z)
             end
     end.
@@ -551,8 +579,8 @@ clauses_or_undef(Cs) -> {clauses, Cs}.
 %% operations use modifiable/2 and never enter this path. `staged` cannot be
 %% captured here: wrap_state admits only published MVCC snapshots for read-set
 %% overlays, and the immutable handle can never gain pending afterwards.
-record_read(undefined, _F, _M, _R) -> ok;
-record_read(Ets, F, _M, R) ->
+record_read(undefined, _F, _R) -> ok;
+record_read(Ets, F, R) ->
     case ets:member(Ets, F) of
         true  -> ok;
         false -> ets:insert(Ets, {F, quod_erlog_db_mvcc:version_token(R, F)}), ok

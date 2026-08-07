@@ -48,14 +48,23 @@ worker_heap_cap_and_public_local_errors_test() ->
        {error, {protocol_error, request_binding}, false},
        receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
 
+    %% A policy refusal runs `fail_with_reason(not_allowed(Ns))` in place of the
+    %% goal: the invocation opens like any other and completes with the bounded
+    %% reason on the first demand, so a denial is ordinary logical failure with
+    %% no separate refusal shape to carry.
     InvocationId = id(94),
     {ok, OpenRef} = quod_scope_session:invoke_open(
                       Handle, InvocationId, true,
                       [{<<"quod:origin">>, key(95)}],
                       quod_transaction_scope:empty_selection()),
     ?assertEqual(
-       {error, {not_allowed, Ns}},
+       {opened, InvocationId},
        receive_scope_reply(Worker, ProofId, SessionRef, OpenRef)),
+    {ok, RefusedRef} =
+        quod_scope_session:invoke_next(Handle, InvocationId, 1),
+    ?assertMatch(
+       {complete, 1, [{not_allowed, Ns} | _], _Dirty},
+       receive_scope_reply(Worker, ProofId, SessionRef, RefusedRef)),
 
     ?assertEqual(ok, quod_scope_session:test_answer_disposition(small)),
     ?assertEqual(

@@ -9,9 +9,19 @@
 %% ontology `root`, owned by `quod`.
 acl_sovereign(quod:root).
 
-%% Default-open reads. Load-bearing: with no can_read/3 clause every read
-%% fail-closes (unknown-predicate ⇒ deny). Narrow this per-ontology as needed.
-can_read(_Goal, _Subject, _Ns).
+%% Default-open invocation. The rule sees the whole call chain at once — a
+%% restrictive policy relates its members itself rather than judging them one at
+%% a time. `Principal` is the engine-owned `{node, NodeKey}` (or `anonymous`);
+%% a refusal is ordinary failure carrying not_allowed(Ns).
+%%
+%% NOTE: this is not the whole effective policy. Founding injects an invisible
+%% bodyless host-entry clause `can_invoke(_, _, [], _)` into EVERY genesis, so a
+%% proof entered on the host itself (an empty call chain) is always admitted and
+%% cannot be locked out by narrowing this clause. Author clauses here govern
+%% remote and cross-ontology callers (a non-empty chain); with none, an ontology
+%% is host-answerable and otherwise closed. This root ships open to all so it is
+%% queryable fleet-wide.
+can_invoke(_Goal, _Principal, _CallChain, _Ns).
 
 %% Node-local ontology lifecycle. Prolog proves authorization and hosting state;
 %% the action runner performs the external operation only after this proof has
@@ -48,7 +58,7 @@ can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
 %% kb before it will support-sign the membership change (`quod_prolog:request_membership_verdict/5`) —
 %% so admission is a decision of the committee, not the submitter. Goal shape: `can_join(Ns, [Host, Port],
 %% Pubkey)` — arg 2 is `[Host, Port]`, arg 3 the advertised pubkey (== NodeId at this stage).
-%% Load-bearing like can_read: with NO clause, a join fail-closes (the re-proof fails → invalid). It must
+%% Load-bearing like can_invoke: with NO clause, a join fail-closes (the re-proof fails → invalid). It must
 %% be **side-effect-free** — a `can_join` that stages a write is rejected network-wide (the proof overlay
 %% would ride its ops into the committed membership diff).
 %%

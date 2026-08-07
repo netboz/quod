@@ -18,7 +18,7 @@ The typed **external-predicate contract** and the per-run **execution context**
    > The `none`-valued slot blocks *writes*, but `current_prolog_flag/2` still
    > enumerates every flag, so a Prolog rule CAN *read* `'$quod_ctx'` and
    > destructure the `#qctx{}`. That is acceptable for the fields carried today —
-   > `ns`/`height`/`kind`/`chain` are already visible to a target's `can_read`
+   > `ns`/`height`/`kind`/`chain` are already visible to a target's `can_invoke`
    > policies by design, and `subject` is `undefined`. But it means the
    > authenticated **subject** (Slice 5, §10) MUST NOT be placed raw in this flag:
    > carry it out-of-band where content cannot read it — the `#lp{}` overlay

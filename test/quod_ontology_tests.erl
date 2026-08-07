@@ -15,6 +15,7 @@ ontology_creation_test_() ->
           ?_test(prepared_input_is_single_use(Fixture)),
           ?_test(reconcile_republishes_running_content(Fixture)),
           ?_test(validation_precedes_mutation(Fixture)),
+          ?_test(restrictive_policy_founds_and_serves(Fixture)),
           ?_test(collisions_preserve_existing_state(Fixture)),
           ?_test(failed_admission_rolls_back(Fixture)),
           ?_test(action_boundary_and_reasons(Fixture)),
@@ -89,7 +90,8 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ok = file:write_file(SourceOne, <<"ordered(file_one).">>),
     ok = file:write_file(SourceTwo, <<"ordered(file_two).\n">>),
     Options =
-        [{terms, [{ordered, terms_first}, {note, welcome},
+        [open_policy(),
+         {terms, [{ordered, terms_first}, {note, welcome},
                   {allowed, reverse}]},
          {source_file, SourceOne},
          {source_file, list_to_binary(SourceTwo)},
@@ -190,7 +192,8 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
 prepared_input_is_single_use(#{dir := Dir}) ->
     Ns = unique_ns(<<"prepared-once">>),
     Source = filename:join(Dir, "prepared-once.pl"),
-    ok = file:write_file(Source, <<"prepared_value(original).">>),
+    ok = file:write_file(
+           Source, <<"can_invoke(_, _, _, _).\nprepared_value(original).">>),
     Action = {create_ontology, Ns, [{source_file, Source}]},
     {ok, Structural} = quod_ontology:validate_action(Action),
     {ok, Prepared} = quod_ontology:prepare_action(Structural),
@@ -340,12 +343,43 @@ validation_precedes_mutation(#{dir := Dir}) ->
        application:get_env(quod, namespace_desired, #{})),
     ?assertEqual(
        DataDirs0,
-       application:get_env(quod, content_data_dirs, #{})).
+       application:get_env(quod, content_data_dirs, #{})),
+
+    %% An author need not supply a can_invoke/4 clause: founding injects the
+    %% bodyless host-entry default, so a policy-less create succeeds and the
+    %% host can query its own new ontology (remote callers stay fail-closed).
+    HostOnlyNs = unique_ns(<<"host-only">>),
+    ?assertMatch(
+       {ok, created, HostOnlyNs, _},
+       quod_ontology:create(HostOnlyNs, [{terms, [{welcome, all}]}])),
+    ok = wait_ready(HostOnlyNs, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(HostOnlyNs, {welcome, all}, HostOnlyNs)).
+
+%% A genesis carrying an explicit RESTRICTIVE can_invoke/4 clause founds and
+%% becomes ready: a private ontology is a real, usable ontology (acceptance 32).
+%% Its own host reaches it because the founder is admitted, and the empty chain
+%% here is this host's own top-level entry.
+restrictive_policy_founds_and_serves(_Fixture) ->
+    PrivateNs = unique_ns(<<"private-policy">>),
+    {ok, created, PrivateNs, _} =
+        quod_ontology:create(
+          PrivateNs,
+          [{source,
+            <<"secret_value(42).\n"
+              "can_invoke(_Goal, {node, K}, [], _Ns) :- "
+              "peer_admitted(K, _, _, K).">>}]),
+    ok = wait_ready(PrivateNs, 200),
+    %% the host's own top-level proof is admitted by the restrictive rule
+    ?assertMatch(
+       {ok, [#{'V' := 42}], _},
+       quod_prolog:prove_ro(PrivateNs, {secret_value, {'V'}}, PrivateNs)).
 
 collisions_preserve_existing_state(_Fixture) ->
     Ns = unique_ns(<<"collision">>),
     {ok, created, Ns, _} =
-        quod_ontology:create(Ns, [{terms, [{kept, true}]}]),
+        quod_ontology:create(Ns, [open_policy(), {terms, [{kept, true}]}]),
     ok = wait_ready(Ns, 200),
     Pid0 = quod_reg:where({quod_ns, Ns}),
     Desired0 = application:get_env(quod, namespace_desired, #{}),
@@ -406,7 +440,8 @@ action_boundary_and_reasons(#{dir := Dir}) ->
          ?ROOT_NS,
           {create_ontology, Ns,
           [{source,
-            <<"action_fact(works).\n"
+            <<"can_invoke(_, _, _, _).\n"
+              "action_fact(works).\n"
               "action_rule(X) :- action_fact(X).">>}]})),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
@@ -564,7 +599,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
          ?ROOT_NS)),
 
     AlreadyNs = unique_ns(<<"already-authorized">>),
-    AlreadyAction = {create_ontology, AlreadyNs, []},
+    AlreadyAction = {create_ontology, AlreadyNs, [open_policy()]},
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:run_action(?ROOT_NS, AlreadyAction)),
@@ -658,7 +693,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     PhaseWriteNs = unique_ns(<<"phase-write">>),
     PhaseMarker = {phase_write_marker, PhaseWriteNs},
     PhaseWriteAction =
-        {action, {create_ontology, PhaseWriteNs, []},
+        {action, {create_ontology, PhaseWriteNs, [open_policy()]},
          [{assertz, PhaseMarker}], {ontology_hosted, PhaseWriteNs}},
     CreateDeclaration = root_creation_action(),
     commit_root(
@@ -667,7 +702,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
         ?assertEqual(
            {error, lifecycle_staged_write},
            quod_prolog:run_action(
-             ?ROOT_NS, {create_ontology, PhaseWriteNs, []})),
+             ?ROOT_NS, {create_ontology, PhaseWriteNs, [open_policy()]})),
         ?assertMatch(
            {fail, _},
            quod_prolog:prove_ro(?ROOT_NS, PhaseMarker, ?ROOT_NS)),
@@ -698,7 +733,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     %% ordered before the valid generic declaration for the same transition,
     %% selection skips it and executes the valid lifecycle action.
     MixedNs = unique_ns(<<"mixed-true-state">>),
-    MixedAction = {create_ontology, MixedNs, []},
+    MixedAction = {create_ontology, MixedNs, [open_policy()]},
     InvalidTrueDeclaration = {action, MixedAction, [], true},
     commit_root({asserta, InvalidTrueDeclaration}),
     try
@@ -715,7 +750,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     %% hosting changed, so the runner reports outcome_unknown rather than a
     %% definite logical failure or trying another transition.
     BadPostNs = unique_ns(<<"bad-postcondition">>),
-    BadPostAction = {create_ontology, BadPostNs, []},
+    BadPostAction = {create_ontology, BadPostNs, [open_policy()]},
     FalsePostDeclaration =
         {action, BadPostAction,
          [{authorized_ontology_lifecycle, BadPostAction},
@@ -747,10 +782,10 @@ anchored_lifecycle_reuses_foreign_scope(_Fixture) ->
           ForeignNs,
           [{source,
             <<"lifecycle_ready(yes).\n"
-              "can_read(_, _, _).\n">>}]),
+              "can_invoke(_, _, _, _).\n">>}]),
     ok = wait_ready(ForeignNs, 200),
     TargetNs = unique_ns(<<"anchored-action">>),
-    Action = {create_ontology, TargetNs, []},
+    Action = {create_ontology, TargetNs, [open_policy()]},
     ForeignCheck = {'::', ForeignNs, {lifecycle_ready, yes}},
     Declaration =
         {action, Action,
@@ -782,7 +817,7 @@ action_timeout_is_outcome_unknown(#{manager := Manager}) ->
     Result =
         try
             quod_prolog:run_action(
-              ?ROOT_NS, {create_ontology, Ns, []})
+              ?ROOT_NS, {create_ontology, Ns, [open_policy()]})
         after
             ok = sys:resume(Manager)
         end,
@@ -843,7 +878,8 @@ join_validation_and_state(#{dir := Dir}) ->
     ?assertEqual(ok, quod_namespace_manager:stop_content(Ns)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
     StateNs = unique_ns(<<"state-scope">>),
-    {ok, created, StateNs, _} = quod_ontology:create(StateNs, []),
+    {ok, created, StateNs, _} =
+        quod_ontology:create(StateNs, [open_policy()]),
     ok = wait_ready(StateNs, 200),
     {fail, StateReasons} =
         quod_prolog:prove_ro(
@@ -885,7 +921,7 @@ join_validation_and_state(#{dir := Dir}) ->
 join_resume_anchor_is_exact(#{dir := Dir}) ->
     Ns = unique_ns(<<"join-resume">>),
     {ok, created, Ns, GenesisHash} =
-        quod_ontology:create(Ns, [{terms, [{durable, original}]}]),
+        quod_ontology:create(Ns, [open_policy(), {terms, [{durable, original}]}]),
     ok = wait_ready(Ns, 200),
     ok = quod_namespace_manager:stop_content(Ns),
     LogPath = filename:join(
@@ -921,7 +957,8 @@ commit_root(Goal) ->
 
 reconcile_republishes_running_content(#{manager := Manager}) ->
     Ns = unique_ns(<<"reconcile-publish">>),
-    {ok, created, Ns, _GenesisHash} = quod_ontology:create(Ns, []),
+    {ok, created, Ns, _GenesisHash} =
+        quod_ontology:create(Ns, [open_policy()]),
     ok = wait_ready(Ns, 200),
     Desired = application:get_env(quod, namespace_desired, #{}),
     Config = maps:get(Ns, maps:get(content, Desired)),
@@ -944,6 +981,11 @@ root_create_policy() ->
         [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
                      quod_prolog:read_terms(File)],
     Policy.
+
+%% Every genuinely fresh creation must carry a can_invoke/4 clause (an ontology
+%% born without one could never be given one); positive fixtures prepend this.
+open_policy() ->
+    {source, <<"can_invoke(_, _, _, _).">>}.
 
 wait_ready(_Ns, 0) ->
     {error, timeout};

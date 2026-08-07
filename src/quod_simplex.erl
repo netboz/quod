@@ -1720,9 +1720,19 @@ genesis_tx(Cfg, Ns, Self, Incarnation) ->
           fun({Pk, Host, Port}, Acc) ->
                   [{peer_admitted, Pk, Host, Port, Pk} | Acc]
           end, [], Founders),
+    %% Every ontology is born able to answer its own host. The bodyless
+    %% host-entry default admits a proof entered here with no caller ahead of
+    %% it (an empty call chain) — which only ever happens for this node's own
+    %% top-level proof, since a scope open always carries its origin. It reads
+    %% no committed state, so it cannot hit the not-yet-applied-policy race, and
+    %% because founding injects it, an author can never omit it and lock the
+    %% host out. Remote and cross-ontology callers (a non-empty chain) match
+    %% nothing here and stay fail-closed until author clauses admit them.
+    HostEntryPolicy = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
     GeneratedDiff =
         quod_prolog:terms_to_diff(
-          [{consensus_incarnation, Incarnation} | GeneratedTerms]),
+          [{consensus_incarnation, Incarnation}, HostEntryPolicy
+           | GeneratedTerms]),
     %% `foldr` is the single list-spine copy needed to prepend generated ops;
     %% InitialDiff itself is retained byte-for-byte and is never repeatedly appended.
     Diff = lists:foldr(fun(Op, Acc) -> [Op | Acc] end,
@@ -5048,6 +5058,14 @@ valid_genesis_transaction(
   when map_size(ReadCheck) =:= 0 ->
     genesis_payload_bounded(Genesis)
         andalso well_formed_transaction(Genesis)
+        %% Assertion-only + an asserted {can_invoke,4} head: `can_invoke/4`
+        %% gates every entry including this host's own top-level proofs, so an
+        %% ontology born without a policy could never be given one — it would
+        %% deny the very proof that asserts it. Enforced here so founding
+        %% (genesis_tx self-validates through this function), restart replay
+        %% and catch-up all refuse a policy-less or non-assert genesis.
+        andalso quod_diff:assertion_only(Diff)
+        andalso quod_diff:asserts_functor(Diff, {can_invoke, 4})
         andalso valid_genesis_identity(
                   decode_genesis_tx_id(Ns, TxId), Diff, Author,
                   Genesis, ExpectedFounders);
@@ -7186,6 +7204,12 @@ source_present({file, none}) -> false;
 source_present({_Kind, undefined}) -> false;
 source_present({_Kind, _Value}) -> true.
 
+%% Config-time shape/size check for the genesis_diff option. It deliberately
+%% does NOT require a policy clause: a RESUME passes its (ignored) genesis_diff
+%% through here too, and forcing policy would reject a valid resume. The
+%% policy-presence invariant is enforced where founding actually happens —
+%% valid_genesis_transaction/3 (founding, restart replay, catch-up) — and named
+%% early for a fresh create in quod_ontology:prepare_action/1.
 validate_genesis_diff(Diff) ->
     case valid_diff(Diff) of
         false ->

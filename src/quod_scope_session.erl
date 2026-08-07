@@ -327,30 +327,43 @@ authorize_and_open(InvocationId, Goal, Chain, Selection,
                             principal = Principal,
                             height = Height,
                             session = Session} = Runtime) ->
-    case quod_ask:authorize_scope(
-           Goal, Principal, Chain, {Ns, Anchor}, Height, Session) of
+    Authorized = quod_ask:authorize_scope(
+                   {node, Principal}, Goal, Chain, {Ns, Anchor}, Height,
+                   Session),
+    %% A refusal runs none of the requested goal — the invocation instead runs
+    %% `fail_with_reason(not_allowed(Ns))`, so it opens like any other and
+    %% completes with the bounded reason through the ordinary solution/complete
+    %% path. There is no separate refusal shape to carry across co-hosted,
+    %% remote, nested, and remote-controller consumers.
+    Effective = effective_goal(Authorized, Goal, Ns),
+    case Authorized of
         false ->
-            %% Same peer-visible error as a failed admission recheck, so record
-            %% here that it was this ontology's own policy that refused. An
-            %% absent policy predicate reads as a refusal under `unknown=fail`.
+            %% Attributable: distinct from a failed validator-admission recheck
+            %% (same peer-visible outcome), with the pinned height — an absent
+            %% or not-yet-applied policy reads as a refusal under `unknown=fail`.
             logger:warning(
-              "quod_scope_session[~s]: can_read refused an invocation at "
-              "height ~p (chain depth ~p)",
-              [Ns, Height, length(Chain)]),
-            {error, {not_allowed, Ns}};
-        true ->
-            Context = quod_predicates:proof_context(
-                        Ns, Height, undefined, [{Ns, Anchor} | Chain]),
-            case quod_proof_session:open(
-                   Session, InvocationId, Goal, Context, Selection) of
-                ok ->
-                    Invocations = (runtime())#runtime.invocations,
-                    put_runtime(Runtime#runtime{
-                      invocations = Invocations#{InvocationId => {1, 0}}}),
-                    {opened, InvocationId};
-                {error, Reason} -> {error, Reason}
-            end
+              "quod_scope_session[~s]: can_invoke refused an invocation at "
+              "pinned height ~p (chain depth ~p)",
+              [Ns, Height, length(Chain)]);
+        true -> ok
+    end,
+    Context = quod_predicates:proof_context(
+                Ns, Height, undefined, [{Ns, Anchor} | Chain]),
+    case quod_proof_session:open(
+           Session, InvocationId, Effective, Context, Selection) of
+        ok ->
+            Invocations = (runtime())#runtime.invocations,
+            put_runtime(Runtime#runtime{
+              invocations = Invocations#{InvocationId => {1, 0}}}),
+            {opened, InvocationId};
+        {error, Reason} -> {error, Reason}
     end.
+
+%% The goal an invocation actually runs: the requested one when authorized, or a
+%% bounded `fail_with_reason(not_allowed(Ns))` when refused, so a denial is
+%% ordinary logical failure carrying its reason and never runs the real goal.
+effective_goal(true, Goal, _Ns)  -> Goal;
+effective_goal(false, _Goal, Ns) -> {fail_with_reason, {not_allowed, Ns}}.
 
 handle_next(RequestRef, InvocationId, ExpectedSeq)
   when is_integer(ExpectedSeq), ExpectedSeq > 0 ->
@@ -692,6 +705,11 @@ valid_command(Origin, ProofId, Ref) ->
 
 valid_invocation_input(InvocationId, Goal, Chain, Selection) ->
     is_binary(InvocationId) andalso byte_size(InvocationId) =:= 16 andalso
+    %% A wire/co-hosted invocation ALWAYS carries its origin, so the chain is
+    %% never empty here. This is load-bearing for the genesis host-entry policy:
+    %% an empty chain means "this node's own top-level proof" and only the local
+    %% engine can present one, so a remote peer cannot forge `[]` to borrow the
+    %% host-entry default admission.
     is_list(Chain) andalso Chain =/= [] andalso
     length(Chain) < ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
     lists:all(fun valid_identity/1, Chain) andalso

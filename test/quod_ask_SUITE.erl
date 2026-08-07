@@ -43,9 +43,16 @@ init_per_suite(Config) ->
     Target = start_node(target, ?TARGET_PORT, TargetKey, ?NS,
                         TargetGenesis, [], #{}, Config),
     PrivateGenesis = filename:join(?config(priv_dir, Config), "remote_private.pl"),
+    %% Policy belongs in GENESIS. `can_invoke/4` gates every scope entry —
+    %% including a top-level prove on this node — so an ontology born without a
+    %% clause could never be given one: it would deny the very proof that would
+    %% assert its policy. An empty chain is this host's own entry, which is
+    %% allowed so the ontology is usable at all; the restrictive clauses for
+    %% remote callers are asserted through it below.
     ok = file:write_file(
            PrivateGenesis,
            ["can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n",
+            "can_invoke(_Goal, _Principal, [], _Ns).\n",
             "secret(42).\n"
             "hidden(99).\n"]),
     start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
@@ -74,14 +81,16 @@ init_per_suite(Config) ->
     wait_ready(Target, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Asker, ?ASKER_NS, {instance_of, pet, my_dog}),
-    %% Step 3 retains the existing policy until can_invoke/4 lands. It checks
-    %% both the authenticated node key and every ontology in the origin-built
-    %% chain. `secret/1` admits both. `hidden/1` deliberately omits the key, so
-    %% the negative case proves an ontology name cannot launder its transport.
+    %% `can_invoke/4` receives the authenticated principal and the whole
+    %% origin-built chain at once, so a restrictive policy names both itself.
+    %% `secret/1` admits the real node key; `hidden/1` deliberately names a
+    %% different one, so the negative case still proves that an ontology name
+    %% in the chain cannot launder its transport.
     ACLs = [
-        {assertz, {can_read, {secret, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}},
-        {assertz, {can_read, {secret, {'X'}}, AskerPub, ?PRIVATE_NS}},
-        {assertz, {can_read, {hidden, {'X'}}, ?ASKER_NS, ?PRIVATE_NS}}
+        {assertz, {can_invoke, {secret, {'X'}}, {node, AskerPub},
+                   {'_'}, ?PRIVATE_NS}},
+        {assertz, {can_invoke, {hidden, {'X'}}, {node, <<0:256>>},
+                   {'_'}, ?PRIVATE_NS}}
     ],
     lists:foreach(
       fun(ACL) ->
@@ -127,10 +136,18 @@ remote_scope_chain_policy(Config) ->
        {ok, [#{'X' := 42}], _},
        peer:call(Asker, quod_prolog, prove,
                  [?ASKER_NS, Allowed, ?ASKER_NS], 60000)),
+    %% A refusal crosses QUIC as ordinary logical failure carrying its bounded
+    %% reason, so the caller can inspect it and branch — same contract as the
+    %% co-hosted path.
     Denied = {'::', ?PRIVATE_NS, {hidden, {'X'}}},
-    ?assertEqual({error, {not_allowed, ?PRIVATE_NS}},
-                 peer:call(Asker, quod_prolog, prove,
-                           [?ASKER_NS, Denied, ?ASKER_NS], 60000)),
+    {fail, DeniedReasons} =
+        peer:call(Asker, quod_prolog, prove,
+                  [?ASKER_NS, Denied, ?ASKER_NS], 60000),
+    ?assert(lists:member({not_allowed, ?PRIVATE_NS}, DeniedReasons)),
+    ?assertMatch(
+       {ok, [#{'X' := 42}], _},
+       peer:call(Asker, quod_prolog, prove,
+                 [?ASKER_NS, {';', Denied, Allowed}, ?ASKER_NS], 60000)),
     {known, [Route]} = peer:call(
                          Asker, quod_directory, resolve, [?PRIVATE_NS]),
     ?assertEqual(direct, maps:get(scope, Route)),

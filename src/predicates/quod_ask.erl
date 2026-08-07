@@ -25,7 +25,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3,
-         authorize_scope/6, close_stream/1]).
+         authorize_scope/6, node_principal/0, close_stream/1]).
 -ifdef(TEST).
 -export([test_serve_nested/1, test_await_scope_reply/2,
          test_await_identity/4, test_await_remote_scope_open/4,
@@ -574,10 +574,29 @@ current_proof_limit() ->
     {OriginNs, _Anchor} = quod_proof_context:origin_identity(),
     {proof_limit_exceeded, OriginNs}.
 
+-doc "The engine-owned node principal every authorization decision binds to.".
+-spec required_node_key() -> <<_:256>>.
 required_node_key() ->
     case application:get_env(quod, node_pubkey) of
         {ok, <<_:256>> = NodeKey} -> NodeKey;
         _ -> erlang:error(node_pubkey_required)
+    end.
+
+-doc """
+The engine-owned principal term for a proof entered on this node itself.
+
+A node without a configured identity is the explicit `anonymous` principal,
+never an invented key: the shipped default-open `can_invoke/4` clause admits
+it, while a restrictive policy — which names the `{node, Key}` terms it
+accepts — naturally does not. Transport paths that genuinely require a key
+(remote dialing, signing) keep `required_node_key/0` and still refuse to run
+keyless.
+""".
+-spec node_principal() -> {node, <<_:256>>} | anonymous.
+node_principal() ->
+    case application:get_env(quod, node_pubkey) of
+        {ok, <<_:256>> = NodeKey} -> {node, NodeKey};
+        _ -> anonymous
     end.
 
 execution_remaining_ms() ->
@@ -589,21 +608,25 @@ execution_remaining_ms() ->
 open_scope_invocation(
   {local_scope, ScopeId, Ns, Anchor, Height, Session},
   Goal, Chain, Selection) ->
-    case authorize_scope(
-           Goal, required_node_key(), Chain,
-           {Ns, Anchor}, Height, Session) of
-        false -> {error, {not_allowed, Ns}};
-        true ->
-            InvocationId = crypto:strong_rand_bytes(16),
-            Context = quod_predicates:proof_context(
-                        Ns, Height, undefined, [{Ns, Anchor} | Chain]),
-            case quod_proof_session:open(
-                   Session, InvocationId, Goal, Context, Selection) of
-                ok -> finish_scope_open(
-                        {local_scope_invocation, ScopeId, Session,
-                         InvocationId, Selection, 1});
-                {error, TargetReason} -> {error, TargetReason}
-            end
+    %% A refusal runs none of Goal — the invocation runs
+    %% `fail_with_reason(not_allowed(Ns))` instead, so it opens like any other
+    %% and completes with the bounded reason through the ordinary path.
+    %% `(Ns::Denied ; Fallback)` therefore fails over to Fallback.
+    Effective =
+        case authorize_scope(node_principal(), Goal, Chain,
+                             {Ns, Anchor}, Height, Session) of
+            true  -> Goal;
+            false -> {fail_with_reason, {not_allowed, Ns}}
+        end,
+    InvocationId = crypto:strong_rand_bytes(16),
+    Context = quod_predicates:proof_context(
+                Ns, Height, undefined, [{Ns, Anchor} | Chain]),
+    case quod_proof_session:open(
+           Session, InvocationId, Effective, Context, Selection) of
+        ok -> finish_scope_open(
+                {local_scope_invocation, ScopeId, Session,
+                 InvocationId, Selection, 1});
+        {error, TargetReason} -> {error, TargetReason}
     end;
 open_scope_invocation(Handle, Goal, Chain, Selection) ->
     InvocationId = crypto:strong_rand_bytes(16),
@@ -1293,27 +1316,46 @@ close_stream({nested_scope_stream, Origin, ProofId, Ref,
 %% Every declared ontology on the path and the authenticated node principal must
 %% be authorized. This prevents a peer laundering access through an invented chain.
 %% Policies are proved against this ontology's committed KB.
-can_read_subjects(Goal, Subjects, Ns, W) ->
-    lists:all(fun(Subject) -> prove_bool({can_read, Goal, Subject, Ns}, W) end, Subjects).
+-doc """
+Prove the target's own `can_invoke/4` admission rule before a scope invocation.
 
--doc "Apply the existing committed-view admission rule before a shared scope invocation.".
--spec authorize_scope(term(), <<_:256>>, [quod_proof_context:identity()],
+The rule receives the canonical call chain **once**, as one list, rather than
+being re-proved per chain member: a restrictive policy inspects or quantifies
+the members itself, so it can express relations between them that a per-member
+conjunction could not. `Principal` is the engine-owned `node(NodeKey)` term
+derived from the authenticated link, never a value Prolog supplied.
+
+The decision is proved on a strict read-only frame over the scope's pinned
+**committed base**, so a proof cannot stage an authorization grant and consume
+it in the same transaction. Its committed reads are absorbed into the scope's
+own dependency set, making the policy a real OCC dependency of the plan this
+scope seals.
+""".
+-spec authorize_scope({node, <<_:256>>} | anonymous,
+                      term(), [quod_proof_context:identity()],
                       quod_proof_context:identity(), non_neg_integer(),
                       quod_proof_session:session()) -> boolean().
-authorize_scope(Goal, <<_:256>> = Principal, Chain,
+authorize_scope(Principal, Goal, Chain,
                 {Ns, <<_:256>> = Anchor}, Height, Session)
-  when is_list(Chain), is_binary(Ns), is_integer(Height), Height >= 0 ->
+  when Principal =:= anonymous orelse element(1, Principal) =:= node,
+       is_list(Chain), is_binary(Ns), is_integer(Height), Height >= 0 ->
     Ctx = quod_predicates:proof_context(
             Ns, Height, undefined, [{Ns, Anchor} | Chain]),
     Committed = quod_predicates:set_context(
                   quod_proof_session:committed_state(Session), Ctx),
     Wrapped = quod_erlog_db_local_prove:wrap_state(
-                Committed, #{read_set => false}),
-    ChainSubjects = [SubjectNs || {SubjectNs, <<_:256>>} <- Chain],
-    try length(ChainSubjects) =:= length(Chain) andalso
-            can_read_subjects(
-              Goal, [Principal | ChainSubjects], Ns, Wrapped)
-    after quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
+                Committed, #{read_set => true, read_only => true}),
+    CallChain = [SubjectNs || {SubjectNs, <<_:256>>} <- Chain],
+    #est{db = #db{ref = PolicyOverlay}} = Wrapped,
+    try length(CallChain) =:= length(Chain) andalso
+            prove_bool(
+              {can_invoke, Goal, Principal, CallChain, Ns}, Wrapped)
+    after
+        %% The policy's committed reads belong to this scope's plan even when it
+        %% refused: the refusal is itself a decision a later commit can falsify.
+        quod_proof_session:absorb_read_set(
+          Session, quod_erlog_db_local_prove:get_read_set(PolicyOverlay)),
+        quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
     end.
 
 prove_bool(Goal, W) ->

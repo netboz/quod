@@ -83,16 +83,41 @@ malformed_and_wrong_author_test() ->
 history_genesis_exemption_test() ->
     {Pub, Identity} = identity(),
     Nonce = <<7:256>>,
+    %% A valid genesis is assertion-only and asserts a {can_invoke,4} head:
+    %% the rule gates every entry, so an ontology born without a policy could
+    %% never be given one.
+    Policy = {assert, {{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}, true}},
     Genesis = (unsigned(Pub))#transaction{
                 tx_id = genesis_id(?NS, Nonce),
                 goal = undefined, result = undefined,
                 diff = [
                   {assert, {{consensus_incarnation, Nonce}, true}},
-                  {assert, {{peer_admitted, Pub, undefined, undefined, Pub}, true}}
+                  {assert, {{peer_admitted, Pub, undefined, undefined, Pub}, true}},
+                  Policy
                 ],
                 read_check = #{},
                 author_seq = 0, submitted_at = 0, sig = none},
     ?assert(quod_simplex:valid_history_entry(?NS, 1, {batch, [Genesis]}, [])),
+    %% policy-less genesis is rejected at the founding/replay/catch-up seam
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{
+                    diff = [{assert, {{consensus_incarnation, Nonce}, true}},
+                            {assert, {{peer_admitted, Pub, undefined,
+                                       undefined, Pub}, true}}]}]}, [])),
+    %% assert-then-retract cannot smuggle a policy-less genesis past the
+    %% assertion-only rule, even though the {can_invoke,4} head appears
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{
+                    diff = [{assert, {{consensus_incarnation, Nonce}, true}},
+                            {assert, {{peer_admitted, Pub, undefined,
+                                       undefined, Pub}, true}},
+                            Policy,
+                            {retract, {{can_invoke, {'G'}, {'P'},
+                                        {'C'}, {'N'}}, true}}]}]}, [])),
     ?assertNot(
        quod_simplex:valid_history_entry(
          ?NS, 1,

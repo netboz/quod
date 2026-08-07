@@ -434,9 +434,18 @@ Both checks use a strict read-only frame over the target scope's pinned
 **committed base**, never staged writes. A proof therefore cannot stage an
 authorization grant and consume it in the same transaction; the grant must
 commit first. This keeps Prepare re-validation deterministic without replaying
-the whole execution transcript. A denial runs none of the requested goal and is
-a fatal typed authorization error, not a logical predicate failure that can
-backtrack into another branch.
+the whole execution transcript.
+
+A denial runs none of the requested goal and is an ordinary logical failure
+carrying a bounded `not_allowed(TargetNs)` reason through the standard
+`fail_with_reason/1` mechanism, so a caller may inspect it with
+`get_fail_reasons/1` and take another branch. The security property does not
+depend on that choice: the denied goal never runs, so the target discloses
+nothing and mutates nothing, and only the caller's own control flow continues.
+Because a proof's diff may therefore depend on a *negative* decision, the
+authorization transcript records refused invocations beside accepted ones, and
+every participant committee re-proves a refusal as false against the same
+pinned committed base — the check is symmetric, so Prepare stays deterministic.
 
 Today's `can_read/3` runs once for **every** authenticated peer/ontology subject
 in the incoming chain and requires all calls to succeed. `can_invoke/4` instead
@@ -446,27 +455,36 @@ the authenticated peer argument but does not silently preserve the old
 per-member conjunction. Shipped policies are rewritten and tested explicitly;
 there is no compatibility loader.
 
-No matching `can_invoke/4` clause means deny. A fresh ontology must contain at
-least one explicit fact or rule whose clause head is `can_invoke/4`; omission is
-invalid genesis, not a private ontology. A private ontology supplies a
-restrictive rule. Common predicates never inject a default, while shipped root,
-examples, and test ontologies that are intentionally open carry an explicit
-default-open clause in their own source.
+No matching `can_invoke/4` clause means deny — with one exception every ontology
+is born with. `can_invoke/4` gates *every* scope entry, including a proof
+entered on this node with no caller ahead of it (an empty call chain). That
+entry is always the host's own top-level proof — a wire or co-hosted invocation
+always carries its origin in the chain, and the target rejects an empty chain
+from the wire — so founding injects one bodyless host-entry default,
+`can_invoke(_Goal, _Principal, [], _Ns)`, into every genesis diff, exactly as it
+injects `consensus_incarnation` and `peer_admitted`. It reads no committed
+state, so it cannot hit the not-yet-applied-policy race (§ the anchored-height
+open item), and because founding injects it rather than the author, an author
+can never omit it and lock the host out of its own ontology. Remote and
+cross-ontology callers (a non-empty chain) match nothing by default and stay
+fail-closed until author clauses admit them. A private ontology therefore needs
+no author clause at all — it is host-answerable and otherwise closed — while a
+shipped ontology intended to be publicly readable carries an explicit
+default-open `can_invoke(_,_,_,_)` clause in its own source. This is the current
+trusted-host starting point; a later milestone may express host self-trust more
+precisely than empty-chain matching.
 
-Use one pure compiled-diff invariant, not duplicated term scanning. On a fresh
-runtime create, validate it after source aggregation/compilation and before
-`start_new_content/2`; omission returns
-`{error, missing_can_invoke_policy}`, which the Prolog adapter exposes as
-`ontology_creation_failed(missing_can_invoke_policy)`. A resume still validates
-the newly supplied source syntax but does not require its ignored terms to
-repeat the already-committed policy. One shared pure validator is called by
-`quod_simplex:genesis_tx/4` before slot-1 append for file, in-memory,
-direct-manager, and boot founding paths, and by
-`valid_history_entry/4 -> valid_genesis_transaction/2` during restart/catch-up.
-It requires a V3 assertion-only genesis diff containing an asserted
-`{can_invoke,4}` head, so an assert-then-retract or hand-built policy-less
-genesis cannot enter through either path. V1/V2 stay rejected by the hard
-break.
+Because the host-entry default is always injected, a valid genesis always
+carries an asserted `{can_invoke,4}` head. The genesis validator keeps that as a
+defense-in-depth check against a hand-built policy-less or non-assertion genesis
+that bypasses `genesis_tx`: one shared pure invariant over the V3
+assertion-only diff, called by `quod_simplex:genesis_tx/4` before slot-1 append
+for file, in-memory, direct-manager, and boot founding paths, and by
+`valid_history_entry/4 -> valid_genesis_transaction/2` during restart/catch-up,
+so an assert-then-retract or hand-built policy-less genesis cannot enter through
+either path. Runtime create no longer rejects a policy-less author diff — the
+default makes one unnecessary — and a resume keeps its existing ignored-options
+contract. V1/V2 stay rejected by the hard break.
 
 The prepared `InitialDiff` has a separate concrete bound: at most 192 KiB in
 deterministic encoding. Runtime preparation, config validation, and the genesis
@@ -643,10 +661,16 @@ when B disappears before A acknowledges B's result. `send_reliable` queue
 acceptance is never treated as proof-state acceptance, and there is no hidden
 automatic retry or re-proof.
 
-Authorization denial is likewise fatal for that `ProofId`, rather than a
-backtrackable predicate failure. Otherwise `(DeniedGoal ; AllowedGoal)` and its
-timing/failure stack would become a policy-probing primitive, and writes staged
-before a nested denial could survive into another alternative.
+Authorization denial is deliberately **not** in that infrastructure class: it is
+ordinary logical failure with a bounded reason, and `(DeniedGoal ; AllowedGoal)`
+runs `AllowedGoal`. Making it fatal would not be a security boundary — the
+denied goal runs either way, so nothing is disclosed or mutated — and would only
+raise the cost of enumerating a policy from one invocation to one proof, which
+the existing per-peer/per-ontology scope-open rate limit already bounds. Paying
+for that constant with the loss of every cross-ontology fallback, and with a
+denial semantics inconsistent with the engine's own failure-reason model, is a
+bad trade. An author who wants a denial to be terminal writes an ordinary cut or
+lets the failure propagate.
 
 The target engine observes when its shared proof-scope worker starts and
 finishes a derivation. It uses that signal to distinguish an execution-budget
@@ -663,9 +687,8 @@ and `foreign_write_unsupported` results disappear:
 
 | result | meaning |
 |---|---|
-| `{fail, Reasons}` | ordinary logical exhaustion; includes bounded nested reasons |
+| `{fail, Reasons}` | ordinary logical exhaustion; includes bounded nested reasons, and a `not_allowed(TargetNs)` reason when `can_invoke/4` refused an invocation |
 | `{error, {erlog, SafeError}}` | bounded Erlog exception, re-raised at the immediate caller with local/co-hosted/remote parity |
-| `{error, {not_allowed, Target}}` | target `can_invoke/4` denied before running the goal; the proof is poisoned |
 | `{error, {bad_name, Term}}` | ontology selector is invalid |
 | `{error, {unknown_ontology, Ns}}` | directory has never learned the ontology |
 | `{error, {ask_requires_anchored_proof, Ns}}` | a raw internal proof attempted `::` without private engine-derived origin authority |
@@ -1546,10 +1569,14 @@ At minimum:
     point keeps its bindings/continuation but sees B's current overlay. Cuts
     inside and immediately after `B::Goal` match self/co-hosted/remote behavior.
 23. `can_invoke/4` allows/denies identically for top-level, self, co-hosted, and
-    remote entry. Denial runs none of Goal and poisons the proof; an invented
-    chain/principal and the removed `CallerNs` API cannot bypass it. A migrated
-    restrictive policy explicitly checks every chain member and denies if any
-    one is unauthorized; `(Denied ; Allowed)` never executes `Allowed`.
+    remote entry. Denial runs none of Goal and fails logically with a bounded
+    `not_allowed(TargetNs)` reason readable by `get_fail_reasons/1`, so
+    `(Denied ; Allowed)` executes `Allowed` while the denied target is left
+    unread and unmutated; an invented chain/principal and the removed
+    `CallerNs` API cannot bypass it. A migrated restrictive policy explicitly
+    checks every chain member and denies if any one is unauthorized. A refusal
+    that changed the proof's control flow appears in the sealed transcript and
+    re-proves as false at the pinned base.
 24. A sole foreign material scope uses one target-authored ordinary transaction,
     returns `{transaction, TargetNs, TargetAnchor, TxId}`, and recovers exact
     bindings through `outcome(OutcomeRef)` after caller death. Two material
@@ -1589,10 +1616,13 @@ At minimum:
     explorer's 5,000-slot scan budget still resolves after restart from the
     rebuilt outcome index, including a sole-foreign result reached through a
     pinned route.
-32. Fresh runtime creation without a staged `can_invoke/4` clause returns
-    `ontology_creation_failed(missing_can_invoke_policy)` with no desired entry,
-    namespace directory, or ledger. An explicit restrictive rule creates a
-    private ontology successfully. Resume accepts valid replacement options
+32. Fresh runtime creation without an author `can_invoke/4` clause succeeds:
+    founding injects the bodyless host-entry default, so the host can query its
+    own new ontology while remote callers stay fail-closed. An explicit
+    restrictive rule founds and *serves* — the host's own readiness proof is
+    admitted while the rule governs remote callers. A hand-built policy-less or
+    non-assertion genesis that bypasses `genesis_tx` is still rejected on
+    replay/catch-up as invalid genesis. Resume accepts valid replacement options
     without requiring their ignored terms to repeat the committed policy, and
     no normal same-VM prove/eval path bypasses it. An instrumented source proves
     runtime creation reads/compiles once and hands the exact `InitialDiff` to

@@ -23,6 +23,28 @@ Pure helpers over the committed erlog database for the content layer.
 -include("quod_ledger.hrl").
 
 -export([validate/2, apply_ops/2, has_clause/4]).
+-export([assertion_only/1, asserts_functor/2]).
+
+-doc "True when every operation in `Diff` is an assert — the only shape a genesis may carry.".
+-spec assertion_only([op()]) -> boolean().
+assertion_only([{assert, _} | Rest]) -> assertion_only(Rest);
+assertion_only([]) -> true;
+assertion_only(_) -> false.
+
+-doc """
+True when `Diff` asserts at least one clause whose head is `Functor`.
+
+With `assertion_only/1` this is the pure genesis policy-presence invariant: a
+founding diff must assert a `{can_invoke, 4}` head, so neither an
+assert-then-retract trick nor a hand-built policy-less genesis can create an
+ontology that denies the very proof that would give it a policy.
+""".
+-spec asserts_functor([op()], {atom(), non_neg_integer()}) -> boolean().
+asserts_functor(Diff, Functor) ->
+    lists:any(
+      fun({assert, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
+         (_) -> false
+      end, Diff).
 
 -doc "`ok` if every predicate in `ReadCheck` still carries the recorded token, else `{conflict, F}` for a conflicting predicate.".
 -spec validate(read_check(), quod_erlog_db_mvcc:ref()) -> ok | {conflict, term()}.

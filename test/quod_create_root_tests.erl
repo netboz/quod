@@ -87,8 +87,9 @@ t_create_root({_Dir, Ns, Content}) ->
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),
         ?assertMatch({ok, [#{}], _},
                      rp(Ns, {system_ontology, {':', quod, root}, 'quod_root.pl', [], []})),
-        %% the default-open can_read/3 rule unifies with anything
-        ?assertMatch({ok, [#{}], _}, rp(Ns, {can_read, foo, bar, baz})),
+        %% the default-open can_invoke/4 rule unifies with anything
+        ?assertMatch({ok, [#{}], _},
+                     rp(Ns, {can_invoke, foo, {node, bar}, [], baz})),
         %% the founder is on its own committee, as a peer_admitted fact in the genesis kb
         ?assertMatch({ok, [#{}], _}, rp(Ns, {peer_admitted, {'_'}, {'_'}, {'_'}, {'_'}})),
         %% The fresh network incarnation is ordinary, queryable ontology truth.

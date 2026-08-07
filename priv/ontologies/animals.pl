@@ -8,8 +8,8 @@
 %% (e.g. pets' `isa(my_dog, animals:dog)`) and ask it questions with `::`
 %% (e.g. `animals::diet(dog, D)`).
 
-%% Reads are open (same default-open rule as quod:root; see doc/inter-ontology.md §6).
-can_read(_Goal, _Subject, _Ns).
+%% Invocation is open (same default-open rule as quod:root; see doc/inter-ontology.md §6).
+can_invoke(_Goal, _Principal, _CallChain, _Ns).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 
 %% --- the class hierarchy ----------------------------------------------------

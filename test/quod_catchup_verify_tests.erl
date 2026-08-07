@@ -29,7 +29,10 @@ sign_tx(Transaction) ->
 %% asserts each founding member's peer_admitted fact, establishing C1.
 genesis(Pubs) ->
     Nonce = ?GENESIS_NONCE,
-    Diff = [{assert, {{consensus_incarnation, Nonce}, true}} |
+    %% Founding injects the bodyless host-entry can_invoke/4 default; a valid
+    %% genesis always carries it, so the fixture mirrors that.
+    Diff = [{assert, {{consensus_incarnation, Nonce}, true}},
+            {assert, {{can_invoke, {'G'}, {'P'}, [], {'N'}}, true}} |
             [{assert, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}
              || Pk <- Pubs]],
     Transaction = #transaction{tx_id = genesis_id(?NS, Nonce),

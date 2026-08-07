@@ -335,12 +335,12 @@ start_brahms(Peer, OwnAddr, Seeds) ->
     ok.
 
 %% Build the default-open genesis ontology in the suite's priv_dir (the shipped quod_root.pl carries the
-%% peer_ready rule; here case 1 upgrades to it live). can_read default-open so proves aren't fail-closed.
+%% peer_ready rule; here case 1 upgrades to it live). can_invoke default-open so proves aren't fail-closed.
 write_genesis(Config) ->
     Path = filename:join(?config(priv_dir, Config), "growth_root.pl"),
     ok = file:write_file(Path,
         <<"acl_sovereign('grow:d').\n"
-          "can_read(_Goal, _Subject, _Ns).\n"
+          "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
           "can_join(_Ns, _Addr, _Pk).\n">>),
     Path.
 

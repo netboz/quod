@@ -1522,8 +1522,10 @@ skipped_batch_nacks_its_callers_test() ->
     S = quod_simplex:test_state(#{slot => 4, eng => quod_simplex:eng_with_certs(4, []),
                                   collecting => {5, [From]}}),
     _ = quod_simplex:finalize(5, S),   %% slot 5 finalized (skipped) while its batch was still collecting
+    %% Select on this waiter's exact reply ref: the mailbox may also hold
+    %% unrelated engine signals, so match `{Ref, _}` rather than any 2-tuple.
     receive
-        {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
+        {Ref, Reply} -> ?assertEqual({error, skipped}, Reply)
     after 0 -> ?assert(false)          %% no reply => the caller would hang to its transaction TTL
     end.
 
@@ -1538,7 +1540,7 @@ competing_notarization_nacks_collected_batch_test() ->
             collecting => {5, [From]}}),
     _ = quod_simplex:approve_block(blk(5), S),
     receive
-        {_Tag, Reply} -> ?assertEqual({error, skipped}, Reply)
+        {Ref, Reply} -> ?assertEqual({error, skipped}, Reply)
     after 0 -> ?assert(false)
     end.
 
@@ -1990,7 +1992,8 @@ ingress_ttl_expires_visibly_test() ->
     {1, _, _, _} = quod_simplex:test_ingress(Aged),
     Expired = quod_simplex:test_expire_ingress(Aged),
     {0, 0, _, []} = quod_simplex:test_ingress(Expired),
-    receive {_Ref, Reply} -> ?assertEqual({error, busy}, Reply)
+    {_, ExpectRef} = From,
+    receive {ExpectRef, Reply} -> ?assertEqual({error, busy}, Reply)
     after 0 -> ?assert(false) end,
     ?assertEqual(1, maps:get(ingress_expired, quod_simplex:stats_map(Expired))),
     ?assertEqual(1, maps:get(r_busy, quod_simplex:stats_map(Expired))),
@@ -2159,7 +2162,8 @@ reseat_nacks_parked_ingress_test() ->
              ingress => [{local, From, lt($i, Me), quod_time:mono_ms()}]}),
     Reseated = quod_simplex:reseat_engine(3, S),
     {0, 0, _, []} = quod_simplex:test_ingress(Reseated),
-    receive {_Ref2, Reply2} -> ?assertEqual({error, skipped}, Reply2)
+    {_, ExpectRef} = From,
+    receive {ExpectRef, Reply2} -> ?assertEqual({error, skipped}, Reply2)
     after 0 -> ?assert(false) end.
 
 %% Delivery can race the selected slot closing. The destination rejects that
@@ -2630,9 +2634,9 @@ retained_custody_demotion_remains_ambiguous_until_deadline_test() ->
     Expired = quod_simplex:test_expire_custody(Parked),
     ?assertEqual([], quod_simplex:test_custody(Expired)),
     ?assertEqual([], quod_simplex:test_relay_pending(Expired)),
+    {_, ExpectRef} = From,
     receive
-        {Tag, Reply} ->
-            ?assertEqual(element(2, From), Tag),
+        {ExpectRef, Reply} ->
             ?assertEqual({error, not_in_charge, unavailable}, Reply)
     after 0 ->
         ?assert(false)
@@ -4650,9 +4654,9 @@ custody_deadline_survives_retarget_and_expires_once_test() ->
     Expired = quod_simplex:test_expire_custody(Retargeted),
     ?assertEqual([], quod_simplex:test_custody(Expired)),
     ?assertEqual([], quod_simplex:test_relay_pending(Expired)),
+    {_, ExpectRef} = From,
     receive
-        {Tag, Reply} ->
-            ?assertEqual(element(2, From), Tag),
+        {ExpectRef, Reply} ->
             ?assertEqual({error, not_in_charge, unavailable}, Reply)
     after 0 ->
         ?assert(false)

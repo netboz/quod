@@ -2239,7 +2239,32 @@ finalize_pinned_result(Result) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%% `::` is only a selector, so an ontology's own policy must gate a TOP-LEVEL
+%% entry exactly as it gates a co-hosted or remote one — otherwise a restrictive
+%% policy would be bypassed simply by proving the goal locally. The chain is
+%% empty here: this entry came from the engine, not through another ontology.
 run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
+    run_authorized_pinned_goal(Kind, Origin, authorized_goal(Origin, Goal)).
+
+%% The goal the top-level entry actually runs: the requested one when the
+%% ontology's own `can_invoke/4` admits it, or `fail_with_reason(not_allowed)`
+%% when it refuses — so a denial is ordinary logical failure carrying its bounded
+%% reason through the same path as any other proof, never a special result.
+authorized_goal(
+  #pinned_origin{namespace = Ns, anchor = Anchor,
+                 height = Height, session = Session}, Goal) ->
+    case quod_ask:authorize_scope(
+           quod_ask:node_principal(), Goal, [], {Ns, Anchor},
+           Height, Session) of
+        true -> Goal;
+        false ->
+            logger:warning(
+              "quod_prolog[~s]: can_invoke refused a top-level goal at "
+              "pinned height ~p", [Ns, Height]),
+            {fail_with_reason, {not_allowed, Ns}}
+    end.
+
+run_authorized_pinned_goal(Kind, Origin, Goal) ->
     Result = normalize_read_only_result(
                Kind, run_origin_invocation(Origin, Goal)),
     case {Result, quod_proof_context:foreign_dirty()} of

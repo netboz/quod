@@ -4,5 +4,5 @@
 %% its own content minimal makes measured work remote routing/answering rather
 %% than local proof search.
 
-can_read(_Goal, _Subject, _Ns).
+can_invoke(_Goal, _Principal, _CallChain, _Ns).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).

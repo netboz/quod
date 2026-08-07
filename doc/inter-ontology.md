@@ -151,11 +151,13 @@ view, whether the scope is local, co-hosted, or remote.
    freezes its committed KB height and opens one shared proof session. The committed KB remains
    a versioned ETS store; a scope holds only its table/height handle and overlay, never a copy of
    the whole ontology.
-3. **Authorize.** Before each invocation, the target checks the current interim `can_read/3`
-   policy against the origin-built ontology chain. A remote scope is also bound to the exact
-   mutually authenticated peer and request link, so another node cannot command it. The final
-   `can_invoke/4` subject policy is the step-4 hard break specified by
-   `distributed-proof-plan.md`; there is no compatibility policy beside it.
+3. **Authorize.** Before each invocation, the target proves its own `can_invoke/4` policy,
+   receiving the origin-built call chain and the engine-owned principal in one call. A remote
+   scope is also bound to the exact mutually authenticated peer and request link, so another
+   node cannot command it. Founding injects a bodyless host-entry default so an ontology can
+   always answer its own host; a refusal is ordinary logical failure carrying a bounded
+   `not_allowed(Ns)` reason, not an error. See `distributed-proof-plan.md` for the full
+   contract; there is no compatibility policy beside it.
 4. **Invoke on demand.** The selected goal runs through the same `quod_proof_session` API in
    every location. One explicit demand produces at most one solution. Backtracking into `::`
    requests the next solution; cuts or caller cleanup cancel the retained continuation.
@@ -264,9 +266,9 @@ Every selection carries the **chain** — the anchored ontologies already involv
   round-trip, no chain growth.
 - **The origin constructs the chain.** Content cannot replace it. Every entry carries the
   ontology's immutable anchor internally, and a remote request is additionally bound to the
-  Ed25519 node key proved by mutual TLS. The interim `can_read/3` policy is ordinary agreed
-  content in the target ontology; the step-4 `can_invoke/4` policy consumes the complete subject
-  at this same boundary.
+  Ed25519 node key proved by mutual TLS. The `can_invoke/4` policy is ordinary agreed content in
+  the target ontology, consuming the whole chain and the engine-owned principal at this boundary;
+  a future authenticated subject lands at the same seam.
 
 > **Technical note.** `ProofId`, origin controller authority, authenticated principal, and
 > scope handles live in private worker/process state and never enter content-readable Erlog
@@ -299,7 +301,7 @@ classes:
 | `{error, {ontology_busy, Ns}}` | the target's bounded scope-worker capacity is full |
 | `{error, {ontology_rate_limited, Ns}}` | the authenticated peer exceeded the scope-open rate |
 | `{error, {ontology_rebuilding, Ns}}` | the target is not ready to freeze a scope |
-| `{error, {not_allowed, Ns}}` | target admission or content policy refused the invocation |
+| `{fail, [{not_allowed, Ns} \| _]}` | the target's `can_invoke/4` policy refused; ordinary logical failure with a bounded reason, not an error |
 | `{error, {proof_limit_exceeded, Ns}}` | the selected worker exceeded a generated-state or heap bound |
 | `{error, {scope_expired, Ns}}` | the bounded target scope expired while idle |
 | `{error, {proof_depth_exceeded, Max}}` | active nested selection depth is exhausted |

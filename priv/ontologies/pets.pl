@@ -6,8 +6,8 @@
 %% over there (e.g. "what does my_dog eat?") follows it as an `animals::...` ask.
 %% `no_follow(pedigree_ref/2)` keeps that one relation's foreign names inert data.
 
-%% Reads are open (same default-open rule as quod:root; see doc/inter-ontology.md §6).
-can_read(_Goal, _Subject, _Ns).
+%% Invocation is open (same default-open rule as quod:root; see doc/inter-ontology.md §6).
+can_invoke(_Goal, _Principal, _CallChain, _Ns).
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 
 %% --- individuals -------------------------------------------------------------

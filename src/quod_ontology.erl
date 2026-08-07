@@ -359,6 +359,11 @@ prepare_create(Ns, InitialDiff) ->
                 {error, _} = Error ->
                     Error;
                 Status ->
+                    %% An author need not supply a `can_invoke/4` clause:
+                    %% founding injects the bodyless host-entry default, so the
+                    %% ontology can always answer its own host and is never born
+                    %% locked out. Author clauses layer restrictions on remote
+                    %% and cross-ontology callers.
                     {ok,
                      #prepared_lifecycle{
                         namespace = Ns, config = Config,

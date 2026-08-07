@@ -21,7 +21,8 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 -export([start/2, stop/1,
          open/5, next/2, cancel/2,
          publish/1, refresh/1, context/1,
-         committed_state/1, local_changes/1, read_set/1, dirty/1,
+         committed_state/1, local_changes/1, read_set/1, absorb_read_set/2,
+         dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
          bindings/2, run_first/3]).
@@ -182,6 +183,18 @@ local_changes(Handle) ->
 -spec read_set(session()) -> map().
 read_set(Handle) ->
     overlay_read_set((get_session(Handle))#session_state.current).
+
+-doc """
+Merge an authorization proof's committed reads into this session's dependencies.
+
+The policy decision is proved on its own read-only frame over the same pinned
+committed base, so its reads belong to the plan this scope seals: a later
+committed change to a policy predicate the decision consulted must conflict.
+""".
+-spec absorb_read_set(session(), map()) -> ok.
+absorb_read_set(Handle, Reads) ->
+    quod_erlog_db_local_prove:absorb_read_set(
+      (get_session(Handle))#session_state.current, Reads).
 
 -doc "Whether the session currently stages at least one effective content operation.".
 -spec dirty(session()) -> boolean().

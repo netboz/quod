@@ -170,6 +170,7 @@ ask_test_() ->
           ?_test(t_reentrant_scope_reuse(Ctx)),
           ?_test(t_origin_scope_reentry_commits_write(Ctx)),
           ?_test(t_nested_failure_reasons(Ctx)),
+          ?_test(t_nested_refusal_fails_logically(Ctx)),
           ?_test(t_read_only_tree_rejects_first_write(Ctx)),
           ?_test(t_scope_session_binding(Ctx)),
           ?_test(t_stateless_scope_error_keeps_published_revision(Ctx)),
@@ -195,19 +196,19 @@ setup() ->
                        integer_to_list(erlang:unique_integer([positive]))),
     ok = filelib:ensure_dir(filename:join(Dir, "placeholder")),
     PrivateFile = write_ontology(Dir, "private.pl",
-        "can_read(secret(_), _Subject, _Ns).\n"
-        "can_read(blocked(_), _Subject, _Ns).\n"
+        "can_invoke(secret(_), _Principal, _Chain, _Ns).\n"
+        "can_invoke(blocked(_), _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
         "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n"
         "secret(42).\n"
         "hidden(denied).\n"),
     SlowFile = write_ontology(Dir, "slow.pl",
-        "can_read(_Goal, _Subject, _Ns).\n"
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
         "loop :- loop.\n"
         "ping(ok).\n"),
     ChainBFile = write_ontology(Dir, "chain_b.pl",
-        "can_read(_Goal, _Subject, _Ns).\n"
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
         "via_c(X) :- chain_c::leaf(X).\n"
         "stage_and_fail :- assertz(shared_mark), fail.\n"
@@ -216,6 +217,11 @@ setup() ->
         "reentry_visible(ok) :- reentry_mark.\n"
         "via_origin_write :- pets::assertz(origin_callback_write).\n"
         "via_c_failure :- chain_c::blocked.\n"
+        %% a nested `::` into an ontology whose policy refuses the (non-empty)
+        %% chain: the refusal must fail logically, not crash the serve path
+        "via_private_denied :- private::hidden(x).\n"
+        "via_private_denied_recovers :- "
+        "(private::hidden(x) ; private::secret(_)).\n"
         "tx_second :- \\+ tx_hidden, assertz(tx_kept).\n"
         "origin_tx_branch :- ((assertz(origin_tx_hidden), fail) ; "
         "\\+ origin_tx_hidden).\n"
@@ -226,7 +232,7 @@ setup() ->
         "\\+ tx_reentry_hidden).\n"
         "tx_waits_in_c :- transaction(chain_c::leaf(ok)).\n"),
     ChainCFile = write_ontology(Dir, "chain_c.pl",
-        "can_read(_Goal, _Subject, _Ns).\n"
+        "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
         "leaf(ok).\n"
         "back_to_b(X) :- chain_b::reentry_visible(X).\n"
@@ -525,6 +531,20 @@ t_nested_failure_reasons(#{pets := P}) ->
     {fail, Reasons} = prove(P, {'::', chain_b, via_c_failure}),
     ?assert(lists:member(c_blocked, Reasons)).
 
+%% A nested `::` into an ontology whose can_invoke/4 refuses (the private
+%% ontology admits only secret/1 and blocked/1, and a nested ask always carries
+%% a non-empty chain) must FAIL LOGICALLY, not crash the nested serve path. This
+%% is the exact route the refusal refactor closed: a refused invocation runs
+%% fail_with_reason(not_allowed(Ns)) and completes with the reason like any goal.
+t_nested_refusal_fails_logically(#{pets := P}) ->
+    {fail, Reasons} = prove(P, {'::', chain_b, via_private_denied}),
+    ?assert(lists:member({not_allowed, <<"private">>}, Reasons)),
+    %% ...and the refusal is backtrackable inside the nested proof: the second
+    %% branch (an admitted secret/1) succeeds.
+    ?assertMatch(
+       {ok, [_ | _], _},
+       prove(P, {'::', chain_b, via_private_denied_recovers})).
+
 t_read_only_tree_rejects_first_write(#{animals := A, pets := P}) ->
     LocalMarker = {read_only_local_write, blocked},
     ?assertEqual(
@@ -771,11 +791,31 @@ receive_forwarded(Pid) ->
         error(nested_reply_timeout)
     end.
 
+%% `can_invoke/4` refusal is ORDINARY logical failure carrying one bounded
+%% reason, not an infrastructure error: none of the goal ran, so the target
+%% disclosed and mutated nothing, while the caller keeps ordinary Prolog control.
 t_permission_gate(#{pets := P, private := Private}) ->
     ?assertMatch({ok, [#{'X' := 42}], _},
                  prove(P, {'::', private, {secret, {'X'}}})),
-    ?assertEqual({error, {not_allowed, Private}},
-                 prove(P, {'::', private, {hidden, {'X'}}})).
+    Denied = {'::', private, {hidden, {'X'}}},
+    ?assertMatch({fail, [_ | _]}, prove(P, Denied)),
+    {fail, Reasons} = prove(P, Denied),
+    %% the refusal is the root cause, under the automatic failing-call frame
+    ?assert(lists:member({not_allowed, Private}, Reasons)),
+
+    %% ...so a caller may inspect it and take another branch: the whole point of
+    %% not making denial fatal. `(Denied ; Fallback)` runs Fallback.
+    ?assertMatch({ok, [#{'X' := 42}], _},
+                 prove(P, {';', Denied, {'::', private, {secret, {'X'}}}})),
+
+    %% and a fallback may branch on WHY it failed, like any other reason: the
+    %% refusal sits under the automatic failing-call frame, same as any
+    %% fail_with_reason/1 root cause.
+    %% (the frame freezes its unbound argument as the ground `unbound` value)
+    Recover = {';', Denied,
+               {get_fail_reasons, [{'Frame'}, {not_allowed, Private}]}},
+    ?assertMatch({ok, [#{'Frame' := {'::', private, {hidden, unbound}}}], _},
+                 prove(P, Recover)).
 
 t_failure_reasons_cross_local_ask(#{pets := P}) ->
     Remote = {'::', private, {blocked, bob}},

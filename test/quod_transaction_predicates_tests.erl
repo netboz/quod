@@ -125,19 +125,12 @@ prove(Goal, Facts) ->
     erlog_int:prove_goal(Goal, W).
 
 committed(Facts) ->
-    Name = list_to_atom(
-             "qtx_" ++
-             integer_to_list(erlang:unique_integer([positive]))),
-    {ok, C0} = erlog_int:new(erlog_db_ets, Name),
+    {ok, C0} = erlog_int:new(quod_erlog_db_mvcc, null),
     Db1 = erlog_bips:load(C0#est.db),
     Db2 = erlog_lib_lists:load(Db1),
     C1 = quod_transaction_predicates:load(
            quod_ask:load(C0#est{db = Db2})),
-    lists:foldl(
-      fun(Fact, C) ->
-              {succeed, CNext} = erlog_int:prove_goal({assertz, Fact}, C),
-              CNext
-      end, C1, Facts).
+    quod_ct:commit_kb(quod_ct:assert_facts(Facts, C1)).
 
 changes(#est{db = #db{ref = Overlay}}) ->
     quod_erlog_db_local_prove:get_local_changes(Overlay).

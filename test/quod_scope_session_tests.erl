@@ -1,7 +1,6 @@
 -module(quod_scope_session_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").
 -include("quod_proof_limits.hrl").
 
 startup_failure_is_asynchronous_and_monitored_test() ->
@@ -557,16 +556,7 @@ flush_scope_messages() ->
 request_link() ->
     receive stop -> ok end.
 
-committed(Facts) ->
-    {ok, Erl} = erlog:new(erlog_db_dict, null),
-    State0 = element(3, Erl),
-    {succeed, State1} =
-        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
-    lists:foldl(
-      fun(Fact, State) ->
-          {succeed, Next} = erlog_int:prove_goal({assertz, Fact}, State),
-          Next
-      end, State1, Facts).
+committed(Facts) -> quod_ct:committed_kb(Facts).
 
 id(N) -> <<N:128>>.
 key(N) -> <<N:256>>.

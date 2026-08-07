@@ -18,7 +18,7 @@ unsigned(Pub) ->
        goal = {set, alpha, 1},
        result = #{<<"X">> => 1},
        diff = [{assert, {{value, alpha, 1}, true}}],
-       read_check = #{{value, 3} => 42, {policy, 1} => 7},
+       read_check = #{{value, 3} => {present, 42}, {policy, 1} => {present, 7}},
        author = Pub,
        author_seq = 1,
        submitted_at = 1750000000000,
@@ -40,9 +40,11 @@ sign_and_verify_test() ->
 deterministic_read_check_order_test() ->
     {Pub, _Identity} = identity(),
     A = (unsigned(Pub))#transaction{
-          read_check = maps:from_list([{{value, 3}, 42}, {{policy, 1}, 7}])},
+          read_check = maps:from_list(
+                         [{{value, 3}, {present, 42}}, {{policy, 1}, {present, 7}}])},
     B = A#transaction{
-          read_check = maps:from_list([{{policy, 1}, 7}, {{value, 3}, 42}])},
+          read_check = maps:from_list(
+                         [{{policy, 1}, {present, 7}}, {{value, 3}, {present, 42}}])},
     ?assertEqual(quod_transaction:bytes(?NS, A),
                  quod_transaction:bytes(?NS, B)).
 
@@ -59,7 +61,7 @@ every_committed_field_is_bound_test() ->
       Tx#transaction{goal = {set, alpha, 2}},
       Tx#transaction{result = #{<<"X">> => 2}},
       Tx#transaction{diff = [{assert, {{value, alpha, 2}, true}}]},
-      Tx#transaction{read_check = #{{value, 3} => 43}},
+      Tx#transaction{read_check = #{{value, 3} => {present, 43}}},
       Tx#transaction{author = <<0:256>>},
       Tx#transaction{author_seq = 2},
       Tx#transaction{submitted_at = 1750000000001}
@@ -110,6 +112,13 @@ history_genesis_exemption_test() ->
        quod_simplex:valid_history_entry(
          ?NS, 1,
          {batch, [Genesis#transaction{author_seq = 1}]}, [])),
+    %% `#{}` in a head pattern matches any map: a non-empty read set on the
+    %% founding transaction must still be refused explicitly
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         ?NS, 1,
+         {batch, [Genesis#transaction{
+                    read_check = #{{x, 1} => {present, 7}}}]}, [])),
     ?assertNot(quod_simplex:valid_history_entry(?NS, 2, {batch, [Genesis]}, [Pub])),
     {ok, Signed} = quod_transaction:sign(
                      ?NS, (unsigned(Pub))#transaction{author_seq = 1}, Identity),

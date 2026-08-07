@@ -1,7 +1,6 @@
 -module(quod_directory_predicates_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").
 
 directory_control_peer_is_registered_root_snapshot_query_test() ->
     K1 = key(1),
@@ -117,13 +116,7 @@ proof_erlog(ContextNs, Facts) ->
     {ok, Erl0} = erlog:new(erlog_db_dict, null),
     Est0 = element(3, Erl0),
     Est1 = quod_predicates:load(Est0),
-    Est2 =
-        lists:foldl(
-          fun(Fact, Est) ->
-              {succeed, Est1a} =
-                  erlog_int:prove_goal({assertz, Fact}, Est),
-              Est1a
-          end, Est1, Facts),
+    Est2 = quod_ct:assert_facts(Facts, Est1),
     Est3 = quod_predicates:set_context(
              Est2,
              quod_predicates:proof_context(ContextNs, 0, undefined)),

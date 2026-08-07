@@ -548,6 +548,18 @@ fixes:
   so a reconnect can resume the same submission instead of proving and signing a new
   transaction. Do not implement this as a timeout tweak or an unbounded in-memory dedup set.
 
+- **Two proof-visible reads bypass OCC capture (pre-token gap, found in the 0.7.62 review).**
+  `current_predicate/1` (via the overlay's `get_interpreted_functors/1`) and
+  `predicate_property/2` (via `get_procedure_type/2`, whose capture skip was deliberate for
+  write-only checks) record no read-set entry, so a proof that branches on a predicate's
+  existence/type commits with no dependency on it — a concurrent create/abolish of that
+  predicate then validates as fresh on every node. Pre-existing under the phash2 scheme,
+  unchanged by the exact-version tokens; producer and validator are symmetrically blind, so
+  it is a capture gap, not a divergence risk. Fix by recording an existence-level dependency
+  at both call sites (the enumeration result depends on every functor's presence, so the
+  cheap sound version records the queried functor only for `predicate_property/2` and needs a
+  considered design for the enumeration case). Decide with Yan before changing semantics.
+
 ## 4. Reader/subscriber arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.
@@ -589,7 +601,8 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   invalidate touched predicates on *live* commit (never replay) + lazy refetch
   through the authenticated ontology-ask API on miss.
 - **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
-  debounce, onia §10). The `quod_diff` functor-hash read-set already produces the per-predicate keys.
+  debounce, onia §10). The mutation-version read-set (`quod_erlog_db_mvcc:version_token/2`) already
+  produces the per-predicate keys.
 
 - **Link backpressure signalling (still useful; relay amplification mitigated).** `quod_link`'s plain
   `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,

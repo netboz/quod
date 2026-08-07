@@ -4824,7 +4824,7 @@ ts_acceptable(Ts, Last, Now) ->
 %% `quod_prolog:request_membership_verdict/5`). Committed history is both cert-verified and checked against
 %% the signed-transaction rules during catch-up and local rebuild.
 %% The whole transaction is checked before voting: identifiers and timestamps have their canonical
-%% shapes, the OCC read-set is a map of predicate hashes, and every diff element is a legal
+%% shapes, the OCC read-set is a map of exact mutation-version tokens, and every diff element is a legal
 %% assert/retract over an Erlog clause. This makes apply/restart a total operation over every block an
 %% honest validator can endorse. The recursive diff check also rejects an improper list such as
 %% `[Op | junk]`, which a shallow cons-cell match would otherwise admit from the untrusted wire.
@@ -5032,9 +5032,11 @@ valid_genesis_transaction(Ns, Genesis) ->
 
 valid_genesis_transaction(
   Ns, #transaction{tx_id = TxId, goal = undefined, result = undefined,
-                   diff = Diff, read_check = #{}, author = Author,
+                   diff = Diff, read_check = ReadCheck, author = Author,
                    author_seq = 0, submitted_at = 0} = Genesis,
-  ExpectedFounders) ->
+  ExpectedFounders)
+  %% `#{}` in a head pattern matches ANY map; genesis must carry no read set.
+  when map_size(ReadCheck) =:= 0 ->
     genesis_payload_bounded(Genesis)
         andalso well_formed_transaction(Genesis)
         andalso valid_genesis_identity(
@@ -5163,13 +5165,19 @@ nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 
 valid_read_check(ReadCheck) when is_map(ReadCheck) ->
     maps:fold(
-      fun({Functor, Arity}, Hash, true) ->
+      fun({Functor, Arity}, Token, true) ->
               is_atom(Functor) andalso is_integer(Arity) andalso Arity >= 0
-                  andalso is_integer(Hash) andalso Hash >= 0;
-         (_Key, _Hash, _Acc) ->
+                  andalso valid_read_token(Token);
+         (_Key, _Token, _Acc) ->
               false
       end, true, ReadCheck);
 valid_read_check(_) -> false.
+
+valid_read_token(never_present) -> true;
+valid_read_token(static) -> true;
+valid_read_token({present, Slot}) -> is_integer(Slot) andalso Slot >= 0;
+valid_read_token({absent, Slot}) -> is_integer(Slot) andalso Slot >= 0;
+valid_read_token(_) -> false.
 
 %% Walk to `[]` and validate every operation, so both `quod_diff:apply_ops/2` and
 %% the committee projection can consume any accepted diff without a catch-all path.

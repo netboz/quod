@@ -170,8 +170,8 @@ onia already does this.
   chain back only if we ever cache foreign facts.)
 - **write-set** = the `differ`'s ordered op-log of asserts/retracts (each tied to
   the committing transaction).
-- **read-set** = the `differ`'s per-functor content hashes — what the proof
-  looked at, for conflict-check and notification. *Caveat (review):* this is
+- **read-set** = the `differ`'s per-functor mutation-version tokens — what the
+  proof looked at, for conflict-check and notification. *Caveat (review):* this is
   **per-predicate** (a whole functor hashed as one), **not per-fact** — so two
   writes to *different* facts of the same predicate falsely conflict, and one
   fact change notifies *every* reader of that predicate. Per-fact granularity is
@@ -588,7 +588,7 @@ Current gaps and priorities live in `deferred.md`.
 
 - **Fact representation + read-set/write-set** — content-identity facts + a
   pointer to the asserting log transaction; write-set = op-log, read-set =
-  per-functor content hashes (§2).
+  per-functor mutation-version tokens (§2).
 - **`::` argument-position** — link-following predicates; trip only when one has
   the foreign name as its subject (§4).
 - **Reads** — now use the engine-owned anchored proof context and reusable selected-

@@ -710,17 +710,27 @@ ontology's committee later validates rather than re-executing the proof:
 `ReadCheck` no longer uses collision-prone `phash2` content values. Reuse the
 MVCC store's exact per-functor mutation version and encode each dependency as
 `Functor => never_present | {present, LastMutationSlot} |
-{absent, LastMutationSlot} | static`. The store retains a tombstone version, so
-absent -> present -> absent is still a conflict. Prepare requires exact equality
-at its parent. This is a deliberate transaction-format break and a conservative
-conflict is acceptable if a functor changed and later returned to identical
-content.
+{absent, LastMutationSlot} | static`. `absent` means the last mutation left no
+clauses to serve — a retraction that emptied the predicate (the ordinary diff
+path, since `op()` has no abolish) or an abolish tombstone — so
+absent -> present -> absent is still a conflict. Prepare requires exact
+equality at its parent. This is a deliberate transaction-format break and a
+conservative conflict is acceptable if a functor changed and later returned to
+identical content (including a transaction whose operations on a functor net
+to nothing — it still stages and versions that functor).
 
-Ordinary batches remain safe with slot-granular versions: producer and validator
-split/reject a batch when a later transaction's read set intersects an earlier
-transaction's write set. Such a transaction is proposed in the next block and
-checks the published parent version. Multiple blind writes may remain ordered in
-one batch. A singleton Prepare already has no same-block predecessor.
+Ordinary batches remain safe with slot-granular versions because validation
+runs at each transaction's exact block position: the apply-time re-check reads
+the store handle that already carries the earlier same-block staged writes, and
+a functor with a staged write reports the `staged` token, which equals no
+capturable token. A transaction whose read set names a functor written earlier
+in its own block is therefore rejected deterministically on every node — its
+signed read dependency is stale by construction and would be rejected against
+the next published parent anyway, so no batch splitting or payload-order rule
+exists and producers batch freely. Multiple blind writes may remain ordered in
+one batch, and a transaction may read what it writes itself (its own writes
+stage only after its validation). A singleton Prepare already has no same-block
+predecessor.
 
 Every hard-break ordinary transaction, control record, and local-plan signature
 binds the exact `{Namespace, GenesisAnchor, ConsensusIncarnation, CommitteeId}`
@@ -1530,8 +1540,9 @@ At minimum:
     scopes return `{group, OriginNs, OriginAnchor, GroupId}` and exact persisted
     bindings through the same API.
 25. OCC detects absent -> present -> absent through its tombstone version; a
-    batch whose later read intersects an earlier write is split/rejected, while
-    blind writes remain ordered.
+    transaction whose read set names a functor written earlier in the same
+    block is rejected at its exact apply position on every node, while blind
+    writes remain ordered and a self read-modify-write applies.
 26. V1/V2 ledger magic and every old transaction/directory/session/control
     domain fail explicitly before replay/decode; only a fresh V3 genesis starts.
     V3 genesis validation rejects policy omission, any non-assert operation,

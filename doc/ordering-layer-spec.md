@@ -5,7 +5,9 @@
 > **DispersedSimplex** BFT (`quod_simplex`); the authoritative sources are `doc/simplex_extended.pdf`
 > (§2 = the spec) and the module docs (`quod_simplex`, `quod_vote_journal`, `quod_ledger_store`,
 > `quod_prolog`). The entire document is historical; even §4 contains retired
-> API shapes and reply semantics. §3 describes the retired Raft store rather than
+> API shapes and reply semantics. The OCC read-set is now exact mutation-version
+> tokens (`include/quod_ledger.hrl`); every `phash2`/`functor_hash` passage
+> below is retired. §3 describes the retired Raft store rather than
 > today's committed log plus vote journal; §§1–4 and the M1–M5 build plan are kept only as history.
 > The supervision examples in §5 are also historical: current dynamic children
 > use stable ids and permanent restart semantics, while

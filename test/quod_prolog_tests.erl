@@ -1,6 +1,5 @@
 -module(quod_prolog_tests).
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").   %% real_hash/2 mirrors a committed functor into a raw #est{}
 -include("quod_ledger.hrl").
 -import(quod_ct, [diff_for/1, change/3, batch/1, wait_until/2]).
 
@@ -30,6 +29,7 @@ prolog_test_() ->
       fun t_apply_and_read/1,
       fun t_occ_reject/1,
       fun t_batch_apply/1,
+      fun t_same_block_read_after_write/1,
       fun t_worker_limit/1]}.
 
 absolute_proof_timeout_test_() ->
@@ -305,16 +305,15 @@ t_apply_and_read({Ns, _}) ->
 t_occ_reject({Ns, _}) ->
     fun() ->
         ok = ab(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
-        %% a change whose read-set expects a stale hash of parent/2 → rejected at apply.
+        %% a change whose read-set carries a stale token for parent/2 → rejected at apply.
         %% apply_block is an async cast (returns ok); the OCC reject is observed by its
         %% EFFECT — the block changes no facts (sibling/1 stays absent). The apply_block cast
         %% is FIFO-ordered before the following prove call, so the effect is visible.
-        Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
+        Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => never_present}),
         ok = ab(Ns, 2, batch(Stale)),
         ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {sibling, x}, Ns)),
-        %% a non-stale read-set (parent/2 matches its real hash) commits fine
-        M = real_hash(Ns, {parent, 2}),
-        Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => M}),
+        %% a non-stale read-set (parent/2 last mutated at height 1) commits fine
+        Good = change(Ns, diff_for({sibling, y}), #{{parent, 2} => {present, 1}}),
         ?assertEqual(ok, ab(Ns, 3, batch(Good))),
         ?assertEqual({ok, [#{}], 3}, quod_prolog:prove(Ns, {sibling, y}, Ns))
     end.
@@ -337,6 +336,28 @@ t_batch_apply({Ns, _}) ->
         Stats2 = quod_prolog:stats(Ns),
         ?assertEqual(2, maps:get(applied, Stats2)),
         ?assertEqual(2, maps:get(applies, Stats2))
+    end.
+
+%% A transaction whose read set names a functor written EARLIER in the same
+%% block hits the `staged` token at its exact block position and is rejected
+%% deterministically; the writer, a blind later write, and a transaction that
+%% reads what it writes itself all apply normally.
+t_same_block_read_after_write({Ns, _}) ->
+    fun() ->
+        ok = ab(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
+        W = change(Ns, diff_for({k, one}), #{}),
+        %% honest capture against height 1 — stale only because W precedes it
+        Raw = change(Ns, diff_for({dependent, x}), #{{k, 1} => never_present}),
+        Blind = change(Ns, diff_for({independent, y}), #{}),
+        %% self read-modify-write: reads parent/2 at its committed height and
+        %% rewrites it — its own writes stage after its validation
+        Self = change(Ns, diff_for({parent, tom, sue}),
+                      #{{parent, 2} => {present, 1}}),
+        ok = ab(Ns, 2, {batch, [W, Raw, Blind, Self]}),
+        ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {k, one}, Ns)),
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, {dependent, x}, Ns)),
+        ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {independent, y}, Ns)),
+        ?assertEqual({ok, [#{}], 2}, quod_prolog:prove(Ns, {parent, tom, sue}, Ns))
     end.
 
 t_worker_limit({Ns, _}) ->
@@ -517,8 +538,8 @@ t_live_reject_emits_event({Ns, _}) ->
         true = quod_reg:subscribe({runtime, Ns}),
         ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({parent, tom, bob}), #{})), live),
         ?assertMatch({applied_live, _}, recv_rt(applied_live)),
-        %% a stale read-set for parent/2 → rejected at apply
-        Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => 12345}),
+        %% a stale read-set token for parent/2 → rejected at apply
+        Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => never_present}),
         ok = quod_prolog:apply_block(Ns, 2, batch(Stale), live),
         {rejected_live, Env} = recv_rt(rejected_live),
         ?assertEqual(2, maps:get(height, Env)),
@@ -562,15 +583,6 @@ t_replay_reentry({Ns, _}) ->
         {replay_started, Id2, 3} = recv_rt(replay_started),
         ?assertNotEqual(Id, Id2)
     end.
-
-%% read the committed hash of a predicate by asking quod_prolog to prove a probe
-%% that records it — simplest is to recompute against a mirror of the same facts.
-real_hash(_Ns, Functor) ->
-    %% mirror the committed parent(tom,bob) into a throwaway db and hash it
-    Tab = list_to_atom("qph_" ++ integer_to_list(erlang:unique_integer([positive]))),
-    {ok, C0} = erlog_int:new(erlog_db_ets, Tab),
-    {succeed, C1} = erlog_int:prove_goal({assertz, {parent, tom, bob}}, C0),
-    quod_diff:functor_hash((C1#est.db)#db.mod, (C1#est.db)#db.ref, Functor).
 
 %%%===================================================================
 %%% Slice 2 increment 1: the runtime attach seam (plan resilient-frolicking-valley) —

@@ -9,18 +9,17 @@
 %%% quod_ns_SUITE; the happy-path remove needs a live 2-node committee, so its retract shape is pinned here).
 %%%===================================================================
 
-%% a committed erlog_db_dict kb built exactly like quod_prolog:build_kb (admit/remove/peer_ready
+%% a committed MVCC kb built exactly like quod_prolog:build_kb (admit/remove/peer_ready
 %% class-registered via quod_predicates, unknown=fail) + the real quod_root.pl (for can_join) + the
-%% given peer_admitted facts.
+%% given peer_admitted facts, published at height 1.
 kb(PeerAdmitted) ->
-    {ok, Erl} = erlog:new(erlog_db_dict, null),
+    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     Est0 = element(3, Erl),
     {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
     Est2 = quod_predicates:load(Est1),
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     Terms = quod_prolog:read_terms(File),
-    lists:foldl(fun(T, E) -> {succeed, E1} = erlog_int:prove_goal({assertz, T}, E), E1 end,
-                Est2, Terms ++ PeerAdmitted).
+    quod_ct:commit_kb(quod_ct:assert_facts(Terms ++ PeerAdmitted, Est2)).
 
 pa(Pub, Host, Port) -> {peer_admitted, Pub, Host, Port, Pub}.
 

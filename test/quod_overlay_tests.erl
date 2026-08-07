@@ -6,15 +6,15 @@
 %%% helpers
 %%%===================================================================
 
-tab() -> list_to_atom("qovl_" ++ integer_to_list(erlang:unique_integer([positive]))).
+%% a committed erlog db (quod_erlog_db_mvcc) with `Facts` (erlog terms)
+%% committed at height 1 — read-set capture records real version tokens
+committed(Facts) -> quod_ct:committed_kb(Facts).
 
-%% a committed erlog db (erlog_db_ets) preloaded with `Facts` (erlog terms)
-committed(Facts) ->
-    {ok, C0} = erlog_int:new(erlog_db_ets, tab()),
-    lists:foldl(fun(Fact, C) ->
-                        {succeed, C1} = erlog_int:prove_goal({assertz, Fact}, C),
-                        C1
-                end, C0, Facts).
+%% commit one more `Fact` into C's shared table at `Version`; the returned
+%% handle reads at the new height, like the apply-time validator does
+mutated(C, Fact, Version) ->
+    {succeed, C1} = erlog_int:prove_goal({assertz, Fact}, C),
+    quod_ct:commit_kb(C1, Version, 1).
 
 db_mod(#est{db = #db{mod = M}}) -> M.
 db_ref(#est{db = #db{ref = R}}) -> R.
@@ -41,9 +41,10 @@ overlay_apply_roundtrip_test() ->
     %% write-set is exactly the staged assert; X resolved to bob
     ?assertMatch([{assert, {{child, bob}, _Body}}], Changes),
     %% read-set records both the predicate and the agreed link-following policy,
-    %% with a content hash for each dependency.
+    %% with an exact mutation-version token for each dependency.
     ?assertEqual([{no_follow, 1}, {parent, 2}], maps:keys(ReadSet)),
-    ?assert(is_integer(maps:get({parent, 2}, ReadSet))),
+    ?assertEqual({present, 1}, maps:get({parent, 2}, ReadSet)),
+    ?assertEqual(never_present, maps:get({no_follow, 1}, ReadSet)),
     %% the committed db was NOT touched — child(bob) is only staged
     ?assertEqual(undefined, proc(C, {child, 1})),
     %% applying the diff to a fresh db makes child(bob) provable
@@ -66,12 +67,75 @@ overlay_apply_roundtrip_test() ->
 validate_conflict_test() ->
     C = committed([{parent, tom, bob}]),
     {_Changes, ReadSet} = scope(C, {parent, tom, {'X'}}),
-    M = db_mod(C), R = db_ref(C),
     %% nothing changed under us → valid
-    ?assertEqual(ok, quod_diff:validate(ReadSet, M, R)),
-    %% mutate parent/2 in the committed db → the read is now stale
-    {succeed, _} = erlog_int:prove_goal({assertz, {parent, tom, sue}}, C),
-    ?assertEqual({conflict, {parent, 2}}, quod_diff:validate(ReadSet, M, R)).
+    ?assertEqual(ok, quod_diff:validate(ReadSet, db_ref(C))),
+    %% commit a parent/2 mutation at height 2 → the read is stale at the head
+    C2 = mutated(C, {parent, tom, sue}, 2),
+    ?assertEqual({conflict, {parent, 2}}, quod_diff:validate(ReadSet, db_ref(C2))),
+    %% the reader's own pinned snapshot is deliberately unchanged
+    ?assertEqual(ok, quod_diff:validate(ReadSet, db_ref(C))).
+
+%% Any mutation that leaves no clauses to serve tokens {absent, Slot} — an
+%% abolish tombstone or a retraction that emptied the predicate — so
+%% absent → present → absent still conflicts with a read taken while the
+%% predicate was first absent.
+absent_present_absent_conflicts_test() ->
+    C = committed([]),
+    %% a read of the never-written predicate captures the never_present token
+    ?assertEqual(never_present,
+                 quod_erlog_db_mvcc:version_token(db_ref(C), {ghost, 1})),
+    ReadSet = #{{ghost, 1} => never_present},
+    ?assertEqual(ok, quod_diff:validate(ReadSet, db_ref(C))),
+    C2 = mutated(C, {ghost, boo}, 2),
+    ?assertEqual({conflict, {ghost, 1}}, quod_diff:validate(ReadSet, db_ref(C2))),
+    {ok, Ref3} = quod_erlog_db_mvcc:abolish_clauses(db_ref(C2), {ghost, 1}),
+    C3 = quod_ct:commit_kb(quod_ct:set_ref(C2, Ref3), 3, 1),
+    %% the predicate is absent again, but its tombstone names height 3
+    ?assertEqual({absent, 3},
+                 quod_erlog_db_mvcc:version_token(db_ref(C3), {ghost, 1})),
+    ?assertEqual({conflict, {ghost, 1}}, quod_diff:validate(ReadSet, db_ref(C3))).
+
+%% Production absence: op() has no abolish, so a retract that empties the
+%% predicate is what the apply path actually commits — it must token absent.
+retract_to_empty_tokens_absent_test() ->
+    [{assert, Clause}] = quod_ct:diff_for({ghost, boo}),
+    C = committed([{ghost, boo}]),
+    ?assertEqual({present, 1},
+                 quod_erlog_db_mvcc:version_token(db_ref(C), {ghost, 1})),
+    {ok, C1} = quod_diff:apply_ops(C, [{retract, Clause}]),
+    C2 = quod_ct:commit_kb(C1, 2, 1),
+    ?assertEqual({absent, 2},
+                 quod_erlog_db_mvcc:version_token(db_ref(C2), {ghost, 1})),
+    ?assertEqual({conflict, {ghost, 1}},
+                 quod_diff:validate(#{{ghost, 1} => {present, 1}}, db_ref(C2))).
+
+%% `staged` is never a capturable token: a recorded staged expectation must
+%% conflict, never match a same-block staged write as fresh.
+staged_expectation_never_validates_test() ->
+    C = committed([]),
+    ?assertEqual({conflict, {k, 1}},
+                 quod_diff:validate(#{{k, 1} => staged}, db_ref(C))),
+    {succeed, C1} = erlog_int:prove_goal({assertz, {k, v}}, C),
+    ?assertEqual(staged, quod_erlog_db_mvcc:version_token(db_ref(C1), {k, 1})),
+    ?assertEqual({conflict, {k, 1}},
+                 quod_diff:validate(#{{k, 1} => staged}, db_ref(C1))).
+
+%% Read-set capture is MVCC-only and only ever over published snapshots — both
+%% refused at wrap time with a named reason, so the uncapturable `staged`
+%% sentinel can never enter a read set (handles are immutable values).
+capture_guards_test() ->
+    {ok, Dict} = erlog_int:new(erlog_db_dict, null),
+    ?assertError({read_set_requires_mvcc, erlog_db_dict},
+                 quod_erlog_db_local_prove:wrap_state(
+                   Dict, #{read_set => true})),
+    C = committed([]),
+    {succeed, Pending} = erlog_int:prove_goal({assertz, {k, v}}, C),
+    ?assertError(read_set_over_unpublished_snapshot,
+                 quod_erlog_db_local_prove:wrap_state(
+                   Pending, #{read_set => true})),
+    %% without capture, wrapping the mid-apply handle stays legal (apply path)
+    _ = quod_erlog_db_local_prove:wrap_state(Pending),
+    ok.
 
 %% A local write must not hide the committed predicate dependency of a later read.
 %% This is the concurrency-sensitive case: another transaction can change parent/2
@@ -113,14 +177,10 @@ write_only_abolish_conflicts_with_concurrent_change_test() ->
     ReadSet =
         quod_erlog_db_local_prove:get_read_set(Ov1),
     ?assertEqual([{parent, 2}], maps:keys(ReadSet)),
-    M = db_mod(C),
-    R = db_ref(C),
-    {succeed, _} =
-        erlog_int:prove_goal(
-          {assertz, {parent, tom, sue}}, C),
+    C2 = mutated(C, {parent, tom, sue}, 2),
     ?assertEqual(
        {conflict, {parent, 2}},
-       quod_diff:validate(ReadSet, M, R)),
+       quod_diff:validate(ReadSet, db_ref(C2))),
     quod_erlog_db_local_prove:cleanup_read_set(W0).
 
 %%%===================================================================

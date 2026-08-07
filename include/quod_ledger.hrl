@@ -19,8 +19,22 @@
 -type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
 %% The differ's write-set: an ordered op-log of asserts/retracts.
 -type op()     :: {assert, clause()} | {retract, clause()}.
-%% The read-set: one content hash per predicate {Functor, Arity}.
--type read_check() :: #{ {Functor :: atom(), Arity :: non_neg_integer()} => integer() }.
+%% The read-set: one exact mutation-version token per predicate {Functor, Arity}.
+%% This header owns the token alphabet — it is part of the signed transaction
+%% bytes; the MVCC store implements it (`quod_erlog_db_mvcc:version_token/2`).
+%% `{present, Slot}`/`{absent, Slot}` name the last committed mutation height at
+%% the reader's snapshot; `absent` means that mutation left no clauses to serve
+%% (a retraction that emptied the predicate, or an abolish tombstone), so
+%% absent → present → absent still conflicts by height. `never_present` means no
+%% committed mutation existed; `static` names an unwritable built-in/compiled
+%% predicate. The transient `staged` marker used during same-block validation is
+%% deliberately NOT part of this alphabet and is rejected on the wire.
+-type read_token() :: never_present
+                    | {present, non_neg_integer()}
+                    | {absent, non_neg_integer()}
+                    | static.
+-type read_check() ::
+        #{ {Functor :: atom(), Arity :: non_neg_integer()} => read_token() }.
 
 %% The committed change record. Every non-genesis transaction carries an Ed25519
 %% signature over the namespace-bound canonical bytes owned by `quod_transaction`;

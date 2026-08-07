@@ -2,12 +2,13 @@
 -moduledoc """
 Pure helpers over the committed erlog database for the content layer.
 
-- `functor_hash/3` — a content hash of one predicate `{Functor, Arity}` (the
-  `{Head, Body}` list, tags stripped). The read-set captured by
-  `m:quod_erlog_db_local_prove` uses *this* function, and `quod_prolog`'s
-  apply-time OCC re-check uses it too, so producer and validator agree exactly.
-- `validate/3` — re-check a read-set against the committed db: `ok` if every
-  predicate still hashes to the recorded value, else `{conflict, Functor}`.
+- `validate/2` — re-check a read-set against the MVCC handle at the change's
+  position: `ok` if every predicate's exact mutation-version token
+  (`quod_erlog_db_mvcc:version_token/2`, the same function the capture side in
+  `m:quod_erlog_db_local_prove` records) still equals the recorded value, else
+  `{conflict, Functor}` for a conflicting predicate. A recorded `staged`
+  expectation is rejected outright: it is never a capturable token, and
+  accepting it would invert the same-block read-after-write rejection.
 - `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
   normalizing legal source-form bodies to Erlog's durable compiled form, with
   content-identity dedup (asserting an identical fact is a no-op; retract is by content).
@@ -21,24 +22,20 @@ Pure helpers over the committed erlog database for the content layer.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([functor_hash/3, validate/3, apply_ops/2, has_clause/4]).
+-export([validate/2, apply_ops/2, has_clause/4]).
 
--doc "Content hash of predicate `F` in the db `Mod:Ref` ({Head,Body} list, tags dropped).".
--spec functor_hash(module(), term(), term()) -> integer().
-functor_hash(Mod, Ref, F) ->
-    case Mod:get_procedure(Ref, F) of
-        {clauses, Cs} -> erlang:phash2([{H, B} || {_Tag, H, B} <- Cs]);
-        undefined     -> erlang:phash2(undefined);
-        _             -> erlang:phash2(immutable)   %% built_in / compiled — unwritable
-    end.
-
--doc "`ok` if every predicate in `ReadCheck` still hashes as recorded, else the first `{conflict, F}`.".
--spec validate(read_check(), module(), term()) -> ok | {conflict, term()}.
-validate(ReadCheck, Mod, Ref) ->
+-doc "`ok` if every predicate in `ReadCheck` still carries the recorded token, else `{conflict, F}` for a conflicting predicate.".
+-spec validate(read_check(), quod_erlog_db_mvcc:ref()) -> ok | {conflict, term()}.
+validate(ReadCheck, Ref) ->
     maps:fold(
       fun(_F, _Exp, {conflict, _} = C) -> C;
+         (F, staged, ok) ->
+              %% `staged` is never a capturable token; matching it against a
+              %% same-block staged write would invert the deterministic
+              %% read-after-write rejection into an accept.
+              {conflict, F};
          (F, Exp, ok) ->
-              case functor_hash(Mod, Ref, F) of
+              case quod_erlog_db_mvcc:version_token(Ref, F) of
                   Exp -> ok;
                   _   -> {conflict, F}
               end

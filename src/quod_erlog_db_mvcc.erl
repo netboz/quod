@@ -11,11 +11,14 @@ Writes are accumulated in the handle's small `pending` map. `commit/3` publishes
 changed predicates at one height in a single engine turn, after which readers opened
 at older heights continue resolving the previous versions.
 """.
+-include("quod_ledger.hrl").   %% read_token(): the wire-owned OCC token alphabet
 
 -export([new/1, add_built_in/2, add_compiled_proc/4,
          asserta_clause/4, assertz_clause/4, retract_clause/3, abolish_clauses/2,
          get_procedure/2, get_procedure_type/2, get_interpreted_functors/1]).
--export([commit/3, delete/1, memory_words/1, history_predicates/1]).
+-export([commit/3, publish_base/1, delete/1, memory_words/1,
+         history_predicates/1]).
+-export([version_token/2, published/1]).
 -ifdef(TEST).
 -export([table/1]).
 -endif.
@@ -99,10 +102,34 @@ get_interpreted_functors(#ref{table = Table} = Ref) ->
 
 %% snapshot lifecycle -----------------------------------------------------
 
--spec commit(ref(), non_neg_integer(), non_neg_integer()) -> ref().
+-doc """
+Publish the boot-time KB (the loaded common predicates) as the height-0 base,
+so every handle a proof can wrap is a published snapshot from the first
+instant — a fresh namespace serves and tokens its base as `{present, 0}`
+before any block applies. Legal exactly once per store, before any `commit/3`;
+`build_kb` is deterministic per release, so the base rows are identical on
+every node.
+""".
+-spec publish_base(ref()) -> ref().
+publish_base(#ref{table = Table, snapshot = 0, pending = Pending} = Ref) ->
+    [] = ets:lookup(Table, {meta, base}),
+    maps:foreach(
+      fun(Functor, Procedure) ->
+          true = ets:insert(Table, [{{version, Functor, 0}, Procedure},
+                                    {{latest, Functor}, 0},
+                                    {{functor, Functor}, true}])
+      end, Pending),
+    true = ets:insert(Table, {{meta, base}, true}),
+    Ref#ref{pending = #{}}.
+
+%% `Version > Previous` is load-bearing for the OCC token scheme: one height
+%% names exactly one immutable procedure value per functor. A same-height
+%% re-commit would rewrite a published version row in place, making
+%% `{present, V}` describe different content on different handles.
+-spec commit(ref(), pos_integer(), non_neg_integer()) -> ref().
 commit(#ref{table = Table, snapshot = Previous, pending = Pending} = Ref,
        Version, OldestSnapshot)
-  when is_integer(Version), Version >= Previous,
+  when is_integer(Version), Version > Previous,
        is_integer(OldestSnapshot), OldestSnapshot =< Version ->
     maps:foreach(
       fun(Functor, Procedure) ->
@@ -131,6 +158,53 @@ table(#ref{table = Table}) -> Table.
 -spec memory_words(ref()) -> non_neg_integer().
 memory_words(#ref{table = Table}) ->
     try ets:info(Table, memory) catch error:badarg -> 0 end.
+
+-doc """
+The OCC read-set token of `Functor` at this handle's snapshot: the last
+committed mutation height at or below the snapshot, tagged with whether that
+mutation left clauses to serve. `{absent, Slot}` covers both an abolish
+tombstone and a retraction that emptied the predicate — any mutation after
+which a reader is served nothing. `never_present` means no committed mutation
+exists at or below the snapshot; `static` names built-in and compiled
+predicates, which have no versions. Resolution shares the read path's
+`previous_version/3` walk and `static_procedure/2` fallback, so the token
+describes the clauses a reader is actually served by construction.
+
+A functor with staged `pending` writes reports `staged`, which equals no
+capturable token. Read-set capture only ever runs over published snapshots
+(`pending` empty — enforced at overlay wrap), while apply-time re-validation
+runs over the handle that accumulates earlier same-block writes — so a
+transaction whose read set names a functor written earlier in its own block
+fails validation deterministically on every node, at its exact position in
+the block.
+
+Pruning keeps the newest version at or below the oldest live snapshot, so the
+token of any pinned live snapshot is stable for that snapshot's lifetime.
+""".
+-spec version_token(ref(), term()) -> read_token() | staged.
+version_token(#ref{pending = Pending}, Functor)
+  when is_map_key(Functor, Pending) ->
+    staged;
+version_token(#ref{table = Table, snapshot = Snapshot}, Functor) ->
+    case previous_version(Table, Functor, Snapshot) of
+        {Version, deleted} -> {absent, Version};
+        {Version, {clauses, _Next, [], []}} -> {absent, Version};
+        {Version, _Procedure} -> {present, Version};
+        none ->
+            case static_procedure(Table, Functor) of
+                undefined -> never_present;
+                _Static   -> static
+            end
+    end.
+
+-doc """
+True when the handle carries no staged `pending` writes — a published snapshot
+whose tokens are all capturable. Read-set capture requires this at overlay
+wrap; handles are immutable values, so a handle published at wrap time can
+never later report `staged`.
+""".
+-spec published(ref()) -> boolean().
+published(#ref{pending = Pending}) -> Pending =:= #{}.
 
 %% Predicates are included here only while more than one committed version must
 %% remain readable by a proof scope holding an older snapshot.
@@ -165,17 +239,18 @@ raw_procedure(#ref{pending = Pending} = Ref, Functor) ->
 committed_procedure(#ref{table = Table, snapshot = Snapshot}, Functor) ->
     case previous_version(Table, Functor, Snapshot) of
         none -> static_procedure(Table, Functor);
-        deleted -> undefined;
-        Procedure -> Procedure
+        {_Version, deleted} -> undefined;
+        {_Version, Procedure} -> Procedure
     end.
 
+%% The newest committed `{Version, Procedure}` at or below `Snapshot`, in one
+%% atomic probe. `none` falls through to the static layer on the read path and
+%% the token path alike, so both resolve identically by construction.
 previous_version(Table, Functor, Snapshot) ->
-    case ets:prev(Table, {version, Functor, Snapshot + 1}) of
-        {version, Functor, Version} = Key when Version =< Snapshot ->
-            case ets:lookup(Table, Key) of
-                [{_, Procedure}] -> Procedure;
-                [] -> none
-            end;
+    case ets:prev_lookup(Table, {version, Functor, Snapshot + 1}) of
+        {{version, Functor, Version}, [{_, Procedure}]}
+          when Version =< Snapshot ->
+            {Version, Procedure};
         _ -> none
     end.
 

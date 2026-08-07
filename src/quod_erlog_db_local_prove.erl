@@ -7,16 +7,17 @@ Wrap a committed erlog state with `wrap_state/1,2`, run the goal, then extract:
 
 - `get_local_changes/1` — the **write-set**: the asserts/retracts the proof made,
   as content-only `op()`s.
-- `get_read_set/1` — the **read-set**: one content hash per `{Functor, Arity}` the
-  proof read from the committed db (for the apply-time OCC re-check).
+- `get_read_set/1` — the **read-set**: one mutation-version token per
+  `{Functor, Arity}` the proof read from the committed db (for the apply-time
+  OCC re-check).
 
 Asserts/retracts are shadowed per functor; reads merge `asserta ++ committed ++
 assertz`. The committed db (`out_db`) is read-only throughout. This is a slimmed
 port of bbsvx's `bbsvx_erlog_db_local_prove` (federation/ACL/provenance dropped).
 
-Ported against erlog's `#est{}`/`#db{}` (see `erlog_int.hrl`); read-set hashing is
-shared with `m:quod_diff` so the producer here and the validator in `quod_prolog`
-agree bit-for-bit.
+Ported against erlog's `#est{}`/`#db{}` (see `erlog_int.hrl`); read-set capture
+records `quod_erlog_db_mvcc:version_token/2` — the same function `quod_diff`'s
+apply-time validator resolves — so producer and validator agree bit-for-bit.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -116,8 +117,22 @@ wrap_state(St, Opts) ->
                 read_only = ReadOnly},
     Ov2 =
         case maps:get(read_set, Opts, false) of
-            true  -> Ets = ets:new(quod_read_set, [set, private]),
-                     Ov1#lp{read_ets = Ets};
+            true  ->
+                %% Read-set capture records exact MVCC version tokens over a
+                %% PUBLISHED snapshot; no other committed store has a version
+                %% history to token, and a mid-apply handle would capture the
+                %% uncapturable `staged` sentinel. Fail here with a named
+                %% reason, not undef or a poisoned read set mid-proof.
+                case Ov1#lp.out_db of
+                    #db{mod = quod_erlog_db_mvcc, ref = OutRef} ->
+                        quod_erlog_db_mvcc:published(OutRef)
+                            orelse erlang:error(
+                                     read_set_over_unpublished_snapshot);
+                    #db{mod = OtherMod} ->
+                        erlang:error({read_set_requires_mvcc, OtherMod})
+                end,
+                Ets = ets:new(quod_read_set, [set, private]),
+                Ov1#lp{read_ets = Ets};
             false -> Ov1
         end,
     %% Erlog invokes clause hooks before database callbacks. A strict read-only
@@ -274,7 +289,7 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
     Asserts = [{assert, {H, B}} || {_T, H, B} <- A ++ lists:reverse(ZR)],
     Retracts ++ Asserts.
 
--doc "The read-set: `#{ {Functor,Arity} => content-hash }` of what the proof read.".
+-doc "The read-set: `#{ {Functor,Arity} => version-token }` of what the proof read.".
 -spec get_read_set(#lp{}) -> map().
 get_read_set(#lp{read_ets = undefined}) -> #{};
 get_read_set(#lp{read_ets = Ets})       -> maps:from_list(ets:tab2list(Ets)).
@@ -406,7 +421,7 @@ raw_get_procedure(#lp{out_db = #db{mod = M, ref = R}, local = L, read_ets = RS},
 %% A virtual follower is a LAST clause for every argument position. Its head only
 %% matches a structured foreign name (Owner:Name), and its body strips that
 %% prefix before asking the owner. The clauses never enter local, so they cannot
-%% be committed or included in a content hash.
+%% be committed or affect a captured read-set token.
 add_followers(_St, {no_follow, 1}, Base) -> Base;
 add_followers(_St, _F, Base) when Base =:= built_in -> Base;
 add_followers(_St, _F, {code, _} = Base) -> Base;
@@ -532,11 +547,13 @@ clauses_or_undef(Cs) -> {clauses, Cs}.
 %% First-read-wins. Local writes change the overlay's visible procedure, but every
 %% interpreted lookup still depends on the committed predicate version underneath it:
 %% a concurrent commit can change which clauses survive a retract/abolish or precede a
-%% local assert. Always capture that original committed hash; write-only operations use
-%% modifiable/2 and never enter this path.
+%% local assert. Always capture that original committed version token; write-only
+%% operations use modifiable/2 and never enter this path. `staged` cannot be
+%% captured here: wrap_state admits only published MVCC snapshots for read-set
+%% overlays, and the immutable handle can never gain pending afterwards.
 record_read(undefined, _F, _M, _R) -> ok;
-record_read(Ets, F, M, R) ->
+record_read(Ets, F, _M, R) ->
     case ets:member(Ets, F) of
         true  -> ok;
-        false -> ets:insert(Ets, {F, quod_diff:functor_hash(M, R, F)}), ok
+        false -> ets:insert(Ets, {F, quod_erlog_db_mvcc:version_token(R, F)}), ok
     end.

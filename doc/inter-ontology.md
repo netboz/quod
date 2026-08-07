@@ -120,7 +120,7 @@ following it is never silent.
 
 > **Technical note — followers are synthesized at read time, never stored.** A stored
 > follower clause is mechanically broken: any later user assert lands after it (silently
-> breaking local-first), it would pollute the per-predicate content fingerprints, and at
+> breaking local-first), it would pollute the per-predicate OCC read-set tokens, and at
 > genesis it would leak into the committed block as user content. Instead the proof overlay
 > (`quod_erlog_db_local_prove`) synthesizes the follower as a virtual LAST clause while a
 > relation is being resolved, tagged so `retract` and committee introspection never treat it as

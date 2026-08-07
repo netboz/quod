@@ -5376,7 +5376,20 @@ transaction_shape_gate_test() ->
                  Good#transaction{diff = [{assert, {{ok, x}, 42}}]}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{read_check = []}, [A])),
     ?assertNot(quod_simplex:change_acceptable(
-                 Good#transaction{read_check = #{{fact, -1} => 0}}, [A])),
+                 Good#transaction{read_check = #{{fact, -1} => {present, 0}}}, [A])),
+    %% the pre-token integer-hash value space is rejected outright
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{read_check = #{{fact, 1} => 12345}}, [A])),
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{read_check = #{{fact, 1} => {present, -1}}}, [A])),
+    %% the transient same-block `staged` marker is never a wire token: admitting
+    %% it would let a crafted read set MATCH a same-block staged write
+    ?assertNot(quod_simplex:change_acceptable(
+                 Good#transaction{read_check = #{{fact, 1} => staged}}, [A])),
+    ?assert(quod_simplex:change_acceptable(
+              Good#transaction{read_check = #{{fact, 1} => {absent, 4},
+                                              {other, 2} => never_present,
+                                              {sys, 3} => static}}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{tx_id = <<>>}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{submitted_at = 1.5}, [A])),
     ?assertNot(quod_simplex:change_acceptable(Good#transaction{sig = unsigned}, [A])).

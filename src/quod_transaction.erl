@@ -15,7 +15,13 @@ accepted.
          relay_attempt_id/5, decode_verified_submission/2]).
 
 -define(DOMAIN, quod_transaction).
--define(VERSION, 2).
+%% v3: the read_check value space became exact mutation-version tokens. Height
+%% tokens (unlike the old content hashes) can validate by coincidence across a
+%% wipe/re-found, so the format break MUST ride a domain bump: v2-signed
+%% transactions are unverifiable everywhere on v3 nodes. Step 4's slice 5
+%% bumps again to the final envelope binding {Ns, Anchor, Incarnation,
+%% CommitteeId}.
+-define(VERSION, 3).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).

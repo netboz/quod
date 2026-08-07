@@ -1,7 +1,6 @@
 -module(quod_proof_session_tests).
 
 -include_lib("eunit/include/eunit.hrl").
--include_lib("erlog/src/erlog_int.hrl").
 -include("quod_proof_limits.hrl").
 
 resumable_invocation_preserves_solution_order_test() ->
@@ -279,14 +278,4 @@ has_assert(Fact, Changes) ->
          (_) -> false
       end, Changes).
 
-committed(Facts) ->
-    {ok, Erl} = erlog:new(erlog_db_dict, null),
-    State0 = element(3, Erl),
-    {succeed, State1} =
-        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
-    lists:foldl(
-      fun(Fact, State) ->
-              {succeed, Next} =
-                  erlog_int:prove_goal({assertz, Fact}, State),
-              Next
-      end, State1, Facts).
+committed(Facts) -> quod_ct:committed_kb(Facts).

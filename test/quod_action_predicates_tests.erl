@@ -124,10 +124,7 @@ failed_candidates_retain_explicit_failure_reasons_test() ->
     ?assert(lists:member(denied_second, Final#est.fail_reasons)).
 
 overlay(Source) ->
-    Name = list_to_atom(
-             "qaction_" ++
-             integer_to_list(erlang:unique_integer([positive]))),
-    {ok, Erl} = erlog:new(erlog_db_ets, Name),
+    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     C0 = element(3, Erl),
     C1 = quod_predicates:load(C0),
     C2 = quod_ask:load(C1),
@@ -135,8 +132,9 @@ overlay(Source) ->
     C4 = quod_action_predicates:load(C3),
     C5 = load_source(common_source(), C4),
     C6 = load_source(Source, C5),
-    {succeed, Committed} = erlog_int:prove_goal(
-                             {set_prolog_flag, unknown, fail}, C6),
+    {succeed, C7} = erlog_int:prove_goal(
+                      {set_prolog_flag, unknown, fail}, C6),
+    Committed = quod_ct:commit_kb(C7),
     quod_erlog_db_local_prove:wrap_state(
       Committed, #{read_set => true}).
 

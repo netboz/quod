@@ -20,6 +20,7 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          peer_prove/3,
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1, wait_until/1, wait_until/2]).
+-export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 
 %% Poll `F` every 150ms until it returns `true` or the budget runs out.
 eventually(_F, Timeout) when Timeout =< 0 -> false;
@@ -121,15 +122,39 @@ rp(Ns, Goal, N) ->
     end.
 
 %% a real content-diff asserting `Fact` (erlog term) — built via the overlay so the clause
-%% body form matches what quod_prolog produces.
+%% body form matches what quod_prolog produces. No read set: only the write-set matters.
 diff_for(Fact) ->
-    Tab = list_to_atom("qct_" ++ integer_to_list(erlang:unique_integer([positive]))),
-    {ok, C} = erlog_int:new(erlog_db_ets, Tab),
-    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    {ok, C} = erlog_int:new(erlog_db_dict, null),
+    W0 = quod_erlog_db_local_prove:wrap_state(C),
     {succeed, W1} = erlog_int:prove_goal({assertz, Fact}, W0),
-    Diff = quod_erlog_db_local_prove:get_local_changes((W1#est.db)#db.ref),
-    quod_erlog_db_local_prove:cleanup_read_set(W1),
-    Diff.
+    quod_erlog_db_local_prove:get_local_changes((W1#est.db)#db.ref).
+
+%% publish a staged MVCC kb at `Version` with pruning floor `Floor` — the
+%% committed state over which read-set overlays capture real version tokens.
+commit_kb(Est) -> commit_kb(Est, 1, 1).
+
+commit_kb(#est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref} = Db} = Est,
+          Version, Floor) ->
+    Est#est{db = Db#db{ref = quod_erlog_db_mvcc:commit(Ref, Version, Floor)}}.
+
+%% swap the db handle of an `#est{}` (e.g. after a direct mvcc mutation)
+set_ref(#est{db = Db} = Est, Ref) -> Est#est{db = Db#db{ref = Ref}}.
+
+%% a committed MVCC kb (unknown=fail) holding `Facts`, published at height 1
+committed_kb(Facts) ->
+    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+    State0 = element(3, Erl),
+    {succeed, State1} =
+        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
+    commit_kb(assert_facts(Facts, State1)).
+
+%% assertz each erlog `Fact` into `Est`, failing loudly on the first refusal
+assert_facts(Facts, Est) ->
+    lists:foldl(
+      fun(Fact, State) ->
+              {succeed, Next} = erlog_int:prove_goal({assertz, Fact}, State),
+              Next
+      end, Est, Facts).
 
 %% a well-shaped unsigned test transaction carrying `Diff` (+ optional OCC read_check)
 change(Ns, Diff) -> change(Ns, Diff, #{}).

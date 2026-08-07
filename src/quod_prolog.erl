@@ -2944,8 +2944,8 @@ oldest_snapshot(Current, #s{workers = Workers,
 
 %% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
 apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change, Index, Origin, S) ->
-    #est{db = #db{mod = M, ref = R}} = S#s.est,
-    case quod_diff:validate(RC, M, R) of
+    #est{db = #db{mod = quod_erlog_db_mvcc, ref = R}} = S#s.est,
+    case quod_diff:validate(RC, R) of
         ok ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             S1 = release(Tx, {ok, {applied, Index}},
@@ -3276,7 +3276,11 @@ build_kb() ->
     Est3 = quod_ask:load(Est2),
     Est4 = quod_transaction_predicates:load(Est3),
     Est5 = quod_action_predicates:load(Est4),
-    load_common_predicates(Est5).
+    %% Publish the loaded common predicates as the height-0 base: every handle
+    %% a proof wraps is then a PUBLISHED snapshot even before the first block,
+    %% which read-set capture requires (tokens for the base read {present, 0}).
+    #est{db = #db{ref = Ref0} = Db} = Est6 = load_common_predicates(Est5),
+    Est6#est{db = Db#db{ref = quod_erlog_db_mvcc:publish_base(Ref0)}}.
 
 load_common_predicates(#est{db = Db0} = Est) ->
     File = filename:join(code:priv_dir(quod),

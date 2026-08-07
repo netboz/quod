@@ -155,12 +155,28 @@ dispatch(Goal, Next, St) ->
                 undefined -> erlog_int:fail(St);
                 {Class, Mod, Fun} ->
                     case allowed(Class, ctx_kind(Ctx)) of
-                        true  -> Mod:Fun(Goal, Next, St);
+                        true  ->
+                            ok = record_bridge_use(Functor, Class, Ctx, St),
+                            Mod:Fun(Goal, Next, St);
                         false -> throw({erlog_error,
                                         {context_violation, Functor, Class, ctx_kind(Ctx)}})
                     end
             end
     end.
+
+%% A query-class bridge reads live node state no later validation can re-prove,
+%% so a sealed plan must not silently depend on one (`m:quod_dtx`). Recorded at
+%% dispatch — a bridge that found no solution still influenced the outcome.
+%% Only `proof` contexts seal plans; a verdict/projection/effect run records
+%% nothing. `peer_ready/1` is exempt: its decision is re-proved by every
+%% validator in the membership verdict, so it is never a hidden dependency.
+record_bridge_use(Functor, query, Ctx, St) ->
+    case ctx_kind(Ctx) =:= proof andalso Functor =/= {peer_ready, 1} of
+        true -> quod_erlog_db_local_prove:record_live_bridge(St, Functor);
+        false -> ok
+    end;
+record_bridge_use(_Functor, _Class, _Ctx, _St) ->
+    ok.
 
 functor(Goal) when is_atom(Goal)  -> {Goal, 0};
 functor(Goal) when is_tuple(Goal) -> {element(1, Goal), tuple_size(Goal) - 1}.

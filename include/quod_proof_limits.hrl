@@ -12,6 +12,14 @@
 -define(QUOD_MAX_NESTED_GOAL_BYTES, 8192).
 -define(QUOD_MAX_PROOF_ANSWER_BYTES, 65536).
 -define(QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF, 1024).
+
+%% Sealing bounds (distributed-proof-plan §4.2). The transcript charge is taken
+%% BEFORE a goal runs; the plan bounds are enforced at seal time and again on
+%% every decode of a plan blob.
+-define(QUOD_MAX_SCOPE_TRANSCRIPT_BYTES, (12 * 1024)).
+-define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (24 * 1024)).
+-define(QUOD_MAX_PLAN_DIFF_OPS, 1024).
+-define(QUOD_MAX_PLAN_READ_FUNCTORS, 1024).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).

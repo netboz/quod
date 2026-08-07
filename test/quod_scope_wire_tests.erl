@@ -100,6 +100,38 @@ scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
     ?assertEqual(
        {ok, InvocationError}, quod_scope_wire:decode_response(Encoded)).
 
+seal_operations_round_trip_and_stay_bounded_test() ->
+    SealCommand = command(scope_seal),
+    {ok, EncodedCommand} = quod_scope_wire:encode_command(SealCommand),
+    ?assertEqual({ok, SealCommand},
+                 quod_scope_wire:decode_request(EncodedCommand)),
+    NotMaterial = event(plan_not_material),
+    {ok, EncodedNotMaterial} = quod_scope_wire:encode_event(NotMaterial),
+    ?assertEqual({ok, NotMaterial},
+                 quod_scope_wire:decode_response(EncodedNotMaterial)),
+    Sealed = event({plan_sealed, <<"opaque plan blob">>}),
+    {ok, EncodedSealed} = quod_scope_wire:encode_event(Sealed),
+    ?assertEqual({ok, Sealed}, quod_scope_wire:decode_response(EncodedSealed)),
+    Oversized = event(
+                  {plan_sealed,
+                   <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>}),
+    ?assertEqual({error, {too_large, plan}},
+                 quod_scope_wire:encode_event(Oversized)),
+    %% The seal failure vocabulary is part of the closed public catalog.
+    lists:foreach(
+      fun(Reason) ->
+          Event = event({scope_error, Reason}),
+          {ok, EncodedError} = quod_scope_wire:encode_event(Event),
+          ?assertEqual({ok, Event},
+                       quod_scope_wire:decode_response(EncodedError))
+      end,
+      [{too_large, transcript}, {too_large, plan},
+       {non_transactional_dependency, {directory_host, 5}}]),
+    ?assertEqual(
+       {error, {protocol_error, bad_error_code}},
+       quod_scope_wire:encode_event(
+         event({scope_error, {non_transactional_dependency, not_a_functor}}))).
+
 retired_generic_public_errors_are_rejected_test() ->
     Retired = [broken_scope, scope_timeout, bad_request, not_allowed,
                unknown_lineage, unknown_savepoint,
@@ -195,11 +227,17 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
        {error, {protocol_error, bad_etf}},
        quod_scope_wire:decode_request(Compressed)),
     {Domain, _Version, Frame} = Outer,
-    WrongVersion = term_to_binary({Domain, 2, Frame}, [deterministic]),
-    ?assertEqual(
-       {error, {protocol_error, wrong_version}},
-       quod_scope_wire:decode_request(WrongVersion)),
-    WrongDomain = term_to_binary({<<"other.scope">>, 1, Frame}, [deterministic]),
+    %% The superseded v1 scope wire is its own identifiable rejection, exactly
+    %% like any other wrong version — a 0.7.61 peer is refused, not misparsed.
+    lists:foreach(
+      fun(OldVersion) ->
+          WrongVersion =
+              term_to_binary({Domain, OldVersion, Frame}, [deterministic]),
+          ?assertEqual(
+             {error, {protocol_error, wrong_version}},
+             quod_scope_wire:decode_request(WrongVersion))
+      end, [1, 3]),
+    WrongDomain = term_to_binary({<<"other.scope">>, 2, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
        quod_scope_wire:decode_request(WrongDomain)),
@@ -469,7 +507,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 1, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 2, Frame}, [deterministic]).
 
 selection(Lineage, BatchIds) ->
     {tx_selection, Lineage, BatchIds}.

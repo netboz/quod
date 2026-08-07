@@ -17,6 +17,7 @@ a synchronous call to itself.
 -include("quod_proof_limits.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
+         seal/2,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
@@ -121,6 +122,112 @@ invoke_cancel({remote_scope, _, _, _, _} = Handle, InvocationId) ->
     remote_no_ack_command(Handle, {invoke_cancel, InvocationId});
 invoke_cancel(_Handle, _InvocationId) ->
     {error, {protocol_error, session_binding}}.
+
+-doc """
+Seal this scope's local plan (`m:quod_dtx`) before the proof closes it.
+
+One function serves every scope location: the origin's own session seals in
+place, a co-hosted worker seals over the session message protocol, and a
+remote scope seals over the wire — where the returned plan must decode, carry
+the exact bound identities, and verify under the authenticated target key.
+""".
+-spec seal(handle() | term(), quod_proof_context:identity()) ->
+          {ok, quod_dtx:plan()} | not_material | {error, term()}.
+seal({local_scope, _ScopeId, Ns, Anchor, Height, Session}, OriginIdentity) ->
+    quod_dtx:seal_session(
+      Session,
+      #{target => {Ns, Anchor}, base_height => Height,
+        proof_id => quod_proof_context:proof_id(),
+        origin => OriginIdentity,
+        principal => quod_ask:node_principal()});
+seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+      _Ns, _Anchor} = Handle,
+     OriginIdentity) ->
+    case command_remaining_ms() of
+        0 ->
+            {error, current_execution_limit()};
+        _RemainingMs ->
+            RequestRef = make_ref(),
+            Pid ! {scope_seal, self(), ProofId, SessionRef,
+                   RequestRef, OriginIdentity},
+            MRef = monitor(process, Pid),
+            try
+                receive
+                    {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+                     {sealed, Result}} ->
+                        Result;
+                    {'DOWN', MRef, process, Pid, Reason} ->
+                        {error, failure_reason(Handle, Reason)}
+                end
+            after
+                demonitor(MRef, [flush])
+            end
+    end;
+seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity) ->
+    remote_seal(Handle);
+seal(_Handle, _OriginIdentity) ->
+    {error, {protocol_error, session_binding}}.
+
+remote_seal(Handle) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case command_remaining_ms() of
+                0 ->
+                    {error, current_execution_limit()};
+                RemainingMs ->
+                    case quod_ask_router:command(
+                           Handle, RemainingMs, scope_seal) of
+                        {ok, RequestId} ->
+                            await_remote_seal(Handle, RequestId, Router, MRef);
+                        {sent, _RequestId} ->
+                            {error, {protocol_error, request_binding}};
+                        {error, _} = Error ->
+                            Error
+                    end
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+await_remote_seal(Handle, RequestId, Router, MRef) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_sealed, Blob}} ->
+            checked_remote_plan(Handle, Blob);
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         plan_not_material} ->
+            not_material;
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_down, Handle, Reason} ->
+            {error, failure_reason(Handle, Reason)};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, failure_reason(Handle, unavailable)}
+    end.
+
+%% The remote target authored this plan: accept it only if it decodes within
+%% bounds, binds exactly the identities this scope was opened under, and its
+%% witness signature verifies under the authenticated target key — a plan
+%% signed by anyone else (or unsigned) is not this scope's plan.
+checked_remote_plan(
+  {remote_scope, _Router, _Generation,
+   {scope_binding, _OriginKey, TargetKey, ProofId, _ScopeId,
+    OriginIdentity, TargetIdentity, _Mode}, _RequestLink},
+  Blob) ->
+    case quod_scope_wire:decode_payload(plan, Blob) of
+        {ok, Plan} ->
+            case quod_dtx:signer(Plan) =:= TargetKey andalso
+                 quod_dtx:verify(Plan) andalso
+                 quod_dtx:target(Plan) =:= TargetIdentity andalso
+                 quod_dtx:origin(Plan) =:= OriginIdentity andalso
+                 quod_dtx:proof_id(Plan) =:= ProofId of
+                true -> {ok, Plan};
+                false -> {error, {protocol_error, bad_payload}}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
 
 -doc "Close the complete ontology scope. Idempotent at the origin.".
 -spec close(handle() | term()) -> ok.
@@ -299,6 +406,15 @@ dispatch_message({scope_savepoint, Origin, ProofId, Ref,
         false ->
             handled
     end;
+dispatch_message({scope_seal, Origin, ProofId, Ref,
+                  RequestRef, OriginIdentity}) ->
+    case valid_command(Origin, ProofId, Ref) of
+        true ->
+            send_reply(RequestRef, {sealed, seal_current(OriginIdentity)}),
+            handled;
+        false ->
+            handled
+    end;
 dispatch_message({scope_close, Origin, ProofId, Ref}) ->
     case valid_command(Origin, ProofId, Ref) of
         true -> stop;
@@ -424,6 +540,23 @@ send_next_error(RequestRef, Reason) ->
 handle_cancel(InvocationId) ->
     remove_invocation(InvocationId),
     handled.
+
+%% Seal this worker's session in place. The origin identity is supplied by the
+%% requester — the origin's own proof context co-hosted, the authenticated
+%% scope binding remotely; the principal is the engine-owned origin key this
+%% scope was opened under.
+seal_current({OriginNs, <<_:256>>} = OriginIdentity)
+  when is_binary(OriginNs), byte_size(OriginNs) > 0 ->
+    #runtime{namespace = Ns, anchor = Anchor, height = Height,
+             proof_id = ProofId, principal = Principal,
+             session = Session} = runtime(),
+    quod_dtx:seal_session(
+      Session,
+      #{target => {Ns, Anchor}, base_height => Height,
+        proof_id => ProofId, origin => OriginIdentity,
+        principal => {node, Principal}});
+seal_current(_OriginIdentity) ->
+    {error, {protocol_error, request_binding}}.
 
 remove_invocation(InvocationId) ->
     Runtime = runtime(),

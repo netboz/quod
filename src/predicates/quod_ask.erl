@@ -870,6 +870,8 @@ await_nested_reply(Origin, ProofId, RequestRef) ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_savepoint, _, _, _, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef);
+        Message = {scope_seal, _, _, _, _, _} ->
+            dispatch_reentrant(Message, Origin, ProofId, RequestRef);
         Message = {scope_close, _, _, _} ->
             dispatch_reentrant(Message, Origin, ProofId, RequestRef)
     end.
@@ -1353,8 +1355,10 @@ authorize_scope(Principal, Goal, Chain,
     after
         %% The policy's committed reads belong to this scope's plan even when it
         %% refused: the refusal is itself a decision a later commit can falsify.
+        %% `get_dependencies` also carries any live-bridge markers the policy
+        %% recorded, so a bridge-dependent decision taints the plan it admitted.
         quod_proof_session:absorb_read_set(
-          Session, quod_erlog_db_local_prove:get_read_set(PolicyOverlay)),
+          Session, quod_erlog_db_local_prove:get_dependencies(PolicyOverlay)),
         quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
     end.
 

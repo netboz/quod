@@ -794,6 +794,34 @@ volatile and is not part of a consensus validity decision. No fictional user
 subject is encoded while the engine context still has no authenticated user;
 the current target-validator/node principal is explicit.
 
+As built (0.7.65, `quod_dtx`), with the same binding properties:
+
+- Each accepted answer folds `(Seq, H(answer))` into one **chained
+  per-invocation digest**, so a transcript entry is O(1) per answer while
+  still binding every answer's exact content and order; the entry carries
+  `{InvocationId, Chain, GoalBytes, AnswerCount, ChainedDigest, Tag}` with
+  `Tag ∈ active | complete | error | cancelled`, and only the first terminal
+  tag sticks. Per-answer transcript growth would have bounded answer streaming
+  inside writing proofs at a few hundred answers.
+- A refused invocation's entry records the goal that actually ran — the
+  substituted `fail_with_reason(not_allowed(Ns))` — not the requested goal.
+  The refusal's re-provable substance is the absorbed policy read set (an OCC
+  dependency of the plan), not the never-executed goal bytes.
+- The plan envelope is `{quod_plan, Core, Signer, Signature}` under witness
+  domain `quod.dtx.plan` v1; `Core`'s diff/read-check/transcript values are
+  nested deterministic ETF binaries, so the origin verifies the signature and
+  outer shape without ever allocating another ontology's atoms.
+- `peer_ready/1` is exempt from the live-bridge gate: its decision is
+  re-proved by every validator in the membership verdict, so a membership
+  admit (a material diff whose `can_join` consulted `peer_ready`) is never a
+  hidden dependency. All other query-class bridges taint the plan.
+- Sealing runs in `quod_proof_context:finalize/0`, before scope close, and
+  only for a proof in which at least one scope staged a write; every scope
+  with a diff **or** a non-empty read set then seals (`plan_not_material`
+  otherwise). A node booted without keys seals unsigned plans (they verify
+  only as unsigned); a plan sealed over the wire must verify under the
+  authenticated target key.
+
 All scopes whose reads influenced a writing proof participate, including a
 scope with an empty local diff. Otherwise a premise in B could change while A
 and C commit. If every diff is empty, the proof returns directly from its pinned

@@ -13,7 +13,7 @@ the scope wire as Erlang references.
 
 -export([start/4, stop/2, proof_id/0, origin_identity/0,
          read_only/0, deadline_ms/0, remaining_ms/0,
-         finalize/0,
+         finalize/0, sealed_plans/0,
          bind_router/3,
          get_or_open_scope/2,
          scope_owner/1,
@@ -66,7 +66,8 @@ the scope wire as Erlang references.
               dirty = #{} :: map(),
               txs = #{} :: #{opaque_id() => #tx{}},
               lineages = #{} :: #{opaque_id() => #lineage{}},
-              batches = #{} :: #{opaque_id() => #batch{}}}).
+              batches = #{} :: #{opaque_id() => #batch{}},
+              sealed_plans = #{} :: #{identity() => quod_dtx:plan()}}).
 
 -define(KEY, '$quod_proof_context').
 
@@ -124,17 +125,75 @@ deadline_ms() -> (context())#ctx.deadline_ms.
 remaining_ms() ->
     erlang:max(0, (context())#ctx.deadline_ms - quod_time:mono_ms()).
 
--doc "Fence and detach every selected local or remote scope before returning.".
+-doc """
+Seal, then fence and detach, every selected local or remote scope.
+
+Sealing comes first (`m:quod_dtx`): while every scope is still live, each one
+holding a staged diff or a non-empty influencing read set is sealed into a
+signed local plan, stored per scope for `sealed_plans/0`. A read-only proof —
+or one in which no scope staged anything — seals nothing. Closing always runs,
+sealed or not; a seal failure is the proof's result even when closing also
+fails.
+""".
 -spec finalize() -> ok | {error, term()}.
 finalize() ->
     Ctx0 = context(),
     case Ctx0#ctx.finalization of
         open ->
-            Result = finalize_scopes(
-                       Ctx0#ctx.scopes, Ctx0#ctx.router, Ctx0#ctx.proof_id),
-            put_context(Ctx0#ctx{finalization = Result}),
+            {SealResult, Plans} = seal_material_scopes(Ctx0),
+            %% Re-fetch: remote sealing may have bound the router meanwhile.
+            Ctx1 = (context())#ctx{sealed_plans = Plans},
+            put_context(Ctx1),
+            CloseResult = finalize_scopes(
+                            Ctx1#ctx.scopes, Ctx1#ctx.router,
+                            Ctx1#ctx.proof_id),
+            Result = case SealResult of
+                         ok -> CloseResult;
+                         {error, _} -> SealResult
+                     end,
+            put_context((context())#ctx{finalization = Result}),
             Result;
         Result -> Result
+    end.
+
+-doc "The plans `finalize/0` sealed, one per material scope identity.".
+-spec sealed_plans() -> #{identity() => quod_dtx:plan()}.
+sealed_plans() -> (context())#ctx.sealed_plans.
+
+seal_material_scopes(#ctx{read_only = true}) ->
+    {ok, #{}};
+seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
+                          origin_identity = OriginIdentity}) ->
+    case proof_material(Scopes, Dirty) of
+        false -> {ok, #{}};
+        true -> seal_scopes(lists:sort(maps:to_list(Scopes)),
+                            OriginIdentity, #{})
+    end.
+
+%% Plans exist to carry writes: only a proof that staged at least one write
+%% anywhere seals, and then every scope it read from participates — an
+%% empty-diff scope's read set is exactly what the eventual commit depends on.
+proof_material(Scopes, Dirty) ->
+    lists:any(fun(Value) -> Value =:= true end, maps:values(Dirty)) orelse
+        lists:any(
+          fun(#scope{handle = {local_scope, _ScopeId, _Ns, _Anchor,
+                               _Height, Session}}) ->
+                  quod_proof_session:dirty(Session);
+             (#scope{}) ->
+                  false
+          end, maps:values(Scopes)).
+
+seal_scopes([], _OriginIdentity, Plans) ->
+    {ok, Plans};
+seal_scopes([{Identity, #scope{handle = Handle}} | Rest],
+            OriginIdentity, Plans) ->
+    case quod_scope_session:seal(Handle, OriginIdentity) of
+        {ok, Plan} ->
+            seal_scopes(Rest, OriginIdentity, Plans#{Identity => Plan});
+        not_material ->
+            seal_scopes(Rest, OriginIdentity, Plans);
+        {error, _} = Error ->
+            {Error, Plans}
     end.
 
 finalize_scopes(Scopes, Router, ProofId) ->

@@ -22,6 +22,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          open/5, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          committed_state/1, local_changes/1, read_set/1, absorb_read_set/2,
+         live_bridges/1, transcript/1,
          dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
@@ -40,8 +41,23 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
           current     :: tuple(),
           invocations = #{} :: #{term() => invocation_state()},
           savepoints  = #{} :: #{term() => quod_erlog_db_local_prove:revision()},
-          overlay_generation = 0 :: non_neg_integer()
+          overlay_generation = 0 :: non_neg_integer(),
+          %% The bounded canonical invocation transcript (`m:quod_dtx`).
+          %% `transcript_rev` holds `{InvocationId, Chain, GoalBin}` in reverse
+          %% open order; `answers` holds each invocation's evolving
+          %% `{Count, ChainedDigest, Tag}`. Recording is off (`transcript_bytes
+          %% = disabled`) for read-only sessions and sessions without a proof
+          %% context — they can never seal a plan.
+          transcript_rev = [] :: [{binary(), list(), binary()}],
+          transcript_bytes = disabled :: disabled | non_neg_integer(),
+          answers = #{} :: #{term() => {non_neg_integer(), binary(),
+                                        active | complete | error | cancelled}}
          }).
+
+%% Fixed per-invocation transcript overhead charged at open, covering the
+%% final entry's count, chained digest, and completion tag.
+-define(TRANSCRIPT_ENTRY_SLACK_BYTES, 96).
+-define(TRANSCRIPT_DIGEST_SEED, <<0:256>>).
 
 -type invocation_state() ::
         active |
@@ -56,8 +72,15 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
     PrivateContext = {session_ref, Handle, Metadata},
     Wrapped = quod_erlog_db_local_prove:wrap_state(
                 Committed, OverlayOpts#{proof_context => PrivateContext}),
+    TranscriptBytes =
+        case Metadata =/= undefined andalso
+             not maps:get(read_only, OverlayOpts, false) of
+            true -> 0;
+            false -> disabled
+        end,
     put_session(Handle, #session_state{scope_id = ScopeId,
-                                       current = Wrapped}),
+                                       current = Wrapped,
+                                       transcript_bytes = TranscriptBytes}),
     Handle.
 
 -doc "Stop a session and release its one shared read-set table. Idempotent.".
@@ -75,6 +98,7 @@ stop(Handle) ->
 -spec open(session(), term(), term(), quod_predicates:ctx(),
            quod_transaction_scope:selection()) ->
           ok | {error, {proof_limit_exceeded, binary()} |
+                       {too_large, transcript} |
                        {protocol_error, bad_binding | bad_selection}}.
 open(Handle, InvocationId, Goal, Context, Selection) ->
     State = get_session(Handle),
@@ -92,15 +116,49 @@ open(Handle, InvocationId, Goal, Context, Selection) ->
                            ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
             invocation_limit_error(Context);
         {true, false, true} ->
-            Scope = quod_proof_scope:open_invocation(
-                      Goal, State#session_state.current, Context,
-                      quod_transaction_scope:checkpoint_depth(Selection)),
-            put_session(
-              Handle,
-              State#session_state{
-                invocations = Invocations#{
-                  InvocationId => {idle, Scope, Selection}}}),
-            ok
+            case charge_transcript(State, InvocationId, Goal, Context) of
+                {ok, State1} ->
+                    Scope = quod_proof_scope:open_invocation(
+                              Goal, State1#session_state.current, Context,
+                              quod_transaction_scope:checkpoint_depth(
+                                Selection)),
+                    put_session(
+                      Handle,
+                      State1#session_state{
+                        invocations = Invocations#{
+                          InvocationId => {idle, Scope, Selection}}}),
+                    ok;
+                {error, _} = Error ->
+                    Error
+            end
+    end.
+
+%% The transcript charge is taken BEFORE the goal runs: an invocation the
+%% transcript cannot afford never executes, so a sealed plan's transcript is
+%% complete by construction — there is no way to run work it does not record.
+charge_transcript(
+  #session_state{transcript_bytes = disabled} = State,
+  _InvocationId, _Goal, _Context) ->
+    {ok, State};
+charge_transcript(
+  #session_state{transcript_rev = Entries,
+                 transcript_bytes = Bytes,
+                 answers = Answers} = State,
+  InvocationId, Goal, Context) ->
+    Chain = quod_predicates:ctx_chain(Context),
+    GoalBin = term_to_binary(Goal, [deterministic]),
+    Entry = {InvocationId, Chain, GoalBin},
+    Cost = erlang:external_size(Entry) + ?TRANSCRIPT_ENTRY_SLACK_BYTES,
+    case Bytes + Cost =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES of
+        true ->
+            {ok, State#session_state{
+                   transcript_rev = [Entry | Entries],
+                   transcript_bytes = Bytes + Cost,
+                   answers = Answers#{
+                     InvocationId =>
+                         {0, ?TRANSCRIPT_DIGEST_SEED, active}}}};
+        false ->
+            {error, {too_large, transcript}}
     end.
 
 invocation_limit_error(Context) ->
@@ -136,7 +194,7 @@ next(Handle, InvocationId) ->
 -doc "Discard one continuation without rolling back staged ontology writes.".
 -spec cancel(session(), term()) -> ok.
 cancel(Handle, InvocationId) ->
-    State = get_session(Handle),
+    State = note_transcript(get_session(Handle), InvocationId, cancelled),
     put_session(
       Handle,
       State#session_state{
@@ -195,6 +253,31 @@ committed change to a policy predicate the decision consulted must conflict.
 absorb_read_set(Handle, Reads) ->
     quod_erlog_db_local_prove:absorb_read_set(
       (get_session(Handle))#session_state.current, Reads).
+
+-doc "The live reality-bridge predicates this session's proofs consulted.".
+-spec live_bridges(session()) -> [{atom(), arity()}].
+live_bridges(Handle) ->
+    overlay_live_bridges((get_session(Handle))#session_state.current).
+
+-doc """
+The session's bounded canonical invocation transcript and final overlay
+generation, in open order: `{InvocationId, Chain, GoalBin, AnswerCount,
+ChainedAnswerDigest, Tag}` per invocation. Empty for a session that records
+none (read-only, or no proof context).
+""".
+-spec transcript(session()) ->
+          {[quod_dtx:transcript_entry()], non_neg_integer()}.
+transcript(Handle) ->
+    #session_state{transcript_rev = EntriesRev,
+                   answers = Answers,
+                   overlay_generation = Generation} = get_session(Handle),
+    Entries =
+        [begin
+             {Count, Digest, Tag} = maps:get(InvocationId, Answers),
+             {InvocationId, Chain, GoalBin, Count, Digest, Tag}
+         end || {InvocationId, Chain, GoalBin}
+                    <- lists:reverse(EntriesRev)],
+    {Entries, Generation}.
 
 -doc "Whether the session currently stages at least one effective content operation.".
 -spec dirty(session()) -> boolean().
@@ -324,26 +407,25 @@ mark_active(Handle, InvocationId,
         invocations = Invocations#{InvocationId => active}}).
 
 finish_step(Handle, InvocationId, {solution, Solution, Scope}, Selection) ->
-    update_after_step(Handle, InvocationId, Scope, Selection, keep),
+    update_after_step(Handle, InvocationId, Scope, Selection, keep,
+                      adopt, {answer, Solution}),
     {solution, Solution};
 finish_step(Handle, InvocationId, {complete, Reasons, Scope}, Selection) ->
-    update_after_step(Handle, InvocationId, Scope, Selection, remove),
+    update_after_step(Handle, InvocationId, Scope, Selection, remove,
+                      adopt, complete),
     {complete, Reasons};
 finish_step(Handle, InvocationId,
             {error, Reason, Scope, RevisionPolicy}, Selection) ->
     update_after_step(
-      Handle, InvocationId, Scope, Selection, remove, RevisionPolicy),
+      Handle, InvocationId, Scope, Selection, remove, RevisionPolicy, error),
     {error, Reason}.
 
-update_after_step(Handle, InvocationId, Scope, Selection, Retention) ->
-    update_after_step(
-      Handle, InvocationId, Scope, Selection, Retention, adopt).
-
 update_after_step(Handle, InvocationId, Scope, Selection,
-                  Retention, RevisionPolicy) ->
+                  Retention, RevisionPolicy, TranscriptEvent) ->
     %% Fetch again: nested selector handling may have opened or advanced other
     %% invocations while this step was suspended.
-    State = get_session(Handle),
+    State = note_transcript(get_session(Handle), InvocationId,
+                            TranscriptEvent),
     Current =
         case RevisionPolicy of
             adopt ->
@@ -372,6 +454,41 @@ update_after_step(Handle, InvocationId, Scope, Selection,
       State#session_state{invocations = Invocations1},
       Current).
 
+%% Fold one step outcome into the invocation's transcript slot. Answers extend
+%% the chained digest — `H(Prev ++ Seq ++ H(Solution))` — so the entry stays
+%% O(1) per answer while still binding every answer's exact content and order.
+%% Only the first terminal tag sticks; a cleanup cancel after completion is not
+%% a second outcome.
+note_transcript(#session_state{transcript_bytes = disabled} = State,
+                _InvocationId, _Event) ->
+    State;
+note_transcript(#session_state{answers = Answers} = State,
+                InvocationId, Event) ->
+    case maps:find(InvocationId, Answers) of
+        {ok, {Count, Digest, active}} ->
+            Slot =
+                case Event of
+                    {answer, Solution} ->
+                        Seq = Count + 1,
+                        SolutionDigest =
+                            crypto:hash(
+                              sha256,
+                              term_to_binary(Solution, [deterministic])),
+                        {Seq,
+                         crypto:hash(
+                           sha256,
+                           <<Digest/binary, Seq:64/unsigned-big,
+                             SolutionDigest/binary>>),
+                         active};
+                    Tag when Tag =:= complete; Tag =:= error;
+                             Tag =:= cancelled ->
+                        {Count, Digest, Tag}
+                end,
+            State#session_state{answers = Answers#{InvocationId => Slot}};
+        _ ->
+            State
+    end.
+
 put_current(Handle, #session_state{current = Current} = State, Current) ->
     %% Publishing an identical immutable revision does not create a new wire
     %% generation. This keeps the number tied to actual canonical state change.
@@ -392,6 +509,9 @@ overlay_local_changes(#est{db = #db{ref = Overlay}}) ->
 
 overlay_read_set(#est{db = #db{ref = Overlay}}) ->
     quod_erlog_db_local_prove:get_read_set(Overlay).
+
+overlay_live_bridges(#est{db = #db{ref = Overlay}}) ->
+    quod_erlog_db_local_prove:get_live_bridges(Overlay).
 
 state_handle(St) ->
     case quod_erlog_db_local_prove:proof_context(St) of

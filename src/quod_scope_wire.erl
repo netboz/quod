@@ -31,7 +31,7 @@ renew the scope lifetime.
 -export_type([binding/0, command/0, event/0, payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 1).
+-define(VERSION, 2).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -50,7 +50,7 @@ renew the scope lifetime.
          <<_:?QUOD_SCOPE_WIRE_PROOF_ID_BITS>>, opaque_id(),
          identity(), identity(), read_write | read_only}.
 -type command_operation() ::
-        scope_open | scope_close |
+        scope_open | scope_close | scope_seal |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
         {invoke_cancel, opaque_id()} |
@@ -68,6 +68,7 @@ renew the scope lifetime.
         {controller_error, opaque_id(), term()}.
 -type event_operation() ::
         {scope_opened, non_neg_integer()} | scope_closed |
+        {plan_sealed, binary()} | plan_not_material |
         {invocation_opened, opaque_id()} |
         {solution | complete | erlog_error,
          opaque_id(), pos_integer(), binary()} |
@@ -90,7 +91,7 @@ renew the scope lifetime.
 -type event() ::
         {scope_event, binding(), pos_integer(), opaque_id(), pos_integer(),
          non_neg_integer(), boolean(), event_operation()}.
--type payload_kind() :: goal | answer | failure_reasons | erlog_error.
+-type payload_kind() :: goal | answer | failure_reasons | erlog_error | plan.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -288,6 +289,11 @@ checked(_Frame, {error, _} = Error) -> Error.
 %% ------------------------------------------------------------------
 
 -spec encode_payload(payload_kind(), term()) -> {ok, binary()} | wire_error().
+%% A plan is a sealed `m:quod_dtx` artifact, not a Prolog term: its codec owns
+%% canonicalization, bounds, and shape validation; only the byte bound is
+%% shared here through `payload_limit/1`.
+encode_payload(plan, Plan) ->
+    quod_dtx:encode(Plan);
 encode_payload(Kind, Term) ->
     case payload_limit(Kind) of
         {ok, MaxBytes} ->
@@ -302,6 +308,8 @@ encode_payload(Kind, Term) ->
     end.
 
 -spec decode_payload(payload_kind(), binary()) -> {ok, term()} | wire_error().
+decode_payload(plan, Encoded) when is_binary(Encoded) ->
+    quod_dtx:decode(Encoded);
 decode_payload(Kind, Encoded) when is_binary(Encoded) ->
     case payload_limit(Kind) of
         {ok, MaxBytes} when byte_size(Encoded) =< MaxBytes ->
@@ -334,6 +342,7 @@ payload_limit(goal) -> {ok, ?QUOD_MAX_NESTED_GOAL_BYTES};
 payload_limit(answer) -> {ok, ?QUOD_MAX_PROOF_ANSWER_BYTES};
 payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
 payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
+payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
 payload_limit(_) -> error.
 
 %% ------------------------------------------------------------------
@@ -342,6 +351,7 @@ payload_limit(_) -> error.
 
 validate_command_operation(scope_open) -> ok;
 validate_command_operation(scope_close) -> ok;
+validate_command_operation(scope_seal) -> ok;
 validate_command_operation(
   {invoke_open, InvocationId, Selection, Chain, GoalBlob}) ->
     case {valid_id(InvocationId), validate_selection(Selection)} of
@@ -397,6 +407,9 @@ validate_event_operation({scope_opened, BaseHeight}) ->
         false -> protocol_error(bad_height)
     end;
 validate_event_operation(scope_closed) -> ok;
+validate_event_operation({plan_sealed, Blob}) ->
+    validate_blob(plan, Blob);
+validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({invocation_opened, InvocationId}) ->
     validate_one_id(InvocationId);
 validate_event_operation({solution, InvocationId, AnswerSeq, Blob}) ->
@@ -736,9 +749,12 @@ validate_public_error_pair({Tag, Max})
 validate_public_error_pair({too_large, Kind}) ->
     case payload_limit(Kind) of
         {ok, _} -> ok;
-        error when Kind =:= scope_envelope -> ok;
+        error when Kind =:= scope_envelope; Kind =:= transcript -> ok;
         error -> protocol_error(bad_error_code)
     end;
+validate_public_error_pair({non_transactional_dependency, {Name, Arity}})
+  when is_atom(Name), is_integer(Arity), Arity >= 0, Arity =< 255 ->
+    ok;
 validate_public_error_pair({protocol_error, Kind}) ->
     case valid_protocol_kind(Kind) of
         true -> ok;

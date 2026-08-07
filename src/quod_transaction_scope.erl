@@ -348,6 +348,9 @@ await_reply_loop(Origin, ProofId, InvocationId, RequestRef, MRef) ->
         Message = {scope_savepoint, _, _, _, _, _, _} ->
             dispatch_while_waiting(Message, Origin, ProofId, InvocationId,
                                    RequestRef, MRef);
+        Message = {scope_seal, _, _, _, _, _} ->
+            dispatch_while_waiting(Message, Origin, ProofId, InvocationId,
+                                   RequestRef, MRef);
         Message = {scope_close, _, _, _} ->
             dispatch_while_waiting(Message, Origin, ProofId, InvocationId,
                                    RequestRef, MRef);

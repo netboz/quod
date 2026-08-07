@@ -1195,6 +1195,26 @@ execute_active_scope_command(
     queue_scope_control(
       Binding, release, BatchIds,
       {batch_released, RequestId, CommandSeq, BatchIds}, Scope, S);
+execute_active_scope_command(
+  scope_seal, RequestId, CommandSeq,
+  Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
+             OriginIdentity, _TargetIdentity, _Mode},
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _SessionScopeId,
+               SessionProofId, SessionRef, _Ns, _Anchor},
+     pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            InternalRef = make_ref(),
+            Pid ! {scope_seal, self(), SessionProofId, SessionRef,
+                   InternalRef, OriginIdentity},
+            add_remote_pending(
+              Binding, InternalRef, {scope_seal, RequestId, CommandSeq}, S)
+    end;
 execute_active_scope_command(Operation, _RequestId, _CommandSeq, Binding,
                              _Scope, S)
   when element(1, Operation) =:= nested_opened;
@@ -1478,6 +1498,29 @@ handle_bound_scope_reply(
       Binding,
       {invoke_result, RequestId, CommandSeq,
        InvocationId, ExpectedSeq, Reply}, Scope, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_seal, RequestId, CommandSeq},
+  {sealed, {ok, Plan}}, S) ->
+    case quod_scope_wire:encode_payload(plan, Plan) of
+        {ok, Blob} ->
+            emit_scope_event(
+              Binding, RequestId, CommandSeq, {plan_sealed, Blob}, S);
+        {error, Reason} ->
+            poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S)
+    end;
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_seal, RequestId, CommandSeq},
+  {sealed, not_material}, S) ->
+    emit_scope_event(Binding, RequestId, CommandSeq, plan_not_material, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_seal, RequestId, CommandSeq},
+  {sealed, {error, Reason}}, S) ->
+    %% A refused seal fails the origin's finalize; the scope is finished
+    %% either way, so the poison-and-drop path is the honest terminal state.
+    poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S);
 handle_bound_scope_reply(
   Binding, _Scope,
   {scope_control, Purpose, Operation, BatchIds},

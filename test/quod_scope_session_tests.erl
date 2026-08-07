@@ -414,6 +414,55 @@ receive_worker_message() ->
         error(worker_message_timeout)
     end.
 
+%% One co-hosted worker seals its own session over the scope message protocol:
+%% the plan binds the scope's pinned identity/height, the requester-supplied
+%% origin, and the engine-owned `{node, Principal}` — and carries the exact
+%% staged diff.
+worker_seals_its_session_on_request_test() ->
+    ScopeId = id(80),
+    ProofId = key(81),
+    Anchor = key(82),
+    Ns = <<"quod:sealed-scope">>,
+    Est = committed([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
+    {Handle, WorkerMRef} =
+        quod_scope_session:start(
+          ScopeId, ProofId, self(), Ns, Anchor, 7, Est, self(),
+          #{principal => key(83),
+            deadline_ms => quod_time:mono_ms() + 5000}),
+    {quod_scope_session, Worker, ScopeId, ProofId,
+     SessionRef, Ns, Anchor} = Handle,
+    Origin = {<<"quod:origin">>, key(85)},
+    InvocationId = id(84),
+    {ok, OpenRef} = quod_scope_session:invoke_open(
+                      Handle, InvocationId, {assertz, {sealed_fact, 1}},
+                      [Origin], quod_transaction_scope:empty_selection()),
+    ?assertEqual({opened, InvocationId},
+                 receive_scope_reply(Worker, ProofId, SessionRef, OpenRef)),
+    {ok, NextRef} = quod_scope_session:invoke_next(Handle, InvocationId, 1),
+    ?assertMatch({solution, 1, _Solution, true},
+                 receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
+    _Ctx = quod_proof_context:start(
+             key(86), false, Origin, quod_time:mono_ms() + 5000),
+    try
+        {ok, Plan} = quod_scope_session:seal(Handle, Origin),
+        ?assertEqual({Ns, Anchor}, quod_dtx:target(Plan)),
+        ?assertEqual(7, quod_dtx:base_height(Plan)),
+        ?assertEqual(ProofId, quod_dtx:proof_id(Plan)),
+        ?assertEqual(Origin, quod_dtx:origin(Plan)),
+        ?assertEqual({node, key(83)}, quod_dtx:principal(Plan)),
+        ?assertMatch([{assert, {{sealed_fact, 1}, _Body}}],
+                     quod_dtx:diff(Plan)),
+        ?assert(quod_dtx:verify(Plan))
+    after
+        quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end)
+    end,
+    ok = quod_scope_session:close(Handle),
+    receive
+        {'DOWN', WorkerMRef, process, Worker, _Reason} -> ok
+    after 1000 ->
+        ?assert(false)
+    end.
+
 receive_scope_reply(Worker, ProofId, SessionRef, RequestRef) ->
     receive
         {scope_reply, Worker, ProofId, SessionRef, RequestRef, Reply} -> Reply

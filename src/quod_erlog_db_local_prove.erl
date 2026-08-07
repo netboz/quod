@@ -33,7 +33,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          live_transaction_tokens/1,
          committed_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
-         get_local_changes/1, get_read_set/1, absorb_read_set/2,
+         get_local_changes/1, get_read_set/1, get_dependencies/1,
+         get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
          cleanup_read_set/1]).
 -export_type([revision/0, checkpoint/0, read_only_frame/0]).
 
@@ -292,7 +293,47 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
 -doc "The read-set: `#{ {Functor,Arity} => version-token }` of what the proof read.".
 -spec get_read_set(#lp{}) -> map().
 get_read_set(#lp{read_ets = undefined}) -> #{};
-get_read_set(#lp{read_ets = Ets})       -> maps:from_list(ets:tab2list(Ets)).
+get_read_set(#lp{read_ets = Ets}) ->
+    maps:from_list(
+      [Entry || {{_Name, Arity}, _Token} = Entry <- ets:tab2list(Ets),
+                is_integer(Arity)]).
+
+-doc """
+Every recorded dependency — OCC read tokens **and** live-bridge markers — as
+one map, for absorbing a policy sub-proof's influence into its parent overlay.
+""".
+-spec get_dependencies(#lp{}) -> map().
+get_dependencies(#lp{read_ets = undefined}) -> #{};
+get_dependencies(#lp{read_ets = Ets}) -> maps:from_list(ets:tab2list(Ets)).
+
+-doc "The live reality-bridge predicates this proof consulted, sorted.".
+-spec get_live_bridges(#lp{}) -> [{atom(), arity()}].
+get_live_bridges(#lp{read_ets = undefined}) -> [];
+get_live_bridges(#lp{read_ets = Ets}) ->
+    lists:sort(
+      [Functor || {{'$quod_live_bridge', Functor}, true}
+                      <- ets:tab2list(Ets)]).
+
+-doc """
+Record that the proof consulted a live reality bridge (a query-class external
+predicate reading non-replicated node state).
+
+The marker shares the read-set table's lifecycle deliberately: it is monotonic
+across savepoint restores — a discarded alternative still consulted the bridge
+— and `absorb_read_set/2` carries it from a policy sub-proof into the parent
+overlay unchanged. The marker key's second element is a functor tuple, so it
+can never collide with an OCC entry, whose key is `{Name, Arity}`.
+""".
+-spec record_live_bridge(tuple(), {atom(), arity()}) -> ok.
+record_live_bridge(
+  #est{db = #db{mod = ?MODULE, ref = #lp{read_ets = Ets}}}, Functor)
+  when Ets =/= undefined ->
+    _ = ets:insert_new(Ets, {{'$quod_live_bridge', Functor}, true}),
+    ok;
+record_live_bridge(_St, _Functor) ->
+    %% No read-set table means this frame can never seal a plan (absorb fails
+    %% loudly on any real dependency), so there is no plan to taint.
+    ok.
 
 -doc """
 Merge another proof's captured reads into this overlay's monotonic read set.

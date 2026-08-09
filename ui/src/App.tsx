@@ -46,10 +46,15 @@ export default function App() {
 
   const rows = current ? (store.rows[current] ?? []) : []
   const nextBefore = current ? store.nextBefore[current] : null
-  // Keep selection as an id-stable snapshot, but render the current store row when it exists so
-  // explicit applied/rejected frames update an already-open drawer.
+  // A fetched detail is immutable ledger state. A live selection keeps
+  // following the store through its pending → applied/rejected transition.
   const selectedRows = selected ? (store.rows[selected.ns] ?? []) : []
-  const selectedCurrent = selected ? selectedRows.find((tx) => tx.tx_id === selected.tx_id) ?? selected : null
+  const selectedStoreRow = selected ? selectedRows.find((tx) => tx.tx_id === selected.tx_id) : null
+  const selectedCurrent = selected
+    ? !selected.live
+      ? selected
+      : selectedStoreRow ?? selected
+    : null
 
   const loadMore = async () => {
     if (!current || !nextBefore || loadingMore) return
@@ -161,11 +166,13 @@ function Header({
 
 function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) {
   const [q, setQ] = useState('')
-  const [state, setState] = useState<'idle' | 'busy' | 'miss' | 'empty'>('idle')
+  const [state, setState] = useState<'idle' | 'busy' | 'miss' | 'empty' | 'pending'>('idle')
+  const [pendingRef, setPendingRef] = useState<{ anchor: string; tx_id: string } | null>(null)
 
   const found = (tx: LiveTx) => {
     onFound(tx)
     setState('idle')
+    setPendingRef(null)
     setQ('')
   }
 
@@ -186,7 +193,14 @@ function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) 
         }
       } else {
         const r = await fetchTx(ns, query)
-        if (!('error' in r)) return found({ ...r.tx, status: 'history', cert: r.block.cert, live: false })
+        if (!('error' in r)) {
+          if (!('tx' in r)) {
+            setPendingRef(r.outcome)
+            return setState('pending')
+          }
+          const status = r.outcome.status === 'rejected' ? 'rejected' : 'applied'
+          return found({ ...r.tx, status, cert: r.block.cert, live: false })
+        }
       }
       setState('miss')
     } catch {
@@ -201,6 +215,7 @@ function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) 
         onChange={(e) => {
           setQ(e.target.value)
           setState('idle')
+          setPendingRef(null)
         }}
         onKeyDown={(e) => e.key === 'Enter' && void go()}
         placeholder="tx id or height…"
@@ -213,6 +228,15 @@ function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) 
       {state === 'busy' && <span className="absolute top-1.5 right-2 text-xs text-gray">…</span>}
       {state === 'miss' && <span className="absolute top-1.5 right-2 text-xs text-rose-light">not found</span>}
       {state === 'empty' && <span className="absolute top-1.5 right-2 text-xs text-gray">empty block</span>}
+      {state === 'pending' && <span className="absolute top-1.5 right-2 text-xs text-gold">pending</span>}
+      {state === 'pending' && pendingRef && (
+        <div
+          className="absolute top-full right-0 z-10 mt-1 rounded-md bg-teal-dark px-2 py-1 font-mono text-[10px] whitespace-nowrap text-gold-soft shadow"
+          title={`transaction:${ns}:${pendingRef.anchor}:${pendingRef.tx_id}`}
+        >
+          anchor {pendingRef.anchor.slice(0, 10)}… · tx {pendingRef.tx_id.slice(0, 12)}…
+        </div>
+      )}
     </div>
   )
 }

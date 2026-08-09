@@ -94,9 +94,27 @@ function Reply({ reply }: { reply: ProveReply }) {
       <div className="mt-3 rounded-lg border border-gold/50 bg-gold-soft/20 px-3 py-2 text-sm text-teal">
         <div className="font-semibold">Outcome still pending</div>
         <div className="mt-1 text-xs text-gray">
-          Do not resubmit this operation. Transaction{' '}
-          <span className="font-mono text-teal">{reply.tx_id}</span> may still be committed.
+          Do not resubmit this operation. Target <span className="font-mono text-teal">{reply.ns}</span>,
+          anchor <span className="font-mono text-teal">{reply.anchor.slice(0, 12)}…</span>, transaction{' '}
+          <span className="font-mono text-teal">{reply.tx_id}</span> may still be committed;
+          its target-anchored status can be queried safely.
         </div>
+      </div>
+    )
+  }
+  if (!('height' in reply)) {
+    return (
+      <div className="mt-3 rounded-lg border border-olive/30 bg-olive/5 px-3 py-2 text-sm">
+        <div className="font-medium text-olive">true · committed in {reply.ns}</div>
+        <div className="mt-1 text-xs text-gray">
+          anchor <span className="font-mono text-teal">{reply.anchor.slice(0, 12)}…</span>, transaction{' '}
+          <span className="font-mono text-teal">{reply.tx_id}</span>
+        </div>
+        {reply.bindings.filter((b) => Object.keys(b).length > 0).map((b, i) => (
+          <div key={i} className="mt-1 font-mono text-[13px] text-teal">
+            {Object.entries(b).map(([v, t]) => `${v} = ${t}`).join(', ')}
+          </div>
+        ))}
       </div>
     )
   }

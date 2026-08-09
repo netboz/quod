@@ -60,12 +60,30 @@ export type Block = {
   txs: TxFull[]
 }
 
-export type FoundTx = { tx: TxFull; block: { slot: number; time: number; noop: boolean; cert: Cert } }
+export type TxOutcome = {
+  status: 'pending' | 'committed' | 'rejected'
+  ns: string
+  anchor: string
+  tx_id: string
+  goal?: string
+  bindings?: Record<string, string>
+  height?: number
+  reason?: string
+}
+
+export type FoundTx = {
+  tx: TxFull
+  block: { slot: number; time: number; noop: boolean; cert: Cert }
+  outcome: TxOutcome
+}
+
+export type FoundOutcome = FoundTx | { outcome: TxOutcome }
 
 export type ProveReply =
   | { result: 'ok'; height: number; bindings: Record<string, string>[] }
+  | { result: 'ok'; ns: string; anchor: string; tx_id: string; bindings: Record<string, string>[] }
   | { result: 'fail' }
-  | { result: 'pending'; tx_id: string }
+  | { result: 'pending'; ns: string; anchor: string; tx_id: string }
   | { error: string; detail?: string; leader?: PeerId | null }
 
 async function get<T>(url: string): Promise<T> {
@@ -86,7 +104,7 @@ export const fetchBlock = (ns: string, slot: number) =>
   get<Block | { error: string }>(`api/block/${encodeURIComponent(ns)}/${slot}`)
 
 export const fetchTx = (ns: string, id: string) =>
-  get<FoundTx | { error: string }>(`api/tx/${encodeURIComponent(ns)}/${encodeURIComponent(id)}`)
+  get<FoundOutcome | { error: string }>(`api/tx/${encodeURIComponent(ns)}/${encodeURIComponent(id)}`)
 
 export const prove = async (ns: string, goal: string): Promise<ProveReply> => {
   const r = await fetch('api/prove', {

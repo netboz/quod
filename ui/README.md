@@ -14,8 +14,9 @@ npm run lint    # oxlint
 The panel is opt-in on a node (`explorer.enabled`, loopback by default — see
 `quod_schema`). Data flow: REST reads (`/api/summary`, `/api/txs`, `/api/tx`,
 `/api/block`), a prove console (`POST /api/prove`, reads answer / writes commit),
-and the `/ws` stream fusing `{committed, Ns}` block frames with per-transaction
-`applied_live` events. Palette: `doc/BBSVX Palette.pdf` — don't invent colors.
+and the `/ws` stream fusing target-explicit `{committed, Ns, Slot, Entry}` block
+frames with per-transaction `applied_live` events. Palette:
+`doc/BBSVX Palette.pdf` — don't invent colors.
 
 The summary distinguishes the **finality head** (`committed+1`) from the next
 proposal slot (`approved+1`). The consensus card shows "Next proposer" and

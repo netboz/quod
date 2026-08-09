@@ -30,3 +30,8 @@ flat_list_spine_does_not_consume_depth_test() ->
     Flat = lists:seq(1, 1000),
     {ok, Wire} = quod_wire_term:encode(Flat),
     ?assertEqual({ok, Flat}, quod_wire_term:decode(Wire)).
+
+improper_tuple_item_list_is_rejected_test() ->
+    ?assertEqual(
+       {error, bad_term},
+       quod_wire_term:decode({4, [{2, 1} | improper_tail]})).

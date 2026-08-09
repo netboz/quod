@@ -36,7 +36,7 @@ setup() ->
     Dir = filename:join("/tmp", "quod_ontology_" ++ Suffix),
     Saved = save_env(
               [node_pubkey, identity_key, node_addr,
-               namespace_desired, content_data_dirs]),
+               namespace_desired, content_storage_dirs]),
     {Pub, Seed} = quod_identity:generate(),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(
@@ -45,7 +45,7 @@ setup() ->
     application:set_env(
       quod, namespace_desired,
       #{content => #{}, brahms => #{}}),
-    application:set_env(quod, content_data_dirs, #{}),
+    application:set_env(quod, content_storage_dirs, #{}),
     {ok, BrahmsSup} = quod_brahms_sup:start_link(),
     unlink(BrahmsSup),
     {ok, NsSup} = quod_ns_sup:start_link(),
@@ -110,35 +110,35 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {note, welcome}, Ns)),
+       quod_prolog:prove_ro(Ns, {note, welcome})),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {welcomes, welcome}, Ns)),
+       quod_prolog:prove_ro(Ns, {welcomes, welcome})),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove(Ns, goal({made, reverse}), Ns)),
+       quod_prolog:prove(Ns, goal({made, reverse}))),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove(Ns, goal({common_fact, asserted}), Ns)),
+       quod_prolog:prove(Ns, goal({common_fact, asserted}))),
     {fail, BlockedReasons} =
-        quod_prolog:prove(Ns, goal(blocked_action), Ns),
+        quod_prolog:prove(Ns, goal(blocked_action)),
     ?assert(lists:member(blocked_by_policy, BlockedReasons)),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove_ro(Ns, blocked_action, Ns)),
+       quod_prolog:prove_ro(Ns, blocked_action)),
     lists:foreach(
       fun(Value) ->
           ?assertMatch(
              {ok, [#{}], _},
-             quod_prolog:prove_ro(Ns, {ordered, Value}, Ns))
+             quod_prolog:prove_ro(Ns, {ordered, Value}))
       end, [terms_first, file_one, file_two, inline]),
     ?assertMatch(
        {ok, [_], _},
-       quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Nonce'}}, Ns)),
+       quod_prolog:prove_ro(Ns, {consensus_incarnation, {'Nonce'}})),
     ?assertMatch(
        {ok, [_], _},
        quod_prolog:prove_ro(
-         Ns, {peer_admitted, {'Id'}, {'Host'}, {'Port'}, {'Key'}}, Ns)),
+         Ns, {peer_admitted, {'Id'}, {'Host'}, {'Port'}, {'Key'}})),
     Desired = application:get_env(quod, namespace_desired, #{}),
     CreatedConfig = maps:get(Ns, maps:get(content, Desired)),
     {ok, Store} =
@@ -174,9 +174,10 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ?assertEqual(
        quod_ledger_store:ledger_dir(RootConfig),
        quod_ledger_store:ledger_dir(CreatedConfig)),
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    Dirs = application:get_env(quod, content_storage_dirs, #{}),
     ?assertEqual(
-       quod_ledger_store:ledger_dir(CreatedConfig),
+       #{data => quod_ledger_store:data_dir(CreatedConfig),
+         ledger => quod_ledger_store:ledger_dir(CreatedConfig)},
        maps:get(Ns, Dirs)),
     ?assert(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns))),
     ok = quod_namespace_manager:stop_content(Ns),
@@ -186,7 +187,7 @@ create_and_resume(#{dir := Dir, root_config := RootConfig}) ->
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove_ro(Ns, {note, must_not_appear}, Ns)),
+       quod_prolog:prove_ro(Ns, {note, must_not_appear})),
     ?assert(maps:get(committed, quod_simplex:stats(Ns)) >= 3).
 
 prepared_input_is_single_use(#{dir := Dir}) ->
@@ -204,14 +205,14 @@ prepared_input_is_single_use(#{dir := Dir}) ->
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {prepared_value, original}, Ns)),
+       quod_prolog:prove_ro(Ns, {prepared_value, original})),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove_ro(Ns, {prepared_value, changed}, Ns)).
+       quod_prolog:prove_ro(Ns, {prepared_value, changed})).
 
 validation_precedes_mutation(#{dir := Dir}) ->
     Desired0 = application:get_env(quod, namespace_desired, #{}),
-    DataDirs0 = application:get_env(quod, content_data_dirs, #{}),
+    DataDirs0 = application:get_env(quod, content_storage_dirs, #{}),
     InvalidNames =
         [<<>>, <<255>>, binary:copy(<<"a">>, 129),
          <<"quod">>, <<"quod:private">>],
@@ -343,7 +344,7 @@ validation_precedes_mutation(#{dir := Dir}) ->
        application:get_env(quod, namespace_desired, #{})),
     ?assertEqual(
        DataDirs0,
-       application:get_env(quod, content_data_dirs, #{})),
+       application:get_env(quod, content_storage_dirs, #{})),
 
     %% An author need not supply a can_invoke/4 clause: founding injects the
     %% bodyless host-entry default, so a policy-less create succeeds and the
@@ -355,7 +356,7 @@ validation_precedes_mutation(#{dir := Dir}) ->
     ok = wait_ready(HostOnlyNs, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(HostOnlyNs, {welcome, all}, HostOnlyNs)).
+       quod_prolog:prove_ro(HostOnlyNs, {welcome, all})).
 
 %% A genesis carrying an explicit RESTRICTIVE can_invoke/4 clause founds and
 %% becomes ready: a private ontology is a real, usable ontology (acceptance 32).
@@ -374,7 +375,7 @@ restrictive_policy_founds_and_serves(_Fixture) ->
     %% the host's own top-level proof is admitted by the restrictive rule
     ?assertMatch(
        {ok, [#{'V' := 42}], _},
-       quod_prolog:prove_ro(PrivateNs, {secret_value, {'V'}}, PrivateNs)).
+       quod_prolog:prove_ro(PrivateNs, {secret_value, {'V'}})).
 
 collisions_preserve_existing_state(_Fixture) ->
     Ns = unique_ns(<<"collision">>),
@@ -394,7 +395,7 @@ collisions_preserve_existing_state(_Fixture) ->
        application:get_env(quod, namespace_desired, #{})),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {kept, true}, Ns)).
+       quod_prolog:prove_ro(Ns, {kept, true})).
 
 failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
     Ns = unique_ns(<<"failed-start">>),
@@ -446,17 +447,16 @@ action_boundary_and_reasons(#{dir := Dir}) ->
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {action_fact, works}, Ns)),
+       quod_prolog:prove_ro(Ns, {action_fact, works})),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {action_rule, works}, Ns)),
+       quod_prolog:prove_ro(Ns, {action_rule, works})),
     ForbiddenNs = unique_ns(<<"forbidden">>),
     ?assertMatch(
        {fail, _},
        quod_prolog:prove(
          ?ROOT_NS,
-         goal({create_ontology, ForbiddenNs, []}),
-         ?ROOT_NS)),
+         goal({create_ontology, ForbiddenNs, []}))),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ForbiddenNs))),
     ?assertEqual(
@@ -465,7 +465,7 @@ action_boundary_and_reasons(#{dir := Dir}) ->
          ?ROOT_NS, {assertz, {not_committed, true}})),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove_ro(?ROOT_NS, {not_committed, true}, ?ROOT_NS)),
+       quod_prolog:prove_ro(?ROOT_NS, {not_committed, true})),
     DesiredBeforeInvalidName =
         application:get_env(quod, namespace_desired, #{}),
     ?assertEqual(
@@ -489,12 +489,12 @@ action_boundary_and_reasons(#{dir := Dir}) ->
        quod_prolog:run_action(?ROOT_NS, RemovedAction)),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove(?ROOT_NS, RemovedAction, ?ROOT_NS)),
+       quod_prolog:prove(?ROOT_NS, RemovedAction)),
     DesiredBeforeRemovedGoal =
         application:get_env(quod, namespace_desired, #{}),
     ?assertMatch(
        {fail, _},
-       quod_prolog:prove(?ROOT_NS, goal(RemovedAction), ?ROOT_NS)),
+       quod_prolog:prove(?ROOT_NS, goal(RemovedAction))),
     ?assertEqual(
        DesiredBeforeRemovedGoal,
        application:get_env(quod, namespace_desired, #{})),
@@ -564,14 +564,12 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
        {ok, [#{}], _},
        quod_prolog:prove_ro(
          ?ROOT_NS,
-         {can_create_ontology, {node, SelfKey}, PolicyProbe, []},
-         ?ROOT_NS)),
+         {can_create_ontology, {node, SelfKey}, PolicyProbe, []})),
     ?assertMatch(
        {fail, _},
        quod_prolog:prove_ro(
          ?ROOT_NS,
-         {can_create_ontology, {node, <<0:256>>}, PolicyProbe, []},
-         ?ROOT_NS)),
+         {can_create_ontology, {node, <<0:256>>}, PolicyProbe, []})),
     ?assertEqual(
        effect,
        quod_predicates:class({authorized_ontology_lifecycle, 1})),
@@ -595,8 +593,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                         {authorized_ontology_lifecycle, 1}, effect, proof}}},
        quod_prolog:prove(
          ?ROOT_NS,
-         {authorized_ontology_lifecycle, DirectAction},
-         ?ROOT_NS)),
+         {authorized_ontology_lifecycle, DirectAction})),
 
     AlreadyNs = unique_ns(<<"already-authorized">>),
     AlreadyAction = {create_ontology, AlreadyNs, [open_policy()]},
@@ -680,7 +677,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                   PolicyWriteReasons)),
         ?assertMatch(
            {fail, _},
-           quod_prolog:prove_ro(?ROOT_NS, Marker, ?ROOT_NS)),
+           quod_prolog:prove_ro(?ROOT_NS, Marker)),
         ?assertNot(filelib:is_dir(
                      quod_ledger_store:ns_dir(Dir, PolicyWriteNs)))
     after
@@ -705,7 +702,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
              ?ROOT_NS, {create_ontology, PhaseWriteNs, [open_policy()]})),
         ?assertMatch(
            {fail, _},
-           quod_prolog:prove_ro(?ROOT_NS, PhaseMarker, ?ROOT_NS)),
+           quod_prolog:prove_ro(?ROOT_NS, PhaseMarker)),
         ?assertNot(filelib:is_dir(
                      quod_ledger_store:ns_dir(Dir, PhaseWriteNs)))
     after
@@ -825,20 +822,21 @@ action_timeout_is_outcome_unknown(#{manager := Manager}) ->
     %% The manager may already hold the accepted request after the worker was
     %% killed. Polling local state is therefore the only safe retry decision.
     ok = wait_ready(Ns, 200),
-    ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
+    ok = wait_local_state(Ns, ready, 200),
     GenesisHash = quod_simplex:genesis_hash(Ns),
     ?assertEqual(32, byte_size(GenesisHash)),
     Desired = application:get_env(quod, namespace_desired, #{}),
     Config = maps:get(Ns, maps:get(content, Desired)),
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
+    Dirs = application:get_env(quod, content_storage_dirs, #{}),
     ?assertEqual(
-       quod_ledger_store:ledger_dir(Config),
+       #{data => quod_ledger_store:data_dir(Config),
+         ledger => quod_ledger_store:ledger_dir(Config)},
        maps:get(Ns, Dirs)).
 
 join_validation_and_state(#{dir := Dir}) ->
     Ns = unique_ns(<<"join-validation">>),
     Desired0 = application:get_env(quod, namespace_desired, #{}),
-    DataDirs0 = application:get_env(quod, content_data_dirs, #{}),
+    DataDirs0 = application:get_env(quod, content_storage_dirs, #{}),
     GoodRaw = crypto:strong_rand_bytes(32),
     GoodHex = binary:encode_hex(GoodRaw),
     BadCalls =
@@ -861,7 +859,7 @@ join_validation_and_state(#{dir := Dir}) ->
              application:get_env(quod, namespace_desired, #{})),
           ?assertEqual(
              DataDirs0,
-             application:get_env(quod, content_data_dirs, #{}))
+             application:get_env(quod, content_storage_dirs, #{}))
       end, BadCalls),
     ?assertNot(filelib:is_dir(quod_ledger_store:ns_dir(Dir, Ns))),
     ?assertEqual({ok, ready}, quod_ontology:local_state(?ROOT_NS)),
@@ -884,7 +882,7 @@ join_validation_and_state(#{dir := Dir}) ->
     {fail, StateReasons} =
         quod_prolog:prove_ro(
           StateNs,
-          {ontology_join_state, StateNs, {'State'}}, StateNs),
+          {ontology_join_state, StateNs, {'State'}}),
     ?assert(
        lists:member(
          {ontology_state_failed, root_only}, StateReasons)),
@@ -946,13 +944,13 @@ join_resume_anchor_is_exact(#{dir := Dir}) ->
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:prove_ro(Ns, {durable, original}, Ns)),
+       quod_prolog:prove_ro(Ns, {durable, original})),
     ok = quod_namespace_manager:stop_content(Ns).
 
 commit_root(Goal) ->
     ?assertMatch(
        {ok, [_ | _], _},
-       quod_prolog:prove(?ROOT_NS, Goal, ?ROOT_NS)),
+       quod_prolog:prove(?ROOT_NS, Goal)),
     ok.
 
 reconcile_republishes_running_content(#{manager := Manager}) ->
@@ -962,10 +960,11 @@ reconcile_republishes_running_content(#{manager := Manager}) ->
     ok = wait_ready(Ns, 200),
     Desired = application:get_env(quod, namespace_desired, #{}),
     Config = maps:get(Ns, maps:get(content, Desired)),
-    ExpectedDir = quod_ledger_store:ledger_dir(Config),
-    application:set_env(quod, content_data_dirs, #{}),
+    ExpectedDirs = #{data => quod_ledger_store:data_dir(Config),
+                     ledger => quod_ledger_store:ledger_dir(Config)},
+    application:set_env(quod, content_storage_dirs, #{}),
     Manager ! reconcile,
-    ok = wait_data_dir(Ns, ExpectedDir, 200).
+    ok = wait_storage_dirs(Ns, ExpectedDirs, 200).
 
 root_creation_action() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
@@ -990,22 +989,32 @@ open_policy() ->
 wait_ready(_Ns, 0) ->
     {error, timeout};
 wait_ready(Ns, N) ->
-    case quod_prolog:prove_ro(Ns, true, Ns) of
+    case quod_prolog:prove_ro(Ns, true) of
         {ok, _, _} -> ok;
         _ ->
             timer:sleep(10),
             wait_ready(Ns, N - 1)
     end.
 
-wait_data_dir(_Ns, _Expected, 0) ->
+wait_local_state(_Ns, _Expected, 0) ->
     {error, timeout};
-wait_data_dir(Ns, Expected, N) ->
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
+wait_local_state(Ns, Expected, N) ->
+    case quod_ontology:local_state(Ns) of
+        {ok, Expected} -> ok;
+        _ ->
+            timer:sleep(10),
+            wait_local_state(Ns, Expected, N - 1)
+    end.
+
+wait_storage_dirs(_Ns, _Expected, 0) ->
+    {error, timeout};
+wait_storage_dirs(Ns, Expected, N) ->
+    Dirs = application:get_env(quod, content_storage_dirs, #{}),
     case maps:get(Ns, Dirs, undefined) of
         Expected -> ok;
         _ ->
             timer:sleep(10),
-            wait_data_dir(Ns, Expected, N - 1)
+            wait_storage_dirs(Ns, Expected, N - 1)
     end.
 
 unique_ns(Prefix) ->

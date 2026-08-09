@@ -8,7 +8,6 @@ context_test_() ->
      ?_test(with_context(fun bounds_distinct_scopes/1)),
      ?_test(with_context(fun bounds_invocation_proxies/1)),
      ?_test(with_context(fun binds_proxies_to_registered_owner/1)),
-     ?_test(with_context(fun tracks_foreign_dirty/1)),
      ?_test(with_context(fun local_typed_death_wins_finalization/1)),
      ?_test(with_context(fun live_local_scope_is_closed_at_finalization/1)),
      ?_test(with_context(fun binds_one_exact_router_generation/1)),
@@ -22,7 +21,7 @@ with_context(Test) ->
     OriginIdentity = {<<"origin">>, <<0:256>>},
     Handle = quod_proof_context:start(
                ProofId, false, OriginIdentity,
-               quod_time:mono_ms() + 60000),
+               quod_time:mono_ms() + 60000, anonymous),
     try Test(#{proof_id => ProofId, handle => Handle})
     after quod_proof_context:stop(
             fun(_Scope) -> ok end, fun(_Proxy) -> ok end)
@@ -133,21 +132,6 @@ binds_proxies_to_registered_owner(_Ctx) ->
         ScopePid ! stop
     end.
 
-tracks_foreign_dirty(_Ctx) ->
-    ScopePid = spawn(fun wait/0),
-    try
-        {ok, ScopeId, scope} = quod_proof_context:get_or_open_scope(
-                        {<<"b">>, <<1:256>>},
-                        fun(_Id) -> {ok, ScopePid, scope} end),
-        ?assertNot(quod_proof_context:foreign_dirty()),
-        ok = quod_proof_context:mark_dirty(ScopeId, true),
-        ?assert(quod_proof_context:foreign_dirty()),
-        ok = quod_proof_context:mark_dirty(ScopeId, false),
-        ?assertNot(quod_proof_context:foreign_dirty())
-    after
-        ScopePid ! stop
-    end.
-
 local_typed_death_wins_finalization(#{proof_id := ProofId}) ->
     Parent = self(),
     ScopePid = spawn(
@@ -175,7 +159,7 @@ local_typed_death_wins_finalization(#{proof_id := ProofId}) ->
     after 1000 -> error(scope_did_not_die)
     end,
     ?assertEqual({error, {scope_expired, Ns}},
-                 quod_proof_context:finalize()).
+                 quod_proof_context:finalize(commit)).
 
 live_local_scope_is_closed_at_finalization(#{proof_id := ProofId}) ->
     Parent = self(),
@@ -197,7 +181,7 @@ live_local_scope_is_closed_at_finalization(#{proof_id := ProofId}) ->
                                              Ns, Anchor},
                                    {ok, ScopePid, Handle}
                                end),
-    ?assertEqual(ok, quod_proof_context:finalize()),
+    ?assertEqual(ok, quod_proof_context:finalize(commit)),
     receive {scope_closed, ScopePid} -> ok
     after 1000 -> error(scope_not_closed_at_finalize)
     end.
@@ -239,11 +223,11 @@ finalizes_remote_router_once(#{proof_id := ProofId}) ->
         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
                                   {<<"remote">>, <<11:256>>},
                                   fun(_Id) -> {ok, Router, Remote} end),
-        ?assertEqual(ok, quod_proof_context:finalize()),
+        ?assertEqual(ok, quod_proof_context:finalize(commit)),
         receive {router_finalized, Router, Owner, ProofId} -> ok
         after 1000 -> error(finalize_not_called)
         end,
-        ?assertEqual(ok, quod_proof_context:finalize()),
+        ?assertEqual(ok, quod_proof_context:finalize(commit)),
         receive {router_finalized, Router, Owner, ProofId} ->
                     error(finalized_twice)
         after 20 -> ok
@@ -271,8 +255,8 @@ retains_finalization_poison(#{proof_id := ProofId}) ->
         {ok, _ScopeId, Remote} = quod_proof_context:get_or_open_scope(
                                   {<<"remote">>, <<13:256>>},
                                   fun(_Id) -> {ok, Router, Remote} end),
-        ?assertEqual(PublicPoison, quod_proof_context:finalize()),
-        ?assertEqual(PublicPoison, quod_proof_context:finalize()),
+        ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
+        ?assertEqual(PublicPoison, quod_proof_context:finalize(commit)),
         receive {router_finalized, Router, Owner, ProofId} -> ok
         after 1000 -> error(finalize_not_called)
         end,
@@ -300,7 +284,7 @@ maps_dead_router_to_target(#{proof_id := ProofId}) ->
                                   fun(_Id) -> {ok, Router, Remote} end),
         ?assertEqual(
            {error, {ontology_unreachable, <<"remote">>}},
-           quod_proof_context:finalize())
+           quod_proof_context:finalize(commit))
     after
         RequestLink ! stop
     end.

@@ -208,7 +208,7 @@ still commit.
 - Resolve custody by `SubmissionId` on every locally committed payload.
 - On local finalization without inclusion, mark the same signed submission
   eligible for reconsideration. `finalize/2` currently runs before
-  `adopt_committee/2`, so it must not route there: revalidation and drain occur
+  `adopt_history/2`, so it must not route there: revalidation and drain occur
   only after committee adoption, the committed sequence floor update, and
   completion of the current `drain_commits/1` contiguous durable prefix.
 - Recheck every excluded member of a partially included author cohort against

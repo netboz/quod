@@ -91,16 +91,17 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 %% read-set: per-functor content hash, per-predicate (#4)
 -type read_check() :: #{ {Functor :: atom(), Arity :: non_neg_integer()} => integer() }.
 
-%% the committed change record — FIXED shape (#24).
-%% Non-genesis transactions are author-signed. `author_seq` is a per-author,
-%% monotonically increasing replay nonce assigned by Simplex ingress.
+%% Current transaction fields. The normative definition remains
+%% include/quod_ledger.hrl; this copy is only an orientation aid.
 -record(transaction, {tx_id        :: binary(),
-                      caller_ns    :: binary(),
-                      goal = undefined :: term(),
-                      result = undefined :: term(),
+                      origin       :: {binary(), binary()},
+                      proof_id = none :: binary() | none,
+                      plan_digest = none :: binary() | none,
+                      goal = undefined :: binary() | undefined,
+                      result = undefined :: binary() | undefined,
                       diff         :: [op()],
                       read_check   :: read_check(),
-                      author       :: server_id(),
+                      author = none :: pubkey() | none,
                       author_seq = 0 :: non_neg_integer(),
                       submitted_at = 0 :: non_neg_integer(),
                       sig = none   :: binary() | none}).
@@ -140,22 +141,24 @@ Every type and record below is defined **once**, here, and `-include`d by `quod_
 `quod_diff:functor_hash/3` and compared by `quod_prolog`'s OCC re-check. Producer and validator use the
 same integer representation.
 
-### Identity & signing readiness
+### Identity and signing
 
-> **Updated (identity milestone A.3, 2026-06-30).** Identity is now the node's **Ed25519
-> pubkey** (`node_id()`), not its address. The bullets below describe the model as built; the
-> signing half (`#transaction.sig`, quorum certificates) is Phase B, still pending.
+> **Current pointer.** Identity is the node's Ed25519 pubkey, and transaction
+> plus quorum signing are implemented. The normative byte contracts are
+> [`transaction-signatures.md`](transaction-signatures.md) and
+> [`consensus-signatures.md`](consensus-signatures.md); do not implement from
+> the retired Phase-1 examples below.
 
 A committee member's identity is its **pubkey** (`node_id() = pubkey()`), generated on first boot
 and persisted; the address `{Host, Port}` (`endpoint()`) is demoted to "where you dial it" — a
 routing hint resolved on connect. This survives a host move (the durable membership is pubkey-only)
 and lets **mutual TLS** prove who a node is.
 
-- **`#transaction.author` / `#transaction.sig`** — `author` is the submitting node's pubkey (set at
-  every `#transaction{}` build site). `sig` is the Ed25519 signature over the canonical bytes
-  `term_to_binary({tx_id, caller_ns, diff, read_check}, [deterministic])` — **still `none` until
-  Phase B**; `verify_change/2` is a pass-through stub until then. The byte-size guard and `tx_id`
-  correlation are unaffected.
+- **`#transaction.author` / `#transaction.sig`** — `author` is the submitting
+  node's pubkey. Version-5 canonical bytes bind the target namespace, genesis
+  anchor, author admission generation, and every committed transaction field
+  except `sig`; only genesis is unsigned. The exact encoder is
+  `quod_transaction:bytes/2`.
 - **Identity vs. address (built).** `node_id()` is the `pubkey()`; `{Host, Port}` is an `endpoint()`
   hint. Committee config entries (`{add, NodeId}`) and `voted_for`/`leader_id` carry the **key**, not
   the address. The address is learned from the authenticated link header (`{Pubkey, Addr}`) into a

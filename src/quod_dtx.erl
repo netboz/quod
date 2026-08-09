@@ -35,23 +35,24 @@ contributed nothing a commit could depend on. A scope with a **material diff**
 that consulted a live reality bridge (`m:quod_predicates` query-class external
 predicates) cannot seal: its decisions rest on node-local, non-replayable
 state that no later validation can re-prove, so sealing fails
-`{non_transactional_dependency, Functor}`. `peer_ready/1` is exempt — its
-decision is re-proved by every validator in the membership verdict, so it is
-never a hidden dependency of a committed diff.
+`{non_transactional_dependency, Functor}`. `peer_ready/1` is admissible only
+for the exact singleton membership diff that every validator re-proves before
+voting; it remains a forbidden live dependency of ordinary content.
 """.
 
 -include("quod_proof_limits.hrl").
 
 -export([seal_session/2, verify/1, encode/1, decode/1,
-         node_signer/0,
+         digest/1,
          core/1, target/1, base_height/1, proof_id/1, origin/1,
          principal/1, overlay_generation/1, signer/1,
-         diff/1, read_check/1, transcript/1]).
+         participates/1, diff_ops/1, diff_bytes/1, read_check_bytes/1,
+         material/1, diff/1, read_check/1, transcript/1]).
 
 -export_type([plan/0, principal/0, transcript_entry/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
--define(PLAN_VERSION, 1).
+-define(PLAN_VERSION, 2).
 
 -type identity() :: quod_proof_context:identity().
 -type principal() :: {node, <<_:256>>} | anonymous.
@@ -102,10 +103,15 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
                      origin => Origin,
                      principal => Principal,
                      overlay_generation => Generation,
+                     %% Signed alongside the opaque diff so a consumer that
+                     %% must not decode foreign atoms (the proof origin) can
+                     %% still classify every OCC participant.
+                     diff_ops => length(Diff),
+                     read_functors => map_size(ReadCheck),
                      diff => deterministic(Diff),
                      read_check => deterministic(ReadCheck),
                      transcript => deterministic(Transcript)},
-            sign_core(Core);
+            sign_core(Core, quod_proof_session:signer(Session));
         {error, _} = Error ->
             Error
     end.
@@ -113,7 +119,8 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
 %% A material diff must not rest on live-bridge truth (module doc); the plan
 %% itself must fit the network's fixed bounds before any signature is minted.
 seal_admissible(Diff, ReadCheck, Bridges) ->
-    case {Diff, Bridges} of
+    EffectiveBridges = admissibility_bridges(Diff, Bridges),
+    case {Diff, EffectiveBridges} of
         {[_ | _], [Functor | _]} ->
             {error, {non_transactional_dependency, Functor}};
         _ ->
@@ -125,12 +132,18 @@ seal_admissible(Diff, ReadCheck, Bridges) ->
             end
     end.
 
-sign_core(Core) ->
+admissibility_bridges(Diff, Bridges) ->
+    case quod_committee_predicates:membership_diff(Diff) of
+        true -> lists:delete({peer_ready, 1}, Bridges);
+        false -> Bridges
+    end.
+
+sign_core(Core, Signer) ->
     Bytes = plan_bytes(Core),
     Plan =
-        case node_signer() of
-            {ok, #{pubkey := Signer} = Identity} ->
-                {quod_plan, Core, Signer,
+        case Signer of
+            #{pubkey := Pubkey} = Identity ->
+                {quod_plan, Core, Pubkey,
                  quod_identity:sign(Bytes, Identity)};
             none ->
                 {quod_plan, Core, none, none}
@@ -145,17 +158,6 @@ plan_bytes(Core) ->
 
 deterministic(Term) ->
     term_to_binary(Term, [deterministic]).
-
--doc "This node's witness identity, or `none` on a node booted without keys.".
--spec node_signer() -> {ok, quod_identity:signer()} | none.
-node_signer() ->
-    case {application:get_env(quod, node_pubkey),
-          application:get_env(quod, identity_key)} of
-        {{ok, <<_:256>> = Pubkey}, {ok, Key}} ->
-            {ok, #{pubkey => Pubkey, key => Key}};
-        _ ->
-            none
-    end.
 
 -doc """
 Whether a plan's witness signature matches its canonical bytes.
@@ -208,9 +210,14 @@ decode(_Blob) ->
 valid_core(#{target := Target, base_height := BaseHeight,
              proof_id := ProofId, origin := Origin,
              principal := Principal, overlay_generation := Generation,
+             diff_ops := DiffOps, read_functors := ReadFunctors,
              diff := Diff, read_check := ReadCheck,
              transcript := Transcript} = Core)
-  when map_size(Core) =:= 9 ->
+  when map_size(Core) =:= 11,
+       is_integer(DiffOps), DiffOps >= 0,
+       DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
+       is_integer(ReadFunctors), ReadFunctors >= 0,
+       ReadFunctors =< ?QUOD_MAX_PLAN_READ_FUNCTORS ->
     valid_identity(Target) andalso valid_identity(Origin) andalso
         is_integer(BaseHeight) andalso BaseHeight >= 0 andalso
         is_binary(ProofId) andalso byte_size(ProofId) =:= 32 andalso
@@ -256,14 +263,83 @@ overlay_generation(Plan) -> maps:get(overlay_generation, core(Plan)).
 -spec signer(plan()) -> none | <<_:256>>.
 signer({quod_plan, _Core, Signer, _Signature}) -> Signer.
 
+-doc "SHA-256 of the plan's canonical unsigned bytes — what an envelope binds.".
+-spec digest(plan()) -> <<_:256>>.
+digest(Plan) -> crypto:hash(sha256, plan_bytes(core(Plan))).
+
+-doc "The signed count of staged write operations; safe on a foreign plan.".
+-spec diff_ops(plan()) -> non_neg_integer().
+diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
+
+-doc "Whether this signed plan contributes writes or OCC reads; safe on a foreign plan.".
+-spec participates(plan()) -> boolean().
+participates(Plan) ->
+    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0.
+
+-doc "The plan's canonical opaque write-set bytes; safe on a foreign plan.".
+-spec diff_bytes(plan()) -> binary().
+diff_bytes(Plan) -> maps:get(diff, core(Plan)).
+
+-doc "The plan's canonical opaque OCC read-set bytes; safe on a foreign plan.".
+-spec read_check_bytes(plan()) -> binary().
+read_check_bytes(Plan) -> maps:get(read_check, core(Plan)).
+
+-doc "Decode and canonical-validate the target-owned nested plan payloads once.".
+-spec material(plan()) ->
+          {ok, #{diff := list(), read_check := map(), transcript := list()}} |
+          {error, {protocol_error, bad_payload}}.
+material(Plan) ->
+    Core = core(Plan),
+    case {decode_canonical(maps:get(diff, Core)),
+          decode_canonical(maps:get(read_check, Core)),
+          decode_canonical(maps:get(transcript, Core))} of
+        {{ok, Diff}, {ok, ReadCheck}, {ok, Transcript}}
+          when is_list(Diff), is_map(ReadCheck), is_list(Transcript) ->
+            case exact_material(Core, Diff, ReadCheck, Transcript) of
+                true ->
+                    {ok, #{diff => Diff, read_check => ReadCheck,
+                           transcript => Transcript}};
+                false ->
+                    {error, {protocol_error, bad_payload}}
+            end;
+        _ ->
+            {error, {protocol_error, bad_payload}}
+    end.
+
+decode_canonical(Blob) when is_binary(Blob) ->
+    case quod_safe_term:decode(Blob, byte_size(Blob)) of
+        {ok, Term} ->
+            case deterministic(Term) =:= Blob of
+                true -> {ok, Term};
+                false -> error
+            end;
+        {error, _} ->
+            error
+    end.
+
+exact_material(Core, Diff, ReadCheck, Transcript) ->
+    proper_length(Diff, 0) =:= maps:get(diff_ops, Core)
+        andalso map_size(ReadCheck) =:= maps:get(read_functors, Core)
+        andalso proper_length(Transcript, 0) =/= invalid.
+
+proper_length([], Length) -> Length;
+proper_length([_ | Rest], Length) -> proper_length(Rest, Length + 1);
+proper_length(_Improper, _Length) -> invalid.
+
 -doc "Decode the plan's staged write-set. Owner-side only: allocates its atoms.".
 -spec diff(plan()) -> [{assert | retract, {term(), term()}}].
-diff(Plan) -> binary_to_term(maps:get(diff, core(Plan))).
+diff(Plan) -> material_value(diff, Plan).
 
 -doc "Decode the plan's exact OCC read tokens. Owner-side only.".
 -spec read_check(plan()) -> map().
-read_check(Plan) -> binary_to_term(maps:get(read_check, core(Plan))).
+read_check(Plan) -> material_value(read_check, Plan).
 
 -doc "Decode the plan's bounded invocation transcript. Owner-side only.".
 -spec transcript(plan()) -> [transcript_entry()].
-transcript(Plan) -> binary_to_term(maps:get(transcript, core(Plan))).
+transcript(Plan) -> material_value(transcript, Plan).
+
+material_value(Key, Plan) ->
+    case material(Plan) of
+        {ok, Material} -> maps:get(Key, Material);
+        {error, _} -> error(bad_plan)
+    end.

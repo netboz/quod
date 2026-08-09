@@ -11,7 +11,7 @@ Two collection paths:
   * **Poll (5s).** Scalar gauges are refreshed from each subsystem's `stats/1`
     (`m:quod_brahms`, `m:quod_simplex`, `m:quod_prolog`, `m:quod_runtime`, `m:quod_feed`). Cumulative counts are exposed
     as gauges set to the running total (use `rate()`/`increase()` in Grafana).
-  * **Event.** The LIVE `{committed, Ns}` event drives finalized-transaction size and
+  * **Event.** The LIVE `{committed, Ns}` event carries its target namespace and drives finalized-transaction size and
     author metrics (never replay — see `quod_simplex:publish_feed/3`). The submitting
     Prolog process records end-to-end latency and authoritative retry outcomes; the
     proposer records one batching sample per proposed block; completion of an
@@ -53,8 +53,8 @@ Two collection paths:
 | `quod_feed_dropped{namespace}` | gauge | `reason` | blocks thrown away, by reason (duplicate / gap / unverified / ...) |
 | `quod_feed_digests/fresh_digests{namespace}` | gauge | | nodes sending 'alive' heartbeats / of those, still fresh |
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | submit → committed-and-applied, measured on the SUBMITTING node with one monotonic clock (one sample per change, at its author) |
-| `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change |
-| `quod_tx_committed_total{namespace}` | counter | `author` | finished changes, by the node that submitted them |
+| `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change, attributed to the target ontology |
+| `quod_tx_committed_total{namespace}` | counter | `author` | finished changes in the target ontology, by its submitting node |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
@@ -77,7 +77,7 @@ Two collection paths:
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([consensus_stat_keys/0, declare/1]).
+-export([consensus_stat_keys/0, declare/1, test_observe_commit/2]).
 -endif.
 
 -include("quod_ledger.hrl").
@@ -130,8 +130,8 @@ handle_info(refresh, State) ->
     State1 = subscribe_commits(State),
     erlang:send_after(?REFRESH_MS, self(), refresh),
     {noreply, State1};
-handle_info({committed, _Slot, #entry{} = Entry}, State) ->
-    _ = observe_commit(Entry),
+handle_info({committed, Ns, _Slot, #entry{} = Entry}, State) ->
+    _ = observe_commit(Ns, Entry),
     {noreply, State};
 handle_info(_Info, State) ->
     {noreply, State}.
@@ -230,7 +230,7 @@ declare(NodeId) ->
     _ = G(quod_prolog_proves,        "Total read queries this node has answered (only ever goes up)."),
     _ = G(quod_prolog_conflicts,     "Total finished changes skipped because they clashed with newer data (only ever goes up)."),
     _ = G(quod_prolog_parked,        "Write requests waiting here for their change to be made final right now."),
-    _ = G(quod_prolog_park_timeouts, "Total write callers whose transaction still had no final result at the local waiting deadline. The transaction may finalize later, so inspect the returned transaction id instead of retrying the same non-idempotent operation (only ever goes up)."),
+    _ = G(quod_prolog_park_timeouts, "Total write callers whose transaction still had no final result at the local waiting deadline. The transaction may finalize later, so inspect the returned target-anchored outcome reference instead of retrying the same non-idempotent operation (only ever goes up)."),
     _ = G(quod_prolog_proof_workers, "How many local queries are running right now. Each uses a frozen view of the data, so a value at the configured limit means new queries are being turned away until one finishes."),
     _ = G(quod_prolog_scope_workers, "How many selected proof scopes this node is serving right now. Each keeps one reusable frozen-base session until the origin proof closes it."),
     _ = G(quod_prolog_kb_memory_words, "How much Erlang VM memory, in words, this ontology's shared knowledge-base table is using. Multiply by the VM word size (normally 8 bytes on a 64-bit node) for an approximate byte count."),
@@ -597,16 +597,22 @@ subscribe_commits(State = #{subs := Subs}) ->
 %% proposer's wall clock (ratcheted to the fleet maximum) and `submitted_at` is the author's, so their
 %% difference measures clock skew as much as processing time. Latency is observed at the SUBMITTING
 %% node instead (`observe_tx_latency/2`, called by quod_prolog when the parked write resolves).
-observe_commit(#entry{data = Data}) ->
+observe_commit(Ns, #entry{data = Data}) ->
     case quod_ledger:payload(Data) of
-        {ok, Payload} -> lists:foreach(fun observe_payload/1, Payload);
+        {ok, Payload} -> lists:foreach(fun(T) -> observe_payload(Ns, T) end,
+                                      Payload);
         error         -> ok
     end.
 
-observe_payload(#transaction{} = Transaction) -> observe_transaction(Transaction);
-observe_payload(noop)                         -> ok.   %% complaint skip, not a transaction
+-ifdef(TEST).
+test_observe_commit(Ns, Entry) -> observe_commit(Ns, Entry).
+-endif.
 
-observe_transaction(#transaction{caller_ns = Ns, author = Author, diff = Diff}) ->
+observe_payload(Ns, #transaction{} = Transaction) ->
+    observe_transaction(Ns, Transaction);
+observe_payload(_Ns, noop) -> ok.   %% complaint skip, not a transaction
+
+observe_transaction(Ns, #transaction{author = Author, diff = Diff}) ->
     L = label(Ns),
     _ = prometheus_histogram:observe(quod_tx_diff_ops, [L], length(Diff)),
     _ = prometheus_counter:inc(quod_tx_committed_total, [L, author_label(Author)]),

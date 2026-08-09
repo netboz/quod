@@ -332,7 +332,7 @@ register_local_scope(Ns, AnchorByte, Pid, Session) ->
 start_context(ProofId) ->
     quod_proof_context:start(
       ProofId, false, {<<"quod:savepoint-origin">>, <<0:256>>},
-      quod_time:mono_ms() + 60000).
+      quod_time:mono_ms() + 60000, anonymous).
 
 wait() ->
     receive stop -> ok end.

@@ -26,7 +26,7 @@ setup() ->
 
 cleanup({Dir, _, _}) -> _ = file:del_dir_r(Dir), ok.
 
-tx(I) -> #transaction{tx_id = integer_to_binary(I), caller_ns = <<"catchup:test">>,
+tx(I) -> #transaction{tx_id = integer_to_binary(I), origin = {<<"catchup:test">>, <<0:256>>},
                       diff = [{assert, {{fact, I}, true}}], read_check = #{},
                       author = <<"a">>, sig = none}.
 
@@ -57,7 +57,7 @@ byte_cap_test() ->
     {ok, S0} = quod_ledger_store:open(Ns, Dir),
     Es = [#entry{index = I, cert = none,
                  data = quod_ledger:data(
-                          [#transaction{tx_id = integer_to_binary(I), caller_ns = Ns,
+                          [#transaction{tx_id = integer_to_binary(I), origin = {Ns, <<0:256>>},
                                         diff = [{assert, {{blob, I}, Big}}], read_check = #{},
                                         author = <<"a">>, sig = none}])}
           || I <- lists:seq(1, 8)],          %% 8 × ~200 KiB = ~1.6 MiB total, over the ~900 KiB budget

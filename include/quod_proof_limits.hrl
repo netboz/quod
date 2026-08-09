@@ -20,6 +20,9 @@
 -define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (24 * 1024)).
 -define(QUOD_MAX_PLAN_DIFF_OPS, 1024).
 -define(QUOD_MAX_PLAN_READ_FUNCTORS, 1024).
+%% The committed envelope's durable top-level goal and selected result.
+-define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (8 * 1024)).
+-define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).

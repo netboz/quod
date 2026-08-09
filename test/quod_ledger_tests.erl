@@ -7,7 +7,7 @@
 %%%===================================================================
 
 tx(I) ->
-    #transaction{tx_id = integer_to_binary(I), caller_ns = <<"quod:root">>,
+    #transaction{tx_id = integer_to_binary(I), origin = {<<"quod:root">>, <<0:256>>},
                  diff = [{assert, {{fact, I}, true}}], read_check = #{},
                  author = <<0:256>>, sig = none}.
 

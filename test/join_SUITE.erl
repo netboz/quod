@@ -313,7 +313,7 @@ runtime_join_action_catches_up(Config) ->
                  match_ok(
                    peer:call(
                      ActionNode, quod_prolog, prove_ro,
-                     [RootNs, true, RootNs]))
+                     [RootNs, true]))
              end, 10000)),
         Action =
             {join_ontology, ?NS, binary:encode_hex(GenesisHash),
@@ -385,7 +385,7 @@ slot_on(Peer, Ns) ->
 prove(Peer, Goal) -> quod_ct:peer_prove(Peer, ?NS, Goal).
 pub_of(Peer) -> peer:call(Peer, application, get_env, [quod, node_pubkey, undefined]).
 
-%% A shape-valid #transaction (tx_id, caller_ns, diff, read_check, author, sig) — never committed: the
+%% A shape-valid #transaction (tx_id, origin, diff, read_check, author, sig) — never committed: the
 %% non-member joiner refuses the append before any consensus step even inspects it.
-dummy_tx(Author) -> #transaction{tx_id = <<"probe">>, caller_ns = ?NS, diff = [],
+dummy_tx(Author) -> #transaction{tx_id = <<"probe">>, origin = {?NS, <<0:256>>}, diff = [],
                                  read_check = #{}, author = Author}.

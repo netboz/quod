@@ -96,7 +96,7 @@ init_per_suite(Config) ->
       fun(ACL) ->
           ?assertMatch({ok, [_], _},
                        peer:call(Target, quod_prolog, prove,
-                                 [?PRIVATE_NS, ACL, ?PRIVATE_NS], 60000))
+                                 [?PRIVATE_NS, ACL], 60000))
       end, ACLs),
     [{target, Target}, {asker, Asker} | Config].
 
@@ -108,11 +108,11 @@ remote_scope_solutions(Config) ->
     Asker = ?config(asker, Config),
     Goal = {'::', ?NS, {diet, dog, {'D'}}},
     ?assertMatch({ok, [#{'D' := {'$quod_symbol', <<"kibble">>}}], _},
-                 peer:call(Asker, quod_prolog, prove, [?ASKER_NS, Goal, ?ASKER_NS], 60000)),
+                 peer:call(Asker, quod_prolog, prove, [?ASKER_NS, Goal], 60000)),
     All = {findall, {'D'}, Goal, {'L'}},
     ?assertMatch({ok, [#{'L' := [{'$quod_symbol', <<"kibble">>},
                                   {'$quod_symbol', <<"meat">>}]}], _},
-                 peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All, ?ASKER_NS], 60000)).
+                 peer:call(Asker, quod_prolog, prove, [?ASKER_NS, All], 60000)).
 
 remote_scope_symbol_safety(Config) ->
     Target = ?config(target, Config),
@@ -120,14 +120,14 @@ remote_scope_symbol_safety(Config) ->
     Echo = {'::', ?NS, {echo, asker_only_symbol}},
     ?assertMatch({ok, [#{}], _},
                  peer:call(Asker, quod_prolog, prove,
-                           [?ASKER_NS, Echo, ?ASKER_NS], 60000)),
+                           [?ASKER_NS, Echo], 60000)),
     ?assertEqual({ok, {'$quod_symbol', <<"asker_only_symbol">>}},
                  peer:call(Target, quod_wire_term, decode,
                            [{0, <<"asker_only_symbol">>}])),
     Unknown = {'::', ?NS, {asker_only_predicate, x}},
     ?assertMatch({fail, [_ | _]},
                  peer:call(Asker, quod_prolog, prove,
-                           [?ASKER_NS, Unknown, ?ASKER_NS], 60000)).
+                           [?ASKER_NS, Unknown], 60000)).
 
 remote_scope_chain_policy(Config) ->
     Asker = ?config(asker, Config),
@@ -135,19 +135,19 @@ remote_scope_chain_policy(Config) ->
     ?assertMatch(
        {ok, [#{'X' := 42}], _},
        peer:call(Asker, quod_prolog, prove,
-                 [?ASKER_NS, Allowed, ?ASKER_NS], 60000)),
+                 [?ASKER_NS, Allowed], 60000)),
     %% A refusal crosses QUIC as ordinary logical failure carrying its bounded
     %% reason, so the caller can inspect it and branch — same contract as the
     %% co-hosted path.
     Denied = {'::', ?PRIVATE_NS, {hidden, {'X'}}},
     {fail, DeniedReasons} =
         peer:call(Asker, quod_prolog, prove,
-                  [?ASKER_NS, Denied, ?ASKER_NS], 60000),
+                  [?ASKER_NS, Denied], 60000),
     ?assert(lists:member({not_allowed, ?PRIVATE_NS}, DeniedReasons)),
     ?assertMatch(
        {ok, [#{'X' := 42}], _},
        peer:call(Asker, quod_prolog, prove,
-                 [?ASKER_NS, {';', Denied, Allowed}, ?ASKER_NS], 60000)),
+                 [?ASKER_NS, {';', Denied, Allowed}], 60000)),
     {known, [Route]} = peer:call(
                          Asker, quod_directory, resolve, [?PRIVATE_NS]),
     ?assertEqual(direct, maps:get(scope, Route)),
@@ -165,14 +165,14 @@ remote_scope_failure_reasons(Config) ->
     ?assertMatch(
        {ok, [#{'Outer' := Remote}], _},
        peer:call(Asker, quod_prolog, prove,
-                 [?ASKER_NS, Recover, ?ASKER_NS], 60000)).
+                 [?ASKER_NS, Recover], 60000)).
 
 remote_scope_deep_failure_reasons(Config) ->
     Asker = ?config(asker, Config),
     Remote = {'::', ?NS, {deep_failure, 70}},
     {fail, Reasons} = peer:call(
                         Asker, quod_prolog, prove,
-                        [?ASKER_NS, Remote, ?ASKER_NS], 60000),
+                        [?ASKER_NS, Remote], 60000),
     ?assert(length(Reasons) > 64),
     ?assertEqual(Remote, hd(Reasons)),
     ?assertEqual({'$quod_symbol', <<"deep_bottom">>}, lists:last(Reasons)).
@@ -183,14 +183,14 @@ remote_scope_structural_reason_rejection(Config) ->
     ?assertEqual(
        {error, {protocol_error, bad_payload}},
        peer:call(Asker, quod_prolog, prove,
-                 [?ASKER_NS, Remote, ?ASKER_NS], 60000)).
+                 [?ASKER_NS, Remote], 60000)).
 
 remote_scope_cancel(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Loop = {'::', ?NS, loop},
     Caller = peer:call(Asker, erlang, spawn,
-                       [quod_prolog, prove, [?ASKER_NS, Loop, ?ASKER_NS]]),
+                       [quod_prolog, prove, [?ASKER_NS, Loop]]),
     wait_scope_workers(Target, 1, 200),
     true = peer:call(Asker, erlang, exit, [Caller, kill]),
     wait_scope_workers(Target, 0, 200).
@@ -223,7 +223,7 @@ run_scope_wave(Asker, Goal, Wave) ->
 
 run_scope_proofs(Ns, Goal, Count) ->
     Parent = self(),
-    _ = [spawn(fun() -> Parent ! {proof_done, quod_prolog:prove(Ns, Goal, Ns)} end)
+    _ = [spawn(fun() -> Parent ! {proof_done, quod_prolog:prove(Ns, Goal)} end)
          || _ <- lists:seq(1, Count)],
     collect_scope_proofs(Count, []).
 
@@ -272,7 +272,7 @@ start_brahms(Peer, Ns, SelfAddr, Seeds) ->
     ok.
 
 wait_ready(Peer, Ns, Goal) ->
-    case peer:call(Peer, quod_prolog, prove, [Ns, Goal, Ns], 5000) of
+    case peer:call(Peer, quod_prolog, prove, [Ns, Goal], 5000) of
         {error, rebuilding} -> timer:sleep(20), wait_ready(Peer, Ns, Goal);
         {ok, _, _} -> ok;
         Other -> ct:fail({not_ready, Ns, Other})

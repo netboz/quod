@@ -22,7 +22,7 @@ by the fixed `quod_scope_wire` decoder.
 
 -export([start_link/0,
          identify/3, ensure_scope/3,
-         command/3, close/2, finalize/2]).
+         command/3, cancel/2, close/2, finalize/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
 
@@ -40,7 +40,8 @@ by the fixed `quod_scope_wire` decoder.
 -type pending() :: {pending, pid(), binary(), reference()}.
 
 -record(request, {
-    command_seq :: pos_integer()
+    command_seq :: pos_integer(),
+    deliver = true :: boolean()
 }).
 
 -record(scope, {
@@ -156,6 +157,19 @@ command({remote_scope, Router, RouterGeneration, Binding, RequestLink} = Handle,
       {command, self(), Handle, RouterGeneration, Binding, RequestLink,
        RemainingMs, Operation});
 command(_Handle, _RemainingMs, _Operation) ->
+    {error, invalid_handle}.
+
+-doc "Stop delivery of one timed-out command while retaining bounded correlation.".
+-spec cancel(remote_handle(), binary()) -> ok | {error, term()}.
+cancel({remote_scope, Router, RouterGeneration, Binding, RequestLink} = Handle,
+       RequestId)
+  when is_pid(Router), is_binary(RouterGeneration), is_pid(RequestLink),
+       is_binary(RequestId) ->
+    guarded_call(
+      Router,
+      {cancel, self(), Handle, RouterGeneration, Binding, RequestLink,
+       RequestId});
+cancel(_Handle, _RequestId) ->
     {error, invalid_handle}.
 
 %% Queue the close before forgetting the local correlation entry.  Both calls
@@ -285,6 +299,24 @@ handle_call(
                 {error, _} = Error ->
                     {reply, Error, S0}
             end;
+        {error, _} = Error ->
+            {reply, Error, S0}
+    end;
+handle_call(
+  {cancel, Owner, Handle, RouterGeneration, Binding, RequestLink, RequestId},
+  _From, S0) ->
+    case find_exact_scope(
+           Owner, Handle, RouterGeneration, Binding, RequestLink, S0) of
+        {ok, Scope0 = #scope{pending = Pending0}} ->
+            Pending1 = case maps:get(RequestId, Pending0, undefined) of
+                           Request = #request{} ->
+                               Pending0#{RequestId =>
+                                             Request#request{deliver = false}};
+                           undefined ->
+                               Pending0
+                       end,
+            {reply, ok,
+             put_scope(Scope0#scope{pending = Pending1}, S0)};
         {error, _} = Error ->
             {reply, Error, S0}
     end;
@@ -675,16 +707,24 @@ validate_and_route_event(
     case maps:get(ScopeKey, Scopes, undefined) of
         undefined -> S0;
         Scope0 ->
+            Deliver = request_delivery(RequestId, Scope0),
             case validate_event_owner(
                    Scope0, PeerIdentity, ReturnLink, Binding, EventSeq,
                    RequestId, AcceptedSeq, Generation, Dirty, Operation) of
                 {ok, Scope1} ->
                     {Scope2, S1} = bind_return_link(ReturnLink, Scope1, S0),
-                    route_valid_event(Operation, RequestId, Scope2, S1);
+                    route_valid_event(
+                      Operation, RequestId, Deliver, Scope2, S1);
                 {error, Reason} ->
                     poison_owner(Scope0#scope.owner,
                                  {protocol_error, Reason}, S0)
             end
+    end.
+
+request_delivery(RequestId, #scope{pending = Pending}) ->
+    case maps:get(RequestId, Pending, undefined) of
+        #request{deliver = Deliver} -> Deliver;
+        undefined -> true
     end.
 
 validate_event_owner(
@@ -774,7 +814,7 @@ first_failed([]) -> none;
 first_failed([{_Reason, true} | Rest]) -> first_failed(Rest);
 first_failed([{Reason, false} | _]) -> Reason.
 
-route_valid_event({scope_opened, BaseHeight}, _RequestId,
+route_valid_event({scope_opened, BaseHeight}, _RequestId, _Deliver,
                   Scope0 = #scope{status = opening, owner = Owner,
                                   open_ref = OpenRef}, S0) ->
     Scope1 = Scope0#scope{status = active, open_frame = <<>>},
@@ -783,23 +823,27 @@ route_valid_event({scope_opened, BaseHeight}, _RequestId,
              {ok, handle(Scope1, S1), BaseHeight,
               Scope1#scope.generation, Scope1#scope.dirty}},
     S1;
-route_valid_event({scope_error, Reason}, _RequestId,
+route_valid_event({scope_error, Reason}, _RequestId, _Deliver,
                   Scope = #scope{status = opening, owner = Owner,
                                  open_ref = OpenRef}, S0) ->
     Owner ! {quod_scope_open, OpenRef, {error, Reason}},
     drop_scope(Scope#scope.key, S0);
-route_valid_event(scope_closed, _RequestId, Scope, S0) ->
+route_valid_event(scope_closed, _RequestId, _Deliver, Scope, S0) ->
     drop_scope(Scope#scope.key, S0);
-route_valid_event({scope_error, Reason} = Operation, RequestId,
+route_valid_event({scope_error, Reason} = Operation, RequestId, Deliver,
                   Scope = #scope{owner = Owner}, S0) ->
-    Owner ! {quod_scope_event, handle(Scope, S0), RequestId,
-             Scope#scope.generation, Scope#scope.dirty, Operation},
+    _ = deliver_event(Deliver, Owner, Scope, RequestId, Operation, S0),
     poison_owner(Owner, {scope_error, Reason}, S0);
-route_valid_event(Operation, RequestId,
+route_valid_event(Operation, RequestId, Deliver,
                   Scope = #scope{owner = Owner}, S0) ->
-    Owner ! {quod_scope_event, handle(Scope, S0), RequestId,
-             Scope#scope.generation, Scope#scope.dirty, Operation},
+    _ = deliver_event(Deliver, Owner, Scope, RequestId, Operation, S0),
     put_scope(Scope, S0).
+
+deliver_event(true, Owner, Scope, RequestId, Operation, S) ->
+    Owner ! {quod_scope_event, handle(Scope, S), RequestId,
+             Scope#scope.generation, Scope#scope.dirty, Operation};
+deliver_event(false, _Owner, _Scope, _RequestId, _Operation, _S) ->
+    ok.
 
 %% ------------------------------------------------------------------
 %% Link lifecycle and cleanup

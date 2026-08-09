@@ -15,7 +15,8 @@ setup() ->
     Dir = filename:join("/tmp", "quod_e2e_" ++ U),
     Ns  = list_to_binary("e2e:" ++ U),
     {Pub, Seed} = quod_identity:generate(),   %% consensus signs shares now — a real keypair is required
-    Id  = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    Key = quod_identity:key_term({Pub, Seed}),
+    Id  = #{pubkey => Pub, key => Key},
     Cfg = #{node_id => Pub, identity => Id, data_dir => Dir, mode => create},
     {Dir, Ns, Cfg}.
 
@@ -77,12 +78,20 @@ t_write_read({Dir, Ns, Cfg}) ->
         %% commits at index 2 (the committee now survives restart — see quod_simplex).
         ?assertMatch(#{committed := 2, last_applied := 2, appends := 1},
                      quod_simplex:stats(Ns)),
-        %% the write flowed through submit_write, which stamps the client submit time on the tx
+        %% sealed-plan submission stamps the client submit time on the tx
         {ok, Store} = quod_ledger_store:open(Ns, Dir),
         try
-            {ok, #entry{data = {batch, [#transaction{submitted_at = Sub}]}}} =
+            {ok, #entry{data = {batch, [#transaction{
+                                              tx_id = TxId,
+                                              submitted_at = Sub}]}}} =
                 quod_ledger_store:read_at(Store, 2),
-            ?assert(Sub > 0)
+            ?assert(Sub > 0),
+            %% The proof reply is sent only after the outcome row and MVCC
+            %% snapshot are published, so an immediate lookup is terminal.
+            ?assertMatch(
+               {ok, #{status := committed, height := 2}},
+               quod_outcome:lookup_live(
+                 Ns, quod_ledger_store:data_dir(Cfg), TxId))
         after quod_ledger_store:close(Store) end
     end.
 
@@ -94,7 +103,7 @@ t_concurrent_writes_batch({Dir, Ns, Cfg}) ->
         Parent = self(),
         Count = 8,
         _ = [spawn(fun() -> Parent ! {write_result, N,
-                                       quod_prolog:prove(Ns, {assertz, {batch_fact, N}}, Ns)}
+                                       quod_prolog:prove(Ns, {assertz, {batch_fact, N}})}
                    end) || N <- lists:seq(1, Count)],
         Results = [receive {write_result, N, R} -> {N, R} after 5000 -> timeout end
                    || N <- lists:seq(1, Count)],
@@ -121,27 +130,51 @@ t_direct_membership_revalidated({_Dir, Ns, Cfg}) ->
         _Pid = start_ns(Ns, Cfg),
         ?assertMatch({ok, _, 1}, rp(Ns, true)),
         {NewMember, _} = quod_identity:generate(),
-        Change = #transaction{
-                    tx_id = <<"direct-membership">>, caller_ns = Ns,
-                    diff = [{assert, {{peer_admitted, NewMember, "127.0.0.1", 9999,
-                                      NewMember}, true}}],
-                    read_check = #{}, author = maps:get(node_id, Cfg), sig = none},
+        {ok, Goal} = quod_durable_term:encode_goal(
+                       {admit, NewMember, "127.0.0.1", 9999}),
+        {ok, Result} = quod_durable_term:encode_result(#{}),
+        Change0 = #transaction{
+                    tx_id = <<>>, origin = {Ns, <<0:256>>},
+                    proof_id = <<0:256>>, plan_digest = <<0:256>>,
+                    goal = Goal, result = Result,
+                    diff = [{assert, {{peer_admitted, NewMember,
+                                      "127.0.0.1", 9999, NewMember}, true}}],
+                    read_check = #{}, author = maps:get(node_id, Cfg),
+                    sig = none},
+        Change = quod_transaction:bind_id(
+                   {Ns, quod_simplex:genesis_hash(Ns)}, Change0),
         ?assertEqual({error, skipped}, quod_simplex:append(Ns, Change)),
         ?assertEqual(1, length(quod_simplex:committee(Ns))),
         ?assertMatch(#{slot := 2, membership_rejects := 1}, quod_simplex:stats(Ns))
     end.
 
-t_restart_reload({_Dir, Ns, Cfg}) ->
+t_restart_reload({Dir, Ns, Cfg}) ->
     fun() ->
         Pid1 = start_ns(Ns, Cfg),
         {ok, _, _} = rp(Ns, {assertz, {parent, tom, bob}}),
         {ok, _, _} = rp(Ns, {assertz, {parent, ann, eve}}),
+        {ok, Store} = quod_ledger_store:open(Ns, Dir),
+        Ref = try
+            {ok, #entry{data = {batch, [#transaction{tx_id = TxId}]}}} =
+                quod_ledger_store:read_at(Store, 2),
+            {transaction, Ns, quod_simplex:genesis_hash(Ns), TxId}
+        after quod_ledger_store:close(Store) end,
+        ExpectedOutcome =
+            #{status => committed, height => 2, ref => Ref},
+        ?assertEqual({ok, ExpectedOutcome}, quod_prolog:outcome(Ref)),
         stop_ns(Pid1),
+        %% The index is derived data: remove it so this restart proves that
+        %% ledger replay alone reconstructs both state and outcomes.
+        ok = file:delete(
+               filename:join(
+                 quod_ledger_store:ns_dir(Dir, Ns), "outcomes.dets")),
         %% restart with the SAME data_dir: quod_simplex reloads the block list from disk,
-        %% quod_prolog rebuilds a fresh kb by replaying it
+        %% quod_prolog rebuilds both the fresh kb projection and the exact
+        %% compact durable outcome from that ledger.
         _Pid2 = start_ns(Ns, Cfg),
         ?assertMatch({ok, [#{'X' := bob}], _}, rp(Ns, {parent, tom, {'X'}})),
         ?assertMatch({ok, [#{'P' := ann}], _}, rp(Ns, {parent, {'P'}, eve})),
+        ?assertEqual({ok, ExpectedOutcome}, quod_prolog:outcome(Ref)),
         %% genesis config @1 + two writes @2,@3
         ?assertMatch(#{committed := 3, last_applied := 3}, quod_simplex:stats(Ns))
     end.
@@ -170,7 +203,7 @@ t_failing_proofs_no_ets_leak({_Dir, Ns, Cfg}) ->
         ?assertMatch({fail, [_ | _]}, rp(Ns, {nope, x})),   %% also waits for readiness
         Before = length(ets:all()),
         _ = [?assertMatch({fail, [_ | _]},
-                          quod_prolog:prove(Ns, {undefined_pred, k}, Ns))
+                          quod_prolog:prove(Ns, {undefined_pred, k}))
              || _ <- lists:seq(1, 50)],
         After = length(ets:all()),
         ?assert(After =< Before + 2)

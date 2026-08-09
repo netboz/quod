@@ -168,10 +168,10 @@ dispatch(Goal, Next, St) ->
 %% so a sealed plan must not silently depend on one (`m:quod_dtx`). Recorded at
 %% dispatch — a bridge that found no solution still influenced the outcome.
 %% Only `proof` contexts seal plans; a verdict/projection/effect run records
-%% nothing. `peer_ready/1` is exempt: its decision is re-proved by every
-%% validator in the membership verdict, so it is never a hidden dependency.
+%% nothing. The sealing boundary decides whether a live bridge is admissible
+%% for the exact resulting diff; dispatch cannot know that yet.
 record_bridge_use(Functor, query, Ctx, St) ->
-    case ctx_kind(Ctx) =:= proof andalso Functor =/= {peer_ready, 1} of
+    case ctx_kind(Ctx) =:= proof of
         true -> quod_erlog_db_local_prove:record_live_bridge(St, Functor);
         false -> ok
     end;

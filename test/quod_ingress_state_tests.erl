@@ -400,7 +400,7 @@ request_is_membership(Request) ->
 tx(Id, Author, Seq, Sig) ->
     #transaction{
        tx_id = Id,
-       caller_ns = ?NS,
+       origin = {?NS, <<0:256>>},
        goal = undefined,
        result = undefined,
        diff = [{assert, {{ingress_test, Id}, true}}],

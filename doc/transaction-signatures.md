@@ -1,6 +1,8 @@
 # Transaction-author signatures
 
-**Status:** implemented and deployed on a fresh ledger.
+**Status:** the original signature/relay milestone is deployed. The current
+Step-4 working tree introduces the incompatible V6 admission-generation and
+semantic-transaction-id contract described below; it is not deployed.
 
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.
@@ -28,6 +30,15 @@ requires a clean persistence reset and re-found.
 10. Every author has a signed, monotonically increasing `author_seq`.
     Validators reject a sequence at or below that author's approved history,
     including an uncommitted approved parent. Gaps are legal; reuse is not.
+11. Every non-genesis `tx_id` is the target-bound SHA-256 digest of the complete
+semantic write: origin, proof and plan identities, durable goal/result,
+diff, and read check. Validators recompute it at live ingress and replay.
+
+The proof origin hashes a plan's opaque `diff` and `read_check` bytes without
+decoding foreign vocabulary. The target constructs a transaction only after
+`quod_dtx:material/1` has proved those bytes are deterministic canonical ETF;
+validators can therefore reproduce the same id from the decoded terms. A
+non-canonical nested plan is rejected before transaction construction.
 
 ## Canonical bytes
 
@@ -35,18 +46,28 @@ requires a clean persistence reset and re-found.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 2,
-   TargetNs, TxId, CallerNs, Goal, Result,
-   Diff, ReadCheck, Author, AuthorSeq, SubmittedAt},
+  {quod_transaction, 6,
+   TargetNs, GenesisAnchor, AuthorAdmission,
+   TxId, Origin, ProofId, PlanDigest, Goal, Result,
+   MaterialWire, Author, AuthorSeq, SubmittedAt},
   [deterministic]).
 ```
 
-The tuple prefix `{quod_transaction, 2}` is the fixed cryptographic
+`MaterialWire` is the bounded `quod_wire_term` encoding of
+`{Diff, maps:to_list(ReadCheck)}`. This keeps caller vocabulary out of the
+fixed ETF envelope: the receiver can safely decode and bind that envelope
+before permitting a bounded vocabulary allocation for the authenticated
+committee author.
+
+The tuple prefix `{quod_transaction, 6}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
-tag is accepted. `TargetNs` comes from the validating committee's context,
-never from a transaction claim. Deterministic ETF gives maps such as
-`ReadCheck` a canonical key order.
+tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current
+`AuthorAdmission` come from the validating committee's own history projection,
+never from transaction claims. The anchor prevents cross-founding replay;
+the admission generation prevents a removed and later re-admitted author from
+replaying signatures from its earlier membership. `maps:to_list/1` gives the
+read check its canonical term order before the wire encoding.
 
 `Goal` and `Result` are covered because they are part of the committed audit
 record shown by the Explorer. `sig` is the sole excluded field.
@@ -62,20 +83,29 @@ record shown by the Explorer. `sig` is the sole excluded field.
 4. reserves bounded signature-growth headroom while the request is unsigned,
    then stamps the signature before custody, batching, or relay.
 
-Structural validation remains independent of namespace context. It requires a
-32-byte author, a 64-byte signature, bounded canonical fields, a valid read
-check, and a valid diff. Namespace-aware acceptance additionally requires
-`caller_ns =:= TargetNs` and verifies the signature using `TargetNs`.
+Structural validation requires a 32-byte author, a 64-byte signature, bounded
+canonical fields, a valid read check, and a valid diff. Namespace-aware
+acceptance recomputes the semantic `tx_id` for the local `{TargetNs,
+GenesisAnchor}`, obtains `AuthorAdmission` from the committee projection, and
+verifies the signature against that exact binding.
 
 An exact block hash that was already accepted for the active slot may reuse its
 previous validation result when redriven. A different block is always checked.
 
 ## Exact replay protection
 
-`tx_id` remains a client-facing correlation id. Replay safety comes from
-`author_seq`, not from a time-limited transaction-id cache. Each consensus
-process keeps only the greatest committed sequence per author and reconstructs
-that projection while streaming the durable ledger at boot.
+`tx_id` is a stable semantic operation id, not caller-chosen data. Its hash
+domain includes `{TargetNs, GenesisAnchor}` and every immutable field that can
+change the write's meaning; it excludes author sequence, submission time, and
+signature so an exact redrive keeps the same id. The durable outcome index uses
+that identity to avoid applying a committed redrive twice. Changed semantic
+content necessarily receives a different id and cannot collide with the first
+outcome except by breaking SHA-256.
+
+Signed-envelope replay protection additionally comes from `author_seq`, not
+from a time-limited transaction-id cache. Each consensus process keeps the
+greatest sequence for every current admission generation and reconstructs that
+projection while streaming the durable ledger at boot.
 
 For a live proposal, the comparison floor includes the committed projection and
 the approved parent block when consensus is pipelined. A block may contain
@@ -131,9 +161,12 @@ The receiving proposer:
 2. safely decodes the outer envelope, which contains only known atoms and
    binaries;
 3. verifies `Signature` over the still-opaque canonical bytes;
-4. only then decodes the canonical transaction;
-5. requires its namespace and author to match the trusted outer context;
-6. re-encodes it and requires byte-for-byte equality.
+4. safely decodes the fixed canonical envelope and bounded material wire;
+5. permits at most 64 previously unknown atom symbols in that authenticated
+   submission, rejecting the complete material before allocation if the bound
+   is exceeded or allocation would consume the VM-wide atom safety reserve;
+6. requires its namespace and author to match the trusted outer context;
+7. re-encodes it and requires byte-for-byte equality.
 
 This prevents unauthenticated content from creating atoms before signature
 verification and rejects non-canonical encodings. The authenticated transport
@@ -141,7 +174,13 @@ peer must equal `Author`. First admission also requires that author and the
 declared target belong to the declared current committee view. Exact duplicate,
 cached, and durable-recovery lookups retain their originally admitted metadata,
 so a later committee transition cannot change an old attempt's meaning. The
-inter-ontology ask symbol codec is never used for transaction relay.
+shared `quod_wire_term` alphabet is reused for the atom-bearing material, while
+this module retains its own signature domain, schema, size limit, and
+allocation policy.
+
+Atoms are not collected by the VM. Once the safety reserve is reached, the node
+continues to accept transactions using existing vocabulary but permanently
+refuses submissions that would introduce new symbols until it is restarted.
 
 Every relay submit, accepted acknowledgement, and result uses the dedicated
 deterministic `term_to_binary({ingress, Ns}, [deterministic])` channel.
@@ -187,9 +226,17 @@ resolves its pending relay only from its own durable log: inclusion succeeds,
 while target-slot finalization without an ordinary submission retires that
 attempt and places the exact retained signed bytes at the next usable proposer.
 A local caller deadline cannot cancel a transaction that may already be
-proposed: it returns `{error, {outcome_unknown, TxId}}`. That transaction id
-must be inspected in the ledger/explorer; automatically re-proving a
-non-idempotent goal is unsafe.
+proposed: it returns
+`{error, {outcome_unknown, {transaction, Ns, GenesisAnchor, TxId}}}`.
+That anchored reference must be inspected through `quod_prolog:outcome/1` or
+the explorer; automatically re-proving a non-idempotent goal is unsafe.
+The compact pending row is synced before this reference can be returned and is
+retained after the caller deadline; only a definite pre-commit rejection or a
+failure to submit removes it. A later committed apply replaces it with the
+terminal classification. A wall-clock TTL must not delete it: consensus may
+still finalize an already-published proposal after any local timeout, and this
+protocol currently has no durable cancellation/exclusion proof that would make
+such reclamation safe.
 
 During an in-flight membership barrier every arrival parks unconditionally:
 the post-adoption schedule is unknowable. A membership change waiting for the

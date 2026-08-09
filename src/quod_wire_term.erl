@@ -126,7 +126,9 @@ decode_list([Head | Tail], Depth, Nodes, Acc) ->
     case decode(Head, Depth, Nodes) of
         {ok, Head1, Nodes1} -> decode_list(Tail, Depth, Nodes1, [Head1 | Acc]);
         error -> error
-    end.
+    end;
+decode_list(_ImproperTail, _Depth, _Nodes, _Acc) ->
+    error.
 
 normalize_goal({'$quod_symbol', _Binary}) -> '$quod_unknown_goal';
 normalize_goal(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->

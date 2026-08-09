@@ -36,17 +36,17 @@ websocket_init(State) ->
 
 websocket_handle(_Frame, State) -> {ok, State}.
 
-%% A finalized block. The event carries no namespace, but every transaction in a per-ns
-%% quod_simplex's block names it (`caller_ns`); a `noop` skip-slot has none to attribute
-%% and paints nothing, so it is dropped.
-websocket_info({committed, Slot, #entry{} = E}, State) ->
+%% A finalized block carries its target ontology explicitly. A proof origin may
+%% differ for a foreign write and is never used to route or attribute the block.
+websocket_info({committed, Ns, Slot, #entry{} = E}, State) ->
     case quod_explorer_http:entry_txs(E) of
         [] -> {ok, State};
-        [#transaction{caller_ns = Ns} | _] = Txs ->
+        Txs ->
             {reply, {text, frame(#{type => block, ns => Ns, slot => Slot,
                                    time => E#entry.timestamp,
                                    cert => quod_explorer_http:cert_json(E#entry.cert),
-                                   txs => [quod_explorer_http:tx_json_full(T, E) || T <- Txs]})},
+                                   txs => [quod_explorer_http:tx_json_full(Ns, T, E)
+                                           || T <- Txs]})},
              State}
     end;
 websocket_info({applied_live, #{ns := Ns, height := H, tx_id := Id}}, State) ->

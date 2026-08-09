@@ -412,7 +412,7 @@ wait_root_peers(Peer, Expected, Retries, _LastResult) ->
     Result =
         peer:call(
           Peer, quod_prolog, prove_ro,
-          [?ROOT, Goal, ?ROOT]),
+          [?ROOT, Goal]),
     case Result of
         {ok, [Bindings], _Height} ->
             case lists:sort(

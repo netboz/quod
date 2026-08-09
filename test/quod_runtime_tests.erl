@@ -146,7 +146,7 @@ unmatched_event_runs_nothing_test() ->
 
 %% only 5-tuple state_handler asserts in the founding block count
 founding_heads_test() ->
-    Tx = #transaction{tx_id = <<"g">>, caller_ns = <<"x">>,
+    Tx = #transaction{tx_id = <<"g">>, origin = {<<"x">>, <<0:256>>},
                       diff = [{assert, {d(a, []), {[], false}}},
                               {assert, {{other, fact}, {[], false}}},
                               {retract, {d(b, []), {[], false}}}],
@@ -160,7 +160,9 @@ founding_heads_test() ->
 setup_bare() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"rt:", (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
-    {ok, Kb} = quod_prolog:start_link(Ns, #{node_id => {"127.0.0.1", 5000}}),
+    {ok, Kb} = quod_prolog:start_link(
+                 Ns, #{node_id => {"127.0.0.1", 5000},
+                       outcome_backend => memory}),
     {ok, Rt} = quod_runtime:start_link(Ns, #{}),
     {Ns, Kb, Rt}.
 
@@ -339,7 +341,8 @@ setup_founded(GenesisTerms) ->
     ok  = file:write_file(Pl, GenesisTerms),
     Ns  = list_to_binary("rtns:" ++ U),
     {Pub, Seed} = quod_identity:generate(),
-    Id  = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
+    Key = quod_identity:key_term({Pub, Seed}),
+    Id  = #{pubkey => Pub, key => Key},
     Cfg = #{node_id => Pub, identity => Id, data_dir => Dir,
             mode => create, genesis_file => Pl},
     {ok, Sup} = quod_ns:start_link(Ns, Cfg),

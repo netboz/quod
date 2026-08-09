@@ -72,10 +72,64 @@ parse_goal_test() ->
     ?assertMatch({error, _}, quod_explorer_http:parse_goal(<<"capital(france">>)).
 
 outcome_unknown_is_pending_test() ->
-    TxId = <<0, 1, 2, 3>>,
+    Ns = <<"quod:target">>,
+    Anchor = <<7:256>>,
+    TxId = <<8:256>>,
     ?assertEqual(
-       {202, #{result => pending, tx_id => <<"00010203">>}},
-       quod_explorer_http:prove_result({error, {outcome_unknown, TxId}})).
+       {202, #{result => pending, ns => Ns,
+               anchor => binary:encode_hex(Anchor, lowercase),
+               tx_id => binary:encode_hex(TxId, lowercase)}},
+       quod_explorer_http:prove_result(
+         {error, {outcome_unknown,
+                  {transaction, Ns, Anchor, TxId}}})).
+
+foreign_commit_is_json_safe_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<12:256>>,
+    TxId = <<13:256>>,
+    Reply =
+        {200, #{result => ok, bindings => [#{}], ns => Ns,
+                anchor => binary:encode_hex(Anchor, lowercase),
+                tx_id => binary:encode_hex(TxId, lowercase)}},
+    ?assertEqual(
+       Reply,
+       quod_explorer_http:prove_result(
+         {ok, [#{}], {transaction, Ns, Anchor, TxId}})),
+    {200, JsonMap} = Reply,
+    ?assert(is_binary(iolist_to_binary(json:encode(JsonMap)))).
+
+transaction_id_parser_is_exact_test() ->
+    TxId = <<9:256>>,
+    ?assertEqual({ok, TxId}, quod_explorer_http:parse_tx_id(
+                               binary:encode_hex(TxId, lowercase))),
+    ?assertEqual({error, bad_tx_id},
+                 quod_explorer_http:parse_tx_id(<<"printable-old-id">>)),
+    ?assertEqual({error, bad_tx_id},
+                 quod_explorer_http:parse_tx_id(binary:copy(<<"z">>, 64))).
+
+outcome_json_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<10:256>>,
+    TxId = <<11:256>>,
+    ?assertEqual(
+       #{status => rejected, reason => conflict_retry, height => 73,
+         ns => Ns, anchor => binary:encode_hex(Anchor, lowercase),
+         tx_id => binary:encode_hex(TxId, lowercase)},
+       quod_explorer_http:outcome_json(
+         #{status => rejected, reason => conflict_retry, height => 73,
+           ref => {transaction, Ns, Anchor, TxId}})).
+
+compact_pending_outcome_json_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<14:256>>,
+    TxId = <<15:256>>,
+    ?assertEqual(
+       #{status => pending, ns => Ns,
+         anchor => binary:encode_hex(Anchor, lowercase),
+         tx_id => binary:encode_hex(TxId, lowercase)},
+       quod_explorer_http:outcome_json(
+         #{status => pending,
+           ref => {transaction, Ns, Anchor, TxId}})).
 
 failure_reasons_are_rendered_test() ->
     ?assertEqual(
@@ -113,8 +167,10 @@ committee_status_invalid_values_fail_closed_test() ->
 %%%===================================================================
 
 tx(N) ->
-    #transaction{tx_id = <<N:64>>, caller_ns = <<"ont:test">>,
-                 goal = {assertz, {fact, N}}, result = #{},
+    {ok, Goal} = quod_durable_term:encode_goal({assertz, {fact, N}}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    #transaction{tx_id = <<N:64>>, origin = {<<"ont:test">>, <<0:256>>},
+                 goal = Goal, result = Result,
                  diff = [{assert, {{fact, N}, true}}], read_check = #{},
                  author = <<N:256>>, submitted_at = 1000 + N, sig = none}.
 
@@ -126,6 +182,53 @@ with_temp_store(Fun) ->
                         integer_to_list(erlang:unique_integer([positive]))),
     {ok, Store0} = quod_ledger_store:open(<<"ont:test">>, Dir),
     try Fun(Store0) after file:del_dir_r(Dir) end.
+
+indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
+    Ns = <<"ont:indexed">>,
+    Anchor = <<21:256>>,
+    Dir = filename:join(
+            "/tmp", "quod_explorer_indexed_" ++
+                integer_to_list(erlang:unique_integer([positive]))),
+    DataDir = filename:join(Dir, "data"),
+    LedgerDir = filename:join(Dir, "ledger"),
+    try
+        T0 = tx(7),
+        T = quod_transaction:bind_id(
+              {Ns, Anchor},
+              T0#transaction{
+                tx_id = <<>>, origin = {Ns, <<22:256>>},
+                proof_id = <<23:256>>, plan_digest = <<24:256>>,
+                author_seq = 1}),
+        {ok, Store0} = quod_ledger_store:open(Ns, LedgerDir),
+        {ok, Store1} = quod_ledger_store:append(
+                         Store0,
+                         [#entry{index = 1, data = noop,
+                                 timestamp = 2001, cert = none},
+                          #entry{index = 2, data = {batch, [T]},
+                                 timestamp = 2002, cert = none}]),
+        ok = quod_ledger_store:close(Store1),
+        {ok, Index0} = quod_outcome:open(
+                         Ns, Anchor,
+                         #{data_dir => DataDir, ledger_dir => LedgerDir,
+                           outcome_backend => disk}),
+        {new, Candidate, Index0a} = quod_outcome:classify(Index0, T),
+        {new, _Stored, Index1} = quod_outcome:terminal(
+                                   Index0a, 2, committed,
+                                   {new, Candidate}),
+        {ok, Index2} = quod_outcome:flush(Index1),
+        IdText = binary:encode_hex(T#transaction.tx_id, lowercase),
+        {ok, terminal, Detail} =
+            quod_explorer_http:test_transaction_outcome(
+              Ns, IdText, LedgerDir, LedgerDir),
+        ?assertMatch(
+           #{outcome := #{status := committed, height := 2,
+                          goal := <<"assertz(fact(7))">>},
+             tx := #{height := 2}, block := #{slot := 2}},
+           Detail),
+        ok = quod_outcome:close(Index2)
+    after
+        _ = file:del_dir_r(Dir)
+    end.
 
 paging_test() ->
     with_temp_store(fun(Store0) ->
@@ -145,21 +248,11 @@ paging_test() ->
         ok
     end).
 
-find_tx_test() ->
-    with_temp_store(fun(Store0) ->
-        {ok, Store} = quod_ledger_store:append(
-                          Store0, [entry(S, [tx(S)]) || S <- lists:seq(1, 4)]),
-        WantId = quod_explorer_http:tx_id_text(<<3:64>>),
-        ?assertMatch(#{tx := #{height := 3}, block := #{slot := 3}},
-                     quod_explorer_http:find_tx(Store, WantId)),
-        ?assertEqual(not_found, quod_explorer_http:find_tx(Store, <<"nope">>)),
-        ok
-    end).
-
 tx_json_full_test() ->
-    J = quod_explorer_http:tx_json_full(tx(7), entry(2, [tx(7)])),
+    J = quod_explorer_http:tx_json_full(
+          <<"ont:target">>, tx(7), entry(2, [tx(7)])),
     ?assertMatch(#{height := 2, time := 2002, ops := 1, read_predicates := 0,
-                   ns := <<"ont:test">>, submitted_at := 1007}, J),
+                   ns := <<"ont:target">>, submitted_at := 1007}, J),
     ?assertEqual(<<"assertz(fact(7))">>, maps:get(goal, J)),
     ?assertEqual([#{op => assert, clause => <<"fact(7)">>}], maps:get(diff, J)),
     ?assertEqual(unsigned, maps:get(signature_status, J)),
@@ -171,26 +264,32 @@ signed_tx_json_test() ->
     {Pub, Seed} = quod_identity:generate(),
     Identity = #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})},
     T0 = (tx(8))#transaction{author = Pub},
-    {ok, T} = quod_transaction:sign(<<"ont:test">>, T0, Identity),
-    J = quod_explorer_http:tx_json_full(T, entry(2, [T])),
+    {ok, T} = quod_transaction:sign(
+                {<<"ont:test">>, <<0:256>>, <<1:256>>}, T0, Identity),
+    J = quod_explorer_http:tx_json_full(<<"ont:test">>, T, entry(2, [T])),
     ?assertEqual(verified, maps:get(signature_status, J)),
     ?assertEqual(128, byte_size(maps:get(signature, J))),
     ?assertEqual(genesis,
                  maps:get(signature_status,
-                          quod_explorer_http:tx_json_full(tx(1), entry(1, [tx(1)])))).
+                          quod_explorer_http:tx_json_full(
+                            <<"ont:test">>, tx(1), entry(1, [tx(1)])))).
 
 compiled_clause_test() ->
     %% committed clauses carry erlog's COMPILED body `{Goals, HasCut}` — facts render head-only,
     %% rules with the familiar comma body (never the raw `{[],false}` internals)
     T = (tx(1))#transaction{diff = [{assert, {{fact, a}, {[], false}}},
                                     {retract, {{rule, {'X'}}, {[{peer_ready, {'X'}}], false}}}]},
-    J = quod_explorer_http:tx_json_full(T, entry(1, [T])),
+    J = quod_explorer_http:tx_json_full(<<"ont:test">>, T, entry(1, [T])),
     ?assertEqual([#{op => assert, clause => <<"fact(a)">>},
                   #{op => retract, clause => <<"rule(X) :- peer_ready(X)">>}],
                  maps:get(diff, J)).
 
 printable_tx_id_test() ->
-    %% Printable opaque ids stay readable; binary protocol ids are hexadecimal.
+    %% Canonical 32-byte ids are always the exact hex accepted by lookup, even
+    %% in the rare case that every hash byte happens to be printable.
     ?assertEqual(<<"client-readable">>,
                  quod_explorer_http:tx_id_text(<<"client-readable">>)),
+    PrintableHash = binary:copy(<<"a">>, 32),
+    ?assertEqual(binary:encode_hex(PrintableHash, lowercase),
+                 quod_explorer_http:tx_id_text(PrintableHash)),
     ?assertEqual(<<"00000000000000ff">>, quod_explorer_http:tx_id_text(<<255:64>>)).

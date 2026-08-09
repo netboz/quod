@@ -51,6 +51,7 @@ renew the scope lifetime.
          identity(), identity(), read_write | read_only}.
 -type command_operation() ::
         scope_open | scope_close | scope_seal |
+        {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
         {invoke_cancel, opaque_id()} |
@@ -69,6 +70,10 @@ renew the scope lifetime.
 -type event_operation() ::
         {scope_opened, non_neg_integer()} | scope_closed |
         {plan_sealed, binary()} | plan_not_material |
+        {plan_submitted, {committed, pos_integer(), binary()} |
+                         {rejected, atom()} |
+                         {outcome_unknown,
+                          {transaction, binary(), binary(), binary()}}} |
         {invocation_opened, opaque_id()} |
         {solution | complete | erlog_error,
          opaque_id(), pos_integer(), binary()} |
@@ -91,7 +96,8 @@ renew the scope lifetime.
 -type event() ::
         {scope_event, binding(), pos_integer(), opaque_id(), pos_integer(),
          non_neg_integer(), boolean(), event_operation()}.
--type payload_kind() :: goal | answer | failure_reasons | erlog_error | plan.
+-type payload_kind() ::
+        goal | answer | failure_reasons | erlog_error | plan | result.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -343,6 +349,7 @@ payload_limit(answer) -> {ok, ?QUOD_MAX_PROOF_ANSWER_BYTES};
 payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
 payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
 payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
+payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
 payload_limit(_) -> error.
 
 %% ------------------------------------------------------------------
@@ -352,6 +359,16 @@ payload_limit(_) -> error.
 validate_command_operation(scope_open) -> ok;
 validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
+validate_command_operation(
+  {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
+    %% These three payloads remain opaque until the authenticated command has
+    %% passed its exact scope binding, sequence, deadline, readiness and quota
+    %% gates. Deep canonical decoding belongs to the shared target admission
+    %% boundary; unauthorised peers pay only bounded envelope decoding here.
+    case quod_trace:valid_carrier(TraceCarrier) of
+        true -> validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob);
+        false -> protocol_error(bad_payload)
+    end;
 validate_command_operation(
   {invoke_open, InvocationId, Selection, Chain, GoalBlob}) ->
     case {valid_id(InvocationId), validate_selection(Selection)} of
@@ -401,6 +418,16 @@ validate_command_operation({controller_error, ControllerId, Reason}) ->
     validate_id_error(ControllerId, Reason);
 validate_command_operation(_) -> protocol_error(bad_shape).
 
+validate_submit_blobs(PlanBlob, GoalBlob, ResultBlob) ->
+    case validate_blob(plan, PlanBlob) of
+        ok ->
+            case validate_blob(goal, GoalBlob) of
+                ok -> validate_blob(result, ResultBlob);
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
 validate_event_operation({scope_opened, BaseHeight}) ->
     case valid_uint64(BaseHeight) of
         true -> ok;
@@ -410,6 +437,29 @@ validate_event_operation(scope_closed) -> ok;
 validate_event_operation({plan_sealed, Blob}) ->
     validate_blob(plan, Blob);
 validate_event_operation(plan_not_material) -> ok;
+validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
+    case valid_sequence(Slot) andalso is_binary(TxId)
+         andalso byte_size(TxId) =:= 32 of
+        true -> ok;
+        false -> protocol_error(bad_shape)
+    end;
+validate_event_operation({plan_submitted, {rejected, Reason}}) ->
+    case lists:member(
+           Reason,
+           [conflict_retry, retry,
+            consensus_unavailable, bad_plan]) of
+        true -> ok;
+        false -> protocol_error(bad_error_code)
+    end;
+validate_event_operation(
+  {plan_submitted,
+   {outcome_unknown, {transaction, Ns, Anchor, TxId}}}) ->
+    case valid_namespace(Ns) andalso is_binary(Anchor)
+         andalso byte_size(Anchor) =:= 32 andalso is_binary(TxId)
+         andalso byte_size(TxId) =:= 32 of
+        true -> ok;
+        false -> protocol_error(bad_shape)
+    end;
 validate_event_operation({invocation_opened, InvocationId}) ->
     validate_one_id(InvocationId);
 validate_event_operation({solution, InvocationId, AnswerSeq, Blob}) ->
@@ -749,7 +799,8 @@ validate_public_error_pair({Tag, Max})
 validate_public_error_pair({too_large, Kind}) ->
     case payload_limit(Kind) of
         {ok, _} -> ok;
-        error when Kind =:= scope_envelope; Kind =:= transcript -> ok;
+        error when Kind =:= scope_envelope; Kind =:= transcript;
+                   Kind =:= result -> ok;
         error -> protocol_error(bad_error_code)
     end;
 validate_public_error_pair({non_transactional_dependency, {Name, Arity}})

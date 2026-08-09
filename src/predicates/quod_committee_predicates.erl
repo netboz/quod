@@ -5,7 +5,7 @@ External Erlang predicates that change the committee — the set of `peer_admitt
 `admit(Pubkey, Host, Port)` and `remove(Pubkey)` are the interface between the ontology (its rules) and the
 committee. They follow the **prove-before-broadcast** discipline (as in bbsvx/onia): a predicate does its
 checks and STAGES the `peer_admitted` assert/retract into the proof's write-set — it does **not** submit to
-consensus itself. quod's normal write path (`m:quod_prolog` `run_proof` → `submit_write` →
+consensus itself. quod's normal write path (`m:quod_prolog` `run_proof` → `submit_plan` →
 `quod_simplex:append`) turns that staged diff into a committed transaction; every member then applies it,
 and `quod_simplex` grows/shrinks its validator set from the same committed diff (`committee_delta/1`). So
 the committee stays a pure, deterministic projection of the committed log on every node.
@@ -49,7 +49,8 @@ its class-enforcing dispatcher (`admit`/`remove` are `staging`, `peer_ready` is 
 identical on every member and never carried in the log; only their resulting `peer_admitted` diff is.
 """.
 
--export([admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1]).
+-export([admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1,
+         membership_diff/1]).
 
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -122,6 +123,15 @@ applied_height(St) -> quod_predicates:ctx_height(quod_predicates:context(St)).
 %% The current committee size = the number of DISTINCT peer_admitted pubkeys — a pubkey with more than
 %% one address fact must not inflate the floor.
 committee_size(Est) -> length(admitted_pubkeys(Est)).
+
+-doc "Whether a diff is exactly one well-formed committee membership operation.".
+-spec membership_diff(term()) -> boolean().
+membership_diff([{Kind, {{peer_admitted, Id, _Host, _Port, Pubkey}, _Body}}])
+  when (Kind =:= assert orelse Kind =:= retract),
+       is_binary(Pubkey), Id =:= Pubkey ->
+    true;
+membership_diff(_Diff) ->
+    false.
 
 -doc """
 The DISTINCT `peer_admitted` pubkeys committed in a kb (element 5 of the fact head, sorted) — the

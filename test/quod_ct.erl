@@ -38,11 +38,11 @@ eventually(F, Timeout) ->
 %% Best-effort stop of a list of `peer` nodes (never throws).
 stop_all(Peers) -> _ = [catch peer:stop(P) || P <- Peers], ok.
 
-%% A `quod_prolog:prove/3` result with at least one binding.
+%% A `quod_prolog:prove/2` result with at least one binding.
 %% A local deadline does not prove that a write failed. Tag it so even a nested
 %% `lists:any/2` callback escapes `eventually/2` instead of resubmitting it.
-match_ok({error, {outcome_unknown, TxId}}) ->
-    throw({quod_retry_stop, {outcome_unknown, TxId}});
+match_ok({error, {outcome_unknown, OutcomeRef}}) ->
+    throw({quod_retry_stop, {outcome_unknown, OutcomeRef}});
 match_ok({badrpc, timeout}) ->
     throw({quod_retry_stop, {transport_timeout, peer_call}});
 match_ok({ok, [_ | _], _}) -> true;
@@ -66,13 +66,13 @@ ordinary_write_ok(Result) ->
 
 -ifdef(TEST).
 eventually_stops_on_unknown_outcome_test() ->
-    TxId = <<"uncertain">>,
+    OutcomeRef = {transaction, <<"quod:test">>, <<1:256>>, <<2:256>>},
     try eventually(
-          fun() -> match_ok({error, {outcome_unknown, TxId}}) end, 1000) of
+          fun() -> match_ok({error, {outcome_unknown, OutcomeRef}}) end, 1000) of
         _ ->
             erlang:error(unknown_outcome_was_retried)
     catch
-        error:{unsafe_retry, {outcome_unknown, TxId}} ->
+        error:{unsafe_retry, {outcome_unknown, OutcomeRef}} ->
             ok
     end.
 
@@ -100,7 +100,7 @@ ordinary_write_does_not_retry_slot_closure_test() ->
 %% parked-write deadline. Let the application report outcome_unknown itself;
 %% otherwise a test poll can resubmit a write that is still able to commit.
 peer_prove(Peer, Ns, Goal) ->
-    peer:call(Peer, quod_prolog, prove, [Ns, Goal, Ns], 35000).
+    peer:call(Peer, quod_prolog, prove, [Ns, Goal], 35000).
 
 %% A per-port data_dir under the suite's private dir.
 datadir(Config, Port) -> filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)).
@@ -116,7 +116,7 @@ generate_key_gt(Lo) ->
 rp(Ns, Goal) -> rp(Ns, Goal, 300).
 rp(_Ns, _Goal, 0) -> {error, timeout};
 rp(Ns, Goal, N) ->
-    case quod_prolog:prove(Ns, Goal, Ns) of
+    case quod_prolog:prove(Ns, Goal) of
         {error, rebuilding} -> timer:sleep(10), rp(Ns, Goal, N - 1);
         R -> R
     end.
@@ -159,9 +159,24 @@ assert_facts(Facts, Est) ->
 %% a well-shaped unsigned test transaction carrying `Diff` (+ optional OCC read_check)
 change(Ns, Diff) -> change(Ns, Diff, #{}).
 change(Ns, Diff, RC) ->
-    #transaction{tx_id = integer_to_binary(erlang:unique_integer([positive])),
-                 caller_ns = Ns, diff = Diff, read_check = RC,
-                 author = {"127.0.0.1", 5000}, sig = none}.
+    PlanDigest = crypto:hash(
+                   sha256,
+                   term_to_binary(
+                     {test_plan, erlang:unique_integer([positive]), Diff, RC},
+                     [deterministic])),
+    Anchor = case quod_simplex:genesis_hash(Ns) of
+                 <<_:256>> = GenesisAnchor -> GenesisAnchor;
+                 undefined -> <<0:256>>
+             end,
+    {ok, Goal} = quod_durable_term:encode_goal({test_change, Ns}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    quod_transaction:bind_id(
+      {Ns, Anchor},
+      #transaction{tx_id = <<>>, origin = {Ns, <<0:256>>},
+                   proof_id = <<0:256>>, plan_digest = PlanDigest,
+                   goal = Goal, result = Result,
+                   diff = Diff, read_check = RC,
+                   author = {"127.0.0.1", 5000}, sig = none}).
 
 batch(Tx) -> {batch, [Tx]}.
 

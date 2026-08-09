@@ -236,7 +236,8 @@ follower_relays(Config) ->
     %% proposal becomes visible between height sampling and append routing.
     {FollowerPeer, _} = relay_only_origin(H + 1, Nodes),
     ?assertMatch({ok, _, _},
-                 prove(FollowerPeer, {assertz, {relayed, from_follower}})),
+                 prove(FollowerPeer,
+                       {assertz, {relayed, from_follower}})),
     [ ?assert(eventually(
                 fun() -> match_ok(prove(Peer, {relayed, {'X'}})) end,
                 10000))
@@ -605,7 +606,8 @@ over_fault_restart_recovers(Config) ->
         case InterruptedResult of
             {ok, _, _} ->
                 ok;
-            {error, {outcome_unknown, TxId}} when is_binary(TxId) ->
+            {error, {outcome_unknown,
+                     {transaction, Ns, <<_:256>>, <<_:256>>}}} ->
                 ok;
             OtherInterrupted ->
                 ct:fail(
@@ -649,9 +651,16 @@ assert_membership_proposal_skipped(Config, Evil) ->
     %% own statem (a transport-level send). Timestamp margin keeps it monotonic vs the last committed block.
     Ts    = erlang:system_time(millisecond) + 1000,
     Identity = maps:get(LeaderPub, ?config(identities, Config)),
-    Unsigned = Evil#transaction{author = LeaderPub,
-                                author_seq = (1 bsl 60) + V, sig = none},
-    {ok, SignedEvil} = quod_transaction:sign(?NS, Unsigned, Identity),
+    Anchor = peer:call(LeaderPeer, quod_simplex, genesis_hash, [?NS]),
+    Unsigned = quod_transaction:bind_id(
+                 {?NS, Anchor},
+                 Evil#transaction{author = LeaderPub,
+                                  author_seq = (1 bsl 60) + V, sig = none}),
+    Status = peer:call(LeaderPeer, quod_simplex, status, [?NS]),
+    {ok, Binding} = quod_simplex:history_binding(
+                      {?NS, Anchor}, LeaderPub,
+                      maps:get(history_projection, Status)),
+    {ok, SignedEvil} = quod_transaction:sign(Binding, Unsigned, Identity),
     Block = #block{slot = V, parent = H, payload = [SignedEvil], timestamp = Ts},
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
     Frame = quod_simplex:encode(?NS, {propose, Block}),
@@ -674,7 +683,11 @@ assert_membership_proposal_skipped(Config, Evil) ->
 
 %% a raw #transaction carrying an arbitrary diff (the Byzantine submitter path — no admit/remove predicate)
 tx(Diff) ->
-    #transaction{tx_id = <<"evil">>, caller_ns = ?NS, diff = Diff,
+    {ok, Goal} = quod_durable_term:encode_goal(byzantine_membership_change),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    #transaction{tx_id = <<>>, origin = {?NS, <<0:256>>},
+                 proof_id = <<0:256>>, plan_digest = <<0:256>>,
+                 goal = Goal, result = Result, diff = Diff,
                  read_check = #{}, author = <<0:256>>, sig = none}.
 
 committee(Peer)          -> maps:get(committee, status(Peer), []).

@@ -4,6 +4,9 @@
 -include("quod_ledger.hrl").
 
 -define(NS, <<"test:transactions">>).
+-define(ANCHOR, <<11:256>>).
+-define(ADMISSION, <<13:256>>).
+-define(BINDING, {?NS, ?ANCHOR, ?ADMISSION}).
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
@@ -12,30 +15,51 @@ identity() ->
     {Pub, #{pubkey => Pub, key => quod_identity:key_term({Pub, Seed})}}.
 
 unsigned(Pub) ->
-    #transaction{
-       tx_id = <<"tx-1">>,
-       caller_ns = ?NS,
-       goal = {set, alpha, 1},
-       result = #{<<"X">> => 1},
-       diff = [{assert, {{value, alpha, 1}, true}}],
-       read_check = #{{value, 3} => {present, 42}, {policy, 1} => {present, 7}},
-       author = Pub,
-       author_seq = 1,
-       submitted_at = 1750000000000,
-       sig = none}.
+    {ok, Goal} = quod_durable_term:encode_goal({set, alpha, 1}),
+    {ok, Result} = quod_durable_term:encode_result(#{'X' => 1}),
+    quod_transaction:bind_id(
+      {?NS, ?ANCHOR},
+      #transaction{
+         tx_id = <<>>,
+         origin = {?NS, <<0:256>>},
+         proof_id = <<21:256>>,
+         plan_digest = <<22:256>>,
+         goal = Goal,
+         result = Result,
+         diff = [{assert, {{value, alpha, 1}, true}}],
+         read_check = #{{value, 3} => {present, 42},
+                        {policy, 1} => {present, 7}},
+         author = Pub,
+         author_seq = 1,
+         submitted_at = 1750000000000,
+         sig = none}).
 
 signed() ->
     {Pub, Identity} = identity(),
     Tx0 = unsigned(Pub),
-    {ok, Tx} = quod_transaction:sign(?NS, Tx0, Identity),
+    {ok, Tx} = quod_transaction:sign(?BINDING, Tx0, Identity),
     {Tx, Identity}.
+
+empty_projection() -> quod_simplex:history_projection().
+projection(Pub) ->
+    quod_simplex:history_projection(
+      [Pub], undefined, #{Pub => ?ADMISSION}, #{}, 0).
 
 sign_and_verify_test() ->
     {Tx, _Identity} = signed(),
     ?assertEqual(64, byte_size(Tx#transaction.sig)),
-    ?assert(quod_transaction:verify(?NS, Tx)),
-    ?assertEqual(quod_transaction:bytes(?NS, Tx#transaction{sig = none}),
-                 quod_transaction:bytes(?NS, Tx)).
+    ?assert(quod_transaction:verify(?BINDING, Tx)),
+    ?assertEqual(quod_transaction:bytes(?BINDING, Tx#transaction{sig = none}),
+                 quod_transaction:bytes(?BINDING, Tx)).
+
+sign_submission_matches_separate_operations_test() ->
+    {Pub, Identity} = identity(),
+    Unsigned = unsigned(Pub),
+    {ok, ExpectedSigned} = quod_transaction:sign(?BINDING, Unsigned, Identity),
+    {ok, ExpectedSubmission} =
+        quod_transaction:submission(?BINDING, ExpectedSigned),
+    {ok, ExpectedSigned, ExpectedSubmission} =
+        quod_transaction:sign_submission(?BINDING, Unsigned, Identity).
 
 deterministic_read_check_order_test() ->
     {Pub, _Identity} = identity(),
@@ -45,40 +69,50 @@ deterministic_read_check_order_test() ->
     B = A#transaction{
           read_check = maps:from_list(
                          [{{policy, 1}, {present, 7}}, {{value, 3}, {present, 42}}])},
-    ?assertEqual(quod_transaction:bytes(?NS, A),
-                 quod_transaction:bytes(?NS, B)).
+    ?assertEqual(quod_transaction:bytes(?BINDING, A),
+                 quod_transaction:bytes(?BINDING, B)).
 
 namespace_binding_test() ->
     {Tx, _Identity} = signed(),
-    ?assert(quod_transaction:verify(?NS, Tx)),
-    ?assertNot(quod_transaction:verify(<<"other:ontology">>, Tx)).
+    ?assert(quod_transaction:verify(?BINDING, Tx)),
+    ?assertNot(quod_transaction:verify(
+                 {<<"other:ontology">>, ?ANCHOR, ?ADMISSION}, Tx)),
+    %% The anchor closes cross-founding replay: the same namespace re-founded
+    %% mints a different genesis hash, so every old signature dies with it.
+    ?assertNot(quod_transaction:verify({?NS, <<12:256>>, ?ADMISSION}, Tx)),
+    %% Leaving and rejoining changes only this author's admission generation.
+    ?assertNot(quod_transaction:verify({?NS, ?ANCHOR, <<14:256>>}, Tx)).
 
 every_committed_field_is_bound_test() ->
     {Tx, _Identity} = signed(),
+    {ok, OtherGoal} = quod_durable_term:encode_goal({set, alpha, 2}),
+    {ok, OtherResult} = quod_durable_term:encode_result(#{'X' => 2}),
     Mutations = [
       Tx#transaction{tx_id = <<"tx-2">>},
-      Tx#transaction{caller_ns = <<"other">>},
-      Tx#transaction{goal = {set, alpha, 2}},
-      Tx#transaction{result = #{<<"X">> => 2}},
+      Tx#transaction{origin = {<<"other">>, <<0:256>>}},
+      Tx#transaction{proof_id = <<23:256>>},
+      Tx#transaction{plan_digest = <<24:256>>},
+      Tx#transaction{goal = OtherGoal},
+      Tx#transaction{result = OtherResult},
       Tx#transaction{diff = [{assert, {{value, alpha, 2}, true}}]},
       Tx#transaction{read_check = #{{value, 3} => {present, 43}}},
       Tx#transaction{author = <<0:256>>},
       Tx#transaction{author_seq = 2},
       Tx#transaction{submitted_at = 1750000000001}
     ],
-    [?assertNot(quod_transaction:verify(?NS, Mutated)) || Mutated <- Mutations].
+    [?assertNot(quod_transaction:verify(?BINDING, Mutated)) || Mutated <- Mutations].
 
 malformed_and_wrong_author_test() ->
     {Pub, Identity} = identity(),
     {OtherPub, OtherIdentity} = identity(),
     Tx = unsigned(Pub),
     ?assertEqual({error, author_mismatch},
-                 quod_transaction:sign(?NS, Tx, OtherIdentity)),
-    {ok, Signed} = quod_transaction:sign(?NS, Tx, Identity),
-    ?assertNot(quod_transaction:verify(?NS, Signed#transaction{sig = <<1, 2, 3>>})),
-    ?assertNot(quod_transaction:verify(?NS, Signed#transaction{author = OtherPub})),
+                 quod_transaction:sign(?BINDING, Tx, OtherIdentity)),
+    {ok, Signed} = quod_transaction:sign(?BINDING, Tx, Identity),
+    ?assertNot(quod_transaction:verify(?BINDING, Signed#transaction{sig = <<1, 2, 3>>})),
+    ?assertNot(quod_transaction:verify(?BINDING, Signed#transaction{author = OtherPub})),
     ?assertEqual({error, already_signed},
-                 quod_transaction:sign(?NS, Signed, Identity)).
+                 quod_transaction:sign(?BINDING, Signed, Identity)).
 
 history_genesis_exemption_test() ->
     {Pub, Identity} = identity(),
@@ -89,6 +123,7 @@ history_genesis_exemption_test() ->
     Policy = {assert, {{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}, true}},
     Genesis = (unsigned(Pub))#transaction{
                 tx_id = genesis_id(?NS, Nonce),
+                proof_id = none, plan_digest = none,
                 goal = undefined, result = undefined,
                 diff = [
                   {assert, {{consensus_incarnation, Nonce}, true}},
@@ -97,59 +132,63 @@ history_genesis_exemption_test() ->
                 ],
                 read_check = #{},
                 author_seq = 0, submitted_at = 0, sig = none},
-    ?assert(quod_simplex:valid_history_entry(?NS, 1, {batch, [Genesis]}, [])),
+    ?assert(quod_simplex:valid_history_entry(
+              {?NS, ?ANCHOR}, 1, {batch, [Genesis]}, empty_projection())),
     %% policy-less genesis is rejected at the founding/replay/catch-up seam
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
+         {?NS, ?ANCHOR}, 1,
          {batch, [Genesis#transaction{
                     diff = [{assert, {{consensus_incarnation, Nonce}, true}},
                             {assert, {{peer_admitted, Pub, undefined,
-                                       undefined, Pub}, true}}]}]}, [])),
+                                       undefined, Pub}, true}}]}]}, empty_projection())),
     %% assert-then-retract cannot smuggle a policy-less genesis past the
     %% assertion-only rule, even though the {can_invoke,4} head appears
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
+         {?NS, ?ANCHOR}, 1,
          {batch, [Genesis#transaction{
                     diff = [{assert, {{consensus_incarnation, Nonce}, true}},
                             {assert, {{peer_admitted, Pub, undefined,
                                        undefined, Pub}, true}},
                             Policy,
                             {retract, {{can_invoke, {'G'}, {'P'},
-                                        {'C'}, {'N'}}, true}}]}]}, [])),
+                                        {'C'}, {'N'}}, true}}]}]}, empty_projection())),
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
-         {batch, [Genesis#transaction{tx_id = <<"genesis:test">>}]}, [])),
+         {?NS, ?ANCHOR}, 1,
+         {batch, [Genesis#transaction{tx_id = <<"genesis:test">>}]}, empty_projection())),
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
-         {batch, [Genesis#transaction{tx_id = genesis_id(?NS, <<8:256>>)}]}, [])),
+         {?NS, ?ANCHOR}, 1,
+         {batch, [Genesis#transaction{tx_id = genesis_id(?NS, <<8:256>>)}]}, empty_projection())),
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
+         {?NS, ?ANCHOR}, 1,
          {batch, [Genesis#transaction{
                     diff = [{assert,
                              {{peer_admitted, Pub, undefined, undefined, Pub},
-                              true}}]}]}, [])),
+                              true}}]}]}, empty_projection())),
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
-         {batch, [Genesis#transaction{author_seq = 1}]}, [])),
+         {?NS, ?ANCHOR}, 1,
+         {batch, [Genesis#transaction{author_seq = 1}]}, empty_projection())),
     %% `#{}` in a head pattern matches any map: a non-empty read set on the
     %% founding transaction must still be refused explicitly
     ?assertNot(
        quod_simplex:valid_history_entry(
-         ?NS, 1,
+         {?NS, ?ANCHOR}, 1,
          {batch, [Genesis#transaction{
-                    read_check = #{{x, 1} => {present, 7}}}]}, [])),
-    ?assertNot(quod_simplex:valid_history_entry(?NS, 2, {batch, [Genesis]}, [Pub])),
-    {ok, Signed} = quod_transaction:sign(
-                     ?NS, (unsigned(Pub))#transaction{author_seq = 1}, Identity),
-    ?assert(quod_simplex:valid_history_entry(?NS, 2, {batch, [Signed]}, [Pub])),
+                    read_check = #{{x, 1} => {present, 7}}}]}, empty_projection())),
     ?assertNot(quod_simplex:valid_history_entry(
-                 <<"other">>, 2, {batch, [Signed]}, [Pub])).
+                 {?NS, ?ANCHOR}, 2, {batch, [Genesis]}, projection(Pub))),
+    {ok, Signed} = quod_transaction:sign(
+                     ?BINDING, (unsigned(Pub))#transaction{author_seq = 1},
+                     Identity),
+    ?assert(quod_simplex:valid_history_entry(
+              {?NS, ?ANCHOR}, 2, {batch, [Signed]}, projection(Pub))),
+    ?assertNot(quod_simplex:valid_history_entry(
+                 {<<"other">>, ?ANCHOR}, 2, {batch, [Signed]}, projection(Pub))).
 
 genesis_id(Ns, Nonce) ->
     <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
@@ -157,18 +196,31 @@ genesis_id(Ns, Nonce) ->
 
 relay_submission_roundtrip_test() ->
     {Tx, _Identity} = signed(),
-    {ok, Submission} = quod_transaction:submission(?NS, Tx),
+    {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
     ?assertEqual(16, byte_size(quod_transaction:submission_id(Submission))),
     ?assert(quod_transaction:verify_submission(Submission)),
     ?assertEqual({ok, Tx},
-                 quod_transaction:decode_verified_submission(?NS, Submission)),
+                 quod_transaction:decode_verified_submission(?BINDING, Submission)),
     ?assertMatch({error, namespace_or_author_mismatch},
                  quod_transaction:decode_verified_submission(
-                   <<"other">>, Submission)).
+                   {<<"other">>, ?ANCHOR, ?ADMISSION}, Submission)).
+
+different_canonical_submissions_have_different_ids_test() ->
+    {Tx, Identity} = signed(),
+    {ok, Submission1} = quod_transaction:submission(?BINDING, Tx),
+    {ok, OtherGoal} = quod_durable_term:encode_goal({set, alpha, 2}),
+    Tx0 = quod_transaction:bind_id(
+            {?NS, ?ANCHOR},
+            Tx#transaction{tx_id = <<>>, goal = OtherGoal, sig = none}),
+    {ok, Tx2} = quod_transaction:sign(?BINDING, Tx0, Identity),
+    {ok, Submission2} = quod_transaction:submission(?BINDING, Tx2),
+    ?assertNotEqual(
+       quod_transaction:submission_id(Submission1),
+       quod_transaction:submission_id(Submission2)).
 
 relay_attempt_identity_test() ->
     {Tx, _Identity} = signed(),
-    {ok, Submission} = quod_transaction:submission(?NS, Tx),
+    {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
     SubmissionId = quod_transaction:submission_id(Submission),
     CommitteeId = <<6:256>>,
     Target = <<7:256>>,
@@ -229,7 +281,7 @@ relay_attempt_identity_rejects_malformed_test() ->
 relay_verifies_before_decode_test() ->
     {Tx, _Identity} = signed(),
     {ok, {submit, Author, Signature, Canonical}} =
-        quod_transaction:submission(?NS, Tx),
+        quod_transaction:submission(?BINDING, Tx),
     Tampered = {submit, Author, flip_first(Signature), Canonical},
     ?assertNot(quod_transaction:verify_submission(Tampered)),
     %% A valid signature over a non-canonical term is authenticated but still not
@@ -243,5 +295,67 @@ relay_verifies_before_decode_test() ->
     ?assertMatch({error, malformed_submission},
                  quod_transaction:decode_verified_submission(
                    ?NS, AuthenticatedGarbage)).
+
+authenticated_relay_etf_cannot_allocate_atoms_test() ->
+    Prefix = integer_to_binary(erlang:unique_integer([positive])),
+    AtomNames =
+        [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
+         || N <- lists:seq(1, 65)],
+    [?assertException(
+        error, badarg, binary_to_existing_atom(Name, utf8))
+     || Name <- AtomNames],
+    %% The signed envelope itself contains only fixed atoms. User vocabulary is
+    %% represented by bounded wire symbols; exceeding the explicit allocation
+    %% cap rejects the complete material before any symbol is interned.
+    DiffWire = wire_list([{0, Name} || Name <- AtomNames]),
+    MaterialWire = {4, [DiffWire, {5}]},
+    {Author, Identity} = identity(),
+    Canonical =
+        term_to_binary(
+          {quod_transaction, 6, ?NS, ?ANCHOR, ?ADMISSION,
+           <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
+           <<>>, <<>>, MaterialWire, Author, 1, 0},
+          [deterministic]),
+    Signature = quod_identity:sign(Canonical, Identity),
+    Submission = {submit, Author, Signature, Canonical},
+    ?assert(quod_transaction:verify_submission(Submission)),
+    ?assertEqual(
+       {error, too_many_new_atoms},
+       quod_transaction:decode_verified_submission(?BINDING, Submission)),
+    [?assertException(
+        error, badarg, binary_to_existing_atom(Name, utf8))
+     || Name <- AtomNames].
+
+bounded_material_failure_is_total_test() ->
+    {Author, Identity} = identity(),
+    %% The wire codec's existing maximum depth is 64. Use a clearly deeper
+    %% fixture so the surrounding material wrappers cannot leave it on the edge.
+    DeepTerm = deep_term(70, leaf),
+    Transaction =
+        quod_transaction:bind_id(
+          {?NS, ?ANCHOR},
+          (unsigned(Author))#transaction{
+            diff = [{assert, {{deep, DeepTerm}, true}}]}),
+    ?assertEqual(
+       {error, bad_term},
+       quod_transaction:bytes(?BINDING, Transaction)),
+    ?assertEqual(
+       {error, bad_term},
+       quod_transaction:sign_submission(
+         ?BINDING, Transaction, Identity)),
+    SignedShape = Transaction#transaction{sig = <<0:512>>},
+    ?assertNot(quod_transaction:verify(?BINDING, SignedShape)),
+    %% Drive the same value through history validation: a validator must reject
+    %% the proposal rather than crashing while reconstructing signed bytes.
+    ?assertNot(
+       quod_simplex:valid_history_entry(
+         {?NS, ?ANCHOR}, 2, {batch, [SignedShape]},
+         projection(Author))).
+
+deep_term(0, Term) -> Term;
+deep_term(Depth, Term) -> deep_term(Depth - 1, {nested, Term}).
+
+wire_list([]) -> {5};
+wire_list([Head | Tail]) -> {6, Head, wire_list(Tail)}.
 
 flip_first(<<Byte, Rest/binary>>) -> <<(Byte bxor 1), Rest/binary>>.

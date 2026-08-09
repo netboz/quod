@@ -25,7 +25,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3,
-         authorize_scope/6, node_principal/0, close_stream/1]).
+         authorize_scope/6, close_stream/1]).
 -ifdef(TEST).
 -export([test_serve_nested/1, test_await_scope_reply/2,
          test_await_identity/4, test_await_remote_scope_open/4,
@@ -582,23 +582,6 @@ required_node_key() ->
         _ -> erlang:error(node_pubkey_required)
     end.
 
--doc """
-The engine-owned principal term for a proof entered on this node itself.
-
-A node without a configured identity is the explicit `anonymous` principal,
-never an invented key: the shipped default-open `can_invoke/4` clause admits
-it, while a restrictive policy — which names the `{node, Key}` terms it
-accepts — naturally does not. Transport paths that genuinely require a key
-(remote dialing, signing) keep `required_node_key/0` and still refuse to run
-keyless.
-""".
--spec node_principal() -> {node, <<_:256>>} | anonymous.
-node_principal() ->
-    case application:get_env(quod, node_pubkey) of
-        {ok, <<_:256>> = NodeKey} -> {node, NodeKey};
-        _ -> anonymous
-    end.
-
 execution_remaining_ms() ->
     case quod_scope_session:remaining_ms() of
         {ok, RemainingMs} -> RemainingMs;
@@ -613,7 +596,7 @@ open_scope_invocation(
     %% and completes with the bounded reason through the ordinary path.
     %% `(Ns::Denied ; Fallback)` therefore fails over to Fallback.
     Effective =
-        case authorize_scope(node_principal(), Goal, Chain,
+        case authorize_scope(quod_proof_context:principal(), Goal, Chain,
                              {Ns, Anchor}, Height, Session) of
             true  -> Goal;
             false -> {fail_with_reason, {not_allowed, Ns}}

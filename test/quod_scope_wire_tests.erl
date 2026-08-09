@@ -125,12 +125,76 @@ seal_operations_round_trip_and_stay_bounded_test() ->
           ?assertEqual({ok, Event},
                        quod_scope_wire:decode_response(EncodedError))
       end,
-      [{too_large, transcript}, {too_large, plan},
+      [{too_large, transcript}, {too_large, plan}, {too_large, result},
        {non_transactional_dependency, {directory_host, 5}}]),
     ?assertEqual(
        {error, {protocol_error, bad_error_code}},
        quod_scope_wire:encode_event(
          event({scope_error, {non_transactional_dependency, not_a_functor}}))).
+
+submit_operations_round_trip_and_stay_bounded_test() ->
+    {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{'X' => ok}),
+    Submit = command(
+               {submit_plan, <<"plan blob">>, GoalBlob, ResultBlob, []}),
+    {ok, EncodedSubmit} = quod_scope_wire:encode_command(Submit),
+    ?assertEqual({ok, Submit}, quod_scope_wire:decode_request(EncodedSubmit)),
+    %% Goal/result bytes remain opaque at the outer command boundary. Their
+    %% canonical decode happens only after the target has authenticated and
+    %% matched the already-open scope.
+    OpaqueSubmit = command(
+                     {submit_plan, <<"plan blob">>,
+                      <<"not canonical goal ETF">>,
+                      <<"not canonical result ETF">>, []}),
+    {ok, EncodedOpaque} = quod_scope_wire:encode_command(OpaqueSubmit),
+    ?assertEqual(
+       {ok, OpaqueSubmit}, quod_scope_wire:decode_request(EncodedOpaque)),
+    ?assertEqual(
+       {error, {too_large, plan}},
+       quod_scope_wire:encode_command(
+         command({submit_plan,
+                  <<0:(?QUOD_MAX_PLAN_ENVELOPE_BYTES + 1)/unit:8>>,
+                  GoalBlob, ResultBlob, []}))),
+    ?assertEqual(
+       {error, {too_large, result}},
+       quod_scope_wire:encode_command(
+         command({submit_plan, <<"p">>, GoalBlob,
+                  <<0:(?QUOD_MAX_DURABLE_RESULT_BYTES + 1)/unit:8>>, []}))),
+    ?assertEqual(
+       {error, {protocol_error, bad_payload}},
+       quod_scope_wire:encode_command(
+         command({submit_plan, <<"p">>, GoalBlob, ResultBlob,
+                  [{<<"not-trace-context">>, <<"x">>}]}))),
+    TxId = <<2:256>>,
+    Committed = event({plan_submitted, {committed, 7, TxId}}),
+    {ok, EncodedCommitted} = quod_scope_wire:encode_event(Committed),
+    ?assertEqual({ok, Committed},
+                 quod_scope_wire:decode_response(EncodedCommitted)),
+    lists:foreach(
+      fun(Reason) ->
+          Event = event({plan_submitted, {rejected, Reason}}),
+          {ok, Encoded} = quod_scope_wire:encode_event(Event),
+          ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded))
+      end,
+      [conflict_retry, retry, consensus_unavailable,
+       bad_plan]),
+    OutcomeRef = {transaction, <<"ns">>, <<1:256>>, TxId},
+    Unknown = event({plan_submitted, {outcome_unknown, OutcomeRef}}),
+    {ok, EncodedUnknown} = quod_scope_wire:encode_event(Unknown),
+    ?assertEqual({ok, Unknown},
+                 quod_scope_wire:decode_response(EncodedUnknown)),
+    ?assertEqual(
+       {error, {protocol_error, bad_error_code}},
+       quod_scope_wire:encode_event(
+         event({plan_submitted, {rejected, arbitrary_atom}}))),
+    ?assertEqual(
+       {error, {protocol_error, bad_shape}},
+       quod_scope_wire:encode_event(
+         event({plan_submitted, {committed, 0, TxId}}))),
+    ?assertEqual(
+       {error, {protocol_error, bad_shape}},
+       quod_scope_wire:encode_event(
+         event({plan_submitted, {committed, 7, <<"short">>}}))).
 
 retired_generic_public_errors_are_rejected_test() ->
     Retired = [broken_scope, scope_timeout, bad_request, not_allowed,

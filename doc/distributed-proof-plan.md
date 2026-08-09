@@ -2,10 +2,13 @@
 
 **Status:** architecture reviewed; implementation in progress. Step 1's local
 `action/3` and `transaction/1` foundation landed in Quod 0.7.58. Step 2's
-shared proof context and recursive co-hosted scopes landed in Quod 0.7.60 but
-have not been deployed. Step 3's hard-break shared scope transport landed in
-Quod 0.7.61 and is not deployable on its own. Steps 4-6 are not implemented,
-and no partial distributed semantics are deployed.
+shared proof context and recursive co-hosted scopes landed in Quod 0.7.60.
+Step 3's hard-break shared scope transport landed in Quod 0.7.61. Step 4 is
+under implementation: sealed single-participant plans now use the target's
+ordinary consensus path, durable canonical goal/result bytes, continuous
+author-admission signature domains, and the indexed anchored outcome contract.
+The multi-participant control protocol below is not yet implemented, and none
+of these hard-break Step 4 changes is deployed.
 
 This plan is the prerequisite correction for the action work in
 `minimal-agent-delivery-plan.md`. It is deliberately complete: it does not ship
@@ -79,8 +82,9 @@ or one atomic abort; an uncertain caller receives the exact outcome handle
 (`{transaction, TargetNs, TargetAnchor, TxId}` for any one-ledger fast path,
 including a sole foreign target; `{group, OriginNs, OriginAnchor, GroupId}` for
 a multi-ledger proof) and queries that handle instead of re-running the proof.
-The namespace and genesis anchor are part of the handle because `TxId` is not a
-global consensus identity and the durable answer may live on another ontology.
+The namespace and genesis anchor remain explicit because an opaque `TxId`
+cannot route itself, and the caller must pin the exact founding whose durable
+answer may live on another ontology.
 
 The implementation is physically distributed because each ontology owns its
 KB and consensus log. Semantically it is one recursive Prolog execution.
@@ -447,8 +451,8 @@ authorization transcript records refused invocations beside accepted ones, and
 every participant committee re-proves a refusal as false against the same
 pinned committed base — the check is symmetric, so Prepare stays deterministic.
 
-Today's `can_read/3` runs once for **every** authenticated peer/ontology subject
-in the incoming chain and requires all calls to succeed. `can_invoke/4` instead
+The retired `can_read/3` ran once for **every** authenticated peer/ontology
+subject in the incoming chain and required all calls to succeed. `can_invoke/4` instead
 receives the canonical whole chain once. A restrictive migrated policy must
 therefore inspect/quantify every `CallChain` member itself; `Principal` replaces
 the authenticated peer argument but does not silently preserve the old
@@ -755,18 +759,22 @@ one batch, and a transaction may read what it writes itself (its own writes
 stage only after its validation). A singleton Prepare already has no same-block
 predecessor.
 
-Every hard-break ordinary transaction, control record, and local-plan signature
-binds the exact `{Namespace, GenesisAnchor, ConsensusIncarnation, CommitteeId}`
-at authoring. Ordinary transactions and ledger control records use the normal
-author sequence; its high-water is keyed to that committee identity and retains
-at most the capped current committee's 64 authors. A local plan is a witness
+Every hard-break signature binds the identity needed for its own lifetime.
+An ordinary transaction binds
+`{Namespace, GenesisAnchor, AuthorAdmission}`: the anchor transitively binds the
+founding incarnation, while `AuthorAdmission` identifies this author's one
+continuous membership generation. An unrelated committee change therefore does
+not invalidate retained custody, but remove/re-admit gives that key a new domain
+and makes every earlier signature unverifiable. Its sequence high-water is kept
+only for current members and resets safely under the new admission id. Live
+commit, restart replay, feed ingest, and catch-up all use the same bounded
+history projection for committee, admission ids, sequences, and timestamp.
+The later distributed control records additionally bind their exact committee
+view, where quorum composition is itself load-bearing. A local plan is a witness
 inside Begin, not a second ledger submission: its distinct signature domain
 binds `ProofId` and the complete coordination manifest digest and consumes no
-ordinary author sequence. Replay validates historical blocks while folding
-their historical committee, then discards the old live sequence map at
-adoption. Re-admitting the same key under a later committee id cannot replay its
-older-domain transactions or plan witnesses. Admission rejects a 65th validator
-before Prolog/consensus mutation, bounding certificates and foreign projections.
+ordinary author sequence. The planned 64-validator admission limit belongs to
+the distributed-control slice and is not claimed as already implemented.
 
 Compiled predicates that read live node-local P state cannot silently influence
 a durable distributed write because they have no consensus-replayable MVCC
@@ -808,19 +816,23 @@ As built (0.7.65, `quod_dtx`), with the same binding properties:
   The refusal's re-provable substance is the absorbed policy read set (an OCC
   dependency of the plan), not the never-executed goal bytes.
 - The plan envelope is `{quod_plan, Core, Signer, Signature}` under witness
-  domain `quod.dtx.plan` v1; `Core`'s diff/read-check/transcript values are
+  domain `quod.dtx.plan` v2; `Core`'s diff/read-check/transcript values are
   nested deterministic ETF binaries, so the origin verifies the signature and
   outer shape without ever allocating another ontology's atoms.
-- `peer_ready/1` is exempt from the live-bridge gate: its decision is
-  re-proved by every validator in the membership verdict, so a membership
-  admit (a material diff whose `can_join` consulted `peer_ready`) is never a
-  hidden dependency. All other query-class bridges taint the plan.
-- Sealing runs in `quod_proof_context:finalize/0`, before scope close, and
-  only for a proof in which at least one scope staged a write; every scope
+- `peer_ready/1` is exempt from the live-bridge gate only when the exact diff
+  is the singleton `peer_admitted/4` membership change that every validator
+  re-proves. A content write that consulted `peer_ready/1` remains tainted,
+  like every other query-class bridge.
+- A successful writing proof seals before submission, while all scopes are
+  still open. `quod_proof_context:finalize(commit)` reuses that sealed set and
+  closes the scopes; failed or errored proofs use `finalize(abort)`, which
+  closes without sealing. For a successful proof in which at least one scope
+  staged a write, every scope
   with a diff **or** a non-empty read set then seals (`plan_not_material`
-  otherwise). A node booted without keys seals unsigned plans (they verify
-  only as unsigned); a plan sealed over the wire must verify under the
-  authenticated target key.
+  otherwise). A plan sealed over the wire must verify under the authenticated
+  target key. Only isolated unkeyed test engines may seal an unsigned
+  zero-anchor plan; a keyed engine without its live genesis anchor refuses the
+  proof as rebuilding.
 
 All scopes whose reads influenced a writing proof participate, including a
 scope with an empty local diff. Otherwise a premise in B could change while A
@@ -849,13 +861,56 @@ material/read-dependent ontologies use the protocol below. There is no separate
 Prolog API or behavioral mode.
 
 This reuses the one-ledger mechanics, not today's private function unchanged.
-Extract one target-owned `quod_prolog:submit_plan/2` primitive from
+Extract one target-owned `quod_prolog:submit_plan/4` primitive from
 `submit_write/8`. It validates the sealed local plan, builds the unsigned
 ordinary envelope, submits it from the target engine, and owns the parked/result
 state until apply. Both an ordinary local proof and a sole-foreign material
 scope call that primitive. Delete the old caller-engine `submit_write/8` shape
 and its `CallerNs =:= Ns` guard so no second foreign submission path or proxy-
 authored transaction survives.
+
+As built in the current Step 4 ordinary-transaction slice:
+
+- The ordinary transaction signature binds
+  `{Ns, GenesisAnchor, AuthorAdmission}`. The anchor is the
+  slot-1 block hash and cryptographically covers the per-founding random
+  `consensus_incarnation` fact committed inside that block, so the incarnation
+  is bound transitively — two foundings can never share an anchor. That is
+  the load-bearing closure: exact height tokens can validate by coincidence
+  across a wipe/re-found, and the anchor makes every old signature
+  unverifiable. `AuthorAdmission` changes only when this author is removed and
+  later admitted again. It closes re-admission replay without invalidating
+  retained custody when somebody else's membership changes. The complete
+  committee id is deliberately absent from ordinary envelopes and remains
+  reserved for the DTX control records (§7), where quorum composition matters.
+- The envelope carries `origin` (the proof-origin identity, replacing
+  `caller_ns`), `proof_id`, and `plan_digest` — the SHA-256 of the sealed
+  plan's canonical unsigned bytes — as record fields; `none` only on the
+  unsigned genesis, and committed non-genesis history requires their
+  presence. Durable goal and result are bounded canonical atom-safe blobs; the
+  decoded result is a strict, sorted `[{VarNameBinary, Term}]` list, so duplicate
+  variable names and topology-dependent atom allocation are impossible.
+- The public API is `prove(Ns, Goal)`; the caller-namespace argument is
+  gone. `submit_plan/4` (plan, bounded goal, bindings) is the one
+  submission primitive; the engine accepts only a plan its OWN node
+  witnessed for its OWN `{Ns, Anchor}` at a base at-or-below its applied
+  head. A proof with no writes returns directly and seals no plan. For a
+  writing proof, single-participant routing counts every plan whose signed
+  diff is non-empty **or** whose signed read set is non-empty. It submits the
+  sole participant's plan engine-direct
+  (local/co-hosted) or over the scope's
+  `submit_plan` frame (remote — outcome only crosses back:
+  `{committed, Slot, TxId} | {rejected, Reason} |
+  {outcome_unknown, OutcomeRef}` from a closed vocabulary),
+  and returns `{ok, [Bindings], {transaction, Ns, Anchor, TxId}}` for a
+  foreign commit. Two or more participants return the acknowledged interim
+  `{error, {distributed_group_unimplemented, Participants}}`; read-only
+  participants are never discarded or committed unprotected. Isolated unit
+  engines (no consensus identity) use the zero-anchor sentinel and never share
+  plans across nodes. After sealing and before a potentially blocking submit,
+  the origin worker leaves the derivation pool: consensus waiters are bounded
+  separately and no longer pin the MVCC snapshot floor or consume a proof
+  slot.
 
 For a distributed proof, the origin first reserves and persists its exact next
 Begin author sequence plus a fresh 32-byte coordination nonce. It then builds
@@ -1097,19 +1152,26 @@ foreign check before voting.
 
 ## 9. Durable state and recovery
 
-Add one `quod_outcome` rebuildable per-namespace disk-backed outcome index for
-ordinary transactions and distributed groups, owned as state by the existing
-namespace `quod_prolog` process rather than a new service. It keeps only active
-groups and a bounded terminal LRU in memory. Quod has no transaction index
-today: the explorer's
-bounded 5,000-slot backward scan is not an outcome contract and is replaced,
-not described as reusable infrastructure. Ledger replay populates the index
-with ordinary transaction id/slot/result entries and the exact group phase,
-manifest digest, local plan, locks, record slots, bounded top-level goal/result
-envelope, and certified outcome. The ledger remains the source of truth;
-corruption or disagreement fails boot rather than guessing.
+`quod_outcome` is the per-namespace disk-backed outcome index, owned as library
+state by the existing namespace `quod_prolog` process rather than a new service.
+The current ordinary slice stores pending submissions and terminal outcomes on
+disk as compact `{ref, tx_id, plan_digest, status}` rows, keeps only a true
+4,096-entry compact terminal LRU in memory, and is populated by the same
+live/replay apply path. It does not duplicate goal, result, diff or read-set
+bytes. The ledger remains authoritative: exact replay duplicates are idempotent
+and contradictory content is rejected instead of being overwritten. The
+canonical transaction id hashes the target identity and complete semantic write,
+so an exact redrive keeps one outcome while any changed content necessarily
+receives a different id. The explorer's old bounded 5,000-slot backward scan is
+deleted; its detail path reads the compact outcome height without entering the
+ontology engine, then reads exactly that one ledger block for transaction detail.
 
-One public `outcome(OutcomeRef)` API covers both forms. The reference is either
+The multi-participant slices extend this same index with active-group phase,
+manifest digest, local plan, locks, record slots, and certified group outcome;
+they do not add another outcome service or cache.
+
+One public `outcome(OutcomeRef)` API covers both forms. The ordinary form is
+implemented now; the group form arrives with the group protocol. The reference is either
 `{transaction, Namespace, GenesisAnchor, TxId}` or
 `{group, OriginNamespace, OriginAnchor, GroupId}`. It therefore routes to and
 pins the ledger that owns the authoritative result instead of assuming ids are
@@ -1117,9 +1179,12 @@ globally unique or local. A group resolves to
 `pending(Phase) | {committed, Bindings, ParticipantSlots} |
 {aborted, Reason}`; an ordinary transaction resolves through the same index and
 the existing exact-submission pending state. A terminal result comes only from
-certified ledger state and returns the exact persisted bounded bindings—never a
-re-proof. Explorer and the HTTP status endpoint are thin views of this same API,
-not separate scans or caches.
+certified ledger state. The ordinary engine API returns the compact
+classification; the explorer enriches a terminal detail from the exact
+persisted transaction at that height, including its bounded bindings—never a
+re-proof. The group protocol may add its own bounded group result to the same
+anchored lookup model; it does not make the ordinary index duplicate ledger
+payloads.
 
 Phase transitions are monotonic and idempotent:
 
@@ -1210,7 +1275,7 @@ Keep the change factored rather than adding phase exceptions throughout
   cleanup registry, with a monotonic `ProofId` touched-scope ownership set;
 - `quod_prolog`: admit the shared workers, retain bounded scope sessions and
   MVCC pins, own the per-namespace `quod_outcome` state, expose the one
-  target-owned `submit_plan/2` plus the public anchored `outcome/1`, and hand
+  target-owned `submit_plan/4` plus the public anchored `outcome/1`, and hand
   sealed plans to commit coordination;
 - `quod_ontology`: require the compiled policy only on a genuinely fresh create
   and map omission to the bounded lifecycle failure; its prepared descriptor
@@ -1463,22 +1528,14 @@ replaces the old QUIC ask protocol outright:
    compatibility mode. Step 5 removes the remaining old ledger/API/domain and
    documentation contracts, not a second ask protocol.
 
-This internal delta deliberately retains the origin's final
-`foreign_dirty() -> foreign_write_unsupported` feature gate. Remote scopes must
-stage writes so repeated-target, failure, re-entry, and rollback semantics can
-be verified, but no public proof may report success while those volatile writes
-would merely be discarded. Step 4 replaces that gate with target sealing and
-the one-ledger/group durable path. Likewise, step 3 carries the authenticated
-node principal and origin-built chain but uses the existing `can_read/3` only as
-an undeployed intermediate. The complete `can_invoke/4` hard break lands with
-step 4's policy-presence, Prepare re-validation, self-seal, API, and V3 genesis
-changes; there is never a compatibility alias.
-
-Step 3 is not deployed. It adds no plan signing, foreign transaction
-submission, Begin/Prepare/Decision/Finalize record, namespace lock, outcome
-index, cross-ledger visibility rule, recovery protocol, or distributed applied
-event. Those remain the immediately following implementation work, and step 6
-is the only deployment gate.
+That intermediate `foreign_dirty() -> foreign_write_unsupported` gate was
+removed when target sealing and the durable one-ledger submission path landed;
+remote writes are no longer volatile state that a successful proof could lose.
+The intermediate `can_read/3` policy was likewise removed when `can_invoke/4`
+landed; there is no compatibility alias. Step 3's scope transport shipped in
+0.7.61 and remains the transport base for Step 4. The status header above is
+the authoritative record of which durable transaction and group-coordination
+parts are implemented and which remain before the deployment gate.
 
 Its focused gate proves, non-vacuously: co-hosted and remote cross-scope
 transaction rollback for assertions, retractions, abolishes, nested
@@ -1639,8 +1696,9 @@ At minimum:
     peer/ontology keys cannot grow the token-bucket table; full admission fails
     closed and idle expiry reclaims entries. An over-rate frame's bounded
     `GoalBlob` is never decoded as a Prolog term.
-31. Two namespaces deliberately reuse the same `TxId`; their anchored
-    `OutcomeRef`s resolve independently. A committed result older than the old
+31. The same semantic plan content bound to two namespace/anchor identities
+    receives two different canonical `TxId`s, and an outcome reference routes
+    only to its exact target founding. A committed result older than the old
     explorer's 5,000-slot scan budget still resolves after restart from the
     rebuilt outcome index, including a sole-foreign result reached through a
     pinned route.

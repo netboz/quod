@@ -22,11 +22,11 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          open/5, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          committed_state/1, local_changes/1, read_set/1, absorb_read_set/2,
-         live_bridges/1, transcript/1,
+         live_bridges/1, transcript/1, signer/1,
          dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
-         bindings/2, run_first/3]).
+         bindings/2, open_first/5, run_first/3]).
 
 -ifdef(TEST).
 -export([test_invocation_state/2]).
@@ -39,7 +39,12 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
 -record(session_state, {
           scope_id    :: <<_:128>>,
           current     :: tuple(),
+          signer = none :: quod_identity:signer() | none,
           invocations = #{} :: #{term() => invocation_state()},
+          %% Invocation ids are transcript identities, not reusable worker
+          %% slots. Keep the bounded lifetime set separately from the live
+          %% continuations so cancel/exhaustion cannot reopen an old slot.
+          used_invocations = #{} :: #{term() => true},
           savepoints  = #{} :: #{term() => quod_erlog_db_local_prove:revision()},
           overlay_generation = 0 :: non_neg_integer(),
           %% The bounded canonical invocation transcript (`m:quod_dtx`).
@@ -78,8 +83,10 @@ start(#est{} = Committed, OverlayOpts) when is_map(OverlayOpts) ->
             true -> 0;
             false -> disabled
         end,
+    Signer = maps:get(signer, OverlayOpts, none),
     put_session(Handle, #session_state{scope_id = ScopeId,
                                        current = Wrapped,
+                                       signer = Signer,
                                        transcript_bytes = TranscriptBytes}),
     Handle.
 
@@ -103,8 +110,9 @@ stop(Handle) ->
 open(Handle, InvocationId, Goal, Context, Selection) ->
     State = get_session(Handle),
     Invocations = State#session_state.invocations,
+    UsedInvocations = State#session_state.used_invocations,
     case {is_binary(InvocationId) andalso byte_size(InvocationId) =:= 16,
-          maps:is_key(InvocationId, Invocations),
+          maps:is_key(InvocationId, UsedInvocations),
           quod_transaction_scope:valid_selection(Selection)} of
         {false, _, _} ->
             {error, {protocol_error, bad_binding}};
@@ -112,7 +120,7 @@ open(Handle, InvocationId, Goal, Context, Selection) ->
             {error, {protocol_error, bad_selection}};
         {true, true, true} ->
             {error, {protocol_error, bad_binding}};
-        {true, false, true} when map_size(Invocations) >=
+        {true, false, true} when map_size(UsedInvocations) >=
                            ?QUOD_MAX_INVOCATIONS_PER_SCOPE ->
             invocation_limit_error(Context);
         {true, false, true} ->
@@ -126,7 +134,8 @@ open(Handle, InvocationId, Goal, Context, Selection) ->
                       Handle,
                       State1#session_state{
                         invocations = Invocations#{
-                          InvocationId => {idle, Scope, Selection}}}),
+                          InvocationId => {idle, Scope, Selection}},
+                        used_invocations = UsedInvocations#{InvocationId => true}}),
                     ok;
                 {error, _} = Error ->
                     Error
@@ -310,6 +319,11 @@ checkpoint_many(Handle, SavepointIds0) when is_list(SavepointIds0) ->
               ?QUOD_MAX_DISTRIBUTED_SAVEPOINTS_PER_PROOF}}
     end.
 
+-doc "The target-node witness configured by the owning ontology engine.".
+-spec signer(session()) -> quod_identity:signer() | none.
+signer(Handle) ->
+    (get_session(Handle))#session_state.signer.
+
 -doc "Atomically restore a set of ids that name the same immutable revision.".
 -spec restore_many(session(), [term()]) ->
           ok | {error, unknown_savepoint | inconsistent_savepoint}.
@@ -382,21 +396,32 @@ run_first(Goal, #est{} = Est, OverlayOpts) when is_map(OverlayOpts) ->
     Handle = start(Est, OverlayOpts),
     InvocationId = crypto:strong_rand_bytes(16),
     try
-        ok = open(Handle, InvocationId, Goal,
-                  quod_predicates:context(Est),
-                  quod_transaction_scope:empty_selection()),
-        case next(Handle, InvocationId) of
-            {solution, _Solution} ->
-                {ok, Bindings} = bindings(Handle, InvocationId),
-                {ok, Bindings,
-                 local_changes(Handle), read_set(Handle)};
-            {complete, Reasons} ->
-                {fail, Reasons};
-            {error, Reason} ->
-                {error, Reason}
-        end
+        open_first(Handle, InvocationId, Goal,
+                   quod_predicates:context(Est),
+                   quod_transaction_scope:empty_selection())
     after
         stop(Handle)
+    end.
+
+-doc "Open one invocation and derive its first result, leaving session ownership to the caller.".
+-spec open_first(session(), <<_:128>>, term(), quod_predicates:ctx(),
+                 quod_transaction_scope:selection()) ->
+          {ok, map(), list(), map()} | {fail, [term()]} | {error, term()}.
+open_first(Handle, InvocationId, Goal, Context, Selection) ->
+    case open(Handle, InvocationId, Goal, Context, Selection) of
+        ok -> first_result(Handle, InvocationId);
+        {error, _} = Error -> Error
+    end.
+
+first_result(Handle, InvocationId) ->
+    case next(Handle, InvocationId) of
+        {solution, _Solution} ->
+            {ok, Bindings} = bindings(Handle, InvocationId),
+            {ok, Bindings, local_changes(Handle), read_set(Handle)};
+        {complete, Reasons} ->
+            {fail, Reasons};
+        {error, Reason} ->
+            {error, Reason}
     end.
 
 mark_active(Handle, InvocationId,

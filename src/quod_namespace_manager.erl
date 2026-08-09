@@ -165,7 +165,7 @@ complete_new_content(Ns, Config,
             Content = maps:get(content, Desired),
             Desired1 = Desired#{content => Content#{Ns => Config}},
             persist_desired(Desired1),
-            publish_data_dir(Ns, Config),
+            publish_storage(Ns, Config),
             {reply, {ok, GenesisHash}, S#s{desired = Desired1}};
         {error, Reason} ->
             stop_rejected_new_content(Ns, S, Reason)
@@ -392,16 +392,16 @@ complete_started_child(brahms, _Ns, _Config, Result) ->
 complete_running_children(brahms, _Desired) ->
     {true, #{}};
 complete_running_children(content, Desired) ->
-    Dirs0 = application:get_env(quod, content_data_dirs, #{}),
-    {Complete, Dirs, Validated} =
+    Storage0 = application:get_env(quod, content_storage_dirs, #{}),
+    {Complete, Storage, Validated} =
         maps:fold(
           fun(Ns, Config, {Complete0, DirsAcc, ValidAcc}) ->
               case running_pid(content, Ns) of
                   Pid when is_pid(Pid) ->
                       case started_genesis(Ns, Config) of
                           {ok, _GenesisHash} ->
-                              Dir = quod_ledger_store:ledger_dir(Config),
-                              {Complete0, DirsAcc#{Ns => Dir},
+                              Dirs = content_storage(Config),
+                              {Complete0, DirsAcc#{Ns => Dirs},
                                ValidAcc#{Ns => true}};
                           {error, _} ->
                               {false, DirsAcc, ValidAcc}
@@ -409,10 +409,10 @@ complete_running_children(content, Desired) ->
                   undefined ->
                       {false, DirsAcc, ValidAcc}
               end
-          end, {true, Dirs0, #{}}, Desired),
-    case Dirs =:= Dirs0 of
+          end, {true, Storage0, #{}}, Desired),
+    case Storage =:= Storage0 of
         true -> ok;
-        false -> application:set_env(quod, content_data_dirs, Dirs)
+        false -> application:set_env(quod, content_storage_dirs, Storage)
     end,
     {Complete, Validated}.
 
@@ -424,7 +424,7 @@ completed_start_succeeded(brahms, _Ns, Result, _Validated) ->
 validate_and_publish_content(Ns, Config) ->
     case started_genesis(Ns, Config) of
         {ok, _GenesisHash} ->
-            publish_data_dir(Ns, Config),
+            publish_storage(Ns, Config),
             ok;
         {error, _} = Error ->
             Error
@@ -433,10 +433,14 @@ validate_and_publish_content(Ns, Config) ->
 %% The manager serializes every writer of this projection. Stopped ontologies
 %% deliberately remain addressable by the explorer, so entries are not removed
 %% when hosting intent is removed.
-publish_data_dir(Ns, Config) ->
-    Dir = quod_ledger_store:ledger_dir(Config),
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
-    application:set_env(quod, content_data_dirs, Dirs#{Ns => Dir}).
+publish_storage(Ns, Config) ->
+    Dirs = application:get_env(quod, content_storage_dirs, #{}),
+    application:set_env(
+      quod, content_storage_dirs, Dirs#{Ns => content_storage(Config)}).
+
+content_storage(Config) ->
+    #{data => quod_ledger_store:data_dir(Config),
+      ledger => quod_ledger_store:ledger_dir(Config)}.
 
 schedule_reconcile_if_error(Result, S) ->
     case start_succeeded(Result) of

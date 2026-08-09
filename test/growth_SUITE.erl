@@ -198,11 +198,16 @@ byzantine_on_grown_committee(Config) ->
     Victim = ?config(fpub, Config),
     Evil0  = tx([{retract, {{peer_admitted, Victim, "wrong-host", 9999, Victim}, true}}]),
     Identity = maps:get(LeaderPub, ?config(identities, Config)),
-    {ok, Evil} = quod_transaction:sign(
-                   ?NS,
-                   Evil0#transaction{author = LeaderPub,
-                                     author_seq = (1 bsl 60) + V},
-                   Identity),
+    Anchor = peer:call(LeaderPeer, quod_simplex, genesis_hash, [?NS]),
+    Status = peer:call(LeaderPeer, quod_simplex, status, [?NS]),
+    {ok, Binding} = quod_simplex:history_binding(
+                      {?NS, Anchor}, LeaderPub,
+                      maps:get(history_projection, Status)),
+    Unsigned = quod_transaction:bind_id(
+                 {?NS, Anchor},
+                 Evil0#transaction{author = LeaderPub,
+                                   author_seq = (1 bsl 60) + V}),
+    {ok, Evil} = quod_transaction:sign(Binding, Unsigned, Identity),
     Ts     = erlang:system_time(millisecond) + 1000,
     Block  = #block{slot = V, parent = H, payload = [Evil], timestamp = Ts},
     Chan   = term_to_binary({log, ?NS}, [deterministic]),
@@ -350,7 +355,7 @@ pump(Ns, N) ->
     lists:foreach(fun(I) -> pump1(Ns, I, 200) end, lists:seq(1, N)).
 pump1(_Ns, I, 0) -> ct:fail({pump_retries_exhausted, I});
 pump1(Ns, I, Tries) ->
-    case quod_prolog:prove(Ns, {assertz, {pump, I}}, Ns) of
+    case quod_prolog:prove(Ns, {assertz, {pump, I}}) of
         {ok, _, _} -> ok;
         {error, rebuilding} ->
             timer:sleep(20),
@@ -400,5 +405,9 @@ rejects_total(Peers) ->
 
 %% a raw #transaction carrying an arbitrary diff (the Byzantine-submitter path — no admit/remove predicate)
 tx(Diff) ->
-    #transaction{tx_id = <<"evil">>, caller_ns = ?NS, diff = Diff,
+    {ok, Goal} = quod_durable_term:encode_goal(byzantine_membership_change),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    #transaction{tx_id = <<>>, origin = {?NS, <<0:256>>},
+                 proof_id = <<0:256>>, plan_digest = <<0:256>>,
+                 goal = Goal, result = Result, diff = Diff,
                  read_check = #{}, author = <<0:256>>, sig = none}.

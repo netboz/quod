@@ -67,7 +67,7 @@ t_admit_grows_committee(Cfg) ->
     %% freeze is the observable proof that active_validators/1 fed the engine the grown set (the adopt path the
     %% suite otherwise never checks). The write is spawned (it parks unfulfilled) so it doesn't block the test.
     H = height(Ns),
-    _ = spawn(fun() -> catch quod_prolog:prove(Ns, {assertz, {wont, commit, now}}, Ns) end),
+    _ = spawn(fun() -> catch quod_prolog:prove(Ns, {assertz, {wont, commit, now}}) end),
     timer:sleep(2000),
     ?assertEqual(H, height(Ns)).
 
@@ -93,7 +93,9 @@ t_gate_rejects_raw_wedge(Cfg) ->
     Self = ?config(node_id, Cfg),
     ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),   %% kb ready, genesis applied
     ?assertEqual([Self], quod_simplex:committee(Ns)),
-    RawTx = fun(Diff) -> #transaction{tx_id = <<"evil">>, caller_ns = Ns, diff = Diff,
+    RawTx = fun(Diff) -> #transaction{tx_id = <<"evil">>, origin = {Ns, <<0:256>>},
+                                      proof_id = <<0:256>>, plan_digest = <<0:256>>,
+                                      diff = Diff,
                                       read_check = #{}, author = Self, sig = none} end,
     WedgeOp = {retract, {{peer_admitted, Self, {'_'}, {'_'}, Self}, true}},
     ?assertEqual({error, bad_change}, quod_simplex:append(Ns, RawTx([WedgeOp]))),          %% N=1 → 0

@@ -327,7 +327,18 @@ failed_start(Ns, Config) ->
     end.
 
 tx(Ns, Author, Id) ->
-    #transaction{tx_id = Id, caller_ns = Ns, diff = [], read_check = #{}, author = Author, sig = none}.
+    Anchor = quod_simplex:genesis_hash(Ns),
+    {ok, Goal} = quod_durable_term:encode_goal({test_append, Id}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    PlanDigest = crypto:hash(
+                   sha256,
+                   term_to_binary({test_append, Id}, [deterministic])),
+    quod_transaction:bind_id(
+      {Ns, Anchor},
+      #transaction{tx_id = <<>>, origin = {Ns, Anchor},
+                   proof_id = <<0:256>>, plan_digest = PlanDigest,
+                   goal = Goal, result = Result,
+                   diff = [], read_check = #{}, author = Author, sig = none}).
 
 decode_genesis_id(Ns, TxId) ->
     NsLen = byte_size(Ns),

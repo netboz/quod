@@ -85,14 +85,28 @@ readiness_config_test_() ->
 %% folds the committee to identity; a membership entry folds the delta; a gap resets to `none` (refetch).
 fold_snapshot_test() ->
     A = <<1>>, B = <<2>>,
-    Admit = #transaction{tx_id = <<"t">>, caller_ns = <<"n">>, author = <<"a">>, sig = none, read_check = #{},
+    Admit = #transaction{tx_id = <<"t">>, origin = {<<"n">>, <<0:256>>}, author = <<"a">>, sig = none, read_check = #{},
                          diff = [{assert, {{peer_admitted, B, "h", 1, B}, true}}]},
+    Projection = quod_simplex:history_projection(
+                   [A], <<3:256>>, #{A => <<4:256>>}, #{}, 0),
+    Noop = #entry{index = 6, data = noop},
+    AdmitEntry = #entry{index = 6, data = quod_ledger:data([Admit])},
     %% contiguous content/noop entry: height advances, committee unchanged
-    ?assertEqual({6, [A], done}, quod_feed:fold_snapshot(6, noop, {5, [A], done})),
+    {6, NoopProjection, done} =
+        quod_feed:fold_snapshot(<<"n">>, Noop, {5, Projection, done}),
+    ?assertEqual([A], quod_simplex:history_committee(NoopProjection)),
     %% contiguous membership entry: committee folds the admit, height advances
-    ?assertEqual({6, lists:usort([A, B]), done}, quod_feed:fold_snapshot(6, Admit, {5, [A], done})),
+    {6, AdmitProjection, done} =
+        quod_feed:fold_snapshot(
+          <<"n">>, AdmitEntry, {5, Projection, done}),
+    ?assertEqual(lists:usort([A, B]),
+                 quod_simplex:history_committee(AdmitProjection)),
     %% NON-contiguous (gap or behind) → reset to none, so the next use refetches real status [DA#5]
-    ?assertEqual(none, quod_feed:fold_snapshot(8, noop, {5, [A], done})),   %% jumped ahead (feed restarted alone)
-    ?assertEqual(none, quod_feed:fold_snapshot(5, noop, {5, [A], done})),   %% duplicate/behind
+    ?assertEqual(none, quod_feed:fold_snapshot(
+                         <<"n">>, Noop#entry{index = 8},
+                         {5, Projection, done})),
+    ?assertEqual(none, quod_feed:fold_snapshot(
+                         <<"n">>, Noop#entry{index = 5},
+                         {5, Projection, done})),
     %% folding onto an unprimed snapshot stays none (primed later by a status call)
-    ?assertEqual(none, quod_feed:fold_snapshot(6, noop, none)).
+    ?assertEqual(none, quod_feed:fold_snapshot(<<"n">>, Noop, none)).

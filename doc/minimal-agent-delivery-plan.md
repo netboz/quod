@@ -207,18 +207,15 @@ undeclared or unauthorized request cannot make Quod read an attacker-selected
 path or disclose its parse/timing result. Full compilation still precedes the
 desired-state check, so malformed Prolog cannot become idempotent success.
 
-The compiled fresh source also records whether its staged genesis diff contains
-an asserted `can_invoke/4` clause. If storage inspection says this would create a
-fresh ledger and that clause is absent, preparation returns
-`ontology_creation_failed(missing_can_invoke_policy)` before
-`start_new_content/2`, desired-manager mutation, namespace directory creation,
-or slot-1 append. A resume does not require newly supplied, ignored terms to
-repeat the policy already guaranteed by its V3 genesis. The common
-pure validator is called by `quod_simplex:genesis_tx/4` before fresh append for
-boot files, in-memory terms, and direct-manager starts, and by
-`valid_history_entry/4 -> valid_genesis_transaction/2` for restart/catch-up.
-Both enforce the same assertion-only/policy-present invariant; common predicates
-inject no default rule.
+Fresh founding injects the bodyless host-entry
+`can_invoke(_, _, [], _)` beside the generated incarnation and committee facts,
+so an author need not repeat it and cannot create an ontology that rejects its
+own host. Author-supplied `can_invoke/4` clauses govern remote and
+cross-ontology callers. `quod_simplex:genesis_tx/4` validates the combined
+generated-plus-authored diff before append, and
+`valid_history_entry/4 -> valid_genesis_transaction/2` applies the same
+assertion-only/policy-present invariant on restart and catch-up. A resume does
+not require newly supplied, ignored terms to repeat genesis policy.
 
 That invariant is not genesis-only. The distributed-proof prerequisite rejects
 an ordinary or distributed diff touching `{can_invoke,4}` when its final

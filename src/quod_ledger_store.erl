@@ -49,7 +49,7 @@ the full log always rescans at open.
 """.
 -include("quod_ledger.hrl").
 
--export([open/2, ledger_dir/1, open_ro/2, close/1,
+-export([open/2, ledger_dir/1, open_ro/2, close/1, namespace/1,
          append/2, read_at/2, read_range/3, fold/5, last/1]).
 -export([default_data_dir/0, data_dir/1, ns_dir/2]).
 
@@ -74,6 +74,10 @@ the full log always rescans at open.
                 last_index  = 0 :: log_index(),
                 base_offset = 0 :: non_neg_integer()}).   %% next append offset (== log file size)
 -opaque handle() :: #store{}.
+
+-doc "Return the ontology whose ledger this handle reads.".
+-spec namespace(handle()) -> binary().
+namespace(#store{ns = Ns}) -> Ns.
 
 %%%===================================================================
 %%% open / close

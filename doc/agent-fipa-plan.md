@@ -355,31 +355,24 @@ Best-effort effects from replayed history remain deliberately absent.
 
 ### Event envelope
 
-One committed transaction produces one event envelope:
+One live-applied transaction produces this compact event envelope:
 
 ```text
-ontology_event(
-    Namespace,
-    Height,
-    TransactionId,
-    Subject,
-    Goal,
-    Result,
-    Diff
-)
+#{ns, height, tx_id, subject, diff}
 ```
 
-Handlers see the complete transaction, not a stream of independent diff
-operations. They may match individual asserts/retracts using Prolog rules, while
-ordering and loop accounting remain transaction-scoped.
+Handlers see the committed diff as one transaction, not a stream of independent
+operations. Goal and result remain canonical ledger blobs and are decoded only
+by detail readers, not copied into every runtime event.
 
-> **As built (Slice 1).** The envelope is a map carrying exactly those fields —
-> `#{ns, height, tx_id, subject, goal, result, diff}` — published as
+> **As built (Slice 1).** The envelope is a map carrying exactly those fields,
+> published as
 > `{applied_live, Env}` on `{runtime, Ns}`. A map (rather than a fixed `/7`
 > record) so Slice 5 can add subject-chain fields without reshaping. It is emitted
-> once per transaction that **actually changed D** on a **live** commit: an
-> OCC-rejected transaction changed nothing and produces no event. `subject` is
-> `undefined` until signed subjects land (section 10).
+> once per transaction that **actually changed D** on a **live** commit. An
+> OCC-rejected transaction publishes `{rejected_live, #{ns, height, tx_id,
+> subject}}` with no diff. `subject` is `undefined` until signed subjects land
+> (section 10).
 
 ### Shared substrate consumers
 

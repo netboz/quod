@@ -61,7 +61,7 @@ vote, rebuild, and catch-up. Remaining, gated:
   node dials a peer by pubkey via the resolver, populated after authenticated
   inbound link headers (`quod_conn:maybe_learn_remote/2`)
   AND now by the committed `peer_admitted` fact's address: `quod_simplex:learn_addresses` learns each
-  admit's `{Pk,{Host,Port}}` at the live commit (`adopt_committee`, OVERWRITE — the fact just passed
+  admit's `{Pk,{Host,Port}}` at the live commit (`adopt_history/2`, OVERWRITE — the fact just passed
   quorum-many readiness verdicts, it's fresh) and on catch-up replay (`apply_catchup_window`,
   learn-if-absent — a historical address must fill a void, never clobber a live header hint). This closes
   the never-met-member hop (at 2→3, member J1 dials brand-new J2 whose address it learned only by folding
@@ -135,7 +135,7 @@ stages, not carried forward:
   (a `noop` slot), over the `{log, Ns}` transport.
 - **Committee = `peer_admitted` facts + admit/remove — DONE** (membership rework, Slice 1+2): the committee
   is the set of `peer_admitted/4` facts, derived deterministically from the committed log
-  (`quod_simplex:log_projection/2`), swapped in-process at commit (`adopt_committee/2`), and re-folded
+  (`quod_simplex:log_projection/2`), swapped in-process at commit (`adopt_history/2`), and re-folded
   on restart — no config-fold, no member-op vocabulary (`voters/2`, `member_op()`, `kind=config` deleted).
   `quod_committee_predicates` provides the `admit(Pubkey,Host,Port)` / `remove(Pubkey)` external Erlang
   predicates (**prove-before-broadcast**: gate `can_join`, stage the assert/retract; the normal write path
@@ -540,13 +540,15 @@ fixes:
 
 - **Durable client idempotency for automatic write retry.** A transaction that has entered
   consensus cannot be cancelled when a local caller deadline expires. The current API now
-  reports `{outcome_unknown, TxId}` and exposes that id through the explorer instead of
+  reports `{outcome_unknown, {transaction, Ns, GenesisAnchor, TxId}}` and exposes
+  that anchored reference through the durable outcome index/explorer instead of
   falsely claiming failure; built-in test/load clients do not retry that outcome or a
   transport failure with no authoritative response. They retry only explicit responses
   that guarantee the operation did not apply. Fully automatic retry of non-idempotent goals
-  still needs a client-supplied stable operation id plus a durable committed/pending lookup,
-  so a reconnect can resume the same submission instead of proving and signing a new
-  transaction. Do not implement this as a timeout tweak or an unbounded in-memory dedup set.
+  still needs a client-supplied stable operation id. The durable committed/pending
+  lookup now exists, but a reconnect cannot associate a newly proved operation with
+  the earlier sealed plan without that stable client identity. Do not implement this
+  as a timeout tweak or an unbounded in-memory dedup set.
 
 - **Two proof-visible reads bypass OCC capture (pre-token gap, found in the 0.7.62 review).**
   `current_predicate/1` (via the overlay's `get_interpreted_functors/1`) and
@@ -569,7 +571,7 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
   refinement is split cert/hash verification before decoding arbitrary payload atoms (below).
 - **P2 — epidemic dissemination — BUILT** (`quod_feed`, 0.6.14): push-pull gossip + anti-entropy over
   the per-namespace Brahms overlay, every block QC-verified per hop before re-push; commit seam
-  (`quod_simplex` publishes `{committed, Slot, Entry}` on `{committed, Ns}`, live path only); validated
+  (`quod_simplex` publishes `{committed, Ns, Slot, Entry}` on `{committed, Ns}`, live path only); validated
   on a 7-node Nomad fleet (cold-start catch-up + live feed-follow + a 100-tx burst, zero errors). Open
   refinements:
   - **Out-of-order handling — reorder buffer (not drop-and-re-pull).** `quod_feed` currently DROPS a
@@ -618,6 +620,13 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 
+- **Outcome-index pending-row reclamation requires durable exclusion.** A
+  submission admitted locally but never committed remains `pending` across
+  restart so an ambiguous client result can never become a false retry signal.
+  Do not add a wall-clock TTL. Reclaim it only after consensus can prove that
+  the transaction can no longer occupy any eligible slot or author-sequence
+  window; until that protocol proof exists, `outcomes.dets` may grow under
+  repeated leader churn.
 - **Adaptive view sizing** — deferred until the live-population estimate has been exercised under much
   larger churn. Brahms exposes `estimated_n`: a bounded cardinality sketch over owner-signed,
   expiring stable identities. It estimates the total live overlay component without copying a KB or a
@@ -662,14 +671,3 @@ Raft-era concern) — but the store handle inside `#s` was not; see below.
   slot 20 001 measures **5.9 KB post-GC** (whole `#s` 2.0 KB, store handle 808 B), identical after a
   restart-from-disk re-fold — the per-ontology consensus footprint is now height-independent
   (~1 MB at that height before, and growing).
-
-## 7. Content / ontology authoring
-
-- **Shared ACL prelude for authored ontologies.** Every genesis `.pl` (quod_root, animals, pets)
-  hand-copies the two load-bearing governance clauses — the default-open `can_read/3` and the
-  `can_join/3` admission gate (`:- peer_ready(Pk)`). N-way copies of safety-critical clauses drift:
-  a Phase-B tightening of `can_join` applied only to root would leave co-hosted ontologies admitting
-  on divergent gates, and an author who simply omits `can_join` gets a silently fail-closed committee
-  that can never grow past its founder. Fix when the ontology count grows: a shared prelude the
-  founder prepends at genesis (or an include directive in `quod_prolog:genesis_diff/1`) so the
-  default gates have ONE home. Until then: copy the clauses deliberately and review them together.

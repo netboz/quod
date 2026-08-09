@@ -17,13 +17,14 @@ a synchronous call to itself.
 -include("quod_proof_limits.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/2,
+         seal/3, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
--export([test_answer_disposition/1]).
+-export([test_answer_disposition/1, test_committed_submit_outcome/3,
+         test_await_remote_submit/5]).
 -endif.
 
 -record(runtime, {
@@ -131,22 +132,24 @@ place, a co-hosted worker seals over the session message protocol, and a
 remote scope seals over the wire — where the returned plan must decode, carry
 the exact bound identities, and verify under the authenticated target key.
 """.
--spec seal(handle() | term(), quod_proof_context:identity()) ->
+-spec seal(handle() | term(), quod_proof_context:identity(),
+           quod_dtx:principal()) ->
           {ok, quod_dtx:plan()} | not_material | {error, term()}.
-seal({local_scope, _ScopeId, Ns, Anchor, Height, Session}, OriginIdentity) ->
+seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
+     OriginIdentity, Principal) ->
     quod_dtx:seal_session(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
         origin => OriginIdentity,
-        principal => quod_ask:node_principal()});
+        principal => Principal});
 seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
       _Ns, _Anchor} = Handle,
-     OriginIdentity) ->
+     OriginIdentity, _Principal) ->
     case command_remaining_ms() of
         0 ->
             {error, current_execution_limit()};
-        _RemainingMs ->
+        RemainingMs ->
             RequestRef = make_ref(),
             Pid ! {scope_seal, self(), ProofId, SessionRef,
                    RequestRef, OriginIdentity},
@@ -158,14 +161,16 @@ seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
                         Result;
                     {'DOWN', MRef, process, Pid, Reason} ->
                         {error, failure_reason(Handle, Reason)}
+                after RemainingMs ->
+                    {error, current_execution_limit()}
                 end
             after
                 demonitor(MRef, [flush])
             end
     end;
-seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity) ->
+seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, _Principal) ->
     remote_seal(Handle);
-seal(_Handle, _OriginIdentity) ->
+seal(_Handle, _OriginIdentity, _Principal) ->
     {error, {protocol_error, session_binding}}.
 
 remote_seal(Handle) ->
@@ -178,7 +183,8 @@ remote_seal(Handle) ->
                     case quod_ask_router:command(
                            Handle, RemainingMs, scope_seal) of
                         {ok, RequestId} ->
-                            await_remote_seal(Handle, RequestId, Router, MRef);
+                            await_remote_seal(
+                              Handle, RequestId, Router, MRef, RemainingMs);
                         {sent, _RequestId} ->
                             {error, {protocol_error, request_binding}};
                         {error, _} = Error ->
@@ -189,7 +195,7 @@ remote_seal(Handle) ->
             Error
     end.
 
-await_remote_seal(Handle, RequestId, Router, MRef) ->
+await_remote_seal(Handle, RequestId, Router, MRef, RemainingMs) ->
     receive
         {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
          {plan_sealed, Blob}} ->
@@ -204,6 +210,9 @@ await_remote_seal(Handle, RequestId, Router, MRef) ->
             {error, failure_reason(Handle, Reason)};
         {'DOWN', MRef, process, Router, _Reason} ->
             {error, failure_reason(Handle, unavailable)}
+    after RemainingMs ->
+        remote_timeout(
+          Handle, RequestId, {error, current_execution_limit()})
     end.
 
 %% The remote target authored this plan: accept it only if it decodes within
@@ -228,6 +237,116 @@ checked_remote_plan(
         {error, _} = Error ->
             Error
     end.
+
+-doc """
+Submit a sealed plan to a REMOTE target validator through its open scope.
+
+Local and co-hosted targets submit engine-direct (`quod_prolog:submit_plan/4`)
+— only a genuinely remote target needs the wire, and only the bounded outcome
+comes back: the transaction is authored, signed, and parked entirely on the
+target node.
+""".
+-spec submit_plan(handle() | term(), quod_dtx:plan(), term(), map()) ->
+          {ok, pos_integer(), binary()} | {error, term()}.
+submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case command_remaining_ms() of
+                0 ->
+                    {error, current_execution_limit()};
+                RemainingMs ->
+                    remote_submit(
+                      Handle, Plan, Goal, DurableResult, RemainingMs,
+                      Router, MRef)
+            end;
+        {error, _} = Error ->
+            Error
+    end;
+submit_plan(_Handle, _Plan, _Goal, _DurableResult) ->
+    {error, {protocol_error, session_binding}}.
+
+remote_submit(Handle, Plan, Goal, DurableResult, RemainingMs, Router, MRef) ->
+    case encode_submit_operation(Plan, Goal, DurableResult) of
+        {ok, Operation, OutcomeRef} ->
+            case quod_ask_router:command(Handle, RemainingMs, Operation) of
+                {ok, RequestId} ->
+                    await_remote_submit(
+                      Handle, RequestId, Router, MRef, OutcomeRef,
+                      RemainingMs);
+                {sent, _RequestId} ->
+                    {error, {protocol_error, request_binding}};
+                {error, _} = Error ->
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+encode_submit_operation(Plan, Goal, Bindings) ->
+    case quod_scope_wire:encode_payload(plan, Plan) of
+        {ok, PlanBlob} ->
+            case quod_transaction:encode_durable_submission(Goal, Bindings) of
+                {ok, GoalBlob, ResultBlob} ->
+                    OutcomeRef = quod_transaction:plan_outcome_ref(
+                                   Plan, GoalBlob, ResultBlob),
+                    {ok, {submit_plan, PlanBlob, GoalBlob,
+                          ResultBlob,
+                          quod_trace:inject(quod_trace:context())},
+                     OutcomeRef};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
+await_remote_submit(
+  Handle, RequestId, Router, MRef,
+  OutcomeRef = {transaction, _Ns, _Anchor, _ExpectedTxId}, RemainingMs) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_submitted, {committed, Slot, TxId}}} ->
+            committed_submit_outcome(Slot, TxId, OutcomeRef);
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_submitted, {outcome_unknown, ReturnedRef}}}
+          when ReturnedRef =:= OutcomeRef ->
+            {error, {outcome_unknown, OutcomeRef}};
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_submitted, {rejected, Reason}}} ->
+            {error, Reason};
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_submitted, _UnexpectedOutcome}} ->
+            {error, {outcome_unknown, OutcomeRef}};
+        {quod_scope_down, Handle, Reason} ->
+            _ = Reason,
+            {error, {outcome_unknown, OutcomeRef}};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, {outcome_unknown, OutcomeRef}}
+    after RemainingMs ->
+        remote_timeout(
+          Handle, RequestId, {error, {outcome_unknown, OutcomeRef}})
+    end.
+
+committed_submit_outcome(
+  Slot, ExpectedTxId,
+  {transaction, _Ns, _Anchor, ExpectedTxId}) ->
+    {ok, Slot, ExpectedTxId};
+committed_submit_outcome(_Slot, _OtherTxId, OutcomeRef) ->
+    {error, {outcome_unknown, OutcomeRef}}.
+
+-ifdef(TEST).
+test_committed_submit_outcome(Slot, TxId, OutcomeRef) ->
+    committed_submit_outcome(Slot, TxId, OutcomeRef).
+
+test_await_remote_submit(Handle, RequestId, Router, OutcomeRef, RemainingMs) ->
+    MRef = monitor(process, Router),
+    try await_remote_submit(
+          Handle, RequestId, Router, MRef, OutcomeRef, RemainingMs)
+    after
+        demonitor(MRef, [flush])
+    end.
+-endif.
 
 -doc "Close the complete ontology scope. Idempotent at the origin.".
 -spec close(handle() | term()) -> ok.
@@ -686,7 +805,8 @@ remote_control(Handle, Operation, ExpectedAck) ->
                            Handle, RemainingMs, Operation) of
                         {ok, RequestId} ->
                             await_remote_control(
-                              Handle, RequestId, ExpectedAck, Router, MRef);
+                              Handle, RequestId, ExpectedAck, Router, MRef,
+                              RemainingMs);
                         {sent, _RequestId} ->
                             {error, {protocol_error, request_binding}};
                         {error, _} = Error ->
@@ -707,7 +827,8 @@ bind_remote_router(
 bind_remote_router(_Handle) ->
     {error, {protocol_error, session_binding}}.
 
-await_remote_control(Handle, RequestId, ExpectedAck, Router, MRef) ->
+await_remote_control(
+  Handle, RequestId, ExpectedAck, Router, MRef, RemainingMs) ->
     receive
         {quod_scope_event, Handle, RequestId, Generation, Dirty, ExpectedAck}
           when is_integer(Generation), Generation >= 0, is_boolean(Dirty) ->
@@ -719,6 +840,22 @@ await_remote_control(Handle, RequestId, ExpectedAck, Router, MRef) ->
             {error, failure_reason(Handle, Reason)};
         {'DOWN', MRef, process, Router, _Reason} ->
             {error, failure_reason(Handle, unavailable)}
+    after RemainingMs ->
+        remote_timeout(
+          Handle, RequestId, {error, current_execution_limit()})
+    end.
+
+remote_timeout(Handle, RequestId, Result) ->
+    _ = quod_ask_router:cancel(Handle, RequestId),
+    drain_remote_event(Handle, RequestId),
+    Result.
+
+drain_remote_event(Handle, RequestId) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty, _Operation} ->
+            drain_remote_event(Handle, RequestId)
+    after 0 ->
+        ok
     end.
 
 valid_batch_ids([First | Rest]) ->
@@ -767,7 +904,7 @@ scope_control(Operation,
     case command_remaining_ms() of
         0 ->
             {error, current_execution_limit()};
-        _RemainingMs ->
+        RemainingMs ->
             RequestRef = make_ref(),
             Pid ! {scope_savepoint, self(), ProofId, SessionRef,
                    RequestRef, Operation, BatchIds},
@@ -779,6 +916,8 @@ scope_control(Operation,
                         Reply;
                     {'DOWN', MRef, process, Pid, Reason} ->
                         {error, failure_reason(Handle, Reason)}
+                after RemainingMs ->
+                    {error, current_execution_limit()}
                 end
             after
                 demonitor(MRef, [flush])

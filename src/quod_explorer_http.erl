@@ -7,12 +7,15 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 | -------- | ------- |
 | `GET /api/summary` | node identity + per-namespace consensus status (height, committee, finality head, next proposer…) |
 | `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
-| `GET /api/tx/:ns/:id` | one transaction by id (bounded backward scan — no global tx index yet) |
+| `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
-| `POST /api/prove` `{ns, goal}` | run a goal through `quod_prolog:prove/3` — a read answers with bindings; a write answers with its committed height or a pending transaction id if the local wait expires first |
+| `POST /api/prove` `{ns, goal}` | run a goal through `quod_prolog:prove/2` — a read answers with bindings; a write answers with its committed height or a pending transaction id if the local wait expires first |
 
 History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
 store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
+Exact outcome classification reads the compact DETS index directly; if the
+ontology is stopped, the request opens the same file read-only. Unauthenticated
+traffic never enters the ontology apply server.
 Term rendering is real Prolog text via `erlog_io:writeq1/1`; raw binaries inside
 terms (pubkeys) are first rewritten to their printable short form. All JSON goes
 through OTP's `m:json`.
@@ -22,22 +25,22 @@ the live stream, so a transaction renders identically live and from history.
 """.
 -export([init/2]).
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, tx_json_full/2, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
+-export([summary/0, tx_json_full/3, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
 -ifdef(TEST).
--export([prolog_text/1, txs_page/3, find_tx/2, parse_goal/1,
-         prove_result/1, committee_status_json/1]).   %% pure surface driven directly by eunit
+-export([prolog_text/1, txs_page/3, parse_goal/1, parse_tx_id/1,
+         prove_result/1, outcome_json/1,
+         committee_status_json/1,
+         test_transaction_outcome/4]).   %% pure surface driven directly by eunit
 -endif.
 -include("quod_ledger.hrl").
+-include("quod_vm_limits.hrl").
 
 -define(DEFAULT_PAGE, 25).
 -define(MAX_PAGE, 100).
 -define(SCAN_SLOTS, 1000).          %% max blocks walked per /api/txs page
--define(TX_SCAN_SLOTS, 5000).       %% max blocks walked hunting a tx id
 -define(MAX_GOAL_BYTES, 4096).      %% /api/prove goal-text cap — a query is small; anything larger is refused
-%% Parsing goal text mints atoms (erlog's scanner uses `list_to_atom`), so the write endpoint could exhaust
-%% the VM atom table. `/api/prove` refuses once fewer than this many atoms remain, so it can degrade itself
-%% but never crash the node. (Defence in depth on top of the small goal cap and the opt-in/loopback bind.)
--define(ATOM_SAFETY_MARGIN, 100000).
+%% Parsing goal text mints atoms (erlog's scanner uses `list_to_atom`), so the
+%% endpoint refuses before consuming the VM-wide safety reserve.
 
 %%%===================================================================
 %%% cowboy handler
@@ -70,10 +73,17 @@ handle(txs, Req) ->
     end;
 handle(tx, Req) ->
     Ns = cowboy_req:binding(ns, Req),
-    Id = cowboy_req:binding(id, Req),
-    case with_store(Ns, fun(Store) -> find_tx(Store, Id) end, not_found) of
-        not_found -> json_reply(404, #{error => not_found}, Req);
-        Found     -> json_reply(200, Found, Req)
+    case transaction_outcome(Ns, cowboy_req:binding(id, Req)) of
+        {ok, pending, Outcome} ->
+            json_reply(202, #{outcome => Outcome}, Req);
+        {ok, terminal, Found} ->
+            json_reply(200, Found, Req);
+        {error, bad_tx_id} ->
+            json_reply(400, #{error => bad_tx_id}, Req);
+        {error, not_found} ->
+            json_reply(404, #{error => not_found}, Req);
+        {error, Reason} ->
+            json_reply(503, #{error => text(Reason)}, Req)
     end;
 handle(block, Req) ->
     Ns = cowboy_req:binding(ns, Req),
@@ -82,7 +92,7 @@ handle(block, Req) ->
         Slot ->
             R = with_store(Ns, fun(Store) ->
                     case quod_ledger_store:read_at(Store, Slot) of
-                        {ok, E}   -> block_json(E);
+                        {ok, E}   -> block_json(Ns, E);
                         not_found -> not_found
                     end
                 end, not_found),
@@ -125,7 +135,7 @@ prove(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
               true ->
                   case parse_goal(Text) of
                       {ok, Goal} ->
-                          Result = quod_prolog:prove(Ns, Goal, Ns),
+                          Result = quod_prolog:prove(Ns, Goal),
                           _ = quod_trace:result(SpanCtx, Result),
                           {Code, Reply} = prove_result(Result),
                           json_reply(Code, Reply, Req);
@@ -143,7 +153,8 @@ prove(_Bad, Req) ->
 %% Parsing goal text mints atoms; refuse before doing so if too few atoms remain, so `/api/prove` can
 %% never exhaust the table and crash the VM (it just stops serving until the node is restarted).
 atom_headroom_ok() ->
-    erlang:system_info(atom_count) + ?ATOM_SAFETY_MARGIN < erlang:system_info(atom_limit).
+    erlang:system_info(atom_count) + ?QUOD_ATOM_SAFETY_MARGIN <
+        erlang:system_info(atom_limit).
 
 trace_headers(Req) ->
     [{Name, Value}
@@ -161,7 +172,15 @@ parse_goal(Text) ->
         {error, {_L, _M, E}} -> {error, text(E)}
     end.
 
-prove_result({ok, Bindings, Height}) ->
+prove_result(
+  {ok, Bindings, {transaction, Ns, Anchor, TxId}})
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_binary(TxId), byte_size(TxId) =:= 32 ->
+    {200, maps:merge(
+            #{result => ok,
+              bindings => [bindings_json(B) || B <- Bindings]},
+            outcome_ref_json(Ns, Anchor, TxId))};
+prove_result({ok, Bindings, Height}) when is_integer(Height), Height >= 0 ->
     {200, #{result => ok, height => Height, bindings => [bindings_json(B) || B <- Bindings]}};
 prove_result(fail) ->
     {200, #{result => fail}};
@@ -171,15 +190,22 @@ prove_result({fail, Reasons}) when is_list(Reasons) ->
 prove_result({error, {not_leader, Hint}}) ->
     Leader = case Hint of none -> null; _ -> id_json(Hint) end,
     {409, #{error => not_leader, leader => Leader}};
-prove_result({error, {outcome_unknown, TxId}}) when is_binary(TxId) ->
-    {202, #{result => pending, tx_id => tx_id_text(TxId)}};
+prove_result(
+  {error, {outcome_unknown,
+           {transaction, Ns, Anchor, TxId}}})
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_binary(TxId), byte_size(TxId) =:= 32 ->
+    {202, (outcome_ref_json(Ns, Anchor, TxId))#{result => pending}};
 prove_result({error, Reason}) ->
     {503, #{error => text(Reason)}}.
 
+outcome_ref_json(Ns, Anchor, TxId) ->
+    #{ns => Ns,
+      anchor => binary:encode_hex(Anchor, lowercase),
+      tx_id => tx_id_text(TxId)}.
+
 bindings_json(B) when is_map(B) ->
-    maps:fold(fun(V, T, Acc) -> Acc#{atom_to_binary(V, utf8) => prolog_text(T)} end, #{}, B);
-bindings_json(Other) ->
-    #{<<"value">> => prolog_text(Other)}.
+    maps:fold(fun(V, T, Acc) -> Acc#{atom_to_binary(V, utf8) => prolog_text(T)} end, #{}, B).
 
 %%%===================================================================
 %%% summary
@@ -246,20 +272,29 @@ leader_json(_Slot, _Committee) ->
 %%%===================================================================
 
 with_store(Ns, Fun, Empty) ->
-    Dirs = application:get_env(quod, content_data_dirs, #{}),
-    Dir = maps:get(Ns, Dirs, quod_ledger_store:default_data_dir()),
-    case quod_ledger_store:open_ro(Ns, Dir) of
+    with_store(Ns, content_ledger_dir(Ns), Fun, Empty).
+
+with_store(Ns, DataDir, Fun, Empty) ->
+    case quod_ledger_store:open_ro(Ns, DataDir) of
         {ok, Store} ->
             try Fun(Store) after quod_ledger_store:close(Store) end;
         {error, _} ->
             Empty
     end.
 
+content_storage(Ns) ->
+    Default = quod_ledger_store:default_data_dir(),
+    Storage = application:get_env(quod, content_storage_dirs, #{}),
+    maps:get(Ns, Storage, #{data => Default, ledger => Default}).
+
+content_ledger_dir(Ns) -> maps:get(ledger, content_storage(Ns)).
+
 txs_page(Store, Before, Limit) ->
     Last = quod_ledger_store:last(Store),
     From = case Before of undefined -> Last; B -> min(B - 1, Last) end,
-    {Txs, NextBefore} = collect_txs(Store, From, Limit, ?SCAN_SLOTS, []),
-    #{txs => Txs, height => Last, next_before => NextBefore}.
+    {TxsRev, NextBefore} = collect_txs(Store, From, Limit, ?SCAN_SLOTS, []),
+    #{txs => lists:reverse(TxsRev), height => Last,
+      next_before => NextBefore}.
 
 %% Walk slots downward until `Need` transaction rows are collected or the scan budget is
 %% spent; newest first. `NextBefore` is the `before` for the next page (`null` = at genesis).
@@ -270,29 +305,102 @@ collect_txs(_Store, Slot, Need, Scan, Acc) when Need =< 0; Scan =< 0 ->
 collect_txs(Store, Slot, Need, Scan, Acc) ->
     case quod_ledger_store:read_at(Store, Slot) of
         {ok, E} ->
-            Rows = [tx_json(T, E) || T <- entry_txs(E)],
-            collect_txs(Store, Slot - 1, Need - length(Rows), Scan - 1, Acc ++ Rows);
+            Ns = quod_ledger_store:namespace(Store),
+            Rows = [tx_json(Ns, T, E) || T <- entry_txs(E)],
+            collect_txs(
+              Store, Slot - 1, Need - length(Rows), Scan - 1,
+              lists:reverse(Rows, Acc));
         not_found ->
             collect_txs(Store, Slot - 1, Need, Scan - 1, Acc)
     end.
 
-%% Bounded backward hunt for a tx id (hex as listed, or the raw genesis id text).
-%% No global tx index exists yet — the reader-arc (doc/deferred.md §4) is the real fix.
-find_tx(Store, Id) ->
-    find_tx(Store, quod_ledger_store:last(Store), Id, ?TX_SCAN_SLOTS).
+%% The outcome index gives the exact terminal height in O(1). The detail view
+%% then reads that one block for its certificate and signed transaction fields;
+%% it never scans history or re-proves the goal.
+transaction_outcome(Ns, IdText) ->
+    transaction_outcome(
+      Ns, IdText, content_ledger_dir(Ns), content_ledger_dir(Ns)).
 
-find_tx(_Store, Slot, _Id, Scan) when Slot < 1; Scan =< 0 ->
-    not_found;
-find_tx(Store, Slot, Id, Scan) ->
-    case quod_ledger_store:read_at(Store, Slot) of
-        {ok, E} ->
-            case [T || T <- entry_txs(E), tx_id_text(T#transaction.tx_id) =:= Id] of
-                [T | _] -> #{tx => tx_json_full(T, E), block => block_meta(E)};
-                []      -> find_tx(Store, Slot - 1, Id, Scan - 1)
+transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir) ->
+    case parse_tx_id(IdText) of
+        {ok, TxId} ->
+            case quod_outcome:lookup_live(Ns, OutcomeDir, TxId) of
+                {ok, #{status := pending} = Outcome} ->
+                    {ok, pending, outcome_json(Outcome)};
+                {ok, #{height := Height} = Outcome} ->
+                    terminal_transaction(
+                      Ns, TxId, Height, Outcome, LedgerDir);
+                {error, not_found} ->
+                    {error, not_found};
+                {error, Reason} ->
+                    {error, Reason}
             end;
-        not_found ->
-            find_tx(Store, Slot - 1, Id, Scan - 1)
+        {error, bad_tx_id} ->
+            {error, bad_tx_id}
     end.
+
+terminal_transaction(Ns, TxId, Height, Outcome, LedgerDir) ->
+    with_store(
+      Ns, LedgerDir,
+      fun(Store) ->
+          case quod_ledger_store:read_at(Store, Height) of
+              {ok, E} ->
+                  case [T || T <- entry_txs(E),
+                             T#transaction.tx_id =:= TxId] of
+                      [T] ->
+                          case durable_submission_json(T) of
+                              {ok, GoalJson, ResultJson} ->
+                                  {ok, terminal,
+                                   #{tx => tx_json_full_decoded(
+                                             Ns, T, E,
+                                             GoalJson, ResultJson),
+                                     block => block_meta(E),
+                                     outcome => terminal_outcome_json(
+                                                  Outcome, GoalJson,
+                                                  ResultJson)}};
+                              {error, _} = Error -> Error
+                          end;
+                      _ ->
+                          {error, outcome_index_mismatch}
+                  end;
+              not_found ->
+                  {error, outcome_index_mismatch}
+          end
+      end,
+      {error, ontology_unreachable}).
+
+-ifdef(TEST).
+test_transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir) ->
+    transaction_outcome(Ns, IdText, OutcomeDir, LedgerDir).
+-endif.
+
+parse_tx_id(Id) when is_binary(Id), byte_size(Id) =:= 64 ->
+    try binary:decode_hex(Id) of
+        <<_:256>> = TxId -> {ok, TxId};
+        _ -> {error, bad_tx_id}
+    catch
+        error:badarg -> {error, bad_tx_id}
+    end;
+parse_tx_id(_Id) ->
+    {error, bad_tx_id}.
+
+outcome_json(#{status := Status,
+               ref := {transaction, Ns, Anchor, TxId}} = Outcome) ->
+    maps:merge(
+      (outcome_ref_json(Ns, Anchor, TxId))#{status => Status},
+      maps:with([height, reason], Outcome)).
+
+durable_submission_json(
+  #transaction{goal = GoalBlob, result = ResultBlob}) ->
+    case {quod_durable_term:decode_goal(GoalBlob),
+          quod_durable_term:decode_result(ResultBlob)} of
+        {{ok, Goal}, {ok, Bindings}} ->
+            {ok, goal_text(Goal), result_json(Bindings)};
+        _ -> {error, outcome_index_mismatch}
+    end.
+
+terminal_outcome_json(Outcome, GoalJson, ResultJson) ->
+    (outcome_json(Outcome))#{goal => GoalJson, bindings => ResultJson}.
 
 entry_txs(#entry{data = Data}) ->
     case quod_ledger:payload(Data) of
@@ -305,17 +413,36 @@ entry_txs(#entry{data = Data}) ->
 %%%===================================================================
 
 -doc "The list-row rendering of one transaction inside its committed entry.".
-tx_json(#transaction{tx_id = Id, caller_ns = CNs, goal = G, author = A,
+tx_json(Ns, #transaction{tx_id = Id,
+                     goal = G, author = A,
                      author_seq = AuthorSeq, submitted_at = Sub, diff = Diff},
         #entry{index = Slot, timestamp = Ts}) ->
-    #{tx_id => tx_id_text(Id), ns => CNs, height => Slot, time => Ts,
-      goal => goal_text(G), author => id_json(A), author_seq => AuthorSeq,
-      submitted_at => Sub,
+    tx_json_decoded(
+      Ns, Id, durable_goal_text(G), A, AuthorSeq, Sub, Diff, Slot, Ts).
+
+tx_json_decoded(Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
+                Diff, Slot, Timestamp) ->
+    #{tx_id => tx_id_text(Id), ns => Ns, height => Slot, time => Timestamp,
+      goal => GoalJson, author => id_json(Author), author_seq => AuthorSeq,
+      submitted_at => SubmittedAt,
       ops => length(Diff)}.
 
 -doc "The detail rendering: the row plus result bindings, authentication, the diff, and OCC extent.".
-tx_json_full(#transaction{result = Res, diff = Diff, read_check = RC, sig = Sig} = T, E) ->
-    (tx_json(T, E))#{result => result_json(Res),
+tx_json_full(Ns, #transaction{result = Res} = T, E) ->
+    tx_json_full_decoded(
+      Ns, T, E, durable_goal_text(T#transaction.goal),
+      durable_result_json(Res)).
+
+tx_json_full_decoded(
+  Ns,
+  #transaction{tx_id = Id, author = Author, author_seq = AuthorSeq,
+               submitted_at = SubmittedAt, diff = Diff,
+               read_check = RC, sig = Sig} = T,
+  #entry{index = Slot, timestamp = Timestamp} = E,
+  GoalJson, ResultJson) ->
+    (tx_json_decoded(
+       Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
+       Diff, Slot, Timestamp))#{result => ResultJson,
                      diff => [op_json(Op) || Op <- Diff],
                      read_predicates => map_size(RC),
                      signature => signature_json(Sig),
@@ -332,8 +459,8 @@ signature_status(#transaction{sig = Sig}, _Entry)
 signature_status(_Transaction, _Entry) ->
     invalid.
 
-block_json(#entry{index = Slot} = E) ->
-    (block_meta(E))#{txs => [tx_json_full(T, E) || T <- entry_txs(E)],
+block_json(Ns, #entry{index = Slot} = E) ->
+    (block_meta(E))#{txs => [tx_json_full(Ns, T, E) || T <- entry_txs(E)],
                      slot => Slot}.
 
 block_meta(#entry{index = Slot, data = Data, timestamp = Ts, cert = Cert}) ->
@@ -347,10 +474,19 @@ cert_json(#implicit_cert{child = Child, commit = Commit}) ->
     #{kind => implicit, child_slot => Child#block.slot,
       signers => [id_json(P) || {P, _Sig} <- Commit#cert.sigs]}.
 
-result_json(undefined) -> null;
-result_json(B) when is_map(B) -> bindings_json(B);
-result_json(L) when is_list(L) -> [bindings_json(B) || B <- L];
-result_json(Other) -> prolog_text(Other).
+%% Durable goal/result blobs decode through the same atom-safe canonical
+%% persistence codec on every node; only the unsigned genesis has none.
+durable_result_json(undefined) -> null;
+durable_result_json(Blob) when is_binary(Blob) ->
+    case quod_durable_term:decode_result(Blob) of
+        {ok, Durable} -> result_json(Durable);
+        {error, _} -> invalid
+    end.
+
+result_json(Durable) ->
+    maps:from_list(
+      [{Name, prolog_text(Value)}
+       || {Name, Value} <- Durable]).
 
 op_json({assert, Clause})  -> #{op => assert,  clause => clause_text(Clause)};
 op_json({retract, Clause}) -> #{op => retract, clause => clause_text(Clause)}.
@@ -368,8 +504,18 @@ clause_text({Head, Body}) -> <<(prolog_text(Head))/binary, " :- ", (prolog_text(
 goal_text(undefined) -> null;
 goal_text(G)         -> prolog_text(G).
 
-%% A transaction id is opaque bytes. Show printable values as-is and encode
-%% binary protocol ids (including the versioned genesis id) as hexadecimal.
+durable_goal_text(undefined) -> null;
+durable_goal_text(Blob) when is_binary(Blob) ->
+    case quod_durable_term:decode_goal(Blob) of
+        {ok, Goal} -> goal_text(Goal);
+        {error, _} -> invalid
+    end.
+
+%% Canonical semantic ids are always 32 bytes and always render as the exact
+%% 64-hex form accepted by `/api/tx`. The genesis id is a separate readable
+%% non-outcome identifier.
+tx_id_text(<<_:256>> = Id) ->
+    binary:encode_hex(Id, lowercase);
 tx_id_text(Id) when is_binary(Id) ->
     case printable(Id) of
         true  -> Id;

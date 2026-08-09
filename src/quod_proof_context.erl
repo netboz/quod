@@ -11,16 +11,16 @@ the scope wire as Erlang references.
 
 -include("quod_proof_limits.hrl").
 
--export([start/4, stop/2, proof_id/0, origin_identity/0,
+-export([start/5, stop/2, proof_id/0, origin_identity/0, principal/0,
          read_only/0, deadline_ms/0, remaining_ms/0,
-         finalize/0, sealed_plans/0,
+         finalize/1, seal_plans/0, scope_handle/1,
          bind_router/3,
          get_or_open_scope/2,
          scope_owner/1,
          register_invocation/2, unregister_invocation/1,
          registered_invocation/2,
          new_proxy/3, proxy/2, update_proxy/3, drop_proxy/2,
-         mark_dirty/2, foreign_dirty/0,
+         mark_dirty/2,
          tx_request/2, materialize/2]).
 -ifdef(TEST).
 -export([scopes/0, registered_scope/1]).
@@ -54,6 +54,7 @@ the scope wire as Erlang references.
 
 -record(ctx, {proof_id  :: <<_:256>>,
               origin_identity :: identity(),
+              principal :: quod_dtx:principal(),
               deadline_ms :: integer(),
               read_only = false :: boolean(),
               finalization = open :: open | ok | {error, term()},
@@ -67,7 +68,8 @@ the scope wire as Erlang references.
               txs = #{} :: #{opaque_id() => #tx{}},
               lineages = #{} :: #{opaque_id() => #lineage{}},
               batches = #{} :: #{opaque_id() => #batch{}},
-              sealed_plans = #{} :: #{identity() => quod_dtx:plan()}}).
+              seal_result = open ::
+                  (open | {ok, map()} | {error, term()})}).
 
 -define(KEY, '$quod_proof_context').
 
@@ -75,13 +77,15 @@ the scope wire as Erlang references.
 -type handle() :: {quod_proof_context, <<_:256>>, pid()}.
 -export_type([identity/0, handle/0]).
 
--spec start(<<_:256>>, boolean(), identity(), integer()) -> handle().
+-spec start(<<_:256>>, boolean(), identity(), integer(),
+            quod_dtx:principal()) -> handle().
 start(<<_:256>> = ProofId, ReadOnly,
-      {Ns, <<_:256>>} = OriginIdentity, DeadlineMs)
+      {Ns, <<_:256>>} = OriginIdentity, DeadlineMs, Principal)
   when is_boolean(ReadOnly), is_binary(Ns), is_integer(DeadlineMs) ->
     undefined = get(?KEY),
     put(?KEY, #ctx{proof_id = ProofId,
                    origin_identity = OriginIdentity,
+                   principal = Principal,
                    deadline_ms = DeadlineMs,
                    read_only = ReadOnly}),
     {quod_proof_context, ProofId, self()}.
@@ -113,6 +117,9 @@ proof_id() -> (context())#ctx.proof_id.
 -spec origin_identity() -> identity().
 origin_identity() -> (context())#ctx.origin_identity.
 
+-spec principal() -> quod_dtx:principal().
+principal() -> (context())#ctx.principal.
+
 -spec read_only() -> boolean().
 read_only() -> (context())#ctx.read_only.
 
@@ -126,24 +133,22 @@ remaining_ms() ->
     erlang:max(0, (context())#ctx.deadline_ms - quod_time:mono_ms()).
 
 -doc """
-Seal, then fence and detach, every selected local or remote scope.
+Fence and detach every selected local or remote scope.
 
-Sealing comes first (`m:quod_dtx`): while every scope is still live, each one
+`commit` seals first (`m:quod_dtx`): while every scope is still live, each one
 holding a staged diff or a non-empty influencing read set is sealed into a
-signed local plan, stored per scope for `sealed_plans/0`. A read-only proof —
-or one in which no scope staged anything — seals nothing. Closing always runs,
-sealed or not; a seal failure is the proof's result even when closing also
-fails.
+signed local plan. `abort` never seals work that cannot commit; it only closes
+the scopes so their private revisions are discarded. Closing always runs. A
+commit-side seal failure takes precedence over a close failure.
 """.
--spec finalize() -> ok | {error, term()}.
-finalize() ->
+-spec finalize(commit | abort) -> ok | {error, term()}.
+finalize(Mode) when Mode =:= commit; Mode =:= abort ->
     Ctx0 = context(),
     case Ctx0#ctx.finalization of
         open ->
-            {SealResult, Plans} = seal_material_scopes(Ctx0),
+            SealResult = finalize_seal(Mode),
             %% Re-fetch: remote sealing may have bound the router meanwhile.
-            Ctx1 = (context())#ctx{sealed_plans = Plans},
-            put_context(Ctx1),
+            Ctx1 = context(),
             CloseResult = finalize_scopes(
                             Ctx1#ctx.scopes, Ctx1#ctx.router,
                             Ctx1#ctx.proof_id),
@@ -156,18 +161,61 @@ finalize() ->
         Result -> Result
     end.
 
--doc "The plans `finalize/0` sealed, one per material scope identity.".
--spec sealed_plans() -> #{identity() => quod_dtx:plan()}.
-sealed_plans() -> (context())#ctx.sealed_plans.
+finalize_seal(commit) ->
+    case seal_plans() of
+        {ok, _Plans} -> ok;
+        {error, _} = Error -> Error
+    end;
+finalize_seal(abort) ->
+    ok.
+
+-doc """
+Seal every material scope's plan now, while all scopes are still open.
+
+Idempotent within one proof: the submission stage seals before routing the
+writing plan, and a later `finalize(commit)` reuses the same sealed set rather than
+sealing twice.
+""".
+-spec seal_plans() -> {ok, #{identity() => quod_dtx:plan()}} | {error, term()}.
+seal_plans() ->
+    Ctx0 = context(),
+    case {Ctx0#ctx.finalization, Ctx0#ctx.seal_result} of
+        {open, {ok, Plans}} ->
+            {ok, Plans};
+        {open, {error, _} = Error} ->
+            Error;
+        {open, open} ->
+            {SealResult, Plans} = seal_material_scopes(Ctx0),
+            case SealResult of
+                ok ->
+                    Result = {ok, Plans},
+                    put_context((context())#ctx{seal_result = Result}),
+                    Result;
+                {error, _} = Error ->
+                    put_context((context())#ctx{seal_result = Error}),
+                    Error
+            end;
+        {_Finalized, _} ->
+            {error, proof_finalized}
+    end.
+
+-doc "The live scope handle pinned for one exact ontology identity.".
+-spec scope_handle(identity()) -> {ok, term()} | error.
+scope_handle(Identity) ->
+    case maps:find(Identity, (context())#ctx.scopes) of
+        {ok, #scope{handle = Handle}} -> {ok, Handle};
+        error -> error
+    end.
 
 seal_material_scopes(#ctx{read_only = true}) ->
     {ok, #{}};
 seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
-                          origin_identity = OriginIdentity}) ->
+                          origin_identity = OriginIdentity,
+                          principal = Principal}) ->
     case proof_material(Scopes, Dirty) of
         false -> {ok, #{}};
         true -> seal_scopes(lists:sort(maps:to_list(Scopes)),
-                            OriginIdentity, #{})
+                            OriginIdentity, Principal, #{})
     end.
 
 %% Plans exist to carry writes: only a proof that staged at least one write
@@ -183,15 +231,16 @@ proof_material(Scopes, Dirty) ->
                   false
           end, maps:values(Scopes)).
 
-seal_scopes([], _OriginIdentity, Plans) ->
+seal_scopes([], _OriginIdentity, _Principal, Plans) ->
     {ok, Plans};
 seal_scopes([{Identity, #scope{handle = Handle}} | Rest],
-            OriginIdentity, Plans) ->
-    case quod_scope_session:seal(Handle, OriginIdentity) of
+            OriginIdentity, Principal, Plans) ->
+    case quod_scope_session:seal(Handle, OriginIdentity, Principal) of
         {ok, Plan} ->
-            seal_scopes(Rest, OriginIdentity, Plans#{Identity => Plan});
+            seal_scopes(
+              Rest, OriginIdentity, Principal, Plans#{Identity => Plan});
         not_material ->
-            seal_scopes(Rest, OriginIdentity, Plans);
+            seal_scopes(Rest, OriginIdentity, Principal, Plans);
         {error, _} = Error ->
             {Error, Plans}
     end.
@@ -488,11 +537,6 @@ mark_dirty(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>> = ScopeId, Dirty)
             put_context(Ctx0#ctx{
                           dirty = (Ctx0#ctx.dirty)#{ScopeId => Dirty}})
     end.
-
--spec foreign_dirty() -> boolean().
-foreign_dirty() ->
-    lists:any(fun(Value) -> Value =:= true end,
-              maps:values((context())#ctx.dirty)).
 
 -doc "Apply one authorized transaction-controller operation atomically.".
 -spec tx_request(actor(), term()) -> term().

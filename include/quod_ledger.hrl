@@ -37,16 +37,23 @@
         #{ {Functor :: atom(), Arity :: non_neg_integer()} => read_token() }.
 
 %% The committed change record. Every non-genesis transaction carries an Ed25519
-%% signature over the namespace-bound canonical bytes owned by `quod_transaction`;
-%% `author` is the submitting node's 32-byte public key. Only anchored genesis uses
+%% signature over canonical bytes bound to the TARGET's immutable identity
+%% `{Ns, GenesisAnchor, AuthorAdmission}` (owned by `quod_transaction`);
+%% `author` is the submitting node's 32-byte public key and AuthorAdmission is
+%% its current continuous membership generation. Only anchored genesis uses
 %% `sig = none`.
--record(transaction, {tx_id      :: binary(),            %% client correlation id; uniqueness is enforced by author_seq
-                 caller_ns    :: binary(),            %% emitting ontology (CallerNs)
-                 goal = undefined :: term(),          %% successful Prolog goal that produced this write
-                 result = undefined :: term(),        %% bindings returned by that proof
+%% A transaction is built from a sealed local plan (`m:quod_dtx`): `origin`
+%% names the proof's origin ontology, `proof_id` the distributed proof, and
+%% `plan_digest` the canonical unsigned plan bytes — `none` only for genesis.
+-record(transaction, {tx_id      :: binary(),            %% target-bound digest of the complete semantic write
+                 origin       :: {binary(), binary()},%% proof origin identity {OriginNs, OriginAnchor}; genesis = {Ns, <<0:256>>}
+                 proof_id = none :: binary() | none,  %% 32-byte distributed-proof id; none only for genesis
+                 plan_digest = none :: binary() | none, %% SHA-256 of the sealed plan's canonical bytes; none only for genesis
+                 goal = undefined :: binary() | undefined, %% canonical atom-safe goal blob; undefined only for genesis
+                 result = undefined :: binary() | undefined, %% canonical atom-safe sorted bindings blob; undefined only for genesis
                  diff         :: [op()],              %% concrete asserts/retracts
                  read_check   :: read_check(),        %% what the proof relied on (OCC)
-                 author       :: node_id(),           %% submitting node's pubkey
+                 author = none :: node_id() | none,    %% set to the submitting node's pubkey before ingress
                  author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis
                  submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).
                  sig = none   :: binary() | none}).   %% 64-byte Ed25519 signature; none only for genesis

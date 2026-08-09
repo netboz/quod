@@ -84,7 +84,7 @@ assert_pending_router_death(Target, WaitFun) ->
     _ = quod_proof_context:start(
           crypto:strong_rand_bytes(32), false,
           {<<"quod:origin">>, crypto:strong_rand_bytes(32)},
-          quod_time:mono_ms() + 60000),
+          quod_time:mono_ms() + 60000, anonymous),
     try
         spawn(fun() -> timer:sleep(5), exit(Router, kill) end),
         ?assertEqual(
@@ -111,7 +111,7 @@ nested_source_binding_test() ->
                       crypto:strong_rand_bytes(32)},
     _Context = quod_proof_context:start(
                  ProofId, false, OriginIdentity,
-                 quod_time:mono_ms() + 60000),
+                 quod_time:mono_ms() + 60000, anonymous),
     try
         {ok, ScopeId, registered_scope} =
             quod_proof_context:get_or_open_scope(
@@ -168,7 +168,7 @@ ask_test_() ->
           ?_test(t_failed_transaction_restores_all_selected_scopes(Ctx)),
           ?_test(t_unrelated_reentrant_invocation_has_no_transaction_lineage(Ctx)),
           ?_test(t_reentrant_scope_reuse(Ctx)),
-          ?_test(t_origin_scope_reentry_commits_write(Ctx)),
+          ?_test(t_origin_scope_reentry_requires_group_commit(Ctx)),
           ?_test(t_nested_failure_reasons(Ctx)),
           ?_test(t_nested_refusal_fails_logically(Ctx)),
           ?_test(t_read_only_tree_rejects_first_write(Ctx)),
@@ -178,7 +178,7 @@ ask_test_() ->
           ?_test(t_scope_worker_crash_is_protocol_error(Ctx)),
           ?_test(t_permission_gate(Ctx)),
           ?_test(t_failure_reasons_cross_local_ask(Ctx)),
-          ?_test(t_foreign_write_rejected(Ctx)),
+          ?_test(t_foreign_write_requires_group_commit(Ctx)),
           ?_test(t_scope_engine_stays_responsive(Ctx)),
           ?_test(t_target_crash_kills_scope(Ctx)),
           ?_test(t_scope_worker_limit(Ctx)),
@@ -385,23 +385,26 @@ t_three_scope_chain(#{pets := P}) ->
     ?assertMatch({ok, [#{'X' := ok}], _},
                  prove(P, {'::', chain_b, {via_c, {'X'}}})).
 
-%% A failed invocation's writes remain in B's shared proof scope, exactly as
-%% ordinary local Prolog backtracking preserves database writes.
-t_failed_foreign_branch_retains_state(#{pets := P}) ->
+%% A failed invocation's writes remain in B's shared proof scope during the
+%% proof. The origin's influencing authorization read makes the final write a
+%% two-participant group, so this slice refuses it instead of committing B
+%% without protecting A's read dependency.
+t_failed_foreign_branch_retains_state(#{pets := P, chain_b := B}) ->
     Goal = {';', {'::', chain_b, stage_and_fail},
                  {'::', chain_b, shared_mark_visible}},
-    ?assertEqual({error, foreign_write_unsupported}, prove(P, Goal)).
+    assert_group_refused(prove(P, Goal), [<<"chain_b">>, <<"pets">>]),
+    ?assertMatch({fail, [_ | _]}, prove(B, shared_mark)).
 
 %% transaction/1 restores B before the enclosing disjunction tries its second
 %% alternative. The second branch can therefore observe absence and stage its
-%% own write; the temporary final write still hits Step 3's publication gate.
+%% own write; only the surviving final write commits.
 t_transaction_restores_foreign_branch_before_alternative(
   #{pets := P, chain_b := B}) ->
     First = {',', {'::', chain_b, {assertz, tx_hidden}}, fail},
     Goal = {transaction, {';', First, {'::', chain_b, tx_second}}},
-    ?assertEqual({error, foreign_write_unsupported}, prove(P, Goal)),
+    assert_group_refused(prove(P, Goal), [<<"chain_b">>, <<"pets">>]),
     ?assertMatch({fail, _}, prove(B, tx_hidden)),
-    ?assertMatch({fail, _}, prove(B, tx_kept)).
+    ?assertMatch({fail, [_ | _]}, prove(B, tx_kept)).
 
 %% The transaction belongs to A, but the choice point and temporary write are
 %% both inside B. B must inherit A's active transaction lineage: otherwise the
@@ -417,11 +420,11 @@ t_origin_transaction_is_inherited_by_selected_branch(
 %% Erlog's local token; the origin controller restores C before B continues.
 t_selected_scope_transaction_restores_descendant(
   #{pets := P, chain_c := C}) ->
-    ?assertEqual(
-       {error, foreign_write_unsupported},
-       prove(P, {'::', chain_b, tx_via_c})),
+    assert_group_refused(
+      prove(P, {'::', chain_b, tx_via_c}),
+      [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
     ?assertMatch({fail, _}, prove(C, c_tx_hidden)),
-    ?assertMatch({fail, _}, prove(C, c_tx_kept)).
+    ?assertMatch({fail, [_ | _]}, prove(C, c_tx_kept)).
 
 %% B owns the transaction, selects C, and C calls back into a fresh logical B
 %% invocation. The callback's failed alternative must still belong to B's
@@ -457,7 +460,7 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
     OriginIdentity = {P, quod_simplex:genesis_hash(P)},
     _ = quod_proof_context:start(
           ProofId, false, OriginIdentity,
-          quod_time:mono_ms() + 60000),
+          quod_time:mono_ms() + 60000, anonymous),
     try
         {ok, ScopeId, Handle} = quod_proof_context:get_or_open_scope(
                          {B, Anchor},
@@ -516,16 +519,19 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
 
 %% C calls back into the already-suspended B scope. The B write must be visible
 %% there; opening a second B overlay would make the proof fail instead.
-t_reentrant_scope_reuse(#{pets := P}) ->
-    ?assertEqual({error, foreign_write_unsupported},
-                 prove(P, {'::', chain_b, {via_c_back, ok}})).
+t_reentrant_scope_reuse(#{pets := P, chain_b := B}) ->
+    assert_group_refused(
+      prove(P, {'::', chain_b, {via_c_back, ok}}),
+      [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
+    ?assertMatch({fail, [_ | _]}, prove(B, reentry_mark)).
 
 %% B selects the already-running origin scope A. The write belongs to A's
 %% ordinary transaction diff; no second A overlay is opened.
-t_origin_scope_reentry_commits_write(#{pets := P}) ->
-    ?assertMatch({ok, [#{}], _},
-                 prove(P, {'::', chain_b, via_origin_write})),
-    ?assertMatch({ok, [#{}], _}, prove(P, origin_callback_write)).
+t_origin_scope_reentry_requires_group_commit(#{pets := P}) ->
+    assert_group_refused(
+      prove(P, {'::', chain_b, via_origin_write}),
+      [<<"chain_b">>, <<"pets">>]),
+    ?assertMatch({fail, [_ | _]}, prove(P, origin_callback_write)).
 
 t_nested_failure_reasons(#{pets := P}) ->
     {fail, Reasons} = prove(P, {'::', chain_b, via_c_failure}),
@@ -549,12 +555,12 @@ t_read_only_tree_rejects_first_write(#{animals := A, pets := P}) ->
     LocalMarker = {read_only_local_write, blocked},
     ?assertEqual(
        {error, read_only},
-       quod_prolog:prove_ro(P, {assertz, LocalMarker}, P)),
+       quod_prolog:prove_ro(P, {assertz, LocalMarker})),
     ?assertMatch({fail, [_ | _]}, prove(P, LocalMarker)),
     ForeignMarker = {read_only_foreign_write, blocked},
     ?assertEqual(
        {error, read_only},
-       quod_prolog:prove_ro(P, {'::', animals, {assertz, ForeignMarker}}, P)),
+       quod_prolog:prove_ro(P, {'::', animals, {assertz, ForeignMarker}})),
     ?assertMatch({fail, [_ | _]}, prove(A, ForeignMarker)).
 
 t_scope_session_binding(#{animals := A}) ->
@@ -708,7 +714,7 @@ t_scope_worker_crash_is_protocol_error(#{pets := P, slow := Slow}) ->
     exit(quod_scope_session:pid(Handle), kill),
     _ = quod_proof_context:start(
           crypto:strong_rand_bytes(32), false,
-          {P, quod_simplex:genesis_hash(P)}, test_deadline()),
+          {P, quod_simplex:genesis_hash(P)}, test_deadline(), anonymous),
     try
         ?assertEqual(
            {error, {protocol_error, proof_engine}},
@@ -826,10 +832,19 @@ t_failure_reasons_cross_local_ask(#{pets := P}) ->
        {ok, [#{'Outer' := Remote}], _},
        prove(P, Recover)).
 
-t_foreign_write_rejected(#{animals := A, pets := P}) ->
-    ?assertEqual({error, foreign_write_unsupported},
-                 prove(P, {'::', animals, {assertz, {stolen, fact}}})),
+%% A foreign write also depends on the origin's authorization read. Until the
+%% group protocol lands, refusing both plans is the only sound result.
+t_foreign_write_requires_group_commit(#{animals := A, pets := P}) ->
+    Goal = {assertz, {stolen, fact}},
+    assert_group_refused(
+      prove(P, {'::', animals, Goal}), [<<"animals">>, <<"pets">>]),
     ?assertMatch({fail, [_ | _]}, prove(A, {stolen, fact})).
+
+assert_group_refused(
+  {error, {distributed_group_unimplemented, Participants}}, Names) ->
+    ?assertEqual(
+       lists:sort(Names),
+       [Ns || {Ns, <<_:256>>} <- Participants]).
 
 %% A scope may be deriving an unproductive goal without blocking its owning
 %% ontology engine. Killing that isolated worker leaves the engine healthy.
@@ -949,7 +964,7 @@ stop_ns(Ns) ->
             receive {'DOWN', Ref, process, Pid, _} -> ok after 5000 -> ok end
     end.
 
-prove(Ns, Goal) -> quod_prolog:prove(Ns, Goal, Ns).
+prove(Ns, Goal) -> quod_prolog:prove(Ns, Goal).
 
 prove_ready(Ns, Goal) -> prove_ready(Ns, Goal, 300).
 prove_ready(_Ns, _Goal, 0) -> {error, timeout};

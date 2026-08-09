@@ -58,7 +58,7 @@ store_test_() ->
 ent(I) -> #entry{index = I, data = chg(I)}.
 
 chg(I) ->
-    #transaction{tx_id = integer_to_binary(I), caller_ns = <<"onia:peers">>,
+    #transaction{tx_id = integer_to_binary(I), origin = {<<"onia:peers">>, <<0:256>>},
             diff = [{assert, {{fact, I}, true}}], read_check = #{},
             author = {"127.0.0.1", 5000}, sig = none}.
 

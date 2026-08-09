@@ -372,7 +372,7 @@ root_peer_proof() ->
     Keys = {'DirectoryControlKeys'},
     Goal = {findall, Key, {directory_control_peer, Key}, Keys},
     validate_peer_proof(
-      quod_prolog:prove_ro(?ROOT_NS, Goal, ?ROOT_NS)).
+      quod_prolog:prove_ro(?ROOT_NS, Goal)).
 
 validate_peer_proof(
   {ok, [Bindings], Height})

@@ -169,12 +169,9 @@ view, whether the scope is local, co-hosted, or remote.
    caller merges it before its `::` goal fails, so ordinary Prolog alternatives may inspect and
    recover. Infrastructure or authorization failures are typed errors, poison the whole
    pre-commit proof, and are never retried as another proof after the target may have executed.
-
-Step 3 deliberately stops before durable distributed commit. A selected scope may stage writes
-and later calls may read them, but a top-level proof that finishes with any foreign scope still
-dirty returns `foreign_write_unsupported`; all volatile scope state is discarded. Step 4
-replaces that single final gate with target-authored plans and durable commit. It does not add a
-second selector or proof engine.
+   A writing proof seals every material scope. One material target submits its target-authored
+   plan through that ontology's ordinary consensus path and returns an anchored outcome
+   reference; the multi-target group protocol is the remaining Step 4 work.
 
 ### 4.1 Where the work runs: one worker per ontology scope
 
@@ -311,7 +308,7 @@ classes:
 | `{error, {too_large, Kind}}` | a named goal, answer, reason, error, or envelope size cap failed |
 | `{error, read_only}` | a strict `prove_ro` tree attempted its first mutation |
 | `{error, {protocol_error, Kind}}` | authenticated identity/session/sequence/payload validation failed |
-| `{error, foreign_write_unsupported}` | temporary Step-3 final gate: a foreign staged view remains dirty, so nothing is committed |
+| `{error, {distributed_group_unimplemented, Participants}}` | temporary Step-4 seam: two or more material targets require the group commit protocol |
 
 Infrastructure and authorization errors poison the volatile proof instead of becoming logical
 failure. A target-authored logical failure alone participates in normal Prolog backtracking.

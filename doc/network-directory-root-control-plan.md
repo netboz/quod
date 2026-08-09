@@ -31,7 +31,7 @@ The design deliberately separates durable truth from moving runtime state:
   The root API deliberately returns only the node key; it does not treat the
   committed Host/Port arguments as durable routing truth. Existing consensus
   code does, however, seed the same address cache from those arguments:
-  `quod_simplex:adopt_committee/4` overwrites the hint at a live membership
+  `quod_simplex:adopt_history/2` overwrites the hint at a live membership
   commit, and `learn_member_endpoints/3` fills an absent hint while catching
   up. A boot re-fold reconstructs only the key set. Consequently `resolve/1`
   may initially return a stale committed endpoint after a deployment move.
@@ -135,7 +135,7 @@ peer_height     height of the last successful root proof
 ```
 
 The root proof must never run in the directory control process itself.
-`quod_prolog:prove_ro/3` is called by at most one monitored, timed worker.
+`quod_prolog:prove_ro/2` is called by at most one monitored, timed worker.
 Worker messages preserve the distinction between
 `{ok, Height, NodeKeys}` (where `NodeKeys = []` is a real successful answer)
 and `{error, Reason}` or worker failure. Every result carries the current token

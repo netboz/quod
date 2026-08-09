@@ -3,6 +3,47 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").
 
+committed_submit_reply_is_bound_to_expected_transaction_test() ->
+    Expected = key(97),
+    Ref = {transaction, <<"quod:target">>, key(98), Expected},
+    ?assertEqual(
+       {ok, 7, Expected},
+       quod_scope_session:test_committed_submit_outcome(
+         7, Expected, Ref)),
+    ?assertEqual(
+       {error, {outcome_unknown, Ref}},
+       quod_scope_session:test_committed_submit_outcome(
+         7, key(99), Ref)).
+
+divergent_submit_reply_terminates_with_expected_reference_test() ->
+    Parent = self(),
+    Router = spawn(fun request_link/0),
+    RequestLink = spawn(fun request_link/0),
+    Binding = {scope_binding, key(7), key(8), key(9), id(2),
+               {<<"quod:origin">>, key(10)},
+               {<<"quod:target">>, key(4)}, read_write},
+    Handle = {remote_scope, Router, id(1), Binding, RequestLink},
+    RequestId = id(3),
+    ExpectedRef = {transaction, <<"quod:target">>, key(4), key(5)},
+    DivergentRef = {transaction, <<"quod:target">>, key(4), key(6)},
+    Worker = spawn(
+               fun() ->
+                   Parent !
+                       {submit_result,
+                        quod_scope_session:test_await_remote_submit(
+                          Handle, RequestId, Router, ExpectedRef, 1000)}
+               end),
+    Worker ! {quod_scope_event, Handle, RequestId, 1, false,
+              {plan_submitted, {outcome_unknown, DivergentRef}}},
+    receive
+        {submit_result, Result} ->
+            ?assertEqual({error, {outcome_unknown, ExpectedRef}}, Result)
+    after 250 ->
+        ?assert(false)
+    end,
+    Router ! stop,
+    RequestLink ! stop.
+
 startup_failure_is_asynchronous_and_monitored_test() ->
     ProofId = crypto:strong_rand_bytes(32),
     Anchor = crypto:strong_rand_bytes(32),
@@ -385,6 +426,36 @@ remote_control_obeys_expired_budget_without_retry_test() ->
         stop_remote_fixture(Router, Handle)
     end.
 
+remote_seal_and_control_stop_at_the_running_budget_test() ->
+    {SealRouter, SealHandle, _SealScopeId, _SealIdentity} =
+        remote_fixture(silent),
+    try
+        with_proof_context_deadline(
+          quod_time:mono_ms() + 40,
+          fun() ->
+              ?assertEqual(
+                 {error, {proof_limit_exceeded, <<"quod:origin">>}},
+                 quod_scope_session:seal(
+                   SealHandle, {<<"quod:origin">>, key(61)}, anonymous))
+          end)
+    after
+        stop_remote_fixture(SealRouter, SealHandle)
+    end,
+    {ControlRouter, ControlHandle, _ControlScopeId, _ControlIdentity} =
+        remote_fixture(silent),
+    try
+        with_proof_context_deadline(
+          quod_time:mono_ms() + 40,
+          fun() ->
+              ?assertEqual(
+                 {error, {proof_limit_exceeded, <<"quod:origin">>}},
+                 quod_scope_session:restore_many(
+                   ControlHandle, [id(51)]))
+          end)
+    after
+        stop_remote_fixture(ControlRouter, ControlHandle)
+    end.
+
 fake_worker(Parent) ->
     receive
         Message ->
@@ -442,9 +513,10 @@ worker_seals_its_session_on_request_test() ->
     ?assertMatch({solution, 1, _Solution, true},
                  receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
     _Ctx = quod_proof_context:start(
-             key(86), false, Origin, quod_time:mono_ms() + 5000),
+             key(86), false, Origin, quod_time:mono_ms() + 5000,
+             anonymous),
     try
-        {ok, Plan} = quod_scope_session:seal(Handle, Origin),
+        {ok, Plan} = quod_scope_session:seal(Handle, Origin, anonymous),
         ?assertEqual({Ns, Anchor}, quod_dtx:target(Plan)),
         ?assertEqual(7, quod_dtx:base_height(Plan)),
         ?assertEqual(ProofId, quod_dtx:proof_id(Plan)),
@@ -504,6 +576,11 @@ fake_router(Parent, Mode, Counter, Handle) ->
                 die_after_command -> exit(simulated_router_failure);
                 _ -> fake_router(Parent, Mode, Counter + 1, Handle)
             end;
+        {'$gen_call', From,
+         {cancel, _Owner, Handle, _RouterGeneration, _Binding, _RequestLink,
+          _RequestId}} ->
+            gen_server:reply(From, ok),
+            fake_router(Parent, Mode, Counter, Handle);
         {'$gen_cast', {unregister, _Owner, Handle, _RouterGeneration,
                       _Binding, _RequestLink}} ->
             Parent ! {router_unregister, Handle},
@@ -589,7 +666,8 @@ with_proof_context(Fun) ->
 
 with_proof_context_deadline(Deadline, Fun) ->
     _ = quod_proof_context:start(
-          key(70), false, {<<"quod:origin">>, key(71)}, Deadline),
+          key(70), false, {<<"quod:origin">>, key(71)}, Deadline,
+          anonymous),
     try Fun()
     after
         quod_proof_context:stop(fun(_Scope) -> ok end,

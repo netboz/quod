@@ -191,8 +191,9 @@ to Tempo at `192.168.1.11:4318`.
 The review's pre-existing "8–31 second" timeout account mixed the public synchronous
 `quod_simplex:append/2` helper with the normal asynchronous Prolog write path. The actual
 caller deadline is 30 seconds there, but the underlying ambiguity is real: a deadline
-cannot cancel a transaction that may already be proposed. Both APIs now report
-`{outcome_unknown, TxId}` instead of a false failure; HTTP returns `202 pending`, and
+cannot cancel a transaction that may already be proposed. Both APIs now report an
+anchored `{outcome_unknown, {transaction, Ns, GenesisAnchor, TxId}}` instead of a
+false failure; HTTP returns `202 pending`, and
 automatic test retry is restricted to explicit `409`/`503` responses that say the write
 did not apply. A transport failure or timeout is unknown and is never resubmitted. The
 load-test HTTP deadline now derives from the deployed, configurable

@@ -1,5 +1,6 @@
 -module(quod_metrics_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 
 %% Regression guard for the documented deploy-killer (doc/deferred / memory): a metric
 %% HELP string with a codepoint > 255 passes `declare` but throws `badarg` in
@@ -38,6 +39,31 @@ observe_tx_latency_test() ->
     after
         Placeholder ! stop
     end.
+
+foreign_commit_metrics_use_target_namespace_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:declare(<<"kp_testnode">>),
+    Target = <<"metrics:target:",
+               (integer_to_binary(
+                  erlang:unique_integer([positive])))/binary>>,
+    Origin = <<"metrics:origin:",
+               (integer_to_binary(
+                  erlang:unique_integer([positive])))/binary>>,
+    Author = <<19:256>>,
+    Tx = #transaction{tx_id = <<20:256>>,
+                      origin = {Origin, <<21:256>>},
+                      proof_id = <<22:256>>, plan_digest = <<23:256>>,
+                      goal = <<>>, result = <<>>,
+                      diff = [{assert, {{metric_fact, true}, true}}],
+                      read_check = #{}, author = Author},
+    ok = quod_metrics:test_observe_commit(
+           Target, #entry{index = 1, data = {batch, [Tx]}}),
+    AuthorLabel = quod_identity:short(Author),
+    ?assertEqual(1, prometheus_counter:value(
+                      quod_tx_committed_total, [Target, AuthorLabel])),
+    ?assertEqual(undefined, prometheus_counter:value(
+                            quod_tx_committed_total,
+                            [Origin, AuthorLabel])).
 
 %% The link-send drop counter makes quod_link's deliberately ignored backpressure
 %% returns visible, classified by reason, receiving peer, and a bounded channel

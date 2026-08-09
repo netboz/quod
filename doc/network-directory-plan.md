@@ -543,7 +543,7 @@ The implementation must include focused tests for these observable contracts:
 13. `directory_control_peer/1` is registered as a query predicate, succeeds
     only in a root execution context, and enumerates the distinct exact
     32-byte keys from committed `peer_admitted/4` facts through normal Prolog
-    backtracking. A real local `prove_ro/3` call must distinguish a legitimate
+    backtracking. A real local `prove_ro/2` call must distinguish a legitimate
     successful-empty result from an absent or failed predicate.
 14. Root proof work does not block the control process. A failed, timed-out or
     stale proof retains the last successful peer set; the next successful

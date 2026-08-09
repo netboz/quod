@@ -1,27 +1,42 @@
 -module(quod_transaction).
 -moduledoc """
-Canonical transaction-author signatures.
+Canonical transaction identity and author signatures.
 
 The signature format is a protocol contract with one fixed domain/schema tag,
-bound to the target ontology supplied by the validating committee. Every
-committed transaction field except `sig` is covered; no alternate tag is
+bound to the target's `{Ns, GenesisAnchor, AuthorAdmission}` supplied by the
+validating committee from its own state — never by the author. The anchor
+is the slot-1 block hash and cryptographically covers the per-founding random
+`consensus_incarnation` fact committed inside that block, so a transaction
+signed under any earlier founding of the same namespace is unverifiable after
+a re-found: exact mutation-version read tokens (unlike the old content hashes)
+could validate by coincidence across a wipe, and this binding is what closes
+that. Every committed field except `sig` is covered; no alternate tag is
 accepted.
 """.
 
 -include("quod_ledger.hrl").
+-include("quod_vm_limits.hrl").
 
--export([bytes/2, sign/3, verify/2,
+-export([from_plan/4, bind_id/2, valid_id/2,
+         plan_outcome_ref/3, encode_durable_submission/2,
+         bytes/2, sign/3, sign_submission/3, verify/2,
          submission/2, submission_id/1, verify_submission/1,
          relay_attempt_id/5, decode_verified_submission/2]).
 
+-export_type([target_binding/0]).
+
 -define(DOMAIN, quod_transaction).
-%% v3: the read_check value space became exact mutation-version tokens. Height
-%% tokens (unlike the old content hashes) can validate by coincidence across a
-%% wipe/re-found, so the format break MUST ride a domain bump: v2-signed
-%% transactions are unverifiable everywhere on v3 nodes. Step 4's slice 5
-%% bumps again to the final envelope binding {Ns, Anchor, Incarnation,
-%% CommitteeId}.
--define(VERSION, 3).
+-define(ID_DOMAIN, quod_semantic_transaction).
+-define(ID_VERSION, 2).
+%% v6 binds an author's continuous admission generation and carries the
+%% atom-bearing diff/read set through the bounded Prolog wire alphabet. The
+%% fixed envelope can therefore be decoded safely before a small, explicit
+%% vocabulary allocation is permitted for an authenticated committee author.
+%% Unrelated committee changes do not invalidate retained custody, while
+%% remove/re-admit makes every signature from the earlier admission
+%% unverifiable. The DTX control records bind the complete committee view
+%% separately where that stronger scope is load-bearing.
+-define(VERSION, 6).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -30,73 +45,237 @@ accepted.
 -define(COMMITTEE_ID_BYTES, 32).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_CANONICAL_BYTES, (256 * 1024)).
+-define(MAX_NEW_SUBMISSION_ATOMS, 64).
 
--doc "Canonical, namespace-bound bytes signed by a transaction author.".
--spec bytes(binary(), #transaction{}) -> binary().
-bytes(TargetNs,
-      #transaction{tx_id = TxId, caller_ns = CallerNs, goal = Goal,
+-type target_binding() :: {binary(), binary(), binary()}.
+
+-doc """
+Build the unsigned semantic transaction carried by one sealed plan.
+
+`Material` must be the canonical result returned by `quod_dtx:material/1`;
+this is what makes the origin's opaque-byte id and validators' decoded-term id
+identical.
+""".
+-spec from_plan(quod_dtx:plan(), map(), binary(), binary()) -> #transaction{}.
+from_plan(Plan, #{diff := Diff, read_check := ReadCheck},
+          GoalBlob, ResultBlob)
+  when is_list(Diff), is_map(ReadCheck),
+       is_binary(GoalBlob), is_binary(ResultBlob) ->
+    Target = quod_dtx:target(Plan),
+    Transaction =
+        #transaction{tx_id = <<>>,
+                     origin = quod_dtx:origin(Plan),
+                     proof_id = quod_dtx:proof_id(Plan),
+                     plan_digest = quod_dtx:digest(Plan),
+                     goal = GoalBlob,
+                     result = ResultBlob,
+                     diff = Diff,
+                     read_check = ReadCheck,
+                     author = none,
+                     sig = none},
+    Transaction#transaction{
+      tx_id = semantic_plan_id(Target, Plan, GoalBlob, ResultBlob)}.
+
+-doc "Bind a transaction's stable id to its target and complete semantic write.".
+-spec bind_id({binary(), binary()}, #transaction{}) -> #transaction{}.
+bind_id(Target, Transaction = #transaction{}) ->
+    Transaction#transaction{tx_id = semantic_id(Target, Transaction)}.
+
+-doc "Whether `tx_id` is the canonical id of this target-bound semantic write.".
+-spec valid_id({binary(), binary()}, #transaction{}) -> boolean().
+valid_id({Ns, <<_:256>>} = Target,
+         #transaction{tx_id = <<_:256>> = TxId} = Transaction)
+  when is_binary(Ns) ->
+    TxId =:= semantic_id(Target, Transaction);
+valid_id(_Target, _Transaction) ->
+    false.
+
+-doc "Build the expected anchored outcome without decoding a foreign plan's payloads.".
+-spec plan_outcome_ref(quod_dtx:plan(), binary(), binary()) ->
+          {transaction, binary(), binary(), binary()}.
+plan_outcome_ref(Plan, GoalBlob, ResultBlob)
+  when is_binary(GoalBlob), is_binary(ResultBlob) ->
+    {Ns, <<_:256>> = Anchor} = Target = quod_dtx:target(Plan),
+    {transaction, Ns, Anchor,
+     semantic_plan_id(Target, Plan, GoalBlob, ResultBlob)}.
+
+-doc "Encode one durable goal/result pair through the shared persistence codec.".
+-spec encode_durable_submission(term(), map()) ->
+          {ok, binary(), binary()} | {error, term()}.
+encode_durable_submission(Goal, Bindings) when is_map(Bindings) ->
+    case quod_durable_term:encode_goal(Goal) of
+        {ok, GoalBlob} ->
+            case quod_durable_term:encode_result(Bindings) of
+                {ok, ResultBlob} -> {ok, GoalBlob, ResultBlob};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end;
+encode_durable_submission(_Goal, _Bindings) ->
+    {error, invalid_result}.
+
+semantic_id({Ns, <<_:256>> = Anchor},
+            #transaction{origin = Origin, proof_id = ProofId,
+                         plan_digest = PlanDigest, goal = Goal,
+                         result = Result, diff = Diff,
+                         read_check = ReadCheck})
+  when is_binary(Ns) ->
+    semantic_id_parts(
+      Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
+      term_to_binary(Diff, [deterministic]),
+      term_to_binary(ReadCheck, [deterministic])).
+
+semantic_plan_id(
+  {Ns, <<_:256>> = Anchor}, Plan, GoalBlob, ResultBlob) ->
+    semantic_id_parts(
+      Ns, Anchor, quod_dtx:origin(Plan), quod_dtx:proof_id(Plan),
+      quod_dtx:digest(Plan), GoalBlob, ResultBlob,
+      quod_dtx:diff_bytes(Plan), quod_dtx:read_check_bytes(Plan)).
+
+semantic_id_parts(Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
+                  DiffBytes, ReadCheckBytes) ->
+    crypto:hash(
+      sha256,
+      term_to_binary(
+        {?ID_DOMAIN, ?ID_VERSION, Ns, Anchor, Origin, ProofId,
+         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes},
+        [deterministic])).
+
+-doc "Canonical bytes signed by a transaction author, bound to the target identity.".
+-spec bytes(target_binding(), #transaction{}) ->
+          {ok, binary()} | {error, bad_term}.
+bytes({TargetNs, TargetAnchor, AuthorAdmission},
+      #transaction{tx_id = TxId, origin = Origin, proof_id = ProofId,
+                   plan_digest = PlanDigest, goal = Goal,
                    result = Result, diff = Diff, read_check = ReadCheck,
                    author = Author, author_seq = AuthorSeq,
                    submitted_at = SubmittedAt})
-  when is_binary(TargetNs) ->
+  when is_binary(TargetNs), is_binary(TargetAnchor),
+       is_binary(AuthorAdmission), byte_size(TargetAnchor) =:= 32,
+       byte_size(AuthorAdmission) =:= 32 ->
+    case encode_material(Diff, ReadCheck) of
+        {ok, MaterialWire} ->
+            {ok,
+             canonical_bytes(
+               TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin, ProofId,
+               PlanDigest, Goal, Result, MaterialWire, Author, AuthorSeq,
+               SubmittedAt)};
+        {error, bad_term} = Error ->
+            Error
+    end;
+bytes(_Binding, _Transaction) ->
+    {error, bad_term}.
+
+canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
+                ProofId, PlanDigest, Goal, Result, MaterialWire, Author,
+                AuthorSeq, SubmittedAt) ->
     term_to_binary(
-      {?DOMAIN, ?VERSION, TargetNs, TxId, CallerNs, Goal, Result,
-       Diff, ReadCheck, Author, AuthorSeq, SubmittedAt},
+      {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
+       TxId, Origin, ProofId, PlanDigest, Goal, Result, MaterialWire,
+       Author, AuthorSeq, SubmittedAt},
       [deterministic]).
 
+encode_material(Diff, ReadCheck) when is_list(Diff), is_map(ReadCheck) ->
+    quod_wire_term:encode({Diff, maps:to_list(ReadCheck)});
+encode_material(_Diff, _ReadCheck) ->
+    {error, bad_term}.
+
 -doc """
-Sign an unsigned transaction for `TargetNs`. The supplied identity must own the
-same public key named by `author`; callers cannot use a node key to sign for a
-different author.
+Sign an unsigned transaction for the target identity. The supplied identity
+must own the same public key named by `author`; callers cannot use a node key
+to sign for a different author.
 """.
--spec sign(binary(), #transaction{}, quod_identity:signer()) ->
+-spec sign(target_binding(), #transaction{}, quod_identity:signer()) ->
         {ok, #transaction{}} | {error, term()}.
-sign(TargetNs,
-     #transaction{author = Author, sig = none} = Transaction,
-     #{pubkey := Author} = Identity)
-  when is_binary(TargetNs), byte_size(Author) =:= ?PUBKEY_BYTES ->
-    Signature = quod_identity:sign(bytes(TargetNs, Transaction), Identity),
-    {ok, Transaction#transaction{sig = Signature}};
-sign(_TargetNs, #transaction{sig = Sig}, _Identity) when Sig =/= none ->
+sign(Binding, Transaction, Identity) ->
+    case signing_material(Binding, Transaction, Identity) of
+        {ok, Signed, _Author, _Signature, _Canonical} -> {ok, Signed};
+        {error, _} = Error -> Error
+    end.
+
+-doc "Sign and build a relay submission without encoding the transaction twice.".
+-spec sign_submission(target_binding(), #transaction{}, quod_identity:signer()) ->
+          {ok, #transaction{}, {submit, binary(), binary(), binary()}} |
+          {error, term()}.
+sign_submission(Binding, Transaction, Identity) ->
+    case signing_material(Binding, Transaction, Identity) of
+        {ok, Signed, Author, Signature, Canonical}
+          when byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+            {ok, Signed, {submit, Author, Signature, Canonical}};
+        {ok, _Signed, _Author, _Signature, _Canonical} ->
+            {error, too_large};
+        {error, _} = Error ->
+            Error
+    end.
+
+signing_material(
+  {TargetNs, TargetAnchor, AuthorAdmission} = Binding,
+  #transaction{author = Author, sig = none} = Transaction,
+  #{pubkey := Author} = Identity)
+  when is_binary(TargetNs), is_binary(TargetAnchor), is_binary(AuthorAdmission),
+       byte_size(TargetAnchor) =:= 32, byte_size(AuthorAdmission) =:= 32,
+       byte_size(Author) =:= ?PUBKEY_BYTES ->
+    case bytes(Binding, Transaction) of
+        {ok, Canonical} ->
+            Signature = quod_identity:sign(Canonical, Identity),
+            {ok, Transaction#transaction{sig = Signature},
+             Author, Signature, Canonical};
+        {error, _} = Error ->
+            Error
+    end;
+signing_material(_Binding, #transaction{sig = Sig}, _Identity)
+  when Sig =/= none ->
     {error, already_signed};
-sign(_TargetNs, #transaction{}, _Identity) ->
+signing_material(_Binding, #transaction{}, _Identity) ->
     {error, author_mismatch};
-sign(_TargetNs, _Transaction, _Identity) ->
+signing_material(_Binding, _Transaction, _Identity) ->
     {error, malformed_transaction}.
 
--doc "Verify a transaction signature against the validator's target namespace.".
--spec verify(binary(), #transaction{}) -> boolean().
-verify(TargetNs, #transaction{author = Author, sig = Signature} = Transaction)
-  when is_binary(TargetNs),
+-doc "Verify a transaction signature against the validator's own target identity.".
+-spec verify(target_binding(), #transaction{}) -> boolean().
+verify({TargetNs, TargetAnchor, AuthorAdmission} = Binding,
+       #transaction{author = Author, sig = Signature} = Transaction)
+  when is_binary(TargetNs), is_binary(TargetAnchor), is_binary(AuthorAdmission),
+       byte_size(TargetAnchor) =:= 32, byte_size(AuthorAdmission) =:= 32,
        is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
-    quod_identity:verify(Signature, bytes(TargetNs, Transaction), Author);
-verify(_TargetNs, _Transaction) ->
+    case bytes(Binding, Transaction) of
+        {ok, Canonical} ->
+            quod_identity:verify(Signature, Canonical, Author);
+        {error, bad_term} ->
+            false
+    end;
+verify(_Binding, _Transaction) ->
     false.
 
 -doc """
 Build the relay payload whose canonical transaction bytes remain opaque until
 the receiving validator has verified their signature.
 """.
--spec submission(binary(), #transaction{}) ->
+-spec submission(target_binding(), #transaction{}) ->
         {ok, {submit, binary(), binary(), binary()}} | {error, term()}.
-submission(TargetNs, #transaction{author = Author, sig = Signature} = Transaction)
-  when is_binary(TargetNs),
-       is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
+submission(Binding, #transaction{author = Author, sig = Signature} = Transaction)
+  when is_binary(Author), byte_size(Author) =:= ?PUBKEY_BYTES,
        is_binary(Signature), byte_size(Signature) =:= ?SIGNATURE_BYTES ->
-    Canonical = bytes(TargetNs, Transaction),
-    case byte_size(Canonical) =< ?MAX_CANONICAL_BYTES of
-        true  -> {ok, {submit, Author, Signature, Canonical}};
-        false -> {error, too_large}
+    case bytes(Binding, Transaction) of
+        {ok, Canonical} when byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+            {ok, {submit, Author, Signature, Canonical}};
+        {ok, _Canonical} ->
+            {error, too_large};
+        {error, _} = Error ->
+            Error
     end;
-submission(_TargetNs, _Transaction) ->
+submission(_Binding, _Transaction) ->
     {error, unsigned_or_malformed}.
 
--doc "Stable 16-byte correlation id for one exact signed submission.".
+-doc "Stable 16-byte correlation id for one authenticated author/signature pair.".
 -spec submission_id({submit, binary(), binary(), binary()}) -> binary().
-submission_id(Submission) ->
+submission_id({submit, Author, Signature, _Canonical}) ->
     <<Id:16/binary, _/binary>> =
-        crypto:hash(sha256, term_to_binary(Submission, [deterministic])),
+        crypto:hash(
+          sha256,
+          term_to_binary(
+            {quod_submission, 2, Author, Signature}, [deterministic])),
     Id.
 
 -doc """
@@ -146,32 +325,148 @@ verify_submission(_Submission) ->
 
 -doc """
 Decode a submission after `verify_submission/1` succeeded. The re-encode check
-rejects non-canonical ETF and binds the opaque bytes to `TargetNs` and `Author`.
+rejects non-canonical ETF and binds the opaque bytes to the target identity
+and `Author`.
 """.
--spec decode_verified_submission(binary(), term()) ->
+-spec decode_verified_submission(target_binding(), term()) ->
         {ok, #transaction{}} | {error, term()}.
 decode_verified_submission(
-  TargetNs, {submit, Author, Signature,
-             <<131, 104, 12, _/binary>> = Canonical})
-  when is_binary(TargetNs), is_binary(Author), is_binary(Signature),
+  {TargetNs, TargetAnchor, AuthorAdmission} = Binding,
+  {submit, Author, Signature,
+   <<131, 104, 15, _/binary>> = Canonical})
+  when is_binary(TargetNs), is_binary(TargetAnchor),
+       is_binary(AuthorAdmission),
+       is_binary(Author), is_binary(Signature),
        byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
-    try binary_to_term(Canonical) of
-        {?DOMAIN, ?VERSION, TargetNs, TxId, CallerNs, Goal, Result,
-         Diff, ReadCheck, Author, AuthorSeq, SubmittedAt} ->
-            Transaction =
-                #transaction{tx_id = TxId, caller_ns = CallerNs, goal = Goal,
-                             result = Result, diff = Diff, read_check = ReadCheck,
-                             author = Author, author_seq = AuthorSeq,
-                             submitted_at = SubmittedAt,
-                             sig = Signature},
-            case bytes(TargetNs, Transaction) =:= Canonical of
-                true  -> {ok, Transaction};
-                false -> {error, noncanonical}
+    case quod_safe_term:decode(Canonical, ?MAX_CANONICAL_BYTES) of
+        {ok,
+         {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
+          TxId, Origin, ProofId,
+          PlanDigest, Goal, Result, MaterialWire, Author, AuthorSeq,
+          SubmittedAt}} ->
+            case decode_material(MaterialWire) of
+                {ok, Diff, ReadCheck} ->
+                    Transaction =
+                        #transaction{tx_id = TxId, origin = Origin,
+                                     proof_id = ProofId,
+                                     plan_digest = PlanDigest,
+                                     goal = Goal, result = Result,
+                                     diff = Diff, read_check = ReadCheck,
+                                     author = Author,
+                                     author_seq = AuthorSeq,
+                                     submitted_at = SubmittedAt,
+                                     sig = Signature},
+                    case bytes(Binding, Transaction) of
+                        {ok, Reencoded} when Reencoded =:= Canonical ->
+                            {ok, Transaction};
+                        {ok, _OtherCanonical} ->
+                            {error, noncanonical};
+                        {error, _} -> {error, malformed_material}
+                    end;
+                {error, _} = Error ->
+                    Error
+            end;
+        {ok, _Other} ->
+            {error, namespace_or_author_mismatch};
+        {error, _Reason} ->
+            {error, malformed_canonical_bytes}
+    end;
+decode_verified_submission(_Binding, _Submission) ->
+    {error, malformed_submission}.
+
+decode_material(MaterialWire) ->
+    case quod_wire_term:decode(MaterialWire) of
+        {ok, {Diff0, ReadPairs0}} when is_list(Diff0), is_list(ReadPairs0) ->
+            case materialize_new_symbols({Diff0, ReadPairs0}) of
+                {ok, {Diff, ReadPairs}} ->
+                    ReadCheck = maps:from_list(ReadPairs),
+                    case map_size(ReadCheck) =:= length(ReadPairs) of
+                        true -> {ok, Diff, ReadCheck};
+                        false -> {error, malformed_material}
+                    end;
+                {error, _} = Error ->
+                    Error
             end;
         _ ->
-            {error, namespace_or_author_mismatch}
-    catch
-        _:_ -> {error, malformed_canonical_bytes}
+            {error, malformed_material}
+    end.
+
+%% The wire decoder never allocates an unknown atom. A valid transaction may
+%% introduce a small amount of ontology vocabulary, so collect and validate the
+%% complete set before allocating any of it. The fixed cap prevents one signed
+%% relay frame from turning a 256 KiB payload into an atom-table bomb; the wider
+%% atom resource/economic policy remains deliberately outside this codec.
+materialize_new_symbols(Term) ->
+    case collect_new_symbols(Term, #{}) of
+        {ok, Symbols} when map_size(Symbols) =< ?MAX_NEW_SUBMISSION_ATOMS ->
+            Names = lists:sort(maps:keys(Symbols)),
+            case lists:all(fun valid_symbol_name/1, Names) of
+                true ->
+                    case atom_headroom(length(Names)) of
+                        true ->
+                            try
+                                _ = [binary_to_atom(Name, utf8) || Name <- Names],
+                                {ok, replace_symbols(Term)}
+                            catch
+                                error:system_limit -> {error, atom_limit};
+                                error:badarg -> {error, malformed_material}
+                            end;
+                        false ->
+                            {error, atom_limit}
+                    end;
+                false ->
+                    {error, malformed_material}
+            end;
+        {ok, _TooMany} ->
+            {error, too_many_new_atoms};
+        error ->
+            {error, malformed_material}
+    end.
+
+atom_headroom(NewAtoms) ->
+    erlang:system_info(atom_count) + NewAtoms + ?QUOD_ATOM_SAFETY_MARGIN <
+        erlang:system_info(atom_limit).
+
+collect_new_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
+    {ok, Acc#{Name => true}};
+collect_new_symbols(Tuple, Acc) when is_tuple(Tuple) ->
+    collect_new_symbol_list(tuple_to_list(Tuple), Acc);
+collect_new_symbols([Head | Tail], Acc) ->
+    case collect_new_symbols(Head, Acc) of
+        {ok, Acc1} -> collect_new_symbols(Tail, Acc1);
+        error -> error
     end;
-decode_verified_submission(_TargetNs, _Submission) ->
-    {error, malformed_submission}.
+collect_new_symbols([], Acc) ->
+    {ok, Acc};
+collect_new_symbols(Term, Acc)
+  when is_atom(Term); is_binary(Term); is_integer(Term); is_float(Term) ->
+    {ok, Acc};
+collect_new_symbols(_Term, _Acc) ->
+    error.
+
+collect_new_symbol_list([], Acc) ->
+    {ok, Acc};
+collect_new_symbol_list([Term | Rest], Acc) ->
+    case collect_new_symbols(Term, Acc) of
+        {ok, Acc1} -> collect_new_symbol_list(Rest, Acc1);
+        error -> error
+    end.
+
+valid_symbol_name(Name) ->
+    try unicode:characters_to_binary(Name, utf8, utf8) of
+        Name -> true;
+        _ -> false
+    catch
+        _:_ -> false
+    end.
+
+replace_symbols({'$quod_symbol', Name}) ->
+    binary_to_existing_atom(Name, utf8);
+replace_symbols(Tuple) when is_tuple(Tuple) ->
+    list_to_tuple([replace_symbols(Term) || Term <- tuple_to_list(Tuple)]);
+replace_symbols([Head | Tail]) ->
+    [replace_symbols(Head) | replace_symbols(Tail)];
+replace_symbols([]) ->
+    [];
+replace_symbols(Term) ->
+    Term.

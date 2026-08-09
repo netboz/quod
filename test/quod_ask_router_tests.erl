@@ -109,6 +109,46 @@ command_correlation_generation_and_no_reply_commands_test() ->
           flush_link_frames(TestPid)
       end).
 
+cancelled_command_discards_late_event_test() ->
+    with_open_scope(
+      fun(Router, _TestPid, TargetKey, Binding, Handle,
+          RequestLink, ReturnLink) ->
+          BatchIds = [id(76)],
+          {ok, RequestId} = quod_ask_router:command(
+                              Handle, 1, {batch_restore, BatchIds}),
+          {scope_command, Binding, CommandSeq, RequestId, 1,
+           {batch_restore, BatchIds}} = receive_command(request),
+          ok = quod_ask_router:cancel(Handle, RequestId),
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     2, RequestId, CommandSeq, 0, false,
+                     {batch_restored, BatchIds}),
+          receive
+              {quod_scope_event, Handle, RequestId, _, _, _} ->
+                  error(cancelled_event_delivered);
+              {quod_scope_down, Handle, Reason} ->
+                  error({cancelled_event_poisoned_scope, Reason})
+          after 20 ->
+              ok
+          end,
+
+          {ok, NextRequestId} = quod_ask_router:command(
+                                  Handle, 1000,
+                                  {batch_release, BatchIds}),
+          {scope_command, Binding, NextCommandSeq, NextRequestId, 1000,
+           {batch_release, BatchIds}} = receive_command(request),
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     3, NextRequestId, NextCommandSeq, 0, false,
+                     {batch_released, BatchIds}),
+          receive
+              {quod_scope_event, Handle, NextRequestId, 0, false,
+               {batch_released, BatchIds}} -> ok
+          after ?TIMEOUT -> error(next_command_timeout)
+          end,
+          ok = quod_ask_router:unregister(Handle),
+          stop_link(RequestLink),
+          stop_link(ReturnLink)
+      end).
+
 scope_close_bypasses_full_pending_limit_test() ->
     with_open_scope(
       fun(Router, _TestPid, _TargetKey, Binding, Handle,

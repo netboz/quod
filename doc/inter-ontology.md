@@ -7,11 +7,16 @@ Plain language on purpose; the technical anchors are in the boxed notes and file
 
 Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil's-advocate
 review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
-default link following, recursive reusable proof scopes, cross-scope transactions, and the
-hard-break scope transport are implemented in the current working tree. The network ontology
-directory contract and its first system/private slice are implemented (§10). Durable
-multi-ontology commit remains disabled until `distributed-proof-plan.md` steps 4-6 land;
-transport-level stream prioritization remains future work.
+default link following, recursive reusable proof scopes, cross-scope transactions, the
+hard-break scope transport, and both one-participant and atomic multi-participant durable
+submission are implemented in the current working tree. The network ontology directory
+contract and its first system/private slice are implemented (§10). This is not a deployment
+claim: the final local gates passed on 2026-08-11 (compile, xref, Dialyzer,
+EUnit 1,027/1,027, Common Test 68/68, UI lint/build, shell syntax, diff check,
+and stale-text audit). The deliberate format break still requires a clean
+re-found, release/deployment, crash matrix, and chained-write load test in
+`distributed-proof-plan.md` Step 6. Transport-level stream prioritization
+remains future work.
 
 There is one execution model for self, co-hosted, and remote selection. Location changes only
 how commands reach the selected ontology's proof scope; the deleted per-invocation ask
@@ -59,10 +64,10 @@ the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" = h
 locally or present in the live directory/direct-route index; §10.)
 
 **Ownership enforcement is NOT in this milestone.** The rule "only user_xxx may create
-`user_xxx:*`" is creation-time permission checking; it needs author-signed writes and the
-ontology registry — both already-deferred work (`deferred.md` §1). This milestone fixes the
-*naming convention and resolution* so no name ever has to change; the spec of record for
-creation-authorization is the signing milestone.
+`user_xxx:*`" is creation-time end-user permission checking. Node-authored signed writes are
+already live, but authenticated user identity and the ownership registry/policy are separate
+work (`deferred.md` §1). This milestone fixes the *naming convention and resolution* so no name
+ever has to change.
 
 **Parked:** deeper paths inside content terms (`thing:cat:max` as a data path). Nothing
 forbids adding them later; they are not specified now.
@@ -90,8 +95,8 @@ An ordinary fact whose arguments name things in other ontologies — that is the
 inter-ontology web. Nothing more:
 
 ```prolog
-isa(my_animal, quod:animal).                    % my_animal is a kind of quod's animal
-attached_to(my_stuff:door, my_world:my_house).  % ANY relation can cross, not just isa
+isa(my_animal, quod:animal).                   % my_animal is a kind of quod's animal
+made_of(my_stuff:door, materials:oak).         % ANY relation can cross, not just isa
 ```
 
 - **A link is established when the fact commits — nothing else.** Proposed, agreed by the
@@ -101,7 +106,7 @@ attached_to(my_stuff:door, my_world:my_house).  % ANY relation can cross, not ju
 
 ### 3.1 Every relation follows its links by default
 
-No blessed list of "following" relations — `isa`, `have_attribute`, `attached_to`: all
+No blessed list of "following" relations — `isa`, `have_attribute`, `made_of`: all
 uniform. The tag written in the term is the explicit crossing marker (ground rule 1), so
 following it is never silent.
 
@@ -171,7 +176,9 @@ view, whether the scope is local, co-hosted, or remote.
    pre-commit proof, and are never retried as another proof after the target may have executed.
    A writing proof seals every material scope. One material target submits its target-authored
    plan through that ontology's ordinary consensus path and returns an anchored outcome
-   reference; the multi-target group protocol is the remaining Step 4 work.
+   reference. Two or more material/read-dependent targets enter one atomic
+   Begin/Prepare/Decision/Finalize/Complete group and return its anchored group reference if the
+   caller can no longer wait. The caller resolves either reference instead of re-proving.
 
 ### 4.1 Where the work runs: one worker per ontology scope
 
@@ -232,7 +239,9 @@ scope.
 >   is refused, and goals, answers, errors, and failure reasons use the bounded
 >   `quod_wire_term` codec. A target-local atom unknown to the origin becomes
 >   `{'$quod_symbol', <<"name">>}`; it can unify and round-trip but cannot exhaust the origin's
->   atom table. Goal bytes remain opaque until identity, anchor, rate, and quota checks pass.
+>   atom table. Goal bytes remain opaque through every relay. After identity, anchor, rate, and
+>   quota checks, only the authenticated target materializes its bounded callable symbol set immediately
+>   before authorization and execution.
 > - A duplicate, stale, skipped, cross-proof, or cross-node command is a typed protocol error.
 >   It poisons the scope; there is no accepted-command redrive or compatibility decoder.
 > - Co-hosted selections skip QUIC and the node router, but call the same scope-session command
@@ -245,8 +254,18 @@ scope.
 An invocation's **complete** event carries its answer sequence, the target scope's current
 dirty/generation state, and the bounded diagnostic stack. It closes only that invocation; the
 scope remains reusable until the top-level proof ends. Failure reasons are bounded to 32 KiB,
-atom-safe encoded like other Prolog values, strictly validated by the immediate caller, and
-never enter consensus or the ledger.
+atom-safe encoded like other Prolog values, and strictly validated by the immediate caller.
+They remain proof-local while Prolog searches. Only the canonical terminal stack of a certified
+group abort is persisted, once, in `Decision(abort)`; intermediate or recovered reasons never
+enter consensus or the ledger.
+
+A durable group is terminal only after origin `Complete`; Decision or Finalize alone remains
+pending. Remote `outcome(Ref)` freezes one certified current view and accepts a status only from
+`f + 1` identical current-validator snapshots bound to that view and a minimum applied slot. An
+ordinary reference stays outcome-unknown even when that quorum reports absence. For a group,
+quorum absence may proceed only to the exact admission-bound coordinator barrier; it proves
+`pending_begin`, `coordinator_retired`, or definite pre-handoff absence. Any stale view, lagging
+publication floor, unavailable coordinator, or insufficient agreement remains outcome-unknown.
 
 There is no per-invocation subscription residue. The future "tell me when it changes" milestone
 will add a bounded, purpose-built subscription record when there is a consumer for it.
@@ -283,8 +302,7 @@ therefore carries no unused freshness field, and completion does not claim a ver
 
 Every failure is **distinct and loud**. Silence is never an answer and a partial result never
 looks complete. The final distributed-proof catalog is normative in
-`distributed-proof-plan.md` §5. During the Step-3 transport slice, `::` exposes these exact
-classes:
+`distributed-proof-plan.md` §5. The current implementation exposes these exact classes:
 
 | result | when |
 |---|---|
@@ -298,6 +316,7 @@ classes:
 | `{error, {ontology_busy, Ns}}` | the target's bounded scope-worker capacity is full |
 | `{error, {ontology_rate_limited, Ns}}` | the authenticated peer exceeded the scope-open rate |
 | `{error, {ontology_rebuilding, Ns}}` | the target is not ready to freeze a scope |
+| `{error, {ontology_unavailable, Ns}}` | a local engine died before any durable-submission checkpoint |
 | `{fail, [{not_allowed, Ns} \| _]}` | the target's `can_invoke/4` policy refused; ordinary logical failure with a bounded reason, not an error |
 | `{error, {proof_limit_exceeded, Ns}}` | the selected worker exceeded a generated-state or heap bound |
 | `{error, {scope_expired, Ns}}` | the bounded target scope expired while idle |
@@ -308,7 +327,8 @@ classes:
 | `{error, {too_large, Kind}}` | a named goal, answer, reason, error, or envelope size cap failed |
 | `{error, read_only}` | a strict `prove_ro` tree attempted its first mutation |
 | `{error, {protocol_error, Kind}}` | authenticated identity/session/sequence/payload validation failed |
-| `{error, {distributed_group_unimplemented, Participants}}` | temporary Step-4 seam: two or more material targets require the group commit protocol |
+| `{error, {outcome_unknown, Ref}}` | an ordinary or group durable checkpoint exists but its terminal consensus outcome is not yet locally known; resolve `Ref` instead of re-proving |
+| `{error, coordinator_retired}` | a group could not begin because its exact coordinator admission retired first |
 
 Infrastructure and authorization errors poison the volatile proof instead of becoming logical
 failure. A target-authored logical failure alone participates in normal Prolog backtracking.
@@ -431,21 +451,27 @@ directory/ask benchmark, not a second consensus benchmark.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 
-- **Committing another ontology's facts in this deployed milestone.** The reusable scope can
-  stage them, but durable multi-ontology commit is enabled only after the complete protocol in
-  `distributed-proof-plan.md` has passed its re-found/deployment gate.
 - **The notification system** ("tell me when what I read changes"). Later milestone; §5
   explains why its storage is not prebuilt as dead per-ask state.
 - **Notification precision finer than per-predicate.** Known, accepted coarseness.
-- **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Arrives with
-  signing; the naming convention lands now (§2).
+- **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Node signing is
+  already live; authenticated end-user identity and the ownership policy remain separate (§2).
 - **Deeper name paths** (`thing:cat:max` as data). Parked.
 
-## 12. What this changes for consensus: nothing
+## 12. What this changes for consensus
 
-Cross-ontology asks happen while a question **runs**, on the node running it
-(prove-before-broadcast). What the committee agrees on is the finished list of changes; apply
-never re-asks anything, and answers a proof consumed are baked into its proposed diff. This
-layer adds **zero** moving parts to ordering, voting, catch-up, or the feed. Two guard rails
-make it stay that way: the membership-vote re-proof is synchronous with following disabled
-(§4.1), and the committed record keeps its existing shape (§6).
+Cross-ontology asks still happen while a question **runs**, on the node running it
+(prove-before-broadcast); apply never re-asks anything. A read-only proof creates no ledger
+record, and one material participant keeps the ordinary target-authored transaction path. Two
+or more material/read-dependent participants use explicit singleton DTX barriers in their
+existing per-ontology Simplex logs. Validators verify sealed plans, authorization transcripts,
+OCC tokens, certified foreign references, and phase rules; they do not re-run the arbitrary
+derivation.
+
+Prepare installs the phase-aware ordinary-content admission lock and proof fence. The same
+group's Decision and prepared Finalize may progress as their roles permit, while a direct
+no-Prepare abort remains an independent metadata tombstone. Finalize reopens consensus
+admission but the proof fence stays closed until the ordered Prolog apply/discard is published;
+origin Complete then publishes the one terminal group outcome. Catch-up and replay fold these
+same records and gates. Membership-vote re-proof remains synchronous with following disabled
+(§4.1).

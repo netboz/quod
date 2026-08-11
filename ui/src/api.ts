@@ -1,6 +1,7 @@
 // Types mirroring quod_explorer_http's JSON, plus thin fetch helpers.
 
 export type PeerId = { id: string; pubkey: string | null }
+export type Origin = { ns: string; anchor: string } | null
 
 export type TxRow = {
   tx_id: string
@@ -20,6 +21,9 @@ export type TxFull = TxRow & {
   result: Record<string, string> | Record<string, string>[] | string | null
   diff: Op[]
   read_predicates: number
+  origin: Origin
+  proof_id: string | null
+  plan_digest: string | null
   signature: string | null
   signature_status: 'verified' | 'genesis' | 'unsigned' | 'invalid' | 'unknown'
 }
@@ -55,9 +59,29 @@ export type TxsPage = { txs: TxRow[]; height: number; next_before: number | null
 export type Block = {
   slot: number
   time: number
-  noop: boolean
+  kind: 'content' | 'begin' | 'prepare' | 'decision' | 'finalize' | 'complete' | 'noop' | 'invalid'
   cert: Cert
   txs: TxFull[]
+  control?: Control
+}
+
+export type Control = {
+  kind: 'begin' | 'prepare' | 'decision' | 'finalize' | 'complete'
+  group_id: string
+  record_digest: string
+  target: Origin
+  author: PeerId
+  author_admission: string
+  sequence: number
+  submitted_at: number
+  participant_count?: number
+  plan_digest?: string
+  verdict?: 'commit' | 'abort'
+  prepare_count?: number
+  reasons?: string[] | null
+  prepared?: boolean
+  applied_generation?: number
+  finalize_count?: number
 }
 
 export type TxOutcome = {
@@ -82,7 +106,7 @@ export type FoundOutcome = FoundTx | { outcome: TxOutcome }
 export type ProveReply =
   | { result: 'ok'; height: number; bindings: Record<string, string>[] }
   | { result: 'ok'; ns: string; anchor: string; tx_id: string; bindings: Record<string, string>[] }
-  | { result: 'fail' }
+  | { result: 'fail'; reasons?: string[] }
   | { result: 'pending'; ns: string; anchor: string; tx_id: string }
   | { error: string; detail?: string; leader?: PeerId | null }
 

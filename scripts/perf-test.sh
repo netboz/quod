@@ -102,7 +102,7 @@ fi
 mkdir -p "$RESULT_DIR/requests"
 
 mapfile -t CANDIDATE_ENDPOINTS < <(
-  curl -fsS "$CONSUL_ADDR/v1/health/service/quod-explorer?passing=true" |
+  curl -fsS "$CONSUL_ADDR/v1/health/service/explorer?passing=true" |
     jq -r '.[] |
       "http://\(.Service.Address):\(.Service.Port)"' |
     sort -u

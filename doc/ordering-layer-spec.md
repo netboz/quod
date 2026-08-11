@@ -3,7 +3,7 @@
 > **⚠ SUPERSEDED (2026-07-02).** This is the Phase-1 build spec for the hand-rolled **Raft** ordering
 > layer (`quod_ledger`), which has since been **removed**. quod's consensus is now a hand-rolled
 > **DispersedSimplex** BFT (`quod_simplex`); the authoritative sources are `doc/simplex_extended.pdf`
-> (§2 = the spec) and the module docs (`quod_simplex`, `quod_vote_journal`, `quod_ledger_store`,
+> (§2 = the spec) and the module docs (`quod_simplex`, `quod_signing_journal`, `quod_ledger_store`,
 > `quod_prolog`). The entire document is historical; even §4 contains retired
 > API shapes and reply semantics. The OCC read-set is now exact mutation-version
 > tokens (`include/quod_ledger.hrl`); every `phash2`/`functor_hash` passage
@@ -497,15 +497,15 @@ is never done.
 apply_committed(S = #s{last_applied = LA, slot = Head}) when LA >= Head -> S;
 apply_committed(S = #s{store = Store, ns = Ns, last_applied = LA, slot = Head}) ->
     quod_ledger_store:fold(Store, LA + 1, Head,
-        fun(#entry{index = I, data = Data}, N) ->
-            quod_prolog:apply_block(Ns, I, Data),
+        fun(#entry{} = Entry, N) ->
+            quod_prolog:apply_entry(Ns, Entry, replay),
             N rem 256 =:= 0 andalso quod_prolog:sync(Ns),
             N + 1
         end, 1),
     S#s{last_applied = Head}.
 ```
 
-`apply_block/3` is an asynchronous cast. The OCC read-set re-check still happens at apply on **every**
+`apply_entry/3` is an asynchronous cast. The OCC read-set re-check still happens at apply on **every**
 member and is deterministic against the same committed prefix. `quod_prolog` correlates the transaction
 id with its own parked caller and returns the final apply/conflict verdict there. Replay inserts a sync
 barrier every 256 casts so rebuilding a long log cannot flood the fact-engine mailbox.
@@ -603,7 +603,7 @@ peers(D)  -> derive_committee(D) -- [D#d.self].
 ```
 
 `get_committee`/`status`/`stats` are served in `common/3` (any state). `replay/1` (§4) resets `last_applied
-:= snap_idx` and re-drives `apply_block/3` over `snap_idx+1 .. commit_index` for a freshly-restarted
+:= snap_idx` and re-drives `apply_entry/3` over `snap_idx+1 .. commit_index` for a freshly-restarted
 `quod_prolog`. `snapshot/1` returns `{ok, snap_idx, snap_data} | none` for KB seeding. `history/3` (§3)
 serves paged browsing.
 
@@ -826,8 +826,9 @@ independent on the same QUIC connection.
 ## 3. Persistence (`quod_ledger_store`)
 
 > **Historical Raft persistence.** This section is not the current disk contract. Today
-> `quod_ledger_store` owns `log.0001`, while `quod_vote_journal` owns the bounded `votes.0001` file that
-> makes in-flight validator decisions durable before their signatures are sent. Neither stores a KB copy.
+> `quod_ledger_store` owns `log.0001`, while `quod_signing_journal` owns the bounded QSJ1 `signing.0001`
+> journal that durably records validator vote latches, DTX sequence floors, and one pending Begin body plus
+> its exact signed envelope before exposure. Neither stores a KB copy.
 
 `quod_ledger_store` was the only quod code that touched disk. A **plain library module** (no process, no reg, no
 supervisor child), called synchronously in-line from inside the `quod_ledger` `gen_statem` callbacks so an
@@ -1061,28 +1062,27 @@ observe a partially rebuilt KB.
 > contracts live in `doc/inter-ontology.md` and `doc/distributed-proof-plan.md`. This
 > historical Raft document deliberately keeps no parallel proof algorithm.
 
-### 4.4 `apply_block` — deterministic OCC apply (#23, #25)
+### 4.4 `apply_entry` — deterministic ordered apply (#23, #25)
 
 `quod_simplex`, once a block is committed, casts it to `quod_prolog` **in log-index order**:
 
 ```erlang
--spec apply_block(Ns :: binary(), Index :: pos_integer(), Change :: #transaction{} | noop)
-        -> ok.
-apply_block(Ns, Index, Change) ->
-    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change}).
+-spec apply_entry(Ns :: binary(), Entry :: #entry{}, live | replay) -> ok.
+apply_entry(Ns, Entry, Origin) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_entry, Entry, Origin}).
 ```
 
 The cast keeps the consensus state machine independent of proof-engine mailbox latency. Write submission
 uses `gen_statem:send_request/2`, so `quod_prolog` also never blocks synchronously waiting for consensus.
 The original caller remains parked by `tx_id`; ordered apply supplies the final OCC verdict.
 
-`apply_step/3` folds every transaction in a committed batch into the engine's pending MVCC handle, then
+`apply_step/3` receives the complete certified entry, folds every transaction in a committed batch into the engine's pending MVCC handle, then
 publishes all changed predicates once at the block index:
 
 ```erlang
-apply_step(Index, noop, S) ->
+apply_step(#entry{index = Index, data = noop}, _Origin, S) ->
     publish_snapshot(Index, S);
-apply_step(Index, {batch, _} = Batch, S) ->
+apply_step(#entry{index = Index, data = {batch, _} = Batch}, Origin, S) ->
     case quod_ledger:payload(Batch) of
         {ok, Transactions} ->
             publish_snapshot(Index, lists:foldl(fun apply_transaction/2,
@@ -1137,7 +1137,7 @@ build_kb() ->
 ```
 
 `quod_simplex` streams entries `last_applied+1 .. committed_head` from `quod_ledger_store`, casting the same
-`apply_block/3` messages used by live commits. Every 256 entries it calls `quod_prolog:sync/1`, a no-op
+`apply_entry/3` messages used by live commits. Every 256 entries it calls `quod_prolog:sync/1`, a no-op
 barrier that bounds the fact-engine mailbox to one replay window. Once the prefix is fully applied and
 Simplex recovery is `ready`, it calls `mark_ready/1`. A lone fact-engine crash therefore rebuilds from disk
 without a second persisted fact store, and no proof can observe partial replay.
@@ -1252,13 +1252,14 @@ Children are `permanent` within the sub-sup; the sub-sup is `transient` under `q
 ### 5.3 `quod_simplex` ⇄ `quod_prolog` apply coupling
 
 For each finalized slot, `quod_simplex` casts
-`quod_prolog:apply_block(Ns, Index, BatchOrNoop)` **strictly in index order**. The OCC read-set re-check runs
+`quod_prolog:apply_entry(Ns, Entry, Origin)` **strictly in index order**, preserving the complete certified
+entry for content, skips, and distributed-transaction controls. The OCC read-set re-check runs
 inside the fact engine on every member (§4.4), so the verdict is deterministic against the same committed
 prefix. The asynchronous boundary prevents an append/apply call cycle; the fact engine itself owns parked
 client correlation by transaction id.
 
 **Rebuild handshake:** `quod_prolog:init/1` creates an empty shared store and casts
-`quod_simplex:rebuild/1`. Simplex streams its durable committed entries back through `apply_block/3`, with
+`quod_simplex:rebuild/1`. Simplex streams its durable committed entries back through `apply_entry/3`, with
 periodic `sync/1` barriers, and calls `mark_ready/1` only after the entire prefix is applied (§4.6).
 
 ### 5.4 Proof routing — historical seam retired
@@ -1418,7 +1419,7 @@ on the next heartbeat.
 2. **`quod_diff`** (pure, `-ifdef(TEST)` exported): `functor_hash(Functor, Arity, Clauses) -> integer()`,
    `read_check(KB, ReferencedFunctors) -> read_check()`, `diff_to_ops(BeforeKB, AfterKB) -> [op()]`,
    `apply_ops(KB, [op()]) -> KB'`. Content-only identity; deterministic apply.
-3. **`quod_prolog`** (§4): `prove/3` and asynchronous `apply_block/3` over the shared MVCC engine.
+3. **`quod_prolog`** (§4): `prove/3` and asynchronous `apply_entry/3` over the shared MVCC engine.
    `prove/3` returns bindings for an empty diff; a non-empty own-namespace diff becomes a transaction and
    the caller remains parked until ordered apply.
 4. **`quod_simplex` gen_statem**: load the durable slot log, recover the current validator projection,
@@ -1501,7 +1502,7 @@ round-trip + **durability ordering** (each mutating call returns only after fsyn
 5. `raft_membership_SUITE` (M4): 3→5 with the second `add_member` blocked until the first commits; 5→3;
    leader-removes-itself; no two-leader window.
 6. `occ_conflict_SUITE`: A `prove`s a `#transaction{}` with a non-empty `read_check`; before A's `append` commits,
-   B mutates a functor in A's `read_check`; A's `apply_block` re-checks at its write's log position, rejects,
+   B mutates a functor in A's `read_check`; A's `apply_entry` re-checks at its write's log position, rejects,
    A's caller gets `{error, conflict_retry}` and retries — committed KB reflects B then A's retry in log
    order. Negative: a disjoint `read_check` commits without abort. Per-predicate granularity: a same-functor
    different-fact change still aborts (accepted MVP false conflict #4).

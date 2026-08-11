@@ -203,6 +203,15 @@ t_unsigned_history_rejected(Cfg) ->
                          Rewritten0,
                          [Genesis, E2#entry{data = {batch, [Unsigned]}}]),
     ok = quod_ledger_store:close(Rewritten1),
+    %% Existing storage must have the new, domain-bound signing journal before
+    %% recovery reaches the deliberately malformed ledger payload below.
+    {ok, GenesisBlock} = quod_simplex:block_from_entry(Genesis),
+    GenesisHash = quod_simplex:block_hash(GenesisBlock),
+    {ok, Journal} = quod_signing_journal:initialize(
+                      Ns,
+                      quod_simplex:consensus_domain(Ns, GenesisHash),
+                      Dir),
+    ok = quod_signing_journal:close(Journal),
     ?assertEqual({error, {invalid_transaction_history, 2}},
                  quod_simplex:start_link(Ns, ?config(base_cfg, Cfg))).
 

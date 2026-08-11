@@ -1,6 +1,8 @@
 -ifndef(QUOD_PROOF_LIMITS_HRL).
 -define(QUOD_PROOF_LIMITS_HRL, true).
 
+-include("quod_ingress_limits.hrl").
+
 %% One source of truth for the bounded distributed-proof worker state.
 -define(QUOD_MAX_ACTIVE_PROOF_DEPTH, 8).
 -define(QUOD_MAX_SCOPES_PER_PROOF, 8).
@@ -23,6 +25,48 @@
 %% The committed envelope's durable top-level goal and selected result.
 -define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (8 * 1024)).
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
+%% Durable multi-ontology control records.  The semantic body limit leaves a
+%% fixed margin below the existing 256 KiB block ceiling for the target-bound
+%% author envelope and singleton block framing.  A group has exactly the same
+%% participant ceiling as the proof that produced it.
+-define(QUOD_MAX_DTX_PARTICIPANTS, ?QUOD_MAX_SCOPES_PER_PROOF).
+-define(QUOD_MAX_DTX_BODY_BYTES, (224 * 1024)).
+%% Deterministic ETF adds exactly 13 bytes around a binary in `{dtx, Blob}`.
+-define(QUOD_DTX_TAGGED_PAYLOAD_OVERHEAD_BYTES, 13).
+-define(QUOD_MAX_DTX_CONTROL_BYTES,
+        (?MAX_BLOCK_BYTES - ?QUOD_DTX_TAGGED_PAYLOAD_OVERHEAD_BYTES)).
+
+%% Process-free DTX recovery endpoint. One semantic record or certified
+%% reference fits below this envelope with a fixed allowance for the v1
+%% request/reply wrapper and public outcome-status metadata.
+-define(QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
+        (?QUOD_MAX_DTX_CONTROL_BYTES + (4 * 1024))).
+%% Complete validation probes every current validator for every participant
+%% concurrently under one shared deadline.  The endpoint owner must therefore
+%% be able to retain the exact worst-case request set without self-backpressure.
+-define(QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
+        (?QUOD_MAX_DTX_PARTICIPANTS * ?MAX_VALIDATORS)).
+-define(QUOD_DTX_ENDPOINT_MAX_WORKERS, 8).
+-define(QUOD_DTX_ENDPOINT_RATE_PER_SECOND, 16).
+-define(QUOD_DTX_ENDPOINT_RATE_BURST, 32).
+-define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
+-define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
+
+%% Shared bound for authenticated per-peer token-bucket tables. Individual
+%% entrances choose their own rate and burst, but retain and prune peer rows
+%% under one bounded policy.
+-define(QUOD_TOKEN_BUCKET_MAX_BUCKETS, 1024).
+-define(QUOD_TOKEN_BUCKET_IDLE_MS, 60000).
+
+%% One node-wide foreign-history owner (distributed-proof-plan §8).  These
+%% limits cover both admission and the retained verified cache; callers and
+%% tests must not duplicate the literals.
+-define(QUOD_MAX_FOREIGN_PENDING, 32).
+-define(QUOD_MAX_FOREIGN_PENDING_PER_PEER, 4).
+-define(QUOD_MAX_FOREIGN_HISTORIES, 64).
+-define(QUOD_MAX_FOREIGN_CACHE_BYTES, (128 * 1024 * 1024)).
+-define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
+-define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).
@@ -55,7 +99,5 @@
 %% bucket are bounded before goal decoding, worker spawn, or monitor creation.
 -define(QUOD_SCOPE_OPEN_RATE_PER_SECOND, 32).
 -define(QUOD_SCOPE_OPEN_RATE_BURST, 32).
--define(QUOD_SCOPE_OPEN_MAX_BUCKETS, 1024).
--define(QUOD_SCOPE_OPEN_BUCKET_IDLE_MS, 60000).
 
 -endif.

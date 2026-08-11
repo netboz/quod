@@ -53,6 +53,17 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
         </dd>
         <Dt>Ontology</Dt>
         <dd className="font-mono">{full.ns}</dd>
+        {full.origin && (
+          <>
+            <Dt>Proof origin</Dt>
+            <dd className="font-mono text-xs break-all">
+              {full.origin.ns}
+              <span className="ml-1 text-gray" title={full.origin.anchor}>
+                ({shortHex(full.origin.anchor, 12)})
+              </span>
+            </dd>
+          </>
+        )}
         <Dt>Height</Dt>
         <dd className="font-mono text-teal-light">#{full.height}</dd>
         <Dt>Block time</Dt>
@@ -81,6 +92,18 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
         )}
         <Dt>Tx id</Dt>
         <dd className="font-mono text-xs break-all">{full.tx_id}</dd>
+        {full.proof_id && (
+          <>
+            <Dt>Proof id</Dt>
+            <dd className="font-mono text-xs break-all text-gray">{full.proof_id}</dd>
+          </>
+        )}
+        {full.plan_digest && (
+          <>
+            <Dt>Plan digest</Dt>
+            <dd className="font-mono text-xs break-all text-gray">{full.plan_digest}</dd>
+          </>
+        )}
         <Dt>Read set</Dt>
         <dd className="text-xs text-gray">{full.read_predicates} predicate(s) checked (OCC)</dd>
       </dl>

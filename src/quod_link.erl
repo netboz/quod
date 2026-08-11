@@ -32,8 +32,8 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 
 -include("quod_transport_limits.hrl").
 
--export([start_outbound/7, start_inbound/3, send/2, send_ordered/2,
-         send_reliable/3, close/1]).
+-export([start_outbound/7, start_inbound/3, peer_key/1,
+         send/2, send_ordered/2, send_reliable/3, close/1]).
 
 -ifdef(TEST).
 -export([header/3, parse_header/1, frame/1, parse/1,
@@ -45,6 +45,12 @@ dead, unreachable, or wrongly authenticated peer fail to come up.
 -define(ORDERED_SEND_TIMEOUT_MS, 250).
 
 -record(s, {conn, sid, channel, peer, buf = <<>>}).
+
+-doc "Extract the authenticated key from either transport identity shape.".
+-spec peer_key(term()) -> <<_:256>> | undefined.
+peer_key(<<_:256>> = PeerKey) -> PeerKey;
+peer_key({<<_:256>> = PeerKey, _Endpoint}) -> PeerKey;
+peer_key(_Malformed) -> undefined.
 
 -ifdef(TEST).
 -define(ORDERED_SEND_RESULT(Conn, Sid, Frame, Deadline),

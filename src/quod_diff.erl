@@ -9,9 +9,15 @@ Pure helpers over the committed erlog database for the content layer.
   `{conflict, Functor}` for a conflicting predicate. A recorded `staged`
   expectation is rejected outright: it is never a capturable token, and
   accepting it would invert the same-block read-after-write rejection.
+- `valid_read_check/1` and `valid_ops/1` — total shape validation for the
+  untrusted durable material consumed by both ordinary and distributed
+  transactions.
 - `apply_ops/2` — apply a `#transaction.diff` (`[op()]`) to the committed erlog state,
   normalizing legal source-form bodies to Erlog's durable compiled form, with
   content-identity dedup (asserting an identical fact is a no-op; retract is by content).
+- `apply_ops_preserving_policy/2` — build that same immutable post-diff state and,
+  only when the diff touches `{can_invoke,4}`, require the final state to retain
+  at least one interpreted policy clause.
 - `has_clause/4` — is a specific `{Head, Body}` clause present in the committed db? It
   performs the same body normalization as `apply_ops`, then uses the same content-identity
   check. The membership verdict uses it to prove that a removal names an exact clause.
@@ -22,8 +28,27 @@ Pure helpers over the committed erlog database for the content layer.
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([validate/2, apply_ops/2, has_clause/4]).
+-export([valid_read_check/1, valid_ops/1,
+         validate/2, apply_ops/2, apply_ops_preserving_policy/2, has_clause/4]).
 -export([assertion_only/1, asserts_functor/2]).
+
+-doc "Whether an untrusted read check uses only valid functor keys and durable MVCC tokens.".
+-spec valid_read_check(term()) -> boolean().
+valid_read_check(ReadCheck) when is_map(ReadCheck) ->
+    maps:fold(
+      fun({Functor, Arity}, Token, true) ->
+              is_atom(Functor) andalso is_integer(Arity) andalso Arity >= 0
+                  andalso valid_read_token(Token);
+         (_Key, _Token, _Acc) ->
+              false
+      end, true, ReadCheck);
+valid_read_check(_) -> false.
+
+-doc "Whether an untrusted diff is a proper list of legal durable assert/retract operations.".
+-spec valid_ops(term()) -> boolean().
+valid_ops([Op | Rest]) -> valid_op(Op) andalso valid_ops(Rest);
+valid_ops([]) -> true;
+valid_ops(_) -> false.
 
 -doc "True when every operation in `Diff` is an assert — the only shape a genesis may carry.".
 -spec assertion_only([op()]) -> boolean().
@@ -69,6 +94,22 @@ apply_ops(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
     R1 = lists:foldl(fun(Op, R) -> apply_op(M, R, Op) end, R0, Ops),
     {ok, Est#est{db = Db#db{ref = R1}}}.
 
+-doc """
+Apply `Ops`, rejecting a final state with no interpreted `can_invoke/4` clause.
+
+Unrelated diffs return the already-built candidate without inspecting its
+policy procedure. A touching diff is judged on that candidate's final state,
+so an atomic replacement is valid regardless of operation order.
+""".
+-spec apply_ops_preserving_policy(tuple(), [op()]) ->
+          {ok, tuple()} | {error, policy_self_seal_forbidden}.
+apply_ops_preserving_policy(Est, Ops) ->
+    {ok, Candidate} = apply_ops(Est, Ops),
+    case touches_functor(Ops, {can_invoke, 4}) of
+        false -> {ok, Candidate};
+        true -> require_interpreted_policy(Candidate)
+    end.
+
 -doc "Is the exact `{Head, Body}` clause present in the committed db `Mod:Ref`? (Content identity.)".
 -spec has_clause(module(), term(), term(), term()) -> boolean().
 has_clause(M, R, H, B0) ->
@@ -78,6 +119,75 @@ has_clause(M, R, H, B0) ->
 %%%===================================================================
 %%% internals
 %%%===================================================================
+
+valid_read_token(never_present) -> true;
+valid_read_token(static) -> true;
+valid_read_token({present, Slot}) -> is_integer(Slot) andalso Slot >= 0;
+valid_read_token({absent, Slot}) -> is_integer(Slot) andalso Slot >= 0;
+valid_read_token(_) -> false.
+
+valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
+    callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
+valid_op(_) -> false.
+
+callable_head(Head) when is_atom(Head) -> true;
+callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 ->
+    is_atom(element(1, Head));
+callable_head(_) -> false.
+
+%% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Explicitly
+%% constructed transactions may carry a legal source body instead; apply_ops/2
+%% normalizes it deterministically before applying it. Validate both forms fully.
+valid_clause_body(Body) -> valid_compiled_body(Body) orelse valid_raw_body(Body).
+
+valid_compiled_body({Code, HasCut}) when is_boolean(HasCut) -> valid_code(Code);
+valid_compiled_body(_) -> false.
+
+valid_code([Instruction | Rest]) -> valid_instruction(Instruction) andalso valid_code(Rest);
+valid_code([]) -> true;
+valid_code(_) -> false.
+
+valid_instruction({{disj}, Left, Right}) ->
+    valid_code(Left) andalso valid_code(Right);
+valid_instruction({{if_then}, Cond, Then, Label}) ->
+    valid_code(Cond) andalso valid_code(Then) andalso valid_code_label(Label);
+valid_instruction({{if_then_else}, Cond, Then, Else, Label}) ->
+    valid_code(Cond) andalso valid_code(Then) andalso valid_code(Else)
+        andalso valid_code_label(Label);
+valid_instruction({{once}, Goal, Label}) ->
+    valid_code(Goal) andalso valid_code_label(Label);
+valid_instruction({{cut}, Label, Last}) ->
+    valid_code_label(Label) andalso is_boolean(Last);
+valid_instruction({call, {Variable}}) ->
+    valid_variable(Variable);
+valid_instruction(Goal) ->
+    callable_head(Goal) andalso valid_stored_term(Goal).
+
+valid_raw_body(Body) -> callable_body(Body) andalso valid_stored_term(Body).
+
+callable_body(Body) when is_atom(Body) -> true;
+callable_body({Variable}) -> valid_variable(Variable);
+callable_body(Body) -> callable_head(Body).
+
+valid_code_label(Label) -> is_atom(Label) orelse (is_integer(Label) andalso Label >= 0).
+valid_variable(Variable) -> is_atom(Variable) orelse (is_integer(Variable) andalso Variable >= 0).
+
+%% Stored clauses use integer variable ids after compilation (`{0}`, `{1}`, ...),
+%% while source terms use atom ids. Erlog's public `is_legal_term/1` only accepts
+%% the latter, so the durable representation needs this small explicit walker.
+valid_stored_term({Variable}) -> valid_variable(Variable);
+valid_stored_term(Term) when is_tuple(Term), tuple_size(Term) >= 2,
+                             is_atom(element(1, Term)) ->
+    valid_tuple_args(Term, 2, tuple_size(Term));
+valid_stored_term([Head | Tail]) ->
+    valid_stored_term(Head) andalso valid_stored_term(Tail);
+valid_stored_term(Term) ->
+    not is_tuple(Term) andalso not (is_list(Term) andalso Term =/= []).
+
+valid_tuple_args(_Term, Index, Size) when Index > Size -> true;
+valid_tuple_args(Term, Index, Size) ->
+    valid_stored_term(element(Index, Term))
+        andalso valid_tuple_args(Term, Index + 1, Size).
 
 apply_op(M, R, {assert, Clause}) ->
     {H, B} = normalize_clause(Clause),
@@ -119,4 +229,18 @@ find_tag(M, R, F, H, B) ->
                 false                -> none
             end;
         _ -> none
+    end.
+
+touches_functor(Ops, Functor) ->
+    lists:any(
+      fun({assert, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
+         ({retract, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
+         (_) -> false
+      end, Ops).
+
+require_interpreted_policy(
+  #est{db = #db{mod = M, ref = R}} = Candidate) ->
+    case M:get_procedure(R, {can_invoke, 4}) of
+        {clauses, [_ | _]} -> {ok, Candidate};
+        _ -> {error, policy_self_seal_forbidden}
     end.

@@ -94,7 +94,7 @@ fields(content) ->
     , {data_dir,     hoconsc:mk(binary(), #{default => <<"">>})}
       %% Optional FAST-LOCAL home for the block ledger only. The chain is replicated by
       %% consensus (a node that loses its ledger re-syncs trustlessly from peers), so it
-      %% does not need the durable volume; identity + vote journal REMAIN under data_dir.
+      %% does not need the durable volume; identity + signing journal REMAIN under data_dir.
       %% "" => the ledger shares data_dir (the previous behaviour).
     , {ledger_dir,   hoconsc:mk(binary(), #{default => <<"">>})}
     , {seeds,        hoconsc:mk(hoconsc:array(binary()), #{default => []})}

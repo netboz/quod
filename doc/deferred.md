@@ -23,12 +23,6 @@ vote, rebuild, and catch-up. Remaining, gated:
   epoch-frozen voting sets, and a `can_replicate` policy for private
   read-replicas. Per-node `can_join` re-validation and signed membership
   transactions are already live.
-- **Remote reads use ontology asks.** The unused `{prove, Ns}` endpoint was
-  removed: it trusted a caller-supplied ontology name and duplicated the
-  authenticated `::` path. Remote reads now have one API, whose answering side
-  checks `can_read` against both the ontology chain and the TLS-authenticated
-  peer key.
-
 ## 2. Transport hardening (hostile-net)
 
 - **Mutual TLS is opportunistic at the library level, but quod binds it.**
@@ -158,11 +152,14 @@ stages, not carried forward:
     fork a cert-trusting catch-up joiner). Proven on the 4-node loopback-QUIC committee (`simplex_SUITE`
     `byzantine_retract_rejected` / `byzantine_admit_rejected`: a crafted proposal from the real leader is
     refused support, the slot skips, the committee is unchanged, the namespace still commits).
-  - **(c) never-empty floor — DONE (crash-safe, stepwise).** `quod_simplex:membership_change_ok/2` (the pure
-    shape gate, Slice A) enforces: a committee-touching tx is EXACTLY ONE well-formed `peer_admitted` op
-    (`Id =:= Pk`, binary) and must not empty the committee — at BOTH the leader (`handle_append`) and every
+  - **(c) bounded, never-empty committee — DONE (crash-safe, stepwise).**
+    `quod_simplex:membership_change_ok/2` (the pure shape gate, Slice A) enforces: a committee-touching tx
+    is EXACTLY ONE well-formed `peer_admitted` op (`Id =:= Pk`, binary), must not empty the committee, and
+    cannot grow it beyond the shared 64-validator cap — at BOTH the leader (`handle_append`) and every
     validator (`valid_proposal`). Kills the raw `retract`-everyone wedge, mass packing/shrinking in one block,
-    op-smuggling, and the `Id≠Pk` address-poison op. The floor is **stepwise never-empty** (4→3→2→1 legal, one
+    op-smuggling, the `Id≠Pk` address-poison op, and unbounded certificate/signature work. Founder config,
+    genesis replay, catch-up, and certificate admission enforce the same shared cap. The floor is
+    **stepwise never-empty** (4→3→2→1 legal, one
     quorum-endorsed member per block); the **hard `3f+1` Byzantine-tolerance floor stays OPEN** — it needs a
     network-target-`f` concept. With today's liveness-only `can_join`
     (`peer_ready` — any live, caught-up node passes), a signed, still-admitted
@@ -264,15 +261,16 @@ stages, not carried forward:
   the proof overlay captures every staged
   assert into the membership diff, so a `can_join` clause that asserts/retracts would ride ops into the
   committed membership transaction network-wide.
-- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22).** `quod_vote_journal` now owns one
-  bounded `votes.0001` file per namespace. The only constructor for a new runtime share first appends a
+- **~~Vote-latch persistence across restart~~ — DONE (2026-07-22; superseded by Step 4).**
+  `quod_signing_journal` now owns the bounded QSJ1 `signing.0001` file per namespace. The only constructor
+  for a new runtime share first appends a
   CRC-framed `{support|commit|complaint, Slot, BlockHash}` decision and calls `datasync`; only then may the
   signature enter the engine or transport. Boot reloads live decisions before recovery can vote, exact
   repeats are idempotent, and conflicting support hashes or final votes fail-stop. Finalization removes the
   slot from memory; at 1 MiB the remaining live decisions are rewritten and atomically renamed. No block,
   proposal, transaction, or KB data is copied. The restart tests exercise both complaint and commit through
   record → close → reopen → opposing evidence. The sync latency is exported as
-  `quod_consensus_vote_journal_sync_seconds`, so its real finality cost is visible rather than assumed.
+  `quod_consensus_signing_journal_vote_sync_seconds`, so its real finality cost is visible rather than assumed.
   Recovery trims only an incomplete final frame. A complete checksum/magic failure fail-stops even at EOF,
   deliberately stricter than the committed ledger's torn-append policy: a vote may already be visible to
   peers once its sync returns, so a complete record can never be discarded as though it were unacknowledged.
@@ -538,17 +536,21 @@ fixes:
   this only makes skips cost the minimum SAFE amount — it does not remove the skips; the
   burst-amplification fixes above are what reduce their frequency. Reverted to Δ=1000ms.
 
-- **Durable client idempotency for automatic write retry.** A transaction that has entered
-  consensus cannot be cancelled when a local caller deadline expires. The current API now
-  reports `{outcome_unknown, {transaction, Ns, GenesisAnchor, TxId}}` and exposes
-  that anchored reference through the durable outcome index/explorer instead of
-  falsely claiming failure; built-in test/load clients do not retry that outcome or a
-  transport failure with no authoritative response. They retry only explicit responses
-  that guarantee the operation did not apply. Fully automatic retry of non-idempotent goals
-  still needs a client-supplied stable operation id. The durable committed/pending
-  lookup now exists, but a reconnect cannot associate a newly proved operation with
-  the earlier sealed plan without that stable client identity. Do not implement this
-  as a timeout tweak or an unbounded in-memory dedup set.
+- **Durable client idempotency for automatic write retry.** Work that has entered
+  consensus cannot be cancelled when a local caller deadline expires. The current API reports
+  `{outcome_unknown, Ref}`, where `Ref` is either
+  `{transaction, Ns, GenesisAnchor, TxId}` or
+  `{group, OriginNs, OriginAnchor, Coordinator, CoordinatorAdmission, GroupId}`, and exposes
+  that anchored reference through the durable outcome index/explorer instead of falsely
+  claiming failure. Remote resolution freezes a certified current view and requires `f + 1`
+  identical current-validator snapshots. Ordinary quorum absence remains unknown; group
+  absence becomes definite only through coordinator retirement in that view or the exact
+  coordinator's admission-bound barrier. Built-in test/load clients do not retry an unknown
+  outcome or a transport failure with no authoritative response. They retry only explicit
+  responses that guarantee the operation did not apply. Fully automatic retry of
+  non-idempotent goals still needs a client-supplied stable operation id: a reconnect cannot
+  associate a newly proved operation with the earlier sealed plan without that identity. Do
+  not implement this as a timeout tweak or an unbounded in-memory dedup set.
 
 - **Two proof-visible reads bypass OCC capture (pre-token gap, found in the 0.7.62 review).**
   `current_predicate/1` (via the overlay's `get_interpreted_functors/1`) and

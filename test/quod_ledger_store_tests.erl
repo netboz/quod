@@ -4,13 +4,14 @@
 
 -define(V1_MAGIC, 16#915106AA).
 -define(V2_MAGIC, 16#915106AB).
--define(MAGIC, 16#915106AC).
+-define(V3_MAGIC, 16#915106AC).
+-define(MAGIC, 16#915106AD).
 -define(READ_CHUNK, 262144).
 
 %% Every superseded frame magic must be rejected as an identifiable format, at
 %% its exact offset, without mutating the file. Each legacy case below runs for
 %% all of them.
-legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}].
+legacy_formats() -> [{1, ?V1_MAGIC}, {2, ?V2_MAGIC}, {3, ?V3_MAGIC}].
 
 %%%===================================================================
 %%% fixtures
@@ -31,6 +32,7 @@ store_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
      [fun t_empty/1,
       fun t_append_read/1,
+      fun t_dtx_payload_roundtrip/1,
       fun t_reopen_persists/1,
       fun t_torn_tail_recovery/1,
       fun t_torn_tail_bad_crc_trims/1,
@@ -55,7 +57,9 @@ store_test_() ->
 %%% helpers
 %%%===================================================================
 
-ent(I) -> #entry{index = I, data = chg(I)}.
+ent(I) -> #entry{index = I, data = data(I)}.
+
+data(I) -> {batch, [chg(I)]}.
 
 chg(I) ->
     #transaction{tx_id = integer_to_binary(I), origin = {<<"onia:peers">>, <<0:256>>},
@@ -84,10 +88,27 @@ t_append_read({Dir, Ns}) ->
         ?assertEqual(2, E2#entry.index),
         ?assertEqual(3, E3#entry.index),
         {ok, E2b} = quod_ledger_store:read_at(S1, 2),
-        ?assertEqual(chg(2), E2b#entry.data),
+        ?assertEqual(data(2), E2b#entry.data),
         %% a non-contiguous append is rejected (the store is append-only, in slot order)
         ?assertError({non_contiguous_append, 3, [5]}, quod_ledger_store:append(S1, [ent(5)])),
         ok = quod_ledger_store:close(S1)
+    end.
+
+%% The store persists the canonical DTX blob unchanged; interpretation belongs
+%% solely to quod_ledger/quod_dtx, not the storage layer.
+t_dtx_payload_roundtrip({Dir, Ns}) ->
+    fun() ->
+        Data = {dtx, <<0, 1, 2, 255>>},
+        Entry = #entry{index = 1, data = Data},
+        {ok, S0} = quod_ledger_store:open(Ns, Dir),
+        {ok, S1} = quod_ledger_store:append(S0, [Entry]),
+        {ok, Stored} = quod_ledger_store:read_at(S1, 1),
+        ?assertEqual(Data, Stored#entry.data),
+        ok = quod_ledger_store:close(S1),
+        {ok, S2} = quod_ledger_store:open(Ns, Dir),
+        {ok, Reopened} = quod_ledger_store:read_at(S2, 1),
+        ?assertEqual(Data, Reopened#entry.data),
+        ok = quod_ledger_store:close(S2)
     end.
 
 t_reopen_persists({Dir, Ns}) ->
@@ -208,20 +229,21 @@ t_chunked_tail_detects_distant_magic({Dir, Ns}) ->
     end.
 
 %% The scanner overlaps windows by three bytes, covering every possible split
-%% of a four-byte V1 or V2 marker at a chunk boundary.
+%% of the current V4 or any recognized V1/V2/V3 marker at a chunk boundary.
 t_chunked_tail_detects_split_magic({Dir, Ns}) ->
     fun() ->
         Path = prepare_log_path(Dir, Ns),
         [begin
              Filler = binary:copy(<<0>>, ?READ_CHUNK - PrefixBytes),
-             Bytes = <<0:32, Filler/binary, ?V1_MAGIC:32>>,
+             Bytes = <<0:32, Filler/binary, Magic:32>>,
              ok = file:write_file(Path, Bytes),
              ?assertError(
                 {log_corruption, bad_magic, 0},
                 quod_ledger_store:open(Ns, Dir)),
              ?assertEqual({ok, Bytes}, file:read_file(Path))
          end
-         || PrefixBytes <- [1, 2, 3]],
+         || Magic <- [?MAGIC, ?V3_MAGIC, ?V2_MAGIC, ?V1_MAGIC],
+            PrefixBytes <- [1, 2, 3]],
         ok
     end.
 
@@ -249,9 +271,9 @@ t_checkpointed_reads({Dir, Ns}) ->
         {ok, S1} = quod_ledger_store:append(S0, [ent(I) || I <- lists:seq(1, N)]),
         ?assertEqual(N, quod_ledger_store:last(S1)),
         {ok, E256} = quod_ledger_store:read_at(S1, 256),   %% farthest from its checkpoint (255 hops)
-        ?assertEqual(chg(256), E256#entry.data),
+        ?assertEqual(data(256), E256#entry.data),
         {ok, E257} = quod_ledger_store:read_at(S1, 257),   %% exactly on a checkpoint (0 hops)
-        ?assertEqual(chg(257), E257#entry.data),
+        ?assertEqual(data(257), E257#entry.data),
         {ok, Es} = quod_ledger_store:read_range(S1, 250, 520),   %% one run across two boundaries
         ?assertEqual(lists:seq(250, 520), [E#entry.index || E <- Es]),
         Sum = quod_ledger_store:fold(S1, 1, N, fun(#entry{index = I}, Acc) -> Acc + I end, 0),

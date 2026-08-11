@@ -4,6 +4,14 @@
 %% header/3, parse_header/1, frame/1 and parse/1 are exported only under -ifdef(TEST).
 -import(quod_link, [header/3, parse_header/1, frame/1, parse/1]).
 
+peer_key_normalizes_transport_identity_test() ->
+    Peer = <<7:256>>,
+    ?assertEqual(Peer, quod_link:peer_key(Peer)),
+    ?assertEqual(Peer, quod_link:peer_key({Peer, {"127.0.0.1", 14567}})),
+    ?assertEqual(undefined, quod_link:peer_key(<<"short">>)),
+    ?assertEqual(undefined, quod_link:peer_key({<<"short">>, ignored})),
+    ?assertEqual(undefined, quod_link:peer_key(malformed)).
+
 %% --- header: <<NLen:16, NodeId, CLen:16, Channel, LearnPolicy:8>> -------
 
 header_roundtrip_test() ->

@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_vm_limits.hrl").
 
 -define(NS, <<"test:transactions">>).
 -define(ANCHOR, <<11:256>>).
@@ -300,7 +301,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     Prefix = integer_to_binary(erlang:unique_integer([positive])),
     AtomNames =
         [<<"qtx_", Prefix/binary, "_", (integer_to_binary(N))/binary>>
-         || N <- lists:seq(1, 65)],
+         || N <- lists:seq(1, ?QUOD_MAX_NEW_MATERIAL_ATOMS + 1)],
     [?assertException(
         error, badarg, binary_to_existing_atom(Name, utf8))
      || Name <- AtomNames],
@@ -331,11 +332,11 @@ bounded_material_failure_is_total_test() ->
     %% The wire codec's existing maximum depth is 64. Use a clearly deeper
     %% fixture so the surrounding material wrappers cannot leave it on the edge.
     DeepTerm = deep_term(70, leaf),
-    Transaction =
-        quod_transaction:bind_id(
-          {?NS, ?ANCHOR},
-          (unsigned(Author))#transaction{
-            diff = [{assert, {{deep, DeepTerm}, true}}]}),
+    %% Invalid material is rejected by the signing codec itself; it does not
+    %% need (and cannot acquire) a canonical semantic id first.
+    Transaction = (unsigned(Author))#transaction{
+                    tx_id = <<1:256>>,
+                    diff = [{assert, {{deep, DeepTerm}, true}}]},
     ?assertEqual(
        {error, bad_term},
        quod_transaction:bytes(?BINDING, Transaction)),

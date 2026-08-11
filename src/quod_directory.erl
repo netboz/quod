@@ -25,7 +25,7 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 -include("quod_directory_limits.hrl").
 
 -export([start_link/0, start_link/1]).
--export([resolve/1, directory_hosts/1,
+-export([resolve/1, validator_routes/2, directory_hosts/1,
          add_direct_seed/2, confirm_direct_seed/5,
          install_record/5, install_records/1,
          expire/1, stats/0]).
@@ -92,6 +92,41 @@ resolve(Ns) when is_binary(Ns) ->
     end;
 resolve(_) ->
     unknown.
+
+-doc """
+Return confirmed validator routes for one exact anchored ontology identity.
+
+Any simultaneously advertised confirmed validator anchor conflict fails the
+whole lookup.  Callers must not filter the desired anchor first: doing so
+would let a split directory view silently choose one of two incompatible
+ontologies with the same namespace.
+""".
+-spec validator_routes(binary(), <<_:256>>) ->
+          {ok, [map()]} | {error, unavailable | anchor_conflict}.
+validator_routes(Ns, <<_:256>> = Anchor) when is_binary(Ns) ->
+    case resolve(Ns) of
+        {known, Routes} ->
+            Eligible =
+                [Route
+                 || #{status := confirmed, role := validator,
+                      node_key := <<_:256>>,
+                      genesis_anchor := <<_:256>>} = Route <- Routes],
+            Anchors = lists:usort(
+                        [A || #{genesis_anchor := A} <- Eligible]),
+            case Anchors of
+                [Anchor] ->
+                    {ok, [R || #{genesis_anchor := A} = R <- Eligible,
+                               A =:= Anchor]};
+                [] ->
+                    {error, unavailable};
+                _ ->
+                    {error, anchor_conflict}
+            end;
+        _ ->
+            {error, unavailable}
+    end;
+validator_routes(_Ns, _Anchor) ->
+    {error, unavailable}.
 
 -doc """
 Active public system hosts for the ground namespace, in deterministic key order.

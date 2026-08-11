@@ -25,7 +25,8 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3,
-         authorize_scope/6, close_stream/1]).
+         authorize_scope/6, validate_authorization_transcript/6,
+         close_stream/1]).
 -ifdef(TEST).
 -export([test_serve_nested/1, test_await_scope_reply/2,
          test_await_identity/4, test_await_remote_scope_open/4,
@@ -107,7 +108,7 @@ do_ask(NsTerm, Inner, Next, St) ->
     end.
 
 guarded_ask(Self, Target, Inner, Next, St) ->
-    quod_predicates:in_verdict(St) andalso ask_error(ask_in_membership_verdict),
+    quod_predicates:local_only(St) andalso ask_error(ask_in_membership_verdict),
     Chain = quod_predicates:ctx_chain(quod_predicates:context(St)),
     length(Chain) >= ?QUOD_MAX_ACTIVE_PROOF_DEPTH andalso
         ask_error(
@@ -591,21 +592,20 @@ execution_remaining_ms() ->
 open_scope_invocation(
   {local_scope, ScopeId, Ns, Anchor, Height, Session},
   Goal, Chain, Selection) ->
-    %% A refusal runs none of Goal — the invocation runs
-    %% `fail_with_reason(not_allowed(Ns))` instead, so it opens like any other
-    %% and completes with the bounded reason through the ordinary path.
-    %% `(Ns::Denied ; Fallback)` therefore fails over to Fallback.
-    Effective =
+    %% Record the requested goal and authorization verdict separately. The
+    %% session substitutes the bounded failure goal only for execution, so a
+    %% validator can later re-check the exact request that policy denied.
+    Verdict =
         case authorize_scope(quod_proof_context:principal(), Goal, Chain,
                              {Ns, Anchor}, Height, Session) of
-            true  -> Goal;
-            false -> {fail_with_reason, {not_allowed, Ns}}
+            true  -> allowed;
+            false -> denied
         end,
     InvocationId = crypto:strong_rand_bytes(16),
     Context = quod_predicates:proof_context(
                 Ns, Height, undefined, [{Ns, Anchor} | Chain]),
     case quod_proof_session:open(
-           Session, InvocationId, Effective, Context, Selection) of
+           Session, InvocationId, Goal, Verdict, Context, Selection) of
         ok -> finish_scope_open(
                 {local_scope_invocation, ScopeId, Session,
                  InvocationId, Selection, 1});
@@ -1286,8 +1286,11 @@ close_stream({scope_invocation, Handle, InvocationId,
       {quod_scope_session:scope_id(Handle), InvocationId});
 close_stream({local_scope_invocation, ScopeId, Session, InvocationId,
               _Selection, _Seq}) ->
-    quod_proof_session:cancel(Session, InvocationId),
-    quod_proof_context:unregister_invocation({ScopeId, InvocationId});
+    try
+        ok = quod_proof_session:cancel(Session, InvocationId)
+    after
+        quod_proof_context:unregister_invocation({ScopeId, InvocationId})
+    end;
 close_stream({origin_scope_stream, Ref, _Expected}) ->
     _ = try cancel_origin_proxy(
               Ref, quod_transaction_scope:current_actor())
@@ -1329,12 +1332,18 @@ authorize_scope(Principal, Goal, Chain,
     Committed = quod_predicates:set_context(
                   quod_proof_session:committed_state(Session), Ctx),
     Wrapped = quod_erlog_db_local_prove:wrap_state(
-                Committed, #{read_set => true, read_only => true}),
-    CallChain = [SubjectNs || {SubjectNs, <<_:256>>} <- Chain],
+                Committed,
+                #{read_set => true,
+                  read_only => true,
+                  %% Authorization is part of the same ontology access, not a
+                  %% fresh snapshot that can outlive its parent session.
+                  access_guard =>
+                      quod_proof_session:access_guard(Session)}),
     #est{db = #db{ref = PolicyOverlay}} = Wrapped,
-    try length(CallChain) =:= length(Chain) andalso
-            prove_bool(
-              {can_invoke, Goal, Principal, CallChain, Ns}, Wrapped)
+    try case authorization_goal(Ns, Goal, Principal, Chain) of
+            {ok, PolicyGoal} -> prove_bool(PolicyGoal, Wrapped);
+            error -> false
+        end
     after
         %% The policy's committed reads belong to this scope's plan even when it
         %% refused: the refusal is itself a decision a later commit can falsify.
@@ -1345,8 +1354,175 @@ authorize_scope(Principal, Goal, Chain,
         quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
     end.
 
+-doc """
+Re-prove one target plan's recorded authorization decisions at Prepare.
+
+The caller supplies the target's already-authenticated, owner-materialized
+transcript.  Every row is checked against the exact parent state in a strict
+local policy context: writes, ontology selection, following, and all governed
+live bridges are unavailable.  A recorded denial must re-prove as an ordinary
+logical failure; an interpreter error is invalid, not another kind of denial.
+""".
+-spec validate_authorization_transcript(
+        quod_proof_context:identity(), quod_proof_context:identity(),
+        quod_dtx:principal(), non_neg_integer(),
+        [quod_dtx:transcript_entry()], tuple()) ->
+          ok | {error, invalid_authorization_transcript}.
+validate_authorization_transcript(
+  {Ns, <<_:256>>} = Target, {_OriginNs, <<_:256>>} = Origin,
+  Principal, ParentHeight, [_ | _] = Transcript, #est{} = ParentEst)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(ParentHeight), ParentHeight >= 0 ->
+    case valid_authorization_principal(Principal) of
+        true ->
+            validate_authorization_entries(
+              Transcript, Target, Origin, Principal, ParentHeight,
+              ParentEst);
+        false ->
+            invalid_authorization_transcript()
+    end;
+validate_authorization_transcript(
+  _Target, _Origin, _Principal, _ParentHeight, _Transcript, _ParentEst) ->
+    invalid_authorization_transcript().
+
+validate_authorization_entries(
+  [], _Target, _Origin, _Principal, _ParentHeight, _ParentEst) ->
+    ok;
+validate_authorization_entries(
+  [Entry | Rest], Target, Origin, Principal, ParentHeight, ParentEst) ->
+    case validate_authorization_entry(
+           Entry, Target, Origin, Principal, ParentHeight, ParentEst) of
+        ok ->
+            validate_authorization_entries(
+              Rest, Target, Origin, Principal, ParentHeight, ParentEst);
+        {error, invalid_authorization_transcript} = Error ->
+            Error
+    end;
+validate_authorization_entries(
+  _Improper, _Target, _Origin, _Principal, _ParentHeight, _ParentEst) ->
+    invalid_authorization_transcript().
+
+validate_authorization_entry(
+  {<<_:128>>, FullChain, GoalBlob, Verdict, AnswerCount, <<_:256>>, Tag},
+  {Ns, _Anchor} = Target, Origin, Principal, ParentHeight, ParentEst)
+  when (Verdict =:= allowed orelse Verdict =:= denied),
+       is_integer(AnswerCount), AnswerCount >= 0,
+       AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+       (Tag =:= active orelse Tag =:= complete orelse
+        Tag =:= error orelse Tag =:= cancelled) ->
+    case {authorization_chain(FullChain, Target, Origin),
+          quod_wire_term:decode_canonical(
+            GoalBlob, ?QUOD_MAX_NESTED_GOAL_BYTES)} of
+        {{ok, CallerChain}, {ok, Goal}} ->
+            case fully_materialized(Goal) of
+                true ->
+                    reprove_authorization(
+                      Ns, Goal, Principal, FullChain, CallerChain,
+                      ParentHeight, Verdict, ParentEst);
+                false ->
+                    invalid_authorization_transcript()
+            end;
+        _ ->
+            invalid_authorization_transcript()
+    end;
+validate_authorization_entry(
+  _Entry, _Target, _Origin, _Principal, _ParentHeight, _ParentEst) ->
+    invalid_authorization_transcript().
+
+reprove_authorization(
+  Ns, Goal, Principal, FullChain, CallerChain, ParentHeight, Verdict,
+  ParentEst) ->
+    Context = quod_predicates:with_chain(
+                quod_predicates:policy_verdict_context(
+                  Ns, ParentHeight), FullChain),
+    Committed = quod_predicates:set_context(ParentEst, Context),
+    Wrapped = quod_erlog_db_local_prove:wrap_state(
+                Committed, #{read_only => true}),
+    try case authorization_goal(Ns, Goal, Principal, CallerChain) of
+            {ok, PolicyGoal} ->
+                case strict_authorization_result(PolicyGoal, Wrapped) of
+                    Verdict -> ok;
+                    _ -> invalid_authorization_transcript()
+                end;
+            error ->
+                invalid_authorization_transcript()
+        end
+    after
+        quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
+    end.
+
+authorization_chain([Target | Rest] = FullChain, Target, Origin) ->
+    case chain_identities(FullChain, 0, [], undefined) of
+        {ok, [_TargetNs | _CallerNamespaces], Origin} ->
+            {ok, Rest};
+        _ ->
+            error
+    end;
+authorization_chain(_FullChain, _Target, _Origin) ->
+    error.
+
+chain_identities([], _Depth, NamespacesRev, Last) ->
+    {ok, lists:reverse(NamespacesRev), Last};
+chain_identities([{Ns, <<_:256>>} = Identity | Rest], Depth,
+                 NamespacesRev, _Last)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       Depth < ?QUOD_MAX_ACTIVE_PROOF_DEPTH ->
+    chain_identities(Rest, Depth + 1, [Ns | NamespacesRev], Identity);
+chain_identities(_ImproperOrTooDeep, _Depth, _NamespacesRev, _Last) ->
+    error.
+
+authorization_goal(Ns, Goal, Principal, Chain) ->
+    case chain_identities(Chain, 0, [], undefined) of
+        {ok, CallChain, _Last} ->
+            {ok, {can_invoke, Goal, Principal, CallChain, Ns}};
+        error ->
+            error
+    end.
+
+valid_authorization_principal({node, <<_:256>>}) -> true;
+valid_authorization_principal(anonymous) -> true;
+valid_authorization_principal(_) -> false.
+
+fully_materialized({'$quod_symbol', Binary}) when is_binary(Binary) -> false;
+fully_materialized(Term) when is_tuple(Term) ->
+    fully_materialized_tuple(Term, 1, tuple_size(Term));
+fully_materialized([Head | Tail]) ->
+    fully_materialized(Head) andalso fully_materialized(Tail);
+fully_materialized([]) -> true;
+fully_materialized(_Term) -> true.
+
+fully_materialized_tuple(_Term, Index, Size) when Index > Size -> true;
+fully_materialized_tuple(Term, Index, Size) ->
+    fully_materialized(element(Index, Term)) andalso
+        fully_materialized_tuple(Term, Index + 1, Size).
+
+invalid_authorization_transcript() ->
+    {error, invalid_authorization_transcript}.
+
+strict_authorization_result(Goal, W) ->
+    try authorization_result(Goal, W)
+    catch
+        _:_ -> invalid
+    end.
+
 prove_bool(Goal, W) ->
+    case authorization_result(Goal, W) of
+        allowed -> true;
+        denied -> false;
+        invalid -> false
+    end.
+
+authorization_result(Goal, W) ->
     try erlog_int:prove_goal(Goal, W) of
-        {succeed, _} -> true;
-        _            -> false
-    catch _:_ -> false end.
+        {succeed, _} -> allowed;
+        {fail, _} -> denied;
+        _ -> invalid
+    catch
+        %% A generation/fence failure is infrastructure truth, not a policy
+        %% denial. Preserve it so the calling ontology receives the same typed
+        %% transaction_pending/rebuilding error as the target scope.
+        throw:{quod_ask_error, Reason} ->
+            throw({quod_ask_error, Reason});
+        _:_ ->
+            invalid
+    end.

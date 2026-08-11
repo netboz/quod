@@ -101,6 +101,55 @@ cleanup_remains_valid_after_execution_budget_expires_test() ->
        quod_prolog:test_scope_command_budget_valid(
          {invoke_next, <<1:128>>, 1}, 0, Past)).
 
+sealed_target_accepts_only_attestation_terminal_submit_and_close_test() ->
+    ManifestBlob = <<"manifest">>,
+    Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>, []},
+    ?assertEqual(
+       active,
+       quod_prolog:test_scope_command_route(active, scope_seal)),
+    ?assertEqual(
+       sealed,
+       quod_prolog:test_scope_command_route(
+         sealed, {scope_attest, ManifestBlob})),
+    ?assertEqual(
+       sealed,
+       quod_prolog:test_scope_command_route(sealed, scope_close)),
+    ?assertEqual(
+       sealed,
+       quod_prolog:test_scope_command_route(sealed, Submit)),
+    ?assertEqual(
+       error,
+       quod_prolog:test_scope_command_route(active, Submit)),
+    ?assertEqual(
+       error,
+       quod_prolog:test_scope_command_route(submitting, Submit)),
+    ?assertEqual(
+       error,
+       quod_prolog:test_scope_command_route(submitted, Submit)),
+    ?assertEqual(
+       {submitted, error},
+       quod_prolog:test_sealed_submit_transition()),
+    ?assertEqual(
+       sealed,
+       quod_prolog:test_scope_command_route(submitted, scope_close)),
+    lists:foreach(
+      fun(Operation) ->
+          ?assertEqual(
+             error,
+             quod_prolog:test_scope_command_route(sealed, Operation))
+      end,
+      [scope_seal,
+       {invoke_open, <<1:128>>, {tx_selection, none, []}, [], <<>>},
+       {invoke_next, <<1:128>>, 1},
+       {invoke_cancel, <<1:128>>},
+       {materialize, <<1:128>>, <<2:128>>, <<3:128>>, [<<4:128>>]},
+       {batch_restore, [<<4:128>>]},
+       {batch_release, [<<4:128>>]}]),
+    ?assertEqual(
+       error,
+       quod_prolog:test_scope_command_route(
+         opening_session, {scope_attest, ManifestBlob})).
+
 idle_expiry_reuses_exact_last_command_correlation_test() ->
     OpenRequest = <<1:128>>,
     LaterRequest = <<2:128>>,
@@ -120,6 +169,7 @@ idle_expiry_reuses_exact_last_command_correlation_test() ->
 
 top_level_deadline_and_crash_use_current_public_errors_test() ->
     Ns = <<"quod:origin">>,
+    OutcomeRef = {transaction, Ns, <<7:256>>, <<8:256>>},
     ?assertEqual(
        {error, {proof_limit_exceeded, Ns}},
        quod_prolog:test_proof_down_reply(prove, killed, Ns)),
@@ -131,7 +181,49 @@ top_level_deadline_and_crash_use_current_public_errors_test() ->
        quod_prolog:test_proof_down_reply(action, unexpected_crash, Ns)),
     ?assertEqual(
        {error, outcome_unknown},
-       quod_prolog:test_proof_down_reply(action, killed, Ns)).
+       quod_prolog:test_proof_down_reply(action, killed, Ns)),
+    ?assertEqual(
+       {error, {outcome_unknown, OutcomeRef}},
+       quod_prolog:test_proof_down_reply(
+         prove, unexpected_crash, Ns, OutcomeRef)).
+
+public_proof_engine_death_is_checkpoint_sensitive_test() ->
+    Ns = <<"quod:origin">>,
+    CallRef1 = make_ref(),
+    Engine1 = spawn(fun() -> receive stop -> ok end end),
+    MRef1 = monitor(process, Engine1),
+    Engine1 ! stop,
+    ?assertEqual(
+       {error, {ontology_unavailable, Ns}},
+       quod_prolog:test_await_public_proof(
+         Engine1, MRef1, CallRef1, Ns, none)),
+
+    GroupRef = {group, Ns, <<1:256>>, <<2:256>>, <<3:256>>, <<4:256>>},
+    CallRef2 = make_ref(),
+    Engine2 = spawn(fun() -> receive stop -> ok end end),
+    MRef2 = monitor(process, Engine2),
+    self() ! {quod_proof_checkpoint, Engine2, CallRef2, GroupRef},
+    Engine2 ! stop,
+    ?assertEqual(
+       {error, {outcome_unknown, GroupRef}},
+       quod_prolog:test_await_public_proof(
+         Engine2, MRef2, CallRef2, Ns, none)).
+
+public_proof_normal_reply_wins_after_checkpoint_test() ->
+    Ns = <<"quod:origin">>,
+    CallRef = make_ref(),
+    Engine = spawn(fun() -> receive stop -> ok end end),
+    MRef = monitor(process, Engine),
+    OutcomeRef = {transaction, Ns, <<5:256>>, <<6:256>>},
+    Expected = {ok, [#{}], 7},
+    self() ! {quod_proof_checkpoint, Engine, CallRef, OutcomeRef},
+    self() ! {quod_proof_reply, Engine, CallRef, Expected},
+    ?assertEqual(
+       Expected,
+       quod_prolog:test_await_public_proof(
+         Engine, MRef, CallRef, Ns, none)),
+    Engine ! stop,
+    demonitor(MRef, [flush]).
 
 test_binding(Ns) ->
     {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,

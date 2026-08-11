@@ -4,8 +4,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchBlock, fetchSummary, fetchTx, fetchTxs } from './api'
-import type { NsSummary } from './api'
+import type { Block, NsSummary } from './api'
 import { Console } from './Console'
+import { ControlDetail } from './ControlDetail'
 import { addHistory, mergeFull, replaceHistory, startWs, useExplorerStore } from './store'
 import type { LiveTx } from './store'
 import { TxDetail } from './TxDetail'
@@ -17,6 +18,7 @@ export default function App() {
   const summary = useQuery({ queryKey: ['summary'], queryFn: fetchSummary })
   const [ns, setNs] = useState<string | null>(null)
   const [selected, setSelected] = useState<LiveTx | null>(null)
+  const [selectedControl, setSelectedControl] = useState<{ ns: string; block: Block } | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => startWs(), [])
@@ -75,9 +77,17 @@ export default function App() {
         onNs={(n) => {
           setNs(n)
           setSelected(null)
+          setSelectedControl(null)
         }}
         ws={store.ws}
-        onFound={setSelected}
+        onFound={(tx) => {
+          setSelectedControl(null)
+          setSelected(tx)
+        }}
+        onControl={(block) => {
+          setSelected(null)
+          setSelectedControl(current ? { ns: current, block } : null)
+        }}
       />
       {nsInfo && <StatCards info={nsInfo} liveHeight={store.heights[nsInfo.ns] ?? nsInfo.height} />}
       <main className="mt-4 flex flex-1 flex-col gap-4 lg:flex-row lg:items-start">
@@ -105,6 +115,11 @@ export default function App() {
             <TxDetail tx={selectedCurrent} onClose={() => setSelected(null)} />
           </div>
         )}
+        {selectedControl && (
+          <div className="w-full lg:sticky lg:top-4 lg:w-[26rem] lg:shrink-0">
+            <ControlDetail ns={selectedControl.ns} block={selectedControl.block} onClose={() => setSelectedControl(null)} />
+          </div>
+        )}
       </main>
     </div>
   )
@@ -116,12 +131,14 @@ function Header({
   onNs,
   ws,
   onFound,
+  onControl,
 }: {
   namespaces: NsSummary[]
   current: string | null
   onNs: (ns: string) => void
   ws: 'connecting' | 'live' | 'down'
   onFound: (tx: LiveTx) => void
+  onControl: (block: Block) => void
 }) {
   return (
     <header className="-mx-4 mb-4 bg-teal px-4 text-cream shadow-md">
@@ -148,7 +165,7 @@ function Header({
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4">
-          {current && <Search ns={current} onFound={onFound} />}
+          {current && <Search ns={current} onFound={onFound} onControl={onControl} />}
           <span className="flex items-center gap-1.5 text-xs">
             <span
               className={
@@ -164,7 +181,7 @@ function Header({
   )
 }
 
-function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) {
+function Search({ ns, onFound, onControl }: { ns: string; onFound: (tx: LiveTx) => void; onControl: (block: Block) => void }) {
   const [q, setQ] = useState('')
   const [state, setState] = useState<'idle' | 'busy' | 'miss' | 'empty' | 'pending'>('idle')
   const [pendingRef, setPendingRef] = useState<{ anchor: string; tx_id: string } | null>(null)
@@ -183,11 +200,17 @@ function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) 
     try {
       // All-digit AND short → a block height; a tx id hex is 24 chars (so an all-digit id isn't mistaken
       // for a height). A height loads the whole block: every tx is merged into the list (not just the
-      // first), and the first is opened; a committed slot with no txs (a skip) reports 'empty', not 'miss'.
+      // first), and the first is opened. A DTX control opens its control detail; a skip reports 'empty'.
       if (/^\d+$/.test(query) && query.length < 16) {
         const b = await fetchBlock(ns, Number(query))
         if (!('error' in b)) {
-          if (b.txs.length === 0) return setState('empty')
+          if (b.txs.length === 0) {
+            if (b.control) {
+              onControl(b)
+              return foundControl()
+            }
+            return setState('empty')
+          }
           mergeFull(ns, b.txs, b.cert)
           return found({ ...b.txs[0], status: 'history', cert: b.cert, live: false })
         }
@@ -206,6 +229,11 @@ function Search({ ns, onFound }: { ns: string; onFound: (tx: LiveTx) => void }) 
     } catch {
       setState('miss')
     }
+  }
+
+  const foundControl = () => {
+    setState('idle')
+    setQ('')
   }
 
   return (

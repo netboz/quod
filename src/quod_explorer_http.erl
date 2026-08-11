@@ -25,12 +25,13 @@ the live stream, so a transaction renders identically live and from history.
 """.
 -export([init/2]).
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, tx_json_full/3, entry_txs/1, cert_json/1, tx_id_text/1, encode/1]).
+-export([summary/0, block_json/2, tx_id_text/1, encode/1]).
 -ifdef(TEST).
+%% Pure surfaces driven directly by eunit.
 -export([prolog_text/1, txs_page/3, parse_goal/1, parse_tx_id/1,
          prove_result/1, outcome_json/1,
          committee_status_json/1,
-         test_transaction_outcome/4]).   %% pure surface driven directly by eunit
+         test_transaction_outcome/4, tx_json_full/3, entry_txs/1]).
 -endif.
 -include("quod_ledger.hrl").
 -include("quod_vm_limits.hrl").
@@ -403,9 +404,15 @@ terminal_outcome_json(Outcome, GoalJson, ResultJson) ->
     (outcome_json(Outcome))#{goal => GoalJson, bindings => ResultJson}.
 
 entry_txs(#entry{data = Data}) ->
-    case quod_ledger:payload(Data) of
-        {ok, Txs} -> Txs;
-        error     -> []          %% noop skip-slot
+    case quod_ledger:classify(Data) of
+        {content, Txs} -> Txs;
+        {'begin', _Control} -> [];
+        {prepare, _Control} -> [];
+        {decision, _Control} -> [];
+        {finalize, _Control} -> [];
+        {complete, _Control} -> [];
+        noop -> [];
+        invalid -> []
     end.
 
 %%%===================================================================
@@ -435,7 +442,8 @@ tx_json_full(Ns, #transaction{result = Res} = T, E) ->
 
 tx_json_full_decoded(
   Ns,
-  #transaction{tx_id = Id, author = Author, author_seq = AuthorSeq,
+  #transaction{tx_id = Id, origin = Origin, proof_id = ProofId,
+               plan_digest = PlanDigest, author = Author, author_seq = AuthorSeq,
                submitted_at = SubmittedAt, diff = Diff,
                read_check = RC, sig = Sig} = T,
   #entry{index = Slot, timestamp = Timestamp} = E,
@@ -445,6 +453,9 @@ tx_json_full_decoded(
        Diff, Slot, Timestamp))#{result => ResultJson,
                      diff => [op_json(Op) || Op <- Diff],
                      read_predicates => map_size(RC),
+                     origin => origin_json(Origin),
+                     proof_id => digest_json(ProofId),
+                     plan_digest => digest_json(PlanDigest),
                      signature => signature_json(Sig),
                      signature_status => signature_status(T, E)}.
 
@@ -459,12 +470,85 @@ signature_status(#transaction{sig = Sig}, _Entry)
 signature_status(_Transaction, _Entry) ->
     invalid.
 
-block_json(Ns, #entry{index = Slot} = E) ->
-    (block_meta(E))#{txs => [tx_json_full(Ns, T, E) || T <- entry_txs(E)],
-                     slot => Slot}.
+block_json(Ns, #entry{data = Data} = E) ->
+    case quod_ledger:classify(Data) of
+        {content, Txs} ->
+            (block_meta(content, E))#{
+              txs => [tx_json_full(Ns, T, E) || T <- Txs]};
+        {'begin', Control} -> dtx_block_meta('begin', Control, E);
+        {prepare, Control} -> dtx_block_meta(prepare, Control, E);
+        {decision, Control} -> dtx_block_meta(decision, Control, E);
+        {finalize, Control} -> dtx_block_meta(finalize, Control, E);
+        {complete, Control} -> dtx_block_meta(complete, Control, E);
+        noop -> (block_meta(noop, E))#{txs => []};
+        invalid -> (block_meta(invalid, E))#{txs => []}
+    end.
 
-block_meta(#entry{index = Slot, data = Data, timestamp = Ts, cert = Cert}) ->
-    #{slot => Slot, time => Ts, noop => Data =:= noop, cert => cert_json(Cert)}.
+dtx_block_meta(Phase, Control, E) ->
+    (block_meta(Phase, E))#{txs => [], control => control_json(Control)}.
+
+%% The explorer exposes only stable, already-validated control metadata.  It
+%% deliberately omits opaque plans, certificates embedded in references, and
+%% raw signing-journal bytes: those are ledger implementation details, not a
+%% second API or an alternate source of truth.
+control_json(Control) ->
+    #{kind := Kind, target := Target, author := Author,
+      author_admission := Admission, sequence := Sequence,
+      submitted_at := SubmittedAt} = quod_dtx:control_metadata(Control),
+    maps:merge(
+      #{kind => Kind,
+        group_id => digest_json(quod_dtx:group_id(Control)),
+        record_digest => digest_json(quod_dtx:record_digest(Control)),
+        target => origin_json(Target),
+        author => id_json(Author),
+        author_admission => digest_json(Admission),
+        sequence => Sequence,
+        submitted_at => SubmittedAt},
+      control_body_json(Kind, quod_dtx:control_body(Control))).
+
+control_body_json('begin', {quod_dtx_begin, _, _Manifest, Bundles}) ->
+    #{participant_count => length(Bundles)};
+control_body_json(
+  prepare,
+  {quod_dtx_prepare, _, _, _BeginRef, _Manifest, PlanDigest, _PlanBlob}) ->
+    #{plan_digest => digest_json(PlanDigest)};
+control_body_json(
+  decision,
+  {quod_dtx_decision, _, _, _BeginRef, Verdict, PrepareRefs, _} = Record) ->
+    #{verdict => Verdict,
+      prepare_count => length(PrepareRefs),
+      reasons => decision_reasons_json(Record)};
+control_body_json(finalize,
+                  {quod_dtx_finalize, _, _, _DecisionRef, Verdict, PrepareRef,
+                   AppliedGeneration}) ->
+    #{verdict => Verdict, prepared => PrepareRef =/= none,
+      applied_generation => AppliedGeneration};
+control_body_json(complete, {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows}) ->
+    #{finalize_count => length(FinalizeRows)}.
+
+decision_reasons_json(Record) ->
+    case quod_dtx:decision_failure_reasons(Record) of
+        none -> null;
+        {ok, Reasons} -> [prolog_text(Reason) || Reason <- Reasons]
+    end.
+
+block_meta(#entry{} = E) ->
+    block_meta(entry_kind(E), E).
+
+block_meta(Kind, #entry{index = Slot, timestamp = Ts, cert = Cert}) ->
+    #{slot => Slot, time => Ts, kind => Kind, cert => cert_json(Cert)}.
+
+entry_kind(#entry{data = Data}) ->
+    case quod_ledger:classify(Data) of
+        {content, _Txs} -> content;
+        {'begin', _Control} -> 'begin';
+        {prepare, _Control} -> prepare;
+        {decision, _Control} -> decision;
+        {finalize, _Control} -> finalize;
+        {complete, _Control} -> complete;
+        noop -> noop;
+        invalid -> invalid
+    end.
 
 cert_json(none) -> null;
 cert_json(#cert{kind = K, sigs = Sigs}) ->
@@ -516,11 +600,20 @@ durable_goal_text(Blob) when is_binary(Blob) ->
 %% non-outcome identifier.
 tx_id_text(<<_:256>> = Id) ->
     binary:encode_hex(Id, lowercase);
+tx_id_text({group, <<_:256>> = GroupId}) ->
+    <<"group:", (binary:encode_hex(GroupId, lowercase))/binary>>;
 tx_id_text(Id) when is_binary(Id) ->
     case printable(Id) of
         true  -> Id;
         false -> binary:encode_hex(Id, lowercase)
     end.
+
+digest_json(<<_:256>> = Digest) -> binary:encode_hex(Digest, lowercase);
+digest_json(_) -> null.
+
+origin_json({Ns, <<_:256>> = Anchor}) when is_binary(Ns) ->
+    #{ns => Ns, anchor => digest_json(Anchor)};
+origin_json(_) -> null.
 
 id_json(Pk) when is_binary(Pk) ->
     #{id => quod_identity:short(Pk), pubkey => binary:encode_hex(Pk, lowercase)};

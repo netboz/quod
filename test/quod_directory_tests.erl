@@ -64,6 +64,29 @@ directory_hosts_remain_key_ordered_with_anchors_test() ->
              quod_directory:directory_hosts(Ns))
       end).
 
+validator_routes_fail_whole_on_anchor_conflict_test() ->
+    Ns = <<"quod:dtx-route">>,
+    Expected = anchor(Ns),
+    Other = anchor(<<Ns/binary, ":other">>),
+    K1 = key(41),
+    K2 = key(42),
+    with_directory(
+      #{allowlist => #{Ns => [K1, K2]}},
+      fun(_Pid) ->
+          {ok, _} = quod_directory:install_record(
+                      K1, {<<"one">>, 1041},
+                      [{Ns, Expected, validator}], 1, 1),
+          ?assertMatch(
+             {ok, [#{node_key := K1, genesis_anchor := Expected}]},
+             quod_directory:validator_routes(Ns, Expected)),
+          {ok, _} = quod_directory:install_record(
+                      K2, {<<"two">>, 1042},
+                      [{Ns, Other, validator}], 1, 1),
+          ?assertEqual(
+             {error, anchor_conflict},
+             quod_directory:validator_routes(Ns, Expected))
+      end).
+
 ambiguous_direct_seed_promotion_fails_without_owner_crash_test() ->
     Ns = <<"quod:agent">>,
     Seed = {<<"private">>, 2003},

@@ -25,13 +25,13 @@ renew the scope lifetime.
          encode_identity_probe/1, encode_identity_response/1,
          encode_command/1, encode_event/1,
          decode_request/1, decode_response/1,
-         encode_payload/2, decode_payload/2,
+         encode_payload/2, decode_payload/2, decode_plan_payload/1,
          valid_public_error/1, scope_error_matches_target/2,
          normalize_public_error/2]).
 -export_type([binding/0, command/0, event/0, payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 2).
+-define(VERSION, 3).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
@@ -51,6 +51,7 @@ renew the scope lifetime.
          identity(), identity(), read_write | read_only}.
 -type command_operation() ::
         scope_open | scope_close | scope_seal |
+        {scope_attest, binary()} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
@@ -70,6 +71,7 @@ renew the scope lifetime.
 -type event_operation() ::
         {scope_opened, non_neg_integer()} | scope_closed |
         {plan_sealed, binary()} | plan_not_material |
+        {plan_attested, binary()} |
         {plan_submitted, {committed, pos_integer(), binary()} |
                          {rejected, atom()} |
                          {outcome_unknown,
@@ -97,7 +99,8 @@ renew the scope lifetime.
         {scope_event, binding(), pos_integer(), opaque_id(), pos_integer(),
          non_neg_integer(), boolean(), event_operation()}.
 -type payload_kind() ::
-        goal | answer | failure_reasons | erlog_error | plan | result.
+        goal | answer | failure_reasons | erlog_error | plan | manifest |
+        attestation | result.
 -type wire_error() ::
         {error, {too_large, scope_envelope | payload_kind()}} |
         {error, {protocol_error, atom()}}.
@@ -300,6 +303,13 @@ checked(_Frame, {error, _} = Error) -> Error.
 %% shared here through `payload_limit/1`.
 encode_payload(plan, Plan) ->
     quod_dtx:encode(Plan);
+encode_payload(manifest, Manifest) ->
+    quod_dtx:encode_manifest(Manifest);
+encode_payload(attestation, Attestation) ->
+    quod_dtx:encode_attestation(Attestation);
+encode_payload(failure_reasons, Reasons) ->
+    normalize_failure_reason_payload(
+      quod_wire_term:encode_failure_reasons(Reasons));
 encode_payload(Kind, Term) ->
     case payload_limit(Kind) of
         {ok, MaxBytes} ->
@@ -313,9 +323,24 @@ encode_payload(Kind, Term) ->
         error -> protocol_error(bad_payload_kind)
     end.
 
+-doc "Decode the typed sealed-plan payload carried by scope submission events.".
+-spec decode_plan_payload(binary()) ->
+          {ok, quod_dtx:plan()} | wire_error().
+decode_plan_payload(Encoded) when is_binary(Encoded) ->
+    quod_dtx:decode(Encoded);
+decode_plan_payload(_Encoded) ->
+    protocol_error(bad_payload).
+
 -spec decode_payload(payload_kind(), binary()) -> {ok, term()} | wire_error().
 decode_payload(plan, Encoded) when is_binary(Encoded) ->
-    quod_dtx:decode(Encoded);
+    decode_plan_payload(Encoded);
+decode_payload(manifest, Encoded) when is_binary(Encoded) ->
+    quod_dtx:decode_manifest(Encoded);
+decode_payload(attestation, Encoded) when is_binary(Encoded) ->
+    quod_dtx:decode_attestation(Encoded);
+decode_payload(failure_reasons, Encoded) ->
+    normalize_failure_reason_payload(
+      quod_wire_term:decode_failure_reasons(Encoded));
 decode_payload(Kind, Encoded) when is_binary(Encoded) ->
     case payload_limit(Kind) of
         {ok, MaxBytes} when byte_size(Encoded) =< MaxBytes ->
@@ -336,19 +361,25 @@ bounded_encoded_payload(_Kind, MaxBytes, Encoded)
   when byte_size(Encoded) =< MaxBytes -> {ok, Encoded};
 bounded_encoded_payload(Kind, _MaxBytes, _Encoded) -> too_large(Kind).
 
-decode_wire_payload(goal, WireTerm) ->
-    normalize_payload(quod_wire_term:decode_goal(WireTerm));
 decode_wire_payload(_Kind, WireTerm) ->
     normalize_payload(quod_wire_term:decode(WireTerm)).
 
 normalize_payload({ok, _} = Result) -> Result;
 normalize_payload({error, bad_term}) -> protocol_error(bad_payload).
 
+normalize_failure_reason_payload({ok, _} = Result) -> Result;
+normalize_failure_reason_payload({error, too_large}) ->
+    too_large(failure_reasons);
+normalize_failure_reason_payload({error, bad_term}) ->
+    protocol_error(bad_payload).
+
 payload_limit(goal) -> {ok, ?QUOD_MAX_NESTED_GOAL_BYTES};
 payload_limit(answer) -> {ok, ?QUOD_MAX_PROOF_ANSWER_BYTES};
 payload_limit(failure_reasons) -> {ok, ?ERLOG_MAX_FAILURE_REASONS_BYTES};
 payload_limit(erlog_error) -> {ok, ?ERLOG_MAX_FAILURE_REASON_BYTES};
 payload_limit(plan) -> {ok, ?QUOD_MAX_PLAN_ENVELOPE_BYTES};
+payload_limit(manifest) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
+payload_limit(attestation) -> {ok, ?QUOD_MAX_DTX_BODY_BYTES};
 payload_limit(result) -> {ok, ?QUOD_MAX_DURABLE_RESULT_BYTES};
 payload_limit(_) -> error.
 
@@ -359,6 +390,8 @@ payload_limit(_) -> error.
 validate_command_operation(scope_open) -> ok;
 validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
+validate_command_operation({scope_attest, ManifestBlob}) ->
+    validate_blob(manifest, ManifestBlob);
 validate_command_operation(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
     %% These three payloads remain opaque until the authenticated command has
@@ -437,6 +470,8 @@ validate_event_operation(scope_closed) -> ok;
 validate_event_operation({plan_sealed, Blob}) ->
     validate_blob(plan, Blob);
 validate_event_operation(plan_not_material) -> ok;
+validate_event_operation({plan_attested, Blob}) ->
+    validate_blob(attestation, Blob);
 validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
     case valid_sequence(Slot) andalso is_binary(TxId)
          andalso byte_size(TxId) =:= 32 of
@@ -446,7 +481,7 @@ validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
 validate_event_operation({plan_submitted, {rejected, Reason}}) ->
     case lists:member(
            Reason,
-           [conflict_retry, retry,
+           [conflict_retry, policy_self_seal_forbidden, retry,
             consensus_unavailable, bad_plan]) of
         true -> ok;
         false -> protocol_error(bad_error_code)
@@ -806,6 +841,8 @@ validate_public_error_pair({too_large, Kind}) ->
 validate_public_error_pair({non_transactional_dependency, {Name, Arity}})
   when is_atom(Name), is_integer(Arity), Arity >= 0, Arity =< 255 ->
     ok;
+validate_public_error_pair({transaction_pending, <<_:256>>}) ->
+    ok;
 validate_public_error_pair({protocol_error, Kind}) ->
     case valid_protocol_kind(Kind) of
         true -> ok;
@@ -868,6 +905,7 @@ valid_protocol_kind(Kind) ->
        bad_payload, bad_payload_kind, bad_error_code,
        command_sequence, event_sequence, answer_sequence,
        request_binding, session_binding, identity_binding,
+       manifest_binding,
        unexpected_scope_command, proof_engine]).
 
 too_large(Kind) -> {error, {too_large, Kind}}.

@@ -81,7 +81,7 @@ can change.  A new source with identical canonical facts updates
     approved :: slot(),
     proposal_visible :: boolean(),
     proposal_slot :: blocked | {ok, slot()},
-    membership_barrier :: boolean(),
+    consensus_barrier :: boolean(),
     approved_author_seqs :: inactive | error | {ok, map()},
     collecting :: none | {slot(), non_neg_integer(), non_neg_integer()},
     custody_lane :: empty | {node_id(), slot(), term()},
@@ -438,7 +438,7 @@ ingress_capability(_Pass, _Origin, #view{capability = Capability}) ->
     Capability.
 
 place(_Pass, _Origin, _Request,
-      #view{membership_barrier = true}, _QueueCount) ->
+      #view{consensus_barrier = true}, _QueueCount) ->
     {park, barrier};
 place(Pass, Origin, Request, View, QueueCount) ->
     Floor = View#view.approved + 1,
@@ -654,12 +654,12 @@ ingress_projection(
         validators = Validators, durable_head = Durable,
         approved = Approved, proposal_visible = ProposalVisible,
         proposal_slot = ProposalSlot,
-        membership_barrier = MembershipBarrier,
+        consensus_barrier = ConsensusBarrier,
         collecting = Collecting, custody_lane = CustodyLane,
         custody_ready = CustodyReady, relay_lane = RelayLane}) ->
     {Self, Capability, CommitteeId, Validators,
      Durable, Approved, ProposalVisible, ProposalSlot,
-     MembershipBarrier, Collecting, CustodyLane,
+     ConsensusBarrier, Collecting, CustodyLane,
      CustodyReady > 0, RelayLane}.
 
 custody_projection(
@@ -686,7 +686,7 @@ view_from_facts(Facts, Previous) ->
        approved = maps:get(approved, Facts),
        proposal_visible = maps:get(proposal_visible, Facts),
        proposal_slot = maps:get(proposal_slot, Facts),
-       membership_barrier = maps:get(membership_barrier, Facts),
+       consensus_barrier = maps:get(consensus_barrier, Facts),
        approved_author_seqs = maps:get(approved_author_seqs, Facts),
        collecting = maps:get(collecting, Facts),
        custody_lane = maps:get(custody_lane, Facts),

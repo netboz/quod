@@ -43,8 +43,14 @@ open_invocation(Goal, Shared, Context, CheckpointDepth)
           {complete, [term()], scope()} |
           {error, term(), scope(), adopt | keep_current}.
 next(#scope{goal = Goal, state = St, phase = Phase} = Scope) ->
-    Result = run_step(Phase, Goal, St),
-    drive(Result, Goal, Scope).
+    case quod_erlog_db_local_prove:check_access(St) of
+        {error, Reason} ->
+            {error, Reason, Scope, keep_current};
+        ok ->
+            Result = run_step(Phase, Goal, St),
+            Driven = drive(Result, Goal, Scope),
+            guard_exposure(Driven)
+    end.
 
 -doc "Rebase a suspended continuation onto its session's current overlay revision.".
 -spec rebase(scope(), tuple()) -> scope().
@@ -59,7 +65,10 @@ state(#scope{state = St}) -> St.
 -doc "Return the invocation's current variable bindings as a map.".
 -spec bindings(scope()) -> map().
 bindings(#scope{vars = Vars, state = #est{} = St}) ->
-    bindings_map(erlog_int:dderef(Vars, St#est.bs)).
+    case quod_erlog_db_local_prove:check_access(St) of
+        ok -> bindings_map(erlog_int:dderef(Vars, St#est.bs));
+        {error, Reason} -> throw({quod_ask_error, Reason})
+    end.
 
 run_step(fresh, Goal, St) ->
     guarded(fun() -> erlog_int:prove_goal(Goal, St) end);
@@ -94,6 +103,28 @@ drive({scope_error, Reason}, _Goal, Scope) ->
     {error, Reason, Scope, keep_current};
 drive(_Other, _Goal, Scope) ->
     {error, {protocol_error, proof_engine}, Scope, keep_current}.
+
+%% No solution, exhaustion report, or interpreter error crosses the scope
+%% boundary without one final generation check. This catches a Prepare or
+%% Finalize transition that raced the interpreter step, including a goal made
+%% only of built-ins and therefore containing no database callback.
+guard_exposure({solution, _Solution, #scope{state = St}} = Result) ->
+    checked_exposure(St, Result);
+guard_exposure({complete, _Reasons, #scope{state = St}} = Result) ->
+    checked_exposure(St, Result);
+guard_exposure({error, _Reason, #scope{state = St}, _Policy} = Result) ->
+    checked_exposure(St, Result).
+
+checked_exposure(St, Result) ->
+    case quod_erlog_db_local_prove:check_access(St) of
+        ok -> Result;
+        {error, Reason} ->
+            {error, Reason, result_scope(Result), keep_current}
+    end.
+
+result_scope({solution, _Solution, Scope}) -> Scope;
+result_scope({complete, _Reasons, Scope}) -> Scope;
+result_scope({error, _Reason, Scope, _Policy}) -> Scope.
 
 bindings_map(Pairs) when is_list(Pairs) -> maps:from_list(Pairs);
 bindings_map(_) -> #{}.

@@ -89,14 +89,14 @@ worker_heap_cap_and_public_local_errors_test() ->
        {error, {protocol_error, request_binding}, false},
        receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
 
-    %% A policy refusal runs `fail_with_reason(not_allowed(Ns))` in place of the
-    %% goal: the invocation opens like any other and completes with the bounded
-    %% reason on the first demand, so a denial is ordinary logical failure with
-    %% no separate refusal shape to carry.
+    %% The requested write is denied and never runs. The invocation still
+    %% completes through ordinary logical failure with the bounded reason.
     InvocationId = id(94),
+    RequestedGoal = {assertz, {must_not_run, true}},
+    Origin = {<<"quod:origin">>, key(95)},
     {ok, OpenRef} = quod_scope_session:invoke_open(
-                      Handle, InvocationId, true,
-                      [{<<"quod:origin">>, key(95)}],
+                      Handle, InvocationId, RequestedGoal,
+                      [Origin],
                       quod_transaction_scope:empty_selection()),
     ?assertEqual(
        {opened, InvocationId},
@@ -104,8 +104,29 @@ worker_heap_cap_and_public_local_errors_test() ->
     {ok, RefusedRef} =
         quod_scope_session:invoke_next(Handle, InvocationId, 1),
     ?assertMatch(
-       {complete, 1, [{not_allowed, Ns} | _], _Dirty},
+       {complete, 1, [{not_allowed, Ns} | _], false},
        receive_scope_reply(Worker, ProofId, SessionRef, RefusedRef)),
+    _Ctx = quod_proof_context:start(
+             key(96), false, Origin, quod_time:mono_ms() + 5000,
+             anonymous),
+    try
+        {ok, RefusedPlan} =
+            quod_scope_session:seal(Handle, Origin, anonymous),
+        ?assertEqual([], quod_dtx:diff(RefusedPlan)),
+        ?assertMatch(
+           [{InvocationId, [{Ns, Anchor}, Origin], _, denied,
+             0, <<0:256>>, complete}],
+           quod_dtx:transcript(RefusedPlan)),
+        [{InvocationId, _Chain, RequestedGoalBin, denied,
+          0, <<0:256>>, complete}] = quod_dtx:transcript(RefusedPlan),
+        {ok, ExpectedGoalBin} =
+            quod_wire_term:encode_canonical(RequestedGoal),
+        ?assertEqual(
+           ExpectedGoalBin,
+           RequestedGoalBin)
+    after
+        quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end)
+    end,
 
     ?assertEqual(ok, quod_scope_session:test_answer_disposition(small)),
     ?assertEqual(
@@ -117,6 +138,56 @@ worker_heap_cap_and_public_local_errors_test() ->
         {'DOWN', WorkerMRef, process, Worker, _Reason} -> ok
     after 1000 ->
         ?assert(false)
+    end.
+
+worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
+    Ns = <<"quod:scope-guard-reply">>,
+    Table = 'quod_simplex_genesis_quod:scope-guard-reply',
+    Tab = ets:new(Table, [named_table, protected, set]),
+    true = ets:insert(Tab, {proof_gate, true, open, 7, none}),
+    ScopeId = id(96),
+    ProofId = key(97),
+    Anchor = key(98),
+    AccessGuard = {quod_proof_access, Ns, 7},
+    Est = committed([{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}]),
+    {Handle, WorkerMRef} =
+        quod_scope_session:start(
+          ScopeId, ProofId, self(), Ns, Anchor, 0, Est, self(),
+          #{principal => key(99), access_guard => AccessGuard,
+            deadline_ms => quod_time:mono_ms() + 5000}),
+    {quod_scope_session, Worker, ScopeId, ProofId,
+     SessionRef, Ns, Anchor} = Handle,
+    InvocationId = id(100),
+    try
+        {ok, OpenRef} = quod_scope_session:invoke_open(
+                          Handle, InvocationId, true,
+                          [{<<"quod:origin">>, key(101)}],
+                          quod_transaction_scope:empty_selection()),
+        ?assertEqual(
+           {opened, InvocationId},
+           receive_scope_reply(Worker, ProofId, SessionRef, OpenRef)),
+        GroupId = key(102),
+        true = ets:insert(
+                 Tab,
+                 {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+        {ok, NextRef} = quod_scope_session:invoke_next(
+                          Handle, InvocationId, 1),
+        ?assertEqual(
+           {error, {transaction_pending, GroupId}, false},
+           receive_scope_reply(Worker, ProofId, SessionRef, NextRef)),
+        with_proof_context(
+          fun() ->
+              ?assertEqual(
+                 {error, {transaction_pending, GroupId}},
+                 quod_scope_session:restore_many(Handle, [id(103)]))
+          end)
+    after
+        ok = quod_scope_session:close(Handle),
+        receive
+            {'DOWN', WorkerMRef, process, Worker, _Reason} -> ok
+        after 1000 -> ?assert(false)
+        end,
+        ets:delete(Tab)
     end.
 
 local_invocation_facade_preserves_worker_protocol_test() ->
@@ -195,6 +266,48 @@ local_materialize_restore_and_release_test() ->
            quod_scope_session:release_many(
              Handle, lists:reverse(BatchIds)))
     after
+        quod_proof_session:stop(Session)
+    end.
+
+local_scope_uses_shared_seal_and_attestation_lifecycle_test() ->
+    {TargetKey, Signer} = test_signer(),
+    ScopeId = id(150),
+    ProofId = key(151),
+    Anchor = key(152),
+    Target = {<<"quod:local-attest">>, Anchor},
+    Origin = {<<"quod:origin">>, key(153)},
+    Session = quod_proof_session:start(
+                committed([]),
+                #{read_set => true,
+                  proof_context => {test, local_attestation},
+                  signer => Signer}),
+    Handle = {local_scope, ScopeId, element(1, Target), Anchor, 3, Session},
+    Invocation = id(154),
+    _Ctx = quod_proof_context:start(
+             ProofId, false, Origin, quod_time:mono_ms() + 5000,
+             anonymous),
+    try
+        ok = quod_proof_session:open(
+               Session, Invocation, {assertz, {local_attested, true}},
+               allowed, quod_predicates:proof_context(
+                          element(1, Target), 3, undefined),
+               quod_transaction_scope:empty_selection()),
+        ?assertMatch(
+           {solution, _}, quod_proof_session:next(Session, Invocation)),
+        {ok, Plan} = quod_scope_session:seal(Handle, Origin, anonymous),
+        Manifest = manifest_for_plan(Plan, key(155), TargetKey),
+        {ok, Attestation} =
+            quod_scope_session:attest_plan(Handle, Plan, Manifest),
+        ?assert(quod_dtx:verify_plan_attestation(
+                  Target, Plan, Manifest, Attestation)),
+        ?assertEqual(
+           {ok, Attestation},
+           quod_scope_session:attest_plan(Handle, Plan, Manifest)),
+        ?assertEqual(
+           {error, {protocol_error, unexpected_scope_command}},
+           quod_scope_session:restore_many(Handle, [id(156)]))
+    after
+        quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end),
         quod_proof_session:stop(Session)
     end.
 
@@ -456,6 +569,39 @@ remote_seal_and_control_stop_at_the_running_budget_test() ->
         stop_remote_fixture(ControlRouter, ControlHandle)
     end.
 
+remote_scope_seal_and_attestation_are_verified_end_to_end_test() ->
+    {Router, Handle, Plan, TargetKey, TargetIdentity} =
+        remote_attestation_fixture(),
+    try
+        with_proof_context(
+          fun() ->
+              Origin = {<<"quod:origin">>, key(161)},
+              ?assertEqual(
+                 {ok, Plan},
+                 quod_scope_session:seal(Handle, Origin,
+                                          {node, key(163)})),
+              Manifest1 = manifest_for_plan(Plan, key(164), TargetKey),
+              Manifest2 = manifest_for_plan(Plan, key(165), TargetKey),
+              {ok, Attestation} =
+                  quod_scope_session:attest_plan(
+                    Handle, Plan, Manifest1),
+              ?assert(quod_dtx:verify_plan_attestation(
+                        TargetIdentity, Plan, Manifest1, Attestation)),
+              {ok, AttestationBytes} =
+                  quod_dtx:encode_attestation(Attestation),
+              {ok, Retry} = quod_scope_session:attest_plan(
+                              Handle, Plan, Manifest1),
+              {ok, RetryBytes} = quod_dtx:encode_attestation(Retry),
+              ?assertEqual(AttestationBytes, RetryBytes),
+              ?assertEqual(
+                 {error, {protocol_error, manifest_binding}},
+                 quod_scope_session:attest_plan(
+                   Handle, Plan, Manifest2))
+          end)
+    after
+        stop_remote_fixture(Router, Handle)
+    end.
+
 fake_worker(Parent) ->
     receive
         Message ->
@@ -490,6 +636,7 @@ receive_worker_message() ->
 %% origin, and the engine-owned `{node, Principal}` — and carries the exact
 %% staged diff.
 worker_seals_its_session_on_request_test() ->
+    {TargetKey, Signer} = test_signer(),
     ScopeId = id(80),
     ProofId = key(81),
     Anchor = key(82),
@@ -499,6 +646,7 @@ worker_seals_its_session_on_request_test() ->
         quod_scope_session:start(
           ScopeId, ProofId, self(), Ns, Anchor, 7, Est, self(),
           #{principal => key(83),
+            signer => Signer,
             deadline_ms => quod_time:mono_ms() + 5000}),
     {quod_scope_session, Worker, ScopeId, ProofId,
      SessionRef, Ns, Anchor} = Handle,
@@ -524,7 +672,39 @@ worker_seals_its_session_on_request_test() ->
         ?assertEqual({node, key(83)}, quod_dtx:principal(Plan)),
         ?assertMatch([{assert, {{sealed_fact, 1}, _Body}}],
                      quod_dtx:diff(Plan)),
-        ?assert(quod_dtx:verify(Plan))
+        ?assert(quod_dtx:verify(Plan)),
+        Manifest1 = manifest_for_plan(Plan, key(87), TargetKey),
+        Manifest2 = manifest_for_plan(Plan, key(88), TargetKey),
+        ?assertMatch(
+           {ok, _},
+           quod_dtx:attest_plan(
+             quod_dtx:target(Plan), Plan, Manifest2, Signer)),
+        {ok, Attestation} =
+            quod_scope_session:attest_plan(Handle, Plan, Manifest1),
+        ?assert(quod_dtx:verify_plan_attestation(
+                  {Ns, Anchor}, Plan, Manifest1, Attestation)),
+        {ok, AttestationBytes} =
+            quod_dtx:encode_attestation(Attestation),
+        {ok, RetryAttestation} =
+            quod_scope_session:attest_plan(Handle, Plan, Manifest1),
+        {ok, RetryBytes} = quod_dtx:encode_attestation(RetryAttestation),
+        ?assertEqual(AttestationBytes, RetryBytes),
+        ?assertEqual(
+           {error, {protocol_error, manifest_binding}},
+           quod_scope_session:attest_plan(Handle, Plan, Manifest2)),
+
+        SealedInvocation = id(89),
+        {ok, RejectedOpenRef} = quod_scope_session:invoke_open(
+                                  Handle, SealedInvocation, true,
+                                  [Origin],
+                                  quod_transaction_scope:empty_selection()),
+        ?assertEqual(
+           {error, {protocol_error, unexpected_scope_command}},
+           receive_scope_reply(
+             Worker, ProofId, SessionRef, RejectedOpenRef)),
+        ?assertEqual(
+           {error, {protocol_error, unexpected_scope_command}},
+           quod_scope_session:restore_many(Handle, [id(90)]))
     after
         quod_proof_context:stop(fun(_) -> ok end, fun(_) -> ok end)
     end,
@@ -554,6 +734,25 @@ remote_fixture(Mode) ->
     Handle = {remote_scope, Router, id(66), Binding, RequestLink},
     Router ! {set_handle, Handle},
     {Router, Handle, ScopeId, TargetIdentity}.
+
+remote_attestation_fixture() ->
+    Parent = self(),
+    {TargetKey, Signer} = test_signer(),
+    RequestLink = spawn(fun request_link/0),
+    ScopeId = id(160),
+    ProofId = key(162),
+    OriginIdentity = {<<"quod:origin">>, key(161)},
+    TargetIdentity = {<<"quod:target">>, key(166)},
+    Principal = {node, key(163)},
+    Plan = sealed_test_plan(
+             TargetIdentity, OriginIdentity, ProofId, Principal, Signer),
+    Mode = {attestation_fixture, Plan, Signer},
+    Router = spawn(fun() -> fake_router(Parent, Mode, 1) end),
+    Binding = {scope_binding, key(163), TargetKey, ProofId, ScopeId,
+               OriginIdentity, TargetIdentity, read_write},
+    Handle = {remote_scope, Router, id(167), Binding, RequestLink},
+    Router ! {set_handle, Handle},
+    {Router, Handle, Plan, TargetKey, TargetIdentity}.
 
 fake_router(Parent, Mode, Counter) ->
     receive
@@ -610,6 +809,30 @@ send_router_event(ack_controls, Owner, Handle, RequestId, Operation) ->
                      3, false, unrelated_event},
             Owner ! {quod_scope_event, Handle, RequestId, 7, true, Ack}
     end;
+send_router_event(
+  {attestation_fixture, Plan, _Signer}, Owner, Handle, RequestId,
+  scope_seal) ->
+    {ok, PlanBlob} = quod_scope_wire:encode_payload(plan, Plan),
+    Owner ! {quod_scope_event, Handle, RequestId, 1, true,
+             {plan_sealed, PlanBlob}};
+send_router_event(
+  {attestation_fixture, Plan, Signer}, Owner, Handle, RequestId,
+  {scope_attest, ManifestBlob}) ->
+    {ok, Manifest} = quod_scope_wire:decode_payload(
+                       manifest, ManifestBlob),
+    Digest = quod_dtx:manifest_digest(Manifest),
+    case get(attestation_manifest_digest) of
+        undefined ->
+            put(attestation_manifest_digest, Digest),
+            send_fixture_attestation(
+              Owner, Handle, RequestId, Plan, Manifest, Signer);
+        Digest ->
+            send_fixture_attestation(
+              Owner, Handle, RequestId, Plan, Manifest, Signer);
+        _Other ->
+            Owner ! {quod_scope_event, Handle, RequestId, 1, true,
+                     {scope_error, {protocol_error, manifest_binding}}}
+    end;
 send_router_event({scope_error, Reason}, Owner, Handle, RequestId, Operation) ->
     case control_ack(Operation) of
         none -> ok;
@@ -623,6 +846,14 @@ send_router_event({scope_down, Reason}, Owner, Handle, _RequestId, Operation) ->
     end;
 send_router_event(_Mode, _Owner, _Handle, _RequestId, _Operation) ->
     ok.
+
+send_fixture_attestation(Owner, Handle, RequestId, Plan, Manifest, Signer) ->
+    {ok, Attestation} = quod_dtx:attest_plan(
+                          quod_dtx:target(Plan), Plan, Manifest, Signer),
+    {ok, AttestationBlob} = quod_scope_wire:encode_payload(
+                              attestation, Attestation),
+    Owner ! {quod_scope_event, Handle, RequestId, 1, true,
+             {plan_attested, AttestationBlob}}.
 
 control_ack({materialize, ControllerId, _InvocationId, _Lineage, BatchIds}) ->
     {materialized, ControllerId, BatchIds};
@@ -693,6 +924,57 @@ request_link() ->
     receive stop -> ok end.
 
 committed(Facts) -> quod_ct:committed_kb(Facts).
+
+test_signer() ->
+    {Pubkey, Seed} = quod_identity:generate(),
+    {Pubkey,
+     #{pubkey => Pubkey,
+       key => quod_identity:key_term({Pubkey, Seed})}}.
+
+manifest_for_plan(Plan, Nonce, Coordinator) ->
+    {ok, GoalBlob} = quod_durable_term:encode_goal({scope, true}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    {OriginNs, OriginAnchor} = quod_dtx:origin(Plan),
+    Target = quod_dtx:target(Plan),
+    {ok, Manifest} = quod_dtx:new_manifest(
+                       #{proof_id => quod_dtx:proof_id(Plan),
+                         coordinator =>
+                             {OriginNs, OriginAnchor,
+                              Coordinator, key(240)},
+                         nonce => Nonce,
+                         principal => quod_dtx:principal(Plan),
+                         goal => GoalBlob,
+                         result => ResultBlob,
+                         participants =>
+                             [{Target, quod_dtx:digest(Plan)},
+                              {{<<"quod:other">>, key(241)}, key(242)}]}),
+    Manifest.
+
+sealed_test_plan(Target, Origin, ProofId, Principal, Signer) ->
+    Session = quod_proof_session:start(
+                committed([]),
+                #{read_set => true,
+                  proof_context => {test, remote_attestation},
+                  signer => Signer}),
+    Invocation = id(243),
+    try
+        ok = quod_proof_session:open(
+               Session, Invocation, {assertz, {remote_attested, true}},
+               allowed,
+               quod_predicates:proof_context(
+                 element(1, Target), 4, undefined),
+               quod_transaction_scope:empty_selection()),
+        ?assertMatch(
+           {solution, _}, quod_proof_session:next(Session, Invocation)),
+        {ok, Plan} = quod_proof_session:seal(
+                       Session,
+                       #{target => Target, base_height => 4,
+                         proof_id => ProofId, origin => Origin,
+                         principal => Principal}),
+        Plan
+    after
+        quod_proof_session:stop(Session)
+    end.
 
 id(N) -> <<N:128>>.
 key(N) -> <<N:256>>.

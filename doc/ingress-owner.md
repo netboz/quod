@@ -90,8 +90,9 @@ no fallback relay path on the consensus channel.
    Simplex view finalizes the target slot without the `SubmissionId`. A peer
    rejection is a wake-up/catch-up hint, not proof that the slot is closed.
 4. **Exact ownership.** Simplex remains authoritative for proposer identity,
-   slot openness, committee state, sequence floors, membership barriers, and
-   finality. It revalidates every ingress offer.
+   slot openness, committee state, sequence floors, consensus barriers
+   (membership and DTX controls), and finality. It revalidates every ingress
+   offer.
 5. **Per-author order.** One FIFO lane preserves signed author sequence order.
    A later sequence cannot overtake an unresolved earlier sequence.
 6. **Membership is global.** A pending or in-flight committee change remains a
@@ -139,7 +140,7 @@ ingress contract:
 - inbound signature verification and relay deduplication;
 - placement attempts, acknowledgements, redrives, and results;
 - bounded pending/completed caches;
-- membership barriers and batch collection;
+- consensus barriers (membership and DTX controls) and batch collection;
 - internal retargeting after authoritative slot exclusion.
 
 `quod_simplex` keeps:
@@ -304,7 +305,7 @@ quod_ingress:route_view(
     committed := Committed,
     approved := Approved,
     proposal_slot := blocked | {open, Slot, Proposer},
-    membership_barrier := boolean(),
+    consensus_barrier := boolean(),
     approved_author_seqs := error | {ok, map()}}).
 
 quod_ingress:finalized(

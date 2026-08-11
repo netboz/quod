@@ -19,6 +19,7 @@ matching **property**, both keyed by the same `Key = {Type, Id}`:
 | `{sup, node}`         | the root supervisor                         |
 | `{directory, node}`   | the local route-directory owner             |
 | `{directory_control, node}` | directory dissemination/control    |
+| `{foreign_log, node}` | bounded anchored foreign-log verifier/cache |
 | `{namespace_manager, node}` | desired per-ontology process sets   |
 | `{quod_ns_sup, node}` | dynamic content-subtree supervisor          |
 | `{quod_brahms_sup, node}` | dynamic Brahms supervisor             |

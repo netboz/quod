@@ -72,6 +72,7 @@ verify-before-decode frame (`doc/deferred.md` §2), and chunking for a single bl
 -record(s, {ns       :: binary(),
             genesis_hash :: <<_:256>>,
             self     :: node_id(),
+            ledger_root :: file:filename_all(),
             chan     :: binary(),                                       %% term_to_binary({feed, Ns}, [deterministic])
             digests  :: atom(),                  %% the per-ns liveness table (digest_table/1) this process owns
             %% cached consensus snapshot {Height, HistoryProjection, Syncing} — folded forward per commit/ingest,
@@ -153,6 +154,7 @@ start(Ns, Config) ->
             Digests = ets:new(digest_table(Ns), [named_table, public, set]),
             arm_anti_entropy(),
             {ok, #s{ns = Ns, genesis_hash = GenesisHash, self = Self,
+                    ledger_root = quod_ledger_store:ledger_dir(Config),
                     chan = Chan, digests = Digests}};
         _ ->
             {stop, missing_consensus_anchor}
@@ -242,8 +244,10 @@ on_block(#entry{index = Slot} = Entry,
                 next ->
                     case quod_catchup:verify_forward(
                            Ns, GenesisHash, Projection, Slot, [Entry]) of
-                        {ok, [_], _} ->
-                            case ingest(Ns, [Entry], ?INGEST_MS, live) of
+                        {ok, [_], Projection1} ->
+                            case ingest(
+                                   Ns, [Entry], Projection1,
+                                   ?INGEST_MS, live) of
                                 ok         -> %% our height advanced to Slot — fold the snapshot forward too
                                               S1 = fold_snap(Entry, S),
                                               eager_push(Entry, S1#s{ingested = S1#s.ingested + 1});
@@ -301,7 +305,9 @@ current(S = #s{ns = Ns, snap = none}) ->
 %% Fold a just-committed / just-ingested entry into the cached snapshot: advance height + the committee
 %% projection TOGETHER (the as-of pairing). [DA#5] only on a contiguous entry (Slot = cached+1); on any gap
 %% — e.g. a feed that restarted alone under rest_for_one while simplex kept committing — reset to `none` and
-%% let the next use refetch. `noop` skips fold the committee to identity.
+%% let the next use refetch. DTX controls also reset the cache: reducing one requires the exact per-group
+%% phase history owned by Simplex/catch-up, while this cache is only an optimization. The next use reads the
+%% already-applied authoritative projection from Simplex instead of creating a second phase-history owner.
 fold_snap(Entry, S = #s{ns = Ns}) ->
     S#s{snap = fold_snapshot(Ns, Entry, S#s.snap)}.
 
@@ -312,7 +318,20 @@ fold_snap(Entry, S = #s{ns = Ns}) ->
 %% verifying set. Fail-closed until then (a drifted snapshot mis-classifies → repull, never mis-verifies).
 fold_snapshot(Ns, #entry{index = Slot} = Entry,
               {SnapSlot, Projection, Syncing}) when Slot =:= SnapSlot + 1 ->
-    {Slot, quod_simplex:history_advance(Ns, Entry, Projection), Syncing};
+    case quod_ledger:classify(Entry#entry.data) of
+        {content, _} ->
+            {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
+             Syncing};
+        noop ->
+            {Slot, quod_simplex:history_advance(Ns, Entry, Projection),
+             Syncing};
+        {'begin', _} -> none;
+        {prepare, _} -> none;
+        {decision, _} -> none;
+        {finalize, _} -> none;
+        {complete, _} -> none;
+        invalid -> none
+    end;
 fold_snapshot(_Ns, _Entry, _Snap) -> none.
 
 %% Drop the cached snapshot only while still syncing — see the anti_entropy handler.
@@ -324,10 +343,11 @@ invalidate_transient(S) -> S.
 %% rejected there and surfaces as {error, _}. A verified next-block push is `live` for this settled
 %% observer and drives P incrementally. An anti-entropy gap window is `replay`: P reconciles once at
 %% its explicit ready edge, so best-effort effects are not reconstructed from missed history.
-ingest(Ns, Entries, Timeout, Mode) when Mode =:= live; Mode =:= replay ->
+ingest(Ns, Entries, Projection, Timeout, Mode)
+  when Mode =:= live; Mode =:= replay ->
     Source = {feed, Mode},
     try gen_server:call(quod_reg:via({quod_simplex, Ns}),
-                        {sink_catchup, Source, Entries}, Timeout)
+                        {sink_catchup, Source, Entries, Projection}, Timeout)
     catch exit:_ -> {error, unavailable} end.
 
 %%%===================================================================
@@ -448,14 +468,19 @@ digest_counts(Table) ->
 %% anchor still derives the signature domain for every mid-chain certificate. One worker
 %% at a time (`pulling`); its `DOWN` clears the latch.
 start_pull(Peer, From, Projection,
-           S = #s{ns = Ns, genesis_hash = GenesisHash}) ->
+           S = #s{ns = Ns, genesis_hash = GenesisHash,
+                  ledger_root = LedgerRoot}) ->
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             Fetch = fun(F)  -> quod_catchup:pull(Ns, F, F + ?WINDOW - 1, Peer) end,
-            Sink  = fun(Es) -> ingest(Ns, Es, ?PULL_SINK_MS, replay) end,
+            Sink  = fun(Es, Projection1) ->
+                        ingest(Ns, Es, Projection1,
+                               ?PULL_SINK_MS, replay)
+                    end,
             try
                 quod_catchup:catch_up(
-                  Ns, GenesisHash, Fetch, Sink, From, Projection)
+                  Ns, GenesisHash, Fetch, Sink, From, Projection,
+                  #{ledger_root => LedgerRoot})
             after
                 %% Close even a failed or partial pull at its valid durable prefix. Simplex sent
                 %% every Prolog apply cast, so its ready edge cannot overtake the final apply.

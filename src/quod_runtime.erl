@@ -77,7 +77,8 @@ observers therefore maintain current P without reconstructing best-effort effect
          terminate/2]).
 -ifdef(TEST).
 %% the pure planning + event-matching core — driven directly by eunit
--export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4]).
+-export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4,
+         test_read_founding/2]).
 -endif.
 
 -define(RECONCILE_BUDGET_MS, 30000).
@@ -957,9 +958,8 @@ read_founding(Ns, Config) ->
     case quod_ledger_store:open_ro(Ns, quod_ledger_store:ledger_dir(Config)) of
         {ok, Store} ->
             try quod_ledger_store:read_at(Store, 1) of
-                {ok, #entry{data = {batch, Txs}}} -> {ok, founding_heads(Txs)};
-                {ok, #entry{}}                    -> {ok, []};   %% a noop slot 1
-                not_found                         -> no_log
+                {ok, #entry{data = Data}} -> founding_payload(Data);
+                not_found -> no_log
             after quod_ledger_store:close(Store)
             end;
         {error, no_log} ->
@@ -967,6 +967,25 @@ read_founding(Ns, Config) ->
         {error, Reason} ->
             {error, Reason}
     end.
+
+%% Slot 1 defines the ontology's founding truth and is necessarily one content
+%% batch. A DTX control, skip, or malformed value at genesis is corruption, not
+%% an empty set of declarations.
+founding_payload(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Txs} -> {ok, founding_heads(Txs)};
+        {'begin', _Control} -> {error, invalid_genesis_payload};
+        {prepare, _Control} -> {error, invalid_genesis_payload};
+        {decision, _Control} -> {error, invalid_genesis_payload};
+        {finalize, _Control} -> {error, invalid_genesis_payload};
+        {complete, _Control} -> {error, invalid_genesis_payload};
+        noop -> {error, invalid_genesis_payload};
+        invalid -> {error, invalid_genesis_payload}
+    end.
+
+-ifdef(TEST).
+test_read_founding(Ns, Config) -> read_founding(Ns, Config).
+-endif.
 
 %% The state_handler heads asserted by the founding block's transactions (full terms).
 founding_heads(Txs) ->

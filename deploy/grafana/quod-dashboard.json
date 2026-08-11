@@ -1284,12 +1284,12 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.50, sum by (le, node_id) (rate(quod_consensus_signing_journal_vote_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
           "legendFormat": "p50 \u00b7 {{node_id}}"
         },
         {
           "refId": "B",
-          "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_consensus_vote_journal_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "expr": "histogram_quantile(0.95, sum by (le, node_id) (rate(quod_consensus_signing_journal_vote_sync_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
           "legendFormat": "p95 \u00b7 {{node_id}}"
         }
       ]

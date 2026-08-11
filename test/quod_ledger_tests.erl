@@ -11,11 +11,11 @@ tx(I) ->
                  diff = [{assert, {{fact, I}, true}}], read_check = #{},
                  author = <<0:256>>, sig = none}.
 
-%% A block payload round-trips through data/1 to a content classification, and
-%% the derived payload/1 agrees with it.
-content_roundtrip_test() ->
+%% The block and ledger use the same explicit content tag; payload/1 is a
+%% deliberately content-only convenience for its existing callers.
+content_classification_test() ->
     Txs = [tx(1), tx(2)],
-    Data = quod_ledger:data(Txs),
+    Data = {batch, Txs},
     ?assertEqual({batch, Txs}, Data),
     ?assertEqual({content, Txs}, quod_ledger:classify(Data)),
     ?assertEqual({ok, Txs}, quod_ledger:payload(Data)).
@@ -25,6 +25,18 @@ content_roundtrip_test() ->
 noop_is_its_own_kind_test() ->
     ?assertEqual(noop, quod_ledger:classify(noop)),
     ?assertEqual(error, quod_ledger:payload(noop)).
+
+%% DTX input is untrusted at catch-up/replay. Non-binary and malformed blobs
+%% are invalid rather than exceptions, content, or inert skips.
+malformed_dtx_is_invalid_test() ->
+    Malformed = [{dtx, not_a_binary},
+                 {dtx, <<>>},
+                 {dtx, <<"not etf">>}],
+    lists:foreach(
+      fun(Data) ->
+          ?assertEqual(invalid, quod_ledger:classify(Data)),
+          ?assertEqual(error, quod_ledger:payload(Data))
+      end, Malformed).
 
 %% Untrusted input reaches classify through catch-up windows and replay, so a
 %% malformed batch is a tolerated classification rather than a crash.
@@ -46,8 +58,7 @@ malformed_is_invalid_test() ->
 %% makes every consumer's exhaustive dispatch fail loudly until it decides what
 %% the new kind means.
 unknown_variant_is_invalid_test() ->
-    Unknown = [{dtx, {prepare, <<"group">>}},
-               {control, anything},
+    Unknown = [{control, anything},
                {batch, [tx(1)], extra},
                undefined,
                <<"bytes">>,

@@ -19,8 +19,113 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([eventually/2, stop_all/1, match_ok/1, ordinary_write_ok/1,
          peer_prove/3,
          datadir/2, generate_key_gt/1]).
--export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1, wait_until/1, wait_until/2]).
+-export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
+         dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
+         wait_until/1, wait_until/2]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
+
+%% Smallest self-contained valid DTX fixture for consumers that only need to
+%% distinguish a control barrier from content. Foreign-reference semantics are
+%% not under test at those sites; the signed envelope and canonical codec are.
+dtx_decision_payload() ->
+    Target = {TargetNs, TargetAnchor} =
+        {<<"quod:dtx-origin">>, <<2:256>>},
+    {Pubkey, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pubkey,
+               key => quod_identity:key_term({Pubkey, Seed})},
+    GroupId = <<4:256>>,
+    {ok, BeginRef} = quod_dtx:certified_ref(
+                       TargetNs, TargetAnchor, 1,
+                       <<3:256>>, GroupId, <<"qc">>),
+    {ok, Record} = quod_dtx:new_decision(
+                     GroupId, BeginRef,
+                     {abort, [{test_abort, dtx_fixture}]}, []),
+    {ok, Control} = quod_dtx:sign_control(
+                      Target, Record, <<6:256>>, 1, 0, Signer),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    {dtx, Blob}.
+
+%% One real self-contained Prepare record for endpoint tests.  Building it
+%% through the public plan/manifest/Begin APIs keeps refusal correlation pinned
+%% to the protocol shape instead of a forged tuple fixture.
+dtx_prepare_blob() ->
+    maps:get(prepare_blob, dtx_prepare_fixture()).
+
+dtx_prepare_fixture() ->
+    {Pubkey, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pubkey,
+               key => quod_identity:key_term({Pubkey, Seed})},
+    Origin = {<<"quod:dtx-fixture-a">>, <<101:256>>},
+    Target = {<<"quod:dtx-fixture-b">>, <<102:256>>},
+    ProofId = <<103:256>>,
+    {OriginPlan, OriginBlob} =
+        dtx_fixture_plan(Origin, ProofId, Origin, Signer, origin),
+    {TargetPlan, TargetBlob} =
+        dtx_fixture_plan(Target, ProofId, Origin, Signer, target),
+    {ok, GoalBlob} = quod_durable_term:encode_goal({fixture, prepare}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    Admission = <<104:256>>,
+    {ok, Manifest} =
+        quod_dtx:new_manifest(
+          #{proof_id => ProofId,
+            coordinator =>
+                {element(1, Origin), element(2, Origin), Pubkey, Admission},
+            nonce => <<105:256>>, principal => anonymous,
+            goal => GoalBlob, result => ResultBlob,
+            participants =>
+                [{Origin, quod_dtx:digest(OriginPlan)},
+                 {Target, quod_dtx:digest(TargetPlan)}]}),
+    {ok, OriginAttestation} =
+        quod_dtx:attest_plan(Origin, OriginPlan, Manifest, Signer),
+    {ok, TargetAttestation} =
+        quod_dtx:attest_plan(Target, TargetPlan, Manifest, Signer),
+    {ok, Begin} =
+        quod_dtx:new_begin(
+          Manifest,
+          [{Origin, quod_dtx:digest(OriginPlan), OriginBlob,
+            OriginAttestation},
+           {Target, quod_dtx:digest(TargetPlan), TargetBlob,
+            TargetAttestation}]),
+    {ok, BeginRef} =
+        quod_dtx:certified_ref(
+          element(1, Origin), element(2, Origin), 1, <<106:256>>,
+          quod_dtx:group_id(Begin), <<"qc">>),
+    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
+    {ok, Blob} = quod_dtx:encode_record(Prepare),
+    {ok, BeginControl} = quod_dtx:sign_control(
+                           Origin, Begin, Admission, 1, 1, Signer),
+    {ok, PrepareControl} = quod_dtx:sign_control(
+                             Target, Prepare, Admission, 1, 1, Signer),
+    #{origin => Origin, target => Target,
+      signer => Signer, admission => Admission,
+      'begin' => Begin, begin_ref => BeginRef, begin_control => BeginControl,
+      prepare => Prepare, prepare_blob => Blob,
+      prepare_control => PrepareControl}.
+
+dtx_fixture_plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
+    Session =
+        quod_proof_session:start(
+          committed_kb([]),
+          #{read_set => true, proof_context => {origin, test},
+            signer => Signer}),
+    try
+        InvocationId = crypto:strong_rand_bytes(16),
+        Context = quod_predicates:proof_context(
+                    Ns, 1, undefined, [Origin]),
+        ok = quod_proof_session:open(
+               Session, InvocationId, {assertz, {dtx_fixture, Value}},
+               allowed, Context, quod_transaction_scope:empty_selection()),
+        {solution, _} = quod_proof_session:next(Session, InvocationId),
+        {ok, Plan} =
+            quod_dtx:seal_session(
+              Session,
+              #{target => Target, base_height => 1, proof_id => ProofId,
+                origin => Origin, principal => anonymous}),
+        {ok, Blob} = quod_dtx:encode(Plan),
+        {Plan, Blob}
+    after
+        quod_proof_session:stop(Session)
+    end.
 
 %% Poll `F` every 150ms until it returns `true` or the budget runs out.
 eventually(_F, Timeout) when Timeout =< 0 -> false;

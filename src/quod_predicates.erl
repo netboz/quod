@@ -3,8 +3,8 @@
 The typed **external-predicate contract** and the per-run **execution context**
 (`doc/agent-fipa-plan.md` §5). Two jobs, one module:
 
-1. **Context.** Every proof, membership verdict, and selected proof scope runs with an
-   execution context — the namespace, the applied height, the authenticated
+1. **Context.** Every proof, deterministic verdict, and selected proof scope runs with
+   an execution context — the namespace, the applied height, the authenticated
    subject (none yet), and the inter-ontology selection chain. It rides in the erlog
    flag store (`#est.fs`) as a single `none`-valued flag, so it survives the MVCC
    worker boundary and cannot be forged by ontology content: the flag-setting
@@ -42,19 +42,21 @@ The typed **external-predicate contract** and the per-run **execution context**
    than silently succeeding. `effect`-class predicates are therefore never
    reachable from an ordinary ontology proof.
 
-The context *kinds* are `proof` (a normal client proof or a staged write),
-`verdict` (a committee membership re-proof — strictly local, following disabled),
-`projection` (a runtime P handler, §8), and `effect` (the action-only boundary
-used by lifecycle authorization now and live E handlers in §9).
+The context *kinds* are `proof` (a normal client proof or staged write),
+`verdict` (a committee membership re-proof — strictly local),
+`policy_verdict` (a strictly local authorization re-proof with every governed
+bridge disabled), `projection` (a runtime P handler, §8), and `effect` (the
+action-only boundary used by lifecycle authorization and live E handlers).
 """.
 -include_lib("erlog/src/erlog_int.hrl").
 
 %% registration + dispatch
 -export([load/1, dispatch/3]).
 %% context read/write on an #est{}
--export([set_context/2, context/1, in_verdict/1]).
+-export([set_context/2, context/1, local_only/1]).
 %% context constructors
--export([proof_context/3, proof_context/4, verdict_context/2, effect_context/2]).
+-export([proof_context/3, proof_context/4, verdict_context/2,
+         policy_verdict_context/2, effect_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
          with_chain/2]).
@@ -76,7 +78,7 @@ used by lifecycle authorization now and live E handlers in §9).
                %% (an effect/reaction id in an `effect` context, Slice 3). `undefined` elsewhere.
                id      = undefined :: term()}).
 
--type kind()  :: proof | verdict | projection | effect.
+-type kind()  :: proof | verdict | policy_verdict | projection | effect.
 -type class() :: query | staging | projection | effect.
 -type ctx()   :: #qctx{} | undefined.
 -export_type([kind/0, class/0, ctx/0]).
@@ -167,7 +169,7 @@ dispatch(Goal, Next, St) ->
 %% A query-class bridge reads live node state no later validation can re-prove,
 %% so a sealed plan must not silently depend on one (`m:quod_dtx`). Recorded at
 %% dispatch — a bridge that found no solution still influenced the outcome.
-%% Only `proof` contexts seal plans; a verdict/projection/effect run records
+%% Only `proof` contexts seal plans; verdict/policy/projection/effect runs record
 %% nothing. The sealing boundary decides whether a live bridge is admissible
 %% for the exact resulting diff; dispatch cannot know that yet.
 record_bridge_use(Functor, query, Ctx, St) ->
@@ -191,12 +193,13 @@ class(Functor) ->
 
 -doc """
 Whether a predicate of `Class` may run in a context of `Kind` (the matrix in the
-module doc). `query` reads anywhere; `staging` writes only inside a `proof`
-(never a `verdict` — a membership re-proof must be side-effect-free); `projection`
-and `effect` run only in their own contexts.
+module doc). `query` reads everywhere except a deterministic policy verdict;
+`staging` writes only inside a `proof`; `projection` and `effect` run only in
+their own contexts.
 """.
 -spec allowed(class(), kind() | undefined) -> boolean().
 allowed(_Class,     undefined)   -> false;
+allowed(query,      policy_verdict) -> false;
 allowed(query,      _Kind)       -> true;
 allowed(staging,    proof)       -> true;
 allowed(staging,    _Kind)       -> false;
@@ -240,14 +243,11 @@ context(#est{fs = Fs}) ->
         false               -> undefined
     end.
 
--doc """
-Whether the `#est{}` carries a `verdict` context. Read by the inter-ontology ask
-handler (which refuses a hop mid-verdict) and by the proof overlay (which disables
-read-time link following mid-verdict) — both must see the same signal that used to
-be the `$quod_in_verdict` process-dictionary flag.
-""".
--spec in_verdict(tuple()) -> boolean().
-in_verdict(Est) -> ctx_kind(context(Est)) =:= verdict.
+-doc "Whether this execution is confined to its local committed ontology.".
+-spec local_only(tuple()) -> boolean().
+local_only(Est) ->
+    Kind = ctx_kind(context(Est)),
+    Kind =:= verdict orelse Kind =:= policy_verdict.
 
 %%%===================================================================
 %%% context constructors + accessors
@@ -267,6 +267,12 @@ proof_context(Ns, Height, Subject, Chain) ->
 -spec verdict_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
 verdict_context(Ns, Height) ->
     #qctx{kind = verdict, ns = Ns, height = Height, subject = undefined}.
+
+-doc "A strictly local authorization re-proof with no governed bridges.".
+-spec policy_verdict_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
+policy_verdict_context(Ns, Height) ->
+    #qctx{kind = policy_verdict, ns = Ns, height = Height,
+          subject = undefined}.
 
 -doc "An `effect` context for action-only authorization and live E handlers.".
 -spec effect_context(binary() | undefined, non_neg_integer()) -> #qctx{}.

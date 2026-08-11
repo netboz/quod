@@ -117,10 +117,14 @@ proof_erlog(ContextNs, Facts) ->
     Est0 = element(3, Erl0),
     Est1 = quod_predicates:load(Est0),
     Est2 = quod_ct:assert_facts(Facts, Est1),
-    Est3 = quod_predicates:set_context(
-             Est2,
+    %% Query bridges run in the local proof overlay. This focused handler test
+    %% uses an in-memory dictionary rather than a published MVCC snapshot, so
+    %% it deliberately does not enable plan read-set capture.
+    Est3 = quod_erlog_db_local_prove:wrap_state(Est2),
+    Est4 = quod_predicates:set_context(
+             Est3,
              quod_predicates:proof_context(ContextNs, 0, undefined)),
-    setelement(3, Erl0, Est3).
+    setelement(3, Erl0, Est4).
 
 control_keys(Facts) ->
     Goal = {findall, {'Key'},

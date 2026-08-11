@@ -17,7 +17,7 @@ a synchronous call to itself.
 -include("quod_proof_limits.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/3, submit_plan/4,
+         seal/3, attest_plan/3, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
@@ -137,7 +137,7 @@ the exact bound identities, and verify under the authenticated target key.
           {ok, quod_dtx:plan()} | not_material | {error, term()}.
 seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
      OriginIdentity, Principal) ->
-    quod_dtx:seal_session(
+    quod_proof_session:seal(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
@@ -224,7 +224,7 @@ checked_remote_plan(
    {scope_binding, _OriginKey, TargetKey, ProofId, _ScopeId,
     OriginIdentity, TargetIdentity, _Mode}, _RequestLink},
   Blob) ->
-    case quod_scope_wire:decode_payload(plan, Blob) of
+    case quod_scope_wire:decode_plan_payload(Blob) of
         {ok, Plan} ->
             case quod_dtx:signer(Plan) =:= TargetKey andalso
                  quod_dtx:verify(Plan) andalso
@@ -237,6 +237,103 @@ checked_remote_plan(
         {error, _} = Error ->
             Error
     end.
+
+-doc "Attest one sealed scope plan into the first exact coordination manifest.".
+-spec attest_plan(handle() | term(), quod_dtx:plan(), quod_dtx:manifest()) ->
+          {ok, quod_dtx:attestation()} | {error, term()}.
+attest_plan(
+  {local_scope, _ScopeId, _Ns, _Anchor, _Height, Session} = Handle,
+  Plan, Manifest) ->
+    checked_attestation_result(
+      Handle, Plan, Manifest, quod_proof_session:attest(Session, Manifest));
+attest_plan(
+  {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+   _Ns, _Anchor} = Handle,
+  Plan, Manifest) ->
+    case command_remaining_ms() of
+        0 ->
+            {error, current_execution_limit()};
+        RemainingMs ->
+            RequestRef = make_ref(),
+            Pid ! {scope_attest, self(), ProofId, SessionRef,
+                   RequestRef, Manifest},
+            MRef = monitor(process, Pid),
+            try
+                receive
+                    {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+                     {attested, Result}} ->
+                        checked_attestation_result(
+                          Handle, Plan, Manifest, Result);
+                    {'DOWN', MRef, process, Pid, Reason} ->
+                        {error, failure_reason(Handle, Reason)}
+                after RemainingMs ->
+                    {error, current_execution_limit()}
+                end
+            after
+                demonitor(MRef, [flush])
+            end
+    end;
+attest_plan({remote_scope, _, _, _, _} = Handle, Plan, Manifest) ->
+    remote_attest(Handle, Plan, Manifest);
+attest_plan(_Handle, _Plan, _Manifest) ->
+    {error, {protocol_error, session_binding}}.
+
+remote_attest(Handle, Plan, Manifest) ->
+    case {bind_remote_router(Handle),
+          quod_scope_wire:encode_payload(manifest, Manifest)} of
+        {{ok, Router, MRef}, {ok, ManifestBlob}} ->
+            case command_remaining_ms() of
+                0 ->
+                    {error, current_execution_limit()};
+                RemainingMs ->
+                    case quod_ask_router:command(
+                           Handle, RemainingMs,
+                           {scope_attest, ManifestBlob}) of
+                        {ok, RequestId} ->
+                            await_remote_attestation(
+                              Handle, Plan, Manifest, RequestId,
+                              Router, MRef, RemainingMs);
+                        {sent, _RequestId} ->
+                            {error, {protocol_error, request_binding}};
+                        {error, _} = Error -> Error
+                    end
+            end;
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error
+    end.
+
+await_remote_attestation(
+  Handle, Plan, Manifest, RequestId, Router, MRef, RemainingMs) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {plan_attested, Blob}} ->
+            case quod_scope_wire:decode_payload(attestation, Blob) of
+                {ok, Attestation} ->
+                    checked_attestation_result(
+                      Handle, Plan, Manifest, {ok, Attestation});
+                {error, _} = Error -> Error
+            end;
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_down, Handle, Reason} ->
+            {error, failure_reason(Handle, Reason)};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, failure_reason(Handle, unavailable)}
+    after RemainingMs ->
+        remote_timeout(
+          Handle, RequestId, {error, current_execution_limit()})
+    end.
+
+checked_attestation_result(Handle, Plan, Manifest, {ok, Attestation}) ->
+    Target = identity(Handle),
+    case quod_dtx:verify_plan_attestation(
+           Target, Plan, Manifest, Attestation) of
+        true -> {ok, Attestation};
+        false -> {error, {protocol_error, bad_payload}}
+    end;
+checked_attestation_result(_Handle, _Plan, _Manifest, {error, _} = Error) ->
+    Error.
 
 -doc """
 Submit a sealed plan to a REMOTE target validator through its open scope.
@@ -419,6 +516,8 @@ scope_id({remote_scope, _RouterPid, _RouterGeneration,
     ScopeId.
 
 -spec identity(handle()) -> quod_proof_context:identity().
+identity({local_scope, _ScopeId, Ns, Anchor, _Height, _Session}) ->
+    {Ns, Anchor};
 identity({quod_scope_session, _Pid, _ScopeId, _ProofId, _Ref, Ns, Anchor}) ->
     {Ns, Anchor};
 identity({remote_scope, _RouterPid, _RouterGeneration,
@@ -534,6 +633,18 @@ dispatch_message({scope_seal, Origin, ProofId, Ref,
         false ->
             handled
     end;
+dispatch_message({scope_attest, Origin, ProofId, Ref,
+                  RequestRef, Manifest}) ->
+    case valid_command(Origin, ProofId, Ref) of
+        true ->
+            Session = (runtime())#runtime.session,
+            send_reply(
+              RequestRef,
+              {attested, quod_proof_session:attest(Session, Manifest)}),
+            handled;
+        false ->
+            handled
+    end;
 dispatch_message({scope_close, Origin, ProofId, Ref}) ->
     case valid_command(Origin, ProofId, Ref) of
         true -> stop;
@@ -558,19 +669,43 @@ handle_open(RequestRef, InvocationId, Goal, Chain, Selection) ->
     handled.
 
 authorize_and_open(InvocationId, Goal, Chain, Selection,
-                   #runtime{namespace = Ns, anchor = Anchor,
-                            principal = Principal,
-                            height = Height,
-                            session = Session} = Runtime) ->
+                   #runtime{session = Session} = Runtime) ->
+    Result =
+        case quod_proof_session:check_mutable(Session) of
+            ok ->
+                with_session_access(
+                  Session,
+                  fun() ->
+                      authorize_and_open_checked(
+                        InvocationId, Goal, Chain, Selection, Runtime)
+                  end);
+            {error, _} = MutableError ->
+                MutableError
+        end,
+    case Result of
+        {error, _} = OpenError ->
+            %% The guard may close after the invocation was installed but
+            %% before its opened reply. Keep no continuation for work the
+            %% caller was correctly told it cannot access.
+            _ = quod_proof_session:cancel(Session, InvocationId),
+            remove_invocation_metadata(InvocationId),
+            OpenError;
+        _ ->
+            Result
+    end.
+
+authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
+                           #runtime{namespace = Ns, anchor = Anchor,
+                                    principal = Principal,
+                                    height = Height,
+                                    session = Session} = Runtime) ->
     Authorized = quod_ask:authorize_scope(
                    {node, Principal}, Goal, Chain, {Ns, Anchor}, Height,
                    Session),
-    %% A refusal runs none of the requested goal — the invocation instead runs
-    %% `fail_with_reason(not_allowed(Ns))`, so it opens like any other and
-    %% completes with the bounded reason through the ordinary solution/complete
-    %% path. There is no separate refusal shape to carry across co-hosted,
-    %% remote, nested, and remote-controller consumers.
-    Effective = effective_goal(Authorized, Goal, Ns),
+    %% The session records the original request and verdict, then derives the
+    %% denied execution goal itself. This keeps the authorization transcript
+    %% re-provable without ever running a refused goal.
+    Verdict = authorization_verdict(Authorized),
     case Authorized of
         false ->
             %% Attributable: distinct from a failed validator-admission recheck
@@ -585,7 +720,7 @@ authorize_and_open(InvocationId, Goal, Chain, Selection,
     Context = quod_predicates:proof_context(
                 Ns, Height, undefined, [{Ns, Anchor} | Chain]),
     case quod_proof_session:open(
-           Session, InvocationId, Effective, Context, Selection) of
+           Session, InvocationId, Goal, Verdict, Context, Selection) of
         ok ->
             Invocations = (runtime())#runtime.invocations,
             put_runtime(Runtime#runtime{
@@ -594,11 +729,8 @@ authorize_and_open(InvocationId, Goal, Chain, Selection,
         {error, Reason} -> {error, Reason}
     end.
 
-%% The goal an invocation actually runs: the requested one when authorized, or a
-%% bounded `fail_with_reason(not_allowed(Ns))` when refused, so a denial is
-%% ordinary logical failure carrying its reason and never runs the real goal.
-effective_goal(true, Goal, _Ns)  -> Goal;
-effective_goal(false, _Goal, Ns) -> {fail_with_reason, {not_allowed, Ns}}.
+authorization_verdict(true) -> allowed;
+authorization_verdict(false) -> denied.
 
 handle_next(RequestRef, InvocationId, ExpectedSeq)
   when is_integer(ExpectedSeq), ExpectedSeq > 0 ->
@@ -626,26 +758,42 @@ handle_next(RequestRef, _InvocationId, _ExpectedSeq) ->
 
 finish_next(RequestRef, InvocationId, Seq, Count, {solution, Solution}) ->
     Runtime0 = runtime(),
-    Dirty = quod_proof_session:dirty(Runtime0#runtime.session),
-    case {Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION,
-          answer_disposition(Solution)} of
-        {true, ok} ->
+    Session = Runtime0#runtime.session,
+    Prepared = with_session_access(
+                 Session,
+                 fun() ->
+                     Dirty = quod_proof_session:dirty(Session),
+                     case {Count < ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+                           answer_disposition(Solution)} of
+                         {true, ok} -> {solution_ready, Dirty};
+                         {false, _} -> {result_error, too_many_answers};
+                         {_, {error, Reason}} -> {result_error, Reason}
+                     end
+                 end),
+    case Prepared of
+        {error, Reason} ->
+            remove_invocation(InvocationId),
+            send_guard_error(RequestRef, Reason);
+        {solution_ready, Dirty} ->
             Invocations = Runtime0#runtime.invocations,
             put_runtime(Runtime0#runtime{
-              invocations = Invocations#{InvocationId => {Seq + 1, Count + 1}}}),
+              invocations = Invocations#{
+                InvocationId => {Seq + 1, Count + 1}}}),
             send_reply(RequestRef, {solution, Seq, Solution, Dirty});
-        {false, _} ->
-            remove_invocation(InvocationId),
-            send_next_error(RequestRef, too_many_answers);
-        {_, {error, Reason}} ->
+        {result_error, Reason} ->
             remove_invocation(InvocationId),
             send_next_error(RequestRef, Reason)
     end,
     handled;
 finish_next(RequestRef, InvocationId, Seq, _Count, {complete, Reasons}) ->
-    Dirty = quod_proof_session:dirty((runtime())#runtime.session),
-    remove_invocation_metadata(InvocationId),
-    send_reply(RequestRef, {complete, Seq, Reasons, Dirty}),
+    case checked_session_dirty((runtime())#runtime.session) of
+        {ok, Dirty} ->
+            remove_invocation_metadata(InvocationId),
+            send_reply(RequestRef, {complete, Seq, Reasons, Dirty});
+        {error, Reason} ->
+            remove_invocation_metadata(InvocationId),
+            send_guard_error(RequestRef, Reason)
+    end,
     handled;
 finish_next(RequestRef, InvocationId, _Seq, _Count, {error, Reason}) ->
     remove_invocation_metadata(InvocationId),
@@ -653,8 +801,15 @@ finish_next(RequestRef, InvocationId, _Seq, _Count, {error, Reason}) ->
     handled.
 
 send_next_error(RequestRef, Reason) ->
-    Dirty = quod_proof_session:dirty((runtime())#runtime.session),
-    send_reply(RequestRef, {error, Reason, Dirty}).
+    case checked_session_dirty((runtime())#runtime.session) of
+        {ok, Dirty} -> send_reply(RequestRef, {error, Reason, Dirty});
+        {error, AccessReason} -> send_guard_error(RequestRef, AccessReason)
+    end.
+
+send_guard_error(RequestRef, Reason) ->
+    %% Dirty is not observable state after a fatal access error; false keeps
+    %% the fixed reply shape without asking the fenced overlay a second time.
+    send_reply(RequestRef, {error, Reason, false}).
 
 handle_cancel(InvocationId) ->
     remove_invocation(InvocationId),
@@ -669,7 +824,7 @@ seal_current({OriginNs, <<_:256>>} = OriginIdentity)
     #runtime{namespace = Ns, anchor = Anchor, height = Height,
              proof_id = ProofId, principal = Principal,
              session = Session} = runtime(),
-    quod_dtx:seal_session(
+    quod_proof_session:seal(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => ProofId, origin => OriginIdentity,
@@ -679,8 +834,11 @@ seal_current(_OriginIdentity) ->
 
 remove_invocation(InvocationId) ->
     Runtime = runtime(),
-    ok = quod_proof_session:cancel(Runtime#runtime.session, InvocationId),
-    remove_invocation_metadata(InvocationId).
+    case quod_proof_session:cancel(
+           Runtime#runtime.session, InvocationId) of
+        ok -> remove_invocation_metadata(InvocationId);
+        {error, _} -> ok
+    end.
 
 remove_invocation_metadata(InvocationId) ->
     Runtime = runtime(),
@@ -877,25 +1035,56 @@ valid_batch_ids(_Improper, _Previous, _Count) ->
 valid_opaque_id(<<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>>) -> true;
 valid_opaque_id(_) -> false.
 
-session_control(checkpoint, Session, BatchIds) ->
+session_control(Operation, Session, BatchIds) ->
+    with_session_access(
+      Session,
+      fun() -> session_control_checked(Operation, Session, BatchIds) end).
+
+session_control_checked(checkpoint, Session, BatchIds) ->
     case quod_proof_session:checkpoint_many(Session, BatchIds) of
         ok -> session_control_reply(Session);
         {error, Reason} -> {error, Reason}
     end;
-session_control(restore, Session, BatchIds) ->
+session_control_checked(restore, Session, BatchIds) ->
     case quod_proof_session:restore_many(Session, BatchIds) of
         ok -> session_control_reply(Session);
         {error, Reason} -> {error, Reason}
     end;
-session_control(release, Session, BatchIds) ->
-    ok = quod_proof_session:release_many(Session, BatchIds),
-    session_control_reply(Session);
-session_control(_Operation, _Session, _BatchIds) ->
+session_control_checked(release, Session, BatchIds) ->
+    case quod_proof_session:release_many(Session, BatchIds) of
+        ok -> session_control_reply(Session);
+        {error, Reason} -> {error, Reason}
+    end;
+session_control_checked(_Operation, _Session, _BatchIds) ->
     {error, {protocol_error, request_binding}}.
 
 session_control_reply(Session) ->
     {ok, quod_proof_session:dirty(Session),
      quod_proof_session:overlay_generation(Session)}.
+
+checked_session_dirty(Session) ->
+    with_session_access(
+      Session, fun() -> {ok, quod_proof_session:dirty(Session)} end).
+
+%% One narrow boundary for every worker-side session operation. It preserves
+%% only the typed proof-access throw; unrelated bugs still crash and are logged
+%% by the worker loop. The post-check prevents a result produced just before a
+%% gate transition from crossing the scope boundary.
+with_session_access(Session, Fun) ->
+    try
+        case quod_proof_session:check_access(Session) of
+            {error, _} = Error ->
+                Error;
+            ok ->
+                Result = Fun(),
+                case quod_proof_session:check_access(Session) of
+                    ok -> Result;
+                    {error, _} = Error -> Error
+                end
+        end
+    catch
+        throw:{quod_ask_error, Reason} -> {error, Reason}
+    end.
 
 scope_control(Operation,
               Handle = {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,

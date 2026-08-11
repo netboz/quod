@@ -8,8 +8,9 @@ This module exclusively owns the committed block log. It is a plain library (no 
 no registration): every function is synchronous and completes its required `fsync`
 before returning, and the handle is threaded by the caller — the writer is
 `m:quod_simplex`; `m:quod_catchup` opens a read-only view via `open_ro/2` to serve
-a joiner. The separate `m:quod_vote_journal` stores only this validator's bounded,
-in-flight vote decisions; it never duplicates blocks or knowledge-base data.
+a joiner. The separate `m:quod_signing_journal` stores this validator's bounded
+in-flight vote decisions, DTX signing floors, and one pending Begin; it never
+duplicates blocks or knowledge-base data.
 
 Layout, under `LedgerDir/<base64url(Ns)>/`:
 
@@ -17,7 +18,7 @@ Layout, under `LedgerDir/<base64url(Ns)>/`:
 | ---------- | --------------------------------------------------------- |
 | `log.0001` | append-only CRC-framed `#entry{}` records — the block log |
 
-`m:quod_vote_journal` separately owns `votes.0001` under the configured
+`m:quod_signing_journal` separately owns `signing.0001` under the configured
 **data** root. The roots may coincide, as they do in the Nomad deployment, but
 `ledger_dir` can place the replicated block log elsewhere.
 
@@ -59,7 +60,8 @@ the full log always rescans at open.
 %% as an identifiable format, never mistaken for corruption or a trimmable tail.
 -define(V1_MAGIC,  16#915106AA). %% certificates were not namespace/genesis-bound
 -define(V2_MAGIC,  16#915106AB). %% consensus-signature format; phash2 OCC read-sets
--define(MAGIC,     16#915106AC). %% V3: mutation-version OCC tokens, explicit entry-data union
+-define(V3_MAGIC,  16#915106AC). %% mutation-version OCC tokens; content-only block payload
+-define(MAGIC,     16#915106AD). %% V4: shared tagged block/entry payload with DTX controls
 -define(HDR_BYTES, 12).      %% Magic:32 ++ Len:32 ++ CRC:32
 -define(CP_INTERVAL, 256).   %% one checkpointed offset per this many entries (sparse index)
 -define(READ_CHUNK, 262144). %% bytes per pread when streaming sequential frames (the read cursor)
@@ -103,7 +105,7 @@ The LEDGER root from an ns `Config` map: `ledger_dir` if set, else `data_dir/1`.
 exists because the two directories have DIFFERENT durability needs: the ledger is
 replicated by consensus itself (any node re-fetches lost history trustlessly via
 catch-up against the pinned genesis anchor), so it may live on fast LOCAL disk — while
-the identity key and the vote journal (whose loss is not repairable from peers) stay on
+the identity key and signing journal (whose loss is not repairable from peers) stay on
 the durable `data_dir`. On the production Ceph volume one fdatasync costs 40-106ms and
 the per-commit ledger sync was a dominant share of consensus round time.
 """.
@@ -287,6 +289,8 @@ next_frame(Fd, {Off, Buf0}) ->
             {stop, {unsupported_format, 1}, Off};
         {short, <<?V2_MAGIC:32, _/binary>>} ->
             {stop, {unsupported_format, 2}, Off};
+        {short, <<?V3_MAGIC:32, _/binary>>} ->
+            {stop, {unsupported_format, 3}, Off};
         {short, _}    -> {stop, short, Off};
         {io_error, R} -> {stop, {io_error, R}, Off};
         {ok, Buf1} ->
@@ -295,6 +299,8 @@ next_frame(Fd, {Off, Buf0}) ->
                     {stop, {unsupported_format, 1}, Off};
                 <<?V2_MAGIC:32, _/binary>> ->
                     {stop, {unsupported_format, 2}, Off};
+                <<?V3_MAGIC:32, _/binary>> ->
+                    {stop, {unsupported_format, 3}, Off};
                 <<?MAGIC:32, Len:32, _:32, _/binary>> when Len > ?MAX_FRAME_BYTES ->
                     {stop, {frame_too_big, Len}, Off};
                 <<?MAGIC:32, Len:32, CRC:32, _/binary>> ->
@@ -406,7 +412,7 @@ trim_or_fail(Fd, Off, Cps, LastI, Reason) ->
     end.
 
 %% Scan a suspect tail in bounded windows. Consecutive reads overlap by three
-%% bytes so either four-byte magic is detected even when split across a chunk
+%% bytes so any four-byte frame magic is detected even when split across a chunk
 %% boundary. The size probe above promised every requested byte: EOF or a short
 %% read is therefore an I/O failure, never permission to discard committed data.
 tail_contains_magic(_Fd, Pos, Size) when Pos >= Size ->
@@ -416,7 +422,8 @@ tail_contains_magic(Fd, Pos, Size) ->
     case file:pread(Fd, Pos, Len) of
         {ok, Bin} when byte_size(Bin) =:= Len ->
             case binary:match(
-                   Bin, [<<?MAGIC:32>>, <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>]) of
+                   Bin, [<<?MAGIC:32>>, <<?V3_MAGIC:32>>,
+                         <<?V2_MAGIC:32>>, <<?V1_MAGIC:32>>]) of
                 nomatch when Pos + Len >= Size ->
                     false;
                 nomatch ->

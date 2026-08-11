@@ -14,7 +14,8 @@ two commit-side seams:
   rejection. The replay boundaries on the same property become an untagged `sync` nudge (they
   carry no namespace) telling the client to refetch `/api/summary`.
 
-Frames: `hello` (summary, on connect) · `block` · `applied` · `rejected` · `sync`.
+Frames: `hello` (summary, on connect) · `block` (content or DTX phase) ·
+`applied` · `rejected` · `sync`.
 
 The endpoint reads nothing from clients, so inbound frames are capped small (anything
 large is abuse), and `idle_timeout => infinity` keeps a quiet ledger from closing the
@@ -38,16 +39,17 @@ websocket_handle(_Frame, State) -> {ok, State}.
 
 %% A finalized block carries its target ontology explicitly. A proof origin may
 %% differ for a foreign write and is never used to route or attribute the block.
-websocket_info({committed, Ns, Slot, #entry{} = E}, State) ->
-    case quod_explorer_http:entry_txs(E) of
-        [] -> {ok, State};
-        Txs ->
-            {reply, {text, frame(#{type => block, ns => Ns, slot => Slot,
-                                   time => E#entry.timestamp,
-                                   cert => quod_explorer_http:cert_json(E#entry.cert),
-                                   txs => [quod_explorer_http:tx_json_full(Ns, T, E)
-                                           || T <- Txs]})},
-             State}
+websocket_info({committed, Ns, _Slot, #entry{} = E}, State) ->
+    Block = quod_explorer_http:block_json(Ns, E),
+    case maps:get(kind, Block) of
+        content -> committed_block_frame(Ns, Block, State);
+        'begin' -> committed_block_frame(Ns, Block, State);
+        prepare -> committed_block_frame(Ns, Block, State);
+        decision -> committed_block_frame(Ns, Block, State);
+        finalize -> committed_block_frame(Ns, Block, State);
+        complete -> committed_block_frame(Ns, Block, State);
+        noop -> {ok, State};
+        invalid -> {ok, State}
     end;
 websocket_info({applied_live, #{ns := Ns, height := H, tx_id := Id}}, State) ->
     {reply, {text, frame(#{type => applied, ns => Ns, height => H,
@@ -65,5 +67,9 @@ websocket_info(_Info, State) ->
     {ok, State}.
 
 terminate(_Reason, _Req, _State) -> ok.
+
+committed_block_frame(Ns, Block, State) ->
+    {reply, {text, frame(Block#{type => block, ns => Ns})},
+     State}.
 
 frame(Json) -> quod_explorer_http:encode(Json).

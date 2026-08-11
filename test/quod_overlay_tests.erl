@@ -137,6 +137,83 @@ capture_guards_test() ->
     _ = quod_erlog_db_local_prove:wrap_state(Pending),
     ok.
 
+generation_guard_blocks_every_overlay_surface_test() ->
+    with_proof_gate(
+      fun(Tab, AccessGuard) ->
+          C = committed([{parent, tom, bob}]),
+          W = quod_erlog_db_local_prove:wrap_state(
+                C, #{read_set => true, access_guard => AccessGuard}),
+          Ov = db_ref(W),
+          ?assertMatch({clauses, _},
+                       quod_erlog_db_local_prove:get_procedure(
+                         Ov, {parent, 2})),
+          GroupId = <<91:256>>,
+          true = ets:insert(
+                   Tab, {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+          Expected = {quod_ask_error, {transaction_pending, GroupId}},
+          ?assertThrow(
+             Expected,
+             quod_erlog_db_local_prove:get_procedure(Ov, {parent, 2})),
+          ?assertThrow(
+             Expected,
+             quod_erlog_db_local_prove:assertz_clause(
+               Ov, {child, 1}, {child, bob}, true)),
+          ?assertThrow(
+             Expected,
+             quod_erlog_db_local_prove:get_local_changes(Ov)),
+          ?assertThrow(
+             Expected,
+             quod_erlog_db_local_prove:record_live_bridge(
+               W, {directory_host, 5})),
+          ?assertThrow(
+             Expected,
+             quod_erlog_db_local_prove:absorb_read_set(W, #{})),
+          lists:foreach(
+            fun(Operation) -> ?assertThrow(Expected, Operation()) end,
+            [fun() ->
+                 quod_erlog_db_local_prove:get_procedure_type(
+                   Ov, {parent, 2})
+             end,
+             fun() ->
+                 quod_erlog_db_local_prove:get_interpreted_functors(Ov)
+             end,
+             fun() ->
+                 quod_erlog_db_local_prove:asserta_clause(
+                   Ov, {child, 1}, {child, bob}, true)
+             end,
+             fun() ->
+                 quod_erlog_db_local_prove:retract_clause(
+                   Ov, {parent, 2}, 1)
+             end,
+             fun() ->
+                 quod_erlog_db_local_prove:abolish_clauses(
+                   Ov, {parent, 2})
+             end,
+             fun() -> quod_erlog_db_local_prove:get_read_set(Ov) end,
+             fun() -> quod_erlog_db_local_prove:get_dependencies(Ov) end,
+             fun() -> quod_erlog_db_local_prove:get_live_bridges(Ov) end]),
+          quod_erlog_db_local_prove:cleanup_read_set(W)
+      end).
+
+guard_is_preserved_by_overlay_revisions_test() ->
+    with_proof_gate(
+      fun(Tab, AccessGuard) ->
+          W0 = quod_erlog_db_local_prove:wrap_state(
+                 committed([]), #{access_guard => AccessGuard}),
+          Revision = quod_erlog_db_local_prove:revision(W0),
+          {succeed, W1} = erlog_int:prove_goal(
+                            {assertz, {staged, value}}, W0),
+          W2 = quod_erlog_db_local_prove:replace_revision(W1, Revision),
+          ?assertEqual(AccessGuard,
+                       quod_erlog_db_local_prove:access_guard(W2)),
+          GroupId = <<92:256>>,
+          true = ets:insert(
+                   Tab, {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+          ?assertEqual(
+             {error, {transaction_pending, GroupId}},
+             quod_erlog_db_local_prove:check_access(W2))
+      end).
+
 %% A local write must not hide the committed predicate dependency of a later read.
 %% This is the concurrency-sensitive case: another transaction can change parent/2
 %% between proof and apply even though this overlay has also staged a parent/2 write.
@@ -353,3 +430,13 @@ assert_read_only_rejects(C, Goal) ->
     ?assertEqual(
        [],
        quod_erlog_db_local_prove:get_local_changes(db_ref(W))).
+
+with_proof_gate(Fun) ->
+    Namespace = <<"quod:overlay-guard-test">>,
+    Table = 'quod_simplex_genesis_quod:overlay-guard-test',
+    Tab = ets:new(Table, [named_table, protected, set]),
+    true = ets:insert(Tab, {proof_gate, true, open, 7, none}),
+    try Fun(Tab, {quod_proof_access, Namespace, 7})
+    after
+        ets:delete(Tab)
+    end.

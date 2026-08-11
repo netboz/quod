@@ -681,6 +681,9 @@ build_bounded_command(
 %% pending slot is occupied. close/2 then unregisters in sender order; an
 %% optional fast scope_closed event may remove the scope first.
 command_expects_event(scope_close) -> false;
+command_expects_event(scope_seal) -> true;
+command_expects_event({scope_attest, _}) -> true;
+command_expects_event({submit_plan, _, _, _, _}) -> true;
 command_expects_event({invoke_open, _, _, _, _}) -> true;
 command_expects_event({invoke_next, _, _}) -> true;
 command_expects_event({materialize, _, _, _, _}) -> true;
@@ -731,7 +734,8 @@ validate_event_owner(
   Scope, PeerIdentity, ReturnLink, Binding, EventSeq, RequestId,
   AcceptedSeq, Generation, Dirty, Operation) ->
     Checks = [
-        {peer_binding, peer_key(PeerIdentity) =:= Scope#scope.target_key},
+        {peer_binding,
+         quod_link:peer_key(PeerIdentity) =:= Scope#scope.target_key},
         {session_binding, Binding =:= Scope#scope.binding},
         {return_link, Scope#scope.return_link =:= undefined orelse
                       Scope#scope.return_link =:= ReturnLink},
@@ -876,7 +880,8 @@ handle_identity_response(
         undefined -> S0;
         OpenRef ->
             Probe = maps:get(OpenRef, Probes),
-            case peer_key(PeerIdentity) =:= Probe#probe.target_key andalso
+            case quod_link:peer_key(PeerIdentity) =:=
+                     Probe#probe.target_key andalso
                  ResponseKey =:= Probe#probe.target_key andalso
                  Namespace =:= Probe#probe.namespace of
                 true ->
@@ -1286,10 +1291,6 @@ handle_or_pending(#scope{binding = Binding}, #s{generation = Generation}) ->
 
 put_scope(Scope = #scope{key = ScopeKey}, S = #s{scopes = Scopes}) ->
     S#s{scopes = Scopes#{ScopeKey => Scope}}.
-
-peer_key({NodeKey, _Endpoint}) when is_binary(NodeKey) -> NodeKey;
-peer_key(NodeKey) when is_binary(NodeKey) -> NodeKey;
-peer_key(_) -> undefined.
 
 unique_request_id(Pending) ->
     Id = new_id(),

@@ -1,6 +1,7 @@
 -module(quod_catchup_verify_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
 
 -define(NS, <<"ns">>).
 -define(GENESIS_TX_VERSION, 1).
@@ -45,7 +46,7 @@ genesis(Pubs) ->
                                origin = {?NS, <<0:256>>}, diff = Diff,
                                read_check = #{}, author = hd(Pubs), sig = none},
     #entry{index = 1, cert = none,
-           data = quod_ledger:data([Transaction])}.
+           data = {batch, [Transaction]}}.
 
 genesis_id(Ns, Nonce) ->
     <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
@@ -86,8 +87,8 @@ committed_batch(I, Transactions, C, K) ->
     committed_batch_in(domain(C), I, Transactions, C, K).
 
 committed_batch_in(Domain, I, Transactions, C, K) ->
-    Data = quod_ledger:data(Transactions),
-    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = Transactions}),
+    Data = {batch, Transactions},
+    BH = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = Data}),
     Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
               || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
@@ -97,11 +98,13 @@ committed_batch_in(Domain, I, Transactions, C, K) ->
 %% exercises the timestamp threading that committed/4 leaves at the 0 default.
 committed_at(I, D, Ts, C, K) ->
     Domain = domain(C),
-    BH     = quod_simplex:block_hash(#block{slot = I, parent = I - 1, payload = [D], timestamp = Ts}),
+    BH     = quod_simplex:block_hash(
+               #block{slot = I, parent = I - 1,
+                      payload = {batch, [D]}, timestamp = Ts}),
     Shares = [quod_simplex:make_share(Domain, commit, I, BH, signer(M))
               || M <- lists:sublist(C, K)],
     {ok, Cert} = quod_simplex:form_cert(Domain, commit, I, BH, Shares, pubs(C)),
-    #entry{index = I, data = quod_ledger:data([D]), timestamp = Ts, cert = Cert}.
+    #entry{index = I, data = {batch, [D]}, timestamp = Ts, cert = Cert}.
 
 %% a complaint-SKIPPED slot I with a COMPLAINT cert (block_hash=none) signed by the first K of C.
 skipped(I, C, K) ->
@@ -150,6 +153,29 @@ happy_test() ->
     {ok, [_, _, _], Final} = verify_chain(C, [], 1, Chain),
     ?assertEqual(P, Final).
 
+%% The same checked history fold serves catch-up and restart. A committee at
+%% the shared limit verifies; an oversized founding set and an otherwise-valid,
+%% old-committee-certified 64 -> 65 admission are both refused.
+validator_cap_history_boundary_test() ->
+    N = ?MAX_VALIDATORS,
+    Capped = committee(N),
+    CappedPubs = pubs(Capped),
+    ?assertMatch(
+       {ok, [_], CappedPubs},
+       verify_chain(Capped, [], 1, [genesis(CappedPubs)])),
+    Oversized = committee(N + 1),
+    ?assertEqual(
+       {error, {invalid_transaction, 1}},
+       verify_chain(Oversized, [], 1, [genesis(pubs(Oversized))])),
+    {ExtraPub, _} = quod_identity:generate(),
+    CertifiedAdmission = committed(
+                           2, admit_tx(ExtraPub, Capped), Capped,
+                           quod_simplex:quorum(N)),
+    ?assertEqual(
+       {error, {invalid_transaction, 2}},
+       verify_chain(
+         Capped, [], 1, [genesis(CappedPubs), CertifiedAdmission])).
+
 batch_hash_is_verified_test() ->
     C = committee(4), P = pubs(C),
     Batch = committed_batch(2, [tx(20, C), tx(21, C)], C, 3),
@@ -160,20 +186,20 @@ batch_hash_is_verified_test() ->
                  verify_chain(
                    C, [], 1,
                    [genesis(P),
-                    Batch#entry{data = quod_ledger:data([tx(21, C), tx(20, C)])}])).
+                    Batch#entry{data = {batch, [tx(21, C), tx(20, C)]}}])).
 
 implicit_parent_commit_test() ->
     C = committee(4), P = pubs(C),
     Domain = domain(C),
-    ParentData = quod_ledger:data([tx(2, C)]),
-    ParentBlock = #block{slot = 2, parent = 1, payload = [tx(2, C)]},
+    ParentData = {batch, [tx(2, C)]},
+    ParentBlock = #block{slot = 2, parent = 1, payload = ParentData},
     ParentBH = quod_simplex:block_hash(ParentBlock),
     SupportShares = [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
                      || M <- lists:sublist(C, 3)],
     {ok, Support} =
         quod_simplex:form_cert(Domain, support, 2, ParentBH, SupportShares, P),
-    ChildData = quod_ledger:data([tx(3, C)]),
-    Child = #block{slot = 3, parent = 2, payload = [tx(3, C)]},
+    ChildData = {batch, [tx(3, C)]},
+    Child = #block{slot = 3, parent = 2, payload = ChildData},
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares = [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
                     || M <- lists:sublist(C, 3)],
@@ -188,7 +214,37 @@ implicit_parent_commit_test() ->
                  verify_chain(
                    C, [], 1,
                    [genesis(P),
-                    E2#entry{data = quod_ledger:data([tx(99, C)])}, E3])).
+                    E2#entry{data = {batch, [tx(99, C)]}}, E3])).
+
+%% A DTX control is an explicit-finality barrier even though it carries no
+%% committee diff. It cannot be smuggled in as the child proof that implicitly
+%% finalizes an ordinary parent.
+implicit_dtx_child_is_rejected_test() ->
+    C = committee(4),
+    P = pubs(C),
+    Domain = domain(C),
+    ParentData = {batch, [tx(2, C)]},
+    Parent = #block{slot = 2, parent = 1, payload = ParentData},
+    ParentBH = quod_simplex:block_hash(Parent),
+    SupportShares =
+        [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
+         || M <- lists:sublist(C, 3)],
+    {ok, Support} = quod_simplex:form_cert(
+                      Domain, support, 2, ParentBH, SupportShares, P),
+    DtxData = quod_ct:dtx_decision_payload(),
+    Child = #block{slot = 3, parent = 2, payload = DtxData},
+    ChildBH = quod_simplex:block_hash(Child),
+    CommitShares =
+        [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
+         || M <- lists:sublist(C, 3)],
+    {ok, Commit} = quod_simplex:form_cert(
+                     Domain, commit, 3, ChildBH, CommitShares, P),
+    E2 = #entry{index = 2, data = ParentData,
+                cert = #implicit_cert{support = Support, child = Child,
+                                      commit = Commit}},
+    ?assertEqual(
+       {error, {cert_mismatch, 2}},
+       verify_chain(C, [], 1, [genesis(P), E2])).
 
 %% A complaint-skipped slot (noop + complaint cert) is accepted between committed blocks.
 skip_test() ->
@@ -216,7 +272,7 @@ timestamped_test() ->
 %% A complaint cert (proves "skip slot I") attached to a #transaction is REJECTED — it authorizes no payload.
 complaint_over_tx_rejected_test() ->
     C = committee(4), {X, _} = quod_identity:generate(),
-    Forged = (skipped(2, C, 3))#entry{data = quod_ledger:data([admit_tx(X, C)])},
+    Forged = (skipped(2, C, 3))#entry{data = {batch, [admit_tx(X, C)]}},
     ?assertEqual({error, {cert_mismatch, 2}},
                  verify_chain(C, [], 1, [genesis(pubs(C)), Forged])).
 
@@ -241,7 +297,7 @@ cert_mismatch_test() ->
                  verify_chain(
                    C, [], 1,
                    [genesis(pubs(C)),
-                    B2#entry{data = quod_ledger:data([tx(99, C)])}])).
+                    B2#entry{data = {batch, [tx(99, C)]}}])).
 
 %% A MALFORMED cert (non-list sigs from a hostile server) is rejected, never crashes the joiner.
 malformed_cert_rejected_test() ->
@@ -392,7 +448,7 @@ implicit_cross_domain_rejected_test() ->
 implicit_entries(Domain, C) ->
     P = pubs(C),
     ParentTx = tx(2, C),
-    Parent = #block{slot = 2, parent = 1, payload = [ParentTx]},
+    Parent = #block{slot = 2, parent = 1, payload = {batch, [ParentTx]}},
     ParentBH = quod_simplex:block_hash(Parent),
     SupportShares =
         [quod_simplex:make_share(Domain, support, 2, ParentBH, signer(M))
@@ -401,7 +457,7 @@ implicit_entries(Domain, C) ->
         quod_simplex:form_cert(
           Domain, support, 2, ParentBH, SupportShares, P),
     ChildTx = tx(3, C),
-    Child = #block{slot = 3, parent = 2, payload = [ChildTx]},
+    Child = #block{slot = 3, parent = 2, payload = {batch, [ChildTx]}},
     ChildBH = quod_simplex:block_hash(Child),
     CommitShares =
         [quod_simplex:make_share(Domain, commit, 3, ChildBH, signer(M))
@@ -409,10 +465,10 @@ implicit_entries(Domain, C) ->
     {ok, Commit} =
         quod_simplex:form_cert(
           Domain, commit, 3, ChildBH, CommitShares, P),
-    {#entry{index = 2, data = quod_ledger:data([ParentTx]),
+    {#entry{index = 2, data = {batch, [ParentTx]},
             cert = #implicit_cert{
                       support = Support, child = Child, commit = Commit}},
-     #entry{index = 3, data = quod_ledger:data([ChildTx]), cert = Commit}}.
+     #entry{index = 3, data = {batch, [ChildTx]}, cert = Commit}}.
 
 %%%--- catch_up/4 driver (mocked Fetch/Sink — no transport/store) ---
 
@@ -425,18 +481,29 @@ mock_fetch(Chain, W) ->
 
 sink() ->
     put(sink, []),
-    fun(Es) ->
+    fun(Es, Projection) ->
             put(sink, lists:reverse(Es, get(sink))),
+            put(sink_projection, Projection),
             ok
     end.
 
 sunk() ->
     lists:reverse(get(sink)).
 
+catchup_options() ->
+    Unique = integer_to_list(erlang:unique_integer([positive, monotonic])),
+    #{ledger_root => filename:join(
+                        "/tmp", "quod_catchup_verify_" ++ Unique)}.
+
+run_catch_up(GenesisHash, Fetch, Sink) ->
+    quod_catchup:catch_up(
+      ?NS, GenesisHash, Fetch, Sink, catchup_options()).
+
 %% the out-of-band-pinned genesis anchor = block_hash of the genesis block.
 gen_hash(#entry{index = 1, data = D}) ->
-    {ok, Payload} = quod_ledger:payload(D),
-    quod_simplex:block_hash(#block{slot = 1, parent = 0, payload = Payload}).
+    {ok, Transactions} = quod_ledger:payload(D),
+    quod_simplex:block_hash(
+      #block{slot = 1, parent = 0, payload = {batch, Transactions}}).
 
 %% The driver loops windowed fetches, verifies each, sinks the verified entries in order, and reports the
 %% caught-up height.
@@ -444,7 +511,7 @@ catch_up_happy_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
     Chain = [G, committed(2, tx(2, C), C, 3), committed(3, tx(3, C), C, 4)],
     Sink = sink(),
-    ?assertEqual({ok, 3}, quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
+    ?assertEqual({ok, 3}, run_catch_up(gen_hash(G), mock_fetch(Chain, 2), Sink)),   %% windows of 2
     ?assertEqual(Chain, sunk()).                                                             %% all, in order
 
 %% A genesis whose CONTENT (here, committee) differs from the pinned genesis hash is rejected (forged anchor).
@@ -452,7 +519,9 @@ catch_up_bad_anchor_test() ->
     C = committee(4), Fake = committee(4),
     Chain = [genesis(pubs(Fake))],
     ?assertEqual({error, bad_anchor},
-                 quod_catchup:catch_up(?NS, gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10), fun(_) -> ok end)).
+                 run_catch_up(
+                   gen_hash(genesis(pubs(C))), mock_fetch(Chain, 10),
+                   fun(_, _) -> ok end)).
 
 %% A window that fails verification aborts catch-up, and NOTHING is persisted (the whole window is atomic).
 catch_up_forged_test() ->
@@ -460,7 +529,7 @@ catch_up_forged_test() ->
     Chain = [G, committed_in(domain(C), 2, tx(2, C), Outsiders, 3)],
     Sink = sink(),
     ?assertMatch({error, {verify, {bad_cert, 2}}},
-                 quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 10), Sink)),
+                 run_catch_up(gen_hash(G), mock_fetch(Chain, 10), Sink)),
     ?assertEqual([], sunk()).   %% the bad window is never sunk
 
 %% A committee change in window 1 is threaded so window 2 verifies against the GROWN set.
@@ -472,7 +541,7 @@ catch_up_committee_change_across_windows_test() ->
     B3 = committed_in(Domain, 3, tx(3, C4), C5, 4), %% window 2, needs the 5-set quorum
     Sink  = sink(),
     Fetch = fun(1) -> {ok, [G, B2], 3}; (3) -> {ok, [B3], 3}; (_) -> {ok, [], 3} end,
-    ?assertEqual({ok, 3}, quod_catchup:catch_up(?NS, gen_hash(G), Fetch, Sink)),
+    ?assertEqual({ok, 3}, run_catch_up(gen_hash(G), Fetch, Sink)),
     ?assertEqual([G, B2, B3], sunk()).
 
 %% A contact that REGRESSES its claimed height below what it already served is treated as stalled (the target
@@ -482,31 +551,33 @@ catch_up_height_regression_test() ->
     Fetch = fun(1) -> {ok, [G, B2], 100};   %% claims height 100
                (_) -> {ok, [], 5}           %% then regresses to 5, mid-catch-up
             end,
-    ?assertEqual({error, no_progress}, quod_catchup:catch_up(?NS, gen_hash(G), Fetch, sink())).
+    ?assertEqual({error, no_progress}, run_catch_up(gen_hash(G), Fetch, sink())).
 
 %% A fetch failure surfaces so the caller can try another contact.
 catch_up_fetch_error_test() ->
     ?assertEqual({error, {fetch, timeout}},
-                 quod_catchup:catch_up(
-                   ?NS, <<0:256>>, fun(_) -> {error, timeout} end,
-                   fun(_) -> ok end)).
+                 run_catch_up(
+                   <<0:256>>, fun(_) -> {error, timeout} end,
+                   fun(_, _) -> ok end)).
 
 catch_up_malformed_height_test() ->
     ?assertEqual({error, {fetch, bad_response}},
-                 quod_catchup:catch_up(
-                   ?NS, <<0:256>>, fun(_) -> {ok, [], not_a_height} end,
-                   fun(_) -> ok end)).
+                 run_catch_up(
+                   <<0:256>>, fun(_) -> {ok, [], not_a_height} end,
+                   fun(_, _) -> ok end)).
 
 %% A sink failure aborts catch-up cleanly (recoverable), not a badmatch crash.
 catch_up_sink_error_test() ->
     C = committee(4), P = pubs(C), G = genesis(P),
     Chain = [G, committed(2, tx(2, C), C, 3)],
     ?assertEqual({error, {sink, disk_full}},
-                 quod_catchup:catch_up(?NS, gen_hash(G), mock_fetch(Chain, 10), fun(_) -> {error, disk_full} end)).
+                 run_catch_up(
+                   gen_hash(G), mock_fetch(Chain, 10),
+                   fun(_, _) -> {error, disk_full} end)).
 
 %% A server that returns empty while claiming more height is stuck — reported, not looped forever.
 catch_up_no_progress_test() ->
     ?assertEqual({error, no_progress},
-                 quod_catchup:catch_up(
-                   ?NS, <<0:256>>, fun(_) -> {ok, [], 5} end,
-                   fun(_) -> ok end)).
+                 run_catch_up(
+                   <<0:256>>, fun(_) -> {ok, [], 5} end,
+                   fun(_, _) -> ok end)).

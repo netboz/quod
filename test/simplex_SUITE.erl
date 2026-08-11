@@ -661,7 +661,8 @@ assert_membership_proposal_skipped(Config, Evil) ->
                       {?NS, Anchor}, LeaderPub,
                       maps:get(history_projection, Status)),
     {ok, SignedEvil} = quod_transaction:sign(Binding, Unsigned, Identity),
-    Block = #block{slot = V, parent = H, payload = [SignedEvil], timestamp = Ts},
+    Block = #block{slot = V, parent = H,
+                   payload = {batch, [SignedEvil]}, timestamp = Ts},
     Chan  = term_to_binary({log, ?NS}, [deterministic]),
     Frame = quod_simplex:encode(?NS, {propose, Block}),
     _ = [peer:call(LeaderPeer, quod_quic, send, [Fpub, Chan, Frame])

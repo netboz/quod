@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.67"
+  default     = "0.7.69"
   description = "Quod image tag in the cluster registry. Routine upgrades resume the existing anchored quod-node host volumes."
 }
 
@@ -199,7 +199,7 @@ job "quod" {
 
     # Fast LOCAL storage: a per-alloc dynamic host volume (mkdir plugin) on each compute
     # node's local disk. This carries EVERYTHING
-    # for the node — identity, vote journal, and the block ledger — on one fast disk, so
+    # for the node — identity, signing journal, and the block ledger — on one fast disk, so
     # every consensus sync is local. Safe because the durability domains are unified: a
     # host that survives keeps all three (restart resumes with its votes remembered); a
     # host that dies loses all three together, so the node can only return as a fresh
@@ -292,7 +292,7 @@ node {
 }
 metrics { port = 14568 }
 # The web explorer is off by DEFAULT (unauthenticated surface whose prove endpoint writes); the fleet
-# opts in explicitly and binds all interfaces so Nomad's quod-explorer /health check can reach it. This
+# opts in explicitly and binds all interfaces so Nomad's explorer /health check can reach it. This
 # is a private cluster; do not copy `ip = "0.0.0.0"` to an internet-exposed deployment.
 explorer {
   enabled = true
@@ -449,7 +449,7 @@ EOT
       }
 
       service {
-        name = "quod-explorer"
+        name = "explorer"
         port = "explorer"
         tags = ["quod", "explorer", "web"]
 
@@ -679,7 +679,7 @@ EOT
       }
 
       service {
-        name = "quod-explorer"
+        name = "explorer"
         port = "explorer"
         tags = ["quod", "explorer", "web", "cloud"]
 

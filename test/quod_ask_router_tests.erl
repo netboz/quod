@@ -109,6 +109,57 @@ command_correlation_generation_and_no_reply_commands_test() ->
           flush_link_frames(TestPid)
       end).
 
+seal_attest_and_submit_are_reply_correlated_test() ->
+    with_open_scope(
+      fun(Router, _TestPid, TargetKey, Binding, Handle,
+          RequestLink, ReturnLink) ->
+          {ok, SealRequest} = quod_ask_router:command(
+                                Handle, 30000, scope_seal),
+          {scope_command, Binding, SealSeq, SealRequest, 30000, scope_seal} =
+              receive_command(request),
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     2, SealRequest, SealSeq, 0, false, plan_not_material),
+          receive
+              {quod_scope_event, Handle, SealRequest, 0, false,
+               plan_not_material} -> ok
+          after ?TIMEOUT -> error(seal_event_timeout)
+          end,
+
+          ManifestBlob = <<"bounded manifest">>,
+          {ok, AttestRequest} = quod_ask_router:command(
+                                  Handle, 30000,
+                                  {scope_attest, ManifestBlob}),
+          {scope_command, Binding, AttestSeq, AttestRequest, 30000,
+           {scope_attest, ManifestBlob}} = receive_command(request),
+          AttestationBlob = <<"bounded attestation">>,
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     3, AttestRequest, AttestSeq, 0, false,
+                     {plan_attested, AttestationBlob}),
+          receive
+              {quod_scope_event, Handle, AttestRequest, 0, false,
+               {plan_attested, AttestationBlob}} -> ok
+          after ?TIMEOUT -> error(attest_event_timeout)
+          end,
+
+          Submit = {submit_plan, <<"plan">>, <<"goal">>, <<"result">>, []},
+          {ok, SubmitRequest} = quod_ask_router:command(
+                                  Handle, 30000, Submit),
+          {scope_command, Binding, SubmitSeq, SubmitRequest, 30000, Submit} =
+              receive_command(request),
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     4, SubmitRequest, SubmitSeq, 0, false,
+                     {plan_submitted, {rejected, bad_plan}}),
+          receive
+              {quod_scope_event, Handle, SubmitRequest, 0, false,
+               {plan_submitted, {rejected, bad_plan}}} -> ok
+          after ?TIMEOUT -> error(submit_event_timeout)
+          end,
+
+          ok = quod_ask_router:unregister(Handle),
+          stop_link(RequestLink),
+          stop_link(ReturnLink)
+      end).
+
 cancelled_command_discards_late_event_test() ->
     with_open_scope(
       fun(Router, _TestPid, TargetKey, Binding, Handle,

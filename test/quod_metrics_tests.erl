@@ -65,6 +65,28 @@ foreign_commit_metrics_use_target_namespace_test() ->
                             quod_tx_committed_total,
                             [Origin, AuthorLabel])).
 
+dtx_commits_are_counted_by_phase_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    ok = quod_metrics:declare(<<"kp_testnode">>),
+    Ns = <<"metrics:non-content:",
+           (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    ok = quod_metrics:test_observe_commit(
+           Ns, #entry{index = 1, data = noop}),
+    ok = quod_metrics:test_observe_commit(
+           Ns, #entry{index = 2, data = {batch, []}}),
+    ?assertEqual(
+       undefined,
+       prometheus_counter:value(
+         quod_dtx_committed_total, [Ns, <<"decision">>])),
+    ok = quod_metrics:test_observe_commit(
+           Ns, #entry{index = 3,
+                      data = quod_ct:dtx_decision_payload()}),
+    ?assertEqual(
+       1,
+       prometheus_counter:value(
+         quod_dtx_committed_total, [Ns, <<"decision">>])).
+
 %% The link-send drop counter makes quod_link's deliberately ignored backpressure
 %% returns visible, classified by reason, receiving peer, and a bounded channel
 %% class. Only exact deterministic Simplex channel identities get `log`/`ingress`;

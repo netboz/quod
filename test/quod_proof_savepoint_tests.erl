@@ -13,7 +13,7 @@ restore_rolls_back_writes_but_keeps_reads_test() ->
         ok = quod_proof_session:open(
                Session, Writer,
                {',', {source, value}, {assertz, {staged, value}}},
-               context(), empty_selection()),
+               allowed, context(), empty_selection()),
         ?assertMatch({solution, _}, quod_proof_session:next(Session, Writer)),
         ?assert(quod_proof_session:dirty(Session)),
         ?assert(quod_proof_session:overlay_generation(Session) > Generation0),
@@ -283,7 +283,7 @@ prove_write(Session, Fact) ->
 prove_goal(Session, Goal) ->
     Invocation = opaque_id(),
     ok = quod_proof_session:open(
-           Session, Invocation, Goal, context(), empty_selection()),
+           Session, Invocation, Goal, allowed, context(), empty_selection()),
     ?assertMatch({solution, _}, quod_proof_session:next(Session, Invocation)).
 
 empty_selection() -> quod_transaction_scope:empty_selection().

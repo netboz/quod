@@ -81,8 +81,9 @@ readiness_config_test_() ->
 %%% fold_snapshot/3 — the cached consensus snapshot advance (contiguity-guarded)
 %%%===================================================================
 
-%% A contiguous entry advances height + folds the committee together (the as-of pairing); a `noop` skip
-%% folds the committee to identity; a membership entry folds the delta; a gap resets to `none` (refetch).
+%% A contiguous content entry advances height + folds the committee together (the as-of pairing); a
+%% `noop` preserves it; a membership entry folds the delta. A gap or DTX control resets to `none`: DTX
+%% reduction needs group history, so the ephemeral feed cache refetches Simplex's authoritative projection.
 fold_snapshot_test() ->
     A = <<1>>, B = <<2>>,
     Admit = #transaction{tx_id = <<"t">>, origin = {<<"n">>, <<0:256>>}, author = <<"a">>, sig = none, read_check = #{},
@@ -90,7 +91,7 @@ fold_snapshot_test() ->
     Projection = quod_simplex:history_projection(
                    [A], <<3:256>>, #{A => <<4:256>>}, #{}, 0),
     Noop = #entry{index = 6, data = noop},
-    AdmitEntry = #entry{index = 6, data = quod_ledger:data([Admit])},
+    AdmitEntry = #entry{index = 6, data = {batch, [Admit]}},
     %% contiguous content/noop entry: height advances, committee unchanged
     {6, NoopProjection, done} =
         quod_feed:fold_snapshot(<<"n">>, Noop, {5, Projection, done}),
@@ -108,5 +109,10 @@ fold_snapshot_test() ->
     ?assertEqual(none, quod_feed:fold_snapshot(
                          <<"n">>, Noop#entry{index = 5},
                          {5, Projection, done})),
+    %% A real, signed DTX control must not enter the content-only projection
+    %% fold (which deliberately fails closed without its phase-history index).
+    Dtx = #entry{index = 6, data = quod_ct:dtx_decision_payload()},
+    ?assertEqual(none, quod_feed:fold_snapshot(
+                         <<"n">>, Dtx, {5, Projection, done})),
     %% folding onto an unprimed snapshot stays none (primed later by a status call)
     ?assertEqual(none, quod_feed:fold_snapshot(<<"n">>, Noop, none)).

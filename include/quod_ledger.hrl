@@ -65,8 +65,16 @@
 -type slot() :: non_neg_integer().               %% 0 = origin sentinel (parent of slot 1); blocks are 1..N
                                                  %% (the founder's self-signed genesis BLOCK is slot 1)
 
-%% A proposed block for a slot. `payload` is a non-empty batch of transactions.
-%% a membership change is an ordinary #transaction asserting/retracting `peer_admitted`). `parent` is
+%% One proposed/committed block payload. Content is an explicitly tagged,
+%% non-empty transaction batch. Distributed-transaction control is one opaque,
+%% canonical blob decoded by `quod_dtx`; it is always a singleton consensus
+%% barrier and never joins a content batch.
+-type block_payload() :: {batch, nonempty_list(#transaction{})}
+                       | {dtx, binary()}.
+
+%% A proposed block for a slot. `payload` is one tagged `block_payload()` (a
+%% membership change remains an ordinary #transaction asserting/retracting
+%% `peer_admitted`). `parent` is
 %% the previous APPROVED slot it extends (0 = genesis). It may therefore be newer than the durable
 %% committed head while consensus is pipelined.
 %% `timestamp` is the leader's propose wall-clock (ms since Unix epoch) — the canonical block time (cf.
@@ -77,7 +85,7 @@
 %% CometBFT-style voting-power-weighted median of validator timestamps instead of the leader's single clock.
 -record(block, {slot      :: slot(),
                 parent    :: slot(),
-                payload   :: [#transaction{}],
+                payload   :: block_payload(),
                 timestamp = 0 :: non_neg_integer()}).
 
 %% A signed vote from ONE validator. `kind`: `support` (notarize) / `commit` (finalize) /
@@ -109,14 +117,14 @@
                         child   :: #block{},
                         commit  :: #cert{}}).
 
-%% What one committed slot carries. The variants are enumerated in exactly one
-%% place — `quod_ledger:classify/1` — and every consumer that reacts per variant
-%% dispatches on its result, so a variant added later (step 4's distributed
-%% control records) cannot be silently folded as nothing at a site that forgot it.
--type entry_data() :: {batch, [#transaction{}]} | noop.
+%% What one committed slot carries. A proposed block's tagged payload is stored
+%% byte-for-byte; complaint-certified skips additionally use `noop`. The
+%% variants are enumerated in exactly one place -- `quod_ledger:classify/1` --
+%% so a new kind cannot be silently folded as nothing at a forgotten consumer.
+-type entry_data() :: block_payload() | noop.
 
-%% A committed log entry. `data` is a canonical `{batch, [#transaction{}]}` block payload,
-%% or the atom `noop` for a complaint-skipped slot. Genesis uses the same batch format.
+%% A committed log entry. `data` is the exact tagged block payload, or the atom
+%% `noop` for a complaint-skipped slot. Genesis is a `{batch, [GenesisTx]}`.
 %% `cert` is the quorum certificate that finalized the slot —
 %% the COMMIT cert for a #transaction, the COMPLAINT cert for a `noop` skip, or `none` for the
 %% self-signed genesis (slot 1, verified out-of-band, not by a cert). A catch-up joiner verifies each

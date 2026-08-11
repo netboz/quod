@@ -15,7 +15,6 @@ accepted.
 """.
 
 -include("quod_ledger.hrl").
--include("quod_vm_limits.hrl").
 
 -export([from_plan/4, bind_id/2, valid_id/2,
          plan_outcome_ref/3, encode_durable_submission/2,
@@ -34,8 +33,9 @@ accepted.
 %% vocabulary allocation is permitted for an authenticated committee author.
 %% Unrelated committee changes do not invalidate retained custody, while
 %% remove/re-admit makes every signature from the earlier admission
-%% unverifiable. The DTX control records bind the complete committee view
-%% separately where that stronger scope is load-bearing.
+%% unverifiable. DTX controls use their own admission-scoped sequence lane, and
+%% each committed control's certified reference binds the exact committee that
+%% finalized its ledger position.
 -define(VERSION, 6).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
@@ -45,7 +45,6 @@ accepted.
 -define(COMMITTEE_ID_BYTES, 32).
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).
 -define(MAX_CANONICAL_BYTES, (256 * 1024)).
--define(MAX_NEW_SUBMISSION_ATOMS, 64).
 
 -type target_binding() :: {binary(), binary(), binary()}.
 
@@ -79,14 +78,17 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck},
 -doc "Bind a transaction's stable id to its target and complete semantic write.".
 -spec bind_id({binary(), binary()}, #transaction{}) -> #transaction{}.
 bind_id(Target, Transaction = #transaction{}) ->
-    Transaction#transaction{tx_id = semantic_id(Target, Transaction)}.
+    case semantic_id(Target, Transaction) of
+        {ok, TxId} -> Transaction#transaction{tx_id = TxId};
+        error -> error(bad_transaction_material)
+    end.
 
 -doc "Whether `tx_id` is the canonical id of this target-bound semantic write.".
 -spec valid_id({binary(), binary()}, #transaction{}) -> boolean().
 valid_id({Ns, <<_:256>>} = Target,
          #transaction{tx_id = <<_:256>> = TxId} = Transaction)
   when is_binary(Ns) ->
-    TxId =:= semantic_id(Target, Transaction);
+    semantic_id(Target, Transaction) =:= {ok, TxId};
 valid_id(_Target, _Transaction) ->
     false.
 
@@ -120,10 +122,27 @@ semantic_id({Ns, <<_:256>> = Anchor},
                          result = Result, diff = Diff,
                          read_check = ReadCheck})
   when is_binary(Ns) ->
-    semantic_id_parts(
-      Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
-      term_to_binary(Diff, [deterministic]),
-      term_to_binary(ReadCheck, [deterministic])).
+    case semantic_material_bytes(Diff, ReadCheck) of
+        {ok, DiffBytes, ReadCheckBytes} ->
+            {ok,
+             semantic_id_parts(
+               Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
+               DiffBytes, ReadCheckBytes)};
+        error ->
+            error
+    end.
+
+semantic_material_bytes(Diff, ReadCheck)
+  when is_list(Diff), is_map(ReadCheck) ->
+    case {quod_wire_term:encode_canonical(Diff),
+          quod_wire_term:encode_canonical(maps:to_list(ReadCheck))} of
+        {{ok, DiffBytes}, {ok, ReadCheckBytes}} ->
+            {ok, DiffBytes, ReadCheckBytes};
+        _ ->
+            error
+    end;
+semantic_material_bytes(_Diff, _ReadCheck) ->
+    error.
 
 semantic_plan_id(
   {Ns, <<_:256>> = Anchor}, Plan, GoalBlob, ResultBlob) ->
@@ -377,7 +396,7 @@ decode_verified_submission(_Binding, _Submission) ->
 decode_material(MaterialWire) ->
     case quod_wire_term:decode(MaterialWire) of
         {ok, {Diff0, ReadPairs0}} when is_list(Diff0), is_list(ReadPairs0) ->
-            case materialize_new_symbols({Diff0, ReadPairs0}) of
+            case quod_wire_term:materialize_symbols({Diff0, ReadPairs0}) of
                 {ok, {Diff, ReadPairs}} ->
                     ReadCheck = maps:from_list(ReadPairs),
                     case map_size(ReadCheck) =:= length(ReadPairs) of
@@ -390,83 +409,3 @@ decode_material(MaterialWire) ->
         _ ->
             {error, malformed_material}
     end.
-
-%% The wire decoder never allocates an unknown atom. A valid transaction may
-%% introduce a small amount of ontology vocabulary, so collect and validate the
-%% complete set before allocating any of it. The fixed cap prevents one signed
-%% relay frame from turning a 256 KiB payload into an atom-table bomb; the wider
-%% atom resource/economic policy remains deliberately outside this codec.
-materialize_new_symbols(Term) ->
-    case collect_new_symbols(Term, #{}) of
-        {ok, Symbols} when map_size(Symbols) =< ?MAX_NEW_SUBMISSION_ATOMS ->
-            Names = lists:sort(maps:keys(Symbols)),
-            case lists:all(fun valid_symbol_name/1, Names) of
-                true ->
-                    case atom_headroom(length(Names)) of
-                        true ->
-                            try
-                                _ = [binary_to_atom(Name, utf8) || Name <- Names],
-                                {ok, replace_symbols(Term)}
-                            catch
-                                error:system_limit -> {error, atom_limit};
-                                error:badarg -> {error, malformed_material}
-                            end;
-                        false ->
-                            {error, atom_limit}
-                    end;
-                false ->
-                    {error, malformed_material}
-            end;
-        {ok, _TooMany} ->
-            {error, too_many_new_atoms};
-        error ->
-            {error, malformed_material}
-    end.
-
-atom_headroom(NewAtoms) ->
-    erlang:system_info(atom_count) + NewAtoms + ?QUOD_ATOM_SAFETY_MARGIN <
-        erlang:system_info(atom_limit).
-
-collect_new_symbols({'$quod_symbol', Name}, Acc) when is_binary(Name) ->
-    {ok, Acc#{Name => true}};
-collect_new_symbols(Tuple, Acc) when is_tuple(Tuple) ->
-    collect_new_symbol_list(tuple_to_list(Tuple), Acc);
-collect_new_symbols([Head | Tail], Acc) ->
-    case collect_new_symbols(Head, Acc) of
-        {ok, Acc1} -> collect_new_symbols(Tail, Acc1);
-        error -> error
-    end;
-collect_new_symbols([], Acc) ->
-    {ok, Acc};
-collect_new_symbols(Term, Acc)
-  when is_atom(Term); is_binary(Term); is_integer(Term); is_float(Term) ->
-    {ok, Acc};
-collect_new_symbols(_Term, _Acc) ->
-    error.
-
-collect_new_symbol_list([], Acc) ->
-    {ok, Acc};
-collect_new_symbol_list([Term | Rest], Acc) ->
-    case collect_new_symbols(Term, Acc) of
-        {ok, Acc1} -> collect_new_symbol_list(Rest, Acc1);
-        error -> error
-    end.
-
-valid_symbol_name(Name) ->
-    try unicode:characters_to_binary(Name, utf8, utf8) of
-        Name -> true;
-        _ -> false
-    catch
-        _:_ -> false
-    end.
-
-replace_symbols({'$quod_symbol', Name}) ->
-    binary_to_existing_atom(Name, utf8);
-replace_symbols(Tuple) when is_tuple(Tuple) ->
-    list_to_tuple([replace_symbols(Term) || Term <- tuple_to_list(Tuple)]);
-replace_symbols([Head | Tail]) ->
-    [replace_symbols(Head) | replace_symbols(Tail)];
-replace_symbols([]) ->
-    [];
-replace_symbols(Term) ->
-    Term.

@@ -35,8 +35,15 @@ The runtime keeps two frontiers: **approved** (support-certified, safe to extend
 **committed** (durable and externally visible). Leaders micro-batch ordered transactions
 into one block and may build one child over an uncommitted approved parent. A child commit also
 finalizes its approved parent; catch-up persists and verifies that implicit proof. Committee
-transactions are singleton barriers, so a voting-set change is explicitly committed before
-the next proposal opens.
+transactions and DTX controls are singleton barriers, so a voting-set change or
+distributed phase is explicitly committed before the next proposal opens. A
+committed Prepare installs a phase-aware ordinary-content admission lock and a
+proof fence. The same group's Decision and prepared Finalize may progress as
+their roles permit; a direct no-Prepare abort is an independent metadata
+tombstone. Finalize reopens consensus admission, while the proof fence stays
+closed until ordered Prolog apply/discard is published. Origin Complete is the
+only transition that publishes the terminal group outcome and releases its
+origin role.
 
 Ingress names the first slot a request can still enter and sends that slot with the signed
 submission to its deterministic proposer. The receiver may collect or park the request only
@@ -62,7 +69,7 @@ three quorum restorations for one unchanged phase start a fresh full Delta; late
 deadline. A member that accepted a proposal while recovering runs that held proposal through the normal
 support or membership-verdict path once ready.
 
-Every first support or final-vote decision is appended and synced through `m:quod_vote_journal`
+Every first support or final-vote decision is appended and synced through `m:quod_signing_journal`
 before its signature can leave the node. Restart therefore reloads the same one-support and
 commit-versus-complaint decisions instead of creating a second vote. One decision table owns every
 first final vote in both live pipeline slots: `f+1` visible peer complaints select the skip camp;
@@ -89,6 +96,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 
 -include("quod_ledger.hrl").
 -include("quod_ingress_limits.hrl").
+-include("quod_proof_limits.hrl").
 
 -define(MAX_SLOT, 16#FFFFFFFFFFFFFFFF).   %% share_bytes/4 signs slots as unsigned 64-bit integers
 -define(PIPELINE_DEPTH, 1).               %% at most one approved parent may remain uncommitted
@@ -111,15 +119,25 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          verify_cert/3,
          may_commit/2, may_complain/2, well_formed_block/1,
          valid_history_entry/4,
-         history_projection/0, history_projection/5,
-         history_committee/1, history_advance/3,
-         history_validate_advance/3,
-         committee_delta/1, apply_committee_delta/2]).   %% committee = projection of peer_admitted facts
+         history_projection/0, history_projection/1, history_projection/5,
+         history_committee/1, history_validator_routes/1,
+         history_advance/3, history_advance/4,
+         history_validate_advance/3, history_validate_advance/4,
+         history_preview_advance/5,
+         committee_delta/1, apply_committee_delta/2,
+         membership_diff_acceptable/2]).   %% committee = projection of peer_admitted facts
 
 -export_type([history_projection/0]).
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
--export([start_link/2, rebuild/1, status/1, committee/1, genesis_hash/1, stats/1, namespaces/0]).
+-export([start_link/2, rebuild/1, prolog_ready/3, finalize_applied/4,
+         dtx_binding/1, register_dtx_begin/5, activate_dtx_begin/3,
+         cancel_dtx_begin/3, submit_dtx/3, dtx_group_barrier/3,
+         dtx_endpoint_request/6, dtx_endpoint_local/3,
+         dtx_local_evidence/3, dtx_applied_source/2, dtx_outcome_lookup/2,
+         status/1, committee/1, genesis_hash/1,
+         acquire_proof_access/1, check_proof_access/1,
+         stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
 -ifdef(TEST).
@@ -137,14 +155,17 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          recovery_failed/1, may_sink/2, reset_pace/0, approve_block/2, finalize/2,
          catchup_origin/1,
          test_state/1, test_arm/1, test_sync/1,
-         restore_vote_rounds/1,
+         restore_signing_state/1,
          proposal_slot/1, acceptable_payload/2, needs_hint_warm/2,
          reconcile_head_progress/1, resume_ready_rounds/1,
          on_progress_timeout/2, progress_timer_actions/2, watch_requested/2,
          settle_readiness/2, prune_consensus_links/1,
          dispatch/3, reconcile_block_requests/1,
          test_progress/1, test_progress_rearms/1, test_support_grace/1,
-         test_round/2, test_requested/1,
+         test_round/2, test_dtx_round/2,
+         test_latch_dtx_validation/6, test_on_dtx_verdict/7,
+         test_consensus_barrier/1, test_dtx_consensus_barrier/2,
+         test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
          test_retired_inbound/1,
          test_relay_link_peers/1, test_relay_chan/1,
@@ -152,7 +173,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_invalidate_relay_generation/2,
          test_close_relay_transport/1,
          test_relay_transport_counts/1,
-         test_redrive_head/3, test_block_requests/1, test_vote_journal/1,
+         test_redrive_head/3, test_block_requests/1, test_signing_journal/1,
          test_append/3, test_relayed_append/3, test_relayed_append/4,
          test_relay_origin/4,
          test_ingress/1, test_ingress_view_source/1,
@@ -175,11 +196,41 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_round_probe/1, test_route/4,
          proposal_visible/2, reseat_engine/2,
          committee_view_id/4, test_committee_id/1,
+         test_author_admissions/1,
          test_author_admission/1,
          test_retire_changed_admissions/3,
+         test_install_projection/2,
+         test_dtx_slot_route/2,
+         test_dtx_endpoint_ready/2,
+         test_dtx_outcome_result/2,
+         test_validate_dtx_reference_evidence/2,
+         test_verify_complete_applied/5,
+         test_dtx_endpoint_frame/6,
+         test_dtx_outbound_message/4,
+         test_seed_dtx_correlation/5,
+         test_dtx_endpoint_result/3,
+         test_seed_dtx_worker/5,
+         test_finish_dtx_worker/3,
+         test_drop_dtx_endpoint_owner/3,
+         test_seed_dtx_submission/3,
+         test_seed_dtx_submission_at/4,
+         test_oldest_eligible_dtx_submission/1,
+         test_resolve_committed_dtx/3,
+         test_retain_dtx_record/3,
+         test_dtx_retain_admissible/2,
+         test_dtx_submission_waiters/1,
+         test_reconcile_signing_state/1,
+         test_finish_pending_begin_reconciliation/2,
+         test_retire_invalid_dtx/3,
+         test_reconcile_dtx_coordinator/1,
+         test_drop_dtx_coordinator/4,
+         test_dtx_coordinator_state/1,
+         test_stop_dtx_coordinator/1,
+         test_dtx_endpoint_counts/1,
          test_log_projection/3,
-         test_apply_catchup_window/3,
+         test_apply_catchup_window/3, test_apply_catchup_window/4,
          test_genesis_tx/4, test_valid_genesis_source/1,
+         test_valid_config/1,
          stats_map/1, encode/2]).   %% encode/2: the `{log, Ns}` wire frame — used by simplex_SUITE to inject a crafted propose
 -endif.
 
@@ -188,7 +239,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 %% and consequently marks their reject branches unreachable; weakening the canonical record types would
 %% hide useful mistakes everywhere else.
 -dialyzer({nowarn_function, [dispatch/3, well_formed_block/1, well_formed_share/1,
-                             valid_read_check/1, valid_diff/1, committee_transaction/2,
+                             committee_transaction/2,
                              transaction_endpoints/1, proper_list/1,
                              change_acceptable/2]}).
 
@@ -297,12 +348,10 @@ inflate the count — signers are deduplicated.
 -spec form_cert(<<_:256>>, support | commit | complaint, slot(),
                 binary() | none, [#share{}], [node_id()]) ->
           {ok, #cert{}} | {error, insufficient}.
-form_cert(_Domain, _Kind, _Slot, _BlockHash, _Shares, []) ->
-    {error, insufficient};                       %% no validators yet ⇒ no quorum (never quorum(0))
 form_cert(Domain, Kind, Slot, BlockHash, Shares, Validators) ->
-    case is_slot(Slot) andalso valid_shape(Kind, BlockHash) of
-        false -> {error, insufficient};          %% malformed (kind/block_hash mismatch)
-        true  ->
+    case {bounded_validator_count(Validators),
+          is_slot(Slot) andalso valid_shape(Kind, BlockHash)} of
+        {{ok, N}, true} when N > 0 ->
             Msg  = share_bytes(Domain, Kind, Slot, BlockHash),
             Sigs = distinct_valid([{S#share.signer, S#share.sig}
                                     || S <- Shares,
@@ -310,10 +359,12 @@ form_cert(Domain, Kind, Slot, BlockHash, Shares, Validators) ->
                                        S#share.slot =:= Slot,
                                        S#share.block_hash =:= BlockHash],
                                    Msg, Validators),
-            case length(Sigs) >= quorum(length(Validators)) of
+            case length(Sigs) >= quorum(N) of
                 true  -> {ok, #cert{kind = Kind, slot = Slot, block_hash = BlockHash, sigs = Sigs}};
                 false -> {error, insufficient}
-            end
+            end;
+        _ ->
+            {error, insufficient}                %% empty/oversized/malformed committee or cert shape
     end.
 -endif.
 
@@ -486,8 +537,8 @@ persisted_finality(Slot, BH, Eng) ->
 implicit_finality(Slot, BH, Eng = #eng{tree = Tree, tree_hashes = Hashes}) ->
     case {maps:get(Slot, Tree, undefined), persisted_cert(support, Slot, BH, Eng)} of
         {#block{payload = Payload}, #cert{} = Support} ->
-            case payload_touches_committee(Payload) of
-                true -> none;   %% committee transitions are explicit-finality barriers
+            case payload_is_consensus_barrier(Payload) of
+                true -> none;   %% committee and DTX transitions require explicit finality
                 false ->
                     Children = lists:sort(
                       [{ChildSl, Child, maps:get(ChildSl, Hashes)}
@@ -646,11 +697,19 @@ maybe_form_bucket_cert(K, Sl, BH, Bucket, Eng) ->
 sanitize_cert(Domain,
               #cert{kind = K, slot = Sl, block_hash = BH, sigs = Sigs} = C,
               Validators) ->
-    N = length(Validators),
-    case N > 0 andalso is_slot(Sl) andalso valid_shape(K, BH)
+    case bounded_validator_count(Validators) of
+        {ok, N} when N > 0 ->
+            sanitize_cert_bounded(
+              Domain, C, K, Sl, BH, Sigs, Validators, N);
+        _ ->
+            error
+    end.
+
+sanitize_cert_bounded(Domain, C, K, Sl, BH, Sigs, Validators, N) ->
+    case is_slot(Sl) andalso valid_shape(K, BH)
          andalso bounded_signatures(Sigs, N) of
         false -> error;
-        true  ->
+        true ->
             Valid = distinct_valid(
                       Sigs, share_bytes(Domain, K, Sl, BH), Validators),
             case length(Valid) >= quorum(N) of
@@ -658,6 +717,17 @@ sanitize_cert(Domain,
                 false -> error
             end
     end.
+
+%% Validator lists come from authenticated history but still cross untrusted
+%% replay/catch-up boundaries. Count only through the shared limit so an
+%% oversized or improper list is rejected before signer traversal or crypto.
+bounded_validator_count(Validators) ->
+    bounded_validator_count(Validators, 0).
+
+bounded_validator_count([], Count) -> {ok, Count};
+bounded_validator_count([_ | Rest], Count) when Count < ?MAX_VALIDATORS ->
+    bounded_validator_count(Rest, Count + 1);
+bounded_validator_count(_MalformedOrTooLarge, _Count) -> error.
 
 cert_key(#cert{kind = K, slot = Sl, block_hash = BH}) -> {K, Sl, BH}.
 
@@ -891,6 +961,11 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                                                   %% so a REAL stall still fails visibly (busy) while the
                                                   %% caller can still hear it — the queue never hides a wedge
 -define(SIGNATURE_VERIFY_TIMEOUT_MS, 2000).       %% fail closed if a crypto worker wedges
+-define(DTX_FOREIGN_VERIFY_MS, 6000).             %% cache-fill workers may outlive one Delta;
+-define(DTX_COORDINATOR_RETRY_MIN_MS, 100).
+-define(DTX_COORDINATOR_RETRY_MAX_MS, 5000).
+-define(DTX_COORDINATOR_MAX_FAILURES, 16).
+                                                  %% proposal redrive reuses the verified cache
 -define(MAX_QUORUM_REARMS, 3).                    %% bound link-flap deadline extension per slot/phase
 -define(READINESS_MS, 1000).                      %% readiness refresh; at or below the default Delta
 -define(READINESS_FRESH_MS, 3000).                %% tolerate two missed refreshes, then fail closed
@@ -901,7 +976,16 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(round, {supporting = none :: none | binary(),
                 final = none :: final_vote(),
                 invalid = none :: none | binary(),
-                validating = none :: none | binary()}).
+                invalid_reason = none :: none | term(),
+                validating = none :: none | binary(),
+                validation = none :: none | membership |
+                    {dtx, term(), pid(), reference()} |
+                    {dtx_foreign, term(), pid(), reference(),
+                     quod_dtx:group_history()},
+                candidate = none :: none | {binary(), #block{}},
+                dtx_parent = none :: none |
+                    {binary(), term(), quod_dtx:group_history(),
+                     quod_dtx:projection()}}).
 
 -record(batch, {slot :: slot(),
                 parent :: slot(),
@@ -921,6 +1005,71 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(local_proposal, {hash :: binary(),
                          waiters = [] :: [term()],
                          trace_ctxs = [] :: [quod_trace:context()]}).
+
+%% A semantic Begin is accepted before it can be signed.  The intent is tied
+%% to the exact Prolog-engine incarnation until that engine activates it; only
+%% the journal-backed submission survives that hand-off.
+-record(dtx_intent, {
+    id :: reference(),
+    engine :: pid(),
+    monitor :: reference(),
+    record :: quod_dtx:control_record(),
+    group_ref :: term()
+}).
+
+%% Retained signed controls are tiny in count (one active group plus the one
+%% locally pending Begin) but may be large in bytes.  Keep the exact signed
+%% envelope once and re-drive it; never copy it into the ordinary transaction
+%% custody queues.
+-record(dtx_submission, {
+    record :: quod_dtx:control_record(),
+    control :: quod_dtx:control(),
+    envelope :: binary(),
+    group_id :: <<_:256>>,
+    digest :: <<_:256>>,
+    inserted_at :: integer(),
+    next_send = 0 :: integer(),
+    waiters = [] :: [term()]
+}).
+
+%% Volatile request ownership for the process-free DTX endpoint.  The exact
+%% authenticated peer and decoded request are retained until one correlated
+%% reply or the caller-owned timeout closes the entry.
+-record(dtx_correlation, {
+    target_ns :: binary(),
+    peer :: node_id(),
+    request :: quod_dtx_endpoint:request(),
+    from :: term(),
+    caller_mref :: reference(),
+    timer :: reference(),
+    timeout_tag :: reference()
+}).
+
+%% Inbound endpoint work never runs in the consensus statem.  The monitor is
+%% the sole lifecycle edge and the exact inbound link is the sole reply path.
+-record(dtx_server_worker, {
+    pid :: pid(),
+    monitor :: reference(),
+    owner_mref = none :: none | reference(),
+    peer :: local | node_id(),
+    request :: quod_dtx_endpoint:request(),
+    destination :: {link, pid()} | {caller, term()}
+}).
+
+%% One bounded owner for the origin's volatile recovery driver.  The semantic
+%% Begin and every decision remain durable elsewhere; this record contains
+%% only the exact monitored process (coordinator or historical-Begin loader)
+%% and bounded retry bookkeeping.
+-record(dtx_coordinator_owner, {
+    status :: running | recovering | backoff,
+    group_id :: <<_:256>>,
+    begin_ref = none :: none | quod_dtx:certified_ref(),
+    group_ref = none :: none | term(),
+    pid = none :: none | pid(),
+    monitor = none :: none | reference(),
+    failures = 0 :: 0..16,
+    retry_at = 0 :: integer()
+}).
 
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
 -record(head_progress, {slot :: slot(),
@@ -965,20 +1114,31 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                   attempts = 0 :: non_neg_integer(),
                   bytes :: pos_integer()}).
 
+-ifdef(TEST).
+-type signing_journal() :: quod_signing_journal:handle() | memory | undefined.
+-else.
+-type signing_journal() :: quod_signing_journal:handle() | undefined.
+-endif.
+
 -record(s, {ns           :: binary(),
             consensus_domain :: <<_:256>> | undefined,
             self         :: node_id(),               %% our pubkey == node_id
             id           :: signer() | undefined,    %% signing identity (pubkey + private key)
             store        :: quod_ledger_store:handle() | undefined,
-            vote_journal :: quod_vote_journal:handle() | memory | undefined,
+            ledger_root  :: file:filename_all() | undefined,
+            signing_journal :: signing_journal(),
             eng          :: #eng{} | undefined,      %% the consensus engine (certificate pool + block tree)
             chan         :: binary() | undefined,    %% term_to_binary({log, Ns}) — the transport channel
             relay_chan   :: binary() | undefined,    %% term_to_binary({ingress, Ns}) — relay-only stream
+            dtx_chan     :: binary() | undefined,    %% bounded DTX recovery request/reply stream
             validators   = [] :: [node_id()],        %% the committee FACTS — sorted `peer_admitted` pubkeys,
                                                      %% the KB projection re-derived from the committed log
                                                      %% (in-process). The ACTIVE voting set derives from this
                                                      %% via `active_validators/1` (identity at epoch length 1);
                                                      %% "who votes now" reads route through THAT, not this field.
+            validator_routes = #{} :: #{node_id() => {term(), pos_integer()}},
+                                                     %% bounded endpoint projection from the same committed
+                                                     %% peer_admitted facts; every use still pins TLS to the key
             committee_id = undefined :: binary() | undefined,
                                                      %% hash identity of the exact membership-adoption block;
                                                      %% undefined only while the namespace has no founded view
@@ -1035,6 +1195,23 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             detailed_metrics = false :: boolean(),
             author_admissions = #{} :: #{node_id() => binary()},
             author_seqs = #{} :: #{node_id() => non_neg_integer()},
+            dtx_projection = undefined :: undefined | quod_dtx:projection(),
+            dtx_lanes = #{} :: #{{binary(), node_id()} => non_neg_integer()},
+            dtx_last_group = none :: none | <<_:256>>,
+            dtx_pending = none
+              :: none | {<<_:256>>, {<<_:256>>, <<_:256>>}},
+            dtx_intent = none :: none | #dtx_intent{},
+            dtx_submissions = #{} ::
+              #{<<_:256>> => #dtx_submission{}},
+            dtx_correlations = #{} ::
+              #{binary() => #dtx_correlation{}},
+            dtx_out_channels = #{} ::
+              #{binary() => {binary(), pos_integer()}},
+            dtx_workers = #{} :: #{pid() => #dtx_server_worker{}},
+            dtx_rate_buckets = #{} :: map(),
+            dtx_coordinator = none
+              :: none | #dtx_coordinator_owner{},
+            history_head = none :: none | {slot(), <<_:256>>},
             next_author_seq = 1 :: pos_integer(),
             prolog_ready = false :: boolean(),
             %% Recovery is one explicit state machine. `unconfirmed` means the durable prefix is valid but
@@ -1088,6 +1265,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 test_state(Overrides) ->
     S0 = maps:fold(fun(approved, _V, Acc) -> Acc;
                      (ingress, _V, Acc) -> Acc;
+                     (validators, _V, Acc) -> Acc;
+                     (author_admissions, _V, Acc) -> Acc;
                      (K, V, Acc) -> test_state_set(K, V, Acc)
                   end,
                   #s{ns = <<"t">>, self = <<"self">>,
@@ -1097,24 +1276,41 @@ test_state(Overrides) ->
                      chan = term_to_binary({log, <<"t">>}, [deterministic]),
                      relay_chan =
                          term_to_binary({ingress, <<"t">>}, [deterministic]),
-                     vote_journal = memory},
+                     signing_journal = memory},
                   Overrides),
-    S1 = case maps:find(approved, Overrides) of
-             {ok, V} -> S0#s{approved = V};
-             error   -> S0
+    %% `validators` derives the default admission map, while an explicit
+    %% `author_admissions` override must win.  Do not let maps:fold/3's
+    %% unspecified traversal order decide that dependency.
+    S1 = case maps:find(validators, Overrides) of
+             {ok, Validators} -> test_state_set(validators, Validators, S0);
+             error -> S0
          end,
     S2 =
-        case maps:is_key(author_admissions, Overrides) of
-            true -> S1;
+        case maps:find(author_admissions, Overrides) of
+            {ok, Admissions} ->
+                test_state_set(author_admissions, Admissions, S1);
+            error ->
+                S1
+        end,
+    S3 = case maps:find(approved, Overrides) of
+             {ok, Approved} -> S2#s{approved = Approved};
+             error -> S2
+        end,
+    %% Production installs the initial DTX projection before the namespace is
+    %% exposed. Keep the generic fixture faithful to that invariant; tests of
+    %% the fail-closed pre-install state can still request `undefined`
+    %% explicitly.
+    S4 =
+        case maps:is_key(dtx_projection, Overrides) of
+            true -> S3;
             false ->
-                S1#s{author_admissions =
-                         maps:from_list(
-                           [{Pk, test_author_admission(Pk)}
-                            || Pk <- S1#s.validators])}
+                S3#s{dtx_projection =
+                         quod_dtx:initial_projection(
+                           target_identity(S3), 0)}
         end,
     case maps:find(ingress, Overrides) of
-        {ok, Items} -> test_state_set(ingress, Items, S2);
-        error       -> S2
+        {ok, Items} -> test_state_set(ingress, Items, S4);
+        error       -> S4
     end.
 test_author_admission(Pubkey) ->
     crypto:hash(
@@ -1122,8 +1318,13 @@ test_author_admission(Pubkey) ->
       term_to_binary({quod_test_admission, Pubkey}, [deterministic])).
 test_retire_changed_admissions(OldAdmissions, Admissions, S) ->
     retire_changed_admissions(OldAdmissions, Admissions, S).
+test_install_projection(Projection, S) ->
+    install_projection(Projection, S).
+test_state_set(ns, V, S)         -> S#s{ns = V};
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
+test_state_set(genesis_hash, V, S) -> S#s{genesis_hash = V};
+test_state_set(ledger_root, V, S) -> S#s{ledger_root = V};
 test_state_set(consensus_domain, V, S) -> S#s{consensus_domain = V};
 test_state_set(validators, V, S) ->
     S#s{validators = V,
@@ -1137,8 +1338,13 @@ test_state_set(last_applied, V, S) -> S#s{last_applied = V};
 test_state_set(prolog_ready, V, S) -> S#s{prolog_ready = V};
 test_state_set(author_seqs, V, S) -> S#s{author_seqs = V};
 test_state_set(author_admissions, V, S) -> S#s{author_admissions = V};
+test_state_set(dtx_projection, V, S) -> S#s{dtx_projection = V};
+test_state_set(dtx_lanes, V, S) -> S#s{dtx_lanes = V};
+test_state_set(dtx_last_group, V, S) -> S#s{dtx_last_group = V};
+test_state_set(dtx_pending, V, S) -> S#s{dtx_pending = V};
+test_state_set(history_head, V, S) -> S#s{history_head = V};
 test_state_set(store, V, S)       -> S#s{store = V};
-test_state_set(vote_journal, V, S) -> S#s{vote_journal = V};
+test_state_set(signing_journal, V, S) -> S#s{signing_journal = V};
 test_state_set(commit_buf, V, S)  -> S#s{commit_buf = V};
 test_state_set(head_progress, idle, S) -> S#s{head_progress = idle};
 test_state_set(head_progress, {Slot, Phase, Ready}, S) ->
@@ -1167,6 +1373,9 @@ test_state_set(block_requests, V, S) -> S#s{block_requests = V};
 test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
+test_state_set(dtx_chan, V, S) -> S#s{dtx_chan = V};
+test_state_set(dtx_submissions, V, S) -> S#s{dtx_submissions = V};
+test_state_set(dtx_coordinator, V, S) -> S#s{dtx_coordinator = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
             (S#s.local_proposals)#{Slot => #local_proposal{hash = Hash, waiters = []}}};
@@ -1218,6 +1427,123 @@ test_support_grace(#s{head_progress = #head_progress{support_grace_used = Used}}
 test_round(Slot, S) ->
     R = round_state(Slot, S),
     {R#round.supporting, round_committed(R), round_complained(R)}.
+test_dtx_round(Slot, S) ->
+    R = round_state(Slot, S),
+    {R#round.validating, R#round.validation,
+     R#round.candidate, R#round.dtx_parent,
+     eng_retained_block(Slot, S#s.eng)}.
+test_latch_dtx_validation(Slot, BH, ParentToken, EnginePid, Block, S) ->
+    Monitor = erlang:monitor(process, EnginePid),
+    R = round_state(Slot, S),
+    {Monitor,
+     put_round(
+       Slot,
+       R#round{validating = BH,
+               validation = {dtx, ParentToken, EnginePid, Monitor},
+               candidate = {BH, Block}}, S)}.
+test_on_dtx_verdict(Slot, BH, ParentToken, EnginePid, Floor, Verdict, S) ->
+    on_dtx_verdict(
+      Slot, BH, ParentToken, EnginePid, Floor, Verdict, S).
+test_consensus_barrier(S) -> consensus_barrier(S).
+test_dtx_consensus_barrier(Record, S) -> dtx_consensus_barrier(Record, S).
+test_dtx_slot_route(Slot, S) -> dtx_slot_route(Slot, S).
+test_dtx_endpoint_ready(Request, S) ->
+    dtx_endpoint_operation_ready(Request, S).
+test_dtx_outcome_result(OutcomeRef, Result) ->
+    dtx_outcome_result(OutcomeRef, Result).
+test_validate_dtx_reference_evidence(Control, Evidence) ->
+    validate_dtx_reference_evidence(Control, Evidence).
+test_verify_complete_applied(
+  Control, LocalIdentity, LedgerRoot, Evidence, VerifyMany) ->
+    verify_complete_applied(
+      Control, LocalIdentity, LedgerRoot, Evidence, VerifyMany).
+test_dtx_endpoint_frame(TargetNs, Mode, Peer, Link, Frame, S) ->
+    handle_dtx_endpoint_frame(TargetNs, Mode, Peer, Link, Frame, S).
+test_dtx_outbound_message(PeerIdentity, Channel, Payload, S) ->
+    handle_dtx_outbound_message(PeerIdentity, Channel, Payload, S).
+test_seed_dtx_correlation(TargetNs, Peer, Request, From,
+                          S = #s{dtx_correlations = Correlations}) ->
+    RequestId = quod_dtx_endpoint:request_id(Request),
+    CallerMRef = erlang:monitor(process, element(1, From)),
+    TimeoutTag = make_ref(),
+    Timer = erlang:send_after(
+              60000, self(),
+              {dtx_endpoint_timeout, RequestId, TimeoutTag}),
+    Correlation = #dtx_correlation{
+                    target_ns = TargetNs, peer = Peer, request = Request,
+                    from = From, caller_mref = CallerMRef, timer = Timer,
+                    timeout_tag = TimeoutTag},
+    S1 = retain_dtx_target_channel(TargetNs, S),
+    S1#s{dtx_correlations = Correlations#{RequestId => Correlation}}.
+test_dtx_endpoint_result(Request, Result, S) ->
+    dtx_endpoint_result_response(Request, Result, S).
+test_seed_dtx_worker(Pid, Peer, Request, Destination,
+                     S = #s{dtx_workers = Workers}) ->
+    Monitor = erlang:monitor(process, Pid),
+    {Monitor,
+     S#s{dtx_workers = Workers#{
+           Pid => #dtx_server_worker{
+                    pid = Pid, monitor = Monitor, peer = Peer,
+                    request = Request, destination = Destination}}}}.
+test_finish_dtx_worker(Pid, Result, S) ->
+    finish_dtx_server_worker(Pid, Result, S).
+test_drop_dtx_endpoint_owner(Ref, Pid, S) ->
+    drop_dtx_endpoint_owner(Ref, Pid, S).
+test_seed_dtx_submission(
+  Control, Waiters, S = #s{dtx_submissions = Submissions}) ->
+    test_seed_dtx_submission_at(
+      Control, Waiters, quod_time:mono_ms(), S#s{dtx_submissions = Submissions}).
+test_seed_dtx_submission_at(
+  Control, Waiters, InsertedAt,
+  S = #s{dtx_submissions = Submissions}) ->
+    Digest = quod_dtx:record_digest(Control),
+    {ok, Envelope} = quod_dtx:encode_control(Control),
+    Submission =
+        #dtx_submission{
+          record = quod_dtx:control_body(Control), control = Control,
+          envelope = Envelope, group_id = quod_dtx:group_id(Control),
+          digest = Digest, inserted_at = InsertedAt,
+          waiters = Waiters},
+    S#s{dtx_submissions = Submissions#{Digest => Submission}}.
+test_oldest_eligible_dtx_submission(S) ->
+    case oldest_eligible_dtx_submission(S) of
+        {Digest, #dtx_submission{record = Record}} -> {Digest, Record};
+        none -> none
+    end.
+test_resolve_committed_dtx(Entry, Payload, S) ->
+    resolve_committed_dtx(Entry, Payload, S).
+test_retain_dtx_record(Record, Waiter, S) ->
+    retain_dtx_record(Record, Waiter, S).
+test_dtx_retain_admissible(Record, S) ->
+    dtx_retain_admissible(Record, S).
+test_dtx_submission_waiters(#s{dtx_submissions = Submissions}) ->
+    lists:sum(
+      [length(Waiters)
+       || #dtx_submission{waiters = Waiters} <- maps:values(Submissions)]).
+test_reconcile_signing_state(S) -> reconcile_signing_state(S).
+test_finish_pending_begin_reconciliation(Transition, S) ->
+    finish_pending_begin_reconciliation(Transition, S).
+test_reconcile_dtx_coordinator(S) -> reconcile_dtx_coordinator(S).
+test_drop_dtx_coordinator(Ref, Pid, Reason, S) ->
+    drop_dtx_coordinator_owner(Ref, Pid, Reason, S).
+test_dtx_coordinator_state(#s{dtx_coordinator = none}) -> none;
+test_dtx_coordinator_state(
+  #s{dtx_coordinator =
+       #dtx_coordinator_owner{status = Status, group_id = GroupId,
+                              begin_ref = BeginRef, pid = Pid,
+                              monitor = Monitor, failures = Failures}}) ->
+    #{status => Status, group_id => GroupId, begin_ref => BeginRef,
+      pid => Pid, monitor => Monitor, failures => Failures}.
+test_stop_dtx_coordinator(S) -> stop_dtx_coordinator(S).
+test_retire_invalid_dtx(Payload, Reasons, S) ->
+    retire_invalid_dtx_submission(Payload, Reasons, S).
+test_dtx_endpoint_counts(
+  #s{dtx_correlations = Correlations, dtx_out_channels = Channels,
+     dtx_workers = Workers, dtx_rate_buckets = Buckets,
+     dtx_submissions = Submissions}) ->
+    #{correlations => map_size(Correlations),
+      channels => map_size(Channels), workers => map_size(Workers),
+      rate_buckets => map_size(Buckets), submissions => map_size(Submissions)}.
 test_requested(#s{requested_slot = V}) -> V.
 test_progress_counts(#s{progress_timeouts = T, quorum_pauses = P}) -> {T, P}.
 test_committed_store(#s{slot = Slot, store = Store}) -> {Slot, Store}.
@@ -1269,7 +1595,7 @@ test_redrive_head(Slot, Hash, S) ->
     Local = #local_proposal{hash = Hash, waiters = []},
     redrive_head(Slot, S#s{local_proposals = #{Slot => Local}}).
 test_block_requests(#s{block_requests = Requests}) -> Requests.
-test_vote_journal(#s{vote_journal = Journal}) -> Journal.
+test_signing_journal(#s{signing_journal = Journal}) -> Journal.
 %% Ingress-queue test surface: raw-From entry wrappers (the waiter/trace envelope is
 %% built here exactly as the running/3 handlers build it), the queue view, and
 %% clock-controlled drain/expiry.
@@ -1481,10 +1807,14 @@ test_route(Pass, Origin, Change, S) ->
     Decision.
 test_round_probe(#s{round_probe = Probe}) -> Probe.
 test_committee_id(#s{committee_id = CommitteeId}) -> CommitteeId.
+test_author_admissions(#s{author_admissions = Admissions}) -> Admissions.
 test_log_projection(Ns, Entries, Seed) ->
     log_projection(Ns, Entries, Seed).
 test_apply_catchup_window(Source, Entries, S) ->
-    apply_catchup_window(Source, Entries, S).
+    Projection = log_projection(S#s.ns, Entries, state_projection(S)),
+    apply_catchup_window(Source, Entries, Projection, S).
+test_apply_catchup_window(Source, Entries, Projection, S) ->
+    apply_catchup_window(Source, Entries, Projection, S).
 -endif.
 
 callback_mode() -> [state_functions].
@@ -1547,6 +1877,249 @@ unknown_append_outcome(OutcomeRef) ->
 -spec rebuild(binary()) -> ok.
 rebuild(Ns) -> gen_statem:cast(quod_reg:via({quod_simplex, Ns}), rebuild).
 
+-doc "Acknowledge that the current Prolog owner processed its ready marker at `Height`.".
+-spec prolog_ready(binary(), pid(), non_neg_integer()) -> ok.
+prolog_ready(Ns, PrologPid, Height)
+  when is_binary(Ns), is_pid(PrologPid),
+       is_integer(Height), Height >= 0 ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined -> ok;
+        SimplexPid ->
+            gen_statem:cast(SimplexPid, {prolog_ready, PrologPid, Height})
+    end.
+
+-doc "Open a pending apply fence after the exact finalized plan is durably visible.".
+-spec finalize_applied(binary(), <<_:256>>, pos_integer(), non_neg_integer()) -> ok.
+finalize_applied(Ns, GroupId, Slot, Generation)
+  when is_binary(Ns), is_binary(GroupId), byte_size(GroupId) =:= 32,
+       is_integer(Slot), Slot > 0,
+       is_integer(Generation), Generation >= 0 ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined -> ok;
+        SimplexPid ->
+            gen_statem:cast(
+              SimplexPid,
+              {finalize_applied, GroupId, Slot, Generation})
+    end.
+
+-doc "Return the exact coordinator identity currently authorised to author DTX controls.".
+-spec dtx_binding(binary()) ->
+          {ok, {binary(), <<_:256>>, <<_:256>>, <<_:256>>}} |
+          {error, term()}.
+dtx_binding(Ns) when is_binary(Ns) ->
+    call(Ns, get_dtx_binding, {error, {ontology_unavailable, Ns}}).
+
+-doc "Register one bounded unsigned Begin intent without allocating a signing sequence.".
+-spec register_dtx_begin(binary(), pid(), reference(),
+                         quod_dtx:control_record(), term()) ->
+          {ok, reference()} | {error, term()}.
+register_dtx_begin(Ns, EnginePid, IntentId, Begin, GroupRef)
+  when is_binary(Ns), is_pid(EnginePid), is_reference(IntentId) ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined -> {error, {ontology_unavailable, Ns}};
+        SimplexPid ->
+            {ok, gen_statem:send_request(
+                   SimplexPid,
+                   {register_dtx_begin, EnginePid, IntentId,
+                    Begin, GroupRef})}
+    end;
+register_dtx_begin(_Ns, _EnginePid, _IntentId, _Begin, _GroupRef) ->
+    {error, invalid_dtx_intent}.
+
+-doc "Transfer an accepted Begin intent from the engine to the signing journal.".
+-spec activate_dtx_begin(binary(), pid(), reference()) -> ok.
+activate_dtx_begin(Ns, EnginePid, IntentId) ->
+    gen_statem:cast(
+      quod_reg:via({quod_simplex, Ns}),
+      {activate_dtx_begin, EnginePid, IntentId}).
+
+-doc "Cancel an inactive engine-owned Begin intent.".
+-spec cancel_dtx_begin(binary(), pid(), reference()) -> ok.
+cancel_dtx_begin(Ns, EnginePid, IntentId) ->
+    gen_statem:cast(
+      quod_reg:via({quod_simplex, Ns}),
+      {cancel_dtx_begin, EnginePid, IntentId}).
+
+-doc "Submit one already-built semantic DTX phase and wait for its certified local reference.".
+-spec submit_dtx(binary(), quod_dtx:control_record(), timeout()) ->
+          {ok, quod_dtx:certified_ref()} | {error, term()}.
+submit_dtx(Ns, Record, Timeout)
+  when is_binary(Ns), (is_integer(Timeout) andalso Timeout > 0) orelse
+                           Timeout =:= infinity ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}), {submit_dtx, Record}, Timeout)
+    catch
+        exit:{noproc, _} -> {error, {ontology_unavailable, Ns}};
+        exit:{timeout, _} -> {error, {outcome_unknown, dtx_record_ref(Record)}};
+        exit:_ -> {error, {outcome_unknown, dtx_record_ref(Record)}}
+    end;
+submit_dtx(_Ns, _Record, _Timeout) ->
+    {error, invalid_dtx_submission}.
+
+-doc "Serialize a pre-Begin group lookup behind the current committed state.".
+-spec dtx_group_barrier(binary(), term(), non_neg_integer()) ->
+          {ok, pending | not_found | {rejected, coordinator_retired}} |
+          {error, term()}.
+dtx_group_barrier(
+  Ns,
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = GroupRef,
+  AppliedFloor)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(AppliedFloor), AppliedFloor >= 0 ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {dtx_group_barrier, GroupRef, AppliedFloor}, 1000)
+    catch
+        exit:_ -> {error, {outcome_unknown, GroupRef}}
+    end;
+dtx_group_barrier(_Ns, GroupRef, _AppliedFloor) ->
+    {error, {outcome_unknown, GroupRef}}.
+
+-doc "Send one bounded DTX recovery request to an exact pinned validator.".
+-spec dtx_endpoint_request(
+        binary(), binary(), <<_:256>>, {inet:hostname(), inet:port_number()},
+        quod_dtx_endpoint:request(), pos_integer()) ->
+          {ok, quod_dtx_endpoint:response()} |
+          {error, busy | not_ready | invalid_request | timeout}.
+dtx_endpoint_request(
+  OwnerNs, TargetNs, <<_:256>> = PeerKey, Endpoint, Request, TimeoutMs)
+  when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
+       is_binary(TargetNs), byte_size(TargetNs) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, OwnerNs}),
+          {dtx_endpoint_request, TargetNs, PeerKey, Endpoint,
+           Request, TimeoutMs},
+          infinity)
+    catch
+        exit:_ -> {error, not_ready}
+    end;
+dtx_endpoint_request(
+  _OwnerNs, _TargetNs, _PeerKey, _Endpoint, _Request, _TimeoutMs) ->
+    {error, invalid_request}.
+
+-doc "Execute the same DTX endpoint operation on a co-hosted namespace.".
+-spec dtx_endpoint_local(binary(), quod_dtx_endpoint:request(), pos_integer()) ->
+          {ok, quod_dtx_endpoint:response()} |
+          {error, busy | not_ready | invalid_request}.
+dtx_endpoint_local(Ns, Request, TimeoutMs)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {dtx_endpoint_local, Request, TimeoutMs}, infinity)
+    catch
+        exit:_ -> {error, not_ready}
+    end;
+dtx_endpoint_local(_Ns, _Request, _TimeoutMs) ->
+    {error, invalid_request}.
+
+-doc "Resolve one foreign anchored outcome through current pinned validators.".
+-spec dtx_outcome_lookup(term(), pos_integer()) ->
+          {ok, map()} | {error, term()}.
+dtx_outcome_lookup(OutcomeRef, TimeoutMs)
+  when is_integer(TimeoutMs), TimeoutMs > 0,
+       TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
+    case {outcome_ref_target(OutcomeRef), lists:sort(namespaces())} of
+        {{ok, TargetNs, Anchor}, [OwnerNs | _]} ->
+            case quod_directory:validator_routes(TargetNs, Anchor) of
+                {ok, Routes} ->
+                    SourceRoutes =
+                        [{PeerKey, Endpoint}
+                         || #{node_key := <<_:256>> = PeerKey,
+                              endpoint := Endpoint} <- Routes,
+                            quod_quic:valid_endpoint(Endpoint)],
+                    case quod_dtx_current_view:lookup_outcome(
+                           OwnerNs, {remote, SourceRoutes}, OutcomeRef,
+                           TimeoutMs) of
+                        Result -> dtx_outcome_result(OutcomeRef, Result)
+                    end;
+                {error, _} ->
+                    {error, {outcome_unknown, OutcomeRef}}
+            end;
+        _ ->
+            {error, {outcome_unknown, OutcomeRef}}
+    end;
+dtx_outcome_lookup(OutcomeRef, _TimeoutMs) ->
+    {error, {outcome_unknown, OutcomeRef}}.
+
+dtx_outcome_result(_OutcomeRef, {ok, Status}) when is_map(Status) ->
+    {ok, Status};
+dtx_outcome_result(
+  {group, _, _, _, _, _}, {error, not_found}) ->
+    {error, not_found};
+dtx_outcome_result(OutcomeRef, {error, _}) ->
+    {error, {outcome_unknown, OutcomeRef}}.
+
+outcome_ref_target(
+  {transaction, Ns, <<_:256>> = Anchor, <<_:256>>})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, Ns, Anchor};
+outcome_ref_target(
+  {group, Ns, <<_:256>> = Anchor, <<_:256>>,
+   <<_:256>>, <<_:256>>})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    {ok, Ns, Anchor};
+outcome_ref_target(_) ->
+    error.
+
+-doc "Verify one exact certified DTX reference in the owning local ledger.".
+-spec dtx_local_evidence(binary(), quod_dtx:certified_ref(),
+                         'begin' | prepare | decision | finalize | complete) ->
+          {ok, map()} |
+          {error, not_ready | not_found | invalid_request}.
+dtx_local_evidence(Ns, Ref, ExpectedPhase)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    try
+        case gen_statem:call(
+               quod_reg:via({quod_simplex, Ns}),
+               {dtx_local_evidence_source, Ref, ExpectedPhase}, 1000) of
+            {ok, LedgerRoot} ->
+                local_evidence_result(
+                  quod_foreign_log:verify_local(
+                    LedgerRoot, Ref, ExpectedPhase,
+                    ?DTX_FOREIGN_VERIFY_MS));
+            {error, _} = Error ->
+                Error
+        end
+    catch exit:_ -> {error, not_ready}
+    end;
+dtx_local_evidence(_Ns, _Ref, _ExpectedPhase) ->
+    {error, invalid_request}.
+
+local_evidence_result({ok, Evidence}) -> {ok, Evidence};
+local_evidence_result({error, phase_mismatch}) -> {error, invalid_request};
+local_evidence_result({error, invalid_foreign_reference}) ->
+    {error, invalid_request};
+local_evidence_result({error, bad_foreign_reference}) ->
+    {error, invalid_request};
+local_evidence_result({error, _Unavailable}) -> {error, not_ready}.
+
+-doc "Return the verified local-ledger source for an exact Finalize reference.".
+-spec dtx_applied_source(binary(), quod_dtx:certified_ref()) ->
+          {ok, {local, file:filename_all()}} |
+          {error, not_ready | not_found | invalid_request}.
+dtx_applied_source(Ns, FinalizeRef)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    try
+        case gen_statem:call(
+               quod_reg:via({quod_simplex, Ns}),
+               {dtx_local_evidence_source, FinalizeRef, finalize}, 1000) of
+            {ok, LedgerRoot} -> {ok, {local, LedgerRoot}};
+            {error, _} = Error -> Error
+        end
+    catch exit:_ -> {error, not_ready}
+    end;
+dtx_applied_source(_Ns, _FinalizeRef) ->
+    {error, invalid_request}.
+
+dtx_record_ref(Record) ->
+    try {dtx_record, quod_dtx:group_id(Record), quod_dtx:record_digest(Record)}
+    catch _:_ -> invalid_dtx_submission
+    end.
+
 status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
 stats(Ns)     -> call(Ns, get_stats, undefined).
@@ -1564,6 +2137,112 @@ genesis_hash(Ns) ->
     catch
         error:badarg -> undefined
     end.
+
+-doc "Acquire one generation-bound proof-access token without calling Simplex.".
+-spec acquire_proof_access(binary()) ->
+          {ok, {quod_proof_access, binary(), non_neg_integer()}} |
+          {error, term()}.
+acquire_proof_access(Ns) when is_binary(Ns) ->
+    case proof_gate_row(Ns) of
+        {ok, true, open, Generation, _LastGroup} ->
+            {ok, {quod_proof_access, Ns, Generation}};
+        {ok, _Ready, {pending, <<_:256>> = GroupId}, _Generation, _Last} ->
+            {error, {transaction_pending, GroupId}};
+        {ok, _Ready,
+         {pending_apply, <<_:256>> = GroupId, _Slot, _AppliedGeneration},
+         _Generation, _Last} ->
+            {error, {transaction_pending, GroupId}};
+        {ok, false, open, _Generation, _LastGroup} ->
+            {error, {ontology_rebuilding, Ns}};
+        {ok, true, open, _ChangedGeneration, none} ->
+            {error, {ontology_rebuilding, Ns}};
+        unavailable ->
+            {error, {ontology_rebuilding, Ns}}
+    end;
+acquire_proof_access(Ns) ->
+    {error, {ontology_rebuilding, Ns}}.
+
+-doc "Revalidate a previously acquired proof-access generation.".
+-spec check_proof_access(term()) -> ok | {error, term()}.
+check_proof_access({quod_proof_access, Ns, ExpectedGeneration})
+  when is_binary(Ns), is_integer(ExpectedGeneration), ExpectedGeneration >= 0 ->
+    case proof_gate_row(Ns) of
+        {ok, true, open, ExpectedGeneration, _LastGroup} ->
+            ok;
+        {ok, _Ready, {pending, <<_:256>> = GroupId}, _Generation, _Last} ->
+            {error, {transaction_pending, GroupId}};
+        {ok, _Ready,
+         {pending_apply, <<_:256>> = GroupId, _Slot, _AppliedGeneration},
+         _Generation, _Last} ->
+            {error, {transaction_pending, GroupId}};
+        {ok, true, open, _ChangedGeneration, <<_:256>> = GroupId} ->
+            {error, {transaction_pending, GroupId}};
+        {ok, false, open, _Generation, _LastGroup} ->
+            {error, {ontology_rebuilding, Ns}};
+        unavailable ->
+            {error, {ontology_rebuilding, Ns}}
+    end;
+check_proof_access(_Token) ->
+    {error, invalid_proof_access}.
+
+proof_gate_row(Ns) ->
+    try ets:lookup(
+          binary_to_existing_atom(genesis_table_name(Ns), utf8), proof_gate) of
+        [{proof_gate, Ready, Fence, Generation, LastGroup}]
+          when is_boolean(Ready), is_integer(Generation), Generation >= 0 ->
+            case valid_proof_gate(Fence, LastGroup) of
+                true -> {ok, Ready, Fence, Generation, LastGroup};
+                false -> unavailable
+            end;
+        _ -> unavailable
+    catch
+        error:badarg -> unavailable
+    end.
+
+valid_proof_gate(open, none) -> true;
+valid_proof_gate(open, <<_:256>>) -> true;
+valid_proof_gate({pending, <<_:256>> = GroupId}, GroupId) -> true;
+valid_proof_gate(
+  {pending_apply, <<_:256>> = GroupId, Slot, Generation}, GroupId)
+  when is_integer(Slot), Slot > 0,
+       is_integer(Generation), Generation >= 0 -> true;
+valid_proof_gate(_, _) -> false.
+
+proof_gate_tuple(
+  Ready,
+  #s{dtx_projection = #{proof_fence := Fence,
+                        generation := Generation},
+     dtx_last_group = LastGroup})
+  when is_boolean(Ready) ->
+    true = valid_proof_gate(Fence, LastGroup),
+    {proof_gate, Ready, Fence, Generation, LastGroup}.
+
+%% The Simplex owner is the sole writer of this protected row.  Compare the
+%% projected value first so ordinary content commits pay no ETS-write cost.
+%% During pre-table startup the existing-atom lookup fails; init/1 publishes
+%% the initial closed row atomically with the anchor immediately afterwards.
+refresh_proof_gate(
+  #s{prolog_ready = Ready,
+     dtx_projection = #{proof_fence := Fence, generation := Generation},
+     dtx_last_group = LastGroup},
+  #s{prolog_ready = Ready,
+     dtx_projection = #{proof_fence := Fence, generation := Generation},
+     dtx_last_group = LastGroup} = S) ->
+    S;
+refresh_proof_gate(
+  _Before,
+  #s{ns = Ns,
+     dtx_projection = #{proof_fence := _Fence, generation := _Generation}} = S) ->
+    try
+        true = ets:insert(
+                 binary_to_existing_atom(genesis_table_name(Ns), utf8),
+                 proof_gate_tuple(S#s.prolog_ready, S))
+    catch
+        error:badarg -> ok
+    end,
+    S;
+refresh_proof_gate(_Before, S) ->
+    S.
 
 namespaces() -> gproc:select([{{{n, l, {quod_simplex, '$1'}}, '_', '_'}, [], ['$1']}]).
 
@@ -1595,58 +2274,106 @@ init_store(Ns, Cfg, Id) ->
     {ok, Store} = quod_ledger_store:open(Ns, quod_ledger_store:ledger_dir(Cfg)),
     Chan = term_to_binary({log, Ns}, [deterministic]),   %% the committee's consensus channel
     RelayChan = term_to_binary({ingress, Ns}, [deterministic]),
+    DtxChan = quod_dtx_endpoint:channel(Ns),
     quod_reg:subscribe({channel, Chan}),                 %% receive peers' proposals/shares/certs
     quod_reg:subscribe({channel, RelayChan}),             %% receive bounded transaction-relay frames
+    quod_reg:subscribe({channel, DtxChan}),               %% receive bounded DTX recovery requests/replies
     RelayTimeout = relay_timeout_ms(Cfg),
     S0 = #s{ns = Ns, self = maps:get(pubkey, Id), id = Id, store = Store,
-            chan = Chan, relay_chan = RelayChan,
+            ledger_root = quod_ledger_store:ledger_dir(Cfg),
+            chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
             relay_timeout_ms = RelayTimeout,
             batch_window_ms = maps:get(batch_window_ms, Cfg),
             detailed_metrics = maps:get(detailed_consensus_metrics, Cfg, false)},
-    %% A bad/missing genesis `.pl` on create is fatal — fail-fast, the app stops.
-    try load_or_bootstrap(S0, Cfg) of
-        S1 ->
-            Committed = S1#s.slot,   %% commits are in order, so the height IS the committed floor
-            case consensus_anchor(S1, Cfg) of
-                {error, Reason} ->
-                    {stop, {bad_config, Reason}};
-                {ok, GenesisHash} ->
-                    Domain = consensus_domain(Ns, GenesisHash),
-                    %% One table per operator-created namespace. `genesis_hash/1` uses
-                    %% binary_to_existing_atom/2, so readers never mint table-name atoms.
-                    GenesisTable = ets:new(
-                                     genesis_table(Ns),
-                                     [named_table, protected, set]),
-                    true = ets:insert(GenesisTable, {anchor, GenesisHash}),
-                    {ok, Journal} =
-                        quod_vote_journal:open(
-                          Ns, Domain, data_dir(Cfg), Committed),
-                    S2 = restore_vote_rounds(
-                           S1#s{vote_journal = Journal,
-                                genesis_hash = GenesisHash,
-                                consensus_domain = Domain}),
-                    Eng = eng_new(
-                            Domain, active_validators(S2), Committed),
-                    %% One periodic tick drives everything post-boot: peer redials AND the sync armer
-                    %% (`maybe_arm_sync`) that kicks boot-sync/gap-fill. A fresh `mode=join` node
-                    %% boots `unconfirmed`, so `should_sync` arms its catch-up at the first tick.
-                    {ok, running,
-                     S2#s{last_applied = 0, approved = Committed, eng = Eng},
-                     [tick_timeout()]}
-            end
+    %% Storage recovery owns one strict order: establish the immutable anchor,
+    %% bind/recover the signing journal, validate the full ledger projection,
+    %% then reconcile retained signing state. A fresh founder creates the
+    %% domain-bound journal before appending genesis; an existing ledger never
+    %% creates or mutates a missing journal.
+    try restore_storage(S0, Cfg) of
+        {S1, GenesisHash, Journal} ->
+            Domain = consensus_domain(Ns, GenesisHash),
+            Committed = S1#s.slot,
+            %% One table per operator-created namespace. `genesis_hash/1` uses
+            %% binary_to_existing_atom/2, so readers never mint table-name atoms.
+            %% The proof gate starts closed and opens only after the ordered
+            %% replay reaches this validated head and that Prolog incarnation
+            %% explicitly acknowledges the height.
+            GenesisTable = ets:new(
+                             genesis_table(Ns),
+                             [named_table, protected, set]),
+            true = ets:insert(
+                     GenesisTable,
+                     [{anchor, GenesisHash},
+                      proof_gate_tuple(false, S1)]),
+            S2 = restore_signing_state(
+                   S1#s{signing_journal = Journal,
+                        genesis_hash = GenesisHash,
+                        consensus_domain = Domain}),
+            Eng = eng_new(Domain, active_validators(S2), Committed),
+            %% One periodic tick drives everything post-boot: peer redials AND the sync armer
+            %% (`maybe_arm_sync`) that kicks boot-sync/gap-fill. A fresh `mode=join` node
+            %% boots `unconfirmed`, so `should_sync` arms its catch-up at the first tick.
+            {ok, running,
+             S2#s{last_applied = 0, approved = Committed, eng = Eng},
+             [tick_timeout()]}
     catch
         throw:{genesis_failed, _} = Reason -> {stop, Reason}
     end.
 
-restore_vote_rounds(S = #s{vote_journal = Journal}) ->
-    S#s{rounds = vote_rounds(Journal)}.
+restore_signing_state(S = #s{signing_journal = Journal}) ->
+    restore_pending_dtx(
+      S#s{rounds = signing_rounds(Journal)}, Journal).
 
-vote_rounds(memory) -> #{};
-vote_rounds(Journal) ->
+-ifdef(TEST).
+signing_rounds(memory) -> #{};
+signing_rounds(Journal) -> signing_rounds_journal(Journal).
+-else.
+signing_rounds(Journal) -> signing_rounds_journal(Journal).
+-endif.
+signing_rounds_journal(Journal) ->
     maps:map(
       fun(_Slot, #{support := Support, final := Final}) ->
               #round{supporting = Support, final = Final}
-      end, quod_vote_journal:rounds(Journal)).
+      end, quod_signing_journal:rounds(Journal)).
+
+-ifdef(TEST).
+restore_pending_dtx(S, memory) ->
+    S;
+restore_pending_dtx(S, Journal) ->
+    restore_pending_dtx_journal(S, Journal).
+-else.
+restore_pending_dtx(S, Journal) ->
+    restore_pending_dtx_journal(S, Journal).
+-endif.
+restore_pending_dtx_journal(S, Journal) ->
+    case quod_signing_journal:pending_begin(Journal) of
+        none ->
+            S;
+        #{group_id := GroupId, body := Body, envelope := Envelope}
+          when is_binary(GroupId), byte_size(GroupId) =:= 32,
+               is_binary(Body), is_binary(Envelope) ->
+            case quod_dtx:decode_control(Envelope) of
+                {ok, Control} ->
+                    Record = quod_dtx:control_body(Control),
+                    case quod_dtx:group_id(Record) =:= GroupId andalso
+                         term_to_binary(Record, [deterministic]) =:= Body of
+                        true ->
+                            Digest = quod_dtx:record_digest(Record),
+                            Submission =
+                                #dtx_submission{
+                                  record = Record, control = Control,
+                                  envelope = Envelope, group_id = GroupId,
+                                  digest = Digest,
+                                  inserted_at = quod_time:mono_ms()},
+                            S#s{dtx_submissions = #{Digest => Submission}};
+                        false ->
+                            error({signing_journal_bad_pending, GroupId})
+                    end;
+                {error, Reason} ->
+                    error({signing_journal_bad_pending, Reason})
+            end
+    end.
 
 %% The consensus re-drive timer: fires every ?TICK_MS to retry dials whose link never came up, so a
 %% transient dial failure at boot can't permanently stall a slot (there is no per-message retransmit).
@@ -1666,62 +2393,111 @@ relay_timeout_ms(Cfg) ->
         _                           -> 31000
     end.
 
-%% Restart reloads durable state: re-derive the committee by folding the `peer_admitted` asserts/retracts
-%% out of the committed log's transaction diffs (`history_advance/3`, which also recovers the timestamp
-%% floor `last_ts` in the same pass), STREAMED from the store in bounded windows — the log is never
-%% materialized in RAM (the store is the archive, quod_prolog holds the KB projection; this consensus
-%% process holds only the validator-set projection). A brand-new namespace is bootstrapped.
-%% Re-folding the committee from the log is the accepted cost of running without a committee checkpoint;
-%% `last/1` gives the height in O(1). Both projections derive from the same committed log, so they can't drift.
-%% Derive the durable state, then decide by mode — `mode` is read HERE ONCE and then discarded (it is boot
-%% config, not running state). `create` founds genesis when fresh (slot 0) or just re-derives on restart;
-%% `join` starts UNFOUNDED (slot 0) or RESUMES a partial prefix (slot≥1) — either way it catches up via
-%% the tick's `should_sync` arm (from slot+1, so a retry never
-%% re-appends disk-present bytes, and `maybe_mark_ready` stays gated on recovery reaching `ready`).
-%% `init_store/3` resolves and installs the configured/local genesis anchor
-%% after this projection, so the boot pin is never copied into intermediate state.
-%%
-%% The initial recovery state is seeded PURELY FROM THE FACTS, not the mode: only the sole validator can
-%% trust its head is the tip (`active_validators == [Self]` — nobody else could have moved it). Everyone
-%% else — a founding joiner, a later joiner, or a resuming member — boots `unconfirmed` and runs recovery. So `mode`
-%% leaves zero running-state residual.
-load_or_bootstrap(S0 = #s{ns = Ns, store = Store}, Cfg) ->
-    Base = case quod_ledger_store:last(Store) of
-               0     -> S0;   %% empty ⇒ unfounded (slot 0)
-               LastI ->
-                   %% The signature-verifying re-fold needs the target binding
-                   %% before `consensus_anchor` installs it in state, and the
-                   %% anchor is derivable exactly here: it IS the durable
-                   %% slot-1 block's hash. A prefix whose genesis cannot be
-                   %% reconstructed is invalid history, not a signable state.
-                   Binding =
-                       case local_genesis_hash(S0) of
-                           <<_:256>> = Anchor -> {Ns, Anchor};
-                           undefined ->
-                               error({invalid_transaction_history, 1})
-                       end,
-                   Projection =
-                            quod_ledger_store:fold(
-                              Store, 1, LastI,
-                              fun(E, Acc) ->
-                                  checked_log_projection_step(Binding, E, Acc)
-                              end, history_projection()),
-                   Vs = history_committee(Projection),
-                   CommitteeId = maps:get(committee_id, Projection),
-                   Ts = maps:get(timestamp, Projection),
-                   Admissions = maps:get(admissions, Projection),
-                   Seqs = maps:get(sequences, Projection),
-                        S0#s{validators = Vs, committee_id = CommitteeId,
-                             slot = LastI, last_ts = Ts,
-                             author_admissions = Admissions,
-                             author_seqs = Seqs}
-           end,
-    S1 = case {maps:get(mode, Cfg), Base#s.slot} of
-             {create, 0} -> bootstrap(Cfg, Base);   %% fresh founder
-             {_Mode, _}  -> Base                    %% join, or restarted founder/admitted member
-         end,
-    S1#s{sync = initial_sync(S1),
-         next_author_seq = maps:get(S1#s.self, S1#s.author_seqs, 0) + 1}.
+%% Recover the one durable state machine. Existing ledgers require an existing
+%% domain-bound signing journal; empty ledgers initialize it before genesis or
+%% catch-up can append anything. The complete semantic fold precedes the sole
+%% reconciliation/pruning call, so raw height can never erase signing evidence.
+restore_storage(S0 = #s{store = Store}, Cfg) ->
+    case quod_ledger_store:last(Store) of
+        0 -> initialize_empty_storage(S0, Cfg);
+        Last -> recover_existing_storage(S0, Cfg, Last)
+    end.
+
+recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
+    Anchor =
+        case local_genesis_hash(S0) of
+            <<_:256>> = Hash -> Hash;
+            undefined -> error({invalid_transaction_history, 1})
+        end,
+    ok = require_configured_anchor(Anchor, Cfg),
+    Domain = consensus_domain(Ns, Anchor),
+    {ok, Journal0} = quod_signing_journal:recover(
+                       Ns, Domain, data_dir(Cfg)),
+    Binding = {Ns, Anchor},
+    ScratchRoot = quod_ledger_store:ledger_dir(Cfg),
+    ok = quod_dtx_phase_index:cleanup(ScratchRoot, Ns),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(ScratchRoot, Ns),
+    Projection0 = seed_pending_begin(
+                    Journal0, history_projection(Binding)),
+    Projection =
+        try
+            quod_ledger_store:fold(
+              Store, 1, Last,
+              fun(E, Acc) ->
+                      checked_log_projection_step(
+                        Binding, E, Acc, PhaseIndex)
+              end,
+              Projection0)
+        after
+            _ = quod_dtx_phase_index:close(PhaseIndex)
+        end,
+    S1 = install_projection(Projection, S0#s{slot = Last}),
+    {ok, Journal1} = reconcile_signing_journal(
+                       Last, Projection, Journal0),
+    finalize_restored_storage(S1, Anchor, Journal1).
+
+initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := join} = Cfg) ->
+    {ok, Anchor} = consensus_anchor(S0, Cfg),
+    Domain = consensus_domain(Ns, Anchor),
+    {ok, Journal0} = quod_signing_journal:initialize(
+                       Ns, Domain, data_dir(Cfg)),
+    Projection = history_projection({Ns, Anchor}),
+    {ok, Journal1} = reconcile_signing_journal(0, Projection, Journal0),
+    finalize_restored_storage(
+      install_projection(Projection, S0), Anchor, Journal1);
+initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := create} = Cfg) ->
+    Entry = genesis_entry(Cfg, S0),
+    Anchor = entry_block_hash(Entry),
+    Domain = consensus_domain(Ns, Anchor),
+    %% Once a signature has ever been exposed this initialization refuses to
+    %% replace the journal, even if the ledger was removed independently.
+    {ok, Journal0} = quod_signing_journal:initialize(
+                       Ns, Domain, data_dir(Cfg)),
+    SAppended = append_genesis(Entry, S0),
+    Projection = checked_log_projection_step(
+                   {Ns, Anchor}, Entry,
+                   history_projection({Ns, Anchor})),
+    S1 = install_projection(Projection, SAppended#s{slot = 1}),
+    {ok, Journal1} = reconcile_signing_journal(1, Projection, Journal0),
+    finalize_restored_storage(S1, Anchor, Journal1).
+
+finalize_restored_storage(S0, Anchor, Journal) ->
+    S1 = S0#s{sync = initial_sync(S0),
+              next_author_seq =
+                  maps:get(S0#s.self, S0#s.author_seqs, 0) + 1},
+    {S1, Anchor, Journal}.
+
+reconcile_signing_journal(Slot, Projection, Journal) ->
+    Pending = reconciled_pending_begin(Projection),
+    quod_signing_journal:reconcile(
+      Journal,
+      #{committed_slot => Slot,
+        live_dtx_lanes => maps:get(dtx_lanes, Projection, #{}),
+        pending => Pending}).
+
+seed_pending_begin(Journal, Projection) ->
+    case quod_signing_journal:pending_begin(Journal) of
+        none -> Projection;
+        #{group_id := <<_:256>> = GroupId,
+          lane := {<<_:256>>, <<_:256>>} = Lane} ->
+            Projection#{dtx_pending := {GroupId, Lane}}
+    end.
+
+reconciled_pending_begin(
+  #{dtx_pending := none}) ->
+    none;
+reconciled_pending_begin(
+  #{dtx_pending := {GroupId, {Admission, Author} = Lane},
+    admissions := Admissions}) ->
+    case maps:get(Author, Admissions, undefined) of
+        Admission -> {GroupId, Lane};
+        _RetiredOrReadmitted -> none
+    end.
+
+require_configured_anchor(_Anchor, #{mode := create}) -> ok;
+require_configured_anchor(Anchor, #{mode := join, genesis_hash := Anchor}) -> ok;
+require_configured_anchor(_Anchor, #{mode := join}) ->
+    error({bad_config, genesis_anchor_mismatch}).
 
 %% Resolve the one immutable chain anchor used by every vote in this process.
 %% A founder derives it from its durable slot-1 block. A fresh joiner uses the
@@ -1730,20 +2506,6 @@ load_or_bootstrap(S0 = #s{ns = Ns, store = Store}, Cfg) ->
 consensus_anchor(#s{slot = 0}, #{mode := join, genesis_hash := GenesisHash})
   when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
     {ok, GenesisHash};
-consensus_anchor(S = #s{slot = Slot}, Cfg) when Slot >= 1 ->
-    case {local_genesis_hash(S), maps:get(mode, Cfg)} of
-        {GenesisHash, create}
-          when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
-            {ok, GenesisHash};
-        {GenesisHash, join}
-          when is_binary(GenesisHash), byte_size(GenesisHash) =:= 32 ->
-            case maps:get(genesis_hash, Cfg) of
-                GenesisHash -> {ok, GenesisHash};
-                _Other      -> {error, genesis_anchor_mismatch}
-            end;
-        _ ->
-            {error, invalid_local_genesis}
-    end;
 consensus_anchor(_S, _Cfg) ->
     {error, missing_genesis_anchor}.
 
@@ -1755,26 +2517,25 @@ initial_sync(#s{self = Self} = S) ->
         _      -> unconfirmed
     end.
 
-%% Fresh create: the canonical founder mints a random incarnation and durably commits ONE genesis block
+%% Fresh create: the canonical founder mints a random incarnation and constructs ONE genesis block
 %% (slot 1). Its transaction asserts `consensus_incarnation/1`, every founding member's
 %% `peer_admitted` fact, and the ontology's configured initial content. The incarnation makes
 %% two fresh foundings cryptographically distinct even when every operator input is byte-identical.
-%% The committee is then DERIVED from that same transaction (`apply_committee_delta`), so bootstrap and
-%% restart re-fold cannot disagree. Loading or compiling initial content may throw
-%% `{genesis_failed,_}`; the whole transaction lands in ONE atomic append, so bad
-%% content persists nothing and the next boot retries fresh.
-bootstrap(Cfg, S = #s{ns = Ns, self = Self, store = Store}) ->
+%% The caller binds the signing journal to the resulting anchor before append.
+%% Loading or compiling initial content may throw `{genesis_failed,_}` before
+%% either durable file changes.
+genesis_entry(Cfg, #s{ns = Ns, self = Self}) ->
     Incarnation = crypto:strong_rand_bytes(32),
     GenesisTx = genesis_tx(Cfg, Ns, Self, Incarnation),
-    E = #entry{index = 1, data = quod_ledger:data([GenesisTx])},
-    {ok, Store1} = quod_ledger_store:append(Store, [E]),
-    Projection = log_projection(Ns, [E], history_projection()),
-    Validators = history_committee(Projection),
-    CommitteeId = maps:get(committee_id, Projection),
-    Admissions = maps:get(admissions, Projection),
-    S#s{store = Store1, validators = Validators,
-        committee_id = CommitteeId, author_admissions = Admissions,
-        slot = 1}.
+    #entry{index = 1, data = {batch, [GenesisTx]}}.
+
+entry_block_hash(#entry{} = Entry) ->
+    {ok, Block} = block_from_entry(Entry),
+    block_hash(Block).
+
+append_genesis(Entry, S = #s{store = Store}) ->
+    {ok, Store1} = quod_ledger_store:append(Store, [Entry]),
+    S#s{store = Store1}.
 
 %% The genesis transaction compiles caller-provided file/term content exactly once. Runtime creation
 %% instead supplies its already-compiled, bounded `genesis_diff`. Generated incarnation/committee facts
@@ -1834,6 +2595,10 @@ test_genesis_tx(Config, Ns, Self, Incarnation) ->
 
 test_valid_genesis_source(Config) ->
     valid_genesis_source(maps:merge(?DEFAULTS, Config)).
+
+test_valid_config(Config) ->
+    Cfg = maps:merge(?DEFAULTS, Config),
+    valid_cfg(Config, Cfg).
 -endif.
 
 genesis_tx_id(Ns, Incarnation)
@@ -1927,11 +2692,111 @@ running_impl({call, From}, {append, Change, TraceCtx}, S0) ->
                     Waiter, Change,
                     S0#s{submitted = S0#s.submitted + 1}),
     keep_progress(S0, S1, Reply);
+running_impl(
+  {call, From},
+  {dtx_endpoint_request, TargetNs, PeerKey, Endpoint, Request, TimeoutMs},
+  S0) ->
+    case start_dtx_endpoint_request(
+           TargetNs, PeerKey, Endpoint, Request, TimeoutMs, From, S0) of
+        {ok, S1} ->
+            {keep_state, S1};
+        {error, Reason} ->
+            {keep_state, S0, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From}, {dtx_endpoint_local, Request, TimeoutMs}, S0) ->
+    case start_local_dtx_endpoint_request(Request, TimeoutMs, From, S0) of
+        {ok, S1} ->
+            {keep_state, S1};
+        {error, Reason} ->
+            {keep_state, S0, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From}, {dtx_local_evidence_source, Ref, ExpectedPhase}, S) ->
+    {keep_state, S,
+     [{reply, From,
+       local_dtx_evidence_source(Ref, ExpectedPhase, S)}]};
+running_impl({call, From}, get_dtx_binding, S) ->
+    Reply = case current_dtx_binding(S) of
+                {ok, Binding} -> {ok, Binding};
+                {error, _} = Error -> Error
+            end,
+    {keep_state, S, [{reply, From, Reply}]};
+running_impl(
+  {call, From},
+  {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef}, S0) ->
+    case register_dtx_intent(
+           EnginePid, IntentId, Begin, GroupRef, S0) of
+        {ok, S1} ->
+            {keep_state, S1, [{reply, From, {accepted, IntentId}}]};
+        {error, Reason} ->
+            {keep_state, S0, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  cast, {activate_dtx_begin, EnginePid, IntentId}, S0) ->
+    S1 = activate_dtx_intent(EnginePid, IntentId, S0),
+    keep_progress(S0, S1, []);
+running_impl(
+  cast, {cancel_dtx_begin, EnginePid, IntentId}, S0) ->
+    {keep_state, cancel_dtx_intent(EnginePid, IntentId, S0)};
+running_impl({call, From}, {submit_dtx, Record}, S0) ->
+    case retain_dtx_record(Record, From, S0) of
+        {ok, S1} ->
+            %% The caller is released only by the certified committed record.
+            keep_progress(S0, S1, []);
+        {error, Reason} ->
+            {keep_state, S0, [{reply, From, {error, Reason}}]}
+    end;
+running_impl(
+  {call, From}, {dtx_group_barrier, GroupRef, AppliedFloor}, S) ->
+    {keep_state, S,
+     [{reply, From, classify_dtx_group_barrier(
+                      GroupRef, AppliedFloor, S)}]};
 %% A freshly-(re)started quod_prolog: re-drive committed blocks from the start (async casts, in slot
 %% order), then mark it ready ONLY once its kb is caught up — never a prove over a half-built kb.
 running_impl(cast, rebuild, S0) ->
-    S1 = apply_committed(S0#s{last_applied = 0, prolog_ready = false}),
+    %% Close the lock-free gate before replay work begins.
+    SClosed = refresh_proof_gate(
+                S0, S0#s{last_applied = 0, prolog_ready = false}),
+    %% The journal is the sole durable owner before Begin commits.  Seed its
+    %% reconciled pending identity into the rebuildable outcome projection
+    %% before any replayed ledger entry, preserving FIFO projection order.
+    ok = quod_prolog:project_pending_begin(
+           S0#s.ns, pending_begin_projection(S0#s.signing_journal)),
+    S1 = apply_committed(SClosed),
     keep_progress(S0, S1, []);
+%% Only the current registered Prolog incarnation may acknowledge readiness,
+%% and only at the exact committed height it actually consumed.  A stale
+%% owner or an acknowledgement overtaken by a newer commit is inert.
+running_impl(
+  cast, {prolog_ready, PrologPid, Height},
+  S0 = #s{ns = Ns, slot = Height, last_applied = Height,
+          sync = ready, prolog_ready = false})
+  when is_pid(PrologPid), is_integer(Height), Height >= 0 ->
+    case quod_reg:where({quod_prolog, Ns}) of
+        PrologPid ->
+            S1 = refresh_proof_gate(S0, S0#s{prolog_ready = true}),
+            keep_progress(S0, S1, []);
+        _Other ->
+            {keep_state, S0}
+    end;
+running_impl(cast, {prolog_ready, _PrologPid, _Height}, S) ->
+    {keep_state, S};
+%% Prolog emits this only after the finalized plan's outcome index has been
+%% flushed and its MVCC revision published.  Stale and duplicate exact events
+%% leave both state and the protected row untouched.
+running_impl(
+  cast, {finalize_applied, GroupId, Slot, Generation},
+  S0 = #s{dtx_projection = Projection0}) ->
+    case quod_dtx:acknowledge_finalize(
+           GroupId, Slot, Generation, Projection0) of
+        {ok, Projection1} ->
+            S1 = refresh_proof_gate(
+                   S0, S0#s{dtx_projection = Projection1}),
+            keep_progress(S0, S1, []);
+        {error, stale_finalize_ack} ->
+            {keep_state, S0}
+    end;
 %% `{log, Ns}` is consensus-only. Decode only after the authenticated peer is
 %% known to be an active participant; a relay envelope on this channel is an
 %% exact no-op and cannot replace a consensus/readiness generation.
@@ -1988,12 +2853,88 @@ running_impl(
                     {keep_state, S0}
             end
     end;
-running_impl(info, {quod_message, _, _OtherChan, _}, S) -> {keep_state, S};   %% Brahms / another namespace's log
+%% DTX recovery uses one bidirectional namespace channel.  Responses are
+%% accepted only for an exact peer/request correlation; requests are charged
+%% to the authenticated peer before any worker or monitor is allocated.
+running_impl(
+  info, {quod_message, {{Peer, _Addr}, InLink}, DtxChan, Payload},
+  S0 = #s{dtx_chan = DtxChan}) ->
+    {S1, Actions} = handle_dtx_endpoint_frame(
+                      S0#s.ns, serve, Peer, InLink, Payload, S0),
+    keep_progress(S0, S1, Actions);
+running_impl(
+  info, {quod_message, {PeerIdentity, _Link}, Channel, Payload}, S0) ->
+    case handle_dtx_outbound_message(
+           PeerIdentity, Channel, Payload, S0) of
+        {handled, S1, Actions} ->
+            keep_progress(S0, S1, Actions);
+        ignore ->
+            {keep_state, S0}
+    end;
+running_impl(
+  info, {dtx_endpoint_worker_result, Pid, Result}, S0) ->
+    {S1, Actions} = finish_dtx_server_worker(Pid, Result, S0),
+    keep_progress(S0, S1, Actions);
+running_impl(
+  info,
+  {dtx_coordinator_bootstrap, Pid, GroupId, BeginRef, Result}, S0) ->
+    S1 = finish_dtx_coordinator_bootstrap(
+           Pid, GroupId, BeginRef, Result, S0),
+    keep_progress(S0, S1, []);
+running_impl(
+  info, {dtx_coordinator, Pid, GroupId, {progress, Phase}},
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{
+             status = running, pid = Pid, group_id = GroupId}}) ->
+    logger:debug(
+      "quod[~s]: DTX group ~p recovery advanced to ~p",
+      [S#s.ns, GroupId, Phase]),
+    {keep_state, S};
+running_impl(
+  info, {dtx_coordinator, Pid, GroupId, {done, _CompleteRef}},
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{
+             status = running, pid = Pid, group_id = GroupId}}) ->
+    %% Complete is authoritative only through the installed projection.  The
+    %% following reconciliation stops this worker if that commit is already
+    %% visible; otherwise its subsequent DOWN is retried from durable state.
+    keep_progress(S, reconcile_dtx_coordinator(S), []);
+running_impl(
+  info, {dtx_coordinator, Pid, GroupId, {error, Reason}},
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{
+             status = running, pid = Pid, group_id = GroupId}}) ->
+    logger:error(
+      "quod[~s]: DTX group ~p coordinator stopped: ~p",
+      [S#s.ns, GroupId, Reason]),
+    %% The durable group is not terminal. The ordered DOWN signal installs a
+    %% bounded retry unless Complete/retirement wins first.
+    {keep_state, S};
+running_impl(info, {dtx_coordinator, _Pid, _GroupId, _Event}, S) ->
+    {keep_state, S};
+running_impl(
+  info, {dtx_endpoint_timeout, RequestId, TimeoutTag}, S0) ->
+    {S1, Actions} = timeout_dtx_correlation(
+                      RequestId, TimeoutTag, S0),
+    keep_progress(S0, S1, Actions);
 %% A membership verdict from our own quod_prolog (a plain message from `deliver_verdict`): emit or withhold
 %% the deferred support share. The tag echoes the `{Slot, BlockHash}` we requested with, so the verdict binds
 %% to the exact block. Support can advance/skip the head, so reflect that in the Δ timer.
 running_impl(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
     S1 = on_membership_verdict(Sl, BH, Verdict, S0),
+    keep_progress(S0, S1, []);
+running_impl(
+  info,
+  {dtx_verdict, {Sl, BH, ParentToken}, EnginePid, AppliedFloor, Verdict},
+  S0) ->
+    S1 = on_dtx_verdict(
+           Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict, S0),
+    keep_progress(S0, S1, []);
+running_impl(
+  info,
+  {dtx_foreign_verdict, {Sl, BH, ParentToken}, WorkerPid, Verdict}, S0) ->
+    S1 = on_dtx_foreign_verdict(
+           Sl, BH, ParentToken, WorkerPid, Verdict, S0),
     keep_progress(S0, S1, []);
 running_impl(info, {link_up, Peer, Chan, LinkPid}, S0 = #s{chan = Chan}) ->
     keep_progress(S0, handle_link_up(Peer, LinkPid, S0), []);
@@ -2019,8 +2960,26 @@ running_impl(
 %% The worker resumes from the persisted height, so a retry continues from the prefix already on disk.
 running_impl(info, {'DOWN', _Ref, process, Pid, _Reason}, S0 = #s{sync = {pulling, Pid}}) ->
     keep_progress(S0, recovery_failed(S0), []);
-running_impl(info, {'DOWN', _Ref, process, Pid, _}, S0) ->
-    keep_progress(S0, drop_link(Pid, S0), []);
+running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
+    case drop_dtx_coordinator_owner(Ref, Pid, Reason, S0) of
+        {true, S1} ->
+            keep_progress(S0, S1, []);
+        false ->
+            case drop_dtx_endpoint_owner(Ref, Pid, S0) of
+                {true, S1, Actions} ->
+                    keep_progress(S0, S1, Actions);
+                false ->
+                    case drop_dtx_intent_monitor(Ref, Pid, S0) of
+                        {true, S1} -> keep_progress(S0, S1, []);
+                        false ->
+                            case drop_dtx_validation_monitor(Ref, Pid, S0) of
+                                {true, S1} -> keep_progress(S0, S1, []);
+                                false ->
+                                    keep_progress(S0, drop_link(Pid, S0), [])
+                            end
+                    end
+            end
+    end;
 %% Seal the current micro-batch. A stale timeout is harmless: flush_batch/2 only
 %% acts when the collecting slot still matches.
 running_impl({timeout, batch}, {flush_batch, V}, S0) ->
@@ -2051,9 +3010,8 @@ running_impl(cast, {sync_done, Pid, {ready, H}},
         S0 = #s{sync = {pulling, Pid}, slot = Slot}) when H >= 1, Slot >= H ->
     S1 = S0#s{sync = ready, sync_arm = reset_pace()},
     S2 = apply_committed(S1),
-    %% Close the runtime replay even when recovery reaches a quiet head. This cast follows all
-    %% replay apply casts from this same process, so reconciliation sees the complete prefix.
-    _ = quod_prolog:mark_ready(S2#s.ns),
+    %% keep_progress requests the ready marker after every preceding replay
+    %% cast; Prolog's explicit acknowledgement opens the proof gate.
     keep_progress(S0, S2, []);
 %% Any incomplete round returns to the single `unconfirmed` state. Partial windows stay durable and the
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
@@ -2064,11 +3022,12 @@ running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
 %% observer. This keeps the sole-writer rule local and makes a promotion crossing deterministic.
-running_impl({call, From}, {sink_catchup, Source, Es}, S0) ->
+running_impl({call, From}, {sink_catchup, Source, Es, Projection}, S0) ->
     case may_sink(Source, S0) of
         %% `reseat_engine` discards the obsolete volatile round and its head watchdog. The common
         %% transition helper cancels the named timer before the recovered member can vote again.
-        true  -> {S1, Reply} = apply_catchup_window(Source, Es, S0),
+        true  -> {S1, Reply} = apply_catchup_window(
+                                Source, Es, Projection, S0),
                  keep_progress(S0, S1, [{reply, From, Reply}]);
         false -> {keep_state, S0, [{reply, From, {error, not_following}}]}
     end;
@@ -2076,8 +3035,8 @@ running_impl({call, From}, {sink_catchup, Source, Es}, S0) ->
 %% above and this ready cast therefore have one sender and preserve mailbox order at Prolog.
 running_impl({call, From}, finish_feed_replay, S = #s{sync = ready}) ->
     case is_participant(S) of
-        false -> _ = quod_prolog:mark_ready(S#s.ns),
-                 {keep_state, S, [{reply, From, ok}]};
+        false -> S1 = maybe_mark_ready(S),
+                 {keep_state, S1, [{reply, From, ok}]};
         true  -> {keep_state, S, [{reply, From, {error, not_following}}]}
     end;
 running_impl({call, From}, finish_feed_replay, S) ->
@@ -2091,8 +3050,12 @@ running_impl(_EventType, _Event, S)             -> {keep_state, S}.
 
 terminate(
   _Reason, _State,
-  #s{chan = Chan, relay_chan = RelayChan,
-     store = Store, vote_journal = Journal,
+  #s{chan = Chan, relay_chan = RelayChan, dtx_chan = DtxChan,
+     store = Store, signing_journal = Journal,
+     dtx_correlations = DtxCorrelations,
+     dtx_out_channels = DtxOutChannels,
+     dtx_workers = DtxWorkers,
+     dtx_coordinator = DtxCoordinator,
      conns = Conns, inbound_conns = Inbound,
      relay_conns = RelayConns,
      relay_inbound_conns = RelayInbound,
@@ -2107,16 +3070,1379 @@ terminate(
             undefined -> ok;
             _ -> catch quod_reg:unsubscribe({channel, RelayChan})
         end,
+    _ = case DtxChan of
+            undefined -> ok;
+            _ -> catch quod_reg:unsubscribe({channel, DtxChan})
+        end,
+    maps:foreach(
+      fun(Channel, {_TargetNs, _Count}) ->
+              _ = catch quod_reg:unsubscribe({channel, Channel}),
+              ok
+      end, DtxOutChannels),
+    close_dtx_endpoint(DtxCorrelations, DtxWorkers),
+    stop_dtx_coordinator_process(DtxCoordinator),
     _ = case Store of
             undefined -> ok;
             _         -> try quod_ledger_store:close(Store) catch _:_ -> ok end
         end,
-    _ = case Journal of
-            undefined -> ok;
-            memory    -> ok;
-            _         -> try quod_vote_journal:close(Journal) catch _:_ -> ok end
-        end,
+    _ = close_signing_journal(Journal),
     ok.
+
+-ifdef(TEST).
+close_signing_journal(undefined) ->
+    ok;
+close_signing_journal(memory) ->
+    ok;
+close_signing_journal(Journal) ->
+    close_signing_journal_handle(Journal).
+-else.
+close_signing_journal(undefined) ->
+    ok;
+close_signing_journal(Journal) ->
+    close_signing_journal_handle(Journal).
+-endif.
+close_signing_journal_handle(Journal) ->
+    try quod_signing_journal:close(Journal) catch _:_ -> ok end.
+
+%%%===================================================================
+%%% durable distributed-control ownership
+%%%===================================================================
+
+current_dtx_binding(
+  #s{ns = Ns, genesis_hash = <<_:256>> = Anchor, self = Self,
+     author_admissions = Admissions, sync = ready,
+     dtx_projection = Projection} = S)
+  when is_map(Projection) ->
+    case {is_participant(S), maps:get(Self, Admissions, undefined)} of
+        {true, <<_:256>> = Admission} ->
+            {ok, {Ns, Anchor, Self, Admission}};
+        _ ->
+            {error, not_in_charge}
+    end;
+current_dtx_binding(#s{ns = Ns}) ->
+    {error, {ontology_unavailable, Ns}}.
+
+register_dtx_intent(EnginePid, IntentId, Begin, GroupRef,
+                    S = #s{ns = Ns, dtx_intent = Existing}) ->
+    CurrentEngine = quod_reg:where({quod_prolog, Ns}),
+    case {CurrentEngine =:= EnginePid,
+          begin_matches_binding(Begin, GroupRef, S), Existing,
+          dtx_begin_registration_open(S)} of
+        {true, true, none, true} ->
+            Monitor = erlang:monitor(process, EnginePid),
+            {ok, S#s{dtx_intent =
+                         #dtx_intent{id = IntentId, engine = EnginePid,
+                                     monitor = Monitor, record = Begin,
+                                     group_ref = GroupRef}}};
+        {true, true,
+         #dtx_intent{id = IntentId, engine = EnginePid,
+                     record = Begin, group_ref = GroupRef}, _} ->
+            {ok, S};
+        {true, true, _, _} ->
+            {error, busy};
+        {false, _, _, _} ->
+            {error, stale_engine};
+        _ ->
+            {error, invalid_dtx_intent}
+    end.
+
+dtx_begin_registration_open(
+  #s{signing_journal = Journal,
+     dtx_projection = #{active := none},
+     dtx_submissions = Submissions}) ->
+    pending_begin_projection(Journal) =:= none andalso
+        not maps:fold(
+              fun(_Digest,
+                  #dtx_submission{record = {quod_dtx_begin, 1, _, _}},
+                  _Found) -> true;
+                 (_Digest, _Submission, Found) -> Found
+              end, false, Submissions);
+dtx_begin_registration_open(_S) ->
+    false.
+
+begin_matches_binding(Begin, GroupRef, S) ->
+    case {current_dtx_binding(S), quod_dtx:begin_group_ref(Begin)} of
+        {{ok, Binding}, {ok, GroupRef}} ->
+            Binding =:= group_ref_binding(GroupRef);
+        _ ->
+            false
+    end.
+
+group_ref_binding(
+  {group, Ns, <<_:256>> = Anchor, <<_:256>> = Coordinator,
+   <<_:256>> = Admission, <<_:256>>}) ->
+    {Ns, Anchor, Coordinator, Admission};
+group_ref_binding(_) ->
+    invalid.
+
+activate_dtx_intent(
+  EnginePid, IntentId,
+  S0 = #s{dtx_intent =
+            #dtx_intent{id = IntentId, engine = EnginePid,
+                        monitor = Monitor, record = Begin,
+                        group_ref = GroupRef}}) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    S = S0#s{dtx_intent = none},
+    case begin_matches_binding(Begin, GroupRef, S) of
+        true ->
+            case retain_dtx_record(Begin, none, S) of
+                {ok, S1} -> S1;
+                {error, Reason} ->
+                    logger:error(
+                      "quod[~s]: accepted DTX Begin activation failed: ~p",
+                      [S#s.ns, Reason]),
+                    S
+            end;
+        false ->
+            %% Retirement or a new admission generation won the ledger race.
+            %% Nothing was signed; the anchored GroupRef status barrier reports
+            %% the deterministic coordinator_retired classification.
+            ok = quod_prolog:dtx_group_resolved(S#s.ns, GroupRef),
+            S
+    end;
+activate_dtx_intent(_EnginePid, _IntentId, S) ->
+    S.
+
+cancel_dtx_intent(
+  EnginePid, IntentId,
+  S = #s{dtx_intent =
+           #dtx_intent{id = IntentId, engine = EnginePid,
+                       monitor = Monitor}}) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    S#s{dtx_intent = none};
+cancel_dtx_intent(_EnginePid, _IntentId, S) ->
+    S.
+
+drop_dtx_intent_monitor(
+  Ref, Pid,
+  S = #s{dtx_intent =
+           #dtx_intent{engine = Pid, monitor = Ref}}) ->
+    {true, S#s{dtx_intent = none}};
+drop_dtx_intent_monitor(_Ref, _Pid, _S) ->
+    false.
+
+%% Recovery coordination is volatile but its source is not: before Begin
+%% commits the signing journal owns the exact semantic record, and afterwards
+%% the committed projection owns its exact certified reference.  Reconciliation
+%% starts at most one monitored process and never performs ledger or Prolog I/O
+%% in this statem.
+reconcile_dtx_coordinator(S) ->
+    reconcile_dtx_coordinator(
+      dtx_coordinator_desired(S), S).
+
+dtx_coordinator_desired(S) ->
+    case current_dtx_binding(S) of
+        {ok, Binding} ->
+            case pending_origin_begin(S, Binding) of
+                {record, _GroupId, _Begin, _GroupRef} = Pending ->
+                    Pending;
+                none ->
+                    committed_origin_recovery(S)
+            end;
+        {error, _} ->
+            none
+    end.
+
+pending_origin_begin(#s{dtx_submissions = Submissions}, Binding) ->
+    Candidates =
+        [{InsertedAt, GroupId, Begin, GroupRef}
+         || #dtx_submission{
+              record = {quod_dtx_begin, 1, _, _} = Begin,
+              group_id = GroupId, inserted_at = InsertedAt}
+                <- maps:values(Submissions),
+            {ok, GroupRef} <- [quod_dtx:begin_group_ref(Begin)],
+            group_ref_binding(GroupRef) =:= Binding],
+    case lists:sort(Candidates) of
+        [{_InsertedAt, GroupId, Begin, GroupRef} | _] ->
+            {record, GroupId, Begin, GroupRef};
+        [] ->
+            none
+    end.
+
+committed_origin_recovery(
+  #s{prolog_ready = true, dtx_projection = Projection})
+  when is_map(Projection) ->
+    case quod_dtx:origin_recovery(Projection) of
+        {active, GroupId, BeginRef} ->
+            {reference, GroupId, BeginRef};
+        none ->
+            none
+    end;
+committed_origin_recovery(_S) ->
+    none.
+
+reconcile_dtx_coordinator(none, S) ->
+    stop_dtx_coordinator(S);
+reconcile_dtx_coordinator(
+  Desired, S = #s{dtx_coordinator = none}) ->
+    start_dtx_coordinator(Desired, 0, S);
+reconcile_dtx_coordinator(
+  Desired,
+  S = #s{dtx_coordinator = Owner}) ->
+    case dtx_coordinator_matches(Desired, Owner, S) of
+        keep ->
+            S;
+        retry ->
+            start_dtx_coordinator(
+              Desired, Owner#dtx_coordinator_owner.failures,
+              S#s{dtx_coordinator = none});
+        replace ->
+            start_dtx_coordinator(
+              Desired, 0, stop_dtx_coordinator(S))
+    end.
+
+dtx_coordinator_matches(
+  {record, GroupId, _Begin, GroupRef},
+  #dtx_coordinator_owner{
+    status = running, group_id = GroupId, begin_ref = none,
+    group_ref = GroupRef}, _S) ->
+    keep;
+dtx_coordinator_matches(
+  {reference, GroupId, BeginRef},
+  #dtx_coordinator_owner{
+    status = running, group_id = GroupId, begin_ref = BeginRef}, _S) ->
+    keep;
+dtx_coordinator_matches(
+  {reference, GroupId, BeginRef},
+  #dtx_coordinator_owner{
+    status = recovering, group_id = GroupId, begin_ref = BeginRef}, _S) ->
+    keep;
+dtx_coordinator_matches(
+  Desired,
+  #dtx_coordinator_owner{
+    status = backoff, group_id = GroupId, begin_ref = BeginRef,
+    retry_at = RetryAt}, _S) ->
+    case desired_matches_backoff(Desired, GroupId, BeginRef) of
+        false -> replace;
+        true ->
+            case quod_time:mono_ms() >= RetryAt of
+                true -> retry;
+                false -> keep
+            end
+    end;
+dtx_coordinator_matches(_Desired, _Owner, _S) ->
+    replace.
+
+desired_matches_backoff(
+  {record, GroupId, _Begin, _GroupRef}, GroupId, none) -> true;
+desired_matches_backoff(
+  {reference, GroupId, BeginRef}, GroupId, BeginRef) -> true;
+desired_matches_backoff(_Desired, _GroupId, _BeginRef) -> false.
+
+start_dtx_coordinator(
+  {record, GroupId, Begin, GroupRef}, Failures,
+  S) ->
+    start_dtx_coordinator_worker(
+      GroupId, Begin, GroupRef, none, none, Failures, S);
+start_dtx_coordinator(
+  {recovered, GroupId, Begin, GroupRef, BeginRef, {ok, Evidence}}, Failures,
+  S) ->
+    start_dtx_coordinator_worker(
+      GroupId, Begin, GroupRef, BeginRef, {BeginRef, Evidence},
+      Failures, S);
+start_dtx_coordinator(
+  {reference, GroupId, BeginRef}, Failures,
+  S = #s{ns = Ns}) ->
+    Owner = self(),
+    {Pid, Monitor} =
+        spawn_monitor(
+          fun() ->
+              Result = dtx_local_evidence(Ns, BeginRef, 'begin'),
+              Owner ! {dtx_coordinator_bootstrap, self(),
+                       GroupId, BeginRef, Result}
+          end),
+    S#s{dtx_coordinator =
+          #dtx_coordinator_owner{
+            status = recovering, group_id = GroupId,
+            begin_ref = BeginRef, pid = Pid, monitor = Monitor,
+            failures = Failures}}.
+
+start_dtx_coordinator_worker(
+  GroupId, Begin, GroupRef, BeginRef, BeginEvidence, Failures,
+  S = #s{ns = Ns}) ->
+    case quod_dtx_coordinator:start_monitor(
+           self(), Ns, Begin, BeginEvidence, #{}) of
+        {ok, Pid, Monitor} ->
+            S#s{dtx_coordinator =
+                  #dtx_coordinator_owner{
+                    status = running, group_id = GroupId,
+                    begin_ref = BeginRef, group_ref = GroupRef,
+                    pid = Pid, monitor = Monitor,
+                    failures = Failures}};
+        {error, Reason} ->
+            logger:error(
+              "quod[~s]: DTX coordinator start failed for ~p: ~p",
+              [Ns, GroupId, Reason]),
+            dtx_coordinator_backoff(
+              GroupId, BeginRef, GroupRef, Failures, S)
+    end.
+
+finish_dtx_coordinator_bootstrap(
+  Pid, GroupId, BeginRef, Result,
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{
+             status = recovering, pid = Pid, monitor = Monitor,
+             group_id = GroupId, begin_ref = BeginRef,
+             failures = Failures}}) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    S0 = S#s{dtx_coordinator = none},
+    case {dtx_coordinator_desired(S0),
+          recovered_origin_begin(GroupId, BeginRef, Result)} of
+        {{reference, GroupId, BeginRef}, {ok, Begin, GroupRef}} ->
+            %% Before Begin, only its exact Coordinator/Admission binding may
+            %% drive the journaled record.  Once the certified Begin is the
+            %% projection's active origin, that evidence is the authority:
+            %% every current origin validator must be able to recover it.
+            start_dtx_coordinator(
+              {recovered, GroupId, Begin, GroupRef, BeginRef, Result},
+              Failures, S0);
+        {{reference, GroupId, BeginRef}, {error, Reason}} ->
+            logger:warning(
+              "quod[~s]: DTX Begin recovery failed for ~p: ~p",
+              [S#s.ns, GroupId, Reason]),
+            dtx_coordinator_backoff(
+              GroupId, BeginRef, none, Failures, S0);
+        {_NoLongerActive, _Result} ->
+            S0
+    end;
+finish_dtx_coordinator_bootstrap(
+  _Pid, _GroupId, _BeginRef, _Result, S) ->
+    S.
+
+recovered_origin_begin(
+  GroupId, BeginRef,
+  {ok, #{phase := 'begin', control := Control}}) ->
+    try
+        'begin' = quod_dtx:control_kind(Control),
+        Begin = quod_dtx:control_body(Control),
+        GroupId = quod_dtx:group_id(Begin),
+        {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
+        {ok, _Identity, _Slot, GroupId} =
+            quod_dtx:certified_ref_binding(BeginRef),
+        {ok, Begin, GroupRef}
+    catch
+        _:_ -> {error, invalid_begin_evidence}
+    end;
+recovered_origin_begin(_GroupId, _BeginRef, {error, Reason}) ->
+    {error, Reason};
+recovered_origin_begin(_GroupId, _BeginRef, _Malformed) ->
+    {error, invalid_begin_evidence}.
+
+dtx_coordinator_backoff(
+  GroupId, BeginRef, GroupRef, PreviousFailures, S) ->
+    Failures = min(?DTX_COORDINATOR_MAX_FAILURES, PreviousFailures + 1),
+    Exponent = min(5, Failures - 1),
+    Delay = min(?DTX_COORDINATOR_RETRY_MAX_MS,
+                ?DTX_COORDINATOR_RETRY_MIN_MS bsl Exponent),
+    S#s{dtx_coordinator =
+          #dtx_coordinator_owner{
+            status = backoff, group_id = GroupId,
+            begin_ref = BeginRef, group_ref = GroupRef,
+            failures = Failures,
+            retry_at = quod_time:mono_ms() + Delay}}.
+
+drop_dtx_coordinator_owner(
+  Ref, Pid, Reason,
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{
+             pid = Pid, monitor = Ref, group_id = GroupId,
+             begin_ref = BeginRef, group_ref = GroupRef,
+             failures = Failures}}) ->
+    case Reason of
+        normal -> ok;
+        shutdown -> ok;
+        _ ->
+            logger:warning(
+              "quod[~s]: DTX coordinator worker for ~p exited: ~p",
+              [S#s.ns, GroupId, Reason])
+    end,
+    {true,
+     dtx_coordinator_backoff(
+       GroupId, BeginRef, GroupRef, Failures,
+       S#s{dtx_coordinator = none})};
+drop_dtx_coordinator_owner(_Ref, _Pid, _Reason, _S) ->
+    false.
+
+stop_dtx_coordinator(
+  S = #s{dtx_coordinator =
+           #dtx_coordinator_owner{pid = Pid, monitor = Monitor}})
+  when is_pid(Pid), is_reference(Monitor) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    exit(Pid, shutdown),
+    S#s{dtx_coordinator = none};
+stop_dtx_coordinator(S) ->
+    S#s{dtx_coordinator = none}.
+
+stop_dtx_coordinator_process(
+  #dtx_coordinator_owner{pid = Pid, monitor = Monitor})
+  when is_pid(Pid), is_reference(Monitor) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    exit(Pid, shutdown),
+    ok;
+stop_dtx_coordinator_process(_NoneOrIdle) ->
+    ok.
+
+classify_dtx_group_barrier(
+  {group, Ns, Anchor, Coordinator, Admission, GroupId} = GroupRef,
+  AppliedFloor,
+  S = #s{ns = Ns, genesis_hash = Anchor, self = Self,
+         slot = Committed, sync = ready, prolog_ready = true,
+         author_admissions = Admissions})
+  when is_integer(AppliedFloor), AppliedFloor >= Committed ->
+    case maps:get(Coordinator, Admissions, undefined) of
+        Admission ->
+            case {Coordinator =:= Self,
+                  local_group_pending(GroupId, GroupRef, S)} of
+                {true, true} -> {ok, pending};
+                {true, false} -> {ok, not_found};
+                {false, _} -> {error, {outcome_unknown, GroupRef}}
+            end;
+        _RetiredOrChanged ->
+            {ok, {rejected, coordinator_retired}}
+    end;
+classify_dtx_group_barrier(GroupRef, _AppliedFloor, _S) ->
+    {error, {outcome_unknown, GroupRef}}.
+
+local_group_pending(
+  GroupId, GroupRef,
+  #s{dtx_intent = Intent, dtx_submissions = Submissions}) ->
+    intent_matches_group(Intent, GroupRef) orelse
+        maps:fold(
+          fun(_Digest, #dtx_submission{group_id = PendingGroup}, Found) ->
+                  Found orelse PendingGroup =:= GroupId
+          end, false, Submissions).
+
+intent_matches_group(
+  #dtx_intent{group_ref = GroupRef}, GroupRef) -> true;
+intent_matches_group(_Intent, _GroupRef) -> false.
+
+%%%===================================================================
+%%% bounded DTX recovery endpoint
+%%%===================================================================
+
+start_dtx_endpoint_request(
+  TargetNs, PeerKey, Endpoint, Request, TimeoutMs, From,
+  S = #s{dtx_correlations = Correlations}) ->
+    RequestId = quod_dtx_endpoint:request_id(Request),
+    Checks =
+        is_binary(TargetNs) andalso byte_size(TargetNs) > 0 andalso
+        is_binary(PeerKey) andalso byte_size(PeerKey) =:= 32 andalso
+        quod_quic:valid_endpoint(Endpoint) andalso
+        is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
+        RequestId =/= error,
+    case {Checks, map_size(Correlations) <
+                  ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
+          maps:is_key(RequestId, Correlations),
+          quod_dtx_endpoint:encode_request(TargetNs, Request)} of
+        {true, true, false, {ok, Frame}} ->
+            CallerMRef = erlang:monitor(process, element(1, From)),
+            TimeoutTag = make_ref(),
+            Timer = erlang:send_after(
+                      TimeoutMs, self(),
+                      {dtx_endpoint_timeout, RequestId, TimeoutTag}),
+            Correlation =
+                #dtx_correlation{
+                  target_ns = TargetNs, peer = PeerKey, request = Request,
+                  from = From, caller_mref = CallerMRef, timer = Timer,
+                  timeout_tag = TimeoutTag},
+            S1 = retain_dtx_target_channel(
+                   TargetNs,
+                   S#s{dtx_correlations =
+                           Correlations#{RequestId => Correlation}}),
+            quod_quic:send_pinned(
+              PeerKey, Endpoint, quod_dtx_endpoint:channel(TargetNs), Frame),
+            {ok, S1};
+        {false, _, _, _} ->
+            {error, invalid_request};
+        {_, false, _, _} ->
+            {error, busy};
+        {_, _, true, _} ->
+            {error, busy};
+        {_, _, _, {error, _}} ->
+            {error, invalid_request}
+    end.
+
+retain_dtx_target_channel(TargetNs, S = #s{ns = TargetNs}) ->
+    S;
+retain_dtx_target_channel(
+  TargetNs, S = #s{dtx_out_channels = Channels}) ->
+    Channel = quod_dtx_endpoint:channel(TargetNs),
+    case maps:get(Channel, Channels, undefined) of
+        undefined ->
+            true = quod_reg:subscribe({channel, Channel}),
+            S#s{dtx_out_channels = Channels#{Channel => {TargetNs, 1}}};
+        {TargetNs, Count} ->
+            S#s{dtx_out_channels =
+                    Channels#{Channel => {TargetNs, Count + 1}}}
+    end.
+
+release_dtx_target_channel(TargetNs, S = #s{ns = TargetNs}) ->
+    S;
+release_dtx_target_channel(
+  TargetNs, S = #s{dtx_out_channels = Channels}) ->
+    Channel = quod_dtx_endpoint:channel(TargetNs),
+    case maps:get(Channel, Channels, undefined) of
+        {TargetNs, 1} ->
+            true = quod_reg:unsubscribe({channel, Channel}),
+            S#s{dtx_out_channels = maps:remove(Channel, Channels)};
+        {TargetNs, Count} when Count > 1 ->
+            S#s{dtx_out_channels =
+                    Channels#{Channel => {TargetNs, Count - 1}}};
+        undefined ->
+            S
+    end.
+
+handle_dtx_endpoint_frame(
+  TargetNs, serve, Peer, InLink, Payload, S)
+  when is_binary(Peer), byte_size(Peer) =:= 32, is_pid(InLink),
+       is_binary(Payload) ->
+    case quod_dtx_endpoint:decode_response(TargetNs, Payload) of
+        {ok, Response} ->
+            accept_dtx_endpoint_response(Peer, Response, S);
+        {error, _} ->
+            case quod_dtx_endpoint:decode_request(TargetNs, Payload) of
+                {ok, Request} ->
+                    admit_dtx_endpoint_request(Peer, InLink, Request, S);
+                {error, _} ->
+                    {S, []}
+            end
+    end;
+handle_dtx_endpoint_frame(_TargetNs, _Mode, _Peer, _InLink, _Payload, S) ->
+    {S, []}.
+
+handle_dtx_endpoint_response(TargetNs, Peer, Payload, S)
+  when is_binary(Peer), byte_size(Peer) =:= 32, is_binary(Payload) ->
+    case quod_dtx_endpoint:decode_response(TargetNs, Payload) of
+        {ok, Response} -> accept_dtx_endpoint_response(Peer, Response, S);
+        {error, _} -> {S, []}
+    end;
+handle_dtx_endpoint_response(_TargetNs, _Peer, _Payload, S) ->
+    {S, []}.
+
+%% The transport publishes an authenticated inbound header as
+%% `{PeerKey, Endpoint}` and a TLS-pinned outbound link as `PeerKey`.  DTX
+%% replies use the same bidirectional stream as their request, so normalize
+%% those two transport-owned forms before applying the exact correlation
+%% check.  No endpoint value participates in response authority.
+handle_dtx_outbound_message(
+  PeerIdentity, Channel, Payload, S) ->
+    case {dtx_outbound_target(Channel, S),
+          quod_link:peer_key(PeerIdentity)} of
+        {{ok, TargetNs}, <<_:256>> = PeerKey} ->
+            {S1, Actions} = handle_dtx_endpoint_response(
+                              TargetNs, PeerKey, Payload, S),
+            {handled, S1, Actions};
+        _ ->
+            ignore
+    end.
+
+dtx_outbound_target(Channel, #s{ns = Ns, dtx_chan = Channel}) ->
+    {ok, Ns};
+dtx_outbound_target(Channel, #s{dtx_out_channels = OutChannels}) ->
+    case maps:find(Channel, OutChannels) of
+        {ok, {TargetNs, _Count}} -> {ok, TargetNs};
+        error -> error
+    end.
+
+accept_dtx_endpoint_response(
+  Peer, Response, S = #s{dtx_correlations = Correlations}) ->
+    RequestId = quod_dtx_endpoint:response_id(Response),
+    case maps:get(RequestId, Correlations, undefined) of
+        #dtx_correlation{peer = Peer, request = Request} = Correlation ->
+            case quod_dtx_endpoint:correlates(Request, Response) of
+                true ->
+                    finish_dtx_correlation(
+                      RequestId, Correlation, {ok, Response}, S);
+                false ->
+                    {S, []}
+            end;
+        _ ->
+            {S, []}
+    end.
+
+finish_dtx_correlation(
+  RequestId,
+  #dtx_correlation{target_ns = TargetNs, from = From,
+                   caller_mref = CallerMRef, timer = Timer}, Reply,
+  S = #s{dtx_correlations = Correlations}) ->
+    _ = erlang:cancel_timer(Timer),
+    _ = erlang:demonitor(CallerMRef, [flush]),
+    S1 = release_dtx_target_channel(
+           TargetNs,
+           S#s{dtx_correlations = maps:remove(RequestId, Correlations)}),
+    {S1, [{reply, From, Reply}]}.
+
+timeout_dtx_correlation(
+  RequestId, TimeoutTag,
+  S = #s{dtx_correlations = Correlations}) ->
+    case maps:get(RequestId, Correlations, undefined) of
+        #dtx_correlation{timeout_tag = TimeoutTag} = Correlation ->
+            finish_dtx_correlation(
+              RequestId, Correlation, {error, timeout}, S);
+        _ ->
+            {S, []}
+    end.
+
+admit_dtx_endpoint_request(Peer, InLink, Request,
+                           S0 = #s{dtx_rate_buckets = Buckets0}) ->
+    Now = quod_time:mono_ms(),
+    case quod_token_bucket:charge(
+           Peer, Now,
+           ?QUOD_DTX_ENDPOINT_RATE_PER_SECOND,
+           ?QUOD_DTX_ENDPOINT_RATE_BURST,
+           ?QUOD_TOKEN_BUCKET_MAX_BUCKETS,
+           ?QUOD_TOKEN_BUCKET_IDLE_MS,
+           Buckets0) of
+        {error, Buckets1} ->
+            S1 = S0#s{dtx_rate_buckets = Buckets1},
+            send_dtx_endpoint_response(
+              InLink, {error, quod_dtx_endpoint:request_id(Request), busy},
+              S1),
+            {S1, []};
+        {ok, Buckets1} ->
+            S1 = S0#s{dtx_rate_buckets = Buckets1},
+            admit_dtx_endpoint_worker(Peer, InLink, Request, S1)
+    end.
+
+admit_dtx_endpoint_worker(
+  Peer, InLink, Request, S = #s{dtx_workers = Workers}) ->
+    RequestId = quod_dtx_endpoint:request_id(Request),
+    case {dtx_endpoint_operation_ready(Request, S),
+          map_size(Workers) < ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
+          dtx_worker_pending(Peer, RequestId, Workers)} of
+        {false, _, _} ->
+            send_dtx_endpoint_response(
+              InLink, {error, RequestId, not_ready}, S),
+            {S, []};
+        {true, false, _} ->
+            send_dtx_endpoint_response(
+              InLink, {error, RequestId, busy}, S),
+            {S, []};
+        {true, true, true} ->
+            send_dtx_endpoint_response(
+              InLink, {error, RequestId, busy}, S),
+            {S, []};
+        {true, true, false} ->
+            case start_dtx_endpoint_operation(
+                   Peer, {link, InLink}, Request,
+                   ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, S) of
+                {ok, S1} ->
+                    {S1, []};
+                {error, Reason} ->
+                    send_dtx_endpoint_response(
+                      InLink, {error, RequestId, Reason}, S),
+                    {S, []}
+            end
+    end.
+
+start_local_dtx_endpoint_request(
+  Request, TimeoutMs, From, S = #s{ns = Ns, dtx_workers = Workers}) ->
+    case {dtx_endpoint_operation_ready(Request, S),
+          map_size(Workers) < ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
+          quod_dtx_endpoint:encode_request(Ns, Request),
+          dtx_worker_pending(
+            local, quod_dtx_endpoint:request_id(Request), Workers)} of
+        {false, _, _, _} ->
+            {error, not_ready};
+        {true, false, _, _} ->
+            {error, busy};
+        {true, true, {error, _}, _} ->
+            {error, invalid_request};
+        {true, true, {ok, _CanonicalFrame}, true} ->
+            {error, busy};
+        {true, true, {ok, _CanonicalFrame}, false} ->
+            start_dtx_endpoint_operation(
+              local, {caller, From}, Request, TimeoutMs, S)
+    end.
+
+start_dtx_endpoint_operation(Peer, Destination,
+                             {submit, _RequestId, _RecordBlob} = Request,
+                             TimeoutMs, S) ->
+    start_dtx_submit_owner(
+      Peer, Destination, Request, TimeoutMs, S);
+start_dtx_endpoint_operation(Peer, Destination, Request, TimeoutMs, S) ->
+    {ok, start_dtx_server_worker(
+           Peer, Destination, Request, TimeoutMs, S)}.
+
+%% Decode and retain a submit in the owning statem turn.  The bounded helper
+%% process owns only the caller deadline; it never calls back into Simplex.
+%% Consequently a later phase query cannot overtake submit admission and see
+%% a false absence while the semantic record is already in flight.
+start_dtx_submit_owner(
+  Peer, Destination, Request = {submit, _RequestId, RecordBlob}, TimeoutMs,
+  S = #s{dtx_workers = Workers}) ->
+    case quod_dtx:decode_record(RecordBlob) of
+        {ok, Record} ->
+            Digest = quod_dtx:record_digest(Record),
+            Parent = self(),
+            OwnerMRef = dtx_worker_owner_monitor(Destination),
+            {Pid, Monitor} = spawn_monitor(
+                               fun() ->
+                                   await_dtx_submit_result(
+                                     Parent, Digest, TimeoutMs)
+                               end),
+            Worker = #dtx_server_worker{
+                       pid = Pid, monitor = Monitor,
+                       owner_mref = OwnerMRef, peer = Peer,
+                       request = Request, destination = Destination},
+            S1 = S#s{dtx_workers = Workers#{Pid => Worker}},
+            case retain_dtx_record(Record, {dtx_endpoint, Pid}, S1) of
+                {ok, S2} ->
+                    {ok, S2};
+                {error, Reason} ->
+                    ok = remove_new_dtx_submit_owner(Pid, Worker),
+                    {error, endpoint_submit_error(Reason)}
+            end;
+        {error, _} ->
+            {error, invalid_request}
+    end.
+
+await_dtx_submit_result(Parent, Digest, TimeoutMs) ->
+    receive
+        {dtx_submit_result, Result} ->
+            Parent ! {dtx_endpoint_worker_result, self(),
+                      {submit_result, Digest, Result}}
+    after TimeoutMs ->
+        Parent ! {dtx_endpoint_worker_result, self(),
+                  {submit_result, Digest, {error, timeout}}}
+    end.
+
+remove_new_dtx_submit_owner(
+  Pid, #dtx_server_worker{monitor = Monitor, owner_mref = OwnerMRef}) ->
+    _ = erlang:demonitor(Monitor, [flush]),
+    demonitor_if_set(OwnerMRef),
+    exit(Pid, shutdown),
+    ok.
+
+endpoint_submit_error(busy) -> busy;
+endpoint_submit_error(invalid_dtx_submission) -> invalid_request;
+endpoint_submit_error(_) -> not_ready.
+
+start_dtx_server_worker(Peer, Destination, Request, TimeoutMs,
+                        S = #s{ns = Ns, dtx_workers = Workers}) ->
+    Parent = self(),
+    OwnerMRef = dtx_worker_owner_monitor(Destination),
+    {Pid, Monitor} = spawn_monitor(
+                       fun() ->
+                           Result = execute_dtx_endpoint_request(
+                                      Ns, Request, TimeoutMs),
+                           Parent ! {dtx_endpoint_worker_result,
+                                     self(), Result}
+                       end),
+    Worker = #dtx_server_worker{
+               pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
+               peer = Peer,
+               request = Request, destination = Destination},
+    S#s{dtx_workers = Workers#{Pid => Worker}}.
+
+dtx_worker_owner_monitor({caller, {Caller, _Tag}}) when is_pid(Caller) ->
+    erlang:monitor(process, Caller);
+dtx_worker_owner_monitor(_Destination) ->
+    none.
+
+demonitor_if_set(none) -> ok;
+demonitor_if_set(Ref) when is_reference(Ref) ->
+    _ = erlang:demonitor(Ref, [flush]),
+    ok.
+
+dtx_worker_pending(Peer, RequestId, Workers) ->
+    maps:fold(
+      fun(_Pid,
+          #dtx_server_worker{peer = WorkerPeer, request = Request}, Found) ->
+              Found orelse
+                  (WorkerPeer =:= Peer andalso
+                   quod_dtx_endpoint:request_id(Request) =:= RequestId)
+      end, false, Workers).
+
+endpoint_write_ready(S = #s{sync = ready, prolog_ready = true}) ->
+    case current_dtx_binding(S) of
+        {ok, _Binding} -> true;
+        {error, _} -> false
+    end;
+endpoint_write_ready(_S) ->
+    false.
+
+endpoint_read_ready(
+  #s{sync = ready, prolog_ready = true,
+     genesis_hash = <<_:256>>, store = Store}) ->
+    Store =/= undefined;
+endpoint_read_ready(_S) ->
+    false.
+
+dtx_endpoint_operation_ready({submit, _, _}, S) ->
+    endpoint_write_ready(S);
+dtx_endpoint_operation_ready({phase, _, _, _}, S) ->
+    endpoint_read_ready(S);
+dtx_endpoint_operation_ready({outcome, _, _, _, _}, S) ->
+    endpoint_read_ready(S);
+dtx_endpoint_operation_ready({outcome_barrier, _, _, _, _}, S) ->
+    endpoint_read_ready(S);
+dtx_endpoint_operation_ready({applied, _, _, _, _, _}, S) ->
+    endpoint_read_ready(S);
+dtx_endpoint_operation_ready(_, _S) ->
+    false.
+
+execute_dtx_endpoint_request(
+  Ns, {phase, _RequestId, GroupId, _Kind}, _TimeoutMs) ->
+    case quod_prolog:dtx_group_state(Ns, GroupId) of
+        {ok, State} -> {phase_state, State};
+        {error, _} -> {error, not_ready}
+    end;
+execute_dtx_endpoint_request(
+  Ns, {outcome, _RequestId, OutcomeRef, _CommitteeId,
+       _MinimumSlot}, _TimeoutMs) ->
+    execute_outcome_snapshot(Ns, OutcomeRef);
+execute_dtx_endpoint_request(
+  Ns, {outcome_barrier, _RequestId, GroupRef, _CommitteeId,
+       _MinimumSlot}, _TimeoutMs) ->
+    execute_outcome_snapshot(Ns, GroupRef);
+execute_dtx_endpoint_request(
+  Ns, {applied, _RequestId, GroupId, FinalizeRef,
+       _Generation, _Verdict}, _TimeoutMs) ->
+    case dtx_local_evidence(Ns, FinalizeRef, finalize) of
+        {ok, Evidence} ->
+            case quod_prolog:dtx_group_state(Ns, GroupId) of
+                {ok, State} -> {applied_state, Evidence, State};
+                {error, _} -> {error, not_ready}
+            end;
+        {error, invalid_request} ->
+            {error, invalid_request};
+        {error, not_found} ->
+            {error, not_found};
+        {error, not_ready} ->
+            {error, not_ready}
+    end.
+
+execute_outcome_snapshot(Ns, OutcomeRef) ->
+    case outcome_ref_namespace(OutcomeRef) of
+        Ns ->
+            case quod_prolog:outcome_snapshot(Ns, OutcomeRef) of
+                {ok, Snapshot} -> {outcome_state, Snapshot};
+                {error, bad_outcome_ref} -> {error, invalid_request};
+                {error, _} -> {error, not_ready}
+            end;
+        _ ->
+            {error, invalid_request}
+    end.
+
+outcome_ref_namespace({transaction, Ns, <<_:256>>, <<_:256>>}) -> Ns;
+outcome_ref_namespace(
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}) -> Ns;
+outcome_ref_namespace(_) -> invalid.
+
+finish_dtx_server_worker(
+  Pid, Result, S = #s{dtx_workers = Workers}) ->
+    case maps:take(Pid, Workers) of
+        {#dtx_server_worker{monitor = Monitor, request = Request,
+                            owner_mref = OwnerMRef,
+                            destination = Destination}, Rest} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            demonitor_if_set(OwnerMRef),
+            S1 = detach_dtx_endpoint_waiter(
+                   Pid, S#s{dtx_workers = Rest}),
+            Response0 = dtx_endpoint_result_response(Request, Result, S1),
+            Response = valid_generated_dtx_response(
+                         Request, Response0, S1#s.ns),
+            deliver_dtx_endpoint_response(Destination, Response, S1);
+        error ->
+            {S, []}
+    end.
+
+dtx_endpoint_result_response(
+  {submit, RequestId, RecordBlob}, {submit_result, Digest, Result}, S) ->
+    TargetIdentity = target_identity(S),
+    case Result of
+        {ok, Ref} ->
+            case quod_dtx:certified_ref_binding(Ref) of
+                {ok, TargetIdentity, _Slot, Digest} ->
+                    {accepted, RequestId, Digest, Ref};
+                _ ->
+                    {error, RequestId, not_ready}
+            end;
+        {error,
+         {prepare_refused, TargetIdentity, Digest, Generation, ReasonsBlob}} ->
+            case submitted_prepare_digest(RecordBlob) of
+                Digest ->
+                    {refused, RequestId, TargetIdentity, Digest, Generation,
+                     ReasonsBlob};
+                _ ->
+                    {error, RequestId, invalid_request}
+            end;
+        {error, busy} ->
+            {error, RequestId, busy};
+        {error, invalid_dtx_submission} ->
+            {error, RequestId, invalid_request};
+        {error, _} ->
+            {error, RequestId, not_ready}
+    end;
+dtx_endpoint_result_response(
+  {phase, RequestId, GroupId, Kind}, {phase_state, State}, S) ->
+    phase_endpoint_response(RequestId, GroupId, Kind, State, S);
+dtx_endpoint_result_response(
+  {outcome, RequestId, OutcomeRef, CommitteeId, MinimumSlot},
+  {outcome_state, Snapshot}, S) ->
+    outcome_endpoint_response(
+      RequestId, OutcomeRef, CommitteeId, MinimumSlot, Snapshot, S);
+dtx_endpoint_result_response(
+  {outcome_barrier, RequestId, GroupRef, CommitteeId, MinimumSlot},
+  {outcome_state, Snapshot}, S) ->
+    outcome_barrier_endpoint_response(
+      RequestId, GroupRef, CommitteeId, MinimumSlot, Snapshot, S);
+dtx_endpoint_result_response(
+  {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict},
+  {applied_state, Evidence, State}, S) ->
+    applied_endpoint_response(
+      RequestId, GroupId, FinalizeRef, Generation, Verdict,
+      Evidence, State, S);
+dtx_endpoint_result_response(Request, {error, Reason}, _S)
+  when Reason =:= busy; Reason =:= not_ready;
+       Reason =:= not_found; Reason =:= invalid_request ->
+    {error, quod_dtx_endpoint:request_id(Request), Reason};
+dtx_endpoint_result_response(Request, _Result, _S) ->
+    {error, quod_dtx_endpoint:request_id(Request), not_ready}.
+
+submitted_prepare_digest(RecordBlob) ->
+    case quod_dtx:decode_record(RecordBlob) of
+        {ok, {quod_dtx_prepare, 1, _, _, _, _, _} = Prepare} ->
+            quod_dtx:record_digest(Prepare);
+        _ ->
+            error
+    end.
+
+outcome_endpoint_response(
+  RequestId, OutcomeRef, CommitteeId, MinimumSlot, Snapshot, S) ->
+    case current_outcome_snapshot(
+           OutcomeRef, CommitteeId, MinimumSlot, Snapshot, S) of
+        {ok, TargetIdentity, AppliedFloor, Outcome} ->
+            {outcome, RequestId, TargetIdentity, CommitteeId,
+             AppliedFloor, Outcome};
+        error ->
+            {error, RequestId, not_ready}
+    end.
+
+outcome_barrier_endpoint_response(
+  RequestId, GroupRef, CommitteeId, MinimumSlot, Snapshot, S) ->
+    case current_outcome_snapshot(
+           GroupRef, CommitteeId, MinimumSlot, Snapshot, S) of
+        {ok, TargetIdentity, AppliedFloor, SnapshotOutcome} ->
+            case classify_dtx_group_barrier(GroupRef, AppliedFloor, S) of
+                {ok, pending}
+                  when SnapshotOutcome =:= not_found;
+                       SnapshotOutcome =:=
+                         #{status => pending, phase => pending_begin,
+                           ref => GroupRef} ->
+                    {outcome_barrier, RequestId, TargetIdentity,
+                     CommitteeId, AppliedFloor, pending_begin};
+                {ok, not_found} when SnapshotOutcome =:= not_found ->
+                    {outcome_barrier, RequestId, TargetIdentity,
+                     CommitteeId, AppliedFloor, not_found};
+                {ok, {rejected, coordinator_retired}} ->
+                    {outcome_barrier, RequestId, TargetIdentity,
+                     CommitteeId, AppliedFloor, coordinator_retired};
+                {error, _} ->
+                    {error, RequestId, not_ready}
+            end;
+        _ ->
+            %% A concurrent certified outcome invalidates the earlier quorum
+            %% absence. The caller must freeze a fresh view and retry instead
+            %% of letting the coordinator override ledger state.
+            {error, RequestId, not_ready}
+    end.
+
+current_outcome_snapshot(
+  OutcomeRef, CommitteeId, MinimumSlot,
+  #{applied_floor := AppliedFloor, outcome := Outcome} = Snapshot,
+  S = #s{slot = AppliedFloor, committee_id = CommitteeId, self = Self})
+  when map_size(Snapshot) =:= 2,
+       is_integer(AppliedFloor), AppliedFloor >= MinimumSlot ->
+    case outcome_ref_namespace(OutcomeRef) =:= S#s.ns andalso
+         endpoint_read_ready(S) andalso
+         lists:member(Self, active_validators(S)) of
+        true -> {ok, target_identity(S), AppliedFloor, Outcome};
+        false -> error
+    end;
+current_outcome_snapshot(
+  _OutcomeRef, _CommitteeId, _MinimumSlot, _Snapshot, _S) ->
+    error.
+
+valid_generated_dtx_response(Request, Response, Ns) ->
+    case quod_dtx_endpoint:encode_response(Ns, Response) of
+        {ok, _Frame} -> Response;
+        {error, _} ->
+            {error, quod_dtx_endpoint:request_id(Request), not_ready}
+    end.
+
+phase_endpoint_response(RequestId, GroupId, Kind,
+                        State = #{history := History,
+                                  generation := Generation}, S) ->
+    case endpoint_snapshot_fresh(State, S) of
+        false ->
+            {error, RequestId, not_ready};
+        true ->
+            Phase = case History of
+                        none -> pending_or_absent_dtx_phase(
+                                  GroupId, Kind, S);
+                        _ ->
+                            case quod_dtx:history_phase(Kind, History) of
+                                {ok, Ref} -> {committed, Ref};
+                                not_found -> pending_or_absent_dtx_phase(
+                                               GroupId, Kind, S)
+                            end
+                    end,
+            {phase, RequestId, Generation, Phase}
+    end;
+phase_endpoint_response(RequestId, _GroupId, _Kind, _State, _S) ->
+    {error, RequestId, not_ready}.
+
+pending_or_absent_dtx_phase(GroupId, Kind, S) ->
+    case local_dtx_phase_pending(GroupId, Kind, S) of
+        true -> pending;
+        false -> not_found
+    end.
+
+local_dtx_phase_pending(
+  GroupId, 'begin',
+  #s{dtx_intent = #dtx_intent{record = Record}} = S) ->
+    quod_dtx:group_id(Record) =:= GroupId orelse
+        retained_dtx_phase_pending(GroupId, 'begin', S);
+local_dtx_phase_pending(GroupId, Kind, S) ->
+    retained_dtx_phase_pending(GroupId, Kind, S).
+
+retained_dtx_phase_pending(
+  GroupId, Kind, #s{dtx_submissions = Submissions}) ->
+    maps:fold(
+      fun(_Digest,
+          #dtx_submission{group_id = PendingGroup, control = Control}, Found) ->
+              Found orelse
+                  (PendingGroup =:= GroupId andalso
+                   quod_dtx:control_kind(Control) =:= Kind)
+      end, false, Submissions).
+
+applied_endpoint_response(
+  RequestId, GroupId, FinalizeRef, Generation, Verdict,
+  Evidence, State = #{applied := Applied},
+  S = #s{committee_id = CurrentCommitteeId}) ->
+    case {endpoint_snapshot_fresh(State, S), Applied,
+          applied_finalize_evidence(
+            GroupId, FinalizeRef, Generation, Verdict, Evidence, S)} of
+        {true,
+         #{finalize_ref := FinalizeRef, generation := Generation,
+           verdict := Verdict},
+         {ok, TargetIdentity}}
+          when is_binary(CurrentCommitteeId),
+               byte_size(CurrentCommitteeId) =:= 32 ->
+            {applied, RequestId, TargetIdentity, CurrentCommitteeId, GroupId,
+             FinalizeRef, Generation, Verdict};
+        {true, _, _} ->
+            {error, RequestId, not_found};
+        {false, _, _} ->
+            {error, RequestId, not_ready}
+    end;
+applied_endpoint_response(
+  RequestId, _GroupId, _FinalizeRef, _Generation, _Verdict,
+  _Evidence, _State, _S) ->
+    {error, RequestId, not_ready}.
+
+applied_finalize_evidence(
+  GroupId, FinalizeRef, Generation, Verdict,
+  #{identity := TargetIdentity, phase := finalize,
+    control := Control}, S) ->
+    case {TargetIdentity =:= target_identity(S),
+          quod_dtx:certified_ref_binding(FinalizeRef),
+          quod_dtx:record_digest(Control),
+          quod_dtx:control_kind(Control),
+          quod_dtx:group_id(Control),
+          quod_dtx:recovery_phase(quod_dtx:control_body(Control))} of
+        {true, {ok, TargetIdentity, _Slot, Digest}, Digest,
+         finalize, GroupId,
+         {ok, #{kind := finalize, verdict := Verdict,
+                generation := Generation}}} ->
+            {ok, TargetIdentity};
+        _ ->
+            error
+    end;
+applied_finalize_evidence(
+  _GroupId, _FinalizeRef, _Generation, _Verdict, _Evidence, _S) ->
+    error.
+
+endpoint_snapshot_fresh(
+  #{applied_floor := Floor, generation := Generation},
+  S = #s{slot = Floor,
+         dtx_projection = #{generation := Generation}}) ->
+    endpoint_read_ready(S);
+endpoint_snapshot_fresh(_State, _S) ->
+    false.
+
+send_dtx_endpoint_response(ReplyLink, Response, #s{ns = Ns}) ->
+    case quod_dtx_endpoint:encode_response(Ns, Response) of
+        {ok, Frame} -> quod_link:send(ReplyLink, Frame);
+        {error, _} -> ok
+    end.
+
+deliver_dtx_endpoint_response({link, ReplyLink}, Response, S) ->
+    send_dtx_endpoint_response(ReplyLink, Response, S),
+    {S, []};
+deliver_dtx_endpoint_response({caller, From}, Response, S) ->
+    {S, [{reply, From, {ok, Response}}]}.
+
+drop_dtx_endpoint_owner(Ref, Pid, S = #s{dtx_workers = Workers}) ->
+    case maps:get(Pid, Workers, undefined) of
+        #dtx_server_worker{monitor = Ref, request = Request,
+                           owner_mref = OwnerMRef,
+                           destination = Destination} ->
+            demonitor_if_set(OwnerMRef),
+            S1 = detach_dtx_endpoint_waiter(
+                   Pid, S#s{dtx_workers = maps:remove(Pid, Workers)}),
+            Response =
+                {error, quod_dtx_endpoint:request_id(Request), not_ready},
+            {S2, Actions} =
+                deliver_dtx_endpoint_response(Destination, Response, S1),
+            {true, S2, Actions};
+        _ ->
+            case drop_dtx_worker_caller(Ref, Pid, S) of
+                {true, _S1, _Actions} = Dropped -> Dropped;
+                false -> drop_dtx_correlation_owner(Ref, Pid, S)
+            end
+    end.
+
+drop_dtx_worker_caller(
+  Ref, Pid, S = #s{dtx_workers = Workers}) ->
+    case maps:fold(
+           fun(WorkerPid,
+               #dtx_server_worker{
+                 owner_mref = OwnerMRef,
+                 destination = {caller, {Caller, _Tag}}}, Found) ->
+                   case Found of
+                       none when OwnerMRef =:= Ref, Caller =:= Pid ->
+                           WorkerPid;
+                       _ -> Found
+                   end;
+              (_WorkerPid, _Worker, Found) ->
+                   Found
+           end, none, Workers) of
+        none ->
+            false;
+        WorkerPid ->
+            #dtx_server_worker{monitor = Monitor} =
+                maps:get(WorkerPid, Workers),
+            _ = erlang:demonitor(Monitor, [flush]),
+            exit(WorkerPid, shutdown),
+            {true,
+             detach_dtx_endpoint_waiter(
+               WorkerPid,
+               S#s{dtx_workers = maps:remove(WorkerPid, Workers)}), []}
+    end.
+
+detach_dtx_endpoint_waiter(
+  Pid, S = #s{dtx_submissions = Submissions}) ->
+    Tag = {dtx_endpoint, Pid},
+    S#s{dtx_submissions =
+          maps:map(
+            fun(_Digest, Submission = #dtx_submission{waiters = Waiters}) ->
+                    Submission#dtx_submission{
+                      waiters = lists:delete(Tag, Waiters)}
+            end, Submissions)}.
+
+drop_dtx_correlation_owner(
+  Ref, Pid, S = #s{dtx_correlations = Correlations}) ->
+    case maps:fold(
+           fun(RequestId,
+               #dtx_correlation{caller_mref = MRef, from = {Caller, _}},
+               Found) ->
+                   case Found of
+                       none when MRef =:= Ref, Caller =:= Pid -> RequestId;
+                       _ -> Found
+                   end
+           end, none, Correlations) of
+        none ->
+            false;
+        RequestId ->
+            Correlation = maps:get(RequestId, Correlations),
+            {S1, _NoReply} = drop_dtx_correlation(RequestId, Correlation, S),
+            {true, S1, []}
+    end.
+
+drop_dtx_correlation(
+  RequestId,
+  #dtx_correlation{target_ns = TargetNs, caller_mref = CallerMRef,
+                   timer = Timer},
+  S = #s{dtx_correlations = Correlations}) ->
+    _ = erlang:cancel_timer(Timer),
+    _ = erlang:demonitor(CallerMRef, [flush]),
+    {release_dtx_target_channel(
+       TargetNs,
+       S#s{dtx_correlations = maps:remove(RequestId, Correlations)}), []}.
+
+close_dtx_endpoint(Correlations, Workers) ->
+    maps:foreach(
+      fun(_RequestId,
+          #dtx_correlation{from = From, caller_mref = CallerMRef,
+                           timer = Timer}) ->
+              _ = erlang:cancel_timer(Timer),
+              _ = erlang:demonitor(CallerMRef, [flush]),
+              _ = gen_statem:reply(From, {error, not_ready}),
+              ok
+      end, Correlations),
+    maps:foreach(
+      fun(Pid, #dtx_server_worker{monitor = Monitor,
+                                  owner_mref = OwnerMRef}) ->
+              _ = erlang:demonitor(Monitor, [flush]),
+              demonitor_if_set(OwnerMRef),
+              exit(Pid, shutdown)
+      end, Workers),
+    ok.
+
+retain_dtx_record(Record, Waiter,
+                  S = #s{dtx_submissions = Submissions}) ->
+    case validated_dtx_record(Record) of
+        {ok, Kind, Digest} ->
+            case dtx_retain_admissible(Record, S) of
+                false ->
+                    {error, stale_dtx_submission};
+                true ->
+                    case maps:get(Digest, Submissions, undefined) of
+                        #dtx_submission{} = Existing ->
+                            case add_dtx_waiter(Waiter, Existing) of
+                                {ok, Updated} ->
+                                    {ok, S#s{dtx_submissions =
+                                                 Submissions#{Digest => Updated}}};
+                                busy ->
+                                    {error, busy}
+                            end;
+                        undefined when
+                          map_size(Submissions) <
+                            ?QUOD_MAX_DTX_PARTICIPANTS + 1 ->
+                            sign_and_retain_dtx(
+                              Kind, Record, Digest, Waiter, S);
+                        undefined ->
+                            {error, busy}
+                    end
+            end;
+        {error, _} ->
+            {error, invalid_dtx_submission}
+    end.
+
+%% The projection is the sole phase owner.  Controls for the active group must
+%% be its exact permitted next phase; a completed group can never be signed
+%% again.  A different future group may remain retained behind the current
+%% lock, preserving bounded pipelining without weakening the active group.
+dtx_retain_admissible(
+  Record,
+  #s{dtx_projection = Projection, dtx_last_group = LastGroup}) ->
+    GroupId = quod_dtx:group_id(Record),
+    case maps:get(active, Projection, none) of
+        none when GroupId =:= LastGroup ->
+            false;
+        none ->
+            quod_dtx:proposal_allowed(Record, Projection);
+        #{group_id := GroupId} ->
+            %% `dtx_last_group` records the most recently entered participant
+            %% role and can therefore equal a group that is still active.
+            %% The projection, not that replay marker, owns its next phase.
+            quod_dtx:proposal_allowed(Record, Projection);
+        #{group_id := _OtherGroup} ->
+            %% Only role-acquisition records may wait behind another group.
+            %% A cross-group Decision/Complete (or prepared Finalize) can
+            %% never become eligible without an active role and would occupy
+            %% bounded retained state forever.  Direct-abort Finalize remains
+            %% admissible only when the canonical projection permits it.
+            quod_dtx:proposal_allowed(Record, Projection) orelse
+                dtx_role_acquisition_record(Record)
+    end.
+
+dtx_role_acquisition_record({quod_dtx_begin, 1, _, _}) -> true;
+dtx_role_acquisition_record({quod_dtx_prepare, 1, _, _, _, _, _}) -> true;
+dtx_role_acquisition_record(_Record) -> false.
+
+validated_dtx_record(Record) ->
+    case {dtx_record_kind(Record), quod_dtx:encode_record(Record)} of
+        {invalid, _} ->
+            {error, invalid_record};
+        {_Kind, {error, _} = Error} ->
+            Error;
+        {Kind, {ok, _Canonical}} ->
+            {ok, Kind, quod_dtx:record_digest(Record)}
+    end.
+
+dtx_record_kind({quod_dtx_begin, 1, _, _}) -> 'begin';
+dtx_record_kind({quod_dtx_prepare, 1, _, _, _, _, _}) -> prepare;
+dtx_record_kind({quod_dtx_decision, 1, _, _, _, _, _}) -> decision;
+dtx_record_kind({quod_dtx_finalize, 1, _, _, _, _, _}) -> finalize;
+dtx_record_kind({quod_dtx_complete, 1, _, _, _}) -> complete;
+dtx_record_kind(_) -> invalid.
+
+sign_and_retain_dtx(Kind, Record, Digest, Waiter,
+                    S = #s{id = Signer, self = Self,
+                           signing_journal = Journal,
+                           dtx_lanes = CommittedFloors,
+                           dtx_submissions = Submissions}) ->
+    case current_dtx_binding(S) of
+        {ok, {_Ns, _Anchor, Self, Admission}} ->
+            Lane = {Admission, Self},
+            LocalFloor = quod_signing_journal:dtx_floor(Journal, Lane),
+            CommittedFloor = maps:get(Lane, CommittedFloors, 0),
+            Floor = erlang:max(LocalFloor, CommittedFloor),
+            Sequence = Floor + 1,
+            case advance_signed_sequence(
+                   dtx, Lane, Sequence, #{Lane => Floor}, #{}) of
+                {ok, _Seen} ->
+                    case quod_dtx:sign_control(
+                           target_identity(S), Record, Admission, Sequence,
+                           quod_time:now_ms(), Signer) of
+                        {ok, Control} ->
+                            {ok, Journal1, Envelope} =
+                                quod_signing_journal:record_dtx(
+                                  Journal, Control),
+                            ok = maybe_project_pending_begin(
+                                   Kind, S#s.ns, Journal1),
+                            Submission =
+                                #dtx_submission{
+                                  record = Record, control = Control,
+                                  envelope = Envelope,
+                                  group_id = quod_dtx:group_id(Record),
+                                  digest = Digest,
+                                  inserted_at = quod_time:mono_ms(),
+                                  waiters = dtx_waiters(Waiter)},
+                            {ok, S#s{signing_journal = Journal1,
+                                     dtx_submissions =
+                                       Submissions#{Digest => Submission}}};
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
+                error ->
+                    {error, stale_sequence}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-ifdef(TEST).
+pending_begin_projection(memory) -> none;
+pending_begin_projection(Journal) ->
+    quod_signing_journal:pending_begin(Journal).
+-else.
+pending_begin_projection(Journal) ->
+    quod_signing_journal:pending_begin(Journal).
+-endif.
+
+maybe_project_pending_begin('begin', Ns, Journal) ->
+    quod_prolog:project_pending_begin(
+      Ns, pending_begin_projection(Journal));
+maybe_project_pending_begin(_Kind, _Ns, _Journal) ->
+    ok.
+
+dtx_waiters(none) -> [];
+dtx_waiters(Waiter) -> [Waiter].
+
+add_dtx_waiter(none, Submission) ->
+    {ok, Submission};
+add_dtx_waiter(Waiter, Submission = #dtx_submission{waiters = []}) ->
+    {ok, Submission#dtx_submission{waiters = [Waiter]}};
+add_dtx_waiter(_Waiter, #dtx_submission{waiters = [_]}) ->
+    %% A timed-out endpoint caller cannot retract its gen_statem From tuple.
+    %% Keep one exact semantic waiter at most; recovery observes the pending
+    %% phase instead of growing this list on every retry.
+    busy.
 
 %%%===================================================================
 %%% append (propose) → engine → commit → apply
@@ -2247,7 +4573,7 @@ ingress_view_facts(
          relay_pending = Pending}) ->
     Floor = Approved + 1,
     Validators = active_validators(S),
-    Barrier = membership_barrier(S),
+    Barrier = consensus_barrier(S),
     #{self => Self,
       capability => ingress_capability(S),
       committee_id => CommitteeId,
@@ -2256,7 +4582,7 @@ ingress_view_facts(
       approved => Approved,
       proposal_visible => proposal_visible(Floor, S),
       proposal_slot => proposal_slot(S, Barrier),
-      membership_barrier => Barrier,
+      consensus_barrier => Barrier,
       approved_author_seqs =>
           custody_author_sequence_floor(CustodyReady, S),
       collecting => collecting_gate(S#s.collecting),
@@ -2685,10 +5011,10 @@ custody_ready_index(Custody) ->
 %% Event-driven, work-conserving drain. One pass considers every item that was queued
 %% at entry. An ordinary blocked item does not stop unrelated authors: it is held while
 %% later authors are considered. Once one item for an author blocks, every later item
-%% from that author is held too, preserving signed author-sequence order. Membership is
-%% deliberately global: an in-flight membership barrier or a queued membership change
-%% stops the pass so the pipeline must quiesce and the committee transition cannot
-%% starve. Held items retain their relative order, so TTL expiry remains oldest-first.
+%% from that author is held too, preserving signed author-sequence order. Consensus
+%% barriers are global: an in-flight barrier or a queued membership change stops the
+%% pass so the pipeline must quiesce and the committee transition cannot starve. Held
+%% items retain their relative order, so TTL expiry remains oldest-first.
 -ifdef(TEST).
 drain_ingress(S, Fingerprint) ->
     {S1, ActionsRev} =
@@ -3196,18 +5522,21 @@ put_pending_relay(AttemptId,
 %% commits. It stops there until commit catches up. Membership blocks are barriers,
 %% and a complaint-finalized slot waiting behind an earlier commit is not reopened.
 proposal_slot(S = #s{}) ->
-    proposal_slot(S, membership_barrier(S)).
+    proposal_slot(S, consensus_barrier(S)).
+
+proposal_slot_for_dtx(Record, S = #s{}) ->
+    proposal_slot(S, dtx_consensus_barrier(Record, S)).
 
 proposal_slot(#s{slot = Committed, approved = Approved,
                  collecting = Collecting,
                  local_proposals = Local, commit_buf = Buf},
-              MembershipBarrier) ->
+              ConsensusBarrier) ->
     Next = Approved + 1,
     HasBatch = case Collecting of #batch{slot = Next} -> true; _ -> false end,
     Open = live_pipeline_slot(Next, Committed)
            andalso (HasBatch orelse not maps:is_key(Next, Local))
            andalso not maps:is_key(Next, Buf)
-           andalso not MembershipBarrier,
+           andalso not ConsensusBarrier,
     case Open of true -> {ok, Next}; false -> blocked end.
 
 %% One definition owns the complete volatile consensus window: the durable head's successor plus the
@@ -3303,13 +5632,24 @@ advance_transaction_sequence(
   #transaction{author = Author, author_seq = Seq},
   SequenceFloor, Seen)
   when is_integer(Seq), Seq > 0 ->
-    Key = {Author, Seq},
-    case Seq > maps:get(Author, SequenceFloor, 0)
-             andalso not maps:is_key(Key, Seen) of
-        true  -> {ok, Seen#{Key => true}};
+    advance_signed_sequence(content, Author, Seq, SequenceFloor, Seen);
+advance_transaction_sequence(_Change, _SequenceFloor, _Seen) ->
+    error.
+
+%% One allocator/check owns both signed sequence lanes. Content is keyed by
+%% author; DTX is keyed by the admission-scoped `{Admission, Author}` lane.
+%% The caller supplies the correct committed/journal floor projection, while
+%% this function enforces the identical strictly-newer/no-duplicate rule.
+advance_signed_sequence(Kind, Owner, Sequence, Floors, Seen)
+  when (Kind =:= content orelse Kind =:= dtx),
+       is_integer(Sequence), Sequence > 0, is_map(Floors), is_map(Seen) ->
+    SeenKey = {Kind, Owner, Sequence},
+    case Sequence > maps:get(Owner, Floors, 0)
+             andalso not maps:is_key(SeenKey, Seen) of
+        true -> {ok, Seen#{SeenKey => true}};
         false -> error
     end;
-advance_transaction_sequence(_Change, _SequenceFloor, _Seen) ->
+advance_signed_sequence(_Kind, _Owner, _Sequence, _Floors, _Seen) ->
     error.
 
 flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
@@ -3317,17 +5657,18 @@ flush_batch(Slot, S = #s{collecting = #batch{slot = Slot, parent = Parent,
                                               count = Count,
                                               opened_at = OpenedAt}}) ->
     Items = lists:reverse(ItemsRev),
-    Payload = [Change || {_From, Change} <- Items],
-    case acceptable_collected_payload(Payload, S) of
+    Transactions = [Change || {_From, Change} <- Items],
+    case acceptable_collected_payload(Transactions, S) of
         false -> reject_collected_batch(Items, Count, S);
-        true  -> propose_batch(Slot, Parent, Items, Payload, Count,
+        true  -> propose_batch(Slot, Parent, Items, Transactions, Count,
                                max(0, quod_time:mono_ms() - OpenedAt), S)
     end;
 flush_batch(_Slot, S) -> S.   %% stale named timeout after an early/full flush
 
-propose_batch(Slot, Parent, Items, Payload, Count, WaitMs, S) ->
+propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
     Waiters = [From || {From, _Change} <- Items],
-    Block = #block{slot = Slot, parent = Parent, payload = Payload,
+    Block = #block{slot = Slot, parent = Parent,
+                   payload = {batch, Transactions},
                    timestamp = max(quod_time:now_ms(), parent_timestamp(Parent, S))},
     BH = block_hash(Block),
     lists:foreach(
@@ -3353,6 +5694,136 @@ propose_batch(Slot, Parent, Items, Payload, Count, WaitMs, S) ->
         undefined -> S3
     end.
 
+drive_retained_dtx(S = #s{dtx_submissions = Submissions})
+  when map_size(Submissions) =:= 0 ->
+    S;
+drive_retained_dtx(S = #s{collecting = #batch{slot = Slot}}) ->
+    %% A DTX barrier never discards already-accepted content. Seal that batch;
+    %% the retained control takes the next legal slot.
+    flush_batch(Slot, S);
+drive_retained_dtx(S) ->
+    case may_vote(S) of
+        false ->
+            S;
+        true ->
+            case oldest_eligible_dtx_submission(S) of
+                none ->
+                    S;
+                {_Digest, #dtx_submission{record = Record}} = Oldest ->
+                    case proposal_slot_for_dtx(Record, S) of
+                        blocked -> S;
+                        {ok, Slot} -> drive_dtx_at_slot(Slot, Oldest, S)
+                    end
+            end
+    end.
+
+oldest_eligible_dtx_submission(
+  #s{dtx_projection = Projection, dtx_submissions = Submissions}) ->
+    case lists:sort(
+           fun({DigestA, #dtx_submission{inserted_at = A}},
+               {DigestB, #dtx_submission{inserted_at = B}}) ->
+                   {A, DigestA} < {B, DigestB}
+           end,
+           [{Digest, Submission}
+            || {Digest, #dtx_submission{record = Record} = Submission}
+                   <- maps:to_list(Submissions),
+               quod_dtx:proposal_allowed(Record, Projection)]) of
+        [Oldest | _] -> Oldest;
+        [] -> none
+    end.
+
+drive_dtx_at_slot(
+  Slot, {Digest, Submission = #dtx_submission{envelope = Envelope,
+                                               next_send = NextSend}},
+  S) ->
+    case dtx_slot_route(Slot, S) of
+        local ->
+            propose_dtx(Slot, Submission, S);
+        {relay, Peer} ->
+            Now = quod_time:mono_ms(),
+            case Now >= NextSend of
+                true ->
+                    Frame = encode(S#s.ns, {dtx_submit, Envelope}),
+                    S1 = send_frame(Peer, Frame, S),
+                    update_dtx_submission(
+                      Digest,
+                      Submission#dtx_submission{
+                        next_send = Now + ?RELAY_RETRY_MS}, S1);
+                false ->
+                    S
+            end;
+        blocked ->
+            S
+    end.
+
+dtx_slot_route(Slot, S = #s{self = Self}) ->
+    case leader(Slot, active_validators(S)) of
+        Self -> local;
+        Peer when is_binary(Peer) -> {relay, Peer};
+        none -> blocked
+    end.
+
+propose_dtx(Slot,
+            #dtx_submission{envelope = Envelope},
+            S = #s{approved = Parent}) ->
+    Payload = {dtx, Envelope},
+    case acceptable_payload(Payload, S) of
+        false -> S;
+        true ->
+            Block = #block{slot = Slot, parent = Parent, payload = Payload,
+                           timestamp = max(
+                             quod_time:now_ms(),
+                             parent_timestamp(Parent, S))},
+            BH = block_hash(Block),
+            Local = #local_proposal{hash = BH},
+            S1 = S#s{
+                   local_proposals =
+                     (S#s.local_proposals)#{Slot => Local},
+                   proposals = S#s.proposals + 1,
+                   round_probe =
+                     (S#s.round_probe)#{Slot =>
+                                           {quod_time:mono_ms(), none}}},
+            S2 = broadcast({propose, Block}, S1),
+            %% Local and relayed leaders must enter through the same DTX
+            %% candidate/validation path as an inbound leader proposal.  A
+            %% DTX block is offered to the consensus engine only after that
+            %% exact candidate's deterministic verdict is accepted.
+            on_propose(BH, Block, true, S2)
+    end.
+
+handle_dtx_submit(_Peer, Envelope, S)
+  when not is_binary(Envelope) ->
+    S;
+handle_dtx_submit(_Peer, Envelope, S) ->
+    Payload = {dtx, Envelope},
+    case acceptable_payload(Payload, S) of
+        false -> S;
+        true ->
+            {ok, Control} = quod_dtx:decode_control(Envelope),
+            Record = quod_dtx:control_body(Control),
+            case {proposal_slot_for_dtx(Record, S), S#s.collecting} of
+                {{ok, Slot}, none} ->
+                    case dtx_slot_route(Slot, S) of
+                        local ->
+                            Submission =
+                              #dtx_submission{
+                                record = Record,
+                                control = Control, envelope = Envelope,
+                                group_id = quod_dtx:group_id(Control),
+                                digest = quod_dtx:record_digest(Control),
+                                inserted_at = quod_time:mono_ms()},
+                            propose_dtx(Slot, Submission, S);
+                        _ -> S
+                    end;
+                _ ->
+                    S
+            end
+    end.
+
+update_dtx_submission(Digest, Submission,
+                      S = #s{dtx_submissions = Submissions}) ->
+    S#s{dtx_submissions = Submissions#{Digest => Submission}}.
+
 reject_collected_batch(Items, Count, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
                        {error, bad_change}, S),
@@ -3361,10 +5832,38 @@ reject_collected_batch(Items, Count, S) ->
 encoded_change_size(Change) ->
     byte_size(term_to_binary(Change, [deterministic])).
 
-membership_barrier(#s{slot = Committed, eng = #eng{tree = Tree}}) ->
-    lists:any(fun({Sl, #block{payload = Payload}}) ->
-                      Sl > Committed andalso payload_touches_committee(Payload)
-              end, maps:to_list(Tree)).
+consensus_barrier(S) ->
+    consensus_barrier(S, include_retained_dtx).
+
+consensus_barrier(S, RetainedMode) ->
+    consensus_barrier(S, RetainedMode, strict_lock).
+
+dtx_consensus_barrier(Record, S) ->
+    consensus_barrier(S, ignore_retained_dtx, {dtx_record, Record}).
+
+consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
+                     rounds = Rounds, dtx_projection = Dtx,
+                     dtx_submissions = Submissions}, RetainedMode, LockMode) ->
+    DurableLock = dtx_durable_lock(Dtx, LockMode),
+    VolatileBlock =
+        lists:any(fun({Sl, #block{payload = Payload}}) ->
+                          Sl > Committed
+                              andalso payload_is_consensus_barrier(Payload)
+                  end, maps:to_list(Tree)),
+    PendingDtx =
+        lists:any(
+          fun({Sl, Round}) ->
+                  Sl > Committed andalso dtx_validation_active(Round)
+          end, maps:to_list(Rounds)),
+    RetainedDtx = RetainedMode =:= include_retained_dtx
+                  andalso map_size(Submissions) > 0,
+    DurableLock orelse VolatileBlock orelse PendingDtx orelse RetainedDtx.
+
+dtx_durable_lock(#{consensus_lock := open}, strict_lock) -> false;
+dtx_durable_lock(#{consensus_lock := {locked, <<_:256>>}}, strict_lock) -> true;
+dtx_durable_lock(Projection, {dtx_record, Record}) ->
+    not quod_dtx:proposal_allowed(Record, Projection);
+dtx_durable_lock(_Projection, _Mode) -> true.
 
 parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
 parent_timestamp(Parent, #s{eng = #eng{tree = Tree}}) ->
@@ -3446,15 +5945,15 @@ probe_prune(Sl, S = #s{round_probe = Probe}) when map_size(Probe) > 0 ->
 probe_prune(_Sl, S) ->
     S.
 
-%% Persist the committed block (durable before we ack), apply it into quod_prolog, advance the height,
-%% clear the per-slot latches, and reply `{ok, Slot}` to every caller in the batch.
+%% Persist the committed tagged payload byte-for-byte (durable before we ack), apply it into
+%% quod_prolog, and advance the height. Content commits additionally resolve their batch callers;
+%% DTX control records use their own durable coordinator path.
 commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store = Store, eng = Eng}) ->
     BH = engine_block_hash(Slot, S),
     case persisted_finality(Slot, BH, Eng) of
         none -> weak_cert_wait(commit, Slot, BH, S);   %% Slice E: don't finalize on a sub-quorum cert
         Cert ->
-            Data = quod_ledger:data(Payload),
-            E = #entry{index = Slot, data = Data, timestamp = BlockTs, cert = Cert},
+            E = #entry{index = Slot, data = Payload, timestamp = BlockTs, cert = Cert},
             {ok, Store1} = timed_step(S, persist,
                                       fun() -> persist_entry(Store, E, Slot, S) end),
             timed_step(S, feed, fun() -> publish_feed(Slot, E, S) end),
@@ -3464,9 +5963,17 @@ commit_block(Slot, #block{payload = Payload, timestamp = BlockTs}, S = #s{store 
                                S#s{store = Store1,
                                    commits = S#s.commits + 1})
                          end),
-            S0 = ack_local(Slot, probe_committed(Slot, SCommitted)),
-            S1 = adopt_history(E, finalize(Slot, S0)),
-            timed_step(S, apply, fun() -> apply_live(Slot, Data, confirm_live(S1)) end)
+            SResolved = resolve_committed_dtx(E, Payload, SCommitted),
+            S0 = ack_local(Slot, probe_committed(Slot, SResolved)),
+            Projection1 = committed_projection(
+                            E, BH, round_state(Slot, S0), S0),
+            {S1, PendingTransition} = reconcile_signing_state(
+                                        adopt_projection(
+                                          E, Projection1,
+                                          finalize(Slot, S0))),
+            S2 = timed_step(
+                   S, apply, fun() -> apply_live(E, confirm_live(S1)) end),
+            finish_pending_begin_reconciliation(PendingTransition, S2)
     end.
 
 persist_entry(Store, Entry, Slot, S) ->
@@ -3514,12 +6021,52 @@ resolve_committed_relays(Included, Slot, S = #s{relay_pending = Pending}) ->
               end
       end, S, Pending).
 
-payload_submission_ids(Payload) ->
-    maps:from_keys(
-      [signed_submission_id(Transaction)
-       || #transaction{sig = Signature} = Transaction <- Payload,
-          is_binary(Signature)],
-      true).
+payload_submission_ids(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            maps:from_keys(
+              [signed_submission_id(Transaction)
+               || #transaction{sig = Signature} = Transaction <- Transactions,
+                  is_binary(Signature)],
+              true);
+        {'begin', _Control} -> #{};
+        {prepare, _Control} -> #{};
+        {decision, _Control} -> #{};
+        {finalize, _Control} -> #{};
+        {complete, _Control} -> #{};
+        noop -> #{};
+        invalid -> #{}
+    end.
+
+resolve_committed_dtx(
+  Entry, Payload,
+  S = #s{ns = Ns, genesis_hash = Anchor,
+         dtx_submissions = Submissions}) ->
+    case quod_ledger:classify(Payload) of
+        {Kind, Control}
+          when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
+               Kind =:= finalize; Kind =:= complete ->
+            Digest = quod_dtx:record_digest(Control),
+            case maps:take(Digest, Submissions) of
+                {#dtx_submission{waiters = Waiters}, Rest} ->
+                    case quod_dtx:certified_entry_ref(
+                           {Ns, Anchor}, Entry, Control) of
+                        {ok, Ref} ->
+                            lists:foldl(
+                              fun(Waiter, Acc) ->
+                                      reply_waiter(Waiter, {ok, Ref}, Acc)
+                              end, S#s{dtx_submissions = Rest}, Waiters);
+                        {error, Reason} ->
+                            error({invalid_committed_dtx_reference,
+                                   Entry#entry.index, Reason})
+                    end;
+                error ->
+                    S
+            end;
+        {content, _} -> S;
+        noop -> S;
+        invalid -> S
+    end.
 
 signed_submission_id(#transaction{author = Author, sig = Signature}) ->
     quod_transaction:submission_id(
@@ -3537,10 +6084,12 @@ engine_block_hash(Slot, #s{eng = #eng{tree_hashes = Hashes}}) ->
 %% after the next round had started. The facts are a pure function of the committed prefix and every node
 %% crosses the boundary at the same logical point. The delta folds via the SAME
 %% `apply_committee_delta/2` as the restart re-fold, so the facts can never drift from a fresh re-fold.
-adopt_history(#entry{data = Change} = Entry,
-              S = #s{ns = Ns, validators = V,
-                     self = Self, eng = Eng}) ->
+adopt_history(#entry{} = Entry, S = #s{ns = Ns}) ->
     Projection1 = history_advance(Ns, Entry, state_projection(S)),
+    adopt_projection(Entry, Projection1, S).
+
+adopt_projection(#entry{data = Change}, Projection1,
+                 S = #s{validators = V, self = Self, eng = Eng}) ->
     V1 = history_committee(Projection1),
     SProjected = install_projection(Projection1, S),
     case V1 =:= V of
@@ -3564,6 +6113,46 @@ adopt_history(#entry{data = Change} = Entry,
               S1#s{eng = eng_set_validators(active_validators(S1), Eng)}   %% engine tracks the active set
     end.
 
+committed_projection(
+  Entry = #entry{index = Slot, data = Payload}, BH,
+  Round, S = #s{ns = Ns}) ->
+    case quod_ledger:classify(Payload) of
+        {content, _Transactions} ->
+            history_advance_known(Ns, Entry, BH, state_projection(S));
+        {'begin', Control} -> live_dtx_projection(Control, Entry, BH, Round, S);
+        {prepare, Control} -> live_dtx_projection(Control, Entry, BH, Round, S);
+        {decision, Control} -> live_dtx_projection(Control, Entry, BH, Round, S);
+        {finalize, Control} -> live_dtx_projection(Control, Entry, BH, Round, S);
+        {complete, Control} -> live_dtx_projection(Control, Entry, BH, Round, S);
+        noop ->
+            history_advance_known(Ns, Entry, entry_history_hash(Entry),
+                                  state_projection(S));
+        invalid ->
+            error({invalid_committed_history, Slot})
+    end.
+
+live_dtx_projection(
+  Control, Entry = #entry{index = Slot}, BH,
+  #round{dtx_parent = {BH, ParentToken, History, ParentDtx}},
+  S = #s{ns = Ns, genesis_hash = Anchor,
+         history_head = ParentToken, dtx_projection = ParentDtx}) ->
+    Projection0 = state_projection(S),
+    case validated_dtx_entry({Ns, Anchor}, Entry, Control, Projection0) of
+        {ok, Ref, Lane, Sequence} ->
+            case quod_dtx:reduce(Control, Ref, History, ParentDtx) of
+                {ok, _History1, Dtx1, _Effects} ->
+                    (project_dtx_transition(
+                       Control, Entry, Dtx1, Lane, Sequence, Projection0))#{
+                      history_head := {Slot, BH}};
+                {error, Reason} ->
+                    error({invalid_committed_dtx, Slot, Reason})
+            end;
+        error ->
+            error({invalid_committed_dtx, Slot})
+    end;
+live_dtx_projection(_Control, #entry{index = Slot}, _BH, _Round, _S) ->
+    error({missing_dtx_parent_validation, Slot}).
+
 %% A complaint cert skipped this slot: persist an empty `noop` entry so the
 %% store height advances contiguously. Ordinary custody ignores the provisional
 %% nack and is marked ready by durable finalization; non-custodied membership
@@ -3577,9 +6166,12 @@ skip_block(Slot, S = #s{store = Store, eng = Eng}) ->
             {ok, Store1} = persist_entry(Store, E, Slot, S),
             publish_feed(Slot, E, S),   %% a committed `noop` skip disseminates too, so followers stay contiguous
             S0 = nack_local(Slot, S#s{store = Store1, skips = S#s.skips + 1}),
-            S1 = adopt_history(E, finalize(Slot, S0)),
+            {S1, PendingTransition} = reconcile_signing_state(
+                                        adopt_history(
+                                          E, finalize(Slot, S0))),
             S2 = S1#s{approved = max(S1#s.approved, Slot)},
-            apply_live(Slot, noop, confirm_live(S2))
+            S3 = apply_live(E, confirm_live(S2)),
+            finish_pending_begin_reconciliation(PendingTransition, S3)
     end.
 
 %% Slice E — the weak-cert finalize guard. `persisted_cert` returned `none`: the pool's cert for this slot
@@ -3605,14 +6197,13 @@ weak_cert_wait(Kind, Slot, BH, S) ->
 %% local proposal, support/commit/complaint latches, and membership validation
 %% latches (all bounded to the in-flight window).
 finalize(Slot, S0) ->
+    _ = release_validation_monitor(round_state(Slot, S0)),
     SCollected = nack_collecting_le(Slot, S0),
     SExcluded = mark_custody_excluded_le(Slot, SCollected),
     S = probe_prune(Slot, nack_relays_le(Slot, SExcluded)),
-    {ok, Journal1} = prune_vote_journal(Slot, S#s.vote_journal),
     clear_requested_le(
       Slot,
       S#s{slot = Slot,
-          vote_journal = Journal1,
           eng = eng_prune(Slot, S#s.eng),   %% this slot is durable now — drop it from the in-flight pool
           block_requests = prune_block_requests(Slot, S#s.block_requests),
           rounds = maps:remove(Slot, S#s.rounds),
@@ -3707,6 +6298,9 @@ reply_waiter(Waiter = #waiter{reply_to = ReplyTo}, Reply, S) ->
     reply_waiter(ReplyTo, Reply, S);
 reply_waiter({relay, RelayRef = #relay_ref{}}, Reply, S) ->
     reply_relay(RelayRef, Reply, S);
+reply_waiter({dtx_endpoint, Pid}, Reply, S) when is_pid(Pid) ->
+    Pid ! {dtx_submit_result, Reply},
+    S;
 reply_waiter(From, Reply, S) ->
     gen_statem:reply(From, Reply),
     S.
@@ -3847,8 +6441,117 @@ round_committed(#round{}) -> false.
 round_complained(#round{final = complaint}) -> true;
 round_complained(#round{}) -> false.
 
-prune_vote_journal(_Slot, memory) -> {ok, memory};
-prune_vote_journal(Slot, Journal) -> quod_vote_journal:prune(Journal, Slot).
+-ifdef(TEST).
+reconcile_signing_state(S = #s{signing_journal = memory}) -> {S, none};
+reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
+-else.
+reconcile_signing_state(S) -> reconcile_signing_state_journal(S).
+-endif.
+reconcile_signing_state_journal(
+  S = #s{slot = Slot, signing_journal = Journal, ns = Ns}) ->
+    Pending0 = pending_begin_projection(Journal),
+    {ok, Journal1} = reconcile_signing_journal(
+                       Slot, state_projection(S), Journal),
+    Pending1 = pending_begin_projection(Journal1),
+    Transition = pending_begin_reconciliation(Pending0, Pending1, S),
+    %% This cast precedes the ordered ledger apply.  The matching resolution
+    %% notification is deliberately deferred until after that apply, when
+    %% quod_prolog's publication floor can make the absence classification
+    %% definitive rather than outcome-unknown.
+    ok = project_reconciled_pending_begin(Ns, Transition),
+    {refresh_stale_dtx_submissions(
+       S#s{signing_journal = Journal1}), Transition}.
+
+pending_begin_reconciliation(
+  #{lane := {Admission, Coordinator}, group_id := GroupId}, none,
+  #s{ns = Ns, genesis_hash = <<_:256>> = Anchor}) ->
+    {cleared_pending_begin,
+     {group, Ns, Anchor, Coordinator, Admission, GroupId}};
+pending_begin_reconciliation(_Before, _After, _S) ->
+    none.
+
+project_reconciled_pending_begin(Ns, {cleared_pending_begin, _GroupRef}) ->
+    quod_prolog:project_pending_begin(Ns, none);
+project_reconciled_pending_begin(_Ns, none) ->
+    ok.
+
+finish_pending_begin_reconciliation(
+  {cleared_pending_begin, GroupRef}, S = #s{ns = Ns}) ->
+    ok = quod_prolog:dtx_group_resolved(Ns, GroupRef),
+    S;
+finish_pending_begin_reconciliation(none, S) ->
+    S.
+
+refresh_stale_dtx_submissions(
+  S = #s{dtx_submissions = Submissions})
+  when map_size(Submissions) =:= 0 ->
+    S;
+refresh_stale_dtx_submissions(S0) ->
+    case current_dtx_binding(S0) of
+        {ok, {_Ns, _Anchor, Self, Admission}} ->
+            CurrentLane = {Admission, Self},
+            maps:fold(
+              fun(Digest, Submission, Acc) ->
+                      refresh_dtx_submission(
+                        Digest, Submission, CurrentLane, Acc)
+              end, S0, S0#s.dtx_submissions);
+        {error, _} ->
+            abandon_dtx_submissions(not_in_charge, S0)
+    end.
+
+refresh_dtx_submission(
+  Digest,
+  #dtx_submission{control = Control, record = Record,
+                  waiters = Waiters},
+  CurrentLane,
+  S = #s{dtx_lanes = CommittedFloors}) ->
+    Meta = quod_dtx:control_metadata(Control),
+    Lane = {maps:get(author_admission, Meta), maps:get(author, Meta)},
+    Sequence = maps:get(sequence, Meta),
+    case {Lane =:= CurrentLane,
+          Sequence =< maps:get(Lane, CommittedFloors, 0)} of
+        {false, _} ->
+            retire_dtx_submission(
+              Digest, Waiters, not_in_charge, S);
+        {true, false} ->
+            S;
+        {true, true} ->
+            SWithout = S#s{dtx_submissions =
+                              maps:remove(Digest, S#s.dtx_submissions)},
+            case sign_and_retain_dtx(
+                   quod_dtx:control_kind(Control), Record, Digest,
+                   none, SWithout) of
+                {ok, S1 = #s{dtx_submissions = Renewed}} ->
+                    New = maps:get(Digest, Renewed),
+                    update_dtx_submission(
+                      Digest, New#dtx_submission{waiters = Waiters}, S1);
+                {error, Reason} ->
+                    logger:error(
+                      "quod[~s]: unable to re-envelope retained DTX control: ~p",
+                      [S#s.ns, Reason]),
+                    lists:foldl(
+                      fun(Waiter, Acc) ->
+                              reply_waiter(Waiter, {error, Reason}, Acc)
+                      end, SWithout, Waiters)
+            end
+    end.
+
+retire_dtx_submission(Digest, Waiters, Reason,
+                      S = #s{dtx_submissions = Submissions}) ->
+    reply_waiters(
+      Waiters, {error, Reason},
+      S#s{dtx_submissions = maps:remove(Digest, Submissions)}).
+
+abandon_dtx_submissions(Reason,
+                        S = #s{dtx_submissions = Submissions}) ->
+    S0 = S#s{dtx_submissions = #{}},
+    maps:fold(
+      fun(_Digest, #dtx_submission{waiters = Waiters}, Acc0) ->
+              lists:foldl(
+                fun(Waiter, Acc) ->
+                        reply_waiter(Waiter, {error, Reason}, Acc)
+                end, Acc0, Waiters)
+      end, S0, Submissions).
 
 prune_block_requests(Committed, Requests) ->
     maps:filter(fun({Slot, _BH}, _Retry) -> Slot > Committed end, Requests).
@@ -3945,6 +6648,8 @@ dispatch(Peer, {certified_block, #block{} = Block, #cert{} = Cert}, S) ->
 dispatch(Peer, {readiness, Height, Ready}, S)
   when is_integer(Height), Height >= 0, is_boolean(Ready) ->
     record_peer_readiness(Peer, Height, Ready, S);
+dispatch(Peer, {dtx_submit, Envelope}, S) ->
+    handle_dtx_submit(Peer, Envelope, S);
 dispatch(_Peer, _Other, S)                 -> S.
 
 well_formed_block(#block{slot = Sl, parent = P, payload = Pl, timestamp = Ts}) ->
@@ -3956,10 +6661,23 @@ well_formed_block_header(Slot, Parent, Timestamp) ->
     is_slot(Slot) andalso is_slot(Parent) andalso is_slot(Timestamp).
 
 well_formed_block_payload(Pl) ->
-    bounded_transaction_list(Pl)
-        andalso byte_size(term_to_binary(Pl, [deterministic])) =< ?MAX_BLOCK_BYTES
-        andalso lists:all(fun well_formed_transaction/1, Pl)
-        andalso unique_tx_ids(Pl).
+    case quod_ledger:classify(Pl) of
+        {content, Transactions} ->
+            bounded_transaction_list(Transactions)
+                andalso encoded_block_payload_fits(Pl)
+                andalso lists:all(fun well_formed_transaction/1, Transactions)
+                andalso unique_tx_ids(Transactions);
+        {'begin', _Control} -> encoded_block_payload_fits(Pl);
+        {prepare, _Control} -> encoded_block_payload_fits(Pl);
+        {decision, _Control} -> encoded_block_payload_fits(Pl);
+        {finalize, _Control} -> encoded_block_payload_fits(Pl);
+        {complete, _Control} -> encoded_block_payload_fits(Pl);
+        noop -> false;
+        invalid -> false
+    end.
+
+encoded_block_payload_fits(Payload) ->
+    byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES.
 well_formed_share(#share{kind = K, slot = Sl, block_hash = BH, signer = Sg, sig = Sig}) ->
     is_slot(Sl) andalso valid_shape(K, BH) andalso valid_signer_signature(Sg, Sig);
 well_formed_share(_) -> false.
@@ -4005,9 +6723,24 @@ ingest_certified_block(
                 #cert{} ->
                     Requests1 =
                         maps:remove({Slot, ExpectedBH}, S1#s.block_requests),
-                    engine_step(
-                      [{block, ExpectedBH, Block}],
-                      S1#s{block_requests = Requests1});
+                    S2 = S1#s{block_requests = Requests1},
+                    case quod_ledger:classify(Block#block.payload) of
+                        {Kind, _Control}
+                          when Kind =:= 'begin'; Kind =:= prepare;
+                               Kind =:= decision; Kind =:= finalize;
+                               Kind =:= complete ->
+                            S3 = retain_dtx_candidate(
+                                   Block, ExpectedBH,
+                                   watch_proposal(Slot, S2)),
+                            case may_vote(S3) of
+                                true -> support_or_validate(
+                                          Block, ExpectedBH, S3);
+                                false -> S3
+                            end;
+                        _ ->
+                            engine_step(
+                              [{block, ExpectedBH, Block}], S2)
+                    end;
                 none ->
                     S1
             end
@@ -4081,7 +6814,7 @@ preflight_proposal(
     end.
 
 %% A new leader proposal is valid only at the next approved slot, extending
-%% that approved parent, with one bounded transaction batch. A retained exact
+%% that approved parent, with one bounded tagged payload. A retained exact
 %% redrive bypasses the checks already paid before that block entered the
 %% engine. In both cases, recovery may retain evidence while only a ready voter
 %% starts local validation, timers, or signatures.
@@ -4090,27 +6823,53 @@ on_propose(BH, #block{slot = Sl} = Block, Known, S) ->
         %% Recovery may ingest the block and certificates as evidence, but only a ready voter starts local
         %% validation, timers, or signatures. The leader's redrive presents the proposal again after recovery.
         true  ->
-            S1 = engine_step([{block, BH, Block}], S),
-            %% A Byzantine leader may equivocate indefinitely. The engine retains
-            %% only the first ordinary block for this slot, so validation and
-            %% signing continue only if this exact hash was admitted.
-            case block_for(BH, S1#s.eng) of
-                #block{} ->
+            case quod_ledger:classify(Block#block.payload) of
+                {Kind, _Control}
+                  when Kind =:= 'begin'; Kind =:= prepare;
+                       Kind =:= decision; Kind =:= finalize;
+                       Kind =:= complete ->
+                    %% Every DTX offer, including an exact redrive, stays on
+                    %% this path.  Its first insertion into the engine happens
+                    %% only in support_validated_dtx/3 after the exact parent
+                    %% history (and Prepare policy) has been retained.  Keeping
+                    %% the redrive here too prevents a future generic-offer
+                    %% refactor from reopening a cert-before-verdict bypass.
+                    S1 = retain_dtx_candidate(Block, BH, watch_proposal(Sl, S)),
                     case may_vote(S1) of
-                        true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
+                        true -> support_or_validate(Block, BH, S1);
                         false -> S1
                     end;
-                undefined ->
-                    S1
+                _ ->
+                    S1 = engine_step([{block, BH, Block}], S),
+                    %% A Byzantine leader may equivocate indefinitely. The engine retains
+                    %% only the first ordinary block for this slot, so validation and
+                    %% signing continue only if this exact hash was admitted.
+                    case block_for(BH, S1#s.eng) of
+                        #block{} ->
+                            case may_vote(S1) of
+                                true  -> support_or_validate(Block, BH, watch_proposal(Sl, S1));
+                                false -> S1
+                            end;
+                        undefined ->
+                            S1
+                    end
             end;
         false -> S
     end.
 
-%% A plain content proposal is supported immediately. A COMMITTEE-changing proposal defers its support
+retain_dtx_candidate(Block = #block{slot = Sl}, BH, S) ->
+    Round = round_state(Sl, S),
+    case Round#round.candidate of
+        none -> put_round(Sl, Round#round{candidate = {BH, Block}}, S);
+        {BH, Block} -> S;
+        {_OtherBH, _OtherBlock} -> S
+    end.
+
+%% Plain content is supported immediately. Committee-changing content defers its support
 %% share until this node's own KB judges it (`quod_prolog:request_membership_verdict/5`, pinned to the
 %% proposal's parent height): we record `validating` and support only on a `valid` verdict — so a Byzantine
 %% leader's unauthorized membership change never collects an honest support quorum. Local and remote
-%% proposals use this same path; the asynchronous Prolog/consensus boundary needs no leader exception.
+%% proposals use this same path; DTX controls use the adjacent exact-history verdict path.
 %% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
@@ -4125,10 +6884,38 @@ support_or_validate(#block{slot = Sl}, BH, S) ->
     end.
 
 support_or_validate_ready(Sl, BH, S) ->
-    #block{payload = Payload} = Block = block_for(BH, S#s.eng),
-    case payload_touches_committee(Payload) of
+    Round = round_state(Sl, S),
+    Block =
+        case block_for(BH, S#s.eng) of
+            #block{} = Stored -> Stored;
+            undefined ->
+                case Round#round.candidate of
+                    {BH, #block{} = Candidate} -> Candidate;
+                    _ -> undefined
+                end
+        end,
+    support_or_validate_candidate(Block, Sl, BH, S).
+
+support_or_validate_candidate(undefined, _Sl, _BH, S) ->
+    S;
+support_or_validate_candidate(#block{payload = Payload} = Block, Sl, BH, S) ->
+    case quod_ledger:classify(Payload) of
+        {content, Transactions} ->
+            support_or_validate_content(
+              Transactions, Block, Sl, BH, S);
+        {'begin', Control} -> support_or_validate_dtx(Control, Block, Sl, BH, S);
+        {prepare, Control} -> support_or_validate_dtx(Control, Block, Sl, BH, S);
+        {decision, Control} -> support_or_validate_dtx(Control, Block, Sl, BH, S);
+        {finalize, Control} -> support_or_validate_dtx(Control, Block, Sl, BH, S);
+        {complete, Control} -> support_or_validate_dtx(Control, Block, Sl, BH, S);
+        noop -> S;
+        invalid -> S
+    end.
+
+support_or_validate_content(Transactions, Block, Sl, BH, S) ->
+    case transactions_touch_committee(Transactions) of
         false -> support_block(Block, BH, S);
-        true  ->
+        true ->
             Round = round_state(Sl, S),
             case Round#round.supporting =:= BH of
                 %% judged VALID + support-signed already: a redriven copy takes the plain support path,
@@ -4137,13 +6924,612 @@ support_or_validate_ready(Sl, BH, S) ->
                 false ->
                     case Round#round.validating of
                         BH -> S;
-                        _ -> [Change] = Payload,   %% acceptable_payload makes membership blocks singleton
+                        _ -> [Change] = Transactions, %% acceptable_payload makes membership blocks singleton
                              _ = quod_prolog:request_membership_verdict(S#s.ns, Change, Sl,
                                                                         self(), {Sl, BH}),
-                             put_round(Sl, Round#round{validating = BH}, S)
+                             put_round(
+                               Sl,
+                               Round#round{validating = BH,
+                                           validation = membership}, S)
                     end
             end
     end.
+
+support_or_validate_dtx(Control, Block, Sl, BH, S) ->
+    Round = round_state(Sl, S),
+    case Round#round.dtx_parent of
+        {BH, _ParentToken, _History, _Projection} ->
+            support_validated_dtx(Block, BH, S);
+        _ ->
+            case Round#round.validating of
+                BH -> S;
+                none -> request_dtx_validation(Control, Sl, BH, S);
+                _OtherBH -> S
+            end
+    end.
+
+request_dtx_validation(Control, Sl, BH,
+                       S = #s{ns = Ns, history_head = ParentToken}) ->
+    case {ParentToken, quod_reg:where({quod_prolog, Ns})} of
+        {{Parent, <<_:256>>} = Token, Pid}
+          when Parent =:= Sl - 1, is_pid(Pid) ->
+            Monitor = erlang:monitor(process, Pid),
+            Tag = {Sl, BH, Token},
+            ok = quod_prolog:request_dtx_verdict(
+                   Ns, Control, Sl, self(), Tag),
+            Round = round_state(Sl, S),
+            put_round(
+              Sl,
+              Round#round{validating = BH,
+                          validation = {dtx, Token, Pid, Monitor}}, S);
+        _ ->
+            S
+    end.
+
+support_validated_dtx(Block = #block{slot = Sl}, BH, S) ->
+    S1 = engine_step([{block, BH, Block}], S),
+    case block_for(BH, S1#s.eng) of
+        #block{} -> support_block(Block, BH, S1);
+        undefined ->
+            clear_dtx_validation(Sl, S1)
+    end.
+
+on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
+               S = #s{approved = Approved, history_head = ParentToken})
+  when Sl =:= Approved + 1, AppliedFloor >= Sl - 1 ->
+    Round = round_state(Sl, S),
+    case {Round#round.validating, Round#round.validation,
+          Round#round.candidate} of
+        {BH, {dtx, ParentToken, EnginePid, Monitor},
+         {BH, #block{payload = Payload} = Block}} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            Round0 = Round#round{validating = none, validation = none},
+            S0 = put_round(Sl, Round0, S),
+            continue_dtx_verdict(
+              Verdict, Payload, Block, Sl, BH, ParentToken, S0);
+        _ ->
+            release_dtx_validation_for_retry(
+              Sl, BH, ParentToken, EnginePid, S)
+    end;
+on_dtx_verdict(Sl, BH, ParentToken, EnginePid, _Floor, _Verdict, S) ->
+    release_dtx_validation_for_retry(
+      Sl, BH, ParentToken, EnginePid, S).
+
+continue_dtx_verdict(
+  {valid, History}, Payload, Block, Sl, BH, ParentToken, S) ->
+    case quod_ledger:classify(Payload) of
+        {Kind, Control}
+          when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
+               Kind =:= finalize; Kind =:= complete ->
+            case quod_foreign_log:required_references(Control) of
+                {ok, []} ->
+                    apply_dtx_verdict(
+                      {valid, History}, Payload, Block, Sl, BH,
+                      ParentToken, S);
+                {ok, _References} ->
+                    start_dtx_foreign_validation(
+                      Control, History, Sl, BH, ParentToken, S);
+                {error, _} ->
+                    reject_dtx_candidate(
+                      Sl, BH, malformed_foreign_references, S)
+            end;
+        _ ->
+            reject_dtx_candidate(Sl, BH, malformed_control, S)
+    end;
+continue_dtx_verdict(Verdict, Payload, Block, Sl, BH, ParentToken, S) ->
+    apply_dtx_verdict(
+      Verdict, Payload, Block, Sl, BH, ParentToken, S).
+
+start_dtx_foreign_validation(
+  Control, History, Sl, BH, ParentToken,
+  S = #s{ledger_root = LedgerRoot}) ->
+    Owner = self(),
+    LocalIdentity = target_identity(S),
+    Worker = spawn(
+               fun() ->
+                   Verdict = verify_dtx_foreign_references(
+                               Control, LocalIdentity, LedgerRoot),
+                   Owner ! {dtx_foreign_verdict,
+                            {Sl, BH, ParentToken}, self(), Verdict}
+               end),
+    Monitor = erlang:monitor(process, Worker),
+    Round = round_state(Sl, S),
+    put_round(
+      Sl,
+      Round#round{
+        validating = BH,
+        validation =
+          {dtx_foreign, ParentToken, Worker, Monitor, History}}, S).
+
+on_dtx_foreign_verdict(
+  Sl, BH, ParentToken, WorkerPid, Verdict,
+  S = #s{approved = Approved, history_head = ParentToken})
+  when Sl =:= Approved + 1 ->
+    Round = round_state(Sl, S),
+    case {Round#round.validating, Round#round.validation,
+          Round#round.candidate} of
+        {BH,
+         {dtx_foreign, ParentToken, WorkerPid, Monitor, History},
+         {BH, #block{payload = Payload} = Block}} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            S0 = put_round(
+                   Sl,
+                   Round#round{validating = none, validation = none}, S),
+            case Verdict of
+                valid ->
+                    apply_dtx_verdict(
+                      {valid, History}, Payload, Block, Sl, BH,
+                      ParentToken, S0);
+                {invalid, Reason} ->
+                    apply_dtx_verdict(
+                      {invalid, Reason}, Payload, Block, Sl, BH,
+                      ParentToken, S0);
+                abstain ->
+                    S0
+            end;
+        _ ->
+            release_dtx_validation_for_retry(
+              Sl, BH, ParentToken, WorkerPid, S)
+    end;
+on_dtx_foreign_verdict(
+  Sl, BH, ParentToken, WorkerPid, _Verdict, S) ->
+    release_dtx_validation_for_retry(
+      Sl, BH, ParentToken, WorkerPid, S).
+
+verify_dtx_foreign_references(Control, LocalIdentity, LedgerRoot) ->
+    case quod_foreign_log:required_references(Control) of
+        {ok, References} ->
+            verify_dtx_reference_list(
+              References, Control, LocalIdentity, LedgerRoot, []);
+        {error, _} ->
+            {invalid, malformed_foreign_references}
+    end.
+
+verify_dtx_reference_list(
+  [], Control, LocalIdentity, LedgerRoot, EvidenceRev) ->
+    Evidence = lists:reverse(EvidenceRev),
+    Bindings = [{Phase, Ref, maps:get(control, Row)}
+                || {Phase, Ref, Row} <- Evidence],
+    case validate_dtx_reference_evidence(Control, Bindings) of
+        ok -> verify_complete_applied(
+                Control, LocalIdentity, LedgerRoot, Evidence);
+        {error, _} -> {invalid, foreign_reference_binding}
+    end;
+verify_dtx_reference_list(
+  [{Phase, Ref} | Rest], Control, LocalIdentity, LedgerRoot, EvidenceRev) ->
+    Result = case quod_dtx:certified_ref_binding(Ref) of
+                 {ok, LocalIdentity, _Slot, _Digest} ->
+                     verify_local_dtx_reference(
+                       Ref, Phase, LocalIdentity, LedgerRoot);
+                 {ok, ForeignIdentity, _Slot, _Digest} ->
+                     verify_remote_dtx_reference(
+                       Ref, Phase, ForeignIdentity);
+                 error ->
+                     {invalid, malformed_foreign_reference}
+             end,
+    case Result of
+        {valid, ReferencedEvidence} ->
+            verify_dtx_reference_list(
+              Rest, Control, LocalIdentity, LedgerRoot,
+              [{Phase, Ref, ReferencedEvidence} | EvidenceRev]);
+        {invalid, _} = Invalid ->
+            Invalid;
+        abstain ->
+            abstain
+    end.
+
+verify_complete_applied(Control, LocalIdentity, LedgerRoot, Evidence) ->
+    verify_complete_applied(
+      Control, LocalIdentity, LedgerRoot, Evidence,
+      fun quod_dtx_current_view:verify_applied_many/3).
+
+verify_complete_applied(
+  Control, LocalIdentity, LedgerRoot, Evidence, VerifyMany) ->
+    case quod_dtx:control_kind(Control) of
+        complete ->
+            case complete_applied_specs(
+                   Control, LocalIdentity, LedgerRoot, Evidence) of
+                {ok, []} ->
+                    %% A direct-abort Finalize has no hidden participant diff;
+                    %% its certificate is already the durable no-op proof.
+                    valid;
+                {ok, Specs} ->
+                    OwnerNs = element(1, LocalIdentity),
+                    case VerifyMany(
+                           OwnerNs, Specs, ?DTX_FOREIGN_VERIFY_MS) of
+                        {ok, _Views} -> valid;
+                        {error, retry} -> abstain;
+                        {error, invalid_request} ->
+                            {invalid, malformed_applied_claim}
+                    end;
+                retry ->
+                    abstain;
+                error ->
+                    {invalid, malformed_applied_claim}
+            end;
+        _OtherKind ->
+            valid
+    end.
+
+complete_applied_specs(Control, LocalIdentity, LedgerRoot, Evidence) ->
+    GroupId = quod_dtx:group_id(Control),
+    Finalizes = [{Ref, Row} || {finalize, Ref, Row} <- Evidence],
+    complete_applied_specs(
+      Finalizes, GroupId, LocalIdentity, LedgerRoot, []).
+
+complete_applied_specs([], _GroupId, _LocalIdentity, _LedgerRoot, Acc) ->
+    {ok, lists:reverse(Acc)};
+complete_applied_specs(
+  [{FinalizeRef, #{identity := Target, control := FinalizeControl} = Evidence}
+   | Rest], GroupId, LocalIdentity, LedgerRoot, Acc) ->
+    case quod_dtx:recovery_phase(quod_dtx:control_body(FinalizeControl)) of
+        {ok, #{kind := finalize, group_id := GroupId,
+               prepare_ref := none}} ->
+            complete_applied_specs(
+              Rest, GroupId, LocalIdentity, LedgerRoot, Acc);
+        {ok, #{kind := finalize, group_id := GroupId,
+               prepare_ref := _PrepareRef, generation := Generation,
+               verdict := Verdict}} ->
+            case complete_applied_source(
+                   Target, FinalizeRef, LocalIdentity, LedgerRoot, Evidence) of
+                {ok, Source} ->
+                    Claim = #{target => Target, group_id => GroupId,
+                              finalize_ref => FinalizeRef,
+                              generation => Generation, verdict => Verdict},
+                    complete_applied_specs(
+                      Rest, GroupId, LocalIdentity, LedgerRoot,
+                      [{Source, Claim} | Acc]);
+                retry ->
+                    retry
+            end;
+        _ ->
+            error
+    end;
+complete_applied_specs(_Malformed, _GroupId, _LocalIdentity, _LedgerRoot,
+                       _Acc) ->
+    error.
+
+complete_applied_source(Target, _FinalizeRef, Target, LedgerRoot, _Evidence)
+  when is_list(LedgerRoot); is_binary(LedgerRoot) ->
+    {ok, {local, LedgerRoot}};
+complete_applied_source(
+  {Ns, _Anchor} = Target, FinalizeRef, _LocalIdentity,
+  _OriginLedgerRoot, Evidence) ->
+    case dtx_applied_source(Ns, FinalizeRef) of
+        {ok, {local, _TargetLedgerRoot} = Source} ->
+            {ok, Source};
+        {error, _} ->
+            complete_remote_applied_source(Target, Evidence)
+    end.
+
+complete_remote_applied_source({Ns, Anchor}, Evidence) ->
+    Historical =
+        case maps:get(routes, Evidence, #{}) of
+            Routes when is_map(Routes), map_size(Routes) =< ?MAX_VALIDATORS ->
+                [{PeerKey, Endpoint}
+                 || {PeerKey, Endpoint} <- maps:to_list(Routes),
+                    is_binary(PeerKey), byte_size(PeerKey) =:= 32,
+                    quod_quic:valid_endpoint(Endpoint)];
+            _ ->
+                []
+        end,
+    Directory =
+        case quod_directory:validator_routes(Ns, Anchor) of
+            {ok, Rows} ->
+                [{PeerKey, Endpoint}
+                 || #{node_key := PeerKey, endpoint := Endpoint} <- Rows,
+                    is_binary(PeerKey), byte_size(PeerKey) =:= 32,
+                    quod_quic:valid_endpoint(Endpoint)];
+            {error, _} ->
+                []
+        end,
+    case lists:usort(Historical ++ Directory) of
+        [_ | _] = Hints -> {ok, {remote, Hints}};
+        [] -> retry
+    end.
+
+validate_dtx_reference_evidence(Control, Evidence) ->
+    quod_dtx:validate_references(Control, Evidence).
+
+verify_local_dtx_reference(
+  Ref, Phase, {Ns, _Anchor} = Identity, LedgerRoot) ->
+    case quod_ledger_store:open_ro(Ns, LedgerRoot) of
+        {ok, Store} ->
+            try
+                case read_local_dtx_evidence(
+                       Store, Ref, Phase, Identity) of
+                    {ok, #{control := _Control} = Evidence} ->
+                        {valid, Evidence};
+                    {error, phase_mismatch} -> {invalid, foreign_phase};
+                    {error, invalid_reference} ->
+                        {invalid, foreign_reference};
+                    {error, not_found} -> abstain
+                end
+            after
+                quod_ledger_store:close(Store)
+            end;
+        _ ->
+            abstain
+    end.
+
+local_dtx_evidence_source(
+  Ref, ExpectedPhase,
+  S = #s{slot = Committed, ledger_root = LedgerRoot}) ->
+    TargetIdentity = target_identity(S),
+    case {endpoint_read_ready(S), valid_dtx_phase(ExpectedPhase),
+          quod_dtx:certified_ref_binding(Ref)} of
+        {true, true, {ok, TargetIdentity, Slot, _Digest}}
+          when Slot =< Committed,
+               (is_list(LedgerRoot) orelse is_binary(LedgerRoot)) ->
+            {ok, LedgerRoot};
+        {true, true, {ok, TargetIdentity, Slot, _Digest}}
+          when Slot > Committed ->
+            {error, not_found};
+        {false, _, _} ->
+            {error, not_ready};
+        _ ->
+            {error, invalid_request}
+    end.
+
+valid_dtx_phase('begin') -> true;
+valid_dtx_phase(prepare) -> true;
+valid_dtx_phase(decision) -> true;
+valid_dtx_phase(finalize) -> true;
+valid_dtx_phase(complete) -> true;
+valid_dtx_phase(_) -> false.
+
+read_local_dtx_evidence(Store, Ref, ExpectedPhase, Identity) ->
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, Identity, Slot, Digest} ->
+            case quod_ledger_store:read_at(Store, Slot) of
+                {ok, #entry{data = Payload} = Entry} ->
+                    case quod_ledger:classify(Payload) of
+                        {ExpectedPhase, Control} ->
+                            case quod_dtx:certified_entry_ref(
+                                   Identity, Entry, Control) of
+                                {ok, Ref} ->
+                                    {ok, #{identity => Identity,
+                                           slot => Slot,
+                                           record_digest => Digest,
+                                           phase => ExpectedPhase,
+                                           control => Control,
+                                           ref => Ref}};
+                                _ ->
+                                    {error, invalid_reference}
+                            end;
+                        {_OtherPhase, _Control} ->
+                            {error, phase_mismatch};
+                        _ ->
+                            {error, invalid_reference}
+                    end;
+                not_found ->
+                    {error, not_found}
+            end;
+        _ ->
+            {error, invalid_reference}
+    end.
+
+verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}) ->
+    case quod_reg:where({quod_simplex, Ns}) of
+        undefined ->
+            verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor);
+        _LocalSimplex ->
+            case dtx_local_evidence(Ns, Ref, Phase) of
+                {ok, #{control := _Control} = Evidence} ->
+                    {valid, Evidence};
+                {ok, _MalformedEvidence} ->
+                    {invalid, foreign_reference};
+                {error, invalid_request} ->
+                    {invalid, foreign_reference};
+                {error, _Unavailable} ->
+                    %% A rebuilding or lagging co-hosted copy is only a route
+                    %% preference.  A current pinned validator may still
+                    %% provide the exact certified reference.
+                    verify_remote_dtx_reference_routes(
+                      Ref, Phase, Ns, Anchor)
+            end
+    end.
+
+verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor) ->
+    case quod_directory:validator_routes(Ns, Anchor) of
+        {ok, Routes} ->
+            Candidates =
+                [{NodeKey, Endpoint}
+                 || #{node_key := NodeKey, endpoint := Endpoint} <- Routes,
+                    is_binary(NodeKey), byte_size(NodeKey) =:= 32],
+            verify_remote_dtx_candidates(
+              Candidates, Ref, Phase, no_answer);
+        {error, _} ->
+            abstain
+    end.
+
+verify_remote_dtx_candidates([], _Ref, _Phase, no_answer) ->
+    abstain;
+verify_remote_dtx_candidates([], _Ref, _Phase, definitive_invalid) ->
+    {invalid, foreign_reference};
+verify_remote_dtx_candidates(
+  [{PeerKey, Endpoint} | Rest], Ref, Phase, Prior) ->
+    case quod_foreign_log:verify(
+           PeerKey, Endpoint, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS) of
+        {ok, #{control := _Control} = Evidence} ->
+            {valid, Evidence};
+        {ok, _MalformedEvidence} ->
+            {invalid, foreign_reference};
+        {error, phase_mismatch} ->
+            verify_remote_dtx_candidates(
+              Rest, Ref, Phase, definitive_invalid);
+        {error, invalid_foreign_reference} ->
+            verify_remote_dtx_candidates(
+              Rest, Ref, Phase, definitive_invalid);
+        {error, _Unavailable} ->
+            verify_remote_dtx_candidates(Rest, Ref, Phase, Prior)
+    end.
+
+apply_dtx_verdict({valid, History}, Payload, Block, Sl, BH, ParentToken,
+                  S = #s{dtx_projection = ParentProjection}) ->
+    case quod_ledger:classify(Payload) of
+        {Kind, Control}
+          when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
+               Kind =:= finalize; Kind =:= complete ->
+            case quod_dtx:preview(
+                   Control, target_identity(S), Sl, BH,
+                   History, ParentProjection) of
+                {ok, _PreviewHistory, _PreviewProjection, _Effects} ->
+                    Round = round_state(Sl, S),
+                    S1 = put_round(
+                           Sl,
+                           Round#round{
+                             dtx_parent =
+                                 {BH, ParentToken, History,
+                                  ParentProjection}}, S),
+                    support_validated_dtx(Block, BH, S1);
+                {error, Reason} ->
+                    reject_dtx_candidate(Sl, BH, Reason, S)
+            end;
+        _ ->
+            reject_dtx_candidate(Sl, BH, malformed_control, S)
+    end;
+apply_dtx_verdict({invalid, Reasons}, Payload, _Block, Sl, BH,
+                  _ParentToken, S0) ->
+    %% Retained local work owns a caller even when an equivalent peer envelope
+    %% wins proposal placement.  A deterministic invalid verdict therefore
+    %% retires the exact semantic record for every phase. Prepare alone has a
+    %% public logical refusal; every other phase is released as retryable so
+    %% recovery re-reads the now-current certified phase chain and replans.
+    S = retire_invalid_dtx_submission(Payload, Reasons, S0),
+    reject_dtx_candidate(Sl, BH, Reasons, S);
+apply_dtx_verdict(abstain, _Payload, _Block, _Sl, _BH, _ParentToken, S) ->
+    S;
+apply_dtx_verdict(_Malformed, _Payload, _Block, Sl, BH, _ParentToken, S) ->
+    reject_dtx_candidate(Sl, BH, malformed_verdict, S).
+
+reject_dtx_candidate(Sl, BH, Reason, S) ->
+    Round = round_state(Sl, S),
+    S1 = put_round(
+           Sl,
+           Round#round{invalid = BH, invalid_reason = Reason,
+                       validating = none, validation = none,
+                       candidate = none, dtx_parent = none}, S),
+    choose_final_vote(Sl, rejected, S1).
+
+retire_invalid_dtx_submission(
+  Payload, Reasons,
+  S = #s{dtx_submissions = Submissions,
+         dtx_projection = Projection}) ->
+    case quod_ledger:classify(Payload) of
+        {Kind, Control}
+          when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
+               Kind =:= finalize; Kind =:= complete ->
+            Digest = quod_dtx:record_digest(Control),
+            case maps:take(Digest, Submissions) of
+                {#dtx_submission{waiters = Waiters}, Rest} ->
+                    Reply = invalid_dtx_submission_reply(
+                              Kind, Digest, Reasons, Projection, S),
+                    reply_waiters(
+                      Waiters, Reply, S#s{dtx_submissions = Rest});
+                error ->
+                    S
+            end;
+        _ ->
+            S
+    end.
+
+invalid_dtx_submission_reply(
+  prepare, Digest, Reasons, Projection, S) ->
+    Target = target_identity(S),
+    Generation = maps:get(generation, Projection),
+    ReasonsBlob = prepare_refusal_blob(Target, Reasons),
+    {error,
+     {prepare_refused, Target, Digest, Generation, ReasonsBlob}};
+invalid_dtx_submission_reply(
+  _OtherPhase, _Digest, _Reasons, _Projection, _S) ->
+    {error, retry}.
+
+prepare_refusal_blob({Ns, Anchor}, [_ | _] = Reasons) ->
+    Marker = {prepare_refused, {ontology, Ns, Anchor}},
+    case quod_wire_term:encode_failure_reasons([Marker | Reasons]) of
+        {ok, Blob} -> Blob;
+        {error, _} ->
+            %% A validator-internal reason must never turn a definite refusal
+            %% into an unavailable/ambiguous result.  The fallback is fixed,
+            %% public and bounded; malformed dynamic data is not reflected.
+            {ok, Blob} = quod_wire_term:encode_failure_reasons(
+                           [Marker, prepare_validation_failed]),
+            Blob
+    end;
+prepare_refusal_blob({Ns, Anchor}, _Malformed) ->
+    {ok, Blob} = quod_wire_term:encode_failure_reasons(
+                   [{prepare_refused, {ontology, Ns, Anchor}},
+                    prepare_validation_failed]),
+    Blob.
+
+clear_dtx_validation(Sl, S) ->
+    Round = round_state(Sl, S),
+    _ = release_validation_monitor(Round),
+    put_round(
+      Sl,
+      Round#round{validating = none, validation = none,
+                  candidate = none, dtx_parent = none}, S).
+
+release_validation_monitor(
+  #round{validation = {dtx, _Token, _Pid, Monitor}}) ->
+    erlang:demonitor(Monitor, [flush]);
+release_validation_monitor(
+  #round{validation = {dtx_foreign, _Token, _Pid, Monitor, _History}}) ->
+    erlang:demonitor(Monitor, [flush]);
+release_validation_monitor(#round{}) ->
+    false.
+
+dtx_validation_active(#round{validation = {dtx, _, _, _}}) -> true;
+dtx_validation_active(
+  #round{validation = {dtx_foreign, _, _, _, _}}) -> true;
+dtx_validation_active(#round{}) -> false.
+
+%% A verdict for the exact active request that no longer matches its
+%% candidate/head/floor cannot be used, but it must also not leave the bounded
+%% validation latch behind. Keep the immutable candidate so the normal
+%% ready/tick redrive can request a fresh verdict; discard only
+%% validation-derived parent state. A late verdict from an older request is an
+%% exact no-op and cannot clear a newer request for the same slot.
+release_dtx_validation_for_retry(Sl, BH, ParentToken, EnginePid, S) ->
+    Round = round_state(Sl, S),
+    case {Round#round.validating, Round#round.validation} of
+        {BH, {dtx, ParentToken, EnginePid, _Monitor}} ->
+            _ = release_validation_monitor(Round),
+            put_round(
+              Sl,
+              Round#round{validating = none, validation = none,
+                          dtx_parent = none}, S);
+        {BH, {dtx_foreign, ParentToken, EnginePid, _Monitor, _History}} ->
+            _ = release_validation_monitor(Round),
+            put_round(
+              Sl,
+              Round#round{validating = none, validation = none,
+                          dtx_parent = none}, S);
+        _ ->
+            S
+    end.
+
+drop_dtx_validation_monitor(Ref, Pid, S = #s{rounds = Rounds}) ->
+    case [Sl || {Sl, Round} <- maps:to_list(Rounds),
+                dtx_validation_monitor(Round) =:= {Pid, Ref}] of
+        [Sl] ->
+            Round = round_state(Sl, S),
+            {true,
+             put_round(
+               Sl,
+               Round#round{validating = none, validation = none}, S)};
+        [] ->
+            false
+    end.
+
+dtx_validation_monitor(#round{validation = {dtx, _Token, Pid, Ref}}) ->
+    {Pid, Ref};
+dtx_validation_monitor(
+  #round{validation = {dtx_foreign, _Token, Pid, Ref, _History}}) ->
+    {Pid, Ref};
+dtx_validation_monitor(#round{}) ->
+    none.
 
 %% The KB verdict for a membership proposal we deferred, correlated to the exact block by `{Sl, BH}`: `valid`
 %% ⇒ emit the deferred support share; `invalid` ⇒ latch its hash in `#round.invalid` (so we never endorse it at any phase —
@@ -4153,9 +7539,11 @@ support_or_validate_ready(Sl, BH, S) ->
 %% now validating under leader equivocation) is dropped, never applied to the wrong block.
 on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= Approved + 1 ->
     Round = round_state(Sl, S),
-    case Round#round.validating of
-        BH ->
-            S1 = put_round(Sl, Round#round{validating = none}, S),
+    case {Round#round.validating, Round#round.validation} of
+        {BH, membership} ->
+            S1 = put_round(
+                   Sl,
+                   Round#round{validating = none, validation = none}, S),
             case Verdict of
                 valid        -> case block_for(BH, S1#s.eng) of
                                     #block{} = Block -> support_block(Block, BH, S1);
@@ -4319,10 +7707,15 @@ keep_progress(S0, S1, Actions, TimerMode) ->
                         fun() -> settle_readiness(S0, maybe_mark_ready(S1)) end),
     SRecovered = timed_step(SReady, reconcile,
                             fun() -> reconcile_block_requests(SReady) end),
+    SCoordinated = timed_step(
+                     SRecovered, dtx_coordinator,
+                     fun() -> reconcile_dtx_coordinator(SRecovered) end),
+    SDtx = timed_step(SCoordinated, dtx_drive,
+                      fun() -> drive_retained_dtx(SCoordinated) end),
     SCustodyReady =
         timed_step(
-          SRecovered, custody_reconcile,
-          fun() -> reconcile_custody_lane(SRecovered) end),
+          SDtx, custody_reconcile,
+          fun() -> reconcile_custody_lane(SDtx) end),
     SCustodyView = refresh_ingress_view(SCustodyReady),
     %% Durable exclusion becomes a new placement only here: the complete
     %% contiguous commit prefix, committee adoption, author floor, and recovery
@@ -4727,10 +8120,20 @@ resume_ready_rounds(S) ->
             %% entries via commit_buf; resume_ready_slot/2 re-reads the current tree on every step.
             Slots = lists:sort([Sl || Sl <- maps:keys((S#s.eng)#eng.tree),
                                      Sl > S#s.slot]),
-            lists:foldl(
-              fun resume_ready_slot/2,
-              S, Slots)
+            S1 = lists:foldl(
+                   fun resume_ready_slot/2,
+                   S, Slots),
+            resume_dtx_candidates(S1)
     end.
+
+resume_dtx_candidates(S = #s{rounds = Rounds}) ->
+    lists:foldl(
+      fun({Sl, #round{candidate = {BH, #block{} = Block}}}, Acc)
+            when Sl > Acc#s.slot ->
+              support_or_validate(Block, BH, Acc);
+         (_, Acc) ->
+              Acc
+      end, S, lists:sort(maps:to_list(Rounds))).
 
 resume_ready_slot(Sl, S = #s{slot = Committed}) when Sl =< Committed ->
     S;
@@ -4816,14 +8219,14 @@ emit_final_vote(Kind, V, BH, S) ->
 %% The sole constructor for NEW runtime consensus evidence. The decision is durable before the
 %% signature can become network-visible; an I/O failure fail-stops this validator before it can
 %% equivocate. Redrive reconstructs an identical Ed25519 share only from the resulting latch.
-record_share(Kind, Slot, BlockHash, S = #s{vote_journal = Journal}) ->
+record_share(Kind, Slot, BlockHash, S = #s{signing_journal = Journal}) ->
     case may_vote(S) of
         false ->
             blocked;
         true ->
             TraceCtx = trace_context_for_slot(Slot, S),
             {ok, Journal1} = quod_trace:with_optional_span(
-                               TraceCtx, <<"quod.vote_journal.sync">>, internal,
+                               TraceCtx, <<"quod.signing_journal.vote_sync">>, internal,
                                #{'quod.namespace' => S#s.ns,
                                  'quod.consensus.slot' => Slot,
                                  'quod.vote.kind' => atom_to_binary(Kind, utf8)},
@@ -4836,17 +8239,26 @@ record_share(Kind, Slot, BlockHash, S = #s{vote_journal = Journal}) ->
                          commit    -> Round#round{final = {commit, BlockHash}};
                          complaint -> Round#round{final = complaint}
                      end,
-            S1 = put_round(Slot, Round1, S#s{vote_journal = Journal1}),
+            S1 = put_round(Slot, Round1, S#s{signing_journal = Journal1}),
             {ok, make_share(S#s.consensus_domain, Kind, Slot, BlockHash, S#s.id), S1}
     end.
 
+-ifdef(TEST).
 record_vote(_Ns, memory, _Kind, _Slot, _BlockHash) -> {ok, memory};
-record_vote(_Ns, undefined, Kind, Slot, BlockHash) ->
-    error({vote_journal_unavailable, Kind, Slot, BlockHash});
 record_vote(Ns, Journal, Kind, Slot, BlockHash) ->
+    record_vote_journal(Ns, Journal, Kind, Slot, BlockHash).
+-else.
+record_vote(Ns, Journal, Kind, Slot, BlockHash) ->
+    record_vote_journal(Ns, Journal, Kind, Slot, BlockHash).
+-endif.
+record_vote_journal(_Ns, undefined, Kind, Slot, BlockHash) ->
+    error({signing_journal_unavailable, Kind, Slot, BlockHash});
+record_vote_journal(Ns, Journal, Kind, Slot, BlockHash) ->
     Started = erlang:monotonic_time(),
-    Result = quod_vote_journal:record(Journal, Kind, Slot, BlockHash),
-    quod_metrics:observe_vote_journal_sync(Ns, erlang:monotonic_time() - Started),
+    Result = quod_signing_journal:record_vote(
+               Journal, Kind, Slot, BlockHash),
+    quod_metrics:observe_signing_journal_vote_sync(
+      Ns, erlang:monotonic_time() - Started),
     Result.
 
 %% Reconstruct already-durable evidence for retransmission. The latch check is part of this function,
@@ -4874,10 +8286,32 @@ valid_proposal(#block{slot = Sl, parent = P} = Block,
 %% Normal leader proposals and certificate-authorized block recovery have different position/hash gates,
 %% but must accept exactly the same timestamp and transaction content. Keep that consensus-sensitive tail
 %% in one predicate so a future admission rule cannot make live voting and recovery disagree.
-block_admissible(#block{payload = Payload, timestamp = Ts}, ParentTs, S) ->
-    not membership_barrier(S)
-        andalso ts_acceptable(Ts, ParentTs, quod_time:now_ms())
+block_admissible(#block{slot = Slot, payload = Payload, timestamp = Ts},
+                 ParentTs, S) ->
+    ts_acceptable(Ts, ParentTs, quod_time:now_ms())
+        andalso payload_admission_open(Slot, Payload, S)
         andalso acceptable_payload(Payload, S).
+
+payload_admission_open(_Slot, {batch, _Transactions}, S) ->
+    not consensus_barrier(S);
+payload_admission_open(Slot, {dtx, _ControlBlob},
+                       #s{slot = Committed, eng = #eng{tree = Tree},
+                          rounds = Rounds}) ->
+    EarlierBarrier =
+        lists:any(
+          fun({Sl, #block{payload = Payload}}) ->
+                  Sl > Committed andalso Sl < Slot
+                      andalso payload_is_consensus_barrier(Payload)
+          end, maps:to_list(Tree)),
+    EarlierValidation =
+        lists:any(
+          fun({Sl, Round}) ->
+                  Sl > Committed andalso Sl < Slot
+                      andalso dtx_validation_active(Round)
+          end, maps:to_list(Rounds)),
+    not EarlierBarrier andalso not EarlierValidation;
+payload_admission_open(_Slot, _Payload, _S) ->
+    false.
 
 %% A proposed block's `timestamp` is acceptable iff it is a non-negative integer. The check lives here
 %% so ordinary proposal admission is total without a duplicate structural pass, while certified recovery
@@ -4896,10 +8330,11 @@ ts_acceptable(Ts, Last, Now) ->
 %% A change this node will PROPOSE or SUPPORT: a fully well-formed `#transaction{}`.
 %% Membership changes are ordinary transactions whose diff asserts/retracts `peer_admitted`
 %% (submitted via a `can_join`-gated external predicate) — a transaction that TOUCHES the committee
-%% additionally passes the membership gate (`membership_change_ok/2`): shape + never-empty floor,
+%% additionally passes the membership gate (`membership_change_ok/2`): shape, never-empty floor, and
+%% the shared validator cap,
 %% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
 %% gates a peer's proposal in `valid_proposal` before support-signing) — so an unacceptable membership
-%% change never reaches a support quorum and can never commit. This is the PURE shape+floor gate; a peer
+%% change never reaches a support quorum and can never commit. This is the PURE shape+floor+cap gate; a peer
 %% that passes it then also defers its support to a KB verdict (`support_or_validate/2` →
 %% `quod_prolog:request_membership_verdict/5`). Committed history is both cert-verified and checked against
 %% the signed-transaction rules during catch-up and local rebuild.
@@ -4908,12 +8343,37 @@ ts_acceptable(Ts, Last, Now) ->
 %% assert/retract over an Erlog clause. This makes apply/restart a total operation over every block an
 %% honest validator can endorse. The recursive diff check also rejects an improper list such as
 %% `[Op | junk]`, which a shallow cons-cell match would otherwise admit from the untrusted wire.
-acceptable_payload([#transaction{} | _] = Payload, S) ->
-    acceptable_payload_content(Payload, S, verify_id)
+acceptable_payload({batch, [#transaction{} | _] = Transactions}, S) ->
+    acceptable_payload_content(Transactions, S, verify_id)
         andalso verify_transaction_signatures(
                   target_identity(S), S#s.author_admissions,
-                  Payload, live);
+                  Transactions, live);
+%% DTX controls are singleton barriers.  This seam pays only bounded envelope,
+%% signature, admission-generation and sequence checks; the exact old-group
+%% history and (for Prepare) parent-KB policy are validated asynchronously
+%% before the block enters the consensus engine.
+acceptable_payload({dtx, _ControlBlob} = Payload, S) ->
+    encoded_block_payload_fits(Payload)
+        andalso dtx_payload_acceptable(quod_ledger:classify(Payload), S);
 acceptable_payload(_Payload, _S) -> false.
+
+dtx_payload_acceptable({Kind, Control},
+                       S = #s{author_admissions = Admissions,
+                              dtx_lanes = Lanes,
+                              dtx_projection = Dtx})
+  when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
+       Kind =:= finalize; Kind =:= complete ->
+    Meta = quod_dtx:control_metadata(Control),
+    Author = maps:get(author, Meta),
+    Admission = maps:get(author_admission, Meta),
+    Sequence = maps:get(sequence, Meta),
+    Lane = {Admission, Author},
+    Dtx =/= undefined
+        andalso maps:get(Author, Admissions, undefined) =:= Admission
+        andalso Sequence > maps:get(Lane, Lanes, 0)
+        andalso quod_dtx:verify_control(target_identity(S), Control);
+dtx_payload_acceptable(_Classified, _S) ->
+    false.
 
 %% Transactions entering this node's local batch have one of two trusted
 %% provenance checks: this node just signed them, or a relay submission was
@@ -4929,7 +8389,7 @@ acceptable_collected_payload(_Payload, _S) ->
 
 acceptable_payload_content(Payload, S, Validation) ->
     bounded_transaction_list(Payload)
-        andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
+        andalso encoded_block_payload_fits({batch, Payload})
         andalso lists:all(
                   fun(Change) ->
                       collected_change_acceptable(Validation, Change, S)
@@ -5040,23 +8500,29 @@ approved_author_seqs(#s{author_seqs = Seqs, approved = Approved,
             error
     end.
 
-%% Accepts either a raw proposal payload (a `#block`'s transaction list) or one
-%% committed entry's data. Every entry kind that can carry an author sequence must
-%% advance the high-water here, so the kinds are enumerated rather than defaulted.
-advance_author_seqs(Payload, Seqs) when is_list(Payload) ->
+%% Advance the ordinary-content sequence projection from one exact tagged
+%% block/entry payload. DTX owns a separate admission-scoped lane; its five
+%% cases stay explicit here so they cannot accidentally contaminate this map.
+advance_author_seqs(Data, Seqs) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} -> advance_content_author_seqs(Transactions, Seqs);
+        {'begin', _Control} -> Seqs;
+        {prepare, _Control} -> Seqs;
+        {decision, _Control} -> Seqs;
+        {finalize, _Control} -> Seqs;
+        {complete, _Control} -> Seqs;
+        noop -> Seqs;
+        invalid -> Seqs
+    end.
+
+advance_content_author_seqs(Transactions, Seqs) ->
     lists:foldl(
       fun(#transaction{author = Author, author_seq = Seq}, Acc)
             when is_integer(Seq), Seq >= 0 ->
               Acc#{Author => max(Seq, maps:get(Author, Acc, 0))};
          (_, Acc) ->
               Acc
-      end, Seqs, Payload);
-advance_author_seqs(Data, Seqs) ->
-    case quod_ledger:classify(Data) of
-        {content, Transactions} -> advance_author_seqs(Transactions, Seqs);
-        noop    -> Seqs;
-        invalid -> Seqs
-    end.
+      end, Seqs, Transactions).
 
 membership_payload_ok(Payload, #s{approved = Approved, slot = Committed}) ->
     case membership_payload_shape(Payload) of
@@ -5079,8 +8545,20 @@ membership_payload_shape(Payload) ->
         false -> none
     end.
 
-payload_touches_committee(Payload) ->
-    lists:any(fun is_membership_change/1, Payload).
+transactions_touch_committee(Transactions) ->
+    lists:any(fun is_membership_change/1, Transactions).
+
+payload_is_consensus_barrier(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} -> transactions_touch_committee(Transactions);
+        {'begin', _Control} -> true;
+        {prepare, _Control} -> true;
+        {decision, _Control} -> true;
+        {finalize, _Control} -> true;
+        {complete, _Control} -> true;
+        noop -> false;
+        invalid -> true
+    end.
 
 is_membership_change(Change) -> committee_delta(Change) =/= {[], []}.
 
@@ -5127,8 +8605,8 @@ well_formed_transaction_fields(TxId, Origin, ProofId, PlanDigest,
         andalso is_integer(SubmittedAt) andalso SubmittedAt >= 0
         andalso (Sig =:= none orelse
                  (is_binary(Sig) andalso byte_size(Sig) =:= 64))
-        andalso valid_read_check(ReadCheck)
-        andalso valid_diff(Diff).
+        andalso quod_diff:valid_read_check(ReadCheck)
+        andalso quod_diff:valid_ops(Diff).
 
 valid_durable_proof(none, undefined, undefined) ->
     true;
@@ -5187,7 +8665,7 @@ valid_history_entry({Ns, Anchor} = Target, I, {batch, Payload},
        is_list(Committee) ->
     bounded_transaction_list(Payload)
         andalso Payload =/= []
-        andalso byte_size(term_to_binary(Payload, [deterministic])) =< ?MAX_BLOCK_BYTES
+        andalso encoded_block_payload_fits({batch, Payload})
         andalso lists:all(
                   fun(Change) ->
                       historical_change_shape_acceptable(Change, Committee)
@@ -5198,13 +8676,24 @@ valid_history_entry({Ns, Anchor} = Target, I, {batch, Payload},
                   Target, Admissions, Payload, replay)
         andalso unique_tx_ids(Payload)
         andalso membership_batch_shape_ok(Payload);
+%% Each DTX phase becomes valid only through the shared phase reducer, sequence
+%% lane, and certified-reference checks. Keep every kind visibly fail-closed
+%% until those checks are wired; no control record is inert history.
+valid_history_entry(_Binding, I, {dtx, Blob}, _Projection, _IdMode)
+  when is_integer(I), I > 1, is_binary(Blob) ->
+    case quod_ledger:classify({dtx, Blob}) of
+        {'begin', _Control} -> false;
+        {prepare, _Control} -> false;
+        {decision, _Control} -> false;
+        {finalize, _Control} -> false;
+        {complete, _Control} -> false;
+        invalid -> false
+    end;
 valid_history_entry(_Binding, _I, _Data, _Committee, _IdMode) ->
     false.
 
 history_id_valid(verify_id, Target, Change) ->
-    valid_target_transaction_id(Target, Change);
-history_id_valid(trusted_prefix, _Target, _Change) ->
-    true.
+    valid_target_transaction_id(Target, Change).
 
 valid_genesis_transaction(Ns, Genesis) ->
     valid_genesis_transaction(Ns, Genesis, any_founding_set).
@@ -5240,6 +8729,7 @@ valid_genesis_identity(
     genesis_incarnation_matches(Diff, Incarnation)
         andalso Removes =:= []
         andalso Adds =/= []
+        andalso length(Adds) =< ?MAX_VALIDATORS
         andalso Author =:= lists:min(Adds)
         andalso founding_set_matches(ExpectedFounders, Adds);
 valid_genesis_identity(
@@ -5252,7 +8742,7 @@ founding_set_matches(ExpectedFounders, Adds) ->
     lists:sort(Adds) =:= ExpectedFounders.
 
 genesis_payload_bounded(Genesis) ->
-    try byte_size(term_to_binary([Genesis], [deterministic])) =< ?MAX_BLOCK_BYTES
+    try encoded_block_payload_fits({batch, [Genesis]})
     catch
         _:_ -> false
     end.
@@ -5371,90 +8861,6 @@ valid_target_transaction_id(_Target, _Change) -> false.
 
 nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 
-valid_read_check(ReadCheck) when is_map(ReadCheck) ->
-    maps:fold(
-      fun({Functor, Arity}, Token, true) ->
-              is_atom(Functor) andalso is_integer(Arity) andalso Arity >= 0
-                  andalso valid_read_token(Token);
-         (_Key, _Token, _Acc) ->
-              false
-      end, true, ReadCheck);
-valid_read_check(_) -> false.
-
-valid_read_token(never_present) -> true;
-valid_read_token(static) -> true;
-valid_read_token({present, Slot}) -> is_integer(Slot) andalso Slot >= 0;
-valid_read_token({absent, Slot}) -> is_integer(Slot) andalso Slot >= 0;
-valid_read_token(_) -> false.
-
-%% Walk to `[]` and validate every operation, so both `quod_diff:apply_ops/2` and
-%% the committee projection can consume any accepted diff without a catch-all path.
-valid_diff([Op | Rest]) -> valid_op(Op) andalso valid_diff(Rest);
-valid_diff([]) -> true;
-valid_diff(_) -> false.
-
-valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
-    callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
-valid_op(_) -> false.
-
-callable_head(Head) when is_atom(Head) -> true;
-callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 -> is_atom(element(1, Head));
-callable_head(_) -> false.
-
-%% Erlog stores clause bodies in compiled `{Code, HasCut}` form. Explicitly
-%% constructed transactions may carry a legal source body instead; `quod_diff`
-%% normalizes it deterministically before applying it. Validate both forms fully.
-valid_clause_body(Body) -> valid_compiled_body(Body) orelse valid_raw_body(Body).
-
-valid_compiled_body({Code, HasCut}) when is_boolean(HasCut) -> valid_code(Code);
-valid_compiled_body(_) -> false.
-
-valid_code([Instruction | Rest]) -> valid_instruction(Instruction) andalso valid_code(Rest);
-valid_code([]) -> true;
-valid_code(_) -> false.
-
-valid_instruction({{disj}, Left, Right}) ->
-    valid_code(Left) andalso valid_code(Right);
-valid_instruction({{if_then}, Cond, Then, Label}) ->
-    valid_code(Cond) andalso valid_code(Then) andalso valid_code_label(Label);
-valid_instruction({{if_then_else}, Cond, Then, Else, Label}) ->
-    valid_code(Cond) andalso valid_code(Then) andalso valid_code(Else)
-        andalso valid_code_label(Label);
-valid_instruction({{once}, Goal, Label}) ->
-    valid_code(Goal) andalso valid_code_label(Label);
-valid_instruction({{cut}, Label, Last}) ->
-    valid_code_label(Label) andalso is_boolean(Last);
-valid_instruction({call, {Variable}}) ->
-    valid_variable(Variable);
-valid_instruction(Goal) ->
-    callable_head(Goal) andalso valid_stored_term(Goal).
-
-valid_raw_body(Body) -> callable_body(Body) andalso valid_stored_term(Body).
-
-callable_body(Body) when is_atom(Body) -> true;
-callable_body({Variable}) -> valid_variable(Variable);
-callable_body(Body) -> callable_head(Body).
-
-valid_code_label(Label) -> is_atom(Label) orelse (is_integer(Label) andalso Label >= 0).
-valid_variable(Variable) -> is_atom(Variable) orelse (is_integer(Variable) andalso Variable >= 0).
-
-%% Stored clauses use integer variable ids after compilation (`{0}`, `{1}`, ...),
-%% while source terms use atom ids. Erlog's public `is_legal_term/1` only accepts the
-%% latter, so the durable representation needs this small explicit walker.
-valid_stored_term({Variable}) -> valid_variable(Variable);
-valid_stored_term(Term) when is_tuple(Term), tuple_size(Term) >= 2,
-                             is_atom(element(1, Term)) ->
-    valid_tuple_args(Term, 2, tuple_size(Term));
-valid_stored_term([Head | Tail]) ->
-    valid_stored_term(Head) andalso valid_stored_term(Tail);
-valid_stored_term(Term) ->
-    not is_tuple(Term) andalso not (is_list(Term) andalso Term =/= []).
-
-valid_tuple_args(_Term, Index, Size) when Index > Size -> true;
-valid_tuple_args(Term, Index, Size) ->
-    valid_stored_term(element(Index, Term))
-        andalso valid_tuple_args(Term, Index + 1, Size).
-
 %% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
 %% term as an element — the catch-all keeps the scan total.
 touches_committee(Diff) ->
@@ -5465,7 +8871,7 @@ touches_committee(Diff) ->
 %% The membership gate — PURE (no KB access; the KB `can_join` re-proof is the deferred support in
 %% `support_or_validate/2`): a
 %% committee-changing transaction must be EXACTLY ONE well-formed `peer_admitted` op and must not
-%% empty the committee.
+%% empty the committee or grow it beyond the shared validator cap.
 %%
 %% - ONE op, NOTHING else: kills a mass retract (one tx emptying the set), a mixed
 %%   content+membership diff (which would smuggle content ops onto the membership apply path), and
@@ -5476,9 +8882,18 @@ touches_committee(Diff) ->
 %%   the namespace could never commit again. The floor is STEPWISE (4→3→2→1 is legal, one
 %%   quorum-endorsed member per block); the hard `3f+1` Byzantine-tolerance floor is deliberately NOT
 %%   enforced (deferred.md §3(c) stays open — it needs a network-target-f concept).
-membership_change_ok(#transaction{diff = Diff} = T, Vs) ->
-    quod_committee_predicates:membership_diff(Diff)
-        andalso apply_committee_delta(T, Vs) =/= [].
+membership_change_ok(#transaction{diff = Diff}, Vs) ->
+    membership_diff_acceptable(Diff, Vs).
+
+-doc "Whether one exact membership diff preserves the committee bounds.".
+-spec membership_diff_acceptable(list(), [node_id()]) -> boolean().
+membership_diff_acceptable(Diff, Validators) ->
+    case quod_committee_predicates:membership_diff(Diff) of
+        false -> false;
+        true ->
+            Next = apply_membership_diff(Diff, Validators),
+            Next =/= [] andalso length(Next) =< ?MAX_VALIDATORS
+    end.
         %% False for >1 op, mixed content, malformed heads, Id =/= Pk,
         %% non-binary keys, and a transition that would empty the committee.
 
@@ -5709,17 +9124,27 @@ durable_relay_result(
   when TargetSlot =< DurableHead ->
     case catch quod_ledger_store:read_at(Store, TargetSlot) of
         {ok, #entry{data = Data}} ->
-            case quod_ledger:payload(Data) of
-                {ok, Payload} ->
-                    case payload_has_submission(SubmissionId, Payload) of
+            case quod_ledger:classify(Data) of
+                {content, Transactions} ->
+                    case payload_has_submission(SubmissionId, Transactions) of
                         true ->
                             {final, {ok, TargetSlot}};
                         false ->
                             {final, {error, not_in_charge, none}}
                     end;
-                error when Data =:= noop ->
+                {'begin', _Control} ->
                     {final, {error, not_in_charge, none}};
-                error ->
+                {prepare, _Control} ->
+                    {final, {error, not_in_charge, none}};
+                {decision, _Control} ->
+                    {final, {error, not_in_charge, none}};
+                {finalize, _Control} ->
+                    {final, {error, not_in_charge, none}};
+                {complete, _Control} ->
+                    {final, {error, not_in_charge, none}};
+                noop ->
+                    {final, {error, not_in_charge, none}};
+                invalid ->
                     unknown
             end;
         _ ->
@@ -6491,22 +9916,23 @@ publish_feed(Slot, #entry{} = Entry, #s{ns = Ns}) ->
     _ = quod_reg:publish({committed, Ns}, {committed, Ns, Slot, Entry}),
     ok.
 
-%% Apply a freshly-committed block using the IN-HAND payload — no read-back of what we just wrote.
+%% Apply a freshly-committed block using the IN-HAND certified entry — no read-back of what we just wrote.
 %% Only when quod_prolog is up AND we are contiguous (last_applied == Slot-1); otherwise leave it and
 %% let the rebuild handshake re-drive the gap from the store (apply_committed/1).
-apply_live(Slot, Change, S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
+apply_live(#entry{index = Slot} = Entry,
+           S = #s{ns = Ns, last_applied = LA}) when LA =:= Slot - 1 ->
     case quod_reg:where({quod_prolog, Ns}) of
         undefined -> S;
-        _         -> _ = safe_apply_block(Ns, Slot, Change, live),   %% async cast (breaks the append<->apply deadlock)
+        _         -> ok = quod_prolog:apply_entry(Ns, Entry, live),
                      S#s{last_applied = Slot}
     end;
-apply_live(_Slot, _Change, S) -> S.
+apply_live(_Entry, S) -> S.
 
 %% Apply committed-but-unapplied blocks into quod_prolog, in slot order — STREAMED from the store
 %% (this process keeps no in-memory log, and re-applying already-counted commits must not recount them).
 %% Rebuild/member/feed-gap callers use replay; a settled observer's verified next-block feed fast path
 %% uses live so its runtime receives the incremental event. Deferred if quod_prolog is not up; lookup is
-%% done ONCE here, not per block. apply_block is a cast by design (see quod_prolog:apply_block/4 — a sync call
+%% done ONCE here, not per block. apply_entry is a cast by design (see quod_prolog:apply_entry/3 — a sync call
 %% would deadlock the live write path), so a long replay would flood quod_prolog's mailbox with the
 %% whole log; every ?APPLY_SYNC_EVERY casts a synchronous no-op (`quod_prolog:sync/1`) drains the
 %% queue — its reply proves every prior cast was consumed, bounding the mailbox to one window.
@@ -6523,8 +9949,8 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Ori
         _ ->
             try
                 _ = quod_ledger_store:fold(Store, LA + 1, C,
-                                           fun(#entry{index = I, data = Data}, N) ->
-                                               _ = safe_apply_block(Ns, I, Data, Origin),
+                                           fun(#entry{} = Entry, N) ->
+                                               ok = quod_prolog:apply_entry(Ns, Entry, Origin),
                                                N rem ?APPLY_SYNC_EVERY =:= 0
                                                    andalso (ok = quod_prolog:sync(Ns)),
                                                N + 1
@@ -6534,22 +9960,18 @@ apply_committed(S = #s{ns = Ns, store = Store, last_applied = LA, slot = C}, Ori
             end
     end.
 
-safe_apply_block(Ns, I, Data, Origin) ->
-    try quod_prolog:apply_block(Ns, I, Data, Origin) catch _:_ -> ok end.
-
-%% Tell quod_prolog its kb is rebuilt and it may serve proves — but only ONCE the committed prefix is
-%% actually applied AND recovery is `ready`, so a node never answers from a half-built or uncorroborated
-%% kb. A joiner/resuming member must NOT mark ready mid-sync: its height only reflects the windows sunk so
-%% far. `prolog_ready` is monotone: a later-behind node keeps serving its
-%% (stale-but-valid) reads while it gap-fills — it never drops back to unready.
+%% Ask quod_prolog to mark its rebuilt kb ready only once the committed prefix
+%% is applied and recovery is `ready`.  This remains a request: `prolog_ready`
+%% flips only when that exact current process acknowledges the consumed height.
+%% A later-behind node keeps serving its stale-but-valid reads while it gap-fills.
 maybe_mark_ready(S = #s{ns = Ns, prolog_ready = false, sync = ready}) ->
     Prolog = try quod_reg:where({quod_prolog, Ns}) catch _:_ -> undefined end,
     case (Prolog =/= undefined) andalso (S#s.last_applied >= S#s.slot) of
         true  -> _ = try quod_prolog:mark_ready(Ns) catch _:_ -> ok end,
-                 S#s{prolog_ready = true};
+                 S;
         false -> S
     end;
-maybe_mark_ready(S) -> S.   %% already marked ready, or recovery has not reached `ready` yet
+maybe_mark_ready(S) -> S.   %% acknowledged already, or recovery has not reached `ready` yet
 
 %%%===================================================================
 %%% mode=join — trustless catch-up (the joiner side of Simplex 4)
@@ -6634,15 +10056,20 @@ may_sink(_Source, _S) -> false.
 %% durable snapshot before each source fetch, and reports `ready` only after the final height is corroborated by
 %% a certificate quorum of the current committee. A raw `{ok, Height}` from one catch-up server is therefore
 %% progress, never authority to vote.
-start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH}) ->
+start_sync_worker(S = #s{ns = Ns, self = Self, genesis_hash = GH,
+                         ledger_root = LedgerRoot}) ->
     Statem = self(),
     {Pid, _Ref} = spawn_monitor(
         fun() ->
             Owner = self(),
-            Sink = fun(Es) ->
-                       gen_statem:call(Statem, {sink_catchup, {recovery, Owner}, Es}, ?SINK_MS)
+            Sink = fun(Es, Projection1) ->
+                       gen_statem:call(
+                         Statem,
+                         {sink_catchup, {recovery, Owner}, Es, Projection1},
+                         ?SINK_MS)
                    end,
-            Result = run_recovery(Ns, GH, Statem, Self, Sink),
+            Result = run_recovery(
+                       Ns, GH, Statem, Self, Sink, LedgerRoot),
             gen_statem:cast(Statem, {sync_done, Owner, Result})
         end),
     S#s{sync = {pulling, Pid}}.
@@ -6664,11 +10091,13 @@ committee_contacts(Self, Committee) ->
 %% This avoids both old failure modes: the first stale `{ok, [], H}` can never declare readiness, and cold
 %% startup costs one network timeout rather than `committee_size * timeout`. A bootstrap endpoint may fetch
 %% history but never corroborates a voting member because endpoint requests are not identity-bound.
-run_recovery(Ns, GH, Statem, Self, Sink) ->
-    recover_tip(Ns, GH, Statem, Self, Sink, ?RECOVERY_FETCHES, false,
+run_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot) ->
+    recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                ?RECOVERY_FETCHES, false,
                 ?RECOVERY_HINT_WARMS).
 
-recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed, HintWarms) ->
+recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+            FetchesLeft, FallbackUsed, HintWarms) ->
     case recovery_snapshot(Statem) of
         {ok, From, Projection} when From > 1 ->
             Height = From - 1,
@@ -6683,19 +10112,22 @@ recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft, FallbackUsed, HintWarms) ->
                     case HintWarms > 0 andalso needs_hint_warm(Committee, Self) of
                         true ->
                             %% A cold node has endpoint seeds but no pubkey=>endpoint cache. Warm a
-                            %% bounded set with tiny direct pulls; each authenticated header teaches the
+                            %% bounded set with tiny identified pulls; each TLS-bound link teaches the
                             %% resolver, then the NEXT pass remains the normal identity-bound quorum probe.
                             warm_contact_hints(Ns, Height),
-                            recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                            recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                                        FetchesLeft,
                                         FallbackUsed, HintWarms - 1);
                         false ->
                             Failure = {tip_unconfirmed, Height, length(lists:usort(Exact))},
-                            continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+                            continue_recovery(Ns, GH, Statem, Self, Sink,
+                                              LedgerRoot, FetchesLeft,
                                               FallbackUsed, ahead_contacts(Probes), Exact, Failure)
                     end
             end;
         {ok, _From, _Committee} ->
-            continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+            continue_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                              FetchesLeft,
                               FallbackUsed, [], [], empty_namespace);
         {error, R} -> {error, {status, R}}
     end.
@@ -6746,25 +10178,28 @@ tip_ready(Committee, Self, ExactPeers) ->
 ahead_contacts(Probes) ->
     lists:usort([Peer || {Peer, {ok, [_ | _], _Height}} <- Probes]).
 
-continue_recovery(_Ns, _GH, _Statem, _Self, _Sink, 0,
+continue_recovery(_Ns, _GH, _Statem, _Self, _Sink, _LedgerRoot, 0,
                   _FallbackUsed, _Ahead, _Exact, Failure) ->
     {error, Failure};
-continue_recovery(Ns, GH, Statem, Self, Sink, FetchesLeft,
+continue_recovery(Ns, GH, Statem, Self, Sink, LedgerRoot, FetchesLeft,
                   FallbackUsed, Ahead, Exact, Failure) ->
     case recovery_sources(Ns, Ahead, Exact, FallbackUsed) of
         {[], _} -> {error, Failure};
         {Sources, FallbackUsed1} ->
-            case try_recovery_sources(Ns, GH, Statem, Sources, Sink) of
+            case try_recovery_sources(
+                   Ns, GH, Statem, Sources, Sink, LedgerRoot) of
                 {ok, _} ->
-                    recover_tip(Ns, GH, Statem, Self, Sink, FetchesLeft - 1, FallbackUsed1,
+                    recover_tip(Ns, GH, Statem, Self, Sink, LedgerRoot,
+                                FetchesLeft - 1, FallbackUsed1,
                                 ?RECOVERY_HINT_WARMS);
                 {error, _} -> {error, Failure}
             end
     end.
 
-%% Only fall back to an unbound Brahms/seed endpoint when no current member supplied even one exact or
-%% ahead response. It can teach us an address and provide verified history; the next identity-bound probe
-%% still decides readiness.
+%% Only fall back to a Brahms/seed endpoint when no current member supplied even
+%% one exact or ahead response. The identified open binds its TLS key before the
+%% pull, and verified history advances state; the next committee-key probe still
+%% decides readiness.
 recovery_sources(_Ns, Ahead, _Exact, FallbackUsed) when Ahead =/= [] ->
     {Ahead, FallbackUsed};
 recovery_sources(Ns, [], [], false) ->
@@ -6774,13 +10209,16 @@ recovery_sources(Ns, [], [], false) ->
     end;
 recovery_sources(_Ns, [], _Exact, FallbackUsed) -> {[], FallbackUsed}.
 
-try_recovery_sources(_Ns, _GH, _Statem, [], _Sink) -> {error, no_source};
-try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink) ->
+try_recovery_sources(_Ns, _GH, _Statem, [], _Sink, _LedgerRoot) ->
+    {error, no_source};
+try_recovery_sources(Ns, GH, Statem, [Contact | Rest], Sink, LedgerRoot) ->
     case recovery_snapshot(Statem) of
         {ok, From, Projection} ->
-            case catch_up_from(Ns, GH, From, Projection, Contact, Sink) of
+            case catch_up_from(
+                   Ns, GH, From, Projection, Contact, Sink, LedgerRoot) of
                 {ok, _} = Ok -> Ok;
-                {error, _}   -> try_recovery_sources(Ns, GH, Statem, Rest, Sink)
+                {error, _}   -> try_recovery_sources(
+                                  Ns, GH, Statem, Rest, Sink, LedgerRoot)
             end;
         {error, R} -> {error, {status, R}}
     end.
@@ -6834,9 +10272,11 @@ tip_quorum(Committee, Self, Peers) ->
     Confirmed = lists:usort(Local ++ [P || P <- Peers, lists:member(P, Committee)]),
     length(Confirmed) >= quorum(length(Committee)).
 
-catch_up_from(Ns, GH, From, Projection, Contact, Sink) ->
+catch_up_from(Ns, GH, From, Projection, Contact, Sink, LedgerRoot) ->
     Fetch = fun(F) -> quod_catchup:pull(Ns, F, F + ?SYNC_WINDOW - 1, Contact) end,
-    quod_catchup:catch_up(Ns, GH, Fetch, Sink, From, Projection).
+    quod_catchup:catch_up(
+      Ns, GH, Fetch, Sink, From, Projection,
+      #{ledger_root => LedgerRoot}).
 
 %% The single recovery armer, run each tick off the commit hot path. It owns gap hysteresis and failure
 %% backoff; the recovery enum enforces single flight.
@@ -6888,30 +10328,25 @@ sibling_up(#s{ns = Ns}) -> quod_reg:where({quod_catchup, Ns}) =/= undefined.
 %% live bytes — so a post-append failure (a store read-back error in the replay) crashes the statem
 %% instead, and the restart re-derives from the disk log, appended window included (fail-loud, no splice).
 %% Both projections (validator set, KB) advance together from the one appended log.
-apply_catchup_window(_Source, [], S) -> {S, ok};
+apply_catchup_window(_Source, [], _Projection, S) -> {S, ok};
 apply_catchup_window(
-  Source, Es0,
-  S = #s{ns = Ns, store = Store, validators = Vs}) ->
-    %% Idempotency: the live engine may have committed a prefix of this window while the pull worker was
-    %% fetching it (a VOTING member gap-fills while still ingesting live consensus). Drop the already-present
-    %% prefix so the append stays contiguous instead of failing `assert_contiguous`.
-    case drop_index_le(quod_ledger_store:last(Store), Es0) of
-        []  -> {S, ok};   %% window entirely already-present — nothing new to sink
-        Es  ->
+  Source, Es, Projection1,
+  S = #s{store = Store}) ->
+    %% The verifier's projection is bound to its exact starting snapshot. If
+    %% live consensus advanced while it fetched, reject the whole stale window
+    %% instead of detaching that projection by trimming an already-durable
+    %% prefix. Recovery resumes from a fresh snapshot.
+    Next = quod_ledger_store:last(Store) + 1,
+    case Es of
+        [#entry{index = First} | _]
+          when First =/= Next ->
+            {S, {error, stale_window}};
+        _ ->
     case try quod_ledger_store:append(Store, Es) catch _:R -> {error, R} end of
         {error, _} = Err -> {S, Err};
         {ok, Store1} ->
-            Projection0 = state_projection(S),
-            Projection1 = log_projection(Ns, Es, Projection0),
-            Vs1 = history_committee(Projection1),
             Included = committed_submission_slots(Es),
-            %% only re-walk the window for dial hints when it actually changed the committee — the common
-            %% content-only window (Vs1 =:= Vs) skips the whole flatmap. (A same-window remove+re-add nets
-            %% Vs1 =:= Vs and is skipped — the accepted address-refresh residual; heals via a header hint.)
-            case Vs1 =/= Vs of
-                true  -> learn_member_endpoints(Es, Vs1, S#s.self);   %% dial hints from replayed admit facts
-                false -> ok
-            end,
+            learn_validator_routes(Projection1, S#s.self),
             Slot = (lists:last(Es))#entry.index,
             %% Re-seat the engine UNCONDITIONALLY at the new head (committee-as-of-new-head + reset every stale
             %% live-slot latch). For a VOTING member gap-filling this is load-bearing (its engine was pinned to
@@ -6922,40 +10357,51 @@ apply_catchup_window(
             Recovered0 =
                 install_projection(
                   Projection1, S#s{store = Store1, slot = Slot}),
+            Recovered1 = settle_recovery_dtx(Es, Recovered0),
+            Recovered2 =
+                settle_recovery_custody(Slot, Included, Recovered1),
             Recovered =
-                settle_recovery_relays(
-                  Slot, Included,
-                  settle_recovery_custody(
-                    Slot, Included, Recovered0)),
-            S1 = reseat_engine(Slot, Recovered, Included),
+                settle_recovery_relays(Slot, Included, Recovered2),
+            {Reconciled, PendingTransition} =
+                reconcile_signing_state(Recovered),
+            S1 = reseat_engine(Slot, Reconciled, Included),
             S2 = catchup_membership_transition(S, S1),
-            {apply_committed(S2, catchup_origin(Source)), ok}
+            S3 = apply_committed(S2, catchup_origin(Source)),
+            {finish_pending_begin_reconciliation(
+               PendingTransition, S3), ok}
     end
     end.
 
 catchup_origin({feed, live}) -> live;
 catchup_origin(_)            -> replay.
 
-%% Drop entries whose `#entry.index` is `=< LastI` (already durable) — keep only the genuinely-new tail so a
-%% window that straddles a prefix the live engine committed meanwhile still appends contiguously.
-drop_index_le(LastI, Es) -> [E || E <- Es, E#entry.index > LastI].
-
 committed_submission_slots(Entries) ->
     lists:foldl(
       fun(#entry{index = Slot, data = Data}, Acc0) ->
-              case quod_ledger:payload(Data) of
-                  {ok, Payload} ->
+              case quod_ledger:classify(Data) of
+                  {content, Transactions} ->
                       lists:foldl(
                         fun(#transaction{sig = Signature} = Transaction, Acc)
                               when is_binary(Signature) ->
                                 Acc#{signed_submission_id(Transaction) => Slot};
                            (_, Acc) ->
                                 Acc
-                        end, Acc0, Payload);
-                  error ->
-                      Acc0
+                        end, Acc0, Transactions);
+                  {'begin', _Control} -> Acc0;
+                  {prepare, _Control} -> Acc0;
+                  {decision, _Control} -> Acc0;
+                  {finalize, _Control} -> Acc0;
+                  {complete, _Control} -> Acc0;
+                  noop -> Acc0;
+                  invalid -> Acc0
               end
       end, #{}, Entries).
+
+settle_recovery_dtx(Entries, S) ->
+    lists:foldl(
+      fun(#entry{data = Payload} = Entry, Acc) ->
+              resolve_committed_dtx(Entry, Payload, Acc)
+      end, S, Entries).
 
 settle_recovery_relays(
   NewHead, Included, S = #s{relay_pending = Pending}) ->
@@ -7013,19 +10459,18 @@ settle_recovery_custody(NewHead, Included, S) ->
               end
       end, S, S#s.custody).
 
-%% Learn dial hints from a REPLAYED catch-up window (`learn_if_absent` — historical addresses fill a void,
-%% never clobber a live header hint; polarity verified: the reply-link header teaches the fresh address
-%% before any window is sunk). Filtered to the post-fold committee `Committee` so replaying a long history
-%% never stuffs the resolver with long-removed members' rotted endpoints; `maps:from_list` gives last-wins
-%% within the window (a remove+re-add of one pk learns the re-add). Excludes Self.
-learn_member_endpoints(Es, Committee, Self) ->
-    Eps = maps:from_list(lists:flatmap(fun(#entry{data = D}) -> admitted_endpoints(D) end, Es)),
-    maps:foreach(fun(Pk, Ep) ->
-                     case Pk =/= Self andalso lists:member(Pk, Committee) of
-                         true  -> quod_quic:learn_if_absent(Pk, Ep);
-                         false -> ok
-                     end
-                 end, Eps).
+%% The verified post-window projection already owns the bounded current
+%% committee routes.  Fill resolver voids from that authority after every
+%% nonempty replay, including a content-only gap after transport restart;
+%% historical hints never clobber a fresher authenticated header sighting.
+learn_validator_routes(Projection, Self) ->
+    maps:foreach(
+      fun(Peer, Endpoint) when Peer =/= Self ->
+              quod_quic:learn_if_absent(Peer, Endpoint);
+         (_Self, _Endpoint) ->
+              ok
+      end,
+      history_validator_routes(Projection)).
 
 %% A feed window can cross this node's admission. Re-seating updates the committee immediately, but promotion
 %% revokes feed ownership and enters recovery before the first vote. If the node's own recovery worker sank
@@ -7058,16 +10503,14 @@ reseat_engine(NewHead, S) ->
 
 reseat_engine(NewHead, S, Included) ->
     S1 = prune_consensus_links(nack_inflight(S, NewHead, Included)),
-    {ok, Journal1} = prune_vote_journal(NewHead, S1#s.vote_journal),
     S1#s{eng             = eng_new(S1#s.consensus_domain,
                                     active_validators(S1), NewHead),
-          vote_journal    = Journal1,
           approved        = NewHead,
           commit_buf      = #{},
           block_requests  = #{},
           requested_slot  = none,
           head_progress   = idle,
-          rounds          = vote_rounds(Journal1)}.
+          rounds          = signing_rounds(S1#s.signing_journal)}.
 
 %% A recovery re-seat intentionally discards the whole volatile consensus window.
 %% Its fresh engine cannot safely retain proposals or votes from the old base.
@@ -7205,10 +10648,27 @@ local_genesis_hash(#s{store = Store}) ->
 -spec block_from_entry(term()) -> {ok, #block{}} | error.
 block_from_entry(#entry{index = I, data = D, timestamp = Ts})
   when is_integer(I), I >= 1, is_integer(Ts), Ts >= 0 ->
-    case quod_ledger:payload(D) of
-        {ok, Payload} -> {ok, #block{slot = I, parent = I - 1,
-                                    payload = Payload, timestamp = Ts}};
-        error -> error
+    case quod_ledger:classify(D) of
+        {content, _Transactions} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        {'begin', _Control} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        {prepare, _Control} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        {decision, _Control} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        {finalize, _Control} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        {complete, _Control} ->
+            {ok, #block{slot = I, parent = I - 1,
+                        payload = D, timestamp = Ts}};
+        noop -> error;
+        invalid -> error
     end;
 block_from_entry(_) -> error.
 
@@ -7218,15 +10678,26 @@ block_from_entry(_) -> error.
 %% contain only current validators and sequences are pruned to the same set.
 -type history_projection() ::
         #{committee := [node_id()],
+          validator_routes := #{node_id() => {term(), pos_integer()}},
           committee_id := binary() | undefined,
           admissions := #{node_id() => binary()},
           sequences := #{node_id() => non_neg_integer()},
-          timestamp := non_neg_integer()}.
+          timestamp := non_neg_integer(),
+          dtx := undefined | quod_dtx:projection(),
+          dtx_lanes := #{{binary(), node_id()} => non_neg_integer()},
+          dtx_last_group := none | <<_:256>>,
+          dtx_pending := none | {<<_:256>>, {<<_:256>>, <<_:256>>}},
+          history_head := none | {slot(), <<_:256>>}}.
 
 -doc "Return the empty authoritative history projection used before genesis.".
 -spec history_projection() -> history_projection().
 history_projection() ->
     history_projection([], undefined, #{}, #{}, 0).
+
+-doc "Bind an empty history projection to one exact ontology founding.".
+-spec history_projection({binary(), <<_:256>>}) -> history_projection().
+history_projection({Ns, <<_:256>>} = Target) when is_binary(Ns) ->
+    (history_projection())#{dtx := quod_dtx:initial_projection(Target, 0)}.
 
 -doc "Build an explicit authoritative history projection from persisted ordering facts.".
 -spec history_projection([node_id()], binary() | undefined,
@@ -7234,21 +10705,32 @@ history_projection() ->
                          #{node_id() => non_neg_integer()},
                          non_neg_integer()) -> history_projection().
 history_projection(Committee, CommitteeId, Admissions, Sequences, Timestamp) ->
-    #{committee => Committee, committee_id => CommitteeId,
+    #{committee => Committee, validator_routes => #{},
+      committee_id => CommitteeId,
       admissions => Admissions, sequences => Sequences,
-      timestamp => Timestamp}.
+      timestamp => Timestamp, dtx => undefined, dtx_lanes => #{},
+      dtx_last_group => none, dtx_pending => none, history_head => none}.
 
 state_projection(
-  #s{validators = Committee, committee_id = CommitteeId,
+  #s{validators = Committee, validator_routes = ValidatorRoutes,
+     committee_id = CommitteeId,
      author_admissions = Admissions, author_seqs = Sequences,
-     last_ts = Timestamp}) ->
-    history_projection(
-      Committee, CommitteeId, Admissions, Sequences, Timestamp).
+     last_ts = Timestamp, dtx_projection = Dtx, dtx_lanes = DtxLanes,
+     dtx_last_group = LastGroup, dtx_pending = Pending,
+     history_head = HistoryHead}) ->
+    (history_projection(
+       Committee, CommitteeId, Admissions, Sequences, Timestamp))#{
+      validator_routes := ValidatorRoutes,
+      dtx := Dtx, dtx_lanes := DtxLanes, dtx_last_group := LastGroup,
+      dtx_pending := Pending, history_head := HistoryHead}.
 
 install_projection(
-  #{committee := Committee, committee_id := CommitteeId,
+  #{committee := Committee, validator_routes := ValidatorRoutes,
+    committee_id := CommitteeId,
     admissions := Admissions, sequences := Sequences,
-    timestamp := Timestamp},
+    timestamp := Timestamp, dtx := Dtx, dtx_lanes := DtxLanes,
+    dtx_last_group := LastGroup, dtx_pending := Pending,
+    history_head := HistoryHead},
   S = #s{self = Self, author_admissions = OldAdmissions,
          next_author_seq = Next}) ->
     OldAdmission = maps:get(Self, OldAdmissions, undefined),
@@ -7259,10 +10741,15 @@ install_projection(
             true  -> Floor;
             false -> max(Next, Floor)
         end,
-    S1 = S#s{validators = Committee, committee_id = CommitteeId,
+    S1 = S#s{validators = Committee, validator_routes = ValidatorRoutes,
+             committee_id = CommitteeId,
              author_admissions = Admissions, author_seqs = Sequences,
-             last_ts = Timestamp, next_author_seq = Next1},
-    retire_changed_admissions(OldAdmissions, Admissions, S1).
+             last_ts = Timestamp, dtx_projection = Dtx,
+             dtx_lanes = DtxLanes, dtx_last_group = LastGroup,
+             dtx_pending = Pending, history_head = HistoryHead,
+             next_author_seq = Next1},
+    S2 = retire_changed_admissions(OldAdmissions, Admissions, S1),
+    refresh_proof_gate(S, S2).
 
 %% Custody retains exact signed bytes. Once an author's admission generation
 %% changes those bytes can never validate again, so keeping or re-routing them
@@ -7298,6 +10785,11 @@ retire_changed_admissions(OldAdmissions, Admissions,
 -spec history_committee(history_projection()) -> [node_id()].
 history_committee(#{committee := Committee}) -> Committee.
 
+-doc "Read the bounded validator key-to-endpoint map from a history projection.".
+-spec history_validator_routes(history_projection()) ->
+          #{node_id() => {term(), pos_integer()}}.
+history_validator_routes(#{validator_routes := Routes}) -> Routes.
+
 -ifdef(TEST).
 -doc "Resolve one current validator's admission-bound transaction signature target.".
 -spec history_binding({binary(), binary()}, node_id(), history_projection()) ->
@@ -7309,13 +10801,15 @@ history_binding({Ns, Anchor}, Author, #{admissions := Admissions}) ->
     end.
 -endif.
 
+-ifdef(TEST).
 -spec log_projection(binary(), [#entry{}], history_projection()) ->
         history_projection().
 log_projection(Ns, Entries, Seed) ->
     lists:foldl(fun(Entry, Acc) -> history_advance(Ns, Entry, Acc) end,
                 Seed, Entries).
+-endif.
 
--doc "Advance the authoritative projection by one already-verified committed entry.".
+-doc "Advance the content/noop projection by one already-verified committed entry.".
 %% Content-only blocks touch no
 %% admission map and perform only the bounded sequence fold; membership blocks
 %% additionally retain the intersection, mint IDs for newly admitted keys and
@@ -7323,14 +10817,63 @@ log_projection(Ns, Entries, Seed) ->
 -spec history_advance(binary(), #entry{}, history_projection()) ->
         history_projection().
 history_advance(
+  Ns, #entry{} = Entry, Projection) ->
+    history_advance_known(Ns, Entry, entry_history_hash(Entry), Projection).
+
+history_advance_known(
+  Ns, #entry{index = Slot} = Entry, HeadHash, Projection) ->
+    Projection1 = history_advance_payload(Ns, Entry, Projection),
+    Projection1#{history_head => {Slot, HeadHash}}.
+
+history_advance_payload(
+  Ns, #entry{data = Data, timestamp = T} = Entry,
+  Projection) ->
+    case quod_ledger:classify(Data) of
+        {content, _Transactions} ->
+            history_advance_content(Ns, Entry, Projection);
+        %% Control history must pass through the phase-aware /4 or /5 APIs;
+        %% this content-only seam fails loudly if a caller bypasses them.
+        {'begin', _Control} -> error(dtx_phase_history_required);
+        {prepare, _Control} -> error(dtx_phase_history_required);
+        {decision, _Control} -> error(dtx_phase_history_required);
+        {finalize, _Control} -> error(dtx_phase_history_required);
+        {complete, _Control} -> error(dtx_phase_history_required);
+        noop ->
+            Projection#{timestamp => max(T, maps:get(timestamp, Projection))};
+        invalid ->
+            error(invalid_committed_history)
+    end.
+
+entry_history_hash(#entry{} = Entry) ->
+    case block_from_entry(Entry) of
+        {ok, Block} -> block_hash(Block);
+        error ->
+            crypto:hash(
+              sha256,
+              term_to_binary({quod_committed_noop, 1, Entry},
+                             [deterministic]))
+    end.
+
+-doc "Validate and reduce one certified committed entry with exact DTX history.".
+-spec history_advance({binary(), <<_:256>>}, #entry{}, history_projection(),
+                      quod_dtx_phase_index:index()) ->
+          {ok, history_projection(), list()} |
+          {error, {invalid_transaction, pos_integer()}}.
+history_advance(Binding, Entry, Projection, PhaseIndex) ->
+    history_validate_advance(Binding, Entry, Projection, PhaseIndex).
+
+history_advance_content(
   Ns, #entry{index = Slot, data = Data, timestamp = T} = Entry,
   #{committee := V,
+    validator_routes := Routes,
     admissions := Admissions, sequences := Seqs,
     timestamp := Ts} = Projection) ->
     Seqs0 = advance_author_seqs(Data, Seqs),
+    Routes0 = advance_validator_routes(Data, Routes),
     case committee_delta(Data) of
         {[], []} ->
-            Projection#{sequences => Seqs0, timestamp => max(T, Ts)};
+            Projection#{validator_routes => maps:with(V, Routes0),
+                        sequences => Seqs0, timestamp => max(T, Ts)};
         {Adds, _Removes} ->
             V1 = apply_committee_delta(Data, V),
             case V1 =:= V of
@@ -7338,7 +10881,8 @@ history_advance(
                     %% Reasserting an existing member may refresh its endpoint
                     %% in Prolog, but it is not a leave/rejoin and must not
                     %% rotate admission identity or sequence state.
-                    Projection#{sequences => Seqs0,
+                    Projection#{validator_routes => maps:with(V, Routes0),
+                                sequences => Seqs0,
                                 timestamp => max(T, Ts)};
                 false ->
                     {ok, Block} = block_from_entry(Entry),
@@ -7357,15 +10901,27 @@ history_advance(
                                                    Pubkey)}
                           end,
                           maps:with(V1, Admissions), NewlyAdmitted),
+                    DtxLanes1 = prune_dtx_lanes(
+                                  Admissions1,
+                                  maps:get(dtx_lanes, Projection, #{})),
                     Projection#{committee => V1,
+                                validator_routes => maps:with(V1, Routes0),
                                 committee_id => CommitteeId1,
                                 admissions => Admissions1,
                                 sequences => maps:without(
                                                NewlyAdmitted,
                                                maps:with(V1, Seqs0)),
+                                dtx_lanes => DtxLanes1,
                                 timestamp => max(T, Ts)}
             end
     end.
+
+prune_dtx_lanes(Admissions, DtxLanes) ->
+    Live = [{Admission, Author}
+            || {Author, Admission} <- maps:to_list(Admissions),
+               is_binary(Author), byte_size(Author) =:= 32,
+               is_binary(Admission), byte_size(Admission) =:= 32],
+    maps:with(Live, DtxLanes).
 
 admission_id(Ns, Slot, BlockHash, Pubkey) ->
     crypto:hash(
@@ -7376,9 +10932,15 @@ admission_id(Ns, Slot, BlockHash, Pubkey) ->
 
 checked_log_projection_step(
   Binding, #entry{index = I} = Entry, Projection) ->
-    case history_validate_advance(
-           Binding, Entry, Projection, trusted_prefix) of
+    case history_validate_advance(Binding, Entry, Projection) of
         {ok, Projection1} -> Projection1;
+        {error, _} -> error({invalid_transaction_history, I})
+    end.
+
+checked_log_projection_step(
+  Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
+    case history_validate_advance(Binding, Entry, Projection, PhaseIndex) of
+        {ok, Projection1, _Effects} -> Projection1;
         {error, _} -> error({invalid_transaction_history, I})
     end.
 
@@ -7387,18 +10949,235 @@ checked_log_projection_step(
                                history_projection()) ->
         {ok, history_projection()} | {error, {invalid_transaction, pos_integer()}}.
 history_validate_advance(
-  Binding, Entry, Projection) ->
-    history_validate_advance(Binding, Entry, Projection, verify_id).
+  Binding, #entry{index = I} = Entry, Projection) ->
+    case history_projection_before_entry(I, Projection) of
+        {ok, Projection1} ->
+            history_validate_content(Binding, Entry, Projection1);
+        error ->
+            {error, {invalid_transaction, I}}
+    end.
 
-history_validate_advance(
+history_validate_content(
   {Ns, _Anchor} = Binding,
   #entry{index = I, data = Data} = Entry,
-  #{sequences := Seqs} = Projection, IdMode) ->
-    case valid_history_entry(Binding, I, Data, Projection, IdMode)
+  #{sequences := Seqs} = Projection) ->
+    case valid_history_entry(Binding, I, Data, Projection, verify_id)
          andalso historical_sequences_ok(I, Data, Seqs) of
         true  -> {ok, history_advance(Ns, Entry, Projection)};
         false -> {error, {invalid_transaction, I}}
     end.
+
+-doc "Verify local finality, then advance content or exact DTX history.".
+-spec history_validate_advance({binary(), binary()}, #entry{},
+                               history_projection(),
+                               quod_dtx_phase_index:index()) ->
+        {ok, history_projection(), list()} |
+        {error, {invalid_transaction, pos_integer()}}.
+history_validate_advance(
+  Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
+    case history_projection_before_entry(I, Projection) of
+        {ok, Projection1} ->
+            case quod_catchup:verify_entry(Binding, Entry, Projection1) of
+                ok ->
+                    history_advance_verified(
+                      Binding, Entry, Projection1, PhaseIndex);
+                {error, _} ->
+                    {error, {invalid_transaction, I}}
+            end;
+        error ->
+            {error, {invalid_transaction, I}}
+    end.
+
+%% The Prolog apply acknowledgement is deliberately not ledger content.  If a
+%% later slot committed, however, the live proof gate must already have opened:
+%% no proposal can pass a pending-apply fence.  Replay/catch-up may therefore
+%% discharge exactly that older fence before validating the later entry.  At
+%% the durable tip no such evidence exists, so the fence stays closed until the
+%% real Prolog acknowledgement arrives.
+history_projection_before_entry(
+  NextSlot,
+  #{dtx :=
+      #{proof_fence :=
+          {pending_apply, GroupId, FinalizeSlot, Generation}} = Dtx0} =
+    Projection)
+  when is_integer(NextSlot), NextSlot > FinalizeSlot ->
+    case quod_dtx:acknowledge_finalize(
+           GroupId, FinalizeSlot, Generation, Dtx0) of
+        {ok, Dtx1} -> {ok, Projection#{dtx := Dtx1}};
+        {error, _} -> error
+    end;
+history_projection_before_entry(_NextSlot, #{dtx := _Dtx} = Projection) ->
+    {ok, Projection};
+history_projection_before_entry(_NextSlot, _Projection) ->
+    error.
+
+%% Live finality already supplies a sanitized local commit certificate. Keeping
+%% the semantic reducer separate avoids repeating quorum cryptography on the
+%% commit hot path; startup/catch-up enter only through the public checked API.
+history_advance_verified(
+  Binding, #entry{index = I, data = Data} = Entry, Projection, PhaseIndex) ->
+    case quod_ledger:classify(Data) of
+        {content, _Transactions} ->
+            case history_validate_content(Binding, Entry, Projection) of
+                {ok, Projection1} -> {ok, Projection1, []};
+                {error, _} = Error -> Error
+            end;
+        {'begin', Control} ->
+            history_advance_dtx(Binding, Entry, Control, Projection, PhaseIndex);
+        {prepare, Control} ->
+            history_advance_dtx(Binding, Entry, Control, Projection, PhaseIndex);
+        {decision, Control} ->
+            history_advance_dtx(Binding, Entry, Control, Projection, PhaseIndex);
+        {finalize, Control} ->
+            history_advance_dtx(Binding, Entry, Control, Projection, PhaseIndex);
+        {complete, Control} ->
+            history_advance_dtx(Binding, Entry, Control, Projection, PhaseIndex);
+        noop ->
+            case history_validate_content(Binding, Entry, Projection) of
+                {ok, Projection1} -> {ok, Projection1, []};
+                {error, _} = Error -> Error
+            end;
+        invalid ->
+            {error, {invalid_transaction, I}}
+    end.
+
+history_advance_dtx(
+  Binding,
+  #entry{index = I} = Entry,
+  Control,
+  #{dtx := Dtx0} = Projection,
+  PhaseIndex) ->
+    case validated_dtx_entry(Binding, Entry, Control, Projection) of
+        {ok, Ref, Lane, Sequence} ->
+            case quod_dtx_phase_index:apply(
+                   PhaseIndex, Control, Ref, Dtx0) of
+                {ok, Dtx1, Effects} ->
+                    {ok,
+                     (project_dtx_transition(
+                        Control, Entry, Dtx1, Lane, Sequence, Projection))#{
+                       history_head := {I, entry_history_hash(Entry)}},
+                     Effects};
+                {error, _} ->
+                    {error, {invalid_transaction, I}}
+            end;
+        error ->
+            {error, {invalid_transaction, I}}
+    end.
+
+validated_dtx_entry(
+  Binding, Entry, Control,
+  #{admissions := Admissions, dtx := Dtx0, dtx_lanes := Lanes0}) ->
+    Meta = quod_dtx:control_metadata(Control),
+    Author = maps:get(author, Meta),
+    Admission = maps:get(author_admission, Meta),
+    Sequence = maps:get(sequence, Meta),
+    Lane = {Admission, Author},
+    case quod_dtx:verify_control(Binding, Control)
+         andalso maps:get(Author, Admissions, undefined) =:= Admission
+         andalso Sequence > maps:get(Lane, Lanes0, 0)
+         andalso Dtx0 =/= undefined of
+        false ->
+            error;
+        true ->
+            case quod_dtx:certified_entry_ref(Binding, Entry, Control) of
+                {ok, Ref} -> {ok, Ref, Lane, Sequence};
+                {error, _} -> error
+            end
+    end.
+
+project_dtx_transition(
+  Control, #entry{timestamp = Timestamp}, Dtx1, Lane, Sequence,
+  #{dtx_lanes := Lanes0, timestamp := Timestamp0,
+    dtx_last_group := LastGroup0, dtx_pending := Pending0} = Projection) ->
+    Projection#{dtx := Dtx1,
+                dtx_lanes := Lanes0#{Lane => Sequence},
+                dtx_last_group := dtx_last_group(Dtx1, LastGroup0),
+                dtx_pending := dtx_pending_after(Control, Pending0),
+                timestamp := max(Timestamp, Timestamp0)}.
+
+-doc "Preview one catch-up entry against an uncommitted phase-index delta.".
+-spec history_preview_advance(
+        {binary(), binary()}, #entry{}, history_projection(),
+        quod_dtx_phase_index:index(), quod_dtx_phase_index:delta()) ->
+          {ok, history_projection(), list(), quod_dtx_phase_index:delta()} |
+          {error, {invalid_transaction, pos_integer()}}.
+history_preview_advance(
+  Binding, #entry{index = I, data = Data} = Entry,
+  Projection, PhaseIndex, Delta0) ->
+    case history_projection_before_entry(I, Projection) of
+        {ok, Projection1} ->
+            case quod_catchup:verify_entry(Binding, Entry, Projection1) of
+                ok ->
+                    case quod_ledger:classify(Data) of
+                        {content, _} ->
+                            preview_content(
+                              Binding, Entry, Projection1, Delta0);
+                        noop ->
+                            preview_content(
+                              Binding, Entry, Projection1, Delta0);
+                        {Kind, Control}
+                          when Kind =:= 'begin'; Kind =:= prepare;
+                               Kind =:= decision; Kind =:= finalize;
+                               Kind =:= complete ->
+                            preview_dtx(
+                              Binding, Entry, Control, Projection1,
+                              PhaseIndex, Delta0);
+                        invalid ->
+                            {error, {invalid_transaction, I}}
+                    end;
+                {error, _} ->
+                    {error, {invalid_transaction, I}}
+            end;
+        error ->
+            {error, {invalid_transaction, I}}
+    end.
+
+preview_content(Binding, Entry, Projection, Delta) ->
+    case history_validate_content(Binding, Entry, Projection) of
+        {ok, Projection1} -> {ok, Projection1, [], Delta};
+        {error, _} = Error -> Error
+    end.
+
+preview_dtx(Binding, #entry{index = I} = Entry, Control,
+            #{dtx := Dtx0} = Projection, PhaseIndex, Delta0) ->
+    case validated_dtx_entry(Binding, Entry, Control, Projection) of
+        {ok, Ref, Lane, Sequence} ->
+            case quod_dtx_phase_index:preview(
+                   PhaseIndex, Delta0, Control, Ref, Dtx0) of
+                {ok, Delta1, Dtx1, Effects} ->
+                    {ok,
+                     (project_dtx_transition(
+                        Control, Entry, Dtx1, Lane, Sequence, Projection))#{
+                       history_head := {I, entry_history_hash(Entry)}},
+                     Effects, Delta1};
+                {error, _} ->
+                    {error, {invalid_transaction, I}}
+            end;
+        error ->
+            {error, {invalid_transaction, I}}
+    end.
+
+dtx_last_group(#{proof_fence := {pending, <<_:256>> = GroupId}}, _Old) ->
+    GroupId;
+dtx_last_group(
+  #{proof_fence := {pending_apply, <<_:256>> = GroupId, _Slot, _Generation}},
+  _Old) ->
+    GroupId;
+dtx_last_group(#{proof_fence := open}, Old) ->
+    Old.
+
+dtx_pending_after(Control, {GroupId, _Lane} = Pending) ->
+    case quod_dtx:control_kind(Control) of
+        'begin' ->
+            case quod_dtx:group_id(Control) of
+                GroupId -> none;
+                _Other -> Pending
+            end;
+        _OtherKind ->
+            Pending
+    end;
+dtx_pending_after(_Control, none) ->
+    none.
 
 %% Project one persisted entry onto the authoritative committee view. Reconstructing the committed block
 %% here is load-bearing: the view id is bound to the same block hash that its finality certificate covered,
@@ -7417,7 +11196,15 @@ historical_sequences_ok(I, Data, Seqs) ->
     case quod_ledger:classify(Data) of
         {content, [_Genesis]} when I =:= 1 -> true;
         {content, Payload} -> transaction_sequences_ok(Payload, Seqs, #{});
-        noop    -> true;
+        %% The DTX lane is checked by its own admission-scoped high-water in
+        %% the shared history reducer. Until that projection is installed, a
+        %% control record is not valid history.
+        {'begin', _Control} -> false;
+        {prepare, _Control} -> false;
+        {decision, _Control} -> false;
+        {finalize, _Control} -> false;
+        {complete, _Control} -> false;
+        noop -> true;
         invalid -> false
     end.
 
@@ -7432,11 +11219,19 @@ committee_delta(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             lists:foldl(fun committee_transaction/2, {[], []}, Transactions);
-        noop    -> {[], []};
+        {'begin', _Control} -> {[], []};
+        {prepare, _Control} -> {[], []};
+        {decision, _Control} -> {[], []};
+        {finalize, _Control} -> {[], []};
+        {complete, _Control} -> {[], []};
+        noop -> {[], []};
         invalid -> {[], []}
     end.
 
 committee_transaction(#transaction{diff = Diff}, Acc) ->
+    committee_diff(Diff, Acc).
+
+committee_diff(Diff, Acc) ->
     case proper_list(Diff) of
         true  -> lists:foldl(fun committee_op/2, Acc, Diff);
         false -> Acc
@@ -7463,7 +11258,12 @@ admitted_endpoints(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             lists:flatmap(fun transaction_endpoints/1, Transactions);
-        noop    -> [];
+        {'begin', _Control} -> [];
+        {prepare, _Control} -> [];
+        {decision, _Control} -> [];
+        {finalize, _Control} -> [];
+        {complete, _Control} -> [];
+        noop -> [];
         invalid -> []
     end.
 
@@ -7473,6 +11273,45 @@ transaction_endpoints(#transaction{diff = Diff}) ->
         false -> []
     end.
 
+%% Keep recovery routing in the same bounded, replayed projection as committee
+%% membership.  Endpoints are authenticated hints: every dial still pins the
+%% TLS peer to the map key.  Invalid historical address terms are ignored
+%% rather than allowed to poison replay or the recovery candidate set.
+advance_validator_routes(Data, Routes) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:foldl(fun transaction_validator_routes/2,
+                        Routes, Transactions);
+        {'begin', _Control} -> Routes;
+        {prepare, _Control} -> Routes;
+        {decision, _Control} -> Routes;
+        {finalize, _Control} -> Routes;
+        {complete, _Control} -> Routes;
+        noop -> Routes;
+        invalid -> Routes
+    end.
+
+transaction_validator_routes(#transaction{diff = Diff}, Routes) ->
+    case proper_list(Diff) of
+        true -> lists:foldl(fun validator_route_op/2, Routes, Diff);
+        false -> Routes
+    end.
+
+validator_route_op(
+  {assert, {{peer_admitted, _Id, Host, Port, <<_:256>> = Key}, _Body}},
+  Routes) ->
+    Endpoint = {Host, Port},
+    case quod_quic:valid_endpoint(Endpoint) of
+        true -> Routes#{Key => Endpoint};
+        false -> Routes
+    end;
+validator_route_op(
+  {retract, {{peer_admitted, _Id, _Host, _Port, <<_:256>> = Key}, _Body}},
+  Routes) ->
+    maps:remove(Key, Routes);
+validator_route_op(_Op, Routes) ->
+    Routes.
+
 proper_list([_ | Rest]) -> proper_list(Rest);
 proper_list([])         -> true;
 proper_list(_)          -> false.
@@ -7480,7 +11319,12 @@ proper_list(_)          -> false.
 %% Apply a committed payload's committee delta onto a validator set — sorted (deterministic, every node
 %% agrees byte-for-byte) and idempotent (a re-asserted member is a no-op).
 apply_committee_delta(Change, V) ->
-    {Adds, Removes} = committee_delta(Change),
+    apply_committee_delta_rows(committee_delta(Change), V).
+
+apply_membership_diff(Diff, V) ->
+    apply_committee_delta_rows(committee_diff(Diff, {[], []}), V).
+
+apply_committee_delta_rows({Adds, Removes}, V) ->
     lists:usort(lists:reverse(Adds, V) -- Removes).
 
 -doc """
@@ -7545,7 +11389,7 @@ source_present({_Kind, _Value}) -> true.
 %% founding adds the host-entry policy before valid_genesis_transaction/3
 %% enforces policy presence; restart replay and catch-up use that same validator.
 validate_genesis_diff(Diff) ->
-    case valid_diff(Diff) of
+    case quod_diff:valid_ops(Diff) of
         false ->
             {error, invalid_genesis_diff};
         true ->
@@ -7570,7 +11414,12 @@ valid_committee(Cfg) ->
     case maps:get(committee, Cfg) of
         L ->
             case proper_list(L) andalso lists:all(fun valid_member/1, L) of
-                true  -> valid_mode(Cfg);
+                true ->
+                    Count = length(founding(Cfg, maps:get(node_id, Cfg))),
+                    case Count =< ?MAX_VALIDATORS of
+                        true  -> valid_mode(Cfg);
+                        false -> {error, {committee_too_large, Count}}
+                    end;
                 false -> {error, {bad_committee, L}}   %% a malformed element ⇒ fail-fast
             end
     end.
@@ -7645,9 +11494,17 @@ status_map(S) ->
       committed => S#s.slot, approved => S#s.approved, last_applied => S#s.last_applied,
       syncing => syncing(S), recovery => recovery_phase(S#s.sync),
       finality_slot => S#s.slot + 1,
+      dtx_coordinator => dtx_coordinator_status(S#s.dtx_coordinator),
       progress_phase => ProgressPhase, progress_quorum_ready => ProgressQuorum,
       proposal_slot => ProposalSlot,
       proposal_open => case proposal_slot(S) of {ok, ProposalSlot} -> true; _ -> false end}.
+
+dtx_coordinator_status(none) -> none;
+dtx_coordinator_status(
+  #dtx_coordinator_owner{status = Status, group_id = GroupId,
+                         begin_ref = BeginRef, failures = Failures}) ->
+    #{status => Status, group_id => GroupId,
+      begin_ref => BeginRef, failures => Failures}.
 
 progress_status(idle) -> {0, idle, false};
 progress_status(#head_progress{slot = Slot, phase = Phase,

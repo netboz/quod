@@ -37,7 +37,7 @@ Two collection paths:
 | `quod_consensus_progress_timeouts/quorum_pauses{namespace}` | gauge | | watchdog expirations and complaints deliberately withheld while fewer than a quorum were ready |
 | `quod_consensus_head_*_votes/head_complaint_signed{namespace}` | gauge | | verified finality evidence for the oldest unfinished block and this node's own skip decision |
 | `quod_consensus_missing_certified_blocks{namespace}` | gauge | | quorum-approved in-flight blocks whose content this node is retrieving from another validator |
-| `quod_consensus_vote_journal_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
+| `quod_consensus_signing_journal_vote_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
 | `quod_runtime_healthy/handlers_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, rebuilt-through height, effect-release frontier, queued events |
@@ -55,6 +55,7 @@ Two collection paths:
 | `quod_tx_commit_latency_ms{namespace}` | histogram | | submit → committed-and-applied, measured on the SUBMITTING node with one monotonic clock (one sample per change, at its author) |
 | `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change, attributed to the target ontology |
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes in the target ontology, by its submitting node |
+| `quod_dtx_committed_total{namespace}` | counter | `phase` | committed distributed-control barriers, by protocol phase |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
@@ -70,7 +71,8 @@ Two collection paths:
 
 -behaviour(gen_server).
 
--export([start_link/0, observe_transaction_signature/3, observe_vote_journal_sync/2,
+-export([start_link/0, observe_transaction_signature/3,
+         observe_signing_journal_vote_sync/2,
          observe_tx_latency/2, count_link_send_drop/3, observe_round_phase/3,
          observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3,
          observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2]).
@@ -262,7 +264,7 @@ declare(NodeId) ->
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
-    _ = H(quod_consensus_vote_journal_sync_seconds,
+    _ = H(quod_consensus_signing_journal_vote_sync_seconds,
           "How long this node took to make one support, commit, or skip vote crash-durable before sending its signature. Every new vote waits for this small disk sync; sustained high values directly delay block finality.",
           ?VOTE_SYNC_BUCKETS),
     _ = H(quod_consensus_round_approve_ms,
@@ -290,6 +292,9 @@ declare(NodeId) ->
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
                                     {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare([{name, quod_dtx_committed_total},
+                                    {help, "Committed distributed-transaction control barriers, grouped by protocol phase."},
+                                    {labels, [namespace, phase]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
@@ -349,8 +354,8 @@ observe_transaction_signature(Ns, Valid, DurationNative)
 
 %% Vote persistence is on the consensus hot path, but observability must remain optional during
 %% supervisor startup and metrics-process restarts.
--spec observe_vote_journal_sync(binary(), non_neg_integer()) -> ok.
-observe_vote_journal_sync(Ns, DurationNative)
+-spec observe_signing_journal_vote_sync(binary(), non_neg_integer()) -> ok.
+observe_signing_journal_vote_sync(Ns, DurationNative)
   when is_binary(Ns), is_integer(DurationNative), DurationNative >= 0 ->
     case whereis(?MODULE) of
         undefined ->
@@ -359,7 +364,8 @@ observe_vote_journal_sync(Ns, DurationNative)
             try
                 Seconds = erlang:convert_time_unit(DurationNative, native, nanosecond) / 1000000000,
                 _ = prometheus_histogram:observe(
-                      quod_consensus_vote_journal_sync_seconds, [label(Ns)], Seconds),
+                      quod_consensus_signing_journal_vote_sync_seconds,
+                      [label(Ns)], Seconds),
                 ok
             catch
                 _:_ -> ok
@@ -592,30 +598,39 @@ subscribe_commits(State = #{subs := Subs}) ->
                         end, Subs, quod_simplex:namespaces()),
     State#{subs => Subs1}.
 
-%% A live-committed entry: observe the per-tx dimensions a scalar counter can't carry. A `noop` skip is
-%% not a transaction. Deliberately NOT observed here: commit latency — the block timestamp is the
+%% A live-committed entry: observe content per transaction and DTX controls per
+%% phase. A `noop` skip is neither. Deliberately NOT observed here: commit latency — the block timestamp is the
 %% proposer's wall clock (ratcheted to the fleet maximum) and `submitted_at` is the author's, so their
 %% difference measures clock skew as much as processing time. Latency is observed at the SUBMITTING
 %% node instead (`observe_tx_latency/2`, called by quod_prolog when the parked write resolves).
 observe_commit(Ns, #entry{data = Data}) ->
-    case quod_ledger:payload(Data) of
-        {ok, Payload} -> lists:foreach(fun(T) -> observe_payload(Ns, T) end,
-                                      Payload);
-        error         -> ok
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:foreach(fun(T) -> observe_transaction(Ns, T) end,
+                          Transactions);
+        {'begin', _Control} -> observe_dtx(Ns, 'begin');
+        {prepare, _Control} -> observe_dtx(Ns, prepare);
+        {decision, _Control} -> observe_dtx(Ns, decision);
+        {finalize, _Control} -> observe_dtx(Ns, finalize);
+        {complete, _Control} -> observe_dtx(Ns, complete);
+        noop -> ok;
+        invalid -> ok
     end.
 
 -ifdef(TEST).
 test_observe_commit(Ns, Entry) -> observe_commit(Ns, Entry).
 -endif.
 
-observe_payload(Ns, #transaction{} = Transaction) ->
-    observe_transaction(Ns, Transaction);
-observe_payload(_Ns, noop) -> ok.   %% complaint skip, not a transaction
-
 observe_transaction(Ns, #transaction{author = Author, diff = Diff}) ->
     L = label(Ns),
     _ = prometheus_histogram:observe(quod_tx_diff_ops, [L], length(Diff)),
     _ = prometheus_counter:inc(quod_tx_committed_total, [L, author_label(Author)]),
+    ok.
+
+observe_dtx(Ns, Phase) ->
+    _ = prometheus_counter:inc(
+          quod_dtx_committed_total,
+          [label(Ns), atom_to_binary(Phase, utf8)]),
     ok.
 
 -doc """

@@ -173,7 +173,7 @@ finalize_seal(abort) ->
 Seal every material scope's plan now, while all scopes are still open.
 
 Idempotent within one proof: the submission stage seals before routing the
-writing plan, and a later `finalize(commit)` reuses the same sealed set rather than
+sealed plan set, and a later `finalize(commit)` reuses that same set rather than
 sealing twice.
 """.
 -spec seal_plans() -> {ok, #{identity() => quod_dtx:plan()}} | {error, term()}.
@@ -213,23 +213,34 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
                           origin_identity = OriginIdentity,
                           principal = Principal}) ->
     case proof_material(Scopes, Dirty) of
-        false -> {ok, #{}};
-        true -> seal_scopes(lists:sort(maps:to_list(Scopes)),
-                            OriginIdentity, Principal, #{})
+        {ok, false} -> {ok, #{}};
+        {ok, true} -> seal_scopes(lists:sort(maps:to_list(Scopes)),
+                                  OriginIdentity, Principal, #{});
+        {error, _} = Error -> {Error, #{}}
     end.
 
 %% Plans exist to carry writes: only a proof that staged at least one write
 %% anywhere seals, and then every scope it read from participates — an
 %% empty-diff scope's read set is exactly what the eventual commit depends on.
 proof_material(Scopes, Dirty) ->
-    lists:any(fun(Value) -> Value =:= true end, maps:values(Dirty)) orelse
-        lists:any(
-          fun(#scope{handle = {local_scope, _ScopeId, _Ns, _Anchor,
-                               _Height, Session}}) ->
-                  quod_proof_session:dirty(Session);
-             (#scope{}) ->
-                  false
-          end, maps:values(Scopes)).
+    case lists:any(fun(Value) -> Value =:= true end, maps:values(Dirty)) of
+        true -> {ok, true};
+        false -> local_scope_material(maps:values(Scopes))
+    end.
+
+local_scope_material(
+  [#scope{handle = {local_scope, _ScopeId, _Ns, _Anchor,
+                    _Height, Session}} | Rest]) ->
+    try quod_proof_session:dirty(Session) of
+        true -> {ok, true};
+        false -> local_scope_material(Rest)
+    catch
+        throw:{quod_ask_error, Reason} -> {error, Reason}
+    end;
+local_scope_material([#scope{} | Rest]) ->
+    local_scope_material(Rest);
+local_scope_material([]) ->
+    {ok, false}.
 
 seal_scopes([], _OriginIdentity, _Principal, Plans) ->
     {ok, Plans};

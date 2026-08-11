@@ -13,6 +13,10 @@
 d(Id, Needs)       -> d(Id, Needs, projection_noop).
 d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
 
+ae(Ns, Index, Data, Origin) ->
+    quod_prolog:apply_entry(
+      Ns, #entry{index = Index, data = Data}, Origin).
+
 %% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
 %% other unbound variable, because a queue entry must be stable and fully ground.
 anonymous_projection_argument_refused_test() ->
@@ -153,6 +157,30 @@ founding_heads_test() ->
                       read_check = #{}, author = <<0:256>>, sig = none},
     ?assertEqual([d(a, [])], quod_runtime:founding_heads([Tx])).
 
+%% Slot 1 is ontology content, never an empty skip or malformed payload. The
+%% old catch-all silently turned either into an ontology with no founding
+%% handlers, hiding ledger corruption.
+non_content_founding_payload_is_rejected_test() ->
+    lists:foreach(
+      fun assert_bad_founding/1,
+      [noop, {batch, []}, quod_ct:dtx_decision_payload()]).
+
+assert_bad_founding(Data) ->
+    U = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_rt_bad_genesis_" ++ U),
+    Ns = list_to_binary("rtbad:" ++ U),
+    try
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        {ok, Store1} = quod_ledger_store:append(
+                         Store0, [#entry{index = 1, data = Data}]),
+        ok = quod_ledger_store:close(Store1),
+        ?assertEqual(
+           {error, invalid_genesis_payload},
+           quod_runtime:test_read_founding(Ns, #{data_dir => Dir}))
+    after
+        _ = file:del_dir_r(Dir)
+    end.
+
 %%%===================================================================
 %%% lifecycle against a bare kb (no store on disk => founding = ∅)
 %%%===================================================================
@@ -216,7 +244,7 @@ t_direct_envelopes_counted({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
         ok = wait_stats(Ns, fun(#{events_seen := E}) -> E >= 1; (_) -> false end)
     end.
 
@@ -227,10 +255,10 @@ t_replay_cycle_reconciles_and_rejects_dynamic({Ns, _Kb, _Rt}) ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
         Dyn = d(sneaky, []),
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for(Dyn))), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for(Dyn))), live),
         %% open a replay run and close it with a live block: replay_ready fires
-        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({r, 2}))), replay),
-        ok = quod_prolog:apply_block(Ns, 3, batch(change(Ns, diff_for({r, 3}))), live),
+        ok = ae(Ns, 2, batch(change(Ns, diff_for({r, 2}))), replay),
+        ok = ae(Ns, 3, batch(change(Ns, diff_for({r, 3}))), live),
         ok = wait_stats(Ns, fun(#{reconciles := R, rejected_dynamic := D, mode := M}) ->
                                 R =:= 2 andalso D >= 1 andalso M =:= live;
                                (_) -> false end)
@@ -247,13 +275,13 @@ t_frontier_follows_and_no_history_leak({Ns, _Kb, _Rt}) ->
         %% version): a frozen floor retains history for ALL of them (the leak), a following
         %% floor lets the next commits prune — only the tail block's change may linger
         C = fun(N) -> {list_to_atom("c" ++ integer_to_list(N)), erlang:unique_integer()} end,
-        [ok = quod_prolog:apply_block(Ns, N, batch(change(Ns, diff_for(C(K)))), live)
+        [ok = ae(Ns, N, batch(change(Ns, diff_for(C(K)))), live)
          || {N, K} <- [{1, 1}, {2, 2}, {3, 3}, {4, 1}, {5, 2}, {6, 3}]],
         ok = wait_stats(Ns, fun(#{p_height := P, e_frontier := E}) ->
                                 P =:= 6 andalso E =:= 6;
                                (_) -> false end),
         %% two more commits give the raised floor a prune opportunity past every change
-        [ok = quod_prolog:apply_block(Ns, N, batch(change(Ns, diff_for({tick, N}))), live)
+        [ok = ae(Ns, N, batch(change(Ns, diff_for({tick, N}))), live)
          || N <- [7, 8]],
         ok = wait_until(fun() ->
                             maps:get(kb_history_predicates, quod_prolog:stats(Ns), 99) =< 1
@@ -266,7 +294,7 @@ t_no_job_resource_follows_frontier({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
         ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
         ?assertEqual(1, quod_runtime:revision(Ns, untouched_resource)),
         ?assertEqual(ok, quod_runtime:await_revision(Ns, untouched_resource, 1, 100))
@@ -278,11 +306,11 @@ t_failed_job_blocks_frontier({Ns, _Kb, _Rt}) ->
     fun() ->
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
         ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 1; (_) -> false end),
         ok = quod_runtime:enqueue_heavy(Ns, broken_resource, 1, definitely_missing_goal),
         ok = wait_stats(Ns, fun(#{heavy_failures := N}) -> N >= 1; (_) -> false end),
-        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({ping, 2}))), live),
+        ok = ae(Ns, 2, batch(change(Ns, diff_for({ping, 2}))), live),
         ok = wait_stats(Ns, fun(#{e_frontier := E}) -> E =:= 2; (_) -> false end),
         ?assertEqual({error, timeout},
                      quod_runtime:await_revision(Ns, broken_resource, 2, 25)),
@@ -321,7 +349,7 @@ t_overflow_collapses_and_converges({Ns, _Kb, Rt}) ->
         {ok, Rt2} = quod_runtime:start_link(Ns, #{runtime_max_queued_events => 0}),
         ok = quod_prolog:mark_ready(Ns),
         ok = wait_stats(Ns, fun(#{mode := M}) -> M =:= live; (_) -> false end),
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({ping, 1}))), live),
         ok = wait_stats(Ns, fun(#{collapses := C, reconciles := R, height := H, mode := M}) ->
                                 C >= 1 andalso R >= 2 andalso H >= 1 andalso M =:= live;
                                (_) -> false end),
@@ -563,7 +591,7 @@ replay_quiesces_snapshot_readers_test_() ->
             R0 = maps:get(reconciles, quod_runtime:stats(Ns)),
             ok = quod_runtime:enqueue_heavy(Ns, slow_resource, H0, {slow, 20000000}),
             ok = wait_stats(Ns, fun(#{heavy_running := N}) -> N =:= 1; (_) -> false end),
-            ok = quod_prolog:apply_block(
+            ok = ae(
                    Ns, H0 + 1, batch(change(Ns, diff_for({during_replay, 1}))), replay),
             ok = quod_prolog:mark_ready(Ns),
             ok = wait_stats(Ns, fun(#{mode := live, height := H, reconciles := R,

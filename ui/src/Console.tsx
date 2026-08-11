@@ -87,7 +87,23 @@ function Reply({ reply }: { reply: ProveReply }) {
     )
   }
   if (reply.result === 'fail') {
-    return <div className="mt-3 rounded-lg bg-cream px-3 py-2 font-mono text-sm text-gray">false.</div>
+    return (
+      <div className="mt-3 rounded-lg border border-rose/30 bg-rose/5 px-3 py-2 text-sm text-rose">
+        <div className="font-mono">false.</div>
+        {reply.reasons && reply.reasons.length > 0 && (
+          <div className="mt-2 border-t border-rose/20 pt-2">
+            <div className="text-[11px] font-semibold tracking-wider uppercase">Failure reasons</div>
+            <ol className="mt-1 space-y-1 font-mono text-[13px] text-teal">
+              {reply.reasons.map((reason, i) => (
+                <li key={`${i}:${reason}`} className="break-all">
+                  {reason}
+                </li>
+              ))}
+            </ol>
+          </div>
+        )}
+      </div>
+    )
   }
   if (reply.result === 'pending') {
     return (

@@ -35,11 +35,12 @@ the committee stays a pure, deterministic projection of the committed log on eve
 
 > #### The predicate checks are honest-path UX, not the safety boundary {: .info }
 >
-> These predicate-level guards (`can_join` in `admit`, the last-member floor in `remove`) run only on the
+> These predicate-level guards (`can_join` and the validator cap in `admit`, the last-member floor in
+> `remove`) run only on the
 > **submitting** node — they give an honest client fast, local feedback. They are NOT the security boundary:
 > a Byzantine submitter that hand-builds a raw `peer_admitted` diff skips them entirely. The authoritative
 > defense is in `m:quod_simplex`, enforced by every validator before it support-signs — the pure shape +
-> never-empty gate (`membership_change_ok/2`) and the per-node KB re-validation
+> never-empty/cap gate (`membership_change_ok/2`) and the per-node KB re-validation
 > (`quod_prolog:request_membership_verdict/5`, which re-proves `can_join` and requires a retract's exact
 > clause to be present). See `doc/deferred.md` §3. (Signed membership authorship — closing committee
 > *packing* — is Phase B.)
@@ -53,6 +54,7 @@ identical on every member and never carried in the log; only their resulting `pe
          membership_diff/1]).
 
 -include_lib("erlog/src/erlog_int.hrl").
+-include("quod_ingress_limits.hrl").
 
 %% admit(Pubkey, Host, Port): prove can_join, then stage the peer_admitted assert. Gate + stage are ONE
 %% erlog conjunction — if can_join fails, the assert is never reached, so nothing is staged and the prove
@@ -60,11 +62,13 @@ identical on every member and never carried in the log; only their resulting `pe
 admit_3(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {admit, Pub, Host, Port} when is_binary(Pub) ->
-            case self_ns(St) of
-                undefined -> erlog_int:fail(St);
-                Ns        -> Fact = {peer_admitted, Pub, Host, Port, Pub},
-                             erlog_int:prove_body(
-                               [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)
+            case {self_ns(St), committee_size(St) < ?MAX_VALIDATORS} of
+                {undefined, _} -> erlog_int:fail(St);
+                {_Ns, false} -> erlog_int:fail(St);
+                {Ns, true} ->
+                    Fact = {peer_admitted, Pub, Host, Port, Pub},
+                    erlog_int:prove_body(
+                      [{can_join, Ns, [Host, Port], Pub}, {assertz, Fact} | Next], St)
             end;
         _ ->
             erlog_int:fail(St)

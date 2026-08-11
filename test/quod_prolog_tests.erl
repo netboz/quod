@@ -23,6 +23,41 @@ cleanup({_Ns, Pid}) ->
     case is_process_alive(Pid) of true -> gen_server:stop(Pid); false -> ok end,
     ok.
 
+mark_ready_acknowledges_from_the_handling_engine_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"ready-ack:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    SimplexKey = {quod_simplex, Ns},
+    true = quod_reg:reg(SimplexKey),
+    {ok, Pid} = quod_prolog:start_link(
+                  Ns, #{node_id => {"127.0.0.1", 5000},
+                        outcome_backend => memory}),
+    try
+        %% init requests replay first; readiness must not be acknowledged by
+        %% the process that merely queued mark_ready.
+        receive {'$gen_cast', rebuild} -> ok
+        after 1000 -> error(no_rebuild_request) end,
+        receive
+            {'$gen_cast', {prolog_ready, _, _}} = Early ->
+                error({early_ready_ack, Early})
+        after 0 ->
+            ok
+        end,
+        ok = quod_prolog:mark_ready(Ns),
+        receive
+            {'$gen_cast', {prolog_ready, Pid, 0}} -> ok
+        after 1000 ->
+            error(no_ready_ack)
+        end,
+        ?assertMatch({ok, _, 0}, quod_prolog:attach_runtime(Ns))
+    after
+        case is_process_alive(Pid) of
+            true -> gen_server:stop(Pid);
+            false -> ok
+        end,
+        true = gproc:unreg(quod_reg:name(SimplexKey))
+    end.
+
 committed_result_survives_scope_cleanup_failure_test() ->
     ProofId = <<41:256>>,
     Ns = <<"quod:cleanup-target">>,
@@ -164,7 +199,69 @@ remote_submission_preserves_retryable_classification_test() ->
          {error, {ontology_rebuilding, <<"quod:target">>}})),
     ?assertEqual(
        {rejected, bad_plan},
-       quod_prolog:test_submit_outcome({error, malformed_plan})).
+       quod_prolog:test_submit_outcome({error, malformed_plan})),
+    %% Apply-time policy refusal is part of the public ontology contract, not
+    %% an internal validation error: a foreign caller must be able to match it.
+    ?assertEqual(
+       {rejected, policy_self_seal_forbidden},
+       quod_prolog:test_submit_outcome(
+         {error, policy_self_seal_forbidden})).
+
+retired_pending_group_releases_exact_waiter_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"quod:retired-group-waiter">>,
+    Anchor = <<81:256>>,
+    Coordinator = <<82:256>>,
+    Admission = <<83:256>>,
+    GroupId = <<84:256>>,
+    GroupRef = {group, Ns, Anchor, Coordinator, Admission, GroupId},
+    Pending = #{lane => {Admission, Coordinator},
+                sequence => 1, group_id => GroupId},
+    {ok, Outcomes0} = quod_outcome:open(
+                        Ns, Anchor, #{outcome_backend => memory}),
+    {ok, Outcomes1} = quod_outcome:project_pending_begin(
+                        Outcomes0, Pending),
+    {ok, Outcomes2} = quod_outcome:project_pending_begin(Outcomes1, none),
+    {ok, Outcomes3} = quod_outcome:advance_applied(Outcomes2, 1),
+    {ok, Outcomes4} = quod_outcome:flush(Outcomes3),
+    Owner = self(),
+    BarrierPid =
+        spawn(
+          fun() ->
+                  true = quod_reg:reg({quod_simplex, Ns}),
+                  Owner ! {barrier_ready, self()},
+                  receive
+                      {'$gen_call', From,
+                       {dtx_group_barrier, GroupRef, 1}} ->
+                          gen_statem:reply(
+                            From, {ok, {rejected, coordinator_retired}})
+                  after 1000 ->
+                      exit(barrier_not_called)
+                  end
+          end),
+    receive
+        {barrier_ready, BarrierPid} -> ok
+    after 1000 ->
+        error(barrier_not_ready)
+    end,
+    try
+        {CallRef, Remaining} =
+            quod_prolog:test_release_absent_group_waiter(
+              Ns, GroupRef, Outcomes4),
+        ?assertEqual(0, Remaining),
+        receive
+            {quod_proof_reply, _Engine, CallRef,
+             {error, coordinator_retired}} -> ok
+        after 1000 ->
+            error(retired_group_waiter_was_not_released)
+        end
+    after
+        case is_process_alive(BarrierPid) of
+            true -> exit(BarrierPid, kill);
+            false -> ok
+        end,
+        ok = quod_outcome:close(Outcomes4)
+    end.
 
 prolog_test_() ->
     {foreach, fun setup/0, fun cleanup/1,
@@ -172,11 +269,37 @@ prolog_test_() ->
       fun t_explicit_failure_reason_and_internal_bare_fail/1,
       fun t_apply_and_read/1,
       fun t_occ_reject/1,
+      fun t_policy_self_seal/1,
       fun t_batch_apply/1,
       fun t_duplicate_plan_applies_once/1,
       fun t_same_block_read_after_write/1,
       fun t_submit_plan_validation/1,
+      fun t_pending_begin_projection_is_exact_and_clearable/1,
       fun t_worker_limit/1]}.
+
+t_pending_begin_projection_is_exact_and_clearable({Ns, _Pid}) ->
+    fun() ->
+        Coordinator = <<71:256>>,
+        Admission = <<72:256>>,
+        GroupId = <<73:256>>,
+        GroupRef = {group, Ns, <<0:256>>, Coordinator, Admission, GroupId},
+        Pending = #{lane => {Admission, Coordinator},
+                    sequence => 1, group_id => GroupId},
+        ok = quod_prolog:project_pending_begin(Ns, Pending),
+        ?assertEqual(
+           {ok, #{applied_floor => 0,
+                  outcome => #{status => pending, phase => pending_begin,
+                               ref => GroupRef}}},
+           quod_prolog:outcome_snapshot(Ns, GroupRef)),
+        ?assertEqual(
+           {ok, #{history => none, applied => none,
+                  applied_floor => 0, generation => 0}},
+           quod_prolog:dtx_group_state(Ns, GroupId)),
+        ok = quod_prolog:project_pending_begin(Ns, none),
+        ?assertEqual(
+           {ok, #{applied_floor => 0, outcome => not_found}},
+           quod_prolog:outcome_snapshot(Ns, GroupRef))
+    end.
 
 %% The one submission primitive refuses anything that is not this node's own
 %% freshly sealed plan for this exact engine: a wrong target identity, a
@@ -188,7 +311,7 @@ t_submit_plan_validation({Ns, _}) ->
         try
             InvocationId = crypto:strong_rand_bytes(16),
             ok = quod_proof_session:open(
-                   Session, InvocationId, {assertz, {planned, x}},
+                   Session, InvocationId, {assertz, {planned, x}}, allowed,
                    quod_predicates:proof_context(Ns, 1, undefined, []),
                    quod_transaction_scope:empty_selection()),
             {solution, _} = quod_proof_session:next(Session, InvocationId),
@@ -515,8 +638,12 @@ handle_event(_EventType, _EventContent, _State, _Data) ->
 
 
 %% Apply a block as a LIVE commit (the common case these tests simulate). Increment-2 tests that need
-%% the replay path call quod_prolog:apply_block/4 with `replay` explicitly.
-ab(Ns, Index, Change) -> quod_prolog:apply_block(Ns, Index, Change, live).
+%% the replay path call quod_prolog:apply_entry/3 with `replay` explicitly.
+ab(Ns, Index, Change) -> ae(Ns, Index, Change, live).
+
+ae(Ns, Index, Data, Origin) ->
+    quod_prolog:apply_entry(
+      Ns, #entry{index = Index, data = Data}, Origin).
 
 %% These bare-engine tests do not run Simplex slot 1, so include the same
 %% unconditional host-entry policy that founding injects into every real
@@ -587,8 +714,8 @@ t_occ_reject({Ns, _}) ->
                          Ns,
                          batch(change(Ns, diff_for({parent, tom, bob}), #{})))),
         %% a change whose read-set carries a stale token for parent/2 → rejected at apply.
-        %% apply_block is an async cast (returns ok); the OCC reject is observed by its
-        %% EFFECT — the block changes no facts (sibling/1 stays absent). The apply_block cast
+        %% apply_entry is an async cast (returns ok); the OCC reject is observed by its
+        %% EFFECT — the block changes no facts (sibling/1 stays absent). The apply_entry cast
         %% is FIFO-ordered before the following prove call, so the effect is visible.
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => never_present}),
         ok = ab(Ns, 2, batch(Stale)),
@@ -598,6 +725,52 @@ t_occ_reject({Ns, _}) ->
         ?assertEqual(ok, ab(Ns, 3, batch(Good))),
         ?assertEqual({ok, [#{}], 3}, quod_prolog:prove(Ns, {sibling, y}))
     end.
+
+t_policy_self_seal({Ns, _}) ->
+    fun() ->
+        Host = host_policy_tx(Ns),
+        [{assert, HostClause}] = Host#transaction.diff,
+        ok = ab(Ns, 1, {batch, [Host]}),
+
+        %% Live removal of the last policy is a typed rejection. The exact
+        %% reason is retained for outcome polling and for a parked local or
+        %% cross-ontology proof caller.
+        Removal = change(Ns, [{retract, HostClause}], #{}),
+        ok = ae(Ns, 2, batch(Removal), live),
+        ?assertEqual(
+           {ok, #{status => rejected,
+                  reason => policy_self_seal_forbidden,
+                  height => 2,
+                  ref => outcome_ref(Ns, Removal)}},
+           quod_prolog:outcome(outcome_ref(Ns, Removal))),
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_reject)),
+
+        %% One transaction may atomically replace the last clause because the
+        %% invariant observes the final candidate rather than operation order.
+        NewPolicy = {can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Namespace'}},
+        [NewAssert] = diff_for(NewPolicy),
+        Replacement = change(
+                        Ns, [{retract, HostClause}, NewAssert], #{}),
+        ok = ae(Ns, 3, batch(Replacement), live),
+        ?assertMatch(
+           {ok, #{status := committed, height := 3}},
+           quod_prolog:outcome(outcome_ref(Ns, Replacement))),
+
+        %% Catch-up/replay uses the same apply path and returns the same exact
+        %% rejection while preserving the replacement policy.
+        {assert, NewClause} = NewAssert,
+        ReplayRemoval = change(Ns, [{retract, NewClause}], #{}),
+        ok = ae(Ns, 4, batch(ReplayRemoval), replay),
+        ?assertMatch(
+           {ok, #{status := rejected,
+                  reason := policy_self_seal_forbidden,
+                  height := 4}},
+           quod_prolog:outcome(outcome_ref(Ns, ReplayRemoval))),
+        ?assertMatch({fail, [_ | _]}, quod_prolog:prove(Ns, missing_after_replay))
+    end.
+
+outcome_ref(Ns, #transaction{tx_id = Tx}) ->
+    {transaction, Ns, <<0:256>>, Tx}.
 
 t_batch_apply({Ns, _}) ->
     fun() ->
@@ -772,6 +945,22 @@ t_verdict_tag_reuse({Ns, _}) ->
         ?assertEqual(ok, no_verdict(t))
     end.
 
+dtx_validation_waits_for_published_outcome_floor_test() ->
+    Ns = <<"validation-floor">>,
+    Anchor = <<71:256>>,
+    {ok, Outcomes0} = quod_outcome:open(
+                        Ns, Anchor, #{outcome_backend => memory}),
+    {ok, OutcomesStaged} = quod_outcome:advance_applied(Outcomes0, 1),
+    %% The KB has reached the proposal parent, but the outcome floor is only
+    %% staged.  The DTX request must remain parked; the old applied-only scan
+    %% would consume this deliberately malformed request immediately.
+    ?assert(quod_prolog:test_resolve_validation(
+              {dtx, malformed}, 2, 1, OutcomesStaged)),
+    {ok, OutcomesPublished} = quod_outcome:flush(OutcomesStaged),
+    ?assertNot(quod_prolog:test_resolve_validation(
+                 {dtx, malformed}, 2, 1, OutcomesPublished)),
+    ok = quod_outcome:close(OutcomesPublished).
+
 %% a committed membership tx applies UNCONDITIONALLY (skip OCC) — its projections stay in lockstep —
 %% while a content tx with an equally-stale read_check is still OCC-rejected (the skip is scoped).
 t_lockstep({Ns, _}) ->
@@ -800,23 +989,23 @@ t_lockstep({Ns, _}) ->
 t_no_boundary_without_advance({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
-        ok = quod_prolog:apply_block(
+        ok = ae(
                Ns, 1,
                with_host_policy(
                  Ns, batch(change(Ns, diff_for({a, 1}), #{}))),
                replay),
         {replay_started, Id, 0} = recv_rt(replay_started),
         %% already-applied live cast (Index 1 =< applied 1): no close, no event
-        ok = quod_prolog:apply_block(Ns, 1, batch(change(Ns, diff_for({a, 1}), #{})), live),
+        ok = ae(Ns, 1, batch(change(Ns, diff_for({a, 1}), #{})), live),
         _ = quod_prolog:applied(Ns),        %% sync barrier: the cast above has been processed
         ok = refute_rt(replay_ready),
         ok = refute_rt(applied_live),
         %% forward-gap live cast (Index 5 > applied 1 + 1): no close either
-        ok = quod_prolog:apply_block(Ns, 5, batch(change(Ns, diff_for({b, 5}), #{})), live),
+        ok = ae(Ns, 5, batch(change(Ns, diff_for({b, 5}), #{})), live),
         _ = quod_prolog:applied(Ns),
         ok = refute_rt(replay_ready),
         %% only a genuine advancing live apply closes the run (ready at the height replay reached)
-        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({c, 2}), #{})), live),
+        ok = ae(Ns, 2, batch(change(Ns, diff_for({c, 2}), #{})), live),
         ?assertMatch({replay_ready, Id, 1}, recv_rt(replay_ready))
     end.
 
@@ -837,7 +1026,7 @@ t_live_emits_event({Ns, _}) ->
         true = quod_reg:subscribe({runtime, Ns}),
         Diff = diff_for({parent, tom, bob}),
         Tx = change(Ns, Diff, #{}),
-        ok = quod_prolog:apply_block(
+        ok = ae(
                Ns, 1, with_host_policy(Ns, batch(Tx)), live),
         {applied_live, Env} = recv_rt(applied_live),
         ?assertEqual(1, maps:get(height, Env)),
@@ -852,7 +1041,7 @@ t_live_emits_event({Ns, _}) ->
 t_live_reject_emits_event({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
-        ok = quod_prolog:apply_block(
+        ok = ae(
                Ns, 1,
                with_host_policy(
                  Ns, batch(change(Ns, diff_for({parent, tom, bob}), #{}))),
@@ -860,7 +1049,7 @@ t_live_reject_emits_event({Ns, _}) ->
         ?assertMatch({applied_live, _}, recv_rt(applied_live)),
         %% a stale read-set token for parent/2 → rejected at apply
         Stale = change(Ns, diff_for({sibling, x}), #{{parent, 2} => never_present}),
-        ok = quod_prolog:apply_block(Ns, 2, batch(Stale), live),
+        ok = ae(Ns, 2, batch(Stale), live),
         {rejected_live, Env} = recv_rt(rejected_live),
         ?assertEqual(2, maps:get(height, Env)),
         ?assertEqual(Stale#transaction.tx_id, maps:get(tx_id, Env)),
@@ -876,7 +1065,7 @@ t_replay_no_event({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
         Tx = change(Ns, diff_for({parent, tom, bob}), #{}),
-        ok = quod_prolog:apply_block(
+        ok = ae(
                Ns, 1, with_host_policy(Ns, batch(Tx)), replay),
         ?assertMatch({replay_started, _Id, 0}, recv_rt(replay_started)),
         ok = refute_rt(applied_live),
@@ -889,22 +1078,22 @@ t_replay_no_event({Ns, _}) ->
 t_replay_reentry({Ns, _}) ->
     fun() ->
         true = quod_reg:subscribe({runtime, Ns}),
-        ok = quod_prolog:apply_block(
+        ok = ae(
                Ns, 1,
                with_host_policy(
                  Ns, batch(change(Ns, diff_for({a, 1}), #{}))),
                live),
         ?assertMatch({applied_live, _}, recv_rt(applied_live)),
         %% gap-fill: replay at 2 opens a run from height 1; it is silent
-        ok = quod_prolog:apply_block(Ns, 2, batch(change(Ns, diff_for({b, 2}), #{})), replay),
+        ok = ae(Ns, 2, batch(change(Ns, diff_for({b, 2}), #{})), replay),
         {replay_started, Id, 1} = recv_rt(replay_started),
         ok = refute_rt(applied_live),
         %% the resuming live apply at 3 closes the run (same Id, ready height 2), then fires the event
-        ok = quod_prolog:apply_block(Ns, 3, batch(change(Ns, diff_for({c, 3}), #{})), live),
+        ok = ae(Ns, 3, batch(change(Ns, diff_for({c, 3}), #{})), live),
         ?assertMatch({replay_ready, Id, 2}, recv_rt(replay_ready)),
         ?assertMatch({applied_live, #{height := 3}}, recv_rt(applied_live)),
         %% a second replay run mints a DISTINCT Id (stale-boundary immunity)
-        ok = quod_prolog:apply_block(Ns, 4, batch(change(Ns, diff_for({d, 4}), #{})), replay),
+        ok = ae(Ns, 4, batch(change(Ns, diff_for({d, 4}), #{})), replay),
         {replay_started, Id2, 3} = recv_rt(replay_started),
         ?assertNotEqual(Id, Id2)
     end.

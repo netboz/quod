@@ -43,7 +43,7 @@ set -uo pipefail
 : "${NOMAD_ADDR:=http://192.168.1.10:4646}"
 : "${JOB:=quod}"
 : "${NS:=quod:root}"
-: "${IMAGE_TAG:=0.7.55}"                    # clean homogeneous-fleet image
+: "${IMAGE_TAG:=0.7.69}"                    # clean homogeneous-fleet image
 : "${IMAGE_REGISTRY:=192.168.1.11:5000}"    # registry used when SCALE=1
 : "${GENESIS_HASH:=}"                       # required only when SCALE=1; never reuse an old fleet's anchor
 : "${NOMAD_FILE:=deploy/quod.nomad}"        # relative to repo root
@@ -253,8 +253,8 @@ validate_config() {
 
 # bounded exec into a node's BEAM (never hang the driver on an unresponsive alloc).
 # -task quod is mandatory because the homogeneous group also has a prestart peer-wait task.
-QEVAL()      { timeout 25 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
-QEVAL_LONG() { timeout 70 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
+QEVAL()      { timeout -k 5 25 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
+QEVAL_LONG() { timeout -k 5 70 nomad alloc exec -task quod "$1" /opt/quod/bin/quod eval "$2" 2>/dev/null; }
 
 #==============================================================================
 # fleet discovery (JSON — no dependence on nomad's human table format / subnet)
@@ -352,7 +352,9 @@ fleet_head() { refresh_endpoints; scrape_fleet 2>/dev/null | awk '$3>m{m=$3} END
 
 # classification from the current FLEETFILE
 validators() { awk '$6==1 && $9==0 {print $1}' "$FLEETFILE"; }
-observers()  { awk '$2=="quod-node" && $6==0 && $9==0 {print $1}' "$FLEETFILE"; }
+# Every row in FLEETFILE is a Quod allocation.  Cloud satellites are observers
+# too; do not silently exclude them just because their Nomad task group differs.
+observers()  { awk '$6==0 && $9==0 {print $1}' "$FLEETFILE"; }
 
 #==============================================================================
 # performance report — commit-latency percentiles + per-node bandwidth over the
@@ -666,9 +668,22 @@ MEMB_RAN=0; MEMB_RESULT=pass
 
 # read a candidate's own identity as an embeddable Erlang literal + address:  "PKLIT|HOST|PORT"
 cand_pk_addr() {   # $1 = alloc
-  local out
-  out=$(QEVAL "$1" '{ok,Pk}=application:get_env(quod,node_pubkey), {ok,{H,P}}=application:get_env(quod,node_addr), Hs=if is_list(H)->H; is_tuple(H)->inet:ntoa(H); true->H end, lists:flatten(io_lib:format("~w|~s|~w",[Pk,Hs,P])).')
-  out=${out#\"}; out=${out%\"}   # eval prints a string with surrounding quotes
+  # `quod eval` can remain attached to a stopped Nomad exec process.  The local
+  # Explorer exposes the same node key, while the generated config is the
+  # authoritative advertised host/port.  Both reads have hard kill deadlines.
+  local out script
+  read -r -d '' script <<'EOF' || true
+set -eu
+summary=$(/usr/bin/curl -fsS --max-time 4 http://127.0.0.1:14569/api/summary)
+hex=$(printf '%s\n' "$summary" | grep -o '"pubkey":"[0-9a-fA-F]\{64\}"' | head -n 1 | sed 's/"pubkey":"//; s/"$//')
+[ "${#hex}" -eq 64 ] || exit 1
+host=$(awk -F '"' '/^[[:space:]]*ip[[:space:]]*=/{print $2; exit}' "$NOMAD_TASK_DIR/quod.conf")
+port=$(awk '/^[[:space:]]*port[[:space:]]*=/{print $3; exit}' "$NOMAD_TASK_DIR/quod.conf")
+[ -n "$host" ] && [ -n "$port" ] || exit 1
+bytes=$(printf '%s' "$hex" | sed 's/../16#&,/g; s/,$//')
+printf '<<%s>>|%s|%s\n' "$bytes" "$host" "$port"
+EOF
+  out=$(timeout -k 5 25 nomad alloc exec -task quod "$1" /bin/sh -c "$script" 2>/dev/null)
   printf '%s' "$out"
 }
 # Admit/remove goals use the private administrative eval path with a generous
@@ -676,8 +691,8 @@ cand_pk_addr() {   # $1 = alloc
 # leader turn can come round. Only definite pre-commit/rejection outcomes retry;
 # an unknown outcome is returned to the test instead of duplicating the operation.
 # This path is opt-in and never used by normal load.
-admit_code()  { printf 'Ns= <<"%s">>, G={admit,%s,"%s",%d}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->admitted; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1" "$2" "$3"; }
-remove_code() { printf 'Ns= <<"%s">>, G={remove,%s}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G,Ns)) of {ok,_,_}->removed; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1"; }
+admit_code()  { printf 'Ns= <<"%s">>, G={admit,%s,"%s",%d}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G)) of {ok,_,_}->admitted; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1" "$2" "$3"; }
+remove_code() { printf 'Ns= <<"%s">>, G={remove,%s}, (fun T(0)->{error,exhausted}; T(K)->case (catch quod_prolog:prove(Ns,G)) of {ok,_,_}->removed; {error,{not_leader,_}}->timer:sleep(200),T(K-1); {error,retry}->timer:sleep(200),T(K-1); {error,busy}->timer:sleep(200),T(K-1); {error,rebuilding}->timer:sleep(200),T(K-1); Other->Other end end)(200).' "$NS" "$1"; }
 
 _memb_wait() {   # $1=admitter $2=cand $3=target_cs_op(-ge|-le) $4=target_cs $5=want_isv  -> 0 ok / 1 timeout
   local i cs isv sy
@@ -696,7 +711,7 @@ membership_churn_cycle() {
   mapfile -t vids < <(validators)
   [ "${#vids[@]}" -lt "$EXP_VALIDATORS" ] && { LOG "MEMB-CHURN: committee not whole (${#vids[@]}/$EXP_VALIDATORS up) — deferring"; return 0; }
   head=$(awk '$3>=0{if($3>m)m=$3}END{print m+0}' "$FLEETFILE")
-  cand=$(awk -v h="$head" '$2=="quod-node" && $6==0 && $9==0 && $3>=0 && (h-$3)<=256 {print $1" "$3}' "$FLEETFILE" | sort -k2 -n | tail -1 | awk '{print $1}')
+  cand=$(awk -v h="$head" '$6==0 && $9==0 && $3>=0 && (h-$3)<=256 {print $1" "$3}' "$FLEETFILE" | sort -k2 -n | tail -1 | awk '{print $1}')
   [ -z "$cand" ] && { LOG "MEMB-CHURN: no caught-up observer candidate — skipping"; return 0; }
   IFS='|' read -r pk host port <<< "$(cand_pk_addr "$cand")"
   [ -z "$pk" ] && { LOG "MEMB-CHURN: could not read candidate $cand identity — skipping"; return 0; }

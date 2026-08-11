@@ -1,6 +1,7 @@
 -module(quod_committee_predicates_tests).
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
+-include("quod_ingress_limits.hrl").
 
 %%%===================================================================
 %%% The admit/remove external predicates, at the predicate level: they GATE + STAGE (prove-before-broadcast)
@@ -64,6 +65,34 @@ admit_unready_fails_test() ->
     ?assertEqual(fail, with_ready(Ns, Ready,
                                   fun() -> scope(ctx(Ns, kb([])), {admit, Cold, "10.0.0.9", 9000}) end)).
 
+%% The predicate gives an honest caller the same bounded-committee result as
+%% the authoritative proposal/history gate: member 64 can be staged, member
+%% 65 cannot.
+admit_enforces_validator_cap_test() ->
+    Ns = <<"cp:cap">>,
+    Members = [<<I:256>> || I <- lists:seq(0, ?MAX_VALIDATORS - 1)],
+    Candidate = lists:last(Members),
+    AtLimitChanges =
+        with_ready(
+          Ns, Candidate,
+          fun() ->
+              scope(
+                ctx(Ns, kb([pa(Pk, "h", 1)
+                            || Pk <- lists:droplast(Members)])),
+                {admit, Candidate, "h", 1})
+          end),
+    ?assertMatch([{assert, {{peer_admitted, Candidate, "h", 1,
+                             Candidate}, _}}], AtLimitChanges),
+    Extra = <<?MAX_VALIDATORS:256>>,
+    ?assertEqual(
+       fail,
+       with_ready(
+         Ns, Extra,
+         fun() ->
+             scope(ctx(Ns, kb([pa(Pk, "h", 1) || Pk <- Members])),
+                   {admit, Extra, "h", 1})
+         end)).
+
 %% admit with NO execution context: the class dispatcher fails closed (no managed context ⇒ no solution),
 %% so nothing is staged.
 admit_without_context_fails_test() ->
@@ -94,6 +123,12 @@ staging_refused_in_verdict_test() ->
     Ns = <<"cp:vd">>,
     Est = quod_predicates:set_context(kb([]), quod_predicates:verdict_context(Ns, 0)),
     ?assertEqual(context_violation, scope(Est, {admit, <<1>>, "h", 1})).
+
+policy_verdict_refuses_live_query_bridge_test() ->
+    Ns = <<"cp:policy-vd">>,
+    Est = quod_predicates:set_context(
+            kb([]), quod_predicates:policy_verdict_context(Ns, 0)),
+    ?assertEqual(context_violation, scope(Est, {peer_ready, <<1>>})).
 
 effect_refused_in_proof_test() ->
     ?assertEqual(

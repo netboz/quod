@@ -12,24 +12,28 @@ order. One `gen_server` per namespace.
 - **Reads** run on a copy-on-write overlay (`m:quod_erlog_db_local_prove`) so the
   committed kb is never touched; the answer is bindings (stamped with the height the
   frozen view was taken at), returned to the caller.
-- **Writes** (a proof that staged asserts/retracts) are handed back to the engine and
-  become a `#transaction{}` submitted to `quod_simplex`; the caller is parked and
-  replied to when the block applies. If its local wait expires first, the caller
-  receives a durable `outcome_unknown` reference; the compact pending row remains
-  pollable because consensus may still commit the transaction.
+- **Writes** seal the complete participating scope set before submission. One
+  participant uses that target ontology's ordinary `#transaction{}` consensus
+  path. Two or more participants use the atomic
+  Begin/Prepare/Decision/Finalize/Complete protocol; no participant publishes its
+  hidden diff before the certified decision and ordered Finalize apply. The caller
+  is parked until the ordinary apply or group Complete is published. If its local
+  wait expires first, it receives the corresponding anchored
+  `outcome_unknown` reference and resolves that reference instead of re-proving.
 - **Lifecycle actions** accept only ground root `create_ontology/2` and
   `join_ontology/3` requests. One read-only anchored proof session validates the
   exact target-state declaration, authorizes before source reads, carries one
   opaque prepared descriptor through prerequisite selection, then re-authorizes,
   executes the typed request once, and verifies its desired state. Prolog
   backtracking never owns an external-operation descriptor.
-- **`apply_block/4`** is the deterministic state machine `quod_simplex` drives on every
-  member: re-check the read-set against the committed kb (OCC), then apply the diff
-  or reject — identical verdict on every member. A **committee-changing** transaction
-  (its diff asserts/retracts `peer_admitted`) is the exception: it applies
-  **unconditionally**, skipping OCC, because it was already re-validated against the
-  parent state before the vote (see `request_membership_verdict/5`) — this keeps the kb
-  and `quod_simplex`'s validator-set projection in lockstep.
+- **`apply_entry/3`** is the deterministic ordered state machine driven by
+  `quod_simplex`. Content transactions re-check their read set (OCC) before apply;
+  DTX Prepare retains a hidden plan, Finalize(commit) publishes it once, and
+  Complete records the terminal group result. A **committee-changing** content
+  transaction (its diff asserts/retracts `peer_admitted`) applies unconditionally
+  because it was re-validated against the exact parent before voting (see
+  `request_membership_verdict/5`), keeping the KB and validator projection in
+  lockstep.
 
 Proves are gated until an initial **rebuild** completes (`ready`), so a freshly
 (re)started engine never answers from a half-built kb. The kb is built with the
@@ -42,10 +46,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include("quod_proof_limits.hrl").
 
 -export([start_link/2, prove/2, prove_ro/2, submit_plan/4, outcome/1,
+         local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
+         project_pending_begin/2,
+         dtx_group_resolved/2,
          run_action/2,
-         applied/1, apply_block/4, mark_ready/1, sync/1,
+         applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
-         request_membership_verdict/5, stats/1, namespaces/0]).
+         request_membership_verdict/5, request_dtx_verdict/5,
+         stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export([prove_est/2, prove_est_read_only/2]).
@@ -57,14 +65,19 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_public_scope_reason/2,
          test_scope_timeout_reason/2,
          test_scope_command_budget_valid/3,
+         test_scope_command_route/2,
+         test_sealed_submit_transition/0,
          test_target_scope_lifetime_ms/2,
          test_remote_timeout_correlation/3,
          test_scope_worker_failure/2,
-         test_proof_down_reply/3,
+         test_proof_down_reply/3, test_proof_down_reply/4,
          test_finalize_pinned_result/1,
          test_terminal_result/1,
          test_not_ready_plan_submission/1,
-         test_submit_outcome/1]).
+         test_submit_outcome/1,
+         test_release_absent_group_waiter/3,
+         test_resolve_validation/4,
+         test_await_public_proof/5]).
 %% Pure verdict and scope-correlation seams driven directly by EUnit.
 -endif.
 
@@ -87,10 +100,34 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                        kind        :: prove | prove_ro | action,
                        worker_mref :: reference(),
                        caller_mref :: reference(),
-                       from        :: gen_server:from(),
+                       from        :: gen_server:from() |
+                                      {async, pid(), reference()},
                        timer       :: reference(),
                        token       :: reference(),
+                       checkpoint = none :: none | term(),
                        height = 0  :: non_neg_integer()}).
+
+%% One engine-owned, pre-signing Begin transfer.  The origin worker waits on
+%% `from`, but the engine keeps serving its mailbox while Simplex validates the
+%% immutable intent.  There is only one origin-active group per ontology, so a
+%% second hand-off is refused rather than queued.
+-record(dtx_handoff, {
+          intent_id  :: reference(),
+          request_id :: term(),
+          worker_ref :: reference(),
+          worker_pid :: pid(),
+          from       :: gen_server:from(),
+          group_ref  :: term()
+         }).
+
+%% After activation the proof worker may close every scope.  Only this compact
+%% public waiter remains; recovery and consensus are owned by Simplex.
+-record(group_waiter, {
+          from        :: gen_server:from() | {async, pid(), reference()},
+          caller_mref :: reference(),
+          timer       :: reference(),
+          group_ref   :: term()
+         }).
 
 %% One engine-owned top-level run. The engine chooses the proof id, frozen
 %% height, and absolute local deadline before spawning the worker; the worker
@@ -145,7 +182,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           handle = undefined :: undefined | quod_scope_session:handle(),
           worker_mref = undefined :: undefined | reference(),
           state = opening_return ::
-                    opening_return | opening_session | active | closing,
+                    opening_return | opening_session | active | sealed |
+                    submitting | submitted | closing,
           next_command_seq = 2 :: pos_integer(),
           next_event_seq = 1 :: pos_integer(),
           deadline_ms :: integer(),
@@ -183,10 +221,13 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                                                integer()}},
             outcomes :: quod_outcome:index(),
             requests  :: term(),                 %% gen_statem async-request collection, labelled by tx_id
-            %% membership verdicts parked until the KB reaches the proposal's parent height (Slot-1),
-            %% then delivered to ReplyTo as {membership_verdict, Tag, Verdict}. Keyed by the unique Tag.
-            %% Tag => {Slot, Change, ReplyTo, TimerRef}
-            validations = #{} :: #{term() => {log_index(), term(), pid(), reference()}},
+            %% Consensus verdicts parked until the KB reaches the proposal's
+            %% parent height (Slot-1).  Membership and DTX Prepare share this
+            %% one height/correlation/timer mechanism; only their pure
+            %% validator and reply tag differ.
+            %% Tag => {Slot, {membership, Change} | {dtx, Control},
+            %%         ReplyTo, TimerRef}
+            validations = #{} :: map(),
             applies   = 0, rejects = 0, proves = 0, conflicts = 0,
             park_timeouts = 0 :: non_neg_integer(),     %% writes still unresolved at their caller deadline
             %% Ref => #proof_worker{}
@@ -196,6 +237,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% ownership here without charging a derivation slot or pinning
             %% MVCC history.
             waiting_workers = #{} :: map(),
+            dtx_handoff = none :: none | #dtx_handoff{},
+            group_waiters = #{} :: map(),
             %% WorkerMon => #scope_worker{}.  Co-hosted and remote scopes share
             %% the same worker/session ownership and MVCC pin accounting.
             scope_workers = #{} :: map(),
@@ -226,17 +269,19 @@ Prove `Goal` against namespace `TargetNs`.
 A successful write proof commits before returning: the third element of the
 result names where — the applied log index for a write into `TargetNs`
 itself, or `{transaction, Ns, Anchor, TxId}` when the proof's sole material
-scope was a foreign ontology and its sealed plan committed there.
+scope was a foreign ontology and its sealed plan committed there.  A
+multi-ontology commit returns a map containing its anchored group reference,
+Complete height, and exact per-ontology Finalize slots.
 """.
 -spec prove(binary(), term()) ->
-        {ok, [map()], log_index() | {transaction, binary(), binary(), binary()}} |
+        {ok, [map()],
+         log_index() | {transaction, binary(), binary(), binary()} | map()} |
         {error, term()} | fail | {fail, [term()]}.
 prove(TargetNs, Goal) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(
-                     Pid, {prove, Goal, quod_trace:context()}, infinity)
-               catch exit:_ -> fail end
+        Pid -> public_proof(
+                 Pid, TargetNs, prove, Goal, quod_trace:context())
     end.
 
 -doc "Read-only prove: like `prove/2` but a write goal is refused (`{error, read_only}`).".
@@ -245,9 +290,35 @@ prove(TargetNs, Goal) ->
 prove_ro(TargetNs, Goal) ->
     case quod_reg:where({quod_prolog, TargetNs}) of
         undefined -> {error, no_such_namespace};
-        Pid -> try gen_server:call(Pid, {prove_ro, Goal}, infinity)
-               catch exit:_ -> fail end
+        Pid -> public_proof(Pid, TargetNs, prove_ro, Goal, otel_ctx:new())
     end.
+
+public_proof(Engine, Ns, Kind, Goal, TraceCtx) ->
+    CallRef = make_ref(),
+    MRef = monitor(process, Engine),
+    gen_server:cast(
+      Engine, {public_proof, self(), CallRef, Kind, Goal, TraceCtx}),
+    try await_public_proof(Engine, MRef, CallRef, Ns, none)
+    after demonitor(MRef, [flush])
+    end.
+
+await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint) ->
+    receive
+        {quod_proof_checkpoint, Engine, CallRef, Ref} ->
+            await_public_proof(Engine, MRef, CallRef, Ns, Ref);
+        {quod_proof_reply, Engine, CallRef, Reply} ->
+            Reply;
+        {'DOWN', MRef, process, Engine, _Reason} ->
+            case Checkpoint of
+                none -> {error, {ontology_unavailable, Ns}};
+                Ref -> {error, {outcome_unknown, Ref}}
+            end
+    end.
+
+-ifdef(TEST).
+test_await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint) ->
+    await_public_proof(Engine, MRef, CallRef, Ns, Checkpoint).
+-endif.
 
 -doc """
 Submit one sealed local plan (`m:quod_dtx`) to its target validator engine.
@@ -281,20 +352,108 @@ submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
             Error
     end.
 
--doc "Resolve one anchored transaction outcome without re-proving its goal.".
--spec outcome({transaction, binary(), binary(), binary()}) ->
+-doc "Resolve one anchored transaction or distributed-group outcome without re-proving.".
+-spec outcome({transaction, binary(), binary(), binary()} |
+              {group, binary(), binary(), binary(), binary(), binary()}) ->
           {ok, map()} | {error, term()}.
 outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
   when is_binary(Ns), byte_size(Ns) > 0 ->
-    case quod_reg:where({quod_prolog, Ns}) of
-        undefined -> {error, {ontology_unreachable, Ns}};
-        Pid ->
-            try gen_server:call(Pid, {outcome, Ref}, 5000)
-            catch exit:_ -> {error, {outcome_unknown, Ref}}
-            end
-    end;
+    public_outcome(Ns, Ref);
+outcome({group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    public_outcome(Ns, Ref);
 outcome(_Ref) ->
     {error, bad_outcome_ref}.
+
+public_outcome(Ns, Ref) ->
+    case quod_reg:where({quod_prolog, Ns}) of
+        undefined -> quod_simplex:dtx_outcome_lookup(Ref, 5000);
+        _Pid -> local_outcome(Ns, Ref)
+    end.
+
+-doc "Read one co-hosted public outcome without performing remote fallback.".
+-spec local_outcome(binary(), term()) -> {ok, map()} | {error, term()}.
+local_outcome(Ns, Ref) when is_binary(Ns), byte_size(Ns) > 0 ->
+    case quod_reg:where({quod_prolog, Ns}) of
+        undefined ->
+            {error, {ontology_unreachable, Ns}};
+        Pid ->
+            Reply =
+                try gen_server:call(Pid, {outcome, Ref}, 5000)
+                catch exit:_ -> {error, {outcome_unknown, Ref}}
+                end,
+            resolve_public_group_absence(Ns, Ref, Reply)
+    end;
+local_outcome(_Ns, _Ref) ->
+    {error, bad_outcome_ref}.
+
+resolve_public_group_absence(
+  Ns,
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref,
+  {error, {group_not_found, AppliedFloor}})
+  when is_integer(AppliedFloor), AppliedFloor >= 0 ->
+    case quod_simplex:dtx_group_barrier(Ns, Ref, AppliedFloor) of
+        {ok, pending} ->
+            {ok, #{status => pending, phase => pending_begin, ref => Ref}};
+        {ok, not_found} ->
+            {error, not_found};
+        {ok, {rejected, coordinator_retired}} ->
+            {ok, #{status => rejected, reason => coordinator_retired,
+                   ref => Ref}};
+        {error, _} = Error ->
+            Error
+    end;
+resolve_public_group_absence(_Ns, _Ref, Reply) ->
+    Reply.
+
+outcome_not_found(
+  {group, _Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
+  AppliedFloor) ->
+    {error, {group_not_found, AppliedFloor}};
+outcome_not_found(_Ref, _AppliedFloor) ->
+    {error, not_found}.
+
+-doc "Read one locally-applied outcome and its atomic publication floor.".
+-spec outcome_snapshot(binary(), term()) ->
+          {ok, #{applied_floor := non_neg_integer(),
+                 outcome := not_found | map()}} |
+          {error, term()}.
+outcome_snapshot(Ns, Ref) when is_binary(Ns), byte_size(Ns) > 0 ->
+    try gen_server:call(
+          quod_reg:via({quod_prolog, Ns}), {outcome_snapshot, Ref}, 1000)
+    catch exit:_ -> {error, {ontology_unavailable, Ns}}
+    end;
+outcome_snapshot(_Ns, _Ref) ->
+    {error, bad_outcome_ref}.
+
+-doc "Read exact bounded local DTX history, applied row, and publication floor.".
+-spec dtx_group_state(binary(), <<_:256>>) ->
+          {ok, map()} | {error, term()}.
+dtx_group_state(Ns, <<_:256>> = GroupId) when is_binary(Ns) ->
+    try gen_server:call(
+          quod_reg:via({quod_prolog, Ns}),
+          {dtx_group_state, GroupId}, 1000)
+    catch exit:_ -> {error, {ontology_unavailable, Ns}}
+    end;
+dtx_group_state(_Ns, _GroupId) ->
+    {error, invalid_group_id}.
+
+-doc "Project the signing journal's exact pending Begin before the engine becomes ready.".
+-spec project_pending_begin(binary(), none | map()) -> ok.
+project_pending_begin(Ns, Pending) when is_binary(Ns) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}), {project_pending_begin, Pending}).
+
+-doc "Recheck a local group waiter after an authoritative Simplex resolution edge.".
+-spec dtx_group_resolved(binary(), term()) -> ok.
+dtx_group_resolved(Ns,
+                    {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}
+                      = GroupRef)
+  when is_binary(Ns) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}), {dtx_group_resolved, GroupRef});
+dtx_group_resolved(_Ns, _GroupRef) ->
+    ok.
 
 -doc """
 Authorize and execute one node-local ontology lifecycle action.
@@ -369,9 +528,9 @@ It is decided by the `quod_simplex` path that obtained the block, never inferred
 apply publishes the post-apply `applied_live` event (`doc/agent-fipa-plan.md` §7), a `replay` apply
 rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
--spec apply_block(binary(), pos_integer(), entry_data(), live | replay) -> ok.
-apply_block(Ns, Index, Change, Origin) ->
-    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_block, Index, Change, Origin}).
+-spec apply_entry(binary(), #entry{}, live | replay) -> ok.
+apply_entry(Ns, #entry{} = Entry, Origin) ->
+    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {apply_entry, Entry, Origin}).
 
 -doc "Signal that the initial rebuild is complete and proves may be served.".
 -spec mark_ready(binary()) -> ok.
@@ -412,9 +571,9 @@ runtime_detach(Ns) ->
 
 -doc """
 Synchronous no-op barrier: returns once every message already in this kb's queue — in
-particular a burst of `apply_block/4` casts — has been consumed. `quod_simplex`'s streamed
+particular a burst of `apply_entry/3` casts — has been consumed. `quod_simplex`'s streamed
 replay calls this every few hundred casts so a long rebuild can't flood the mailbox with
-the whole log (backpressure); the applies themselves must stay casts (see `apply_block/4`).
+the whole log (backpressure); the applies themselves must stay casts (see `apply_entry/3`).
 Deadlock-safe from the replay: it only runs while this kb is UNREADY, and an unready kb
 refuses proves, so it can never be parked in an `append` back into `quod_simplex`.
 """.
@@ -431,13 +590,26 @@ as a correlated message.
 
 The verdict is judged against the KB **as of the proposal's parent** (`Slot-1`), so every honest node
 reaches the same verdict deterministically: if the kb is already there it is delivered now; if it is
-behind, the request parks until `apply_block` reaches `Slot-1` (or a short fixed TTL — `validation_ttl_ms`,
+behind, the request parks until `apply_entry` reaches `Slot-1` (or a short fixed TTL — `validation_ttl_ms`,
 on the order of Δ — reaps it to `abstain`); if the kb is already past the slot, the slot resolved without
 us — `abstain`. Re-issuing the same `Tag` supersedes a still-parked request for it.
 """.
 -spec request_membership_verdict(binary(), term(), pos_integer(), pid(), term()) -> ok.
 request_membership_verdict(Ns, Change, Slot, ReplyTo, Tag) ->
     gen_server:cast(quod_reg:via({quod_prolog, Ns}), {membership_verdict_req, Change, Slot, ReplyTo, Tag}).
+
+-doc """
+Look up one DTX control's exact group history at the proposal parent and, for
+Prepare, also validate its plan against that parent KB.  The reply is
+`{dtx_verdict, Tag, EnginePid, AppliedFloor,
+  {valid, History} | {invalid, Reason} | abstain}`.
+""".
+-spec request_dtx_verdict(binary(), quod_dtx:control(), pos_integer(), pid(), term()) -> ok.
+request_dtx_verdict(Ns, Control, Slot, ReplyTo, Tag)
+  when is_binary(Ns), is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}),
+      {dtx_verdict_req, Control, Slot, ReplyTo, Tag}).
 
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
@@ -546,34 +718,12 @@ init_opened(Ns, Cfg, Self, Signer, MaxProofWorkers, MaxScopeWorkers,
     end,
     {ok, S}.
 
-%% Proves are refused until the rebuild has caught the kb up (never a half-built read).
-%% A ready engine SPAWNS a worker per proof and returns immediately — the engine never
-%% blocks on a proof (doc/inter-ontology.md §4.1); the worker reports its result back
-%% to this engine, which owns the single reply path to the caller.
-handle_call({prove, _G, _TraceCtx}, _From, S = #s{ready = false}) ->
-    {reply, {error, rebuilding}, S};
-handle_call({prove, _Goal, _TraceCtx}, _From,
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when map_size(Workers) >= Max ->
-    {reply, {error, busy}, S};
-handle_call({prove, Goal, TraceCtx}, From, S) ->
-    {noreply, spawn_proof(prove, Goal, From, TraceCtx, S)};
-%% Read-only prove for trusted local subsystems: identical to a read, but a goal
-%% that stages a write is refused instead of submitted. Reads carry the
-%% committed height of the frozen view and are gated on readiness like prove.
-handle_call({prove_ro, _G}, _From, S = #s{ready = false}) ->
-    {reply, {error, rebuilding}, S};
-handle_call({prove_ro, _Goal}, _From,
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when map_size(Workers) >= Max ->
-    {reply, {error, busy}, S};
-handle_call({prove_ro, Goal}, From, S) ->
-    {noreply, spawn_proof(prove_ro, Goal, From, otel_ctx:new(), S)};
 %% A worker calls this exactly once after every participating plan is sealed
 %% and before it can block on submission. From this point it must never read
 %% its frozen Erlog state again. The move releases both the derivation budget
 %% and the MVCC floor while retaining one bounded owner for the eventual reply.
-handle_call({release_proof_snapshot, Ref}, {Pid, _Tag},
+handle_call({checkpoint_and_release_proof_snapshot, Ref, OutcomeRef},
+            {Pid, _Tag},
             S = #s{workers = Workers, waiting_workers = Waiting,
                    max_proof_workers = Max}) ->
     case maps:get(Ref, Workers, undefined) of
@@ -583,9 +733,12 @@ handle_call({release_proof_snapshot, Ref}, {Pid, _Tag},
             %% resolve after it; killing the owner now would turn an unknown
             %% outcome into a false definite failure and make retries unsafe.
             _ = erlang:cancel_timer(KillRef),
+            checkpoint_client(Worker#proof_worker.from, OutcomeRef),
             {reply, ok,
              S#s{workers = maps:remove(Ref, Workers),
-                 waiting_workers = Waiting#{Ref => Worker}}};
+                 waiting_workers = Waiting#{
+                   Ref => Worker#proof_worker{
+                            checkpoint = OutcomeRef}}}};
         #proof_worker{pid = Pid} ->
             {reply, {error, busy}, S};
         _ ->
@@ -610,12 +763,55 @@ handle_call({outcome, Ref}, _From, S = #s{outcomes = Outcomes0}) ->
             {reply, {error, wrong_genesis_anchor},
              S#s{outcomes = Outcomes1}};
         {not_found, Outcomes1} ->
-            {reply, {error, not_found}, S#s{outcomes = Outcomes1}};
+            Reply = outcome_not_found(Ref, S#s.applied),
+            {reply, Reply, S#s{outcomes = Outcomes1}};
         {{error, Reason}, Outcomes1} ->
             {stop, {outcome_index_unavailable, Reason},
              {error, outcome_index_unavailable},
              S#s{outcomes = Outcomes1}}
     end;
+handle_call({outcome_snapshot, _Ref}, _From,
+            S = #s{ready = false, ns = Ns}) ->
+    {reply, {error, {ontology_rebuilding, Ns}}, S};
+handle_call({outcome_snapshot, Ref}, _From,
+            S = #s{outcomes = Outcomes0}) ->
+    case quod_outcome:lookup_ref(Outcomes0, Ref) of
+        {{ok, Stored}, Outcomes1} ->
+            Reply = case quod_outcome:public(Stored) of
+                        {ok, Public} ->
+                            {ok, #{applied_floor =>
+                                       quod_outcome:applied_floor(Outcomes1),
+                                   outcome => Public}};
+                        {error, _} = Error -> Error
+                    end,
+            {reply, Reply, S#s{outcomes = Outcomes1}};
+        {wrong_anchor, Outcomes1} ->
+            {reply, {error, wrong_genesis_anchor},
+             S#s{outcomes = Outcomes1}};
+        {not_found, Outcomes1} ->
+            {reply,
+             {ok, #{applied_floor =>
+                         quod_outcome:applied_floor(Outcomes1),
+                     outcome => not_found}},
+             S#s{outcomes = Outcomes1}};
+        {{error, Reason}, Outcomes1} ->
+            {stop, {outcome_index_unavailable, Reason},
+             {error, outcome_index_unavailable},
+             S#s{outcomes = Outcomes1}}
+    end;
+handle_call({dtx_group_state, _GroupId}, _From,
+            S = #s{ready = false, ns = Ns}) ->
+    {reply, {error, {ontology_rebuilding, Ns}}, S};
+handle_call({dtx_group_state, GroupId}, _From,
+            S = #s{outcomes = Outcomes0}) ->
+    {Reply, Outcomes1} = local_dtx_group_state(GroupId, Outcomes0),
+    {reply, Reply, S#s{outcomes = Outcomes1}};
+%% The worker has already sealed every participant and built one immutable
+%% semantic Begin.  Registration is asynchronous to Simplex; this engine owns
+%% the sole in-flight correlation and does not block its mailbox.
+handle_call({register_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
+            S) ->
+    register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S);
 %% Lifecycle actions share the proof-worker budget and readiness gate. The
 %% node principal is derived here from engine state, never from the request.
 handle_call({run_action, _Action, _Structural}, _From,
@@ -650,6 +846,8 @@ handle_call(get_stats, _From, S) ->
               park_timeouts => S#s.park_timeouts,       %% final outcome unknown when caller deadline elapsed
               proof_workers => map_size(S#s.workers),
               proof_waiters => map_size(S#s.waiting_workers),
+              dtx_handoff => S#s.dtx_handoff =/= none,
+              group_waiters => map_size(S#s.group_waiters),
               scope_workers => map_size(S#s.scope_workers),
               remote_scopes => map_size(S#s.remote_scopes),
               kb_memory_words => quod_erlog_db_mvcc:memory_words(StoreRef),
@@ -692,8 +890,43 @@ handle_call({attach_runtime, _Pid}, _From, S) ->
     {reply, {error, not_ready}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
-handle_cast({apply_block, Index, Change, Origin}, S0) ->
-    S1 = apply_committed(Index, Change, Origin, S0),
+%% Public proofs use an explicit call reference and monitor the exact engine.
+%% This makes an engine exit distinguishable before/after a durable checkpoint
+%% without blocking the engine in an opaque gen_server call.
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx},
+            S = #s{ready = false})
+  when is_pid(Caller), is_reference(CallRef),
+       (Kind =:= prove orelse Kind =:= prove_ro) ->
+    reply_client({async, Caller, CallRef}, {error, rebuilding}),
+    {noreply, S};
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx},
+            S = #s{workers = Workers, max_proof_workers = Max})
+  when is_pid(Caller), is_reference(CallRef),
+       (Kind =:= prove orelse Kind =:= prove_ro),
+       map_size(Workers) >= Max ->
+    reply_client({async, Caller, CallRef}, {error, busy}),
+    {noreply, S};
+handle_cast({public_proof, Caller, CallRef, Kind, Goal, TraceCtx}, S)
+  when is_pid(Caller), is_reference(CallRef),
+       (Kind =:= prove orelse Kind =:= prove_ro) ->
+    {noreply,
+     spawn_proof(
+       Kind, Goal, {async, Caller, CallRef}, TraceCtx, S)};
+handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
+    case quod_outcome:project_pending_begin(Outcomes0, Pending) of
+        {ok, Outcomes1} ->
+            case quod_outcome:flush(Outcomes1) of
+                {ok, Outcomes2} -> {noreply, S#s{outcomes = Outcomes2}};
+                {error, Reason} ->
+                    {stop, {outcome_index_unavailable, Reason}, S}
+            end;
+        {error, Reason} ->
+            {stop, {outcome_index_unavailable, Reason}, S}
+    end;
+handle_cast({dtx_group_resolved, GroupRef}, S) ->
+    {noreply, release_group_waiter(GroupRef, S)};
+handle_cast({apply_entry, #entry{} = Entry, Origin}, S0) ->
+    S1 = apply_committed(Entry, Origin, S0),
     %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
     %% from the raw origin: an already-applied no-op (`Index =< applied`) or a forward gap
     %% (`Index > applied+1`, which bails to rebuild) must never emit a false boundary.
@@ -706,7 +939,7 @@ handle_cast({proof_result, Ref, Result}, S) ->
 %% apply can also close a replay interval, handled in note_origin/4.
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
-    {noreply, S#s{ready = true, runtime_mode = live}};
+    acknowledge_ready(S#s{ready = true, runtime_mode = live});
 %% Quiet-boot ready edge (agent-fipa-plan §7 as-built): a fresh/empty-log boot never opens a
 %% replay run, so without this clause the FIRST ready transition would be unobservable and a
 %% waiting runtime would hang. Guarded on the actual false→true edge — rebuild handshakes
@@ -714,8 +947,8 @@ handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied 
 %% the runtime a spurious full reconciliation each time.
 handle_cast(mark_ready, S = #s{ready = false, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, boot, H}),
-    {noreply, S#s{ready = true}};
-handle_cast(mark_ready, S) -> {noreply, S};
+    acknowledge_ready(S#s{ready = true});
+handle_cast(mark_ready, S) -> acknowledge_ready(S);
 %% Monotone floor raise from the attached runtime (runtime_floor/2); a stale or foreign
 %% caller's cast is ignored, and lowering is impossible by construction.
 handle_cast({runtime_floor, Pid, H}, S = #s{runtime_pin = {Pid, MRef, F}}) when H > F ->
@@ -730,8 +963,20 @@ handle_cast({runtime_detach, _Pid}, S) -> {noreply, S};
 %% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
 %% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
 handle_cast({membership_verdict_req, Change, Slot, ReplyTo, Tag}, S) ->
-    {noreply, request_verdict(Change, Slot, ReplyTo, Tag, S)};
+    {noreply,
+     request_validation(
+       {membership, Change}, Slot, ReplyTo, Tag, S)};
+handle_cast({dtx_verdict_req, Control, Slot, ReplyTo, Tag}, S) ->
+    {noreply,
+     request_validation(
+       {dtx, Control}, Slot, ReplyTo, Tag, S)};
 handle_cast(_Msg, S)       -> {noreply, S}.
+
+%% Emit readiness from the handled edge, not from the caller that queued it.
+%% Simplex also pins this process and height before opening its protected gate.
+acknowledge_ready(S = #s{ns = Ns, applied = Height}) ->
+    ok = quod_simplex:prolog_ready(Ns, self(), Height),
+    {noreply, S}.
 
 %% A proof worker finished (normal: it already replied / handed off) or crashed
 %% (abnormal: the caller still waits — reply the distinct error here). MUST come
@@ -841,18 +1086,31 @@ handle_info({park_timeout, Tx}, S = #s{ns = Ns, parked = P}) ->
                           park_timeouts = S#s.park_timeouts + 1}};
         error -> {noreply, S}
     end;
-%% A parked membership verdict whose parent height never arrived in time (the kb is too far behind, or
-%% the slot was skipped before we caught up): reap it and deliver `abstain` so the voter stops waiting.
+handle_info({group_wait_timeout, GroupId}, S = #s{group_waiters = Waiters}) ->
+    case maps:take(GroupId, Waiters) of
+        {#group_waiter{from = From, caller_mref = CallerMRef,
+                       group_ref = GroupRef}, Waiters1} ->
+            demonitor(CallerMRef, [flush]),
+            reply_client(From, {error, {outcome_unknown, GroupRef}}),
+            {noreply,
+             S#s{group_waiters = Waiters1,
+                 park_timeouts = S#s.park_timeouts + 1}};
+        error ->
+            {noreply, S}
+    end;
+%% A parked consensus verdict whose parent height never arrived in time (the KB
+%% is too far behind, or the slot was skipped before we caught up): reap it and
+%% deliver `abstain` so the voter stops waiting.
 handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
     case maps:take(Tag, V) of
-        {{_Slot, _Change, ReplyTo, _TRef}, V1} ->
-            deliver_verdict(ReplyTo, Tag, abstain),
+        {{_Slot, Request, ReplyTo, _TRef}, V1} ->
+            deliver_validation(Request, ReplyTo, Tag, abstain, S),
             {noreply, S#s{validations = V1}};
         error -> {noreply, S}
     end;
 %% `send_request/2` gives us a non-blocking gen_statem call without a helper process per
 %% transaction. Responses are matched through the opaque request-id collection and labelled
-%% with their tx id. A successful append still resolves through ordered `apply_block`; only a
+%% with their tx id. A successful append still resolves through ordered `apply_entry`; only a
 %% definite consensus rejection releases the parked client here.
 handle_info(Info, S) ->
     handle_response_info(Info, S).
@@ -1101,40 +1359,13 @@ charge_scope_open(PeerKey, Identity,
                   S = #s{scope_open_rates = Rates0}) ->
     Now = quod_time:mono_ms(),
     Key = {PeerKey, Identity},
-    Rates = maybe_prune_scope_open_rates(Now, Rates0),
-    case maps:find(Key, Rates) of
-        {ok, {Tokens0, LastRefill, _LastSeen}} ->
-            Capacity = ?QUOD_SCOPE_OPEN_RATE_BURST * 1000,
-            Tokens = min(
-                       Capacity,
-                       Tokens0 +
-                           max(0, Now - LastRefill) *
-                               ?QUOD_SCOPE_OPEN_RATE_PER_SECOND),
-            case Tokens >= 1000 of
-                true ->
-                    {ok,
-                     S#s{scope_open_rates = Rates#{
-                       Key => {Tokens - 1000, Now, Now}}}};
-                false ->
-                    {error,
-                     S#s{scope_open_rates = Rates#{
-                       Key => {Tokens, Now, Now}}}}
-            end;
-        error when map_size(Rates) >= ?QUOD_SCOPE_OPEN_MAX_BUCKETS ->
-            {error, S#s{scope_open_rates = Rates}};
-        error ->
-            Tokens = (?QUOD_SCOPE_OPEN_RATE_BURST - 1) * 1000,
-            {ok, S#s{scope_open_rates = Rates#{Key => {Tokens, Now, Now}}}}
+    case quod_token_bucket:charge(
+           Key, Now, ?QUOD_SCOPE_OPEN_RATE_PER_SECOND,
+           ?QUOD_SCOPE_OPEN_RATE_BURST, ?QUOD_TOKEN_BUCKET_MAX_BUCKETS,
+           ?QUOD_TOKEN_BUCKET_IDLE_MS, Rates0) of
+        {ok, Rates} -> {ok, S#s{scope_open_rates = Rates}};
+        {error, Rates} -> {error, S#s{scope_open_rates = Rates}}
     end.
-
-maybe_prune_scope_open_rates(Now, Rates)
-  when map_size(Rates) >= ?QUOD_SCOPE_OPEN_MAX_BUCKETS ->
-    maps:filter(
-      fun(_Key, {_Tokens, _LastRefill, LastSeen}) ->
-          Now - LastSeen < ?QUOD_SCOPE_OPEN_BUCKET_IDLE_MS
-      end, Rates);
-maybe_prune_scope_open_rates(_Now, Rates) ->
-    Rates.
 
 begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
                         RequestId, RemainingMs,
@@ -1283,16 +1514,80 @@ execute_remote_scope_command(Binding, scope_open, RequestId, CommandSeq, S) ->
 execute_remote_scope_command(Binding, Operation, RequestId, CommandSeq,
                              S = #s{remote_scopes = Remote}) ->
     case maps:find(Binding, Remote) of
-        {ok, #remote_scope{state = active} = Scope} ->
-            execute_active_scope_command(
-              Operation, RequestId, CommandSeq, Binding, Scope, S);
+        {ok, #remote_scope{state = State} = Scope} ->
+            execute_routed_scope_command(
+              scope_command_route(State, Operation), Operation,
+              RequestId, CommandSeq, Binding, Scope, S);
         _ ->
-            %% The command was accepted against an opening session only if it
-            %% violated the explicit opened-before-demand boundary.
             poison_remote_scope(
               Binding, RequestId, CommandSeq,
               {protocol_error, unexpected_scope_command}, S)
     end.
+
+execute_routed_scope_command(
+  active, Operation, RequestId, CommandSeq, Binding, Scope, S) ->
+    execute_active_scope_command(
+      Operation, RequestId, CommandSeq, Binding, Scope, S);
+execute_routed_scope_command(
+  sealed, Operation, RequestId, CommandSeq, Binding, Scope, S) ->
+    execute_sealed_scope_command(
+      Operation, RequestId, CommandSeq, Binding, Scope, S);
+execute_routed_scope_command(
+  error, _Operation, RequestId, CommandSeq, Binding, _Scope, S) ->
+    %% Opening and sealed scopes have deliberately disjoint command sets.
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      {protocol_error, unexpected_scope_command}, S).
+
+scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
+scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
+scope_command_route(active, _Operation) -> active;
+scope_command_route(sealed, scope_close) -> sealed;
+scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
+scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
+scope_command_route(submitting, scope_close) -> sealed;
+scope_command_route(submitted, scope_close) -> sealed;
+scope_command_route(_State, _Operation) -> error.
+
+execute_sealed_scope_command(
+  scope_close, RequestId, CommandSeq, Binding, _Scope, S) ->
+    close_remote_scope(Binding, RequestId, CommandSeq, S);
+execute_sealed_scope_command(
+  {scope_attest, ManifestBlob}, RequestId, CommandSeq, Binding,
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _SessionScopeId,
+               SessionProofId, SessionRef, _Ns, _Anchor},
+     pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            case quod_scope_wire:decode_payload(manifest, ManifestBlob) of
+                {ok, Manifest} ->
+                    InternalRef = make_ref(),
+                    Pid ! {scope_attest, self(), SessionProofId, SessionRef,
+                           InternalRef, Manifest},
+                    add_remote_pending(
+                      Binding, InternalRef,
+                      {scope_attest, RequestId, CommandSeq}, S);
+                {error, Reason} ->
+                    poison_remote_scope(
+                      Binding, RequestId, CommandSeq, Reason, S)
+            end
+    end;
+execute_sealed_scope_command(
+  {submit_plan, _, _, _, _} = Operation,
+  RequestId, CommandSeq, Binding, _Scope, S) ->
+    %% The existing one-participant path hands its already-sealed plan to the
+    %% target consensus engine exactly once. Move out of `sealed` before the
+    %% asynchronous hand-off so a duplicate cannot start a second submission.
+    S1 = update_remote_scope(
+           Binding,
+           fun(Scope) -> Scope#remote_scope{state = submitting} end, S),
+    execute_remote_plan_submission(
+      Operation, RequestId, CommandSeq, Binding, S1).
 
 execute_active_scope_command(
   scope_close, RequestId, CommandSeq, Binding, _Scope, S) ->
@@ -1302,9 +1597,7 @@ execute_active_scope_command(
     %% lifetime timer.  The last published generation is sufficient for the
     %% terminal acknowledgement; then the common drop path stops the worker
     %% and retains ownership until its monitored DOWN releases the pin.
-    S1 = emit_scope_event(
-           Binding, RequestId, CommandSeq, scope_closed, S),
-    drop_remote_scope(Binding, S1);
+    close_remote_scope(Binding, RequestId, CommandSeq, S);
 execute_active_scope_command(
   {invoke_open, InvocationId, Selection, Chain, GoalBlob},
   RequestId, CommandSeq, Binding,
@@ -1315,7 +1608,7 @@ execute_active_scope_command(
               Binding, RequestId, CommandSeq, InvocationId, 1,
               {proof_limit_exceeded, target_namespace(Binding)}, S);
         true ->
-            case quod_scope_wire:decode_payload(goal, GoalBlob) of
+            case decode_target_scope_goal(GoalBlob) of
                 {ok, Goal} ->
                     {ok, InternalRef} = quod_scope_session:invoke_open(
                                           Handle, InvocationId,
@@ -1386,42 +1679,10 @@ execute_active_scope_command(
       Binding, release, BatchIds,
       {batch_released, RequestId, CommandSeq, BatchIds}, Scope, S);
 execute_active_scope_command(
-  {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier},
-  RequestId, CommandSeq,
-  Binding = {scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
-             OriginIdentity, _TargetIdentity, Mode},
-  _Scope, S) ->
-    From = {remote_submit, Binding, RequestId, CommandSeq},
-    case Mode =:= read_write andalso
-         decode_submit_plan(PlanBlob) of
-        {ok, Plan} ->
-            %% The wire submission must be the authenticated scope's own plan:
-            %% same proof, same origin. A plan borrowed from another proof or
-            %% origin is refused before any consensus interaction.
-            case quod_dtx:proof_id(Plan) =:= ProofId andalso
-                 quod_dtx:origin(Plan) =:= OriginIdentity of
-                true ->
-                    case accept_plan_submission(
-                           From, Plan, GoalBlob, ResultBlob, [],
-                           quod_trace:extract(TraceCarrier), S) of
-                        {noreply, S1} -> S1;
-                        {reply, Reply, S1} ->
-                            finish_remote_submit(From, Reply, S1);
-                        {stop, Reason, Reply, S1} ->
-                            %% Preserve the remote caller's definite/unknown
-                            %% result, then fail-stop this ontology before it
-                            %% can accept another command with a broken index.
-                            {stop, Reason,
-                             finish_remote_submit(From, Reply, S1)}
-                    end;
-                false ->
-                    finish_remote_submit(From, {error, bad_plan}, S)
-            end;
-        false ->
-            finish_remote_submit(From, {error, bad_plan}, S);
-        {error, _Reason} ->
-            finish_remote_submit(From, {error, bad_plan}, S)
-    end;
+  {submit_plan, _, _, _, _}, RequestId, CommandSeq, Binding, _Scope, S) ->
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      {protocol_error, unexpected_scope_command}, S);
 execute_active_scope_command(
   scope_seal, RequestId, CommandSeq,
   Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
@@ -1460,6 +1721,61 @@ execute_active_scope_command(_Operation, RequestId, CommandSeq, Binding,
     poison_remote_scope(
       Binding, RequestId, CommandSeq,
       {protocol_error, unexpected_scope_command}, S).
+
+close_remote_scope(Binding, RequestId, CommandSeq, S) ->
+    S1 = emit_scope_event(
+           Binding, RequestId, CommandSeq, scope_closed, S),
+    drop_remote_scope(Binding, S1).
+
+execute_remote_plan_submission(
+  {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier},
+  RequestId, CommandSeq,
+  Binding = {scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
+             OriginIdentity, _TargetIdentity, Mode},
+  S) ->
+    From = {remote_submit, Binding, RequestId, CommandSeq},
+    case Mode =:= read_write andalso decode_submit_plan(PlanBlob) of
+        {ok, Plan} ->
+            %% The wire submission must be the authenticated scope's own plan:
+            %% same proof, same origin. A plan borrowed from another proof or
+            %% origin is refused before any consensus interaction.
+            case quod_dtx:proof_id(Plan) =:= ProofId andalso
+                 quod_dtx:origin(Plan) =:= OriginIdentity of
+                true ->
+                    case accept_plan_submission(
+                           From, Plan, GoalBlob, ResultBlob, [],
+                           quod_trace:extract(TraceCarrier), S) of
+                        {noreply, S1} -> S1;
+                        {reply, Reply, S1} ->
+                            finish_remote_submit(From, Reply, S1);
+                        {stop, Reason, Reply, S1} ->
+                            %% Preserve the remote caller's definite/unknown
+                            %% result, then fail-stop this ontology before it
+                            %% can accept another command with a broken index.
+                            {stop, Reason,
+                             finish_remote_submit(From, Reply, S1)}
+                    end;
+                false ->
+                    finish_remote_submit(From, {error, bad_plan}, S)
+            end;
+        false ->
+            finish_remote_submit(From, {error, bad_plan}, S);
+        {error, _Reason} ->
+            finish_remote_submit(From, {error, bad_plan}, S)
+    end.
+
+%% Scope-goal symbols remain opaque through intermediate origin relays. The
+%% target owns execution and makes the single bounded, authenticated
+%% atom-allocation decision before its scope worker receives the goal.
+decode_target_scope_goal(GoalBlob) ->
+    case quod_scope_wire:decode_payload(goal, GoalBlob) of
+        {ok, Goal0} ->
+            case quod_wire_term:materialize_goal_symbols(Goal0) of
+                {ok, Goal} -> {ok, Goal};
+                {error, _} -> {error, {protocol_error, bad_payload}}
+            end;
+        {error, _} = Error -> Error
+    end.
 
 queue_scope_state_probe(Binding, Purpose,
                         Scope = #remote_scope{pending = Pending}, S) ->
@@ -1732,8 +2048,11 @@ handle_bound_scope_reply(
   {sealed, {ok, Plan}}, S) ->
     case quod_scope_wire:encode_payload(plan, Plan) of
         {ok, Blob} ->
+            S1 = update_remote_scope(
+                   Binding,
+                   fun(Scope) -> Scope#remote_scope{state = sealed} end, S),
             emit_scope_event(
-              Binding, RequestId, CommandSeq, {plan_sealed, Blob}, S);
+              Binding, RequestId, CommandSeq, {plan_sealed, Blob}, S1);
         {error, Reason} ->
             poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S)
     end;
@@ -1741,13 +2060,32 @@ handle_bound_scope_reply(
   Binding, _Scope,
   {scope_seal, RequestId, CommandSeq},
   {sealed, not_material}, S) ->
-    emit_scope_event(Binding, RequestId, CommandSeq, plan_not_material, S);
+    S1 = update_remote_scope(
+           Binding,
+           fun(Scope) -> Scope#remote_scope{state = sealed} end, S),
+    emit_scope_event(Binding, RequestId, CommandSeq, plan_not_material, S1);
 handle_bound_scope_reply(
   Binding, _Scope,
   {scope_seal, RequestId, CommandSeq},
   {sealed, {error, Reason}}, S) ->
     %% A refused seal fails the origin's finalize; the scope is finished
     %% either way, so the poison-and-drop path is the honest terminal state.
+    poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_attest, RequestId, CommandSeq},
+  {attested, {ok, Attestation}}, S) ->
+    case quod_scope_wire:encode_payload(attestation, Attestation) of
+        {ok, Blob} ->
+            emit_scope_event(
+              Binding, RequestId, CommandSeq, {plan_attested, Blob}, S);
+        {error, Reason} ->
+            poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S)
+    end;
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {scope_attest, RequestId, CommandSeq},
+  {attested, {error, Reason}}, S) ->
     poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S);
 handle_bound_scope_reply(
   Binding, _Scope,
@@ -1989,6 +2327,22 @@ test_scope_timeout_reason(Phase, Ns) ->
 test_scope_command_budget_valid(Operation, RemainingMs, Deadline) ->
     scope_command_budget_valid(Operation, RemainingMs, Deadline).
 
+test_scope_command_route(State, Operation) ->
+    scope_command_route(State, Operation).
+
+test_sealed_submit_transition() ->
+    Binding =
+        {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,
+         {<<"quod:origin">>, <<5:256>>},
+         {<<"quod:target">>, <<6:256>>}, read_write},
+    Operation = {submit_plan, <<"not-a-plan">>, <<>>, <<>>, []},
+    Scope = #remote_scope{binding = Binding, state = sealed},
+    S0 = #s{remote_scopes = #{Binding => Scope}},
+    S1 = execute_sealed_scope_command(
+           Operation, <<7:128>>, 2, Binding, Scope, S0),
+    #remote_scope{state = State} = maps:get(Binding, S1#s.remote_scopes),
+    {State, scope_command_route(State, Operation)}.
+
 test_target_scope_lifetime_ms(RemainingMs, LocalLimitMs) ->
     target_scope_lifetime_ms(RemainingMs, LocalLimitMs).
 
@@ -2004,6 +2358,9 @@ test_scope_worker_failure(Reason, Ns) ->
 
 test_proof_down_reply(Kind, Reason, Ns) ->
     proof_down_reply(Kind, Reason, Ns).
+
+test_proof_down_reply(Kind, Reason, Ns, Checkpoint) ->
+    proof_down_reply(Kind, Reason, Ns, Checkpoint).
 -endif.
 
 target_namespace({scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
@@ -2335,7 +2692,13 @@ drop_remote_record(
         error -> S
     end.
 
-handle_response_info(Info, S = #s{requests = Requests}) ->
+handle_response_info(Info, S) ->
+    case handle_dtx_handoff_response(Info, S) of
+        no_reply -> handle_append_response_info(Info, S);
+        Reply -> Reply
+    end.
+
+handle_append_response_info(Info, S = #s{requests = Requests}) ->
     case gen_statem:check_response(Info, Requests, true) of
         {{reply, Result}, Tx, Requests1} ->
             {noreply, append_result(Tx, Result, S#s{requests = Requests1})};
@@ -2348,6 +2711,111 @@ handle_response_info(Info, S = #s{requests = Requests}) ->
         no_request ->
             {noreply, S}
     end.
+
+register_dtx_handoff(
+  Ref, Pid, From, Begin, GroupRef,
+  S = #s{ns = Ns, workers = Workers, dtx_handoff = none}) ->
+    Checks =
+        {maps:get(Ref, Workers, undefined),
+         quod_dtx:begin_group_ref(Begin)},
+    case Checks of
+        {#proof_worker{pid = Pid}, {ok, GroupRef}} ->
+            IntentId = make_ref(),
+            case quod_simplex:register_dtx_begin(
+                   Ns, self(), IntentId, Begin, GroupRef) of
+                {ok, RequestId} ->
+                    Handoff = #dtx_handoff{
+                                 intent_id = IntentId,
+                                 request_id = RequestId,
+                                 worker_ref = Ref,
+                                 worker_pid = Pid,
+                                 from = From,
+                                 group_ref = GroupRef},
+                    {noreply, S#s{dtx_handoff = Handoff}};
+                {error, _} = Error ->
+                    {reply, Error, S}
+            end;
+        {#proof_worker{pid = Pid}, error} ->
+            {reply, {error, invalid_begin}, S};
+        _ ->
+            {reply, {error, cancelled}, S}
+    end;
+register_dtx_handoff(_Ref, _Pid, _From, _Begin, _GroupRef, S) ->
+    {reply, {error, busy}, S}.
+
+handle_dtx_handoff_response(_Info, #s{dtx_handoff = none}) ->
+    no_reply;
+handle_dtx_handoff_response(
+  Info,
+  S = #s{dtx_handoff =
+           #dtx_handoff{request_id = RequestId} = Handoff}) ->
+    case gen_statem:check_response(Info, RequestId) of
+        {reply, {accepted, IntentId}} ->
+            accepted_dtx_handoff(IntentId, Handoff, S);
+        {reply, {error, Reason}} ->
+            rejected_dtx_handoff({error, Reason}, Handoff, S);
+        {reply, _Other} ->
+            rejected_dtx_handoff(
+              {error, {protocol_error, dtx_handoff}}, Handoff, S);
+        {error, _Reason} ->
+            rejected_dtx_handoff(
+              {error, {ontology_unavailable, S#s.ns}}, Handoff, S);
+        no_reply ->
+            no_reply
+    end.
+
+accepted_dtx_handoff(
+  IntentId,
+  #dtx_handoff{intent_id = IntentId, worker_ref = Ref,
+               worker_pid = Pid, from = From,
+               group_ref = GroupRef},
+  S = #s{ns = Ns, workers = Workers, waiting_workers = Waiting,
+         group_waiters = GroupWaiters, max_proof_workers = Max}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{pid = Pid, timer = KillRef} = Worker
+          when map_size(Waiting) < Max,
+               map_size(GroupWaiters) < Max ->
+            _ = erlang:cancel_timer(KillRef),
+            Worker1 = Worker#proof_worker{checkpoint = GroupRef},
+            S1 = S#s{
+                   workers = maps:remove(Ref, Workers),
+                   waiting_workers = Waiting#{Ref => Worker1},
+                   dtx_handoff = none},
+            %% Register was acknowledged.  Checkpoint and activation are sent
+            %% by this exact engine in that order before the worker may close
+            %% the participant scopes.
+            checkpoint_client(Worker#proof_worker.from, GroupRef),
+            ok = quod_simplex:activate_dtx_begin(Ns, self(), IntentId),
+            gen_server:reply(From, ok),
+            {noreply, S1};
+        _ ->
+            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            gen_server:reply(From, {error, cancelled}),
+            {noreply, S#s{dtx_handoff = none}}
+    end;
+accepted_dtx_handoff(_WrongIntentId, Handoff, S) ->
+    rejected_dtx_handoff(
+      {error, {protocol_error, dtx_handoff}}, Handoff, S).
+
+rejected_dtx_handoff(
+  Error,
+  #dtx_handoff{intent_id = IntentId, from = From},
+  S = #s{ns = Ns}) ->
+    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+    gen_server:reply(From, Error),
+    {noreply, S#s{dtx_handoff = none}}.
+
+cancel_dtx_handoff(
+  Ref,
+  S = #s{ns = Ns,
+         dtx_handoff = #dtx_handoff{
+                           worker_ref = Ref, intent_id = IntentId,
+                           from = From}}) ->
+    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+    gen_server:reply(From, {error, cancelled}),
+    S#s{dtx_handoff = none};
+cancel_dtx_handoff(_Ref, S) ->
+    S.
 
 terminate(_Reason, #s{ns = Ns, workers = W,
                       waiting_workers = Waiting,
@@ -2389,7 +2857,7 @@ spawn_proof(Kind, Goal, From, TraceCtx, Principal,
         proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal,
                      Ns, Est, Applied, TraceCtx, Principal, Signer)
     end, [monitor]),
-    CallerMRef = monitor(process, element(1, From)),
+    CallerMRef = monitor(process, proof_client_pid(From)),
     Token = make_ref(),
     KillDelay = max(1, Deadline - quod_time:mono_ms()),
     KillRef = erlang:send_after(KillDelay, Engine, {proof_kill, Ref, Token}),
@@ -2543,16 +3011,18 @@ finalize_pinned_result(Result) ->
         %% seals. Scope-close failure cannot turn logical failure into a
         %% different public result; remote private state expires discarded.
         {error, _Reason} when Mode =:= abort -> Result;
-        %% Submission precedes scope cleanup. Once consensus returned a
-        %% committed handle, a later close/fence failure is only a cleanup
-        %% failure: replacing the handle would invite an unsafe retry of a
-        %% non-idempotent operation.
-        {error, _Reason} when element(1, Result) =:= committed -> Result;
+        %% Durable hand-off precedes scope cleanup. Once an ordinary commit or
+        %% an activated group exists, a later close/fence failure is only a
+        %% cleanup failure: replacing the handle would invite an unsafe retry.
+        {error, _Reason}
+          when element(1, Result) =:= committed;
+               element(1, Result) =:= group_pending -> Result;
         {error, Reason} -> {error, Reason}
     end.
 
 finalization_mode({ok, _, _, _}) -> commit;
 finalization_mode({committed, _, _}) -> commit;
+finalization_mode({group_pending, _, _}) -> commit;
 finalization_mode(_Result) -> abort.
 
 -ifdef(TEST).
@@ -2564,39 +3034,39 @@ test_finalize_pinned_result(Result) -> finalize_pinned_result(Result).
 %% policy would be bypassed simply by proving the goal locally. The chain is
 %% empty here: this entry came from the engine, not through another ontology.
 run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
-    run_authorized_pinned_goal(Kind, Origin, authorized_goal(Origin, Goal)).
+    Verdict = authorization_verdict(Origin, Goal),
+    run_authorized_pinned_goal(Kind, Origin, Goal, Verdict).
 
-%% The goal the top-level entry actually runs: the requested one when the
-%% ontology's own `can_invoke/4` admits it, or `fail_with_reason(not_allowed)`
-%% when it refuses — so a denial is ordinary logical failure carrying its bounded
-%% reason through the same path as any other proof, never a special result.
-authorized_goal(
+%% Keep the requested goal intact for the authorization transcript. The proof
+%% session derives the bounded denial goal only for execution.
+authorization_verdict(
   #pinned_origin{namespace = Ns, anchor = Anchor,
                  height = Height, session = Session}, Goal) ->
     case quod_ask:authorize_scope(
            quod_proof_context:principal(), Goal, [], {Ns, Anchor},
            Height, Session) of
-        true -> Goal;
+        true -> allowed;
         false ->
             logger:warning(
               "quod_prolog[~s]: can_invoke refused a top-level goal at "
               "pinned height ~p", [Ns, Height]),
-            {fail_with_reason, {not_allowed, Ns}}
+            denied
     end.
 
 proof_principal(#{pubkey := <<_:256>> = Pubkey}) -> {node, Pubkey};
 proof_principal(none) -> anonymous.
 
-run_authorized_pinned_goal(Kind, Origin, Goal) ->
+run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
     Result = normalize_read_only_result(
-               Kind, run_origin_invocation(Origin, Goal)),
+               Kind, run_origin_invocation(Origin, Goal, Verdict)),
     finish_pinned_proof(Kind, Origin, Goal, Result).
 
-%% A successful ordinary proof seals its plans while every scope is still
-%% open, then submits the sole participating plan to that target's own
-%% validator engine — local, co-hosted, or remote. A participant contributed
-%% either writes or OCC reads. Read-only proof kinds and failed proofs pass
-%% through; failed proofs close without sealing.
+%% A successful writable proof seals every scope while all sessions are still
+%% open, then routes the immutable participant set once: zero material plans is
+%% a read, one plan uses that target's ordinary consensus path, and two or more
+%% use one atomic group. A participant contributed writes or OCC reads.
+%% Read-only proof kinds and failed proofs pass through; failed proofs close
+%% without sealing.
 finish_pinned_proof(prove, Origin, Goal, {ok, Bindings, _Diff, ReadSet}) ->
     case quod_proof_context:seal_plans() of
         {ok, Plans} ->
@@ -2617,46 +3087,163 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
             %% read-only plans stay in the context for the group protocol.
             {ok, Bindings, [], ReadSet};
         [Target] ->
-            case release_origin_snapshot(Origin) of
-                ok ->
-                    submit_single_plan(
-                      Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-                {error, _} = Error -> Error
-            end;
-        Many ->
-            %% The one acknowledged interim seam: group coordination is the
-            %% Begin/Prepare protocol, not N independent submissions.
-            {error, {distributed_group_unimplemented, Many}}
+            submit_single_plan(
+              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
+        Participants ->
+            submit_group(
+              Origin, Goal, Bindings, Plans, Participants)
     end.
 
-release_origin_snapshot(
-  #pinned_origin{engine = Engine, worker_ref = Ref}) ->
-    release_proof_snapshot(Engine, Ref).
+checkpoint_and_release_origin_snapshot(
+  #pinned_origin{engine = Engine, worker_ref = WorkerRef}, OutcomeRef) ->
+    gen_server:call(
+      Engine,
+      {checkpoint_and_release_proof_snapshot, WorkerRef, OutcomeRef},
+      infinity).
 
-release_proof_snapshot(Engine, Ref) ->
-    gen_server:call(Engine, {release_proof_snapshot, Ref}, infinity).
-
-submit_single_plan(#pinned_origin{namespace = Ns, anchor = Anchor},
+submit_single_plan(#pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
                    {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings) ->
-    Result =
-        case quod_proof_context:scope_handle(Target) of
-            {ok, {remote_scope, _, _, _, _} = Handle} ->
-                submit_remote_plan(Handle, Plan, Goal, Bindings);
-            {ok, {local_scope, _, TargetNs, TargetAnchor, _, _}} ->
-                quod_prolog:submit_plan(TargetNs, Plan, Goal, Bindings);
-            {ok, {quod_scope_session, _, _, _, _,
-                  TargetNs, TargetAnchor}} ->
-                quod_prolog:submit_plan(TargetNs, Plan, Goal, Bindings);
-            _ ->
-                {error, {ontology_unreachable, TargetNs}}
-        end,
-    case {Result, Target} of
-        {{ok, _B, Index, _TxId}, {Ns, Anchor}} ->
-            {committed, Bindings, Index};
-        {{ok, _B, _Index, TxId}, _Foreign} ->
-            {committed, Bindings, {transaction, TargetNs, TargetAnchor, TxId}};
-        {{error, _} = Error, _} ->
+    case quod_transaction:encode_durable_submission(Goal, Bindings) of
+        {ok, GoalBlob, ResultBlob} ->
+            OutcomeRef = quod_transaction:plan_outcome_ref(
+                           Plan, GoalBlob, ResultBlob),
+            case checkpoint_and_release_origin_snapshot(Origin, OutcomeRef) of
+                ok ->
+                    Result = submit_single_plan_at_target(
+                               Target, Plan, Goal, Bindings,
+                               GoalBlob, ResultBlob),
+                    case {Result, Target} of
+                        {{ok, _B, Index, _TxId}, {Ns, Anchor}} ->
+                            {committed, Bindings, Index};
+                        {{ok, _B, _Index, TxId}, _Foreign} ->
+                            {committed, Bindings,
+                             {transaction, TargetNs, TargetAnchor, TxId}};
+                        {{error, _} = Error, _} ->
+                            Error
+                    end;
+                {error, _} = Error ->
+                    Error
+            end;
+        {error, _} = Error ->
             Error
+    end.
+
+submit_single_plan_at_target(
+  {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings,
+  GoalBlob, ResultBlob) ->
+    case quod_proof_context:scope_handle(Target) of
+        {ok, {remote_scope, _, _, _, _} = Handle} ->
+            %% The remote facade canonical-encodes the same immutable values;
+            %% OutcomeRef above is therefore the exact target transaction.
+            submit_remote_plan(Handle, Plan, Goal, Bindings);
+        {ok, {local_scope, _, TargetNs, TargetAnchor, _, _}} ->
+            submit_plan_encoded(
+              TargetNs, Plan, GoalBlob, ResultBlob, Bindings);
+        {ok, {quod_scope_session, _, _, _, _,
+              TargetNs, TargetAnchor}} ->
+            submit_plan_encoded(
+              TargetNs, Plan, GoalBlob, ResultBlob, Bindings);
+        _ ->
+            {error, {ontology_unreachable, TargetNs}}
+    end.
+
+submit_plan_encoded(TargetNs, Plan, GoalBlob, ResultBlob, Bindings) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, {ontology_unreachable, TargetNs}};
+        Pid ->
+            try gen_server:call(
+                  Pid,
+                  {submit_plan, Plan, GoalBlob, ResultBlob,
+                   [Bindings], quod_trace:context()}, infinity)
+            catch exit:_ ->
+                {error,
+                 {outcome_unknown,
+                  quod_transaction:plan_outcome_ref(
+                    Plan, GoalBlob, ResultBlob)}}
+            end
+    end.
+
+submit_group(
+  #pinned_origin{engine = Engine, worker_ref = WorkerRef,
+                 proof_id = ProofId, namespace = Ns,
+                 anchor = Anchor},
+  Goal, Bindings, Plans, Participants) ->
+    case quod_transaction:encode_durable_submission(Goal, Bindings) of
+        {ok, GoalBlob, ResultBlob} ->
+            case quod_simplex:dtx_binding(Ns) of
+                {ok, {Ns, Anchor, _Coordinator, _Admission} = Coordinator} ->
+                    Principal = quod_dtx:principal(
+                                  maps:get(hd(Participants), Plans)),
+                    ParticipantRows =
+                        [{Identity,
+                          quod_dtx:digest(maps:get(Identity, Plans))}
+                         || Identity <- Participants],
+                    ManifestInput =
+                        #{proof_id => ProofId,
+                          coordinator => Coordinator,
+                          nonce => crypto:strong_rand_bytes(32),
+                          principal => Principal,
+                          goal => GoalBlob,
+                          result => ResultBlob,
+                          participants => ParticipantRows},
+                    build_and_register_group(
+                      Engine, WorkerRef, ManifestInput,
+                      Plans, ParticipantRows, Bindings);
+                {ok, _WrongBinding} ->
+                    {error, {protocol_error, coordinator_binding}};
+                {error, _} = Error ->
+                    Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+build_and_register_group(
+  Engine, WorkerRef, ManifestInput, Plans, ParticipantRows, Bindings) ->
+    case quod_dtx:new_manifest(ManifestInput) of
+        {ok, Manifest} ->
+            case attest_group_plans(
+                   ParticipantRows, Plans, Manifest, []) of
+                {ok, Bundles} ->
+                    case quod_dtx:new_begin(Manifest, Bundles) of
+                        {ok, Begin} ->
+                            case quod_dtx:begin_group_ref(Begin) of
+                                {ok, GroupRef} ->
+                                    case gen_server:call(
+                                           Engine,
+                                           {register_dtx_begin, WorkerRef,
+                                            Begin, GroupRef}, infinity) of
+                                        ok ->
+                                            {group_pending, Bindings, GroupRef};
+                                        {error, _} = Error -> Error
+                                    end;
+                                error ->
+                                    {error, invalid_begin}
+                            end;
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+attest_group_plans([], _Plans, _Manifest, RevBundles) ->
+    {ok, lists:reverse(RevBundles)};
+attest_group_plans(
+  [{Identity, PlanDigest} | Rest], Plans, Manifest, RevBundles) ->
+    Plan = maps:get(Identity, Plans),
+    case {quod_proof_context:scope_handle(Identity), quod_dtx:encode(Plan)} of
+        {{ok, Handle}, {ok, PlanBlob}} ->
+            case quod_scope_session:attest_plan(Handle, Plan, Manifest) of
+                {ok, Attestation} ->
+                    Bundle = {Identity, PlanDigest, PlanBlob, Attestation},
+                    attest_group_plans(
+                      Rest, Plans, Manifest, [Bundle | RevBundles]);
+                {error, _} = Error -> Error
+            end;
+        {error, _} -> {error, {protocol_error, session_binding}};
+        {_, {error, _} = Error} -> Error
     end.
 
 %% The remote target committed under its own authorship; only the bounded
@@ -2667,19 +3254,25 @@ submit_remote_plan(Handle, Plan, Goal, Bindings) ->
         {error, _} = Error -> Error
     end.
 
+run_origin_invocation(Origin, Goal) ->
+    run_origin_invocation(Origin, Goal, allowed).
+
 run_origin_invocation(
   #pinned_origin{scope_id = ScopeId,
-                 session = Session, context = Context}, Goal) ->
+                 session = Session, context = Context}, Goal, Verdict) ->
     InvocationId = crypto:strong_rand_bytes(16),
     Actor = {ScopeId, InvocationId},
     Selection = quod_transaction_scope:empty_selection(),
     case quod_proof_context:register_invocation(Actor, Selection) of
         ok ->
             try quod_proof_session:open_first(
-                  Session, InvocationId, Goal, Context, Selection)
+                  Session, InvocationId, Goal, Verdict, Context, Selection)
             after
-                quod_proof_session:cancel(Session, InvocationId),
-                quod_proof_context:unregister_invocation(Actor)
+                try
+                    ok = quod_proof_session:cancel(Session, InvocationId)
+                after
+                    quod_proof_context:unregister_invocation(Actor)
+                end
             end;
         {error, Reason} ->
             {error, Reason}
@@ -2805,22 +3398,65 @@ lifecycle_success() -> {ok, #{}, [], #{}}.
 %% Every worker result is terminal now: a write proof commits (or fails)
 %% inside the worker through submit_plan/4 before it reports, so the engine's
 %% one reply path only shapes results — it never re-enters submission.
+finish_proof(Ref, {group_pending, _Bindings, GroupRef}, S) ->
+    retain_group_waiter(Ref, GroupRef, S);
 finish_proof(Ref, Result, S) ->
     case take_proof_worker(Ref, S) of
         error -> S;
         {{From, Applied}, S1} ->
             case Result of
-                {fail, []} -> gen_server:reply(From, fail), S1;
-                {fail, Reasons} -> gen_server:reply(From, {fail, Reasons}), S1;
-                {error, _} = E -> gen_server:reply(From, E), S1;
+                {fail, []} -> reply_client(From, fail), S1;
+                {fail, Reasons} -> reply_client(From, {fail, Reasons}), S1;
+                {error, _} = E -> reply_client(From, E), S1;
                 {ok, Bindings, [], _ReadSet} ->
-                    gen_server:reply(From, {ok, [Bindings], Applied}), S1;
+                    reply_client(From, {ok, [Bindings], Applied}), S1;
                 {committed, Bindings, Handle} ->
-                    gen_server:reply(From, {ok, [Bindings], Handle}), S1;
+                    reply_client(From, {ok, [Bindings], Handle}), S1;
                 _Other ->
-                    gen_server:reply(
+                    reply_client(
                       From, {error, {protocol_error, proof_engine}}), S1
             end
+    end.
+
+retain_group_waiter(
+  Ref,
+  {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
+    = GroupRef,
+  S = #s{waiting_workers = Waiting, group_waiters = GroupWaiters,
+         max_proof_workers = Max, ttl = Ttl}) ->
+    case {maps:take(Ref, Waiting), maps:is_key(GroupId, GroupWaiters)} of
+        {{#proof_worker{checkpoint = GroupRef,
+                        worker_mref = WorkerMRef,
+                        caller_mref = CallerMRef,
+                        from = From, timer = ProofTimer}, Waiting1}, false}
+          when map_size(GroupWaiters) < Max ->
+            _ = erlang:cancel_timer(ProofTimer),
+            demonitor(WorkerMRef, [flush]),
+            Timer = erlang:send_after(Ttl, self(),
+                                      {group_wait_timeout, GroupId}),
+            Waiter = #group_waiter{
+                        from = From, caller_mref = CallerMRef,
+                        timer = Timer, group_ref = GroupRef},
+            S1 = S#s{waiting_workers = Waiting1,
+                     group_waiters = GroupWaiters#{GroupId => Waiter}},
+            %% Complete may have crossed this worker's scope-cleanup/result
+            %% message. Re-read the flushed projection now so that ordering
+            %% cannot strand a waiter until its deadline.
+            release_group_waiter(GroupRef, S1);
+        {{Worker, Waiting1}, _} ->
+            {_Reply, _Height} = proof_worker_reply(Worker),
+            reply_client(Worker#proof_worker.from,
+                         {error, {outcome_unknown, GroupRef}}),
+            S#s{waiting_workers = Waiting1};
+        {error, _} ->
+            S
+    end;
+retain_group_waiter(Ref, _BadRef, S) ->
+    case take_proof_worker(Ref, S) of
+        {{From, _Applied}, S1} ->
+            reply_client(From, {error, {protocol_error, dtx_waiter}}),
+            S1;
+        error -> S
     end.
 
 take_proof_worker(Ref, S = #s{workers = W, waiting_workers = Waiting}) ->
@@ -2844,6 +3480,21 @@ proof_worker_reply(
     demonitor(WorkerMRef, [flush]),
     demonitor(CallerMRef, [flush]),
     {From, Applied}.
+
+proof_client_pid({async, Pid, _CallRef}) when is_pid(Pid) -> Pid;
+proof_client_pid({Pid, _Tag}) when is_pid(Pid) -> Pid.
+
+reply_client({async, Caller, CallRef}, Reply) ->
+    Caller ! {quod_proof_reply, self(), CallRef, Reply},
+    ok;
+reply_client(From, Reply) ->
+    gen_server:reply(From, Reply).
+
+checkpoint_client({async, Caller, CallRef}, Ref) ->
+    Caller ! {quod_proof_checkpoint, self(), CallRef, Ref},
+    ok;
+checkpoint_client(_InternalCaller, _Ref) ->
+    ok.
 
 %% The attached runtime died: clear its pin so history pruning resumes at the next commit.
 %% (Its monitor already fired — no demonitor needed.)
@@ -2917,25 +3568,45 @@ handle_proof_down(MRef, Reason, S) ->
 
 handle_waiting_proof_down(MRef, Reason, S) ->
     case find_proof_monitor(MRef, S#s.waiting_workers) of
-        false -> unhandled;
+        false -> handle_group_waiter_down(MRef, S);
         Found -> finish_proof_down(Found, Reason, S)
+    end.
+
+handle_group_waiter_down(MRef, S = #s{group_waiters = Waiters}) ->
+    case maps:fold(
+           fun(GroupId, #group_waiter{caller_mref = CallerMRef}, Acc) ->
+                   case Acc of
+                       none when CallerMRef =:= MRef -> GroupId;
+                       _ -> Acc
+                   end
+           end, none, Waiters) of
+        none ->
+            unhandled;
+        GroupId ->
+            {#group_waiter{timer = Timer}, Waiters1} =
+                maps:take(GroupId, Waiters),
+            _ = erlang:cancel_timer(Timer),
+            {noreply, S#s{group_waiters = Waiters1}}
     end.
 
 finish_proof_down(Found, Reason, S) ->
     case Found of
-        {worker, Ref, From, Kind} ->
-            case take_proof_worker(Ref, S) of
+        {worker, Ref, From, Kind, Checkpoint} ->
+            S0 = cancel_dtx_handoff(Ref, S),
+            case take_proof_worker(Ref, S0) of
                 {{_From, _Height}, S1} ->
-                    Reply = proof_down_reply(Kind, Reason, S#s.ns),
-                    gen_server:reply(From, Reply),
+                    Reply = proof_down_reply(
+                              Kind, Reason, S#s.ns, Checkpoint),
+                    reply_client(From, Reply),
                     {noreply, S1};
-                error -> {noreply, S}
+                error -> {noreply, S0}
             end;
         {caller, Ref, Pid} ->
             kill_worker(Pid),
-            case take_proof_worker(Ref, S) of
+            S0 = cancel_dtx_handoff(Ref, S),
+            case take_proof_worker(Ref, S0) of
                 {{_From, _Height}, S1} -> {noreply, S1};
-                error -> {noreply, S}
+                error -> {noreply, S0}
             end;
         false -> unhandled
     end.
@@ -2944,13 +3615,21 @@ find_proof_monitor(MRef, W) ->
     maps:fold(
       fun(Ref, #proof_worker{pid = Pid, kind = Kind,
                              worker_mref = WorkerMRef,
-                             caller_mref = CallerMRef, from = From}, Acc) ->
+                             caller_mref = CallerMRef, from = From,
+                             checkpoint = Checkpoint}, Acc) ->
           case Acc of
-              false when WorkerMRef =:= MRef -> {worker, Ref, From, Kind};
+              false when WorkerMRef =:= MRef ->
+                  {worker, Ref, From, Kind, Checkpoint};
               false when CallerMRef =:= MRef -> {caller, Ref, Pid};
               _ -> Acc
           end
       end, false, W).
+
+proof_down_reply(_Kind, _Reason, _Ns, Checkpoint)
+  when Checkpoint =/= none ->
+    {error, {outcome_unknown, Checkpoint}};
+proof_down_reply(Kind, Reason, Ns, none) ->
+    proof_down_reply(Kind, Reason, Ns).
 
 proof_down_reply(action, _Reason, _Ns) ->
     {error, outcome_unknown};
@@ -3342,18 +4021,23 @@ submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
 %% for this command; accept_plan_submission/6 remains the shared local/remote
 %% trust boundary that canonical-decodes goal and result before consensus.
 decode_submit_plan(PlanBlob) ->
-    quod_scope_wire:decode_payload(plan, PlanBlob).
+    quod_scope_wire:decode_plan_payload(PlanBlob).
 
 %% Terminal for one wire submission: fold the internal parked outcome into the
 %% closed `plan_submitted` vocabulary and emit it on the scope's return path.
 finish_remote_submit({remote_submit, Binding, RequestId, CommandSeq},
                      Reply, S) ->
+    S1 = update_remote_scope(
+           Binding,
+           fun(Scope) -> Scope#remote_scope{state = submitted} end, S),
     emit_scope_event(
       Binding, RequestId, CommandSeq,
-      {plan_submitted, submit_outcome(Reply)}, S).
+      {plan_submitted, submit_outcome(Reply)}, S1).
 
 submit_outcome({ok, _Bindings, Index, TxId}) -> {committed, Index, TxId};
 submit_outcome({error, conflict_retry}) -> {rejected, conflict_retry};
+submit_outcome({error, policy_self_seal_forbidden}) ->
+    {rejected, policy_self_seal_forbidden};
 submit_outcome({error, retry}) -> {rejected, retry};
 submit_outcome({error, busy}) -> {rejected, retry};
 submit_outcome({error, {ontology_rebuilding, _Ns}}) -> {rejected, retry};
@@ -3426,14 +4110,12 @@ mark_consensus_reply(Tx, Slot, S = #s{parked = Parked}) ->
 %%% apply (deterministic; identical on every member)
 %%%===================================================================
 
-%% Apply one committed entry, then — in a SHARED tail across every applied-advancing path — resolve any
-%% membership verdict parked for the parent height we just reached. Whether the applied step commits a
-%% tx, skips a `noop`, or logs an unexpected payload, a validation whose parent is that slot must be
-%% answered (and never leak), so `resolve_validations/1` runs once here, keyed on the new `applied`.
-%% Each verdict's `can_join` re-proof reads the parent height from the verdict execution context that
-%% `membership_verdict/2` builds from `S#s.applied` (see `m:quod_predicates`).
-apply_committed(Index, Change, Origin, S) ->
-    resolve_validations(apply_step(Index, Change, Origin, S)).
+%% Apply one committed entry, then — in a shared tail across every
+%% applied-advancing path — resolve membership or Prepare verdicts parked for
+%% the parent height just reached.  A content commit, DTX phase, or noop must
+%% all release the same bounded validation lifecycle.
+apply_committed(#entry{} = Entry, Origin, S) ->
+    resolve_validations(apply_step(Entry, Origin, S)).
 
 %% Each clause returns the new #s{}. Index is the committed entry's log index; entries
 %% arrive in order on the (FIFO) cast channel from quod_simplex. `Origin` (live|replay) reaches
@@ -3441,23 +4123,23 @@ apply_committed(Index, Change, Origin, S) ->
 %% event. Both are delivered only after the block snapshot is durable and visible.
 %%
 %% Already applied (e.g. a rebuild re-drive): idempotent no-op.
-apply_step(Index, _Change, _Origin, S = #s{applied = A}) when Index =< A ->
+apply_step(#entry{index = Index}, _Origin, S = #s{applied = A}) when Index =< A ->
     S;
 %% Forward gap: quod_simplex is ahead of us (we restarted, or missed a cast). Don't apply out
 %% of order — ask quod_simplex to re-drive from the snapshot so we receive a contiguous run.
-apply_step(Index, _Change, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
+apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when Index > A + 1 ->
     _ = try quod_simplex:rebuild(Ns) catch _:_ -> ok end,
     S;
-%% Index == applied+1. Every committed entry kind is enumerated here: a kind this
-%% node cannot apply advances the cursor instead of restart-looping on old/corrupt
-%% data, but it is never confused with a kind that legitimately applies nothing.
+%% Index == applied+1. Every committed entry kind is enumerated here. A recognized
+%% kind without a deterministic apply implementation fails loudly; it is never
+%% confused with `noop`, the one kind that legitimately applies no data change.
 %%
 %% Caller completions and outcome events are buffered through the fold and
 %% delivered only after `publish_snapshot` commits the outcome index and MVCC
 %% version. A successful API reply can therefore be followed immediately by a
 %% terminal outcome lookup or a read of the committed state. All envelopes in
 %% a block share that block-final snapshot.
-apply_step(Index, Data, Origin, S) ->
+apply_step(#entry{index = Index, data = Data} = Entry, Origin, S) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
             {S1, RevPostApply} =
@@ -3468,11 +4150,374 @@ apply_step(Index, Data, Origin, S) ->
                   end, {S, []}, Transactions),
             complete_transactions(
               lists:reverse(RevPostApply), publish_snapshot(Index, S1));
+        {'begin', Control} ->
+            apply_dtx_entry(Control, Entry, Origin, S);
+        {prepare, Control} ->
+            apply_dtx_entry(Control, Entry, Origin, S);
+        {decision, Control} ->
+            apply_dtx_entry(Control, Entry, Origin, S);
+        {finalize, Control} ->
+            apply_dtx_entry(Control, Entry, Origin, S);
+        {complete, Control} ->
+            apply_dtx_entry(Control, Entry, Origin, S);
         noop ->
             publish_snapshot(Index, S);
         invalid ->
             skip_unexpected(Index, Data, S)
     end.
+
+%% Apply one certified DTX record through the same pure reducer used by
+%% consensus history.  Prepare validates but does not publish its hidden plan;
+%% Finalize(commit) is the only phase that changes D.  The outcome projection
+%% is flushed with the ordered floor before MVCC publication, and only then is
+%% Simplex allowed to reopen the proof fence.
+apply_dtx_entry(Control, #entry{index = Index} = Entry, Origin,
+                S0 = #s{ns = Ns, outcomes = Outcomes0}) ->
+    Binding = {Ns, target_anchor(Ns)},
+    true = quod_dtx:verify_control(Binding, Control),
+    {ok, CertifiedRef} = quod_dtx:certified_entry_ref(
+                           Binding, Entry, Control),
+    GroupId = quod_dtx:group_id(Control),
+    {History0, Outcomes1} = dtx_group_history(Outcomes0, GroupId),
+    Projection0 = maps:get(projection, quod_outcome:dtx_state(Outcomes1)),
+    {ok, History1, Projection1, Effects} =
+        quod_dtx:reduce(Control, CertifiedRef, History0, Projection0),
+    {S1, Event} = apply_dtx_effects(
+                    Effects, Index, S0#s{outcomes = Outcomes1}),
+    {ok, Outcomes2, DeferredAck} = quod_outcome:apply_dtx(
+                                      S1#s.outcomes, Index, Control,
+                                      History1, Projection1, Effects),
+    S2 = publish_snapshot(Index, S1#s{outcomes = Outcomes2}),
+    S3 = publish_dtx_outcome(Event, Index, Origin, S2),
+    S4 = finish_dtx_apply(DeferredAck, Control, Origin, S3),
+    maybe_release_completed_group(Control, GroupId, S4).
+
+dtx_group_history(Outcomes, GroupId) ->
+    case quod_outcome:group_history(Outcomes, GroupId) of
+        {History, Outcomes1} when is_map(History) -> {History, Outcomes1};
+        {error, Reason} -> outcome_index_failure(Reason)
+    end.
+
+local_dtx_group_state(GroupId, Outcomes0) ->
+    Dtx = quod_outcome:dtx_state(Outcomes0),
+    Generation = maps:get(generation, maps:get(projection, Dtx)),
+    AppliedFloor = quod_outcome:applied_floor(Outcomes0),
+    case quod_outcome:lookup_group(Outcomes0, GroupId) of
+        {{ok, Row}, Outcomes1} ->
+            Reply =
+                {ok,
+                 #{history => maps:get(history, Row),
+                   applied => maps:get(applied, Row),
+                   applied_floor => AppliedFloor,
+                   generation => Generation}},
+            {Reply, Outcomes1};
+        {not_found, Outcomes1} ->
+            {{ok, #{history => none, applied => none,
+                    applied_floor => AppliedFloor,
+                    generation => Generation}}, Outcomes1};
+        {{error, Reason}, Outcomes1} ->
+            {{error, Reason}, Outcomes1}
+    end.
+
+%% Complete is already present in the flushed outcome projection here.  Resolve
+%% the origin caller directly in this ordered apply turn; the external
+%% notification seam is reserved for resolution edges Prolog cannot observe.
+maybe_release_completed_group(Control, GroupId, S) ->
+    case quod_dtx:control_kind(Control) of
+        complete -> release_group_waiter_by_id(GroupId, S);
+        _ -> S
+    end.
+
+release_group_waiter_by_id(GroupId, S = #s{group_waiters = Waiters}) ->
+    case maps:get(GroupId, Waiters, undefined) of
+        #group_waiter{group_ref = GroupRef} ->
+            release_group_waiter(GroupRef, S);
+        undefined ->
+            S
+    end.
+
+release_group_waiter(
+  {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
+    = GroupRef,
+  S = #s{group_waiters = Waiters, outcomes = Outcomes0}) ->
+    case maps:get(GroupId, Waiters, undefined) of
+        #group_waiter{group_ref = GroupRef} = Waiter ->
+            case quod_outcome:lookup_ref(Outcomes0, GroupRef) of
+                {{ok, Stored}, Outcomes1} ->
+                    case quod_outcome:public(Stored) of
+                        {ok, #{status := committed,
+                               height := Height,
+                               bindings := Bindings,
+                               participant_slots := Slots}} ->
+                            finish_group_waiter(
+                              GroupId, Waiter,
+                              {ok, [Bindings],
+                               #{ref => GroupRef, height => Height,
+                                 participant_slots => Slots}},
+                              S#s{outcomes = Outcomes1});
+                        {ok, #{status := aborted, reasons := Reasons}} ->
+                            finish_group_waiter(
+                              GroupId, Waiter, {fail, Reasons},
+                              S#s{outcomes = Outcomes1});
+                        {ok, #{status := pending}} ->
+                            S#s{outcomes = Outcomes1};
+                        {error, Reason} ->
+                            error({outcome_index_unavailable, Reason})
+                    end;
+                {not_found, Outcomes1} ->
+                    resolve_absent_group_waiter(
+                      GroupId, GroupRef, Waiter,
+                      S#s{outcomes = Outcomes1});
+                {wrong_anchor, _Outcomes1} ->
+                    error({outcome_index_unavailable, wrong_anchor});
+                {{error, Reason}, _Outcomes1} ->
+                    error({outcome_index_unavailable, Reason})
+            end;
+        _ ->
+            S
+    end;
+release_group_waiter(_BadRef, S) ->
+    S.
+
+resolve_absent_group_waiter(
+  GroupId, GroupRef, Waiter,
+  S = #s{ns = Ns, applied = AppliedFloor}) ->
+    case quod_simplex:dtx_group_barrier(Ns, GroupRef, AppliedFloor) of
+        {ok, pending} ->
+            S;
+        {ok, not_found} ->
+            finish_group_waiter(
+              GroupId, Waiter, {error, not_found}, S);
+        {ok, {rejected, coordinator_retired}} ->
+            finish_group_waiter(
+              GroupId, Waiter, {error, coordinator_retired}, S);
+        {error, _UnavailableOrUnknown} ->
+            S
+    end.
+
+finish_group_waiter(
+  GroupId,
+  #group_waiter{from = From, caller_mref = CallerMRef, timer = Timer},
+  Result, S = #s{group_waiters = Waiters}) ->
+    _ = erlang:cancel_timer(Timer),
+    demonitor(CallerMRef, [flush]),
+    reply_client(From, Result),
+    S#s{group_waiters = maps:remove(GroupId, Waiters)}.
+
+-ifdef(TEST).
+test_release_absent_group_waiter(
+  Ns,
+  {group, Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
+    = GroupRef,
+  Outcomes) ->
+    CallRef = make_ref(),
+    CallerMRef = erlang:monitor(process, self()),
+    Timer = erlang:send_after(60000, self(),
+                              {group_wait_timeout, GroupId}),
+    Waiter = #group_waiter{
+                from = {async, self(), CallRef},
+                caller_mref = CallerMRef, timer = Timer,
+                group_ref = GroupRef},
+    S0 = #s{ns = Ns, outcomes = Outcomes,
+            applied = quod_outcome:applied_floor(Outcomes),
+            group_waiters = #{GroupId => Waiter}},
+    S1 = release_group_waiter(GroupRef, S0),
+    {CallRef, map_size(S1#s.group_waiters)}.
+-endif.
+
+apply_dtx_effects([], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{prepared, _GroupId, _Ref, Manifest, PlanDigest, PlanBlob, _Generation}],
+  Index, S) ->
+    case validate_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
+        ok -> {S, none};
+        {error, Reason} -> error({invalid_committed_dtx_prepare, Index, Reason})
+    end;
+apply_dtx_effects(
+  [{apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
+    _Ref, _Generation}], Index, S) ->
+    case decode_prepared_material(Manifest, PlanDigest, PlanBlob, S) of
+        {ok, Context, #{diff := Diff}} ->
+            {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
+            {S#s{est = Est1, applies = S#s.applies + 1},
+             {group_applied, GroupId, Context, Diff}};
+        {error, Reason} ->
+            error({invalid_committed_dtx_finalize, Index, Reason})
+    end;
+apply_dtx_effects(
+  [{discard_prepared, _GroupId, _Manifest, _PlanDigest, _PlanBlob,
+    _Ref, _Generation}], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{origin_started, _GroupId, _Ref}], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{decided, _GroupId, _Verdict, _Ref}], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{direct_applied_abort, _GroupId, _Ref, _Generation}], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{completed, _GroupId, commit, _Ref}], _Index, S) ->
+    {S, none};
+apply_dtx_effects(
+  [{completed, _GroupId, abort, _Ref, _Reasons}], _Index, S) ->
+    {S, none}.
+
+decode_authenticated_target_plan(PlanBlob, #s{ns = Ns}) ->
+    case quod_dtx:decode(PlanBlob) of
+        {ok, Plan} ->
+            case quod_dtx:target(Plan) =:= {Ns, target_anchor(Ns)} andalso
+                 quod_dtx:verify(Plan) of
+                true -> {ok, Plan};
+                false -> {error, bad_plan_binding}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+decode_prepared_material(Manifest, PlanDigest, PlanBlob, S) ->
+    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
+        {ok, Plan, Context} ->
+            case quod_dtx:material(Plan) of
+                {ok, Material} -> {ok, Context, Material};
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) ->
+    case decode_authenticated_target_plan(PlanBlob, S) of
+        {ok, Plan} ->
+            case {quod_dtx:digest(Plan) =:= PlanDigest,
+                  quod_dtx:event_context(Manifest, Plan)} of
+                {true, {ok, Context}} -> {ok, Plan, Context};
+                _ -> {error, bad_manifest_binding}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+validate_prepared_plan(Manifest, PlanDigest, PlanBlob,
+                       S = #s{applied = Parent, est = Est}) ->
+    %% Authenticate the outer plan and its current target author before the
+    %% owner materializer is allowed to allocate any ontology symbols.
+    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
+        {ok, Plan, _Context} ->
+            validate_prepared_plan_header(Plan, Parent, Est, S);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+validate_prepared_plan_header(Plan, Parent, Est, S) ->
+    case prepared_signer_admitted(quod_dtx:signer(Plan), S) of
+        false ->
+            {error, signer_not_admitted};
+        true ->
+            case {quod_dtx:participates(Plan),
+                  quod_dtx:base_height(Plan) =< Parent} of
+                {false, _} -> {error, not_material};
+                {_, false} -> {error, future_base_height};
+                {true, true} -> validate_prepared_plan_material(Plan, Est, S)
+            end
+    end.
+
+validate_prepared_plan_material(Plan, Est, S) ->
+    case quod_dtx:material(Plan) of
+        {ok, #{diff := Diff, read_check := ReadCheck,
+               transcript := Transcript}} ->
+            validate_prepared_material(
+              Plan, Diff, ReadCheck, Transcript, Est, S);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, S) ->
+    case quod_diff:valid_ops(Diff) andalso
+         quod_diff:valid_read_check(ReadCheck) of
+        false ->
+            {error, malformed_plan_material};
+        true ->
+            validate_prepared_occ(
+              Plan, Diff, ReadCheck, Transcript, Est, S)
+    end.
+
+validate_prepared_occ(Plan, Diff, ReadCheck, Transcript, Est, S) ->
+    case quod_diff:validate(ReadCheck, mvcc_ref(Est)) of
+        {conflict, _Functor} ->
+            {error, conflict_retry};
+        ok ->
+            case validate_prepared_membership(Diff, S) of
+                {error, _} = Error -> Error;
+                ok ->
+                    validate_prepared_candidate(
+                      Plan, Diff, Transcript, Est, S)
+            end
+    end.
+
+validate_prepared_candidate(Plan, Diff, Transcript, Est, S) ->
+    case quod_diff:apply_ops_preserving_policy(Est, Diff) of
+        {error, _} = Error ->
+            Error;
+        {ok, _DiscardedCandidate} ->
+            validate_plan_transcript(Plan, Transcript, S)
+    end.
+
+mvcc_ref(#est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}) -> Ref.
+
+prepared_signer_admitted(
+  none, #s{signer = none, ns = Ns}) ->
+    target_anchor(Ns) =:= <<0:256>>;
+prepared_signer_admitted(
+  <<_:256>> = Signer, #s{est = Est}) ->
+    lists:member(Signer, quod_committee_predicates:admitted_pubkeys(Est));
+prepared_signer_admitted(_Signer, _S) ->
+    false.
+
+validate_plan_transcript(
+  Plan, Transcript, #s{applied = ParentHeight, est = ParentEst}) ->
+    quod_ask:validate_authorization_transcript(
+      quod_dtx:target(Plan), quod_dtx:origin(Plan),
+      quod_dtx:principal(Plan), ParentHeight, Transcript, ParentEst).
+
+validate_prepared_membership(Diff, S) ->
+    case diff_touches_membership(Diff) of
+        false -> ok;
+        true ->
+            Validators = quod_committee_predicates:admitted_pubkeys(S#s.est),
+            case quod_simplex:membership_diff_acceptable(Diff, Validators)
+                 andalso exact_membership_parent(Diff, S#s.est) of
+                true -> ok;
+                false -> {error, invalid_membership}
+            end
+    end.
+
+exact_membership_parent(
+  [{assert, {{peer_admitted, _Id, _Host, _Port, Pubkey}, _Body}}], Est) ->
+    not lists:member(
+          Pubkey, quod_committee_predicates:admitted_pubkeys(Est));
+exact_membership_parent(
+  [{retract, {Head, Body}}],
+  #est{db = #db{mod = Mod, ref = Ref}}) ->
+    quod_diff:has_clause(Mod, Ref, Head, Body);
+exact_membership_parent(_Diff, _Est) ->
+    false.
+
+diff_touches_membership(Diff) ->
+    lists:any(
+      fun({_Kind, {{peer_admitted, _, _, _, _}, _Body}}) -> true;
+         (_) -> false
+      end, Diff).
+
+finish_dtx_apply(none, _Control, _Origin, S) ->
+    S;
+finish_dtx_apply(
+  {finalize_applied, GroupId, Slot, Generation}, _Control, _Origin,
+  S = #s{ns = Ns}) ->
+    ok = quod_simplex:finalize_applied(Ns, GroupId, Slot, Generation),
+    S.
 
 apply_transaction(#transaction{plan_digest = none} = Change,
                   Index, Origin, S) ->
@@ -3552,10 +4597,14 @@ skip_unexpected(Index, Other, S = #s{ns = Ns}) ->
 publish_snapshot(Index, S = #s{est = #est{db = #db{mod = quod_erlog_db_mvcc,
                                                      ref = Ref0} = Db} = Est,
                                 outcomes = Outcomes0}) ->
-    %% Terminal rows accumulated by this block become one DETS insert. If it
-    %% fails, the process stops before publishing the MVCC height; restart
-    %% replays the authoritative ledger and rebuilds both projections.
-    Outcomes1 = require_outcome_index(quod_outcome:flush(Outcomes0)),
+    %% Every ledger entry advances the outcome projection's ordered floor,
+    %% including content and noops. DTX terminal visibility therefore cannot
+    %% jump across an unrecorded ordinary prefix. All rows accumulated by this
+    %% block and that floor become one DETS insert; on failure the process stops
+    %% before publishing the MVCC height and replay rebuilds both projections.
+    OutcomesStaged = require_outcome_index(
+                       quod_outcome:advance_applied(Outcomes0, Index)),
+    Outcomes1 = require_outcome_index(quod_outcome:flush(OutcomesStaged)),
     Floor = oldest_snapshot(Index, S),
     Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
     S#s{est = Est#est{db = Db#db{ref = Ref1}},
@@ -3577,31 +4626,38 @@ oldest_snapshot(Current, #s{workers = Workers,
         none -> ScopeFloor
     end.
 
-%% A normal content transaction: OCC re-check the read-set, then apply the diff or reject.
+%% A normal content transaction: OCC re-check the read-set, build the candidate
+%% state, then enforce invariants before publishing it.
 apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change,
               Index, Origin, Prior, S) ->
     #est{db = #db{mod = quod_erlog_db_mvcc, ref = R}} = S#s.est,
     case quod_diff:validate(RC, R) of
         ok ->
-            {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            S0 = record_terminal(Change, Index, committed, Prior,
-                                 S#s{est = Est1,
-                                     applies = S#s.applies + 1}),
-            {S0, {outcome_applied(Change, Index, Origin, S0),
-                  {committed, Tx, Index}}};
+            case quod_diff:apply_ops_preserving_policy(S#s.est, Diff) of
+                {ok, Est1} ->
+                    S0 = record_terminal(Change, Index, committed, Prior,
+                                         S#s{est = Est1,
+                                             applies = S#s.applies + 1}),
+                    {S0, {outcome_applied(Change, Index, Origin, S0),
+                          {committed, Tx, Index}}};
+                {error, policy_self_seal_forbidden} ->
+                    reject_content(Change, Index, Origin, Prior,
+                                   policy_self_seal_forbidden, S)
+            end;
         {conflict, _F} ->
-            %% OCC-rejected: D is unchanged, but the transaction WAS committed (it is in the block),
-            %% so a live apply still announces the outcome — `rejected_live` — so an observer distinguishes
-            %% "committed and applied" from "committed but rejected at apply" without inferring it from a
-            %% later commit. Replay stays silent (rebuild only). Its cross-node consistency is the same as
-            %% the OCC verdict itself: deterministic on every member.
-            S0 = record_terminal(
-                   Change, Index, {rejected, conflict_retry}, Prior,
-                   S#s{rejects = S#s.rejects + 1,
-                       conflicts = S#s.conflicts + 1}),
-            {S0, {outcome_rejected(Change, Index, Origin, S0),
-                  {rejected, Tx, conflict_retry, Index}}}
+            reject_content(Change, Index, Origin, Prior, conflict_retry,
+                           S#s{conflicts = S#s.conflicts + 1})
     end.
+
+%% A deterministic apply-time rejection leaves D unchanged but still records
+%% the exact typed reason for the submitting proof (including a foreign caller)
+%% and the durable outcome index. Replay is silent at the event layer only.
+reject_content(#transaction{tx_id = Tx} = Change, Index, Origin, Prior,
+               Reason, S) ->
+    S0 = record_terminal(Change, Index, {rejected, Reason}, Prior,
+                         S#s{rejects = S#s.rejects + 1}),
+    {S0, {outcome_rejected(Change, Index, Origin, S0),
+          {rejected, Tx, Reason, Index}}}.
 
 record_terminal(#transaction{plan_digest = none}, _Index, _Verdict, _Prior, S) ->
     S;
@@ -3728,6 +4784,29 @@ publish_outcome({rejected, Env}, S = #s{ns = Ns}) ->
     publish_runtime(Ns, {rejected_live, Env}),
     S.
 
+%% A distributed commit publishes exactly the same post-snapshot runtime
+%% signal as an ordinary write, with the durable GroupId as its identity.
+%% Replay, aborts, duplicate controls, and empty participant diffs are silent;
+%% the runtime reconciles replay from the committed snapshot boundary.
+publish_dtx_outcome(none, _Index, _Origin, S) ->
+    S;
+publish_dtx_outcome(
+  {group_applied, _GroupId, _Context, []}, _Index, _Origin, S) ->
+    S;
+publish_dtx_outcome(
+  {group_applied, GroupId,
+   #{proof_id := ProofId, origin := ProofOrigin,
+     principal := Principal, goal := Goal, result := Result,
+     plan_digest := PlanDigest}, Diff},
+  Index, live, S = #s{ns = Ns}) ->
+    Env = #{ns => Ns, height => Index, tx_id => {group, GroupId},
+            proof_id => ProofId, origin => ProofOrigin,
+            subject => Principal, goal => Goal, result => Result,
+            plan_digest => PlanDigest, diff => Diff},
+    publish_outcome({applied, Env}, S);
+publish_dtx_outcome({group_applied, _, _, _}, _Index, replay, S) ->
+    S.
+
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.
 
 %% Drop the runtime pin and its monitor (on re-attach or DOWN). The demonitor flush purges any
@@ -3811,40 +4890,141 @@ drop_request(ReqId, Requests) ->
 %% every honest node ⇒ the same verdict, so honest votes never split. Delivered asynchronously (a cast
 %% back), because a synchronous call here would deadlock the append<->apply cycle.
 
-%% A re-issued Tag (a re-proposed slot after a view change) SUPERSEDES any request still parked under it:
-%% drop the stale entry and cancel its timer first, so an orphaned timer can never fire against the new
-%% request and reap it to a premature abstain. The superseded request's `ReplyTo` hears back via the fresh
-%% verdict for the same Tag.
-request_verdict(Change, Slot, ReplyTo, Tag, S0) ->
-    do_request_verdict(Change, Slot, ReplyTo, Tag, supersede_validation(Tag, S0)).
+%% A re-issued Tag (a re-proposed slot after a view change) supersedes any
+%% request still parked under it.  This one mechanism serves every
+%% parent-state consensus verdict; adding a DTX phase does not add another
+%% timer/map lifecycle.
+request_validation(Request, Slot, ReplyTo, Tag, S0) ->
+    do_request_validation(
+      Request, Slot, ReplyTo, Tag, supersede_validation(Tag, S0)).
 
-%% Judge `Change` at height `Slot-1`: answer now if the kb is exactly there, park if it is behind, or
-%% abstain if it is already past the slot (which resolved without us — slots are never reused).
-do_request_verdict(Change, Slot, ReplyTo, Tag, S = #s{applied = A}) when A =:= Slot - 1 ->
-    deliver_verdict(ReplyTo, Tag, membership_verdict(Change, S)), S;
-do_request_verdict(Change, Slot, ReplyTo, Tag, S = #s{applied = A, validations = V, vttl = Vttl})
-  when A < Slot - 1 ->
-    TRef = erlang:send_after(Vttl, self(), {validation_timeout, Tag}),
-    S#s{validations = V#{Tag => {Slot, Change, ReplyTo, TRef}}};
-do_request_verdict(_Change, _Slot, ReplyTo, Tag, S) ->   %% applied > Slot-1: too late, the slot is decided
-    deliver_verdict(ReplyTo, Tag, abstain), S.
+%% Judge at height `Slot-1`: answer now if the exact parent state is published,
+%% park while the KB (or, for DTX, its durable outcome floor) is behind, and
+%% abstain if the slot has already resolved without us.
+do_request_validation(Request, Slot, ReplyTo, Tag,
+                      S = #s{validations = V, vttl = Vttl}) ->
+    case validation_position(Request, Slot - 1, S) of
+        ready ->
+            {Verdict, S1} = validation_verdict(Request, S),
+            deliver_validation(Request, ReplyTo, Tag, Verdict, S1),
+            S1;
+        wait ->
+            TRef = erlang:send_after(Vttl, self(), {validation_timeout, Tag}),
+            S#s{validations = V#{Tag => {Slot, Request, ReplyTo, TRef}}};
+        stale ->
+            deliver_validation(Request, ReplyTo, Tag, abstain, S),
+            S
+    end.
+
+validation_position({dtx, _Control}, Parent,
+                    #s{applied = Parent, outcomes = Outcomes}) ->
+    case quod_outcome:applied_floor(Outcomes) >= Parent of
+        true -> ready;
+        false -> wait
+    end;
+validation_position(_Request, Parent, #s{applied = Parent}) ->
+    ready;
+validation_position(_Request, Parent, #s{applied = Applied})
+  when Applied < Parent ->
+    wait;
+validation_position(_Request, _Parent, _S) ->
+    stale.
 
 supersede_validation(Tag, S = #s{validations = V}) ->
     case maps:take(Tag, V) of
-        {{_Slot, _Change, _ReplyTo, OldTRef}, V1} -> _ = erlang:cancel_timer(OldTRef), S#s{validations = V1};
-        error                                     -> S
+        {{_Slot, _Request, _ReplyTo, OldTRef}, V1} ->
+            _ = erlang:cancel_timer(OldTRef),
+            S#s{validations = V1};
+        error ->
+            S
     end.
 
-%% Once the kb reaches a slot, answer every verdict parked for that slot's children (parent == applied).
-%% Judged against the just-advanced `est` (state exactly at the parent height). Cancels each timer.
-resolve_validations(S = #s{applied = A, validations = V}) ->
-    Ready = [{Tag, Rec} || {Tag, {Slot, _, _, _} = Rec} <- maps:to_list(V), Slot =:= A + 1],
+%% Reconsider every parked verdict after an apply.  `validation_position/3` is
+%% the single readiness rule: DTX additionally waits for the outcome index's
+%% durably-published floor, so reaching the KB height alone must not release it.
+resolve_validations(S = #s{validations = V}) ->
     lists:foldl(
-      fun({Tag, {_Slot, Change, ReplyTo, TRef}}, Acc) ->
-              _ = erlang:cancel_timer(TRef),
-              deliver_verdict(ReplyTo, Tag, membership_verdict(Change, Acc)),
-              Acc#s{validations = maps:remove(Tag, Acc#s.validations)}
-      end, S, Ready).
+      fun({Tag, {Slot, Request, ReplyTo, TRef}}, Acc) ->
+              case validation_position(Request, Slot - 1, Acc) of
+                  ready ->
+                      _ = erlang:cancel_timer(TRef),
+                      {Verdict, Acc1} = validation_verdict(Request, Acc),
+                      deliver_validation(
+                        Request, ReplyTo, Tag, Verdict, Acc1),
+                      Acc1#s{
+                        validations = maps:remove(
+                                        Tag, Acc1#s.validations)};
+                  wait ->
+                      Acc;
+                  stale ->
+                      _ = erlang:cancel_timer(TRef),
+                      deliver_validation(
+                        Request, ReplyTo, Tag, abstain, Acc),
+                      Acc#s{
+                        validations = maps:remove(Tag, Acc#s.validations)}
+              end
+      end, S, maps:to_list(V)).
+
+-ifdef(TEST).
+test_resolve_validation(Request, Slot, Applied, Outcomes) ->
+    Tag = make_ref(),
+    S1 = resolve_validations(
+           #s{applied = Applied, outcomes = Outcomes,
+              validations =
+                #{Tag => {Slot, Request, self(), make_ref()}}}),
+    maps:is_key(Tag, S1#s.validations).
+-endif.
+
+validation_verdict({membership, Change}, S) ->
+    {membership_verdict(Change, S), S};
+validation_verdict({dtx, Control}, S) ->
+    dtx_validation_verdict(Control, S).
+
+dtx_validation_verdict(Control, S = #s{outcomes = Outcomes0}) ->
+    case safe_dtx_group_id(Control) of
+        {ok, GroupId} ->
+        case quod_outcome:group_history(Outcomes0, GroupId) of
+            {History, Outcomes1} when is_map(History) ->
+                S1 = S#s{outcomes = Outcomes1},
+                {dtx_policy_verdict(Control, History, S1), S1};
+            {error, Reason} ->
+                outcome_index_failure(Reason)
+        end;
+        error ->
+            {{invalid, malformed_control}, S}
+    end.
+
+safe_dtx_group_id(Control) ->
+    try quod_dtx:group_id(Control) of
+        <<_:256>> = GroupId -> {ok, GroupId};
+        _ -> error
+    catch
+        error:function_clause -> error;
+        error:{badmatch, _} -> error
+    end.
+
+dtx_policy_verdict(Control, History, S) ->
+    case quod_dtx:control_kind(Control) of
+        prepare ->
+            case quod_dtx:prepare_payload(Control) of
+                {ok, Manifest, PlanDigest, PlanBlob} ->
+                    case validate_prepared_plan(
+                           Manifest, PlanDigest, PlanBlob, S) of
+                        ok -> {valid, History};
+                        %% Keep deterministic Prepare failures as a real
+                        %% reason stack.  Simplex adds the target marker before
+                        %% the bounded wire encoding; the coordinator can then
+                        %% preserve the complete stack in Decision(abort).
+                        {error, Reason} -> {invalid, [Reason]}
+                    end;
+                error ->
+                    {invalid, malformed_control}
+            end;
+        'begin' -> {valid, History};
+        decision -> {valid, History};
+        finalize -> {valid, History};
+        complete -> {valid, History}
+    end.
 
 %% The verdict for the single guaranteed-shape `peer_admitted` op (Slice A's gate ensures exactly one),
 %% judged against `S#s.est` (the parent-height kb):
@@ -3859,8 +5039,14 @@ resolve_validations(S = #s{applied = A, validations = V}) ->
 %% - retract: valid only if that exact `peer_admitted` clause is present — a fabricated-address retract
 %%   matches nothing, so it can never eject a validator from the set while missing in the KB.
 -spec membership_verdict(term(), #s{}) -> valid | {invalid, term()}.
-membership_verdict(#transaction{diff = [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}]},
-                   #s{ns = Ns, applied = Applied, est = Est}) ->
+membership_verdict(#transaction{diff = Diff}, S) ->
+    membership_diff_verdict(Diff, S);
+membership_verdict(_Change, _S) ->
+    {invalid, malformed}.
+
+membership_diff_verdict(
+  [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],
+  #s{ns = Ns, applied = Applied, est = Est}) ->
     case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
         true  -> {invalid, already_admitted};
         false -> %% The re-proof runs INLINE in the engine, pinned to the parent height (`Applied`) and
@@ -3876,19 +5062,27 @@ membership_verdict(#transaction{diff = [{assert, {{peer_admitted, Pk, H, P, Pk},
                      {error, _}        -> {invalid, can_join}
                  end
     end;
-membership_verdict(#transaction{diff = [{retract, {{peer_admitted, _Id, _H, _P, _Pk}, _B} = Clause}]},
-                   #s{est = #est{db = #db{mod = M, ref = R}}}) ->
+membership_diff_verdict(
+  [{retract, {{peer_admitted, _Id, _H, _P, _Pk}, _B} = Clause}],
+  #s{est = #est{db = #db{mod = M, ref = R}}}) ->
     {ClauseHead, ClauseBody} = Clause,
     case quod_diff:has_clause(M, R, ClauseHead, ClauseBody) of
         true  -> valid;
         false -> {invalid, no_such_member}
     end;
-membership_verdict(_Change, _S) ->
+membership_diff_verdict(_Diff, _S) ->
     {invalid, malformed}.   %% Slice A's gate makes this unreachable in production; kept total for tests/robustness
 
-%% Async delivery to the requesting statem (or a test pid) — a plain message so the statem consumes it
-%% as an `info` event and a test just `receive`s the bare tuple.
-deliver_verdict(ReplyTo, Tag, Verdict) -> ReplyTo ! {membership_verdict, Tag, Verdict}, ok.
+%% Async delivery to the requesting statem (or a test pid) — a plain message so
+%% the statem consumes it as an `info` event and a test can receive it directly.
+deliver_validation({membership, _Change}, ReplyTo, Tag, Verdict, _S) ->
+    ReplyTo ! {membership_verdict, Tag, Verdict},
+    ok;
+deliver_validation({dtx, _Control}, ReplyTo, Tag, Verdict,
+                   #s{outcomes = Outcomes}) ->
+    ReplyTo ! {dtx_verdict, Tag, self(),
+               quod_outcome:applied_floor(Outcomes), Verdict},
+    ok.
 
 %%%===================================================================
 %%% kb construction
@@ -3954,9 +5148,16 @@ build_kb() ->
     %% worker a stable frozen view while commits continue.
     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     Est0 = element(3, Erl),
+    %% Admit diagnostics against the exact atom-safe representation used by
+    %% ontology scope replies and durable abort Decisions. Anything retained
+    %% here is therefore guaranteed to cross either boundary unchanged; an
+    %% excess is represented at creation by fail_reasons_truncated.
+    EstReasonBounded = erlog_int:set_failure_reason_policy(
+                         {quod_wire_term, valid_failure_reason_stack}, Est0),
     %% unknown predicate => fail (not error): a goal over an undefined predicate just
     %% has no solution, rather than crashing.
-    {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
+    {succeed, Est1} = erlog_int:prove_goal(
+                        {set_prolog_flag, unknown, fail}, EstReasonBounded),
     %% Register every static Erlang predicate BEFORE loading the shared interpreted
     %% clauses. A collision in common_predicates.pl then fails as an attempted
     %% modification of a static procedure instead of shadowing a governed boundary.

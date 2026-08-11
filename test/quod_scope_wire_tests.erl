@@ -9,9 +9,12 @@ all_command_shapes_roundtrip_deterministically_test() ->
     Answer = payload(answer, {item, found}),
     Reasons = payload(failure_reasons, [{missing, item}]),
     ErlogError = payload(erlog_error, {permission_error, write}),
+    Manifest = payload(manifest, manifest()),
     Operations =
         [scope_open,
          scope_close,
+         scope_seal,
+         {scope_attest, Manifest},
          {invoke_open, id(1), selection(none, []), chain(2), Goal},
          {invoke_next, id(1), 1},
          {invoke_cancel, id(1)},
@@ -43,9 +46,13 @@ all_events_carry_exact_state_and_roundtrip_test() ->
     Answer = payload(answer, ok),
     Reasons = payload(failure_reasons, [{failed, c}]),
     ErlogError = payload(erlog_error, {type_error, callable}),
+    Attestation = payload(attestation, attestation()),
     Operations =
         [{scope_opened, 77},
          scope_closed,
+         plan_not_material,
+         {plan_sealed, <<"opaque plan">>},
+         {plan_attested, Attestation},
          {invocation_opened, id(1)},
          {solution, id(1), 1, Answer},
          {complete, id(1), 2, Reasons},
@@ -75,6 +82,7 @@ all_events_carry_exact_state_and_roundtrip_test() ->
 scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
     Target = <<"quod:target">>,
     Descendant = <<"quod:descendant">>,
+    PendingGroup = <<77:256>>,
     ?assert(quod_scope_wire:scope_error_matches_target(
               {proof_limit_exceeded, Target}, Target)),
     ?assertNot(quod_scope_wire:scope_error_matches_target(
@@ -82,6 +90,8 @@ scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
     ?assert(quod_scope_wire:scope_error_matches_target(read_only, Target)),
     ?assert(quod_scope_wire:scope_error_matches_target(
               {scope_limit_exceeded, 8}, Target)),
+    ?assert(quod_scope_wire:scope_error_matches_target(
+              {transaction_pending, PendingGroup}, Target)),
     ?assertNot(quod_scope_wire:scope_error_matches_target(
                  arbitrary_remote_error, Target)),
     ?assertEqual(
@@ -92,6 +102,20 @@ scope_error_target_binding_does_not_constrain_invocation_errors_test() ->
        {protocol_error, proof_engine},
        quod_scope_wire:normalize_public_error(
          {proof_limit_exceeded, Descendant}, Target)),
+    ?assertEqual(
+       {transaction_pending, PendingGroup},
+       quod_scope_wire:normalize_public_error(
+         {transaction_pending, PendingGroup}, Target)),
+
+    PendingEvent = event({scope_error,
+                          {transaction_pending, PendingGroup}}),
+    {ok, EncodedPending} = quod_scope_wire:encode_event(PendingEvent),
+    ?assertEqual({ok, PendingEvent},
+                 quod_scope_wire:decode_response(EncodedPending)),
+    ?assertEqual(
+       {error, {protocol_error, bad_error_code}},
+       quod_scope_wire:encode_event(
+         event({scope_error, {transaction_pending, <<"short">>}}))),
 
     InvocationError = event(
                         {invocation_error, id(1), 1,
@@ -131,6 +155,30 @@ seal_operations_round_trip_and_stay_bounded_test() ->
        {error, {protocol_error, bad_error_code}},
        quod_scope_wire:encode_event(
          event({scope_error, {non_transactional_dependency, not_a_functor}}))).
+
+manifest_attestation_payloads_are_canonical_and_bounded_test() ->
+    Manifest = manifest(),
+    Attestation = attestation(),
+    ManifestBlob = payload(manifest, Manifest),
+    AttestationBlob = payload(attestation, Attestation),
+    ?assertEqual(
+       {ok, Manifest},
+       quod_scope_wire:decode_payload(manifest, ManifestBlob)),
+    ?assertEqual(
+       {ok, Attestation},
+       quod_scope_wire:decode_payload(attestation, AttestationBlob)),
+    ?assertEqual(
+       {error, {too_large, manifest}},
+       quod_scope_wire:encode_command(
+         command(
+           {scope_attest,
+            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))),
+    ?assertEqual(
+       {error, {too_large, attestation}},
+       quod_scope_wire:encode_event(
+         event(
+           {plan_attested,
+            <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))).
 
 submit_operations_round_trip_and_stay_bounded_test() ->
     {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
@@ -176,7 +224,7 @@ submit_operations_round_trip_and_stay_bounded_test() ->
           {ok, Encoded} = quod_scope_wire:encode_event(Event),
           ?assertEqual({ok, Event}, quod_scope_wire:decode_response(Encoded))
       end,
-      [conflict_retry, retry, consensus_unavailable,
+      [conflict_retry, policy_self_seal_forbidden, retry, consensus_unavailable,
        bad_plan]),
     OutcomeRef = {transaction, <<"ns">>, <<1:256>>, TxId},
     Unknown = event({plan_submitted, {outcome_unknown, OutcomeRef}}),
@@ -234,11 +282,18 @@ goal_stays_opaque_until_explicit_payload_decode_test() ->
        quod_scope_wire:decode_payload(goal, UnknownAtomEtf)),
     ?assertException(error, badarg, binary_to_existing_atom(Unknown, utf8)).
 
+opaque_goal_symbol_survives_scope_codec_test() ->
+    Symbol = <<"quod_scope_relay_only_",
+               (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Goal = {{'$quod_symbol', Symbol}, x},
+    {ok, Blob} = quod_scope_wire:encode_payload(goal, Goal),
+    ?assertEqual({ok, Goal}, quod_scope_wire:decode_payload(goal, Blob)),
+    ?assertException(error, badarg, binary_to_existing_atom(Symbol, utf8)).
+
 payload_byte_bounds_are_exact_test() ->
     exact_payload_boundary(goal, ?QUOD_MAX_NESTED_GOAL_BYTES),
     exact_payload_boundary(answer, ?QUOD_MAX_PROOF_ANSWER_BYTES),
-    exact_payload_boundary(
-      failure_reasons, ?ERLOG_MAX_FAILURE_REASONS_BYTES),
+    exact_failure_reason_payload_boundary(),
     exact_payload_boundary(erlog_error, ?ERLOG_MAX_FAILURE_REASON_BYTES),
     ?assertEqual(
        {ok, [{because, no_clause}]},
@@ -249,6 +304,29 @@ payload_byte_bounds_are_exact_test() ->
        {ok, {type_error, callable}},
        quod_scope_wire:decode_payload(
          erlog_error, payload(erlog_error, {type_error, callable}))).
+
+exact_failure_reason_payload_boundary() ->
+    Reasons = failure_reason_stack_at_wire_limit(),
+    {ok, AtLimit} = quod_scope_wire:encode_payload(
+                      failure_reasons, Reasons),
+    ?assertEqual(?ERLOG_MAX_FAILURE_REASONS_BYTES, byte_size(AtLimit)),
+    ?assertEqual(
+       {ok, Reasons},
+       quod_scope_wire:decode_payload(failure_reasons, AtLimit)),
+    Prefix = lists:droplast(Reasons),
+    Last = lists:last(Reasons),
+    TooLarge = Prefix ++ [<<Last/binary, 0>>],
+    ?assertEqual(
+       {error, {too_large, failure_reasons}},
+       quod_scope_wire:encode_payload(failure_reasons, TooLarge)),
+    ?assertEqual(
+       {error, {too_large, failure_reasons}},
+       quod_scope_wire:decode_payload(
+         failure_reasons, <<AtLimit/binary, 0>>)),
+    ?assertEqual(
+       {ok, []},
+       quod_scope_wire:decode_payload(
+         failure_reasons, payload(failure_reasons, []))).
 
 scope_envelope_byte_bound_is_exact_and_predecode_test() ->
     Base = {scope_command, binding(), 1, id(1), 30000, scope_open},
@@ -291,8 +369,8 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
        {error, {protocol_error, bad_etf}},
        quod_scope_wire:decode_request(Compressed)),
     {Domain, _Version, Frame} = Outer,
-    %% The superseded v1 scope wire is its own identifiable rejection, exactly
-    %% like any other wrong version — a 0.7.61 peer is refused, not misparsed.
+    %% Both superseded scope wires are identifiable rejections: an old peer is
+    %% refused at the version boundary, never misparsed as V3.
     lists:foreach(
       fun(OldVersion) ->
           WrongVersion =
@@ -300,8 +378,8 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, [1, 3]),
-    WrongDomain = term_to_binary({<<"other.scope">>, 2, Frame}, [deterministic]),
+      end, [1, 2]),
+    WrongDomain = term_to_binary({<<"other.scope">>, 3, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
        quod_scope_wire:decode_request(WrongDomain)),
@@ -560,9 +638,56 @@ exact_payload_boundary(Kind, MaxBytes) ->
        {error, {too_large, Kind}},
        quod_scope_wire:decode_payload(Kind, <<AtLimit/binary, 0>>)).
 
+reason_wire_size(Reason) ->
+    {ok, Wire} = quod_wire_term:encode(Reason),
+    byte_size(term_to_binary(Wire, [deterministic])).
+
+reason_stack_wire_size(Reasons) ->
+    {ok, Wire} = quod_wire_term:encode(Reasons),
+    byte_size(term_to_binary(Wire, [deterministic])).
+
+reason_binary_at_wire_size(Size) ->
+    EmptySize = reason_wire_size(<<>>),
+    true = Size >= EmptySize,
+    Binary = binary:copy(<<"r">>, Size - EmptySize),
+    Size = reason_wire_size(Binary),
+    Binary.
+
+failure_reason_stack_at_wire_limit() ->
+    MaxReason = reason_binary_at_wire_size(?ERLOG_MAX_FAILURE_REASON_BYTES),
+    Prefix = lists:duplicate(7, MaxReason),
+    BaseSize = reason_stack_wire_size(Prefix ++ [<<>>]),
+    Growth = ?ERLOG_MAX_FAILURE_REASONS_BYTES - BaseSize,
+    true = Growth >= 0,
+    Last = binary:copy(<<"s">>, Growth),
+    true = reason_wire_size(Last) =< ?ERLOG_MAX_FAILURE_REASON_BYTES,
+    Reasons = Prefix ++ [Last],
+    ?ERLOG_MAX_FAILURE_REASONS_BYTES = reason_stack_wire_size(Reasons),
+    Reasons.
+
 payload(Kind, Term) ->
     {ok, Blob} = quod_scope_wire:encode_payload(Kind, Term),
     Blob.
+
+manifest() ->
+    {ok, GoalBlob} = quod_durable_term:encode_goal({scope_wire, true}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    {ok, Manifest} = quod_dtx:new_manifest(
+                       #{proof_id => key(120),
+                         coordinator =>
+                             {<<"quod:a">>, key(5), key(121), key(122)},
+                         nonce => key(123),
+                         principal => anonymous,
+                         goal => GoalBlob,
+                         result => ResultBlob,
+                         participants =>
+                             [{{<<"quod:b">>, key(6)}, key(124)},
+                              {{<<"quod:c">>, key(7)}, key(125)}]}),
+    Manifest.
+
+attestation() ->
+    {quod_dtx_attestation, 1, {<<"quod:b">>, key(6)},
+     key(126), key(127), key(128), <<129:512>>}.
 
 command(Operation) ->
     {scope_command, binding(), 1, id(90), 30000, Operation}.
@@ -571,7 +696,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 2, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 3, Frame}, [deterministic]).
 
 selection(Lineage, BatchIds) ->
     {tx_selection, Lineage, BatchIds}.

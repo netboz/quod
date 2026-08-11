@@ -27,7 +27,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          get_procedure/2, get_procedure_type/2, get_interpreted_functors/1,
          choicepoint_checkpoint/1, choicepoint_restore/2]).
 %% overlay API
--export([wrap_state/1, wrap_state/2, lifecycle_principal/1,
+-export([wrap_state/1, wrap_state/2, access_guard/1, check_access/1,
+         lifecycle_principal/1,
          proof_context/1, fresh_proof_state/1,
          revision/1, replace_revision/2,
          live_transaction_tokens/1,
@@ -36,7 +37,11 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          get_local_changes/1, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
          cleanup_read_set/1]).
--export_type([revision/0, checkpoint/0, read_only_frame/0]).
+-export_type([access_guard/0, revision/0, checkpoint/0, read_only_frame/0]).
+
+-type access_guard() ::
+        unguarded |
+        {quod_proof_access, binary(), non_neg_integer()}.
 
 -record(fstate, {abolished = false :: boolean(),
                  asserta   = []    :: [{integer(), term(), term()}],
@@ -59,6 +64,11 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
              %% Worker-owned distributed-proof state. Like lifecycle authority,
              %% this must never enter the Prolog-visible flag store.
              proof_context = undefined :: term(),
+             %% Immutable generation-bound access authority acquired from the
+             %% namespace's consensus projection. The overlay understands no
+             %% lock policy: it only revalidates this opaque data token through
+             %% quod_simplex at every externally-visible database operation.
+             access_guard = unguarded :: access_guard(),
              %% Policy sub-proofs must reject the first attempted mutation,
              %% including changes whose eventual net diff would be empty.
              read_only = false :: boolean()}).
@@ -95,7 +105,7 @@ wrap_state(#est{db = #db{mod = OutMod, ref = OutRef,
                          assert_hooks = AH, retract_hooks = RH} = OutDb} = St) ->
     Overlay = (new({OutRef, OutMod}))#lp{
                 out_db = OutDb,
-                follow_disabled = quod_predicates:in_verdict(St)},
+                follow_disabled = quod_predicates:local_only(St)},
     St#est{db = #db{mod = ?MODULE, ref = Overlay, loc = [],
                     assert_hooks = AH, retract_hooks = RH}}.
 
@@ -105,6 +115,7 @@ As `wrap_state/1`, with private overlay options:
 - `read_set => true` tracks the committed read-set;
 - `lifecycle_principal => Principal` carries engine-owned lifecycle authority;
 - `proof_context => Context` carries worker-owned proof/session authority;
+- `access_guard => Guard` carries the immutable namespace access generation;
 - `read_only => true` rejects every interpreted database mutation.
 """.
 -spec wrap_state(tuple(), map()) -> tuple().
@@ -113,8 +124,10 @@ wrap_state(St, Opts) ->
     ReadOnly = boolean_option(read_only, Opts),
     Principal = maps:get(lifecycle_principal, Opts, undefined),
     ProofContext = maps:get(proof_context, Opts, undefined),
+    AccessGuard = access_guard_option(Opts),
     Ov1 = Ov#lp{lifecycle_principal = Principal,
                 proof_context = ProofContext,
+                access_guard = AccessGuard,
                 read_only = ReadOnly},
     Ov2 =
         case maps:get(read_set, Opts, false) of
@@ -145,6 +158,27 @@ wrap_state(St, Opts) ->
           end,
     Wrapped#est{db = Db1#db{ref = Ov2}}.
 
+-doc "Return the immutable proof-access guard carried by a wrapped state.".
+-spec access_guard(tuple()) -> access_guard().
+access_guard(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{access_guard = AccessGuard}}}) ->
+    AccessGuard;
+access_guard(_St) ->
+    erlang:error(badarg).
+
+-doc "Revalidate a wrapped state or overlay against its namespace access generation.".
+-spec check_access(tuple() | #lp{}) -> ok | {error, term()}.
+check_access(#est{db = #db{mod = ?MODULE, ref = Ov}}) ->
+    check_access(Ov);
+check_access(#lp{access_guard = unguarded}) ->
+    ok;
+check_access(
+  #lp{access_guard = {quod_proof_access, _Ns, _Generation} = AccessGuard}) ->
+    quod_simplex:check_proof_access(AccessGuard);
+check_access(_State) ->
+    {error, invalid_proof_access}.
+
 -doc "Return the engine-owned lifecycle principal carried by a wrapped state.".
 -spec lifecycle_principal(tuple()) -> {ok, term()} | undefined.
 lifecycle_principal(
@@ -171,7 +205,7 @@ fresh_proof_state(
   #est{db = #db{mod = ?MODULE} = Db} = St) ->
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0,
            db = Db#db{loc = []},
-           fail_reasons = [], fail_reason_bytes = 0,
+           fail_reasons = [], fail_reason_count = 0,
            fail_reasons_truncated = false, fail_boundaries = 0,
            checkpoint_depth = 0};
 fresh_proof_state(_St) ->
@@ -190,8 +224,10 @@ revision(_St) ->
 -spec replace_revision(tuple(), revision()) -> tuple().
 replace_revision(
   #est{db = #db{mod = ?MODULE,
-                ref = #lp{scope_id = ScopeId}} = Db} = St,
-  #revision{scope_id = ScopeId, overlay = Overlay}) ->
+                ref = #lp{scope_id = ScopeId,
+                          access_guard = AccessGuard}} = Db} = St,
+  #revision{scope_id = ScopeId,
+            overlay = #lp{access_guard = AccessGuard} = Overlay}) ->
     St#est{db = Db#db{ref = Overlay}};
 replace_revision(_St, _Revision) ->
     erlang:error(badarg).
@@ -222,8 +258,9 @@ sub-proof.
 -spec committed_state(tuple()) -> tuple().
 committed_state(
   #est{db = #db{mod = ?MODULE, ref = #lp{out_db = OutDb}}} = St) ->
+    ensure_access(St),
     St#est{cps = [], bs = erlog_int:new_bindings(), vn = 0, db = OutDb,
-           fail_reasons = [], fail_reason_bytes = 0,
+           fail_reasons = [], fail_reason_count = 0,
            fail_reasons_truncated = false, fail_boundaries = 0,
            checkpoint_depth = 0}.
 
@@ -231,6 +268,7 @@ committed_state(
 -spec checkpoint(tuple()) -> checkpoint().
 checkpoint(
   #est{db = #db{mod = ?MODULE, ref = Ov}}) ->
+    ensure_access(Ov),
     choicepoint_checkpoint(Ov).
 
 -doc "Restore staged writes from a checkpoint while retaining monotonic proof reads.".
@@ -238,6 +276,7 @@ checkpoint(
 restore(
   #est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St,
   #checkpoint{} = Checkpoint) ->
+    ensure_access(Ov),
     %% `read_ets` deliberately comes from the current overlay. It is the same
     %% table named by the token and contains the union of every read performed
     %% since the checkpoint, including reads in discarded alternatives.
@@ -253,6 +292,7 @@ enter_read_only(
                           read_only = ReadOnly} = Ov,
                 assert_hooks = AssertHooks,
                 retract_hooks = RetractHooks} = Db} = St) ->
+    ensure_access(Ov),
     Frame = #read_only_frame{scope_id = ScopeId,
                              read_only = ReadOnly,
                              assert_hooks = AssertHooks,
@@ -270,6 +310,7 @@ leave_read_only(
                    read_only = ReadOnly,
                    assert_hooks = AssertHooks,
                    retract_hooks = RetractHooks}) ->
+    ensure_access(Ov),
     St#est{db = Db#db{ref = Ov#lp{read_only = ReadOnly},
                       assert_hooks = AssertHooks,
                       retract_hooks = RetractHooks}};
@@ -278,7 +319,9 @@ leave_read_only(_St, _Frame) ->
 
 -doc "The write-set: the proof's asserts/retracts as content-only ops.".
 -spec get_local_changes(#lp{}) -> [{assert | retract, {term(), term()}}].
-get_local_changes(#lp{local = Local, out_db = #db{mod = M, ref = R}}) ->
+get_local_changes(
+  #lp{local = Local, out_db = #db{mod = M, ref = R}} = Ov) ->
+    ensure_access(Ov),
     maps:fold(fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end, [], Local).
 
 functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
@@ -292,8 +335,12 @@ functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
 
 -doc "The read-set: `#{ {Functor,Arity} => version-token }` of what the proof read.".
 -spec get_read_set(#lp{}) -> map().
-get_read_set(#lp{read_ets = undefined}) -> #{};
-get_read_set(#lp{read_ets = Ets}) ->
+get_read_set(#lp{read_ets = ReadEts} = Ov) ->
+    ensure_access(Ov),
+    read_set(ReadEts).
+
+read_set(undefined) -> #{};
+read_set(Ets) ->
     maps:from_list(
       [Entry || {{_Name, Arity}, _Token} = Entry <- ets:tab2list(Ets),
                 is_integer(Arity)]).
@@ -303,13 +350,21 @@ Every recorded dependency — OCC read tokens **and** live-bridge markers — as
 one map, for absorbing a policy sub-proof's influence into its parent overlay.
 """.
 -spec get_dependencies(#lp{}) -> map().
-get_dependencies(#lp{read_ets = undefined}) -> #{};
-get_dependencies(#lp{read_ets = Ets}) -> maps:from_list(ets:tab2list(Ets)).
+get_dependencies(#lp{read_ets = ReadEts} = Ov) ->
+    ensure_access(Ov),
+    dependencies(ReadEts).
+
+dependencies(undefined) -> #{};
+dependencies(Ets) -> maps:from_list(ets:tab2list(Ets)).
 
 -doc "The live reality-bridge predicates this proof consulted, sorted.".
 -spec get_live_bridges(#lp{}) -> [{atom(), arity()}].
-get_live_bridges(#lp{read_ets = undefined}) -> [];
-get_live_bridges(#lp{read_ets = Ets}) ->
+get_live_bridges(#lp{read_ets = ReadEts} = Ov) ->
+    ensure_access(Ov),
+    live_bridges(ReadEts).
+
+live_bridges(undefined) -> [];
+live_bridges(Ets) ->
     lists:sort(
       [Functor || {{'$quod_live_bridge', Functor}, true}
                       <- ets:tab2list(Ets)]).
@@ -326,14 +381,20 @@ can never collide with an OCC entry, whose key is `{Name, Arity}`.
 """.
 -spec record_live_bridge(tuple(), {atom(), arity()}) -> ok.
 record_live_bridge(
-  #est{db = #db{mod = ?MODULE, ref = #lp{read_ets = Ets}}}, Functor)
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{read_ets = Ets} = Ov}}, Functor)
   when Ets =/= undefined ->
+    ensure_access(Ov),
     _ = ets:insert_new(Ets, {{'$quod_live_bridge', Functor}, true}),
     ok;
-record_live_bridge(_St, _Functor) ->
+record_live_bridge(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, _Functor) ->
+    ensure_access(Ov),
     %% No read-set table means this frame can never seal a plan (absorb fails
     %% loudly on any real dependency), so there is no plan to taint.
-    ok.
+    ok;
+record_live_bridge(_St, _Functor) ->
+    erlang:error(badarg).
 
 -doc """
 Merge another proof's captured reads into this overlay's monotonic read set.
@@ -347,21 +408,30 @@ entry is never overwritten.
 """.
 -spec absorb_read_set(tuple(), map()) -> ok.
 absorb_read_set(
-  #est{db = #db{mod = ?MODULE, ref = #lp{read_ets = Ets}}}, Reads)
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{read_ets = Ets} = Ov}}, Reads)
   when Ets =/= undefined ->
+    ensure_access(Ov),
     maps:foreach(
       fun(Functor, Token) -> _ = ets:insert_new(Ets, {Functor, Token}), ok end,
       Reads);
-absorb_read_set(_St, Reads) when map_size(Reads) =:= 0 ->
+absorb_read_set(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, Reads)
+  when map_size(Reads) =:= 0 ->
+    ensure_access(Ov),
     %% Nothing to absorb — a policy proof that read nothing committed.
     ok;
-absorb_read_set(_St, _Reads) ->
+absorb_read_set(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, _Reads) ->
+    ensure_access(Ov),
     %% The target overlay has no read-set table, so making the authorization
     %% policy an OCC dependency is impossible — silently dropping it would let a
     %% concurrently-revoked grant commit unconflicted. That "policy is an OCC
     %% dependency" is a real invariant, not best-effort: fail loudly here rather
     %% than at some later apply that no longer conflicts.
-    erlang:error(absorb_read_set_without_read_ets).
+    erlang:error(absorb_read_set_without_read_ets);
+absorb_read_set(_St, _Reads) ->
+    erlang:error(badarg).
 
 -doc "Drop the read-set table for a finished proof (pass the final `#est{}`).".
 -spec cleanup_read_set(tuple()) -> ok.
@@ -400,68 +470,77 @@ choicepoint_restore(_Ov, _Checkpoint) ->
 add_built_in(St, _Functor)            -> St.
 add_compiled_proc(St, _F, _M, _Fn)    -> {ok, St}.
 
-asserta_clause(#lp{read_only = true}, _F, _Head, _Body) ->
-    error;
-asserta_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
-    case modifiable(St, F) of
-        false -> error;
-        true  ->
+asserta_clause(#lp{} = St, F, Head, Body) ->
+    ensure_access(St),
+    case St#lp.read_only orelse not modifiable(St, F) of
+        true -> error;
+        false ->
+            L = St#lp.local,
+            Tag = St#lp.next_tag,
             FS = maps:get(F, L, #fstate{}),
             FS1 = FS#fstate{asserta = [{Tag, Head, Body} | FS#fstate.asserta]},
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
-assertz_clause(#lp{read_only = true}, _F, _Head, _Body) ->
-    error;
-assertz_clause(#lp{local = L, next_tag = Tag} = St, F, Head, Body) ->
-    case modifiable(St, F) of
-        false -> error;
-        true  ->
+assertz_clause(#lp{} = St, F, Head, Body) ->
+    ensure_access(St),
+    case St#lp.read_only orelse not modifiable(St, F) of
+        true -> error;
+        false ->
+            L = St#lp.local,
+            Tag = St#lp.next_tag,
             FS = maps:get(F, L, #fstate{}),
             FS1 = FS#fstate{assertz_rev = [{Tag, Head, Body} | FS#fstate.assertz_rev]},
             {ok, St#lp{local = L#{F => FS1}, next_tag = Tag + 1}}
     end.
 
-retract_clause(#lp{read_only = true}, _F, _Tag) ->
-    error;
 retract_clause(#lp{out_db = #db{mod = M, ref = R}, local = L} = St, F, Tag) ->
-    case M:get_procedure_type(R, F) of
-        built_in -> error;
-        compiled -> error;
-        _ ->
-            FS = maps:get(F, L, #fstate{}),
-            case local_tag(Tag, FS) of
-                {true, asserta} ->
-                    {ok, St#lp{local = L#{F => FS#fstate{asserta = lists:keydelete(Tag, 1, FS#fstate.asserta)}}}};
-                {true, assertz} ->
-                    {ok, St#lp{local = L#{F => FS#fstate{
-                        assertz_rev = lists:keydelete(Tag, 1, FS#fstate.assertz_rev)}}}};
-                false ->
-                    case committed_clause(M, R, F, Tag) of
-                        undefined -> {ok, St};
-                        {H, B}    -> Ret = (FS#fstate.retracted)#{Tag => {H, B}},
-                                     {ok, St#lp{local = L#{F => FS#fstate{retracted = Ret}}}}
+    ensure_access(St),
+    case St#lp.read_only of
+        true -> error;
+        false ->
+            case M:get_procedure_type(R, F) of
+                built_in -> error;
+                compiled -> error;
+                _ ->
+                    FS = maps:get(F, L, #fstate{}),
+                    case local_tag(Tag, FS) of
+                        {true, asserta} ->
+                            {ok, St#lp{local = L#{F => FS#fstate{asserta = lists:keydelete(Tag, 1, FS#fstate.asserta)}}}};
+                        {true, assertz} ->
+                            {ok, St#lp{local = L#{F => FS#fstate{
+                                assertz_rev = lists:keydelete(Tag, 1, FS#fstate.assertz_rev)}}}};
+                        false ->
+                            case committed_clause(M, R, F, Tag) of
+                                undefined -> {ok, St};
+                                {H, B}    -> Ret = (FS#fstate.retracted)#{Tag => {H, B}},
+                                             {ok, St#lp{local = L#{F => FS#fstate{retracted = Ret}}}}
+                            end
                     end
             end
     end.
 
-abolish_clauses(#lp{read_only = true}, _F) ->
-    error;
 abolish_clauses(
   #lp{out_db = #db{mod = M, ref = R},
       local = L, read_ets = RS} = St,
   F) ->
-    case M:get_procedure_type(R, F) of
-        built_in -> error;
-        _ ->
-            %% The resulting retract set is derived from the committed
-            %% procedure later in get_local_changes/1. Therefore abolish is a
-            %% read-modify-write even when the Prolog goal never reads F.
-            record_read(RS, F, R),
-            {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
+    ensure_access(St),
+    case St#lp.read_only of
+        true -> error;
+        false ->
+            case M:get_procedure_type(R, F) of
+                built_in -> error;
+                _ ->
+                    %% The resulting retract set is derived from the committed
+                    %% procedure later in get_local_changes/1. Therefore abolish is a
+                    %% read-modify-write even when the Prolog goal never reads F.
+                    record_read(RS, F, R),
+                    {ok, St#lp{local = L#{F => #fstate{abolished = true}}}}
+            end
     end.
 
 get_procedure(St, F) ->
+    ensure_access(St),
     Base = raw_get_procedure(St, F),
     case is_tuple(F) andalso not St#lp.follow_disabled of
         true  -> add_followers(St, F, Base);     %% synthesize read-time link followers
@@ -555,7 +634,12 @@ replace_nth(N, Value, [Head | Tail]) when N > 1 ->
 
 %% A type check must NOT record a read-set dependency (review #8): compute from the
 %% committed type + local presence directly, never via the recording get_procedure/2.
-get_procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
+get_procedure_type(
+  #lp{} = St, F) ->
+    ensure_access(St),
+    procedure_type(St, F).
+
+procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
     FS = maps:get(F, L, #fstate{}),
     HasLocal = FS#fstate.asserta =/= [] orelse FS#fstate.assertz_rev =/= [],
     case M:get_procedure_type(R, F) of
@@ -569,10 +653,11 @@ get_procedure_type(#lp{out_db = #db{mod = M, ref = R}, local = L}, F) ->
     end.
 
 get_interpreted_functors(#lp{out_db = #db{mod = M, ref = R}, local = L} = St) ->
+    ensure_access(St),
     Locals = [F || {F, FS} <- maps:to_list(L),
                    FS#fstate.asserta =/= [] orelse FS#fstate.assertz_rev =/= []],
     All = lists:usort(M:get_interpreted_functors(R) ++ Locals),
-    [F || F <- All, get_procedure_type(St, F) =:= interpreted].
+    [F || F <- All, procedure_type(St, F) =:= interpreted].
 
 %%%===================================================================
 %%% internals
@@ -582,6 +667,26 @@ boolean_option(Key, Opts) ->
     case maps:get(Key, Opts, false) of
         true  -> true;
         false -> false
+    end.
+
+access_guard_option(Opts) ->
+    case maps:get(access_guard, Opts, unguarded) of
+        unguarded ->
+            %% Only isolated/internal callers that cannot select a live
+            %% namespace use this sentinel. Production proof entry points
+            %% acquire a generation-bound token before starting the session.
+            unguarded;
+        {quod_proof_access, Ns, Generation} = AccessGuard
+          when is_binary(Ns), is_integer(Generation), Generation >= 0 ->
+            AccessGuard;
+        _ ->
+            erlang:error(invalid_proof_access)
+    end.
+
+ensure_access(State) ->
+    case check_access(State) of
+        ok -> ok;
+        {error, Reason} -> throw({quod_ask_error, Reason})
     end.
 
 %% A pure write doesn't create a read-dependency: check the committed type

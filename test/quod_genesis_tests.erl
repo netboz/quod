@@ -44,6 +44,18 @@ genesis_source_validation_test() ->
          Base#{genesis_diff => [
                   {assert, {{valid_prefix, ok}, true}} | improper_tail]})).
 
+founding_committee_cap_test() ->
+    Self = <<0:256>>,
+    Members = [<<I:256>> || I <- lists:seq(1, ?MAX_VALIDATORS)],
+    AtLimit = (base_config(Self))#{committee => lists:sublist(
+                                                  Members,
+                                                  ?MAX_VALIDATORS - 1)},
+    AboveLimit = (base_config(Self))#{committee => Members},
+    ?assertEqual(ok, quod_simplex:test_valid_config(AtLimit)),
+    ?assertEqual(
+       {error, {committee_too_large, ?MAX_VALIDATORS + 1}},
+       quod_simplex:test_valid_config(AboveLimit)).
+
 genesis_initial_diff_boundary_test() ->
     Self = <<0:256>>,
     Base = base_config(Self),

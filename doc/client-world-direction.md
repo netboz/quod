@@ -2,10 +2,16 @@
 
 **Status:** NON-NORMATIVE DIRECTION. Revalidate before implementation.
 
-This document records the intended architecture for client projection, GUI,
-visual cues, hot simulation, and editable voxel worlds. It is deliberately
-separate from `doc/agent-fipa-plan.md`: none of this should expand or delay the
-immediate agent/runtime substrate work.
+This document records the intended architecture for client projection,
+renderer-neutral model ontologies, GUI, client profiles, visual cues, hot
+simulation, and editable voxel worlds. It is deliberately separate from
+`doc/agent-fipa-plan.md`: none of this should expand or delay the immediate
+agent/runtime substrate work.
+
+The presentation-ontology, asynchronous-GUI, contextual-action-menu, client
+profile, and semantic-theme directions below were revalidated with Yan on
+2026-08-10. Predicate, module, and wire names remain illustrative until their
+implementation slices are reviewed.
 
 Implementation depends on the agent plan through signed users, immutable
 subjects, hosted agents, wielding, post-apply events, runtime reconciliation,
@@ -37,6 +43,10 @@ The following predecessor choices are rejected:
 - committing generated blocks or per-frame transforms;
 - one undifferentiated stream for scene state, GUI, physics, and visual cues.
 
+A committed user shortcut does not weaken the rejection of client-supplied
+goals. The goal belongs to an ontology; the client receives and later invokes a
+stable entry identifier, never executable Prolog text or a goal term.
+
 ## 1. Directional invariants
 
 1. **No KB copies.** Client and world projections use shared MVCC snapshot
@@ -53,6 +63,18 @@ The following predecessor choices are rejected:
    building, and terrain-changing explosions are ordered durable overlays.
 7. **Clients execute declared presentation data only.** Descriptor schemas,
    assets, payloads, and resource costs are validated and bounded.
+8. **Presentation meaning is renderer-neutral.** Ontologies describe geometry,
+   composition, GUI, and interaction semantics; a Babylon/WebXR adapter renders
+   that vocabulary for the first client.
+9. **Composition is the default.** Complex models reuse governed components;
+   the server resolves their authorized attachment graph into one bounded scene
+   projection.
+10. **Human interaction never suspends a proof.** Draft input is client/session
+   P-state. Submission starts a bounded transaction; a long wait is represented
+   by durable correlated state and resumed by a later transaction.
+11. **Profiles describe capabilities, not product names.** The same projected
+    scene and interaction semantics adapt to immersive XR, tracked controllers,
+    hand tracking, gamepads, keyboard/mouse, and flat displays.
 
 ## 2. D, P, and E for worlds
 
@@ -62,10 +84,12 @@ specialized P/E profile, not a fourth external-predicate class.
 Durable D facts describe:
 
 - world identity, generator type and exact version, and deterministic seed;
-- entity identity, model/material references, baseline transform, collision
-  shape, and simulation parameters;
+- standard model/UI declarations, entity identity, model/material references,
+  baseline transform, collision shape, component attachment, and simulation
+  parameters;
 - current logical simulation authority and monotonically increasing epoch;
-- structured GUI component trees and view subscriptions;
+- structured GUI component trees, durable pending interactions, private
+  user-owned menu entries and preferences, and view subscriptions;
 - sparse voxel edits and semantic checkpoints.
 
 Rebuildable P contains:
@@ -73,6 +97,8 @@ Rebuildable P contains:
 - shared scene and spatial indexes;
 - filtered per-agent subscriptions;
 - client model and GUI indexes;
+- projected contextual menus, session device capabilities, and unsubmitted GUI
+  drafts;
 - simulation processes, bodies, ghosts, and colliders;
 - generated voxel chunks, overlays, meshes, and caches.
 
@@ -126,8 +152,9 @@ Illustrative durable vocabulary:
 ```prolog
 world(WorldId, WorldClass, GeneratorVersion, Seed).
 scene_entity(EntityId, WorldId).
-model(EntityId, ContentHash).
+model(EntityId, ModelDescriptor).
 transform(EntityId, Transform).
+attached(ChildId, ParentId, Socket, LocalTransform).
 gui_component(ViewId, ComponentId, Kind).
 gui_attribute(ViewId, ComponentId, Name, Value).
 view_subscription(AgentId, Source, ViewType).
@@ -138,6 +165,63 @@ ontologies, not hard-coded Erlang dispatch.
 
 Asset references are content-addressed and policy checked. Ontology content
 cannot cause clients to fetch arbitrary executable code or untrusted URLs.
+
+### 4.1 Presentation ontologies
+
+Quod should provide a small governed family of reusable presentation
+ontologies. They define renderer-neutral model classes and bounded descriptor
+schemas; they do not reproduce Babylon's JavaScript API in Prolog. The initial
+family should cover:
+
+- primitives such as spheres, boxes, planes, cylinders, and other bounded
+  parameterized geometry;
+- content-addressed mesh assets, with glTF/GLB as the preferred interchange
+  format and additional audited import formats added through versioned schemas;
+- heightfields, procedural terrain, and voxel surfaces;
+- materials, textures, lights, cameras, and scene transforms;
+- skeleton, animation, and morph references where the selected client supports
+  them.
+
+These are reusable ontology concepts, not a requirement to found one consensus
+namespace for every primitive or widget. A domain ontology may use them to say
+that an entity is a sphere, a rigged mesh, a heightfield, or a composite model.
+Babylon/WebXR is the first rendering adapter; another client may map the same
+descriptors to a different engine without changing durable domain truth.
+
+Large meshes, textures, heightfields, audio, and video remain content-addressed
+data. An ontology carries their identity, type, integrity hash, metadata, and
+policy—not their unbounded bytes. Fetch, decoding, and resource limits are
+validated outside consensus before a client resource becomes usable.
+
+### 4.2 Composition and attachment
+
+Presentation is compositional. A character may use body, arm, equipment, and
+animation ontologies; a table may use a top and four legs; a world may combine
+terrain and independently governed objects. The parent owns the semantic
+relationship and the child owns its reusable presentation. A private component
+ontology need not be advertised by the network directory: authorized parents
+may address it through their known route.
+
+The current relationship is durable state, for example:
+
+```prolog
+attached(Child, Parent, Socket, LocalTransform).
+
+action(attach(Child, Parent, Socket, LocalTransform),
+       [component(Child), compatible(Child, Parent, Socket)],
+       attached(Child, Parent, Socket, LocalTransform)).
+```
+
+A caller asks for `goal(attached(...))`. If that desired state already holds,
+no transition runs; otherwise any declared action capable of reaching the same
+state may be tried under the action semantics in `doc/agent-fipa-plan.md`.
+Static genesis composition may assert `attached/4` directly. Per-frame bone,
+joint, or animation transforms remain hot P-state unless a domain explicitly
+commits a semantic checkpoint.
+
+Projection resolves the authorized component graph server-side and sends a
+bounded scene tree. A client does not crawl arbitrary ontologies, discover
+private children, or interpret arbitrary predicates.
 
 Server P maintains one scene/spatial index per hosted world and applies each
 wielded agent's sight/view policy:
@@ -174,9 +258,38 @@ A collision may emit a visual explosion immediately. If it also causes shared
 truth such as damage, destruction, or a voxel edit, the authority submits a
 separate authorized action. The cue is never evidence that the action committed.
 
-## 6. GUI input
+## 6. GUI ontologies and human interaction
 
-GUI output is state projection. Input is an authenticated command:
+GUI output is state projection. Quod should provide a reusable, extensible GUI
+ontology with a semantic class tree such as:
+
+```text
+gui_component
+|- container: panel, form, row, column, grid
+|- display:   label, image, progress, table, log, editor
+`- input:     text_box, number_box, checkbox, select, slider, button
+```
+
+The standard ontology defines roles, value and event schemas, containment, and
+accessibility meaning. Domain ontologies instantiate or derive these concepts;
+they do not each require a separate consensus namespace. Rendering adapters may
+map the same semantic roles to spatial panels, a flat desktop UI, speech, or
+native accessibility facilities.
+
+### 6.1 Current values and local drafts
+
+A projected widget describes current accepted state. A variable in a view rule
+is bound when that projection is proved; it is not a suspended variable waiting
+for a future person:
+
+```prolog
+text_box(View, Field, Label, Options, CurrentText) :-
+    character_name(Character, CurrentText).
+```
+
+Typing and intermediate form edits remain client/session P-state. Quod does not
+commit a transaction for every key press. On validate or submit, the client
+sends one authenticated typed command:
 
 ```text
 gui_input(InputId, SessionId, AgentId, ViewId, ComponentId,
@@ -187,14 +300,141 @@ The server:
 
 1. binds the session to its authenticated user and wielded agent;
 2. verifies that the component/event exists in the projected current view;
-3. validates the payload against the component schema;
+3. validates a bounded payload against the component schema;
 4. maps the event through ontology policy to a ground desired state whose
    declared `action/3` transition is owned by that ontology;
-5. applies session, agent, and component rate limits.
+5. runs one `goal(DesiredState)` transaction and applies session, agent, and
+   component rate limits.
 
-The client never supplies a Prolog goal. `SeenHeight` allows stale-interface
-rejection or refresh. `InputId` and the exact desired state make retries
-explicit and idempotent.
+One form submission is one bounded payload and one transaction, so related
+field changes may commit atomically. Quod does not first commit a generic GUI
+event and then rely on a second transaction for the primary domain change: that
+would introduce a partial-success window. Post-commit `react_on` handlers remain
+appropriate for notifications, projections, and external effects.
+
+At invocation time the client never supplies a Prolog goal. `SeenHeight` allows
+stale-interface rejection or refresh. `InputId` makes retries explicit and
+idempotent. The result identifies acceptance or returns a bounded public
+failure-reason stack and current height. A client may bind those reasons to
+field/form errors; a failed submission does not need to write an error fact.
+
+### 6.2 Waiting for a person
+
+A proof, snapshot, or namespace process must not wait for human response. A
+workflow that needs later input first reaches durable correlated state and
+ends, for example:
+
+```prolog
+awaiting_input(RequestId, Agent, Form, Schema, Deadline).
+```
+
+A later `gui_input` starts a new transaction. It validates the correlation and
+atomically applies the domain update while completing or retracting the pending
+request. If a larger workflow must resume, D stores a ground, versioned
+continuation intent—not a live Prolog continuation or an unbound variable.
+Runtime processes may schedule timeouts or mirror pending requests, but the
+durable state is sufficient to reconstruct them after restart.
+
+### 6.3 Contextual action menus
+
+An action menu is a bounded ontology projection, not an enumeration of every
+internal `action/3` clause and not a second authorization system. Its candidates
+may be derived from:
+
+- goals exposed by the wielded avatar and its composed limbs, abilities,
+  equipment, and tools;
+- goals offered by the current target;
+- avatar or tool goals that are applicable to that target;
+- goals the user has pinned in a private user-owned ontology associated with
+  the avatar;
+- a small set of client or platform operations such as opening settings.
+
+Multiple actions may reach the same desired state, so a state-changing menu
+entry normally names `goal(DesiredState)`, not a chosen transition. Read-only
+entries may instead open a projected result view. The ontology projects a
+ground, bounded menu descriptor with stable `MenuId` and `EntryId`; the client
+does not receive the stored goal term. Activation sends the menu/entry IDs,
+target context, and observed height. The server reloads the entry, grounds any
+target-dependent rule, rechecks current availability and authorization, and
+then proves it. Pinning a goal grants no new authority.
+
+This permits users to add their own contextual goals without permitting a
+client to inject executable Prolog. Stale or no-longer-ground menu entries are
+rejected and the menu is refreshed. Pure client operations such as opening
+settings remain explicitly identified as client operations; they do not
+pretend to be ontology transactions.
+
+### 6.4 Device capabilities and user profiles
+
+The same scene and interaction semantics support immersive VR and conventional
+software. The concrete controls are the intersection of:
+
+```text
+session device capabilities
+    intersect persistent user preferences
+    intersect current world policy
+```
+
+Device capabilities are untrusted P-state discovered for the session, for
+example immersive versus flat display, tracked pointers, touchpad or thumbstick
+radial input, trigger/squeeze, hand tracking, haptics, mouse, keyboard, and
+gamepad. Durable user preferences may select dominant hand, self-menu hand,
+target-pointer hand, locomotion, comfort, and accessibility options. Security
+decisions remain ontology policy; a claimed device capability never grants
+authority. Arbitrary menu and profile data belongs in a private user-owned
+ontology, not the platform `quod:user` identity/routing ontology.
+
+The XR adapter supplies stereo cameras, head/controller poses, spatial panels,
+and an XR frame budget. The desktop adapter supplies a conventional camera,
+mouse/keyboard or gamepad controls, and screen-space panels. Both consume the
+same scene and GUI projections.
+
+The default VR profile uses two related radial menus:
+
+- the self context presents avatar, limb, equipment, and user-pinned goals;
+- the target context follows the pointing ray and combines target-provided
+  goals with avatar/tool goals applicable to that target.
+
+The hand assignment is configurable. A Vive touchpad maps naturally to a pie
+gesture; a Quest 3 controller can use a thumbstick or button to open, tilt to
+select, and trigger/click to confirm; hand tracking can use a palm menu and
+pinch. A desktop profile presents the same entries through a toolbar, shortcut,
+right-click, or radial mouse menu. This is one semantic menu with different
+input adapters, not separate VR and desktop domain logic.
+
+### 6.5 Icons and semantic themes
+
+Presentation metadata belongs primarily to the requested goal/desired state,
+because several transitions may reach that state and the actual transition is
+chosen only during proof. Illustrative metadata includes a label, description,
+group, priority, and icon. Icon resolution is:
+
+1. the user's override for that menu entry;
+2. goal-specific metadata;
+3. inherited goal/class metadata;
+4. the built-in abstract action icon.
+
+Built-in icons and user/domain icons are bounded presentation descriptors or
+content-addressed assets. They cannot contain executable URLs or code. Colour
+is never the only signifier: icon shape, text, contrast, and accessibility
+semantics must carry the same meaning.
+
+Themes map semantic roles to concrete colour and material. The initial
+Tarot-inspired direction uses red for action/transition and yellow/gold for its
+manifested effect or visible consequence. The default abstract action icon
+therefore uses a red circular arrow around a yellow/gold central spark.
+Blue/teal may denote perception or receptive state, green/olive material or
+growing state, violet abstraction or transformation, white potential/clarity,
+and slate an unavailable or unresolved entry; these secondary associations
+remain theme choices rather than protocol meanings.
+
+Marseille and Rider-Waite colour language inform the semantic contrast;
+Visconti-Sforza and the gilded/lithographic Pierre Jacquot/Raymond Abellio Tarot
+portfolio inform material and graphic finish without copying their artwork. A
+capable VR renderer may use restrained metallic or shimmering gold, while flat
+and accessibility profiles use a stable high-contrast fallback. Here `effect`
+is a presentation role, not a new D/P/E class or a change to `action/3`
+semantics.
 
 ## 7. Editable voxel worlds
 
@@ -351,10 +591,12 @@ statistics.
 - Every metric has user-facing Prometheus help and a matching Grafana panel.
 
 Metrics should cover subscriptions, snapshot size/latency, delta depth,
-resnapshot cause, stale GUI input, cue rejection/expiry, frame age/loss,
-authority epochs, chunk generation/cache behavior, voxel edit commit-to-client
-latency, patch size/cells, revision conflicts, client resync, compaction, and
-collider installation.
+resnapshot cause, GUI submit latency and failure class, stale/deduplicated GUI
+input, pending-interaction age, menu projection/refresh, profile/capability
+selection, cue rejection/expiry, frame age/loss, authority epochs, chunk
+generation/cache behavior, voxel edit commit-to-client latency, patch
+size/cells, revision conflicts, client resync, compaction, and collider
+installation.
 
 Voxel edit throughput is a gameplay parameter because edits are consensus
 transactions. Client prediction hides local perception but not authoritative
@@ -374,15 +616,24 @@ These milestones are intentionally outside the numbered agent/FIPA slices.
 ### C1 -- client projection and GUI
 
 - Negotiate a versioned protocol and authenticated subscription.
-- Deliver an atomic scene snapshot and model create/update/remove deltas.
+- Deliver an atomic scene snapshot and model create/update/remove deltas for a
+  primitive, a content-addressed mesh, and one composite attachment tree.
 - Deliver one bounded versioned explosion cue.
-- Project one GUI tree and map one button event to a declared
-  `goal(DesiredState)`.
+- Project one typed GUI tree, retain edits as a local draft, and map one form
+  submission to a single declared `goal(DesiredState)` transaction.
+- Complete one durable `awaiting_input` interaction through a later correlated
+  transaction without retaining a proof or snapshot.
+- Project self and target menus, invoke an ontology-owned entry by stable ID,
+  and prove that a user-pinned entry grants no extra authority.
+- Render the same semantic menu through one immersive capability profile and
+  one desktop profile, including icon fallback and non-colour labels.
 - Test disconnect, sequence gaps, owner failover, and slow clients.
 
 Success means reconnect reconstructs models/GUI without replaying cues; unknown
 descriptors fail closed; a client cannot forge identity, address undeclared
-components, or submit goals; queues remain bounded.
+components, or supply arbitrary goals at invocation time; drafts do not create
+transactions; failed input returns bounded reasons; stale menu entries refresh;
+queues remain bounded.
 
 ### C2 -- hot simulation and editable voxel world
 

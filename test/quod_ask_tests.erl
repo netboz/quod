@@ -145,6 +145,66 @@ nested_source_binding_test() ->
         exit(Stranger, kill)
     end.
 
+authorization_transcript_reproves_allowed_and_denied_test() ->
+    Target = {<<"quod:policy-target">>, <<1:256>>},
+    Origin = {<<"quod:policy-origin">>, <<2:256>>},
+    Principal = anonymous,
+    Chain = [Target, Origin],
+    Goal = {read, item},
+    Allowing = policy_kb(
+                 [{can_invoke, {'Goal'}, {'Principal'},
+                   {'Chain'}, {'Namespace'}}]),
+    Denying = policy_kb([]),
+    ?assertEqual(
+       ok,
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, Principal, 1,
+         authorization_transcript(Goal, allowed, Chain), Allowing)),
+    ?assertEqual(
+       ok,
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, Principal, 1,
+         authorization_transcript(Goal, denied, Chain), Denying)),
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, Principal, 1,
+         authorization_transcript(Goal, denied, Chain), Allowing)).
+
+authorization_transcript_binds_full_chain_test() ->
+    Target = {<<"quod:policy-target">>, <<3:256>>},
+    Origin = {<<"quod:policy-origin">>, <<4:256>>},
+    Other = {<<"quod:other">>, <<5:256>>},
+    Est = policy_kb(
+            [{can_invoke, {'Goal'}, {'Principal'},
+              {'Chain'}, {'Namespace'}}]),
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, anonymous, 1,
+         authorization_transcript(probe, allowed, [Other, Origin]), Est)),
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, anonymous, 1,
+         authorization_transcript(probe, allowed, [Target, Other]), Est)),
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_ask:validate_authorization_transcript(
+         Target, Origin, anonymous, 1, [], Est)).
+
+authorization_transcript(Goal, Verdict, Chain) ->
+    {ok, GoalBlob} = quod_wire_term:encode_canonical(Goal),
+    [{<<1:128>>, Chain, GoalBlob, Verdict, 0, <<0:256>>, complete}].
+
+policy_kb(Facts) ->
+    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
+    State0 = element(3, Erl),
+    {succeed, State1} =
+        erlog_int:prove_goal({set_prolog_flag, unknown, fail}, State0),
+    State2 = quod_ask:load(quod_predicates:load(State1)),
+    quod_ct:commit_kb(quod_ct:assert_facts(Facts, State2)).
+
 ask_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
@@ -160,15 +220,18 @@ ask_test_() ->
           ?_test(t_loud_routing_errors(Ctx)),
           ?_test(t_recursive_selection(Ctx)),
           ?_test(t_three_scope_chain(Ctx)),
-          ?_test(t_failed_foreign_branch_retains_state(Ctx)),
-          ?_test(t_transaction_restores_foreign_branch_before_alternative(Ctx)),
+          {timeout, 30,
+           ?_test(t_failed_foreign_branch_retains_state(Ctx))},
+          {timeout, 30,
+           ?_test(t_transaction_restores_foreign_branch_before_alternative(Ctx))},
           ?_test(t_origin_transaction_is_inherited_by_selected_branch(Ctx)),
-          ?_test(t_selected_scope_transaction_restores_descendant(Ctx)),
+          {timeout, 30,
+           ?_test(t_selected_scope_transaction_restores_descendant(Ctx))},
           ?_test(t_selected_transaction_survives_reentrant_callback(Ctx)),
           ?_test(t_failed_transaction_restores_all_selected_scopes(Ctx)),
           ?_test(t_unrelated_reentrant_invocation_has_no_transaction_lineage(Ctx)),
-          ?_test(t_reentrant_scope_reuse(Ctx)),
-          ?_test(t_origin_scope_reentry_requires_group_commit(Ctx)),
+          {timeout, 30, ?_test(t_reentrant_scope_reuse(Ctx))},
+          {timeout, 30, ?_test(t_origin_scope_reentry_commits_group(Ctx))},
           ?_test(t_nested_failure_reasons(Ctx)),
           ?_test(t_nested_refusal_fails_logically(Ctx)),
           ?_test(t_read_only_tree_rejects_first_write(Ctx)),
@@ -178,7 +241,9 @@ ask_test_() ->
           ?_test(t_scope_worker_crash_is_protocol_error(Ctx)),
           ?_test(t_permission_gate(Ctx)),
           ?_test(t_failure_reasons_cross_local_ask(Ctx)),
-          ?_test(t_foreign_write_requires_group_commit(Ctx)),
+          {timeout, 30, ?_test(t_foreign_write_commits_group(Ctx))},
+          {timeout, 30,
+           ?_test(t_prepare_refusal_aborts_group_with_reasons(Ctx))},
           ?_test(t_scope_engine_stays_responsive(Ctx)),
           ?_test(t_target_crash_kills_scope(Ctx)),
           ?_test(t_scope_worker_limit(Ctx)),
@@ -195,6 +260,9 @@ setup() ->
     Dir = filename:join("/tmp", "quod_ask_" ++
                        integer_to_list(erlang:unique_integer([positive]))),
     ok = filelib:ensure_dir(filename:join(Dir, "placeholder")),
+    {ok, ForeignLog} = quod_foreign_log:start_link(
+                         #{cache_dir => filename:join(Dir, "foreign-log"),
+                           page_timeout_ms => 1000}),
     PrivateFile = write_ontology(Dir, "private.pl",
         "can_invoke(secret(_), _Principal, _Chain, _Ns).\n"
         "can_invoke(blocked(_), _Principal, _Chain, _Ns).\n"
@@ -210,6 +278,7 @@ setup() ->
     ChainBFile = write_ontology(Dir, "chain_b.pl",
         "can_invoke(_Goal, _Principal, _Chain, _Ns).\n"
         "can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).\n"
+        "drop_policy :- abolish(can_invoke/4).\n"
         "via_c(X) :- chain_c::leaf(X).\n"
         "stage_and_fail :- assertz(shared_mark), fail.\n"
         "shared_mark_visible :- shared_mark.\n"
@@ -252,11 +321,14 @@ setup() ->
     _ = prove_ready(P, {instance_of, pet, my_dog}),
     _ = prove_ready(Private, {secret, 42}),
     _ = prove_ready(Slow, {ping, ok}),
-    #{dir => Dir, router => Router, namespaces => Namespaces, animals => A, pets => P,
+    #{dir => Dir, router => Router, foreign_log => ForeignLog,
+      namespaces => Namespaces, animals => A, pets => P,
       private => Private, slow => Slow, chain_b => ChainB, chain_c => ChainC}.
 
-cleanup(#{dir := Dir, router := Router, namespaces := Namespaces}) ->
+cleanup(#{dir := Dir, router := Router, foreign_log := ForeignLog,
+          namespaces := Namespaces}) ->
     lists:foreach(fun stop_ns/1, Namespaces),
+    _ = catch gen_server:stop(ForeignLog),
     _ = catch gen_server:stop(Router),
     application:unset_env(quod, node_pubkey),
     application:unset_env(quod, identity_key),
@@ -387,13 +459,14 @@ t_three_scope_chain(#{pets := P}) ->
 
 %% A failed invocation's writes remain in B's shared proof scope during the
 %% proof. The origin's influencing authorization read makes the final write a
-%% two-participant group, so this slice refuses it instead of committing B
-%% without protecting A's read dependency.
+%% two-participant group; Complete makes both the read dependency and B's write
+%% durable before the caller returns.
 t_failed_foreign_branch_retains_state(#{pets := P, chain_b := B}) ->
     Goal = {';', {'::', chain_b, stage_and_fail},
                  {'::', chain_b, shared_mark_visible}},
-    assert_group_refused(prove(P, Goal), [<<"chain_b">>, <<"pets">>]),
-    ?assertMatch({fail, [_ | _]}, prove(B, shared_mark)).
+    assert_group_committed(
+      prove_group(P, Goal, [P, B]), [<<"chain_b">>, <<"pets">>]),
+    ?assertMatch({ok, [#{}], _}, prove(B, shared_mark)).
 
 %% transaction/1 restores B before the enclosing disjunction tries its second
 %% alternative. The second branch can therefore observe absence and stage its
@@ -402,9 +475,10 @@ t_transaction_restores_foreign_branch_before_alternative(
   #{pets := P, chain_b := B}) ->
     First = {',', {'::', chain_b, {assertz, tx_hidden}}, fail},
     Goal = {transaction, {';', First, {'::', chain_b, tx_second}}},
-    assert_group_refused(prove(P, Goal), [<<"chain_b">>, <<"pets">>]),
+    assert_group_committed(
+      prove_group(P, Goal, [P, B]), [<<"chain_b">>, <<"pets">>]),
     ?assertMatch({fail, _}, prove(B, tx_hidden)),
-    ?assertMatch({fail, [_ | _]}, prove(B, tx_kept)).
+    ?assertMatch({ok, [#{}], _}, prove(B, tx_kept)).
 
 %% The transaction belongs to A, but the choice point and temporary write are
 %% both inside B. B must inherit A's active transaction lineage: otherwise the
@@ -420,11 +494,11 @@ t_origin_transaction_is_inherited_by_selected_branch(
 %% Erlog's local token; the origin controller restores C before B continues.
 t_selected_scope_transaction_restores_descendant(
   #{pets := P, chain_c := C}) ->
-    assert_group_refused(
+    assert_group_committed(
       prove(P, {'::', chain_b, tx_via_c}),
       [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
     ?assertMatch({fail, _}, prove(C, c_tx_hidden)),
-    ?assertMatch({fail, [_ | _]}, prove(C, c_tx_kept)).
+    ?assertMatch({ok, [#{}], _}, prove(C, c_tx_kept)).
 
 %% B owns the transaction, selects C, and C calls back into a fresh logical B
 %% invocation. The callback's failed alternative must still belong to B's
@@ -520,18 +594,18 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
 %% C calls back into the already-suspended B scope. The B write must be visible
 %% there; opening a second B overlay would make the proof fail instead.
 t_reentrant_scope_reuse(#{pets := P, chain_b := B}) ->
-    assert_group_refused(
+    assert_group_committed(
       prove(P, {'::', chain_b, {via_c_back, ok}}),
       [<<"chain_b">>, <<"chain_c">>, <<"pets">>]),
-    ?assertMatch({fail, [_ | _]}, prove(B, reentry_mark)).
+    ?assertMatch({ok, [#{}], _}, prove(B, reentry_mark)).
 
 %% B selects the already-running origin scope A. The write belongs to A's
-%% ordinary transaction diff; no second A overlay is opened.
-t_origin_scope_reentry_requires_group_commit(#{pets := P}) ->
-    assert_group_refused(
+%% group plan; no second A overlay is opened.
+t_origin_scope_reentry_commits_group(#{pets := P}) ->
+    assert_group_committed(
       prove(P, {'::', chain_b, via_origin_write}),
       [<<"chain_b">>, <<"pets">>]),
-    ?assertMatch({fail, [_ | _]}, prove(P, origin_callback_write)).
+    ?assertMatch({ok, [#{}], _}, prove(P, origin_callback_write)).
 
 t_nested_failure_reasons(#{pets := P}) ->
     {fail, Reasons} = prove(P, {'::', chain_b, via_c_failure}),
@@ -832,19 +906,57 @@ t_failure_reasons_cross_local_ask(#{pets := P}) ->
        {ok, [#{'Outer' := Remote}], _},
        prove(P, Recover)).
 
-%% A foreign write also depends on the origin's authorization read. Until the
-%% group protocol lands, refusing both plans is the only sound result.
-t_foreign_write_requires_group_commit(#{animals := A, pets := P}) ->
+%% A foreign write also depends on the origin's authorization read. The group
+%% commits both participants before exposing the target write.
+t_foreign_write_commits_group(#{animals := A, pets := P}) ->
     Goal = {assertz, {stolen, fact}},
-    assert_group_refused(
+    assert_group_committed(
       prove(P, {'::', animals, Goal}), [<<"animals">>, <<"pets">>]),
-    ?assertMatch({fail, [_ | _]}, prove(A, {stolen, fact})).
+    ?assertMatch({ok, [#{}], _}, prove(A, {stolen, fact})).
 
-assert_group_refused(
-  {error, {distributed_group_unimplemented, Participants}}, Names) ->
+%% A deterministic participant refusal becomes the group's logical abort.  Its
+%% bounded reason stack reaches the originating Prolog proof unchanged, and no
+%% hidden participant write becomes visible.
+t_prepare_refusal_aborts_group_with_reasons(
+  #{pets := P, chain_b := B}) ->
+    {fail, Reasons} = prove(P, {'::', chain_b, drop_policy}),
+    Anchor = quod_simplex:genesis_hash(B),
+    ?assert(lists:member(
+              {prepare_refused, {ontology, B, Anchor}}, Reasons)),
+    ?assert(lists:member(policy_self_seal_forbidden, Reasons)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       prove(B, {can_invoke, probe, anonymous, [], B})).
+
+assert_group_committed(
+  {ok, [_Bindings],
+   #{ref := {group, _Ns, _Anchor, _Coordinator, _Admission, _GroupId},
+     participant_slots := Slots}}, Names) ->
+    ?assertEqual(length(Names), length(Slots)),
     ?assertEqual(
-       lists:sort(Names),
-       [Ns || {Ns, <<_:256>>} <- Participants]).
+       lists:sort(
+         [{Ns, quod_simplex:genesis_hash(Ns)} || Ns <- Names]),
+       lists:sort(
+         [Identity || {Identity = {Ns, <<_:256>>}, Slot, Generation} <- Slots,
+                      is_binary(Ns),
+                      is_integer(Slot), Slot > 0,
+                      is_integer(Generation), Generation >= 0])).
+
+prove_group(Ns, Goal, Watched) ->
+    Parent = self(),
+    Ref = make_ref(),
+    {Pid, Monitor} = spawn_monitor(
+                       fun() -> Parent ! {Ref, prove(Ns, Goal)} end),
+    receive
+        {Ref, Result} ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            Result;
+        {'DOWN', Monitor, process, Pid, Reason} ->
+            error({group_proof_crashed, Reason})
+    after 15000 ->
+        exit(Pid, kill),
+        error({group_timeout, Watched})
+    end.
 
 %% A scope may be deriving an unproductive goal without blocking its owning
 %% ontology engine. Killing that isolated worker leaves the engine healthy.

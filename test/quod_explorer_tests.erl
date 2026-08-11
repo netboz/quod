@@ -177,6 +177,46 @@ tx(N) ->
 entry(Slot, Txs) ->
     #entry{index = Slot, data = {batch, Txs}, timestamp = 2000 + Slot, cert = none}.
 
+block_json_distinguishes_non_transaction_slots_test() ->
+    Content = quod_explorer_http:block_json(<<"ont:test">>, entry(2, [tx(2)])),
+    ?assertEqual(content, maps:get(kind, Content)),
+    ?assertEqual(1, length(maps:get(txs, Content))),
+    Noop = quod_explorer_http:block_json(
+             <<"ont:test">>, #entry{index = 3, data = noop}),
+    ?assertEqual(noop, maps:get(kind, Noop)),
+    ?assertEqual([], maps:get(txs, Noop)),
+    Invalid = quod_explorer_http:block_json(
+                <<"ont:test">>, #entry{index = 4, data = {batch, []}}),
+    ?assertEqual(invalid, maps:get(kind, Invalid)),
+    ?assertEqual([], maps:get(txs, Invalid)),
+    DtxEntry = #entry{index = 5, data = quod_ct:dtx_decision_payload()},
+    Dtx = quod_explorer_http:block_json(<<"ont:test">>, DtxEntry),
+    ?assertEqual(decision, maps:get(kind, Dtx)),
+    ?assertEqual([], maps:get(txs, Dtx)),
+    Control = maps:get(control, Dtx),
+    ?assertEqual(decision, maps:get(kind, Control)),
+    ?assertEqual(abort, maps:get(verdict, Control)),
+    ?assertEqual([<<"test_abort(dtx_fixture)">>], maps:get(reasons, Control)),
+    ?assert(is_binary(quod_explorer_http:encode(Dtx))),
+    ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)).
+
+websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
+    Ns = <<"ont:test">>,
+    DtxEntry = #entry{index = 5, data = quod_ct:dtx_decision_payload()},
+    {reply, {text, Frame}, state} =
+        quod_explorer_ws:websocket_info(
+          {committed, Ns, 5, DtxEntry}, state),
+    ?assertNotEqual(nomatch, binary:match(Frame, <<"decision">>)),
+    ?assertEqual(
+       {ok, state},
+       quod_explorer_ws:websocket_info(
+         {committed, Ns, 6, #entry{index = 6, data = noop}}, state)),
+    ?assertEqual(
+       {ok, state},
+       quod_explorer_ws:websocket_info(
+         {committed, Ns, 7,
+          #entry{index = 7, data = {batch, []}}}, state)).
+
 with_temp_store(Fun) ->
     Dir = filename:join("/tmp", "quod_explorer_eunit_" ++
                         integer_to_list(erlang:unique_integer([positive]))),
@@ -255,6 +295,11 @@ tx_json_full_test() ->
                    ns := <<"ont:target">>, submitted_at := 1007}, J),
     ?assertEqual(<<"assertz(fact(7))">>, maps:get(goal, J)),
     ?assertEqual([#{op => assert, clause => <<"fact(7)">>}], maps:get(diff, J)),
+    ?assertEqual(
+       #{ns => <<"ont:test">>, anchor => binary:encode_hex(<<0:256>>, lowercase)},
+       maps:get(origin, J)),
+    ?assertEqual(null, maps:get(proof_id, J)),
+    ?assertEqual(null, maps:get(plan_digest, J)),
     ?assertEqual(unsigned, maps:get(signature_status, J)),
     ?assertEqual(null, maps:get(signature, J)),
     %% the whole thing must be JSON-encodable
@@ -292,4 +337,7 @@ printable_tx_id_test() ->
     PrintableHash = binary:copy(<<"a">>, 32),
     ?assertEqual(binary:encode_hex(PrintableHash, lowercase),
                  quod_explorer_http:tx_id_text(PrintableHash)),
+    ?assertEqual(
+       <<"group:", (binary:encode_hex(PrintableHash, lowercase))/binary>>,
+       quod_explorer_http:tx_id_text({group, PrintableHash})),
     ?assertEqual(<<"00000000000000ff">>, quod_explorer_http:tx_id_text(<<255:64>>)).

@@ -793,7 +793,7 @@ restarting consensus or rebuilding the KB.
 ### Slice 1 -- execution contexts and apply origin
 
 **Status: DELIVERED (0.7.15).** The typed-predicate substrate, the `#est.fs`
-context migration, `apply_block/4` with `live | replay`, the `applied_live` event,
+context migration, `apply_entry/3` with a complete certified entry and `live | replay`, the `applied_live` event,
 and the `replay_started`/`replay_ready` boundaries are built and green (285 eunit,
 25 CT, dialyzer + xref clean). The "reconciles P exactly once" and "cannot resume
 E early" acceptance items are substrate-only until `quod_runtime` (Slice 2)
@@ -802,7 +802,7 @@ passing unchanged, not by a dedicated benchmark. See the "As built" notes in
 sections 5 and 7.
 
 - Introduce explicit predicate metadata and execution contexts.
-- Replace `apply_block/3` with the live/replay-aware apply contract.
+- Replace the payload-only apply call with the live/replay-aware full-entry contract.
 - Add explicit recovery-start and ready-edge boundaries for initial rebuild and
   every in-process catch-up transition.
 - Add a post-D applied event.

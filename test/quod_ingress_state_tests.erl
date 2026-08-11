@@ -2,6 +2,7 @@
 
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_ledger.hrl").
+-include("quod_ingress_limits.hrl").
 
 -define(NS, <<"ingress-state:test">>).
 -define(CID, <<"committee-1">>).
@@ -152,7 +153,7 @@ barrier_future_slot_and_capacity_truth_table_test() ->
     [A, B] = validators(),
     Local = request(<<"local">>, B, 0, none, false),
     Barrier =
-        with_view(B, [A, B], #{membership_barrier => true}),
+        with_view(B, [A, B], #{consensus_barrier => true}),
     ?assertEqual(
        {park, barrier},
        route(entry, local, Local, Barrier)),
@@ -204,7 +205,8 @@ request_size_is_cached_in_queue_accounting_test() ->
         quod_ingress_state:enqueue(
           local, waiter, Prepared, 10, State),
     Expected =
-        byte_size(term_to_binary(Change, [deterministic])) + 96 + 6,
+        byte_size(term_to_binary(Change, [deterministic]))
+        + 96 + ?BATCH_ENVELOPE_BYTES,
     ?assertEqual(
        #{count => 1, bytes => Expected, authors => #{B => 1}},
        quod_ingress_state:summary(Queued)).
@@ -345,7 +347,7 @@ facts(Self, Validators) ->
       approved => 3,
       proposal_visible => false,
       proposal_slot => {ok, 4},
-      membership_barrier => false,
+      consensus_barrier => false,
       approved_author_seqs => {ok, #{}},
       collecting => none,
       custody_lane => empty,

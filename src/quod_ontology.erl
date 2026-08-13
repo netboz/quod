@@ -4,23 +4,28 @@ Runtime creation of a local, self-founded ontology and joining of an existing
 ontology through its pinned genesis anchor.
 
 Creation deliberately reuses the normal namespace manager, namespace
-supervision tree, genesis builder, and root storage placement. It adds no
-catalogue or durable hosting manifest: a full application restart forgets the
-runtime hosting intent, and calling `create/2` again resumes the existing
-ledger.
+supervision tree, genesis builder, and root storage placement. The authorized
+public action is recorded as an ordinary root transaction with a typed direct
+effect, but it adds no root catalogue or durable hosting manifest: a full
+application restart forgets the runtime hosting intent, and calling `create/2`
+again resumes the existing ledger.
 Joining uses that same lifecycle asynchronously: acceptance starts the existing
 catch-up process, and `local_state/1` reports its local progress.
 
 These functions are trusted same-VM APIs; they do not authenticate a remote
 caller. Node-local Prolog lifecycle requests must enter through
-`quod_prolog:run_action/2`, which proves root policy before calling them.
+`quod_prolog:run_action/2`, which proves root policy and commits the typed
+descriptor before the effect journal calls them.
 """.
 
 -include("quod_ingress_limits.hrl").
+-include("quod_proof_limits.hrl").
+-include("quod_ledger.hrl").
 
 -export([create/2, join/3,
          validate_action/1, prepare_action/1, execute_prepared/1,
-         local_state/1, genesis_anchor/1]).
+         prepared_effect/4, prepared_bytes/1, decode_prepared/1,
+         local_state/1, genesis_anchor/1, root_ns/0]).
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -49,7 +54,9 @@ caller. Node-local Prolog lifecycle requests must enter through
 }).
 
 -record(prepared_lifecycle, {
+    kind :: create | join,
     namespace :: binary(),
+    anchor :: <<_:256>>,
     config :: map(),
     status :: created | joining | resumed
 }).
@@ -183,6 +190,15 @@ local_state(Name) ->
         {error, _} = Error -> Error;
         {ok, Ns} -> {ok, local_state_validated(Ns)}
     end.
+
+-doc """
+The root namespace name — the ACL authority anchor every network is founded on.
+
+Exported so callers stop re-declaring the literal: this module owns the root
+ontology's lifecycle, so it owns its name.
+""".
+-spec root_ns() -> binary().
+root_ns() -> ?ROOT_NS.
 
 -doc """
 Return the exact local 32-byte genesis anchor. A live Simplex anchor wins; while
@@ -358,7 +374,26 @@ prepare_create(Ns, InitialDiff) ->
             case existing_ledger(Ns, Config) of
                 {error, _} = Error ->
                     Error;
-                Status ->
+                {resumed, ExistingAnchor} ->
+                    prepare_create_existing(
+                      Ns, ExistingAnchor,
+                      Config#{genesis_hash => ExistingAnchor}, resumed);
+                created ->
+                    NodeId = maps:get(node_id, Config),
+                    case quod_simplex:prepare_genesis(Config, Ns, NodeId) of
+                        {error, _} = Error ->
+                            Error;
+                        {ok, Entry, Anchor} ->
+                            FrozenConfig =
+                                Config#{prepared_genesis_entry => Entry,
+                                        genesis_hash => Anchor},
+                            prepare_create_existing(
+                              Ns, Anchor, FrozenConfig, created)
+                    end
+            end
+    end.
+
+prepare_create_existing(Ns, Anchor, Config, Status) ->
                     %% An author need not supply a `can_invoke/4` clause:
                     %% founding injects the bodyless host-entry default, so the
                     %% ontology can always answer its own host and is never born
@@ -366,10 +401,8 @@ prepare_create(Ns, InitialDiff) ->
                     %% and cross-ontology callers.
                     {ok,
                      #prepared_lifecycle{
-                        namespace = Ns, config = Config,
-                        status = Status}}
-            end
-    end.
+                        kind = create, namespace = Ns, anchor = Anchor,
+                        config = Config, status = Status}}.
 
 prepare_join(Ns, RawGenesisHash, SeedPeers) ->
     case root_storage() of
@@ -393,15 +426,71 @@ prepare_join(Ns, RawGenesisHash, SeedPeers) ->
                 created ->
                     {ok,
                      #prepared_lifecycle{
-                        namespace = Ns, config = Config,
+                        kind = join, namespace = Ns,
+                        anchor = RawGenesisHash, config = Config,
                         status = joining}};
-                resumed ->
+                {resumed, RawGenesisHash} ->
                     {ok,
                      #prepared_lifecycle{
-                        namespace = Ns, config = Config,
-                        status = resumed}}
+                        kind = join, namespace = Ns,
+                        anchor = RawGenesisHash, config = Config,
+                        status = resumed}};
+                {resumed, _DifferentAnchor} ->
+                    {error, genesis_mismatch}
             end
     end.
+
+-doc "Build the closed public descriptor for one exact private preparation.".
+-spec prepared_effect(term(), prepared_descriptor(), <<_:256>>,
+                      {node, <<_:256>>} | {user, <<_:256>>}) ->
+          {ok, quod_effect:effect()} | {error, term()}.
+prepared_effect(Action,
+                #prepared_lifecycle{kind = Kind, namespace = Ns,
+                                    anchor = Anchor} = Prepared,
+                <<_:256>> = Executor, Actor) ->
+    case {quod_durable_term:encode_goal(Action), prepared_bytes(Prepared)} of
+        {{ok, ActionBytes}, {ok, PreparedBytes}} ->
+            Effect =
+                {quod_direct_effect, 1, local_durable, ontology_lifecycle,
+                 Kind, crypto:strong_rand_bytes(32), Executor, Actor,
+                 {Ns, Anchor}, crypto:hash(sha256, ActionBytes),
+                 crypto:hash(sha256, PreparedBytes)},
+            case quod_effect:validate(Effect) of
+                true -> {ok, Effect};
+                false -> {error, invalid_direct_effect}
+            end;
+        {{error, _} = Error, _} -> Error;
+        {_, {error, _} = Error} -> Error
+    end;
+prepared_effect(_Action, _Prepared, _Executor, _Actor) ->
+    {error, invalid_direct_effect}.
+
+-doc "Canonical bounded bytes retained only in the local prepared-action journal.".
+-spec prepared_bytes(prepared_descriptor()) -> {ok, binary()} | {error, term()}.
+prepared_bytes(#prepared_lifecycle{} = Prepared) ->
+    Bytes = term_to_binary({quod_prepared_lifecycle, 1, Prepared},
+                           [deterministic]),
+    case byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES of
+        true -> {ok, Bytes};
+        false -> {error, initial_content_too_large}
+    end;
+prepared_bytes(_) -> {error, invalid_action}.
+
+-doc "Decode and validate one exact journal-owned private preparation.".
+-spec decode_prepared(binary()) ->
+          {ok, prepared_descriptor()} | {error, invalid_action}.
+decode_prepared(Bytes)
+  when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES ->
+    try binary_to_term(Bytes, [safe]) of
+        {quod_prepared_lifecycle, 1, #prepared_lifecycle{} = Prepared} ->
+            case prepared_bytes(Prepared) of
+                {ok, Bytes} -> {ok, Prepared};
+                _ -> {error, invalid_action}
+            end;
+        _ -> {error, invalid_action}
+    catch _:_ -> {error, invalid_action}
+    end;
+decode_prepared(_) -> {error, invalid_action}.
 
 start(Ns, Config, Status) ->
     Result =
@@ -599,13 +688,25 @@ existing_ledger(Ns, Config) ->
     case quod_ledger_store:open_ro(Ns, LedgerDir) of
         {ok, Store} ->
             Last = quod_ledger_store:last(Store),
+            Result = case Last of
+                         0 -> created;
+                         _ -> existing_ledger_anchor(Store)
+                     end,
             ok = quod_ledger_store:close(Store),
-            case Last of
-                0 -> created;
-                _ -> resumed
-            end;
+            Result;
         {error, no_log} ->
             created;
         {error, Reason} ->
             {error, {ledger_read_failed, Reason}}
+    end.
+
+existing_ledger_anchor(Store) ->
+    case quod_ledger_store:read_at(Store, 1) of
+        {ok, #entry{} = Entry} ->
+            case quod_simplex:block_from_entry(Entry) of
+                {ok, Block} -> {resumed, quod_simplex:block_hash(Block)};
+                error -> {error, {ledger_read_failed, invalid_genesis}}
+            end;
+        _ ->
+            {error, {ledger_read_failed, missing_genesis}}
     end.

@@ -2427,6 +2427,161 @@ restart_preserves_commit_latch_test() ->
         file:del_dir_r(Dir)
     end.
 
+%% An effect transaction crosses a second hard crash boundary after the
+%% effect journal has handed it to Simplex: the exact signed submission must
+%% be datasync'd in the signing journal before custody is acknowledged.  A
+%% restart restores those bytes, rather than rebuilding or re-signing the
+%% transaction, so the original OutcomeRef remains the only public identity.
+restart_restores_exact_effect_custody_test() ->
+    Ns = <<"t">>,
+    Anchor = <<0:256>>,
+    {Author, Identity} = id(),
+    Admission = quod_simplex:test_author_admission(Author),
+    EffectId = crypto:hash(sha256, <<"effect-restart-id">>),
+    TargetAnchor = crypto:hash(sha256, <<"effect-restart-target">>),
+    RequestDigest = crypto:hash(sha256, <<"effect-restart-request">>),
+    PreparedDigest = crypto:hash(sha256, <<"effect-restart-prepared">>),
+    {ok, Goal} = quod_durable_term:encode_goal(
+                   {create_ontology, <<"restart:created">>, []}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    Effect = {quod_direct_effect, 1, local_durable,
+              ontology_lifecycle, create, EffectId, Author,
+              {node, Author}, {<<"restart:created">>, TargetAnchor},
+              RequestDigest, PreparedDigest},
+    Unsigned = quod_transaction:bind_id(
+                 {Ns, Anchor},
+                 #transaction{origin = {Ns, Anchor},
+                              proof_id = crypto:hash(
+                                           sha256, <<"effect-proof">>),
+                              plan_digest = crypto:hash(
+                                              sha256, <<"effect-plan">>),
+                              goal = Goal, result = Result,
+                              diff = [], read_check = #{},
+                              effects = [Effect], author = Author,
+                              author_seq = 1, submitted_at = 1234,
+                              sig = none}),
+    {ok, Signed, Submission} = quod_transaction:sign_submission(
+                                 {Ns, Anchor, Admission},
+                                 Unsigned, Identity),
+    TxId = Signed#transaction.tx_id,
+    SubmissionId = quod_transaction:submission_id(Submission),
+    Dir = filename:join(
+            "/tmp", "quod_effect_custody_restart_" ++
+                        integer_to_list(
+                          erlang:unique_integer([positive]))),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(
+                           Ns, ?DOMAIN, Dir),
+        {ok, Journal1} = quod_signing_journal:record_effect(
+                           Journal0, Signed, Submission),
+        ok = quod_signing_journal:close(Journal1),
+
+        {ok, Journal2} = quod_signing_journal:recover(
+                           Ns, ?DOMAIN, Dir),
+        Restarted = quod_simplex:restore_signing_state(
+                      st(#{ns => Ns, self => Author, id => Identity,
+                           validators => [Author],
+                           author_admissions => #{Author => Admission},
+                           signing_journal => Journal2,
+                           sync => ready})),
+        [{SubmissionId, 1, RestoredSubmission, ready,
+          _NoExpiry, 0}] = quod_simplex:test_custody(Restarted),
+        ?assertEqual(Submission, RestoredSubmission),
+        ?assertMatch(
+           #{TxId := #{admission := Admission, sequence := 1}},
+           quod_signing_journal:pending_effects(
+             quod_simplex:test_signing_journal(Restarted))),
+
+        %% Live commit retirement is keyed by semantic TxId, not by the
+        %% shorter transport submission id.  It must clear custody in the
+        %% same turn even when no ordinary custody/relay waiter exists.
+        Committed = quod_simplex:test_resolve_committed_submissions(
+                      {batch, [Signed]}, 2, Restarted),
+        ?assertEqual(
+           #{},
+           quod_signing_journal:pending_effects(
+             quod_simplex:test_signing_journal(Committed))),
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(Committed))
+    after
+        file:del_dir_r(Dir)
+    end.
+
+%% More than one full journal capacity of sequential effect commits must not
+%% accumulate signing custody.  Each committed semantic TxId retires before
+%% the next lifecycle transaction is signed.
+effect_custody_does_not_saturate_after_live_commits_test() ->
+    Ns = <<"t">>,
+    Anchor = <<0:256>>,
+    {Author, Identity} = id(),
+    Admission = quod_simplex:test_author_admission(Author),
+    Dir = filename:join(
+            "/tmp", "quod_effect_custody_capacity_" ++
+                        integer_to_list(erlang:unique_integer([positive]))),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(
+                           Ns, ?DOMAIN, Dir),
+        S0 = st(#{ns => Ns, self => Author, id => Identity,
+                  validators => [Author],
+                  author_admissions => #{Author => Admission},
+                  signing_journal => Journal0, sync => ready}),
+        Final =
+            lists:foldl(
+              fun(Sequence, S) ->
+                  {Signed, Submission} = effect_submission_fixture(
+                                           Ns, Anchor, Admission,
+                                           Sequence, Author, Identity),
+                  {ok, Journal1} = quod_signing_journal:record_effect(
+                                     quod_simplex:test_signing_journal(S),
+                                     Signed, Submission),
+                  S1 = quod_simplex:test_state_set(
+                         signing_journal, Journal1, S),
+                  S2 = quod_simplex:test_resolve_committed_submissions(
+                         {batch, [Signed]}, Sequence + 1, S1),
+                  ?assertEqual(
+                     #{},
+                     quod_signing_journal:pending_effects(
+                       quod_simplex:test_signing_journal(S2))),
+                  S2
+              end,
+              S0, lists:seq(1, 65)),
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(Final))
+    after
+        file:del_dir_r(Dir)
+    end.
+
+effect_submission_fixture(Ns, Anchor, Admission, Sequence,
+                          Author, Identity) ->
+    Effect = {quod_direct_effect, 1, local_durable,
+              ontology_lifecycle, create,
+              crypto:hash(sha256, <<"effect-id", Sequence:64>>), Author,
+              {node, Author},
+              {<<"capacity:test">>,
+               crypto:hash(sha256, <<"effect-target", Sequence:64>>)},
+              crypto:hash(sha256, <<"effect-request", Sequence:64>>),
+              crypto:hash(sha256, <<"effect-prepared", Sequence:64>>)},
+    Unsigned = quod_transaction:bind_id(
+                 {Ns, Anchor},
+                 #transaction{origin = {Ns, Anchor},
+                              proof_id = crypto:hash(
+                                           sha256,
+                                           <<"effect-proof", Sequence:64>>),
+                              plan_digest = crypto:hash(
+                                              sha256,
+                                              <<"effect-plan", Sequence:64>>),
+                              goal = durable_goal(
+                                       {create_ontology,
+                                        <<"capacity:test">>, []}),
+                              result = durable_result(),
+                              diff = [], read_check = #{}, effects = [Effect],
+                              author = Author, author_seq = Sequence,
+                              submitted_at = Sequence, sig = none}),
+    {ok, Signed, Submission} = quod_transaction:sign_submission(
+                                 {Ns, Anchor, Admission},
+                                 Unsigned, Identity),
+    {Signed, Submission}.
+
 %% Drive the repaired liveness path through the state-machine boundary: f+1 peer complaints for an already
 %% notarized head recruit this validator, its durable share completes the skip certificate, the noop is
 %% appended, and the rotated slot then accepts and commits a normal signed transaction. This is the complete

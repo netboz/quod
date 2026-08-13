@@ -69,6 +69,10 @@ parse_goal_test() ->
     %% with or without the closing dot
     ?assertEqual({ok, {capital, france, {'X'}}},
                  quod_explorer_http:parse_goal(<<"capital(france, X).">>)),
+    ?assertEqual(
+       {ok, {create_ontology, "demo:console", [{terms, [{hello, world}]}]}},
+       quod_explorer_http:parse_goal(
+         <<"create_ontology(\"demo:console\", [terms([hello(world)])])">>)),
     ?assertMatch({error, _}, quod_explorer_http:parse_goal(<<"capital(france">>)).
 
 outcome_unknown_is_pending_test() ->
@@ -82,6 +86,11 @@ outcome_unknown_is_pending_test() ->
        quod_explorer_http:prove_result(
          {error, {outcome_unknown,
                   {transaction, Ns, Anchor, TxId}}})).
+
+invalid_action_is_a_bad_request_test() ->
+    ?assertEqual(
+       {400, #{error => invalid_action}},
+       quod_explorer_http:prove_result({error, invalid_action})).
 
 foreign_commit_is_json_safe_test() ->
     Ns = <<"quod:target">>,
@@ -217,6 +226,47 @@ websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
          {committed, Ns, 7,
           #entry{index = 7, data = {batch, []}}}, state)).
 
+websocket_refreshes_namespace_subscriptions_without_reconnect_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"ont:dynamic:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    true = quod_reg:subscribe({namespace_topology, node}),
+    try
+        {reply, {text, SyncFrame}, State1} =
+            quod_explorer_ws:websocket_info(
+              {namespace_topology, [Ns]}, #{namespaces => []}),
+        ?assertNotEqual(nomatch, binary:match(SyncFrame, <<"sync">>)),
+        Marker = {dynamic_namespace_subscription, Ns},
+        _ = quod_reg:publish({committed, Ns}, Marker),
+        receive Marker -> ok after 1000 -> error(subscription_missing) end,
+
+        {reply, {text, _}, State2} =
+            quod_explorer_ws:websocket_info(
+              {namespace_topology, []}, State1),
+        _ = quod_reg:publish({committed, Ns}, Marker),
+        receive Marker -> error(subscription_not_removed)
+        after 0 -> ok
+        end,
+        ok = quod_explorer_ws:terminate(normal, ignored, State2)
+    after
+        %% `terminate/3` normally owns this; tolerate an assertion exit.
+        _ = catch quod_reg:unsubscribe({committed, Ns}),
+        _ = catch quod_reg:unsubscribe({runtime, Ns}),
+        _ = catch quod_reg:unsubscribe({namespace_topology, node})
+    end.
+
+malformed_effect_renders_as_invalid_without_crashing_test() ->
+    Ns = <<"ont:test">>,
+    T0 = tx(91),
+    T = T0#transaction{effects = [{malformed_effect, 1}]},
+    E = #entry{index = 91, data = {batch, [T]}, timestamp = 91},
+    Json = quod_explorer_http:tx_json_full(Ns, T, E),
+    ?assertEqual([invalid], maps:get(effect_operations, Json)),
+    [Effect] = maps:get(effects, Json),
+    ?assertEqual(invalid, maps:get(operation, Effect)),
+    ?assertEqual(unavailable, maps:get(local_execution, Effect)),
+    ?assert(is_binary(quod_explorer_http:encode(Json))).
+
 with_temp_store(Fun) ->
     Dir = filename:join("/tmp", "quod_explorer_eunit_" ++
                         integer_to_list(erlang:unique_integer([positive]))),
@@ -291,7 +341,9 @@ paging_test() ->
 tx_json_full_test() ->
     J = quod_explorer_http:tx_json_full(
           <<"ont:target">>, tx(7), entry(2, [tx(7)])),
-    ?assertMatch(#{height := 2, time := 2002, ops := 1, read_predicates := 0,
+    ?assertMatch(#{height := 2, time := 2002, ops := 1, effect_count := 0,
+                   effect_operations := [], effects := [],
+                   root_facts_changed := true, read_predicates := 0,
                    ns := <<"ont:target">>, submitted_at := 1007}, J),
     ?assertEqual(<<"assertz(fact(7))">>, maps:get(goal, J)),
     ?assertEqual([#{op => assert, clause => <<"fact(7)">>}], maps:get(diff, J)),
@@ -303,6 +355,33 @@ tx_json_full_test() ->
     ?assertEqual(unsigned, maps:get(signature_status, J)),
     ?assertEqual(null, maps:get(signature, J)),
     %% the whole thing must be JSON-encodable
+    ?assert(is_binary(quod_explorer_http:encode(J))).
+
+effect_tx_json_is_explicit_and_does_not_claim_root_diff_test() ->
+    Executor0 = <<77:256>>,
+    Executor = case application:get_env(quod, node_pubkey) of
+                   {ok, Executor0} -> <<78:256>>;
+                   _ -> Executor0
+               end,
+    Effect = {quod_direct_effect, 1, local_durable,
+              ontology_lifecycle, create, <<1:256>>, Executor,
+              {user, <<2:256>>}, {<<"ont:new">>, <<3:256>>},
+              <<4:256>>, <<5:256>>},
+    T = (tx(9))#transaction{diff = [], effects = [Effect]},
+    J = quod_explorer_http:tx_json_full(
+          <<"ont:root">>, T, entry(4, [T])),
+    ?assertEqual(false, maps:get(root_facts_changed, J)),
+    ?assertEqual(1, maps:get(effect_count, J)),
+    ?assertEqual([create], maps:get(effect_operations, J)),
+    [Rendered] = maps:get(effects, J),
+    ?assertMatch(#{operation := create,
+                   actor := #{kind := user},
+                   actor_authority := author_node_claimed,
+                   local_execution := not_this_node}, Rendered),
+    ?assertEqual(
+       #{ns => <<"ont:new">>,
+         anchor => binary:encode_hex(<<3:256>>, lowercase)},
+       maps:get(target, Rendered)),
     ?assert(is_binary(quod_explorer_http:encode(J))).
 
 signed_tx_json_test() ->

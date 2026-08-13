@@ -36,6 +36,8 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          enter_read_only/1, leave_read_only/2,
          get_local_changes/1, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
+         absorb_live_bridges/2, get_effects/1, stage_effect/2,
+         set_lifecycle_effect/2, lifecycle_effect/1,
          cleanup_read_set/1]).
 -export_type([access_guard/0, revision/0, checkpoint/0, read_only_frame/0]).
 
@@ -51,6 +53,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
+             effects = []       :: [quod_effect:effect()],
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
              read_ets = undefined :: ets:tid() | undefined,
              %% Read-time link following is disabled inside a committee membership verdict
@@ -61,6 +64,10 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
              %% Engine-owned lifecycle authority. It is deliberately outside
              %% `#est.fs`, whose values ontology code can enumerate.
              lifecycle_principal = undefined :: term(),
+             %% One engine-prepared direct effect, private from ontology code.
+             %% The registered action-transition predicate may stage only this
+             %% exact value into `effects`.
+             lifecycle_effect = undefined :: term(),
              %% Worker-owned distributed-proof state. Like lifecycle authority,
              %% this must never enter the Prolog-visible flag store.
              proof_context = undefined :: term(),
@@ -79,6 +86,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
+                     effects = [] :: [quod_effect:effect()],
                      next_tag :: integer(),
                      distributed = [] :: [distributed_token()]}).
 -opaque checkpoint() :: #checkpoint{}.
@@ -188,6 +196,25 @@ lifecycle_principal(
     {ok, Principal};
 lifecycle_principal(_) ->
     undefined.
+
+-doc "Install the one trusted lifecycle effect available to the transition predicate.".
+-spec set_lifecycle_effect(tuple(), quod_effect:effect()) -> tuple().
+set_lifecycle_effect(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov} = Db} = St, Effect) ->
+    ensure_access(Ov),
+    case quod_effect:validate(Effect) of
+        true -> St#est{db = Db#db{ref = Ov#lp{lifecycle_effect = Effect}}};
+        false -> erlang:error(invalid_direct_effect)
+    end;
+set_lifecycle_effect(_St, _Effect) -> erlang:error(badarg).
+
+-doc "Return the engine-prepared effect; it is never exposed through Prolog flags.".
+-spec lifecycle_effect(tuple()) -> {ok, quod_effect:effect()} | undefined.
+lifecycle_effect(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{lifecycle_effect = Effect}}})
+  when Effect =/= undefined -> {ok, Effect};
+lifecycle_effect(_) -> undefined.
 
 -doc "Return the worker-owned proof context carried by a wrapped state.".
 -spec proof_context(tuple()) -> {ok, term()} | undefined.
@@ -324,6 +351,26 @@ get_local_changes(
     ensure_access(Ov),
     maps:fold(fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end, [], Local).
 
+-doc "The rollback-safe direct effects staged in this overlay revision.".
+-spec get_effects(#lp{}) -> [quod_effect:effect()].
+get_effects(#lp{effects = Effects} = Ov) ->
+    ensure_access(Ov),
+    Effects.
+
+-doc "Stage one validated direct effect in the immutable overlay revision.".
+-spec stage_effect(tuple(), quod_effect:effect()) -> tuple().
+stage_effect(
+  #est{db = #db{mod = ?MODULE, ref = #lp{effects = Effects} = Ov} = Db} = St,
+  Effect) ->
+    ensure_access(Ov),
+    Candidate = Effects ++ [Effect],
+    case quod_effect:validate_list(Candidate) of
+        true -> St#est{db = Db#db{ref = Ov#lp{effects = Candidate}}};
+        false -> erlang:error(invalid_direct_effect)
+    end;
+stage_effect(_St, _Effect) ->
+    erlang:error(badarg).
+
 functor_ops(F, #fstate{abolished = Ab, asserta = A, assertz_rev = ZR,
                        retracted = Ret}, M, R) ->
     Retracts = case Ab of
@@ -433,6 +480,41 @@ absorb_read_set(
 absorb_read_set(_St, _Reads) ->
     erlang:error(badarg).
 
+-doc "Merge validated live-bridge markers without treating them as OCC tokens.".
+-spec absorb_live_bridges(tuple(), [{atom(), arity()}]) -> ok.
+absorb_live_bridges(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{read_ets = Ets} = Ov}}, Bridges)
+  when Ets =/= undefined, is_list(Bridges) ->
+    ensure_access(Ov),
+    case lists:all(fun valid_bridge/1, Bridges) of
+        true ->
+            lists:foreach(
+              fun(Functor) ->
+                      _ = ets:insert_new(
+                            Ets, {{'$quod_live_bridge', Functor}, true}),
+                      ok
+              end,
+              Bridges),
+            ok;
+        false ->
+            erlang:error(badarg)
+    end;
+absorb_live_bridges(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, []) ->
+    ensure_access(Ov),
+    ok;
+absorb_live_bridges(
+  #est{db = #db{mod = ?MODULE, ref = #lp{} = Ov}}, _Bridges) ->
+    ensure_access(Ov),
+    erlang:error(absorb_live_bridges_without_read_ets);
+absorb_live_bridges(_St, _Bridges) ->
+    erlang:error(badarg).
+
+valid_bridge({Name, Arity}) ->
+    is_atom(Name) andalso is_integer(Arity) andalso Arity >= 0;
+valid_bridge(_) -> false.
+
 -doc "Drop the read-set table for a finished proof (pass the final `#est{}`).".
 -spec cleanup_read_set(tuple()) -> ok.
 cleanup_read_set(#est{db = #db{ref = #lp{read_ets = Ets}}}) when Ets =/= undefined ->
@@ -451,17 +533,19 @@ new({OutRef, OutMod}) ->
 %% the explicit transaction entry savepoint. Neither callback traverses clause
 %% data; restore retains the current monotonic read-set and overlay metadata.
 choicepoint_checkpoint(
-  #lp{scope_id = ScopeId, local = Local, next_tag = NextTag}) ->
-    #checkpoint{scope_id = ScopeId, local = Local, next_tag = NextTag,
+  #lp{scope_id = ScopeId, local = Local, effects = Effects,
+      next_tag = NextTag}) ->
+    #checkpoint{scope_id = ScopeId, local = Local, effects = Effects,
+                next_tag = NextTag,
                 distributed = quod_transaction_scope:checkpoint_token()}.
 
 choicepoint_restore(
   #lp{scope_id = ScopeId} = Ov,
   #checkpoint{scope_id = ScopeId,
-              local = Local, next_tag = NextTag,
+              local = Local, effects = Effects, next_tag = NextTag,
               distributed = Distributed}) ->
     ok = quod_transaction_scope:restore_token(Distributed),
-    Ov#lp{local = Local, next_tag = NextTag};
+    Ov#lp{local = Local, effects = Effects, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
     erlang:error(badarg).
 

@@ -1,5 +1,6 @@
 /_build/
 /_checkouts/
+client/node_modules/
 *.beam
 *.plt
 erl_crash.dump

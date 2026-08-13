@@ -60,8 +60,11 @@ its proof fence but never change consensus-derived generation state.
          digest/1,
          core/1, target/1, base_height/1, proof_id/1, origin/1,
          principal/1, overlay_generation/1, signer/1,
-         participates/1, diff_ops/1, diff_bytes/1, read_check_bytes/1,
-         material/1, diff/1, read_check/1, transcript/1,
+         participates/1, diff_ops/1, effects_count/1,
+         diff_bytes/1, read_check_bytes/1, effects_bytes/1,
+         live_bridges_bytes/1,
+         material/1, diff/1, read_check/1, effects/1, live_bridges/1,
+         transcript/1,
          new_manifest/1, manifest_digest/1,
          encode_manifest/1, decode_manifest/1,
          attest_plan/4, verify_plan_attestation/4,
@@ -88,7 +91,7 @@ its proof fence but never change consensus-derived generation state.
               group_history/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
--define(PLAN_VERSION, 3).
+-define(PLAN_VERSION, 4).
 
 -define(CONTROL_VERSION, 1).
 -define(MANIFEST_VERSION, 1).
@@ -106,7 +109,7 @@ its proof fence but never change consensus-derived generation state.
 -define(PREVIEW_PROOF, <<"quod.dtx.preview">>).
 
 -type identity() :: quod_proof_context:identity().
--type principal() :: {node, <<_:256>>} | anonymous.
+-type principal() :: {node, <<_:256>>} | {user, <<_:256>>} | anonymous.
 -type transcript_entry() ::
         {<<_:128>>, [identity()], binary(),
          allowed | denied, non_neg_integer(), binary(),
@@ -173,14 +176,15 @@ seal_session(Session,
 seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal) ->
     Diff = quod_proof_session:local_changes(Session),
     ReadCheck = quod_proof_session:read_set(Session),
+    Effects = quod_proof_session:effects(Session),
     Result =
-        case {Diff, map_size(ReadCheck)} of
-            {[], 0} ->
+        case {Diff, map_size(ReadCheck), Effects} of
+            {[], 0, []} ->
                 not_material;
             _ ->
                 seal_material(
                   Session, Target, BaseHeight, ProofId, Origin, Principal,
-                  Diff, ReadCheck)
+                  Diff, ReadCheck, Effects)
         end,
     %% Extraction and encoding are pure, but the namespace may have committed
     %% Prepare/Finalize while they ran. Never expose a plan (or even classify a
@@ -191,13 +195,15 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal) ->
     end.
 
 seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
-              Diff, ReadCheck) ->
+              Diff, ReadCheck, Effects) ->
     Bridges = quod_proof_session:live_bridges(Session),
     {Transcript, Generation} = quod_proof_session:transcript(Session),
-    case seal_admissible(Diff, ReadCheck, Bridges) of
+    case seal_admissible(Diff, ReadCheck, Effects, Bridges) of
         ok ->
-            case encode_material(Diff, ReadCheck, Transcript) of
-                {ok, DiffBlob, ReadCheckBlob, TranscriptBlob} ->
+            case encode_material(
+                   Diff, ReadCheck, Effects, Bridges, Transcript) of
+                {ok, DiffBlob, ReadCheckBlob, EffectsBlob, BridgesBlob,
+                 TranscriptBlob} ->
                     Core = #{target => Target,
                              base_height => BaseHeight,
                              proof_id => ProofId,
@@ -210,8 +216,11 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
                              %% participant.
                              diff_ops => length(Diff),
                              read_functors => map_size(ReadCheck),
+                             effects_count => length(Effects),
                              diff => DiffBlob,
                              read_check => ReadCheckBlob,
+                             effects => EffectsBlob,
+                             live_bridges => BridgesBlob,
                              transcript => TranscriptBlob},
                     sign_core(Core, quod_proof_session:signer(Session));
                 {error, _} = Error ->
@@ -221,14 +230,22 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
             Error
     end.
 
-encode_material(Diff, ReadCheck, Transcript) ->
+encode_material(Diff, ReadCheck, Effects, Bridges, Transcript) ->
     case {quod_wire_term:encode_canonical(Diff),
           quod_wire_term:encode_canonical(maps:to_list(ReadCheck)),
+          quod_wire_term:encode_canonical(Effects),
+          quod_wire_term:encode_canonical(Bridges),
           quod_wire_term:encode_canonical(Transcript)} of
-        {{ok, DiffBlob}, {ok, ReadCheckBlob}, {ok, TranscriptBlob}}
-          when byte_size(TranscriptBlob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
-            {ok, DiffBlob, ReadCheckBlob, TranscriptBlob};
-        {{ok, _}, {ok, _}, {ok, _TooLargeTranscript}} ->
+        {{ok, DiffBlob}, {ok, ReadCheckBlob}, {ok, EffectsBlob},
+         {ok, BridgesBlob}, {ok, TranscriptBlob}}
+          when byte_size(EffectsBlob) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES,
+               byte_size(TranscriptBlob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+            {ok, DiffBlob, ReadCheckBlob, EffectsBlob, BridgesBlob,
+             TranscriptBlob};
+        {{ok, _}, {ok, _}, {ok, EffectsBlob}, {ok, _}, {ok, _}}
+          when byte_size(EffectsBlob) > ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
+            {error, {too_large, effects}};
+        {{ok, _}, {ok, _}, {ok, _}, {ok, _}, {ok, _TooLargeTranscript}} ->
             {error, {too_large, transcript}};
         _ ->
             {error, {too_large, plan}}
@@ -236,17 +253,21 @@ encode_material(Diff, ReadCheck, Transcript) ->
 
 %% A material diff must not rest on live-bridge truth (module doc); the plan
 %% itself must fit the network's fixed bounds before any signature is minted.
-seal_admissible(Diff, ReadCheck, Bridges) ->
+seal_admissible(Diff, ReadCheck, Effects, Bridges) ->
     EffectiveBridges = admissibility_bridges(Diff, Bridges),
-    case {Diff, EffectiveBridges} of
-        {[_ | _], [Functor | _]} ->
+    case {Diff, Effects, EffectiveBridges} of
+        {[_ | _], _, [Functor | _]} ->
             {error, {non_transactional_dependency, Functor}};
+        {[_ | _], [_ | _], _} ->
+            {error, effect_requires_single_participant};
         _ ->
             case {length(Diff) =< ?QUOD_MAX_PLAN_DIFF_OPS,
-                  map_size(ReadCheck) =< ?QUOD_MAX_PLAN_READ_FUNCTORS} of
-                {true, true} -> ok;
-                {false, _} -> {error, {too_large, plan}};
-                {_, false} -> {error, {too_large, plan}}
+                  map_size(ReadCheck) =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
+                  quod_effect:validate_list(Effects)} of
+                {true, true, true} -> ok;
+                {false, _, _} -> {error, {too_large, plan}};
+                {_, false, _} -> {error, {too_large, plan}};
+                {_, _, false} -> {error, invalid_direct_effect}
             end
     end.
 
@@ -330,13 +351,17 @@ valid_core(#{target := Target, base_height := BaseHeight,
              proof_id := ProofId, origin := Origin,
              principal := Principal, overlay_generation := Generation,
              diff_ops := DiffOps, read_functors := ReadFunctors,
-             diff := Diff, read_check := ReadCheck,
+             effects_count := EffectsCount,
+             diff := Diff, read_check := ReadCheck, effects := Effects,
+             live_bridges := Bridges,
              transcript := Transcript} = Core)
-  when map_size(Core) =:= 11,
+  when map_size(Core) =:= 14,
        is_integer(DiffOps), DiffOps >= 0,
        DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
        is_integer(ReadFunctors), ReadFunctors >= 0,
-       ReadFunctors =< ?QUOD_MAX_PLAN_READ_FUNCTORS ->
+       ReadFunctors =< ?QUOD_MAX_PLAN_READ_FUNCTORS,
+       is_integer(EffectsCount), EffectsCount >= 0,
+       EffectsCount =< ?QUOD_MAX_DIRECT_EFFECTS ->
     valid_identity(Target) andalso valid_identity(Origin) andalso
         is_integer(BaseHeight) andalso BaseHeight >= 0 andalso
         is_binary(ProofId) andalso byte_size(ProofId) =:= 32 andalso
@@ -346,6 +371,10 @@ valid_core(#{target := Target, base_height := BaseHeight,
         byte_size(Diff) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(ReadCheck) andalso
         byte_size(ReadCheck) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
+        is_binary(Effects) andalso
+        byte_size(Effects) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES andalso
+        is_binary(Bridges) andalso
+        byte_size(Bridges) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
         is_binary(Transcript) andalso
         byte_size(Transcript) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES;
 valid_core(_) ->
@@ -359,6 +388,7 @@ valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
 
 valid_principal({node, <<_:256>>}) -> true;
+valid_principal({user, <<_:256>>}) -> true;
 valid_principal(anonymous) -> true;
 valid_principal(_) -> false.
 
@@ -397,7 +427,12 @@ diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
 -doc "Whether this signed plan contributes writes or OCC reads; safe on a foreign plan.".
 -spec participates(plan()) -> boolean().
 participates(Plan) ->
-    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0.
+    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0 orelse
+        effects_count(Plan) > 0.
+
+-doc "The signed count of staged direct effects; safe on a foreign plan.".
+-spec effects_count(plan()) -> non_neg_integer().
+effects_count(Plan) -> maps:get(effects_count, core(Plan)).
 
 -doc "The plan's canonical opaque write-set bytes; safe on a foreign plan.".
 -spec diff_bytes(plan()) -> binary().
@@ -407,6 +442,14 @@ diff_bytes(Plan) -> maps:get(diff, core(Plan)).
 -spec read_check_bytes(plan()) -> binary().
 read_check_bytes(Plan) -> maps:get(read_check, core(Plan)).
 
+-doc "The plan's canonical opaque direct-effect bytes.".
+-spec effects_bytes(plan()) -> binary().
+effects_bytes(Plan) -> maps:get(effects, core(Plan)).
+
+-doc "The plan's canonical opaque live-bridge marker bytes.".
+-spec live_bridges_bytes(plan()) -> binary().
+live_bridges_bytes(Plan) -> maps:get(live_bridges, core(Plan)).
+
 -doc """
 Decode, jointly materialize, and validate target-owned plan payloads once.
 
@@ -415,7 +458,10 @@ outer signature and exact target binding; foreign holders keep these blobs
 opaque and use only the signed counts and digests.
 """.
 -spec material(plan()) ->
-          {ok, #{diff := list(), read_check := map(), transcript := list()}} |
+          {ok, #{diff := list(), read_check := map(),
+                 effects := [quod_effect:effect()],
+                 live_bridges := [{atom(), arity()}],
+                 transcript := [transcript_entry()]}} |
           {error, {protocol_error, bad_payload} |
                   too_many_new_atoms | atom_limit}.
 material(Plan) ->
@@ -429,12 +475,17 @@ material(Plan) ->
 decode_material(Core) ->
     case {decode_material_blob(maps:get(diff, Core)),
           decode_material_blob(maps:get(read_check, Core)),
+          decode_material_blob(maps:get(effects, Core)),
+          decode_material_blob(maps:get(live_bridges, Core)),
           decode_material_blob(maps:get(transcript, Core))} of
-        {{ok, Diff}, {ok, ReadPairs}, {ok, Transcript}}
-          when is_list(Diff), is_list(ReadPairs), is_list(Transcript) ->
+        {{ok, Diff}, {ok, ReadPairs}, {ok, Effects}, {ok, Bridges},
+         {ok, Transcript}}
+          when is_list(Diff), is_list(ReadPairs), is_list(Effects),
+               is_list(Bridges), is_list(Transcript) ->
             case attach_transcript_goals(Transcript, 0, []) of
                 {ok, AnnotatedTranscript} ->
-                    {ok, {Diff, ReadPairs, AnnotatedTranscript}};
+                    {ok, {Diff, ReadPairs, Effects, Bridges,
+                          AnnotatedTranscript}};
                 error ->
                     error
             end;
@@ -468,17 +519,25 @@ attach_transcript_goals(_MalformedOrTooLong, _Count, _Acc) ->
 
 materialize_decoded(Core, Decoded) ->
     case quod_wire_term:materialize_symbols(Decoded) of
-        {ok, {Diff, ReadPairs, AnnotatedTranscript}} ->
+        {ok, {Diff, ReadPairs, Effects, Bridges, AnnotatedTranscript}} ->
             case {build_read_check(
                     ReadPairs, maps:get(read_functors, Core), 0, #{}),
                   strip_transcript_goals(AnnotatedTranscript, [])} of
                 {{ok, ReadCheck}, {ok, Transcript}} ->
                     case exact_length(Diff, maps:get(diff_ops, Core), 0)
+                         andalso exact_length(
+                                   Effects, maps:get(effects_count, Core), 0)
                          andalso quod_diff:valid_ops(Diff)
                          andalso quod_diff:valid_read_check(ReadCheck)
+                         andalso valid_effects(Effects)
+                         andalso valid_live_bridges(Bridges)
+                         andalso seal_admissible(
+                                   Diff, ReadCheck, Effects, Bridges) =:= ok
                          andalso valid_transcript(Transcript, 0) of
                         true ->
                             {ok, #{diff => Diff, read_check => ReadCheck,
+                                   effects => Effects,
+                                   live_bridges => lists:sort(Bridges),
                                    transcript => Transcript}};
                         false ->
                             {error, {protocol_error, bad_payload}}
@@ -527,6 +586,35 @@ exact_length([_ | Rest], Expected, Count) when Count < Expected ->
 exact_length(_MalformedOrWrongCount, _Expected, _Count) ->
     false.
 
+valid_live_bridges(Bridges) ->
+    Bridges =:= lists:usort(Bridges) andalso
+        lists:all(
+          fun({Name, Arity}) ->
+                  is_atom(Name) andalso is_integer(Arity) andalso Arity >= 0;
+             (_) -> false
+          end,
+          Bridges).
+
+valid_effects(Effects) ->
+    valid_effects(Effects, 0, #{}).
+
+valid_effects([], Count, _Ids) ->
+    Count =< ?QUOD_MAX_DIRECT_EFFECTS;
+valid_effects([Effect | Rest], Count, Ids)
+  when Count < ?QUOD_MAX_DIRECT_EFFECTS ->
+    case quod_effect:validate(Effect) of
+        true ->
+            Id = quod_effect:effect_id(Effect),
+            case maps:is_key(Id, Ids) of
+                false -> valid_effects(
+                           Rest, Count + 1, Ids#{Id => true});
+                true -> false
+            end;
+        false -> false
+    end;
+valid_effects(_, _Count, _Ids) ->
+    false.
+
 valid_transcript([], Count) ->
     Count =< ?QUOD_MAX_INVOCATIONS_PER_SCOPE;
 valid_transcript([Entry | Rest], Count)
@@ -564,6 +652,14 @@ diff(Plan) -> material_value(diff, Plan).
 -doc "Decode the plan's exact OCC read tokens. Owner-side only.".
 -spec read_check(plan()) -> map().
 read_check(Plan) -> material_value(read_check, Plan).
+
+-doc "Decode the plan's typed direct effects. Owner-side only.".
+-spec effects(plan()) -> [quod_effect:effect()].
+effects(Plan) -> material_value(effects, Plan).
+
+-doc "Decode the plan's signed local bridge markers. Owner-side only.".
+-spec live_bridges(plan()) -> [{atom(), arity()}].
+live_bridges(Plan) -> material_value(live_bridges, Plan).
 
 -doc "Decode the plan's bounded invocation transcript. Owner-side only.".
 -spec transcript(plan()) -> [transcript_entry()].
@@ -763,6 +859,7 @@ plan_matches_manifest(Target, Plan, PlanDigest, Manifest) ->
         proof_id(Plan) =:= manifest_proof_id(Manifest) andalso
         origin(Plan) =:= {OriginNs, OriginAnchor} andalso
         principal(Plan) =:= manifest_principal(Manifest) andalso
+        effects_count(Plan) =:= 0 andalso
         lists:keyfind(Target, 1, manifest_participants(Manifest)) =:=
             {Target, PlanDigest}.
 

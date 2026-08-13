@@ -1,10 +1,11 @@
-# `create_ontology` — testing slice
+# `create_ontology` — local preparation and durable action
 
 ## Goal
 
-Add one Erlang API that creates and starts a local N=1 ontology from ordered
-term, inline-source, and file-source inputs, and one root action executed by
-the dedicated, policy-checked lifecycle runner.
+The trusted Erlang API prepares and starts a local N=1 ontology from ordered
+term, inline-source, and file-source inputs. The public root action uses that
+same preparer but first records a typed create effect in one ordinary root
+transaction; local hosting starts only after that transaction is applied.
 
 ```erlang
 quod_ontology:create(
@@ -18,9 +19,11 @@ The created namespace owns its own slot-1 ledger.  Its genesis contains the
 provided terms, the generated `consensus_incarnation/1`, and its self-only
 `peer_admitted/4` fact.
 
-No root catalogue, root transaction, directory change, membership automation,
-ownership rule, manifest, quota, or restart-persistence feature is part of
-this slice.
+There is still no root catalogue fact, ownership table, manifest, or quota.
+The public action does create a root ledger transaction with an empty root
+diff and a closed effect descriptor. The low-level `quod_ontology:create/2`
+function remains a trusted same-VM primitive and does not itself authorize or
+write the root ledger.
 
 ## Public API
 

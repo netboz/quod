@@ -55,11 +55,11 @@ state/action/precondition planning model; these are conceptual checks, not code
 dependencies: <https://djvu.online/file/1aOUJssWgu45e> and
 <https://www.cs.ubc.ca/~poole/aibook/html1e/ArtInt_201.html>.
 
-Section 3.1 records the correction now being implemented in Quod's action
+Section 3.1 records the correction implemented in Quod's action
 executor. `action/3` describes a transition, its prerequisites, and the desired
 state. A transition may assert that state directly, as several reference
 actions do, but the runner must not assume that this is the only way to reach
-it. The correction is reviewed and its implementation updates
+it. The correction was reviewed and its implementation updates
 `agent-fipa-plan.md` and every dependent Quod document in the same isolated
 delta.
 
@@ -552,9 +552,10 @@ does not freeze the later public FIPA AID encoding.
 ## 4. Reactions: extend the existing P-to-E boundary
 
 After the distributed-proof prerequisite, `quod_prolog` emits one
-`applied_live` envelope per live-applied D change with canonical commit identity
+`applied_live` envelope per live-applied material transaction with canonical commit identity
 `{transaction, TxId} | {group, GroupId}`. `quod_runtime` consumes those
-envelopes, runs P from the block-final snapshot, and owns the reserved
+envelopes, including effect-only transactions whose D diff is empty, runs P
+from the block-final snapshot, and owns the reserved
 `e_frontier`. No consensus, ingress, ledger, or apply-process callback is added.
 
 ### 4.1 Trusted declarations

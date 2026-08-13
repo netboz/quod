@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="quod dodecahedron — jewel colourway">
+  <title>quod dodecahedron · jewel</title>
+  <g transform="translate(0,2)" stroke="#F8F4EC" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M60 36 L39.1 51.2 L47.1 75.8 L72.9 75.8 L80.9 51.2 Z" fill="#F5B301"/>
+    <path d="M60 36 L60 10 L31.8 19.2 L14.4 43.2 L39.1 51.2 Z" fill="#6D5AA8"/>
+    <path d="M39.1 51.2 L14.4 43.2 L14.4 72.8 L31.8 96.8 L47.1 75.8 Z" fill="#1E8A5A"/>
+    <path d="M47.1 75.8 L31.8 96.8 L60 106 L88.2 96.8 L72.9 75.8 Z" fill="#B5273B"/>
+    <path d="M72.9 75.8 L88.2 96.8 L105.6 72.8 L105.6 43.2 L80.9 51.2 Z" fill="#1662B0"/>
+    <path d="M80.9 51.2 L105.6 43.2 L88.2 19.2 L60 10 L60 36 Z" fill="#D96A4A"/>
+  </g>
+</svg>

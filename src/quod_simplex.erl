@@ -113,7 +113,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -behaviour(gen_statem).
 
 %% Pure consensus core (also used by the gen_statem below, the catch-up verifier, and the tests).
--export([quorum/1, leader/2,
+-export([quorum/1, leader/2, prepare_genesis/3,
          block_hash/1, block_from_entry/1, consensus_domain/2, share_bytes/4,
          make_share/5, verify_share/2,
          verify_cert/3,
@@ -131,6 +131,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, rebuild/1, prolog_ready/3, finalize_applied/4,
+         handoff_effect/3,
          dtx_binding/1, register_dtx_begin/5, activate_dtx_begin/3,
          cancel_dtx_begin/3, submit_dtx/3, dtx_group_barrier/3,
          dtx_endpoint_request/6, dtx_endpoint_local/3,
@@ -188,6 +189,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_expire_relay_results/1, test_redrive_relays/1,
          test_reply_relay/7,
          test_custody/1, test_custody_authors/1,
+         test_resolve_committed_submissions/3,
          test_drain_custody/1,
          test_keep_progress_transition/2,
          test_expire_custody/1,
@@ -1000,7 +1002,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
 -record(waiter, {reply_to :: term(),
                  submission_id = undefined :: binary() | undefined,
                  trace_ctx :: quod_trace:context(),
-                 trace_span :: quod_trace:span_ctx()}).
+                 trace_span :: quod_trace:span_ctx() | undefined}).
 
 -record(local_proposal, {hash :: binary(),
                          waiters = [] :: [term()],
@@ -1775,6 +1777,8 @@ test_custody_authors(#s{custody = Custody}) ->
       [Author
        || #custody{change = #transaction{author = Author}} <-
               maps:values(Custody)]).
+test_resolve_committed_submissions(Payload, Slot, S) ->
+    resolve_committed_submissions(Payload, Slot, S).
 test_custody_placement({local, Slot, _CommitteeId}) ->
     {local, Slot};
 test_custody_placement(Placement) ->
@@ -1825,6 +1829,22 @@ callback_mode() -> [state_functions].
 
 start_link(Ns, Config) ->
     gen_statem:start_link(quod_reg:via({quod_simplex, Ns}), ?MODULE, {Ns, Config}, []).
+
+-doc "Durably accept one exact local effect transaction into signed custody.".
+-spec handoff_effect(binary(), <<_:256>>, #transaction{}) ->
+          ok | {error, busy | bad_change | not_in_charge | outcome_unknown}.
+handoff_effect(Ns, <<_:256>> = Admission, #transaction{} = Change)
+  when is_binary(Ns) ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {handoff_effect, Admission, Change}, 8000)
+    catch
+        exit:{noproc, _} -> {error, not_in_charge};
+        exit:{timeout, _} -> {error, outcome_unknown};
+        exit:_ -> {error, outcome_unknown}
+    end;
+handoff_effect(_Ns, _Admission, _Change) ->
+    {error, bad_change}.
 
 -ifdef(TEST).
 -doc """
@@ -2322,8 +2342,58 @@ init_store(Ns, Cfg, Id) ->
     end.
 
 restore_signing_state(S = #s{signing_journal = Journal}) ->
-    restore_pending_dtx(
-      S#s{rounds = signing_rounds(Journal)}, Journal).
+    restore_pending_effects(
+      restore_pending_dtx(
+        S#s{rounds = signing_rounds(Journal)}, Journal), Journal).
+
+-ifdef(TEST).
+restore_pending_effects(S, memory) -> S;
+restore_pending_effects(S, Journal) ->
+    restore_pending_effects_journal(S, Journal).
+-else.
+restore_pending_effects(S, Journal) ->
+    restore_pending_effects_journal(S, Journal).
+-endif.
+
+restore_pending_effects_journal(S0, Journal) ->
+    maps:fold(
+      fun(TxId, Row, S) -> restore_pending_effect(TxId, Row, S) end,
+      S0, quod_signing_journal:pending_effects(Journal)).
+
+restore_pending_effect(
+  TxId, #{sequence := Sequence, envelope := Envelope},
+  S = #s{self = Self, custody = Custody,
+         custody_ready = Ready, custody_deadlines = Deadlines,
+         custody_bytes = Bytes0}) ->
+    Submission = binary_to_term(Envelope, [safe]),
+    case binding(S, Self) of
+        {ok, TargetBinding} ->
+            case quod_transaction:decode_verified_submission(
+                   TargetBinding, Submission) of
+                {ok, #transaction{tx_id = TxId, author_seq = Sequence,
+                                  effects = [_]} = Change} ->
+                    SubmissionId = quod_transaction:submission_id(Submission),
+                    Bytes = byte_size(Envelope),
+                    Deadline = ?MAX_SLOT,
+                    Waiter = #waiter{reply_to = {effect_custody, TxId},
+                                     submission_id = SubmissionId,
+                                     trace_ctx = otel_ctx:new(),
+                                     trace_span = undefined},
+                    Record = #custody{waiter = Waiter, change = Change,
+                                      submission = Submission,
+                                      original_arrival = quod_time:mono_ms(),
+                                      deadline = Deadline, bytes = Bytes},
+                    S#s{custody = Custody#{SubmissionId => Record},
+                        custody_ready = gb_sets:add_element(
+                                          {Sequence, SubmissionId}, Ready),
+                        custody_deadlines = gb_sets:add_element(
+                                              {Deadline, SubmissionId},
+                                              Deadlines),
+                        custody_bytes = Bytes0 + Bytes};
+                _ -> error({signing_journal_bad_effect, TxId})
+            end;
+        error -> error({signing_journal_effect_not_in_charge, TxId})
+    end.
 
 -ifdef(TEST).
 signing_rounds(memory) -> #{};
@@ -2419,22 +2489,51 @@ recover_existing_storage(S0 = #s{ns = Ns, store = Store}, Cfg, Last) ->
     {ok, PhaseIndex} = quod_dtx_phase_index:open(ScratchRoot, Ns),
     Projection0 = seed_pending_begin(
                     Journal0, history_projection(Binding)),
-    Projection =
+    PendingEffects0 = quod_signing_journal:pending_effects(Journal0),
+    {Projection, UncommittedEffects} =
         try
             quod_ledger_store:fold(
               Store, 1, Last,
-              fun(E, Acc) ->
-                      checked_log_projection_step(
-                        Binding, E, Acc, PhaseIndex)
+              fun(E = #entry{data = Data}, {Acc, PendingEffects}) ->
+                      {checked_log_projection_step(
+                         Binding, E, Acc, PhaseIndex),
+                       remove_committed_effect_ids(Data, PendingEffects)}
               end,
-              Projection0)
+              {Projection0, PendingEffects0})
         after
             _ = quod_dtx_phase_index:close(PhaseIndex)
         end,
     S1 = install_projection(Projection, S0#s{slot = Last}),
     {ok, Journal1} = reconcile_signing_journal(
                        Last, Projection, Journal0),
-    finalize_restored_storage(S1, Anchor, Journal1).
+    Journal2 = retire_recovered_effects(
+                 PendingEffects0, UncommittedEffects, Journal1),
+    S2 = reconcile_effect_signing_custody(
+           S1#s{signing_journal = Journal2}),
+    finalize_restored_storage(S2, Anchor, S2#s.signing_journal).
+
+remove_committed_effect_ids(Data, Pending) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:foldl(
+              fun(#transaction{tx_id = TxId, effects = [_]}, Acc) ->
+                      maps:remove(TxId, Acc);
+                 (_, Acc) -> Acc
+              end, Pending, Transactions);
+        _ -> Pending
+    end.
+
+retire_recovered_effects(Before, After, Journal0) ->
+    maps:fold(
+      fun(TxId, _Row, Journal) ->
+              case maps:is_key(TxId, After) of
+                  true -> Journal;
+                  false ->
+                      {ok, Journal1} =
+                          quod_signing_journal:retire_effect(Journal, TxId),
+                      Journal1
+              end
+      end, Journal0, Before).
 
 initialize_empty_storage(S0 = #s{ns = Ns}, #{mode := join} = Cfg) ->
     {ok, Anchor} = consensus_anchor(S0, Cfg),
@@ -2524,10 +2623,40 @@ initial_sync(#s{self = Self} = S) ->
 %% The caller binds the signing journal to the resulting anchor before append.
 %% Loading or compiling initial content may throw `{genesis_failed,_}` before
 %% either durable file changes.
+genesis_entry(#{prepared_genesis_entry := #entry{} = Entry},
+              #s{ns = Ns, self = Self}) ->
+    case valid_prepared_genesis(Entry, Ns, Self) of
+        true -> Entry;
+        false -> throw({genesis_failed, invalid_prepared_genesis})
+    end;
 genesis_entry(Cfg, #s{ns = Ns, self = Self}) ->
-    Incarnation = crypto:strong_rand_bytes(32),
-    GenesisTx = genesis_tx(Cfg, Ns, Self, Incarnation),
-    #entry{index = 1, data = {batch, [GenesisTx]}}.
+    {ok, Entry, _Anchor} = prepare_genesis(Cfg, Ns, Self),
+    Entry.
+
+-doc "Freeze and hash the exact slot-1 genesis entry used by runtime creation.".
+-spec prepare_genesis(map(), binary(), binary()) ->
+          {ok, #entry{}, <<_:256>>} | {error, term()}.
+prepare_genesis(Cfg, Ns, <<_:256>> = Self)
+  when is_map(Cfg), is_binary(Ns), byte_size(Ns) > 0 ->
+    try
+        Incarnation = crypto:strong_rand_bytes(32),
+        Entry = #entry{index = 1,
+                       data = {batch, [genesis_tx(Cfg, Ns, Self, Incarnation)]},
+                       timestamp = 0},
+        {ok, Entry, entry_block_hash(Entry)}
+    catch
+        throw:{genesis_failed, Reason} -> {error, Reason};
+        error:Reason -> {error, Reason}
+    end;
+prepare_genesis(_Cfg, _Ns, _Self) ->
+    {error, invalid_generated_genesis}.
+
+valid_prepared_genesis(
+  #entry{index = 1, timestamp = 0,
+         data = {batch, [#transaction{author = Author} = Tx]}, cert = none},
+  Ns, Self) ->
+    Author =:= Self andalso valid_genesis_transaction(Ns, Tx, [Self]);
+valid_prepared_genesis(_, _, _) -> false.
 
 entry_block_hash(#entry{} = Entry) ->
     {ok, Block} = block_from_entry(Entry),
@@ -2692,6 +2821,13 @@ running_impl({call, From}, {append, Change, TraceCtx}, S0) ->
                     Waiter, Change,
                     S0#s{submitted = S0#s.submitted + 1}),
     keep_progress(S0, S1, Reply);
+running_impl({call, From}, {handoff_effect, Admission, Change}, S0) ->
+    case handoff_effect_change(Admission, Change, S0) of
+        {ok, S1} ->
+            keep_progress(S0, S1, [{reply, From, ok}]);
+        {error, Reason, S1} ->
+            {keep_state, S1, [{reply, From, {error, Reason}}]}
+    end;
 running_impl(
   {call, From},
   {dtx_endpoint_request, TargetNs, PeerKey, Endpoint, Request, TimeoutMs},
@@ -4839,6 +4975,83 @@ proposal_visible(Next, S = #s{eng = #eng{tree = Tree}}) ->
     (round_state(Next, S))#round.supporting =/= none
         orelse maps:is_key(Next, Tree).
 
+%% Direct effects use the ordinary content lane, but their signed envelope is
+%% custody-owned before the proof worker is allowed to continue.  This is one
+%% idempotent hand-off: an exact retained semantic transaction is success, and
+%% a different continuous admission can never re-sign it.
+handoff_effect_change(
+  <<_:256>> = ExpectedAdmission,
+  #transaction{tx_id = <<_:256>> = TxId, effects = [_],
+               author_seq = 0, sig = none} = Change,
+  S = #s{self = Self, custody = Custody,
+         custody_bytes = CustodyBytes}) ->
+    case {current_dtx_binding(S), find_effect_custody(TxId, Change, Custody)} of
+        {{ok, {_Ns, _Anchor, Self, ExpectedAdmission}}, {ok, _SubmissionId}} ->
+            {ok, S};
+        {{ok, {_Ns, _Anchor, Self, ExpectedAdmission}}, not_found} ->
+            case local_change_acceptable(Change, S) andalso
+                 map_size(Custody) < ?MAX_CUSTODY andalso
+                 CustodyBytes + ?MAX_BLOCK_BYTES + 1024 =<
+                     ?MAX_CUSTODY_BYTES of
+                false -> {error, busy, S};
+                true -> sign_and_retain_effect(Change, S)
+            end;
+        {{ok, {_Ns, _Anchor, Self, _OtherAdmission}}, _} ->
+            {error, not_in_charge, S};
+        _ ->
+            {error, not_in_charge, S}
+    end;
+handoff_effect_change(_Admission, _Change, S) ->
+    {error, bad_change, S}.
+
+find_effect_custody(TxId, Expected, Custody) ->
+    Matches =
+        [SubmissionId
+         || {SubmissionId, #custody{change = Change}} <- maps:to_list(Custody),
+            Change#transaction.tx_id =:= TxId,
+            unsigned_envelope(Change) =:= Expected],
+    case Matches of
+        [SubmissionId] -> {ok, SubmissionId};
+        [] -> not_found;
+        _ -> error(effect_custody_conflict)
+    end.
+
+unsigned_envelope(Change = #transaction{}) ->
+    Change#transaction{author_seq = 0, sig = none}.
+
+sign_and_retain_effect(Change, S0) ->
+    case sign_local_change(Change, S0) of
+        {ok, Signed, Submission, S1} ->
+            SubmissionId = quod_transaction:submission_id(Submission),
+            Envelope = term_to_binary(Submission, [deterministic]),
+            Bytes = byte_size(Envelope),
+            Waiter = #waiter{reply_to =
+                                 {effect_custody, Change#transaction.tx_id},
+                             submission_id = SubmissionId,
+                             trace_ctx = otel_ctx:new(),
+                             trace_span = undefined},
+            Record = #custody{waiter = Waiter, change = Signed,
+                              submission = Submission,
+                              original_arrival = quod_time:mono_ms(),
+                              deadline = ?MAX_SLOT, bytes = Bytes},
+            Custody = S1#s.custody,
+            Ready = S1#s.custody_ready,
+            Deadlines = S1#s.custody_deadlines,
+            S2 = S1#s{custody = Custody#{SubmissionId => Record},
+                      custody_ready = gb_sets:add_element(
+                                          {Signed#transaction.author_seq,
+                                           SubmissionId}, Ready),
+                      custody_deadlines = gb_sets:add_element(
+                                             {?MAX_SLOT, SubmissionId},
+                                             Deadlines),
+                      custody_bytes = S1#s.custody_bytes + Bytes},
+            {ok, S2};
+        {error, busy} ->
+            {error, busy, S0};
+        {error, _} ->
+            {error, bad_change, S0}
+    end.
+
 %% The local append API accepts only a structurally valid unsigned transaction
 %% authored by this node. Routing reserves bounded signature-growth headroom;
 %% the item is signed exactly once when it leaves the unsigned queue, before it
@@ -4859,8 +5072,28 @@ sign_local_change(#transaction{author = Self, sig = none} = Change,
             case quod_transaction:sign_submission(
                    TargetBinding, Change#transaction{author_seq = Seq}, Id) of
                 {ok, Signed, Submission} ->
-                    {ok, Signed, Submission,
-                     S#s{next_author_seq = Seq + 1}};
+                    case Signed#transaction.effects of
+                        [] ->
+                            {ok, Signed, Submission,
+                             S#s{next_author_seq = Seq + 1}};
+                        [_Effect] ->
+                            Pending = quod_signing_journal:pending_effects(
+                                        S#s.signing_journal),
+                            case maps:is_key(Signed#transaction.tx_id, Pending)
+                                 orelse map_size(Pending) <
+                                           ?QUOD_MAX_PREPARED_EFFECTS of
+                                true ->
+                                    {ok, Journal1} =
+                                        quod_signing_journal:record_effect(
+                                          S#s.signing_journal,
+                                          Signed, Submission),
+                                    {ok, Signed, Submission,
+                                     S#s{next_author_seq = Seq + 1,
+                                         signing_journal = Journal1}};
+                                false ->
+                                    {error, busy}
+                            end
+                    end;
                 {error, _} = Error -> Error
             end;
         error ->
@@ -5982,16 +6215,43 @@ persist_entry(Store, Entry, Slot, S) ->
       #{'quod.namespace' => S#s.ns, 'quod.consensus.slot' => Slot},
       fun() -> quod_ledger_store:append(Store, [Entry]) end).
 
-resolve_committed_submissions(
-  _Payload, _Slot,
-  S = #s{custody = Custody, relay_pending = Pending})
-  when map_size(Custody) =:= 0, map_size(Pending) =:= 0 ->
-    S;
 resolve_committed_submissions(Payload, Slot, S) ->
     Included = payload_submission_ids(Payload),
-    resolve_committed_relays(
+    retire_committed_effect_custody(
+      payload_effect_transaction_ids(Payload),
+      resolve_committed_relays(
       Included, Slot,
-      resolve_committed_custody(Included, Slot, S)).
+      resolve_committed_custody(Included, Slot, S))).
+
+retire_committed_effect_custody(Included,
+                                S = #s{signing_journal = Journal}) ->
+    Journal1 = maps:fold(
+                 fun(TxId, _Present, AccJournal) ->
+                     case maps:is_key(
+                            TxId,
+                            quod_signing_journal:pending_effects(
+                              AccJournal)) of
+                         true ->
+                             {ok, Next} =
+                                 quod_signing_journal:retire_effect(
+                                   AccJournal, TxId),
+                             Next;
+                         false -> AccJournal
+                     end
+                 end, Journal, Included),
+    S#s{signing_journal = Journal1}.
+
+payload_effect_transaction_ids(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            maps:from_keys(
+              [TxId
+               || #transaction{tx_id = <<_:256>> = TxId,
+                               effects = [_]} <- Transactions],
+              true);
+        _ ->
+            #{}
+    end.
 
 resolve_committed_custody(
   _Included, _Slot, S = #s{custody = Custody})
@@ -6293,6 +6553,8 @@ reply_waiter(
   #waiter{reply_to = {custody, SubmissionId}},
   Reply, S) ->
     complete_custody(SubmissionId, Reply, S);
+reply_waiter(#waiter{reply_to = {effect_custody, _TxId}}, _Reply, S) ->
+    S;
 reply_waiter(Waiter = #waiter{reply_to = ReplyTo}, Reply, S) ->
     finish_waiter_trace(Waiter, Reply),
     reply_waiter(ReplyTo, Reply, S);
@@ -6460,7 +6722,43 @@ reconcile_signing_state_journal(
     %% definitive rather than outcome-unknown.
     ok = project_reconciled_pending_begin(Ns, Transition),
     {refresh_stale_dtx_submissions(
-       S#s{signing_journal = Journal1}), Transition}.
+       reconcile_effect_signing_custody(
+         S#s{signing_journal = Journal1})), Transition}.
+
+reconcile_effect_signing_custody(
+  S0 = #s{signing_journal = Journal0}) ->
+    ExpectedAdmission = current_effect_admission(S0),
+    maps:fold(
+      fun(TxId, #{admission := Admission}, S) ->
+              case ExpectedAdmission of
+                  Admission -> S;
+                  _ -> retire_effect_signing_custody(TxId, S)
+              end
+      end, S0, quod_signing_journal:pending_effects(Journal0)).
+
+current_effect_admission(S = #s{self = Self,
+                                author_admissions = Admissions}) ->
+    case {is_participant(S), maps:get(Self, Admissions, undefined)} of
+        {true, <<_:256>> = Admission} -> Admission;
+        _ -> none
+    end.
+
+retire_effect_signing_custody(
+  TxId, S0 = #s{signing_journal = Journal0, custody = Custody}) ->
+    SubmissionIds =
+        [SubmissionId
+         || {SubmissionId, #custody{change = #transaction{tx_id = RowTxId}}}
+                <- maps:to_list(Custody),
+            RowTxId =:= TxId],
+    S1 = lists:foldl(
+           fun(SubmissionId, S) ->
+                   complete_custody(
+                     SubmissionId, {error, not_in_charge, unavailable}, S)
+           end, S0, SubmissionIds),
+    {ok, Journal1} = quod_signing_journal:retire_effect(
+                       Journal0, TxId),
+    quod_effect_journal:retire_transaction(TxId, not_in_charge),
+    S1#s{signing_journal = Journal1}.
 
 pending_begin_reconciliation(
   #{lane := {Admission, Coordinator}, group_id := GroupId}, none,

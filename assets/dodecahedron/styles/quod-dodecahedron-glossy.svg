@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="quod dodecahedron — glossy">
+  <defs>
+    <linearGradient id="gy" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFDE4D"/><stop offset="1" stop-color="#D9A800"/></linearGradient>
+    <linearGradient id="gb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3E90D8"/><stop offset="1" stop-color="#124F8C"/></linearGradient>
+    <linearGradient id="gg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#86AC5A"/><stop offset="1" stop-color="#4E6E2C"/></linearGradient>
+    <linearGradient id="gr" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#D9727A"/><stop offset="1" stop-color="#97323B"/></linearGradient>
+    <linearGradient id="gt" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#327E9C"/><stop offset="1" stop-color="#0F4257"/></linearGradient>
+    <linearGradient id="gs" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#A2ACBE"/><stop offset="1" stop-color="#64708A"/></linearGradient>
+    <clipPath id="cell"><path d="M105.6 45.2 L88.2 21.2 L60 12 L31.8 21.2 L14.4 45.2 L14.4 74.8 L31.8 98.8 L60 108 L88.2 98.8 L105.6 74.8 Z"/></clipPath>
+  </defs>
+  <g transform="translate(0,2)" stroke="#F8F4EC" stroke-width="1.5" stroke-linejoin="round">
+    <path d="M60 36 L39.1 51.2 L47.1 75.8 L72.9 75.8 L80.9 51.2 Z" fill="url(#gy)"/>
+    <path d="M60 36 L60 10 L31.8 19.2 L14.4 43.2 L39.1 51.2 Z" fill="url(#gb)"/>
+    <path d="M39.1 51.2 L14.4 43.2 L14.4 72.8 L31.8 96.8 L47.1 75.8 Z" fill="url(#gg)"/>
+    <path d="M47.1 75.8 L31.8 96.8 L60 106 L88.2 96.8 L72.9 75.8 Z" fill="url(#gr)"/>
+    <path d="M72.9 75.8 L88.2 96.8 L105.6 72.8 L105.6 43.2 L80.9 51.2 Z" fill="url(#gt)"/>
+    <path d="M80.9 51.2 L105.6 43.2 L88.2 19.2 L60 10 L60 36 Z" fill="url(#gs)"/>
+  </g>
+  <g clip-path="url(#cell)"><ellipse cx="58" cy="26" rx="52" ry="30" fill="#FFFFFF" opacity="0.20"/></g>
+</svg>

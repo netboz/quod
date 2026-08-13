@@ -15,6 +15,7 @@ accepted.
 """.
 
 -include("quod_ledger.hrl").
+-include("quod_proof_limits.hrl").
 
 -export([from_plan/4, bind_id/2, valid_id/2,
          plan_outcome_ref/3, encode_durable_submission/2,
@@ -26,7 +27,7 @@ accepted.
 
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
--define(ID_VERSION, 2).
+-define(ID_VERSION, 3).
 %% v6 binds an author's continuous admission generation and carries the
 %% atom-bearing diff/read set through the bounded Prolog wire alphabet. The
 %% fixed envelope can therefore be decoded safely before a small, explicit
@@ -36,7 +37,7 @@ accepted.
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 6).
+-define(VERSION, 7).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -56,7 +57,8 @@ this is what makes the origin's opaque-byte id and validators' decoded-term id
 identical.
 """.
 -spec from_plan(quod_dtx:plan(), map(), binary(), binary()) -> #transaction{}.
-from_plan(Plan, #{diff := Diff, read_check := ReadCheck},
+from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
+                  effects := Effects},
           GoalBlob, ResultBlob)
   when is_list(Diff), is_map(ReadCheck),
        is_binary(GoalBlob), is_binary(ResultBlob) ->
@@ -70,6 +72,7 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck},
                      result = ResultBlob,
                      diff = Diff,
                      read_check = ReadCheck,
+                     effects = Effects,
                      author = none,
                      sig = none},
     Transaction#transaction{
@@ -120,28 +123,29 @@ semantic_id({Ns, <<_:256>> = Anchor},
             #transaction{origin = Origin, proof_id = ProofId,
                          plan_digest = PlanDigest, goal = Goal,
                          result = Result, diff = Diff,
-                         read_check = ReadCheck})
+                         read_check = ReadCheck, effects = Effects})
   when is_binary(Ns) ->
-    case semantic_material_bytes(Diff, ReadCheck) of
-        {ok, DiffBytes, ReadCheckBytes} ->
+    case semantic_material_bytes(Diff, ReadCheck, Effects) of
+        {ok, DiffBytes, ReadCheckBytes, EffectsBytes} ->
             {ok,
              semantic_id_parts(
                Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
-               DiffBytes, ReadCheckBytes)};
+               DiffBytes, ReadCheckBytes, EffectsBytes)};
         error ->
             error
     end.
 
-semantic_material_bytes(Diff, ReadCheck)
-  when is_list(Diff), is_map(ReadCheck) ->
+semantic_material_bytes(Diff, ReadCheck, Effects)
+  when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
     case {quod_wire_term:encode_canonical(Diff),
-          quod_wire_term:encode_canonical(maps:to_list(ReadCheck))} of
-        {{ok, DiffBytes}, {ok, ReadCheckBytes}} ->
-            {ok, DiffBytes, ReadCheckBytes};
+          quod_wire_term:encode_canonical(maps:to_list(ReadCheck)),
+          quod_wire_term:encode_canonical(Effects)} of
+        {{ok, DiffBytes}, {ok, ReadCheckBytes}, {ok, EffectsBytes}} ->
+            {ok, DiffBytes, ReadCheckBytes, EffectsBytes};
         _ ->
             error
     end;
-semantic_material_bytes(_Diff, _ReadCheck) ->
+semantic_material_bytes(_Diff, _ReadCheck, _Effects) ->
     error.
 
 semantic_plan_id(
@@ -149,15 +153,16 @@ semantic_plan_id(
     semantic_id_parts(
       Ns, Anchor, quod_dtx:origin(Plan), quod_dtx:proof_id(Plan),
       quod_dtx:digest(Plan), GoalBlob, ResultBlob,
-      quod_dtx:diff_bytes(Plan), quod_dtx:read_check_bytes(Plan)).
+      quod_dtx:diff_bytes(Plan), quod_dtx:read_check_bytes(Plan),
+      quod_dtx:effects_bytes(Plan)).
 
 semantic_id_parts(Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
-                  DiffBytes, ReadCheckBytes) ->
+                  DiffBytes, ReadCheckBytes, EffectsBytes) ->
     crypto:hash(
       sha256,
       term_to_binary(
         {?ID_DOMAIN, ?ID_VERSION, Ns, Anchor, Origin, ProofId,
-         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes},
+         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes, EffectsBytes},
         [deterministic])).
 
 -doc "Canonical bytes signed by a transaction author, bound to the target identity.".
@@ -167,18 +172,28 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
       #transaction{tx_id = TxId, origin = Origin, proof_id = ProofId,
                    plan_digest = PlanDigest, goal = Goal,
                    result = Result, diff = Diff, read_check = ReadCheck,
+                   effects = Effects,
                    author = Author, author_seq = AuthorSeq,
                    submitted_at = SubmittedAt})
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), byte_size(TargetAnchor) =:= 32,
        byte_size(AuthorAdmission) =:= 32 ->
-    case encode_material(Diff, ReadCheck) of
-        {ok, MaterialWire} ->
-            {ok,
-             canonical_bytes(
-               TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin, ProofId,
-               PlanDigest, Goal, Result, MaterialWire, Author, AuthorSeq,
-               SubmittedAt)};
+    case encode_material(Diff, ReadCheck, Effects) of
+        {ok, MaterialWire, EffectsWire}
+          when byte_size(EffectsWire) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
+            case quod_effect:validate_transaction(
+                   TargetNs, TargetAnchor, Author, Effects) of
+                true ->
+                    {ok,
+                     canonical_bytes(
+                       TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
+                       ProofId, PlanDigest, Goal, Result, MaterialWire,
+                       EffectsWire, Author, AuthorSeq, SubmittedAt)};
+                false ->
+                    {error, bad_term}
+            end;
+        {ok, _MaterialWire, _EffectsWire} ->
+            {error, bad_term};
         {error, bad_term} = Error ->
             Error
     end;
@@ -186,17 +201,25 @@ bytes(_Binding, _Transaction) ->
     {error, bad_term}.
 
 canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
-                ProofId, PlanDigest, Goal, Result, MaterialWire, Author,
+                ProofId, PlanDigest, Goal, Result, MaterialWire, EffectsWire,
+                Author,
                 AuthorSeq, SubmittedAt) ->
     term_to_binary(
       {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
        TxId, Origin, ProofId, PlanDigest, Goal, Result, MaterialWire,
-       Author, AuthorSeq, SubmittedAt},
+       EffectsWire, Author, AuthorSeq, SubmittedAt},
       [deterministic]).
 
-encode_material(Diff, ReadCheck) when is_list(Diff), is_map(ReadCheck) ->
-    quod_wire_term:encode({Diff, maps:to_list(ReadCheck)});
-encode_material(_Diff, _ReadCheck) ->
+encode_material(Diff, ReadCheck, Effects)
+  when is_list(Diff), is_map(ReadCheck), is_list(Effects) ->
+    case {quod_wire_term:encode({Diff, maps:to_list(ReadCheck)}),
+          quod_wire_term:encode_canonical(Effects)} of
+        {{ok, MaterialWire}, {ok, EffectsWire}} ->
+            {ok, MaterialWire, EffectsWire};
+        _ ->
+            {error, bad_term}
+    end;
+encode_material(_Diff, _ReadCheck, _Effects) ->
     {error, bad_term}.
 
 -doc """
@@ -352,7 +375,7 @@ and `Author`.
 decode_verified_submission(
   {TargetNs, TargetAnchor, AuthorAdmission} = Binding,
   {submit, Author, Signature,
-   <<131, 104, 15, _/binary>> = Canonical})
+   <<131, 104, 16, _/binary>> = Canonical})
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
@@ -361,16 +384,18 @@ decode_verified_submission(
         {ok,
          {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
           TxId, Origin, ProofId,
-          PlanDigest, Goal, Result, MaterialWire, Author, AuthorSeq,
+          PlanDigest, Goal, Result, MaterialWire, EffectsWire,
+          Author, AuthorSeq,
           SubmittedAt}} ->
-            case decode_material(MaterialWire) of
-                {ok, Diff, ReadCheck} ->
+            case decode_material(MaterialWire, EffectsWire) of
+                {ok, Diff, ReadCheck, Effects} ->
                     Transaction =
                         #transaction{tx_id = TxId, origin = Origin,
                                      proof_id = ProofId,
                                      plan_digest = PlanDigest,
                                      goal = Goal, result = Result,
                                      diff = Diff, read_check = ReadCheck,
+                                     effects = Effects,
                                      author = Author,
                                      author_seq = AuthorSeq,
                                      submitted_at = SubmittedAt,
@@ -393,14 +418,19 @@ decode_verified_submission(
 decode_verified_submission(_Binding, _Submission) ->
     {error, malformed_submission}.
 
-decode_material(MaterialWire) ->
-    case quod_wire_term:decode(MaterialWire) of
-        {ok, {Diff0, ReadPairs0}} when is_list(Diff0), is_list(ReadPairs0) ->
-            case quod_wire_term:materialize_symbols({Diff0, ReadPairs0}) of
-                {ok, {Diff, ReadPairs}} ->
+decode_material(MaterialWire, EffectsWire) ->
+    case {quod_wire_term:decode(MaterialWire),
+          quod_wire_term:decode_canonical(
+            EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
+        {{ok, {Diff0, ReadPairs0}}, {ok, Effects0}}
+          when is_list(Diff0), is_list(ReadPairs0), is_list(Effects0) ->
+            case quod_wire_term:materialize_symbols(
+                   {Diff0, ReadPairs0, Effects0}) of
+                {ok, {Diff, ReadPairs, Effects}} ->
                     ReadCheck = maps:from_list(ReadPairs),
-                    case map_size(ReadCheck) =:= length(ReadPairs) of
-                        true -> {ok, Diff, ReadCheck};
+                    case map_size(ReadCheck) =:= length(ReadPairs) andalso
+                         quod_effect:validate_list(Effects) of
+                        true -> {ok, Diff, ReadCheck, Effects};
                         false -> {error, malformed_material}
                     end;
                 {error, _} = Error ->

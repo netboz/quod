@@ -252,12 +252,13 @@ ordinary prerequisite order remains explicit for an execution candidate.
 
 The executor re-runs the same authorization helper against the captured
 committed snapshot for both modes. `already` returns without lifecycle IO.
-`execute` passes the prepared descriptor to
-`quod_ontology:execute_prepared/1` exactly once, without rereading or
-recompiling caller input, then verifies the selected desired state. A failed
-postcondition after IO is `outcome_unknown`, because local state may already
-have changed. The manager remains the authoritative atomic collision check,
-closing the state-check/start race.
+`execute` records the closed join effect in one ordinary root transaction,
+then the root runtime releases its frozen prepared descriptor only after
+ordered apply. The effect journal checks the desired state before any retry,
+so a crash after the manager accepted the join cannot start a second logical
+operation. An uncertain result carries the exact root transaction reference.
+The manager remains the authoritative atomic collision check, closing the
+state-check/start race.
 
 `authorized_ontology_lifecycle/1` is the sole governed lifecycle authorization
 predicate and is effect-class, so it is available only inside the action

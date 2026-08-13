@@ -18,6 +18,9 @@ subjects, hosted agents, wielding, post-apply events, runtime reconciliation,
 and owner-gated effects. Details here are expected to evolve after those pieces
 exist and can be measured.
 
+The concrete browser-key, open-registration, challenge, session, and
+key-provider direction is recorded in `doc/client-authentication-plan.md`.
+
 This direction already constrains the substrate in four ways:
 
 - ordered runtime handlers must remain thin and enqueue heavy work;
@@ -64,7 +67,7 @@ stable entry identifier, never executable Prolog text or a goal term.
 7. **Clients execute declared presentation data only.** Descriptor schemas,
    assets, payloads, and resource costs are validated and bounded.
 8. **Presentation meaning is renderer-neutral.** Ontologies describe geometry,
-   composition, GUI, and interaction semantics; a Babylon/WebXR adapter renders
+  composition, GUI, and interaction semantics; a Babylon.js 9.18.1/WebXR adapter renders
    that vocabulary for the first client.
 9. **Composition is the default.** Complex models reuse governed components;
    the server resolves their authorized attachment graph into one bounded scene
@@ -118,6 +121,49 @@ idempotent resource jobs. Scene elaboration, meshing, collider construction,
 asset processing, and simulation stepping run in queue-fed workers outside that
 tier. A dependent output waits for its resource revision; unrelated namespace
 events do not.
+
+## 2.1 Client endpoint and global release
+
+Every Quod node may expose a separate client HTTPS service on port **14570**.
+It is distinct from P2P (`14567`), metrics (`14568`), and the operational
+Explorer (`14569`).  A browser or XR headset may load the client from any
+healthy node and establish its authenticated session with that node; the node
+then obtains the authorized world projection through normal Quod mechanisms.
+
+The endpoint serves a small audited bootstrap and immutable, content-addressed
+client bundles.  It is not an Explorer alias and does not expose arbitrary
+`prove` or administrative endpoints.  Authentication belongs to the later
+client-session protocol, not to the first static-file request.
+
+A governed client-release declaration may be durable ontology data, for
+example conceptually:
+
+```prolog
+client_release(ReleaseId, ProtocolRange, BootstrapHash, BundleHash,
+               ManifestHash, ActivatedAt).
+```
+
+The declaration records which immutable release is active.  It does **not**
+make JavaScript, shaders, or renderer plug-ins executable ontology rules.  A
+node/browser obtains bundle bytes by hash, checks their bounded manifest,
+integrity and protocol compatibility, and only then lets the audited bootstrap
+load them.  An owner-governed ordinary transition activates a new release;
+nodes may retain the preceding verified release during rollout so reconnecting
+clients do not receive a half-updated application.
+
+This separates two useful forms of global update:
+
+- Ontology data may change declared screens, scene descriptors, menu entries,
+  icons, preferences, and the active release manifest.
+- Executable client bytes remain immutable signed/content-addressed assets with
+  an explicit compatibility contract.  There is no `eval`, URL fetch, or
+  arbitrary code path derived from a domain ontology.
+
+The first implementation slice establishes the dedicated static endpoint,
+node-bound Ed25519 challenge-response, short-lived node-local sessions, and a
+single constrained user-home registration command. Typed world commands,
+bundle distribution, and release activation remain separate bounded protocols;
+none is implied by loading the client or holding a session.
 
 ## 3. Client envelope families
 

@@ -45,7 +45,9 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/2, prove/2, prove_ro/2, submit_plan/4, outcome/1,
+-export([start_link/2, prove/2, prove_ro/2, prove_as/3, execute/2, execute_as/3,
+         run_action_as/3,
+         submit_plan/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
          project_pending_begin/2,
          dtx_group_resolved/2,
@@ -284,6 +286,50 @@ prove(TargetNs, Goal) ->
                  Pid, TargetNs, prove, Goal, quod_trace:context())
     end.
 
+-doc """
+Execute one top-level Quod term.
+
+Ordinary terms use the normal proof path. A lifecycle term uses the same
+declared `action/3` proof and governed Erlang predicates as every other
+action, then performs its one node-local effect only after that proof has
+succeeded. This keeps the console and future typed clients on one execution
+model instead of making ontology creation a separate product API.
+""".
+-spec execute(binary(), term()) ->
+          {ok, [map()],
+           log_index() | {transaction, binary(), binary(), binary()} | map()} |
+          {error, term()} | fail | {fail, [term()]}.
+execute(TargetNs, Goal) ->
+    case lifecycle_action_term(Goal) of
+        true -> run_action(TargetNs, Goal);
+        false -> prove(TargetNs, Goal)
+    end.
+
+-doc """
+Execute one server-constructed top-level term under an authenticated user.
+
+This is the user-principal counterpart of `execute/2`. It deliberately accepts
+only terms constructed by a typed ingress codec; it is not a way to give a
+browser a general Prolog evaluator.
+""".
+-spec execute_as(binary(), term(), {user, <<_:256>>}) ->
+          {ok, [map()],
+           log_index() | {transaction, binary(), binary(), binary()} | map()} |
+          {error, term()} | fail | {fail, [term()]}.
+execute_as(TargetNs, Goal, {user, <<_:256>>} = Principal) ->
+    case lifecycle_action_term(Goal) of
+        true -> run_action_as(TargetNs, Goal, Principal);
+        false -> prove_as(TargetNs, Goal, Principal)
+    end;
+execute_as(_TargetNs, _Goal, _Principal) ->
+    {error, invalid_user_principal}.
+
+%% These are the typed lifecycle action constructors registered by
+%% `quod_ontology:validate_action/1`. They must enter the action executor even
+%% when malformed, so callers receive its bounded validation failure rather
+%% than silently proving an unrelated ordinary predicate.
+lifecycle_action_term(Goal) -> quod_predicates:action_transition(Goal).
+
 -doc "Read-only prove: like `prove/2` but a write goal is refused (`{error, read_only}`).".
 -spec prove_ro(binary(), term()) ->
         {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
@@ -293,11 +339,32 @@ prove_ro(TargetNs, Goal) ->
         Pid -> public_proof(Pid, TargetNs, prove_ro, Goal, otel_ctx:new())
     end.
 
+-doc """
+Run a server-owned goal under one already-authenticated user principal.
+
+This is an in-VM boundary for the typed client-command ingress; it is not an
+HTTP endpoint and must never receive a browser-provided Prolog goal.
+""".
+-spec prove_as(binary(), term(), {user, <<_:256>>}) ->
+          {ok, [map()], log_index() | {transaction, binary(), binary(), binary()} | map()} |
+          {error, term()} | fail | {fail, [term()]}.
+prove_as(TargetNs, Goal, {user, <<_:256>>} = Principal) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Pid -> public_proof(
+                 Pid, TargetNs, prove, Goal, quod_trace:context(), Principal)
+    end;
+prove_as(_TargetNs, _Goal, _Principal) ->
+    {error, invalid_user_principal}.
+
 public_proof(Engine, Ns, Kind, Goal, TraceCtx) ->
+    public_proof(Engine, Ns, Kind, Goal, TraceCtx, undefined).
+
+public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal) ->
     CallRef = make_ref(),
     MRef = monitor(process, Engine),
     gen_server:cast(
-      Engine, {public_proof, self(), CallRef, Kind, Goal, TraceCtx}),
+      Engine, {public_proof, self(), CallRef, Kind, Goal, TraceCtx, Principal}),
     try await_public_proof(Engine, MRef, CallRef, Ns, none)
     after demonitor(MRef, [flush])
     end.
@@ -410,6 +477,18 @@ outcome_not_found(
   {group, _Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
   AppliedFloor) ->
     {error, {group_not_found, AppliedFloor}};
+outcome_not_found(
+  {transaction, <<"quod:root">>, <<_:256>>, <<_:256>>} = Ref,
+  _AppliedFloor) ->
+    case quod_effect_journal:status_ref(Ref) of
+        {ok, #{state := retired, result := Reason}} ->
+            {ok, #{status => rejected, reason => Reason, ref => Ref}};
+        {ok, #{state := operator_error, result := Reason}} ->
+            {ok, #{status => rejected,
+                   reason => {operator_error, Reason}, ref => Ref}};
+        _ ->
+            {error, not_found}
+    end;
 outcome_not_found(_Ref, _AppliedFloor) ->
     {error, not_found}.
 
@@ -456,15 +535,17 @@ dtx_group_resolved(_Ns, _GroupRef) ->
     ok.
 
 -doc """
-Authorize and execute one node-local ontology lifecycle action.
+Authorize and commit one node-local ontology lifecycle action.
 
 Only fully-ground `create_ontology/2` and `join_ontology/3` actions targeting
 `quod:root` are accepted. A bounded worker validates the committed root
 transition, authorizes the engine-owned node principal before preparing input,
-selects the declaration's desired state or prerequisites read-only, and invokes
-only the prepared typed helper. A worker loss is outcome-unknown because the
-namespace manager may already have accepted the operation; inspect
-`ontology_join_state/2` before retrying.
+selects the declaration's desired state or prerequisites read-only, and records
+one typed effect in the ordinary root transaction path.  The effect journal
+invokes the prepared helper only after ordered apply. A worker loss is
+outcome-unknown because the transaction or namespace-manager operation may
+already have been accepted; inspect the returned outcome reference before any
+retry.
 """.
 -spec run_action(binary(), term()) ->
         {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
@@ -474,15 +555,41 @@ run_action(TargetNs, Action) ->
             case quod_reg:where({quod_prolog, TargetNs}) of
                 undefined -> {error, no_such_namespace};
                 Pid ->
-                    try gen_server:call(
-                          Pid, {run_action, Action, Structural}, infinity)
-                    catch exit:_ -> {error, outcome_unknown}
-                    end
+                    public_action(
+                      Pid, TargetNs, Action, Structural, node)
             end;
         {error, Reason} ->
             {error, Reason};
         {fail, Reason} ->
             {fail, [Reason]}
+    end.
+
+-doc "Run one server-constructed root lifecycle action under an authenticated user.".
+-spec run_action_as(binary(), term(), {user, <<_:256>>}) ->
+        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
+run_action_as(TargetNs, Action, {user, <<_:256>>} = Principal) ->
+    case validate_action_request(TargetNs, Action) of
+        {ok, Structural} ->
+            case quod_reg:where({quod_prolog, TargetNs}) of
+                undefined -> {error, no_such_namespace};
+                Pid ->
+                    public_action(
+                      Pid, TargetNs, Action, Structural, Principal)
+            end;
+        {error, Reason} -> {error, Reason};
+        {fail, Reason} -> {fail, [Reason]}
+    end;
+run_action_as(_TargetNs, _Action, _Principal) ->
+    {error, invalid_user_principal}.
+
+public_action(Engine, Ns, Action, Structural, Principal) ->
+    CallRef = make_ref(),
+    MRef = monitor(process, Engine),
+    gen_server:cast(
+      Engine,
+      {public_action, self(), CallRef, Action, Structural, Principal}),
+    try await_public_proof(Engine, MRef, CallRef, Ns, none)
+    after demonitor(MRef, [flush])
     end.
 
 validate_action_request(TargetNs, Action) ->
@@ -507,6 +614,20 @@ lifecycle_principal(NodeKey)
     {ok, {node, NodeKey}};
 lifecycle_principal(_InvalidEngineIdentity) ->
     error.
+
+valid_user_lifecycle_principal({user, <<_:256>>}) -> true;
+valid_user_lifecycle_principal(_) -> false.
+
+lifecycle_request_principal(node, Self) ->
+    case lifecycle_principal(Self) of
+        {ok, Principal} -> {ok, Principal};
+        error -> {error, not_authorized}
+    end;
+lifecycle_request_principal(Principal, _Self) ->
+    case valid_user_lifecycle_principal(Principal) of
+        true -> {ok, Principal};
+        false -> {error, invalid_user_principal}
+    end.
 
 -doc "The committed log index this kb has applied (the freshness height for a read).".
 -spec applied(binary()) -> log_index().
@@ -744,6 +865,42 @@ handle_call({checkpoint_and_release_proof_snapshot, Ref, OutcomeRef},
         _ ->
             {reply, {error, cancelled}, S}
     end;
+handle_call(
+  {checkpoint_bound_effect, Ref, Effect, Change, OutcomeRef},
+  {Pid, _Tag},
+  S = #s{workers = Workers, waiting_workers = Waiting,
+         max_proof_workers = Max}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{pid = Pid, timer = KillRef} = Worker
+          when map_size(Waiting) < Max ->
+            case quod_effect_journal:bind_transaction(
+                   Effect, Change, OutcomeRef) of
+                ok ->
+                    _ = erlang:cancel_timer(KillRef),
+                    checkpoint_client(Worker#proof_worker.from, OutcomeRef),
+                    S1 = S#s{workers = maps:remove(Ref, Workers),
+                              waiting_workers = Waiting#{
+                                Ref => Worker#proof_worker{
+                                         checkpoint = OutcomeRef}}},
+                    EffectId = quod_effect:effect_id(Effect),
+                    case quod_effect_journal:activate(EffectId) of
+                        ok ->
+                            {reply, ok, S1};
+                        {error, _Reason} ->
+                            %% The exact recovery reference is already in the
+                            %% caller's mailbox. Activation may have reached
+                            %% disk, so a weaker error must never invite retry.
+                            {reply,
+                             {error, {outcome_unknown, OutcomeRef}}, S1}
+                    end;
+                {error, Reason} ->
+                    {reply, {error, Reason}, S}
+            end;
+        #proof_worker{pid = Pid} ->
+            {reply, {error, busy}, S};
+        _ ->
+            {reply, {error, cancelled}, S}
+    end;
 %% One sealed local plan becomes one signed ordinary transaction. The caller
 %% (a proof worker, local or serving a co-hosted foreign scope; or this
 %% engine itself on behalf of an authenticated remote submission) parks until
@@ -752,6 +909,12 @@ handle_call(
   {submit_plan, Plan, GoalBlob, ResultBlob, ReplyBindings, TraceCtx}, From, S) ->
     accept_plan_submission(
       From, Plan, GoalBlob, ResultBlob, ReplyBindings, TraceCtx, S);
+handle_call(
+  {submit_bound_effect_plan, Plan, Change, GoalBlob, ResultBlob,
+   ReplyBindings, TraceCtx}, From, S) ->
+    accept_bound_effect_submission(
+      From, Plan, Change, GoalBlob, ResultBlob,
+      ReplyBindings, TraceCtx, S);
 handle_call({outcome, _Ref}, _From, S = #s{ready = false, ns = Ns}) ->
     {reply, {error, {ontology_rebuilding, Ns}}, S};
 handle_call({outcome, Ref}, _From, S = #s{outcomes = Outcomes0}) ->
@@ -812,31 +975,6 @@ handle_call({dtx_group_state, GroupId}, _From,
 handle_call({register_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
             S) ->
     register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S);
-%% Lifecycle actions share the proof-worker budget and readiness gate. The
-%% node principal is derived here from engine state, never from the request.
-handle_call({run_action, _Action, _Structural}, _From,
-            S = #s{ready = false}) ->
-    {reply, {error, rebuilding}, S};
-handle_call({run_action, _Action, _Structural}, _From,
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when map_size(Workers) >= Max ->
-    {reply, {error, busy}, S};
-handle_call({run_action, Action, Structural}, From,
-            S = #s{self = Self}) ->
-    case lifecycle_principal(Self) of
-        {ok, Principal} ->
-            {noreply,
-             spawn_proof(action, {Action, Structural}, From,
-                         otel_ctx:new(),
-                         Principal, S)};
-        error ->
-            {reply,
-             {fail,
-              [quod_ontology_predicates:failure_reason(
-                 Action, not_authorized)]},
-             S}
-    end;
-
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
     {reply, #{applied   => S#s.applied,  applies => S#s.applies,
@@ -893,25 +1031,65 @@ handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 %% Public proofs use an explicit call reference and monitor the exact engine.
 %% This makes an engine exit distinguishable before/after a durable checkpoint
 %% without blocking the engine in an opaque gen_server call.
-handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx},
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal},
             S = #s{ready = false})
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro) ->
     reply_client({async, Caller, CallRef}, {error, rebuilding}),
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx},
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal},
             S = #s{workers = Workers, max_proof_workers = Max})
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro),
        map_size(Workers) >= Max ->
     reply_client({async, Caller, CallRef}, {error, busy}),
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, Goal, TraceCtx}, S)
+handle_cast({public_proof, Caller, CallRef, Kind, Goal, TraceCtx, Principal}, S)
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro) ->
-    {noreply,
-     spawn_proof(
-       Kind, Goal, {async, Caller, CallRef}, TraceCtx, S)};
+    case valid_public_proof_principal(Principal) of
+        true ->
+            {noreply,
+             spawn_proof(
+               Kind, Goal, {async, Caller, CallRef}, TraceCtx, Principal, S)};
+        false ->
+            reply_client({async, Caller, CallRef}, {error, invalid_user_principal}),
+            {noreply, S}
+    end;
+%% Lifecycle actions use the same explicit monitor/checkpoint protocol as
+%% public proofs.  That is what preserves the exact transaction reference if
+%% the root engine restarts after accepting the effect.  `node` is only a
+%% request marker: the actual key is derived from this engine's signer.
+handle_cast({public_action, Caller, CallRef, _Action, _Structural, _Principal},
+            S = #s{ready = false})
+  when is_pid(Caller), is_reference(CallRef) ->
+    reply_client({async, Caller, CallRef}, {error, rebuilding}),
+    {noreply, S};
+handle_cast({public_action, Caller, CallRef, _Action, _Structural, _Principal},
+            S = #s{workers = Workers, max_proof_workers = Max})
+  when is_pid(Caller), is_reference(CallRef), map_size(Workers) >= Max ->
+    reply_client({async, Caller, CallRef}, {error, busy}),
+    {noreply, S};
+handle_cast({public_action, Caller, CallRef, Action, Structural, Requested},
+            S = #s{self = Self})
+  when is_pid(Caller), is_reference(CallRef) ->
+    From = {async, Caller, CallRef},
+    case lifecycle_request_principal(Requested, Self) of
+        {ok, Principal} ->
+            {noreply,
+             spawn_proof(action, {Action, Structural}, From,
+                         otel_ctx:new(), Principal, S)};
+        {error, invalid_user_principal} ->
+            reply_client(From, {error, invalid_user_principal}),
+            {noreply, S};
+        {error, not_authorized} ->
+            reply_client(
+              From,
+              {fail,
+               [quod_ontology_predicates:failure_reason(
+                  Action, not_authorized)]}),
+            {noreply, S}
+    end;
 handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
     case quod_outcome:project_pending_begin(Outcomes0, Pending) of
         {ok, Outcomes1} ->
@@ -2841,10 +3019,6 @@ terminate(_Reason, #s{ns = Ns, workers = W,
 %% Spawn one worker for this proof. The worker gets a small table/height snapshot handle,
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
-spawn_proof(Kind, Goal, From, TraceCtx,
-            S) ->
-    spawn_proof(Kind, Goal, From, TraceCtx, undefined, S).
-
 spawn_proof(Kind, Goal, From, TraceCtx, Principal,
             S = #s{ns = Ns, est = Est, applied = Applied,
                    signer = Signer,
@@ -2904,17 +3078,17 @@ run_worker(Engine, Ref, action, ProofId, Deadline, {Action, Structural}, Princip
     run_lifecycle_origin(
       Engine, Ref, ProofId, Deadline, Action, Structural, Principal, Ns,
       Applied, Est, Signer);
-run_worker(Engine, Ref, Kind, ProofId, Deadline, Goal, _Principal, Ns, Applied, Est,
+run_worker(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est,
            Signer) ->
     run_origin_proof(
-      Engine, Ref, Kind, ProofId, Deadline, Goal, Ns, Applied, Est, Signer).
+      Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est, Signer).
 
-run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Ns, Applied, Est,
+run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est,
                  Signer) ->
     case quod_simplex:genesis_hash(Ns) of
         <<_:256>> = Anchor ->
             run_pinned_origin(
-              Engine, Ref, Kind, ProofId, Deadline, undefined, Ns, Applied,
+              Engine, Ref, Kind, ProofId, Deadline, Principal, Ns, Applied,
               Anchor, Est, Signer,
               fun(Origin) -> run_pinned_goal(Origin, Goal) end);
         undefined when Signer =:= none ->
@@ -2924,7 +3098,7 @@ run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Ns, Applied, Est,
             %% authorization, sealing, snapshot release and submission.
             Anchor = <<0:256>>,
             run_pinned_origin(
-              Engine, Ref, Kind, ProofId, Deadline, undefined, Ns, Applied,
+              Engine, Ref, Kind, ProofId, Deadline, Principal, Ns, Applied,
               Anchor, Est, Signer,
               fun(Origin) -> run_pinned_goal(Origin, Goal) end);
         undefined ->
@@ -2961,18 +3135,28 @@ run_lifecycle_origin(Engine, Ref, ProofId, Deadline, Action, Structural, Princip
 
 run_pinned_origin(Engine, Ref, Kind, ProofId, Deadline, Principal, Ns, Applied,
                   Anchor, Est, Signer, RunFun) ->
-    ReadOnly = Kind =:= prove_ro orelse Kind =:= action,
+    %% Lifecycle actions are ordinary writable proofs whose only permitted
+    %% material is one typed direct effect.  Keeping the proof context
+    %% read-only here would silently discard that effect at sealing time.
+    ReadOnly = Kind =:= prove_ro,
     OriginIdentity = {Ns, Anchor},
+    AuthPrincipal = case Principal of
+                        undefined -> proof_principal(Signer);
+                        _ -> Principal
+                    end,
     OriginHandle = quod_proof_context:start(
                      ProofId, ReadOnly, OriginIdentity, Deadline,
-                     proof_principal(Signer)),
+                     AuthPrincipal),
     OverlayOpts0 = #{read_set => true,
                      read_only => ReadOnly,
                      signer => Signer,
                      proof_context => {origin, OriginHandle}},
-    OverlayOpts = case Principal of
-                      undefined -> OverlayOpts0;
-                      _ -> OverlayOpts0#{lifecycle_principal => Principal}
+    %% A client-authenticated proof principal authorizes the proof itself.
+    %% Only lifecycle actions carry their actor through the overlay's separate
+    %% lifecycle-principal channel.
+    OverlayOpts = case Kind =:= action andalso Principal =/= undefined of
+                      true -> OverlayOpts0#{lifecycle_principal => Principal};
+                      false -> OverlayOpts0
                   end,
     Context = quod_predicates:with_chain(
                 quod_predicates:context(Est), [OriginIdentity]),
@@ -3031,8 +3215,12 @@ test_finalize_pinned_result(Result) -> finalize_pinned_result(Result).
 
 %% `::` is only a selector, so an ontology's own policy must gate a TOP-LEVEL
 %% entry exactly as it gates a co-hosted or remote one — otherwise a restrictive
-%% policy would be bypassed simply by proving the goal locally. The chain is
-%% empty here: this entry came from the engine, not through another ontology.
+%% policy would be bypassed simply by proving the goal locally. A node's own
+%% top-level proof uses the empty chain admitted by the founding host-entry
+%% clause. A browser user is not that host: give it a non-empty, engine-owned
+%% chain so its user-specific `can_invoke/4` policy is actually consulted.
+%% This does not override an ontology that explicitly grants users access —
+%% notably the shipped root ontology is deliberately open by its own policy.
 run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
     Verdict = authorization_verdict(Origin, Goal),
     run_authorized_pinned_goal(Kind, Origin, Goal, Verdict).
@@ -3042,8 +3230,9 @@ run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
 authorization_verdict(
   #pinned_origin{namespace = Ns, anchor = Anchor,
                  height = Height, session = Session}, Goal) ->
+    Principal = quod_proof_context:principal(),
     case quod_ask:authorize_scope(
-           quod_proof_context:principal(), Goal, [], {Ns, Anchor},
+           Principal, Goal, authorization_chain(Principal, {Ns, Anchor}), {Ns, Anchor},
            Height, Session) of
         true -> allowed;
         false ->
@@ -3053,8 +3242,15 @@ authorization_verdict(
             denied
     end.
 
+authorization_chain({user, <<_:256>>}, Identity) -> [Identity];
+authorization_chain(_Principal, _Identity) -> [].
+
 proof_principal(#{pubkey := <<_:256>> = Pubkey}) -> {node, Pubkey};
 proof_principal(none) -> anonymous.
+
+valid_public_proof_principal(undefined) -> true;
+valid_public_proof_principal({user, <<_:256>>}) -> true;
+valid_public_proof_principal(_) -> false.
 
 run_authorized_pinned_goal(Kind, Origin, Goal, Verdict) ->
     Result = normalize_read_only_result(
@@ -3081,15 +3277,23 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
     Participants = lists:sort(
                      [Identity || {Identity, Plan} <- maps:to_list(Plans),
                                   quod_dtx:participates(Plan)]),
-    case Participants of
-        [] ->
+    EffectParticipants =
+        [Identity || {Identity, Plan} <- maps:to_list(Plans),
+                     quod_dtx:effects_count(Plan) > 0],
+    case {Participants, EffectParticipants} of
+        {[], _} ->
             %% Nothing staged anywhere: the ordinary read result. Sealed
             %% read-only plans stay in the context for the group protocol.
             {ok, Bindings, [], ReadSet};
-        [Target] ->
+        {[Target], []} ->
             submit_single_plan(
               Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        Participants ->
+        {[Target], [_]} ->
+            submit_single_plan(
+              Origin, Target, maps:get(Target, Plans), Goal, Bindings);
+        {_Many, [_ | _]} ->
+            {error, effect_requires_single_participant};
+        {Participants, []} ->
             submit_group(
               Origin, Goal, Bindings, Plans, Participants)
     end.
@@ -3101,13 +3305,40 @@ checkpoint_and_release_origin_snapshot(
       {checkpoint_and_release_proof_snapshot, WorkerRef, OutcomeRef},
       infinity).
 
-submit_single_plan(#pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
-                   {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings) ->
+checkpoint_bound_effect(
+  #pinned_origin{engine = Engine, worker_ref = WorkerRef},
+  Effect, Change, OutcomeRef) ->
+    gen_server:call(
+      Engine,
+      {checkpoint_bound_effect, WorkerRef, Effect, Change, OutcomeRef},
+      infinity).
+
+submit_single_plan(Origin, Target, Plan, Goal, Bindings) ->
     case quod_transaction:encode_durable_submission(Goal, Bindings) of
         {ok, GoalBlob, ResultBlob} ->
-            OutcomeRef = quod_transaction:plan_outcome_ref(
-                           Plan, GoalBlob, ResultBlob),
-            case checkpoint_and_release_origin_snapshot(Origin, OutcomeRef) of
+            case quod_dtx:effects_count(Plan) of
+                0 ->
+                    submit_single_ordinary_plan(
+                      Origin, Target, Plan, Goal, Bindings,
+                      GoalBlob, ResultBlob);
+                1 ->
+                    submit_single_effect_plan(
+                      Origin, Target, Plan, Bindings,
+                      GoalBlob, ResultBlob);
+                _ ->
+                    {error, invalid_direct_effect}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+submit_single_ordinary_plan(
+  #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
+  {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings,
+  GoalBlob, ResultBlob) ->
+    OutcomeRef = quod_transaction:plan_outcome_ref(
+                   Plan, GoalBlob, ResultBlob),
+    case checkpoint_and_release_origin_snapshot(Origin, OutcomeRef) of
                 ok ->
                     Result = submit_single_plan_at_target(
                                Target, Plan, Goal, Bindings,
@@ -3123,9 +3354,69 @@ submit_single_plan(#pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
                     end;
                 {error, _} = Error ->
                     Error
+    end.
+
+submit_single_effect_plan(
+  #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
+  {Ns, Anchor} = Target, Plan, Bindings, GoalBlob, ResultBlob) ->
+    case quod_dtx:material(Plan) of
+        {ok, #{effects := [Effect]} = Material} ->
+            Change0 = quod_transaction:from_plan(
+                        Plan, Material, GoalBlob, ResultBlob),
+            Change = Change0#transaction{
+                       author = quod_dtx:signer(Plan),
+                       submitted_at = quod_time:now_ms()},
+            OutcomeRef = {transaction, Ns, Anchor,
+                          Change#transaction.tx_id},
+            case checkpoint_bound_effect(
+                   Origin, Effect, Change, OutcomeRef) of
+                ok ->
+                    case submit_bound_effect_plan(
+                           Target, Plan, Change,
+                           GoalBlob, ResultBlob, Bindings) of
+                        {ok, _B, Index, _TxId} ->
+                            {committed, Bindings,
+                             {effect_commit, Index, OutcomeRef}};
+                        {error, _} = Error -> Error
+                    end;
+                {error, _} = Error -> Error
             end;
-        {error, _} = Error ->
-            Error
+        _ ->
+            {error, invalid_direct_effect}
+    end;
+submit_single_effect_plan(_Origin, _Target, _Plan, _Bindings,
+                          _GoalBlob, _ResultBlob) ->
+    {error, effect_executor_not_local}.
+
+submit_bound_effect_plan(
+  {TargetNs, TargetAnchor}, Plan, Change, GoalBlob, ResultBlob, Bindings) ->
+    case quod_proof_context:scope_handle({TargetNs, TargetAnchor}) of
+        {ok, {local_scope, _, TargetNs, TargetAnchor, _, _}} ->
+            submit_bound_effect_plan_encoded(
+              TargetNs, Plan, Change, GoalBlob, ResultBlob, Bindings);
+        {ok, {quod_scope_session, _, _, _, _, TargetNs, TargetAnchor}} ->
+            submit_bound_effect_plan_encoded(
+              TargetNs, Plan, Change, GoalBlob, ResultBlob, Bindings);
+        _ ->
+            {error, effect_executor_not_local}
+    end.
+
+submit_bound_effect_plan_encoded(
+  TargetNs, Plan, Change, GoalBlob, ResultBlob, Bindings) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, {ontology_unreachable, TargetNs}};
+        Pid ->
+            try gen_server:call(
+                  Pid,
+                  {submit_bound_effect_plan, Plan, Change,
+                   GoalBlob, ResultBlob, [Bindings], quod_trace:context()},
+                  infinity)
+            catch exit:_ ->
+                {error, {outcome_unknown,
+                         {transaction, TargetNs,
+                          element(2, quod_dtx:target(Plan)),
+                          Change#transaction.tx_id}}}
+            end
     end.
 
 submit_single_plan_at_target(
@@ -3328,46 +3619,60 @@ lifecycle_authorized(Action, Origin) ->
 prepare_lifecycle_input(Action, Structural, Origin) ->
     case lifecycle_authorized(Action, Origin) of
         ok ->
-            case quod_ontology:prepare_action(Structural) of
-                {ok, Prepared} ->
-                    Goal =
-                        {prepare_lifecycle_action, Action,
-                         {'DesiredState'}, {'Mode'}},
-                    Selection = run_origin_invocation(Origin, Goal),
-                    complete_lifecycle_action(
-                      Action, Prepared, Origin, Selection);
-                {error, Reason} ->
-                    {fail,
-                     [quod_ontology_predicates:lifecycle_error(
-                        Action, Reason)]}
+            case quod_effect_journal:reserve(self()) of
+                {ok, Reservation} ->
+                    try
+                        case quod_ontology:prepare_action(Structural) of
+                            {ok, Prepared} ->
+                                Goal =
+                                    {prepare_lifecycle_action, Action,
+                                     {'DesiredState'}, {'Mode'}},
+                                Selection = run_origin_invocation(Origin, Goal),
+                                complete_lifecycle_action(
+                                  Action, Prepared, Reservation,
+                                  Origin, Selection);
+                            {error, Reason} ->
+                                {fail,
+                                 [quod_ontology_predicates:lifecycle_error(
+                                    Action, Reason)]}
+                        end
+                    after
+                        ok = quod_effect_journal:release_reservation(
+                               Reservation)
+                    end;
+                {error, busy} ->
+                    {error, busy};
+                {error, _} ->
+                    {error, lifecycle_journal_unavailable}
             end;
         {error, Reason} ->
             {fail, [Reason]}
     end.
 
-complete_lifecycle_action(Action, Prepared, Origin,
+complete_lifecycle_action(Action, Prepared, Reservation, Origin,
                           {ok, Bindings, [], _ReadSet})
   when is_map(Bindings) ->
     case {maps:find('DesiredState', Bindings), maps:find('Mode', Bindings)} of
         {{ok, DesiredState}, {ok, Mode}}
           when Mode =:= already; Mode =:= execute ->
             finish_lifecycle_action(
-              Action, Prepared, Origin, DesiredState, Mode);
+              Action, Prepared, Reservation, Origin, DesiredState, Mode);
         _ ->
             {error, action_declaration_failed}
     end;
-complete_lifecycle_action(_Action, _Prepared, _Origin,
+complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin,
                           {ok, _Bindings, _Diff, _ReadSet}) ->
     {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Origin,
+complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin,
                           {error, {erlog,
                                    {permission_error, modify,
                                     static_procedure, _Predicate}}}) ->
     {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Origin, Result) ->
+complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin, Result) ->
     Result.
 
-finish_lifecycle_action(Action, Prepared, Origin, DesiredState, Mode) ->
+finish_lifecycle_action(Action, Prepared, Reservation,
+                        Origin, DesiredState, Mode) ->
     case quod_predicates:is_ground(DesiredState) of
         false ->
             {error, action_declaration_failed};
@@ -3378,20 +3683,76 @@ finish_lifecycle_action(Action, Prepared, Origin, DesiredState, Mode) ->
                 ok when Mode =:= already ->
                     lifecycle_success();
                 ok ->
-                    case quod_ontology_predicates:execute_prepared(
-                           Action, Prepared) of
-                        ok -> verify_lifecycle_state(DesiredState, Origin);
-                        {error, outcome_unknown} -> {error, outcome_unknown};
-                        {error, Reason} -> {fail, [Reason]}
-                    end
+                    stage_commit_and_execute_lifecycle(
+                      Action, Prepared, Reservation,
+                      Origin, DesiredState)
             end
     end.
 
-verify_lifecycle_state(DesiredState, Origin) ->
-    case run_origin_invocation(Origin, DesiredState) of
-        {ok, _Bindings, [], _ReadSet} -> lifecycle_success();
-        _ -> {error, outcome_unknown}
+stage_commit_and_execute_lifecycle(
+  Action, Prepared, Reservation,
+  #pinned_origin{session = Session} = Origin, DesiredState) ->
+    Principal = quod_proof_context:principal(),
+    case quod_proof_session:signer(Session) of
+        #{pubkey := <<_:256>> = Executor} ->
+            case quod_ontology:prepared_effect(
+                   Action, Prepared, Executor, Principal) of
+                {ok, Effect} ->
+                    case quod_effect_journal:stage(
+                           Reservation, Action, DesiredState,
+                           Effect, Prepared) of
+                        ok ->
+                            ok = quod_proof_session:set_lifecycle_effect(
+                                   Session, Effect),
+                            stage_lifecycle_transition(
+                              Action, Effect, Origin, Session);
+                        {error, Reason} ->
+                            {error, Reason}
+                    end;
+                {error, Reason} ->
+                    {fail, [quod_ontology_predicates:lifecycle_error(
+                              Action, Reason)]}
+            end;
+        none ->
+            {error, rebuilding}
     end.
+
+stage_lifecycle_transition(Action, Effect, Origin, Session) ->
+    case run_origin_invocation(Origin, Action) of
+                        {ok, Bindings, [], ReadSet} = Staged ->
+                            case quod_proof_session:effects(Session) of
+                                [Effect] ->
+                                    Submitted = finish_pinned_proof(
+                                                  prove, Origin, Action,
+                                                  Staged),
+                                    complete_committed_lifecycle(
+                                      Effect, Submitted,
+                                      Bindings, ReadSet);
+                                _ ->
+                                    {error, lifecycle_effect_not_staged}
+                            end;
+                        {ok, _Bindings, _Diff, _ReadSet} ->
+                            {error, lifecycle_staged_write};
+        Other ->
+            Other
+    end.
+
+complete_committed_lifecycle(
+  Effect, {committed, _Bindings,
+           {effect_commit, Height, OutcomeRef}},
+    _Bindings0, _ReadSet) ->
+    case quod_effect_journal:await(
+           quod_effect:effect_id(Effect),
+           max(1, quod_proof_context:remaining_ms())) of
+        ok -> {committed, #{}, Height};
+        {error, outcome_unknown} ->
+            {error, {outcome_unknown, OutcomeRef}};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+complete_committed_lifecycle(
+  _Effect, Other, _Bindings, _ReadSet) ->
+    Other.
 
 lifecycle_success() -> {ok, #{}, [], #{}}.
 
@@ -3481,8 +3842,7 @@ proof_worker_reply(
     demonitor(CallerMRef, [flush]),
     {From, Applied}.
 
-proof_client_pid({async, Pid, _CallRef}) when is_pid(Pid) -> Pid;
-proof_client_pid({Pid, _Tag}) when is_pid(Pid) -> Pid.
+proof_client_pid({async, Pid, _CallRef}) when is_pid(Pid) -> Pid.
 
 reply_client({async, Caller, CallRef}, Reply) ->
     Caller ! {quod_proof_reply, self(), CallRef, Reply},
@@ -3882,13 +4242,108 @@ accept_plan_submission(
 accept_plan_submission(
   From, Plan, GoalBlob, ResultBlob, ReplyBindings, TraceCtx, S) ->
     case valid_plan_submission(Plan, GoalBlob, ResultBlob, S) of
-        {ok, Material} ->
+        {ok, #{effects := []} = Material} ->
             submit_plan_envelope(
               From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
               TraceCtx, S);
+        {ok, _EffectBearingMaterial} ->
+            %% Direct effects require the checkpointed exact-transaction
+            %% handoff. The ordinary plan API must not create a second path.
+            {reply, {error, effect_requires_bound_handoff}, S};
         {error, Reason} ->
             outcome_admission_error(Reason, S)
     end.
+
+accept_bound_effect_submission(
+  _From, _Plan, _Change, _GoalBlob, _ResultBlob,
+  _ReplyBindings, _TraceCtx, S = #s{ready = false, ns = Ns}) ->
+    {reply, {error, {ontology_rebuilding, Ns}}, S};
+accept_bound_effect_submission(
+  From, Plan, Change, GoalBlob, ResultBlob,
+  ReplyBindings, TraceCtx, S = #s{ns = Ns, outcomes = Outcomes0,
+                                  parked = Parked}) ->
+    case valid_plan_submission(Plan, GoalBlob, ResultBlob, S) of
+        {ok, Material} ->
+            Expected0 = quod_transaction:from_plan(
+                          Plan, Material, GoalBlob, ResultBlob),
+            Expected = Expected0#transaction{
+                         author = S#s.self,
+                         submitted_at = Change#transaction.submitted_at},
+            case Change =:= Expected andalso
+                 Change#transaction.author_seq =:= 0 andalso
+                 Change#transaction.sig =:= none andalso
+                 quod_transaction:valid_id(
+                   {Ns, target_anchor(Ns)}, Change) of
+                true ->
+                    Ref = {transaction, Ns, target_anchor(Ns),
+                           Change#transaction.tx_id},
+                    admit_bound_effect_plan(
+                      From, Change, ReplyBindings, TraceCtx,
+                      Ref, Outcomes0, Parked, S);
+                false ->
+                    {reply, {error, invalid_direct_effect_transaction}, S}
+            end;
+        {error, Reason} ->
+            outcome_admission_error(Reason, S)
+    end.
+
+admit_bound_effect_plan(From, Change, ReplyBindings, TraceCtx, Ref,
+                        Outcomes0, Parked, S) ->
+    Tx = Change#transaction.tx_id,
+    case quod_outcome:admit(Outcomes0, Change) of
+        {{terminal, Stored}, Outcomes1} ->
+            {reply, terminal_submission_reply(Stored, ReplyBindings),
+             S#s{outcomes = Outcomes1}};
+        {pending, Outcomes1} when is_map_key(Tx, Parked) ->
+            {reply, {error, {outcome_unknown, Ref}},
+             S#s{outcomes = Outcomes1}};
+        {Status, Outcomes1} when Status =:= pending; Status =:= new ->
+            handoff_and_park_effect(
+              From, Change, ReplyBindings, TraceCtx,
+              S#s{outcomes = Outcomes1});
+        {error, Reason} ->
+            outcome_index_error(Reason, Ref, S)
+    end.
+
+handoff_and_park_effect(
+  From, #transaction{effects = [Effect]} = Change,
+  ReplyBindings, TraceCtx, S) ->
+    EffectId = quod_effect:effect_id(Effect),
+    case quod_effect_journal:handoff(EffectId) of
+        ok ->
+            park_handed_off_effect(
+              From, Change, ReplyBindings, TraceCtx, S);
+        {error, Reason}
+          when Reason =:= busy; Reason =:= outcome_unknown;
+               Reason =:= unavailable ->
+            %% Custody may already be durable.  Keep the exact outcome parked
+            %% and let journal reconciliation repeat only this hand-off.
+            quod_effect_journal:reconcile(),
+            park_handed_off_effect(
+              From, Change, ReplyBindings, TraceCtx, S);
+        {error, Reason} ->
+            quod_effect_journal:retire([Effect], Reason),
+            {reply, {error, Reason},
+             discard_unsubmitted(Change#transaction.tx_id, S)}
+    end.
+
+park_handed_off_effect(
+  From, Change, ReplyBindings, TraceCtx, S = #s{ns = Ns}) ->
+    Tx = Change#transaction.tx_id,
+    {TransactionCtx, SpanCtx} = quod_trace:start_span(
+                                  TraceCtx, <<"quod.transaction">>, internal,
+                                  #{'quod.namespace' => Ns,
+                                    'quod.tx.id' => quod_trace:tx_id(Tx),
+                                    'quod.kb.read_height' => S#s.applied,
+                                    'quod.diff.operations' => 0}),
+    _ = quod_trace:add_event(
+          TransactionCtx, <<"transaction.handed_off">>, #{}),
+    TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
+    T0 = quod_time:mono_ms(),
+    Parked1 = (S#s.parked)#{Tx =>
+                 {From, ReplyBindings, S#s.applied, TRef, none,
+                  SpanCtx, T0}},
+    {noreply, S#s{parked = Parked1}}.
 
 outcome_admission_error(Reason, S) ->
     {reply, {error, Reason}, S}.
@@ -3918,6 +4373,8 @@ valid_plan_submission(Plan, GoalBlob, ResultBlob, S = #s{ns = Ns}) ->
             orelse throw(bad_plan),
         quod_dtx:base_height(Plan) =< S#s.applied orelse throw(bad_plan),
         {ok, Material} = quod_dtx:material(Plan),
+        valid_direct_plan_effects(Plan, Material) orelse
+            throw(invalid_direct_effect),
         {ok, _Goal} = quod_durable_term:decode_goal(GoalBlob),
         {ok, _DurableResult} = quod_durable_term:decode_result(ResultBlob),
         {ok, Material}
@@ -3925,6 +4382,17 @@ valid_plan_submission(Plan, GoalBlob, ResultBlob, S = #s{ns = Ns}) ->
         error:{badmatch, {error, Reason}} -> {error, Reason};
         throw:Reason -> {error, Reason};
         _:_ -> {error, bad_plan}
+    end.
+
+valid_direct_plan_effects(Plan, #{effects := Effects}) ->
+    case Effects of
+        [] -> true;
+        [Effect] ->
+            quod_effect:validate(Effect) andalso
+                quod_effect:executor(Effect) =:= quod_dtx:signer(Plan) andalso
+                quod_effect:actor(Effect) =:= quod_dtx:principal(Plan) andalso
+                quod_dtx:diff_ops(Plan) =:= 0;
+        _ -> false
     end.
 
 self_witnessed(none, Self) ->
@@ -3946,6 +4414,12 @@ submit_plan_envelope(From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
     Tx = Change#transaction.tx_id,
     Diff = Change#transaction.diff,
     Ref = {transaction, Ns, Anchor, Tx},
+    admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx,
+                     Ref, Outcomes0, Parked, S).
+
+admit_bound_plan(From, Change, ReplyBindings, Diff, TraceCtx, Ref,
+                 Outcomes0, Parked, S) ->
+    Tx = Change#transaction.tx_id,
     case quod_outcome:admit(Outcomes0, Change) of
         {{terminal, Stored}, Outcomes1} ->
             {reply, terminal_submission_reply(Stored, ReplyBindings),
@@ -4680,7 +5154,8 @@ is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []
 %%%===================================================================
 %%
 %% The `{runtime, Ns}` property carries these messages for the explorer (`m:quod_explorer_ws`) and any
-%% observer: `{applied_live, Env}` (one per live-applied transaction that changed D), `{rejected_live,
+%% observer: `{applied_live, Env}` (one per live-applied material transaction, including an
+%% effect-only transaction with an empty D diff), `{rejected_live,
 %% Env}` (one per live transaction that committed but was OCC-rejected at apply), and the
 %% `{replay_started, Id, From}` / `{replay_ready, Id, Height}` boundaries of a replay run (`Id` is
 %% `boot` for the quiet-boot ready edge). The ATTACHED runtime (`attach_runtime/1`) additionally
@@ -4727,22 +5202,24 @@ note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns})
     S#s{runtime_mode = live};
 note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying, or live while already live
 
-%% One event per ordinary committed transaction that actually changed D, on a
-%% LIVE commit only — never replay. The runtime consumes only the concrete diff
-%% and identifiers; goal/result remain canonical ledger blobs and are decoded
-%% lazily only by a detail reader. Genesis is not an agent event.
+%% One event per ordinary material committed transaction on a LIVE commit only
+%% — never replay. The runtime consumes the concrete diff, validated direct
+%% effects, and identifiers; goal/result remain canonical ledger blobs and are
+%% decoded lazily only by a detail reader. Genesis is not an agent event.
 outcome_applied(#transaction{plan_digest = none}, _Index, _Origin, _S) -> none;
-outcome_applied(#transaction{tx_id = Tx, diff = Diff}, Index, live, #s{ns = Ns}) ->
+outcome_applied(#transaction{tx_id = Tx, diff = Diff, effects = Effects},
+                Index, live, #s{ns = Ns}) ->
     {applied, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
-                diff => Diff}};
+                diff => Diff, effects => Effects}};
 outcome_applied(_Change, _Index, replay, _S) -> none.
 
 %% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors
 %% `outcome_applied` so every live tx in a block yields exactly one outcome event (applied or
 %% rejected); D is unchanged, so the envelope carries no diff/result.
-outcome_rejected(#transaction{tx_id = Tx}, Index, live, #s{ns = Ns}) ->
+outcome_rejected(#transaction{tx_id = Tx, effects = Effects},
+                 Index, live, #s{ns = Ns}) ->
     {rejected, #{ns => Ns, height => Index, tx_id => Tx,
-                 subject => undefined}};
+                 subject => undefined, effects => Effects}};
 outcome_rejected(_Change, _Index, replay, _S) -> none.
 
 %% Complete each transaction in block order after the block snapshot is
@@ -4782,6 +5259,11 @@ publish_outcome({applied, Env}, S = #s{ns = Ns, est = Est, runtime_pin = Pin}) -
     S;
 publish_outcome({rejected, Env}, S = #s{ns = Ns}) ->
     publish_runtime(Ns, {rejected_live, Env}),
+    _ = case maps:get(effects, Env, []) of
+            [] -> ok;
+            Effects ->
+                quod_effect_journal:retire(Effects, conflict_retry)
+        end,
     S.
 
 %% A distributed commit publishes exactly the same post-snapshot runtime

@@ -1,0 +1,50 @@
+/* The BBSVX house palette — the five brand values, and only shades derived
+   from them.  client/src/palette.js carries the same constants for Babylon. */
+:root {
+  --navy: #0B3954;
+  --grey-blue: #848FA5;
+  --green: #698F3F;
+  --gold: #F9C80E;
+  --red: #C14953;
+
+  /* Derived shades: mixes of the palette above, never new hues. */
+  --ground: color-mix(in srgb, var(--navy) 34%, black);
+  --panel: color-mix(in srgb, var(--navy) 88%, black);
+  --panel-edge: color-mix(in srgb, var(--grey-blue) 40%, transparent);
+  --ink: color-mix(in srgb, var(--grey-blue) 30%, white);
+  --ink-muted: var(--grey-blue);
+
+  color: var(--ink);
+  background: var(--ground);
+  font-family: Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+html, body, #app, #world { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+#world { display: block; touch-action: none; }
+
+.hud {
+  position: fixed;
+  inset: auto auto 2rem 2rem;
+  width: min(26rem, calc(100vw - 4rem));
+  padding: 1.3rem 1.45rem;
+  border: 1px solid var(--panel-edge);
+  border-radius: 1.25rem;
+  background: linear-gradient(145deg,
+    color-mix(in srgb, var(--panel) 92%, transparent),
+    color-mix(in srgb, var(--ground) 88%, transparent));
+  box-shadow: 0 1rem 4rem color-mix(in srgb, var(--ground) 60%, black);
+  backdrop-filter: blur(18px);
+}
+
+.eyebrow { margin: 0; color: var(--gold); font-size: .7rem; font-weight: 700; letter-spacing: .14em; }
+h1 { margin: .4rem 0 .55rem; font-size: 1.55rem; }
+#status { margin: 0; color: var(--ink-muted); line-height: 1.45; }
+.actions { display: flex; flex-wrap: wrap; gap: .7rem; margin-top: 1.2rem; }
+button { border: 0; border-radius: .65rem; padding: .7rem .9rem; color: var(--navy); background: var(--gold); font: inherit; font-weight: 700; cursor: pointer; }
+button:disabled { cursor: not-allowed; opacity: .48; }
+button + button { color: var(--ink); background: color-mix(in srgb, var(--grey-blue) 32%, var(--panel)); }
+
+@media (max-width: 600px) {
+  .hud { inset: auto 1rem 1rem; width: auto; }
+}

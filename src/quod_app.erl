@@ -117,6 +117,9 @@ drop_content_env_overrides() ->
 %% with no identity is useless, so a failure here is fatal — fail-fast like genesis.
 apply_identity(Cfg) ->
     Dir = identity_dir(Cfg),
+    %% Published so the other per-node secrets that live beside `node.key` — the
+    %% browser-TLS keypair — resolve the same directory without re-deriving it.
+    application:set_env(quod, identity_dir, Dir),
     case quod_identity:ensure(Dir) of
         {ok, #{pubkey := Pub, cert := Cert, key := Key}} ->
             application:set_env(quod, node_pubkey, Pub),
@@ -258,6 +261,12 @@ apply_transport_env(Cfg) ->
     application:set_env(quod, explorer_enabled, maps:get(enabled, Ex, false)),
     application:set_env(quod, explorer_ip, parse_ip(maps:get(ip, Ex, <<"127.0.0.1">>))),
     application:set_env(quod, explorer_port, maps:get(port, Ex)),
+    Client = maps:get(client, Cfg),
+    application:set_env(quod, client_enabled, maps:get(enabled, Client, false)),
+    application:set_env(quod, client_ip, parse_ip(maps:get(ip, Client, <<"127.0.0.1">>))),
+    application:set_env(quod, client_port, maps:get(port, Client)),
+    application:set_env(quod, client_certfile, maps:get(certfile, Client, <<>>)),
+    application:set_env(quod, client_keyfile, maps:get(keyfile, Client, <<>>)),
     application:set_env(quod, node_addr, {Ip, Port}),   %% advertised endpoint the transport announces
     application:set_env(quod, node_id, {Ip, Port}),     %% Brahms' address-flavoured id (distinct from node_pubkey)
     application:set_env(quod, quic_idle_timeout_ms, maps:get(idle_timeout_ms, Node)),  %% dead-peer detection tuning

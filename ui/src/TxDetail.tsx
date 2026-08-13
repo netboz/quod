@@ -3,7 +3,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { fetchBlock } from './api'
-import type { Cert, Op } from './api'
+import type { Cert, Effect, Op } from './api'
 import type { LiveTx, TxStatus } from './store'
 import { shortHex, timestamp } from './format'
 
@@ -122,9 +122,78 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
 
       <DiffSection diff={full.diff} status={full.status} loading={block.isLoading} />
 
+      <EffectsSection effects={full.effects} loading={block.isLoading} />
+
       <CertSection cert={full.cert} />
     </aside>
   )
+}
+
+function EffectsSection({ effects, loading }: { effects: Effect[]; loading: boolean }) {
+  return (
+    <Section title={`Lifecycle effects — ${effects.length}`}>
+      {loading && <div className="text-xs text-gray">loading block…</div>}
+      <div className="space-y-3">
+        {effects.map((effect) => (
+          <article key={effect.effect_id} className="rounded-lg border border-teal/15 bg-cream p-3">
+            <div className="flex items-center justify-between gap-3">
+              <span className="font-mono text-sm font-semibold text-teal">{effect.operation}</span>
+              <EffectBadge status={effect.local_execution} />
+            </div>
+            <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+              <Dt>Target</Dt>
+              <dd className="font-mono break-all">
+                {effect.target.ns} <span className="text-gray">({shortHex(effect.target.anchor, 12)})</span>
+              </dd>
+              <Dt>Actor</Dt>
+              <dd className="font-mono break-all" title={effect.actor.identity.pubkey ?? undefined}>
+                {effect.actor.kind}:{effect.actor.identity.id}
+              </dd>
+              <Dt>Authorized by</Dt>
+              <dd>the transaction author node</dd>
+              <Dt>Executor</Dt>
+              <dd className="font-mono break-all" title={effect.executor.pubkey ?? undefined}>
+                {effect.executor.id}
+              </dd>
+              <Dt>Effect id</Dt>
+              <dd className="font-mono break-all text-gray">{effect.effect_id}</dd>
+              <Dt>Request digest</Dt>
+              <dd className="font-mono break-all text-gray">{effect.request_digest}</dd>
+              <Dt>Prepared digest</Dt>
+              <dd className="font-mono break-all text-gray">{effect.prepared_digest}</dd>
+              {effect.local_execution_height != null && effect.local_execution_height > 0 && (
+                <>
+                  <Dt>Executed at</Dt>
+                  <dd className="font-mono">root height #{effect.local_execution_height}</dd>
+                </>
+              )}
+              {effect.local_execution_result != null && (
+                <>
+                  <Dt>Local result</Dt>
+                  <dd className="font-mono break-all">{effect.local_execution_result}</dd>
+                </>
+              )}
+            </dl>
+          </article>
+        ))}
+        {effects.length === 0 && !loading && (
+          <div className="text-xs text-gray italic">no lifecycle effects</div>
+        )}
+      </div>
+    </Section>
+  )
+}
+
+function EffectBadge({ status }: { status: Effect['local_execution'] }) {
+  const style = {
+    pending: ['pending', 'bg-gold-soft/40 text-teal'],
+    applied: ['executed here', 'bg-olive/15 text-olive'],
+    retired: ['retired', 'bg-gray/15 text-gray'],
+    operator_error: ['operator error', 'bg-rose/15 text-rose'],
+    unavailable: ['local status unavailable', 'bg-gray/15 text-gray'],
+    not_this_node: ['executed on another node', 'bg-teal/10 text-teal-light'],
+  }[status]
+  return <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${style[1]}`}>{style[0]}</span>
 }
 
 // The diff is what the proof PROPOSED. It only actually changed the kb when the tx applied; for a

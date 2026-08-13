@@ -1,6 +1,6 @@
 variable "image_tag" {
   type        = string
-  default     = "0.7.69"
+  default     = "0.7.70"
   description = "Quod image tag in the cluster registry. Routine upgrades resume the existing anchored quod-node host volumes."
 }
 
@@ -195,6 +195,7 @@ job "quod" {
       port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
       port "explorer" { to = 14569 }
+      port "client" { to = 14570 }
     }
 
     # Fast LOCAL storage: a per-alloc dynamic host volume (mkdir plugin) on each compute
@@ -274,7 +275,7 @@ EOT
       config {
         image      = "${var.image_registry}/quod:${var.image_tag}"
         force_pull = true
-        ports      = ["p2p", "metrics", "explorer"]
+        ports      = ["p2p", "metrics", "explorer", "client"]
       }
 
       volume_mount {
@@ -298,6 +299,16 @@ explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
+}
+# HTTPS, with the node's own self-signed certificate: a browser withholds Web
+# Crypto outside a secure context, so over plaintext the client could not hold a
+# key at all. Visitors accept the certificate once per node.
+client {
+  enabled  = true
+  ip       = "0.0.0.0"
+  port     = 14570
+  certfile = ""
+  keyfile  = ""
 }
 directory {
   allowlist = [
@@ -461,6 +472,23 @@ EOT
         }
       }
 
+      # The browser/XR client. Served over HTTPS with the node's own self-signed
+      # certificate, so the health check must not verify a chain there is none of.
+      service {
+        name = "client"
+        port = "client"
+        tags = ["quod", "client", "web"]
+
+        check {
+          type          = "http"
+          protocol      = "https"
+          tls_skip_verify = true
+          path          = "/health"
+          interval      = "15s"
+          timeout       = "3s"
+        }
+      }
+
       kill_signal  = "SIGTERM"
       kill_timeout = "30s"
     }
@@ -497,6 +525,7 @@ EOT
       port "p2p" { to = 14567 }
       port "metrics" { to = 14568 }
       port "explorer" { to = 14569 }
+      port "client" { to = 14570 }
     }
 
     volume "quod-data" {
@@ -546,7 +575,7 @@ EOT
       config {
         image      = "${var.image_registry}/quod:${var.image_tag}"
         force_pull = true
-        ports      = ["p2p", "metrics", "explorer"]
+        ports      = ["p2p", "metrics", "explorer", "client"]
       }
 
       volume_mount {
@@ -569,6 +598,16 @@ explorer {
   enabled = true
   ip      = "0.0.0.0"
   port    = 14569
+}
+# HTTPS, with the node's own self-signed certificate: a browser withholds Web
+# Crypto outside a secure context, so over plaintext the client could not hold a
+# key at all. Visitors accept the certificate once per node.
+client {
+  enabled  = true
+  ip       = "0.0.0.0"
+  port     = 14570
+  certfile = ""
+  keyfile  = ""
 }
 directory {
   # Satellites independently validate every directory record they receive.
@@ -688,6 +727,23 @@ EOT
           path     = "/health"
           interval = "15s"
           timeout  = "3s"
+        }
+      }
+
+      # The browser/XR client. Served over HTTPS with the node's own self-signed
+      # certificate, so the health check must not verify a chain there is none of.
+      service {
+        name = "client"
+        port = "client"
+        tags = ["quod", "client", "web", "cloud"]
+
+        check {
+          type          = "http"
+          protocol      = "https"
+          tls_skip_verify = true
+          path          = "/health"
+          interval      = "15s"
+          timeout       = "3s"
         }
       }
 

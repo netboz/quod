@@ -13,13 +13,31 @@ export type TxRow = {
   author_seq: number
   submitted_at: number // ms epoch, 0 = unset
   ops: number
+  effect_count: number
+  effect_operations: string[]
 }
 
 export type Op = { op: 'assert' | 'retract' | 'unknown'; clause: string }
 
+export type Effect = {
+  effect_id: string
+  operation: string
+  executor: PeerId
+  actor: { kind: 'node' | 'user'; identity: PeerId }
+  actor_authority: 'author_node_claimed'
+  target: { ns: string; anchor: string }
+  request_digest: string
+  prepared_digest: string
+  local_execution: 'pending' | 'applied' | 'retired' | 'operator_error' | 'unavailable' | 'not_this_node'
+  local_execution_height?: number
+  local_execution_result?: string | null
+}
+
 export type TxFull = TxRow & {
   result: Record<string, string> | Record<string, string>[] | string | null
   diff: Op[]
+  root_facts_changed: boolean
+  effects: Effect[]
   read_predicates: number
   origin: Origin
   proof_id: string | null

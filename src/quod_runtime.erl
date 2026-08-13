@@ -504,6 +504,7 @@ reconcile_finished({ok, FoundingCache, #{handlers := Hs, order := Order, index :
               rejected_dynamic = S0#s.rejected_dynamic + Rej,
               reconciles = S0#s.reconciles + 1,
               exec_failures = 0},
+    _ = maybe_reconcile_direct_effects(Ns),
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
                                    pump_heavy(release_ready_waiters(S1#s{mode = live}))));
@@ -524,6 +525,10 @@ reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
                            "newer ready edge", [Ns, Reason]),
             replace_snapshot_and_reconcile(Id, S1)
     end.
+
+maybe_reconcile_direct_effects(<<"quod:root">>) ->
+    quod_effect_journal:reconcile();
+maybe_reconcile_direct_effects(_Ns) -> ok.
 
 %% Founding configuration errors are permanent (only new founding content or a code fix can
 %% change them); execution failures are transient and go through collapse + backoff.
@@ -566,8 +571,10 @@ maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
         0 ->
             %% no handlers: the tier is trivially complete through the batch tip
             {Tip, TipEst} = batch_tip(Blocks),
+            Effects = batch_effects(Blocks),
             S1 = S#s{queue = [], queue_len = 0, est = TipEst, height = Tip,
                      p_height = Tip, e_frontier = Tip},
+            release_direct_effects(Effects),
             floor_raise(pump_heavy(release_ready_waiters(S1)));
         _ ->
             %% budget = one per-event allowance per block, CAPPED — a wedged goal in a huge
@@ -593,16 +600,24 @@ coalesce_blocks(Batch) ->
           fun({Env, Est}, Acc) ->
                   H = maps:get(height, Env, 0),
                   Heads = changed_heads(Env),
+                  Effects = maps:get(effects, Env, []),
                   case Acc of
-                      [{H, _E0, H0} | Rest] -> [{H, Est, H0 ++ Heads} | Rest];  %% same block
-                      _                     -> [{H, Est, Heads} | Acc]
+                      [{H, _E0, H0, E0} | Rest] ->
+                          [{H, Est, H0 ++ Heads, E0 ++ Effects} | Rest];
+                      _ -> [{H, Est, Heads, Effects} | Acc]
                   end
           end, [], Batch),
-    lists:reverse([{H, Est, lists:usort(Heads)} || {H, Est, Heads} <- Folded]).
+    lists:reverse(
+      [{H, Est, lists:usort(Heads), Effects}
+       || {H, Est, Heads, Effects} <- Folded]).
 
 batch_tip(Blocks) ->
-    {Tip, Est, _Heads} = lists:last(Blocks),
+    {Tip, Est, _Heads, _Effects} = lists:last(Blocks),
     {Tip, Est}.
+
+batch_effects(Blocks) ->
+    [{Height, Effects}
+     || {Height, _Est, _Heads, Effects} <- Blocks, Effects =/= []].
 
 %% Runner body (event batch): per BLOCK, run the invalidated handlers in converge order, each
 %% with its watched subset of the block's changed heads as scope. Returns {ok,Tip,Est}|{error,R}.
@@ -610,7 +625,7 @@ run_events(Ns, Blocks, Handlers, Order, Index, Deps) ->
     try
         {Tip, TipEst} =
             lists:foldl(
-              fun({H, Est, Heads}, _Prev) ->
+              fun({H, Est, Heads, _Effects}, _Prev) ->
                       {Run, Scopes} = event_plan(Heads, Index, Order, Deps),
                       lists:foreach(
                         fun(Id) ->
@@ -619,7 +634,7 @@ run_events(Ns, Blocks, Handlers, Order, Index, Deps) ->
                         end, Run),
                       {H, Est}
               end, {0, undefined}, Blocks),
-        {ok, Tip, TipEst}
+        {ok, Tip, TipEst, batch_effects(Blocks)}
     catch throw:R -> {error, R}
     end.
 
@@ -627,6 +642,13 @@ run_events(Ns, Blocks, Handlers, Order, Index, Deps) ->
 %% per-key convergence can observe removals (nothing in the snapshot for key K ⇒ delete P[K]).
 changed_heads(Env) ->
     [Head || {_Op, {Head, _Body}} <- maps:get(diff, Env, [])].
+
+release_direct_effects(HeightEffects) ->
+    lists:foreach(
+      fun({Height, Effects}) ->
+          ok = quod_effect_journal:release_applied(Height, Effects)
+      end, HeightEffects),
+    ok.
 
 %% Pure: which handlers must run for these changed heads, in what order, with what scope.
 %% Matched handlers AND their transitive dependents run (a dependent whose watch didn't fire
@@ -663,13 +685,14 @@ scope_for(Id, Heads, Index) ->
         _  -> {keys, Watched}
     end.
 
-events_finished({ok, Tip, TipEst}, S = #s{mode = live}) ->
+events_finished({ok, Tip, TipEst, Effects}, S = #s{mode = live}) ->
     %% advance est/height to the batch tip so heavy workers (started here) and the floor track
     %% the head; p_height/e_frontier are the P-before-E barrier
     S1 = S#s{est = TipEst, height = Tip,
              p_height = max(S#s.p_height, Tip),
              e_frontier = max(S#s.e_frontier, Tip),
              exec_failures = 0},
+    release_direct_effects(Effects),
     next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S1))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).

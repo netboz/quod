@@ -20,10 +20,16 @@ ontology_creation_test_() ->
           ?_test(failed_admission_rolls_back(Fixture)),
           ?_test(action_boundary_and_reasons(Fixture)),
           ?_test(lifecycle_authorization_guards(Fixture)),
-          ?_test(anchored_lifecycle_reuses_foreign_scope(Fixture)),
+          ?_test(authenticated_registration_creates_its_home(Fixture)),
+          ?_test(foreign_prerequisite_excludes_direct_effect(Fixture)),
           ?_test(action_timeout_is_outcome_unknown(Fixture)),
+          ?_test(effect_completion_survives_journal_restart(Fixture)),
+          ?_test(action_resume_reuses_existing_anchor(Fixture)),
+          ?_test(desired_state_rejects_same_name_wrong_anchor(Fixture)),
+          ?_test(lifecycle_actions_leave_root_facts_unchanged(Fixture)),
           ?_test(join_validation_and_state(Fixture)),
-          ?_test(join_resume_anchor_is_exact(Fixture))]
+          ?_test(join_resume_anchor_is_exact(Fixture)),
+          ?_test(action_resume_after_content_tree_restart(Fixture))]
      end}.
 
 setup() ->
@@ -68,16 +74,22 @@ setup() ->
 
 cleanup(#{dir := Dir, saved := Saved, manager := Manager,
           ns_sup := NsSup, brahms_sup := BrahmsSup}) ->
+    CurrentManager = quod_reg:where({namespace_manager, node}),
+    CurrentNsSup = quod_reg:where({quod_ns_sup, node}),
     Desired = application:get_env(
                 quod, namespace_desired,
                 #{content => #{}, brahms => #{}}),
     Content = maps:get(content, Desired, #{}),
-    lists:foreach(
-      fun(Ns) ->
-          _ = quod_namespace_manager:stop_content(Ns)
-      end, maps:keys(Content)),
-    stop_process(Manager),
-    stop_process(NsSup),
+    case is_pid(CurrentManager) andalso is_process_alive(CurrentManager) of
+        true ->
+            lists:foreach(
+              fun(Ns) ->
+                  _ = quod_namespace_manager:stop_content(Ns)
+              end, maps:keys(Content));
+        false -> ok
+    end,
+    stop_processes([CurrentManager, Manager]),
+    stop_processes([CurrentNsSup, NsSup]),
     stop_process(BrahmsSup),
     restore_env(Saved),
     _ = file:del_dir_r(Dir),
@@ -433,17 +445,28 @@ failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
         Orphan ! stop
     end.
 
-action_boundary_and_reasons(#{dir := Dir}) ->
+action_boundary_and_reasons(#{dir := Dir, root_config := RootConfig}) ->
     Ns = unique_ns(<<"action-created">>),
+    {ok, [#{}], EffectHeight} =
+        quod_prolog:run_action(
+          ?ROOT_NS,
+           {create_ontology, Ns,
+           [{source,
+             <<"can_invoke(_, _, _, _).\n"
+               "action_fact(works).\n"
+               "action_rule(X) :- action_fact(X).">>}]}),
+    {ok, RootStore} = quod_ledger_store:open_ro(
+                        ?ROOT_NS,
+                        quod_ledger_store:ledger_dir(RootConfig)),
+    {ok, #entry{data = {batch,
+                        [#transaction{diff = [], effects = [Effect]}]}}} =
+        quod_ledger_store:read_at(RootStore, EffectHeight),
+    ok = quod_ledger_store:close(RootStore),
+    ?assertEqual(create, quod_effect:operation(Effect)),
+    ?assertEqual(Ns, element(1, quod_effect:target(Effect))),
     ?assertMatch(
-       {ok, [#{}], _},
-       quod_prolog:run_action(
-         ?ROOT_NS,
-          {create_ontology, Ns,
-          [{source,
-            <<"can_invoke(_, _, _, _).\n"
-              "action_fact(works).\n"
-              "action_rule(X) :- action_fact(X).">>}]})),
+       {ok, #{state := applied, height := EffectHeight}},
+       quod_effect_journal:status(quod_effect:effect_id(Effect))),
     ok = wait_ready(Ns, 200),
     ?assertMatch(
        {ok, [#{}], _},
@@ -453,12 +476,34 @@ action_boundary_and_reasons(#{dir := Dir}) ->
        quod_prolog:prove_ro(Ns, {action_rule, works})),
     ForbiddenNs = unique_ns(<<"forbidden">>),
     ?assertMatch(
-       {fail, _},
+       {error, {erlog, {context_violation,
+                        {create_ontology, 2}, effect, proof}}},
        quod_prolog:prove(
          ?ROOT_NS,
          goal({create_ontology, ForbiddenNs, []}))),
     ?assertNot(filelib:is_dir(
                  quod_ledger_store:ns_dir(Dir, ForbiddenNs))),
+    %% The common top-level executor recognizes a declared action.  The
+    %% console uses this same entry point, so creation is not a separate
+    %% operator-only mechanism.
+    ConsoleNs = unique_ns(<<"console-created">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         ?ROOT_NS, {create_ontology, ConsoleNs, [open_policy()]})),
+    ok = wait_ready(ConsoleNs, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(ConsoleNs, true)),
+    %% The Explorer parser represents a quoted namespace as a character list.
+    %% It shares the same canonical name grammar as Erlang callers.
+    ConsoleTextNs = binary_to_list(unique_ns(<<"console-text">>)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         ?ROOT_NS, {create_ontology, ConsoleTextNs, [open_policy()]})),
+    ?assertEqual(iolist_to_binary(ConsoleTextNs),
+                 quod_ontology_name:flatten(ConsoleTextNs)),
     ?assertEqual(
        {error, invalid_action},
        quod_prolog:run_action(
@@ -570,6 +615,37 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
        quod_prolog:prove_ro(
          ?ROOT_NS,
          {can_create_ontology, {node, <<0:256>>}, PolicyProbe, []})),
+    %% Open registration is not a second general creation authority.  Root
+    %% accepts only the exact namespace and fixed terms derived from this key.
+    {UserKey, _UserSeed} = quod_identity:generate(),
+    {ok, UserNs} = quod_user:home_namespace(UserKey),
+    {ok, UserOptions} = quod_user:home_options(UserKey),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {can_create_ontology, {user, UserKey}, UserNs,
+          UserOptions})),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {can_create_ontology, {user, UserKey}, PolicyProbe,
+          UserOptions})),
+    ?assertMatch(
+       {fail, _},
+       quod_prolog:prove_ro(
+         ?ROOT_NS,
+         {can_create_ontology, {user, UserKey}, UserNs,
+          [{terms, [{user, forged}]}]})),
+    %% `execute/2` is the common top-level entry, not an action-only wrapper:
+    %% ordinary terms retain the exact proof path.
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(?ROOT_NS, true)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute_as(?ROOT_NS, true, {user, UserKey})),
     ?assertEqual(
        effect,
        quod_predicates:class({authorized_ontology_lifecycle, 1})),
@@ -577,6 +653,24 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                  quod_predicates:class({create_ontology_effect, 2})),
     ?assertEqual(undefined,
                  quod_predicates:class({join_ontology_effect, 3})),
+
+    %% The authenticated-user action path is still mediated by the same root
+    %% declaration and policy.  It creates one deterministic home locally;
+    %% there is no global user registry and no node-ownership condition.
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action_as(
+         ?ROOT_NS, {create_ontology, UserNs, UserOptions},
+         {user, UserKey})),
+    ok = wait_ready(UserNs, 200),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(UserNs, {user_key, {'UserId'}, UserKey, active})),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:prove_ro(
+         UserNs,
+         {can_invoke, anything, {user, UserKey}, [remote], UserNs})),
 
     Desired0 = application:get_env(quod, namespace_desired, #{}),
     ?assertEqual(
@@ -743,9 +837,10 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
         commit_root({retract, InvalidTrueDeclaration})
     end,
 
-    %% A typed start followed by a false selected postcondition is ambiguous:
-    %% hosting changed, so the runner reports outcome_unknown rather than a
-    %% definite logical failure or trying another transition.
+    %% A typed start followed by a false selected postcondition is a definite
+    %% operator failure recorded by the durable journal. Hosting changed, but
+    %% the caller must not be told to resolve an already-known outcome or try
+    %% another transition.
     BadPostNs = unique_ns(<<"bad-postcondition">>),
     BadPostAction = {create_ontology, BadPostNs, [open_policy()]},
     FalsePostDeclaration =
@@ -758,7 +853,7 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
        {asserta, FalsePostDeclaration}}),
     try
         ?assertEqual(
-           {error, outcome_unknown},
+           {error, {operator_error, postcondition_failed}},
            quod_prolog:run_action(?ROOT_NS, BadPostAction)),
         ok = wait_ready(BadPostNs, 200),
         ?assertEqual({ok, ready}, quod_ontology:local_state(BadPostNs))
@@ -768,11 +863,54 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
            {assertz, CreateDeclaration}})
     end.
 
-%% Both selected prerequisites and post-I/O verification execute through fresh
-%% root invocations, but their pinned target identity belongs to the one
-%% lifecycle proof context. Successful creation proves every foreign check ran;
-%% the target's proof counter proves they reused one read-only scope session.
-anchored_lifecycle_reuses_foreign_scope(_Fixture) ->
+authenticated_registration_creates_its_home(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _Seed} = KeyPair = quod_identity:generate(),
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    Peer = {127, 0, 0, 1},
+    try
+        LoginNonce = crypto:strong_rand_bytes(32),
+        {ok, Challenge} =
+            quod_client_auth:issue_challenge(PublicKey, LoginNonce, Peer),
+        ChallengeId = maps:get(challenge_id, Challenge),
+        {ok, ChallengeBytes} = quod_user:challenge_bytes(
+                                 NetworkId, NodeKey, ChallengeId, PublicKey,
+                                 LoginNonce, maps:get(server_nonce, Challenge),
+                                 maps:get(expires_ms, Challenge)),
+        LoginSignature =
+            quod_identity:sign(ChallengeBytes, quod_identity:key_term(KeyPair)),
+        {ok, #{session_id := SessionId}} =
+            quod_client_auth:complete_challenge(ChallengeId, LoginSignature),
+        RegistrationNonce = crypto:strong_rand_bytes(32),
+        {ok, RegistrationBytes} =
+            quod_user:registration_bytes(NetworkId, PublicKey, RegistrationNonce),
+        RegistrationSignature =
+            quod_identity:sign(RegistrationBytes, quod_identity:key_term(KeyPair)),
+        {ok, #{namespace := UserNs}} =
+            quod_client_registration:register(
+              SessionId, RegistrationNonce, RegistrationSignature, Peer),
+        ok = wait_ready(UserNs, 200),
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:prove_ro(
+             UserNs,
+             {can_invoke, anything, {user, PublicKey}, [remote], UserNs}))
+    after
+        %% Synchronous: the registered name must be free before anything else
+        %% starts this server again.
+        unlink(AuthPid),
+        AuthRef = monitor(process, AuthPid),
+        exit(AuthPid, shutdown),
+        receive {'DOWN', AuthRef, process, AuthPid, _} -> ok after 5000 -> ok end
+    end.
+
+%% A direct local effect cannot be hidden inside a distributed transaction.
+%% Reading a foreign prerequisite makes that ontology a participant, so the
+%% sealed request is rejected before the local ontology is created.
+foreign_prerequisite_excludes_direct_effect(#{dir := Dir}) ->
     ForeignNs = unique_ns(<<"lifecycle-prerequisite">>),
     {ok, created, ForeignNs, _ForeignAnchor} =
         quod_ontology:create(
@@ -795,10 +933,11 @@ anchored_lifecycle_reuses_foreign_scope(_Fixture) ->
       {',', {retract, CreateDeclaration}, {asserta, Declaration}}),
     Before = maps:get(proves, quod_prolog:stats(ForeignNs)),
     try
-        ?assertMatch(
-           {ok, [#{}], _},
+        ?assertEqual(
+           {error, effect_requires_single_participant},
            quod_prolog:run_action(?ROOT_NS, Action)),
-        ok = wait_ready(TargetNs, 200),
+        ?assertNot(filelib:is_dir(
+                     quod_ledger_store:ns_dir(Dir, TargetNs))),
         ?assertEqual(
            Before + 1,
            maps:get(proves, quod_prolog:stats(ForeignNs)))
@@ -818,11 +957,16 @@ action_timeout_is_outcome_unknown(#{manager := Manager}) ->
         after
             ok = sys:resume(Manager)
         end,
-    ?assertEqual({error, outcome_unknown}, Result),
-    %% The manager may already hold the accepted request after the worker was
-    %% killed. Polling local state is therefore the only safe retry decision.
+    ?assertMatch(
+       {error,
+        {outcome_unknown,
+         {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}}, Result),
+    {error, {outcome_unknown, Ref}} = Result,
+    %% The manager may already hold the accepted request. The exact reference
+    %% is what makes later resolution safe; the action must not be re-proved.
     ok = wait_ready(Ns, 200),
     ok = wait_local_state(Ns, ready, 200),
+    ?assertMatch({ok, #{status := committed}}, quod_prolog:outcome(Ref)),
     GenesisHash = quod_simplex:genesis_hash(Ns),
     ?assertEqual(32, byte_size(GenesisHash)),
     Desired = application:get_env(quod, namespace_desired, #{}),
@@ -832,6 +976,187 @@ action_timeout_is_outcome_unknown(#{manager := Manager}) ->
        #{data => quod_ledger_store:data_dir(Config),
          ledger => quod_ledger_store:ledger_dir(Config)},
        maps:get(Ns, Dirs)).
+
+%% The manager mutation can complete immediately before the effect journal
+%% dies.  Recovery must observe the already-satisfied postcondition, mark the
+%% original row applied, and preserve the exact public recovery reference; it
+%% must not attempt to found a second incarnation.
+effect_completion_survives_journal_restart(_Fixture) ->
+    Ns = unique_ns(<<"effect-journal-restart">>),
+    Tag = make_ref(),
+    Parent = self(),
+    application:set_env(quod, effect_test_after_execute, {Parent, Tag}),
+    {Caller, CallerMRef} = spawn_monitor(
+                            fun() ->
+                                Parent !
+                                    {restarted_action_result, self(),
+                                     quod_prolog:run_action(
+                                       ?ROOT_NS,
+                                       {create_ontology, Ns,
+                                        [open_policy()]})}
+                            end),
+    try
+        Worker =
+            receive
+                {effect_after_execute, Tag, EffectWorker} -> EffectWorker
+            after 5000 ->
+                error(effect_execution_timeout)
+            end,
+        OldJournal = quod_reg:where({quod_effect_journal, node}),
+        ?assert(is_pid(OldJournal)),
+        application:unset_env(quod, effect_test_after_execute),
+        JournalMRef = monitor(process, OldJournal),
+        exit(OldJournal, kill),
+        receive
+            {'DOWN', JournalMRef, process, OldJournal, _} -> ok
+        after 5000 ->
+            error(effect_journal_stop_timeout)
+        end,
+        %% The blocked test worker watches its owner and cannot outlive the
+        %% journal it represented.
+        WorkerMRef = monitor(process, Worker),
+        receive
+            {'DOWN', WorkerMRef, process, Worker, _} -> ok
+        after 5000 ->
+            error(effect_worker_stop_timeout)
+        end,
+        ok = wait_new_effect_journal(OldJournal, 200),
+        ok = wait_ready(?ROOT_NS, 200),
+        ok = wait_ready(Ns, 200),
+        Result =
+            receive
+                {restarted_action_result, Caller, ActionResult} ->
+                    ActionResult
+            after 5000 ->
+                error(action_result_timeout)
+            end,
+        ?assertMatch(
+           {error,
+            {outcome_unknown,
+             {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}},
+           Result),
+        ?assertMatch(
+           {ok, #{state := applied}},
+           wait_effect_target_state(Ns, applied, 200)),
+        receive
+            {'DOWN', CallerMRef, process, Caller, normal} -> ok
+        after 5000 ->
+            error(action_caller_stop_timeout)
+        end
+    after
+        application:unset_env(quod, effect_test_after_execute),
+        exit(Caller, kill)
+    end.
+
+%% Re-establishing hosting after the runtime manager forgot its in-memory
+%% desired state must bind the new root receipt to the immutable slot-1
+%% anchor already on disk.  It must not preview a second incarnation.
+action_resume_reuses_existing_anchor(_Fixture) ->
+    Ns = unique_ns(<<"action-resume">>),
+    Action = {create_ontology, Ns, [open_policy()]},
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 200),
+    Anchor = quod_simplex:genesis_hash(Ns),
+    ?assertMatch(<<_:256>>, Anchor),
+    ok = quod_namespace_manager:stop_content(Ns),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 200),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)).
+
+%% A name-only desired predicate is not enough: a locally hosted fork with a
+%% different genesis must make this effect incompatible, never already-applied.
+desired_state_rejects_same_name_wrong_anchor(_Fixture) ->
+    Ns = unique_ns(<<"desired-anchor">>),
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:run_action(
+         ?ROOT_NS, {create_ontology, Ns, [open_policy()]})),
+    ok = wait_ready(Ns, 200),
+    Actual = quod_simplex:genesis_hash(Ns),
+    <<First, Rest/binary>> = Actual,
+    Wrong = <<(First bxor 1), Rest/binary>>,
+    Executor = application:get_env(quod, node_pubkey, <<0:256>>),
+    Effect = {quod_direct_effect, 1, local_durable,
+              ontology_lifecycle, create,
+              crypto:hash(sha256, <<"wrong-anchor-effect">>), Executor,
+              {node, Executor}, {Ns, Wrong},
+              crypto:hash(sha256, <<"wrong-anchor-request">>),
+              crypto:hash(sha256, <<"wrong-anchor-prepared">>)},
+    ?assertEqual(
+       incompatible,
+       quod_effect_journal:test_desired_state(
+         {ontology_hosted, Ns}, Effect)).
+
+%% Lifecycle operations are durable root-ledger effects, not root knowledge.
+%% Repeating them must therefore commit effect descriptors with an empty
+%% Prolog diff instead of accumulating one root fact per hosted ontology.
+lifecycle_actions_leave_root_facts_unchanged(
+  #{root_config := RootConfig}) ->
+    Heights =
+        [begin
+             Ns = unique_ns(<<"root-diff-free">>),
+             {ok, [#{}], Height} = quod_prolog:run_action(
+                                    ?ROOT_NS,
+                                    {create_ontology, Ns,
+                                     [open_policy()]}),
+             ok = wait_ready(Ns, 200),
+             Height
+         end || _ <- lists:seq(1, 3)],
+    {ok, Store} = quod_ledger_store:open_ro(
+                    ?ROOT_NS,
+                    quod_ledger_store:ledger_dir(RootConfig)),
+    try
+        lists:foreach(
+          fun(Height) ->
+              {ok, #entry{data = {batch, Transactions}}} =
+                  quod_ledger_store:read_at(Store, Height),
+              ?assert(lists:any(
+                        fun(#transaction{diff = [], effects = [_]}) -> true;
+                           (_) -> false
+                        end, Transactions)),
+              ?assertEqual(
+                 [], lists:append(
+                       [Diff || #transaction{effects = [_], diff = Diff}
+                                    <- Transactions]))
+          end, Heights)
+    after
+        ok = quod_ledger_store:close(Store)
+    end.
+
+%% The supported recovery boundary is wider than stop_content/1: after the
+%% namespace manager and the whole content supervisor tree disappear, a new
+%% application-lifetime manager has no hosting intent for the user ontology.
+%% Reissuing the action must inspect the preserved ledger and reuse slot 1's
+%% exact anchor rather than previewing a new incarnation.
+action_resume_after_content_tree_restart(
+  #{manager := Manager, ns_sup := NsSup, root_config := RootConfig}) ->
+    Ns = unique_ns(<<"action-tree-restart">>),
+    Action = {create_ontology, Ns, [open_policy()]},
+    ?assertMatch({ok, [#{}], _}, quod_prolog:run_action(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 200),
+    Anchor = quod_simplex:genesis_hash(Ns),
+
+    stop_process(Manager),
+    stop_process(NsSup),
+    application:set_env(
+      quod, namespace_desired, #{content => #{}, brahms => #{}}),
+    application:set_env(quod, content_storage_dirs, #{}),
+    {ok, NewNsSup} = quod_ns_sup:start_link(),
+    unlink(NewNsSup),
+    {ok, NewManager} = quod_namespace_manager:start_link(),
+    unlink(NewManager),
+    {ok, _RootPid} =
+        quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
+    ok = wait_ready(?ROOT_NS, 200),
+    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:run_action(?ROOT_NS, Action)),
+    ok = wait_ready(Ns, 200),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)).
 
 join_validation_and_state(#{dir := Dir}) ->
     Ns = unique_ns(<<"join-validation">>),
@@ -977,7 +1302,7 @@ root_creation_action() ->
 root_create_policy() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     [Policy] =
-        [Term || {':-', {can_create_ontology, _, _, _}, _} = Term <-
+        [Term || {':-', {can_create_ontology, {node, _}, _, _}, _} = Term <-
                      quod_prolog:read_terms(File)],
     Policy.
 
@@ -994,6 +1319,30 @@ wait_ready(Ns, N) ->
         _ ->
             timer:sleep(10),
             wait_ready(Ns, N - 1)
+    end.
+
+wait_new_effect_journal(_OldPid, 0) ->
+    {error, timeout};
+wait_new_effect_journal(OldPid, N) ->
+    case quod_reg:where({quod_effect_journal, node}) of
+        Pid when is_pid(Pid), Pid =/= OldPid -> ok;
+        _ ->
+            timer:sleep(10),
+            wait_new_effect_journal(OldPid, N - 1)
+    end.
+
+wait_effect_target_state(_Ns, _Expected, 0) ->
+    {error, timeout};
+wait_effect_target_state(Ns, Expected, N) ->
+    Matches =
+        [Row || #{target := {RowNs, _Anchor}} = Row <-
+                    quod_effect_journal:rows(),
+                RowNs =:= Ns],
+    case Matches of
+        [#{state := Expected} = Row] -> {ok, Row};
+        _ ->
+            timer:sleep(10),
+            wait_effect_target_state(Ns, Expected, N - 1)
     end.
 
 wait_local_state(_Ns, _Expected, 0) ->
@@ -1031,7 +1380,11 @@ stop_process(Pid) when is_pid(Pid) ->
     case is_process_alive(Pid) of
         true -> gen_server:stop(Pid);
         false -> ok
-    end.
+    end;
+stop_process(_) -> ok.
+
+stop_processes(Pids) ->
+    lists:foreach(fun stop_process/1, lists:usort(Pids)).
 
 save_env(Keys) ->
     [{Key, application:get_env(quod, Key)} || Key <- Keys].

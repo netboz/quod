@@ -197,23 +197,32 @@ The pipeline is:
    once, or normalizes join input, into one opaque descriptor without manager
    or ledger mutation. Full input validation deliberately precedes the desired
    state check, so invalid input cannot become idempotent success;
-5. `prepare_lifecycle_action/3` selects that exact declaration read-only. It
-   returns `already` when its desired state is true, otherwise checks the same
-   declaration's ordered prerequisites and returns `execute`;
+5. `prepare_lifecycle_action/3` selects that exact declaration in the normal
+   staged proof overlay. It returns `already` when its desired state is true,
+   otherwise checks the same declaration's ordered prerequisites and returns
+   `execute`. Any staged write remains visible in the operation log and the
+   runner rejects the completed proof unless its diff is empty; the separate
+   authorization sub-proof remains strict read-only;
 6. the runner re-authorizes the private principal for either result. `already`
-   returns without lifecycle IO; `execute` calls only
-   `quod_ontology:execute_prepared/1` once and then verifies the selected
-   desired state read-only;
-7. a failed or missing declaration retains its bounded Prolog reasons, any
-   attempted preparation write returns `lifecycle_staged_write`, and a worker
-   loss or failed postcondition after accepted IO is `outcome_unknown`.
+   returns without lifecycle IO; `execute` stages the closed lifecycle effect,
+   seals one ordinary root transaction with an empty root diff, checkpoints
+   its exact transaction reference, and waits for consensus;
+7. ordered root apply releases the effect only after the runtime projection
+   reaches that height. The journal then calls the frozen
+   `quod_ontology:execute_prepared/1` payload and verifies the selected desired
+   state. Recovery checks that desired state before repeating any local call;
+8. a failed or missing declaration retains its bounded Prolog reasons, any
+   attempted preparation write returns `lifecycle_staged_write`, a worker loss
+   after its transaction checkpoint is `outcome_unknown`, and a journal-known
+   rejection or postcondition failure is returned as a definite error.
 
 The visible `authorized_ontology_lifecycle/1` prerequisite and the direct
 checks all use the same factored authorization helper. The direct preflight
-prevents source reads when a declaration accidentally omits its visible gate;
-the final check brackets potentially time-varying query-class policy before IO.
-All policy proofs are strict read-only views. Execution remains in the existing
-bounded proof worker, so the namespace engine itself never blocks.
+prevents source reads when a declaration accidentally omits its visible gate.
+All policy proofs are strict read-only views and their committed dependencies
+enter the transaction's OCC read set. There is no post-commit policy re-proof:
+an applied effect is the local obligation recorded by that accepted
+transaction. Execution runs outside the namespace engine.
 
 The obsolete inline-IO creation/join registrations and handlers are removed.
 `quod_ontology_predicates` only maps prepared-helper results to bounded public
@@ -329,7 +338,7 @@ calls. It must not be approximated by accepting a caller-provided tuple now.
   - the high-level `run_action/2` pipeline is the sole lifecycle entry;
   - it derives the node principal only for that action run;
   - it carries one opaque prepared descriptor through declaration, policy,
-    mode selection, typed execution, and postcondition verification;
+    mode selection, typed effect staging, transaction checkpoint, and outcome;
 - `src/quod_predicates.erl`
   - registers the governed authorization predicate;
   - contains no inline-IO lifecycle predicate registrations;

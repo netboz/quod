@@ -310,12 +310,14 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     %% cap rejects the complete material before any symbol is interned.
     DiffWire = wire_list([{0, Name} || Name <- AtomNames]),
     MaterialWire = {4, [DiffWire, {5}]},
+    EffectsWire = quod_wire_term:encode_canonical([]),
+    {ok, CanonicalEffects} = EffectsWire,
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 6, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 7, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
-           <<>>, <<>>, MaterialWire, Author, 1, 0},
+           <<>>, <<>>, MaterialWire, CanonicalEffects, Author, 1, 0},
           [deterministic]),
     Signature = quod_identity:sign(Canonical, Identity),
     Submission = {submit, Author, Signature, Canonical},

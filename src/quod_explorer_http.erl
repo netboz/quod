@@ -9,7 +9,7 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 | `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
 | `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
-| `POST /api/prove` `{ns, goal}` | run a goal through `quod_prolog:prove/2` — a read answers with bindings; a write answers with its committed height or a pending transaction id if the local wait expires first |
+| `POST /api/prove` `{ns, goal}` | run a term through `quod_prolog:execute/2` — ordinary goals prove normally; declared lifecycle actions run their policy-checked Erlang effect |
 
 History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
 store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
@@ -136,7 +136,12 @@ prove(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
               true ->
                   case parse_goal(Text) of
                       {ok, Goal} ->
-                          Result = quod_prolog:prove(Ns, Goal),
+                          %% `execute/2` is the common top-level boundary:
+                          %% normal predicates prove as before, while a typed
+                          %% lifecycle action follows its declared action
+                          %% proof and effect path. The console does not
+                          %% implement a second create/join mechanism.
+                          Result = quod_prolog:execute(Ns, Goal),
                           _ = quod_trace:result(SpanCtx, Result),
                           {Code, Reply} = prove_result(Result),
                           json_reply(Code, Reply, Req);
@@ -197,6 +202,9 @@ prove_result(
   when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
        is_binary(TxId), byte_size(TxId) =:= 32 ->
     {202, (outcome_ref_json(Ns, Anchor, TxId))#{result => pending}};
+%% A malformed declared lifecycle term is a caller error, not a service outage.
+prove_result({error, invalid_action}) ->
+    {400, #{error => invalid_action}};
 prove_result({error, Reason}) ->
     {503, #{error => text(Reason)}}.
 
@@ -422,17 +430,20 @@ entry_txs(#entry{data = Data}) ->
 -doc "The list-row rendering of one transaction inside its committed entry.".
 tx_json(Ns, #transaction{tx_id = Id,
                      goal = G, author = A,
-                     author_seq = AuthorSeq, submitted_at = Sub, diff = Diff},
+                     author_seq = AuthorSeq, submitted_at = Sub,
+                     diff = Diff, effects = Effects},
         #entry{index = Slot, timestamp = Ts}) ->
     tx_json_decoded(
-      Ns, Id, durable_goal_text(G), A, AuthorSeq, Sub, Diff, Slot, Ts).
+      Ns, Id, durable_goal_text(G), A, AuthorSeq, Sub,
+      Diff, Effects, Slot, Ts).
 
 tx_json_decoded(Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
-                Diff, Slot, Timestamp) ->
+                Diff, Effects, Slot, Timestamp) ->
     #{tx_id => tx_id_text(Id), ns => Ns, height => Slot, time => Timestamp,
       goal => GoalJson, author => id_json(Author), author_seq => AuthorSeq,
       submitted_at => SubmittedAt,
-      ops => length(Diff)}.
+      ops => length(Diff), effect_count => length(Effects),
+      effect_operations => [effect_operation(Effect) || Effect <- Effects]}.
 
 -doc "The detail rendering: the row plus result bindings, authentication, the diff, and OCC extent.".
 tx_json_full(Ns, #transaction{result = Res} = T, E) ->
@@ -445,19 +456,87 @@ tx_json_full_decoded(
   #transaction{tx_id = Id, origin = Origin, proof_id = ProofId,
                plan_digest = PlanDigest, author = Author, author_seq = AuthorSeq,
                submitted_at = SubmittedAt, diff = Diff,
-               read_check = RC, sig = Sig} = T,
+               read_check = RC, effects = Effects, sig = Sig} = T,
   #entry{index = Slot, timestamp = Timestamp} = E,
   GoalJson, ResultJson) ->
     (tx_json_decoded(
        Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
-       Diff, Slot, Timestamp))#{result => ResultJson,
+       Diff, Effects, Slot, Timestamp))#{result => ResultJson,
                      diff => [op_json(Op) || Op <- Diff],
+                     root_facts_changed => Diff =/= [],
+                     effects => [effect_json(Effect) || Effect <- Effects],
                      read_predicates => map_size(RC),
                      origin => origin_json(Origin),
                      proof_id => digest_json(ProofId),
                      plan_digest => digest_json(PlanDigest),
                      signature => signature_json(Sig),
                      signature_status => signature_status(T, E)}.
+
+effect_json(Effect) ->
+    case quod_effect:validate(Effect) of
+        true ->
+            EffectId = quod_effect:effect_id(Effect),
+            Base =
+                #{effect_id => digest_json(EffectId),
+                  operation => quod_effect:operation(Effect),
+                  executor => id_json(quod_effect:executor(Effect)),
+                  actor => actor_json(quod_effect:actor(Effect)),
+                  actor_authority => author_node_claimed,
+                  target => origin_json(quod_effect:target(Effect)),
+                  request_digest =>
+                      digest_json(quod_effect:request_digest(Effect)),
+                  prepared_digest =>
+                      digest_json(quod_effect:prepared_digest(Effect))},
+            maps:merge(
+              Base,
+              local_effect_status(EffectId,
+                                  quod_effect:executor(Effect)));
+        false ->
+            invalid_effect_json()
+    end.
+
+effect_operation(Effect) ->
+    case quod_effect:validate(Effect) of
+        true -> quod_effect:operation(Effect);
+        false -> invalid
+    end.
+
+invalid_effect_json() ->
+    InvalidPeer = #{id => <<"invalid">>, pubkey => null},
+    #{effect_id => <<"invalid">>, operation => invalid,
+      executor => InvalidPeer,
+      actor => #{kind => node, identity => InvalidPeer},
+      actor_authority => author_node_claimed,
+      target => #{ns => <<"invalid">>, anchor => <<"invalid">>},
+      request_digest => <<"invalid">>, prepared_digest => <<"invalid">>,
+      local_execution => unavailable,
+      local_execution_result => <<"invalid descriptor">>}.
+
+actor_json({node, Key}) -> #{kind => node, identity => id_json(Key)};
+actor_json({user, Key}) -> #{kind => user, identity => id_json(Key)}.
+
+local_effect_status(EffectId, Executor) ->
+    case application:get_env(quod, node_pubkey) of
+        {ok, Executor} ->
+            case quod_effect_journal:status(EffectId) of
+                {ok, #{state := State} = Status} ->
+                    #{local_execution => local_effect_state(State),
+                      local_execution_height => maps:get(height, Status, 0),
+                      local_execution_result =>
+                          local_effect_result(maps:get(result, Status, none))};
+                _ -> #{local_execution => unavailable}
+            end;
+        _ -> #{local_execution => not_this_node}
+    end.
+
+local_effect_state(prepared) -> pending;
+local_effect_state(handed_off) -> pending;
+local_effect_state(committed) -> pending;
+local_effect_state(State) -> State.
+
+local_effect_result(none) -> null;
+local_effect_result(ok) -> ok;
+local_effect_result(Result) -> prolog_text(Result).
 
 signature_json(Sig) when is_binary(Sig) -> binary:encode_hex(Sig, lowercase);
 signature_json(none) -> null.

@@ -22,6 +22,16 @@
 -define(QUOD_MAX_PLAN_ENVELOPE_BYTES, (24 * 1024)).
 -define(QUOD_MAX_PLAN_DIFF_OPS, 1024).
 -define(QUOD_MAX_PLAN_READ_FUNCTORS, 1024).
+%% Direct effects are deliberately singleton in the first protocol version.
+%% The representation remains a bounded list so a later reviewed effect class
+%% can raise the shared bound without another shape change.
+-define(QUOD_MAX_DIRECT_EFFECTS, 1).
+-define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
+-define(QUOD_MAX_PREPARED_EFFECTS, 64).
+-define(QUOD_MAX_PREPARED_EFFECT_BYTES, (256 * 1024)).
+-define(QUOD_MAX_PREPARED_EFFECT_TOTAL_BYTES,
+        (?QUOD_MAX_PREPARED_EFFECTS *
+         (?QUOD_MAX_PREPARED_EFFECT_BYTES + (16 * 1024)))).
 %% The committed envelope's durable top-level goal and selected result.
 -define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (8 * 1024)).
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).

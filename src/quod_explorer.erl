@@ -36,7 +36,7 @@ start_link() ->
 init([]) ->
     Port = application:get_env(quod, explorer_port, 14569),
     Ip   = application:get_env(quod, explorer_ip, {127, 0, 0, 1}),
-    Dispatch = cowboy_router:compile([{'_', [
+    Routes = [{'_', [
         {"/", cowboy_static, {priv_file, quod, "explorer/index.html"}},
         {"/favicon.png", cowboy_static, {priv_file, quod, "explorer/favicon.png"}},
         {"/assets/[...]", cowboy_static, {priv_dir, quod, "explorer/assets"}},
@@ -47,15 +47,15 @@ init([]) ->
         {"/api/tx/:ns/:id", quod_explorer_http, tx},
         {"/api/block/:ns/:slot", quod_explorer_http, block},
         {"/api/prove", quod_explorer_http, prove}
-    ]}]),
+    ]}],
     %% NEVER let the explorer take down the node: on bind error, log and run without a listener (it
-    %% is optional; consensus must not depend on it). Reuse a listener that survived our own restart
-    %% (terminate stops it on a clean exit; a brutal kill can leave it up).
-    case cowboy:start_clear(?LISTENER, [{port, Port}, {ip, Ip}], #{env => #{dispatch => Dispatch}}) of
+    %% is optional; consensus must not depend on it). This is the opposite choice from the client
+    %% endpoint (`m:quod_client`), which fails so its supervisor retries — nobody depends on the
+    %% explorer being up, and everybody depends on the client being up.
+    case quod_http_listener:start(
+           #{name => ?LISTENER, ip => Ip, port => Port, routes => Routes}) of
         {ok, _} ->
             logger:info("quod: explorer on ~p:~p/", [Ip, Port]),
-            {ok, #{}};
-        {error, {already_started, _}} ->
             {ok, #{}};
         {error, Reason} ->
             logger:warning("quod: explorer disabled — listen on ~p:~p failed (~p)", [Ip, Port, Reason]),
@@ -65,4 +65,4 @@ init([]) ->
 handle_call(_Request, _From, State) -> {reply, ok, State}.
 handle_cast(_Message, State) -> {noreply, State}.
 handle_info(_Message, State) -> {noreply, State}.
-terminate(_Reason, _State) -> _ = cowboy:stop_listener(?LISTENER), ok.
+terminate(_Reason, _State) -> quod_http_listener:stop(?LISTENER).

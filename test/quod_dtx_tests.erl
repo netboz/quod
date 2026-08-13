@@ -1949,11 +1949,14 @@ signed_material_plan(Diff, ReadPairs, Transcript) ->
              overlay_generation => 0,
              diff_ops => length(Diff),
              read_functors => length(ReadPairs),
+             effects_count => 0,
              diff => wire_blob(Diff),
              read_check => wire_blob(ReadPairs),
+             effects => wire_blob([]),
+             live_bridges => wire_blob([]),
              transcript => wire_blob(Transcript)},
     Bytes = term_to_binary(
-              {<<"quod.dtx.plan">>, 3, Core}, [deterministic]),
+              {<<"quod.dtx.plan">>, 4, Core}, [deterministic]),
     plan({quod_plan, Core, Pubkey, quod_identity:sign(Bytes, Signer)}).
 
 transcript_with_goal(Goal) ->

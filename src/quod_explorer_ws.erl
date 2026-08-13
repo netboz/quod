@@ -17,6 +17,10 @@ two commit-side seams:
 Frames: `hello` (summary, on connect) · `block` (content or DTX phase) ·
 `applied` · `rejected` · `sync`.
 
+The namespace manager publishes each validated local topology change. This
+socket updates its committed/runtime subscriptions in place and emits `sync`,
+so the browser refreshes its namespace list without reconnecting.
+
 The endpoint reads nothing from clients, so inbound frames are capped small (anything
 large is abuse), and `idle_timeout => infinity` keeps a quiet ledger from closing the
 socket; a real TCP close still terminates the handler.
@@ -31,9 +35,11 @@ init(Req, _Opts) ->
 
 websocket_init(State) ->
     Nss = lists:usort(quod_simplex:namespaces()),
-    [quod_reg:subscribe({committed, Ns}) || Ns <- Nss],
-    [quod_reg:subscribe({runtime, Ns}) || Ns <- Nss],
-    {reply, {text, frame(#{type => hello, summary => quod_explorer_http:summary()})}, State}.
+    true = quod_reg:subscribe({namespace_topology, node}),
+    subscribe_namespaces(Nss),
+    {reply,
+     {text, frame(#{type => hello, summary => quod_explorer_http:summary()})},
+     State#{namespaces => Nss}}.
 
 websocket_handle(_Frame, State) -> {ok, State}.
 
@@ -63,13 +69,39 @@ websocket_info({replay_started, _Id, _From}, State) ->
     {reply, {text, frame(#{type => sync})}, State};
 websocket_info({replay_ready, _Id, _Height}, State) ->
     {reply, {text, frame(#{type => sync})}, State};
+websocket_info({namespace_topology, Nss0}, State) when is_list(Nss0) ->
+    Nss = lists:usort([Ns || Ns <- Nss0, is_binary(Ns)]),
+    Old = maps:get(namespaces, State, []),
+    Added = Nss -- Old,
+    Removed = Old -- Nss,
+    subscribe_namespaces(Added),
+    unsubscribe_namespaces(Removed),
+    {reply, {text, frame(#{type => sync})},
+     State#{namespaces => Nss}};
 websocket_info(_Info, State) ->
     {ok, State}.
 
-terminate(_Reason, _Req, _State) -> ok.
+terminate(_Reason, _Req, State) ->
+    unsubscribe_namespaces(maps:get(namespaces, State, [])),
+    _ = quod_reg:unsubscribe({namespace_topology, node}),
+    ok.
 
 committed_block_frame(Ns, Block, State) ->
     {reply, {text, frame(Block#{type => block, ns => Ns})},
      State}.
 
 frame(Json) -> quod_explorer_http:encode(Json).
+
+subscribe_namespaces(Nss) ->
+    [begin
+         true = quod_reg:subscribe({committed, Ns}),
+         true = quod_reg:subscribe({runtime, Ns})
+     end || Ns <- Nss],
+    ok.
+
+unsubscribe_namespaces(Nss) ->
+    [begin
+         true = quod_reg:unsubscribe({committed, Ns}),
+         true = quod_reg:unsubscribe({runtime, Ns})
+     end || Ns <- Nss],
+    ok.

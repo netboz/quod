@@ -32,7 +32,7 @@ chain, so a self-signed per-node cert authenticates cleanly.
 
 -export([ensure/1, advance_directory_epoch/1,
          generate/0, key_term/1, mint_cert/1, pubkey_of_cert/1, short/1,
-         sign/2, verify/3]).
+         sign/2, verify/3, write_atomic/3]).
 
 -export_type([pubkey/0, seed/0, keypair/0, key_term/0, signer/0, identity/0]).
 
@@ -209,6 +209,16 @@ read_seed(Path) ->
 write_secret(Path, Seed) ->
     write_atomic(Path, Seed, 8#600).
 
+-doc """
+Write `Bytes` to `Path` durably, privately and atomically (tmp + exclusive
+create + `chmod Mode` before the bytes land + rename + dirent fsync).
+
+Exported for the other on-disk secrets that live beside `node.key` — currently
+the browser-TLS keypair in `m:quod_client_tls` — so one audited write path
+covers every private file this node persists.
+""".
+-spec write_atomic(file:filename_all(), iodata(), non_neg_integer()) ->
+          ok | {error, term()}.
 write_atomic(Path, Bytes, Mode) ->
     case filelib:ensure_dir(Path) of
         ok ->

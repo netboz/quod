@@ -11,7 +11,8 @@ acl_sovereign(quod:root).
 
 %% Default-open invocation. The rule sees the whole call chain at once — a
 %% restrictive policy relates its members itself rather than judging them one at
-%% a time. `Principal` is the engine-owned `{node, NodeKey}` (or `anonymous`);
+%% a time. `Principal` is engine-owned (`{node, NodeKey}`, `{user, PublicKey}`
+%% or `anonymous`);
 %% a refusal is ordinary failure carrying not_allowed(Ns).
 %%
 %% NOTE: this is not the whole effective policy. Founding injects an invisible
@@ -23,9 +24,10 @@ acl_sovereign(quod:root).
 %% queryable fleet-wide.
 can_invoke(_Goal, _Principal, _CallChain, _Ns).
 
-%% Node-local ontology lifecycle. Prolog proves authorization and hosting state;
-%% the action runner performs the external operation only after this proof has
-%% succeeded without staging a replicated write.
+%% Node-local ontology lifecycle. Prolog proves authorization and hosting state,
+%% then records a typed effect in a root transaction with an empty fact diff.
+%% The local effect journal performs the external operation only after that
+%% transaction is durably ordered and applied.
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
 ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
@@ -49,6 +51,13 @@ action(join_ontology(Name, GenesisHash, Seeds),
 %% only while its key is a currently admitted validator of quod:root.
 can_create_ontology(node(NodeKey), _Name, _Options) :-
     peer_admitted(NodeKey, _, _, NodeKey).
+
+%% Open registration is intentionally narrow. `user_home_genesis/3` is an
+%% engine query predicate that accepts only the deterministic namespace and
+%% fixed genesis options derived from this exact Ed25519 key. It cannot accept
+%% a user-selected name, source file, or arbitrary initial policy.
+can_create_ontology(user(PublicKey), Name, Options) :-
+    user_home_genesis(PublicKey, Name, Options).
 
 can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
     peer_admitted(NodeKey, _, _, NodeKey).

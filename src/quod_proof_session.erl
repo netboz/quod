@@ -22,13 +22,16 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          open/6, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          access_guard/1, check_access/1, check_mutable/1,
-         committed_state/1, local_changes/1, read_set/1, absorb_read_set/2,
+         committed_state/1, local_changes/1, effects/1, stage_effect/2,
+         set_lifecycle_effect/2,
+         read_set/1, absorb_read_set/2, absorb_live_bridges/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
          dirty/1,
          checkpoint_many/2, restore_many/2, release_many/2,
          overlay_generation/1,
-         bindings/2, open_first/6, run_first/3]).
+         bindings/2, open_first/6, run_first/3,
+         run_first_with_dependencies/3]).
 
 -ifdef(TEST).
 -export([test_invocation_state/2]).
@@ -326,6 +329,32 @@ local_changes(Handle) ->
     State = get_session(Handle),
     overlay_local_changes(State#session_state.current).
 
+-doc "Return the direct effects staged in the current immutable revision.".
+-spec effects(session()) -> [quod_effect:effect()].
+effects(Handle) ->
+    State = get_session(Handle),
+    overlay_effects(State#session_state.current).
+
+-doc "Stage one typed direct effect and publish the resulting revision.".
+-spec stage_effect(session(), quod_effect:effect()) -> ok.
+stage_effect(Handle, Effect) ->
+    State = get_session(Handle),
+    ensure_lifecycle_mutable(State),
+    Current = quod_erlog_db_local_prove:stage_effect(
+                State#session_state.current, Effect),
+    put_current(Handle, State, Current),
+    ok.
+
+-doc "Install the exact private lifecycle effect before invoking its transition.".
+-spec set_lifecycle_effect(session(), quod_effect:effect()) -> ok.
+set_lifecycle_effect(Handle, Effect) ->
+    State = get_session(Handle),
+    ensure_lifecycle_mutable(State),
+    Current = quod_erlog_db_local_prove:set_lifecycle_effect(
+                State#session_state.current, Effect),
+    put_current(Handle, State, Current),
+    ok.
+
 -doc "Return the session's monotonic committed-read dependencies.".
 -spec read_set(session()) -> map().
 read_set(Handle) ->
@@ -345,6 +374,14 @@ absorb_read_set(Handle, Reads) ->
     ensure_lifecycle_mutable(State),
     quod_erlog_db_local_prove:absorb_read_set(
       State#session_state.current, Reads).
+
+-doc "Merge live bridge observations separately from committed OCC reads.".
+-spec absorb_live_bridges(session(), [{atom(), arity()}]) -> ok.
+absorb_live_bridges(Handle, Bridges) ->
+    State = get_session(Handle),
+    ensure_lifecycle_mutable(State),
+    quod_erlog_db_local_prove:absorb_live_bridges(
+      State#session_state.current, Bridges).
 
 -doc "The live reality-bridge predicates this session's proofs consulted.".
 -spec live_bridges(session()) -> [{atom(), arity()}].
@@ -375,9 +412,10 @@ transcript(Handle) ->
                     <- lists:reverse(EntriesRev)],
     {Entries, Generation}.
 
--doc "Whether the session currently stages at least one effective content operation.".
+-doc "Whether the session currently stages content or a durable direct effect.".
 -spec dirty(session()) -> boolean().
-dirty(Handle) -> local_changes(Handle) =/= [].
+dirty(Handle) ->
+    local_changes(Handle) =/= [] orelse effects(Handle) =/= [].
 
 -doc "Atomically retain one current immutable revision under bounded batch ids.".
 -spec checkpoint_many(session(), [term()]) ->
@@ -599,6 +637,24 @@ run_first(Goal, #est{} = Est, OverlayOpts) when is_map(OverlayOpts) ->
         stop(Handle)
     end.
 
+-doc "Run one isolated invocation and retain its typed read dependencies.".
+-spec run_first_with_dependencies(term(), tuple(), map()) ->
+          {{ok, map(), list(), map()} | {fail, [term()]} | {error, term()},
+           [{atom(), arity()}]}.
+run_first_with_dependencies(Goal, #est{} = Est, OverlayOpts)
+  when is_map(OverlayOpts) ->
+    Handle = start(Est, OverlayOpts),
+    InvocationId = crypto:strong_rand_bytes(16),
+    try
+        Result = open_first(
+                   Handle, InvocationId, Goal, allowed,
+                   quod_predicates:context(Est),
+                   quod_transaction_scope:empty_selection()),
+        {Result, live_bridges(Handle)}
+    after
+        stop(Handle)
+    end.
+
 -doc "Open one invocation and derive its first result, leaving session ownership to the caller.".
 -spec open_first(session(), <<_:128>>, term(), allowed | denied,
                  quod_predicates:ctx(),
@@ -776,6 +832,9 @@ install_state_revision(Target, Source) ->
 
 overlay_local_changes(#est{db = #db{ref = Overlay}}) ->
     quod_erlog_db_local_prove:get_local_changes(Overlay).
+
+overlay_effects(#est{db = #db{ref = Overlay}}) ->
+    quod_erlog_db_local_prove:get_effects(Overlay).
 
 overlay_read_set(#est{db = #db{ref = Overlay}}) ->
     quod_erlog_db_local_prove:get_read_set(Overlay).

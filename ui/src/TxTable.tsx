@@ -48,9 +48,16 @@ export function TxTable({
     col.accessor('goal', {
       header: 'Goal',
       cell: (c) => (
-        <span className="block max-w-[26rem] truncate font-mono text-[13px] text-teal">
-          {c.getValue() ?? <span className="italic text-gray">genesis</span>}
-        </span>
+        <div className="max-w-[26rem]">
+          <span className="block truncate font-mono text-[13px] text-teal">
+            {c.getValue() ?? <span className="italic text-gray">genesis</span>}
+          </span>
+          {c.row.original.effect_count > 0 && (
+            <span className="mt-0.5 block truncate text-[11px] font-medium text-gold">
+              lifecycle: {c.row.original.effect_operations.join(', ')}
+            </span>
+          )}
+        </div>
       ),
     }),
     col.accessor('author', {

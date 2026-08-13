@@ -1301,8 +1301,8 @@ close_stream({nested_scope_stream, Origin, ProofId, Ref,
     request_nested_cancel(Origin, ProofId, Actor, Selection, Ref).
 
 
-%% Every declared ontology on the path and the authenticated node principal must
-%% be authorized. This prevents a peer laundering access through an invented chain.
+%% Every declared ontology on the path and the authenticated principal must be
+%% authorized. This prevents a peer laundering access through an invented chain.
 %% Policies are proved against this ontology's committed KB.
 -doc """
 Prove the target's own `can_invoke/4` admission rule before a scope invocation.
@@ -1310,8 +1310,8 @@ Prove the target's own `can_invoke/4` admission rule before a scope invocation.
 The rule receives the canonical call chain **once**, as one list, rather than
 being re-proved per chain member: a restrictive policy inspects or quantifies
 the members itself, so it can express relations between them that a per-member
-conjunction could not. `Principal` is the engine-owned `node(NodeKey)` term
-derived from the authenticated link, never a value Prolog supplied.
+conjunction could not. `Principal` is the engine-owned `node(NodeKey)`,
+`user(PublicKey)`, or `anonymous` term; it is never a value Prolog supplied.
 
 The decision is proved on a strict read-only frame over the scope's pinned
 **committed base**, so a proof cannot stage an authorization grant and consume
@@ -1319,14 +1319,19 @@ it in the same transaction. Its committed reads are absorbed into the scope's
 own dependency set, making the policy a real OCC dependency of the plan this
 scope seals.
 """.
--spec authorize_scope({node, <<_:256>>} | anonymous,
+-spec authorize_scope({node | user, <<_:256>>} | anonymous,
                       term(), [quod_proof_context:identity()],
                       quod_proof_context:identity(), non_neg_integer(),
                       quod_proof_session:session()) -> boolean().
 authorize_scope(Principal, Goal, Chain,
                 {Ns, <<_:256>> = Anchor}, Height, Session)
-  when Principal =:= anonymous orelse element(1, Principal) =:= node,
-       is_list(Chain), is_binary(Ns), is_integer(Height), Height >= 0 ->
+  when is_list(Chain), is_binary(Ns), is_integer(Height), Height >= 0 ->
+    case valid_authorization_principal(Principal) of
+        true -> authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session);
+        false -> false
+    end.
+
+authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
     Ctx = quod_predicates:proof_context(
             Ns, Height, undefined, [{Ns, Anchor} | Chain]),
     Committed = quod_predicates:set_context(
@@ -1480,6 +1485,7 @@ authorization_goal(Ns, Goal, Principal, Chain) ->
     end.
 
 valid_authorization_principal({node, <<_:256>>}) -> true;
+valid_authorization_principal({user, <<_:256>>}) -> true;
 valid_authorization_principal(anonymous) -> true;
 valid_authorization_principal(_) -> false.
 

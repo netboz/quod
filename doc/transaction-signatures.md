@@ -1,8 +1,9 @@
 # Transaction-author signatures
 
 **Status:** the original signature/relay milestone is deployed. The current
-Step-4 working tree introduces the incompatible V6 admission-generation and
-semantic-transaction-id contract described below; it is not deployed.
+working tree introduces the incompatible V7 typed-effects extension to the
+admission-generation and semantic-transaction-id contract described below; it
+is not deployed.
 
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.
@@ -32,7 +33,8 @@ requires a clean persistence reset and re-found.
     including an uncommitted approved parent. Gaps are legal; reuse is not.
 11. Every non-genesis `tx_id` is the target-bound SHA-256 digest of the complete
 semantic write: origin, proof and plan identities, durable goal/result,
-diff, and read check. Validators recompute it at live ingress and replay.
+diff, read check, and typed direct effects. Validators recompute it at live
+ingress and replay.
 
 The proof origin hashes a plan's opaque `diff` and `read_check` bytes without
 decoding foreign vocabulary. The target constructs a transaction only after
@@ -46,10 +48,10 @@ non-canonical nested plan is rejected before transaction construction.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 6,
+  {quod_transaction, 7,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
-   MaterialWire, Author, AuthorSeq, SubmittedAt},
+   MaterialWire, EffectsWire, Author, AuthorSeq, SubmittedAt},
   [deterministic]).
 ```
 
@@ -59,7 +61,11 @@ fixed ETF envelope: the receiver can safely decode and bind that envelope
 before permitting a bounded vocabulary allocation for the authenticated
 committee author.
 
-The tuple prefix `{quod_transaction, 6}` is the fixed cryptographic
+`EffectsWire` is the separate bounded canonical encoding of the closed typed
+direct-effect list. It is signed and included in the semantic transaction id;
+private prepared payloads and executable goals are never stored there.
+
+The tuple prefix `{quod_transaction, 7}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current

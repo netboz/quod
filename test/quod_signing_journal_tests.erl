@@ -1,6 +1,7 @@
 -module(quod_signing_journal_tests).
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
 -define(MAGIC, 16#51534A31). %% "QSJ1"
@@ -410,6 +411,65 @@ reconcile_retires_pending_before_accepting_another_group_test() ->
           ok = quod_signing_journal:close(J4)
       end).
 
+effect_custody_is_durable_idempotent_and_admission_scoped_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Pub, Seed} = quod_identity:generate(),
+          Signer = #{pubkey => Pub,
+                     key => quod_identity:key_term({Pub, Seed})},
+          Anchor = hash(8101),
+          Admission1 = hash(8102),
+          Admission2 = hash(8103),
+          Base = effect_transaction(Ns, Anchor, Pub),
+          {T1, Submission1} = signed_effect(
+                                Ns, Anchor, Admission1, 1, Base, Signer),
+          TxId = T1#transaction.tx_id,
+          {ok, J0} = quod_signing_journal:initialize(
+                       Ns, domain(1), Dir),
+          {ok, J1} = quod_signing_journal:record_effect(
+                       J0, T1, Submission1),
+          Path = journal_path(Ns, Dir),
+          Size1 = filelib:file_size(Path),
+          ?assertMatch(
+             #{TxId := #{admission := Admission1, sequence := 1}},
+             quod_signing_journal:pending_effects(J1)),
+
+          %% Exact custody retry is a read: no duplicate durable frame.
+          {ok, J2} = quod_signing_journal:record_effect(
+                       J1, T1, Submission1),
+          ?assertEqual(Size1, filelib:file_size(Path)),
+
+          %% Effect custody is globally ordered by author sequence. Only the
+          %% exact persisted envelope is an idempotent retry; even a
+          %% same-admission re-sign is an anti-equivocation conflict.
+          {T2, Submission2} = signed_effect(
+                                Ns, Anchor, Admission1, 2, Base, Signer),
+          ?assertError(
+             {effect_signing_conflict, TxId},
+             quod_signing_journal:record_effect(J2, T2, Submission2)),
+          {T3, Submission3} = signed_effect(
+                                Ns, Anchor, Admission2, 3, Base, Signer),
+          {ok, BeforeConflict} = file:read_file(Path),
+          ?assertError(
+             {effect_signing_conflict, TxId},
+             quod_signing_journal:record_effect(J2, T3, Submission3)),
+          ?assertEqual({ok, BeforeConflict}, file:read_file(Path)),
+          ok = quod_signing_journal:close(J2),
+
+          {ok, J4} = quod_signing_journal:recover(
+                       Ns, domain(1), Dir),
+          ?assertMatch(
+             #{TxId := #{admission := Admission1, sequence := 1}},
+             quod_signing_journal:pending_effects(J4)),
+          {ok, J5} = quod_signing_journal:retire_effect(J4, TxId),
+          ?assertEqual(#{}, quod_signing_journal:pending_effects(J5)),
+          ok = quod_signing_journal:close(J5),
+          {ok, J6} = quod_signing_journal:recover(
+                       Ns, domain(1), Dir),
+          ?assertEqual(#{}, quod_signing_journal:pending_effects(J6)),
+          ok = quod_signing_journal:close(J6)
+      end).
+
 compressed_record_is_rejected_without_mutation_test() ->
     with_dir(
       fun(Ns, Dir) ->
@@ -594,6 +654,28 @@ same_lane_finalize(#{origin := {Ns, Anchor} = Target,
     {ok, Control} = quod_dtx:sign_control(
                       Target, Record, Admission, Sequence, 0, Signer),
     Control.
+
+effect_transaction(Ns, Anchor, Author) ->
+    {ok, Goal} = quod_durable_term:encode_goal(
+                   {create_ontology, <<"journal:created">>, []}),
+    {ok, Result} = quod_durable_term:encode_result(#{}),
+    Effect = {quod_direct_effect, 1, local_durable,
+              ontology_lifecycle, create, hash(8201), Author,
+              {user, hash(8202)}, {<<"journal:created">>, hash(8203)},
+              hash(8204), hash(8205)},
+    quod_transaction:bind_id(
+      {Ns, Anchor},
+      #transaction{origin = {Ns, Anchor}, proof_id = hash(8206),
+                   plan_digest = hash(8207), goal = Goal, result = Result,
+                   diff = [], read_check = #{}, effects = [Effect],
+                   author = Author, author_seq = 1,
+                   submitted_at = 1234, sig = none}).
+
+signed_effect(Ns, Anchor, Admission, Sequence, Base, Signer) ->
+    Unsigned = Base#transaction{author_seq = Sequence, sig = none},
+    {ok, Signed, Submission} = quod_transaction:sign_submission(
+                                 {Ns, Anchor, Admission}, Unsigned, Signer),
+    {Signed, Submission}.
 
 pending_fixture(#{control := Control}) ->
     Meta = quod_dtx:control_metadata(Control),

@@ -7,7 +7,9 @@ state.
 reads the engine-owned lifecycle principal from the private proof overlay and
 proves root policy against an isolated, read-only committed view. It never
 performs lifecycle IO. The actual create/join call is made only by
-`quod_prolog:run_action/2` after the complete action proof succeeds.
+`quod_prolog:run_action/2` records the validated descriptor in the ordinary
+root transaction path.  The durable effect journal performs the prepared
+create/join only after that transaction is applied.
 
 `ontology_join_state/2` remains a read-only view of this node. The low-level
 `quod_ontology` APIs and `execute_prepared/2` are trusted same-VM APIs, not
@@ -17,12 +19,46 @@ remote authorization boundaries.
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([authorized_ontology_lifecycle_predicate/3,
+         lifecycle_transition_predicate/3,
+         user_home_genesis_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3]).
--export([authorize_lifecycle/5,
-         execute_prepared/2, lifecycle_error/2, failure_reason/2]).
+-export([authorize_lifecycle/5, lifecycle_error/2, failure_reason/2]).
 
 -define(ROOT_NS, <<"quod:root">>).
+
+-doc "Stage the exact engine-prepared lifecycle effect; perform no IO.".
+-spec lifecycle_transition_predicate(term(), term(), tuple()) -> term().
+lifecycle_transition_predicate(Goal, Next, #est{bs = Bs} = St) ->
+    Ground = erlog_int:dderef(Goal, Bs),
+    case quod_predicates:ctx_ns(quod_predicates:context(St)) of
+        ?ROOT_NS ->
+            case {quod_predicates:is_ground(Ground),
+                  quod_erlog_db_local_prove:lifecycle_effect(St)} of
+                {true, {ok, Effect}} ->
+                    case effect_matches_action(Effect, Ground) of
+                        true ->
+                            St1 = quod_erlog_db_local_prove:stage_effect(
+                                    St, Effect),
+                            erlog_int:prove_body(Next, St1);
+                        false ->
+                            fail_reason(
+                              failure_reason(Ground, invalid_action), St)
+                    end;
+                _ ->
+                    fail_reason(failure_reason(Ground, invalid_action), St)
+            end;
+        _ ->
+            fail_reason(failure_reason(Ground, root_only), St)
+    end.
+
+effect_matches_action(Effect, Action) ->
+    case quod_durable_term:encode_goal(Action) of
+        {ok, Bytes} ->
+            crypto:hash(sha256, Bytes) =:=
+                quod_effect:request_digest(Effect);
+        {error, _} -> false
+    end.
 
 -spec authorized_ontology_lifecycle_predicate(term(), term(), tuple()) -> term().
 authorized_ontology_lifecycle_predicate(Goal, Next, #est{bs = Bs} = St) ->
@@ -46,7 +82,12 @@ authorize_predicate({authorized_ontology_lifecycle, Action}, Next, St) ->
                            Action, Principal, Base,
                            quod_predicates:ctx_ns(Ctx),
                            quod_predicates:ctx_height(Ctx)) of
-                        ok -> erlog_int:prove_body(Next, St);
+                        {ok, Reads, Bridges} ->
+                            ok = quod_erlog_db_local_prove:absorb_read_set(
+                                   St, Reads),
+                            ok = quod_erlog_db_local_prove:absorb_live_bridges(
+                                   St, Bridges),
+                            erlog_int:prove_body(Next, St);
                         {error, Reason} -> fail_reason(Reason, St)
                     end;
                 undefined ->
@@ -56,6 +97,25 @@ authorize_predicate({authorized_ontology_lifecycle, Action}, Next, St) ->
 authorize_predicate(_Goal, _Next, St) ->
     fail_reason({ontology_lifecycle_failed, invalid_arguments}, St).
 
+-doc "Pure root-policy validator for the one legal user-home creation shape.".
+-spec user_home_genesis_predicate(term(), term(), tuple()) -> term().
+user_home_genesis_predicate(Goal, Next, #est{bs = Bs} = St) ->
+    case quod_predicates:ctx_ns(quod_predicates:context(St)) of
+        ?ROOT_NS ->
+            user_home_genesis(erlog_int:dderef(Goal, Bs), Next, St);
+        _ ->
+            erlog_int:fail(St)
+    end.
+
+user_home_genesis({user_home_genesis, PublicKey, Namespace, Options}, Next, St)
+  when is_binary(PublicKey), is_binary(Namespace), is_list(Options) ->
+    case {quod_user:home_namespace(PublicKey), quod_user:valid_home(PublicKey, Options)} of
+        {{ok, Namespace}, true} -> erlog_int:prove_body(Next, St);
+        _ -> erlog_int:fail(St)
+    end;
+user_home_genesis(_Goal, _Next, St) ->
+    erlog_int:fail(St).
+
 -doc """
 Authorize one already-ground lifecycle action against the captured committed
 root state. The node principal is engine-owned; callers cannot supply it
@@ -63,16 +123,20 @@ through Prolog. Policy runs in the existing strictly-local verdict context and
 through the overlay's read-only mode.
 """.
 -spec authorize_lifecycle(term(), term(), tuple(), binary(), non_neg_integer()) ->
-          ok | {error, term()}.
-authorize_lifecycle(Action, {node, NodeKey} = Principal, CommittedEst,
+          {ok, map(), [{atom(), arity()}]} | {error, term()}.
+authorize_lifecycle(Action, {Kind, NodeKey} = Principal, CommittedEst,
                     ?ROOT_NS, Height)
-  when is_binary(NodeKey), byte_size(NodeKey) =:= 32,
+  when (Kind =:= node orelse Kind =:= user),
+       is_binary(NodeKey), byte_size(NodeKey) =:= 32,
        is_integer(Height), Height >= 0 ->
     case policy_goal(Action, Principal) of
         {ok, Goal} ->
             VerdictEst = verdict_state(CommittedEst, Height),
-            case quod_prolog:prove_est_read_only(Goal, VerdictEst) of
-                {ok, _Bindings, [], _ReadSet} -> ok;
+            case quod_proof_session:run_first_with_dependencies(
+                   Goal, VerdictEst, #{read_only => true,
+                                       read_set => true}) of
+                {{ok, _Bindings, [], ReadSet}, Bridges} ->
+                    {ok, ReadSet, Bridges};
                 _ -> {error, failure_reason(Action, not_authorized)}
             end;
         error ->
@@ -92,15 +156,6 @@ verdict_state(CommittedEst, Height) ->
     quod_predicates:set_context(
       CommittedEst,
       quod_predicates:verdict_context(?ROOT_NS, Height)).
-
--doc "Execute one previously prepared lifecycle request without rereading its input.".
--spec execute_prepared(term(), term()) -> ok | {error, term()}.
-execute_prepared(Action, Prepared) ->
-    case quod_ontology:execute_prepared(Prepared) of
-        {ok, _Status, _Ns, _RawGenesisHash} -> ok;
-        {error, outcome_unknown} -> {error, outcome_unknown};
-        {error, Reason} -> {error, lifecycle_error(Action, Reason)}
-    end.
 
 -doc "Map a typed lifecycle API error to its bounded public Prolog reason.".
 -spec lifecycle_error(term(), term()) -> term().

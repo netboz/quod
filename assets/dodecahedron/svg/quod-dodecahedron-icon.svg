@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="quod app icon — dodecahedron on deep teal">
+  <title>quod dodecahedron app icon</title>
+  <rect x="0" y="0" width="120" height="120" rx="26" fill="#0B3954"/>
+  <g transform="translate(60,60) scale(0.8) translate(-60,-58)" stroke="#F8F4EC" stroke-width="1.6" stroke-linejoin="round">
+    <path d="M60 36 L39.1 51.2 L47.1 75.8 L72.9 75.8 L80.9 51.2 Z" fill="#F9C80E"/>
+    <path d="M60 36 L60 10 L31.8 19.2 L14.4 43.2 L39.1 51.2 Z" fill="#1A6BB8"/>
+    <path d="M39.1 51.2 L14.4 43.2 L14.4 72.8 L31.8 96.8 L47.1 75.8 Z" fill="#698F3F"/>
+    <path d="M47.1 75.8 L31.8 96.8 L60 106 L88.2 96.8 L72.9 75.8 Z" fill="#C14953"/>
+    <path d="M72.9 75.8 L88.2 96.8 L105.6 72.8 L105.6 43.2 L80.9 51.2 Z" fill="#1A5F7A"/>
+    <path d="M80.9 51.2 L105.6 43.2 L88.2 19.2 L60 10 L60 36 Z" fill="#848FA5"/>
+  </g>
+</svg>

@@ -16,10 +16,13 @@ accepts only the compact result of an already-validated history fold.
 
 -include("quod_ingress_limits.hrl").
 -include("quod_proof_limits.hrl").
+-include("quod_ledger.hrl").
 
 -export([initialize/3, recover/3, reconcile/2, close/1,
          rounds/1, dtx_floor/2, pending_begin/1,
-         record_vote/4, record_dtx/2]).
+         pending_effects/1,
+         record_vote/4, record_dtx/2, record_effect/3,
+         retire_effect/2]).
 -export_type([handle/0, round/0, final_vote/0, lane/0, pending_begin/0]).
 
 -ifdef(TEST).
@@ -42,8 +45,8 @@ accepts only the compact result of an already-validated history fold.
 %% DTX limits automatically instead of duplicating their current values.
 -define(PENDING_WRAPPER_BYTES, 165).
 -define(MAX_FRAME_PAYLOAD_BYTES,
-        (?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES +
-         ?PENDING_WRAPPER_BYTES)).
+        max((?QUOD_MAX_DTX_BODY_BYTES + ?QUOD_MAX_DTX_CONTROL_BYTES +
+             ?PENDING_WRAPPER_BYTES), (?MAX_BLOCK_BYTES + 4096))).
 
 -type block_hash() :: <<_:256>>.
 -type final_vote() :: none | {commit, block_hash()} | complaint.
@@ -62,7 +65,10 @@ accepts only the compact result of an already-validated history fold.
           ever_used = false :: boolean(),
           rounds = #{} :: rounds(),
           dtx_floors = #{} :: #{lane() => non_neg_integer()},
-          pending = none :: none | pending_begin()
+          pending = none :: none | pending_begin(),
+          effects = #{} :: #{binary() =>
+              #{admission := <<_:256>>, sequence := pos_integer(), body := binary(),
+                envelope := binary()}}
          }).
 -opaque handle() :: #journal{}.
 
@@ -105,12 +111,12 @@ recover(Ns, Domain, DataDir)
     case file:open(Path, [read, write, raw, binary]) of
         {ok, Fd} ->
             try
-                {Offset, Used, Rounds, Floors, Pending, _Count} =
+                {Offset, Used, Rounds, Floors, Pending, Effects, _Count} =
                     scan(Fd, Domain, recover),
                 {ok, #journal{fd = Fd, path = Path, domain = Domain,
                               offset = Offset, ever_used = Used,
                               rounds = Rounds, dtx_floors = Floors,
-                              pending = Pending}}
+                              pending = Pending, effects = Effects}}
             catch
                 Class:Reason:Stack ->
                     _ = file:close(Fd),
@@ -142,6 +148,13 @@ dtx_floor(#journal{dtx_floors = Floors}, Lane) ->
 -doc "Return the one exact locally pending Begin, if any.".
 -spec pending_begin(handle()) -> none | pending_begin().
 pending_begin(#journal{pending = Pending}) -> Pending.
+
+-doc "Return the exact journaled effect submissions still awaiting history.".
+-spec pending_effects(handle()) ->
+          #{binary() =>
+              #{admission := <<_:256>>, sequence := pos_integer(),
+                body := binary(), envelope := binary()}}.
+pending_effects(#journal{effects = Effects}) -> Effects.
 
 -doc "Persist one consensus vote latch before its signature is exposed.".
 -spec record_vote(handle(), support | commit | complaint, pos_integer(),
@@ -187,6 +200,47 @@ record_dtx(J, Control) ->
             end;
         {error, Reason} ->
             error({invalid_dtx_control, Reason})
+    end.
+
+-doc "Persist one exact signed effect transaction before exposing its bytes.".
+-spec record_effect(handle(), #transaction{}, term()) -> {ok, handle()}.
+record_effect(J = #journal{effects = Effects}, Transaction, Submission) ->
+    case effect_submission(Transaction, Submission) of
+        {ok, TxId, Admission, Sequence, Body, Envelope} ->
+            case maps:get(TxId, Effects, undefined) of
+                #{admission := Admission, sequence := Sequence,
+                  body := Body, envelope := Envelope} ->
+                    {ok, J};
+                undefined ->
+                    case map_size(Effects) < ?QUOD_MAX_PREPARED_EFFECTS of
+                        true ->
+                            Term = {quod_signing_effect, 1, TxId, Sequence,
+                                    Body, Envelope},
+                            Effects1 = Effects#{TxId =>
+                                #{admission => Admission,
+                                  sequence => Sequence, body => Body,
+                                  envelope => Envelope}},
+                            {ok, persist_mutation(
+                                   Term, J#journal{effects = Effects1,
+                                                   ever_used = true})};
+                        false ->
+                            error(effect_signing_journal_full)
+                    end;
+                _ ->
+                    error({effect_signing_conflict, TxId})
+            end;
+        error -> error(invalid_effect_submission)
+    end.
+
+-doc "Retire one effect custody row only after validated committed history.".
+-spec retire_effect(handle(), <<_:256>>) -> {ok, handle()}.
+retire_effect(J = #journal{effects = Effects}, <<_:256>> = TxId) ->
+    case maps:is_key(TxId, Effects) of
+        false -> {ok, J};
+        true ->
+            Effects1 = maps:remove(TxId, Effects),
+            Term = {quod_signing_effect_retired, 1, TxId},
+            {ok, persist_mutation(Term, J#journal{effects = Effects1})}
     end.
 
 -doc "Raise live floors and prune retired state only from validated history.".
@@ -297,6 +351,58 @@ valid_control_kind(finalize) -> true;
 valid_control_kind(complete) -> true;
 valid_control_kind(_) -> false.
 
+effect_submission(
+  #transaction{tx_id = <<_:256>> = TxId, author_seq = Sequence,
+               effects = [_], sig = Signature} = Transaction,
+  {submit, Author, Signature, Body} = Submission)
+  when is_integer(Sequence), Sequence >= 1,
+       is_binary(Author), byte_size(Author) =:= 32,
+       is_binary(Signature), byte_size(Signature) =:= 64,
+       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES ->
+    Envelope = term_to_binary(Submission, [deterministic]),
+    case {quod_transaction:verify_submission(Submission),
+          Transaction#transaction.author =:= Author,
+          canonical_effect_identity(Body, TxId, Sequence, Author)} of
+        {true, true, {ok, Admission}} ->
+            {ok, TxId, Admission, Sequence, Body, Envelope};
+        _ -> error
+    end;
+effect_submission(_Transaction, _Submission) -> error.
+
+decoded_effect(<<_:256>> = TxId, Sequence, Body, Envelope)
+  when is_integer(Sequence), Sequence >= 1, Sequence =< ?MAX_SLOT,
+       is_binary(Body), byte_size(Body) =< ?MAX_BLOCK_BYTES,
+       is_binary(Envelope), byte_size(Envelope) =< (?MAX_BLOCK_BYTES + 1024) ->
+    try binary_to_term(Envelope, [safe]) of
+        {submit, Author, Signature, Body} = Submission
+          when is_binary(Author), byte_size(Author) =:= 32,
+               is_binary(Signature), byte_size(Signature) =:= 64 ->
+            case {quod_transaction:verify_submission(Submission),
+                  canonical_effect_identity(Body, TxId, Sequence, Author)} of
+                {true, {ok, Admission}} ->
+                    {ok, #{admission => Admission,
+                           sequence => Sequence, body => Body,
+                               envelope => Envelope}};
+                _ -> error
+            end;
+        _ -> error
+    catch _:_ -> error
+    end;
+decoded_effect(_, _, _, _) -> error.
+
+canonical_effect_identity(Body, TxId, Sequence, Author) ->
+    case quod_safe_term:decode(Body, ?MAX_BLOCK_BYTES) of
+        {ok, {quod_transaction, 7, _Ns, _Anchor, <<_:256>> = Admission,
+              TxId, _Origin, _ProofId, _PlanDigest, _Goal, _Result,
+              _MaterialWire, EffectsWire, Author, Sequence, _SubmittedAt}} ->
+            case quod_wire_term:decode_canonical(
+                   EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES) of
+                {ok, [_Effect]} -> {ok, Admission};
+                _ -> error
+            end;
+        _ -> error
+    end.
+
 %%%===================================================================
 %%% vote state
 %%%===================================================================
@@ -347,7 +453,7 @@ require_replaceable(Path) ->
         {error, Reason} -> error({signing_journal_io_error, 0, Reason});
         {ok, Fd} ->
             try
-                {_Offset, Used, _Rounds, _Floors, _Pending, Count} =
+                {_Offset, Used, _Rounds, _Floors, _Pending, _Effects, Count} =
                     scan(Fd, any, strict),
                 case not Used andalso Count =:= 0 of
                     true -> ok;
@@ -363,20 +469,22 @@ scan(Fd, ExpectedDomain, Mode) ->
         {ok, Payload, Offset} ->
             {Domain, HeaderUsed} = decode_header(Payload, 0),
             ok = expected_domain(ExpectedDomain, Domain),
-            scan_records(Fd, Offset, Mode, HeaderUsed, #{}, #{}, none, 0);
+            scan_records(Fd, Offset, Mode, HeaderUsed, #{}, #{}, none,
+                         #{}, 0);
         eof ->
             error({signing_journal_corruption, missing_header, 0})
     end.
 
-scan_records(Fd, Offset, Mode, Used, Rounds, Floors, Pending, Count) ->
+scan_records(Fd, Offset, Mode, Used, Rounds, Floors, Pending, Effects,
+             Count) ->
     case read_frame(Fd, Offset, Mode) of
-        eof -> {Offset, Used, Rounds, Floors, Pending, Count};
+        eof -> {Offset, Used, Rounds, Floors, Pending, Effects, Count};
         {ok, Payload, Next} ->
             Term = decode_canonical(Payload, Offset),
-            {Rounds1, Floors1, Pending1} =
-                apply_record(Term, Rounds, Floors, Pending, Offset),
+            {Rounds1, Floors1, Pending1, Effects1} =
+                apply_record(Term, Rounds, Floors, Pending, Effects, Offset),
             scan_records(Fd, Next, Mode, true, Rounds1, Floors1,
-                         Pending1, Count + 1)
+                         Pending1, Effects1, Count + 1)
     end.
 
 read_frame(Fd, Offset, Mode) ->
@@ -452,25 +560,42 @@ decode_canonical(Payload, Offset) ->
     end.
 
 apply_record({quod_signing_vote, 1, Kind, Slot, BH},
-             Rounds, Floors, Pending, _Offset) ->
+             Rounds, Floors, Pending, Effects, _Offset) ->
     ok = valid_vote(Kind, Slot, BH),
     {_Changed, Rounds1} = apply_vote(Kind, Slot, BH, Rounds),
-    {Rounds1, Floors, Pending};
+    {Rounds1, Floors, Pending, Effects};
 apply_record({quod_signing_dtx_floor, 1, Admission, Author, Sequence},
-             Rounds, Floors, Pending, Offset) ->
+             Rounds, Floors, Pending, Effects, Offset) ->
     Lane = {Admission, Author},
     ok = valid_recorded_sequence(Lane, Sequence, Floors, Offset),
-    {Rounds, Floors#{Lane => Sequence}, Pending};
+    {Rounds, Floors#{Lane => Sequence}, Pending, Effects};
 apply_record({quod_signing_pending_begin, 1, Admission, Author, Sequence,
               GroupId, Body, Envelope},
-             Rounds, Floors, OldPending, Offset) ->
+             Rounds, Floors, OldPending, Effects, Offset) ->
     Lane = {Admission, Author},
     ok = valid_recorded_sequence(Lane, Sequence, Floors, Offset),
     Pending = decoded_pending(
                 Lane, Sequence, GroupId, Body, Envelope, Offset),
     ok = valid_pending_successor(OldPending, Pending, Offset),
-    {Rounds, Floors#{Lane => Sequence}, Pending};
-apply_record(Other, _Rounds, _Floors, _Pending, Offset) ->
+    {Rounds, Floors#{Lane => Sequence}, Pending, Effects};
+apply_record({quod_signing_effect, 1, TxId, Sequence, Body, Envelope},
+             Rounds, Floors, Pending, Effects, Offset) ->
+    case decoded_effect(TxId, Sequence, Body, Envelope) of
+        {ok, Row} ->
+            case maps:get(TxId, Effects, undefined) of
+                undefined when map_size(Effects) < ?QUOD_MAX_PREPARED_EFFECTS ->
+                    {Rounds, Floors, Pending, Effects#{TxId => Row}};
+                _ -> error({signing_journal_bad_effect, Offset})
+            end;
+        _ -> error({signing_journal_bad_effect, Offset})
+    end;
+apply_record({quod_signing_effect_retired, 1, <<_:256>> = TxId},
+             Rounds, Floors, Pending, Effects, Offset) ->
+    case maps:is_key(TxId, Effects) of
+        true -> {Rounds, Floors, Pending, maps:remove(TxId, Effects)};
+        false -> error({signing_journal_bad_effect_retirement, Offset})
+    end;
+apply_record(Other, _Rounds, _Floors, _Pending, _Effects, Offset) ->
     error({signing_journal_bad_record, Other, Offset}).
 
 valid_recorded_sequence(Lane, Sequence, Floors, Offset) ->
@@ -594,11 +719,12 @@ maybe_compact(J = #journal{offset = Offset}) ->
 
 compact(J = #journal{fd = OldFd, path = Path, domain = Domain,
                      ever_used = Used, rounds = Rounds,
-                     dtx_floors = Floors, pending = Pending}) ->
+                     dtx_floors = Floors, pending = Pending,
+                     effects = Effects}) ->
     Tmp = temporary_path(filename:dirname(Path)),
     _ = file:delete(Tmp),
     Terms = [{quod_signing_header, 1, Domain, Used}
-             | snapshot_terms(Rounds, Floors, Pending)],
+             | snapshot_terms(Rounds, Floors, Pending, Effects)],
     Data = iolist_to_binary([frame(encode(Term)) || Term <- Terms]),
     {ok, TmpFd} = file:open(Tmp, [write, raw, binary, exclusive]),
     try
@@ -613,10 +739,16 @@ compact(J = #journal{fd = OldFd, path = Path, domain = Domain,
     {ok, Fd} = file:open(Path, [read, write, raw, binary]),
     J#journal{fd = Fd, offset = byte_size(Data)}.
 
-snapshot_terms(Rounds, Floors, Pending) ->
+snapshot_terms(Rounds, Floors, Pending, Effects) ->
     round_terms(
       Rounds,
-      pending_terms(Pending, floor_terms(Floors, Pending, []))).
+      pending_terms(
+        Pending, floor_terms(Floors, Pending, effect_terms(Effects)))).
+
+effect_terms(Effects) ->
+    [{quod_signing_effect, 1, TxId, Sequence, Body, Envelope}
+     || {TxId, #{sequence := Sequence, body := Body,
+                 envelope := Envelope}} <- lists:sort(maps:to_list(Effects))].
 
 round_terms(Rounds, Tail) ->
     lists:foldr(

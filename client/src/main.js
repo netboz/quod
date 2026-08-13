@@ -1,0 +1,315 @@
+import { Engine } from '@babylonjs/core/Engines/engine'
+import { Scene } from '@babylonjs/core/scene'
+import { ArcRotateCamera } from '@babylonjs/core/Cameras/arcRotateCamera'
+import { HemisphericLight } from '@babylonjs/core/Lights/hemisphericLight'
+import { MeshBuilder } from '@babylonjs/core/Meshes/meshBuilder'
+import { Color3 } from '@babylonjs/core/Maths/math.color'
+import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
+import { Vector3 } from '@babylonjs/core/Maths/math.vector'
+import { PALETTE } from './palette.js'
+import {
+  b64url,
+  createKeyProvider,
+  fromB64url,
+  hasLocalKeyProvider,
+  importEncryptedKeyProvider,
+  loadLocalKeyProvider,
+  localKeyMatches,
+  exportEncryptedKeyProvider,
+  saveLocalKeyProvider,
+} from './key-provider.js'
+import './style.css'
+
+const canvas = document.querySelector('#world')
+const status = document.querySelector('#status')
+const xrButton = document.querySelector('#xr')
+const identityButton = document.querySelector('#identity')
+const unlockButton = document.querySelector('#unlock')
+const saveButton = document.querySelector('#save')
+const exportButton = document.querySelector('#export')
+const importButton = document.querySelector('#import')
+const importFile = document.querySelector('#import-file')
+const registerButton = document.querySelector('#register')
+
+let identity = null
+
+// One palette for the DOM and the scene.  Shades are scaled from the brand
+// values rather than being separate colours.
+const navy = Color3.FromHexString(PALETTE.navy)
+const greyBlue = Color3.FromHexString(PALETTE.greyBlue)
+
+const engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true })
+const scene = new Scene(engine)
+const sky = navy.scale(0.34)
+scene.clearColor.set(sky.r, sky.g, sky.b, 1)
+
+const camera = new ArcRotateCamera(
+  'observer',
+  -Math.PI / 2.2,
+  Math.PI / 2.7,
+  12,
+  new Vector3(0, 0.5, 0),
+  scene,
+)
+camera.lowerRadiusLimit = 5
+camera.upperRadiusLimit = 20
+camera.attachControl(canvas, true)
+
+const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
+light.intensity = 0.9
+
+const ground = MeshBuilder.CreateDisc('ground', { radius: 4, tessellation: 80 }, scene)
+ground.rotation.x = Math.PI / 2
+const groundMaterial = new StandardMaterial('ground-material', scene)
+groundMaterial.diffuseColor = greyBlue.scale(0.30)
+groundMaterial.emissiveColor = navy.scale(0.22)
+ground.material = groundMaterial
+
+// Red action, gold manifested effect, green material state — the semantic
+// triad of doc/client-world-direction.md §6.5, standing in for real entities.
+for (const [index, color] of [
+  Color3.FromHexString(PALETTE.red),
+  Color3.FromHexString(PALETTE.gold),
+  Color3.FromHexString(PALETTE.green),
+].entries()) {
+  const orb = MeshBuilder.CreateSphere(`presence-${index}`, { diameter: 1.15, segments: 32 }, scene)
+  const angle = (index / 3) * Math.PI * 2 + 0.4
+  orb.position = new Vector3(Math.cos(angle) * 2.2, 0.55, Math.sin(angle) * 2.2)
+  const material = new StandardMaterial(`presence-material-${index}`, scene)
+  material.diffuseColor = color
+  material.emissiveColor = color.scale(0.18)
+  orb.material = material
+}
+
+engine.runRenderLoop(() => scene.render())
+window.addEventListener('resize', () => engine.resize())
+
+async function updateHealth() {
+  try {
+    const response = await fetch('/health', { cache: 'no-store' })
+    if (!response.ok) throw new Error(`health ${response.status}`)
+    status.textContent = 'This node is ready. You can start a temporary signed identity.'
+  } catch {
+    status.textContent = 'This node is not ready yet. The world preview remains local.'
+  }
+}
+
+xrButton.addEventListener('click', async () => {
+  xrButton.disabled = true
+  try {
+    // XR is optional and expensive.  Keep it out of the first scene bundle;
+    // browsers without WebXR never download it.
+    await import('@babylonjs/core/XR/webXRDefaultExperience')
+    await scene.createDefaultXRExperienceAsync({ floorMeshes: [ground] })
+    status.textContent = 'Immersive mode is ready.'
+  } catch {
+    status.textContent = 'Immersive mode is not available in this browser or headset.'
+  } finally {
+    xrButton.disabled = false
+  }
+})
+
+identityButton.addEventListener('click', async () => {
+  await withIdentityButton(identityButton, async () => {
+    status.textContent = 'Creating an Ed25519 identity…'
+    await authenticate(createKeyProvider())
+  })
+})
+
+unlockButton.addEventListener('click', async () => {
+  await withIdentityButton(unlockButton, async () => {
+    const passphrase = window.prompt('Passphrase for your saved Quod identity')
+    if (passphrase === null) {
+      status.textContent = 'Unlock cancelled.'
+      unlockButton.disabled = false
+      return
+    }
+    status.textContent = 'Unlocking your saved identity…'
+    await authenticate(loadLocalKeyProvider(passphrase))
+  })
+})
+
+saveButton.addEventListener('click', async () => {
+  if (!identity) return
+  const passphrase = await confirmedPassphrase('Choose a passphrase for this encrypted key')
+  if (passphrase === null) return
+  saveButton.disabled = true
+  try {
+    await saveLocalKeyProvider(identity.provider, passphrase)
+    saveButton.textContent = 'Encrypted key saved'
+    status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser.`
+  } catch (error) {
+    status.textContent = `Could not save the key: ${error.message || 'unknown error'}`
+    saveButton.disabled = false
+  }
+})
+
+exportButton.addEventListener('click', async () => {
+  if (!identity) return
+  const passphrase = await confirmedPassphrase('Passphrase for the encrypted key file')
+  if (passphrase === null) return
+  exportButton.disabled = true
+  try {
+    const encoded = await exportEncryptedKeyProvider(identity.provider, passphrase)
+    const blob = new Blob([encoded], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${identity.session.user_id}.quodkey`
+    link.click()
+    URL.revokeObjectURL(url)
+    status.textContent = 'Encrypted key file exported. You may store it on a USB stick.'
+  } catch (error) {
+    status.textContent = `Could not export the key: ${error.message || 'unknown error'}`
+  } finally {
+    exportButton.disabled = false
+  }
+})
+
+importButton.addEventListener('click', () => importFile.click())
+
+importFile.addEventListener('change', async () => {
+  const [file] = importFile.files
+  importFile.value = ''
+  if (!file) return
+  if (file.size > 16_384) {
+    status.textContent = 'That encrypted key file is too large.'
+    return
+  }
+  const passphrase = window.prompt('Passphrase for the encrypted key file')
+  if (passphrase === null) return
+  importButton.disabled = true
+  try {
+    status.textContent = 'Unlocking imported identity…'
+    await authenticate(importEncryptedKeyProvider(await file.text(), passphrase))
+  } catch (error) {
+    status.textContent = `Could not import the key: ${error.message || 'unknown error'}`
+  } finally {
+    importButton.disabled = false
+  }
+})
+
+registerButton.addEventListener('click', async () => {
+  if (!identity) return
+  registerButton.disabled = true
+  try {
+    status.textContent = 'Creating your user home on this node…'
+    const clientNonce = crypto.getRandomValues(new Uint8Array(32))
+    const signature = new Uint8Array(await identity.provider.sign(
+      registrationBytes(identity.networkId, identity.provider.publicKey, clientNonce),
+    ))
+    const result = await postJson('/api/user/register', {
+      session_id: identity.session.session_id,
+      client_nonce: b64url(clientNonce),
+      signature: b64url(signature),
+    })
+    registerButton.textContent = 'User home ready'
+    status.textContent = `Your user home is ready on this node: ${result.namespace}`
+  } catch (error) {
+    status.textContent = `Could not create your user home: ${error.message || 'unknown error'}`
+    registerButton.disabled = false
+  }
+})
+
+async function withIdentityButton(button, operation) {
+  button.disabled = true
+  try {
+    assertKeysUsable()
+    await operation()
+  } catch (error) {
+    status.textContent = `Identity setup failed: ${error.message || 'unknown error'}`
+    button.disabled = false
+  }
+}
+
+// A browser exposes Web Crypto only in a secure context, so an http:// page on
+// anything but localhost simply has no crypto.subtle. Naming that cause beats
+// reporting "unavailable" and leaving someone to guess at their browser.
+function assertKeysUsable() {
+  if (globalThis.crypto?.subtle) return
+  throw new Error(globalThis.isSecureContext === false
+    ? 'this page must be served over https for the browser to allow key handling'
+    : 'this browser does not provide Web Crypto')
+}
+
+async function confirmedPassphrase(promptText) {
+  const passphrase = window.prompt(`${promptText} (at least 12 characters)`)
+  if (passphrase === null) return null
+  const confirmation = window.prompt('Repeat the passphrase')
+  if (confirmation !== passphrase) {
+    status.textContent = 'The passphrases did not match. Nothing was saved.'
+    return null
+  }
+  return passphrase
+}
+
+async function authenticate(providerPromise) {
+  const provider = await providerPromise
+  const clientNonce = crypto.getRandomValues(new Uint8Array(32))
+  const challenge = await postJson('/api/auth/challenge', {
+    public_key: b64url(provider.publicKey),
+    client_nonce: b64url(clientNonce),
+  })
+  const signature = new Uint8Array(await provider.sign(
+    challengeBytes(challenge, provider.publicKey, clientNonce),
+  ))
+  const session = await postJson('/api/auth/complete', {
+    challenge_id: challenge.challenge_id,
+    signature: b64url(signature),
+  })
+  identity = { provider, session, networkId: fromB64url(challenge.network_id) }
+  identityButton.textContent = 'Identity active'
+  identityButton.disabled = true
+  // Saved means *this* key is saved. A browser holding an older key must still
+  // be offered Save, or a freshly created identity could be used to found a
+  // permanent user home and then vanish when the tab closes.
+  const saved = localKeyMatches(provider)
+  saveButton.hidden = saved
+  saveButton.disabled = false
+  exportButton.hidden = false
+  exportButton.disabled = false
+  registerButton.hidden = false
+  registerButton.disabled = false
+  status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'} You can now create its user home here.`
+}
+
+async function postJson(url, body) {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+  const payload = await response.json().catch(() => ({}))
+  if (!response.ok) throw new Error(payload.error || `request failed (${response.status})`)
+  return payload
+}
+
+function challengeBytes(challenge, publicKey, clientNonce) {
+  const domain = new TextEncoder().encode('quod_user_challenge_v1\0')
+  const network = fromB64url(challenge.network_id)
+  const node = fromB64url(challenge.node_key)
+  const challengeId = fromB64url(challenge.challenge_id)
+  const serverNonce = fromB64url(challenge.server_nonce)
+  const expiry = new Uint8Array(8)
+  new DataView(expiry.buffer).setBigUint64(0, BigInt(challenge.expires_ms), false)
+  return joinBytes(domain, network, node, challengeId, publicKey, clientNonce, serverNonce, expiry)
+}
+
+function registrationBytes(networkId, publicKey, clientNonce) {
+  const domain = new TextEncoder().encode('quod_user_registration_v1\0')
+  return joinBytes(domain, networkId, publicKey, clientNonce)
+}
+
+function joinBytes(...parts) {
+  const length = parts.reduce((total, part) => total + part.length, 0)
+  const result = new Uint8Array(length)
+  let offset = 0
+  for (const part of parts) {
+    result.set(part, offset)
+    offset += part.length
+  }
+  return result
+}
+
+void updateHealth()
+unlockButton.hidden = !hasLocalKeyProvider()

@@ -25,6 +25,7 @@ roots() ->
     [ {node,     hoconsc:mk(hoconsc:ref(?MODULE, node),     #{default => #{}})}
     , {metrics,  hoconsc:mk(hoconsc:ref(?MODULE, metrics),  #{default => #{}})}
     , {explorer, hoconsc:mk(hoconsc:ref(?MODULE, explorer), #{default => #{}})}
+    , {client,   hoconsc:mk(hoconsc:ref(?MODULE, client),   #{default => #{}})}
     , {identity, hoconsc:mk(hoconsc:ref(?MODULE, identity), #{default => #{}})}
     , {directory, hoconsc:mk(hoconsc:ref(?MODULE, directory), #{default => #{}})}
       %% A LIST: a node may host several ontologies side by side (each entry founds or
@@ -57,6 +58,20 @@ fields(explorer) ->
     [ {enabled, hoconsc:mk(boolean(), #{default => false})}
     , {ip,      hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
     , {port,    hoconsc:mk(integer(), #{default => 14569})}
+    ];
+fields(client) ->
+    %% Static bootstrap, fixed challenge-response authentication, and one
+    %% constrained user-home registration route. Typed world commands remain
+    %% absent until their authenticated protocol is implemented.
+    %%
+    %% Always TLS: a browser withholds Web Crypto outside a secure context, so
+    %% plaintext would leave the client unable to hold a key at all. Both PEM
+    %% paths empty ⇒ the node's own self-signed browser cert (`quod_client_tls`).
+    [ {enabled,  hoconsc:mk(boolean(), #{default => false})}
+    , {ip,       hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
+    , {port,     hoconsc:mk(integer(), #{default => 14570})}
+    , {certfile, hoconsc:mk(binary(),  #{default => <<>>})}
+    , {keyfile,  hoconsc:mk(binary(),  #{default => <<>>})}
     ];
 fields(identity) ->
     %% The node's Ed25519 keypair (its `node_id` is the pubkey) is generated on first

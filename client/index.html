@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#0B3954">
+    <title>Quod</title>
+  </head>
+  <body>
+    <main id="app">
+      <canvas id="world" aria-label="Quod world preview"></canvas>
+      <section class="hud" aria-live="polite">
+        <p class="eyebrow">QUOD · WORLD CLIENT</p>
+        <h1>Connected world</h1>
+        <p id="status">Checking this node…</p>
+        <div class="actions">
+          <button id="xr" type="button">Enter immersive mode</button>
+          <button id="identity" type="button">Create identity</button>
+          <button id="unlock" type="button" hidden>Unlock saved identity</button>
+          <button id="save" type="button" hidden>Save encrypted key</button>
+          <button id="export" type="button" hidden>Export encrypted key</button>
+          <button id="import" type="button">Import encrypted key</button>
+          <button id="register" type="button" hidden>Create user home</button>
+          <input id="import-file" type="file" accept="application/json,.quodkey" hidden>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

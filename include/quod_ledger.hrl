@@ -53,6 +53,7 @@
                  result = undefined :: binary() | undefined, %% canonical atom-safe sorted bindings blob; undefined only for genesis
                  diff         :: [op()],              %% concrete asserts/retracts
                  read_check   :: read_check(),        %% what the proof relied on (OCC)
+                 effects = [] :: [quod_effect:effect()], %% bounded typed direct effects; never callbacks/goals
                  author = none :: node_id() | none,    %% set to the submitting node's pubkey before ingress
                  author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis
                  submitted_at = 0 :: non_neg_integer(), %% client submit wall-clock (ms since Unix epoch); 0 = unset/genesis. Advisory (self-reported).

@@ -166,6 +166,7 @@ complete_new_content(Ns, Config,
             Desired1 = Desired#{content => Content#{Ns => Config}},
             persist_desired(Desired1),
             publish_storage(Ns, Config),
+            notify_content_changed(),
             {reply, {ok, GenesisHash}, S#s{desired = Desired1}};
         {error, Reason} ->
             stop_rejected_new_content(Ns, S, Reason)
@@ -204,7 +205,7 @@ handle_info(reconcile, S) ->
     S0 = S#s{retry = undefined},
     {Changed, Complete, S1} = reconcile_all(bind_supervisors(S0)),
     case Changed of
-        true -> quod_directory_control:namespace_changed();
+        true -> notify_content_changed();
         false -> ok
     end,
     {noreply,
@@ -370,10 +371,18 @@ normalize_stop(Other) -> Other.
 
 maybe_notify_directory(content, Result) ->
     case start_succeeded(Result) orelse Result =:= ok of
-        true -> quod_directory_control:namespace_changed();
+        true -> notify_content_changed();
         false -> ok
     end;
 maybe_notify_directory(brahms, _Result) ->
+    ok.
+
+notify_content_changed() ->
+    quod_directory_control:namespace_changed(),
+    _ = quod_reg:publish(
+          {namespace_topology, node},
+          {namespace_topology,
+           lists:usort(quod_simplex:namespaces())}),
     ok.
 
 complete_started_child(content, Ns, Config, Result) ->

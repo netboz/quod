@@ -355,23 +355,27 @@ Best-effort effects from replayed history remain deliberately absent.
 
 ### Event envelope
 
-One live-applied transaction produces this compact event envelope:
+One live-applied material transaction produces this compact event envelope:
 
 ```text
-#{ns, height, tx_id, subject, diff}
+#{ns, height, tx_id, subject, diff, effects}
 ```
 
 Handlers see the committed diff as one transaction, not a stream of independent
-operations. Goal and result remain canonical ledger blobs and are decoded only
-by detail readers, not copied into every runtime event.
+operations. `effects` contains only the already-validated bounded descriptors
+from that transaction; effect-only transactions therefore cross the same
+ordered runtime boundary with `diff = []`. Goal and result remain canonical
+ledger blobs and are decoded only by detail readers, not copied into every
+runtime event.
 
 > **As built (Slice 1).** The envelope is a map carrying exactly those fields,
 > published as
 > `{applied_live, Env}` on `{runtime, Ns}`. A map (rather than a fixed `/7`
 > record) so Slice 5 can add subject-chain fields without reshaping. It is emitted
-> once per transaction that **actually changed D** on a **live** commit. An
+> once per material transaction on a **live** commit, including a direct-effect
+> transaction with an empty D diff. An
 > OCC-rejected transaction publishes `{rejected_live, #{ns, height, tx_id,
-> subject}}` with no diff. `subject` is `undefined` until signed subjects land
+> subject, effects}}` with no diff. `subject` is `undefined` until signed subjects land
 > (section 10).
 
 ### Shared substrate consumers

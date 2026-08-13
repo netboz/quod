@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" width="120" height="120" role="img" aria-label="quod dodecahedron 3D">
+  <g stroke="#F8F4EC" stroke-width="0.7" stroke-linejoin="round">
+    <path d="M46.3 24.0 L45.5 18.1 L26.8 39.3 L14.9 59.3 L26.4 50.7 Z" fill="rgb(19,71,91)"/>
+    <path d="M74.2 22.5 L45.5 18.1 L46.3 24.0 L78.1 32.4 L94.7 31.1 Z" fill="rgb(225,181,13)"/>
+    <path d="M26.4 50.7 L14.9 59.3 L26.0 88.4 L44.9 99.8 L45.9 76.6 Z" fill="rgb(87,94,109)"/>
+    <path d="M94.7 31.1 L78.1 32.4 L78.4 65.2 L95.5 82.1 L104.8 60.7 Z" fill="rgb(24,87,112)"/>
+    <path d="M95.5 82.1 L78.4 65.2 L45.9 76.6 L44.9 99.8 L74.8 102.6 Z" fill="rgb(80,108,48)"/>
+    <path d="M78.1 32.4 L46.3 24.0 L26.4 50.7 L45.9 76.6 L78.4 65.2 Z" fill="rgb(127,137,158)"/>
+  </g>
+</svg>

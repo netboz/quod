@@ -3,10 +3,10 @@
 ## Goal
 
 Keep one ontology-creation operation and make its second argument an ordered
-list of input options. The node-local authorized action entry is:
+list of input options. The common top-level Quod entry is:
 
 ```erlang
-quod_prolog:run_action(
+quod_prolog:execute(
   <<"quod:root">>,
   {create_ontology, {':', user, notes},
    [{source_file, "./test.pl"},
@@ -28,6 +28,14 @@ This was a breaking replacement for the former raw term-list argument. There
 is no `create_source/2`, legacy argument detection, or compatibility branch.
 All inputs converge before validation and use the existing atomic creation
 path.
+
+`create_ontology/2` and `join_ontology/3` are reserved top-level action names.
+`execute/2` always routes these exact arities to the root lifecycle action
+executor; an ontology that wants an ordinary domain predicate should choose a
+different name. All other terms continue through the ordinary proof path.
+Namespace names accept a binary, an atom, the structured `owner:name` form, or
+a quoted Prolog string such as `"owner:name"`; all four become the same
+canonical namespace.
 
 ## Options
 
@@ -175,9 +183,20 @@ the Prolog failure stack.
 through the dedicated root action runner. That runner derives a private node
 principal, proves policy in a read-only committed view, re-authorizes, and then
 calls the typed executor. Ordinary proofs, selected-ontology scope sessions,
-consensus projections, and the explorer prove endpoint cannot execute it. The
-low-level creation API is trusted same-VM code and is not a remote
+and consensus projections cannot execute it. The Explorer console uses the
+same top-level executor as every other caller: an ordinary term stays an
+ordinary proof, while a typed `create_ontology/2` or `join_ontology/3` term is
+routed through its declared root `action/3` proof and this policy-checked
+effect. The low-level creation API is trusted same-VM code and is not a remote
 authorization boundary.
+
+## Explorer console
+
+The Explorer console is an operator tool, not an authenticated browser-client
+boundary. It may submit the same lifecycle terms through `execute/2`, including
+`{source_file, Path}`; therefore it can read a Prolog source file accessible to
+the hosting node and make its contents durable. It also has no registration
+rate limit. Expose it only where that operator authority is intended.
 
 ## Tests
 

@@ -62,7 +62,7 @@ action-only boundary used by lifecycle authorization and live E handlers).
          with_chain/2]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
--export([class/1, allowed/2, is_ground/1]).
+-export([class/1, role/1, action_transition/1, allowed/2, is_ground/1]).
 -export([projection_noop_1/3]).
 
 -define(CTX_FLAG, '$quod_ctx').
@@ -105,34 +105,47 @@ governed() -> [{peer_ready, 1}, {directory_host, 5},
                {directory_control_peer, 1},
                {admit, 3}, {remove, 1},
                {authorized_ontology_lifecycle, 1},
+               {create_ontology, 2}, {join_ontology, 3},
+               {user_home_genesis, 3},
                {ontology_join_state, 2}, {ontology_genesis_anchor, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
 
 %% {Class, HandlerModule, HandlerFunction} for a governed predicate, or `undefined`.
-registry({peer_ready, 1}) -> {query,   quod_committee_predicates, peer_ready_1};
+registry({peer_ready, 1}) -> {query, normal, quod_committee_predicates, peer_ready_1};
 registry({directory_host, 5}) ->
-    {query, quod_directory_predicates, directory_host_5};
+    {query, normal, quod_directory_predicates, directory_host_5};
 registry({directory_control_peer, 1}) ->
-    {query, quod_directory_predicates, directory_control_peer_1};
-registry({admit, 3})      -> {staging, quod_committee_predicates, admit_3};
-registry({remove, 1})     -> {staging, quod_committee_predicates, remove_1};
+    {query, normal, quod_directory_predicates, directory_control_peer_1};
+registry({admit, 3}) -> {staging, normal, quod_committee_predicates, admit_3};
+registry({remove, 1}) -> {staging, normal, quod_committee_predicates, remove_1};
 %% Read-only itself, but deliberately action-only: only the lifecycle runner
 %% carries an effect context, so ordinary proofs cannot probe its private
 %% engine-owned principal.
 registry({authorized_ontology_lifecycle, 1}) ->
-    {effect, quod_ontology_predicates,
+    {effect, normal, quod_ontology_predicates,
      authorized_ontology_lifecycle_predicate};
+registry({create_ontology, 2}) ->
+    {effect, action_transition, quod_ontology_predicates,
+     lifecycle_transition_predicate};
+registry({join_ontology, 3}) ->
+    {effect, action_transition, quod_ontology_predicates,
+     lifecycle_transition_predicate};
+%% A root-policy-only pure validator. It proves that a user principal is
+%% creating precisely its own deterministic home, never arbitrary source.
+registry({user_home_genesis, 3}) ->
+    {query, normal, quod_ontology_predicates, user_home_genesis_predicate};
 registry({ontology_join_state, 2}) ->
-    {query, quod_ontology_predicates,
+    {query, normal, quod_ontology_predicates,
      ontology_join_state_predicate};
 registry({ontology_genesis_anchor, 2}) ->
-    {query, quod_ontology_predicates,
+    {query, normal, quod_ontology_predicates,
      ontology_genesis_anchor_predicate};
 %% arity 1: a handler ConvergeGoal is invoked with the scope argument appended, so the
 %% declared atom `projection_noop` reaches the KB as {projection_noop, Scope}.
-registry({projection_noop, 1}) -> {projection, ?MODULE, projection_noop_1};
+registry({projection_noop, 1}) -> {projection, normal, ?MODULE, projection_noop_1};
 %% heavy work leaves the ordered tier through this bridge (m:quod_runtime_predicates)
-registry({enqueue_projection, 2}) -> {projection, quod_runtime_predicates, enqueue_projection_2};
+registry({enqueue_projection, 2}) ->
+    {projection, normal, quod_runtime_predicates, enqueue_projection_2};
 registry(_)               -> undefined.
 
 -doc """
@@ -155,7 +168,7 @@ dispatch(Goal, Next, St) ->
             Functor = functor(Goal),
             case registry(Functor) of
                 undefined -> erlog_int:fail(St);
-                {Class, Mod, Fun} ->
+                {Class, _Role, Mod, Fun} ->
                     case allowed(Class, ctx_kind(Ctx)) of
                         true  ->
                             ok = record_bridge_use(Functor, Class, Ctx, St),
@@ -169,11 +182,11 @@ dispatch(Goal, Next, St) ->
 %% A query-class bridge reads live node state no later validation can re-prove,
 %% so a sealed plan must not silently depend on one (`m:quod_dtx`). Recorded at
 %% dispatch — a bridge that found no solution still influenced the outcome.
-%% Only `proof` contexts seal plans; verdict/policy/projection/effect runs record
-%% nothing. The sealing boundary decides whether a live bridge is admissible
-%% for the exact resulting diff; dispatch cannot know that yet.
+%% Proof and effect contexts can seal plans.  The sealing boundary decides
+%% whether a live bridge is admissible for the exact resulting diff/effect;
+%% dispatch cannot know that yet.
 record_bridge_use(Functor, query, Ctx, St) ->
-    case ctx_kind(Ctx) =:= proof of
+    case ctx_kind(Ctx) =:= proof orelse ctx_kind(Ctx) =:= effect of
         true -> quod_erlog_db_local_prove:record_live_bridge(St, Functor);
         false -> ok
     end;
@@ -187,9 +200,24 @@ functor(Goal) when is_tuple(Goal) -> {element(1, Goal), tuple_size(Goal) - 1}.
 -spec class({atom(), arity()}) -> class() | undefined.
 class(Functor) ->
     case registry(Functor) of
-        {Class, _, _} -> Class;
+        {Class, _, _, _} -> Class;
         undefined     -> undefined
     end.
+
+-doc "Closed registry role used by top-level routing.".
+-spec role({atom(), arity()}) -> normal | action_transition | undefined.
+role(Functor) ->
+    case registry(Functor) of
+        {_Class, Role, _Mod, _Fun} -> Role;
+        undefined -> undefined
+    end.
+
+-spec action_transition(term()) -> boolean().
+action_transition(Goal) when is_atom(Goal) -> role({Goal, 0}) =:= action_transition;
+action_transition(Goal) when is_tuple(Goal), tuple_size(Goal) >= 1,
+                             is_atom(element(1, Goal)) ->
+    role({element(1, Goal), tuple_size(Goal) - 1}) =:= action_transition;
+action_transition(_) -> false.
 
 -doc """
 Whether a predicate of `Class` may run in a context of `Kind` (the matrix in the

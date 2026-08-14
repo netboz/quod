@@ -33,7 +33,8 @@ a synchronous call to itself.
           origin    :: pid(),
           namespace :: binary(),
           anchor    :: <<_:256>>,
-          principal :: <<_:256>>,
+          principal :: quod_dtx:principal(),
+          request_binding = none :: quod_client_goal:request_binding(),
           height    :: non_neg_integer(),
           engine    :: pid(),
           ref       :: reference(),
@@ -57,9 +58,12 @@ start(<<_:128>> = ScopeId, <<_:256>> = ProofId, Origin,
       Ns, <<_:256>> = Anchor, Height,
       Est, Engine,
       Opts = #{deadline_ms := DeadlineMs,
-               principal := <<_:256>>})
+               principal := Principal,
+               request_binding := RequestBinding})
   when is_pid(Origin), is_binary(Ns), is_integer(Height), Height >= 0,
        is_pid(Engine), is_integer(DeadlineMs) ->
+    true = quod_dtx:valid_principal(Principal),
+    true = quod_client_goal:valid_request_binding(RequestBinding),
     Ref = make_ref(),
     MaxHeapWords = bytes_to_heap_words(?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES),
     {Pid, WorkerMRef} =
@@ -142,7 +146,8 @@ seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
         origin => OriginIdentity,
-        principal => Principal});
+        principal => Principal,
+        request_binding => none});
 seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
       _Ns, _Anchor} = Handle,
      OriginIdentity, _Principal) ->
@@ -222,7 +227,8 @@ await_remote_seal(Handle, RequestId, Router, MRef, RemainingMs) ->
 checked_remote_plan(
   {remote_scope, _Router, _Generation,
    {scope_binding, _OriginKey, TargetKey, ProofId, _ScopeId,
-    OriginIdentity, TargetIdentity, _Mode}, _RequestLink},
+    OriginIdentity, TargetIdentity, _Mode,
+    Principal, _AuthenticationDigest}, _RequestLink},
   Blob) ->
     case quod_scope_wire:decode_plan_payload(Blob) of
         {ok, Plan} ->
@@ -230,7 +236,8 @@ checked_remote_plan(
                  quod_dtx:verify(Plan) andalso
                  quod_dtx:target(Plan) =:= TargetIdentity andalso
                  quod_dtx:origin(Plan) =:= OriginIdentity andalso
-                 quod_dtx:proof_id(Plan) =:= ProofId of
+                 quod_dtx:proof_id(Plan) =:= ProofId andalso
+                 quod_dtx:principal(Plan) =:= Principal of
                 true -> {ok, Plan};
                 false -> {error, {protocol_error, bad_payload}}
             end;
@@ -385,7 +392,7 @@ encode_submit_operation(Plan, Goal, Bindings) ->
             case quod_transaction:encode_durable_submission(Goal, Bindings) of
                 {ok, GoalBlob, ResultBlob} ->
                     OutcomeRef = quod_transaction:plan_outcome_ref(
-                                   Plan, GoalBlob, ResultBlob),
+                                   Plan, GoalBlob, ResultBlob, none),
                     {ok, {submit_plan, PlanBlob, GoalBlob,
                           ResultBlob,
                           quod_trace:inject(quod_trace:context())},
@@ -512,7 +519,8 @@ scope_id({quod_scope_session, _Pid, ScopeId, _ProofId, _Ref,
     ScopeId;
 scope_id({remote_scope, _RouterPid, _RouterGeneration,
           {scope_binding, _OriginKey, _TargetKey, _ProofId, ScopeId,
-           _OriginIdentity, _TargetIdentity, _Mode}, _RequestLink}) ->
+           _OriginIdentity, _TargetIdentity, _Mode,
+           _Principal, _AuthenticationDigest}, _RequestLink}) ->
     ScopeId.
 
 -spec identity(handle()) -> quod_proof_context:identity().
@@ -522,7 +530,8 @@ identity({quod_scope_session, _Pid, _ScopeId, _ProofId, _Ref, Ns, Anchor}) ->
     {Ns, Anchor};
 identity({remote_scope, _RouterPid, _RouterGeneration,
           {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
-           _OriginIdentity, TargetIdentity, _Mode}, _RequestLink}) ->
+           _OriginIdentity, TargetIdentity, _Mode,
+           _Principal, _AuthenticationDigest}, _RequestLink}) ->
     TargetIdentity.
 
 -doc "Service one scope command re-entrantly while this worker waits in `::`.".
@@ -555,6 +564,8 @@ init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
                                proof_id = ProofId, origin = Origin,
                                namespace = Ns, anchor = Anchor,
                                principal = maps:get(principal, Opts),
+                               request_binding = maps:get(
+                                                   request_binding, Opts),
                                height = Height, engine = Engine,
                                ref = Ref,
                                deadline_ms = maps:get(deadline_ms, Opts),
@@ -700,7 +711,7 @@ authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
                                     height = Height,
                                     session = Session} = Runtime) ->
     Authorized = quod_ask:authorize_scope(
-                   {node, Principal}, Goal, Chain, {Ns, Anchor}, Height,
+                   Principal, Goal, Chain, {Ns, Anchor}, Height,
                    Session),
     %% The session records the original request and verdict, then derives the
     %% denied execution goal itself. This keeps the authorization transcript
@@ -823,12 +834,14 @@ seal_current({OriginNs, <<_:256>>} = OriginIdentity)
   when is_binary(OriginNs), byte_size(OriginNs) > 0 ->
     #runtime{namespace = Ns, anchor = Anchor, height = Height,
              proof_id = ProofId, principal = Principal,
+             request_binding = RequestBinding,
              session = Session} = runtime(),
     quod_proof_session:seal(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => ProofId, origin => OriginIdentity,
-        principal => {node, Principal}});
+        principal => Principal,
+        request_binding => RequestBinding});
 seal_current(_OriginIdentity) ->
     {error, {protocol_error, request_binding}}.
 
@@ -929,7 +942,8 @@ handle_scope_id(
   {remote_scope, _RouterPid, _RouterGeneration,
    {scope_binding, _OriginKey, _TargetKey, _ProofId,
     <<_:?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS>> = ScopeId,
-    _OriginIdentity, _TargetIdentity, _Mode}, _RequestLink}) ->
+    _OriginIdentity, _TargetIdentity, _Mode,
+    _Principal, _AuthenticationDigest}, _RequestLink}) ->
     {ok, ScopeId};
 handle_scope_id(_) ->
     error.
@@ -977,7 +991,7 @@ remote_control(Handle, Operation, ExpectedAck) ->
 
 bind_remote_router(
   {remote_scope, Router, Generation,
-   {scope_binding, _, _, _, _, _, {TargetNs, _}, _}, _RequestLink}) ->
+   {scope_binding, _, _, _, _, _, {TargetNs, _}, _, _, _}, _RequestLink}) ->
     case quod_proof_context:bind_router(Router, Generation, TargetNs) of
         {ok, MRef} -> {ok, Router, MRef};
         {error, _} = Error -> Error

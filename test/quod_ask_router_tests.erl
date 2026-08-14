@@ -18,7 +18,8 @@ pending_precedes_send_and_scope_is_reused_test() ->
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
           OpenCommand = receive_command(request),
-          {scope_command, Binding, 1, RequestId, 30000, scope_open} = OpenCommand,
+          {scope_command, Binding, 1, RequestId, 30000,
+           {scope_open, node}} = OpenCommand,
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,
                      1, RequestId, 1, 0, false, {scope_opened, 42}),
@@ -709,7 +710,7 @@ owner_death_queues_close_and_reaps_exact_entry_test() ->
           end,
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
-          {scope_command, Binding, 1, RequestId, _, scope_open} =
+          {scope_command, Binding, 1, RequestId, _, {scope_open, node}} =
               receive_command(request),
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,
@@ -739,7 +740,7 @@ owner_death_after_open_send_closes_still_pending_scope_test() ->
           end,
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
-          {scope_command, Binding, 1, _OpenRequestId, _, scope_open} =
+          {scope_command, Binding, 1, _OpenRequestId, _, {scope_open, node}} =
               receive_command(request),
           exit(Owner, kill),
           {scope_command, Binding, 2, _CloseId, 0, scope_close} =
@@ -875,7 +876,8 @@ with_open_scope(Fun) ->
           {OpenRef, Channel} = receive_open(TargetKey),
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
-          {scope_command, Binding, 1, RequestId, 30000, scope_open} =
+          {scope_command, Binding, 1, RequestId, 30000,
+           {scope_open, node}} =
               receive_command(request),
           ReturnLink = fake_link(TestPid, return),
           send_event(Router, TargetKey, ReturnLink, Binding,
@@ -1074,11 +1076,14 @@ is_pending({pending, Router, Generation, OpenRef}, Router)
 is_pending(_Result, _Router) -> false.
 
 binding(OriginKey, TargetKey, N, TargetNs, AnchorN) ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     {scope_binding, OriginKey, TargetKey, proof_id(N), id(N),
-     {<<"quod:origin">>, key(10)}, {TargetNs, key(AnchorN)}, read_write}.
+     {<<"quod:origin">>, key(10)}, {TargetNs, key(AnchorN)}, read_write,
+     {node, OriginKey}, AuthenticationDigest}.
 
-origin_key({scope_binding, OriginKey, _, _, _, _, _, _}) -> OriginKey.
-target_identity({scope_binding, _, _, _, _, _, TargetIdentity, _}) ->
+origin_key({scope_binding, OriginKey, _, _, _, _, _, _, _, _}) -> OriginKey.
+target_identity({scope_binding, _, _, _, _, _, TargetIdentity, _, _, _}) ->
     TargetIdentity.
 
 endpoint() -> {"127.0.0.1", 14567}.

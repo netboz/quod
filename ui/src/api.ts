@@ -42,8 +42,37 @@ export type TxFull = TxRow & {
   origin: Origin
   proof_id: string | null
   plan_digest: string | null
+  request?: SignedRequest | null
   signature: string | null
   signature_status: 'verified' | 'genesis' | 'unsigned' | 'invalid' | 'unknown'
+}
+
+export type SignedRequest = {
+  status: 'verified' | 'invalid'
+  request_digest: string | null
+  user: PeerId | null
+  operation_id: string | null
+  operation_ref: {
+    kind: 'operation'
+    ns: string
+    anchor: string
+    user: PeerId
+    operation_id: string
+  } | null
+  target: Origin
+  mode: 'execute' | 'cursor' | null
+  parser_version: number | null
+  not_after_ms: number | null
+  signature: string | null
+  first_outcome: {
+    kind: 'transaction' | 'group'
+    ns: string
+    anchor: string
+    tx_id?: string
+    coordinator?: PeerId
+    coordinator_admission?: string
+    group_id?: string
+  } | null
 }
 
 export type Cert = {
@@ -93,6 +122,7 @@ export type Control = {
   sequence: number
   submitted_at: number
   participant_count?: number
+  request?: SignedRequest | null
   plan_digest?: string
   verdict?: 'commit' | 'abort'
   prepare_count?: number

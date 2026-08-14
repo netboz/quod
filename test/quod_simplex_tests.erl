@@ -720,6 +720,49 @@ dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
         file:del_dir_r(Dir)
     end.
 
+unsigned_begin_history_replay_does_not_require_root_identity_test() ->
+    SavedDesired = application:get_env(quod, namespace_desired),
+    application:unset_env(quod, namespace_desired),
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Origin = {Ns, Anchor} = maps:get(origin, Fixture),
+    Signer = maps:get(signer, Fixture),
+    Pub = maps:get(pubkey, Signer),
+    Admission = maps:get(admission, Fixture),
+    Control = maps:get(begin_control, Fixture),
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Data = {dtx, ControlBlob},
+    Block = #block{slot = 1, parent = 0, payload = Data, timestamp = 0},
+    BlockHash = quod_simplex:block_hash(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    #share{sig = Signature} = quod_simplex:make_share(
+                                Domain, commit, 1, BlockHash, Signer),
+    Entry = #entry{index = 1, data = Data, timestamp = 0,
+                   cert = #cert{kind = commit, slot = 1,
+                                block_hash = BlockHash,
+                                sigs = [{Pub, Signature}]}},
+    Projection0 =
+        (quod_simplex:history_projection(
+           [Pub], <<1:256>>, #{Pub => Admission}, #{}, 0))#{
+          dtx := quod_dtx:initial_projection(Origin, 0)},
+    Dir = relay_store_dir("unsigned_begin_history"),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(Dir, Ns),
+    try
+        ?assertMatch({error, _}, quod_ontology:network_identity()),
+        ?assertMatch(
+           {ok, _Projection1, _Effects},
+           quod_simplex:history_advance(
+             Origin, Entry, Projection0, PhaseIndex))
+    after
+        ok = quod_dtx_phase_index:close(PhaseIndex),
+        _ = file:del_dir_r(Dir),
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
+    end.
+
 dtx_retained_selection_skips_an_older_ineligible_group_test() ->
     Older = quod_ct:dtx_prepare_fixture(),
     Active = quod_ct:dtx_prepare_fixture(),

@@ -18,23 +18,27 @@ renew the scope lifetime.
 """.
 
 -include("quod_proof_limits.hrl").
+-include("quod_client_goal_limits.hrl").
 -include("quod_transport_limits.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([request_channel/1, return_channel/1,
+         authentication_digest/1,
          encode_identity_probe/1, encode_identity_response/1,
          encode_command/1, encode_event/1,
          decode_request/1, decode_response/1,
          encode_payload/2, decode_payload/2, decode_plan_payload/1,
          valid_public_error/1, scope_error_matches_target/2,
          normalize_public_error/2]).
--export_type([binding/0, command/0, event/0, payload_kind/0]).
+-export_type([authentication/0, binding/0, command/0, event/0,
+              payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 3).
+-define(VERSION, 4).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
+-define(AUTH_DOMAIN, <<"quod.scope.auth.v4", 0>>).
 
 -if(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
 -error("scope envelope must stay below the transport frame bound").
@@ -45,12 +49,14 @@ renew the scope lifetime.
 -type lineage() :: none | opaque_id().
 -type selection() :: {tx_selection, lineage(), [opaque_id()]}.
 -type identity() :: {binary(), key()}.
+-type authentication() :: node | {signed_goal, binary(), <<_:512>>}.
 -type binding() ::
         {scope_binding, key(), key(),
          <<_:?QUOD_SCOPE_WIRE_PROOF_ID_BITS>>, opaque_id(),
-         identity(), identity(), read_write | read_only}.
+         identity(), identity(), read_write | read_only,
+         quod_dtx:principal(), <<_:256>>}.
 -type command_operation() ::
-        scope_open | scope_close | scope_seal |
+        {scope_open, authentication()} | scope_close | scope_seal |
         {scope_attest, binary()} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
@@ -122,6 +128,23 @@ request_channel(Namespace) when is_binary(Namespace) ->
 -spec return_channel(key()) -> binary().
 return_channel(<<_:?QUOD_SCOPE_WIRE_KEY_BITS>> = OriginKey) ->
     term_to_binary({?RETURN_CHANNEL_TAG, OriginKey}, [deterministic]).
+
+-doc "Digest the exact bounded authentication context latched by a scope.".
+-spec authentication_digest(authentication()) ->
+          {ok, <<_:256>>} | {error, {protocol_error, atom()}}.
+authentication_digest(node) ->
+    {ok, crypto:hash(sha256, <<?AUTH_DOMAIN/binary, 0:8>>)};
+authentication_digest(
+  {signed_goal, RequestBytes, <<_:512>> = Signature})
+  when is_binary(RequestBytes),
+       byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
+    {ok, crypto:hash(
+           sha256,
+           <<?AUTH_DOMAIN/binary, 1:8,
+             (byte_size(RequestBytes)):32/unsigned-big,
+             RequestBytes/binary, Signature/binary>>)};
+authentication_digest(_Authentication) ->
+    protocol_error(bad_authentication).
 
 -spec encode_identity_probe(identity_probe()) ->
           {ok, binary()} | wire_error().
@@ -387,7 +410,8 @@ payload_limit(_) -> error.
 %% Fixed operation shapes
 %% ------------------------------------------------------------------
 
-validate_command_operation(scope_open) -> ok;
+validate_command_operation({scope_open, Authentication}) ->
+    validate_authentication(Authentication);
 validate_command_operation(scope_close) -> ok;
 validate_command_operation(scope_seal) -> ok;
 validate_command_operation({scope_attest, ManifestBlob}) ->
@@ -563,20 +587,30 @@ validate_event_operation(_) -> protocol_error(bad_shape).
 
 validate_binding(
   {scope_binding, OriginKey, TargetKey, ProofId, SessionId,
-   OriginIdentity, TargetIdentity, Mode}) ->
+   OriginIdentity, TargetIdentity, Mode, Principal, AuthenticationDigest}) ->
     case {valid_key(OriginKey), valid_key(TargetKey), valid_proof_id(ProofId),
           valid_id(SessionId), valid_identity(OriginIdentity),
-          valid_identity(TargetIdentity), valid_mode(Mode)} of
-        {true, true, true, true, true, true, true} -> ok;
-        {false, _, _, _, _, _, _} -> protocol_error(bad_binding);
-        {_, false, _, _, _, _, _} -> protocol_error(bad_binding);
-        {_, _, false, _, _, _, _} -> protocol_error(bad_binding);
-        {_, _, _, false, _, _, _} -> protocol_error(bad_binding);
-        {_, _, _, _, false, _, _} -> protocol_error(bad_identity);
-        {_, _, _, _, _, false, _} -> protocol_error(bad_identity);
-        {_, _, _, _, _, _, false} -> protocol_error(bad_mode)
+          valid_identity(TargetIdentity), valid_mode(Mode),
+          quod_dtx:valid_principal(Principal),
+          valid_key(AuthenticationDigest)} of
+        {true, true, true, true, true, true, true, true, true} -> ok;
+        {false, _, _, _, _, _, _, _, _} -> protocol_error(bad_binding);
+        {_, false, _, _, _, _, _, _, _} -> protocol_error(bad_binding);
+        {_, _, false, _, _, _, _, _, _} -> protocol_error(bad_binding);
+        {_, _, _, false, _, _, _, _, _} -> protocol_error(bad_binding);
+        {_, _, _, _, false, _, _, _, _} -> protocol_error(bad_identity);
+        {_, _, _, _, _, false, _, _, _} -> protocol_error(bad_identity);
+        {_, _, _, _, _, _, false, _, _} -> protocol_error(bad_mode);
+        {_, _, _, _, _, _, _, false, _} -> protocol_error(bad_principal);
+        {_, _, _, _, _, _, _, _, false} -> protocol_error(bad_authentication)
     end;
 validate_binding(_) -> protocol_error(bad_binding).
+
+validate_authentication(Authentication) ->
+    case authentication_digest(Authentication) of
+        {ok, _Digest} -> ok;
+        {error, _} = Error -> Error
+    end.
 
 validate_id_chain_blob(Id, Chain, Blob, Kind) ->
     case {valid_id(Id), validate_chain(Chain), validate_blob(Kind, Blob)} of
@@ -813,6 +847,7 @@ valid_uint64(Integer) ->
 %% Typed failures are a closed vocabulary.  Prolog failures and Erlog errors
 %% remain opaque bounded quod_wire_term blobs in their dedicated operations.
 validate_public_error(read_only) -> ok;
+validate_public_error(signed_scope_unavailable) -> ok;
 validate_public_error({Tag, Value} = Reason) ->
     case namespaced_error_tag(Tag) of
         true ->

@@ -989,7 +989,20 @@ prove_group(Ns, Goal, Watched) ->
             error({group_proof_crashed, Reason})
     after 15000 ->
         exit(Pid, kill),
-        error({group_timeout, Watched})
+        error(
+          {group_timeout,
+           [{WatchedNs, group_diagnostic(WatchedNs)}
+            || WatchedNs <- Watched]})
+    end.
+
+group_diagnostic(Ns) ->
+    Status = quod_simplex:status(Ns),
+    case maps:get(dtx_coordinator, Status, none) of
+        #{group_id := <<_:256>> = GroupId} ->
+            #{simplex => Status,
+              prolog => quod_prolog:dtx_group_state(Ns, GroupId)};
+        _ ->
+            #{simplex => Status}
     end.
 
 %% A scope may be deriving an unproductive goal without blocking its owning

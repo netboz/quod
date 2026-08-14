@@ -628,6 +628,55 @@ signed_tx_json_test() ->
                           quod_explorer_http:tx_json_full(
                             <<"ont:test">>, tx(1), entry(1, [tx(1)])))).
 
+signed_user_intent_is_rendered_from_the_transaction_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    Transaction = maps:get(transaction, Fixture),
+    Json = quod_explorer_http:tx_json_full(
+             Ns, Transaction, entry(2, [Transaction])),
+    Request = maps:get(request, Json),
+    ?assertEqual(verified, maps:get(status, Request)),
+    ?assertEqual(quod_identity:short(maps:get(user, Fixture)),
+                 maps:get(id, maps:get(user, Request))),
+    ?assertEqual(
+       binary:encode_hex(maps:get(request_digest, Fixture), lowercase),
+       maps:get(request_digest, Request)),
+    ?assertEqual(
+       binary:encode_hex(maps:get(operation_id, Fixture), lowercase),
+       maps:get(operation_id, Request)),
+    ?assertMatch(
+       #{kind := operation, ns := Ns,
+         anchor := _AnchorHex, user := #{id := _},
+         operation_id := _},
+       maps:get(operation_ref, Request)),
+    ?assertEqual(
+       #{kind => transaction, ns => Ns,
+         anchor => binary:encode_hex(Anchor, lowercase),
+         tx_id => quod_explorer_http:tx_id_text(
+                    Transaction#transaction.tx_id)},
+       maps:get(first_outcome, Request)),
+    ?assertEqual(128, byte_size(maps:get(signature, Request))),
+    ?assert(is_binary(quod_explorer_http:encode(Json))).
+
+signed_user_intent_is_rendered_once_from_the_origin_begin_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Control = maps:get(begin_control, Fixture),
+    {ok, Blob} = quod_dtx:encode_control(Control),
+    Json = quod_explorer_http:block_json(
+             element(1, maps:get(target, Fixture)),
+             #entry{index = 2, timestamp = 2, data = {dtx, Blob}}),
+    RenderedControl = maps:get(control, Json),
+    Request = maps:get(request, RenderedControl),
+    ?assertEqual('begin', maps:get(kind, RenderedControl)),
+    ?assertEqual(1, maps:get(participant_count, RenderedControl)),
+    ?assertEqual(verified, maps:get(status, Request)),
+    ?assertEqual(
+       binary:encode_hex(maps:get(request_digest, Fixture), lowercase),
+       maps:get(request_digest, Request)),
+    ?assertMatch(#{kind := group, group_id := _},
+                 maps:get(first_outcome, Request)),
+    ?assert(is_binary(quod_explorer_http:encode(Json))).
+
 compiled_clause_test() ->
     %% committed clauses carry erlog's COMPILED body `{Goals, HasCut}` — facts render head-only,
     %% rules with the familiar comma body (never the raw `{[],false}` internals)

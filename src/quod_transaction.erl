@@ -17,27 +17,30 @@ accepted.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([from_plan/4, bind_id/2, valid_id/2,
-         plan_outcome_ref/3, encode_durable_submission/2,
+-export([from_plan/5, bind_id/2, valid_id/2,
+         plan_outcome_ref/4, encode_durable_submission/2,
          bytes/2, sign/3, sign_submission/3, verify/2,
          submission/2, submission_id/1, verify_submission/1,
-         relay_attempt_id/5, decode_verified_submission/2]).
+         relay_attempt_id/5, decode_verified_submission/2,
+         validate_request/4, request_claim/1,
+         requires_network_identity/1]).
 
 -export_type([target_binding/0]).
 
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
--define(ID_VERSION, 3).
-%% v6 binds an author's continuous admission generation and carries the
-%% atom-bearing diff/read set through the bounded Prolog wire alphabet. The
-%% fixed envelope can therefore be decoded safely before a small, explicit
+-define(ID_VERSION, 4).
+%% V8 binds an author's continuous admission generation, signed-user request,
+%% authorization transcript, and the atom-bearing diff/read set through the
+%% bounded Prolog wire alphabet. The fixed envelope can therefore be decoded
+%% safely before a small, explicit
 %% vocabulary allocation is permitted for an authenticated committee author.
 %% Unrelated committee changes do not invalidate retained custody, while
 %% remove/re-admit makes every signature from the earlier admission
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 7).
+-define(VERSION, 8).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -56,13 +59,16 @@ Build the unsigned semantic transaction carried by one sealed plan.
 this is what makes the origin's opaque-byte id and validators' decoded-term id
 identical.
 """.
--spec from_plan(quod_dtx:plan(), map(), binary(), binary()) -> #transaction{}.
+-spec from_plan(quod_dtx:plan(), map(), binary(), binary(),
+                none | quod_client_goal:request_auth()) -> #transaction{}.
 from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
-                  effects := Effects},
-          GoalBlob, ResultBlob)
+                  effects := Effects} = Material,
+          GoalBlob, ResultBlob, RequestAuth)
   when is_list(Diff), is_map(ReadCheck),
        is_binary(GoalBlob), is_binary(ResultBlob) ->
     Target = quod_dtx:target(Plan),
+    {StoredAuth, AuthTranscript} =
+        request_fields(Plan, Material, GoalBlob, RequestAuth),
     Transaction =
         #transaction{tx_id = <<>>,
                      origin = quod_dtx:origin(Plan),
@@ -73,10 +79,14 @@ from_plan(Plan, #{diff := Diff, read_check := ReadCheck,
                      diff = Diff,
                      read_check = ReadCheck,
                      effects = Effects,
+                     request_auth = StoredAuth,
+                     auth_transcript = AuthTranscript,
                      author = none,
                      sig = none},
     Transaction#transaction{
-      tx_id = semantic_plan_id(Target, Plan, GoalBlob, ResultBlob)}.
+      tx_id = semantic_plan_id(
+                Target, Plan, GoalBlob, ResultBlob,
+                StoredAuth, AuthTranscript)}.
 
 -doc "Bind a transaction's stable id to its target and complete semantic write.".
 -spec bind_id({binary(), binary()}, #transaction{}) -> #transaction{}.
@@ -96,13 +106,28 @@ valid_id(_Target, _Transaction) ->
     false.
 
 -doc "Build the expected anchored outcome without decoding a foreign plan's payloads.".
--spec plan_outcome_ref(quod_dtx:plan(), binary(), binary()) ->
+-spec plan_outcome_ref(quod_dtx:plan(), binary(), binary(),
+                       none | quod_client_goal:request_auth()) ->
           {transaction, binary(), binary(), binary()}.
-plan_outcome_ref(Plan, GoalBlob, ResultBlob)
+plan_outcome_ref(Plan, GoalBlob, ResultBlob, RequestAuth)
   when is_binary(GoalBlob), is_binary(ResultBlob) ->
     {Ns, <<_:256>> = Anchor} = Target = quod_dtx:target(Plan),
+    {StoredAuth, AuthTranscript} =
+        request_outcome_fields(Plan, GoalBlob, RequestAuth),
     {transaction, Ns, Anchor,
-     semantic_plan_id(Target, Plan, GoalBlob, ResultBlob)}.
+     semantic_plan_id(
+       Target, Plan, GoalBlob, ResultBlob, StoredAuth, AuthTranscript)}.
+
+request_outcome_fields(Plan, _GoalBlob, none) ->
+    case quod_dtx:request_binding(Plan) of
+        none -> {none, none};
+        _ -> error(bad_request_binding)
+    end;
+request_outcome_fields(Plan, GoalBlob, RequestAuth) ->
+    case quod_dtx:material(Plan) of
+        {ok, Material} -> request_fields(Plan, Material, GoalBlob, RequestAuth);
+        {error, _} -> error(bad_plan)
+    end.
 
 -doc "Encode one durable goal/result pair through the shared persistence codec.".
 -spec encode_durable_submission(term(), map()) ->
@@ -119,18 +144,130 @@ encode_durable_submission(Goal, Bindings) when is_map(Bindings) ->
 encode_durable_submission(_Goal, _Bindings) ->
     {error, invalid_result}.
 
+request_fields(Plan, _Material, _GoalBlob, none) ->
+    case quod_dtx:request_binding(Plan) of
+        none -> {none, none};
+        _ -> error(bad_request_binding)
+    end;
+request_fields(Plan, #{transcript := Transcript}, GoalBlob,
+               {user_goal_v1, <<_:256>> = Digest, _Bytes, _Signature} = Auth) ->
+    case quod_dtx:request_binding(Plan) of
+        {user_goal_v1, Digest} ->
+            Target = quod_dtx:target(Plan),
+            case quod_client_goal:authorization_transcript(
+                   Transcript, Target, GoalBlob) of
+                {ok, Authorization} ->
+                    case request_evidence(
+                           Target, GoalBlob, Auth, Authorization, verify) of
+                        {ok, _Evidence} -> {Auth, Authorization};
+                        {error, _} -> error(bad_request_binding)
+                    end;
+                _ -> error(bad_request_binding)
+            end;
+        _ ->
+            error(bad_request_binding)
+    end;
+request_fields(_Plan, _Material, _GoalBlob, _RequestAuth) ->
+    error(bad_request_binding).
+
+-doc "Validate and expose one transaction's durable signed-user claim.".
+-spec validate_request(binary(), {binary(), <<_:256>>}, non_neg_integer(),
+                       #transaction{}) ->
+          {ok, none | map()} | {error, term()}.
+validate_request(_Network, _Target, _AdmissionMs,
+                 #transaction{request_auth = none,
+                              auth_transcript = none}) ->
+    {ok, none};
+validate_request(
+  <<_:256>> = Network, {Ns, <<_:256>>} = Target, AdmissionMs,
+  #transaction{origin = Target, goal = GoalBlob, request_auth = Auth,
+               auth_transcript = {user_goal_v1, TranscriptBlob}})
+  when is_binary(Ns), is_integer(AdmissionMs), AdmissionMs >= 0,
+       is_binary(GoalBlob), is_binary(TranscriptBlob) ->
+    request_evidence(
+      Target, GoalBlob, Auth, {user_goal_v1, TranscriptBlob},
+      {admission, Network, AdmissionMs});
+validate_request(_Network, _Target, _AdmissionMs, #transaction{}) ->
+    {error, invalid_request_binding}.
+
+-doc "Return the bounded operation claim without consulting runtime state.".
+-spec request_claim(#transaction{}) -> none | {ok, map()} | error.
+request_claim(#transaction{request_auth = none, auth_transcript = none}) ->
+    none;
+request_claim(#transaction{origin = Target, goal = GoalBlob, request_auth = Auth,
+                           auth_transcript = {user_goal_v1, TranscriptBlob}})
+  when is_binary(GoalBlob), is_binary(TranscriptBlob) ->
+    case request_evidence(
+           Target, GoalBlob, Auth, {user_goal_v1, TranscriptBlob}, verify) of
+        {ok, #{claim := Claim}} -> {ok, Claim};
+        {error, _} -> error
+    end;
+request_claim(#transaction{}) ->
+    error.
+
+-doc "Whether a content value must be checked against the network identity.".
+-spec requires_network_identity(term()) -> boolean().
+requires_network_identity([]) -> false;
+requires_network_identity(
+  [#transaction{request_auth = none, auth_transcript = none} | Rest]) ->
+    requires_network_identity(Rest);
+requires_network_identity([#transaction{} | _Rest]) -> true;
+requires_network_identity([_Malformed | _Rest]) -> true;
+requires_network_identity(_ImproperOrMalformed) -> true.
+
+valid_request_fields(_Target, _GoalBlob, none, none) ->
+    true;
+valid_request_fields(Target, GoalBlob, Auth, Authorization) ->
+    case request_evidence(
+           Target, GoalBlob, Auth, Authorization, verify) of
+        {ok, _Evidence} -> true;
+        {error, _} -> false
+    end.
+
+%% One structural verifier feeds transaction construction, signed bytes,
+%% claim extraction, and admission-time validation. Callers project the shape
+%% they need; none of them reimplements request or transcript checks.
+request_evidence(Target, GoalBlob, Auth, Authorization, verify) ->
+    checked_request_target(
+      Target,
+      quod_client_goal:verify_durable_authorization(
+        Auth, Authorization, GoalBlob));
+request_evidence(Target, GoalBlob, Auth, Authorization,
+                 {admission, Network, AdmissionMs}) ->
+    checked_request_target(
+      Target,
+      quod_client_goal:validate_durable_authorization(
+        Auth, Authorization, Network, Target, AdmissionMs, GoalBlob));
+request_evidence(_Target, _GoalBlob, _Auth, _Authorization, _Mode) ->
+    {error, invalid_request_binding}.
+
+checked_request_target(
+  {Ns, Anchor},
+  {ok, #{evidence :=
+             #{request := #{target_namespace := Ns,
+                            target_genesis_anchor := Anchor}}}} = Result)
+  when is_binary(Ns), is_binary(Anchor) ->
+    Result;
+checked_request_target(_Target, {ok, _OtherEvidence}) ->
+    {error, invalid_request_binding};
+checked_request_target(_Target, {error, _} = Error) ->
+    Error.
+
 semantic_id({Ns, <<_:256>> = Anchor},
             #transaction{origin = Origin, proof_id = ProofId,
                          plan_digest = PlanDigest, goal = Goal,
                          result = Result, diff = Diff,
-                         read_check = ReadCheck, effects = Effects})
+                         read_check = ReadCheck, effects = Effects,
+                         request_auth = RequestAuth,
+                         auth_transcript = AuthTranscript})
   when is_binary(Ns) ->
     case semantic_material_bytes(Diff, ReadCheck, Effects) of
         {ok, DiffBytes, ReadCheckBytes, EffectsBytes} ->
             {ok,
              semantic_id_parts(
                Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
-               DiffBytes, ReadCheckBytes, EffectsBytes)};
+               DiffBytes, ReadCheckBytes, EffectsBytes,
+               RequestAuth, AuthTranscript)};
         error ->
             error
     end.
@@ -149,20 +286,23 @@ semantic_material_bytes(_Diff, _ReadCheck, _Effects) ->
     error.
 
 semantic_plan_id(
-  {Ns, <<_:256>> = Anchor}, Plan, GoalBlob, ResultBlob) ->
+  {Ns, <<_:256>> = Anchor}, Plan, GoalBlob, ResultBlob,
+  RequestAuth, AuthTranscript) ->
     semantic_id_parts(
       Ns, Anchor, quod_dtx:origin(Plan), quod_dtx:proof_id(Plan),
       quod_dtx:digest(Plan), GoalBlob, ResultBlob,
       quod_dtx:diff_bytes(Plan), quod_dtx:read_check_bytes(Plan),
-      quod_dtx:effects_bytes(Plan)).
+      quod_dtx:effects_bytes(Plan), RequestAuth, AuthTranscript).
 
 semantic_id_parts(Ns, Anchor, Origin, ProofId, PlanDigest, Goal, Result,
-                  DiffBytes, ReadCheckBytes, EffectsBytes) ->
+                  DiffBytes, ReadCheckBytes, EffectsBytes,
+                  RequestAuth, AuthTranscript) ->
     crypto:hash(
       sha256,
       term_to_binary(
         {?ID_DOMAIN, ?ID_VERSION, Ns, Anchor, Origin, ProofId,
-         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes, EffectsBytes},
+         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes, EffectsBytes,
+         RequestAuth, AuthTranscript},
         [deterministic])).
 
 -doc "Canonical bytes signed by a transaction author, bound to the target identity.".
@@ -173,13 +313,17 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
                    plan_digest = PlanDigest, goal = Goal,
                    result = Result, diff = Diff, read_check = ReadCheck,
                    effects = Effects,
+                   request_auth = RequestAuth,
+                   auth_transcript = AuthTranscript,
                    author = Author, author_seq = AuthorSeq,
                    submitted_at = SubmittedAt})
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission), byte_size(TargetAnchor) =:= 32,
        byte_size(AuthorAdmission) =:= 32 ->
-    case encode_material(Diff, ReadCheck, Effects) of
-        {ok, MaterialWire, EffectsWire}
+    case {encode_material(Diff, ReadCheck, Effects),
+          valid_request_fields(
+            {TargetNs, TargetAnchor}, Goal, RequestAuth, AuthTranscript)} of
+        {{ok, MaterialWire, EffectsWire}, true}
           when byte_size(EffectsWire) =< ?QUOD_MAX_DIRECT_EFFECT_BYTES ->
             case quod_effect:validate_transaction(
                    TargetNs, TargetAnchor, Author, Effects) of
@@ -188,13 +332,14 @@ bytes({TargetNs, TargetAnchor, AuthorAdmission},
                      canonical_bytes(
                        TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
                        ProofId, PlanDigest, Goal, Result, MaterialWire,
-                       EffectsWire, Author, AuthorSeq, SubmittedAt)};
+                       EffectsWire, RequestAuth, AuthTranscript,
+                       Author, AuthorSeq, SubmittedAt)};
                 false ->
                     {error, bad_term}
             end;
-        {ok, _MaterialWire, _EffectsWire} ->
+        {{ok, _MaterialWire, _EffectsWire}, _} ->
             {error, bad_term};
-        {error, bad_term} = Error ->
+        {{error, bad_term} = Error, _} ->
             Error
     end;
 bytes(_Binding, _Transaction) ->
@@ -202,12 +347,13 @@ bytes(_Binding, _Transaction) ->
 
 canonical_bytes(TargetNs, TargetAnchor, AuthorAdmission, TxId, Origin,
                 ProofId, PlanDigest, Goal, Result, MaterialWire, EffectsWire,
-                Author,
+                RequestAuth, AuthTranscript, Author,
                 AuthorSeq, SubmittedAt) ->
     term_to_binary(
       {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
        TxId, Origin, ProofId, PlanDigest, Goal, Result, MaterialWire,
-       EffectsWire, Author, AuthorSeq, SubmittedAt},
+       EffectsWire, RequestAuth, AuthTranscript,
+       Author, AuthorSeq, SubmittedAt},
       [deterministic]).
 
 encode_material(Diff, ReadCheck, Effects)
@@ -375,7 +521,7 @@ and `Author`.
 decode_verified_submission(
   {TargetNs, TargetAnchor, AuthorAdmission} = Binding,
   {submit, Author, Signature,
-   <<131, 104, 16, _/binary>> = Canonical})
+   <<131, 104, 18, _/binary>> = Canonical})
   when is_binary(TargetNs), is_binary(TargetAnchor),
        is_binary(AuthorAdmission),
        is_binary(Author), is_binary(Signature),
@@ -385,6 +531,7 @@ decode_verified_submission(
          {?DOMAIN, ?VERSION, TargetNs, TargetAnchor, AuthorAdmission,
           TxId, Origin, ProofId,
           PlanDigest, Goal, Result, MaterialWire, EffectsWire,
+          RequestAuth, AuthTranscript,
           Author, AuthorSeq,
           SubmittedAt}} ->
             case decode_material(MaterialWire, EffectsWire) of
@@ -396,6 +543,8 @@ decode_verified_submission(
                                      goal = Goal, result = Result,
                                      diff = Diff, read_check = ReadCheck,
                                      effects = Effects,
+                                     request_auth = RequestAuth,
+                                     auth_transcript = AuthTranscript,
                                      author = Author,
                                      author_seq = AuthorSeq,
                                      submitted_at = SubmittedAt,

@@ -311,12 +311,12 @@ required_references('begin', _Begin) ->
     {ok, []};
 required_references(
   prepare,
-  {quod_dtx_prepare, 1, _GroupId, BeginRef, _Manifest,
+  {quod_dtx_prepare, 2, _GroupId, BeginRef, _Manifest,
    _PlanDigest, _PlanBlob}) ->
     checked_references([{'begin', BeginRef}]);
 required_references(
   decision,
-  {quod_dtx_decision, 1, _GroupId, BeginRef, _Verdict, Rows, _Reasons}) ->
+  {quod_dtx_decision, 2, _GroupId, BeginRef, _Verdict, Rows, _Reasons}) ->
     case reference_rows(Rows, prepare, 0, []) of
         {ok, References} ->
             checked_references([{'begin', BeginRef} | References]);
@@ -325,13 +325,13 @@ required_references(
     end;
 required_references(
   finalize,
-  {quod_dtx_finalize, 1, _GroupId, DecisionRef, _Verdict,
+  {quod_dtx_finalize, 2, _GroupId, DecisionRef, _Verdict,
    PrepareRef, _Generation}) ->
     Tail = case PrepareRef of none -> []; _ -> [{prepare, PrepareRef}] end,
     checked_references([{decision, DecisionRef} | Tail]);
 required_references(
   complete,
-  {quod_dtx_complete, 1, _GroupId, DecisionRef, Rows}) ->
+  {quod_dtx_complete, 2, _GroupId, DecisionRef, Rows}) ->
     case finalize_rows(Rows, 0, []) of
         {ok, References} ->
             checked_references([{decision, DecisionRef} | References]);
@@ -645,7 +645,7 @@ terminate(_Reason, #s{channels = Channels}) ->
 
 validate_request(
   <<_:256>>, Endpoint,
-  {quod_dtx_ref, 1, Ns, <<_:256>> = Anchor, Slot,
+  {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
    <<_:256>>, <<_:256>>, Proof} = Ref,
   Phase, TimeoutMs)
   when is_binary(Ns), byte_size(Ns) > 0,
@@ -664,7 +664,7 @@ validate_request(_Peer, _Endpoint, _Ref, _Phase, _TimeoutMs) ->
 
 validate_local_request(
   LedgerRoot,
-  {quod_dtx_ref, 1, Ns, <<_:256>> = Anchor, Slot,
+  {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
    <<_:256>>, <<_:256>>, Proof} = Ref,
   Phase, TimeoutMs)
   when (is_list(LedgerRoot) orelse is_binary(LedgerRoot)),
@@ -735,7 +735,7 @@ valid_identity(_) ->
 
 validate_current_ref(Ref, TimeoutMs) ->
     case Ref of
-        {quod_dtx_ref, 1, Ns, <<_:256>> = Anchor, Slot,
+        {quod_dtx_ref, 2, Ns, <<_:256>> = Anchor, Slot,
          <<_:256>>, <<_:256>>, Proof}
           when is_binary(Ns), byte_size(Ns) > 0,
                byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
@@ -2185,17 +2185,17 @@ valid_dtx_target(
 valid_dtx_target(_, _) -> false.
 
 ref_identity(
-  {quod_dtx_ref, 1, Ns, Anchor, _Slot, _BlockHash, _Digest, _Proof}) ->
+  {quod_dtx_ref, 2, Ns, Anchor, _Slot, _BlockHash, _Digest, _Proof}) ->
     {Ns, Anchor};
 ref_identity(_) -> invalid.
 
-ref_slot({quod_dtx_ref, 1, _Ns, _Anchor, Slot, _BlockHash, _Digest, _Proof}) ->
+ref_slot({quod_dtx_ref, 2, _Ns, _Anchor, Slot, _BlockHash, _Digest, _Proof}) ->
     Slot.
 
 ref_block_hash(
-  {quod_dtx_ref, 1, _Ns, _Anchor, _Slot, BlockHash, _Digest, _Proof}) ->
+  {quod_dtx_ref, 2, _Ns, _Anchor, _Slot, BlockHash, _Digest, _Proof}) ->
     BlockHash.
 
 ref_record_digest(
-  {quod_dtx_ref, 1, _Ns, _Anchor, _Slot, _BlockHash, Digest, _Proof}) ->
+  {quod_dtx_ref, 2, _Ns, _Anchor, _Slot, _BlockHash, Digest, _Proof}) ->
     Digest.

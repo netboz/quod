@@ -1,13 +1,14 @@
 # Signed client goals
 
-**Status:** Slices 1 and 2 are implemented in the working tree. Slice 1 contains
+**Status:** Slices 1 through 3 are implemented in the working tree. Slice 1 contains
 the pure request codec, signature verifier, and atom-safe parser. Slice 2 adds
 authenticated local `read`: it enters the ordinary read-only proof path as the
 signed user, applies the ontology's normal ACL, and refuses foreign scopes
-until signed scope propagation lands. The durable-write architecture has been
-revised after adversarial review and requires one more review before Slice 3
-implementation. No signed write, cursor, or any-node forwarding endpoint
-exists yet.
+until signed scope propagation lands. Slice 3 adds the coordinated durable
+format break, validator-side request/ACL revalidation, one shared operation
+projection for ordinary transactions and DTX Begins, and Explorer rendering.
+It is awaiting independent review. No public signed write, signed cursor, or
+any-node forwarding endpoint exists yet.
 
 ## Purpose
 
@@ -291,7 +292,10 @@ ordinary transaction:
       {user_goal_v1, TopLevelAuthorizationTranscriptBlob}
 
 DTX Begin:
-    request_auth = {user_goal_v1, RequestDigest, RequestBytes, UserSignature}
+    request_auth = none |
+      {user_goal_v1, RequestDigest, RequestBytes, UserSignature}
+    auth_transcript = none |
+      {user_goal_v1, TopLevelAuthorizationTranscriptBlob}
 ```
 
 An ordinary transaction must carry the complete `request_auth`, not only its
@@ -313,11 +317,16 @@ handled by the same deterministic authorization and OCC rules as the original
 proof. Node-authored transactions and genesis carry `none` and retain their
 current behavior.
 
-For DTX, the origin Begin carries the complete evidence once. The Manifest and
-every participant plan bind only its digest. A participant validator follows
-the certified Begin reference it already must verify, checks the full evidence
-there, and requires the Manifest/plan digest binding to match. Prepare must not
-copy the full request into every participant ledger merely for convenience.
+For DTX, the origin Begin carries the complete request and the one top-level
+authorization entry once. Origin validators re-prove that entry through the
+same `quod_ask:validate_authorization_transcript/6` path used for an ordinary
+transaction. The Manifest and every participant plan bind only the request
+digest. A participant validator follows the certified Begin reference it
+already must verify, checks the full evidence there, and requires the
+Manifest/plan digest binding to match. It then re-proves its target plan's
+existing authorization transcript. Prepare must not copy the full request or
+the origin authorization entry into every participant ledger merely for
+convenience.
 
 The currently deployed fixed home-registration request is not added to the new
 ledger format. There is no `user_registration_v1` transaction variant. Slices
@@ -336,10 +345,10 @@ For every user write, validators require:
 - the request target is the proof origin's exact identity;
 - the request principal equals the plan and record principal;
 - parsing the request produces the exact top-level durable goal blob;
-- an ordinary user transaction contains exactly one top-level authorization
-  entry for that same goal and target, and re-proving it against the committed
-  parent through `validate_authorization_transcript/6` yields the recorded
-  verdict;
+- an ordinary user transaction or origin DTX Begin contains exactly one
+  top-level authorization entry for that same goal and target, and re-proving
+  it against the committed origin parent through
+  `validate_authorization_transcript/6` yields the recorded verdict;
 - every participant plan binds the same request digest;
 - the operation identity has not been used with another request digest.
 
@@ -451,8 +460,10 @@ accepted the connection:
 Current origin validators answer operation lookup from the same applied
 projection and corroborate it through the existing certified-current-view
 quorum mechanism. A claimed row returns its first ordinary or group outcome
-reference, whose normal resolver supplies the result. Absence is not reported
-as safe-to-retry while an admission could still be in flight.
+reference and the exact request digest, whose normal resolver supplies the
+result. The client compares that digest with its persisted signed request
+before accepting the result. Absence is not reported as safe-to-retry while an
+admission could still be in flight.
 
 Proposal preview, consensus validation, ordered apply, replay, and catch-up all
 use the same rules in certified order:
@@ -471,6 +482,13 @@ contains a second same-digest record is invalid; validators do not commit a
 redundant no-op ledger record. Ordered validation and replay enforce the same
 transition, and the same projection arbitrates an ordinary transaction racing a
 DTX Begin.
+
+If a node cannot resolve the pinned root-network identity while applying an
+already committed signed record, it closes its proof gate and waits. It keeps
+no second entry queue: once the identity is available, the namespace replays
+the committed ledger through the same apply path. The temporary local lookup
+failure is never converted into a crash or a verdict about the committed
+record.
 
 The client checkpoints the operation ID and signed request before sending.
 After an uncertain response it resolves that identity; it does not generate a
@@ -551,7 +569,8 @@ Implementation uses one coordinated protocol generation:
   only;
 - plan V4 becomes V5 and its core carries `request_binding`;
 - DTX Manifest V1 becomes V2, all DTX records and controls become V2, and Begin
-  carries the one full `request_auth`; the Manifest and plans carry its digest;
+  carries the one full `request_auth` plus the one top-level authorization
+  entry; the Manifest and plans carry the request digest;
 - signed DTX groups permit one participant so a foreign-only write still has
   an authoritative Begin on the origin;
 - scope wire V3 becomes V4 and binds the principal plus authentication-context
@@ -627,7 +646,9 @@ cannot rebind an already-admitted read.
 
 - Land the coordinated format break described above.
 - Verify request evidence independently during proposal validation, ordered
-  apply, replay, catch-up, and outcome reconstruction.
+  apply, replay, catch-up, and outcome reconstruction. Re-prove the one origin
+  authorization entry through the same ACL checker for both an ordinary
+  transaction and a DTX Begin.
 - Add the shared origin operation projection for ordinary transactions and DTX
   Begins, with exact first-claim, alias, conflict, pending, and uncertain rules.
 - Route a signed foreign-only write through an origin Begin with one DTX
@@ -644,8 +665,8 @@ Slice-3 foreign-only case is fixture-tested by constructing the signed plans
 in-VM, as existing DTX tests do. Slice 3 must not make that public path
 reachable by weakening `signed_scope_unavailable`.
 
-Public signed writes remain disabled until this slice is independently
-reviewed and its replay/crash tests pass.
+Public signed writes remain disabled while this slice is independently
+reviewed and until the later activation slices pass their replay/crash gates.
 
 ### Slice 4: local signed execute and cursor
 
@@ -655,6 +676,10 @@ reviewed and its replay/crash tests pass.
   Explorer-specific coordinator beside it.
 - Pass verified goals through the existing `execute_as`/proof boundary without
   adding signing-specific predicate dispatch.
+- Carry the already-verified request evidence through proof and transaction
+  construction. The submitting node must not repeat signature verification or
+  parsing merely to derive the transaction and its outcome reference;
+  validators still verify the durable evidence independently.
 - Preserve the original request evidence and operation ID through cursor
   Accept after any number of `next` operations.
 - Migrate fixed home registration to a normal signed root goal using the same
@@ -679,7 +704,8 @@ write ingress remains disabled in deployed releases throughout this interval.
 - Complete the Slice-3 scope V4 implementation that carries the full principal
   and request digest; do not introduce another wire version or re-found.
 - Verify evidence at every remote target and preserve it through nested scopes.
-- Bind identical evidence into every participant plan, Manifest, and Begin.
+- Bind the identical request digest into every participant plan and Manifest;
+  keep the complete request and origin authorization entry once in Begin.
 - Test two- and three-ontology user writes, restrictive target ACLs, principal
   substitution, altered request bytes, stripped evidence, route failover,
   coordinator crash, abort, and Complete recovery.

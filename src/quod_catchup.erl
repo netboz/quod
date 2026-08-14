@@ -410,6 +410,7 @@ verify_implicit(Binding, Domain, E, I,
                                     ValidChild =
                                         quod_simplex:valid_history_entry(
                                           Binding, ChildSlot, ChildPayload,
+                                          ChildTs,
                                           Projection),
                                     case ValidChild andalso
                                          ChildTs >= Parent#block.timestamp of

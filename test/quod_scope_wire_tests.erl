@@ -11,7 +11,8 @@ all_command_shapes_roundtrip_deterministically_test() ->
     ErlogError = payload(erlog_error, {permission_error, write}),
     Manifest = payload(manifest, manifest()),
     Operations =
-        [scope_open,
+        [{scope_open, node},
+         {scope_open, {signed_goal, <<"request">>, <<7:512>>}},
          scope_close,
          scope_seal,
          {scope_attest, Manifest},
@@ -40,6 +41,47 @@ all_command_shapes_roundtrip_deterministically_test() ->
           {ok, EncodedAgain} = quod_scope_wire:encode_command(Command),
           ?assertEqual(Encoded, EncodedAgain)
       end, lists:enumerate(Operations)).
+
+scope_v4_authentication_digest_is_exact_and_bounded_test() ->
+    {ok, NodeDigest} = quod_scope_wire:authentication_digest(node),
+    Auth = {signed_goal, <<"request">>, <<7:512>>},
+    {ok, SignedDigest} = quod_scope_wire:authentication_digest(Auth),
+    ?assertNotEqual(NodeDigest, SignedDigest),
+    ?assertNotEqual(
+       SignedDigest,
+       element(2, quod_scope_wire:authentication_digest(
+                    {signed_goal, <<"request!">>, <<7:512>>}))),
+    ?assertNotEqual(
+       SignedDigest,
+       element(2, quod_scope_wire:authentication_digest(
+                    {signed_goal, <<"request">>, <<8:512>>}))),
+    ?assertEqual(
+       {error, {protocol_error, bad_authentication}},
+       quod_scope_wire:authentication_digest(
+         {signed_goal, <<"request">>, <<7:504>>})),
+    ?assertEqual(
+       {error, {protocol_error, bad_authentication}},
+       quod_scope_wire:authentication_digest(missing)).
+
+scope_v4_binding_rejects_principal_and_authentication_substitution_test() ->
+    Command = command({scope_open, node}),
+    {scope_command, Binding, Seq, RequestId, Budget, Operation} = Command,
+    ?assertMatch({ok, _}, quod_scope_wire:encode_command(Command)),
+    ?assertEqual(
+       {error, {protocol_error, bad_principal}},
+       quod_scope_wire:encode_command(
+         {scope_command, setelement(9, Binding, {user, <<1:248>>}),
+          Seq, RequestId, Budget, Operation})),
+    ?assertEqual(
+       {error, {protocol_error, bad_authentication}},
+       quod_scope_wire:encode_command(
+         {scope_command, setelement(10, Binding, <<1:248>>),
+          Seq, RequestId, Budget, Operation})),
+    OldBinding = list_to_tuple(lists:sublist(tuple_to_list(Binding), 8)),
+    ?assertEqual(
+       {error, {protocol_error, bad_binding}},
+       quod_scope_wire:encode_command(
+         {scope_command, OldBinding, Seq, RequestId, Budget, Operation})).
 
 all_events_carry_exact_state_and_roundtrip_test() ->
     Goal = payload(goal, {call, c}),
@@ -329,15 +371,18 @@ exact_failure_reason_payload_boundary() ->
          failure_reasons, payload(failure_reasons, []))).
 
 scope_envelope_byte_bound_is_exact_and_predecode_test() ->
-    Base = {scope_command, binding(), 1, id(1), 30000, scope_open},
+    Base = {scope_command, binding(), 1, id(1), 30000,
+            {scope_open, node}},
     {ok, BaseEncoded} = quod_scope_wire:encode_command(Base),
     Growth = ?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES - byte_size(BaseEncoded),
     {scope_command, Binding0, Seq, RequestId, Remaining, Operation} = Base,
     {scope_binding, OriginKey, TargetKey, ProofId, SessionId,
-     {_OldOriginNs, OriginAnchor}, TargetIdentity, Mode} = Binding0,
+     {_OldOriginNs, OriginAnchor}, TargetIdentity, Mode,
+     Principal, AuthenticationDigest} = Binding0,
     LongOriginNs = binary:copy(<<"n">>, byte_size(<<"quod:a">>) + Growth),
     LongBinding = {scope_binding, OriginKey, TargetKey, ProofId, SessionId,
-                   {LongOriginNs, OriginAnchor}, TargetIdentity, Mode},
+                   {LongOriginNs, OriginAnchor}, TargetIdentity, Mode,
+                   Principal, AuthenticationDigest},
     AtLimit = {scope_command, LongBinding, Seq, RequestId, Remaining, Operation},
     {ok, AtLimitEncoded} = quod_scope_wire:encode_command(AtLimit),
     ?assertEqual(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES,
@@ -357,7 +402,7 @@ scope_envelope_byte_bound_is_exact_and_predecode_test() ->
 
 outer_safe_etf_and_version_are_fail_closed_test() ->
     Command = {scope_command, binding_with_origin(binary:copy(<<"x">>, 1000)),
-               1, id(1), 30000, scope_open},
+               1, id(1), 30000, {scope_open, node}},
     {ok, Encoded} = quod_scope_wire:encode_command(Command),
     ?assertEqual(
        {error, {protocol_error, bad_etf}},
@@ -369,8 +414,8 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
        {error, {protocol_error, bad_etf}},
        quod_scope_wire:decode_request(Compressed)),
     {Domain, _Version, Frame} = Outer,
-    %% Both superseded scope wires are identifiable rejections: an old peer is
-    %% refused at the version boundary, never misparsed as V3.
+    %% Every superseded scope wire is an identifiable rejection: an old peer
+    %% is refused at the version boundary, never misparsed as V4.
     lists:foreach(
       fun(OldVersion) ->
           WrongVersion =
@@ -378,8 +423,8 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, [1, 2]),
-    WrongDomain = term_to_binary({<<"other.scope">>, 3, Frame}, [deterministic]),
+      end, [1, 2, 3]),
+    WrongDomain = term_to_binary({<<"other.scope">>, 4, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
        quod_scope_wire:decode_request(WrongDomain)),
@@ -680,13 +725,14 @@ manifest() ->
                          principal => anonymous,
                          goal => GoalBlob,
                          result => ResultBlob,
+                         request_binding => none,
                          participants =>
                              [{{<<"quod:b">>, key(6)}, key(124)},
                               {{<<"quod:c">>, key(7)}, key(125)}]}),
     Manifest.
 
 attestation() ->
-    {quod_dtx_attestation, 1, {<<"quod:b">>, key(6)},
+    {quod_dtx_attestation, 2, {<<"quod:b">>, key(6)},
      key(126), key(127), key(128), <<129:512>>}.
 
 command(Operation) ->
@@ -696,7 +742,7 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 3, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 4, Frame}, [deterministic]).
 
 selection(Lineage, BatchIds) ->
     {tx_selection, Lineage, BatchIds}.
@@ -704,8 +750,11 @@ selection(Lineage, BatchIds) ->
 binding() -> binding_with_origin(<<"quod:a">>).
 
 binding_with_origin(OriginNs) ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     {scope_binding, key(1), key(2), key(3), id(4),
-     {OriginNs, key(5)}, {<<"quod:b">>, key(6)}, read_write}.
+     {OriginNs, key(5)}, {<<"quod:b">>, key(6)}, read_write,
+     {node, key(1)}, AuthenticationDigest}.
 
 chain(Count) ->
     [{<<"quod:", (integer_to_binary(Index))/binary>>, key(20 + Index)}

@@ -328,9 +328,11 @@ fake_finalize_router_loop(TestPid, Result) ->
     end.
 
 remote_handle(Router, RequestLink, ProofId, N) ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     Binding = {scope_binding, <<1:256>>, <<2:256>>, ProofId, <<N:128>>,
                {<<"origin">>, <<0:256>>}, {<<"remote">>, <<11:256>>},
-               read_write},
+               read_write, {node, <<1:256>>}, AuthenticationDigest},
     {remote_scope, Router, <<3:128>>, Binding, RequestLink}.
 
 bind_remote_router(Router) ->

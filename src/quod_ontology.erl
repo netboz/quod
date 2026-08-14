@@ -25,7 +25,8 @@ descriptor before the effect journal calls them.
 -export([create/2, join/3,
          validate_action/1, prepare_action/1, execute_prepared/1,
          prepared_effect/4, prepared_bytes/1, decode_prepared/1,
-         local_state/1, genesis_anchor/1, root_ns/0]).
+         local_state/1, genesis_anchor/1,
+         network_identity/0, network_identity/1, root_ns/0]).
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -218,6 +219,17 @@ genesis_anchor(Name) ->
                     desired_genesis_anchor(Ns)
             end
     end.
+
+-doc "Return the exact root anchor that separates this Quod network.".
+-spec network_identity() -> {ok, <<_:256>>} | {error, term()}.
+network_identity() ->
+    genesis_anchor(root_ns()).
+
+-doc "Return the network identity only when a validated record requires it.".
+-spec network_identity(boolean()) ->
+          {ok, none | <<_:256>>} | {error, term()}.
+network_identity(true) -> network_identity();
+network_identity(false) -> {ok, none}.
 
 desired_genesis_anchor(Ns) ->
     Desired = application:get_env(quod, namespace_desired, #{}),

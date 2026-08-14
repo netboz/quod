@@ -621,7 +621,8 @@ tx_json_full_decoded(
   #transaction{tx_id = Id, origin = Origin, proof_id = ProofId,
                plan_digest = PlanDigest, author = Author, author_seq = AuthorSeq,
                submitted_at = SubmittedAt, diff = Diff,
-               read_check = RC, effects = Effects, sig = Sig} = T,
+               read_check = RC, effects = Effects, sig = Sig,
+               request_auth = RequestAuth} = T,
   #entry{index = Slot, timestamp = Timestamp} = E,
   GoalJson, ResultJson) ->
     (tx_json_decoded(
@@ -634,8 +635,18 @@ tx_json_full_decoded(
                      origin => origin_json(Origin),
                      proof_id => digest_json(ProofId),
                      plan_digest => digest_json(PlanDigest),
+                     request => request_json(
+                                  RequestAuth,
+                                  quod_transaction:request_claim(T),
+                                  transaction_ref(Origin, Id)),
                      signature => signature_json(Sig),
                      signature_status => signature_status(T, E)}.
+
+transaction_ref({Ns, <<_:256>> = Anchor}, <<_:256>> = TxId)
+  when is_binary(Ns) ->
+    {transaction, Ns, Anchor, TxId};
+transaction_ref(_Origin, _TxId) ->
+    none.
 
 effect_json(Effect) ->
     case quod_effect:validate(Effect) of
@@ -750,8 +761,18 @@ control_json(Control) ->
         submitted_at => SubmittedAt},
       control_body_json(Kind, quod_dtx:control_body(Control))).
 
-control_body_json('begin', {quod_dtx_begin, _, _Manifest, Bundles}) ->
-    #{participant_count => length(Bundles)};
+control_body_json(
+  'begin',
+  {quod_dtx_begin, _, _Manifest, _RequestAuth, _Authorization,
+   Bundles} = Begin) ->
+    OutcomeRef = case quod_dtx:begin_group_ref(Begin) of
+                     {ok, Ref} -> Ref;
+                     error -> none
+                 end,
+    #{participant_count => length(Bundles),
+      request => request_json(
+                   quod_dtx:request_auth(Begin),
+                   quod_dtx:request_claim(Begin), OutcomeRef)};
 control_body_json(
   prepare,
   {quod_dtx_prepare, _, _, _BeginRef, _Manifest, PlanDigest, _PlanBlob}) ->
@@ -769,6 +790,67 @@ control_body_json(finalize,
       applied_generation => AppliedGeneration};
 control_body_json(complete, {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows}) ->
     #{finalize_count => length(FinalizeRows)}.
+
+request_json(none, none, _OutcomeRef) ->
+    null;
+request_json(
+  {user_goal_v1, <<_:256>> = Digest, RequestBytes,
+   <<_:512>> = UserSignature},
+  {ok, #{key := {UserKey, OperationId}, digest := Digest,
+         target := {TargetNs, <<_:256>> = TargetAnchor},
+         deadline := Deadline, principal := {user, UserKey},
+         operation_ref := OperationRef}},
+  OutcomeRef)
+  when is_binary(RequestBytes), is_binary(TargetNs) ->
+    case quod_client_goal:verify(RequestBytes, UserSignature) of
+        {ok, #{request := #{mode := Mode, parser_version := ParserVersion}}} ->
+            #{status => verified,
+              request_digest => digest_json(Digest),
+              user => id_json(UserKey),
+              operation_id => digest_json(OperationId),
+              operation_ref => operation_ref_json(OperationRef),
+              target => origin_json({TargetNs, TargetAnchor}),
+              mode => Mode,
+              parser_version => ParserVersion,
+              not_after_ms => Deadline,
+              signature => signature_json(UserSignature),
+              first_outcome => anchored_outcome_ref_json(OutcomeRef)};
+        {error, _} ->
+            invalid_request_json()
+    end;
+request_json(_RequestAuth, _Claim, _OutcomeRef) ->
+    invalid_request_json().
+
+invalid_request_json() ->
+    #{status => invalid, request_digest => null, user => null,
+      operation_id => null, operation_ref => null, target => null,
+      mode => null, parser_version => null, not_after_ms => null,
+      signature => null, first_outcome => null}.
+
+operation_ref_json(
+  {operation, Ns, <<_:256>> = Anchor, <<_:256>> = User,
+   <<_:256>> = OperationId})
+  when is_binary(Ns) ->
+    #{kind => operation, ns => Ns, anchor => digest_json(Anchor),
+      user => id_json(User), operation_id => digest_json(OperationId)};
+operation_ref_json(_) ->
+    null.
+
+anchored_outcome_ref_json(
+  {transaction, Ns, <<_:256>> = Anchor, <<_:256>> = TxId})
+  when is_binary(Ns) ->
+    #{kind => transaction, ns => Ns, anchor => digest_json(Anchor),
+      tx_id => tx_id_text(TxId)};
+anchored_outcome_ref_json(
+  {group, Ns, <<_:256>> = Anchor, <<_:256>> = Coordinator,
+   <<_:256>> = Admission, <<_:256>> = GroupId})
+  when is_binary(Ns) ->
+    #{kind => group, ns => Ns, anchor => digest_json(Anchor),
+      coordinator => id_json(Coordinator),
+      coordinator_admission => digest_json(Admission),
+      group_id => digest_json(GroupId)};
+anchored_outcome_ref_json(_) ->
+    null.
 
 decision_reasons_json(Record) ->
     case quod_dtx:decision_failure_reasons(Record) of

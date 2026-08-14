@@ -45,21 +45,26 @@ voting; it remains a forbidden live dependency of ordinary content.
 The same module owns the single-version Begin → Prepare → Decision → Finalize
 → Complete codec.  Controls carry atom-safe nested plan bytes, use a separate
 signature domain per phase, and are accepted only after exact target, manifest,
-plan, reference, and author bindings are verified. Abort Decisions bind one
-canonical bounded failure-reason stack; Complete refers to that Decision
-without copying the reasons. `reduce/4` is the pure
+plan, reference, and author bindings are verified. A signed-user Begin carries
+the complete request and its one origin authorization entry; plans and the
+Manifest carry only the request digest. Origin validation reuses the same ACL
+checker as ordinary transactions, while Prepare keeps the existing target-plan
+authorization check. Abort Decisions bind one canonical bounded failure-reason
+stack; Complete refers to that Decision without copying the reasons. `reduce/4` is the pure
 fold used by live consensus and replay; local apply acknowledgements can open
 its proof fence but never change consensus-derived generation state.
 """.
 
 -include("quod_proof_limits.hrl").
+-include("quod_client_goal_limits.hrl").
 -include("quod_ledger.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 
 -export([seal_session/2, verify/1, encode/1, decode/1,
          digest/1,
          core/1, target/1, base_height/1, proof_id/1, origin/1,
-         principal/1, overlay_generation/1, signer/1,
+         principal/1, request_binding/1, overlay_generation/1, signer/1,
+         valid_principal/1,
          participates/1, diff_ops/1, effects_count/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
          live_bridges_bytes/1,
@@ -70,14 +75,17 @@ its proof fence but never change consensus-derived generation state.
          attest_plan/4, verify_plan_attestation/4,
          encode_attestation/1, decode_attestation/1,
          certified_ref/6, certified_entry_ref/3, validate_certified_ref/1,
-         new_begin/2, new_prepare/3, new_decision/4,
+         new_begin/4, new_prepare/3, new_decision/4,
          new_finalize/5, new_complete/3,
          encode_record/1, decode_record/1,
          sign_control/6, encode_control/1, decode_control/1,
          verify_control/2, control_kind/1, control_target/1,
          control_body/1, control_metadata/1, prepare_payload/1,
+         request_auth/1, request_authorization/1,
+         request_claim/1, validate_request/4, requires_network_identity/1,
          prepare_matches_begin/2, validate_references/2, event_context/2,
          record_digest/1, group_id/1, decision_failure_reasons/1,
+         record_kind/1,
          begin_group_ref/1, begin_recovery_rows/1,
          certified_ref_binding/1, recovery_phase/1, history_phase/2,
          initial_projection/2, valid_projection/1, origin_recovery/1,
@@ -91,13 +99,13 @@ its proof fence but never change consensus-derived generation state.
               group_history/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
--define(PLAN_VERSION, 4).
+-define(PLAN_VERSION, 5).
 
--define(CONTROL_VERSION, 1).
--define(MANIFEST_VERSION, 1).
--define(ATTESTATION_VERSION, 1).
--define(REF_VERSION, 1).
--define(RECORD_VERSION, 1).
+-define(CONTROL_VERSION, 2).
+-define(MANIFEST_VERSION, 2).
+-define(ATTESTATION_VERSION, 2).
+-define(REF_VERSION, 2).
+-define(RECORD_VERSION, 2).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 -define(MANIFEST_DOMAIN, <<"quod.dtx.manifest">>).
 -define(ATTESTATION_DOMAIN, <<"quod.dtx.attestation">>).
@@ -117,29 +125,32 @@ its proof fence but never change consensus-derived generation state.
 -opaque plan() :: {quod_plan, map(), none | <<_:256>>, none | binary()}.
 
 -type manifest() ::
-        {quod_dtx_manifest, 1, <<_:256>>,
+        {quod_dtx_manifest, 2, <<_:256>>,
          {binary(), <<_:256>>, <<_:256>>, <<_:256>>}, <<_:256>>, principal(),
          binary(), <<_:256>>, binary(), <<_:256>>,
+         quod_client_goal:request_binding(),
          [{identity(), <<_:256>>}]}.
 -type attestation() ::
-        {quod_dtx_attestation, 1, identity(), <<_:256>>, <<_:256>>,
+        {quod_dtx_attestation, 2, identity(), <<_:256>>, <<_:256>>,
          <<_:256>>, <<_:512>>}.
 -type certified_ref() ::
-        {quod_dtx_ref, 1, binary(), <<_:256>>, pos_integer(),
+        {quod_dtx_ref, 2, binary(), <<_:256>>, pos_integer(),
          <<_:256>>, <<_:256>>, binary()}.
 -type control_record() ::
-        {quod_dtx_begin, 1, manifest(), list()} |
-        {quod_dtx_prepare, 1, <<_:256>>, certified_ref(), manifest(),
+        {quod_dtx_begin, 2, manifest(),
+         none | quod_client_goal:request_auth(),
+         none | {user_goal_v1, binary()}, list()} |
+        {quod_dtx_prepare, 2, <<_:256>>, certified_ref(), manifest(),
          <<_:256>>, binary()} |
-        {quod_dtx_decision, 1, <<_:256>>, certified_ref(), commit,
+        {quod_dtx_decision, 2, <<_:256>>, certified_ref(), commit,
          list(), none} |
-        {quod_dtx_decision, 1, <<_:256>>, certified_ref(), abort,
+        {quod_dtx_decision, 2, <<_:256>>, certified_ref(), abort,
          list(), binary()} |
-        {quod_dtx_finalize, 1, <<_:256>>, certified_ref(), commit | abort,
+        {quod_dtx_finalize, 2, <<_:256>>, certified_ref(), commit | abort,
          certified_ref() | none, non_neg_integer()} |
-        {quod_dtx_complete, 1, <<_:256>>, certified_ref(), list()}.
+        {quod_dtx_complete, 2, <<_:256>>, certified_ref(), list()}.
 -type control() ::
-        {quod_dtx_control, 1,
+        {quod_dtx_control, 2,
          'begin' | prepare | decision | finalize | complete,
          identity(), control_record(), <<_:256>>, <<_:256>>,
          pos_integer(), non_neg_integer(), <<_:512>>}.
@@ -155,25 +166,30 @@ plan is bound to: `target`, `base_height`, `proof_id`, `origin`, `principal`.
 -spec seal_session(quod_proof_session:session(),
                    #{target := identity(), base_height := non_neg_integer(),
                      proof_id := <<_:256>>, origin := identity(),
-                     principal := principal()}) ->
+                     principal := principal(),
+                     request_binding := quod_client_goal:request_binding()}) ->
           {ok, plan()} | not_material | {error, term()}.
 seal_session(Session,
              #{target := {_TargetNs, <<_:256>>} = Target,
                base_height := BaseHeight,
                proof_id := <<_:256>> = ProofId,
                origin := {_OriginNs, <<_:256>>} = Origin,
-               principal := Principal})
+               principal := Principal,
+               request_binding := RequestBinding})
   when is_integer(BaseHeight), BaseHeight >= 0 ->
     true = valid_principal(Principal),
+    true = quod_client_goal:valid_request_binding(RequestBinding),
     case quod_proof_session:check_access(Session) of
         ok ->
             seal_session_checked(
-              Session, Target, BaseHeight, ProofId, Origin, Principal);
+              Session, Target, BaseHeight, ProofId, Origin, Principal,
+              RequestBinding);
         {error, _} = Error ->
             Error
     end.
 
-seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal) ->
+seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal,
+                     RequestBinding) ->
     Diff = quod_proof_session:local_changes(Session),
     ReadCheck = quod_proof_session:read_set(Session),
     Effects = quod_proof_session:effects(Session),
@@ -184,6 +200,7 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal) ->
             _ ->
                 seal_material(
                   Session, Target, BaseHeight, ProofId, Origin, Principal,
+                  RequestBinding,
                   Diff, ReadCheck, Effects)
         end,
     %% Extraction and encoding are pure, but the namespace may have committed
@@ -195,6 +212,7 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal) ->
     end.
 
 seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
+              RequestBinding,
               Diff, ReadCheck, Effects) ->
     Bridges = quod_proof_session:live_bridges(Session),
     {Transcript, Generation} = quod_proof_session:transcript(Session),
@@ -209,6 +227,7 @@ seal_material(Session, Target, BaseHeight, ProofId, Origin, Principal,
                              proof_id => ProofId,
                              origin => Origin,
                              principal => Principal,
+                             request_binding => RequestBinding,
                              overlay_generation => Generation,
                              %% Signed alongside the opaque diff so a consumer
                              %% that must not decode foreign vocabulary (the
@@ -349,13 +368,14 @@ decode(_Blob) ->
 
 valid_core(#{target := Target, base_height := BaseHeight,
              proof_id := ProofId, origin := Origin,
-             principal := Principal, overlay_generation := Generation,
+             principal := Principal, request_binding := RequestBinding,
+             overlay_generation := Generation,
              diff_ops := DiffOps, read_functors := ReadFunctors,
              effects_count := EffectsCount,
              diff := Diff, read_check := ReadCheck, effects := Effects,
              live_bridges := Bridges,
              transcript := Transcript} = Core)
-  when map_size(Core) =:= 14,
+  when map_size(Core) =:= 15,
        is_integer(DiffOps), DiffOps >= 0,
        DiffOps =< ?QUOD_MAX_PLAN_DIFF_OPS,
        is_integer(ReadFunctors), ReadFunctors >= 0,
@@ -366,6 +386,7 @@ valid_core(#{target := Target, base_height := BaseHeight,
         is_integer(BaseHeight) andalso BaseHeight >= 0 andalso
         is_binary(ProofId) andalso byte_size(ProofId) =:= 32 andalso
         valid_principal(Principal) andalso
+        quod_client_goal:valid_request_binding(RequestBinding) andalso
         is_integer(Generation) andalso Generation >= 0 andalso
         is_binary(Diff) andalso
         byte_size(Diff) =< ?QUOD_MAX_PLAN_ENVELOPE_BYTES andalso
@@ -387,10 +408,25 @@ valid_witness(_, _) -> false.
 valid_identity({Ns, <<_:256>>}) when is_binary(Ns), byte_size(Ns) > 0 -> true;
 valid_identity(_) -> false.
 
+-doc "Validate the one principal alphabet shared by plans and scopes.".
+-spec valid_principal(term()) -> boolean().
 valid_principal({node, <<_:256>>}) -> true;
 valid_principal({user, <<_:256>>}) -> true;
 valid_principal(anonymous) -> true;
 valid_principal(_) -> false.
+
+valid_request_auth_shape(none) -> true;
+valid_request_auth_shape(
+  {user_goal_v1, <<_:256>>, Bytes, <<_:512>>}) ->
+    is_binary(Bytes) andalso
+        byte_size(Bytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES;
+valid_request_auth_shape(_) -> false.
+
+valid_request_authorization_shape(none) -> true;
+valid_request_authorization_shape({user_goal_v1, Blob}) ->
+    is_binary(Blob) andalso
+        byte_size(Blob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES;
+valid_request_authorization_shape(_) -> false.
 
 -spec core(plan()) -> map().
 core({quod_plan, Core, _Signer, _Signature}) -> Core.
@@ -409,6 +445,9 @@ origin(Plan) -> maps:get(origin, core(Plan)).
 
 -spec principal(plan()) -> principal().
 principal(Plan) -> maps:get(principal, core(Plan)).
+
+-spec request_binding(plan()) -> quod_client_goal:request_binding().
+request_binding(Plan) -> maps:get(request_binding, core(Plan)).
 
 -spec overlay_generation(plan()) -> non_neg_integer().
 overlay_generation(Plan) -> maps:get(overlay_generation, core(Plan)).
@@ -681,10 +720,11 @@ new_manifest(#{proof_id := <<_:256>> = ProofId,
                coordinator := Coordinator,
                nonce := <<_:256>> = Nonce,
                principal := Principal,
+               request_binding := RequestBinding,
                goal := Goal,
                result := Result,
                participants := Participants} = Input)
-  when map_size(Input) =:= 7, is_binary(Goal), is_binary(Result) ->
+  when map_size(Input) =:= 8, is_binary(Goal), is_binary(Result) ->
     case {byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
           byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES,
           bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS)} of
@@ -695,7 +735,8 @@ new_manifest(#{proof_id := <<_:256>> = ProofId,
                         {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId,
                          Coordinator, Nonce, Principal, Goal,
                          crypto:hash(sha256, Goal), Result,
-                         crypto:hash(sha256, Result), CanonicalParticipants},
+                         crypto:hash(sha256, Result), RequestBinding,
+                         CanonicalParticipants},
                     case within_body_limit(Manifest) andalso
                          valid_manifest(Manifest) of
                         true -> {ok, Manifest};
@@ -859,6 +900,7 @@ plan_matches_manifest(Target, Plan, PlanDigest, Manifest) ->
         proof_id(Plan) =:= manifest_proof_id(Manifest) andalso
         origin(Plan) =:= {OriginNs, OriginAnchor} andalso
         principal(Plan) =:= manifest_principal(Manifest) andalso
+        request_binding(Plan) =:= manifest_request_binding(Manifest) andalso
         effects_count(Plan) =:= 0 andalso
         lists:keyfind(Target, 1, manifest_participants(Manifest)) =:=
             {Target, PlanDigest}.
@@ -953,15 +995,16 @@ certified_ref_binding(
 certified_ref_binding(_) ->
     error.
 
--doc "Build a canonical Begin from one manifest and its exact target bundles.".
--spec new_begin(manifest(), list()) ->
+-doc "Build a canonical Begin from one manifest, user evidence, authorization, and target bundles.".
+-spec new_begin(manifest(), none | quod_client_goal:request_auth(),
+                none | {user_goal_v1, binary()}, list()) ->
           {ok, control_record()} | {error, term()}.
-new_begin(Manifest, Bundles) ->
+new_begin(Manifest, RequestAuth, Authorization, Bundles) ->
     case canonical_bundles(Bundles) of
         {ok, CanonicalBundles} ->
             Record =
-                {quod_dtx_begin, ?RECORD_VERSION, Manifest,
-                 CanonicalBundles},
+                {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+                 Authorization, CanonicalBundles},
             new_record('begin', Record);
         error ->
             {error, invalid_begin}
@@ -971,7 +1014,8 @@ new_begin(Manifest, Bundles) ->
 -spec new_prepare(control_record(), certified_ref(), identity()) ->
           {ok, control_record()} | {error, term()}.
 new_prepare(
-  {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles} = Begin,
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+   _Authorization, Bundles} = Begin,
   BeginRef, Target) ->
     case valid_record('begin', Begin) andalso within_body_limit(Begin)
          andalso valid_identity(Target) of
@@ -1293,7 +1337,8 @@ prepare_matches_begin(
 prepare_matches_begin(
   {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef, Manifest,
    PlanDigest, PlanBlob} = Prepare,
-  {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles} = Begin) ->
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+   _Authorization, Bundles} = Begin) ->
     valid_record(prepare, Prepare) andalso valid_record('begin', Begin)
         andalso prepare_matches_valid_begin(
                   GroupId, BeginRef, PlanDigest, PlanBlob, Begin, Bundles);
@@ -1350,7 +1395,8 @@ validate_reference_chain(
   [{'begin', BeginRef, BeginControl} | PrepareEvidence]) ->
     case exact_evidence_record('begin', BeginRef, BeginControl) of
         {ok, _BeginTarget,
-         {quod_dtx_begin, ?RECORD_VERSION, Manifest, _Bundles} = Begin} ->
+         {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+          _Authorization, _Bundles} = Begin} ->
             record_digest_unchecked('begin', Begin) =:= GroupId andalso
                 decision_participants_match(
                   Verdict, PrepareRows, Manifest) andalso
@@ -1458,7 +1504,8 @@ prepare_matches_valid_begin_controls(
   {quod_dtx_prepare, ?RECORD_VERSION, GroupId, BeginRef, Manifest,
    PlanDigest, PlanBlob},
   {quod_dtx_control, ?CONTROL_VERSION, 'begin', _,
-   {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles} = Begin,
+   {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+    _Authorization, Bundles} = Begin,
    _, _, _, _, _}) ->
     prepare_matches_valid_begin(
       GroupId, BeginRef, PlanDigest, PlanBlob, Begin, Bundles).
@@ -1530,7 +1577,8 @@ event_context(Manifest, Plan) ->
                     {OriginNs, OriginAnchor, _, _} =
                         manifest_coordinator(Manifest),
                     {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId, _, _,
-                     Principal, Goal, _, Result, _, _} = Manifest,
+                     Principal, Goal, _, Result, _, _RequestBinding, _} =
+                        Manifest,
                     {ok, #{proof_id => ProofId,
                            origin => {OriginNs, OriginAnchor},
                            principal => Principal,
@@ -1566,7 +1614,7 @@ record_digest(Record) ->
 
 record_digest_unchecked(Kind, Record) ->
     BodyBlob = deterministic(Record),
-    crypto:hash(sha256, deterministic({record_domain(Kind), 1, BodyBlob})).
+    crypto:hash(sha256, deterministic({record_domain(Kind), ?RECORD_VERSION, BodyBlob})).
 
 -doc "Stable identity of one semantic Begin, independent of its outer author.".
 -spec group_id(control() | control_record()) -> <<_:256>>.
@@ -1575,12 +1623,164 @@ group_id({quod_dtx_control, ?CONTROL_VERSION, 'begin', _, _, _, _, _, _, _} =
     record_digest(Control);
 group_id({quod_dtx_control, ?CONTROL_VERSION, _, _, Record, _, _, _, _, _}) ->
     record_group_id(Record);
-group_id({quod_dtx_begin, ?RECORD_VERSION, _, _} = Begin) ->
+group_id({quod_dtx_begin, ?RECORD_VERSION, _, _, _, _} = Begin) ->
     record_digest(Begin);
 group_id({quod_dtx_prepare, ?RECORD_VERSION, GroupId, _, _, _, _}) -> GroupId;
 group_id({quod_dtx_decision, ?RECORD_VERSION, GroupId, _, _, _, _}) -> GroupId;
 group_id({quod_dtx_finalize, ?RECORD_VERSION, GroupId, _, _, _, _}) -> GroupId;
 group_id({quod_dtx_complete, ?RECORD_VERSION, GroupId, _, _}) -> GroupId.
+
+-doc "Return the full signed request carried only by an origin Begin.".
+-spec request_auth(control() | control_record()) ->
+          none | quod_client_goal:request_auth().
+request_auth(
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', _, Begin, _, _, _, _, _}) ->
+    request_auth(Begin);
+request_auth(
+  {quod_dtx_begin, ?RECORD_VERSION, _Manifest, RequestAuth,
+   _Authorization, _Bundles}) ->
+    RequestAuth.
+
+-doc "Return the recorded top-level authorization carried only by an origin Begin.".
+-spec request_authorization(control() | control_record()) ->
+          none | {user_goal_v1, binary()}.
+request_authorization(
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', _, Begin, _, _, _, _, _}) ->
+    request_authorization(Begin);
+request_authorization(
+  {quod_dtx_begin, ?RECORD_VERSION, _Manifest, _RequestAuth,
+   Authorization, _Bundles}) ->
+    Authorization.
+
+-doc "Return one Begin's bounded operation claim without runtime state.".
+-spec request_claim(control() | control_record()) ->
+          none | {ok, map()} | error.
+request_claim(
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', _, Begin, _, _, _, _, _}) ->
+    request_claim(Begin);
+request_claim(
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, none, none,
+   _Bundles} = Begin) ->
+    case valid_begin_material(Begin) andalso
+         manifest_request_binding(Manifest) =:= none of
+        true -> none;
+        false -> error
+    end;
+request_claim(
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+   Authorization, _Bundles} = Begin) ->
+    case valid_begin_material(Begin) of
+        true ->
+            case request_evidence_from_manifest(
+                   RequestAuth, Authorization, Manifest) of
+                {ok, #{claim := Claim}} ->
+                    {ok, Claim};
+                error -> error
+            end;
+        false -> error
+    end;
+request_claim(_) ->
+    error.
+
+-doc "Validate one Begin's user evidence at its certified admission time.".
+-spec validate_request(binary(), identity(), non_neg_integer(),
+                       control() | control_record()) ->
+          {ok, none | map()} | {error, term()}.
+validate_request(Network, Target, AdmissionMs,
+                 {quod_dtx_control, ?CONTROL_VERSION, 'begin', Target,
+                  Begin, _, _, _, _, _}) ->
+    validate_request(Network, Target, AdmissionMs, Begin);
+validate_request(
+  _Network, Target, AdmissionMs,
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, none, none,
+   _Bundles} = Begin)
+  when is_integer(AdmissionMs), AdmissionMs >= 0 ->
+    case valid_begin_material(Begin) andalso
+         request_evidence_matches_manifest(none, none, Manifest) andalso
+         manifest_origin(Manifest) =:= Target of
+        true -> {ok, none};
+        false -> {error, invalid_request_binding}
+    end;
+validate_request(
+  <<_:256>> = Network, Target, AdmissionMs,
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+   Authorization, _Bundles} = Begin)
+  when is_integer(AdmissionMs), AdmissionMs >= 0 ->
+    case valid_begin_material(Begin) andalso
+         manifest_origin(Manifest) =:= Target of
+        true ->
+            case quod_client_goal:validate_durable_authorization(
+                   RequestAuth, Authorization, Network, Target, AdmissionMs,
+                   manifest_goal(Manifest)) of
+                {ok, RequestEvidence} ->
+                    case request_evidence_matches_manifest(
+                           RequestEvidence, Manifest) of
+                        true -> {ok, RequestEvidence};
+                        false -> {error, invalid_request_binding}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        false ->
+            {error, invalid_request_binding}
+    end;
+validate_request(_Network, _Target, _AdmissionMs, _Begin) ->
+    {error, invalid_request_binding}.
+
+-doc "Whether a Begin must be checked against the network identity.".
+-spec requires_network_identity(term()) -> boolean().
+requires_network_identity(
+  {quod_dtx_control, ?CONTROL_VERSION, 'begin', _Target,
+   Begin, _Author, _Admission, _Sequence, _SubmittedAt, _Signature}) ->
+    requires_network_identity(Begin);
+requires_network_identity(
+  {quod_dtx_begin, ?RECORD_VERSION, _Manifest, none, none, _Bundles}) ->
+    false;
+requires_network_identity(
+  {quod_dtx_begin, ?RECORD_VERSION, _Manifest, _RequestAuth,
+   _Authorization, _Bundles}) ->
+    true;
+requires_network_identity(_Malformed) ->
+    true.
+
+request_evidence_matches_manifest(none, none, Manifest) ->
+    manifest_request_binding(Manifest) =:= none;
+request_evidence_matches_manifest(RequestAuth, Authorization, Manifest) ->
+    case request_evidence_from_manifest(
+           RequestAuth, Authorization, Manifest) of
+        {ok, _RequestEvidence} -> true;
+        error -> false
+    end.
+
+valid_begin_material(
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+   _Authorization, Bundles} = Begin) ->
+    within_body_limit(Begin) andalso valid_manifest(Manifest) andalso
+        valid_bundles(Manifest, Bundles).
+
+request_evidence_from_manifest(
+  {user_goal_v1, <<_:256>>, _Bytes, <<_:512>>} = RequestAuth,
+  Authorization, Manifest) ->
+    case quod_client_goal:verify_durable_authorization(
+           RequestAuth, Authorization, manifest_goal(Manifest)) of
+        {ok, RequestEvidence} ->
+            case request_evidence_matches_manifest(
+                   RequestEvidence, Manifest) of
+                true -> {ok, RequestEvidence};
+                false -> error
+            end;
+        {error, _} -> error
+    end;
+request_evidence_from_manifest(_RequestAuth, _Authorization, _Manifest) ->
+    error.
+
+request_evidence_matches_manifest(
+  #{evidence := Evidence, principal := Principal}, Manifest) ->
+    #{request := #{target_namespace := Ns,
+                   target_genesis_anchor := Anchor}} = Evidence,
+    {Ns, Anchor} =:= manifest_origin(Manifest) andalso
+        Principal =:= manifest_principal(Manifest) andalso
+        quod_client_goal:request_binding(Evidence) =:=
+            manifest_request_binding(Manifest).
 
 -doc "Return the durable public reference fixed by one validated semantic Begin.".
 -spec begin_group_ref(control_record()) ->
@@ -1592,7 +1792,8 @@ begin_group_ref(
     {Ns, <<_:256>> = Anchor, <<_:256>> = Coordinator,
      <<_:256>> = Admission},
     _Nonce, _Principal, _Goal, _GoalDigest, _Result, _ResultDigest,
-    _Participants}, _Bundles} = Begin)
+    _RequestBinding, _Participants}, _RequestAuth, _Authorization,
+   _Bundles} = Begin)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     case valid_record('begin', Begin) andalso within_body_limit(Begin) of
         true ->
@@ -1612,7 +1813,8 @@ begin_recovery_rows(
    {quod_dtx_manifest, ?MANIFEST_VERSION, _ProofId,
     {Ns, <<_:256>> = Anchor, _Coordinator, _Admission},
     _Nonce, _Principal, _Goal, _GoalDigest, _Result, _ResultDigest,
-    _Participants}, Bundles} = Begin)
+    _RequestBinding, _Participants}, _RequestAuth, _Authorization,
+   Bundles} = Begin)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     case valid_record('begin', Begin) andalso within_body_limit(Begin) of
         true ->
@@ -1757,7 +1959,10 @@ record_domain(decision) -> ?DECISION_DOMAIN;
 record_domain(finalize) -> ?FINALIZE_DOMAIN;
 record_domain(complete) -> ?COMPLETE_DOMAIN.
 
-record_kind({quod_dtx_begin, ?RECORD_VERSION, _, _}) -> 'begin';
+-doc "Classify one exact current-version semantic DTX record.".
+-spec record_kind(term()) -> 'begin' | prepare | decision | finalize |
+                             complete | invalid.
+record_kind({quod_dtx_begin, ?RECORD_VERSION, _, _, _, _}) -> 'begin';
 record_kind({quod_dtx_prepare, ?RECORD_VERSION, _, _, _, _, _}) -> prepare;
 record_kind({quod_dtx_decision, ?RECORD_VERSION, _, _, _, _, _}) -> decision;
 record_kind({quod_dtx_finalize, ?RECORD_VERSION, _, _, _, _, _}) -> finalize;
@@ -1768,8 +1973,11 @@ record_kind(_) -> invalid.
 %% decode, hashing, or signature work.  Every list is rejected after at most
 %% nine cells; no hostile list is sorted or traversed without that proof.
 bounded_record_shape(
-  'begin', {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles}) ->
+  'begin', {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+            Authorization, Bundles}) ->
     bounded_manifest_shape(Manifest) andalso
+        valid_request_auth_shape(RequestAuth) andalso
+        valid_request_authorization_shape(Authorization) andalso
         bounded_bundle_shape(Bundles);
 bounded_record_shape(
   prepare, {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>>, Ref, Manifest,
@@ -1800,21 +2008,23 @@ bounded_record_shape(_, _) -> false.
 bounded_manifest_shape(
   {quod_dtx_manifest, ?MANIFEST_VERSION, <<_:256>>,
    {Ns, <<_:256>>, <<_:256>>, <<_:256>>}, <<_:256>>, Principal,
-   Goal, <<_:256>>, Result, <<_:256>>, Participants}) ->
+   Goal, <<_:256>>, Result, <<_:256>>, RequestBinding, Participants}) ->
     is_binary(Ns) andalso byte_size(Ns) > 0 andalso
-        valid_principal(Principal) andalso is_binary(Goal) andalso
+        valid_principal(Principal) andalso
+        quod_client_goal:valid_request_binding(RequestBinding) andalso
+        is_binary(Goal) andalso
         byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES andalso
         is_binary(Result) andalso
         byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES andalso
         case bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS) of
-            {ok, Length} when Length >= 2 -> true;
+            {ok, Length} when Length >= 1 -> true;
             _ -> false
         end;
 bounded_manifest_shape(_) -> false.
 
 bounded_bundle_shape(Bundles) ->
     case bounded_length(Bundles, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             lists:all(
               fun({Target, <<_:256>>, PlanBlob,
                    {quod_dtx_attestation, ?ATTESTATION_VERSION, _, _, _,
@@ -1829,7 +2039,8 @@ bounded_bundle_shape(Bundles) ->
 
 phase_target_matches(
   'begin', {Ns, Anchor},
-  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _}) ->
+  {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+   _Authorization, _}) ->
     {OriginNs, OriginAnchor, _, _} = manifest_coordinator(Manifest),
     {OriginNs, OriginAnchor} =:= {Ns, Anchor};
 phase_target_matches(
@@ -1861,8 +2072,11 @@ valid_control_record(Kind, Target, Record) ->
         phase_target_matches(Kind, Target, Record).
 
 valid_record_structure(
-  'begin', {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles}) ->
+  'begin', {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+            Authorization, Bundles}) ->
     valid_manifest_structure(Manifest) andalso
+        request_evidence_matches_manifest(
+          RequestAuth, Authorization, Manifest) andalso
         valid_bundle_structure(Manifest, Bundles);
 valid_record_structure(
   prepare,
@@ -1924,8 +2138,12 @@ valid_bundle_structure(
           BundleRest, ParticipantRest, ManifestDigest);
 valid_bundle_structure(_, _, _) -> false.
 
-valid_record('begin', {quod_dtx_begin, ?RECORD_VERSION, Manifest, Bundles}) ->
-    valid_manifest(Manifest) andalso valid_bundles(Manifest, Bundles);
+valid_record('begin',
+             {quod_dtx_begin, ?RECORD_VERSION, Manifest, RequestAuth,
+              Authorization, _Bundles} = Begin) ->
+    valid_begin_material(Begin) andalso
+        request_evidence_matches_manifest(
+          RequestAuth, Authorization, Manifest);
 valid_record(prepare,
              {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, BeginRef,
               Manifest, <<_:256>> = PlanDigest, PlanBlob} = Record)
@@ -1963,11 +2181,12 @@ valid_manifest(
   {quod_dtx_manifest, ?MANIFEST_VERSION, <<_:256>>,
    {OriginNs, <<_:256>>, <<_:256>>, <<_:256>>}, <<_:256>>, Principal,
    Goal, <<_:256>> = GoalDigest, Result, <<_:256>> = ResultDigest,
-   Participants})
+   RequestBinding, Participants})
   when is_binary(OriginNs), byte_size(OriginNs) > 0,
        is_binary(Goal), byte_size(Goal) =< ?QUOD_MAX_TOPLEVEL_GOAL_BYTES,
        is_binary(Result), byte_size(Result) =< ?QUOD_MAX_DURABLE_RESULT_BYTES ->
     valid_principal(Principal) andalso
+        quod_client_goal:valid_request_binding(RequestBinding) andalso
         valid_participants(Participants) andalso
         crypto:hash(sha256, Goal) =:= GoalDigest andalso
         crypto:hash(sha256, Result) =:= ResultDigest andalso
@@ -1984,7 +2203,7 @@ durable_blobs_valid(Goal, Result) ->
 
 valid_participants(Participants) ->
     case bounded_length(Participants, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             valid_identity_digest_rows(Participants, none);
         _ ->
             false
@@ -1999,7 +2218,7 @@ valid_identity_digest_rows(_, _) -> false.
 
 canonical_identity_digest_rows(Rows) ->
     case bounded_length(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             case lists:all(
                    fun({Identity, <<_:256>>}) -> valid_identity(Identity);
                       (_) -> false
@@ -2055,7 +2274,7 @@ canonical_reference_rows(Rows) ->
 
 canonical_finalize_rows(Rows) ->
     case bounded_length(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             case lists:all(
                    fun({Identity, Ref, Generation}) ->
                            valid_identity(Identity) andalso
@@ -2118,27 +2337,37 @@ valid_attestation_shape(
 valid_attestation_shape(_, _, _, _) -> false.
 
 manifest_participants(
-  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, _, _, _, _, _, Rows}) ->
+  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, _, _, _, _, _, _, Rows}) ->
     Rows.
 
 manifest_proof_id(
-  {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId, _, _, _, _, _, _, _, _}) ->
+  {quod_dtx_manifest, ?MANIFEST_VERSION, ProofId, _, _, _, _, _, _, _, _, _}) ->
     ProofId.
 
 manifest_principal(
-  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, Principal, _, _, _, _, _}) ->
+  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, Principal, _, _, _, _, _, _}) ->
     Principal.
 
+manifest_goal(
+  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, _, Goal, _, _, _, _, _}) ->
+    Goal.
+
 manifest_coordinator(
-  {quod_dtx_manifest, ?MANIFEST_VERSION, _, Coordinator, _, _, _, _, _, _, _}) ->
+  {quod_dtx_manifest, ?MANIFEST_VERSION, _, Coordinator, _, _, _, _, _, _, _, _}) ->
     Coordinator.
+
+manifest_request_binding(
+  {quod_dtx_manifest, ?MANIFEST_VERSION, _, _, _, _, _, _, _, _,
+   RequestBinding, _}) ->
+    RequestBinding.
 
 manifest_origin(Manifest) ->
     {Ns, Anchor, _Coordinator, _Admission} = manifest_coordinator(Manifest),
     {Ns, Anchor}.
 
 begin_author_matches('begin', {Ns, Anchor}, Author, Admission,
-                     {quod_dtx_begin, ?RECORD_VERSION, Manifest, _}) ->
+                     {quod_dtx_begin, ?RECORD_VERSION, Manifest,
+                      _RequestAuth, _Authorization, _}) ->
     manifest_coordinator(Manifest) =:= {Ns, Anchor, Author, Admission};
 begin_author_matches(Kind, _Target, _Author, _Admission, _Record) ->
     Kind =/= 'begin'.
@@ -2183,7 +2412,7 @@ valid_finalize_prepare(_, _) -> false.
 
 valid_finalize_rows(Rows) ->
     case bounded_length(Rows, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             valid_finalize_rows(Rows, none);
         _ -> false
     end.
@@ -2234,7 +2463,7 @@ origin_recovery(Projection) ->
 -doc "Whether one already-validated retained control is the next phase this projection may propose.".
 -spec proposal_allowed(control_record(), projection()) -> boolean().
 proposal_allowed(
-  {quod_dtx_begin, ?RECORD_VERSION, _, _},
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _, _},
   #{active := none, consensus_lock := open}) ->
     true;
 proposal_allowed(
@@ -2466,7 +2695,8 @@ reduce_new(complete, Record, GroupId, Digest, Ref,
     end.
 
 begin_transition(Record, GroupId, Digest, Ref, History, Projection) ->
-    {quod_dtx_begin, ?RECORD_VERSION, Manifest, _} = Record,
+    {quod_dtx_begin, ?RECORD_VERSION, Manifest, _RequestAuth,
+     _Authorization, _} = Record,
     Origin =
         #{phase => begun, begin_ref => Ref,
           manifest_digest => manifest_digest_unchecked(Manifest),
@@ -2820,7 +3050,7 @@ participant_plan_valid(Target, GroupId, BeginRef, PrepareRef,
 
 valid_identity_list(Identities) ->
     case bounded_length(Identities, ?QUOD_MAX_DTX_PARTICIPANTS) of
-        {ok, Length} when Length >= 2 ->
+        {ok, Length} when Length >= 1 ->
             valid_identity_list(Identities, none);
         _ -> false
     end.
@@ -2857,7 +3087,7 @@ history_accepts_group(#{group_id := none}, _GroupId) -> true;
 history_accepts_group(#{group_id := GroupId}, GroupId) -> true;
 history_accepts_group(_, _) -> false.
 
-record_group_id({quod_dtx_begin, ?RECORD_VERSION, _, _} = Begin) ->
+record_group_id({quod_dtx_begin, ?RECORD_VERSION, _, _, _, _} = Begin) ->
     group_id(Begin);
 record_group_id({quod_dtx_prepare, ?RECORD_VERSION, GroupId, _, _, _, _}) ->
     GroupId;

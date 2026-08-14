@@ -40,7 +40,8 @@ all_request_shapes_roundtrip_deterministically_test() ->
          {outcome_barrier, id(11), group_ref(), digest(7), 11},
          {applied, id(8), digest(2), certified_ref(), 9, commit},
          {applied, id(9), digest(2), certified_ref(), 0, abort},
-         {outcome, id(10), transaction_ref(), digest(7), 11}],
+         {outcome, id(10), transaction_ref(), digest(7), 11},
+         {outcome, id(12), operation_ref(), digest(7), 11}],
     lists:foreach(
       fun(Request) ->
           {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request),
@@ -76,7 +77,9 @@ all_response_shapes_roundtrip_and_correlate_test() ->
            reasons => [{cannot_link, bob}],
            participant_slots => participant_slots()},
          #{status => rejected, reason => coordinator_retired,
-           ref => GroupRef}],
+           ref => GroupRef},
+         #{status => claimed, height => 14, ref => operation_ref(),
+           request_digest => digest(13), outcome_ref => TxRef}],
     Pairs =
         [{{submit, id(1), record_blob()},
           {accepted, id(1), record_blob_digest(), accepted_ref()}},
@@ -235,8 +238,8 @@ malformed_and_noncanonical_frames_fail_closed_test() ->
          <<0:(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES + 1)/unit:8>>)),
 
     CompressedRecord = term_to_binary(
-                         {quod_dtx_begin, 1,
-                          binary:copy(<<0>>, 8 * 1024), []},
+                         {quod_dtx_begin, 2,
+                          binary:copy(<<0>>, 8 * 1024), none, none, []},
                          [compressed]),
     ?assertMatch(<<131, 80, _/binary>>, CompressedRecord),
     ?assertEqual(
@@ -285,7 +288,8 @@ invalid_fixed_shapes_are_rejected_test() ->
         [{submit, <<1:120>>, record_blob()},
          {submit, id(1),
           term_to_binary(
-            {quod_dtx_begin, 1, {opaque_manifest, digest(4)}, []},
+            {quod_dtx_begin, 2, {opaque_manifest, digest(4)},
+             none, none, []},
             [deterministic])},
          {phase, id(1), <<2:248>>, 'begin'},
          {phase, id(1), digest(2), unknown_phase},
@@ -329,6 +333,9 @@ invalid_fixed_shapes_are_rejected_test() ->
          {outcome, id(1), outcome_target(), digest(7), 12,
           #{status => committed, height => 1, ref => GroupRef,
             bindings => [{<<"X">>, ok}], participant_slots => []}},
+         {outcome, id(1), outcome_target(), digest(7), 12,
+          #{status => claimed, height => 1, ref => operation_ref(),
+            request_digest => <<1:248>>, outcome_ref => transaction_ref()}},
          {outcome, id(1), {<<>>, digest(1)}, digest(7), 12, not_found},
          {outcome, id(1), outcome_target(), <<1:248>>, 12, not_found},
          {outcome, id(1), outcome_target(), digest(7), -1, not_found},
@@ -371,6 +378,9 @@ group_ref() ->
 
 transaction_ref() ->
     {transaction, <<"quod:origin">>, digest(1), digest(4)}.
+
+operation_ref() ->
+    {operation, <<"quod:origin">>, digest(1), digest(12), digest(13)}.
 
 target() -> {<<"quod:target">>, digest(5)}.
 

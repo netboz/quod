@@ -256,22 +256,11 @@ valid_outcome_request(OwnerNs, Source, OutcomeRef, TimeoutMs)
   when is_binary(OwnerNs), byte_size(OwnerNs) > 0,
        is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
-    case {valid_source(Source), outcome_ref_identity(OutcomeRef)} of
+    case {valid_source(Source), quod_outcome:ref_identity(OutcomeRef)} of
         {true, {ok, Target}} -> {ok, Target};
         _ -> error
     end;
 valid_outcome_request(_OwnerNs, _Source, _OutcomeRef, _TimeoutMs) ->
-    error.
-
-outcome_ref_identity(
-  {transaction, Ns, <<_:256>> = Anchor, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0 ->
-    {ok, {Ns, Anchor}};
-outcome_ref_identity(
-  {group, Ns, <<_:256>> = Anchor, <<_:256>>, <<_:256>>, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0 ->
-    {ok, {Ns, Anchor}};
-outcome_ref_identity(_) ->
     error.
 
 lookup_outcome_view(OwnerNs, Source, OutcomeRef, Target, View,

@@ -8,6 +8,7 @@
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
+-include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_vm_limits.hrl").
 
@@ -49,7 +50,7 @@ first(Session, Goal) ->
 bind() ->
     #{target => {?NS, key(1)}, base_height => 1,
       proof_id => key(2), origin => {<<"quod:origin">>, key(3)},
-      principal => anonymous}.
+      principal => anonymous, request_binding => none}.
 
 key(N) -> <<N:256>>.
 
@@ -229,10 +230,10 @@ origin_outcome_identity_keeps_foreign_payloads_opaque_test() ->
             quod_transaction:encode_durable_submission(
               {'::', ?NS, {assertz, {t, 1}}}, #{}),
         Ref = quod_transaction:plan_outcome_ref(
-                Plan, GoalBlob, ResultBlob),
+                Plan, GoalBlob, ResultBlob, none),
         {ok, Material} = quod_dtx:material(Plan),
         Transaction = quod_transaction:from_plan(
-                        Plan, Material, GoalBlob, ResultBlob),
+                        Plan, Material, GoalBlob, ResultBlob, none),
         {TargetNs, TargetAnchor} = quod_dtx:target(Plan),
         ?assertEqual(
            Ref,
@@ -252,7 +253,7 @@ origin_outcome_identity_keeps_foreign_payloads_opaque_test() ->
                         Signer, Signature}),
         AtomsBefore = erlang:system_info(atom_count),
         OpaqueRef = quod_transaction:plan_outcome_ref(
-                      OpaquePlan, GoalBlob, ResultBlob),
+                      OpaquePlan, GoalBlob, ResultBlob, none),
         ?assertEqual(AtomsBefore, erlang:system_info(atom_count)),
         ?assertMatch(
            {transaction, ?NS, <<_:256>>, <<_:256>>}, OpaqueRef),
@@ -728,7 +729,7 @@ failed_material_proof_aborts_without_sealing_test() ->
     end.
 
 %% ------------------------------------------------------------------
-%% V1 durable control protocol
+%% V2 durable control protocol
 %% ------------------------------------------------------------------
 
 control_codec_roundtrips_all_five_fixed_records_test() ->
@@ -764,6 +765,21 @@ control_codec_roundtrips_all_five_fixed_records_test() ->
        ?MAX_BLOCK_BYTES - ?QUOD_DTX_TAGGED_PAYLOAD_OVERHEAD_BYTES,
        ?QUOD_MAX_DTX_CONTROL_BYTES).
 
+superseded_v1_begin_record_is_rejected_test() ->
+    F = protocol_fixture(),
+    {quod_dtx_begin, 2,
+     {quod_dtx_manifest, 2, ProofId, Coordinator, Nonce, Principal,
+      Goal, GoalDigest, Result, ResultDigest, _RequestBinding,
+      Participants}, _RequestAuth, _Authorization, Bundles} =
+        maps:get(begin_record, F),
+    OldManifest =
+        {quod_dtx_manifest, 1, ProofId, Coordinator, Nonce, Principal,
+         Goal, GoalDigest, Result, ResultDigest, Participants},
+    OldBegin = {quod_dtx_begin, 1, OldManifest, Bundles},
+    ?assertEqual(
+       {error, {protocol_error, bad_payload}},
+       quod_dtx:decode_record(term_to_binary(OldBegin, [deterministic]))).
+
 manifest_and_record_constructors_canonicalize_bounded_rows_test() ->
     F = protocol_fixture(),
     Manifest = maps:get(manifest, F),
@@ -772,7 +788,8 @@ manifest_and_record_constructors_canonicalize_bounded_rows_test() ->
     {ok, Manifest} =
         quod_dtx:new_manifest(Input#{participants := lists:reverse(Participants)}),
     Bundles = maps:get(bundles, F),
-    {ok, Begin} = quod_dtx:new_begin(Manifest, lists:reverse(Bundles)),
+    {ok, Begin} = quod_dtx:new_begin(
+                    Manifest, none, none, lists:reverse(Bundles)),
     ?assertEqual(maps:get(begin_record, F), Begin),
     PrepareRows = maps:get(prepare_rows, F),
     {ok, Decision} =
@@ -794,6 +811,105 @@ manifest_and_record_constructors_canonicalize_bounded_rows_test() ->
        {error, invalid_manifest},
        quod_dtx:new_manifest(Input#{participants := [hd(Participants) | bad_tail]})).
 
+signed_foreign_only_begin_has_one_real_participant_and_origin_evidence_test() ->
+    Foreign = {<<"quod:signed-foreign">>, key(220)},
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{participant_target => Foreign}),
+    Begin = maps:get('begin', Fixture),
+    Origin = maps:get(target, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    {ok, Origin, _GroupId, [{Foreign, PlanBlob}]} =
+        quod_dtx:begin_recovery_rows(Begin),
+    ?assert(is_binary(PlanBlob)),
+    {ok, #{principal := {user, User}, claim := Claim,
+           transcript := Transcript}} =
+        quod_dtx:validate_request(
+          maps:get(network, Fixture), Origin, Deadline, Begin),
+    ?assertEqual(maps:get(user, Fixture), User),
+    ?assertMatch([{_, [Origin], _, allowed, _, _, _}], Transcript),
+    ?assertEqual(maps:get(authorization, Fixture),
+                 quod_dtx:request_authorization(Begin)),
+    ?assertEqual(maps:get(operation_ref, Fixture),
+                 maps:get(operation_ref, Claim)),
+    ?assertEqual(
+       {error, expired},
+       quod_dtx:validate_request(
+         maps:get(network, Fixture), Origin, Deadline + 1, Begin)),
+    ?assertMatch({ok, #{digest := _, operation_ref := _}},
+                 quod_dtx:request_claim(Begin)).
+
+unsigned_begin_does_not_require_network_identity_test() ->
+    Fixture = protocol_fixture(),
+    Begin = maps:get(begin_record, Fixture),
+    Origin = maps:get(target_a, Fixture),
+    ?assertNot(quod_dtx:requires_network_identity(Begin)),
+    ?assertEqual(
+       {ok, none},
+       quod_dtx:validate_request(none, Origin, 0, Begin)),
+    Signed = maps:get('begin', quod_ct:signed_dtx_begin_fixture(#{})),
+    ?assert(quod_dtx:requires_network_identity(Signed)),
+    ?assert(quod_dtx:requires_network_identity(malformed)).
+
+maximum_signed_request_is_preserved_by_transaction_and_begin_test() ->
+    Goal = <<"assertz(saved(ok)).">>,
+    GoalText =
+        <<(binary:copy(
+             <<" ">>, ?QUOD_CLIENT_GOAL_TEXT_BYTES - byte_size(Goal)))/binary,
+          Goal/binary>>,
+    Ns = binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
+    Target = {Ns, key(221)},
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{target => Target, goal_text => GoalText}),
+    Transaction = maps:get(transaction, Fixture),
+    Begin = maps:get('begin', Fixture),
+    Network = maps:get(network, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    ?assertMatch(
+       {ok, #{claim := _}},
+       quod_transaction:validate_request(
+         Network, Target, Deadline, Transaction)),
+    ?assertMatch(
+       {ok, #{claim := _}},
+       quod_dtx:validate_request(Network, Target, Deadline, Begin)),
+    ?assertMatch({ok, _}, quod_dtx:encode_record(Begin)),
+    Request = maps:get(request, Fixture),
+    ?assertEqual(
+       {error, {too_large, goal_text}},
+       quod_client_goal:encode(
+         Request#{goal_text => <<GoalText/binary, " ">>})).
+
+signed_begin_rejects_changed_authorization_evidence_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Begin = maps:get('begin', Fixture),
+    Origin = maps:get(target, Fixture),
+    {ok, WrongAuthorization} =
+        quod_client_goal:authorization_transcript(
+          [{<<210:128>>, [Origin], <<"different_goal.">>, allowed,
+            1, <<211:256>>, complete}],
+          Origin, <<"different_goal.">>),
+    ForgedBegin = setelement(5, Begin, WrongAuthorization),
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_dtx:validate_request(
+         maps:get(network, Fixture), Origin,
+         maps:get(deadline, Fixture), ForgedBegin)),
+    ?assertEqual(error, quod_dtx:request_claim(ForgedBegin)).
+
+signed_begin_rejects_changed_request_bytes_even_with_valid_outer_shape_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Begin = maps:get('begin', Fixture),
+    {user_goal_v1, Digest, <<First, Rest/binary>>, Signature} =
+        maps:get(auth, Fixture),
+    ForgedAuth =
+        {user_goal_v1, Digest, <<(First bxor 1), Rest/binary>>, Signature},
+    ForgedBegin = setelement(4, Begin, ForgedAuth),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_dtx:validate_request(
+         maps:get(network, Fixture), maps:get(target, Fixture),
+         maps:get(deadline, Fixture), ForgedBegin)),
+    ?assertEqual(error, quod_dtx:request_claim(ForgedBegin)).
+
 abort_decision_uses_one_canonical_atom_safe_reason_blob_test() ->
     F = protocol_fixture(),
     Unknown =
@@ -809,7 +925,7 @@ abort_decision_uses_one_canonical_atom_safe_reason_blob_test() ->
           maps:get(group_id, F), maps:get(begin_ref, F),
           {abort, Reasons}, []),
     ?assertEqual({ok, Reasons}, quod_dtx:decision_failure_reasons(Abort)),
-    {quod_dtx_decision, 1, _, _, abort, [], ReasonsBlob} =
+    {quod_dtx_decision, 2, _, _, abort, [], ReasonsBlob} =
         record_tuple(Abort),
     ?assertEqual(
        {ok, ReasonsBlob},
@@ -900,19 +1016,19 @@ abort_reason_bytes_are_canonical_signed_and_digest_bound_test() ->
         signed(
           maps:get(origin, F), First, maps:get(admission, F), 61,
           maps:get(signer, F)),
-    {quod_dtx_control, 1, decision, Target, _FirstRecord, Author, Admission,
+    {quod_dtx_control, 2, decision, Target, _FirstRecord, Author, Admission,
      Sequence, SubmittedAt, Signature} = tuple(Signed),
     Tampered =
-        {quod_dtx_control, 1, decision, Target, Second, Author, Admission,
+        {quod_dtx_control, 2, decision, Target, Second, Author, Admission,
          Sequence, SubmittedAt, Signature},
     ?assertNot(quod_dtx:verify_control(Target, Tampered)),
 
-    {quod_dtx_decision, 1, GroupId, BeginRef, abort, Rows, CanonicalBlob} =
+    {quod_dtx_decision, 2, GroupId, BeginRef, abort, Rows, CanonicalBlob} =
         record_tuple(First),
     NonCanonicalBlob = noncanonical_reason_blob(CanonicalBlob),
     NonCanonical =
         record(
-          {quod_dtx_decision, 1, GroupId, BeginRef, abort, Rows,
+          {quod_dtx_decision, 2, GroupId, BeginRef, abort, Rows,
            NonCanonicalBlob}),
     NonCanonicalControl =
         forge_control_blob(
@@ -922,7 +1038,7 @@ abort_reason_bytes_are_canonical_signed_and_digest_bound_test() ->
        {error, {protocol_error, bad_payload}},
        quod_dtx:decode_control(NonCanonicalControl)),
     OldReasonless =
-        record({quod_dtx_decision, 1, GroupId, BeginRef, abort, Rows}),
+        record({quod_dtx_decision, 2, GroupId, BeginRef, abort, Rows}),
     OldControl =
         forge_control_blob(
           decision, Target, OldReasonless, Admission, 63, 63,
@@ -932,7 +1048,7 @@ abort_reason_bytes_are_canonical_signed_and_digest_bound_test() ->
        quod_dtx:decode_control(OldControl)),
     ReasonBearingCommit =
         record(
-          {quod_dtx_decision, 1, GroupId, BeginRef, commit,
+          {quod_dtx_decision, 2, GroupId, BeginRef, commit,
            lists:keysort(1, maps:get(prepare_rows, F)), CanonicalBlob}),
     CommitControl =
         forge_control_blob(
@@ -957,18 +1073,19 @@ group_id_excludes_only_the_outer_begin_envelope_test() ->
 
 forged_attestation_is_structurally_decodable_but_never_verifies_test() ->
     F = protocol_fixture(),
-    {quod_dtx_begin, 1, Manifest, [First | Rest]} =
+    {quod_dtx_begin, 2, Manifest, RequestAuth, Authorization,
+     [First | Rest]} =
         record_tuple(maps:get(begin_record, F)),
     {Target, PlanDigest, PlanBlob,
-     {quod_dtx_attestation, 1, Target, PlanDigest, ManifestDigest,
+     {quod_dtx_attestation, 2, Target, PlanDigest, ManifestDigest,
       Attestor, Signature}} = First,
     <<Bit:1, Tail/bitstring>> = Signature,
     ForgedAttestation =
-        {quod_dtx_attestation, 1, Target, PlanDigest, ManifestDigest,
+        {quod_dtx_attestation, 2, Target, PlanDigest, ManifestDigest,
          Attestor, <<(Bit bxor 1):1, Tail/bitstring>>},
     ForgedBegin =
         record(
-          {quod_dtx_begin, 1, Manifest,
+          {quod_dtx_begin, 2, Manifest, RequestAuth, Authorization,
            [{Target, PlanDigest, PlanBlob, ForgedAttestation} | Rest]}),
     ?assertEqual(
        {error, invalid_control},
@@ -1020,7 +1137,7 @@ noncanonical_plan_envelope_cannot_change_a_group_id_test() ->
          end || Bundle <- maps:get(bundles, F)],
     ?assertEqual(
        {error, invalid_begin},
-       quod_dtx:new_begin(maps:get(manifest, F), Bundles)).
+       quod_dtx:new_begin(maps:get(manifest, F), none, none, Bundles)).
 
 phase_target_bindings_reject_substitution_test() ->
     F = protocol_fixture(),
@@ -1048,9 +1165,11 @@ decode_is_total_and_rejects_noncanonical_or_oversized_controls_test() ->
     ?assertMatch(
        {error, {protocol_error, bad_payload}},
        quod_dtx:decode_control(term_to_binary({'not', a, control}))),
-    {quod_dtx_begin, 1, Manifest, Bundles} =
+    {quod_dtx_begin, 2, Manifest, RequestAuth, Authorization, Bundles} =
         record_tuple(maps:get(begin_record, F)),
-    NonCanonical = record({quod_dtx_begin, 1, Manifest, lists:reverse(Bundles)}),
+    NonCanonical =
+        record({quod_dtx_begin, 2, Manifest, RequestAuth, Authorization,
+                lists:reverse(Bundles)}),
     Blob = forge_control_blob(
              'begin', maps:get(origin, F), NonCanonical,
              maps:get(admission, F), 1, 1, maps:get(signer, F)),
@@ -1089,8 +1208,8 @@ prepare_is_derived_from_the_exact_begin_target_without_legacy_shape_test() ->
        {error, invalid_prepare},
        quod_dtx:new_prepare(Begin, WrongRef, Target)),
     %% The former six-field Prepare is a deliberate protocol hard break.
-    {quod_dtx_prepare, 1, GroupId, _, _, PlanDigest, PlanBlob} = Prepare,
-    Legacy = {quod_dtx_prepare, 1, GroupId, BeginRef, PlanDigest, PlanBlob},
+    {quod_dtx_prepare, 2, GroupId, _, _, PlanDigest, PlanBlob} = Prepare,
+    Legacy = {quod_dtx_prepare, 2, GroupId, BeginRef, PlanDigest, PlanBlob},
     ?assertEqual(
        {error, {protocol_error, bad_payload}},
        quod_dtx:decode_record(term_to_binary(Legacy, [deterministic]))).
@@ -1101,9 +1220,9 @@ prepare_manifest_is_checked_against_begin_and_yields_exact_event_context_test() 
     Begin = maps:get(begin_record, F),
     Manifest = maps:get(manifest, F),
     Plan = maps:get(plan_a, F),
-    {quod_dtx_prepare, 1, GroupId, BeginRef, _, PlanDigest, PlanBlob} = Prepare,
+    {quod_dtx_prepare, 2, GroupId, BeginRef, _, PlanDigest, PlanBlob} = Prepare,
     TamperedManifest = setelement(6, Manifest, {node, key(199)}),
-    Tampered = {quod_dtx_prepare, 1, GroupId, BeginRef, TamperedManifest,
+    Tampered = {quod_dtx_prepare, 2, GroupId, BeginRef, TamperedManifest,
                 PlanDigest, PlanBlob},
     ?assertEqual(error, quod_dtx:prepare_payload(Tampered)),
     ?assertNot(quod_dtx:prepare_matches_begin(Tampered, Begin)),
@@ -1129,7 +1248,7 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
        ok,
        quod_dtx:validate_references(
          PrepareAControl, [{'begin', BeginRef, BeginControl}])),
-    {quod_dtx_decision, 1, _, _, commit, PrepareRows, _} =
+    {quod_dtx_decision, 2, _, _, commit, PrepareRows, _} =
         maps:get(decision_record, F),
     DecisionEvidence =
         [{'begin', BeginRef, BeginControl} |
@@ -1143,7 +1262,7 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
          maps:get(finalize_a_control, F),
          [{decision, DecisionRef, DecisionControl},
           {prepare, PrepareARef, PrepareAControl}])),
-    {quod_dtx_complete, 1, _, _, FinalizeRows} =
+    {quod_dtx_complete, 2, _, _, FinalizeRows} =
         maps:get(complete_record, F),
     CompleteEvidence =
         [{decision, DecisionRef, DecisionControl} |
@@ -1170,7 +1289,7 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
                           maps:get(target_b, F), PlanB,
                           ForeignManifest, maps:get(signer, F)),
     {ok, ForeignBegin} = quod_dtx:new_begin(
-                           ForeignManifest,
+                           ForeignManifest, none, none,
                            [{maps:get(target_a, F), quod_dtx:digest(PlanA),
                              PlanABlob, ForeignAttA},
                             {maps:get(target_b, F), quod_dtx:digest(PlanB),
@@ -1194,7 +1313,7 @@ reference_validation_is_exhaustive_and_rejects_cross_group_or_verdict_test() ->
                              maps:get(origin, F), CrossDecision,
                              maps:get(admission, F), 71,
                              maps:get(signer, F)),
-    {quod_dtx_decision, 1, _, _, _, CrossRows, _} = CrossDecision,
+    {quod_dtx_decision, 2, _, _, _, CrossRows, _} = CrossDecision,
     CrossEvidence =
         [{'begin', BeginRef, BeginControl} |
          [{prepare, Ref,
@@ -1237,7 +1356,7 @@ preview_uses_the_shared_reducer_with_an_exact_candidate_ref_test() ->
     BeginEntry = maps:get('begin', maps:get(records, H1)),
     CandidateRef = maps:get(ref, BeginEntry),
     ?assertMatch(
-       {quod_dtx_ref, 1, Ns, Anchor, Slot, BlockHash, _Digest,
+       {quod_dtx_ref, 2, Ns, Anchor, Slot, BlockHash, _Digest,
         <<_/binary>>},
        CandidateRef),
     ?assertEqual(
@@ -1367,7 +1486,7 @@ abort_reducer_retains_exact_reasons(Pub) ->
     OriginRole = maps:get(origin, maps:get(active, P2)),
     DecisionEntry = maps:get(decision, maps:get(records, H2)),
     StoredDecision = maps:get(record, DecisionEntry),
-    {quod_dtx_decision, 1, _, _, abort, _, ReasonsBlob} =
+    {quod_dtx_decision, 2, _, _, abort, _, ReasonsBlob} =
         record_tuple(StoredDecision),
     ?assert(is_binary(ReasonsBlob)),
     ?assertEqual(
@@ -1652,6 +1771,7 @@ protocol_fixture(Pub) ->
                     {element(1, A), element(2, A), Pub, Admission},
                 nonce => key(94), principal => anonymous,
                 goal => GoalBlob, result => ResultBlob,
+                request_binding => none,
                 participants => Participants},
           {ok, Manifest} = quod_dtx:new_manifest(ManifestInput),
           {ok, AttA} = quod_dtx:attest_plan(A, PlanA, Manifest, Signer),
@@ -1659,7 +1779,8 @@ protocol_fixture(Pub) ->
           Bundles =
               [{B, quod_dtx:digest(PlanB), PlanBBlob, AttB},
                {A, quod_dtx:digest(PlanA), PlanABlob, AttA}],
-          {ok, Begin} = quod_dtx:new_begin(Manifest, Bundles),
+          {ok, Begin} = quod_dtx:new_begin(
+                          Manifest, none, none, Bundles),
           GroupId = quod_dtx:group_id(Begin),
           BeginControl = signed(A, Begin, Admission, 1, Signer),
           BeginRef = protocol_ref(A, 1, Begin),
@@ -1722,7 +1843,8 @@ protocol_plan(Target, ProofId, Origin, Fact) ->
             quod_dtx:seal_session(
               Session,
               #{target => Target, base_height => 1, proof_id => ProofId,
-                origin => Origin, principal => anonymous}),
+                origin => Origin, principal => anonymous,
+                request_binding => none}),
         {ok, Blob} = quod_dtx:encode(Plan),
         {Plan, Blob}
     after
@@ -1777,11 +1899,11 @@ forge_control_blob(Kind, Target, Record, Admission, Sequence, SubmittedAt,
         end,
     Bytes =
         term_to_binary(
-          {Domain, 1, Target, BodyBlob, Author, Admission, Sequence,
+          {Domain, 2, Target, BodyBlob, Author, Admission, Sequence,
            SubmittedAt}, [deterministic]),
     Signature = quod_identity:sign(Bytes, Signer),
     term_to_binary(
-      {quod_dtx_control, 1, Kind, Target, BodyBlob, Author, Admission,
+      {quod_dtx_control, 2, Kind, Target, BodyBlob, Author, Admission,
        Sequence, SubmittedAt, Signature}, [deterministic]).
 
 abort_controls(F) ->
@@ -1837,7 +1959,8 @@ origin_only_group(F, Origin) ->
           coordinator =>
               {OriginNs, OriginAnchor, maps:get(pubkey, Signer), Admission},
           nonce => key(231), principal => anonymous,
-          goal => GoalBlob, result => ResultBlob,
+              goal => GoalBlob, result => ResultBlob,
+              request_binding => none,
           participants =>
               [{C, quod_dtx:digest(PlanC)},
                {A, quod_dtx:digest(PlanA)}]},
@@ -1846,7 +1969,7 @@ origin_only_group(F, Origin) ->
     {ok, AttC} = quod_dtx:attest_plan(C, PlanC, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest,
+          Manifest, none, none,
           [{C, quod_dtx:digest(PlanC), PlanCBlob, AttC},
            {A, quod_dtx:digest(PlanA), PlanABlob, AttA}]),
     GroupId = quod_dtx:group_id(Begin),
@@ -1894,7 +2017,7 @@ identity(N) -> {<<"quod:bounded">>, key(180 + N)}.
 reason_identity({Ns, <<_:256>> = Anchor}) when is_binary(Ns) ->
     {ontology, Ns, Anchor}.
 
-ref_slot_test({quod_dtx_ref, 1, _, _, Slot, _, _, _}) -> Slot.
+ref_slot_test({quod_dtx_ref, 2, _, _, Slot, _, _, _}) -> Slot.
 
 reason_wire_size(Reason) ->
     {ok, Wire} = quod_wire_term:encode(Reason),
@@ -1946,6 +2069,7 @@ signed_material_plan(Diff, ReadPairs, Transcript) ->
              proof_id => key(2),
              origin => {<<"quod:origin">>, key(3)},
              principal => anonymous,
+             request_binding => none,
              overlay_generation => 0,
              diff_ops => length(Diff),
              read_functors => length(ReadPairs),
@@ -1956,7 +2080,7 @@ signed_material_plan(Diff, ReadPairs, Transcript) ->
              live_bridges => wire_blob([]),
              transcript => wire_blob(Transcript)},
     Bytes = term_to_binary(
-              {<<"quod.dtx.plan">>, 4, Core}, [deterministic]),
+              {<<"quod.dtx.plan">>, 5, Core}, [deterministic]),
     plan({quod_plan, Core, Pubkey, quod_identity:sign(Bytes, Signer)}).
 
 transcript_with_goal(Goal) ->

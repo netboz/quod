@@ -19,9 +19,10 @@ divergent_submit_reply_terminates_with_expected_reference_test() ->
     Parent = self(),
     Router = spawn(fun request_link/0),
     RequestLink = spawn(fun request_link/0),
-    Binding = {scope_binding, key(7), key(8), key(9), id(2),
-               {<<"quod:origin">>, key(10)},
-               {<<"quod:target">>, key(4)}, read_write},
+    Binding = node_binding(
+                key(7), key(8), key(9), id(2),
+                {<<"quod:origin">>, key(10)},
+                {<<"quod:target">>, key(4)}, read_write),
     Handle = {remote_scope, Router, id(1), Binding, RequestLink},
     RequestId = id(3),
     ExpectedRef = {transaction, <<"quod:target">>, key(4), key(5)},
@@ -52,7 +53,7 @@ startup_failure_is_asynchronous_and_monitored_test() ->
         quod_scope_session:start(
           ScopeId, ProofId, self(), <<"quod:broken-scope">>, Anchor, 0,
           {not_an_erlog_state}, self(),
-          #{principal => key(1),
+          #{principal => {node, key(1)}, request_binding => none,
             deadline_ms => quod_time:mono_ms() + 5000}),
     Worker = quod_scope_session:pid(Handle),
     receive
@@ -70,7 +71,7 @@ worker_heap_cap_and_public_local_errors_test() ->
         quod_scope_session:start(
           ScopeId, ProofId, self(), Ns, Anchor, 0,
           committed([]), self(),
-          #{principal => key(89),
+          #{principal => {node, key(89)}, request_binding => none,
             deadline_ms => quod_time:mono_ms() + 5000}),
     {quod_scope_session, Worker, ScopeId, ProofId,
      SessionRef, Ns, Anchor} = Handle,
@@ -153,7 +154,8 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
     {Handle, WorkerMRef} =
         quod_scope_session:start(
           ScopeId, ProofId, self(), Ns, Anchor, 0, Est, self(),
-          #{principal => key(99), access_guard => AccessGuard,
+          #{principal => {node, key(99)}, request_binding => none,
+            access_guard => AccessGuard,
             deadline_ms => quod_time:mono_ms() + 5000}),
     {quod_scope_session, Worker, ScopeId, ProofId,
      SessionRef, Ns, Anchor} = Handle,
@@ -450,9 +452,10 @@ failure_reason_is_transport_specific_test() ->
     Local = {quod_scope_session, self(), id(70), key(71), make_ref(),
              LocalNs, key(72)},
     TargetNs = <<"quod:remote-failure">>,
-    Binding = {scope_binding, key(73), key(74), key(75), id(76),
-               {<<"quod:origin">>, key(77)}, {TargetNs, key(78)},
-               read_write},
+    Binding = node_binding(
+                key(73), key(74), key(75), id(76),
+                {<<"quod:origin">>, key(77)}, {TargetNs, key(78)},
+                read_write),
     Remote = {remote_scope, self(), id(79), Binding, self()},
     ?assertEqual(
        read_only,
@@ -645,7 +648,7 @@ worker_seals_its_session_on_request_test() ->
     {Handle, WorkerMRef} =
         quod_scope_session:start(
           ScopeId, ProofId, self(), Ns, Anchor, 7, Est, self(),
-          #{principal => key(83),
+          #{principal => {node, key(83)}, request_binding => none,
             signer => Signer,
             deadline_ms => quod_time:mono_ms() + 5000}),
     {quod_scope_session, Worker, ScopeId, ProofId,
@@ -729,8 +732,9 @@ remote_fixture(Mode) ->
     ScopeId = id(60),
     OriginIdentity = {<<"quod:origin">>, key(61)},
     TargetIdentity = {<<"quod:target">>, key(62)},
-    Binding = {scope_binding, key(63), key(64), key(65), ScopeId,
-               OriginIdentity, TargetIdentity, read_write},
+    Binding = node_binding(
+                key(63), key(64), key(65), ScopeId,
+                OriginIdentity, TargetIdentity, read_write),
     Handle = {remote_scope, Router, id(66), Binding, RequestLink},
     Router ! {set_handle, Handle},
     {Router, Handle, ScopeId, TargetIdentity}.
@@ -748,8 +752,9 @@ remote_attestation_fixture() ->
              TargetIdentity, OriginIdentity, ProofId, Principal, Signer),
     Mode = {attestation_fixture, Plan, Signer},
     Router = spawn(fun() -> fake_router(Parent, Mode, 1) end),
-    Binding = {scope_binding, key(163), TargetKey, ProofId, ScopeId,
-               OriginIdentity, TargetIdentity, read_write},
+    Binding = node_binding(
+                key(163), TargetKey, ProofId, ScopeId,
+                OriginIdentity, TargetIdentity, read_write),
     Handle = {remote_scope, Router, id(167), Binding, RequestLink},
     Router ! {set_handle, Handle},
     {Router, Handle, Plan, TargetKey, TargetIdentity}.
@@ -945,6 +950,7 @@ manifest_for_plan(Plan, Nonce, Coordinator) ->
                          principal => quod_dtx:principal(Plan),
                          goal => GoalBlob,
                          result => ResultBlob,
+                         request_binding => none,
                          participants =>
                              [{Target, quod_dtx:digest(Plan)},
                               {{<<"quod:other">>, key(241)}, key(242)}]}),
@@ -970,11 +976,19 @@ sealed_test_plan(Target, Origin, ProofId, Principal, Signer) ->
                        Session,
                        #{target => Target, base_height => 4,
                          proof_id => ProofId, origin => Origin,
-                         principal => Principal}),
+                         principal => Principal, request_binding => none}),
         Plan
     after
         quod_proof_session:stop(Session)
     end.
+
+node_binding(OriginKey, TargetKey, ProofId, ScopeId,
+             OriginIdentity, TargetIdentity, Mode) ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
+    {scope_binding, OriginKey, TargetKey, ProofId, ScopeId,
+     OriginIdentity, TargetIdentity, Mode,
+     {node, OriginKey}, AuthenticationDigest}.
 
 id(N) -> <<N:128>>.
 key(N) -> <<N:256>>.

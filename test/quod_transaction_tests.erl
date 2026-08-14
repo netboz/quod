@@ -195,6 +195,110 @@ genesis_id(Ns, Nonce) ->
     <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
       (byte_size(Ns)):32, Ns/binary, Nonce/binary>>.
 
+signed_user_request_is_bound_and_revalidated_at_admission_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Transaction = maps:get(transaction, Fixture),
+    Network = maps:get(network, Fixture),
+    Target = maps:get(target, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    {ok, #{principal := {user, User}, claim := Claim}} =
+        quod_transaction:validate_request(
+          Network, Target, Deadline, Transaction),
+    ?assertEqual(maps:get(user, Fixture), User),
+    ?assertEqual(maps:get(operation_ref, Fixture),
+                 maps:get(operation_ref, Claim)),
+    ?assertEqual(
+       {error, expired},
+       quod_transaction:validate_request(
+         Network, Target, Deadline + 1, Transaction)),
+    ?assertMatch({ok, #{digest := _, operation_ref := _}},
+                 quod_transaction:request_claim(Transaction)).
+
+signed_user_request_and_authorization_transcript_are_not_interchangeable_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Transaction = maps:get(transaction, Fixture),
+    Network = maps:get(network, Fixture),
+    Target = maps:get(target, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    {user_goal_v1, Digest, Bytes, Signature} =
+        Transaction#transaction.request_auth,
+    ForgedAuth = {user_goal_v1, Digest, flip_first(Bytes), Signature},
+    ?assertMatch(
+       {error, _},
+       quod_transaction:validate_request(
+         Network, Target, Deadline,
+         Transaction#transaction{request_auth = ForgedAuth})),
+    {ok, OtherGoal} = quod_durable_term:encode_goal({saved, other}),
+    {ok, WrongTranscript} =
+        quod_wire_term:encode_canonical(
+          [{<<1:128>>, [Target], OtherGoal, allowed, 1, <<2:256>>, complete}]),
+    WrongAuthorization =
+        Transaction#transaction{
+          auth_transcript = {user_goal_v1, WrongTranscript}},
+    ?assertEqual(
+       {error, invalid_authorization_transcript},
+       quod_transaction:validate_request(
+         Network, Target, Deadline, WrongAuthorization)),
+    ?assertEqual(error, quod_transaction:request_claim(WrongAuthorization)).
+
+signed_request_replay_uses_the_certified_block_time_test() ->
+    Network = <<82:256>>,
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{network => Network, target => {?NS, ?ANCHOR}}),
+    Transaction = maps:get(transaction, Fixture),
+    #{pubkey := Author} = maps:get(node_identity, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Projection = quod_simplex:history_projection(
+                   [Author], undefined, #{Author => Admission}, #{}, 0),
+    Deadline = maps:get(deadline, Fixture),
+    quod_ct:with_network_identity(
+      Network,
+      fun() ->
+          ?assert(quod_simplex:valid_history_entry(
+                    {?NS, ?ANCHOR}, 2, {batch, [Transaction]},
+                    Deadline, Projection)),
+          ?assertNot(quod_simplex:valid_history_entry(
+                       {?NS, ?ANCHOR}, 2, {batch, [Transaction]},
+                       Deadline + 1, Projection))
+      end).
+
+same_user_request_has_one_semantic_transaction_across_validator_authors_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    First = maps:get(transaction, Fixture),
+    {OtherAuthor, OtherIdentity} = identity(),
+    Admission = maps:get(admission, Fixture),
+    {Ns, Anchor} = Target = maps:get(target, Fixture),
+    {ok, Second} = quod_transaction:sign(
+                     {Ns, Anchor, Admission},
+                     First#transaction{author = OtherAuthor,
+                                       author_seq = 2, sig = none},
+                     OtherIdentity),
+    ?assertNotEqual(First#transaction.author, Second#transaction.author),
+    ?assertNotEqual(First#transaction.sig, Second#transaction.sig),
+    ?assertEqual(First#transaction.tx_id, Second#transaction.tx_id),
+    ?assertEqual(quod_transaction:request_claim(First),
+                 quod_transaction:request_claim(Second)),
+    {ok, Claim} = quod_transaction:request_claim(Second),
+    ?assert(quod_transaction:verify(
+              {Ns, Anchor, Admission}, First)),
+    ?assert(quod_transaction:verify(
+              {Ns, Anchor, Admission}, Second)),
+    ?assertEqual(Target, maps:get(target, Claim)).
+
+network_identity_requirement_is_total_and_fail_closed_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Signed = maps:get(transaction, Fixture),
+    Unsigned = Signed#transaction{request_auth = none,
+                                  auth_transcript = none},
+    Mismatched = Unsigned#transaction{
+                   auth_transcript = {user_goal_v1, <<>>}},
+    ?assertNot(quod_transaction:requires_network_identity([])),
+    ?assertNot(quod_transaction:requires_network_identity([Unsigned])),
+    ?assert(quod_transaction:requires_network_identity([Mismatched])),
+    ?assert(quod_transaction:requires_network_identity([Unsigned, Signed])),
+    ?assert(quod_transaction:requires_network_identity([malformed])),
+    ?assert(quod_transaction:requires_network_identity(not_a_list)).
+
 relay_submission_roundtrip_test() ->
     {Tx, _Identity} = signed(),
     {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
@@ -205,6 +309,25 @@ relay_submission_roundtrip_test() ->
     ?assertMatch({error, namespace_or_author_mismatch},
                  quod_transaction:decode_verified_submission(
                    {<<"other">>, ?ANCHOR, ?ADMISSION}, Submission)).
+
+superseded_v7_transaction_is_explicitly_rejected_test() ->
+    {Tx, Identity} = signed(),
+    {ok, V8Bytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 8, Ns, Anchor, Admission,
+     TxId, Origin, ProofId, PlanDigest, Goal, Result,
+     MaterialWire, EffectsWire, _RequestAuth, _AuthorizationTranscript,
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(V8Bytes),
+    V7Bytes = term_to_binary(
+                {quod_transaction, 7, Ns, Anchor, Admission,
+                 TxId, Origin, ProofId, PlanDigest, Goal, Result,
+                 MaterialWire, EffectsWire, Author, AuthorSeq, SubmittedAt},
+                [deterministic]),
+    V7Signature = quod_identity:sign(V7Bytes, Identity),
+    V7Submission = {submit, Author, V7Signature, V7Bytes},
+    ?assert(quod_transaction:verify_submission(V7Submission)),
+    ?assertEqual(
+       {error, malformed_submission},
+       quod_transaction:decode_verified_submission(?BINDING, V7Submission)).
 
 different_canonical_submissions_have_different_ids_test() ->
     {Tx, Identity} = signed(),
@@ -315,9 +438,10 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 7, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 8, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
-           <<>>, <<>>, MaterialWire, CanonicalEffects, Author, 1, 0},
+           <<>>, <<>>, MaterialWire, CanonicalEffects,
+           none, none, Author, 1, 0},
           [deterministic]),
     Signature = quod_identity:sign(Canonical, Identity),
     Submission = {submit, Author, Signature, Canonical},

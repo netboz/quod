@@ -1,9 +1,9 @@
 # Transaction-author signatures
 
 **Status:** the original signature/relay milestone is deployed. The current
-working tree introduces the incompatible V7 typed-effects extension to the
-admission-generation and semantic-transaction-id contract described below; it
-is not deployed.
+working tree introduces the incompatible V8 signed-user-request extension to
+the admission-generation and semantic-transaction-id contract described below;
+it is not deployed.
 
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.
@@ -33,7 +33,8 @@ requires a clean persistence reset and re-found.
     including an uncommitted approved parent. Gaps are legal; reuse is not.
 11. Every non-genesis `tx_id` is the target-bound SHA-256 digest of the complete
 semantic write: origin, proof and plan identities, durable goal/result,
-diff, read check, and typed direct effects. Validators recompute it at live
+diff, read check, typed direct effects, exact signed-user request evidence,
+and its top-level authorization transcript. Validators recompute it at live
 ingress and replay.
 
 The proof origin hashes a plan's opaque `diff` and `read_check` bytes without
@@ -48,10 +49,11 @@ non-canonical nested plan is rejected before transaction construction.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 7,
+  {quod_transaction, 8,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
-   MaterialWire, EffectsWire, Author, AuthorSeq, SubmittedAt},
+   MaterialWire, EffectsWire, RequestAuth, AuthorizationTranscript,
+   Author, AuthorSeq, SubmittedAt},
   [deterministic]).
 ```
 
@@ -62,10 +64,14 @@ before permitting a bounded vocabulary allocation for the authenticated
 committee author.
 
 `EffectsWire` is the separate bounded canonical encoding of the closed typed
-direct-effect list. It is signed and included in the semantic transaction id;
-private prepared payloads and executable goals are never stored there.
+direct-effect list. `RequestAuth` is either `none` or the exact canonical
+signed-user request evidence; `AuthorizationTranscript` is either `none` or
+the one canonical top-level `can_invoke/4` decision recorded during the proof.
+Both are signed and included in the semantic transaction id. Validators verify
+the request and re-prove the recorded ACL decision against the proposal parent;
+private prepared payloads and executable callbacks are never stored there.
 
-The tuple prefix `{quod_transaction, 7}` is the fixed cryptographic
+The tuple prefix `{quod_transaction, 8}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current

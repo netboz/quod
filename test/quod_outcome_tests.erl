@@ -13,6 +13,24 @@ deterministic_transaction_identity_is_target_anchored_test() ->
                  {<<"quod:other">>, Anchor}, T)),
     ?assertNot(quod_transaction:valid_id({Ns, <<3:256>>}, T)).
 
+all_public_outcome_references_share_one_identity_parser_test() ->
+    Ns = <<"quod:target">>,
+    Anchor = <<1:256>>,
+    Identity = {Ns, Anchor},
+    ?assertEqual(
+       {ok, Identity},
+       quod_outcome:ref_identity({transaction, Ns, Anchor, <<2:256>>})),
+    ?assertEqual(
+       {ok, Identity},
+       quod_outcome:ref_identity(
+         {group, Ns, Anchor, <<3:256>>, <<4:256>>, <<5:256>>})),
+    ?assertEqual(
+       {ok, Identity},
+       quod_outcome:ref_identity(
+         {operation, Ns, Anchor, <<6:256>>, <<7:256>>})),
+    ?assertEqual(error, quod_outcome:ref_identity({transaction, Ns, Anchor})),
+    ?assertEqual(error, quod_outcome:ref_identity(not_a_reference)).
+
 pending_terminal_and_semantic_duplicate_test() ->
     Ns = <<"quod:outcome-memory">>,
     Anchor = <<4:256>>,
@@ -56,6 +74,76 @@ changed_content_requires_its_own_transaction_id_test() ->
     ?assertNotEqual(T#transaction.tx_id, Changed#transaction.tx_id),
     ?assertMatch({new, _, _}, quod_outcome:classify(Index1, Changed)),
     ok = quod_outcome:close(Index1).
+
+one_operation_projection_arbitrates_transaction_and_begin_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = Target = maps:get(target, Fixture),
+    Transaction = maps:get(transaction, Fixture),
+    Begin = maps:get('begin', Fixture),
+    {ok, TransactionClaim} = quod_transaction:request_claim(Transaction),
+    {ok, BeginClaim} = quod_dtx:request_claim(Begin),
+    ?assertEqual(TransactionClaim, BeginClaim),
+    TransactionRef =
+        {transaction, Ns, Anchor, Transaction#transaction.tx_id},
+    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
+    {ok, Index0} = quod_outcome:open(
+                     Ns, Anchor, #{outcome_backend => memory}),
+    {new, Index1} = quod_outcome:claim_operation(
+                      Index0, 2, TransactionClaim, TransactionRef),
+    {{claimed, Existing}, Index2} = quod_outcome:check_operation(
+                                      Index1, BeginClaim, GroupRef),
+    ?assertEqual(TransactionRef, maps:get(outcome_ref, Existing)),
+    ?assertEqual(
+       {error, outcome_index_conflict},
+       quod_outcome:claim_operation(
+         Index2, 3, BeginClaim, GroupRef)),
+    OperationRef = maps:get(operation_ref, TransactionClaim),
+    {{ok, Existing}, Index3} = quod_outcome:lookup_ref(Index2, OperationRef),
+    ?assertEqual(
+       {ok, #{status => claimed, ref => OperationRef,
+              request_digest => maps:get(digest, TransactionClaim),
+              outcome_ref => TransactionRef, height => 2}},
+       quod_outcome:public(Existing)),
+    ?assertEqual(Target, maps:get(target, TransactionClaim)),
+    ok = quod_outcome:close(Index3).
+
+same_operation_id_conflicts_across_transaction_and_begin_after_reopen_test() ->
+    First = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = Target = maps:get(target, First),
+    Second = quod_ct:signed_dtx_begin_fixture(
+               #{target => Target,
+                 key_pair => maps:get(key_pair, First),
+                 operation_id => maps:get(operation_id, First),
+                 goal_text => <<"assertz(saved(other)).">>}),
+    {ok, FirstClaim} = quod_transaction:request_claim(
+                         maps:get(transaction, First)),
+    {ok, SecondClaim} = quod_dtx:request_claim(maps:get('begin', Second)),
+    ?assertEqual(maps:get(key, FirstClaim), maps:get(key, SecondClaim)),
+    ?assertNotEqual(maps:get(digest, FirstClaim), maps:get(digest, SecondClaim)),
+    FirstRef = {transaction, Ns, Anchor,
+                (maps:get(transaction, First))#transaction.tx_id},
+    {ok, SecondRef} = quod_dtx:begin_group_ref(maps:get('begin', Second)),
+    Dir = outcome_dir("operation-reopen"),
+    Config = #{data_dir => Dir, outcome_backend => disk},
+    try
+        {ok, Index0} = quod_outcome:open(Ns, Anchor, Config),
+        {new, Index1} = quod_outcome:claim_operation(
+                          Index0, 2, FirstClaim, FirstRef),
+        {ok, Index2} = quod_outcome:flush(Index1),
+        ok = quod_outcome:close(Index2),
+        {ok, Reopened0} = quod_outcome:open(Ns, Anchor, Config),
+        {{claimed, Stored}, Reopened1} = quod_outcome:check_operation(
+                                          Reopened0, SecondClaim, SecondRef),
+        ?assertEqual(maps:get(digest, FirstClaim),
+                     maps:get(request_digest, Stored)),
+        ?assertEqual(
+           {error, outcome_index_conflict},
+           quod_outcome:claim_operation(
+             Reopened1, 3, SecondClaim, SecondRef)),
+        ok = quod_outcome:close(Reopened1)
+    after
+        _ = file:del_dir_r(Dir)
+    end.
 
 nondeterministic_transaction_id_is_rejected_test() ->
     Ns = <<"quod:outcome-id">>,
@@ -723,11 +811,12 @@ group_fixture(Ns, Anchor, Pub, Signer, Verdict) ->
                          coordinator => {Ns, Anchor, Pub, Admission},
                          nonce => <<35:256>>, principal => anonymous,
                          goal => GoalBlob, result => ResultBlob,
+                         request_binding => none,
                          participants => Participants}),
     {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
-                    Manifest,
+                    Manifest, none, none,
                     [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
                      {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     GroupId = quod_dtx:group_id(Begin),
@@ -789,7 +878,7 @@ group_plan(Target, ProofId, Origin, Fact, Signer) ->
                        Session,
                        #{target => Target, base_height => 1,
                          proof_id => ProofId, origin => Origin,
-                         principal => anonymous}),
+                         principal => anonymous, request_binding => none}),
         {ok, Blob} = quod_dtx:encode(Plan),
         {Plan, Blob}
     after
@@ -830,4 +919,4 @@ apply_group_control_with_deferred_ack(Index, Slot, Control, Ref,
                                   Projection1, Effects),
     {Index1, History1, Projection1, DeferredAck}.
 
-ref_slot({quod_dtx_ref, 1, _, _, Slot, _, _, _}) -> Slot.
+ref_slot({quod_dtx_ref, 2, _, _, Slot, _, _, _}) -> Slot.

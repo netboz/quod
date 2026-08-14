@@ -20,49 +20,50 @@ required_references_is_exhaustive_test() ->
     ?assertEqual(
        {ok, []},
        quod_foreign_log:required_references(
-         control('begin', Target, {quod_dtx_begin, 1, ignored, ignored}))),
+         control('begin', Target,
+                 {quod_dtx_begin, 2, ignored, none, none, ignored}))),
     ?assertEqual(
        {ok, [{'begin', BeginA}]},
        quod_foreign_log:required_references(
          control(prepare, Target,
-                 {quod_dtx_prepare, 1, key(20), BeginA, ignored,
+                 {quod_dtx_prepare, 2, key(20), BeginA, ignored,
                   key(21), <<>>}))),
     ?assertEqual(
        {ok, [{'begin', BeginA}, {prepare, PrepareA}, {prepare, PrepareB}]},
        quod_foreign_log:required_references(
          control(decision, Target,
-                 {quod_dtx_decision, 1, key(20), BeginA, commit,
+                 {quod_dtx_decision, 2, key(20), BeginA, commit,
                   [{A, PrepareA}, {B, PrepareB}], none}))),
     ?assertEqual(
        {ok, [{decision, Decision}, {prepare, PrepareA}]},
        quod_foreign_log:required_references(
          control(finalize, Target,
-                 {quod_dtx_finalize, 1, key(20), Decision, commit,
+                 {quod_dtx_finalize, 2, key(20), Decision, commit,
                   PrepareA, 2}))),
     ?assertEqual(
        {ok, [{decision, Decision}]},
        quod_foreign_log:required_references(
          control(finalize, Target,
-                 {quod_dtx_finalize, 1, key(20), Decision, abort, none, 1}))),
+                 {quod_dtx_finalize, 2, key(20), Decision, abort, none, 1}))),
     ?assertEqual(
        {ok, [{decision, Decision},
              {finalize, FinalizeA}, {finalize, FinalizeB}]},
        quod_foreign_log:required_references(
          control(complete, Target,
-                 {quod_dtx_complete, 1, key(20), Decision,
+                 {quod_dtx_complete, 2, key(20), Decision,
                   [{A, FinalizeA, 2}, {B, FinalizeB, 3}]}))),
     %% A row cannot smuggle a reference for a different anchored identity.
     ?assertEqual(
        {error, invalid_control},
        quod_foreign_log:required_references(
          control(decision, Target,
-                 {quod_dtx_decision, 1, key(20), BeginA, commit,
+                 {quod_dtx_decision, 2, key(20), BeginA, commit,
                   [{B, PrepareA}], none}))),
     ?assertEqual(
        {error, invalid_control},
        quod_foreign_log:required_references(
          control(complete, Target,
-                 {quod_dtx_complete, 1, key(20), Decision,
+                 {quod_dtx_complete, 2, key(20), Decision,
                   [{A, FinalizeA, 16#10000000000000000}]}))).
 
 invalid_public_timeout_is_rejected_without_owner_test() ->
@@ -496,12 +497,12 @@ tampered_reference_and_phase_are_rejected_test() ->
         ?assertMatch(
            {ok, _},
            quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
-        {quod_dtx_ref, 1, RNs, Anchor, Slot, BlockHash, Digest, Proof} = Ref,
-        BadHash = {quod_dtx_ref, 1, RNs, Anchor, Slot, key(201),
+        {quod_dtx_ref, 2, RNs, Anchor, Slot, BlockHash, Digest, Proof} = Ref,
+        BadHash = {quod_dtx_ref, 2, RNs, Anchor, Slot, key(201),
                    Digest, Proof},
-        BadDigest = {quod_dtx_ref, 1, RNs, Anchor, Slot, BlockHash,
+        BadDigest = {quod_dtx_ref, 2, RNs, Anchor, Slot, BlockHash,
                      key(202), Proof},
-        BadProof = {quod_dtx_ref, 1, RNs, Anchor, Slot, BlockHash,
+        BadProof = {quod_dtx_ref, 2, RNs, Anchor, Slot, BlockHash,
                     Digest, <<"different-qc">>},
         ?assertMatch(
            {error, _},
@@ -595,9 +596,9 @@ wrong_anchor_and_unavailable_history_only_retry_test() ->
     Pid = start_owner(Dir, Fetch),
     Peer = key(93),
     Endpoint = {"127.0.0.1", 19093},
-    {quod_dtx_ref, 1, RNs, _Anchor, Slot, BlockHash, Digest, Proof} =
+    {quod_dtx_ref, 2, RNs, _Anchor, Slot, BlockHash, Digest, Proof} =
         maps:get(ref, Fixture),
-    WrongAnchorRef = {quod_dtx_ref, 1, RNs, key(203), Slot,
+    WrongAnchorRef = {quod_dtx_ref, 2, RNs, key(203), Slot,
                       BlockHash, Digest, Proof},
     try
         ?assertEqual(
@@ -839,19 +840,20 @@ prepared_fixture(Ns) ->
     {ok, EmptyBlob} = quod_wire_term:encode_canonical([]),
     Core = #{target => Binding, base_height => 1,
              proof_id => key(83), origin => Origin,
-             principal => anonymous, overlay_generation => 0,
+             principal => anonymous, request_binding => none,
+             overlay_generation => 0,
              diff_ops => 1, read_functors => 0, effects_count => 0,
              diff => DiffBlob, read_check => EmptyBlob,
              effects => EmptyBlob, live_bridges => EmptyBlob,
              transcript => EmptyBlob},
     PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 4, Core}, [deterministic]),
+                  {<<"quod.dtx.plan">>, 5, Core}, [deterministic]),
     Plan = {quod_plan, Core, Pub,
             quod_identity:sign(PlanBytes, Signer)},
     {ok, PlanBlob} = quod_dtx:encode(Plan),
     OtherCore = Core#{target := Other, diff_ops := 0, diff := EmptyBlob},
     OtherPlanBytes = term_to_binary(
-                       {<<"quod.dtx.plan">>, 4, OtherCore}, [deterministic]),
+                       {<<"quod.dtx.plan">>, 5, OtherCore}, [deterministic]),
     OtherPlan = {quod_plan, OtherCore, Pub,
                  quod_identity:sign(OtherPlanBytes, Signer)},
     {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),
@@ -864,6 +866,7 @@ prepared_fixture(Ns) ->
                               Pub, Admission},
                          nonce => key(82), principal => anonymous,
                          goal => GoalBlob, result => ResultBlob,
+                         request_binding => none,
                          participants =>
                              [{Binding, quod_dtx:digest(Plan)},
                               {Other, quod_dtx:digest(OtherPlan)}]}),
@@ -872,7 +875,7 @@ prepared_fixture(Ns) ->
     {ok, OtherAttestation} = quod_dtx:attest_plan(
                                Other, OtherPlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
-                    Manifest,
+                    Manifest, none, none,
                     [{Binding, quod_dtx:digest(Plan), PlanBlob, Attestation},
                      {Other, quod_dtx:digest(OtherPlan), OtherPlanBlob,
                       OtherAttestation}]),
@@ -1053,7 +1056,7 @@ receive_fetches(N, Acc) ->
     end.
 
 control(Kind, Target, Record) ->
-    {quod_dtx_control, 1, Kind, Target, Record,
+    {quod_dtx_control, 2, Kind, Target, Record,
      key(240), key(241), 1, 0, <<0:512>>}.
 
 ref({Ns, Anchor}, Slot, Seed) ->

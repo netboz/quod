@@ -46,7 +46,9 @@ applies target identity, history, policy, signing, and consensus semantics.
         {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}.
 -type transaction_ref() ::
         {transaction, binary(), <<_:256>>, <<_:256>>}.
--type outcome_ref() :: transaction_ref() | group_ref().
+-type operation_ref() ::
+        {operation, binary(), <<_:256>>, <<_:256>>, <<_:256>>}.
+-type outcome_ref() :: transaction_ref() | group_ref() | operation_ref().
 -type phase_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type verdict() :: commit | abort.
 -type request() ::
@@ -365,6 +367,15 @@ valid_public_outcome_status(
     ref := GroupRef} = Status)
   when map_size(Status) =:= 3 ->
     valid_group_ref(GroupRef);
+valid_public_outcome_status(
+  #{status := claimed, height := Height, ref := OperationRef,
+    request_digest := RequestDigest, outcome_ref := OutcomeRef} = Status)
+  when map_size(Status) =:= 5 ->
+    valid_slot(Height) andalso valid_operation_ref(OperationRef) andalso
+        is_binary(RequestDigest) andalso byte_size(RequestDigest) =:= 32 andalso
+        valid_outcome_ref(OutcomeRef) andalso
+        quod_outcome:ref_identity(OperationRef) =:=
+            quod_outcome:ref_identity(OutcomeRef);
 valid_public_outcome_status(_) ->
     false.
 
@@ -454,7 +465,7 @@ correlates(
   {outcome, RequestId, TargetIdentity, CommitteeId, AppliedFloor,
    Outcome} = Response) ->
     valid_pair(Request, Response) andalso AppliedFloor >= MinimumSlot andalso
-        TargetIdentity =:= outcome_ref_identity(OutcomeRef) andalso
+        quod_outcome:ref_identity(OutcomeRef) =:= {ok, TargetIdentity} andalso
         outcome_matches_ref(Outcome, OutcomeRef);
 correlates(
   {outcome_barrier, RequestId, GroupRef, CommitteeId,
@@ -462,7 +473,7 @@ correlates(
   {outcome_barrier, RequestId, TargetIdentity, CommitteeId, AppliedFloor,
    _Status} = Response) ->
     valid_pair(Request, Response) andalso AppliedFloor >= MinimumSlot andalso
-        TargetIdentity =:= outcome_ref_identity(GroupRef);
+        quod_outcome:ref_identity(GroupRef) =:= {ok, TargetIdentity};
 correlates(
   {applied, RequestId, GroupId, FinalizeRef, Generation, Verdict} = Request,
   {applied, RequestId, _TargetIdentity, _CommitteeId, GroupId, FinalizeRef,
@@ -478,14 +489,6 @@ outcome_matches_ref(not_found, _OutcomeRef) -> true;
 outcome_matches_ref(#{ref := OutcomeRef}, OutcomeRef) -> true;
 outcome_matches_ref(_Outcome, _OutcomeRef) -> false.
 
-outcome_ref_identity(
-  {transaction, Ns, <<_:256>> = Anchor, <<_:256>>}) ->
-    {Ns, Anchor};
-outcome_ref_identity(
-  {group, Ns, <<_:256>> = Anchor, <<_:256>>, <<_:256>>, <<_:256>>}) ->
-    {Ns, Anchor};
-outcome_ref_identity(_) -> undefined.
-
 record_blob_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
         {ok, Record} -> quod_dtx:record_digest(Record);
@@ -494,7 +497,7 @@ record_blob_digest(RecordBlob) ->
 
 prepare_blob_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
-        {ok, {quod_dtx_prepare, 1, _, _, _, _, _} = Record} ->
+        {ok, {quod_dtx_prepare, 2, _, _, _, _, _} = Record} ->
             quod_dtx:record_digest(Record);
         _ ->
             error
@@ -530,8 +533,14 @@ valid_transaction_ref(
     valid_namespace(Ns);
 valid_transaction_ref(_) -> false.
 
+valid_operation_ref(
+  {operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>}) ->
+    valid_namespace(Ns);
+valid_operation_ref(_) -> false.
+
 valid_outcome_ref(Ref) ->
-    valid_transaction_ref(Ref) orelse valid_group_ref(Ref).
+    valid_transaction_ref(Ref) orelse valid_group_ref(Ref) orelse
+        valid_operation_ref(Ref).
 
 valid_certified_ref(Ref) -> quod_dtx:validate_certified_ref(Ref).
 

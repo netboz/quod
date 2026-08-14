@@ -13,10 +13,16 @@ when they need the complete validator check.
 """.
 
 -include("quod_client_goal_limits.hrl").
+-include("quod_proof_limits.hrl").
 
 -export([encode/1, decode/1, verify/2, verify_for/5,
-         digest/1, operation_ref/1]).
--export_type([request/0, evidence/0, mode/0]).
+         digest/1, operation_ref/1,
+         request_auth/1, request_binding/1,
+         valid_request_binding/1, authorization_transcript/3,
+         verify_durable_authorization/3,
+         validate_durable_authorization/6]).
+-export_type([request/0, evidence/0, mode/0,
+              request_auth/0, request_binding/0]).
 
 -define(DOMAIN, <<"quod.user.goal.v1", 0>>).
 -define(PARSER_VERSION, 1).
@@ -39,10 +45,14 @@ when they need the complete validator check.
           goal := term(), goal_blob := binary(),
           variables := [{binary(), non_neg_integer()}],
           operation_ref := tuple()}.
+-type request_auth() ::
+        {user_goal_v1, <<_:256>>, binary(), <<_:512>>}.
+-type request_binding() :: none | {user_goal_v1, <<_:256>>}.
 
 -type error_reason() ::
         invalid_request | invalid_signature | invalid_goal |
         wrong_network | wrong_target | invalid_admission_time | expired |
+        invalid_authorization_transcript |
         {too_large, request | namespace | goal_text | goal}.
 
 -doc "Encode one exact v1 request into the bytes the browser signs.".
@@ -117,6 +127,177 @@ operation_ref(#{target_namespace := Namespace,
                 user_public_key := PublicKey,
                 operation_id := OperationId}) ->
     {operation, Namespace, Anchor, PublicKey, OperationId}.
+
+-doc "Build the one canonical durable evidence object from verified ingress evidence.".
+-spec request_auth(evidence()) -> request_auth().
+request_auth(#{request_bytes := Bytes, request_digest := <<_:256>> = Digest,
+               signature := <<_:512>> = Signature}) ->
+    {user_goal_v1, Digest, Bytes, Signature}.
+
+-doc "Return the digest-only binding copied into sealed plans and manifests.".
+-spec request_binding(evidence() | request_auth()) -> request_binding().
+request_binding(#{request_digest := <<_:256>> = Digest}) ->
+    {user_goal_v1, Digest};
+request_binding({user_goal_v1, <<_:256>> = Digest, _Bytes, _Signature}) ->
+    {user_goal_v1, Digest}.
+
+-doc "Validate the one durable request-binding alphabet owned by this protocol.".
+-spec valid_request_binding(term()) -> boolean().
+valid_request_binding(none) -> true;
+valid_request_binding({user_goal_v1, <<_:256>>}) -> true;
+valid_request_binding(_) -> false.
+
+-doc "Build the one durable operation claim from verified request evidence.".
+-spec operation_claim(evidence()) -> map().
+operation_claim(
+  #{request := #{target_namespace := Ns,
+                 target_genesis_anchor := Anchor,
+                 user_public_key := User,
+                 operation_id := OperationId,
+                 not_after_ms := Deadline},
+    request_digest := Digest, operation_ref := OperationRef}) ->
+    #{key => {User, OperationId}, digest => Digest,
+      target => {Ns, Anchor}, deadline => Deadline,
+      principal => {user, User}, operation_ref => OperationRef}.
+
+-doc "Encode the one top-level allowed authorization entry bound to a signed goal.".
+-spec authorization_transcript(list(), term(), term()) ->
+          {ok, {user_goal_v1, binary()}} | error.
+authorization_transcript(Transcript, Target, GoalBlob)
+  when is_list(Transcript), is_binary(GoalBlob) ->
+    Matches =
+        [Entry || {_, Chain, EntryGoal, allowed, _, _, _} = Entry <- Transcript,
+                  Chain =:= [Target], EntryGoal =:= GoalBlob],
+    case Matches of
+        [Entry] ->
+            case quod_wire_term:encode_canonical([Entry]) of
+                {ok, Blob}
+                  when byte_size(Blob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+                    {ok, {user_goal_v1, Blob}};
+                _ -> error
+            end;
+        _ -> error
+    end;
+authorization_transcript(_Transcript, _Target, _GoalBlob) ->
+    error.
+
+-doc "Decode and bind the one recorded top-level authorization entry to verified intent.".
+-spec verify_authorization(evidence(), term()) -> {ok, list()} | error.
+verify_authorization(
+  #{request := #{target_namespace := Ns,
+                 target_genesis_anchor := Anchor},
+    goal_blob := GoalBlob},
+  {user_goal_v1, Blob})
+  when is_binary(Ns), is_binary(GoalBlob), is_binary(Blob),
+       byte_size(Blob) =< ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES ->
+    Target = {Ns, Anchor},
+    case quod_wire_term:decode_canonical(
+           Blob, ?QUOD_MAX_SCOPE_TRANSCRIPT_BYTES) of
+        {ok, [Entry0]} ->
+            case quod_wire_term:materialize_symbols([Entry0]) of
+                {ok, [Entry]} ->
+                    verify_authorization_entry(Entry, Target, GoalBlob);
+                _ -> error
+            end;
+        _ -> error
+    end;
+verify_authorization(_Evidence, _Authorization) ->
+    error.
+
+verify_authorization_entry(
+  {<<_:128>>, [Target], GoalBlob, allowed, AnswerCount, <<_:256>>, Tag} = Entry,
+  Target, GoalBlob)
+  when is_integer(AnswerCount), AnswerCount >= 0,
+       AnswerCount =< ?QUOD_MAX_ANSWERS_PER_INVOCATION,
+       (Tag =:= active orelse Tag =:= complete orelse
+        Tag =:= error orelse Tag =:= cancelled) ->
+    {ok, [Entry]};
+verify_authorization_entry(_Entry, _Target, _GoalBlob) ->
+    error.
+
+-doc """
+Validate durable user intent against the exact ledger admission context.
+
+This is the sole transaction/DTX validation seam: it re-verifies the original
+signature and parser result, checks the stored digest, target and block time,
+and binds the resulting goal and principal.  Callers do not reinterpret any of
+those fields themselves.
+""".
+-spec validate_durable_auth(term(), term(), term(), term(), term()) ->
+          {ok, evidence()} | {error, error_reason() | invalid_binding}.
+validate_durable_auth(
+  Auth, ExpectedNetwork, {Ns, <<_:256>>} = ExpectedTarget, AdmissionMs,
+  ExpectedGoalBlob)
+  when is_binary(Ns), is_binary(ExpectedGoalBlob) ->
+    case verify_durable_auth(Auth, ExpectedGoalBlob) of
+        {ok, #{request := Request} = Evidence} ->
+            validate_context(
+              Request, ExpectedNetwork, ExpectedTarget, AdmissionMs,
+              Evidence);
+        {error, _} = Error ->
+            Error
+    end;
+validate_durable_auth(_Auth, _Network, _Target, _AdmissionMs,
+                      _GoalBlob) ->
+    {error, invalid_binding}.
+
+-doc "Verify durable request evidence and its exact parsed goal without runtime context.".
+-spec verify_durable_auth(term(), term()) ->
+          {ok, evidence()} | {error, error_reason() | invalid_binding}.
+verify_durable_auth(
+  {user_goal_v1, <<_:256>> = Digest, Bytes, <<_:512>> = Signature},
+  ExpectedGoalBlob)
+  when is_binary(Bytes), is_binary(ExpectedGoalBlob) ->
+    case verify(Bytes, Signature) of
+        {ok, #{request := #{mode := Mode},
+               request_digest := Digest,
+               goal_blob := ExpectedGoalBlob} = Evidence}
+          when Mode =:= execute; Mode =:= cursor ->
+            {ok, Evidence};
+        {ok, _OtherEvidence} ->
+            {error, invalid_binding};
+        {error, _} = Error ->
+            Error
+    end;
+verify_durable_auth(_Auth, _ExpectedGoalBlob) ->
+    {error, invalid_binding}.
+
+-doc "Verify the one signed request and its recorded authorization without runtime context.".
+-spec verify_durable_authorization(term(), term(), term()) ->
+          {ok, map()} | {error, error_reason() | invalid_binding}.
+verify_durable_authorization(Auth, Authorization, GoalBlob) ->
+    case verify_durable_auth(Auth, GoalBlob) of
+        {ok, Evidence} ->
+            authorized_evidence(Evidence, Authorization);
+        {error, _} = Error ->
+            Error
+    end.
+
+-doc "Validate the one signed request and its authorization at ledger admission.".
+-spec validate_durable_authorization(
+        term(), term(), term(), term(), term(), term()) ->
+          {ok, map()} | {error, error_reason() | invalid_binding}.
+validate_durable_authorization(
+  Auth, Authorization, Network, Target, AdmissionMs, GoalBlob) ->
+    case validate_durable_auth(
+           Auth, Network, Target, AdmissionMs, GoalBlob) of
+        {ok, Evidence} ->
+            authorized_evidence(Evidence, Authorization);
+        {error, _} = Error ->
+            Error
+    end.
+
+authorized_evidence(Evidence, Authorization) ->
+    case verify_authorization(Evidence, Authorization) of
+        {ok, Transcript} ->
+            Claim = operation_claim(Evidence),
+            {ok, #{evidence => Evidence,
+                   principal => maps:get(principal, Claim),
+                   transcript => Transcript,
+                   claim => Claim}};
+        error ->
+            {error, invalid_authorization_transcript}
+    end.
 
 %% ------------------------------------------------------------------
 %% Fixed wire

@@ -177,11 +177,15 @@ setup() ->
     {PublicKey, _} = KeyPair,
     User = {user, PublicKey},
     Policy = {can_invoke, {'Goal'}, User, {'Chain'}, Ns},
-    Transactions =
-        [quod_ct:change(Ns, quod_ct:diff_for({lookup, bob}), #{}),
-         quod_ct:change(Ns, quod_ct:diff_for(Policy), #{})],
+    GenesisAuthor = <<16#76:256>>,
+    GenesisDiff =
+        quod_ct:diff_for({lookup, bob}) ++ quod_ct:diff_for(Policy),
+    Genesis = quod_simplex:test_genesis_tx(
+                #{mode => create, node_id => GenesisAuthor,
+                  committee => [], genesis_diff => GenesisDiff},
+                Ns, GenesisAuthor, <<16#77:256>>),
     ok = quod_prolog:apply_entry(
-           Ns, #entry{index = 1, data = {batch, Transactions}}, live),
+           Ns, #entry{index = 1, data = {batch, [Genesis]}}, live),
     ok = quod_prolog:mark_ready(Ns),
     1 = quod_prolog:applied(Ns),
     {ok, AuthPid} = quod_client_auth:start_link(

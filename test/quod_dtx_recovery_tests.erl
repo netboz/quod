@@ -380,7 +380,8 @@ semantic_record_codec_is_canonical_bounded_and_total_test() ->
              quod_dtx:decode_record(<<BeginBlob/binary, 0>>)),
           ?assertEqual(
              {error, {protocol_error, bad_payload}},
-             quod_dtx:encode_record({quod_dtx_begin, 2, bad, []})),
+             quod_dtx:encode_record(
+               {quod_dtx_begin, 2, bad, none, none, []})),
           ?assertEqual(
              {error, {protocol_error, bad_payload}},
              quod_dtx:decode_record(not_binary)),
@@ -416,6 +417,7 @@ fixture(#{pubkey := Pub} = Signer) ->
                 {element(1, Origin), element(2, Origin), Pub, Admission},
             nonce => digest(5), principal => anonymous,
             goal => GoalBlob, result => ResultBlob,
+            request_binding => none,
             participants =>
                 [{Origin, quod_dtx:digest(PlanA)},
                  {Other, quod_dtx:digest(PlanB)}]}),
@@ -423,7 +425,7 @@ fixture(#{pubkey := Pub} = Signer) ->
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest,
+          Manifest, none, none,
           [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
            {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     #{signer => Signer, admission => Admission,
@@ -448,7 +450,8 @@ plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
             quod_dtx:seal_session(
               Session,
               #{target => Target, base_height => 1, proof_id => ProofId,
-                origin => Origin, principal => anonymous}),
+                origin => Origin, principal => anonymous,
+                request_binding => none}),
         {ok, Blob} = quod_dtx:encode(Plan),
         {Plan, Blob}
     after

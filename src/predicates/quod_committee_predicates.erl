@@ -41,7 +41,7 @@ the committee stays a pure, deterministic projection of the committed log on eve
 > a Byzantine submitter that hand-builds a raw `peer_admitted` diff skips them entirely. The authoritative
 > defense is in `m:quod_simplex`, enforced by every validator before it support-signs — the pure shape +
 > never-empty/cap gate (`membership_change_ok/2`) and the per-node KB re-validation
-> (`quod_prolog:request_membership_verdict/5`, which re-proves `can_join` and requires a retract's exact
+> (`quod_prolog:request_content_verdict/6`, which re-proves `can_join` and requires a retract's exact
 > clause to be present). See `doc/deferred.md` §3. (Signed membership authorship — closing committee
 > *packing* — is Phase B.)
 

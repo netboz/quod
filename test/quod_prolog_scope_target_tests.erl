@@ -51,6 +51,43 @@ unknown_internal_error_is_not_put_on_the_wire_test() ->
        quod_prolog:test_public_scope_reason(
          {protocol_error, not_in_the_wire_catalog}, Ns)).
 
+signed_scope_authentication_is_verified_then_explicitly_unavailable_test() ->
+    Network = <<91:256>>,
+    Origin = {<<"quod:signed-origin">>, <<92:256>>},
+    Fixture = quod_ct:signed_goal_fixture(
+                #{network => Network, target => Origin}),
+    Authentication =
+        {signed_goal, maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture)},
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(Authentication),
+    User = maps:get(user, Fixture),
+    OriginKey = <<93:256>>,
+    quod_ct:with_network_identity(
+      Network,
+      fun() ->
+          ?assertEqual(
+             {error, signed_scope_unavailable},
+             quod_prolog:test_scope_authentication_reason(
+               Authentication, OriginKey, Origin, {user, User},
+               AuthenticationDigest)),
+          lists:foreach(
+            fun({Auth, Identity, Principal, Digest}) ->
+                ?assertEqual(
+                   {error, {protocol_error, request_binding}},
+                   quod_prolog:test_scope_authentication_reason(
+                     Auth, OriginKey, Identity, Principal, Digest))
+            end,
+            [{Authentication, Origin, {user, <<94:256>>},
+              AuthenticationDigest},
+             {Authentication, {<<"quod:other">>, element(2, Origin)},
+              {user, User}, AuthenticationDigest},
+             {Authentication, Origin, {user, User}, <<95:256>>},
+             {{signed_goal, <<(maps:get(request_bytes, Fixture))/binary, 0>>,
+               maps:get(signature, Fixture)},
+              Origin, {user, User}, AuthenticationDigest}])
+      end).
+
 target_owns_scope_timeout_classification_test() ->
     Ns = <<"quod:target">>,
     ?assertEqual(
@@ -226,5 +263,8 @@ public_proof_normal_reply_wins_after_checkpoint_test() ->
     demonitor(MRef, [flush]).
 
 test_binding(Ns) ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,
-     {<<"quod:origin">>, <<5:256>>}, {Ns, <<6:256>>}, read_write}.
+     {<<"quod:origin">>, <<5:256>>}, {Ns, <<6:256>>}, read_write,
+     {node, <<1:256>>}, AuthenticationDigest}.

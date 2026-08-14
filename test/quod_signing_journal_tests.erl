@@ -595,10 +595,12 @@ begin_control(Ctx, Variant, Sequence) ->
                          principal => anonymous,
                          goal => Goal,
                          result => Result,
+                         request_binding => none,
                          participants => Participants}),
     Bundle1 = bundle(Target1, Plan1, Manifest, Signer1),
     Bundle2 = bundle(Target2, Plan2, Manifest, Signer2),
-    {ok, Record} = quod_dtx:new_begin(Manifest, [Bundle1, Bundle2]),
+    {ok, Record} = quod_dtx:new_begin(
+                     Manifest, none, none, [Bundle1, Bundle2]),
     Control = sign_begin(Ctx, Record, Sequence),
     #{control => Control, record => Record,
       coordinator_signer => CoordinatorSigner}.
@@ -627,7 +629,7 @@ signed_plan(Variant, Participant, Origin, ProofId) ->
                        Session,
                        #{target => Target, base_height => 1,
                          proof_id => ProofId, origin => Origin,
-                         principal => anonymous}),
+                         principal => anonymous, request_binding => none}),
         {Target, Plan, Signer}
     after
         quod_proof_session:stop(Session)

@@ -136,7 +136,13 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
                      {can_invoke, {'Goal'}, {'Principal'},
                       {'Chain'}, {'Namespace'}}),
                    #{}),
-        ok = ab(Ns, 1, {batch, [Membership, Policy]}),
+        JoinPolicy = change(
+                       Ns,
+                       diff_for(
+                         {can_join, {'Address'}, {'Admission'}, {'Key'}}),
+                       #{}),
+        ok = ab(Ns, 1, {batch, [JoinPolicy]}),
+        ok = ab(Ns, 2, {batch, [Membership, Policy]}),
         ok = quod_prolog:mark_ready(Ns),
         ProofId = <<48:256>>,
         ScopeId = <<49:128>>,
@@ -326,7 +332,8 @@ t_submit_plan_validation({Ns, _}) ->
                                           base_height => 0,
                                           proof_id => <<1:256>>,
                                           origin => {Ns, <<0:256>>},
-                                          principal => anonymous}, Bind)),
+                                          principal => anonymous,
+                                          request_binding => none}, Bind)),
                        Plan
                    end,
             %% (The accepted path commits through consensus and is covered by
@@ -639,6 +646,10 @@ membership_test_() ->
       fun t_verdict_side_effects/1,
       fun t_verdict_lifecycle/1,
       fun t_verdict_tag_reuse/1,
+      fun t_signed_operation_uses_the_same_content_verdict_path/1,
+      fun t_signed_operation_rechecks_the_parent_policy/1,
+      fun t_committed_signed_operation_waits_for_network_identity/1,
+      fun t_signed_begin_uses_the_same_operation_verdict_path/1,
       fun t_lockstep/1]}.
 
 %% Slice 1 increment 2: the post-apply event layer (doc/agent-fipa-plan.md §7) — apply origin drives
@@ -946,13 +957,30 @@ mem_assert(Ns, Pk, H, P)  -> change(Ns, [{assert,  {{peer_admitted, Pk, H, P, Pk
 mem_retract(Ns, Pk, H, P) -> change(Ns, [{retract, {{peer_admitted, Pk, H, P, Pk}, true}}], #{}).
 canjoin_open(Ns)          -> change(Ns, diff_for({can_join, {'A'}, {'B'}, {'C'}}), #{}).
 
-recv_verdict(Tag) -> receive {membership_verdict, Tag, V} -> V after 2000 -> timeout end.
-no_verdict(Tag)   -> receive {membership_verdict, Tag, V} -> {unexpected, V} after 150 -> ok end.
+recv_verdict(Tag) -> receive {content_verdict, Tag, V} -> V after 2000 -> timeout end.
+no_verdict(Tag)   -> receive {content_verdict, Tag, V} -> {unexpected, V} after 150 -> ok end.
 
 %% ask + receive (used when applied == Slot-1, so the verdict is delivered immediately)
 verdict(Ns, Change, Slot, Tag) ->
-    ok = quod_prolog:request_membership_verdict(Ns, Change, Slot, self(), Tag),
+    ok = quod_prolog:request_content_verdict(
+           Ns, [Change], 0, Slot, self(), Tag),
     recv_verdict(Tag).
+
+content_verdict(Ns, Transactions, Timestamp, Slot, Tag) ->
+    ok = quod_prolog:request_content_verdict(
+           Ns, Transactions, Timestamp, Slot, self(), Tag),
+    recv_verdict(Tag).
+
+dtx_verdict(Ns, Control, Timestamp, Slot, Tag) ->
+    ok = quod_prolog:request_dtx_verdict(
+           Ns, Control, Timestamp, Slot, self(), Tag),
+    receive
+        {dtx_verdict, Tag, Engine, Floor, Verdict}
+          when is_pid(Engine), is_integer(Floor) ->
+            {Floor, Verdict}
+    after 2000 ->
+        timeout
+    end.
 
 %% assert/dup/retract-present/retract-absent, judged against the parent-height kb.
 t_verdict_basic({Ns, _}) ->
@@ -993,7 +1021,8 @@ t_verdict_lifecycle({Ns, _}) ->
         PkB = <<"pkB">>,
         ok = ab(Ns, 1, batch(canjoin_open(Ns))),   %% applied == 1
         %% a verdict for Slot 3 (parent 2 > applied 1) parks — nothing delivered yet
-        ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 3, self(), park),
+        ok = quod_prolog:request_content_verdict(
+               Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 3, self(), park),
         ?assertEqual(ok, no_verdict(park)),
         %% advancing to height 2 via a NOOP still resolves it (shared tail across every apply path)
         ok = ab(Ns, 2, noop),
@@ -1001,7 +1030,8 @@ t_verdict_lifecycle({Ns, _}) ->
         %% applied == 2: a verdict for Slot 2 (parent 1, already passed) abstains
         ?assertEqual(abstain, verdict(Ns, mem_assert(Ns, PkB, "h", 1), 2, late)),
         %% a verdict whose parent never arrives is reaped to abstain after the TTL (validation_ttl_ms=500)
-        ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 9, self(), ttl),
+        ok = quod_prolog:request_content_verdict(
+               Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 9, self(), ttl),
         ?assertEqual(abstain, recv_verdict(ttl))
     end.
 
@@ -1012,14 +1042,201 @@ t_verdict_tag_reuse({Ns, _}) ->
         PkB = <<"pkB">>,
         ok = ab(Ns, 1, batch(canjoin_open(Ns))),   %% applied == 1
         %% park Tag `t` for a far slot (parent 8, never reached)
-        ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 9, self(), t),
+        ok = quod_prolog:request_content_verdict(
+               Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 9, self(), t),
         %% re-issue the SAME Tag for a near slot (parent 2) — supersedes the far one + cancels its timer
-        ok = quod_prolog:request_membership_verdict(Ns, mem_assert(Ns, PkB, "h", 1), 3, self(), t),
+        ok = quod_prolog:request_content_verdict(
+               Ns, [mem_assert(Ns, PkB, "h", 1)], 0, 3, self(), t),
         ?assertEqual(ok, no_verdict(t)),                         %% neither has delivered yet
         ok = ab(Ns, 2, noop),               %% reach parent 2 → the NEW request resolves
         ?assertEqual(valid, recv_verdict(t)),
         %% the superseded far-slot timer was cancelled, so no stray abstain follows
         ?assertEqual(ok, no_verdict(t))
+    end.
+
+t_signed_operation_uses_the_same_content_verdict_path({Ns, _}) ->
+    fun() ->
+        Network = <<81:256>>,
+        quod_ct:with_network_identity(
+          Network,
+          fun() ->
+            Target = {Ns, <<0:256>>},
+            First = quod_ct:signed_dtx_begin_fixture(
+                      #{network => Network, target => Target}),
+            FirstTx = maps:get(transaction, First),
+            Other = quod_ct:signed_dtx_begin_fixture(
+                      #{network => Network, target => Target,
+                        key_pair => maps:get(key_pair, First),
+                        operation_id => maps:get(operation_id, First),
+                        goal_text => <<"assertz(saved(other)).">>}),
+            OtherTx = maps:get(transaction, Other),
+            Policy = change(
+                       Ns,
+                       diff_for(
+                         {can_invoke, {'Goal'}, {'Principal'},
+                          {'Chain'}, {'Namespace'}}),
+                       #{}),
+            ok = ab(Ns, 1, batch(Policy)),
+            ?assertEqual(
+               valid,
+               content_verdict(Ns, [FirstTx], 0, 2, signed_new)),
+            ?assertEqual(
+               {invalid, duplicate_operation},
+               content_verdict(
+                 Ns, [FirstTx, FirstTx], 0, 2, signed_duplicate_batch)),
+            ?assertEqual(
+               {invalid, operation_conflict},
+               content_verdict(
+                 Ns, [FirstTx, OtherTx], 0, 2, signed_conflict_batch)),
+            ok = ab(Ns, 2, {batch, [FirstTx]}),
+            ?assertEqual(
+               {invalid, duplicate_operation},
+               content_verdict(
+                 Ns, [FirstTx], 0, 3, signed_duplicate_history)),
+            ?assertEqual(
+               {ok, [#{}], 2}, quod_prolog:prove(Ns, {saved, ok})),
+            ?assertMatch(
+               {fail, [_ | _]}, quod_prolog:prove(Ns, {saved, other}))
+          end)
+    end.
+
+t_signed_operation_rechecks_the_parent_policy({Ns, _}) ->
+    fun() ->
+        Network = <<83:256>>,
+        quod_ct:with_network_identity(
+          Network,
+          fun() ->
+              Target = {Ns, <<0:256>>},
+              Fixture = quod_ct:signed_dtx_begin_fixture(
+                          #{network => Network, target => Target}),
+              Transaction = maps:get(transaction, Fixture),
+              Policy = {can_invoke, {'Goal'}, {'Principal'},
+                        {'Chain'}, {'Namespace'}},
+              RestrictivePolicy =
+                  {can_invoke, different_goal, {'Principal'},
+                   {'Chain'}, {'Namespace'}},
+              [PolicyAssert = {assert, PolicyClause}] = diff_for(Policy),
+              [RestrictiveAssert] = diff_for(RestrictivePolicy),
+              ok = ab(Ns, 1, batch(change(Ns, [PolicyAssert], #{}))),
+              ?assertEqual(
+                 valid,
+                 content_verdict(
+                   Ns, [Transaction], 0, 2, signed_policy_present)),
+              ok = ab(
+                     Ns, 2,
+                     batch(change(
+                             Ns,
+                             [RestrictiveAssert,
+                              {retract, PolicyClause}], #{}))),
+              ?assertEqual(
+                 {invalid, invalid_authorization_transcript},
+                 content_verdict(
+                   Ns, [Transaction], 0, 3, signed_policy_revoked))
+          end)
+    end.
+
+t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
+    fun() ->
+        Network = <<84:256>>,
+        Target = {Ns, <<0:256>>},
+        Fixture = quod_ct:signed_dtx_begin_fixture(
+                    #{network => Network, target => Target}),
+        Transaction = maps:get(transaction, Fixture),
+        Policy = change(
+                   Ns,
+                   diff_for(
+                     {can_invoke, {'Goal'}, {'Principal'},
+                      {'Chain'}, {'Namespace'}}),
+                   #{}),
+        ok = ab(Ns, 1, batch(Policy)),
+        ?assertEqual(1, quod_prolog:applied(Ns)),
+        SavedDesired = application:get_env(quod, namespace_desired),
+        Desired0 = application:get_env(quod, namespace_desired, #{}),
+        Content0 = maps:get(content, Desired0, #{}),
+        Root = quod_ontology:root_ns(),
+        SimplexKey = {quod_simplex, Ns},
+        ?assertEqual(undefined, quod_reg:where({quod_simplex, Root})),
+        true = quod_reg:reg(SimplexKey),
+        try
+            application:set_env(
+              quod, namespace_desired,
+              Desired0#{content => maps:remove(Root, Content0)}),
+            ok = ab(Ns, 2, {batch, [Transaction]}),
+            ?assertEqual(1, quod_prolog:applied(Ns)),
+            ?assert(is_process_alive(Pid)),
+            ?assertEqual(
+               {error, rebuilding},
+               quod_prolog:prove(Ns, true)),
+            receive
+                {'$gen_cast', rebuild} -> error(premature_apply_rebuild)
+            after 0 ->
+                ok
+            end,
+            application:set_env(
+              quod, namespace_desired,
+              Desired0#{content =>
+                            Content0#{Root => #{genesis_hash => Network}}}),
+            receive
+                {'$gen_cast', rebuild} -> ok
+            after 1000 ->
+                error(missing_apply_rebuild)
+            end,
+            ok = ae(Ns, 2, {batch, [Transaction]}, replay),
+            ok = quod_prolog:mark_ready(Ns),
+            ?assertEqual(2, quod_prolog:applied(Ns)),
+            ?assertMatch(
+               {ok, [#{}], 2}, quod_prolog:prove(Ns, {saved, ok}))
+        after
+            true = gproc:unreg(quod_reg:name(SimplexKey)),
+            case SavedDesired of
+                {ok, Desired} ->
+                    application:set_env(quod, namespace_desired, Desired);
+                undefined ->
+                    application:unset_env(quod, namespace_desired)
+            end
+        end
+    end.
+
+t_signed_begin_uses_the_same_operation_verdict_path({Ns, _}) ->
+    fun() ->
+        Network = <<82:256>>,
+        quod_ct:with_network_identity(
+          Network,
+          fun() ->
+              Target = {Ns, <<0:256>>},
+              Fixture = quod_ct:signed_dtx_begin_fixture(
+                          #{network => Network, target => Target}),
+              Control = maps:get(begin_control, Fixture),
+              Policy = {can_invoke, {'Goal'}, {'Principal'},
+                        {'Chain'}, {'Namespace'}},
+              RestrictivePolicy =
+                  {can_invoke, different_goal, {'Principal'},
+                   {'Chain'}, {'Namespace'}},
+              [PolicyAssert = {assert, PolicyClause}] = diff_for(Policy),
+              [RestrictiveAssert] = diff_for(RestrictivePolicy),
+              ok = ab(Ns, 1, batch(change(Ns, [PolicyAssert], #{}))),
+              ?assertMatch(
+                 {1, {valid, _}},
+                 dtx_verdict(
+                   Ns, Control, maps:get(deadline, Fixture), 2,
+                   signed_begin)),
+              ok = ab(
+                     Ns, 2,
+                     batch(change(
+                             Ns,
+                             [RestrictiveAssert,
+                              {retract, PolicyClause}], #{}))),
+              ?assertMatch(
+                 {2, {invalid, invalid_authorization_transcript}},
+                 dtx_verdict(
+                   Ns, Control, maps:get(deadline, Fixture), 3,
+                   revoked_signed_begin)),
+              ?assertMatch(
+                 {2, {invalid, invalid_request_auth}},
+                 dtx_verdict(
+                   Ns, Control, maps:get(deadline, Fixture) + 1, 3,
+                   expired_signed_begin))
+          end)
     end.
 
 dtx_validation_waits_for_published_outcome_floor_test() ->
@@ -1032,10 +1249,10 @@ dtx_validation_waits_for_published_outcome_floor_test() ->
     %% staged.  The DTX request must remain parked; the old applied-only scan
     %% would consume this deliberately malformed request immediately.
     ?assert(quod_prolog:test_resolve_validation(
-              {dtx, malformed}, 2, 1, OutcomesStaged)),
+              {dtx, malformed, 0}, 2, 1, OutcomesStaged)),
     {ok, OutcomesPublished} = quod_outcome:flush(OutcomesStaged),
     ?assertNot(quod_prolog:test_resolve_validation(
-                 {dtx, malformed}, 2, 1, OutcomesPublished)),
+                 {dtx, malformed, 0}, 2, 1, OutcomesPublished)),
     ok = quod_outcome:close(OutcomesPublished).
 
 %% a committed membership tx applies UNCONDITIONALLY (skip OCC) — its projections stay in lockstep —

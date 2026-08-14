@@ -21,6 +21,8 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
          datadir/2, generate_key_gt/1]).
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
+         signed_goal_fixture/1, signed_dtx_begin_fixture/1,
+         with_network_identity/2,
          wait_until/1, wait_until/2]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
 
@@ -72,6 +74,7 @@ dtx_prepare_fixture() ->
                 {element(1, Origin), element(2, Origin), Pubkey, Admission},
             nonce => <<105:256>>, principal => anonymous,
             goal => GoalBlob, result => ResultBlob,
+            request_binding => none,
             participants =>
                 [{Origin, quod_dtx:digest(OriginPlan)},
                  {Target, quod_dtx:digest(TargetPlan)}]}),
@@ -81,7 +84,7 @@ dtx_prepare_fixture() ->
         quod_dtx:attest_plan(Target, TargetPlan, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest,
+          Manifest, none, none,
           [{Origin, quod_dtx:digest(OriginPlan), OriginBlob,
             OriginAttestation},
            {Target, quod_dtx:digest(TargetPlan), TargetBlob,
@@ -102,6 +105,156 @@ dtx_prepare_fixture() ->
       prepare => Prepare, prepare_blob => Blob,
       prepare_control => PrepareControl}.
 
+%% One browser-equivalent signed request for protocol consumers.  Keeping the
+%% fixture here prevents transaction, DTX, outcome, and Explorer tests from
+%% growing their own subtly different request encoders.
+signed_goal_fixture(Overrides) when is_map(Overrides) ->
+    Target = {TargetNs, TargetAnchor} =
+        maps:get(target, Overrides, {<<"quod:signed-fixture">>, <<201:256>>}),
+    Network = maps:get(network, Overrides, <<202:256>>),
+    Mode = maps:get(mode, Overrides, execute),
+    Deadline = maps:get(deadline, Overrides, 1_800_000_000_000),
+    OperationId = maps:get(operation_id, Overrides, <<203:256>>),
+    GoalText = maps:get(goal_text, Overrides, <<"assertz(saved(ok)).">>),
+    {PublicKey, Seed} = maps:get(key_pair, Overrides, quod_identity:generate()),
+    Identity = #{pubkey => PublicKey,
+                 key => quod_identity:key_term({PublicKey, Seed})},
+    Request =
+        #{network_identity => Network,
+          user_public_key => PublicKey,
+          operation_id => OperationId,
+          target_namespace => TargetNs,
+          target_genesis_anchor => TargetAnchor,
+          mode => Mode,
+          parser_version => 1,
+          not_after_ms => Deadline,
+          goal_text => GoalText},
+    {ok, RequestBytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(RequestBytes, maps:get(key, Identity)),
+    {ok, Evidence} = quod_client_goal:verify(RequestBytes, Signature),
+    #{target => Target, network => Network, mode => Mode,
+      deadline => Deadline, operation_id => OperationId,
+      user => PublicKey, key_pair => {PublicKey, Seed},
+      identity => Identity, request => Request,
+      request_bytes => RequestBytes, signature => Signature,
+      request_digest => maps:get(request_digest, Evidence),
+      goal_blob => maps:get(goal_blob, Evidence),
+      operation_ref => maps:get(operation_ref, Evidence),
+      evidence => Evidence, auth => quod_client_goal:request_auth(Evidence),
+      binding => quod_client_goal:request_binding(Evidence)}.
+
+with_network_identity(<<_:256>> = Network, Fun) when is_function(Fun, 0) ->
+    SavedDesired = application:get_env(quod, namespace_desired),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    Root = quod_ontology:root_ns(),
+    application:set_env(
+      quod, namespace_desired,
+      Desired0#{content => Content0#{Root => #{genesis_hash => Network}}}),
+    try Fun()
+    after
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
+    end.
+
+%% A one-participant signed Begin built through the real proof/plan/manifest
+%% constructors.  Consumers can therefore test the foreign-only group shape
+%% without forging protocol tuples or opening the disabled public write path.
+signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
+    Request = signed_goal_fixture(Overrides),
+    Origin = {Ns, Anchor} = maps:get(target, Request),
+    Target = maps:get(participant_target, Overrides, Origin),
+    #{goal := FrozenGoal} = maps:get(evidence, Request),
+    {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+    {NodeKey, NodeSeed} = quod_identity:generate(),
+    NodeIdentity = #{pubkey => NodeKey,
+                     key => quod_identity:key_term({NodeKey, NodeSeed})},
+    ProofId = maps:get(proof_id, Overrides, <<204:256>>),
+    Admission = maps:get(admission, Overrides, <<205:256>>),
+    Session =
+        quod_proof_session:start(
+          committed_kb([]),
+          #{read_set => true, proof_context => {origin, signed_fixture},
+            signer => NodeIdentity}),
+    try
+        InvocationId = <<206:128>>,
+        Chain = case Target =:= Origin of
+                    true -> [Origin];
+                    false -> [Origin, Target]
+                end,
+        Context = quod_predicates:proof_context(
+                    element(1, Target), 1, undefined, Chain),
+        ok = quod_proof_session:open(
+               Session, InvocationId, Goal, allowed, Context,
+               quod_transaction_scope:empty_selection()),
+        {solution, _} = quod_proof_session:next(Session, InvocationId),
+        {ok, Plan} =
+            quod_dtx:seal_session(
+              Session,
+              #{target => Target, base_height => 1, proof_id => ProofId,
+                origin => Origin, principal => {user, maps:get(user, Request)},
+                request_binding => maps:get(binding, Request)}),
+        {ok, PlanBlob} = quod_dtx:encode(Plan),
+        {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+        {ok, Manifest} =
+            quod_dtx:new_manifest(
+              #{proof_id => ProofId,
+                coordinator => {Ns, Anchor, NodeKey, Admission},
+                nonce => <<207:256>>,
+                principal => {user, maps:get(user, Request)},
+                goal => maps:get(goal_blob, Request),
+                result => ResultBlob,
+                request_binding => maps:get(binding, Request),
+                participants => [{Target, quod_dtx:digest(Plan)}]}),
+        {ok, Attestation} =
+            quod_dtx:attest_plan(Target, Plan, Manifest, NodeIdentity),
+        {ok, Authorization} =
+            quod_client_goal:authorization_transcript(
+              [{<<208:128>>, [Origin], maps:get(goal_blob, Request), allowed,
+                1, <<209:256>>, complete}],
+              Origin, maps:get(goal_blob, Request)),
+        {ok, Begin} =
+            quod_dtx:new_begin(
+              Manifest, maps:get(auth, Request), Authorization,
+              [{Target, quod_dtx:digest(Plan), PlanBlob, Attestation}]),
+        {ok, Control} =
+            quod_dtx:sign_control(
+              Origin, Begin, Admission, 1,
+              maps:get(submitted_at, Overrides, 1), NodeIdentity),
+        Base =
+            Request#{node_identity => NodeIdentity, admission => Admission,
+                     participant_target => Target, proof_id => ProofId,
+                     plan => Plan, plan_blob => PlanBlob,
+                     manifest => Manifest, authorization => Authorization,
+                     'begin' => Begin,
+                     begin_control => Control},
+        case Target =:= Origin of
+            true ->
+                {ok, Material} = quod_dtx:material(Plan),
+                UnsignedTransaction =
+                    quod_transaction:from_plan(
+                      Plan, Material, maps:get(goal_blob, Request), ResultBlob,
+                      maps:get(auth, Request)),
+                SubmittedAt = maps:get(submitted_at, Overrides, 1),
+                {ok, Transaction} =
+                    quod_transaction:sign(
+                      {Ns, Anchor, Admission},
+                      UnsignedTransaction#transaction{
+                        author = NodeKey, author_seq = 1,
+                        submitted_at = SubmittedAt},
+                      NodeIdentity),
+                Base#{transaction => Transaction};
+            false ->
+                Base
+        end
+    after
+        quod_proof_session:stop(Session)
+    end.
+
 dtx_fixture_plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
     Session =
         quod_proof_session:start(
@@ -120,7 +273,8 @@ dtx_fixture_plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
             quod_dtx:seal_session(
               Session,
               #{target => Target, base_height => 1, proof_id => ProofId,
-                origin => Origin, principal => anonymous}),
+                origin => Origin, principal => anonymous,
+                request_binding => none}),
         {ok, Blob} = quod_dtx:encode(Plan),
         {Plan, Blob}
     after

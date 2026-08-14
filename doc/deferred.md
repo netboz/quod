@@ -139,8 +139,9 @@ stages, not carried forward:
   **propose/support time** on EVERY
   validator (the BFT-native seam), not the honest submitter alone:
   - **(a) per-node re-validation — DONE.** Every validator re-judges a committee-changing proposal against
-    its OWN kb before support-signing (`quod_prolog:request_membership_verdict/5`, an async cast pinned to
-    the proposal's parent height `Slot-1` so honest nodes reach the same verdict): an assert re-proves
+    its OWN kb before support-signing (`quod_prolog:request_content_verdict/6`, the one async content
+    validator pinned to the proposal's parent height `Slot-1` so honest nodes reach the same verdict):
+    signed-user evidence and its recorded ACL decision are checked there too; for membership, an assert re-proves
     `can_join` (rejecting a `can_join` that stages writes, or a pubkey already admitted); a retract requires
     the exact `peer_admitted` clause present (`quod_diff:has_clause/4`) — which closes the fabricated-address
     **validator-ejection** (a wrong-`Host`/`Port` retract that would drop a member from `#s.validators` while

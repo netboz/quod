@@ -275,7 +275,7 @@ seal_latches_state_and_first_manifest_attestation_test() ->
     ProofId = key(202),
     Bindings = #{target => Target, base_height => 7,
                  proof_id => ProofId, origin => Origin,
-                 principal => anonymous},
+                 principal => anonymous, request_binding => none},
     Session = quod_proof_session:start(
                 committed([]),
                 #{read_set => true,
@@ -370,7 +370,7 @@ not_material_seal_is_also_terminal_test() ->
     Bindings = #{target => {<<"quod:session-test">>, key(210)},
                  base_height => 7, proof_id => key(211),
                  origin => {<<"quod:origin">>, key(212)},
-                 principal => anonymous},
+                 principal => anonymous, request_binding => none},
     try
         ?assertEqual(not_material,
                      quod_proof_session:seal(Session, Bindings)),
@@ -511,6 +511,7 @@ manifest(Plan, Nonce, Coordinator) ->
                          principal => quod_dtx:principal(Plan),
                          goal => GoalBlob,
                          result => ResultBlob,
+                         request_binding => none,
                          participants =>
                              [{Target, quod_dtx:digest(Plan)},
                               {OtherTarget, key(222)}]}),

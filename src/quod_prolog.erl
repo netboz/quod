@@ -36,7 +36,7 @@ order. One `gen_server` per namespace.
   Complete records the terminal group result. A **committee-changing** content
   transaction (its diff asserts/retracts `peer_admitted`) applies unconditionally
   because it was re-validated against the exact parent before voting (see
-  `request_membership_verdict/5`), keeping the KB and validator projection in
+  `request_content_verdict/6`), keeping the KB and validator projection in
   lockstep.
 
 Proves are gated until an initial **rebuild** completes (`ready`), so a freshly
@@ -60,7 +60,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          run_action/2,
          applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
-         request_membership_verdict/5, request_dtx_verdict/5,
+         request_content_verdict/6, request_dtx_verdict/6,
          stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -78,6 +78,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_target_scope_lifetime_ms/2,
          test_remote_timeout_correlation/3,
          test_scope_worker_failure/2,
+         test_scope_authentication_reason/5,
          test_proof_down_reply/3, test_proof_down_reply/4,
          test_finalize_pinned_result/1,
          test_terminal_result/1,
@@ -89,7 +90,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% Pure verdict and scope-correlation seams driven directly by EUnit.
 -endif.
 
-%% The membership-verdict park budget: a verdict parked past the slot's Δ complaint-skip is moot, so this
+%% The parent-content validation park budget: a verdict parked past the slot's Δ complaint-skip is moot, so this
 %% is a short FIXED budget (default 2000 ms — on the order of the consensus Δ_timeout, `?DELTA_MS` ~1 s in
 %% quod_simplex), deliberately NOT the 30 s write TTL. Reaping a stale parked verdict delivers `abstain`.
 -define(DEFAULTS, #{node_id => undefined, transaction_ttl_ms => 30000,
@@ -99,6 +100,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                     scope_step_timeout_ms => 30000,
                     outcome_backend => disk}).
 -define(ROOT_NS, <<"quod:root">>).
+-define(APPLY_DEPENDENCY_RETRY_MS, 250).
 
 %% Busy/rebuilding replies are deliberately rate-limited: an authenticated peer can
 %% still flood valid open frames, and rejecting them must not create unbounded work.
@@ -171,6 +173,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% this record's binding and command sequence have matched.
 -record(remote_scope, {
           binding      :: quod_scope_wire:binding(),
+          request_binding = none :: quod_client_goal:request_binding(),
           peer_key     :: <<_:256>>,
           request_link :: pid(),
           request_mref :: reference(),
@@ -211,6 +214,12 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% normally; `{replaying, Id}` while catching up (boot rebuild or a runtime gap-fill), so
             %% replay applies suppress live events and the started/ready boundaries carry a correlating Id.
             runtime_mode = live :: live | {replaying, reference()},
+            %% A committed signed record can arrive while this node cannot
+            %% resolve the root-network anchor. The ledger remains the sole
+            %% queue: stop serving proofs, retain no entry bytes here, and ask
+            %% Simplex to replay once the shared dependency is available.
+            apply_dependency = none ::
+                none | {network_identity, reference(), reference()},
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
@@ -490,7 +499,7 @@ submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
                        catch exit:_ ->
                            {error, {outcome_unknown,
                                     quod_transaction:plan_outcome_ref(
-                                      Plan, GoalBlob, ResultBlob)}}
+                                      Plan, GoalBlob, ResultBlob, none)}}
                        end
             end;
         {error, _} = Error ->
@@ -499,12 +508,16 @@ submit_plan(TargetNs, Plan, Goal, Bindings) when is_map(Bindings) ->
 
 -doc "Resolve one anchored transaction or distributed-group outcome without re-proving.".
 -spec outcome({transaction, binary(), binary(), binary()} |
-              {group, binary(), binary(), binary(), binary(), binary()}) ->
+              {group, binary(), binary(), binary(), binary(), binary()} |
+              {operation, binary(), binary(), binary(), binary()}) ->
           {ok, map()} | {error, term()}.
 outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     public_outcome(Ns, Ref);
 outcome({group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    public_outcome(Ns, Ref);
+outcome({operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>} = Ref)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     public_outcome(Ns, Ref);
 outcome(_Ref) ->
@@ -780,10 +793,11 @@ refuses proves, so it can never be parked in an `append` back into `quod_simplex
 sync(Ns) -> gen_server:call(quod_reg:via({quod_prolog, Ns}), sync, 30000).
 
 -doc """
-Ask this kb to judge a committee-changing `Change` proposed for `Slot`, and deliver the verdict
-ASYNCHRONOUSLY as `{membership_verdict, Tag, valid | {invalid, Reason} | abstain}` to `ReplyTo`.
+Ask this kb to validate one content batch against the parent of `Slot`, and
+deliver the verdict asynchronously as
+`{content_verdict, Tag, valid | {invalid, Reason} | abstain}` to `ReplyTo`.
 
-A **cast** on purpose: membership validation can require Prolog work while the consensus statem
+A **cast** on purpose: content validation can require Prolog work while the consensus statem
 is handling the proposal. Neither process waits synchronously for the other; the verdict returns
 as a correlated message.
 
@@ -793,9 +807,13 @@ behind, the request parks until `apply_entry` reaches `Slot-1` (or a short fixed
 on the order of Δ — reaps it to `abstain`); if the kb is already past the slot, the slot resolved without
 us — `abstain`. Re-issuing the same `Tag` supersedes a still-parked request for it.
 """.
--spec request_membership_verdict(binary(), term(), pos_integer(), pid(), term()) -> ok.
-request_membership_verdict(Ns, Change, Slot, ReplyTo, Tag) ->
-    gen_server:cast(quod_reg:via({quod_prolog, Ns}), {membership_verdict_req, Change, Slot, ReplyTo, Tag}).
+-spec request_content_verdict(binary(), [#transaction{}], non_neg_integer(),
+                              pos_integer(), pid(), term()) -> ok.
+request_content_verdict(Ns, Transactions, BlockTimestamp, Slot, ReplyTo, Tag) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}),
+      {content_verdict_req, Transactions, BlockTimestamp,
+       Slot, ReplyTo, Tag}).
 
 -doc """
 Look up one DTX control's exact group history at the proposal parent and, for
@@ -803,12 +821,13 @@ Prepare, also validate its plan against that parent KB.  The reply is
 `{dtx_verdict, Tag, EnginePid, AppliedFloor,
   {valid, History} | {invalid, Reason} | abstain}`.
 """.
--spec request_dtx_verdict(binary(), quod_dtx:control(), pos_integer(), pid(), term()) -> ok.
-request_dtx_verdict(Ns, Control, Slot, ReplyTo, Tag)
+-spec request_dtx_verdict(binary(), quod_dtx:control(), non_neg_integer(),
+                          pos_integer(), pid(), term()) -> ok.
+request_dtx_verdict(Ns, Control, BlockTimestamp, Slot, ReplyTo, Tag)
   when is_binary(Ns), is_integer(Slot), Slot > 0, is_pid(ReplyTo) ->
     gen_server:cast(
       quod_reg:via({quod_prolog, Ns}),
-      {dtx_verdict_req, Control, Slot, ReplyTo, Tag}).
+      {dtx_verdict_req, Control, BlockTimestamp, Slot, ReplyTo, Tag}).
 
 stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_prolog, Ns}), get_stats, 1000)
@@ -1214,6 +1233,11 @@ handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
     end;
 handle_cast({dtx_group_resolved, GroupRef}, S) ->
     {noreply, release_group_waiter(GroupRef, S)};
+handle_cast({apply_entry, #entry{}, _Origin},
+            S = #s{apply_dependency = {network_identity, _, _}}) ->
+    %% Simplex owns the durable history and will replay it from the current
+    %% applied floor. Do not grow a second in-memory entry queue here.
+    {noreply, S};
 handle_cast({apply_entry, #entry{} = Entry, Origin}, S0) ->
     S1 = apply_committed(Entry, Origin, S0),
     %% Drive the replay lifecycle from whether the apply ACTUALLY advanced the committed height, not
@@ -1226,6 +1250,9 @@ handle_cast({proof_result, Ref, Result}, S) ->
 %% mark_ready closes any replay interval before serving proves or resuming steady-state handling.
 %% Simplex emits it after boot, member recovery, and observer anti-entropy; the first later live
 %% apply can also close a replay interval, handled in note_origin/4.
+handle_cast(mark_ready,
+            S = #s{apply_dependency = {network_identity, _, _}}) ->
+    {noreply, S};
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
     acknowledge_ready(S#s{ready = true, runtime_mode = live});
@@ -1249,16 +1276,19 @@ handle_cast({runtime_floor, _Pid, _H}, S) -> {noreply, S};
 handle_cast({runtime_detach, Pid}, S = #s{runtime_pin = {Pid, _MRef, _F}}) ->
     {noreply, clear_runtime_pin(S)};
 handle_cast({runtime_detach, _Pid}, S) -> {noreply, S};
-%% A membership-verdict request (request_membership_verdict/5): judge it against the KB at the
-%% proposal's parent height (Slot-1), delivering now or parking until the kb catches up.
-handle_cast({membership_verdict_req, Change, Slot, ReplyTo, Tag}, S) ->
+%% One shared content-verdict request: validate ordinary authorization and any
+%% membership change against Slot-1, delivering now or parking until the KB catches up.
+handle_cast(
+  {content_verdict_req, Transactions, BlockTimestamp,
+   Slot, ReplyTo, Tag}, S) ->
     {noreply,
      request_validation(
-       {membership, Change}, Slot, ReplyTo, Tag, S)};
-handle_cast({dtx_verdict_req, Control, Slot, ReplyTo, Tag}, S) ->
+       {content, Transactions, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
+handle_cast(
+  {dtx_verdict_req, Control, BlockTimestamp, Slot, ReplyTo, Tag}, S) ->
     {noreply,
      request_validation(
-       {dtx, Control}, Slot, ReplyTo, Tag, S)};
+       {dtx, Control, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
 handle_cast(_Msg, S)       -> {noreply, S}.
 
 %% Emit readiness from the handled edge, not from the caller that queued it.
@@ -1397,6 +1427,20 @@ handle_info({validation_timeout, Tag}, S = #s{validations = V}) ->
             {noreply, S#s{validations = V1}};
         error -> {noreply, S}
     end;
+handle_info(
+  {retry_apply_dependency, network_identity, Token},
+  S = #s{apply_dependency = {network_identity, _Timer, Token}}) ->
+    case quod_ontology:network_identity() of
+        {ok, <<_:256>>} ->
+            case catch quod_simplex:rebuild(S#s.ns) of
+                ok -> {noreply, S#s{apply_dependency = none}};
+                _ -> {noreply, arm_apply_dependency_retry(S)}
+            end;
+        {error, _} ->
+            {noreply, arm_apply_dependency_retry(S)}
+    end;
+handle_info({retry_apply_dependency, network_identity, _StaleToken}, S) ->
+    {noreply, S};
 %% `send_request/2` gives us a non-blocking gen_statem call without a helper process per
 %% transaction. Responses are matched through the opaque request-id collection and labelled
 %% with their tx id. A successful append still resolves through ordered `apply_entry`; only a
@@ -1453,7 +1497,8 @@ start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                                      Ns, Anchor, Height,
                                      Est, self(),
                                      #{read_only => ReadOnly,
-                                       principal => Principal,
+                                       principal => {node, Principal},
+                                       request_binding => none,
                                        signer => S#s.signer,
                                        deadline_ms => ScopeDeadline}),
             Pid = quod_scope_session:pid(Handle),
@@ -1533,15 +1578,15 @@ handle_scope_command(
   PeerKey, Endpoint, RequestLink,
   {scope_command, Binding, CommandSeq, RequestId, RemainingMs, Operation},
   S = #s{remote_scopes = Remote}) ->
-    case maps:find(Binding, Remote) of
-        error when Operation =:= scope_open ->
+    case {maps:find(Binding, Remote), Operation} of
+        {error, {scope_open, Authentication}} ->
             handle_remote_scope_open(
-              PeerKey, Endpoint, RequestLink, Binding,
+              PeerKey, Endpoint, RequestLink, Binding, Authentication,
               CommandSeq, RequestId, RemainingMs, S);
-        error ->
+        {error, _OtherOperation} ->
             reject_unknown_scope(
               PeerKey, Endpoint, Binding, CommandSeq, RequestId, S);
-        {ok, Scope} ->
+        {{ok, Scope}, _} ->
             handle_bound_scope_command(
               PeerKey, RequestLink, Binding, CommandSeq,
               RequestId, RemainingMs, Operation, Scope, S)
@@ -1550,7 +1595,9 @@ handle_scope_command(
 handle_remote_scope_open(
   PeerKey, Endpoint, RequestLink,
   Binding = {scope_binding, OriginKey, TargetKey, _ProofId, _ScopeId,
-             _OriginIdentity, {Ns, Anchor}, Mode},
+             OriginIdentity, {Ns, Anchor}, Mode,
+             Principal, AuthenticationDigest},
+  Authentication,
   CommandSeq, RequestId, RemainingMs,
   S = #s{ns = Ns, self = TargetKey}) ->
     case PeerKey =:= OriginKey andalso
@@ -1559,27 +1606,89 @@ handle_remote_scope_open(
         false ->
             S;
         true ->
-            case remote_open_reason(Mode, Anchor, PeerKey, S) of
-                ok ->
-                    case charge_scope_open(PeerKey, {Ns, Anchor}, S) of
-                        {ok, S1} ->
-                            begin_remote_scope_open(
-                              PeerKey, Endpoint, RequestLink, Binding,
-                              RequestId, RemainingMs, S1);
-                        {error, S1} ->
-                            reject_scope_open(
-                              PeerKey, Endpoint, Binding, RequestId,
-                              {ontology_rate_limited, Ns}, S1)
-                    end;
+            case scope_authentication_reason(
+                   Authentication, OriginKey, OriginIdentity, Principal,
+                   AuthenticationDigest, S) of
+                {ok, RequestBinding} ->
+                    open_authenticated_remote_scope(
+                      PeerKey, Endpoint, RequestLink, Binding,
+                      RequestBinding, RequestId, RemainingMs,
+                      Mode, Anchor, S);
                 {error, Reason} ->
                     reject_scope_open(
                       PeerKey, Endpoint, Binding, RequestId, Reason, S)
             end
     end;
 handle_remote_scope_open(
-  _PeerKey, _Endpoint, _RequestLink, _Binding,
+  _PeerKey, _Endpoint, _RequestLink, _Binding, _Authentication,
   _CommandSeq, _RequestId, _RemainingMs, S) ->
     S.
+
+open_authenticated_remote_scope(
+  PeerKey, Endpoint, RequestLink, Binding, RequestBinding,
+  RequestId, RemainingMs, Mode, Anchor, S = #s{ns = Ns}) ->
+    case remote_open_reason(Mode, Anchor, PeerKey, S) of
+        ok ->
+                    case charge_scope_open(PeerKey, {Ns, Anchor}, S) of
+                        {ok, S1} ->
+                            begin_remote_scope_open(
+                              PeerKey, Endpoint, RequestLink, Binding,
+                              RequestBinding,
+                              RequestId, RemainingMs, S1);
+                        {error, S1} ->
+                            reject_scope_open(
+                              PeerKey, Endpoint, Binding, RequestId,
+                              {ontology_rate_limited, Ns}, S1)
+                    end;
+        {error, Reason} ->
+            reject_scope_open(
+              PeerKey, Endpoint, Binding, RequestId, Reason, S)
+    end.
+
+scope_authentication_reason(
+  node, OriginKey, _OriginIdentity, {node, OriginKey},
+  AuthenticationDigest, _S) ->
+    case quod_scope_wire:authentication_digest(node) of
+        {ok, AuthenticationDigest} -> {ok, none};
+        _ -> {error, {protocol_error, request_binding}}
+    end;
+scope_authentication_reason(
+  {signed_goal, RequestBytes, Signature} = Authentication,
+  _OriginKey, OriginIdentity, {user, UserKey}, AuthenticationDigest,
+  _S) ->
+    case {quod_scope_wire:authentication_digest(Authentication),
+          quod_client_goal:verify(RequestBytes, Signature)} of
+        {{ok, AuthenticationDigest},
+         {ok, #{request := #{network_identity := Network,
+                             user_public_key := UserKey,
+                             target_namespace := OriginNs,
+                             target_genesis_anchor := OriginAnchor},
+                request_digest := _RequestDigest}}}
+          when {OriginNs, OriginAnchor} =:= OriginIdentity ->
+            case quod_ontology:network_identity() of
+                {ok, Network} ->
+                    %% The V4 evidence is already verified and bound here, but
+                    %% public signed scopes remain deliberately unavailable
+                    %% until Slice 5 activates the completed propagation path.
+                    {error, signed_scope_unavailable};
+                _ -> {error, {protocol_error, request_binding}}
+            end;
+        _ ->
+            {error, {protocol_error, request_binding}}
+    end;
+scope_authentication_reason(
+  _Authentication, _OriginKey, _OriginIdentity, _Principal,
+  _AuthenticationDigest, _S) ->
+    {error, {protocol_error, request_binding}}.
+
+-ifdef(TEST).
+test_scope_authentication_reason(
+  Authentication, OriginKey, OriginIdentity, Principal,
+  AuthenticationDigest) ->
+    scope_authentication_reason(
+      Authentication, OriginKey, OriginIdentity, Principal,
+      AuthenticationDigest, test_state).
+-endif.
 
 remote_open_reason(Mode, Anchor, PeerKey,
                    S = #s{ns = Ns,
@@ -1657,6 +1766,7 @@ charge_scope_open(PeerKey, Identity,
     end.
 
 begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
+                        RequestBinding,
                         RequestId, RemainingMs,
                         S = #s{scope_timeout_ms = ScopeTimeout,
                                remote_scopes = Remote,
@@ -1673,7 +1783,8 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
     Timer = erlang:send_after(
               Lifetime, self(), {remote_scope_expire, Binding, Token}),
     Scope = #remote_scope{
-               binding = Binding, peer_key = PeerKey,
+               binding = Binding, request_binding = RequestBinding,
+               peer_key = PeerKey,
                request_link = RequestLink, request_mref = RequestMRef,
                return_channel = ReturnChannel, open_ref = OpenRef,
                open_request_id = RequestId,
@@ -1689,7 +1800,8 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
 reject_unknown_scope(
   PeerKey, Endpoint,
   Binding = {scope_binding, PeerKey, TargetKey, _ProofId, _ScopeId,
-             _OriginIdentity, {Ns, _Anchor}, _Mode},
+             _OriginIdentity, {Ns, _Anchor}, _Mode,
+             _Principal, _AuthenticationDigest},
   CommandSeq, RequestId, S = #s{ns = Ns, self = TargetKey})
   when CommandSeq >= 1 ->
     reject_scope_open(
@@ -1793,10 +1905,12 @@ accept_scope_command(_Operation, RequestId, CommandSeq, Scope) ->
 
 binding_admission_reason(
   {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
-   _OriginIdentity, {_Ns, Anchor}, Mode}, S) ->
+   _OriginIdentity, {_Ns, Anchor}, Mode,
+   _Principal, _AuthenticationDigest}, S) ->
     scope_admission_reason(Mode, Anchor, S).
 
-execute_remote_scope_command(Binding, scope_open, RequestId, CommandSeq, S) ->
+execute_remote_scope_command(
+  Binding, {scope_open, _Authentication}, RequestId, CommandSeq, S) ->
     poison_remote_scope(
       Binding, RequestId, CommandSeq,
       {protocol_error, unexpected_scope_command}, S);
@@ -1975,7 +2089,8 @@ execute_active_scope_command(
 execute_active_scope_command(
   scope_seal, RequestId, CommandSeq,
   Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
-             OriginIdentity, _TargetIdentity, _Mode},
+             OriginIdentity, _TargetIdentity, _Mode,
+             _Principal, _AuthenticationDigest},
   #remote_scope{
      handle = {quod_scope_session, Pid, _SessionScopeId,
                SessionProofId, SessionRef, _Ns, _Anchor},
@@ -2020,7 +2135,8 @@ execute_remote_plan_submission(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier},
   RequestId, CommandSeq,
   Binding = {scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
-             OriginIdentity, _TargetIdentity, Mode},
+             OriginIdentity, _TargetIdentity, Mode,
+             _Principal, _AuthenticationDigest},
   S) ->
     From = {remote_submit, Binding, RequestId, CommandSeq},
     case Mode =:= read_write andalso decode_submit_plan(PlanBlob) of
@@ -2163,7 +2279,8 @@ handle_scope_return_error(OpenRef, PeerKey, ReturnChannel,
 
 start_remote_scope_session(
   Binding = {scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
-             _OriginIdentity, {Ns, _Anchor}, _Mode},
+             _OriginIdentity, {Ns, _Anchor}, _Mode,
+             _Principal, _AuthenticationDigest},
   ReturnLink,
   Scope,
   S = #s{scope_workers = Workers, max_scope_workers = Max}) ->
@@ -2180,10 +2297,12 @@ start_remote_scope_session(
     end.
 
 start_admitted_remote_scope_session(
-  Binding = {scope_binding, OriginKey, _TargetKey, ProofId, ScopeId,
-             _OriginIdentity, {Ns, Anchor}, Mode},
+  Binding = {scope_binding, _OriginKey, _TargetKey, ProofId, ScopeId,
+             _OriginIdentity, {Ns, Anchor}, Mode,
+             Principal, _AuthenticationDigest},
   ReturnLink,
   Scope = #remote_scope{request_mref = RequestMRef,
+                        request_binding = RequestBinding,
                         open_request_id = OpenRequestId},
   S = #s{est = Est, applied = Height,
          scope_workers = Workers, scope_pids = Pids,
@@ -2194,7 +2313,8 @@ start_admitted_remote_scope_session(
                              ScopeId, ProofId, self(), Ns, Anchor, Height,
                              Est, self(),
                              #{read_only => ReadOnly,
-                               principal => OriginKey,
+                               principal => Principal,
+                               request_binding => RequestBinding,
                                signer => S#s.signer,
                                deadline_ms => Scope#remote_scope.deadline_ms}),
     Pid = quod_scope_session:pid(Handle),
@@ -2620,10 +2740,13 @@ test_scope_command_route(State, Operation) ->
     scope_command_route(State, Operation).
 
 test_sealed_submit_transition() ->
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     Binding =
         {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,
          {<<"quod:origin">>, <<5:256>>},
-         {<<"quod:target">>, <<6:256>>}, read_write},
+         {<<"quod:target">>, <<6:256>>}, read_write,
+         {node, <<1:256>>}, AuthenticationDigest},
     Operation = {submit_plan, <<"not-a-plan">>, <<>>, <<>>, []},
     Scope = #remote_scope{binding = Binding, state = sealed},
     S0 = #s{remote_scopes = #{Binding => Scope}},
@@ -2653,7 +2776,8 @@ test_proof_down_reply(Kind, Reason, Ns, Checkpoint) ->
 -endif.
 
 target_namespace({scope_binding, _OriginKey, _TargetKey, _ProofId, _ScopeId,
-                  _OriginIdentity, {Ns, _Anchor}, _Mode}) -> Ns.
+                  _OriginIdentity, {Ns, _Anchor}, _Mode,
+                  _Principal, _AuthenticationDigest}) -> Ns.
 
 random_request_id() ->
     crypto:strong_rand_bytes(?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8).
@@ -2687,7 +2811,8 @@ handle_remote_controller_request(Message, S = #s{scope_pids = Pids,
 remote_controller_bound(
   ProofId, From,
   {scope_binding, _OriginKey, _TargetKey, ProofId, ScopeId,
-   _OriginIdentity, _TargetIdentity, _Mode},
+   _OriginIdentity, _TargetIdentity, _Mode,
+   _Principal, _AuthenticationDigest},
   #remote_scope{
      handle = {quod_scope_session, From, ScopeId, ProofId,
                _SessionRef, _Ns, _Anchor},
@@ -2924,10 +3049,12 @@ new_controller_id_from(Controllers) ->
     end.
 
 binding_proof_id({scope_binding, _OriginKey, _TargetKey, ProofId, _ScopeId,
-                  _OriginIdentity, _TargetIdentity, _Mode}) -> ProofId.
+                  _OriginIdentity, _TargetIdentity, _Mode,
+                  _Principal, _AuthenticationDigest}) -> ProofId.
 
 binding_scope_id({scope_binding, _OriginKey, _TargetKey, _ProofId, ScopeId,
-                  _OriginIdentity, _TargetIdentity, _Mode}) -> ScopeId.
+                  _OriginIdentity, _TargetIdentity, _Mode,
+                  _Principal, _AuthenticationDigest}) -> ScopeId.
 
 drop_remote_scope(Binding, S = #s{remote_scopes = Remote}) ->
     case maps:find(Binding, Remote) of
@@ -3484,7 +3611,7 @@ submit_single_ordinary_plan(
   {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings,
   GoalBlob, ResultBlob) ->
     OutcomeRef = quod_transaction:plan_outcome_ref(
-                   Plan, GoalBlob, ResultBlob),
+                   Plan, GoalBlob, ResultBlob, none),
     case checkpoint_and_release_origin_snapshot(Origin, OutcomeRef) of
                 ok ->
                     Result = submit_single_plan_at_target(
@@ -3509,7 +3636,7 @@ submit_single_effect_plan(
     case quod_dtx:material(Plan) of
         {ok, #{effects := [Effect]} = Material} ->
             Change0 = quod_transaction:from_plan(
-                        Plan, Material, GoalBlob, ResultBlob),
+                        Plan, Material, GoalBlob, ResultBlob, none),
             Change = Change0#transaction{
                        author = quod_dtx:signer(Plan),
                        submitted_at = quod_time:now_ms()},
@@ -3597,7 +3724,7 @@ submit_plan_encoded(TargetNs, Plan, GoalBlob, ResultBlob, Bindings) ->
                 {error,
                  {outcome_unknown,
                   quod_transaction:plan_outcome_ref(
-                    Plan, GoalBlob, ResultBlob)}}
+                    Plan, GoalBlob, ResultBlob, none)}}
             end
     end.
 
@@ -3623,6 +3750,7 @@ submit_group(
                           principal => Principal,
                           goal => GoalBlob,
                           result => ResultBlob,
+                          request_binding => none,
                           participants => ParticipantRows},
                     build_and_register_group(
                       Engine, WorkerRef, ManifestInput,
@@ -3643,7 +3771,7 @@ build_and_register_group(
             case attest_group_plans(
                    ParticipantRows, Plans, Manifest, []) of
                 {ok, Bundles} ->
-                    case quod_dtx:new_begin(Manifest, Bundles) of
+                    case quod_dtx:new_begin(Manifest, none, none, Bundles) of
                         {ok, Begin} ->
                             case quod_dtx:begin_group_ref(Begin) of
                                 {ok, GroupRef} ->
@@ -4509,7 +4637,7 @@ accept_bound_effect_submission(
     case valid_plan_submission(Plan, GoalBlob, ResultBlob, S) of
         {ok, Material} ->
             Expected0 = quod_transaction:from_plan(
-                          Plan, Material, GoalBlob, ResultBlob),
+                          Plan, Material, GoalBlob, ResultBlob, none),
             Expected = Expected0#transaction{
                          author = S#s.self,
                          submitted_at = Change#transaction.submitted_at},
@@ -4652,7 +4780,7 @@ submit_plan_envelope(From, Plan, Material, GoalBlob, ReplyBindings, ResultBlob,
                             parked = Parked}) ->
     Anchor = target_anchor(Ns),
     Change0 = quod_transaction:from_plan(
-                Plan, Material, GoalBlob, ResultBlob),
+                Plan, Material, GoalBlob, ResultBlob, none),
     Change = Change0#transaction{author = S#s.self,
                                  submitted_at = quod_time:now_ms()},
     Tx = Change#transaction.tx_id,
@@ -4857,17 +4985,28 @@ apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when In
 %% version. A successful API reply can therefore be followed immediately by a
 %% terminal outcome lookup or a read of the committed state. All envelopes in
 %% a block share that block-final snapshot.
-apply_step(#entry{index = Index, data = Data} = Entry, Origin, S) ->
+apply_step(#entry{index = Index, data = Data,
+                  timestamp = BlockTimestamp} = Entry, Origin, S) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} ->
-            {S1, RevPostApply} =
-                lists:foldl(
-                  fun(T, {Acc, PostApply}) ->
-                      {Acc1, Item} = apply_transaction(T, Index, Origin, Acc),
-                      {Acc1, [Item | PostApply]}
-                  end, {S, []}, Transactions),
-            complete_transactions(
-              lists:reverse(RevPostApply), publish_snapshot(Index, S1));
+            case apply_content_validation(
+                   Transactions, BlockTimestamp, Index, S) of
+                {valid, Validated} ->
+                    {S1, RevPostApply} =
+                        lists:foldl(
+                          fun(T, {Acc, PostApply}) ->
+                              {Acc1, Item} = apply_transaction(
+                                               T, Index, Origin, Acc),
+                              {Acc1, [Item | PostApply]}
+                          end, {Validated, []}, Transactions),
+                    complete_transactions(
+                      lists:reverse(RevPostApply),
+                      publish_snapshot(Index, S1));
+                {{unavailable, network_identity, Reason}, Deferred} ->
+                    wait_for_apply_dependency(Reason, Deferred);
+                {Invalid, _S1} ->
+                    error({invalid_committed_content, Index, Invalid})
+            end;
         {'begin', Control} ->
             apply_dtx_entry(Control, Entry, Origin, S);
         {prepare, Control} ->
@@ -4884,37 +5023,63 @@ apply_step(#entry{index = Index, data = Data} = Entry, Origin, S) ->
             skip_unexpected(Index, Data, S)
     end.
 
+apply_content_validation(Transactions, BlockTimestamp, Slot, S) ->
+    case content_network_identity(Transactions) of
+        {ok, Network} ->
+            validate_content_transactions(
+              Transactions, Network, BlockTimestamp,
+              {claim, Slot}, #{}, S);
+        {error, Reason} ->
+            {{unavailable, network_identity, Reason}, S}
+    end.
+
 %% Apply one certified DTX record through the same pure reducer used by
 %% consensus history.  Prepare validates but does not publish its hidden plan;
 %% Finalize(commit) is the only phase that changes D.  The outcome projection
 %% is flushed with the ordered floor before MVCC publication, and only then is
 %% Simplex allowed to reopen the proof fence.
-apply_dtx_entry(Control, #entry{index = Index} = Entry, Origin,
-                S0 = #s{ns = Ns, outcomes = Outcomes0}) ->
+apply_dtx_entry(Control,
+                #entry{index = Index, timestamp = BlockTimestamp} = Entry,
+                Origin,
+                S0 = #s{ns = Ns}) ->
     Binding = {Ns, target_anchor(Ns)},
     true = quod_dtx:verify_control(Binding, Control),
     {ok, CertifiedRef} = quod_dtx:certified_entry_ref(
                            Binding, Entry, Control),
     GroupId = quod_dtx:group_id(Control),
-    {History0, Outcomes1} = dtx_group_history(Outcomes0, GroupId),
+    {History0, Validated} =
+        case dtx_validation_verdict(
+               Control, BlockTimestamp, {claim, Index}, S0) of
+            {{valid, History}, RequestValidated} ->
+                {History, RequestValidated};
+            {{unavailable, network_identity, Reason}, Deferred} ->
+                {deferred, wait_for_apply_dependency(Reason, Deferred)};
+            {Invalid, _InvalidState} ->
+                error({invalid_committed_dtx, Index, Invalid})
+        end,
+    apply_validated_dtx(
+      History0, Validated, Control, CertifiedRef, Entry, Index, Origin,
+      GroupId).
+
+apply_validated_dtx(deferred, Deferred, _Control, _CertifiedRef, _Entry,
+                    _Index, _Origin, _GroupId) ->
+    Deferred;
+apply_validated_dtx(History0, Validated, Control, CertifiedRef, _Entry,
+                    Index, Origin, GroupId) ->
+    Outcomes1 = Validated#s.outcomes,
     Projection0 = maps:get(projection, quod_outcome:dtx_state(Outcomes1)),
     {ok, History1, Projection1, Effects} =
         quod_dtx:reduce(Control, CertifiedRef, History0, Projection0),
-    {S1, Event} = apply_dtx_effects(
-                    Effects, Index, S0#s{outcomes = Outcomes1}),
+    {EffectState, Event} = apply_dtx_effects(
+                           Effects, Index,
+                           Validated#s{outcomes = Outcomes1}),
     {ok, Outcomes2, DeferredAck} = quod_outcome:apply_dtx(
-                                      S1#s.outcomes, Index, Control,
+                                      EffectState#s.outcomes, Index, Control,
                                       History1, Projection1, Effects),
-    S2 = publish_snapshot(Index, S1#s{outcomes = Outcomes2}),
+    S2 = publish_snapshot(Index, EffectState#s{outcomes = Outcomes2}),
     S3 = publish_dtx_outcome(Event, Index, Origin, S2),
     S4 = finish_dtx_apply(DeferredAck, Control, Origin, S3),
     maybe_release_completed_group(Control, GroupId, S4).
-
-dtx_group_history(Outcomes, GroupId) ->
-    case quod_outcome:group_history(Outcomes, GroupId) of
-        {History, Outcomes1} when is_map(History) -> {History, Outcomes1};
-        {error, Reason} -> outcome_index_failure(Reason)
-    end.
 
 local_dtx_group_state(GroupId, Outcomes0) ->
     Dtx = quod_outcome:dtx_state(Outcomes0),
@@ -5279,7 +5444,7 @@ terminal_slot(_Status) -> error({outcome_index_conflict, bad_status}).
 apply_new_transaction(#transaction{tx_id = Tx, diff = Diff} = Change,
                       Index, Origin, Prior, S) ->
     %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was
-    %% re-validated against the parent state before the vote (`membership_verdict/2`), so OCC is
+    %% re-validated against the parent state before the vote (`request_content_verdict/6`), so OCC is
     %% redundant here AND is the source of a real divergence: the Simplex
     %% history projection folds the
     %% validator set unconditionally at commit, so an OCC-skipped membership diff would leave the KB fact
@@ -5642,7 +5807,7 @@ do_request_validation(Request, Slot, ReplyTo, Tag,
             S
     end.
 
-validation_position({dtx, _Control}, Parent,
+validation_position({dtx, _Control, _BlockTimestamp}, Parent,
                     #s{applied = Parent, outcomes = Outcomes}) ->
     case quod_outcome:applied_floor(Outcomes) >= Parent of
         true -> ready;
@@ -5701,24 +5866,239 @@ test_resolve_validation(Request, Slot, Applied, Outcomes) ->
     maps:is_key(Tag, S1#s.validations).
 -endif.
 
-validation_verdict({membership, Change}, S) ->
-    {membership_verdict(Change, S), S};
-validation_verdict({dtx, Control}, S) ->
-    dtx_validation_verdict(Control, S).
+validation_verdict({content, Transactions, BlockTimestamp}, S) ->
+    content_validation_verdict(Transactions, BlockTimestamp, S);
+validation_verdict({dtx, Control, BlockTimestamp}, S) ->
+    dtx_validation_verdict(Control, BlockTimestamp, check, S).
 
-dtx_validation_verdict(Control, S = #s{outcomes = Outcomes0}) ->
+content_validation_verdict(Transactions, BlockTimestamp, S)
+  when is_list(Transactions), is_integer(BlockTimestamp),
+       BlockTimestamp >= 0 ->
+    case content_network_identity(Transactions) of
+        {ok, Network} ->
+            validate_content_transactions(
+              Transactions, Network, BlockTimestamp, check, #{}, S);
+        {error, _} ->
+            {abstain, S}
+    end;
+content_validation_verdict(_Transactions, _BlockTimestamp, S) ->
+    {{invalid, malformed_content}, S}.
+
+content_network_identity(Transactions) ->
+    quod_ontology:network_identity(
+      quod_transaction:requires_network_identity(Transactions)).
+
+validate_content_transactions(
+  [], _Network, _BlockTimestamp, _OperationMode, _Seen, S) ->
+    {valid, S};
+validate_content_transactions(
+  [#transaction{} = Change | Rest], Network, BlockTimestamp,
+  OperationMode, Seen, S0) ->
+    Target = {S0#s.ns, target_anchor(S0#s.ns)},
+    case quod_transaction:validate_request(
+           Network, Target, BlockTimestamp, Change) of
+        {ok, none} ->
+            continue_content_validation(
+              Change, Rest, Network, BlockTimestamp,
+              OperationMode, Seen, S0);
+        {ok, RequestEvidence} ->
+            case validate_signed_request(
+                   Target, RequestEvidence,
+                   transaction_outcome_ref(Target, Change),
+                   OperationMode, Seen, S0) of
+                {ok, Seen1, S1} ->
+                    continue_content_validation(
+                      Change, Rest, Network, BlockTimestamp,
+                      OperationMode, Seen1, S1);
+                {{invalid, Reason}, S1} ->
+                    {{invalid, Reason}, S1}
+            end;
+        {error, _} ->
+            {{invalid, invalid_request_auth}, S0}
+    end;
+validate_content_transactions(
+  _Malformed, _Network, _BlockTimestamp, _OperationMode, _Seen, S) ->
+    {{invalid, malformed_content}, S}.
+
+continue_content_validation(
+  Change, Rest, Network, BlockTimestamp, OperationMode, Seen,
+  S = #s{applied = 0, ns = Ns}) ->
+    case Rest =:= [] andalso
+         quod_simplex:valid_genesis_transaction(Ns, Change) of
+        true ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, OperationMode, Seen, S);
+        false ->
+            continue_ordinary_content_validation(
+              Change, Rest, Network, BlockTimestamp,
+              OperationMode, Seen, S)
+    end;
+continue_content_validation(
+  Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S) ->
+    continue_ordinary_content_validation(
+      Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S).
+
+continue_ordinary_content_validation(
+  Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S) ->
+    case is_membership_change(Change) of
+        false ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, OperationMode, Seen, S);
+        true ->
+            case membership_verdict(Change, S) of
+                valid ->
+                    validate_content_transactions(
+                      Rest, Network, BlockTimestamp,
+                      OperationMode, Seen, S);
+                {invalid, Reason} ->
+                    {{invalid, Reason}, S}
+            end
+    end.
+
+validate_signed_request(
+  Target,
+  #{principal := Principal, transcript := Transcript, claim := Claim},
+  OutcomeRef, OperationMode, Seen,
+  S0 = #s{applied = Parent, est = Est}) ->
+    case quod_ask:validate_authorization_transcript(
+           Target, Target, Principal, Parent, Transcript, Est) of
+        ok ->
+            validate_operation_claim(
+              Claim, OutcomeRef, OperationMode, Seen, S0);
+        {error, _} ->
+            {{invalid, invalid_authorization_transcript}, S0}
+    end.
+
+validate_operation_claim(
+  #{key := Key, digest := Digest} = Claim, OutcomeRef,
+  OperationMode, Seen,
+  S0 = #s{outcomes = Outcomes0}) ->
+    case maps:find(Key, Seen) of
+        {ok, Digest} ->
+            {{invalid, duplicate_operation}, S0};
+        {ok, _OtherDigest} ->
+            {{invalid, operation_conflict}, S0};
+        error ->
+            case operation_projection_transition(
+                   OperationMode, Outcomes0, Claim, OutcomeRef) of
+                {new, Outcomes1} ->
+                    {ok, Seen#{Key => Digest},
+                     S0#s{outcomes = Outcomes1}};
+                {{claimed, #{request_digest := Digest}}, Outcomes1} ->
+                    {{invalid, duplicate_operation},
+                     S0#s{outcomes = Outcomes1}};
+                {{claimed, _Other}, Outcomes1} ->
+                    {{invalid, operation_conflict},
+                     S0#s{outcomes = Outcomes1}};
+                {error, Reason} ->
+                    outcome_index_failure(Reason)
+            end
+    end.
+
+operation_projection_transition(check, Outcomes, Claim, OutcomeRef) ->
+    quod_outcome:check_operation(Outcomes, Claim, OutcomeRef);
+operation_projection_transition(
+  {claim, Slot}, Outcomes, Claim, OutcomeRef) ->
+    case quod_outcome:claim_operation(
+           Outcomes, Slot, Claim, OutcomeRef) of
+        {new, Outcomes1} -> {new, Outcomes1};
+        %% Replaying the exact same committed slot is an idempotent apply, so
+        %% the caller follows its normal publication path without reporting a
+        %% duplicate client operation.
+        {replay, Outcomes1} -> {new, Outcomes1};
+        {error, _} = Error -> Error
+    end.
+
+transaction_outcome_ref(
+  {Ns, Anchor}, #transaction{tx_id = <<_:256>> = TxId}) ->
+    {transaction, Ns, Anchor, TxId}.
+
+dtx_validation_verdict(Control, BlockTimestamp, OperationMode,
+                       S = #s{outcomes = Outcomes0}) ->
     case safe_dtx_group_id(Control) of
         {ok, GroupId} ->
         case quod_outcome:group_history(Outcomes0, GroupId) of
             {History, Outcomes1} when is_map(History) ->
                 S1 = S#s{outcomes = Outcomes1},
-                {dtx_policy_verdict(Control, History, S1), S1};
+                case dtx_request_verdict(
+                       Control, BlockTimestamp, OperationMode, S1) of
+                    {valid, S2} ->
+                        {dtx_policy_verdict(Control, History, S2), S2};
+                    {Verdict, S2} ->
+                        {Verdict, S2}
+                end;
             {error, Reason} ->
                 outcome_index_failure(Reason)
         end;
         error ->
             {{invalid, malformed_control}, S}
     end.
+
+dtx_request_verdict(Control, BlockTimestamp, OperationMode, S) ->
+    case quod_dtx:control_kind(Control) of
+        'begin' -> validate_dtx_begin_request(
+                     Control, BlockTimestamp, OperationMode, S);
+        _ -> {valid, S}
+    end.
+
+validate_dtx_begin_request(Control, BlockTimestamp, OperationMode, S0) ->
+    Target = {S0#s.ns, target_anchor(S0#s.ns)},
+    case quod_ontology:network_identity(
+           quod_dtx:requires_network_identity(Control)) of
+        {ok, Network} ->
+            case quod_dtx:validate_request(
+                   Network, Target, BlockTimestamp, Control) of
+                {ok, none} -> {valid, S0};
+                {ok, RequestEvidence} ->
+                    case quod_dtx:begin_group_ref(
+                           quod_dtx:control_body(Control)) of
+                        {ok, GroupRef} ->
+                            case validate_signed_request(
+                                   Target, RequestEvidence, GroupRef,
+                                   OperationMode, #{}, S0) of
+                                {ok, _Seen, S1} -> {valid, S1};
+                                {{invalid, Reason}, S1} ->
+                                    {{invalid, Reason}, S1}
+                            end;
+                        error ->
+                            {{invalid, malformed_control}, S0}
+                    end;
+                {error, _} -> {{invalid, invalid_request_auth}, S0}
+            end;
+        {error, Reason} ->
+            case OperationMode of
+                {claim, _Slot} ->
+                    {{unavailable, network_identity, Reason}, S0};
+                check ->
+                    {abstain, S0}
+            end
+    end.
+
+wait_for_apply_dependency(Reason, S = #s{apply_dependency = none}) ->
+    logger:warning(
+      "committed record is waiting for root network identity: ~0p",
+      [Reason]),
+    arm_apply_dependency_retry(
+      begin_dependency_replay(S#s{ready = false}));
+wait_for_apply_dependency(_Reason, S) ->
+    S.
+
+begin_dependency_replay(
+  S = #s{runtime_mode = live, ns = Ns, applied = Applied}) ->
+    Id = make_ref(),
+    publish_runtime(Ns, {replay_started, Id, Applied}),
+    %% The runtime owns detaching its old MVCC pin after it has stopped every
+    %% reader, exactly as for an ordinary catch-up replay.
+    S#s{runtime_mode = {replaying, Id}};
+begin_dependency_replay(S) ->
+    S.
+
+arm_apply_dependency_retry(S) ->
+    Token = make_ref(),
+    Timer = erlang:send_after(
+              ?APPLY_DEPENDENCY_RETRY_MS, self(),
+              {retry_apply_dependency, network_identity, Token}),
+    S#s{apply_dependency = {network_identity, Timer, Token}}.
 
 safe_dtx_group_id(Control) ->
     try quod_dtx:group_id(Control) of
@@ -5764,11 +6144,9 @@ dtx_policy_verdict(Control, History, S) ->
 %%   once quorum-many validators independently observed the candidate ready.
 %% - retract: valid only if that exact `peer_admitted` clause is present — a fabricated-address retract
 %%   matches nothing, so it can never eject a validator from the set while missing in the KB.
--spec membership_verdict(term(), #s{}) -> valid | {invalid, term()}.
+-spec membership_verdict(#transaction{}, #s{}) -> valid | {invalid, term()}.
 membership_verdict(#transaction{diff = Diff}, S) ->
-    membership_diff_verdict(Diff, S);
-membership_verdict(_Change, _S) ->
-    {invalid, malformed}.
+    membership_diff_verdict(Diff, S).
 
 membership_diff_verdict(
   [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],
@@ -5797,14 +6175,15 @@ membership_diff_verdict(
         false -> {invalid, no_such_member}
     end;
 membership_diff_verdict(_Diff, _S) ->
-    {invalid, malformed}.   %% Slice A's gate makes this unreachable in production; kept total for tests/robustness
+    {invalid, invalid_membership}.
 
 %% Async delivery to the requesting statem (or a test pid) — a plain message so
 %% the statem consumes it as an `info` event and a test can receive it directly.
-deliver_validation({membership, _Change}, ReplyTo, Tag, Verdict, _S) ->
-    ReplyTo ! {membership_verdict, Tag, Verdict},
+deliver_validation({content, _Transactions, _BlockTimestamp},
+                   ReplyTo, Tag, Verdict, _S) ->
+    ReplyTo ! {content_verdict, Tag, Verdict},
     ok;
-deliver_validation({dtx, _Control}, ReplyTo, Tag, Verdict,
+deliver_validation({dtx, _Control, _BlockTimestamp}, ReplyTo, Tag, Verdict,
                    #s{outcomes = Outcomes}) ->
     ReplyTo ! {dtx_verdict, Tag, self(),
                quod_outcome:applied_floor(Outcomes), Verdict},

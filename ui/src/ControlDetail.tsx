@@ -52,6 +52,14 @@ function ControlFields({ control }: { control: Control }) {
       {control.prepared != null && <><Dt>Prepared</Dt><dd>{control.prepared ? 'yes' : 'no'}</dd></>}
       {control.applied_generation != null && <><Dt>Applied generation</Dt><dd>{control.applied_generation}</dd></>}
       {control.plan_digest && <><Dt>Plan digest</Dt><dd className="font-mono text-xs break-all text-gray">{control.plan_digest}</dd></>}
+      {control.request && <>
+        <Dt>User request</Dt><dd>{control.request.status}</dd>
+        <Dt>User</Dt><dd className="font-mono text-xs break-all">{control.request.user?.id ?? 'invalid'}</dd>
+        <Dt>Request digest</Dt><dd className="font-mono text-xs break-all text-gray">{control.request.request_digest ?? 'invalid'}</dd>
+        <Dt>Operation id</Dt><dd className="font-mono text-xs break-all text-gray">{control.request.operation_id ?? 'invalid'}</dd>
+        <Dt>User signature</Dt><dd className="font-mono text-[11px] break-all text-gray">{control.request.signature ?? 'invalid'}</dd>
+        <Dt>First outcome</Dt><dd className="font-mono text-xs break-all text-gray">{control.request.first_outcome?.group_id ?? 'invalid'}</dd>
+      </>}
     </>
   )
 }

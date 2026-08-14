@@ -372,7 +372,7 @@ run_command({applied, Target, GroupId, FinalizeRef, Generation, Verdict}, S) ->
 
 submit_record(Target, Record, S) ->
     try
-        Kind = record_kind(Record),
+        Kind = quod_dtx:record_kind(Record),
         GroupId = quod_dtx:group_id(Record),
         case quod_dtx:encode_record(Record) of
             {ok, RecordBlob} ->
@@ -1113,12 +1113,6 @@ valid_validator_routes(Routes, Committee)
           end, true, Routes);
 valid_validator_routes(_Routes, _Committee) ->
     false.
-
-record_kind({quod_dtx_begin, 1, _, _}) -> 'begin';
-record_kind({quod_dtx_prepare, 1, _, _, _, _, _}) -> prepare;
-record_kind({quod_dtx_decision, 1, _, _, _, _, _}) -> decision;
-record_kind({quod_dtx_finalize, 1, _, _, _, _, _}) -> finalize;
-record_kind({quod_dtx_complete, 1, _, _, _}) -> complete.
 
 request_id() ->
     crypto:strong_rand_bytes(?QUOD_DTX_ENDPOINT_REQUEST_ID_BITS div 8).

@@ -164,12 +164,12 @@ committed_begin_bootstrap_starts_with_prepare_not_begin_test() ->
                 routes => #{}},
           {ok, Commands} = quod_dtx_coordinator:test_initial_commands(
                              Ns, Begin, Ref, Evidence),
-          ?assertMatch([{submit, _, {quod_dtx_prepare, 1, _, _, _, _, _}},
-                        {submit, _, {quod_dtx_prepare, 1, _, _, _, _, _}}],
+          ?assertMatch([{submit, _, {quod_dtx_prepare, 2, _, _, _, _, _}},
+                        {submit, _, {quod_dtx_prepare, 2, _, _, _, _, _}}],
                        Commands),
           ?assertNot(
              lists:any(
-               fun({submit, _, {quod_dtx_begin, 1, _, _}}) -> true;
+               fun({submit, _, {quod_dtx_begin, 2, _, _, _, _}}) -> true;
                   (_) -> false
                end, Commands))
       end).
@@ -273,6 +273,7 @@ fixture(#{pubkey := Pub} = Signer) ->
                 {element(1, Origin), element(2, Origin), Pub, Admission},
             nonce => digest(15), principal => anonymous,
             goal => GoalBlob, result => ResultBlob,
+            request_binding => none,
             participants =>
                 [{Origin, quod_dtx:digest(PlanA)},
                  {Other, quod_dtx:digest(PlanB)}]}),
@@ -280,7 +281,7 @@ fixture(#{pubkey := Pub} = Signer) ->
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest,
+          Manifest, none, none,
           [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
            {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     #{signer => Signer, admission => Admission,
@@ -303,7 +304,7 @@ plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
                        Session,
                        #{target => Target, base_height => 1,
                          proof_id => ProofId, origin => Origin,
-                         principal => anonymous}),
+                         principal => anonymous, request_binding => none}),
         {ok, Blob} = quod_dtx:encode(Plan),
         {Plan, Blob}
     after

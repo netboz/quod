@@ -99,7 +99,7 @@ materialized(#{goal_blob := GoalBlob, request :=
     end.
 
 network_identity() ->
-    case quod_ontology:genesis_anchor(quod_ontology:root_ns()) of
+    case quod_ontology:network_identity() of
         {ok, <<_:256>> = Network} -> {ok, Network};
         _ -> {error, signed_goal_unavailable}
     end.

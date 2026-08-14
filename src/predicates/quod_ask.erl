@@ -245,10 +245,11 @@ origin_scope(Target) ->
         {error, _} = Error -> Error
     end.
 
-%% Scope wire v3 can authenticate only the origin node.  A user proof must not
-%% silently become that node when it selects another ontology.  Same-ontology
-%% selection remains local and keeps the exact user principal; foreign user
-%% scopes fail closed until the reviewed signed-auth scope generation lands.
+%% Scope wire V4 carries the signed principal and request digest, but its public
+%% propagation path deliberately remains closed until Slice 5. A user proof
+%% must never fall back to the forwarding node's authority. Same-ontology
+%% selection stays local; foreign signed-user scopes fail closed at this one
+%% activation boundary.
 signed_user_scope_admission(Target) ->
     case quod_proof_context:principal() of
         {user, <<_:256>>} ->
@@ -432,9 +433,12 @@ open_remote_routes(Target, Anchor, ScopeId,
                true -> read_only;
                false -> read_write
            end,
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(node),
     Binding = {scope_binding, OriginKey, TargetKey,
                quod_proof_context:proof_id(), ScopeId,
-               quod_proof_context:origin_identity(), {Target, Anchor}, Mode},
+               quod_proof_context:origin_identity(), {Target, Anchor}, Mode,
+               {node, OriginKey}, AuthenticationDigest},
     case ensure_remote_scope(Endpoint, Binding) of
         {ok, Handle} ->
             {ok, quod_scope_session:pid(Handle), Handle};
@@ -499,7 +503,8 @@ await_remote_scope_open(Target, Router, Generation, OpenRef) ->
     end.
 
 binding_target_namespace(
-  {scope_binding, _, _, _, _, _, {Target, _Anchor}, _Mode}) -> Target.
+  {scope_binding, _, _, _, _, _, {Target, _Anchor}, _Mode,
+   _Principal, _AuthenticationDigest}) -> Target.
 
 remember_route_error(none, Reason) -> Reason;
 remember_route_error(Reason, _LaterReason) -> Reason.

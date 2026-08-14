@@ -484,7 +484,8 @@ validate_open(_Owner, _Endpoint, _Binding, _RemainingMs, _S) ->
 
 validate_new_open(Endpoint, Binding, RemainingMs, Fields) ->
     RequestId = new_id(),
-    Command = {scope_command, Binding, 1, RequestId, RemainingMs, scope_open},
+    Command = {scope_command, Binding, 1, RequestId, RemainingMs,
+               {scope_open, node}},
     case {quod_quic:valid_endpoint(Endpoint),
           quod_scope_wire:encode_command(Command)} of
         {false, _} -> {error, invalid_endpoint};
@@ -495,13 +496,15 @@ validate_new_open(Endpoint, Binding, RemainingMs, Fields) ->
 
 open_fields(
   Binding = {scope_binding, OriginKey, TargetKey, ProofId, ScopeId,
-             _OriginIdentity, TargetIdentity = {TargetNs, Anchor}, _Mode},
+             _OriginIdentity, TargetIdentity = {TargetNs, Anchor}, _Mode,
+             {node, OriginKey}, AuthenticationDigest},
   OriginKey)
   when is_binary(TargetKey), byte_size(TargetKey) =:= 32,
        is_binary(ProofId), byte_size(ProofId) =:= 32,
        is_binary(ScopeId), byte_size(ScopeId) =:= ?ID_BYTES,
        is_binary(TargetNs), byte_size(TargetNs) > 0,
-       is_binary(Anchor), byte_size(Anchor) =:= 32 ->
+       is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_binary(AuthenticationDigest), byte_size(AuthenticationDigest) =:= 32 ->
     {ok, #{binding => Binding,
            key => {ProofId, ScopeId},
            proof_id => ProofId,
@@ -513,9 +516,9 @@ open_fields(_Binding, _OriginKey) ->
 
 reusable_binding(
   {scope_binding, OriginKey, _NewTargetKey, ProofId, _NewScopeId,
-   OriginIdentity, TargetIdentity, Mode},
+   OriginIdentity, TargetIdentity, Mode, Principal, AuthenticationDigest},
   {scope_binding, OriginKey, _OldTargetKey, ProofId, _OldScopeId,
-   OriginIdentity, TargetIdentity, Mode}) -> true;
+   OriginIdentity, TargetIdentity, Mode, Principal, AuthenticationDigest}) -> true;
 reusable_binding(_, _) -> false.
 
 admit_scope(Owner, ProofId, TargetKey, S) ->
@@ -634,7 +637,8 @@ retained_owner_transition(Same, Same, Count) -> Count.
 %% Command and event correlation
 %% ------------------------------------------------------------------
 
-build_active_command(#scope{status = active}, _RemainingMs, scope_open) ->
+build_active_command(
+  #scope{status = active}, _RemainingMs, {scope_open, _Authentication}) ->
     {error, {protocol_error, unexpected_scope_command}};
 build_active_command(
   Scope = #scope{status = active, next_command_seq = CommandSeq,
@@ -762,7 +766,7 @@ validate_event_owner(
 
 scope_error_matches_target(
   {scope_error, Reason},
-  #scope{binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _}}) ->
+  #scope{binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _, _, _}}) ->
     quod_scope_wire:scope_error_matches_target(Reason, TargetNs);
 scope_error_matches_target(_Operation, #scope{}) ->
     true.
@@ -783,7 +787,7 @@ valid_untracked_terminal(
 valid_untracked_terminal(
   RequestId, AcceptedSeq, {scope_error, {Kind, TargetNs}},
   #scope{status = active,
-         binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _},
+         binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _, _, _},
          last_request_id = RequestId, last_command_seq = AcceptedSeq}) ->
     Kind =:= scope_expired orelse Kind =:= proof_limit_exceeded;
 valid_untracked_terminal(_RequestId, _AcceptedSeq, _Operation, _Scope) ->
@@ -1112,7 +1116,7 @@ link_alive(Pid) when is_pid(Pid) -> erlang:is_process_alive(Pid);
 link_alive(_) -> false.
 
 scope_unreachable(
-  #scope{binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _}}) ->
+  #scope{binding = {scope_binding, _, _, _, _, _, {TargetNs, _}, _, _, _}}) ->
     {ontology_unreachable, TargetNs}.
 
 drop_owner(Owner, S0) ->
@@ -1276,7 +1280,8 @@ find_exact_scope(_Owner, _Handle, _RouterGeneration, _Binding, _RequestLink, _S)
     {error, stale_router}.
 
 scope_key({scope_binding, _OriginKey, _TargetKey, ProofId, ScopeId,
-           _OriginIdentity, _TargetIdentity, _Mode}) ->
+           _OriginIdentity, _TargetIdentity, _Mode,
+           _Principal, _AuthenticationDigest}) ->
     {ok, {ProofId, ScopeId}};
 scope_key(_) -> error.
 

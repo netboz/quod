@@ -3,7 +3,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { fetchBlock } from './api'
-import type { Cert, Effect, Op } from './api'
+import type { Cert, Effect, Op, SignedRequest } from './api'
 import type { LiveTx, TxStatus } from './store'
 import { shortHex, timestamp } from './format'
 
@@ -108,6 +108,8 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
         <dd className="text-xs text-gray">{full.read_predicates} predicate(s) checked (OCC)</dd>
       </dl>
 
+      {full.request && <SignedRequestSection request={full.request} />}
+
       <Section title="Goal">
         <pre className="rounded-lg bg-cream p-3 font-mono text-[13px] break-all whitespace-pre-wrap text-teal">
           {full.goal ?? 'genesis'}
@@ -126,6 +128,53 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
 
       <CertSection cert={full.cert} />
     </aside>
+  )
+}
+
+function SignedRequestSection({ request }: { request: SignedRequest }) {
+  return (
+    <Section title="Signed user request">
+      <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+        <Dt>Status</Dt>
+        <dd>{request.status}</dd>
+        {request.user && (
+          <>
+            <Dt>User</Dt>
+            <dd className="font-mono break-all" title={request.user.pubkey ?? undefined}>{request.user.id}</dd>
+          </>
+        )}
+        <Dt>Request digest</Dt>
+        <dd className="font-mono break-all text-gray">{request.request_digest ?? 'invalid'}</dd>
+        <Dt>Operation id</Dt>
+        <dd className="font-mono break-all text-gray">{request.operation_id ?? 'invalid'}</dd>
+        {request.operation_ref && (
+          <>
+            <Dt>Operation ref</Dt>
+            <dd className="font-mono break-all text-gray">
+              {request.operation_ref.ns}:{request.operation_ref.operation_id}
+            </dd>
+          </>
+        )}
+        <Dt>Mode</Dt>
+        <dd>{request.mode ?? 'invalid'}</dd>
+        <Dt>Valid until</Dt>
+        <dd>{request.not_after_ms == null ? 'invalid' : timestamp(request.not_after_ms)}</dd>
+        {request.signature && (
+          <>
+            <Dt>User signature</Dt>
+            <dd className="font-mono text-[11px] break-all text-gray">{request.signature}</dd>
+          </>
+        )}
+        {request.first_outcome && (
+          <>
+            <Dt>First outcome</Dt>
+            <dd className="font-mono break-all text-gray">
+              {request.first_outcome.kind}:{request.first_outcome.tx_id ?? request.first_outcome.group_id}
+            </dd>
+          </>
+        )}
+      </dl>
+    </Section>
   )
 }
 

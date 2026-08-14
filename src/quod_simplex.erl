@@ -118,7 +118,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          make_share/5, verify_share/2,
          verify_cert/3,
          may_commit/2, may_complain/2, well_formed_block/1,
-         valid_history_entry/4,
+         valid_genesis_transaction/2,
+         valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
          history_committee/1, history_validator_routes/1,
          history_advance/3, history_advance/4,
@@ -980,7 +981,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 invalid = none :: none | binary(),
                 invalid_reason = none :: none | term(),
                 validating = none :: none | binary(),
-                validation = none :: none | membership |
+                validation = none :: none | content |
                     {dtx, term(), pid(), reference()} |
                     {dtx_foreign, term(), pid(), reference(),
                      quod_dtx:group_history()},
@@ -2042,8 +2043,9 @@ dtx_endpoint_local(_Ns, _Request, _TimeoutMs) ->
 dtx_outcome_lookup(OutcomeRef, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
-    case {outcome_ref_target(OutcomeRef), lists:sort(namespaces())} of
-        {{ok, TargetNs, Anchor}, [OwnerNs | _]} ->
+    case {quod_outcome:ref_identity(OutcomeRef),
+          lists:sort(namespaces())} of
+        {{ok, {TargetNs, Anchor}}, [OwnerNs | _]} ->
             case quod_directory:validator_routes(TargetNs, Anchor) of
                 {ok, Routes} ->
                     SourceRoutes =
@@ -2072,18 +2074,6 @@ dtx_outcome_result(
     {error, not_found};
 dtx_outcome_result(OutcomeRef, {error, _}) ->
     {error, {outcome_unknown, OutcomeRef}}.
-
-outcome_ref_target(
-  {transaction, Ns, <<_:256>> = Anchor, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0 ->
-    {ok, Ns, Anchor};
-outcome_ref_target(
-  {group, Ns, <<_:256>> = Anchor, <<_:256>>,
-   <<_:256>>, <<_:256>>})
-  when is_binary(Ns), byte_size(Ns) > 0 ->
-    {ok, Ns, Anchor};
-outcome_ref_target(_) ->
-    error.
 
 -doc "Verify one exact certified DTX reference in the owning local ledger.".
 -spec dtx_local_evidence(binary(), quod_dtx:certified_ref(),
@@ -3056,8 +3046,8 @@ running_impl(
 %% A membership verdict from our own quod_prolog (a plain message from `deliver_verdict`): emit or withhold
 %% the deferred support share. The tag echoes the `{Slot, BlockHash}` we requested with, so the verdict binds
 %% to the exact block. Support can advance/skip the head, so reflect that in the Δ timer.
-running_impl(info, {membership_verdict, {Sl, BH}, Verdict}, S0) ->
-    S1 = on_membership_verdict(Sl, BH, Verdict, S0),
+running_impl(info, {content_verdict, {Sl, BH}, Verdict}, S0) ->
+    S1 = on_content_verdict(Sl, BH, Verdict, S0),
     keep_progress(S0, S1, []);
 running_impl(
   info,
@@ -3289,7 +3279,7 @@ dtx_begin_registration_open(
     pending_begin_projection(Journal) =:= none andalso
         not maps:fold(
               fun(_Digest,
-                  #dtx_submission{record = {quod_dtx_begin, 1, _, _}},
+                  #dtx_submission{record = {quod_dtx_begin, 2, _, _, _, _}},
                   _Found) -> true;
                  (_Digest, _Submission, Found) -> Found
               end, false, Submissions);
@@ -3383,7 +3373,7 @@ pending_origin_begin(#s{dtx_submissions = Submissions}, Binding) ->
     Candidates =
         [{InsertedAt, GroupId, Begin, GroupRef}
          || #dtx_submission{
-              record = {quod_dtx_begin, 1, _, _} = Begin,
+              record = {quod_dtx_begin, 2, _, _, _, _} = Begin,
               group_id = GroupId, inserted_at = InsertedAt}
                 <- maps:values(Submissions),
             {ok, GroupRef} <- [quod_dtx:begin_group_ref(Begin)],
@@ -4050,8 +4040,8 @@ execute_dtx_endpoint_request(
     end.
 
 execute_outcome_snapshot(Ns, OutcomeRef) ->
-    case outcome_ref_namespace(OutcomeRef) of
-        Ns ->
+    case quod_outcome:ref_identity(OutcomeRef) of
+        {ok, {Ns, _Anchor}} ->
             case quod_prolog:outcome_snapshot(Ns, OutcomeRef) of
                 {ok, Snapshot} -> {outcome_state, Snapshot};
                 {error, bad_outcome_ref} -> {error, invalid_request};
@@ -4060,11 +4050,6 @@ execute_outcome_snapshot(Ns, OutcomeRef) ->
         _ ->
             {error, invalid_request}
     end.
-
-outcome_ref_namespace({transaction, Ns, <<_:256>>, <<_:256>>}) -> Ns;
-outcome_ref_namespace(
-  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}) -> Ns;
-outcome_ref_namespace(_) -> invalid.
 
 finish_dtx_server_worker(
   Pid, Result, S = #s{dtx_workers = Workers}) ->
@@ -4139,7 +4124,7 @@ dtx_endpoint_result_response(Request, _Result, _S) ->
 
 submitted_prepare_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
-        {ok, {quod_dtx_prepare, 1, _, _, _, _, _} = Prepare} ->
+        {ok, {quod_dtx_prepare, 2, _, _, _, _, _} = Prepare} ->
             quod_dtx:record_digest(Prepare);
         _ ->
             error
@@ -4191,7 +4176,8 @@ current_outcome_snapshot(
   S = #s{slot = AppliedFloor, committee_id = CommitteeId, self = Self})
   when map_size(Snapshot) =:= 2,
        is_integer(AppliedFloor), AppliedFloor >= MinimumSlot ->
-    case outcome_ref_namespace(OutcomeRef) =:= S#s.ns andalso
+    case quod_outcome:ref_identity(OutcomeRef) =:=
+             {ok, target_identity(S)} andalso
          endpoint_read_ready(S) andalso
          lists:member(Self, active_validators(S)) of
         true -> {ok, target_identity(S), AppliedFloor, Outcome};
@@ -4486,12 +4472,12 @@ dtx_retain_admissible(
                 dtx_role_acquisition_record(Record)
     end.
 
-dtx_role_acquisition_record({quod_dtx_begin, 1, _, _}) -> true;
-dtx_role_acquisition_record({quod_dtx_prepare, 1, _, _, _, _, _}) -> true;
-dtx_role_acquisition_record(_Record) -> false.
+dtx_role_acquisition_record(Record) ->
+    Kind = quod_dtx:record_kind(Record),
+    Kind =:= 'begin' orelse Kind =:= prepare.
 
 validated_dtx_record(Record) ->
-    case {dtx_record_kind(Record), quod_dtx:encode_record(Record)} of
+    case {quod_dtx:record_kind(Record), quod_dtx:encode_record(Record)} of
         {invalid, _} ->
             {error, invalid_record};
         {_Kind, {error, _} = Error} ->
@@ -4499,13 +4485,6 @@ validated_dtx_record(Record) ->
         {Kind, {ok, _Canonical}} ->
             {ok, Kind, quod_dtx:record_digest(Record)}
     end.
-
-dtx_record_kind({quod_dtx_begin, 1, _, _}) -> 'begin';
-dtx_record_kind({quod_dtx_prepare, 1, _, _, _, _, _}) -> prepare;
-dtx_record_kind({quod_dtx_decision, 1, _, _, _, _, _}) -> decision;
-dtx_record_kind({quod_dtx_finalize, 1, _, _, _, _, _}) -> finalize;
-dtx_record_kind({quod_dtx_complete, 1, _, _, _}) -> complete;
-dtx_record_kind(_) -> invalid.
 
 sign_and_retain_dtx(Kind, Record, Digest, Waiter,
                     S = #s{id = Signer, self = Self,
@@ -7163,11 +7142,11 @@ retain_dtx_candidate(Block = #block{slot = Sl}, BH, S) ->
         {_OtherBH, _OtherBlock} -> S
     end.
 
-%% Plain content is supported immediately. Committee-changing content defers its support
-%% share until this node's own KB judges it (`quod_prolog:request_membership_verdict/5`, pinned to the
-%% proposal's parent height): we record `validating` and support only on a `valid` verdict — so a Byzantine
-%% leader's unauthorized membership change never collects an honest support quorum. Local and remote
-%% proposals use this same path; DTX controls use the adjacent exact-history verdict path.
+%% Content that requires parent-state validation defers its support share until
+%% this node's own KB judges it through `quod_prolog:request_content_verdict/6`,
+%% pinned to the proposal parent. This one path covers signed authorization and
+%% committee policy; local and remote proposals use it identically. DTX controls
+%% use the adjacent exact-history verdict path.
 %% The verdict is correlated to the exact block by its HASH (the Tag is `{Sl, BlockHash}`), so a Byzantine
 %% leader that EQUIVOCATES (two different blocks for one slot) can never have block A's verdict endorse
 %% block B. Re-proposing the SAME block is idempotent (we're already validating it — no duplicate request).
@@ -7210,8 +7189,9 @@ support_or_validate_candidate(#block{payload = Payload} = Block, Sl, BH, S) ->
         invalid -> S
     end.
 
-support_or_validate_content(Transactions, Block, Sl, BH, S) ->
-    case transactions_touch_committee(Transactions) of
+support_or_validate_content(
+  Transactions, Block = #block{timestamp = BlockTimestamp}, Sl, BH, S) ->
+    case transactions_require_parent_validation(Transactions) of
         false -> support_block(Block, BH, S);
         true ->
             Round = round_state(Sl, S),
@@ -7222,13 +7202,13 @@ support_or_validate_content(Transactions, Block, Sl, BH, S) ->
                 false ->
                     case Round#round.validating of
                         BH -> S;
-                        _ -> [Change] = Transactions, %% acceptable_payload makes membership blocks singleton
-                             _ = quod_prolog:request_membership_verdict(S#s.ns, Change, Sl,
-                                                                        self(), {Sl, BH}),
+                        _ -> _ = quod_prolog:request_content_verdict(
+                                   S#s.ns, Transactions, BlockTimestamp,
+                                   Sl, self(), {Sl, BH}),
                              put_round(
                                Sl,
                                Round#round{validating = BH,
-                                           validation = membership}, S)
+                                           validation = content}, S)
                     end
             end
     end.
@@ -7241,12 +7221,12 @@ support_or_validate_dtx(Control, Block, Sl, BH, S) ->
         _ ->
             case Round#round.validating of
                 BH -> S;
-                none -> request_dtx_validation(Control, Sl, BH, S);
+                none -> request_dtx_validation(Control, Block, Sl, BH, S);
                 _OtherBH -> S
             end
     end.
 
-request_dtx_validation(Control, Sl, BH,
+request_dtx_validation(Control, #block{timestamp = BlockTimestamp}, Sl, BH,
                        S = #s{ns = Ns, history_head = ParentToken}) ->
     case {ParentToken, quod_reg:where({quod_prolog, Ns})} of
         {{Parent, <<_:256>>} = Token, Pid}
@@ -7254,7 +7234,7 @@ request_dtx_validation(Control, Sl, BH,
             Monitor = erlang:monitor(process, Pid),
             Tag = {Sl, BH, Token},
             ok = quod_prolog:request_dtx_verdict(
-                   Ns, Control, Sl, self(), Tag),
+                   Ns, Control, BlockTimestamp, Sl, self(), Tag),
             Round = round_state(Sl, S),
             put_round(
               Sl,
@@ -7835,10 +7815,11 @@ dtx_validation_monitor(#round{}) ->
 %% notarize; if enough nodes abstain the slot Δ-skips). A verdict is acted on ONLY if `{Sl, BH}` still matches
 %% what we are validating AND `Sl` is still head+1 — so a stale verdict (slot finalized, or a DIFFERENT block
 %% now validating under leader equivocation) is dropped, never applied to the wrong block.
-on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= Approved + 1 ->
+on_content_verdict(Sl, BH, Verdict, S = #s{approved = Approved})
+  when Sl =:= Approved + 1 ->
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation} of
-        {BH, membership} ->
+        {BH, content} ->
             S1 = put_round(
                    Sl,
                    Round#round{validating = none, validation = none}, S),
@@ -7855,7 +7836,7 @@ on_membership_verdict(Sl, BH, Verdict, S = #s{approved = Approved}) when Sl =:= 
             end;
         _ -> S
     end;
-on_membership_verdict(_Sl, _BH, _Verdict, S) -> S.
+on_content_verdict(_Sl, _BH, _Verdict, S) -> S.
 
 %% The oldest non-final slot is an explicit local protocol state. The former `active_slot` latch followed
 %% `approved+1`; consequently a support certificate cleared its timer even though the slot was not durable.
@@ -8633,8 +8614,9 @@ ts_acceptable(Ts, Last, Now) ->
 %% enforced at BOTH proposal seams (the leader gates its own input in `handle_append`; every validator
 %% gates a peer's proposal in `valid_proposal` before support-signing) — so an unacceptable membership
 %% change never reaches a support quorum and can never commit. This is the PURE shape+floor+cap gate; a peer
-%% that passes it then also defers its support to a KB verdict (`support_or_validate/2` →
-%% `quod_prolog:request_membership_verdict/5`). Committed history is both cert-verified and checked against
+%% that passes it then also defers its support to the shared KB content verdict
+%% (`support_or_validate/2` → `quod_prolog:request_content_verdict/6`).
+%% Committed history is both cert-verified and checked against
 %% the signed-transaction rules during catch-up and local rebuild.
 %% The whole transaction is checked before voting: identifiers and timestamps have their canonical
 %% shapes, the OCC read-set is a map of exact mutation-version tokens, and every diff element is a legal
@@ -8846,6 +8828,10 @@ membership_payload_shape(Payload) ->
 transactions_touch_committee(Transactions) ->
     lists:any(fun is_membership_change/1, Transactions).
 
+transactions_require_parent_validation(Transactions) ->
+    transactions_touch_committee(Transactions) orelse
+        quod_transaction:requires_network_identity(Transactions).
+
 payload_is_consensus_barrier(Data) ->
     case quod_ledger:classify(Data) of
         {content, Transactions} -> transactions_touch_committee(Transactions);
@@ -8945,18 +8931,25 @@ Only the explicitly positioned slot-1 genesis transaction may be unsigned.
 -spec valid_history_entry({binary(), binary()}, pos_integer(), term(),
                           history_projection()) -> boolean().
 valid_history_entry(Binding, Index, Data, Projection) ->
-    valid_history_entry(Binding, Index, Data, Projection, verify_id).
+    valid_history_entry(Binding, Index, Data, 0, Projection).
+
+-spec valid_history_entry({binary(), binary()}, pos_integer(), term(),
+                          non_neg_integer(), history_projection()) -> boolean().
+valid_history_entry(Binding, Index, Data, Timestamp, Projection) ->
+    valid_history_entry(
+      Binding, Index, Data, Timestamp, Projection, verify_id).
 
 valid_history_entry({Ns, _Anchor}, 1,
                     {batch, [#transaction{origin = {Ns, <<0:256>>},
                                           sig = none} = Genesis]},
-                    #{committee := []}, _IdMode)
+                    _Timestamp, #{committee := []}, _IdMode)
   when is_binary(Ns) ->
     valid_genesis_transaction(Ns, Genesis);
-valid_history_entry(_Binding, I, noop, _Projection, _IdMode)
+valid_history_entry(_Binding, I, noop, _Timestamp, _Projection, _IdMode)
   when is_integer(I), I > 1 ->
     true;
 valid_history_entry({Ns, Anchor} = Target, I, {batch, Payload},
+                    Timestamp,
                     #{committee := Committee, admissions := Admissions},
                     IdMode)
   when is_binary(Ns), is_binary(Anchor), is_integer(I), I > 1,
@@ -8972,12 +8965,14 @@ valid_history_entry({Ns, Anchor} = Target, I, {batch, Payload},
                   Payload)
         andalso verify_transaction_signatures(
                   Target, Admissions, Payload, replay)
+        andalso historical_requests_valid(Target, Timestamp, Payload)
         andalso unique_tx_ids(Payload)
         andalso membership_batch_shape_ok(Payload);
 %% Each DTX phase becomes valid only through the shared phase reducer, sequence
 %% lane, and certified-reference checks. Keep every kind visibly fail-closed
 %% until those checks are wired; no control record is inert history.
-valid_history_entry(_Binding, I, {dtx, Blob}, _Projection, _IdMode)
+valid_history_entry(_Binding, I, {dtx, Blob}, _Timestamp,
+                    _Projection, _IdMode)
   when is_integer(I), I > 1, is_binary(Blob) ->
     case quod_ledger:classify({dtx, Blob}) of
         {'begin', _Control} -> false;
@@ -8987,8 +8982,27 @@ valid_history_entry(_Binding, I, {dtx, Blob}, _Projection, _IdMode)
         {complete, _Control} -> false;
         invalid -> false
     end;
-valid_history_entry(_Binding, _I, _Data, _Committee, _IdMode) ->
+valid_history_entry(_Binding, _I, _Data, _Timestamp, _Committee, _IdMode) ->
     false.
+
+historical_requests_valid(Target, Timestamp, Transactions) ->
+    case content_network_identity(Transactions) of
+        {ok, Network} ->
+            lists:all(
+              fun(Transaction) ->
+                      case quod_transaction:validate_request(
+                             Network, Target, Timestamp, Transaction) of
+                          {ok, _} -> true;
+                          {error, _} -> false
+                      end
+              end, Transactions);
+        {error, _} ->
+            false
+    end.
+
+content_network_identity(Transactions) ->
+    quod_ontology:network_identity(
+      quod_transaction:requires_network_identity(Transactions)).
 
 history_id_valid(verify_id, Target, Change) ->
     valid_target_transaction_id(Target, Change).
@@ -11259,7 +11273,8 @@ history_validate_content(
   {Ns, _Anchor} = Binding,
   #entry{index = I, data = Data} = Entry,
   #{sequences := Seqs} = Projection) ->
-    case valid_history_entry(Binding, I, Data, Projection, verify_id)
+    case valid_history_entry(
+           Binding, I, Data, Entry#entry.timestamp, Projection, verify_id)
          andalso historical_sequences_ok(I, Data, Seqs) of
         true  -> {ok, history_advance(Ns, Entry, Projection)};
         false -> {error, {invalid_transaction, I}}
@@ -11345,7 +11360,8 @@ history_advance_dtx(
   Control,
   #{dtx := Dtx0} = Projection,
   PhaseIndex) ->
-    case validated_dtx_entry(Binding, Entry, Control, Projection) of
+    case valid_dtx_history_request(Binding, Entry, Control) andalso
+         validated_dtx_entry(Binding, Entry, Control, Projection) of
         {ok, Ref, Lane, Sequence} ->
             case quod_dtx_phase_index:apply(
                    PhaseIndex, Control, Ref, Dtx0) of
@@ -11358,8 +11374,26 @@ history_advance_dtx(
                 {error, _} ->
                     {error, {invalid_transaction, I}}
             end;
-        error ->
+        Invalid when Invalid =:= false; Invalid =:= error ->
             {error, {invalid_transaction, I}}
+    end.
+
+valid_dtx_history_request(
+  Binding, #entry{timestamp = Timestamp}, Control) ->
+    case quod_dtx:control_kind(Control) of
+        'begin' ->
+            case quod_ontology:network_identity(
+                   quod_dtx:requires_network_identity(Control)) of
+                {ok, Network} ->
+                    case quod_dtx:validate_request(
+                           Network, Binding, Timestamp, Control) of
+                        {ok, _} -> true;
+                        {error, _} -> false
+                    end;
+                {error, _} -> false
+            end;
+        _ ->
+            true
     end.
 
 validated_dtx_entry(

@@ -402,6 +402,26 @@ one_byzantine_outcome_reply_never_decides_test() ->
              end),
     ?assertEqual({error, retry}, lookup(F, Ref, Deps)).
 
+operation_outcome_requires_f_plus_one_current_validators_test() ->
+    F = fixture(4),
+    [A, B | _] = maps:get(committee, F),
+    Ref = outcome_operation_ref(F),
+    Status = #{status => claimed, height => 14, ref => Ref,
+               request_digest => digest(13),
+               outcome_ref => outcome_transaction_ref(F)},
+    Matching = maps:from_keys([A, B], true),
+    Deps = outcome_dependencies(
+             maps:get(view, F),
+             fun(Key, Request, Target, CommitteeId, Slot) ->
+                     case maps:is_key(Key, Matching) of
+                         true -> outcome_reply(
+                                   Request, Target, CommitteeId, Slot,
+                                   Status);
+                         false -> {error, not_ready}
+                     end
+             end),
+    ?assertEqual({ok, Status}, lookup(F, Ref, Deps)).
+
 view_mismatch_lag_and_split_valid_statuses_are_retryable_test() ->
     F = fixture(4),
     [A, B, C, D] = maps:get(committee, F),
@@ -615,6 +635,10 @@ outcome_transaction_ref(F) ->
 outcome_group_ref(F, Coordinator) ->
     {TargetNs, Anchor} = maps:get(identity, maps:get(view, F)),
     {group, TargetNs, Anchor, Coordinator, digest(221), digest(222)}.
+
+outcome_operation_ref(F) ->
+    {TargetNs, Anchor} = maps:get(identity, maps:get(view, F)),
+    {operation, TargetNs, Anchor, digest(223), digest(13)}.
 
 group_committed(Ref) ->
     #{status => committed, height => 9, ref => Ref,

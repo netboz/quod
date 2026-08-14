@@ -42,13 +42,15 @@ The following predecessor choices are rejected:
 
 - a generic effect dispatcher that invokes compiled code by descriptor functor;
 - treating an unknown descriptor as implicitly safe client data;
-- client-supplied Prolog goals;
+- unsigned or unbounded client goals executed outside the ordinary proof and
+  ACL path;
 - committing generated blocks or per-frame transforms;
 - one undifferentiated stream for scene state, GUI, physics, and visual cues.
 
-A committed user shortcut does not weaken the rejection of client-supplied
-goals. The goal belongs to an ontology; the client receives and later invokes a
-stable entry identifier, never executable Prolog text or a goal term.
+A helper shortcut does not grant authority. A client may submit a signed,
+bounded Prolog goal directly, or construct the same goal from a stable helper
+description. Both enter the same ontology proof and ACL path described in
+`doc/signed-client-goals-plan.md`.
 
 ## 1. Directional invariants
 
@@ -161,7 +163,7 @@ This separates two useful forms of global update:
 
 The first implementation slice establishes the dedicated static endpoint,
 node-bound Ed25519 challenge-response, short-lived node-local sessions, and a
-single constrained user-home registration command. Typed world commands,
+single constrained user-home registration operation. Signed client goals,
 bundle distribution, and release activation remain separate bounded protocols;
 none is implied by loading the client or holding a session.
 
@@ -335,22 +337,22 @@ text_box(View, Field, Label, Options, CurrentText) :-
 
 Typing and intermediate form edits remain client/session P-state. Quod does not
 commit a transaction for every key press. On validate or submit, the client
-sends one authenticated typed command:
+constructs and signs one visible goal. A structured helper may first use a
+message such as:
 
 ```text
 gui_input(InputId, SessionId, AgentId, ViewId, ComponentId,
           Event, Payload, SeenHeight)
 ```
 
-The server:
+The helper/client:
 
 1. binds the session to its authenticated user and wielded agent;
 2. verifies that the component/event exists in the projected current view;
 3. validates a bounded payload against the component schema;
-4. maps the event through ontology policy to a ground desired state whose
-   declared `action/3` transition is owned by that ontology;
-5. runs one `goal(DesiredState)` transaction and applies session, agent, and
-   component rate limits.
+4. constructs and displays a ground goal, normally `goal(DesiredState)`;
+5. signs and submits it through the general goal ingress, which applies the
+   ordinary ontology ACL, proof, transaction, and resource limits.
 
 One form submission is one bounded payload and one transaction, so related
 field changes may commit atomically. Quod does not first commit a generic GUI
@@ -358,11 +360,12 @@ event and then rely on a second transaction for the primary domain change: that
 would introduce a partial-success window. Post-commit `react_on` handlers remain
 appropriate for notifications, projections, and external effects.
 
-At invocation time the client never supplies a Prolog goal. `SeenHeight` allows
-stale-interface rejection or refresh. `InputId` makes retries explicit and
-idempotent. The result identifies acceptance or returns a bounded public
-failure-reason stack and current height. A client may bind those reasons to
-field/form errors; a failed submission does not need to write an error fact.
+`SeenHeight` allows stale-interface rejection or refresh. `InputId` may be used
+by the helper as the signed operation identity. The result identifies
+acceptance or returns a bounded public failure-reason stack and current height.
+A client may bind those reasons to field/form errors; a failed submission does
+not need to write an error fact. A developer or script may bypass the helper
+and sign an ordinary goal directly, without gaining additional authority.
 
 ### 6.2 Waiting for a person
 
@@ -383,8 +386,8 @@ durable state is sufficient to reconstruct them after restart.
 
 ### 6.3 Contextual action menus
 
-An action menu is a bounded ontology projection, not an enumeration of every
-internal `action/3` clause and not a second authorization system. Its candidates
+An action menu is an optional bounded ontology projection, not an enumeration
+of every internal `action/3` clause and not a second authorization system. Its candidates
 may be derived from:
 
 - goals exposed by the wielded avatar and its composed limbs, abilities,
@@ -396,19 +399,18 @@ may be derived from:
 - a small set of client or platform operations such as opening settings.
 
 Multiple actions may reach the same desired state, so a state-changing menu
-entry normally names `goal(DesiredState)`, not a chosen transition. Read-only
-entries may instead open a projected result view. The ontology projects a
-ground, bounded menu descriptor with stable `MenuId` and `EntryId`; the client
-does not receive the stored goal term. Activation sends the menu/entry IDs,
-target context, and observed height. The server reloads the entry, grounds any
-target-dependent rule, rechecks current availability and authorization, and
-then proves it. Pinning a goal grants no new authority.
+entry normally constructs `goal(DesiredState)`, not a chosen transition.
+Read-only entries may instead construct a query. The ontology projects a
+ground, bounded descriptor with stable `MenuId` and `EntryId`; the client
+constructs the resulting goal locally and makes it available for inspection
+before signing it. The server verifies and proves that exact goal through the
+general ingress. Pinning or presenting a goal grants no new authority.
 
-This permits users to add their own contextual goals without permitting a
-client to inject executable Prolog. Stale or no-longer-ground menu entries are
-rejected and the menu is refreshed. Pure client operations such as opening
-settings remain explicitly identified as client operations; they do not
-pretend to be ontology transactions.
+This permits users to add their own contextual helpers while preserving direct
+signed goal submission. Stale or no-longer-ground menu entries are rejected and
+the menu is refreshed. Pure client operations such as opening settings remain
+explicitly identified as client operations; they do not pretend to be ontology
+transactions.
 
 ### 6.4 Device capabilities and user profiles
 
@@ -523,13 +525,15 @@ action(apply_voxel_edit(WorldId, ExpectedRevisions, EditId, Operation),
            WorldId, ExpectedRevisions, EditId, Operation)).
 ```
 
-The server asks for the ground desired state with `goal/1`; the client never
-chooses or invokes `apply_voxel_edit/4`. Authorization reads the authenticated
-subject from the engine-owned proof context rather than from an `action/3`
-argument. The named transition derives and stages the canonical patch and
-revision facts, then records the exact request state. Including the request
-identity in that state makes an exact retry idempotent without treating a
-different operation that reused `EditId` as success.
+The ordinary helper asks for the ground desired state with `goal/1`, allowing
+the ontology to choose a transition. A developer may instead sign an explicit
+`apply_voxel_edit/4` goal if the ontology exposes and authorizes it; that is not
+a separate execution path. Authorization reads the authenticated subject from
+the engine-owned proof context rather than from an `action/3` argument. The
+named transition derives and stages the canonical patch and revision facts,
+then records the exact request state. Including the request identity in that
+state makes an exact retry idempotent without treating a different operation
+that reused `EditId` as success.
 This transition deliberately records its target as a fact; that is a domain
 choice in this example, not behavior supplied by the action framework.
 
@@ -676,10 +680,9 @@ These milestones are intentionally outside the numbered agent/FIPA slices.
 - Test disconnect, sequence gaps, owner failover, and slow clients.
 
 Success means reconnect reconstructs models/GUI without replaying cues; unknown
-descriptors fail closed; a client cannot forge identity, address undeclared
-components, or supply arbitrary goals at invocation time; drafts do not create
-transactions; failed input returns bounded reasons; stale menu entries refresh;
-queues remain bounded.
+descriptors fail closed; a client cannot forge identity, alter a signed goal,
+or bypass ontology ACLs; drafts do not create transactions; failed input
+returns bounded reasons; stale menu entries refresh; queues remain bounded.
 
 ### C2 -- hot simulation and editable voxel world
 

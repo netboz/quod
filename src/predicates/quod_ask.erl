@@ -240,6 +240,27 @@ origin_open(Target, Goal, Chain, OwnerActor, Selection) ->
     end.
 
 origin_scope(Target) ->
+    case signed_user_scope_admission(Target) of
+        ok -> origin_scope_admitted(Target);
+        {error, _} = Error -> Error
+    end.
+
+%% Scope wire v3 can authenticate only the origin node.  A user proof must not
+%% silently become that node when it selects another ontology.  Same-ontology
+%% selection remains local and keeps the exact user principal; foreign user
+%% scopes fail closed until the reviewed signed-auth scope generation lands.
+signed_user_scope_admission(Target) ->
+    case quod_proof_context:principal() of
+        {user, <<_:256>>} ->
+            case quod_proof_context:origin_identity() of
+                {Target, <<_:256>>} -> ok;
+                {_OriginNs, <<_:256>>} -> {error, signed_scope_unavailable}
+            end;
+        _ ->
+            ok
+    end.
+
+origin_scope_admitted(Target) ->
     case quod_reg:where({quod_prolog, Target}) of
         undefined -> open_directory_scope(Target);
         _Engine ->

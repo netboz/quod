@@ -49,7 +49,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/2, prove/2, prove_ro/2, prove_as/3, execute/2, execute_as/3,
+-export([start_link/2, prove/2, prove_ro/2, prove_ro_as/3, prove_as/3,
+         execute/2, execute_as/3,
          open_cursor/4, cancel_cursor/3,
          run_action_as/3,
          submit_plan/4, outcome/1,
@@ -382,10 +383,41 @@ prove_ro(TargetNs, Goal) ->
     end.
 
 -doc """
-Run a server-owned goal under one already-authenticated user principal.
+Run a read-only goal under an authenticated user against one exact ontology.
 
-This is an in-VM boundary for the typed client-command ingress; it is not an
-HTTP endpoint and must never receive a browser-provided Prolog goal.
+The caller has already verified and materialized a signed client goal.  The
+immutable anchor is checked beside the engine lookup and carried into the
+worker for a final comparison before proof execution. A namespace stopped and
+re-founded anywhere in that interval cannot receive a request signed for its
+prior identity.
+""".
+-spec prove_ro_as({binary(), <<_:256>>}, term(), {user, <<_:256>>}) ->
+          {ok, [map()], log_index()} | {error, term()} |
+          fail | {fail, [term()]}.
+prove_ro_as({TargetNs, <<_:256>> = Anchor}, Goal,
+            {user, <<_:256>>} = Principal)
+  when is_binary(TargetNs) ->
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined ->
+            {error, no_such_namespace};
+        Pid ->
+            case quod_simplex:genesis_hash(TargetNs) of
+                Anchor ->
+                    public_proof(
+                      Pid, TargetNs, prove_ro, Goal,
+                      quod_trace:context(), Principal, Anchor);
+                _ ->
+                    {error, wrong_genesis_anchor}
+            end
+    end;
+prove_ro_as(_Target, _Goal, _Principal) ->
+    {error, invalid_user_principal}.
+
+-doc """
+Run a server-constructed goal under one already-authenticated user principal.
+
+General browser text enters only through the signed, atom-safe read boundary;
+callers of this writable API still construct their term in trusted server code.
 """.
 -spec prove_as(binary(), term(), {user, <<_:256>>}) ->
           {ok, [map()], log_index() | {transaction, binary(), binary(), binary()} | map()} |
@@ -403,10 +435,14 @@ public_proof(Engine, Ns, Kind, Goal, TraceCtx) ->
     public_proof(Engine, Ns, Kind, Goal, TraceCtx, undefined).
 
 public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal) ->
+    public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal, any).
+
+public_proof(Engine, Ns, Kind, Goal, TraceCtx, Principal, ExpectedAnchor) ->
     CallRef = make_ref(),
     MRef = monitor(process, Engine),
     gen_server:cast(
-      Engine, {public_proof, self(), CallRef, Kind, Goal, TraceCtx, Principal}),
+      Engine, {public_proof, self(), CallRef, Kind, Goal, TraceCtx, Principal,
+               ExpectedAnchor}),
     try await_public_proof(Engine, MRef, CallRef, Ns, none)
     after demonitor(MRef, [flush])
     end.
@@ -1094,7 +1130,7 @@ handle_cast({public_cursor, Owner, CallRef, <<_:256>> = CursorId, Goal,
     {noreply,
      spawn_proof(
        cursor, {Owner, CallRef, CursorId, Goal},
-       {async, Owner, CallRef}, TraceCtx, undefined, S)};
+       {async, Owner, CallRef}, TraceCtx, undefined, any, S)};
 handle_cast({cancel_public_cursor, Owner, CallRef}, S = #s{workers = Workers})
   when is_pid(Owner), is_reference(CallRef) ->
     case find_cursor_worker(Owner, CallRef, Workers) of
@@ -1102,27 +1138,31 @@ handle_cast({cancel_public_cursor, Owner, CallRef}, S = #s{workers = Workers})
         error -> ok
     end,
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal},
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal,
+             _ExpectedAnchor},
             S = #s{ready = false})
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro) ->
     reply_client({async, Caller, CallRef}, {error, rebuilding}),
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal},
+handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal,
+             _ExpectedAnchor},
             S = #s{workers = Workers, max_proof_workers = Max})
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro),
        map_size(Workers) >= Max ->
     reply_client({async, Caller, CallRef}, {error, busy}),
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, Goal, TraceCtx, Principal}, S)
+handle_cast({public_proof, Caller, CallRef, Kind, Goal, TraceCtx, Principal,
+             ExpectedAnchor}, S)
   when is_pid(Caller), is_reference(CallRef),
        (Kind =:= prove orelse Kind =:= prove_ro) ->
     case valid_public_proof_principal(Principal) of
         true ->
             {noreply,
              spawn_proof(
-               Kind, Goal, {async, Caller, CallRef}, TraceCtx, Principal, S)};
+               Kind, Goal, {async, Caller, CallRef}, TraceCtx, Principal,
+               ExpectedAnchor, S)};
         false ->
             reply_client({async, Caller, CallRef}, {error, invalid_user_principal}),
             {noreply, S}
@@ -1149,7 +1189,7 @@ handle_cast({public_action, Caller, CallRef, Action, Structural, Requested},
         {ok, Principal} ->
             {noreply,
              spawn_proof(action, {Action, Structural}, From,
-                         otel_ctx:new(), Principal, S)};
+                         otel_ctx:new(), Principal, any, S)};
         {error, invalid_user_principal} ->
             reply_client(From, {error, invalid_user_principal}),
             {noreply, S};
@@ -3090,7 +3130,7 @@ terminate(_Reason, #s{ns = Ns, workers = W,
 %% Spawn one worker for this proof. The worker gets a small table/height snapshot handle,
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
-spawn_proof(Kind, Goal, From, TraceCtx, Principal,
+spawn_proof(Kind, Goal, From, TraceCtx, Principal, ExpectedAnchor,
             S = #s{ns = Ns, est = Est, applied = Applied,
                    signer = Signer,
                    proof_timeout_ms = ProofTimeout}) ->
@@ -3100,7 +3140,8 @@ spawn_proof(Kind, Goal, From, TraceCtx, Principal,
     Deadline = quod_time:mono_ms() + ProofTimeout,
     {Pid, MRef} = spawn_opt(fun() ->
         proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal,
-                     Ns, Est, Applied, TraceCtx, Principal, Signer)
+                     Ns, Est, Applied, TraceCtx, Principal, ExpectedAnchor,
+                     Signer)
     end, [monitor]),
     CallerMRef = monitor(process, proof_client_pid(From)),
     Token = make_ref(),
@@ -3121,7 +3162,7 @@ bump_proves(S) -> S#s{proves = S#s.proves + 1}.
 %% read), proves against that view, and reports one correlated result to the engine. The
 %% origin-scope read-set ETS table is created here, so an abandoned/killed run can never leak it.
 proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, Ns, Est,
-             Applied, TraceCtx, Principal, Signer) ->
+             Applied, TraceCtx, Principal, ExpectedAnchor, Signer) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
     Ctx = worker_context(Kind, Ns, Applied),
     Result = quod_trace:with_span(
@@ -3131,7 +3172,7 @@ proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, Ns, Est,
                fun(SpanCtx) ->
                    R = run_worker(
                          Engine, Ref, Kind, ProofId, Deadline, Goal, Principal,
-                         Ns, Applied,
+                         ExpectedAnchor, Ns, Applied,
                          quod_predicates:set_context(Est, Ctx), Signer),
                    _ = quod_trace:result(SpanCtx, R),
                    R
@@ -3145,30 +3186,36 @@ worker_context(_ProofKind, Ns, Applied) ->
     quod_predicates:proof_context(Ns, Applied, undefined).
 
 run_worker(Engine, Ref, action, ProofId, Deadline, {Action, Structural}, Principal,
-           Ns, Applied, Est, Signer) ->
+           _ExpectedAnchor, Ns, Applied, Est, Signer) ->
     run_lifecycle_origin(
       Engine, Ref, ProofId, Deadline, Action, Structural, Principal, Ns,
       Applied, Est, Signer);
 run_worker(Engine, Ref, cursor, ProofId, Deadline,
            {Owner, CallRef, CursorId, Goal}, Principal,
-           Ns, Applied, Est, Signer) ->
+           _ExpectedAnchor, Ns, Applied, Est, Signer) ->
     run_cursor_origin(
       Engine, Ref, ProofId, Deadline, Owner, CallRef, CursorId, Goal,
       Principal, Ns, Applied, Est, Signer);
-run_worker(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est,
-           Signer) ->
+run_worker(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal,
+           ExpectedAnchor, Ns, Applied, Est, Signer) ->
     run_origin_proof(
-      Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est, Signer).
+      Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, ExpectedAnchor,
+      Ns, Applied, Est, Signer).
 
-run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est,
-                 Signer) ->
+run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal,
+                 ExpectedAnchor, Ns, Applied, Est, Signer) ->
     case quod_simplex:genesis_hash(Ns) of
-        <<_:256>> = Anchor ->
+        <<_:256>> = Anchor
+          when ExpectedAnchor =:= any; ExpectedAnchor =:= Anchor ->
             run_pinned_origin(
               Engine, Ref, Kind, ProofId, Deadline, Principal, Ns, Applied,
               Anchor, Est, Signer,
               fun(Origin) -> run_pinned_goal(Origin, Goal) end);
-        undefined when Signer =:= none ->
+        <<_:256>> when is_binary(ExpectedAnchor) ->
+            {error, wrong_genesis_anchor};
+        undefined when is_binary(ExpectedAnchor) ->
+            {error, wrong_genesis_anchor};
+        undefined when ExpectedAnchor =:= any, Signer =:= none ->
             %% Isolated unit/runtime engines have no consensus identity and
             %% therefore cannot own foreign scopes. The same proof pipeline
             %% still runs under its private sentinel identity, including

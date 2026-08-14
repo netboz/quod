@@ -38,6 +38,17 @@ malformed_reserved_symbol_markers_are_rejected_test() ->
        {error, malformed_material},
        quod_wire_term:materialize_goal_symbols({',', true})).
 
+goal_symbol_names_is_atom_safe_and_uses_callable_positions_test() ->
+    Callable = <<"new_callable">>,
+    Data = <<"opaque_data">>,
+    Goal = {{'$quod_symbol', Callable},
+            {'$quod_symbol', Data}},
+    ?assertEqual({ok, [Callable]},
+                 quod_wire_term:goal_symbol_names(Goal)),
+    ?assertEqual({error, malformed_material},
+                 quod_wire_term:goal_symbol_names(
+                   {{'$quod_symbol', not_binary}, ok})).
+
 depth_limit_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
     ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).

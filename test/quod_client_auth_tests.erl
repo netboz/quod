@@ -129,6 +129,128 @@ registration_budget_is_bounded_per_peer_test() ->
             quod_client_auth:reserve_registration({127, 0, 0, 3}))
       end).
 
+signed_goal_admission_is_bounded_by_user_and_peer_test() ->
+    Limit = #{window_ms => 60000, max_total => 8,
+              max_per_key => 1, max_keys => 8},
+    with_auth(
+      #{goal_user_limit => Limit,
+        goal_peer_limit => Limit#{max_per_key => 2}},
+      fun() ->
+         KeyPair = quod_identity:generate(),
+         {ok, #{session_id := SessionId}} = open_session(KeyPair, <<51:256>>),
+         ?assertMatch({ok, _}, quod_client_auth:admit_goal(SessionId, ?PEER)),
+         ?assertEqual(
+            {error, client_goal_rate_limited},
+            quod_client_auth:admit_goal(SessionId, {127, 0, 0, 2})),
+         ?assertEqual(
+            {error, invalid_session},
+            quod_client_auth:admit_goal(<<0:256>>, ?PEER))
+      end).
+
+paired_goal_budgets_commit_only_when_both_admit_test() ->
+    Limit = #{window_ms => 60000, max_total => 8,
+              max_per_key => 1, max_keys => 8},
+    with_auth(
+      #{goal_user_limit => Limit,
+        goal_peer_limit => Limit},
+      fun() ->
+         {ok, #{session_id := SessionA}} =
+             open_session(quod_identity:generate(), <<52:256>>),
+         {ok, #{session_id := SessionB}} =
+             open_session(quod_identity:generate(), <<53:256>>),
+         ?assertMatch({ok, _}, quod_client_auth:admit_goal(SessionA, ?PEER)),
+         %% B's user budget provisionally admits, but the shared peer budget
+         %% refuses. That failed pair must not spend B's user allowance.
+         ?assertEqual(
+            {error, client_goal_rate_limited},
+            quod_client_auth:admit_goal(SessionB, ?PEER)),
+         ?assertMatch(
+            {ok, _},
+            quod_client_auth:admit_goal(SessionB, {127, 0, 0, 2}))
+      end).
+
+paired_symbol_budgets_commit_only_when_both_admit_test() ->
+    Limit = #{window_ms => 60000, max_total => 8,
+              max_per_key => 1, max_keys => 8},
+    {UserA, _} = quod_identity:generate(),
+    {UserB, _} = quod_identity:generate(),
+    First = unique_symbol(<<"paired_symbol_functor_">>),
+    Second = unique_symbol(<<"paired_symbol_functor_">>),
+    with_auth(
+      #{max_materialized_atoms => 1024,
+        symbol_user_limit => Limit,
+        symbol_peer_limit => Limit},
+      fun() ->
+         ?assertMatch(
+            {ok, _},
+            quod_client_auth:materialize_goal(
+              UserA, ?PEER, {{'$quod_symbol', First}, ok})),
+         ?assertEqual(
+            {error, client_goal_rate_limited},
+            quod_client_auth:materialize_goal(
+              UserB, ?PEER, {{'$quod_symbol', Second}, ok})),
+         ?assertError(badarg, binary_to_existing_atom(Second, utf8)),
+         ?assertMatch(
+            {ok, _},
+            quod_client_auth:materialize_goal(
+              UserB, {127, 0, 0, 2},
+              {{'$quod_symbol', Second}, ok}))
+      end).
+
+signed_goal_materialization_leaves_data_opaque_test() ->
+    {PublicKey, _} = quod_identity:generate(),
+    Functor = unique_symbol(<<"signed_functor_">>),
+    Data = unique_symbol(<<"signed_data_">>),
+    Baseline = erlang:system_info(atom_count),
+    with_auth(
+      #{atom_baseline => Baseline,
+        max_materialized_atoms => 1024,
+        symbol_user_limit => #{window_ms => 60000, max_total => 8,
+                               max_per_key => 8, max_keys => 8},
+        symbol_peer_limit => #{window_ms => 60000, max_total => 8,
+                               max_per_key => 8, max_keys => 8}},
+      fun() ->
+         Goal = {{'$quod_symbol', Functor}, {'$quod_symbol', Data}},
+         ?assertError(badarg, binary_to_existing_atom(Functor, utf8)),
+         ?assertError(badarg, binary_to_existing_atom(Data, utf8)),
+         {ok, Materialized} =
+             quod_client_auth:materialize_goal(PublicKey, ?PEER, Goal),
+         ?assertEqual({binary_to_existing_atom(Functor, utf8),
+                       {'$quod_symbol', Data}}, Materialized),
+         %% Ordinary data is not allocated merely because it appeared in a
+         %% signed request.
+         ?assertError(badarg, binary_to_existing_atom(Data, utf8))
+      end).
+
+materialized_atom_ceiling_survives_auth_owner_restart_test() ->
+    Baseline = erlang:system_info(atom_count),
+    Options = #{atom_baseline => Baseline,
+                max_materialized_atoms => 1024},
+    Pid1 = start_auth(Options),
+    {PublicKey, _} = quod_identity:generate(),
+    First = unique_symbol(<<"restart_bound_functor_">>),
+    try
+        ?assertMatch(
+           {ok, _},
+           quod_client_auth:materialize_goal(
+             PublicKey, ?PEER, {{'$quod_symbol', First}, ok}))
+    after
+        stop_auth(Pid1)
+    end,
+    Used = erlang:system_info(atom_count) - Baseline,
+    ?assert(Used >= 1),
+    Pid2 = start_auth(
+             Options#{max_materialized_atoms => Used}),
+    Second = unique_symbol(<<"restart_bound_functor_">>),
+    try
+        ?assertEqual(
+           {error, client_symbol_budget_exhausted},
+           quod_client_auth:materialize_goal(
+             PublicKey, ?PEER, {{'$quod_symbol', Second}, ok}))
+    after
+        stop_auth(Pid2)
+    end.
+
 malformed_requests_are_not_authentication_failures_test() ->
     with_auth(
       fun() ->
@@ -153,6 +275,14 @@ signed_challenge(KeyPair, ClientNonce) ->
                     maps:get(server_nonce, Challenge),
                     maps:get(expires_ms, Challenge)),
     {ChallengeId, quod_identity:sign(Bytes, quod_identity:key_term(KeyPair))}.
+
+open_session(KeyPair, ClientNonce) ->
+    {ChallengeId, Signature} = signed_challenge(KeyPair, ClientNonce),
+    quod_client_auth:complete_challenge(ChallengeId, Signature).
+
+unique_symbol(Prefix) ->
+    <<Prefix/binary,
+      (integer_to_binary(erlang:unique_integer([positive])))/binary>>.
 
 with_auth(Fun) -> with_auth(#{}, Fun).
 

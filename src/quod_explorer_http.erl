@@ -29,10 +29,10 @@ the live stream, so a transaction renders identically live and from history.
 """.
 -export([init/2]).
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, block_json/2, tx_id_text/1, encode/1]).
+-export([summary/0, block_json/2, tx_id_text/1, encode/1, prolog_text/1]).
 -ifdef(TEST).
 %% Pure surfaces driven directly by eunit.
--export([prolog_text/1, txs_page/3, parse_goal/1, parse_tx_id/1,
+-export([txs_page/3, parse_goal/1, parse_tx_id/1,
          prove_result/1, cursor_result/1, parse_cursor_id/1, outcome_json/1,
          committee_status_json/1,
          test_transaction_outcome/4, tx_json_full/3, entry_txs/1]).
@@ -891,6 +891,14 @@ pt(B, _) when is_binary(B) ->
         false -> [<<"<<0x">>, binary:encode_hex(binary:part(B, 0, min(16, byte_size(B))), lowercase),
                   case byte_size(B) > 16 of true -> <<"…>>">>; false -> <<">>">> end]
     end;
+pt({'$quod_symbol', Name} = Symbol, _) when is_binary(Name) ->
+    %% Signed goals deliberately keep data-position symbols opaque so merely
+    %% mentioning a value cannot allocate a VM atom.  That internal marker is
+    %% not part of the user's result: render the original Prolog symbol text.
+    case unicode:characters_to_list(Name, utf8) of
+        Characters when is_list(Characters) -> opaque_symbol(Characters);
+        _ -> io_lib:write(Symbol)
+    end;
 pt({V}, _) when is_integer(V) -> [$_ | integer_to_list(V)];   %% erlog variable
 pt({V}, _) when is_atom(V) -> atom_to_list(V);
 pt([], _) -> "[]";
@@ -927,6 +935,37 @@ parens(Out, _OpP, _Prec) -> Out.
 escape($") -> "\\\"";
 escape($\\) -> "\\\\";
 escape(C) -> C.
+
+opaque_symbol([First | Rest] = Name)
+  when First >= $a, First =< $z ->
+    case lists:all(fun plain_symbol_char/1, Rest) of
+        true -> Name;
+        false -> quoted_symbol(Name)
+    end;
+opaque_symbol(Name) ->
+    quoted_symbol(Name).
+
+plain_symbol_char(C) when C >= $a, C =< $z -> true;
+plain_symbol_char(C) when C >= $A, C =< $Z -> true;
+plain_symbol_char(C) when C >= $0, C =< $9 -> true;
+plain_symbol_char($_) -> true;
+plain_symbol_char(_) -> false.
+
+quoted_symbol(Name) ->
+    [$', [quoted_symbol_char(C) || C <- Name], $'].
+
+quoted_symbol_char($') -> "\\'";
+quoted_symbol_char($\\) -> "\\\\";
+quoted_symbol_char($\n) -> "\\n";
+quoted_symbol_char($\r) -> "\\r";
+quoted_symbol_char($\t) -> "\\t";
+quoted_symbol_char($\v) -> "\\v";
+quoted_symbol_char($\b) -> "\\b";
+quoted_symbol_char($\f) -> "\\f";
+quoted_symbol_char(27) -> "\\e";
+quoted_symbol_char(C) when C < 32; C =:= 127 ->
+    io_lib:format("\\x~.16B\\", [C]);
+quoted_symbol_char(C) -> C.
 
 %% An improper tail still renders rather than crashing the page.
 proper([H | T]) when is_list(T) -> [H | proper(T)];

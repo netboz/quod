@@ -3,10 +3,10 @@
 Dedicated browser client endpoint.
 
 The listener is disabled by default. It provides static client assets, fixed
-Ed25519 authentication messages, and one constrained user-home registration
-command; it has no general proof or world-command API. Keeping this boundary
-separate from Explorer means browsers can load a client from any node without
-inheriting Explorer's write console.
+Ed25519 authentication messages, constrained user-home registration, and the
+reviewed user-signed local read endpoint. Keeping this boundary separate from
+Explorer means browsers can load a client from any node without inheriting the
+Explorer's unsigned operator console.
 
 **It is served over TLS.** Not for confidentiality alone: a browser withholds
 Web Crypto entirely outside a secure context, so over plain HTTP the client
@@ -95,7 +95,8 @@ routes() ->
         {"/health", quod_client_http, health},
         {"/api/auth/challenge", quod_client_http, auth_challenge},
         {"/api/auth/complete", quod_client_http, auth_complete},
-        {"/api/user/register", quod_client_http, user_register}
+        {"/api/user/register", quod_client_http, user_register},
+        {"/api/goals/read", quod_client_http, signed_goal_read}
      ]}].
 
 %% A configured certificate wins; otherwise the node's own self-signed browser

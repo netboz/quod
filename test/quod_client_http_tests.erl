@@ -12,11 +12,28 @@ assertions include the absence of crash reports, not only the responses.
 """.
 
 -include_lib("eunit/include/eunit.hrl").
+-include("quod_client_goal_limits.hrl").
 
 %% The logger handler used by collect_crashes/1.
 -export([log/2]).
 
 -define(PEER, {127, 0, 0, 1}).
+
+signed_read_result_keeps_parser_variable_names_test() ->
+    Evidence = #{request_digest => <<1:256>>,
+                 request => #{operation_id => <<2:256>>},
+                 variables => [{<<"Person">>, 0}]},
+    ?assertEqual(
+       {200, #{result => ok, height => 7,
+               request_digest => b64url(<<1:256>>),
+               operation_id => b64url(<<2:256>>),
+               bindings => [#{<<"Person">> => <<"bob">>}]}},
+       quod_client_http:signed_read_result(
+         {ok, Evidence, {ok, [#{0 => bob}], 7}})),
+    ?assertEqual(
+       {409, #{error => signed_scope_unavailable}},
+       quod_client_http:signed_read_result(
+         {ok, Evidence, {error, signed_scope_unavailable}})).
 
 client_http_test_() ->
     {setup, fun setup/0, fun cleanup/1,
@@ -53,6 +70,8 @@ api_reply_is_clean(Port) ->
                  request(Connection, post, "/api/auth/complete", <<"nonsense">>)),
     ?assertMatch({400, _, _},
                  request(Connection, post, "/api/user/register", <<"{}">>)),
+    ?assertMatch({400, _, _},
+                 request(Connection, post, "/api/goals/read", <<"{}">>)),
     %% Still usable, so none of those replies killed the stream.
     ?assertMatch({200, _, _}, request(Connection, get, "/health", <<>>)),
     close(Connection).
@@ -68,6 +87,7 @@ routes_are_crash_free(Port) ->
                     _ = request(Connection, post, "/api/auth/challenge", <<"{}">>),
                     _ = request(Connection, post, "/api/auth/complete", <<"{}">>),
                     _ = request(Connection, post, "/api/user/register", <<"{}">>),
+                    _ = request(Connection, post, "/api/goals/read", <<"{}">>),
                     _ = request(Connection, get, "/api/auth/challenge", <<>>),
                     _ = request(Connection, post, "/api/auth/challenge",
                                 binary:copy(<<"A">>, 8192)),
@@ -82,6 +102,12 @@ oversized_body_is_refused(Port) ->
     Body = <<"{\"public_key\":\"", (binary:copy(<<"A">>, 8192))/binary, "\"}">>,
     ?assertMatch({413, _, _},
                  request(Connection, post, "/api/auth/challenge", Body)),
+    %% Pin the independent, larger cap on the signed-goal route as well.  Raw
+    %% junk is intentional: body admission must happen before JSON decoding.
+    SignedGoalBody = binary:copy(
+                       <<"A">>, ?QUOD_CLIENT_GOAL_REQUEST_BYTES * 2),
+    ?assertMatch({413, _, _},
+                 request(Connection, post, "/api/goals/read", SignedGoalBody)),
     close(Connection).
 
 method_is_enforced(Port) ->
@@ -159,7 +185,8 @@ routes() ->
     [{'_', [{"/health", quod_client_http, health},
             {"/api/auth/challenge", quod_client_http, auth_challenge},
             {"/api/auth/complete", quod_client_http, auth_complete},
-            {"/api/user/register", quod_client_http, user_register}]}].
+            {"/api/user/register", quod_client_http, user_register},
+            {"/api/goals/read", quod_client_http, signed_goal_read}]}].
 
 tls_dir() ->
     Dir = filename:join(["/tmp", "quod-client-http-tests",
@@ -211,3 +238,6 @@ read_body(Socket, Acc, Length) ->
 header(Line) ->
     [Name, Value] = binary:split(Line, <<": ">>),
     {string:lowercase(Name), Value}.
+
+b64url(Bytes) ->
+    base64:encode(Bytes, #{mode => urlsafe, padding => false}).

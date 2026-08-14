@@ -21,12 +21,18 @@ Two properties are worth stating because they shaped the code:
 
 Every local validity and window comparison uses the monotonic clock. Only the
 expiry a browser signs is wall-clock, because both ends must read it the same.
+
+The cumulative client-vocabulary ceiling is tied to the VM lifetime, just as
+the atom table is.  A baseline atom count is retained in `persistent_term`
+across auth-owner restarts; the owner then conservatively counts all atom-table
+growth since that baseline.  Restarting this process therefore cannot reset the
+ceiling, while restarting the VM naturally resets both atoms and the baseline.
 """.
 
 -behaviour(gen_server).
 
 -export([start_link/0, issue_challenge/3, complete_challenge/2, session/1,
-         reserve_registration/1]).
+         reserve_registration/1, admit_goal/2, materialize_goal/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([start_link/1]).
@@ -47,6 +53,29 @@ expiry a browser signs is wall-clock, because both ends must read it the same.
         #{window_ms => ?WINDOW_MS, max_total => 64, max_per_key => 4,
           max_keys => 256}).
 
+-include("quod_client_goal_limits.hrl").
+
+-define(GOAL_USER_LIMIT,
+        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
+          max_total => ?QUOD_CLIENT_GOAL_RATE_TOTAL,
+          max_per_key => ?QUOD_CLIENT_GOAL_RATE_PER_USER,
+          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
+-define(GOAL_PEER_LIMIT,
+        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
+          max_total => ?QUOD_CLIENT_GOAL_RATE_TOTAL,
+          max_per_key => ?QUOD_CLIENT_GOAL_RATE_PER_PEER,
+          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
+-define(SYMBOL_USER_LIMIT,
+        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
+          max_total => ?QUOD_CLIENT_SYMBOL_RATE_TOTAL,
+          max_per_key => ?QUOD_CLIENT_SYMBOL_RATE_PER_USER,
+          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
+-define(SYMBOL_PEER_LIMIT,
+        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
+          max_total => ?QUOD_CLIENT_SYMBOL_RATE_TOTAL,
+          max_per_key => ?QUOD_CLIENT_SYMBOL_RATE_PER_PEER,
+          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
+
 -record(s, {network_id :: binary() | undefined,
             node_key :: binary() | undefined,
             challenges = #{} :: #{binary() => map()},
@@ -56,7 +85,15 @@ expiry a browser signs is wall-clock, because both ends must read it the same.
             session_ttl_ms :: pos_integer(),
             max_sessions :: pos_integer(),
             challenge_rate :: quod_rate:limiter(),
-            registration_rate :: quod_rate:limiter()}).
+            registration_rate :: quod_rate:limiter(),
+            goal_user_rate :: quod_rate:limiter(),
+            goal_peer_rate :: quod_rate:limiter(),
+            symbol_user_rate :: quod_rate:limiter(),
+            symbol_peer_rate :: quod_rate:limiter(),
+            atom_baseline :: non_neg_integer(),
+            max_materialized_atoms :: non_neg_integer()}).
+
+-define(ATOM_BASELINE_KEY, {?MODULE, atom_baseline}).
 
 start_link() ->
     case application:get_env(quod, client_enabled, false) of
@@ -67,7 +104,13 @@ start_link() ->
 -ifdef(TEST).
 -spec start_link(map()) -> gen_server:start_ret().
 start_link(Options) when is_map(Options) ->
-    gen_server:start_link({local, ?MODULE}, ?MODULE, Options, []).
+    %% Unit tests normally want an isolated baseline. A test that exercises a
+    %% restart passes the same explicit baseline to both owners.
+    TestOptions = case maps:is_key(atom_baseline, Options) of
+                      true -> Options;
+                      false -> Options#{atom_baseline => isolated}
+                  end,
+    gen_server:start_link({local, ?MODULE}, ?MODULE, TestOptions, []).
 -endif.
 
 -doc """
@@ -109,6 +152,17 @@ cannot spend the budget that protects durable ontology creation.
 reserve_registration(Peer) ->
     call({reserve_registration, Peer}).
 
+-doc "Resolve a live session and atomically charge its user and peer goal budgets.".
+-spec admit_goal(binary(), term()) -> {ok, map()} | {error, term()}.
+admit_goal(SessionId, Peer) ->
+    call({admit_goal, SessionId, Peer}).
+
+-doc "Materialize one already-verified goal under exact user, peer and VM budgets.".
+-spec materialize_goal(<<_:256>>, term(), term()) ->
+          {ok, term()} | {error, term()}.
+materialize_goal(PublicKey, Peer, Goal) ->
+    call({materialize_goal, PublicKey, Peer, Goal}).
+
 call(Request) ->
     try gen_server:call(?MODULE, Request, 5000)
     catch exit:_ -> {error, client_auth_unavailable}
@@ -127,7 +181,23 @@ init(Options) ->
                                         ?CHALLENGE_LIMIT)),
             registration_rate = quod_rate:new(
                                   maps:get(registration_limit, Options,
-                                           ?REGISTRATION_LIMIT))}}.
+                                           ?REGISTRATION_LIMIT)),
+            goal_user_rate = quod_rate:new(
+                               maps:get(goal_user_limit, Options,
+                                        ?GOAL_USER_LIMIT)),
+            goal_peer_rate = quod_rate:new(
+                               maps:get(goal_peer_limit, Options,
+                                        ?GOAL_PEER_LIMIT)),
+            symbol_user_rate = quod_rate:new(
+                                 maps:get(symbol_user_limit, Options,
+                                          ?SYMBOL_USER_LIMIT)),
+            symbol_peer_rate = quod_rate:new(
+                                 maps:get(symbol_peer_limit, Options,
+                                          ?SYMBOL_PEER_LIMIT)),
+            atom_baseline = atom_baseline(Options),
+            max_materialized_atoms =
+                maps:get(max_materialized_atoms, Options,
+                         ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)}}.
 
 handle_call({issue, PublicKey, ClientNonce, Peer}, _From, S) ->
     reply(issue(PublicKey, ClientNonce, Peer, S));
@@ -139,6 +209,10 @@ handle_call({session, SessionId}, _From, S) ->
     reply(lookup_session(SessionId, S));
 handle_call({reserve_registration, Peer}, _From, S) ->
     reply(charge(#s.registration_rate, Peer, client_registration, S));
+handle_call({admit_goal, SessionId, Peer}, _From, S) ->
+    reply(admit_goal_request(SessionId, Peer, S));
+handle_call({materialize_goal, PublicKey, Peer, Goal}, _From, S) ->
+    reply(materialize_verified_goal(PublicKey, Peer, Goal, S));
 handle_call(_Request, _From, S) ->
     {reply, {error, invalid_request}, S}.
 
@@ -314,6 +388,121 @@ tagged(client_auth, busy) -> client_auth_busy;
 tagged(client_auth, rate_limited) -> client_auth_rate_limited;
 tagged(client_registration, busy) -> client_registration_busy;
 tagged(client_registration, rate_limited) -> client_registration_rate_limited.
+
+%% ======================================================================
+%% signed goals
+%% ======================================================================
+
+admit_goal_request(SessionId, Peer, S0) ->
+    case lookup_session(SessionId, S0) of
+        {{ok, #{public_key := PublicKey} = Session}, S1} ->
+            case charge_pair(
+                   #s.goal_user_rate, PublicKey,
+                   #s.goal_peer_rate, Peer, S1) of
+                {ok, S2} -> {{ok, Session}, S2};
+                {{error, _} = Error, S2} -> {Error, S2}
+            end;
+        {{error, _} = Error, S1} ->
+            {Error, S1}
+    end.
+
+materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
+    case quod_wire_term:goal_symbol_names(Goal) of
+        {ok, Names} ->
+            NewNames = [Name || Name <- Names, not existing_atom(Name)],
+            materialize_new_symbols(PublicKey, Peer, Goal, length(NewNames), S0);
+        {error, _} ->
+            {{error, invalid_goal}, S0}
+    end;
+materialize_verified_goal(_PublicKey, _Peer, _Goal, S) ->
+    {{error, invalid_user_principal}, S}.
+
+materialize_new_symbols(_PublicKey, _Peer, Goal, 0, S) ->
+    case quod_wire_term:materialize_goal_symbols(Goal) of
+        {ok, Materialized} -> {{ok, Materialized}, S};
+        {error, Reason} -> {{error, Reason}, S}
+    end;
+materialize_new_symbols(PublicKey, Peer, Goal, Count,
+                        #s{atom_baseline = Baseline,
+                           max_materialized_atoms = Max} = S0)
+  when Count > 0 ->
+    Used = max(0, erlang:system_info(atom_count) - Baseline),
+    case Used + Count =< Max of
+        false ->
+            {{error, client_symbol_budget_exhausted}, S0};
+        true ->
+            case charge_pair_many(
+                   #s.symbol_user_rate, PublicKey,
+                   #s.symbol_peer_rate, Peer, Count, S0) of
+                {{error, _} = Error, S1} ->
+                    {Error, S1};
+                {ok, S1} ->
+                    %% The owner serializes client vocabulary allocation.  The
+                    %% existing materializer still enforces per-request and VM
+                    %% headroom limits shared with every other wire boundary.
+                    case quod_wire_term:materialize_goal_symbols(Goal) of
+                        {ok, Materialized} ->
+                            {{ok, Materialized}, S1};
+                        {error, Reason} ->
+                            {{error, Reason}, S1}
+                    end
+            end
+    end.
+
+charge_pair(FirstField, FirstKey, SecondField, SecondKey, S) ->
+    charge_pair_many(FirstField, FirstKey, SecondField, SecondKey, 1, S).
+
+charge_pair_many(FirstField, FirstKey, SecondField, SecondKey, Count, S)
+  when is_integer(Count), Count > 0 ->
+    Now = quod_time:mono_ms(),
+    case allow_many(FirstKey, Count, Now, element(FirstField, S)) of
+        {ok, FirstRate} ->
+            case allow_many(SecondKey, Count, Now, element(SecondField, S)) of
+                {ok, SecondRate} ->
+                    {ok, setelement(SecondField,
+                                    setelement(FirstField, S, FirstRate),
+                                    SecondRate)};
+                {Reason, _SecondRate} ->
+                    %% The operation needs both budgets.  A refusal by either
+                    %% side commits neither provisional charge.
+                    {{error, goal_rate_error(Reason)}, S}
+            end;
+        {Reason, _FirstRate} ->
+            {{error, goal_rate_error(Reason)}, S}
+    end.
+
+allow_many(_Key, 0, _Now, Rate) ->
+    {ok, Rate};
+allow_many(Key, Remaining, Now, Rate0) ->
+    case quod_rate:allow(Key, Now, Rate0) of
+        {ok, Rate1} -> allow_many(Key, Remaining - 1, Now, Rate1);
+        {Reason, Rate1} -> {Reason, Rate1}
+    end.
+
+goal_rate_error(busy) -> client_goal_busy;
+goal_rate_error(rate_limited) -> client_goal_rate_limited.
+
+existing_atom(Name) ->
+    try binary_to_existing_atom(Name, utf8) of
+        _ -> true
+    catch
+        error:badarg -> false
+    end.
+
+atom_baseline(#{atom_baseline := Baseline})
+  when is_integer(Baseline), Baseline >= 0 ->
+    Baseline;
+atom_baseline(#{atom_baseline := isolated}) ->
+    erlang:system_info(atom_count);
+atom_baseline(_Options) ->
+    case persistent_term:get(?ATOM_BASELINE_KEY, undefined) of
+        Baseline when is_integer(Baseline), Baseline >= 0 ->
+            Baseline;
+        undefined ->
+            Baseline = erlang:system_info(atom_count),
+            persistent_term:put(?ATOM_BASELINE_KEY, Baseline),
+            Baseline
+    end.
 
 network_and_node(#s{network_id = Network0, node_key = Node0}) ->
     Network = case Network0 of

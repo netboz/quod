@@ -1,16 +1,19 @@
 # Client authentication and key custody
 
-**Status:** first implementation slice landed locally: deterministic user
-identity, node-bound Ed25519 challenge-response, short-lived node-local
-sessions, and constrained user-home foundation. Typed world commands remain to
-be added.
+**Status:** deterministic user identity, node-bound Ed25519
+challenge-response, short-lived node-local sessions, and constrained user-home
+foundation have landed. The pure signed-goal request/parser and authenticated
+local read endpoint are implemented in the working tree. Signed writes,
+cursors, remote scopes, and any-node forwarding remain staged as specified in
+`doc/signed-client-goals-plan.md`.
 
 ## Goal
 
 A person uses an Ed25519 user key to authenticate to any Quod node, chooses an
 agent they are allowed to wield, and receives a session whose immutable subject
-is carried into every later typed client command. The browser never sends a
-general Prolog goal.
+is carried into later signed goal requests. A client may submit an ordinary
+bounded Prolog goal; its signature, rather than a server-owned request catalogue,
+binds the exact intent.
 
 New user registration is open initially: a fresh key may create its own user
 home ontology. World, agent, and avatar access remain governed by their normal
@@ -154,7 +157,7 @@ POST /api/user/register
 `signature` covers the fixed registration bytes for that session key, the
 pinned root genesis identity, and `client_nonce`. The server derives every
 other value—user namespace, fixed facts, fixed ACL source, and root lifecycle
-action. It therefore cannot create a client-selected ontology or execute a
+request. It therefore cannot create a client-selected ontology or execute a
 client-supplied goal.
 
 ## Transport
@@ -174,21 +177,22 @@ keep the session handle off the wire in the clear.
 
 ## Known gaps
 
-Three properties are specified above but not yet enforced. They are recorded
+Four properties are specified above but not yet enforced. They are recorded
 here so that nothing downstream mistakes the current state for the finished one.
 
 **A plan carries a user principal that no user signed.** Durable plans admit a
 `{user, PublicKey}` principal, and every validator re-proves `can_invoke` as
 that claimed user — but a plan is signed only by the sealing node's key. Nothing
 binds the claimed user to a user signature, so an admitted validator can assert
-authority it never saw. The typed-command ingress below is what closes this: it
-binds the user's signature and command digest into the transaction. Until then,
+authority it never saw. The signed-goal ingress below closes this by binding the
+user's signature and request digest into every plan and transaction. Until then,
 user authority is only as strong as the node that sealed it. The blast radius
-today is small — the sole user-principal action is founding one's own home,
-whose shape root policy pins exactly — but no new user-principal action should
-be added ahead of that binding.
+today is small — the sole writable user-principal operation is founding one's
+own home, whose shape root policy pins exactly — but no new writable
+user-principal operation should be exposed ahead of that binding. The signed
+local read endpoint cannot create a plan or ledger row.
 
-**Top-level user authorization has a canonical chain shape.** A user command
+**Top-level user authorization has a canonical chain shape.** A user goal
 enters its target directly rather than through another ontology. Its policy
 therefore sees a one-element chain containing that target's anchored identity;
 the durable authorization transcript records the target twice: once as the
@@ -202,8 +206,8 @@ reaches another ontology through a scope session is authorized as the hosting
 node, not as the user, and plans sealed on both sides of such a boundary carry
 different principals — which the begin-record check rejects. So a user-principal
 proof spanning more than one ontology cannot commit today. Single-namespace
-registration is unaffected. Carrying the principal across the boundary is a
-prerequisite for the first multi-ontology user command.
+registration is unaffected. Carrying the principal and signed request evidence
+across the boundary is a prerequisite for the first multi-ontology user goal.
 
 **Registration is rate-limited but not capped.** A node bounds registrations per
 minute and per peer, not in total, and each one founds a durable ontology. Keys
@@ -212,26 +216,34 @@ belongs in policy rather than in the ingress limiter — an admission predicate
 the root ontology proves — consistent with treating business restrictions as
 predicates rather than hard-coded runtime rules.
 
-## Typed command ingress
+## Signed goal ingress
 
-A session alone is insufficient for a durable write. Each state-changing
-client command carries a stable command id and a user signature over its
-canonical typed payload, current session subject, target namespace, and
-anti-replay nonce. The receiving node verifies it, rechecks session validity,
-derives the engine-owned subject, and only then maps a bounded menu or GUI
-event identifier to a server-owned desired state.
+A session alone is insufficient for a durable write. Each client goal carries
+a stable operation id and a user signature over its exact bounded goal text,
+execution mode, target namespace and genesis anchor, user key, and network
+identity. The receiving node verifies it, rechecks session validity, derives
+the engine-owned subject, and enters the existing proof path with the exact
+goal. It does not map the request through a hard-coded predicate catalogue.
 
-The eventual transaction plan binds that subject and signed command digest.
-The existing node signature continues to attest consensus authorship; it does
-not replace the user's signature. `outcome_unknown` is resolved by its exact
-anchored outcome reference, never by submitting the command again.
+The sealed plan binds that subject and signed request digest. An ordinary
+transaction carries the complete signed request; a distributed transaction
+carries it once in the certified origin Begin while participant records bind
+its digest. The existing node signature continues to attest consensus
+authorship; it does not replace the user's signature. `outcome_unknown` is
+resolved by its exact anchored operation or transaction outcome reference,
+never by submitting the goal request again.
+
+Client code may construct a goal from any interaction or received event, or a
+person may enter one directly. Every case uses this same ingress.
+The full contract, cross-ontology propagation, idempotency rules, and staged
+implementation are specified in `doc/signed-client-goals-plan.md`.
 
 ## Explicit exclusions from the first slice
 
 - no password sent to Quod;
 - no plaintext private key in `localStorage`;
 - no plaintext private key in an exported key file;
-- no client-supplied Prolog goal;
+- no unsigned, unbounded, or server-substituted client goal;
 - no bearer session copied into durable facts;
 - no automatic discovery or execution of code from a user ontology;
 - no vault provider until the encrypted bundle format and recovery story are

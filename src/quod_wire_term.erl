@@ -28,6 +28,7 @@ payload; one aggregate payload gets one bounded allocation budget.
 -export([encode/1, decode/1,
          encode_canonical/1, decode_canonical/2,
          materialize_symbols/1, materialize_goal_symbols/1,
+         goal_symbol_names/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
@@ -113,6 +114,20 @@ materialize_goal_symbols(Goal) ->
             {error, too_many_new_atoms};
         error ->
             {error, malformed_material}
+    end.
+
+-doc """
+Return the distinct opaque callable symbols in one atom-safe goal.
+
+This is the process-free admission half of `materialize_goal_symbols/1`: it
+performs the identical callable-position walk but never creates an atom.
+""".
+-spec goal_symbol_names(term()) ->
+          {ok, [binary()]} | {error, malformed_material}.
+goal_symbol_names(Goal) ->
+    case collect_goal_symbols(Goal, #{}) of
+        {ok, Symbols} -> {ok, lists:sort(maps:keys(Symbols))};
+        error -> {error, malformed_material}
     end.
 
 materialize_symbol_names(Names) ->

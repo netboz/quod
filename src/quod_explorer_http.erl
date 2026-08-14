@@ -10,6 +10,10 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 | `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
 | `POST /api/prove` `{ns, goal}` | run a term through `quod_prolog:execute/2` — ordinary goals prove normally; declared lifecycle actions run their policy-checked Erlang effect |
+| `POST /api/proof-cursors` `{ns, goal}` | open one retained ordinary proof and return its first solution |
+| `POST /api/proof-cursors/:id/next` | backtrack the retained proof to its next solution |
+| `POST /api/proof-cursors/:id/accept` | accept the displayed solution and commit any staged writes |
+| `DELETE /api/proof-cursors/:id` | stop the proof and discard staged state |
 
 History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
 store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
@@ -29,17 +33,23 @@ the live stream, so a transaction renders identically live and from history.
 -ifdef(TEST).
 %% Pure surfaces driven directly by eunit.
 -export([prolog_text/1, txs_page/3, parse_goal/1, parse_tx_id/1,
-         prove_result/1, outcome_json/1,
+         prove_result/1, cursor_result/1, parse_cursor_id/1, outcome_json/1,
          committee_status_json/1,
          test_transaction_outcome/4, tx_json_full/3, entry_txs/1]).
 -endif.
 -include("quod_ledger.hrl").
 -include("quod_vm_limits.hrl").
+-include("quod_directory_limits.hrl").
 
 -define(DEFAULT_PAGE, 25).
 -define(MAX_PAGE, 100).
 -define(SCAN_SLOTS, 1000).          %% max blocks walked per /api/txs page
 -define(MAX_GOAL_BYTES, 4096).      %% /api/prove goal-text cap — a query is small; anything larger is refused
+%% A JSON string can use six wire bytes for one raw byte (`\u00xx`).  This cap
+%% therefore admits every valid maximum goal and namespace after escaping;
+%% their independent raw limits below still decide semantic size errors.
+-define(MAX_PROVE_BODY,
+        ((?MAX_GOAL_BYTES + ?DIRECTORY_MAX_NAMESPACE_BYTES) * 6 + 1024)).
 %% Parsing goal text mints atoms (erlog's scanner uses `list_to_atom`), so the
 %% endpoint refuses before consuming the VM-wide safety reserve.
 
@@ -102,20 +112,49 @@ handle(block, Req) ->
                 Block     -> json_reply(200, Block, Req)
             end
     end;
-handle(prove, Req0) ->
+handle(cursor_open, Req0) ->
     case cowboy_req:method(Req0) of
         <<"POST">> ->
-            %% A body over the cap returns `{more, _, _}`; refuse it as too-large (413) instead of
-            %% badmatching to a 500 — and never buffer more than one extra chunk of it.
-            case cowboy_req:read_body(Req0, #{length => ?MAX_GOAL_BYTES}) of
-                {ok, Body, Req} ->
-                    Decoded = try json:decode(Body) catch _:_ -> bad_json end,
-                    prove(Decoded, Req);
-                {more, _Partial, Req} ->
+            case read_prove_body(Req0) of
+                {ok, Decoded, Req} ->
+                    open_cursor(Decoded, Req);
+                {error, body_too_large, Req} ->
                     json_reply(413, #{error => body_too_large}, Req)
             end;
         _ ->
             json_reply(405, #{error => method_not_allowed}, Req0)
+    end;
+handle(cursor_next, Req) ->
+    cursor_command(next, <<"POST">>, Req);
+handle(cursor_accept, Req) ->
+    cursor_command(accept, <<"POST">>, Req);
+handle(cursor_stop, Req) ->
+    cursor_command(stop, <<"DELETE">>, Req);
+handle(prove, Req0) ->
+    case cowboy_req:method(Req0) of
+        <<"POST">> ->
+            case read_prove_body(Req0) of
+                {ok, Decoded, Req} ->
+                    prove(Decoded, Req);
+                {error, body_too_large, Req} ->
+                    json_reply(413, #{error => body_too_large}, Req)
+            end;
+        _ ->
+            json_reply(405, #{error => method_not_allowed}, Req0)
+    end.
+
+%% Cowboy's `length` is a read chunk size, not a total request limit: a body
+%% delivered in one piece may be larger.  Both Explorer write endpoints share
+%% this explicit post-read cap, matching the dedicated client boundary.
+read_prove_body(Req0) ->
+    case cowboy_req:read_body(Req0, #{length => ?MAX_PROVE_BODY}) of
+        {ok, Body, Req} when byte_size(Body) =< ?MAX_PROVE_BODY ->
+            Decoded = try json:decode(Body) catch _:_ -> bad_json end,
+            {ok, Decoded, Req};
+        {ok, _Oversized, Req} ->
+            {error, body_too_large, Req};
+        {more, _Partial, Req} ->
+            {error, body_too_large, Req}
     end.
 
 %%%===================================================================
@@ -123,7 +162,9 @@ handle(prove, Req0) ->
 %%%===================================================================
 
 prove(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
-  when is_binary(Ns), is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
     quod_trace:with_span(
       quod_trace:extract(trace_headers(Req)), <<"quod.http.prove">>, server,
       #{'quod.namespace' => Ns, 'quod.goal.bytes' => byte_size(Text),
@@ -156,6 +197,53 @@ prove(#{<<"goal">> := Text}, Req) when is_binary(Text), byte_size(Text) > ?MAX_G
 prove(_Bad, Req) ->
     json_reply(400, #{error => bad_request}, Req).
 
+open_cursor(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
+       is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
+    case atom_headroom_ok() of
+        false ->
+            json_reply(503, #{error => atom_table_pressure}, Req);
+        true ->
+            case parse_goal(Text) of
+                {ok, Goal} ->
+                    %% Lifecycle actions deliberately remain one-shot: their
+                    %% local durable effect begins only after ordering and has
+                    %% no meaningful redo. Ordinary goals retain their exact
+                    %% Erlog continuation in the engine worker.
+                    Result = case quod_predicates:action_transition(Goal) of
+                                 true -> quod_prolog:execute(Ns, Goal);
+                                 false -> quod_explorer:cursor_open(Ns, Goal)
+                             end,
+                    {Code, Reply} = cursor_result(Result),
+                    json_reply(Code, Reply, Req);
+                {error, Detail} ->
+                    json_reply(
+                      400, #{error => parse_error, detail => Detail}, Req)
+            end
+    end;
+open_cursor(#{<<"goal">> := Text}, Req)
+  when is_binary(Text), byte_size(Text) > ?MAX_GOAL_BYTES ->
+    json_reply(413, #{error => goal_too_large}, Req);
+open_cursor(_Bad, Req) ->
+    json_reply(400, #{error => bad_request}, Req).
+
+cursor_command(Command, Method, Req0) ->
+    case cowboy_req:method(Req0) of
+        Method ->
+            case parse_cursor_id(cowboy_req:binding(id, Req0)) of
+                {ok, CursorId} ->
+                    {Code, Reply} = cursor_result(
+                                      quod_explorer:cursor_command(
+                                        CursorId, Command)),
+                    json_reply(Code, Reply, Req0);
+                error ->
+                    json_reply(400, #{error => bad_cursor_id}, Req0)
+            end;
+        _ ->
+            json_reply(405, #{error => method_not_allowed}, Req0)
+    end.
+
 %% Parsing goal text mints atoms; refuse before doing so if too few atoms remain, so `/api/prove` can
 %% never exhaust the table and crash the VM (it just stops serving until the node is restarted).
 atom_headroom_ok() ->
@@ -186,6 +274,25 @@ prove_result(
             #{result => ok,
               bindings => [bindings_json(B) || B <- Bindings]},
             outcome_ref_json(Ns, Anchor, TxId))};
+prove_result(
+  {ok, Bindings,
+   #{ref := {group, Ns, Anchor, Coordinator, Admission, GroupId} = Ref,
+     height := Height, participant_slots := Slots}})
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_binary(Coordinator), byte_size(Coordinator) =:= 32,
+       is_binary(Admission), byte_size(Admission) =:= 32,
+       is_binary(GroupId), byte_size(GroupId) =:= 32,
+       is_integer(Height), Height > 0, is_list(Slots) ->
+    case participant_slots_json(Slots, []) of
+        {ok, PublicSlots} ->
+            {200, maps:merge(
+                    #{result => ok, height => Height,
+                      bindings => [bindings_json(B) || B <- Bindings],
+                      participant_slots => PublicSlots},
+                    group_ref_json(Ref))};
+        error ->
+            {503, #{error => invalid_group_outcome}}
+    end;
 prove_result({ok, Bindings, Height}) when is_integer(Height), Height >= 0 ->
     {200, #{result => ok, height => Height, bindings => [bindings_json(B) || B <- Bindings]}};
 prove_result(fail) ->
@@ -202,16 +309,74 @@ prove_result(
   when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
        is_binary(TxId), byte_size(TxId) =:= 32 ->
     {202, (outcome_ref_json(Ns, Anchor, TxId))#{result => pending}};
+prove_result(
+  {error, {outcome_unknown,
+           {group, Ns, Anchor, Coordinator, Admission, GroupId} = Ref}})
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_binary(Coordinator), byte_size(Coordinator) =:= 32,
+       is_binary(Admission), byte_size(Admission) =:= 32,
+       is_binary(GroupId), byte_size(GroupId) =:= 32 ->
+    {202, (group_ref_json(Ref))#{result => pending}};
 %% A malformed declared lifecycle term is a caller error, not a service outage.
 prove_result({error, invalid_action}) ->
     {400, #{error => invalid_action}};
 prove_result({error, Reason}) ->
     {503, #{error => text(Reason)}}.
 
+cursor_result({solution, <<_:256>> = CursorId, Bindings, Height})
+  when is_map(Bindings), is_integer(Height), Height >= 0 ->
+    {200, #{result => solution,
+            cursor => binary:encode_hex(CursorId, lowercase),
+            height => Height,
+            bindings => [bindings_json(Bindings)]}};
+cursor_result({ok, stopped}) ->
+    {200, #{result => stopped}};
+cursor_result({error, not_found}) ->
+    {404, #{error => cursor_not_found}};
+cursor_result({error, not_ready}) ->
+    {409, #{error => cursor_not_ready}};
+cursor_result({error, busy}) ->
+    {409, #{error => cursor_busy}};
+cursor_result({error, ontology_unavailable}) ->
+    {503, #{error => ontology_unavailable}};
+cursor_result(Result) ->
+    prove_result(Result).
+
+parse_cursor_id(Id) when is_binary(Id), byte_size(Id) =:= 64 ->
+    try binary:decode_hex(Id) of
+        <<_:256>> = CursorId -> {ok, CursorId};
+        _ -> error
+    catch _:_ -> error
+    end;
+parse_cursor_id(_) ->
+    error.
+
 outcome_ref_json(Ns, Anchor, TxId) ->
     #{ns => Ns,
       anchor => binary:encode_hex(Anchor, lowercase),
       tx_id => tx_id_text(TxId)}.
+
+group_ref_json(
+  {group, Ns, Anchor, Coordinator, Admission, GroupId}) ->
+    #{ns => Ns,
+      anchor => binary:encode_hex(Anchor, lowercase),
+      coordinator => binary:encode_hex(Coordinator, lowercase),
+      coordinator_admission => binary:encode_hex(Admission, lowercase),
+      group_id => binary:encode_hex(GroupId, lowercase)}.
+
+participant_slots_json([], Acc) ->
+    {ok, lists:reverse(Acc)};
+participant_slots_json(
+  [{{Ns, Anchor}, Slot, Generation} | Rest], Acc)
+  when is_binary(Ns), is_binary(Anchor), byte_size(Anchor) =:= 32,
+       is_integer(Slot), Slot > 0,
+       is_integer(Generation), Generation >= 0 ->
+    participant_slots_json(
+      Rest,
+      [#{ns => Ns, anchor => binary:encode_hex(Anchor, lowercase),
+         height => Slot, generation => Generation} | Acc]);
+participant_slots_json(_Bad, _Acc) ->
+    error.
 
 bindings_json(B) when is_map(B) ->
     maps:fold(fun(V, T, Acc) -> Acc#{atom_to_binary(V, utf8) => prolog_text(T)} end, #{}, B).

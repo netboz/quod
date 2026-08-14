@@ -13,9 +13,13 @@ npm run lint    # oxlint
 
 The panel is opt-in on a node (`explorer.enabled`, loopback by default — see
 `quod_schema`). Data flow: REST reads (`/api/summary`, `/api/txs`, `/api/tx`,
-`/api/block`), a prove console (`POST /api/prove`, reads answer / writes commit),
-and the `/ws` stream fusing target-explicit `{committed, Ns, Slot, Entry}` block
-frames with per-transaction `applied_live` events. Palette:
+`/api/block`), and a retained prove cursor (`POST /api/proof-cursors`) with
+Next, Accept, and Stop controls. A displayed answer is provisional: Accept
+seals it and commits staged writes; Stop discards them. Ordinary Prolog writes
+survive Next as normal, while `transaction/1` is the explicit rollback boundary.
+Declared lifecycle actions remain one-shot. The `/ws` stream fuses
+target-explicit `{committed, Ns, Slot, Entry}` block frames with per-transaction
+`applied_live` events. Palette:
 `doc/BBSVX Palette.pdf` — don't invent colors.
 
 The summary distinguishes the **finality head** (`committed+1`) from the next

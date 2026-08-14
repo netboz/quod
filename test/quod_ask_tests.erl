@@ -210,6 +210,7 @@ ask_test_() ->
      fun(Ctx) ->
          [?_test(t_single_answer(Ctx)),
           ?_test(t_backtracking_all_answers(Ctx)),
+          ?_test(t_cursor_backtracks_across_ontology(Ctx)),
           ?_test(t_default_link_following(Ctx)),
           ?_test(t_multi_position_follow_dedup(Ctx)),
           ?_test(t_repeated_follow_queries_are_independent(Ctx)),
@@ -343,6 +344,39 @@ t_backtracking_all_answers(#{pets := P}) ->
     ?assertMatch({ok, [#{'L' := [kibble, meat]}], _},
                  prove(P, {findall, {'D'},
                            {'::', animals, {diet, dog, {'D'}}}, {'L'}})).
+
+t_cursor_backtracks_across_ontology(#{pets := P}) ->
+    CursorId = crypto:strong_rand_bytes(32),
+    {ok, Engine, CallRef} = quod_prolog:open_cursor(
+                              P,
+                              {'::', animals, {diet, dog, {'D'}}},
+                              self(), CursorId),
+    {Worker, #{'D' := kibble}} =
+        receive_cursor_solution(CallRef, CursorId, open),
+    NextRef = make_ref(),
+    Worker ! {quod_cursor_command, self(), CallRef, CursorId,
+              NextRef, next},
+    {Worker, #{'D' := meat}} =
+        receive_cursor_solution(CallRef, CursorId, NextRef),
+    Worker ! {quod_cursor_command, self(), CallRef, CursorId,
+              make_ref(), accept},
+    receive
+        {quod_proof_reply, Engine, CallRef,
+         {ok, [#{'D' := meat}], _Height}} -> ok
+    after 5000 ->
+        error(cursor_accept_timeout)
+    end.
+
+receive_cursor_solution(CallRef, CursorId, CommandRef) ->
+    receive
+        {quod_cursor_solution, Worker, CallRef, CursorId, CommandRef,
+         Bindings, _Height} ->
+            {Worker, Bindings};
+        {quod_proof_reply, Engine, CallRef, Reply} ->
+            error({cursor_closed_before_solution, Engine, Reply})
+    after 5000 ->
+        error(cursor_solution_timeout)
+    end.
 
 t_default_link_following(#{animals := A}) ->
     ?assertMatch({ok, [#{'D' := kibble}], _},

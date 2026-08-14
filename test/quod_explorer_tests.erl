@@ -87,10 +87,240 @@ outcome_unknown_is_pending_test() ->
          {error, {outcome_unknown,
                   {transaction, Ns, Anchor, TxId}}})).
 
+group_commit_and_unknown_are_json_safe_test() ->
+    Ns = <<"quod:origin">>,
+    Anchor = <<31:256>>,
+    Coordinator = <<32:256>>,
+    Admission = <<33:256>>,
+    GroupId = <<34:256>>,
+    Ref = {group, Ns, Anchor, Coordinator, Admission, GroupId},
+    Target = {<<"quod:target">>, <<35:256>>},
+    {200, Committed} = quod_explorer_http:prove_result(
+                         {ok, [#{'X' => linked}],
+                          #{ref => Ref, height => 9,
+                            participant_slots =>
+                              [{{Ns, Anchor}, 8, 1},
+                               {Target, 7, 2}]}}),
+    ?assertEqual(ok, maps:get(result, Committed)),
+    ?assertEqual(binary:encode_hex(GroupId, lowercase),
+                 maps:get(group_id, Committed)),
+    ?assertEqual(2, length(maps:get(participant_slots, Committed))),
+    ?assert(is_binary(iolist_to_binary(json:encode(Committed)))),
+    {202, Pending} = quod_explorer_http:prove_result(
+                       {error, {outcome_unknown, Ref}}),
+    ?assertEqual(pending, maps:get(result, Pending)),
+    ?assertEqual(binary:encode_hex(Coordinator, lowercase),
+                 maps:get(coordinator, Pending)).
+
 invalid_action_is_a_bad_request_test() ->
     ?assertEqual(
        {400, #{error => invalid_action}},
        quod_explorer_http:prove_result({error, invalid_action})).
+
+proof_cursor_json_and_id_are_exact_test() ->
+    CursorId = <<23:256>>,
+    CursorText = binary:encode_hex(CursorId, lowercase),
+    ?assertEqual(
+       {200, #{result => solution, cursor => CursorText, height => 17,
+               bindings => [#{<<"X">> => <<"second">>}]}},
+       quod_explorer_http:cursor_result(
+         {solution, CursorId, #{'X' => second}, 17})),
+    ?assertEqual({ok, CursorId},
+                 quod_explorer_http:parse_cursor_id(CursorText)),
+    ?assertEqual(error,
+                 quod_explorer_http:parse_cursor_id(<<"not-a-cursor">>)),
+    ?assertEqual({200, #{result => stopped}},
+                 quod_explorer_http:cursor_result({ok, stopped})),
+    ?assertEqual({404, #{error => cursor_not_found}},
+                 quod_explorer_http:cursor_result({error, not_found})).
+
+%%%===================================================================
+%%% cursor coordinator — exact ownership, races, and cleanup
+%%%===================================================================
+
+cursor_command_busy_and_solution_correlation_test() ->
+    {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
+    Tag = make_ref(),
+    {noreply, State1} = quod_explorer:handle_call(
+                          {cursor_command, CursorId, next},
+                          {self(), Tag}, State0),
+    CommandRef = receive
+        {worker_message, Worker,
+         {quod_cursor_command, _Owner, CallRef, CursorId,
+          SeenCommandRef, next}} -> SeenCommandRef
+    after 1000 -> error(cursor_command_missing)
+    end,
+    ?assertMatch(
+       {reply, {error, busy}, _},
+       quod_explorer:handle_call(
+         {cursor_command, CursorId, accept},
+         {self(), make_ref()}, State1)),
+    {noreply, State2} = quod_explorer:handle_info(
+                          {quod_cursor_solution, Worker, CallRef, CursorId,
+                           CommandRef, #{'X' => second}, 7}, State1),
+    receive
+        {Tag, {solution, CursorId, #{'X' := second}, 7}} -> ok
+    after 1000 -> error(cursor_solution_reply_missing)
+    end,
+    #{CursorId := #{pending := none}} = maps:get(cursors, State2),
+    {noreply, State3} = quod_explorer:handle_info(
+                          {quod_proof_reply, Engine, CallRef, cursor_stopped},
+                          State2),
+    ?assertEqual(#{}, maps:get(cursors, State3)),
+    stop_cursor_fixture(Engine, Worker).
+
+cursor_stale_solution_kills_exact_worker_test() ->
+    {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
+    WorkerMRef = monitor(process, Worker),
+    {noreply, State1} = quod_explorer:handle_call(
+                          {cursor_command, CursorId, next},
+                          {self(), make_ref()}, State0),
+    receive {worker_message, Worker, _} -> ok
+    after 1000 -> error(cursor_command_missing)
+    end,
+    {noreply, State2} = quod_explorer:handle_info(
+                          {quod_cursor_solution, Worker, CallRef, CursorId,
+                           make_ref(), #{}, 7}, State1),
+    ?assertEqual(#{}, maps:get(cursors, State2)),
+    receive {'DOWN', WorkerMRef, process, Worker, killed} -> ok
+    after 1000 -> error(stale_cursor_worker_survived)
+    end,
+    stop_cursor_fixture(Engine, undefined).
+
+cursor_caller_down_cancels_next_but_detaches_accept_test() ->
+    %% A vanished observer may safely cancel a read/Next.  Accept is different:
+    %% it may already be durably submitted, so only the observer is detached.
+    {NextId, NextEngine, NextWorker, _NextCallRef, NextState0} =
+        cursor_state(none, none),
+    NextWorkerMRef = monitor(process, NextWorker),
+    NextCaller = spawn(fun cursor_fixture_loop/0),
+    {noreply, NextState1} = quod_explorer:handle_call(
+                              {cursor_command, NextId, next},
+                              {NextCaller, make_ref()}, NextState0),
+    receive {worker_message, NextWorker, _} -> ok
+    after 1000 -> error(next_command_missing)
+    end,
+    NextCallerMRef = pending_caller_mref(NextId, NextState1),
+    exit(NextCaller, kill),
+    NextDown = receive
+        {'DOWN', NextCallerMRef, process, NextCaller, killed} = NextDownMsg ->
+            NextDownMsg
+    after 1000 -> error(next_caller_down_missing)
+    end,
+    {noreply, NextState2} = quod_explorer:handle_info(NextDown, NextState1),
+    ?assertEqual(#{}, maps:get(cursors, NextState2)),
+    receive {'DOWN', NextWorkerMRef, process, NextWorker, killed} -> ok
+    after 1000 -> error(next_worker_survived_caller)
+    end,
+    stop_cursor_fixture(NextEngine, undefined),
+
+    {AcceptId, AcceptEngine, AcceptWorker, AcceptCallRef, AcceptState0} =
+        cursor_state(none, none),
+    AcceptCaller = spawn(fun cursor_fixture_loop/0),
+    {noreply, AcceptState1} = quod_explorer:handle_call(
+                                {cursor_command, AcceptId, accept},
+                                {AcceptCaller, make_ref()}, AcceptState0),
+    receive {worker_message, AcceptWorker, _} -> ok
+    after 1000 -> error(accept_command_missing)
+    end,
+    AcceptCallerMRef = pending_caller_mref(AcceptId, AcceptState1),
+    exit(AcceptCaller, kill),
+    AcceptDown = receive
+        {'DOWN', AcceptCallerMRef, process, AcceptCaller, killed} = AcceptDownMsg ->
+            AcceptDownMsg
+    after 1000 -> error(accept_caller_down_missing)
+    end,
+    {noreply, AcceptState2} =
+        quod_explorer:handle_info(AcceptDown, AcceptState1),
+    #{AcceptId := #{pending := detached_accept}} =
+        maps:get(cursors, AcceptState2),
+    ?assert(is_process_alive(AcceptWorker)),
+    {noreply, AcceptState3} = quod_explorer:handle_info(
+                               {quod_proof_reply, AcceptEngine,
+                                AcceptCallRef, {ok, [#{}], 8}},
+                               AcceptState2),
+    ?assertEqual(#{}, maps:get(cursors, AcceptState3)),
+    stop_cursor_fixture(AcceptEngine, AcceptWorker).
+
+cursor_engine_down_preserves_exact_checkpoint_test() ->
+    Ref = {transaction, <<"ont:test">>, <<41:256>>, <<42:256>>},
+    lists:foreach(
+      fun({Checkpoint, Expected}) ->
+          Tag = make_ref(),
+          CallerMRef = monitor(process, self()),
+          Pending = {{self(), Tag}, CallerMRef, open},
+          {CursorId, Engine, Worker, _CallRef, State0} =
+              cursor_state(Pending, Checkpoint),
+          EngineMRef = cursor_engine_mref(CursorId, State0),
+          exit(Engine, kill),
+          EngineDown = receive
+              {'DOWN', EngineMRef, process, Engine, killed} = Down -> Down
+          after 1000 -> error(cursor_engine_down_missing)
+          end,
+          {noreply, State1} =
+              quod_explorer:handle_info(EngineDown, State0),
+          receive {Tag, Expected} -> ok
+          after 1000 -> error(cursor_engine_reply_missing)
+          end,
+          ?assertEqual(#{}, maps:get(cursors, State1)),
+          stop_cursor_fixture(undefined, Worker)
+      end,
+      [{none, {error, ontology_unavailable}},
+       {Ref, {error, {outcome_unknown, Ref}}}]).
+
+cursor_terminate_preserves_detached_accept_worker_test() ->
+    {ok, _} = application:ensure_all_started(cowboy),
+    {CursorId, Engine, Worker, _CallRef, State0} =
+        cursor_state(detached_accept, none),
+    ?assertEqual(ok, quod_explorer:terminate(shutdown, State0)),
+    ?assert(is_process_alive(Worker)),
+    %% The terminated owner intentionally drops its volatile map; the engine
+    %% owns the still-bounded worker until settlement or the proof deadline.
+    ?assert(maps:is_key(CursorId, maps:get(cursors, State0))),
+    stop_cursor_fixture(Engine, Worker).
+
+cursor_state(Pending, Checkpoint) ->
+    Parent = self(),
+    Engine = spawn(fun cursor_fixture_loop/0),
+    Worker = spawn(fun() -> cursor_worker_loop(Parent) end),
+    EngineMRef = monitor(process, Engine),
+    CursorId = crypto:strong_rand_bytes(32),
+    CallRef = make_ref(),
+    Cursor = #{engine => Engine, engine_mref => EngineMRef,
+               call_ref => CallRef, worker => Worker,
+               checkpoint => Checkpoint, pending => Pending},
+    {CursorId, Engine, Worker, CallRef,
+     #{cursors => #{CursorId => Cursor}}}.
+
+cursor_worker_loop(Parent) ->
+    receive
+        stop -> ok;
+        Message ->
+            Parent ! {worker_message, self(), Message},
+            cursor_worker_loop(Parent)
+    end.
+
+cursor_fixture_loop() ->
+    receive stop -> ok end.
+
+pending_caller_mref(CursorId, State) ->
+    #{CursorId := #{pending := {_From, MRef, _Command}}} =
+        maps:get(cursors, State),
+    MRef.
+
+cursor_engine_mref(CursorId, State) ->
+    #{CursorId := #{engine_mref := MRef}} = maps:get(cursors, State),
+    MRef.
+
+stop_cursor_fixture(Engine, Worker) ->
+    lists:foreach(
+      fun(Pid) when is_pid(Pid) ->
+              case is_process_alive(Pid) of
+                  true -> Pid ! stop;
+                  false -> ok
+              end;
+         (_) -> ok
+      end, [Engine, Worker]).
 
 foreign_commit_is_json_safe_test() ->
     Ns = <<"quod:target">>,

@@ -12,6 +12,10 @@ order. One `gen_server` per namespace.
 - **Reads** run on a copy-on-write overlay (`m:quod_erlog_db_local_prove`) so the
   committed kb is never touched; the answer is bindings (stamped with the height the
   frozen view was taken at), returned to the caller.
+- **Explorer cursors** retain that exact bounded proof worker between answers.
+  `next` resumes its continuation, `accept` seals the displayed answer through
+  the ordinary submission path, and `stop` discards the staged proof. They do
+  not re-run a goal to manufacture another answer.
 - **Writes** seal the complete participating scope set before submission. One
   participant uses that target ontology's ordinary `#transaction{}` consensus
   path. Two or more participants use the atomic
@@ -46,6 +50,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -include("quod_proof_limits.hrl").
 
 -export([start_link/2, prove/2, prove_ro/2, prove_as/3, execute/2, execute_as/3,
+         open_cursor/4, cancel_cursor/3,
          run_action_as/3,
          submit_plan/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
@@ -99,7 +104,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -define(MAX_SCOPE_REJECTS_PER_SECOND, 32).
 
 -record(proof_worker, {pid         :: pid(),
-                       kind        :: prove | prove_ro | action,
+                       kind        :: prove | prove_ro | action | cursor,
                        worker_mref :: reference(),
                        caller_mref :: reference(),
                        from        :: gen_server:from() |
@@ -140,7 +145,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           proof_id    :: <<_:256>>,
           scope_id    :: <<_:128>>,
           deadline_ms :: integer(),
-          kind        :: prove | prove_ro | action,
+          kind        :: prove | prove_ro | action | cursor,
           namespace   :: binary(),
           anchor      :: <<_:256>>,
           height      :: non_neg_integer(),
@@ -264,6 +269,43 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -spec start_link(binary(), map()) -> {ok, pid()} | {error, term()}.
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_prolog, Ns}), ?MODULE, {Ns, Config}, []).
+
+-doc """
+Open one bounded, resumable top-level proof owned by `Owner`.
+
+The returned call reference is private coordination between the Explorer cursor
+owner and this engine.  Solutions are delivered one at a time without
+re-proving; the cursor owner must explicitly request `next`, `accept`, or
+`stop`.  The ordinary engine proof deadline remains the absolute cursor
+lifetime.
+""".
+-spec open_cursor(binary(), term(), pid(), <<_:256>>) ->
+          {ok, pid(), reference()} | {error, term()}.
+open_cursor(TargetNs, Goal, Owner, <<_:256>> = CursorId)
+  when is_binary(TargetNs), is_pid(Owner) ->
+    case quod_predicates:action_transition(Goal) of
+        true -> {error, non_backtrackable_action};
+        false ->
+            case quod_reg:where({quod_prolog, TargetNs}) of
+                undefined -> {error, no_such_namespace};
+                Engine ->
+                    CallRef = make_ref(),
+                    gen_server:cast(
+                      Engine,
+                      {public_cursor, Owner, CallRef, CursorId, Goal,
+                       quod_trace:context()}),
+                    {ok, Engine, CallRef}
+            end
+    end;
+open_cursor(_TargetNs, _Goal, _Owner, _CursorId) ->
+    {error, bad_request}.
+
+-doc "Cancel an Explorer cursor by its exact engine/call ownership.".
+-spec cancel_cursor(pid(), pid(), reference()) -> ok.
+cancel_cursor(Engine, Owner, CallRef)
+  when is_pid(Engine), is_pid(Owner), is_reference(CallRef) ->
+    gen_server:cast(Engine, {cancel_public_cursor, Owner, CallRef}),
+    ok.
 
 -doc """
 Prove `Goal` against namespace `TargetNs`.
@@ -1031,6 +1073,35 @@ handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 %% Public proofs use an explicit call reference and monitor the exact engine.
 %% This makes an engine exit distinguishable before/after a durable checkpoint
 %% without blocking the engine in an opaque gen_server call.
+handle_cast({public_cursor, Owner, CallRef, CursorId, _Goal, _TraceCtx}, S)
+  when is_pid(Owner), is_reference(CallRef),
+       (not is_binary(CursorId) orelse byte_size(CursorId) =/= 32) ->
+    reply_client({async, Owner, CallRef}, {error, bad_request}),
+    {noreply, S};
+handle_cast({public_cursor, Owner, CallRef, <<_:256>>, _Goal, _TraceCtx},
+            S = #s{ready = false})
+  when is_pid(Owner), is_reference(CallRef) ->
+    reply_client({async, Owner, CallRef}, {error, rebuilding}),
+    {noreply, S};
+handle_cast({public_cursor, Owner, CallRef, <<_:256>>, _Goal, _TraceCtx},
+            S = #s{workers = Workers, max_proof_workers = Max})
+  when is_pid(Owner), is_reference(CallRef), map_size(Workers) >= Max ->
+    reply_client({async, Owner, CallRef}, {error, busy}),
+    {noreply, S};
+handle_cast({public_cursor, Owner, CallRef, <<_:256>> = CursorId, Goal,
+             TraceCtx}, S)
+  when is_pid(Owner), is_reference(CallRef) ->
+    {noreply,
+     spawn_proof(
+       cursor, {Owner, CallRef, CursorId, Goal},
+       {async, Owner, CallRef}, TraceCtx, undefined, S)};
+handle_cast({cancel_public_cursor, Owner, CallRef}, S = #s{workers = Workers})
+  when is_pid(Owner), is_reference(CallRef) ->
+    case find_cursor_worker(Owner, CallRef, Workers) of
+        {ok, Pid} -> kill_worker(Pid);
+        error -> ok
+    end,
+    {noreply, S};
 handle_cast({public_proof, Caller, CallRef, Kind, _Goal, _TraceCtx, _Principal},
             S = #s{ready = false})
   when is_pid(Caller), is_reference(CallRef),
@@ -3078,6 +3149,12 @@ run_worker(Engine, Ref, action, ProofId, Deadline, {Action, Structural}, Princip
     run_lifecycle_origin(
       Engine, Ref, ProofId, Deadline, Action, Structural, Principal, Ns,
       Applied, Est, Signer);
+run_worker(Engine, Ref, cursor, ProofId, Deadline,
+           {Owner, CallRef, CursorId, Goal}, Principal,
+           Ns, Applied, Est, Signer) ->
+    run_cursor_origin(
+      Engine, Ref, ProofId, Deadline, Owner, CallRef, CursorId, Goal,
+      Principal, Ns, Applied, Est, Signer);
 run_worker(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Applied, Est,
            Signer) ->
     run_origin_proof(
@@ -3104,6 +3181,29 @@ run_origin_proof(Engine, Ref, Kind, ProofId, Deadline, Goal, Principal, Ns, Appl
         undefined ->
             %% A keyed engine is a network participant. It must never seal a
             %% sentinel-anchored plan during the short ready/genesis gap.
+            {error, rebuilding}
+    end.
+
+run_cursor_origin(Engine, Ref, ProofId, Deadline, Owner, CallRef, CursorId,
+                  Goal, Principal, Ns, Applied, Est, Signer) ->
+    case quod_simplex:genesis_hash(Ns) of
+        <<_:256>> = Anchor ->
+            run_pinned_origin(
+              Engine, Ref, cursor, ProofId, Deadline, Principal, Ns, Applied,
+              Anchor, Est, Signer,
+              fun(Origin) ->
+                  run_cursor_goal(
+                    Owner, CallRef, CursorId, Goal, Origin)
+              end);
+        undefined when Signer =:= none ->
+            run_pinned_origin(
+              Engine, Ref, cursor, ProofId, Deadline, Principal, Ns, Applied,
+              <<0:256>>, Est, Signer,
+              fun(Origin) ->
+                  run_cursor_goal(
+                    Owner, CallRef, CursorId, Goal, Origin)
+              end);
+        undefined ->
             {error, rebuilding}
     end.
 
@@ -3548,6 +3648,88 @@ submit_remote_plan(Handle, Plan, Goal, Bindings) ->
 run_origin_invocation(Origin, Goal) ->
     run_origin_invocation(Origin, Goal, allowed).
 
+run_cursor_goal(
+  Owner, CallRef, CursorId, Goal,
+  #pinned_origin{scope_id = ScopeId, session = Session,
+                 context = Context, height = Height} = Origin) ->
+    Verdict = authorization_verdict(Origin, Goal),
+    InvocationId = crypto:strong_rand_bytes(16),
+    Actor = {ScopeId, InvocationId},
+    Selection = quod_transaction_scope:empty_selection(),
+    case quod_proof_context:register_invocation(Actor, Selection) of
+        ok ->
+            CursorResult =
+                try
+                    case quod_proof_session:open(
+                           Session, InvocationId, Goal, Verdict,
+                           Context, Selection) of
+                        ok ->
+                            cursor_step(
+                              Owner, CallRef, CursorId, open, InvocationId,
+                              Session, Height);
+                        {error, Reason} ->
+                            {error, Reason}
+                    end
+                after
+                    try quod_proof_session:cancel(Session, InvocationId)
+                    after quod_proof_context:unregister_invocation(Actor)
+                    end
+                end,
+            case CursorResult of
+                {accept, Bindings} ->
+                    finish_pinned_proof(
+                      prove, Origin, Goal,
+                      {ok, Bindings,
+                       quod_proof_session:local_changes(Session),
+                       quod_proof_session:read_set(Session)});
+                Other -> Other
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+cursor_step(Owner, CallRef, CursorId, CommandRef, InvocationId,
+            Session, Height) ->
+    case quod_proof_session:next(Session, InvocationId) of
+        {solution, _Solution} ->
+            case quod_proof_session:bindings(Session, InvocationId) of
+                {ok, Bindings} ->
+                    Owner ! {quod_cursor_solution, self(), CallRef, CursorId,
+                             CommandRef, Bindings, Height},
+                    cursor_wait(
+                      Owner, CallRef, CursorId, InvocationId,
+                      Session, Height);
+                {error, Reason} ->
+                    {error, Reason}
+            end;
+        {complete, Reasons} ->
+            {fail, Reasons};
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+cursor_wait(Owner, CallRef, CursorId, InvocationId, Session, Height) ->
+    Remaining = quod_proof_context:remaining_ms(),
+    receive
+        {quod_cursor_command, Owner, CallRef, CursorId,
+         CommandRef, next} ->
+            cursor_step(
+              Owner, CallRef, CursorId, CommandRef, InvocationId,
+              Session, Height);
+        {quod_cursor_command, Owner, CallRef, CursorId,
+         _CommandRef, accept} ->
+            case quod_proof_session:bindings(Session, InvocationId) of
+                {ok, Bindings} -> {accept, Bindings};
+                {error, Reason} -> {error, Reason}
+            end;
+        {quod_cursor_command, Owner, CallRef, CursorId,
+         _CommandRef, stop} ->
+            cursor_stopped
+    after Remaining ->
+        {error, {proof_limit_exceeded,
+                 element(1, quod_proof_context:origin_identity())}}
+    end.
+
 run_origin_invocation(
   #pinned_origin{scope_id = ScopeId,
                  session = Session, context = Context}, Goal, Verdict) ->
@@ -3773,6 +3955,8 @@ finish_proof(Ref, Result, S) ->
                     reply_client(From, {ok, [Bindings], Applied}), S1;
                 {committed, Bindings, Handle} ->
                     reply_client(From, {ok, [Bindings], Handle}), S1;
+                cursor_stopped ->
+                    reply_client(From, {ok, stopped}), S1;
                 _Other ->
                     reply_client(
                       From, {error, {protocol_error, proof_engine}}), S1
@@ -3984,6 +4168,19 @@ find_proof_monitor(MRef, W) ->
               _ -> Acc
           end
       end, false, W).
+
+find_cursor_worker(Owner, CallRef, Workers) ->
+    maps:fold(
+      fun(_Ref,
+          #proof_worker{pid = Pid, kind = cursor,
+                        from = {async, Owner0, CallRef0}}, Acc) ->
+              case Acc of
+                  error when Owner0 =:= Owner, CallRef0 =:= CallRef ->
+                      {ok, Pid};
+                  _ -> Acc
+              end;
+         (_Ref, #proof_worker{}, Acc) -> Acc
+      end, error, Workers).
 
 proof_down_reply(_Kind, _Reason, _Ns, Checkpoint)
   when Checkpoint =/= none ->

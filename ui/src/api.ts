@@ -122,10 +122,31 @@ export type FoundTx = {
 export type FoundOutcome = FoundTx | { outcome: TxOutcome }
 
 export type ProveReply =
+  | { result: 'solution'; cursor: string; height: number; bindings: Record<string, string>[] }
   | { result: 'ok'; height: number; bindings: Record<string, string>[] }
   | { result: 'ok'; ns: string; anchor: string; tx_id: string; bindings: Record<string, string>[] }
+  | {
+      result: 'ok'
+      ns: string
+      anchor: string
+      coordinator: string
+      coordinator_admission: string
+      group_id: string
+      height: number
+      participant_slots: { ns: string; anchor: string; height: number; generation: number }[]
+      bindings: Record<string, string>[]
+    }
   | { result: 'fail'; reasons?: string[] }
   | { result: 'pending'; ns: string; anchor: string; tx_id: string }
+  | {
+      result: 'pending'
+      ns: string
+      anchor: string
+      coordinator: string
+      coordinator_admission: string
+      group_id: string
+    }
+  | { result: 'stopped' }
   | { error: string; detail?: string; leader?: PeerId | null }
 
 async function get<T>(url: string): Promise<T> {
@@ -156,3 +177,24 @@ export const prove = async (ns: string, goal: string): Promise<ProveReply> => {
   })
   return (await r.json()) as ProveReply
 }
+
+async function proofCursorRequest(url: string, method: 'POST' | 'DELETE', body?: object): Promise<ProveReply> {
+  const r = await fetch(url, {
+    method,
+    headers: body ? { 'content-type': 'application/json' } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  })
+  return (await r.json()) as ProveReply
+}
+
+export const openProofCursor = (ns: string, goal: string) =>
+  proofCursorRequest('api/proof-cursors', 'POST', { ns, goal })
+
+export const nextProofSolution = (cursor: string) =>
+  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}/next`, 'POST')
+
+export const acceptProofSolution = (cursor: string) =>
+  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}/accept`, 'POST')
+
+export const stopProofCursor = (cursor: string) =>
+  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}`, 'DELETE')

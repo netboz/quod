@@ -100,7 +100,8 @@ configuration surface.
 Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 `14568`): `quod_up` and per-namespace `quod_brahms_{view_size,sample_size,links,rounds}`.
 
-The **web explorer** (live transaction list, detail view, prove console) is
+The **web explorer** (live transaction list, detail view, backtracking prove
+console) is
 opt-in: `explorer.enabled` in the HOCON config, loopback-bound by default
 (`explorer.ip`/`explorer.port`, default `14569`). Frontend source lives in
 `ui/`; its built bundle is committed under `priv/explorer/` and served by the
@@ -124,7 +125,7 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.70
+TAG=0.7.71
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .

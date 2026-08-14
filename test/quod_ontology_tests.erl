@@ -12,6 +12,8 @@ ontology_creation_test_() ->
      fun cleanup/1,
      fun(Fixture) ->
          [?_test(create_and_resume(Fixture)),
+          {timeout, 30,
+           ?_test(cursor_backtracks_in_predicate_created_ontology(Fixture))},
           ?_test(prepared_input_is_single_use(Fixture)),
           ?_test(reconcile_republishes_running_content(Fixture)),
           ?_test(validation_precedes_mutation(Fixture)),
@@ -31,6 +33,116 @@ ontology_creation_test_() ->
           ?_test(join_resume_anchor_is_exact(Fixture)),
           ?_test(action_resume_after_content_tree_restart(Fixture))]
      end}.
+
+cursor_backtracks_in_predicate_created_ontology(_Fixture) ->
+    Ns = unique_ns(<<"cursor-created">>),
+    Source =
+        <<"pick(first).\n"
+          "pick(second).\n">>,
+    ?assertMatch(
+       {ok, [#{}], _},
+       quod_prolog:execute(
+         ?ROOT_NS,
+         {create_ontology, Ns,
+          [open_policy(), {source, Source}]})),
+    ok = wait_ready(Ns, 200),
+
+    %% This is one retained proof, not three executions of the same goal.
+    %% Advancing resumes the exact Erlog continuation.
+    X = {'X'},
+    CursorId = crypto:strong_rand_bytes(32),
+    {ok, Engine, CallRef} = quod_prolog:open_cursor(
+                              Ns, {pick, X},
+                              self(), CursorId),
+    {Worker, #{'X' := first}, _Height1} =
+        receive_cursor_solution(CallRef, CursorId, open),
+    NextRef = make_ref(),
+    Worker ! {quod_cursor_command, self(), CallRef, CursorId,
+              NextRef, next},
+    {Worker, #{'X' := second}, _Height2} =
+        receive_cursor_solution(CallRef, CursorId, NextRef),
+    Worker ! {quod_cursor_command, self(), CallRef, CursorId,
+              make_ref(), accept},
+    ?assertMatch(
+       {ok, [#{'X' := second}], _},
+       receive_cursor_reply(Engine, CallRef)),
+
+    %% Stop explicitly discards staged writes from an otherwise live proof.
+    StopId = crypto:strong_rand_bytes(32),
+    {ok, StopEngine, StopCallRef} = quod_prolog:open_cursor(
+                                      Ns,
+                                      {',', {assertz, {temp, stopped}},
+                                       {pick, {'X'}}},
+                                      self(), StopId),
+    {StopWorker, #{'X' := first}, _} =
+        receive_cursor_solution(StopCallRef, StopId, open),
+    StopWorker ! {quod_cursor_command, self(), StopCallRef, StopId,
+                  make_ref(), stop},
+    ?assertEqual({ok, stopped},
+                 receive_cursor_reply(StopEngine, StopCallRef)),
+    ?assertMatch({fail, _}, quod_prolog:prove_ro(Ns, {temp, stopped})),
+
+    %% transaction/1 remains deliberately semidet: it rolls failed internal
+    %% alternatives back, accepts its first complete branch, and exposes one
+    %% solution to the surrounding cursor.
+    TransactionId = crypto:strong_rand_bytes(32),
+    TransactionGoal =
+        {transaction,
+         {';',
+          {',', {assertz, {temp, rolled_back}}, fail},
+          {assertz, {temp, committed}}}},
+    {ok, TransactionEngine, TransactionCallRef} =
+        quod_prolog:open_cursor(
+          Ns, TransactionGoal, self(), TransactionId),
+    {TransactionWorker, #{}, _} = receive_cursor_solution(
+                                      TransactionCallRef,
+                                      TransactionId, open),
+    TransactionWorker !
+        {quod_cursor_command, self(), TransactionCallRef,
+         TransactionId, make_ref(), accept},
+    ?assertMatch({ok, [#{}], _},
+                 receive_cursor_reply(
+                   TransactionEngine, TransactionCallRef)),
+    ?assertMatch({ok, [#{}], _},
+                 quod_prolog:prove_ro(Ns, {temp, committed})),
+    ?assertMatch({fail, _},
+                 quod_prolog:prove_ro(Ns, {temp, rolled_back})),
+
+    %% Asking beyond the final alternative closes the cursor with ordinary
+    %% logical failure, so the UI knows there is no further solution.
+    ExhaustId = crypto:strong_rand_bytes(32),
+    {ok, ExhaustEngine, ExhaustCallRef} = quod_prolog:open_cursor(
+                                            Ns, {pick, {'X'}},
+                                            self(), ExhaustId),
+    {ExhaustWorker, #{'X' := first}, _} =
+        receive_cursor_solution(ExhaustCallRef, ExhaustId, open),
+    ExhaustNext1 = make_ref(),
+    ExhaustWorker ! {quod_cursor_command, self(), ExhaustCallRef,
+                     ExhaustId, ExhaustNext1, next},
+    {ExhaustWorker, #{'X' := second}, _} =
+        receive_cursor_solution(ExhaustCallRef, ExhaustId, ExhaustNext1),
+    ExhaustWorker ! {quod_cursor_command, self(), ExhaustCallRef,
+                     ExhaustId, make_ref(), next},
+    ?assertMatch({fail, _},
+                 receive_cursor_reply(ExhaustEngine, ExhaustCallRef)).
+
+receive_cursor_solution(CallRef, CursorId, CommandRef) ->
+    receive
+        {quod_cursor_solution, Worker, CallRef, CursorId, CommandRef,
+         Bindings, Height} ->
+            {Worker, Bindings, Height};
+        {quod_proof_reply, Engine, CallRef, Reply} ->
+            error({cursor_closed_before_solution, Engine, Reply})
+    after 5000 ->
+        error(cursor_solution_timeout)
+    end.
+
+receive_cursor_reply(Engine, CallRef) ->
+    receive
+        {quod_proof_reply, Engine, CallRef, Reply} -> Reply
+    after 10000 ->
+        error(cursor_reply_timeout)
+    end.
 
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),

@@ -398,6 +398,46 @@ absolute_proof_timeout_test_() ->
                        quod_prolog:prove(Ns, loop))
      end}.
 
+idle_cursor_uses_the_absolute_proof_deadline_test_() ->
+    {setup,
+     fun() ->
+         {ok, _} = application:ensure_all_started(gproc),
+         Ns = <<"cursor-timeout:", (integer_to_binary(
+                                      erlang:unique_integer([positive])))/binary>>,
+         {ok, Pid} = quod_prolog:start_link(
+                       Ns, #{node_id => {"127.0.0.1", 5000},
+                             proof_timeout_ms => 80,
+                             outcome_backend => memory}),
+         ok = quod_prolog:mark_ready(Ns),
+         {Ns, Pid}
+     end,
+     fun cleanup/1,
+     fun({Ns, _Pid}) ->
+         fun() ->
+             ok = ab(
+                    Ns, 1,
+                    with_host_policy(
+                      Ns,
+                      batch(change(Ns, diff_for({cursor_value, first}), #{})))),
+             CursorId = crypto:strong_rand_bytes(32),
+             {ok, Engine, CallRef} =
+                 quod_prolog:open_cursor(
+                   Ns, {cursor_value, {'X'}}, self(), CursorId),
+             Worker = receive
+                 {quod_cursor_solution, CursorWorker, CallRef, CursorId,
+                  open, #{'X' := first}, 1} -> CursorWorker
+             after 1000 -> error(cursor_first_solution_missing)
+             end,
+             ?assert(is_process_alive(Worker)),
+             receive
+                 {quod_proof_reply, Engine, CallRef,
+                  {error, {proof_limit_exceeded, Ns}}} -> ok
+             after 1000 -> error(idle_cursor_deadline_missing)
+             end,
+             ?assertEqual(ok, wait_proof_workers(Ns, 0, 100))
+         end
+     end}.
+
 outcome_unknown_timeout_test_() ->
     {setup,
      fun() ->

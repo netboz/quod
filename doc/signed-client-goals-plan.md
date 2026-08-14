@@ -490,6 +490,13 @@ the committed ledger through the same apply path. The temporary local lookup
 failure is never converted into a crash or a verdict about the committed
 record.
 
+The deterministic parent-state checks live in the process-free
+`quod_commit_validation` library. Consensus voting and ordered apply call the
+same content/DTX validators; only apply records an operation claim at the
+certified slot. `quod_prolog` remains the sole owner of the knowledge base,
+outcome index, scheduling, replay, diff application, and publication. The
+extraction adds no process, cache, ACL, or alternate goal executor.
+
 The client checkpoints the operation ID and signed request before sending.
 After an uncertain response it resolves that identity; it does not generate a
 new operation ID or silently re-prove the goal. Automatic retransmission is not

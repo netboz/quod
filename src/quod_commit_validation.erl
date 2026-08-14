@@ -1,0 +1,473 @@
+-module(quod_commit_validation).
+-moduledoc """
+Deterministic validation for content and DTX records at one committed parent.
+
+This module is deliberately process-free.  It owns no knowledge base, outcome
+store, worker, timer, or authorization policy.  `quod_prolog` supplies one
+frozen parent context, uses the returned outcome projection, and remains the
+only owner of scheduling, ordered apply, replay, and publication.
+
+Consensus checking and committed apply both enter through `content/4` and
+`dtx/4`; the mode selects whether an operation claim is only checked or is
+recorded at its committed slot.  Keeping that distinction here prevents the
+two callers from drifting while preserving the one existing authorization
+path (`quod_ask:validate_authorization_transcript/6`).
+""".
+
+-include_lib("erlog/src/erlog_int.hrl").
+-include("quod_ledger.hrl").
+
+-export([new/5, outcomes/1, content/4, dtx/4, prepared_material/4]).
+-export_type([context/0, mode/0]).
+
+-record(context, {
+          target   :: {binary() | undefined, <<_:256>>},
+          applied  :: non_neg_integer(),
+          est      :: tuple() | undefined,
+          outcomes :: quod_outcome:index(),
+          signer   :: quod_identity:signer() | none
+         }).
+
+-opaque context() :: #context{}.
+-type mode() :: check | {claim, pos_integer()}.
+-type result(Verdict) ::
+        {ok, Verdict, context()} | {outcome_error, term()}.
+
+-spec new({binary() | undefined, <<_:256>>}, non_neg_integer(),
+          tuple() | undefined,
+          quod_outcome:index(), quod_identity:signer() | none) -> context().
+new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
+  when is_integer(Applied), Applied >= 0,
+       (is_tuple(Est) orelse Est =:= undefined) ->
+    #context{target = Target, applied = Applied, est = Est,
+             outcomes = Outcomes, signer = Signer}.
+
+-spec outcomes(context()) -> quod_outcome:index().
+outcomes(#context{outcomes = Outcomes}) -> Outcomes.
+
+-spec content(term(), term(), mode(), context()) -> result(term()).
+content(Transactions, BlockTimestamp, Mode, Context)
+  when is_list(Transactions), is_integer(BlockTimestamp),
+       BlockTimestamp >= 0 ->
+    case quod_ontology:network_identity(
+           quod_transaction:requires_network_identity(Transactions)) of
+        {ok, Network} ->
+            validate_content_transactions(
+              Transactions, Network, BlockTimestamp, Mode, #{}, Context);
+        {error, Reason} ->
+            dependency_verdict(Mode, Reason, Context)
+    end;
+content(_Transactions, _BlockTimestamp, _Mode, Context) ->
+    {ok, {invalid, malformed_content}, Context}.
+
+-spec dtx(term(), term(), mode(), context()) -> result(term()).
+dtx(Control, BlockTimestamp, Mode,
+    Context0 = #context{outcomes = Outcomes0}) ->
+    case safe_dtx_group_id(Control) of
+        {ok, GroupId} ->
+            case quod_outcome:group_history(Outcomes0, GroupId) of
+                {History, Outcomes1} when is_map(History) ->
+                    Context1 = Context0#context{outcomes = Outcomes1},
+                    case dtx_request_verdict(
+                           Control, BlockTimestamp, Mode, Context1) of
+                        {ok, valid, Context2} ->
+                            {ok, dtx_policy_verdict(
+                                   Control, History, Context2), Context2};
+                        Other ->
+                            Other
+                    end;
+                {error, Reason} ->
+                    {outcome_error, Reason}
+            end;
+        error ->
+            {ok, {invalid, malformed_control}, Context0}
+    end.
+
+prepared_plan(Manifest, PlanDigest, PlanBlob,
+              Context = #context{applied = Parent, est = Est}) ->
+    %% Authenticate the outer plan and its current target author before the
+    %% owner materializer is allowed to allocate any ontology symbols.
+    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
+        {ok, Plan, _EventContext} ->
+            validate_prepared_plan_header(Plan, Parent, Est, Context);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-spec prepared_material(quod_dtx:manifest(), <<_:256>>, binary(), context()) ->
+          {ok, map(), map()} | {error, term()}.
+prepared_material(Manifest, PlanDigest, PlanBlob, Context) ->
+    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
+        {ok, Plan, EventContext} ->
+            case quod_dtx:material(Plan) of
+                {ok, Material} -> {ok, EventContext, Material};
+                {error, Reason} -> {error, Reason}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+dependency_verdict(check, _Reason, Context) ->
+    {ok, abstain, Context};
+dependency_verdict({claim, _Slot}, Reason, Context) ->
+    {ok, {unavailable, network_identity, Reason}, Context}.
+
+validate_content_transactions(
+  [], _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
+    {ok, valid, Context};
+validate_content_transactions(
+  [#transaction{} = Change | Rest], Network, BlockTimestamp,
+  Mode, Seen, Context0 = #context{target = Target}) ->
+    case quod_transaction:validate_request(
+           Network, Target, BlockTimestamp, Change) of
+        {ok, none} ->
+            continue_content_validation(
+              Change, Rest, Network, BlockTimestamp,
+              Mode, Seen, Context0);
+        {ok, RequestEvidence} ->
+            case validate_signed_request(
+                   RequestEvidence, transaction_outcome_ref(Target, Change),
+                   Mode, Seen, Context0) of
+                {ok, Seen1, Context1} ->
+                    continue_content_validation(
+                      Change, Rest, Network, BlockTimestamp,
+                      Mode, Seen1, Context1);
+                {invalid, Reason, Context1} ->
+                    {ok, {invalid, Reason}, Context1};
+                {outcome_error, _} = Error ->
+                    Error
+            end;
+        {error, _} ->
+            {ok, {invalid, invalid_request_auth}, Context0}
+    end;
+validate_content_transactions(
+  _Malformed, _Network, _BlockTimestamp, _Mode, _Seen, Context) ->
+    {ok, {invalid, malformed_content}, Context}.
+
+continue_content_validation(
+  Change, Rest, Network, BlockTimestamp, Mode, Seen,
+  Context = #context{applied = 0, target = {Ns, _Anchor}}) ->
+    case Rest =:= [] andalso
+         quod_simplex:valid_genesis_transaction(Ns, Change) of
+        true ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen, Context);
+        false ->
+            continue_ordinary_content_validation(
+              Change, Rest, Network, BlockTimestamp, Mode, Seen, Context)
+    end;
+continue_content_validation(
+  Change, Rest, Network, BlockTimestamp, Mode, Seen, Context) ->
+    continue_ordinary_content_validation(
+      Change, Rest, Network, BlockTimestamp, Mode, Seen, Context).
+
+continue_ordinary_content_validation(
+  Change, Rest, Network, BlockTimestamp, Mode, Seen, Context) ->
+    case is_membership_change(Change) of
+        false ->
+            validate_content_transactions(
+              Rest, Network, BlockTimestamp, Mode, Seen, Context);
+        true ->
+            case membership_verdict(Change, Context) of
+                valid ->
+                    validate_content_transactions(
+                      Rest, Network, BlockTimestamp, Mode, Seen, Context);
+                {invalid, Reason} ->
+                    {ok, {invalid, Reason}, Context}
+            end
+    end.
+
+validate_signed_request(
+  #{principal := Principal, transcript := Transcript, claim := Claim},
+  OutcomeRef, Mode, Seen,
+  Context0 = #context{target = Target, applied = Parent, est = Est}) ->
+    case quod_ask:validate_authorization_transcript(
+           Target, Target, Principal, Parent, Transcript, Est) of
+        ok ->
+            validate_operation_claim(
+              Claim, OutcomeRef, Mode, Seen, Context0);
+        {error, _} ->
+            {invalid, invalid_authorization_transcript, Context0}
+    end.
+
+validate_operation_claim(
+  #{key := Key, digest := Digest} = Claim, OutcomeRef,
+  Mode, Seen, Context0 = #context{outcomes = Outcomes0}) ->
+    case maps:find(Key, Seen) of
+        {ok, Digest} ->
+            {invalid, duplicate_operation, Context0};
+        {ok, _OtherDigest} ->
+            {invalid, operation_conflict, Context0};
+        error ->
+            case operation_projection_transition(
+                   Mode, Outcomes0, Claim, OutcomeRef) of
+                {new, Outcomes1} ->
+                    {ok, Seen#{Key => Digest},
+                     Context0#context{outcomes = Outcomes1}};
+                {{claimed, #{request_digest := Digest}}, Outcomes1} ->
+                    {invalid, duplicate_operation,
+                     Context0#context{outcomes = Outcomes1}};
+                {{claimed, _Other}, Outcomes1} ->
+                    {invalid, operation_conflict,
+                     Context0#context{outcomes = Outcomes1}};
+                {error, Reason} ->
+                    {outcome_error, Reason}
+            end
+    end.
+
+operation_projection_transition(check, Outcomes, Claim, OutcomeRef) ->
+    quod_outcome:check_operation(Outcomes, Claim, OutcomeRef);
+operation_projection_transition({claim, Slot}, Outcomes, Claim, OutcomeRef) ->
+    case quod_outcome:claim_operation(Outcomes, Slot, Claim, OutcomeRef) of
+        {new, Outcomes1} -> {new, Outcomes1};
+        %% Replaying the exact same committed slot is an idempotent apply, so
+        %% the owner follows its normal publication path without reporting a
+        %% duplicate client operation.
+        {replay, Outcomes1} -> {new, Outcomes1};
+        {error, _} = Error -> Error
+    end.
+
+transaction_outcome_ref(
+  {Ns, Anchor}, #transaction{tx_id = <<_:256>> = TxId}) ->
+    {transaction, Ns, Anchor, TxId}.
+
+dtx_request_verdict(Control, BlockTimestamp, Mode, Context) ->
+    case quod_dtx:control_kind(Control) of
+        'begin' -> validate_dtx_begin_request(
+                     Control, BlockTimestamp, Mode, Context);
+        _ -> {ok, valid, Context}
+    end.
+
+validate_dtx_begin_request(Control, BlockTimestamp, Mode,
+                           Context0 = #context{target = Target}) ->
+    case quod_ontology:network_identity(
+           quod_dtx:requires_network_identity(Control)) of
+        {ok, Network} ->
+            case quod_dtx:validate_request(
+                   Network, Target, BlockTimestamp, Control) of
+                {ok, none} ->
+                    {ok, valid, Context0};
+                {ok, RequestEvidence} ->
+                    case quod_dtx:begin_group_ref(
+                           quod_dtx:control_body(Control)) of
+                        {ok, GroupRef} ->
+                            case validate_signed_request(
+                                   RequestEvidence, GroupRef,
+                                   Mode, #{}, Context0) of
+                                {ok, _Seen, Context1} ->
+                                    {ok, valid, Context1};
+                                {invalid, Reason, Context1} ->
+                                    {ok, {invalid, Reason}, Context1};
+                                {outcome_error, _} = Error ->
+                                    Error
+                            end;
+                        error ->
+                            {ok, {invalid, malformed_control}, Context0}
+                    end;
+                {error, _} ->
+                    {ok, {invalid, invalid_request_auth}, Context0}
+            end;
+        {error, Reason} ->
+            dependency_verdict(Mode, Reason, Context0)
+    end.
+
+safe_dtx_group_id(Control) ->
+    try quod_dtx:group_id(Control) of
+        <<_:256>> = GroupId -> {ok, GroupId};
+        _ -> error
+    catch
+        error:function_clause -> error;
+        error:{badmatch, _} -> error
+    end.
+
+dtx_policy_verdict(Control, History, Context) ->
+    case quod_dtx:control_kind(Control) of
+        prepare ->
+            case quod_dtx:prepare_payload(Control) of
+                {ok, Manifest, PlanDigest, PlanBlob} ->
+                    case prepared_plan(
+                           Manifest, PlanDigest, PlanBlob, Context) of
+                        ok -> {valid, History};
+                        %% Preserve deterministic Prepare failures as a real
+                        %% reason stack. Simplex adds the target marker before
+                        %% the bounded wire encoding.
+                        {error, Reason} -> {invalid, [Reason]}
+                    end;
+                error ->
+                    {invalid, malformed_control}
+            end;
+        'begin' -> {valid, History};
+        decision -> {valid, History};
+        finalize -> {valid, History};
+        complete -> {valid, History}
+    end.
+
+decode_authenticated_target_plan(
+  PlanBlob, #context{target = Target}) ->
+    case quod_dtx:decode(PlanBlob) of
+        {ok, Plan} ->
+            case quod_dtx:target(Plan) =:= Target andalso
+                 quod_dtx:verify(Plan) of
+                true -> {ok, Plan};
+                false -> {error, bad_plan_binding}
+            end;
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) ->
+    case decode_authenticated_target_plan(PlanBlob, Context) of
+        {ok, Plan} ->
+            case {quod_dtx:digest(Plan) =:= PlanDigest,
+                  quod_dtx:event_context(Manifest, Plan)} of
+                {true, {ok, EventContext}} ->
+                    {ok, Plan, EventContext};
+                _ ->
+                    {error, bad_manifest_binding}
+            end;
+        {error, _} = Error ->
+            Error
+    end.
+
+validate_prepared_plan_header(Plan, Parent, Est, Context) ->
+    case prepared_signer_admitted(quod_dtx:signer(Plan), Context) of
+        false ->
+            {error, signer_not_admitted};
+        true ->
+            case {quod_dtx:participates(Plan),
+                  quod_dtx:base_height(Plan) =< Parent} of
+                {false, _} -> {error, not_material};
+                {_, false} -> {error, future_base_height};
+                {true, true} ->
+                    validate_prepared_plan_material(Plan, Est, Context)
+            end
+    end.
+
+validate_prepared_plan_material(Plan, Est, Context) ->
+    case quod_dtx:material(Plan) of
+        {ok, #{diff := Diff, read_check := ReadCheck,
+               transcript := Transcript}} ->
+            validate_prepared_material(
+              Plan, Diff, ReadCheck, Transcript, Est, Context);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+validate_prepared_material(
+  Plan, Diff, ReadCheck, Transcript, Est, Context) ->
+    case quod_diff:valid_ops(Diff) andalso
+         quod_diff:valid_read_check(ReadCheck) of
+        false ->
+            {error, malformed_plan_material};
+        true ->
+            validate_prepared_occ(
+              Plan, Diff, ReadCheck, Transcript, Est, Context)
+    end.
+
+validate_prepared_occ(
+  Plan, Diff, ReadCheck, Transcript, Est, Context) ->
+    case quod_diff:validate(ReadCheck, mvcc_ref(Est)) of
+        {conflict, _Functor} ->
+            {error, conflict_retry};
+        ok ->
+            case validate_prepared_membership(Diff, Context) of
+                {error, _} = Error -> Error;
+                ok ->
+                    validate_prepared_candidate(
+                      Plan, Diff, Transcript, Est, Context)
+            end
+    end.
+
+validate_prepared_candidate(Plan, Diff, Transcript, Est, Context) ->
+    case quod_diff:apply_ops_preserving_policy(Est, Diff) of
+        {error, _} = Error ->
+            Error;
+        {ok, _DiscardedCandidate} ->
+            validate_plan_transcript(Plan, Transcript, Context)
+    end.
+
+mvcc_ref(#est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}) -> Ref.
+
+prepared_signer_admitted(
+  none, #context{signer = none, target = {_Ns, Anchor}}) ->
+    Anchor =:= <<0:256>>;
+prepared_signer_admitted(
+  <<_:256>> = Signer, #context{est = Est}) ->
+    lists:member(Signer, quod_committee_predicates:admitted_pubkeys(Est));
+prepared_signer_admitted(_Signer, _Context) ->
+    false.
+
+validate_plan_transcript(
+  Plan, Transcript,
+  #context{applied = ParentHeight, est = ParentEst}) ->
+    quod_ask:validate_authorization_transcript(
+      quod_dtx:target(Plan), quod_dtx:origin(Plan),
+      quod_dtx:principal(Plan), ParentHeight, Transcript, ParentEst).
+
+validate_prepared_membership(Diff, #context{est = Est}) ->
+    case diff_touches_membership(Diff) of
+        false ->
+            ok;
+        true ->
+            Validators = quod_committee_predicates:admitted_pubkeys(Est),
+            case quod_simplex:membership_diff_acceptable(Diff, Validators)
+                 andalso exact_membership_parent(Diff, Est) of
+                true -> ok;
+                false -> {error, invalid_membership}
+            end
+    end.
+
+exact_membership_parent(
+  [{assert, {{peer_admitted, _Id, _Host, _Port, Pubkey}, _Body}}], Est) ->
+    not lists:member(
+          Pubkey, quod_committee_predicates:admitted_pubkeys(Est));
+exact_membership_parent(
+  [{retract, {Head, Body}}],
+  #est{db = #db{mod = Mod, ref = Ref}}) ->
+    quod_diff:has_clause(Mod, Ref, Head, Body);
+exact_membership_parent(_Diff, _Est) ->
+    false.
+
+diff_touches_membership(Diff) ->
+    lists:any(
+      fun({_Kind, {{peer_admitted, _, _, _, _}, _Body}}) -> true;
+         (_) -> false
+      end, Diff).
+
+is_membership_change(Change) ->
+    quod_simplex:committee_delta(Change) =/= {[], []}.
+
+membership_verdict(#transaction{diff = Diff}, Context) ->
+    membership_diff_verdict(Diff, Context).
+
+membership_diff_verdict(
+  [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],
+  #context{target = {Ns, _Anchor}, applied = Applied, est = Est}) ->
+    case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
+        true ->
+            {invalid, already_admitted};
+        false ->
+            %% Re-prove the same can_join goal used by admit/3, against the
+            %% frozen parent and the existing verdict execution context.
+            VerdictEst = quod_predicates:set_context(
+                           Est,
+                           quod_predicates:verdict_context(Ns, Applied)),
+            case quod_proof_session:run_first(
+                   {can_join, Ns, [H, P], Pk}, VerdictEst,
+                   #{read_set => true}) of
+                {ok, _, [], _} -> valid;
+                {ok, _, _Diff, _} -> {invalid, can_join_side_effects};
+                {fail, _Reasons} -> {invalid, can_join};
+                {error, _} -> {invalid, can_join}
+            end
+    end;
+membership_diff_verdict(
+  [{retract, {{peer_admitted, _Id, _H, _P, _Pk}, _B} = Clause}],
+  #context{est = #est{db = #db{mod = M, ref = R}}}) ->
+    {ClauseHead, ClauseBody} = Clause,
+    case quod_diff:has_clause(M, R, ClauseHead, ClauseBody) of
+        true -> valid;
+        false -> {invalid, no_such_member}
+    end;
+membership_diff_verdict(_Diff, _Context) ->
+    {invalid, invalid_membership}.

@@ -67,8 +67,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([prove_est/2, prove_est_read_only/2]).
 %% prove against a raw #est{} handle (runtime + isolated policy reads)
 -ifdef(TEST).
--export([membership_verdict/2,
-         test_active_command_stack/1,
+-export([test_active_command_stack/1,
          test_scope_capacity_available/3,
          test_public_scope_reason/2,
          test_scope_timeout_reason/2,
@@ -5024,14 +5023,10 @@ apply_step(#entry{index = Index, data = Data,
     end.
 
 apply_content_validation(Transactions, BlockTimestamp, Slot, S) ->
-    case content_network_identity(Transactions) of
-        {ok, Network} ->
-            validate_content_transactions(
-              Transactions, Network, BlockTimestamp,
-              {claim, Slot}, #{}, S);
-        {error, Reason} ->
-            {{unavailable, network_identity, Reason}, S}
-    end.
+    commit_validation_result(
+      quod_commit_validation:content(
+        Transactions, BlockTimestamp, {claim, Slot},
+        commit_validation_context(S)), S).
 
 %% Apply one certified DTX record through the same pure reducer used by
 %% consensus history.  Prepare validates but does not publish its hidden plan;
@@ -5211,16 +5206,17 @@ test_release_absent_group_waiter(
 apply_dtx_effects([], _Index, S) ->
     {S, none};
 apply_dtx_effects(
-  [{prepared, _GroupId, _Ref, Manifest, PlanDigest, PlanBlob, _Generation}],
-  Index, S) ->
-    case validate_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
-        ok -> {S, none};
-        {error, Reason} -> error({invalid_committed_dtx_prepare, Index, Reason})
-    end;
+  [{prepared, _GroupId, _Ref, _Manifest, _PlanDigest, _PlanBlob,
+    _Generation}], _Index, S) ->
+    %% `dtx/4` validated this exact Prepare against the frozen parent before
+    %% the reducer could produce the effect. Do not run a second validator.
+    {S, none};
 apply_dtx_effects(
   [{apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
     _Ref, _Generation}], Index, S) ->
-    case decode_prepared_material(Manifest, PlanDigest, PlanBlob, S) of
+    case quod_commit_validation:prepared_material(
+           Manifest, PlanDigest, PlanBlob,
+           commit_validation_context(S)) of
         {ok, Context, #{diff := Diff}} ->
             {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
             {S#s{est = Est1, applies = S#s.applies + 1},
@@ -5247,152 +5243,6 @@ apply_dtx_effects(
 apply_dtx_effects(
   [{completed, _GroupId, abort, _Ref, _Reasons}], _Index, S) ->
     {S, none}.
-
-decode_authenticated_target_plan(PlanBlob, #s{ns = Ns}) ->
-    case quod_dtx:decode(PlanBlob) of
-        {ok, Plan} ->
-            case quod_dtx:target(Plan) =:= {Ns, target_anchor(Ns)} andalso
-                 quod_dtx:verify(Plan) of
-                true -> {ok, Plan};
-                false -> {error, bad_plan_binding}
-            end;
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-decode_prepared_material(Manifest, PlanDigest, PlanBlob, S) ->
-    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
-        {ok, Plan, Context} ->
-            case quod_dtx:material(Plan) of
-                {ok, Material} -> {ok, Context, Material};
-                {error, Reason} -> {error, Reason}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) ->
-    case decode_authenticated_target_plan(PlanBlob, S) of
-        {ok, Plan} ->
-            case {quod_dtx:digest(Plan) =:= PlanDigest,
-                  quod_dtx:event_context(Manifest, Plan)} of
-                {true, {ok, Context}} -> {ok, Plan, Context};
-                _ -> {error, bad_manifest_binding}
-            end;
-        {error, _} = Error ->
-            Error
-    end.
-
-validate_prepared_plan(Manifest, PlanDigest, PlanBlob,
-                       S = #s{applied = Parent, est = Est}) ->
-    %% Authenticate the outer plan and its current target author before the
-    %% owner materializer is allowed to allocate any ontology symbols.
-    case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, S) of
-        {ok, Plan, _Context} ->
-            validate_prepared_plan_header(Plan, Parent, Est, S);
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-validate_prepared_plan_header(Plan, Parent, Est, S) ->
-    case prepared_signer_admitted(quod_dtx:signer(Plan), S) of
-        false ->
-            {error, signer_not_admitted};
-        true ->
-            case {quod_dtx:participates(Plan),
-                  quod_dtx:base_height(Plan) =< Parent} of
-                {false, _} -> {error, not_material};
-                {_, false} -> {error, future_base_height};
-                {true, true} -> validate_prepared_plan_material(Plan, Est, S)
-            end
-    end.
-
-validate_prepared_plan_material(Plan, Est, S) ->
-    case quod_dtx:material(Plan) of
-        {ok, #{diff := Diff, read_check := ReadCheck,
-               transcript := Transcript}} ->
-            validate_prepared_material(
-              Plan, Diff, ReadCheck, Transcript, Est, S);
-        {error, Reason} ->
-            {error, Reason}
-    end.
-
-validate_prepared_material(Plan, Diff, ReadCheck, Transcript, Est, S) ->
-    case quod_diff:valid_ops(Diff) andalso
-         quod_diff:valid_read_check(ReadCheck) of
-        false ->
-            {error, malformed_plan_material};
-        true ->
-            validate_prepared_occ(
-              Plan, Diff, ReadCheck, Transcript, Est, S)
-    end.
-
-validate_prepared_occ(Plan, Diff, ReadCheck, Transcript, Est, S) ->
-    case quod_diff:validate(ReadCheck, mvcc_ref(Est)) of
-        {conflict, _Functor} ->
-            {error, conflict_retry};
-        ok ->
-            case validate_prepared_membership(Diff, S) of
-                {error, _} = Error -> Error;
-                ok ->
-                    validate_prepared_candidate(
-                      Plan, Diff, Transcript, Est, S)
-            end
-    end.
-
-validate_prepared_candidate(Plan, Diff, Transcript, Est, S) ->
-    case quod_diff:apply_ops_preserving_policy(Est, Diff) of
-        {error, _} = Error ->
-            Error;
-        {ok, _DiscardedCandidate} ->
-            validate_plan_transcript(Plan, Transcript, S)
-    end.
-
-mvcc_ref(#est{db = #db{mod = quod_erlog_db_mvcc, ref = Ref}}) -> Ref.
-
-prepared_signer_admitted(
-  none, #s{signer = none, ns = Ns}) ->
-    target_anchor(Ns) =:= <<0:256>>;
-prepared_signer_admitted(
-  <<_:256>> = Signer, #s{est = Est}) ->
-    lists:member(Signer, quod_committee_predicates:admitted_pubkeys(Est));
-prepared_signer_admitted(_Signer, _S) ->
-    false.
-
-validate_plan_transcript(
-  Plan, Transcript, #s{applied = ParentHeight, est = ParentEst}) ->
-    quod_ask:validate_authorization_transcript(
-      quod_dtx:target(Plan), quod_dtx:origin(Plan),
-      quod_dtx:principal(Plan), ParentHeight, Transcript, ParentEst).
-
-validate_prepared_membership(Diff, S) ->
-    case diff_touches_membership(Diff) of
-        false -> ok;
-        true ->
-            Validators = quod_committee_predicates:admitted_pubkeys(S#s.est),
-            case quod_simplex:membership_diff_acceptable(Diff, Validators)
-                 andalso exact_membership_parent(Diff, S#s.est) of
-                true -> ok;
-                false -> {error, invalid_membership}
-            end
-    end.
-
-exact_membership_parent(
-  [{assert, {{peer_admitted, _Id, _Host, _Port, Pubkey}, _Body}}], Est) ->
-    not lists:member(
-          Pubkey, quod_committee_predicates:admitted_pubkeys(Est));
-exact_membership_parent(
-  [{retract, {Head, Body}}],
-  #est{db = #db{mod = Mod, ref = Ref}}) ->
-    quod_diff:has_clause(Mod, Ref, Head, Body);
-exact_membership_parent(_Diff, _Est) ->
-    false.
-
-diff_touches_membership(Diff) ->
-    lists:any(
-      fun({_Kind, {{peer_admitted, _, _, _, _}, _Body}}) -> true;
-         (_) -> false
-      end, Diff).
 
 finish_dtx_apply(none, _Control, _Origin, S) ->
     S;
@@ -5871,208 +5721,30 @@ validation_verdict({content, Transactions, BlockTimestamp}, S) ->
 validation_verdict({dtx, Control, BlockTimestamp}, S) ->
     dtx_validation_verdict(Control, BlockTimestamp, check, S).
 
-content_validation_verdict(Transactions, BlockTimestamp, S)
-  when is_list(Transactions), is_integer(BlockTimestamp),
-       BlockTimestamp >= 0 ->
-    case content_network_identity(Transactions) of
-        {ok, Network} ->
-            validate_content_transactions(
-              Transactions, Network, BlockTimestamp, check, #{}, S);
-        {error, _} ->
-            {abstain, S}
-    end;
-content_validation_verdict(_Transactions, _BlockTimestamp, S) ->
-    {{invalid, malformed_content}, S}.
-
-content_network_identity(Transactions) ->
-    quod_ontology:network_identity(
-      quod_transaction:requires_network_identity(Transactions)).
-
-validate_content_transactions(
-  [], _Network, _BlockTimestamp, _OperationMode, _Seen, S) ->
-    {valid, S};
-validate_content_transactions(
-  [#transaction{} = Change | Rest], Network, BlockTimestamp,
-  OperationMode, Seen, S0) ->
-    Target = {S0#s.ns, target_anchor(S0#s.ns)},
-    case quod_transaction:validate_request(
-           Network, Target, BlockTimestamp, Change) of
-        {ok, none} ->
-            continue_content_validation(
-              Change, Rest, Network, BlockTimestamp,
-              OperationMode, Seen, S0);
-        {ok, RequestEvidence} ->
-            case validate_signed_request(
-                   Target, RequestEvidence,
-                   transaction_outcome_ref(Target, Change),
-                   OperationMode, Seen, S0) of
-                {ok, Seen1, S1} ->
-                    continue_content_validation(
-                      Change, Rest, Network, BlockTimestamp,
-                      OperationMode, Seen1, S1);
-                {{invalid, Reason}, S1} ->
-                    {{invalid, Reason}, S1}
-            end;
-        {error, _} ->
-            {{invalid, invalid_request_auth}, S0}
-    end;
-validate_content_transactions(
-  _Malformed, _Network, _BlockTimestamp, _OperationMode, _Seen, S) ->
-    {{invalid, malformed_content}, S}.
-
-continue_content_validation(
-  Change, Rest, Network, BlockTimestamp, OperationMode, Seen,
-  S = #s{applied = 0, ns = Ns}) ->
-    case Rest =:= [] andalso
-         quod_simplex:valid_genesis_transaction(Ns, Change) of
-        true ->
-            validate_content_transactions(
-              Rest, Network, BlockTimestamp, OperationMode, Seen, S);
-        false ->
-            continue_ordinary_content_validation(
-              Change, Rest, Network, BlockTimestamp,
-              OperationMode, Seen, S)
-    end;
-continue_content_validation(
-  Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S) ->
-    continue_ordinary_content_validation(
-      Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S).
-
-continue_ordinary_content_validation(
-  Change, Rest, Network, BlockTimestamp, OperationMode, Seen, S) ->
-    case is_membership_change(Change) of
-        false ->
-            validate_content_transactions(
-              Rest, Network, BlockTimestamp, OperationMode, Seen, S);
-        true ->
-            case membership_verdict(Change, S) of
-                valid ->
-                    validate_content_transactions(
-                      Rest, Network, BlockTimestamp,
-                      OperationMode, Seen, S);
-                {invalid, Reason} ->
-                    {{invalid, Reason}, S}
-            end
-    end.
-
-validate_signed_request(
-  Target,
-  #{principal := Principal, transcript := Transcript, claim := Claim},
-  OutcomeRef, OperationMode, Seen,
-  S0 = #s{applied = Parent, est = Est}) ->
-    case quod_ask:validate_authorization_transcript(
-           Target, Target, Principal, Parent, Transcript, Est) of
-        ok ->
-            validate_operation_claim(
-              Claim, OutcomeRef, OperationMode, Seen, S0);
-        {error, _} ->
-            {{invalid, invalid_authorization_transcript}, S0}
-    end.
-
-validate_operation_claim(
-  #{key := Key, digest := Digest} = Claim, OutcomeRef,
-  OperationMode, Seen,
-  S0 = #s{outcomes = Outcomes0}) ->
-    case maps:find(Key, Seen) of
-        {ok, Digest} ->
-            {{invalid, duplicate_operation}, S0};
-        {ok, _OtherDigest} ->
-            {{invalid, operation_conflict}, S0};
-        error ->
-            case operation_projection_transition(
-                   OperationMode, Outcomes0, Claim, OutcomeRef) of
-                {new, Outcomes1} ->
-                    {ok, Seen#{Key => Digest},
-                     S0#s{outcomes = Outcomes1}};
-                {{claimed, #{request_digest := Digest}}, Outcomes1} ->
-                    {{invalid, duplicate_operation},
-                     S0#s{outcomes = Outcomes1}};
-                {{claimed, _Other}, Outcomes1} ->
-                    {{invalid, operation_conflict},
-                     S0#s{outcomes = Outcomes1}};
-                {error, Reason} ->
-                    outcome_index_failure(Reason)
-            end
-    end.
-
-operation_projection_transition(check, Outcomes, Claim, OutcomeRef) ->
-    quod_outcome:check_operation(Outcomes, Claim, OutcomeRef);
-operation_projection_transition(
-  {claim, Slot}, Outcomes, Claim, OutcomeRef) ->
-    case quod_outcome:claim_operation(
-           Outcomes, Slot, Claim, OutcomeRef) of
-        {new, Outcomes1} -> {new, Outcomes1};
-        %% Replaying the exact same committed slot is an idempotent apply, so
-        %% the caller follows its normal publication path without reporting a
-        %% duplicate client operation.
-        {replay, Outcomes1} -> {new, Outcomes1};
-        {error, _} = Error -> Error
-    end.
-
-transaction_outcome_ref(
-  {Ns, Anchor}, #transaction{tx_id = <<_:256>> = TxId}) ->
-    {transaction, Ns, Anchor, TxId}.
+content_validation_verdict(Transactions, BlockTimestamp, S) ->
+    commit_validation_result(
+      quod_commit_validation:content(
+        Transactions, BlockTimestamp, check,
+        commit_validation_context(S)), S).
 
 dtx_validation_verdict(Control, BlockTimestamp, OperationMode,
-                       S = #s{outcomes = Outcomes0}) ->
-    case safe_dtx_group_id(Control) of
-        {ok, GroupId} ->
-        case quod_outcome:group_history(Outcomes0, GroupId) of
-            {History, Outcomes1} when is_map(History) ->
-                S1 = S#s{outcomes = Outcomes1},
-                case dtx_request_verdict(
-                       Control, BlockTimestamp, OperationMode, S1) of
-                    {valid, S2} ->
-                        {dtx_policy_verdict(Control, History, S2), S2};
-                    {Verdict, S2} ->
-                        {Verdict, S2}
-                end;
-            {error, Reason} ->
-                outcome_index_failure(Reason)
-        end;
-        error ->
-            {{invalid, malformed_control}, S}
-    end.
+                       S) ->
+    commit_validation_result(
+      quod_commit_validation:dtx(
+        Control, BlockTimestamp, OperationMode,
+        commit_validation_context(S)), S).
 
-dtx_request_verdict(Control, BlockTimestamp, OperationMode, S) ->
-    case quod_dtx:control_kind(Control) of
-        'begin' -> validate_dtx_begin_request(
-                     Control, BlockTimestamp, OperationMode, S);
-        _ -> {valid, S}
-    end.
+commit_validation_context(
+  #s{ns = Ns, applied = Applied, est = Est,
+     outcomes = Outcomes, signer = Signer}) ->
+    quod_commit_validation:new(
+      {Ns, target_anchor(Ns)}, Applied, Est, Outcomes, Signer).
 
-validate_dtx_begin_request(Control, BlockTimestamp, OperationMode, S0) ->
-    Target = {S0#s.ns, target_anchor(S0#s.ns)},
-    case quod_ontology:network_identity(
-           quod_dtx:requires_network_identity(Control)) of
-        {ok, Network} ->
-            case quod_dtx:validate_request(
-                   Network, Target, BlockTimestamp, Control) of
-                {ok, none} -> {valid, S0};
-                {ok, RequestEvidence} ->
-                    case quod_dtx:begin_group_ref(
-                           quod_dtx:control_body(Control)) of
-                        {ok, GroupRef} ->
-                            case validate_signed_request(
-                                   Target, RequestEvidence, GroupRef,
-                                   OperationMode, #{}, S0) of
-                                {ok, _Seen, S1} -> {valid, S1};
-                                {{invalid, Reason}, S1} ->
-                                    {{invalid, Reason}, S1}
-                            end;
-                        error ->
-                            {{invalid, malformed_control}, S0}
-                    end;
-                {error, _} -> {{invalid, invalid_request_auth}, S0}
-            end;
-        {error, Reason} ->
-            case OperationMode of
-                {claim, _Slot} ->
-                    {{unavailable, network_identity, Reason}, S0};
-                check ->
-                    {abstain, S0}
-            end
-    end.
+commit_validation_result({ok, Verdict, Context}, S) ->
+    {Verdict,
+     S#s{outcomes = quod_commit_validation:outcomes(Context)}};
+commit_validation_result({outcome_error, Reason}, _S) ->
+    outcome_index_failure(Reason).
 
 wait_for_apply_dependency(Reason, S = #s{apply_dependency = none}) ->
     logger:warning(
@@ -6099,83 +5771,6 @@ arm_apply_dependency_retry(S) ->
               ?APPLY_DEPENDENCY_RETRY_MS, self(),
               {retry_apply_dependency, network_identity, Token}),
     S#s{apply_dependency = {network_identity, Timer, Token}}.
-
-safe_dtx_group_id(Control) ->
-    try quod_dtx:group_id(Control) of
-        <<_:256>> = GroupId -> {ok, GroupId};
-        _ -> error
-    catch
-        error:function_clause -> error;
-        error:{badmatch, _} -> error
-    end.
-
-dtx_policy_verdict(Control, History, S) ->
-    case quod_dtx:control_kind(Control) of
-        prepare ->
-            case quod_dtx:prepare_payload(Control) of
-                {ok, Manifest, PlanDigest, PlanBlob} ->
-                    case validate_prepared_plan(
-                           Manifest, PlanDigest, PlanBlob, S) of
-                        ok -> {valid, History};
-                        %% Keep deterministic Prepare failures as a real
-                        %% reason stack.  Simplex adds the target marker before
-                        %% the bounded wire encoding; the coordinator can then
-                        %% preserve the complete stack in Decision(abort).
-                        {error, Reason} -> {invalid, [Reason]}
-                    end;
-                error ->
-                    {invalid, malformed_control}
-            end;
-        'begin' -> {valid, History};
-        decision -> {valid, History};
-        finalize -> {valid, History};
-        complete -> {valid, History}
-    end.
-
-%% The verdict for the single guaranteed-shape `peer_admitted` op (Slice A's gate ensures exactly one),
-%% judged against `S#s.est` (the parent-height kb):
-%% - assert: reject a pubkey already admitted (the one-fact-per-pubkey invariant that keeps the KB + the
-%%   validator set in lockstep on retract); else re-prove the SAME `can_join` goal `admit_3` staged. A
-%%   `can_join` that stages writes is rejected — it must be side-effect-free, or the overlay would ride
-%%   its ops into the committed diff network-wide. NB the KB state is pinned to the parent height, but a
-%%   `can_join` rule may also read REALITY through a read-only external predicate (`peer_ready`), and
-%%   there honest validators MAY split (each judges from its own liveness observations). Intentional and
-%%   fail-closed: a support shortfall Δ-skips the slot and the submitter retries — the admit commits only
-%%   once quorum-many validators independently observed the candidate ready.
-%% - retract: valid only if that exact `peer_admitted` clause is present — a fabricated-address retract
-%%   matches nothing, so it can never eject a validator from the set while missing in the KB.
--spec membership_verdict(#transaction{}, #s{}) -> valid | {invalid, term()}.
-membership_verdict(#transaction{diff = Diff}, S) ->
-    membership_diff_verdict(Diff, S).
-
-membership_diff_verdict(
-  [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],
-  #s{ns = Ns, applied = Applied, est = Est}) ->
-    case lists:member(Pk, quod_committee_predicates:admitted_pubkeys(Est)) of
-        true  -> {invalid, already_admitted};
-        false -> %% The re-proof runs INLINE in the engine, pinned to the parent height (`Applied`) and
-                 %% carrying a VERDICT execution context (`m:quod_predicates`). That context disables
-                 %% cross-ontology asks (a committee vote must never make network hops mid-verdict,
-                 %% doc/inter-ontology.md §11) and read-time link following, and supplies the height the
-                 %% `peer_ready` gate reads — all deterministically, without any process-dictionary state.
-                 VerdictEst = quod_predicates:set_context(Est, quod_predicates:verdict_context(Ns, Applied)),
-                 case run_proof_est({can_join, Ns, [H, P], Pk}, VerdictEst) of
-                     {ok, _, [], _}    -> valid;
-                     {ok, _, _Diff, _} -> {invalid, can_join_side_effects};
-                     fail              -> {invalid, can_join};
-                     {error, _}        -> {invalid, can_join}
-                 end
-    end;
-membership_diff_verdict(
-  [{retract, {{peer_admitted, _Id, _H, _P, _Pk}, _B} = Clause}],
-  #s{est = #est{db = #db{mod = M, ref = R}}}) ->
-    {ClauseHead, ClauseBody} = Clause,
-    case quod_diff:has_clause(M, R, ClauseHead, ClauseBody) of
-        true  -> valid;
-        false -> {invalid, no_such_member}
-    end;
-membership_diff_verdict(_Diff, _S) ->
-    {invalid, invalid_membership}.
 
 %% Async delivery to the requesting statem (or a test pid) — a plain message so
 %% the statem consumes it as an `info` event and a test can receive it directly.

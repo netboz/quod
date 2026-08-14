@@ -96,7 +96,7 @@ remove_1(Goal, Next, #est{bs = Bs} = St) ->
 %% (quod_feed:peer_ready/3 — fresh digest + height slack). Read-only: stages nothing, binds nothing.
 %% An unbound/non-binary argument fails closed (the gate is a check, not a generator). NOTE validators MAY
 %% legitimately split on this predicate (each judges from its OWN digest table) — see the verdict-split
-%% note at quod_prolog:membership_verdict/2.
+%% note in `quod_commit_validation`'s membership validation.
 peer_ready_1(Goal, Next, #est{bs = Bs} = St) ->
     case erlog_int:dderef(Goal, Bs) of
         {peer_ready, Pk} when is_binary(Pk) ->
@@ -139,7 +139,7 @@ membership_diff(_Diff) ->
 
 -doc """
 The DISTINCT `peer_admitted` pubkeys committed in a kb (element 5 of the fact head, sorted) — the
-committee as facts. `quod_prolog`'s membership verdict uses it for the one-fact-per-pubkey invariant
+committee as facts. `quod_commit_validation` uses it for the one-fact-per-pubkey invariant
 (reject an `admit` of a pubkey already admitted), which also keeps the KB and the validator-set
 projection in lockstep on retract.
 """.

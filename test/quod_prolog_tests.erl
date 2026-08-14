@@ -15,8 +15,10 @@ setup() ->
     {ok, Pid} = quod_prolog:start_link(
                   Ns, #{node_id => {"127.0.0.1", 5000}, max_proof_workers => 1,
                         outcome_backend => memory}),
-    %% no quod_simplex in these isolated tests — simulate the rebuild handshake completing
+    %% No quod_simplex in these isolated tests: simulate the rebuild handshake,
+    %% then use a same-sender call as a barrier before a test can subscribe.
     ok = quod_prolog:mark_ready(Ns),
+    _ = quod_prolog:applied(Ns),
     {Ns, Pid}.
 
 cleanup({_Ns, Pid}) ->

@@ -1,8 +1,8 @@
 # quod explorer — frontend
 
 React + TypeScript + Vite + Tailwind + TanStack (Query/Table). The **production
-bundle is committed into `priv/explorer/`**, where the node's cowboy listener
-(`quod_explorer`) serves it — building the Erlang release needs no node tooling.
+bundle is committed into `priv/explorer/`**, where the read-only Explorer and
+TLS client listeners serve it — building the Erlang release needs no node tooling.
 
 ```bash
 npm install
@@ -11,13 +11,14 @@ npm run build   # tsc + vite build → ../priv/explorer  (commit the output)
 npm run lint    # oxlint
 ```
 
-The panel is opt-in on a node (`explorer.enabled`, loopback by default — see
-`quod_schema`). Data flow: REST reads (`/api/summary`, `/api/txs`, `/api/tx`,
-`/api/block`), and a retained prove cursor (`POST /api/proof-cursors`) with
-Next, Accept, and Stop controls. A displayed answer is provisional: Accept
-seals it and commits staged writes; Stop discards them. Ordinary Prolog writes
-survive Next as normal, while `transaction/1` is the explicit rollback boundary.
-Declared lifecycle actions remain one-shot. The `/ws` stream fuses
+Ledger browsing remains available on the optional, read-only Explorer listener.
+The interactive console is served at `/explorer/` on the TLS client listener:
+it uses the same encrypted browser key, login, signed-goal endpoint, and cursor
+owner as the world client. There is no Explorer-specific proof or ACL route.
+A displayed answer is provisional: Accept seals it and commits staged writes;
+Stop discards them. Ordinary Prolog writes survive Next as normal, while
+`transaction/1` is the explicit rollback boundary. Declared lifecycle actions
+remain one-shot. The `/ws` stream fuses
 target-explicit `{committed, Ns, Slot, Entry}` block frames with per-transaction
 `applied_live` events. Palette:
 `doc/BBSVX Palette.pdf` — don't invent colors.

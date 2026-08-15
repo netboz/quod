@@ -23,10 +23,12 @@ descriptor before the effect journal calls them.
 -include("quod_ledger.hrl").
 
 -export([create/2, join/3,
-         validate_action/1, prepare_action/1, execute_prepared/1,
+         validate_action/1, prepare_action/1, prepare_action/2,
+         execute_prepared/1,
          prepared_effect/4, prepared_bytes/1, decode_prepared/1,
          local_state/1, genesis_anchor/1,
-         network_identity/0, network_identity/1, root_ns/0]).
+         network_identity/0, network_identity/1, network_identity/2,
+         root_ns/0]).
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -49,8 +51,8 @@ descriptor before the effect journal calls them.
         {terms, [term()]}.
 
 -record(lifecycle_request, {
-    kind :: create | join,
-    namespace :: binary(),
+    kind :: create | join | user_home,
+    namespace :: binary() | undefined,
     payload :: term()
 }).
 
@@ -83,6 +85,7 @@ validate_action(Action) ->
     case Action of
         {create_ontology, _, _} -> validate_typed_action(Action);
         {join_ontology, _, _, _} -> validate_typed_action(Action);
+        create_user_home -> validate_typed_action(Action);
         _ -> {error, invalid_action}
     end.
 
@@ -128,7 +131,10 @@ validate_ground_action(
                                 payload = {RawGenesisHash, SeedPeers}}}
                     end
             end
-    end.
+    end;
+validate_ground_action(create_user_home) ->
+    {ok, #lifecycle_request{kind = user_home,
+                            namespace = undefined, payload = none}}.
 
 -doc """
 Finish a structurally validated lifecycle request without mutating hosting
@@ -138,8 +144,13 @@ exactly once into the descriptor; join inputs are already normalized.
 """.
 -spec prepare_action(structural_descriptor()) ->
           {ok, prepared_descriptor()} | {error, term()}.
+prepare_action(Structural) -> prepare_action(Structural, none).
+
+-spec prepare_action(structural_descriptor(), term()) ->
+          {ok, prepared_descriptor()} | {error, term()}.
 prepare_action(
-  #lifecycle_request{kind = create, namespace = Ns, payload = Options}) ->
+  #lifecycle_request{kind = create, namespace = Ns, payload = Options},
+  _Principal) ->
     case load_options(Options) of
         {error, _} = Error ->
             Error;
@@ -156,11 +167,26 @@ prepare_action(
     end;
 prepare_action(
   #lifecycle_request{kind = join, namespace = Ns,
-                     payload = {RawGenesisHash, SeedPeers}})
+                     payload = {RawGenesisHash, SeedPeers}}, _Principal)
   when is_binary(RawGenesisHash), byte_size(RawGenesisHash) =:= 32,
        is_list(SeedPeers) ->
     prepare_join(Ns, RawGenesisHash, SeedPeers);
-prepare_action(_InvalidDescriptor) ->
+prepare_action(#lifecycle_request{kind = user_home},
+               {user, PublicKey}) ->
+    case quod_user:identity(PublicKey) of
+        {ok, Identity} ->
+            %% The derived action is fixed, but it still uses the one normal
+            %% creation validator. This keeps source/text normalization and
+            %% every genesis limit identical to create_ontology/2.
+            case validate_ground_action(quod_user:home_action(Identity)) of
+                {ok, #lifecycle_request{kind = create} = Create} ->
+                    prepare_action(Create, {user, PublicKey});
+                {error, _} = Error -> Error
+            end;
+        {error, _} ->
+            {error, invalid_action}
+    end;
+prepare_action(_InvalidDescriptor, _Principal) ->
     {error, invalid_action}.
 
 -doc """
@@ -179,7 +205,7 @@ execute_action(Action) ->
         {error, _} = Error ->
             Error;
         {ok, Structural} ->
-            case prepare_action(Structural) of
+            case prepare_action(Structural, none) of
                 {error, _} = Error -> Error;
                 {ok, Prepared} -> execute_prepared(Prepared)
             end
@@ -230,6 +256,18 @@ network_identity() ->
           {ok, none | <<_:256>>} | {error, term()}.
 network_identity(true) -> network_identity();
 network_identity(false) -> {ok, none}.
+
+-doc "Return the network identity from the validation target when it is the root.".
+-spec network_identity(boolean(), {binary(), <<_:256>>}) ->
+          {ok, none | <<_:256>>} | {error, term()}.
+network_identity(false, {_Ns, <<_:256>>}) ->
+    {ok, none};
+network_identity(true, {?ROOT_NS, <<_:256>> = RootAnchor}) ->
+    %% The root anchor is the network identity. Deriving it from the record
+    %% avoids a circular lookup while the root itself is being replayed.
+    {ok, RootAnchor};
+network_identity(true, {_Ns, <<_:256>>}) ->
+    network_identity().
 
 desired_genesis_anchor(Ns) ->
     Desired = application:get_env(quod, namespace_desired, #{}),

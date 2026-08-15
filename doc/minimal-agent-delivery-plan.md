@@ -1,15 +1,16 @@
 # Minimal durable agent delivery — Slices 3 and 4
 
-**Status:** the architecture is reviewed. Delivery implementation waits for
-distributed-proof steps 2--6; step 1's target-driven `action/3` and local
-`transaction/1` foundation landed in Quod 0.7.58. No agent-delivery component
-is implemented or deployed.
+**Status:** the architecture is reviewed. The durable multi-ontology
+transaction prerequisite is implemented in Quod 0.7.69, and the
+target-driven `action/3` and local `transaction/1` foundation landed in Quod
+0.7.58. No agent-delivery component is implemented or deployed.
 
 ## 1. Why this is next
 
 `doc/agent-fipa-plan.md` is the normative base specification. It requires Quod to
 finish reactions and reliable effects (Slice 3), then prove them with two real
-hosted agents (Slice 4), before signed users and `subject/3` (Slice 5).
+hosted agents (Slice 4), before agent delegation and the full `subject/3`
+authority chain.
 
 That order is also required by `doc/ontology-lifecycle-authorization-plan.md`:
 a user subject may not be enabled until Quod has a real wielded agent,
@@ -19,15 +20,18 @@ ingress, exact subject propagation through `::`, and validator-side transaction
 authorization.
 
 That lifecycle requirement is stricter than the broad sequencing currently in
-`agent-fipa-plan.md`, which lists signed subjects in Slice 5 but complete
+`agent-fipa-plan.md`, which lists agent subjects in Slice 5 but complete
 wielding in Slice 6. Before subject work begins, those sections must be aligned:
 the next subject milestone must include the minimum real wielding,
 `accepts_wielding/2`, and capability derivation needed to make its subject
 truthful. It must not enable a subject first and repair it one slice later.
 
-Therefore this milestone does **not** introduce a temporary `user(Key)`
-principal, an empty agent chain, or caller-supplied capabilities. Node keys,
-users, agents, and ontology names remain separate identities.
+The signed-client work now introduces a real, signature-bound `{user, Key}`
+base principal independently of this milestone. That principal is not a
+temporary agent subject: it contains no agent chain or capabilities and cannot
+claim either. This milestone still introduces no empty agent chain or
+caller-supplied capabilities. Node keys, users, agents, and ontology names
+remain separate identities.
 
 The milestone combines Slices 3 and 4 in one reviewed vertical plan, while
 implementing them in their normative order. The Slice-3 substrate is immediately
@@ -1275,8 +1279,9 @@ the exact uncommitted tree.
 
 ## 12. Deliberate non-goals
 
-- signed users, login/session ingress, `subject/3`, capabilities, delegation,
-  wielding, or validator user authorization;
+- changes to the existing client login and signed base-user ingress;
+- `subject/3`, capabilities, delegation, wielding, or agent-subject
+  authorization;
 - public FIPA ACL envelopes, AMS, DF, AID routing, federation, or subscriptions;
 - dynamic runtime declarations;
 - a generic effect dispatcher, callback/plugin framework, or copied KB;
@@ -1286,6 +1291,6 @@ the exact uncommitted tree.
   migration layer.
 
 After this milestone passes restart, ownership-churn, and mixed-traffic tests,
-the next reviewed milestone can introduce authenticated users and immutable
-subjects together with the minimum real wielding, receiving-side validation,
+the next reviewed agent milestone can extend the authenticated base user into
+immutable subjects together with the minimum real wielding, receiving-side validation,
 and capability derivation required by the stricter lifecycle specification.

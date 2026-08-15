@@ -240,26 +240,7 @@ origin_open(Target, Goal, Chain, OwnerActor, Selection) ->
     end.
 
 origin_scope(Target) ->
-    case signed_user_scope_admission(Target) of
-        ok -> origin_scope_admitted(Target);
-        {error, _} = Error -> Error
-    end.
-
-%% Scope wire V4 carries the signed principal and request digest, but its public
-%% propagation path deliberately remains closed until Slice 5. A user proof
-%% must never fall back to the forwarding node's authority. Same-ontology
-%% selection stays local; foreign signed-user scopes fail closed at this one
-%% activation boundary.
-signed_user_scope_admission(Target) ->
-    case quod_proof_context:principal() of
-        {user, <<_:256>>} ->
-            case quod_proof_context:origin_identity() of
-                {Target, <<_:256>>} -> ok;
-                {_OriginNs, <<_:256>>} -> {error, signed_scope_unavailable}
-            end;
-        _ ->
-            ok
-    end.
+    origin_scope_admitted(Target).
 
 origin_scope_admitted(Target) ->
     case quod_reg:where({quod_prolog, Target}) of
@@ -290,7 +271,10 @@ open_cohosted_scope(Target, Anchor, ScopeId) ->
                     try gen_server:call(
                           Engine,
                           {scope_open, ScopeId, ProofId, Anchor, ReadOnly,
-                           quod_proof_context:deadline_ms()},
+                           quod_proof_context:deadline_ms(),
+                           quod_proof_context:origin_identity(),
+                           quod_proof_context:principal(),
+                           quod_proof_context:scope_authentication()},
                           RemainingMs) of
                         {ok, Handle} ->
                             {ok, quod_scope_session:pid(Handle), Handle};
@@ -433,13 +417,14 @@ open_remote_routes(Target, Anchor, ScopeId,
                true -> read_only;
                false -> read_write
            end,
+    Authentication = quod_proof_context:scope_authentication(),
     {ok, AuthenticationDigest} =
-        quod_scope_wire:authentication_digest(node),
+        quod_scope_wire:authentication_digest(Authentication),
     Binding = {scope_binding, OriginKey, TargetKey,
                quod_proof_context:proof_id(), ScopeId,
                quod_proof_context:origin_identity(), {Target, Anchor}, Mode,
-               {node, OriginKey}, AuthenticationDigest},
-    case ensure_remote_scope(Endpoint, Binding) of
+               quod_proof_context:principal(), AuthenticationDigest},
+    case ensure_remote_scope(Endpoint, Binding, Authentication) of
         {ok, Handle} ->
             {ok, quod_scope_session:pid(Handle), Handle};
         {error, Reason} ->
@@ -458,13 +443,13 @@ open_remote_routes(Target, Anchor, ScopeId,
 open_remote_routes(Target, Anchor, ScopeId, [_Invalid | Rest], BestError) ->
     open_remote_routes(Target, Anchor, ScopeId, Rest, BestError).
 
-ensure_remote_scope(Endpoint, Binding) ->
+ensure_remote_scope(Endpoint, Binding, Authentication) ->
     Target = binding_target_namespace(Binding),
     case execution_remaining_ms() of
         0 -> {error, current_proof_limit()};
         RemainingMs ->
             case quod_ask_router:ensure_scope(
-                   Endpoint, Binding, RemainingMs) of
+                   Endpoint, Binding, Authentication, RemainingMs) of
                 {ok, Handle} -> bind_open_handle(Target, Handle);
                 {pending, Router, Generation, OpenRef} ->
                     await_remote_scope_open(

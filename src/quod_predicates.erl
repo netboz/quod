@@ -106,6 +106,7 @@ governed() -> [{peer_ready, 1}, {directory_host, 5},
                {admit, 3}, {remove, 1},
                {authorized_ontology_lifecycle, 1},
                {create_ontology, 2}, {join_ontology, 3},
+               {create_user_home, 0}, {current_user_home, 2},
                {user_home_genesis, 3},
                {ontology_join_state, 2}, {ontology_genesis_anchor, 2},
                {projection_noop, 1}, {enqueue_projection, 2}].
@@ -130,6 +131,14 @@ registry({create_ontology, 2}) ->
 registry({join_ontology, 3}) ->
     {effect, action_transition, quod_ontology_predicates,
      lifecycle_transition_predicate};
+registry({create_user_home, 0}) ->
+    {effect, action_transition, quod_ontology_predicates,
+     lifecycle_transition_predicate};
+%% Bind the private, engine-owned user principal to its deterministic home
+%% while selecting the create_user_home action declaration.
+registry({current_user_home, 2}) ->
+    {effect, normal, quod_ontology_predicates,
+     current_user_home_predicate};
 %% A root-policy-only pure validator. It proves that a user principal is
 %% creating precisely its own deterministic home, never arbitrary source.
 registry({user_home_genesis, 3}) ->

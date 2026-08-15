@@ -568,7 +568,7 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
     OriginIdentity = {P, quod_simplex:genesis_hash(P)},
     _ = quod_proof_context:start(
           ProofId, false, OriginIdentity,
-          quod_time:mono_ms() + 60000, anonymous),
+          quod_time:mono_ms() + 60000, {node, test_node_key()}),
     try
         {ok, ScopeId, Handle} = quod_proof_context:get_or_open_scope(
                          {B, Anchor},
@@ -577,7 +577,9 @@ t_unrelated_reentrant_invocation_has_no_transaction_lineage(
                                     Engine,
                                     {scope_open, NewScopeId, ProofId,
                                      Anchor, false,
-                                     quod_proof_context:deadline_ms()}) of
+                                     quod_proof_context:deadline_ms(),
+                                     OriginIdentity,
+                                     quod_proof_context:principal(), node}) of
                                  {ok, Opened} ->
                                      {ok, quod_scope_session:pid(Opened), Opened};
                                  {error, _} = Error ->
@@ -678,8 +680,8 @@ t_scope_session_binding(#{animals := A}) ->
     ScopeId = scope_id(1),
     {ok, Handle} = gen_server:call(
                      Engine,
-                     {scope_open, ScopeId, ProofId, Anchor, false,
-                      test_deadline()}),
+                     scope_open_request(
+                       A, ScopeId, ProofId, Anchor, false)),
     try
         {quod_scope_session, ScopePid, ScopeId, ProofId,
          SessionRef, A, Anchor} = Handle,
@@ -713,24 +715,24 @@ t_scope_session_binding(#{animals := A}) ->
         ?assertEqual(
            {ok, Handle},
            gen_server:call(
-             Engine, {scope_open, ScopeId, ProofId, Anchor, false,
-                      test_deadline()})),
+             Engine, scope_open_request(
+                       A, ScopeId, ProofId, Anchor, false))),
         ?assertEqual(
            {error, {anchor_conflict, A}},
            gen_server:call(
-             Engine, {scope_open, ScopeId, ProofId, <<0:256>>, false,
-                      test_deadline()})),
+             Engine, scope_open_request(
+                       A, ScopeId, ProofId, <<0:256>>, false))),
         ?assertEqual(
            {error, scope_mode_conflict},
            gen_server:call(
-             Engine, {scope_open, ScopeId, ProofId, Anchor, true,
-                      test_deadline()})),
+             Engine, scope_open_request(
+                       A, ScopeId, ProofId, Anchor, true))),
         ?assertEqual(
            {error, {anchor_conflict, A}},
              gen_server:call(
-               Engine, {scope_open, scope_id(2),
-                      crypto:strong_rand_bytes(32), <<0:256>>, false,
-                      test_deadline()}))
+               Engine, scope_open_request(
+                         A, scope_id(2), crypto:strong_rand_bytes(32),
+                         <<0:256>>, false)))
     after
         ok = quod_scope_session:close(Handle),
         ok = wait_workers(A, 0, ?WAIT_RETRIES)
@@ -746,8 +748,8 @@ t_stateless_scope_error_keeps_published_revision(
     ScopeId = scope_id(3),
     {ok, Handle} = gen_server:call(
                      Engine,
-                     {scope_open, ScopeId, ProofId, Anchor, false,
-                      test_deadline()}),
+                     scope_open_request(
+                       ChainB, ScopeId, ProofId, Anchor, false)),
     try
         InvocationId = invocation_id(1),
         Goal = {',', {assertz, {published_before_error, retained}},
@@ -783,9 +785,9 @@ t_scope_owner_death_reaps_session(#{animals := A}) ->
     Anchor = quod_simplex:genesis_hash(A),
     Owner = spawn(fun() ->
         Result = gen_server:call(
-                   Engine, {scope_open, scope_id(4),
-                            crypto:strong_rand_bytes(32), Anchor, false,
-                            test_deadline()}),
+                   Engine, scope_open_request(
+                             A, scope_id(4), crypto:strong_rand_bytes(32),
+                             Anchor, false)),
         Parent ! {owner_scope, self(), Result},
         receive stop -> ok end
     end),
@@ -809,8 +811,8 @@ t_scope_worker_crash_is_protocol_error(#{pets := P, slow := Slow}) ->
     ScopeId = scope_id(5),
     {ok, Handle} = gen_server:call(
                      Engine,
-                     {scope_open, ScopeId, ProofId, Anchor, false,
-                      test_deadline()}),
+                     scope_open_request(
+                       Slow, ScopeId, ProofId, Anchor, false)),
     InvocationId = invocation_id(1),
     {ok, OpenRef} = quod_scope_session:invoke_open(
                       Handle, InvocationId, loop,
@@ -1046,8 +1048,9 @@ t_scope_worker_limit(#{animals := A}) ->
        {error, {ontology_busy, A}},
        gen_server:call(
          quod_reg:where({quod_prolog, A}),
-         {scope_open, scope_id(164), crypto:strong_rand_bytes(32),
-          Anchor, false, test_deadline()})),
+         scope_open_request(
+           A, scope_id(164), crypto:strong_rand_bytes(32),
+           Anchor, false))),
     lists:foreach(fun quod_scope_session:close/1, Handles),
     ?assertEqual(ok, wait_workers(A, 0, ?WAIT_RETRIES)).
 
@@ -1097,8 +1100,17 @@ open_test_scope(Ns, ReadOnly, Id) ->
     Engine = quod_reg:where({quod_prolog, Ns}),
     gen_server:call(
       Engine,
-      {scope_open, scope_id(Id), crypto:strong_rand_bytes(32),
-       quod_simplex:genesis_hash(Ns), ReadOnly, test_deadline()}).
+      scope_open_request(
+        Ns, scope_id(Id), crypto:strong_rand_bytes(32),
+        quod_simplex:genesis_hash(Ns), ReadOnly)).
+
+scope_open_request(Ns, ScopeId, ProofId, Anchor, ReadOnly) ->
+    {scope_open, ScopeId, ProofId, Anchor, ReadOnly, test_deadline(),
+     {Ns, Anchor}, {node, test_node_key()}, node}.
+
+test_node_key() ->
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    NodeKey.
 
 test_deadline() -> quod_time:mono_ms() + 60000.
 

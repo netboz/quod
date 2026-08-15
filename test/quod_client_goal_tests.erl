@@ -113,6 +113,41 @@ signature_binds_every_request_field_test() ->
        fun(R) -> R#{not_after_ms => ?DEADLINE + 1} end,
        fun(R) -> R#{goal_text => <<"assertz(saved(no)).">>} end]).
 
+verified_variable_names_bind_the_durable_result_test() ->
+    KeyPair = quod_identity:generate(),
+    {PublicKey, _} = KeyPair,
+    {ok, Bytes} = quod_client_goal:encode(
+                    request(PublicKey, execute, <<"pair(X, Y).">>)),
+    Signature = quod_identity:sign(
+                  Bytes, quod_identity:key_term(KeyPair)),
+    {ok, Evidence} = quod_client_goal:verify(Bytes, Signature),
+    ?assertEqual(
+       {ok, #{<<"X">> => first, <<"Y">> => second}},
+       quod_client_goal:durable_bindings(
+         Evidence, #{0 => first, 1 => second})),
+    %% Results are projected from the signed name table. Proof-only indices,
+    %% including anonymous variables, are intentionally not public results.
+    ?assertEqual(
+       {ok, #{}},
+       quod_client_goal:durable_bindings(Evidence, #{2 => unknown})).
+
+anonymous_variables_are_omitted_from_named_results_test() ->
+    KeyPair = quod_identity:generate(),
+    {PublicKey, _} = KeyPair,
+    {ok, Bytes} = quod_client_goal:encode(
+                    request(PublicKey, execute, <<"pair(X, _).">>)),
+    Signature = quod_identity:sign(
+                  Bytes, quod_identity:key_term(KeyPair)),
+    {ok, Evidence} = quod_client_goal:verify(Bytes, Signature),
+    ?assertEqual(
+       {ok, #{<<"X">> => first}},
+       quod_client_goal:named_bindings(
+         Evidence, #{0 => first, 1 => intentionally_hidden})),
+    ?assertEqual(
+       {ok, #{<<"X">> => first}},
+       quod_client_goal:durable_bindings(
+         Evidence, #{0 => first, 1 => intentionally_hidden})).
+
 validator_context_is_exact_and_uses_admission_time_test() ->
     KeyPair = quod_identity:generate(),
     {PublicKey, _} = KeyPair,

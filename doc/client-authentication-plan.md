@@ -1,19 +1,20 @@
 # Client authentication and key custody
 
 **Status:** deterministic user identity, node-bound Ed25519
-challenge-response, short-lived node-local sessions, and constrained user-home
-foundation have landed. The pure signed-goal request/parser and authenticated
-local read endpoint are implemented in the working tree. Signed writes,
-cursors, remote scopes, and any-node forwarding remain staged as specified in
-`doc/signed-client-goals-plan.md`.
+challenge-response, short-lived node-local sessions, signed goals and cursors,
+signed multi-ontology scopes, unresolved-operation persistence, and the
+constrained user-home foundation are implemented in the working tree. Any-node
+forwarding and deployment of the hard protocol break remain staged as
+specified in `doc/signed-client-goals-plan.md`.
 
 ## Goal
 
-A person uses an Ed25519 user key to authenticate to any Quod node, chooses an
-agent they are allowed to wield, and receives a session whose immutable subject
-is carried into later signed goal requests. A client may submit an ordinary
-bounded Prolog goal; its signature, rather than a server-owned request catalogue,
-binds the exact intent.
+A person uses an Ed25519 user key to authenticate to a Quod node and receives a
+session bound to that base user identity. The client may submit an ordinary
+bounded Prolog goal; its signature, rather than a server-owned request
+catalogue, binds the exact intent. A later agent milestone may extend that base
+user into an immutable delegated subject after wielding is implemented; the
+current client does not fabricate an agent chain or capabilities.
 
 New user registration is open initially: a fresh key may create its own user
 home ontology. World, agent, and avatar access remain governed by their normal
@@ -57,17 +58,13 @@ browser support matrix are security-sensitive versioned work. The initial
 implementation must use a reviewed password KDF and authenticated encryption;
 it must not silently fall back to plaintext browser storage.
 
-## Registration
+## User-home creation
 
-The client creates a key locally and submits a typed registration request:
-
-```text
-register_user_v1(PublicKey, ClientNonce, Signature)
-```
-
-`Signature` covers a domain-separated canonical request containing the
-network identity, public key, and nonce. A node
-verifies it before it begins the constrained user-home foundation operation.
+The client creates its key locally, authenticates it, and signs the ordinary
+argument-free Prolog goal `create_user_home.` against the exact `quod:root`
+identity. The goal uses the same canonical signed request, operation ID, proof,
+ACL, lifecycle effect, and durable outcome path as every other local signed
+write. There is no registration-only protocol or executor.
 
 There is no global ontology containing every user. `quod:user` is the shared
 model and founding policy; a key deterministically names one home namespace:
@@ -85,10 +82,11 @@ user_home(UserId, Namespace).
 user_home_version(1).
 ```
 
-The registration boundary derives the namespace and these facts itself; it
-never accepts client-selected namespace text or Prolog source. Reusing a key
-therefore resolves the same home. Display names remain optional profile data
-inside that home and do not participate in identity or routing.
+The lifecycle predicate derives the namespace and these facts from the
+engine-owned signed user principal; it never accepts client-selected namespace
+text or Prolog source. Reusing a key therefore resolves the same home. Display
+names remain optional profile data inside that home and do not participate in
+identity or routing.
 
 The home also contains one fixed ACL rule, supplied by Quod rather than the
 browser. It grants `can_invoke/4` only to that home's active `user_key`:
@@ -101,13 +99,11 @@ This is source because Prolog variables must remain variables. Genesis data
 facts deliberately do not preserve variables; they materialize an unbound
 slot as the literal value `unbound`.
 
-Open registration is deliberately narrow: it proves possession of the key,
+Open home creation is deliberately narrow: it proves possession of the key,
 not trust, citizenship, ownership of an avatar, or any privileged capability.
-Rate limits and anti-abuse controls are ingress policy, not durable identity
-facts. The initial node-local boundary admits at most 64 registration attempts
-per minute, at most four from one peer address, and keeps at most 256 peer
-counters. These limits are deliberately operational and replaceable; they do
-not become user data or a network-wide identity registry.
+The shared signed-goal rate limits and anti-abuse controls are ingress policy,
+not durable identity facts. They are deliberately operational and replaceable;
+they do not become user data or a network-wide identity registry.
 
 User homes are sparse: dormant homes are durable data, not permanently running
 committees. Their placement and replication policy is separate from identity
@@ -144,21 +140,20 @@ subject(UserId, [AgentId], Capabilities)
 Changing wielded agent creates a new immutable session subject rather than
 mutating a subject beneath an in-flight request.
 
-## Implemented registration endpoint
+## Implemented user-home request
 
-The dedicated client listener accepts only:
+After login, the dedicated client listener accepts the same request as any
+other signed local execution:
 
 ```text
-POST /api/user/register
-{ session_id, client_nonce, signature }
+POST /api/goals/execute
+{ session_id, request, signature }
 ```
 
-`session_id` must name a currently valid node-local challenge session.
-`signature` covers the fixed registration bytes for that session key, the
-pinned root genesis identity, and `client_nonce`. The server derives every
-other value—user namespace, fixed facts, fixed ACL source, and root lifecycle
-request. It therefore cannot create a client-selected ontology or execute a
-client-supplied goal.
+The signed request contains `create_user_home.`, targets the exact root anchor,
+and is bound to the session key. The proof engine derives every other
+value—user namespace, fixed facts, fixed ACL source, and lifecycle effect. The
+client cannot choose the home name or genesis.
 
 ## Transport
 
@@ -175,22 +170,10 @@ user authentication is the Ed25519 challenge-response below, which is unaffected
 by who signed the transport. It exists to unlock the secure-context APIs and to
 keep the session handle off the wire in the clear.
 
-## Known gaps
+## Current boundaries
 
-Four properties are specified above but not yet enforced. They are recorded
-here so that nothing downstream mistakes the current state for the finished one.
-
-**A plan carries a user principal that no user signed.** Durable plans admit a
-`{user, PublicKey}` principal, and every validator re-proves `can_invoke` as
-that claimed user — but a plan is signed only by the sealing node's key. Nothing
-binds the claimed user to a user signature, so an admitted validator can assert
-authority it never saw. The signed-goal ingress below closes this by binding the
-user's signature and request digest into every plan and transaction. Until then,
-user authority is only as strong as the node that sealed it. The blast radius
-today is small — the sole writable user-principal operation is founding one's
-own home, whose shape root policy pins exactly — but no new writable
-user-principal operation should be exposed ahead of that binding. The signed
-local read endpoint cannot create a plan or ledger row.
+These boundaries are explicit so downstream work does not invent a second
+identity or routing path.
 
 **Top-level user authorization has a canonical chain shape.** A user goal
 enters its target directly rather than through another ontology. Its policy
@@ -201,19 +184,21 @@ invisible empty-chain host permission from matching, and lets every validator
 re-prove the identical policy decision. ACL authors should treat this as a
 direct browser entry, not as the target calling itself.
 
-**A user principal does not survive a scope boundary.** An invocation that
-reaches another ontology through a scope session is authorized as the hosting
-node, not as the user, and plans sealed on both sides of such a boundary carry
-different principals — which the begin-record check rejects. So a user-principal
-proof spanning more than one ontology cannot commit today. Single-namespace
-registration is unaffected. Carrying the principal and signed request evidence
-across the boundary is a prerequisite for the first multi-ontology user goal.
+**A user principal survives every scope boundary unchanged.** Local, co-hosted,
+remote, and nested scopes carry the exact signed request and `{user, Key}`
+principal. Each target verifies the evidence before running its existing
+`can_invoke/4` policy, and every participant plan binds the same request digest.
+No target substitutes the hosting node identity and no second ACL exists.
 
-**Registration is rate-limited but not capped.** A node bounds registrations per
-minute and per peer, not in total, and each one founds a durable ontology. Keys
-are free, so sustained low-rate registration grows without limit. The bound
-belongs in policy rather than in the ingress limiter — an admission predicate
-the root ontology proves — consistent with treating business restrictions as
+**Ingress is still target-local.** The node receiving a signed HTTP request
+must host the exact target ontology. Forwarding an unchanged signed request
+from an arbitrary gateway to a target validator belongs to Slice 6; scope
+transport inside an admitted proof is already implemented.
+
+**User-home creation is rate-limited but not capped.** A node bounds signed
+goals per user and peer, not homes in total, and each new key may found a durable
+ontology. Any market-specific bound belongs in the root policy rather than in a
+special ingress limiter, consistent with treating business restrictions as
 predicates rather than hard-coded runtime rules.
 
 ## Signed goal ingress
@@ -232,6 +217,13 @@ its digest. The existing node signature continues to attest consensus
 authorship; it does not replace the user's signature. `outcome_unknown` is
 resolved by its exact anchored operation or transaction outcome reference,
 never by submitting the goal request again.
+
+Before Execute or cursor Accept, the browser stores the exact signed request in
+a bounded 64-row IndexedDB journal. A reload queries only
+`POST /api/goals/outcomes` with those original bytes. Definite outcomes remove
+rows; pending or unavailable outcomes retain them. Nothing is evicted to make
+room. Without durable browser storage, login and reads continue to work but
+durable submission is disabled before any write request is sent.
 
 Client code may construct a goal from any interaction or received event, or a
 person may enter one directly. Every case uses this same ingress.

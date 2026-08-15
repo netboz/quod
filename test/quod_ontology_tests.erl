@@ -23,6 +23,12 @@ ontology_creation_test_() ->
           ?_test(action_boundary_and_reasons(Fixture)),
           ?_test(lifecycle_authorization_guards(Fixture)),
           ?_test(authenticated_registration_creates_its_home(Fixture)),
+          {timeout, 30,
+           ?_test(signed_execute_omits_anonymous_bindings(Fixture))},
+          {timeout, 30,
+           ?_test(signed_cursor_accept_preserves_operation(Fixture))},
+          {timeout, 30,
+           ?_test(signed_multi_ontology_write_preserves_one_user_request(Fixture))},
           ?_test(foreign_prerequisite_excludes_direct_effect(Fixture)),
           ?_test(action_timeout_is_outcome_unknown(Fixture)),
           ?_test(effect_completion_survives_journal_restart(Fixture)),
@@ -755,9 +761,6 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:execute(?ROOT_NS, true)),
-    ?assertMatch(
-       {ok, [#{}], _},
-       quod_prolog:execute_as(?ROOT_NS, true, {user, UserKey})),
     ?assertEqual(
        effect,
        quod_predicates:class({authorized_ontology_lifecycle, 1})),
@@ -765,24 +768,6 @@ lifecycle_authorization_guards(#{dir := Dir}) ->
                  quod_predicates:class({create_ontology_effect, 2})),
     ?assertEqual(undefined,
                  quod_predicates:class({join_ontology_effect, 3})),
-
-    %% The authenticated-user action path is still mediated by the same root
-    %% declaration and policy.  It creates one deterministic home locally;
-    %% there is no global user registry and no node-ownership condition.
-    ?assertMatch(
-       {ok, [#{}], _},
-       quod_prolog:run_action_as(
-         ?ROOT_NS, {create_ontology, UserNs, UserOptions},
-         {user, UserKey})),
-    ok = wait_ready(UserNs, 200),
-    ?assertMatch(
-       {ok, [#{}], _},
-       quod_prolog:prove_ro(UserNs, {user_key, {'UserId'}, UserKey, active})),
-    ?assertMatch(
-       {ok, [#{}], _},
-       quod_prolog:prove_ro(
-         UserNs,
-         {can_invoke, anything, {user, UserKey}, [remote], UserNs})),
 
     Desired0 = application:get_env(quod, namespace_desired, #{}),
     ?assertEqual(
@@ -984,26 +969,52 @@ authenticated_registration_creates_its_home(_Fixture) ->
                         max_challenges => 4, max_sessions => 4}),
     Peer = {127, 0, 0, 1},
     try
-        LoginNonce = crypto:strong_rand_bytes(32),
-        {ok, Challenge} =
-            quod_client_auth:issue_challenge(PublicKey, LoginNonce, Peer),
-        ChallengeId = maps:get(challenge_id, Challenge),
-        {ok, ChallengeBytes} = quod_user:challenge_bytes(
-                                 NetworkId, NodeKey, ChallengeId, PublicKey,
-                                 LoginNonce, maps:get(server_nonce, Challenge),
-                                 maps:get(expires_ms, Challenge)),
-        LoginSignature =
-            quod_identity:sign(ChallengeBytes, quod_identity:key_term(KeyPair)),
-        {ok, #{session_id := SessionId}} =
-            quod_client_auth:complete_challenge(ChallengeId, LoginSignature),
-        RegistrationNonce = crypto:strong_rand_bytes(32),
-        {ok, RegistrationBytes} =
-            quod_user:registration_bytes(NetworkId, PublicKey, RegistrationNonce),
-        RegistrationSignature =
-            quod_identity:sign(RegistrationBytes, quod_identity:key_term(KeyPair)),
-        {ok, #{namespace := UserNs}} =
-            quod_client_registration:register(
-              SessionId, RegistrationNonce, RegistrationSignature, Peer),
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        OpenInvoke = root_open_invoke_policy(),
+        HostInvoke = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
+        %% The generated host rule precedes the source's open rule and both
+        %% unify with the source pattern. Remove both, then put back only the
+        %% exact empty-chain host rule for this authorization test.
+        commit_root(
+          {',', {retract, OpenInvoke},
+           {',', {retract, OpenInvoke}, {asserta, HostInvoke}}}),
+        try
+            %% The generated empty-chain host rule still admits the node's
+            %% lifecycle request after the public root rule is removed.
+            NodeCreatedNs = unique_ns(<<"node-lifecycle-acl">>),
+            ?assertMatch(
+               {ok, [#{}], _},
+               quod_prolog:run_action(
+                 ?ROOT_NS,
+                 {create_ontology, NodeCreatedNs, [open_policy()]})),
+            ok = wait_ready(NodeCreatedNs, 200),
+
+            %% A signed user has a non-empty caller chain and therefore cannot
+            %% use that host rule. Lifecycle does not bypass can_invoke/4.
+            {DeniedBytes, DeniedSignature} = signed_user_goal(
+                                                NetworkId, PublicKey, KeyPair,
+                                                ?ROOT_NS, NetworkId, execute,
+                                                SessionExpires,
+                                                <<"create_user_home.">>),
+            ?assertMatch(
+               {ok, _DeniedEvidence,
+                {fail, [{not_allowed, ?ROOT_NS}]}},
+               quod_client_goal_ingress:submit(
+                 execute, SessionId, DeniedBytes, DeniedSignature, Peer))
+        after
+            commit_root({assertz, OpenInvoke})
+        end,
+        {ok, UserNs} = quod_user:home_namespace(PublicKey),
+        {RequestBytes, RequestSignature} = signed_user_goal(
+                                             NetworkId, PublicKey, KeyPair,
+                                             ?ROOT_NS, NetworkId, execute,
+                                             SessionExpires,
+                                             <<"create_user_home.">>),
+        ?assertMatch(
+           {ok, _Evidence, {ok, [#{}], _}},
+           quod_client_goal_ingress:submit(
+             execute, SessionId, RequestBytes, RequestSignature, Peer)),
         ok = wait_ready(UserNs, 200),
         ?assertMatch(
            {ok, [#{}], _},
@@ -1017,6 +1028,298 @@ authenticated_registration_creates_its_home(_Fixture) ->
         AuthRef = monitor(process, AuthPid),
         exit(AuthPid, shutdown),
         receive {'DOWN', AuthRef, process, AuthPid, _} -> ok after 5000 -> ok end
+    end.
+
+signed_cursor_accept_preserves_operation(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _Seed} = KeyPair = quod_identity:generate(),
+    Peer = {127, 0, 0, 1},
+    PreviousClientEnabled = application:get_env(quod, client_enabled),
+    application:set_env(quod, client_enabled, true),
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    {ok, CursorPid} = quod_client_cursor:start_link(),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Ns = unique_ns(<<"signed-cursor">>),
+        Source =
+            <<"can_invoke(_, _, _, _).\n"
+              "ignored(hidden).\n"
+              "pick(first).\n"
+              "pick(second).\n">>,
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:run_action(
+             ?ROOT_NS,
+             {create_ontology, Ns, [{source, Source}]})),
+        ok = wait_ready(Ns, 200),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        {RequestBytes, RequestSignature} =
+            signed_user_goal(
+              NetworkId, PublicKey, KeyPair, Ns, Anchor, cursor,
+              SessionExpires,
+              <<"pick(X), ignored(_), assertz(chosen(X)).">>),
+        {ok, Evidence0,
+         {solution, CursorId, #{0 := first}, _Height0}} =
+            quod_client_goal_ingress:submit(
+              cursor, SessionId, RequestBytes, RequestSignature, Peer),
+        {ok, Evidence1,
+         {solution, CursorId, #{0 := second}, _Height1}} =
+            quod_client_goal_ingress:cursor_command(
+              SessionId, CursorId, next, Peer),
+        ?assertEqual(Evidence0, Evidence1),
+        {ok, Evidence2, {ok, [#{0 := second}], Height}} =
+            quod_client_goal_ingress:cursor_command(
+              SessionId, CursorId, accept, Peer),
+        ?assertEqual(Evidence0, Evidence2),
+        ?assertMatch({ok, [#{}], _},
+                     quod_prolog:prove_ro(Ns, {chosen, second})),
+
+        RequestAuth = quod_client_goal:request_auth(Evidence0),
+        OperationRef = maps:get(operation_ref, Evidence0),
+        Desired = application:get_env(quod, namespace_desired, #{}),
+        Config = maps:get(Ns, maps:get(content, Desired)),
+        {ok, Store} = quod_ledger_store:open_ro(
+                        Ns, quod_ledger_store:ledger_dir(Config)),
+        try
+            {ok, #entry{data = {batch, Transactions}}} =
+                quod_ledger_store:read_at(Store, Height),
+            Matching =
+                [Transaction
+                 || #transaction{request_auth = StoredAuth} = Transaction
+                        <- Transactions,
+                    StoredAuth =:= RequestAuth],
+            ?assertMatch([#transaction{}], Matching),
+            [Committed] = Matching,
+            {ok, DurableResult} =
+                quod_durable_term:decode_result(
+                  Committed#transaction.result),
+            ?assertEqual([{<<"X">>, second}], DurableResult),
+            {ok, Claim} = quod_transaction:request_claim(Committed),
+            ?assertEqual(OperationRef, maps:get(operation_ref, Claim))
+        after
+            ok = quod_ledger_store:close(Store)
+        end
+    after
+        stop_process(CursorPid),
+        stop_process(AuthPid),
+        restore_env([{client_enabled, PreviousClientEnabled}])
+    end.
+
+signed_execute_omits_anonymous_bindings(_Fixture) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _Seed} = KeyPair = quod_identity:generate(),
+    Peer = {127, 0, 0, 1},
+    PreviousClientEnabled = application:get_env(quod, client_enabled),
+    application:set_env(quod, client_enabled, true),
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Ns = unique_ns(<<"signed-anonymous-execute">>),
+        Source =
+            <<"can_invoke(_, _, _, _).\n"
+              "draft(first).\n">>,
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:run_action(
+             ?ROOT_NS,
+             {create_ontology, Ns, [{source, Source}]})),
+        ok = wait_ready(Ns, 200),
+        Anchor = quod_simplex:genesis_hash(Ns),
+        {RequestBytes, RequestSignature} =
+            signed_user_goal(
+              NetworkId, PublicKey, KeyPair, Ns, Anchor, execute,
+              SessionExpires,
+              <<"draft(_), assertz(final(ok)).">>),
+        ?assertMatch(
+           {ok, _Evidence, {ok, [#{}], _Height}},
+           quod_client_goal_ingress:submit(
+             execute, SessionId, RequestBytes, RequestSignature, Peer)),
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:prove_ro(Ns, {final, ok}))
+    after
+        stop_process(AuthPid),
+        restore_env([{client_enabled, PreviousClientEnabled}])
+    end.
+
+signed_multi_ontology_write_preserves_one_user_request(#{dir := Dir}) ->
+    {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+    {ok, NodeKey} = application:get_env(quod, node_pubkey),
+    {PublicKey, _Seed} = KeyPair = quod_identity:generate(),
+    Peer = {127, 0, 0, 1},
+    PreviousClientEnabled = application:get_env(quod, client_enabled),
+    application:set_env(quod, client_enabled, true),
+    {ok, AuthPid} = quod_client_auth:start_link(
+                      #{network_id => NetworkId, node_key => NodeKey,
+                        max_challenges => 4, max_sessions => 4}),
+    {ok, ForeignLogPid} = quod_foreign_log:start_link(
+                            #{cache_dir => filename:join(
+                                              Dir, "signed-foreign-log"),
+                              page_timeout_ms => 1000}),
+    unlink(ForeignLogPid),
+    try
+        #{session_id := SessionId, expires_ms := SessionExpires} =
+            open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+        Origin = unique_ns(<<"signed-origin">>),
+        Left = unique_ns(<<"signed-left">>),
+        Right = unique_ns(<<"signed-right">>),
+        Denied = unique_ns(<<"signed-denied">>),
+        UserOnly =
+            [{source,
+              <<"can_invoke(_, user(_), _, _).\n">>}],
+        lists:foreach(
+          fun(Ns) ->
+              ?assertMatch(
+                 {ok, [#{}], _},
+                 quod_prolog:run_action(
+                   ?ROOT_NS, {create_ontology, Ns, UserOnly})),
+              ok = wait_ready(Ns, 200)
+          end, [Origin, Left, Right]),
+        ?assertMatch(
+           {ok, [#{}], _},
+           quod_prolog:run_action(
+             ?ROOT_NS,
+             {create_ontology, Denied,
+              [{source, <<"can_invoke(_, node(_), _, _).\n">>}]})),
+        ok = wait_ready(Denied, 200),
+
+        %% The forwarding node cannot borrow its own identity at the target.
+        ?assertMatch(
+           {fail, [_ | _]},
+           quod_prolog:prove(
+             Origin,
+             {'::', Left, {assertz, {node_was_not_the_user, bad}}})),
+
+        OriginAnchor = quod_simplex:genesis_hash(Origin),
+        GoalText =
+            <<$", Left/binary, $", "::assertz(signed_mark(left)), ",
+              $", Right/binary, $", "::assertz(signed_mark(right)).">>,
+        {RequestBytes, RequestSignature} =
+            signed_user_goal(
+              NetworkId, PublicKey, KeyPair, Origin, OriginAnchor, execute,
+              SessionExpires, GoalText),
+        {ok, Evidence,
+         {ok, [#{}],
+          #{ref := {group, Origin, OriginAnchor, _, _, _} = GroupRef,
+            participant_slots := Slots}}} =
+            quod_client_goal_ingress:submit(
+              execute, SessionId, RequestBytes, RequestSignature, Peer),
+        %% The origin's top-level ACL read is itself a committed dependency,
+        %% so this write has three participants even though facts change only
+        %% on the two foreign ontologies.
+        ?assertEqual(3, length(Slots)),
+        ?assertMatch({ok, [#{}], _},
+                     quod_prolog:prove_ro(Left, {signed_mark, left})),
+        ?assertMatch({ok, [#{}], _},
+                     quod_prolog:prove_ro(Right, {signed_mark, right})),
+
+        DeniedGoal =
+            <<$", Left/binary, $", "::assertz(must_roll_back), ",
+              $", Denied/binary, $", "::assertz(must_not_commit).">>,
+        {DeniedBytes, DeniedSignature} =
+            signed_user_goal(
+              NetworkId, PublicKey, KeyPair, Origin, OriginAnchor, execute,
+              SessionExpires, DeniedGoal),
+        {ok, _DeniedEvidence, {fail, DeniedReasons}} =
+            quod_client_goal_ingress:submit(
+              execute, SessionId, DeniedBytes, DeniedSignature, Peer),
+        ?assert(lists:member({not_allowed, Denied}, DeniedReasons)),
+        ?assertMatch({fail, _}, quod_prolog:prove_ro(Left, must_roll_back)),
+        ?assertMatch({fail, _},
+                     quod_prolog:prove_ro(Denied, must_not_commit)),
+
+        BeginControl = ledger_control(Origin, 'begin'),
+        Begin = quod_dtx:control_body(BeginControl),
+        RequestAuth = quod_client_goal:request_auth(Evidence),
+        RequestBinding = quod_client_goal:request_binding(Evidence),
+        ?assertEqual(RequestAuth, quod_dtx:request_auth(Begin)),
+        PrepareControls = [ledger_control(Ns, prepare)
+                           || Ns <- [Origin, Left, Right]],
+        PreparePayloads =
+            [begin
+                 ?assert(quod_dtx:prepare_matches_begin(Control, Begin)),
+                 {ok, Manifest, _PlanDigest, PlanBlob} =
+                     quod_dtx:prepare_payload(Control),
+                 {ok, Plan} = quod_dtx:decode(PlanBlob),
+                 ?assertEqual({user, PublicKey}, quod_dtx:principal(Plan)),
+                 ?assertEqual(RequestBinding,
+                              quod_dtx:request_binding(Plan)),
+                 {Manifest, Plan}
+             end || Control <- PrepareControls],
+        [{Manifest, _}, {Manifest, _}, {Manifest, _}] = PreparePayloads,
+
+        OperationRef = maps:get(operation_ref, Evidence),
+        ?assertMatch(
+           {ok, #{status := claimed, request_digest := _,
+                  outcome_ref := GroupRef}},
+           quod_prolog:outcome(OperationRef))
+    after
+        stop_process(ForeignLogPid),
+        stop_process(AuthPid),
+        restore_env([{client_enabled, PreviousClientEnabled}])
+    end.
+
+open_client_session(NetworkId, NodeKey, KeyPair = {PublicKey, _Seed}, Peer) ->
+    LoginNonce = crypto:strong_rand_bytes(32),
+    {ok, Challenge} =
+        quod_client_auth:issue_challenge(PublicKey, LoginNonce, Peer),
+    ChallengeId = maps:get(challenge_id, Challenge),
+    {ok, ChallengeBytes} = quod_user:challenge_bytes(
+                             NetworkId, NodeKey, ChallengeId, PublicKey,
+                             LoginNonce, maps:get(server_nonce, Challenge),
+                             maps:get(expires_ms, Challenge)),
+    LoginSignature =
+        quod_identity:sign(ChallengeBytes, quod_identity:key_term(KeyPair)),
+    {ok, Session} =
+        quod_client_auth:complete_challenge(ChallengeId, LoginSignature),
+    Session.
+
+signed_user_goal(NetworkId, PublicKey, KeyPair, TargetNs, TargetAnchor,
+                 Mode, SessionExpires, GoalText) ->
+    Request = #{network_identity => NetworkId,
+                user_public_key => PublicKey,
+                operation_id => crypto:strong_rand_bytes(32),
+                target_namespace => TargetNs,
+                target_genesis_anchor => TargetAnchor,
+                mode => Mode,
+                parser_version => 1,
+                not_after_ms => min(SessionExpires,
+                                    quod_time:now_ms() + 30000),
+                goal_text => GoalText},
+    {ok, RequestBytes} = quod_client_goal:encode(Request),
+    {RequestBytes,
+     quod_identity:sign(RequestBytes, quod_identity:key_term(KeyPair))}.
+
+ledger_control(Ns, Kind) ->
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Config = maps:get(Ns, maps:get(content, Desired)),
+    {ok, Store} = quod_ledger_store:open_ro(
+                    Ns, quod_ledger_store:ledger_dir(Config)),
+    try
+        ledger_control(Store, quod_ledger_store:last(Store), Kind)
+    after
+        ok = quod_ledger_store:close(Store)
+    end.
+
+ledger_control(_Store, 0, Kind) ->
+    error({missing_dtx_control, Kind});
+ledger_control(Store, Slot, Kind) ->
+    case quod_ledger_store:read_at(Store, Slot) of
+        {ok, #entry{data = Data}} ->
+            case quod_ledger:classify(Data) of
+                {Kind, Control} -> Control;
+                _ -> ledger_control(Store, Slot - 1, Kind)
+            end;
+        not_found ->
+            ledger_control(Store, Slot - 1, Kind)
     end.
 
 %% A direct local effect cannot be hidden inside a distributed transaction.
@@ -1415,6 +1718,13 @@ root_create_policy() ->
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     [Policy] =
         [Term || {':-', {can_create_ontology, {node, _}, _, _}, _} = Term <-
+                     quod_prolog:read_terms(File)],
+    Policy.
+
+root_open_invoke_policy() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Policy] =
+        [Term || {can_invoke, _, _, _, _} = Term <-
                      quod_prolog:read_terms(File)],
     Policy.
 

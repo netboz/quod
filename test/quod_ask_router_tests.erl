@@ -11,7 +11,7 @@ pending_precedes_send_and_scope_is_reused_test() ->
           Binding = binding(OriginKey, TargetKey, 1, <<"quod:target">>, 11),
           OpenRef = pending_ref(
                       quod_ask_router:ensure_scope(
-                        Router, endpoint(), Binding, 30000), Router),
+                        Router, endpoint(), Binding, node, 30000), Router),
           ?assertEqual(1, maps:get(scopes, quod_ask_router:test_stats(Router))),
           {OpenRef, Channel} = receive_open(TargetKey),
           ?assertEqual(quod_scope_wire:request_channel(<<"quod:target">>), Channel),
@@ -33,10 +33,56 @@ pending_precedes_send_and_scope_is_reused_test() ->
           ?assertEqual({ok, Handle},
                        quod_ask_router:ensure_scope(
                          Router, {"different.invalid", 9999},
-                         ReuseBinding, 1)),
+                         ReuseBinding, node, 1)),
           receive {open_requested, _, _, _, _} -> ?assert(false)
           after 20 -> ok
           end,
+          ok = quod_ask_router:unregister(Handle),
+          await_scope_count(Router, 0),
+          stop_link(RequestLink),
+          stop_link(ReturnLink)
+      end).
+
+signed_authentication_is_carried_unchanged_on_remote_open_test() ->
+    with_router(
+      fun(Router, TestPid, OriginKey, TargetKey) ->
+          Fixture = quod_ct:signed_goal_fixture(#{}),
+          Authentication =
+              {signed_goal, maps:get(request_bytes, Fixture),
+               maps:get(signature, Fixture)},
+          Binding = signed_binding(OriginKey, TargetKey, Fixture),
+          OpenRef = pending_ref(
+                      quod_ask_router:ensure_scope(
+                        Router, endpoint(), Binding, Authentication, 30000),
+                      Router),
+          {OpenRef, Channel} = receive_open(TargetKey),
+          RequestLink = fake_link(TestPid, request),
+          Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
+          {scope_command, Binding, 1, RequestId, 30000,
+           {scope_open, Authentication}} = receive_command(request),
+
+          %% The router binds the exact opaque authentication bytes.  Their
+          %% signature and principal are verified independently by the target.
+          {signed_goal, RequestBytes, Signature} = Authentication,
+          <<First, Rest/binary>> = RequestBytes,
+          Altered = {signed_goal, <<(First bxor 1), Rest/binary>>, Signature},
+          ?assertEqual(
+             {error, invalid_binding},
+             quod_ask_router:ensure_scope(
+               Router, endpoint(), Binding, Altered, 30000)),
+          ?assertEqual(
+             {error, invalid_binding},
+             quod_ask_router:ensure_scope(
+               Router, endpoint(), Binding, node, 30000)),
+
+          ReturnLink = fake_link(TestPid, return),
+          send_event(Router, TargetKey, ReturnLink, Binding,
+                     1, RequestId, 1, 0, false, {scope_opened, 42}),
+          Handle = receive
+                       {quod_scope_open, OpenRef,
+                        {ok, H, 42, 0, false}} -> H
+                   after ?TIMEOUT -> error(open_timeout)
+                   end,
           ok = quod_ask_router:unregister(Handle),
           await_scope_count(Router, 0),
           stop_link(RequestLink),
@@ -525,7 +571,7 @@ owner_and_peer_bounds_reject_before_open_test() ->
                          4,
                          binding(OriginKey, TargetKey, N,
                                  namespace(N), N),
-                         proof_id(1)), 1000)
+                         proof_id(1)), node, 1000)
                      || N <- lists:seq(1, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER)],
           ?assert(lists:all(fun(Result) -> is_pending(Result, Router) end,
                            Results)),
@@ -538,7 +584,7 @@ owner_and_peer_bounds_reject_before_open_test() ->
                  binding(OriginKey, key(2), 100,
                          <<"quod:overflow">>, 100),
                  proof_id(1)),
-               1000)),
+               node, 1000)),
           ?assertEqual(?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
                        maps:get(scopes, quod_ask_router:test_stats(Router)))
       end),
@@ -872,7 +918,7 @@ with_open_scope(Fun) ->
           Binding = binding(OriginKey, TargetKey, 1, <<"quod:target">>, 11),
           OpenRef = pending_ref(
                       quod_ask_router:ensure_scope(
-                        Router, endpoint(), Binding, 30000), Router),
+                        Router, endpoint(), Binding, node, 30000), Router),
           {OpenRef, Channel} = receive_open(TargetKey),
           RequestLink = fake_link(TestPid, request),
           Router ! {link_up, OpenRef, TargetKey, Channel, RequestLink},
@@ -977,7 +1023,7 @@ batch_owner(Router, TestPid, Bindings) ->
     spawn(
       fun() ->
           Results = [quod_ask_router:ensure_scope(
-                       Router, endpoint(), Binding, 30000)
+                       Router, endpoint(), Binding, node, 30000)
                      || Binding <- Bindings],
           TestPid ! {batch_owner_result, self(), Results},
           batch_owner_loop(Router, TestPid)
@@ -996,7 +1042,7 @@ owner_loop(Router, TestPid) ->
     receive
         {ensure, Endpoint, Binding} ->
             Result = quod_ask_router:ensure_scope(
-                       Router, Endpoint, Binding, 1000),
+                       Router, Endpoint, Binding, node, 1000),
             TestPid ! {owner_result, self(), Result},
             owner_loop(Router, TestPid);
         {identify, Endpoint, Namespace, RemainingMs} ->
@@ -1081,6 +1127,16 @@ binding(OriginKey, TargetKey, N, TargetNs, AnchorN) ->
     {scope_binding, OriginKey, TargetKey, proof_id(N), id(N),
      {<<"quod:origin">>, key(10)}, {TargetNs, key(AnchorN)}, read_write,
      {node, OriginKey}, AuthenticationDigest}.
+
+signed_binding(OriginKey, TargetKey, Fixture) ->
+    Authentication =
+        {signed_goal, maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture)},
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(Authentication),
+    {scope_binding, OriginKey, TargetKey, proof_id(1), id(1),
+     maps:get(target, Fixture), {<<"quod:signed-target">>, key(77)},
+     read_write, {user, maps:get(user, Fixture)}, AuthenticationDigest}.
 
 origin_key({scope_binding, OriginKey, _, _, _, _, _, _, _, _}) -> OriginKey.
 target_identity({scope_binding, _, _, _, _, _, TargetIdentity, _, _, _}) ->

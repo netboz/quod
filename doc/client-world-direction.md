@@ -1,6 +1,10 @@
 # Quod client and world runtime -- architectural direction
 
-**Status:** NON-NORMATIVE DIRECTION. Revalidate before implementation.
+**Status:** the browser key, login, signed local and multi-ontology goals,
+cursor, unresolved-operation journal, user-home, and Explorer-console
+foundation is implemented in the working tree. The world, agent, presentation,
+and simulation sections remain non-normative direction and must be revalidated
+before their implementation.
 
 This document records the intended architecture for client projection,
 renderer-neutral model ontologies, GUI, client profiles, visual cues, hot
@@ -13,12 +17,14 @@ profile, and semantic-theme directions below were revalidated with Yan on
 2026-08-10. Predicate, module, and wire names remain illustrative until their
 implementation slices are reviewed.
 
-Implementation depends on the agent plan through signed users, immutable
-subjects, hosted agents, wielding, post-apply events, runtime reconciliation,
-and owner-gated effects. Details here are expected to evolve after those pieces
-exist and can be measured.
+The signed-client work now supplies the base user identity and signed goal path
+through local and remote ontology scopes. The remaining world-runtime direction
+depends on the agent plan for immutable delegated subjects, hosted agents,
+wielding, post-apply events, runtime reconciliation, and owner-gated effects.
+Details here are expected to evolve after those pieces exist and can be
+measured.
 
-The concrete browser-key, open-registration, challenge, session, and
+The concrete browser-key, open user-home creation, challenge, session, and
 key-provider direction is recorded in `doc/client-authentication-plan.md`.
 
 This direction already constrains the substrate in four ways:
@@ -161,11 +167,15 @@ This separates two useful forms of global update:
   an explicit compatibility contract.  There is no `eval`, URL fetch, or
   arbitrary code path derived from a domain ontology.
 
-The first implementation slice establishes the dedicated static endpoint,
-node-bound Ed25519 challenge-response, short-lived node-local sessions, and a
-single constrained user-home registration operation. Signed client goals,
-bundle distribution, and release activation remain separate bounded protocols;
-none is implied by loading the client or holding a session.
+The implemented local-client slice establishes the dedicated TLS endpoint,
+node-bound Ed25519 challenge-response, short-lived node-local sessions, and one
+signed-goal API for reads, writes, cursors, and the ordinary
+`create_user_home.` root goal. The interactive Explorer console uses that same
+login and API; the standalone Explorer listener is read-only. The same signed
+request and user principal now cross remote and nested ontology scopes through
+the ordinary scope/DTX path. Any-node HTTP ingress forwarding, bundle
+distribution, and governed release activation remain separate bounded
+protocols; none is implied by loading the client or holding a session.
 
 ## 3. Client envelope families
 

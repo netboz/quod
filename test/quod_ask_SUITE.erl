@@ -10,6 +10,7 @@
          remote_scope_deep_failure_reasons/1,
          remote_scope_structural_reason_truncation/1,
          remote_scope_cancel/1, remote_scope_transport_reuse/1,
+         remote_signed_group_uses_exact_user_request/1,
          remote_group_recovers_after_origin_crash/1]).
 -export([run_scope_proofs/3]).
 
@@ -28,6 +29,7 @@ all() -> [remote_scope_solutions, remote_scope_symbol_safety,
           remote_scope_deep_failure_reasons,
           remote_scope_structural_reason_truncation,
           remote_scope_cancel, remote_scope_transport_reuse,
+          remote_signed_group_uses_exact_user_request,
           remote_group_recovers_after_origin_crash].
 
 init_per_suite(Config) ->
@@ -45,7 +47,8 @@ init_per_suite(Config) ->
     TargetGenesis = filename:join(?config(priv_dir, Config), "remote_animals.pl"),
     ok = file:write_file(
            TargetGenesis,
-           [AnimalsBin,
+           ["can_invoke(_Goal, user(_), _Chain, _Ns).\n",
+            AnimalsBin,
             "\necho(X).\n"
             "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
             "via_third_failure :- third::third_blocked.\n",
@@ -84,7 +87,8 @@ init_per_suite(Config) ->
     AskerGenesis = filename:join(?config(priv_dir, Config), "remote_pets.pl"),
     ok = file:write_file(
            AskerGenesis,
-           [PetsBin,
+           ["can_invoke(_Goal, user(_), _Chain, _Ns).\n",
+            PetsBin,
             "\nrecover_third_failure :- animals::via_third_failure ; "
             "get_fail_reasons([_, _, _, _, third_declined]).\n"]),
     Asker = start_node(asker, ?ASKER_PORT, AskerKey, ?ASKER_NS,
@@ -134,6 +138,18 @@ init_per_suite(Config) ->
            [?THIRD_NS, ThirdAddr]),
     start_brahms(Asker, ?ASKER_NS, AskerAddr, [TargetAddr]),
     start_brahms(Third, ?THIRD_NS, ThirdAddr, []),
+    NetworkId = <<240:256>>,
+    lists:foreach(
+      fun(Peer) -> set_network_identity(Peer, NetworkId) end,
+      [Target, Asker, Third]),
+    {UserPub, _} = UserKey = quod_identity:generate(),
+    {ok, AuthPid} = peer:call(
+                      Asker, quod_client_auth, start_link,
+                      [#{network_id => NetworkId, node_key => AskerPub,
+                         max_challenges => 4, max_sessions => 4}]),
+    ClientPeer = {127, 0, 0, 1},
+    Session = open_client_session(
+                Asker, NetworkId, AskerPub, UserKey, ClientPeer),
     wait_ready(Target, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Third, ?THIRD_NS,
@@ -159,9 +175,15 @@ init_per_suite(Config) ->
     [{target, Target}, {asker, Asker}, {third, Third},
      {target_pub, TargetPub}, {wrong_pub, WrongPub},
      {target_addr, TargetAddr}, {third_pub, ThirdPub},
-     {third_addr, ThirdAddr} | Config].
+     {third_addr, ThirdAddr}, {network_id, NetworkId},
+     {user_key, UserKey}, {user_pub, UserPub},
+     {client_peer, ClientPeer}, {client_session, Session},
+     {client_auth, AuthPid} | Config].
 
 end_per_suite(Config) ->
+    _ = catch peer:call(
+                ?config(asker, Config), erlang, exit,
+                [?config(client_auth, Config), shutdown]),
     _ = [catch peer:stop(P) || P <- [?config(target, Config),
                                       ?config(asker, Config),
                                       ?config(third, Config)]],
@@ -286,6 +308,60 @@ remote_scope_transport_reuse(Config) ->
     run_scope_wave(Asker, Goal, second),
     wait_scope_workers(Target, 0, 200).
 
+%% One browser-equivalent request crosses two remote scope hops and commits
+%% through the ordinary group protocol.  Earlier cases have already proved
+%% failover past the suite's synthetic wrong-certificate route; retire that
+%% route now so every DTX evidence phase does not pay its full dial timeout.
+remote_signed_group_uses_exact_user_request(Config) ->
+    Asker = ?config(asker, Config),
+    retire_wrong_route(Asker, ?config(wrong_pub, Config),
+                       ?config(target_addr, Config), 200),
+    NetworkId = ?config(network_id, Config),
+    UserKey = ?config(user_key, Config),
+    UserPub = ?config(user_pub, Config),
+    Session = ?config(client_session, Config),
+    Peer = ?config(client_peer, Config),
+    Anchor = peer:call(
+               Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
+    Tag = erlang:unique_integer([positive]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "assertz(signed_pets_mark(~B)), "
+                   "\"animals\"::dtx_write_chain(~B).",
+                   [Tag, Tag])),
+    {RequestBytes, Signature} = signed_goal_request(
+                                  NetworkId, UserPub, UserKey,
+                                  ?ASKER_NS, Anchor,
+                                  maps:get(expires_ms, Session), GoalText),
+    {ok, Evidence, SubmitResult} = peer:call(
+                                     Asker,
+                                     quod_client_goal_ingress, submit,
+                                     [execute,
+                                      maps:get(session_id, Session),
+                                      RequestBytes, Signature, Peer],
+                                     60000),
+    {GroupRef, Outcome} =
+        case SubmitResult of
+            {ok, [#{}],
+             #{ref := {group, ?ASKER_NS, Anchor, _, _, _} = Ref} = Done} ->
+                {Ref, Done};
+            {error,
+             {outcome_unknown,
+              {group, ?ASKER_NS, Anchor, _, _, _} = Ref}} ->
+                %% A transport timeout is uncertainty, never permission to
+                %% resubmit. Resolve the exact first group instead.
+                {Ref, wait_group_outcome(Asker, Ref, 600)}
+        end,
+    Slots = maps:get(participant_slots, Outcome),
+    ?assertEqual(3, length(Slots)),
+    assert_fact_once(Asker, ?ASKER_NS, signed_pets_mark, Tag),
+    assert_fact_once(?config(target, Config), ?NS, dtx_animals_mark, Tag),
+    assert_fact_once(?config(third, Config), ?THIRD_NS, dtx_third_mark, Tag),
+    OperationRef = maps:get(operation_ref, Evidence),
+    ?assertMatch(
+       {ok, #{status := claimed, outcome_ref := GroupRef}},
+       peer:call(Asker, quod_prolog, outcome, [OperationRef])).
+
 %% The origin is stopped at the coordinator's certified Decision boundary,
 %% before it can plan a Finalize.  Recovery must resume from the durable phase
 %% chain, not re-prove or replay any plan, and the exact caller checkpoint must
@@ -294,12 +370,6 @@ remote_group_recovers_after_origin_crash(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
-    %% The earlier routing test deliberately installs a lower-sorting wrong
-    %% certificate for B.  Retire that synthetic record before exercising the
-    %% phase protocol; otherwise every evidence request pays an irrelevant
-    %% transport identity timeout.
-    retire_wrong_route(Asker, ?config(wrong_pub, Config),
-                       ?config(target_addr, Config), 200),
     Tag = erlang:unique_integer([positive]),
     Goal = {',', {assertz, {dtx_pets_mark, Tag}},
                  {'::', ?NS, {dtx_write_chain, Tag}}},
@@ -586,6 +656,51 @@ collect_scope_proofs(Count, Results) ->
     after 10000 ->
         timeout
     end.
+
+set_network_identity(Peer, NetworkId) ->
+    Desired = peer:call(
+                Peer, application, get_env,
+                [quod, namespace_desired, #{}]),
+    Content = maps:get(content, Desired, #{}),
+    ok = peer:call(
+           Peer, application, set_env,
+           [quod, namespace_desired,
+            Desired#{content => Content#{
+              quod_ontology:root_ns() => #{genesis_hash => NetworkId}}}]).
+
+open_client_session(Peer, NetworkId, NodeKey,
+                    KeyPair = {PublicKey, _Seed}, ClientPeer) ->
+    ClientNonce = crypto:strong_rand_bytes(32),
+    {ok, Challenge} = peer:call(
+                        Peer, quod_client_auth, issue_challenge,
+                        [PublicKey, ClientNonce, ClientPeer]),
+    ChallengeId = maps:get(challenge_id, Challenge),
+    {ok, ChallengeBytes} = quod_user:challenge_bytes(
+                             NetworkId, NodeKey, ChallengeId, PublicKey,
+                             ClientNonce, maps:get(server_nonce, Challenge),
+                             maps:get(expires_ms, Challenge)),
+    Signature = quod_identity:sign(
+                  ChallengeBytes, quod_identity:key_term(KeyPair)),
+    {ok, Session} = peer:call(
+                      Peer, quod_client_auth, complete_challenge,
+                      [ChallengeId, Signature]),
+    Session.
+
+signed_goal_request(NetworkId, PublicKey, KeyPair, Namespace, Anchor,
+                    SessionExpires, GoalText) ->
+    Request = #{network_identity => NetworkId,
+                user_public_key => PublicKey,
+                operation_id => crypto:strong_rand_bytes(32),
+                target_namespace => Namespace,
+                target_genesis_anchor => Anchor,
+                mode => execute, parser_version => 1,
+                not_after_ms => min(
+                                  SessionExpires,
+                                  quod_time:now_ms() + 30000),
+                goal_text => GoalText},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    {Bytes,
+     quod_identity:sign(Bytes, quod_identity:key_term(KeyPair))}.
 
 start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
            DirectoryAllowlist, Config) ->

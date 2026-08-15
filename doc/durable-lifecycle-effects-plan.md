@@ -1,10 +1,9 @@
 # Durable lifecycle effects
 
-**Status:** IMPLEMENTED IN THE CURRENT WORKING TREE; NOT DEPLOYED. The protocol,
-durable custody, checkpointed public outcome, P-before-E execution, recovery,
-and Explorer rendering described here are present. Unit and static release
-gates remain mandatory before the tree is committed or deployed, and the
-protocol break requires a clean re-found rather than reuse of an older ledger.
+**Status:** IMPLEMENTED IN QUOD 0.7.71. The protocol, durable custody,
+checkpointed public outcome, P-before-E execution, recovery, and Explorer
+rendering described here are present. Its incompatible ledger generation was
+introduced by a clean re-found; no compatibility decoder was retained.
 
 ## 1. Goal
 
@@ -267,13 +266,14 @@ It is nevertheless a real product boundary:
 
 - Explorer labels `actor` as **claimed by the author node**, not
   committee-verified;
-- the current `{user, PublicKey}` actor is authenticated to the serving node,
-  but is not yet a user-signed transaction principal validated by every
-  committee member;
+- a node-authored action remains an author-node claim, while a signed client
+  action carries its exact `{user, PublicKey}` principal and request evidence
+  in the transaction for independent validation by every committee member;
 - quotas, payment, or network-wide creation rights must not treat the effect
   descriptor as proof of compliance;
-- enabling such policy requires the separately planned validator-side signed
-  subject/typed-command verification, not another field in this descriptor.
+- policy involving delegated agents or capabilities still requires the
+  separately planned immutable subject chain and wielding checks; it must not
+  be inferred from the base user signature or another effect field.
 
 ## 6. Exact preparation and transaction hand-off
 
@@ -528,9 +528,11 @@ For an effect-only transaction it shows:
 
 Execution state is explicitly local and is not presented as consensus truth.
 The committed descriptor bytes and admitted node author are consensus truth.
-The displayed actor and “authorized” claim are explicitly labelled
-**author-node claimed**, not committee-verified, until validator-side signed
-subjects exist.
+For a node-authored action, the displayed actor and “authorized” claim remain
+explicitly labelled **author-node claimed**. For a signed client action,
+Explorer separately renders the verified user request and the validator-node
+signature; it must not present either one as an agent delegation or capability
+that the request did not contain.
 
 The namespace list also needs the already-planned local topology notification:
 `quod_namespace_manager` publishes a namespace change after start/stop, the
@@ -552,10 +554,11 @@ Do not spend several re-founds on adjacent pending work. Before coding, audit
 the approved agent-delivery work and any other already-approved plan/transaction
 schema changes. Land compatible schema changes in the same release, then:
 
-1. finish and review the current client/authentication working-tree slice;
-2. implement and gate the coordinated protocol change;
+1. complete and review the signed client-goal generation described in
+   `signed-client-goals-plan.md` (implemented in the working tree);
+2. run the coordinated protocol and release gates;
 3. found the network once from the current root source, including the approved
-   user-registration policy clause;
+   signed `create_user_home` policy clause;
 4. never apply a separate temporary live root-policy migration immediately
    before that planned re-found.
 

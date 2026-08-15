@@ -3,10 +3,9 @@
 Dedicated browser client endpoint.
 
 The listener is disabled by default. It provides static client assets, fixed
-Ed25519 authentication messages, constrained user-home registration, and the
-reviewed user-signed local read endpoint. Keeping this boundary separate from
-Explorer means browsers can load a client from any node without inheriting the
-Explorer's unsigned operator console.
+Ed25519 authentication messages, and the single signed-goal API used for
+reads, writes and retained backtracking cursors. User-home creation is an
+ordinary signed root goal; this boundary has no predicate-specific command.
 
 **It is served over TLS.** Not for confidentiality alone: a browser withholds
 Web Crypto entirely outside a secure context, so over plain HTTP the client
@@ -92,11 +91,28 @@ routes() ->
     [{'_', [
         {"/", cowboy_static, {priv_file, quod, "client/index.html"}},
         {"/assets/[...]", cowboy_static, {priv_dir, quod, "client/assets"}},
+        {"/explorer", quod_client_http, explorer_index},
+        {"/explorer/favicon.png", cowboy_static,
+         {priv_file, quod, "explorer/favicon.png"}},
+        {"/explorer/assets/[...]", cowboy_static,
+         {priv_dir, quod, "explorer/assets"}},
+        {"/explorer/ws", quod_explorer_ws, []},
+        {"/explorer/api/summary", quod_explorer_http, summary},
+        {"/explorer/api/txs", quod_explorer_http, txs},
+        {"/explorer/api/tx/:ns/:id", quod_explorer_http, tx},
+        {"/explorer/api/block/:ns/:slot", quod_explorer_http, block},
         {"/health", quod_client_http, health},
         {"/api/auth/challenge", quod_client_http, auth_challenge},
         {"/api/auth/complete", quod_client_http, auth_complete},
-        {"/api/user/register", quod_client_http, user_register},
-        {"/api/goals/read", quod_client_http, signed_goal_read}
+        {"/api/goals/read", quod_client_http, signed_goal_read},
+        {"/api/goals/execute", quod_client_http, signed_goal_execute},
+        {"/api/goals/outcomes", quod_client_http, signed_goal_outcome},
+        {"/api/goals/cursors", quod_client_http, signed_goal_cursor},
+        {"/api/goals/cursors/:id/next", quod_client_http,
+         signed_cursor_next},
+        {"/api/goals/cursors/:id/accept", quod_client_http,
+         signed_cursor_accept},
+        {"/api/goals/cursors/:id", quod_client_http, signed_cursor_stop}
      ]}].
 
 %% A configured certificate wins; otherwise the node's own self-signed browser

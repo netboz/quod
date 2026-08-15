@@ -537,22 +537,6 @@ fixes:
   this only makes skips cost the minimum SAFE amount — it does not remove the skips; the
   burst-amplification fixes above are what reduce their frequency. Reverted to Δ=1000ms.
 
-- **Durable client idempotency for automatic write retry.** Work that has entered
-  consensus cannot be cancelled when a local caller deadline expires. The current API reports
-  `{outcome_unknown, Ref}`, where `Ref` is either
-  `{transaction, Ns, GenesisAnchor, TxId}` or
-  `{group, OriginNs, OriginAnchor, Coordinator, CoordinatorAdmission, GroupId}`, and exposes
-  that anchored reference through the durable outcome index/explorer instead of falsely
-  claiming failure. Remote resolution freezes a certified current view and requires `f + 1`
-  identical current-validator snapshots. Ordinary quorum absence remains unknown; group
-  absence becomes definite only through coordinator retirement in that view or the exact
-  coordinator's admission-bound barrier. Built-in test/load clients do not retry an unknown
-  outcome or a transport failure with no authoritative response. They retry only explicit
-  responses that guarantee the operation did not apply. Fully automatic retry of
-  non-idempotent goals still needs a client-supplied stable operation id: a reconnect cannot
-  associate a newly proved operation with the earlier sealed plan without that identity. Do
-  not implement this as a timeout tweak or an unbounded in-memory dedup set.
-
 - **Two proof-visible reads bypass OCC capture (pre-token gap, found in the 0.7.62 review).**
   `current_predicate/1` (via the overlay's `get_interpreted_functors/1`) and
   `predicate_property/2` (via `get_procedure_type/2`, whose capture skip was deliberate for

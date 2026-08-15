@@ -2,17 +2,17 @@
 -moduledoc """
 Typed HTTP boundary for the dedicated browser client listener.
 
-Authentication, user registration, and the reviewed signed read request are
-accepted here.  Goal text is never parsed in this Cowboy process: it remains
-inside the signed binary request and crosses the atom-safe ingress boundary
-only after session and signature validation.
+Authentication and all three signed-goal modes are accepted here. Goal text is
+never parsed in this Cowboy process: it remains inside the signed binary
+request and crosses the atom-safe ingress boundary only after session and
+signature validation.
 """.
 
 -behaviour(cowboy_handler).
 
 -export([init/2]).
 -ifdef(TEST).
--export([signed_read_result/1]).
+-export([signed_goal_result/1]).
 -endif.
 
 -include("quod_client_goal_limits.hrl").
@@ -23,19 +23,56 @@ only after session and signature validation.
 
 init(Req0, health) ->
     {ok, text_reply(200, <<"ok\n">>, Req0), health};
+%% Cowboy considers the paths with and without a trailing slash equivalent
+%% during dispatch. One handler must therefore distinguish them; two route
+%% entries make the redirect shadow the index page.
+init(Req0, explorer_index) ->
+    case cowboy_req:path(Req0) of
+        <<"/explorer">> ->
+            {ok, cowboy_req:reply(
+                   308, #{<<"location">> => <<"/explorer/">>}, <<>>, Req0),
+             explorer_index};
+        <<"/explorer/">> ->
+            {ok, explorer_index_reply(Req0), explorer_index}
+    end;
 init(Req0, auth_challenge) ->
     post_json(Req0, auth_challenge, ?MAX_AUTH_BODY, fun auth_challenge/2);
 init(Req0, auth_complete) ->
     post_json(Req0, auth_complete, ?MAX_AUTH_BODY, fun auth_complete/2);
-init(Req0, user_register) ->
-    post_json(Req0, user_register, ?MAX_AUTH_BODY, fun user_register/2);
 init(Req0, signed_goal_read) ->
     post_json(Req0, signed_goal_read, ?MAX_SIGNED_GOAL_BODY,
-              fun signed_goal_read/2).
+              fun(Body, Req) -> signed_goal(read, Body, Req) end);
+init(Req0, signed_goal_execute) ->
+    post_json(Req0, signed_goal_execute, ?MAX_SIGNED_GOAL_BODY,
+              fun(Body, Req) -> signed_goal(execute, Body, Req) end);
+init(Req0, signed_goal_cursor) ->
+    post_json(Req0, signed_goal_cursor, ?MAX_SIGNED_GOAL_BODY,
+              fun(Body, Req) -> signed_goal(cursor, Body, Req) end);
+init(Req0, signed_goal_outcome) ->
+    post_json(Req0, signed_goal_outcome, ?MAX_SIGNED_GOAL_BODY,
+              fun signed_goal_outcome/2);
+init(Req0, signed_cursor_next) ->
+    cursor_command(Req0, <<"POST">>, next);
+init(Req0, signed_cursor_accept) ->
+    cursor_command(Req0, <<"POST">>, accept);
+init(Req0, signed_cursor_stop) ->
+    cursor_command(Req0, <<"DELETE">>, stop).
 
-%% The handler is given the decoded body and the request, so a route that needs
-%% something more from the request (the peer address, for registration) reads it
-%% itself rather than forking this function.
+explorer_index_reply(Req0) ->
+    Path = filename:join(code:priv_dir(quod), "explorer/index.html"),
+    case file:read_file(Path) of
+        {ok, Body} ->
+            cowboy_req:reply(
+              200,
+              #{<<"content-type">> => <<"text/html; charset=utf-8">>,
+                <<"cache-control">> => <<"no-cache">>},
+              Body, Req0);
+        {error, _Reason} ->
+            text_reply(503, <<"explorer unavailable\n">>, Req0)
+    end.
+
+%% The handler is given both the decoded body and the request so every signed
+%% route shares this one bounded JSON admission path.
 post_json(Req0, State, MaxBody, Handler) ->
     case cowboy_req:method(Req0) of
         <<"POST">> ->
@@ -81,93 +118,115 @@ auth_complete(#{<<"challenge_id">> := ChallengeId64,
 auth_complete(_, _Req) ->
     {400, #{error => invalid_auth_request}}.
 
-user_register(#{<<"session_id">> := SessionId64,
-                <<"client_nonce">> := ClientNonce64,
-                <<"signature">> := Signature64}, Req) ->
-    case {decode_b64url(SessionId64, 32), decode_b64url(ClientNonce64, 32),
-          decode_b64url(Signature64, 64)} of
-        {{ok, SessionId}, {ok, ClientNonce}, {ok, Signature}} ->
-            registration_result(
-              quod_client_registration:register(
-                SessionId, ClientNonce, Signature, peer_ip(Req)));
-        _ -> {400, #{error => invalid_registration_request}}
-    end;
-user_register(_, _Req) ->
-    {400, #{error => invalid_registration_request}}.
+signed_goal(Mode,
+            Body, Req) ->
+    with_signed_request(
+      Body,
+      fun(SessionId, RequestBytes, Signature) ->
+            signed_goal_result(
+              quod_client_goal_ingress:submit(
+                Mode, SessionId, RequestBytes, Signature, peer_ip(Req)))
+      end).
 
-signed_goal_read(#{<<"session_id">> := SessionId64,
-                   <<"request">> := Request64,
-                   <<"signature">> := Signature64}, Req) ->
+signed_goal_outcome(Body, Req) ->
+    with_signed_request(
+      Body,
+      fun(SessionId, RequestBytes, Signature) ->
+          signed_goal_result(
+            quod_client_goal_ingress:resolve_operation(
+              SessionId, RequestBytes, Signature, peer_ip(Req)))
+      end).
+
+with_signed_request(
+  #{<<"session_id">> := SessionId64,
+    <<"request">> := Request64,
+    <<"signature">> := Signature64}, Fun) when is_function(Fun, 3) ->
     case {decode_b64url(SessionId64, 32),
           decode_b64url_bounded(
             Request64, ?QUOD_CLIENT_GOAL_REQUEST_BYTES),
           decode_b64url(Signature64, 64)} of
         {{ok, SessionId}, {ok, RequestBytes}, {ok, Signature}} ->
-            signed_read_result(
-              quod_client_goal_ingress:read(
-                SessionId, RequestBytes, Signature, peer_ip(Req)));
+            Fun(SessionId, RequestBytes, Signature);
         _ ->
             {400, #{error => invalid_signed_goal_request}}
     end;
-signed_goal_read(_, _Req) ->
+with_signed_request(_Body, _Fun) ->
     {400, #{error => invalid_signed_goal_request}}.
 
-registration_result({ok, #{user_id := UserId, namespace := Namespace,
-                          registration_height := Height}}) ->
-    {201, #{user_id => UserId, namespace => Namespace,
-            registration_height => Height}};
-registration_result({error, registration_not_authorized}) ->
-    {403, #{error => registration_not_authorized}};
-registration_result({error, invalid_registration_signature}) ->
-    {401, #{error => invalid_registration_signature}};
-registration_result({error, invalid_registration_request}) ->
-    {400, #{error => invalid_registration_request}};
-registration_result({error, invalid_session}) ->
-    {401, #{error => authentication_failed}};
-registration_result({error, client_registration_rate_limited}) ->
-    {429, #{error => registration_rate_limited}};
-registration_result({error, client_registration_busy}) ->
-    {429, #{error => registration_busy}};
-registration_result({error, client_auth_unavailable}) ->
-    {503, #{error => client_auth_unavailable}};
-registration_result({error, registration_unavailable}) ->
-    {503, #{error => registration_unavailable}};
-registration_result({error, outcome_unknown}) ->
-    {503, #{error => registration_outcome_unknown}};
-registration_result({error, _}) ->
-    {503, #{error => registration_unavailable}};
-registration_result(_) ->
-    {403, #{error => registration_not_authorized}}.
+cursor_command(Req0, Method, Command) ->
+    case cowboy_req:method(Req0) of
+        Method ->
+            case decode_b64url(cowboy_req:binding(id, Req0), 32) of
+                {ok, CursorId} ->
+                    {Code, Reply, Req} = read_json(
+                      Req0, ?MAX_AUTH_BODY,
+                      fun(Body, Request) ->
+                          signed_cursor_command(
+                            Body, CursorId, Command, Request)
+                      end),
+                    {ok, json_reply(Code, Reply, Req), Command};
+                error ->
+                    {ok, json_reply(
+                           400, #{error => bad_cursor_id}, Req0), Command}
+            end;
+        _ ->
+            {ok, json_reply(
+                   405, #{error => method_not_allowed}, Req0), Command}
+    end.
 
-signed_read_result({ok, Evidence, Result}) ->
+signed_cursor_command(#{<<"session_id">> := SessionId64},
+                      CursorId, Command, Req) ->
+    case decode_b64url(SessionId64, 32) of
+        {ok, SessionId} ->
+            signed_goal_result(
+              quod_client_goal_ingress:cursor_command(
+                SessionId, CursorId, Command, peer_ip(Req)));
+        error ->
+            {400, #{error => invalid_cursor_command}}
+    end;
+signed_cursor_command(_, _CursorId, _Command, _Req) ->
+    {400, #{error => invalid_cursor_command}}.
+
+signed_goal_result(
+  {ok, Evidence, {operation_pending, _OperationRef}}) ->
+    {202, evidence_json(
+            Evidence,
+            #{result => operation_outcome, status => pending,
+              terminal => false})};
+signed_goal_result(
+  {ok, Evidence, {operation_outcome, Claim, Outcome}}) ->
+    signed_operation_outcome(Evidence, Claim, Outcome);
+signed_goal_result({ok, Evidence, Result}) ->
     signed_proof_result(Evidence, Result);
-signed_read_result({error, invalid_session}) ->
+signed_goal_result({error, invalid_session}) ->
     {401, #{error => authentication_failed}};
-signed_read_result({error, session_principal_mismatch}) ->
+signed_goal_result({error, session_principal_mismatch}) ->
     {401, #{error => session_principal_mismatch}};
-signed_read_result({error, invalid_signature}) ->
+signed_goal_result({error, invalid_signature}) ->
     {401, #{error => invalid_signature}};
-signed_read_result({error, client_auth_unavailable}) ->
+signed_goal_result({error, client_auth_unavailable}) ->
     {503, #{error => client_auth_unavailable}};
-signed_read_result({error, client_goal_rate_limited}) ->
+signed_goal_result({error, client_goal_rate_limited}) ->
     {429, #{error => goal_rate_limited}};
-signed_read_result({error, client_goal_busy}) ->
+signed_goal_result({error, client_goal_busy}) ->
     {503, #{error => goal_ingress_busy}};
-signed_read_result({error, client_symbol_budget_exhausted}) ->
+signed_goal_result({error, client_symbol_budget_exhausted}) ->
     {503, #{error => symbol_budget_exhausted}};
-signed_read_result({error, atom_limit}) ->
+signed_goal_result({error, atom_limit}) ->
     {503, #{error => atom_table_pressure}};
-signed_read_result({error, too_many_new_atoms}) ->
+signed_goal_result({error, too_many_new_atoms}) ->
     {413, #{error => goal_vocabulary_too_large}};
-signed_read_result({error, {too_large, Field}}) ->
+signed_goal_result({error, {too_large, Field}}) ->
     {413, #{error => field_too_large, field => atom_to_binary(Field)}};
-signed_read_result({error, signed_target_unavailable}) ->
+signed_goal_result({error, signed_target_unavailable}) ->
     {503, #{error => signed_target_unavailable}};
-signed_read_result({error, signed_goal_unavailable}) ->
+signed_goal_result({error, signed_goal_unavailable}) ->
     {503, #{error => signed_goal_unavailable}};
-signed_read_result({error, expired}) ->
+signed_goal_result({error, client_cursor_unavailable}) ->
+    {503, #{error => client_cursor_unavailable}};
+signed_goal_result({error, expired}) ->
     {410, #{error => signed_goal_expired}};
-signed_read_result({error, Reason})
+signed_goal_result({error, Reason})
   when Reason =:= invalid_request; Reason =:= invalid_goal;
        Reason =:= wrong_network; Reason =:= wrong_target;
        Reason =:= invalid_admission_time;
@@ -176,8 +235,35 @@ signed_read_result({error, Reason})
        Reason =:= malformed_material;
        Reason =:= invalid_user_principal ->
     {400, #{error => Reason}};
-signed_read_result({error, _}) ->
+signed_goal_result({error, not_found}) ->
+    {404, #{error => cursor_not_found}};
+signed_goal_result({error, not_ready}) ->
+    {409, #{error => cursor_not_ready}};
+signed_goal_result({error, busy}) ->
+    {409, #{error => cursor_busy}};
+signed_goal_result({error, _}) ->
     {503, #{error => signed_goal_unavailable}}.
+
+signed_operation_outcome(
+  Evidence, #{height := ClaimHeight}, #{status := Status} = Outcome)
+  when is_integer(ClaimHeight), ClaimHeight > 0 ->
+    Terminal = Status =:= committed orelse Status =:= rejected orelse
+                   Status =:= aborted,
+    Code = case Terminal of true -> 200; false -> 202 end,
+    Details0 = maps:with([height, phase, reason], Outcome),
+    Details = case maps:get(reasons, Outcome, undefined) of
+                  Reasons when is_list(Reasons) ->
+                      Details0#{reasons =>
+                                    [quod_explorer_http:prolog_text(Reason)
+                                     || Reason <- Reasons]};
+                  _ -> Details0
+              end,
+    {Code, evidence_json(
+             Evidence,
+             Details#{result => operation_outcome, status => Status,
+                      terminal => Terminal, claim_height => ClaimHeight})};
+signed_operation_outcome(_Evidence, _Claim, _Outcome) ->
+    {503, #{error => outcome_index_corrupt}}.
 
 signed_proof_result(Evidence, {ok, Bindings, Height})
   when is_list(Bindings), is_integer(Height), Height >= 0 ->
@@ -185,6 +271,29 @@ signed_proof_result(Evidence, {ok, Bindings, Height})
             Evidence,
             #{result => ok, height => Height,
               bindings => [signed_bindings(Evidence, B) || B <- Bindings]})};
+signed_proof_result(Evidence,
+                    {solution, <<_:256>> = CursorId, Bindings, Height})
+  when is_map(Bindings), is_integer(Height), Height >= 0 ->
+    {200, evidence_json(
+            Evidence,
+            #{result => solution, cursor => b64url(CursorId),
+              height => Height,
+              bindings => [signed_bindings(Evidence, Bindings)]})};
+signed_proof_result(Evidence, {ok, stopped}) ->
+    {200, evidence_json(Evidence, #{result => stopped})};
+signed_proof_result(Evidence, {ok, Bindings, Outcome})
+  when is_list(Bindings) ->
+    %% Reuse the Explorer's one anchored outcome renderer.  Empty bindings
+    %% keep it independent of VM atoms; the signed parser names are restored
+    %% from Evidence below.
+    case quod_explorer_http:prove_result({ok, [], Outcome}) of
+        {Code, Json} ->
+            {Code, evidence_json(
+                     Evidence,
+                     Json#{bindings =>
+                               [signed_bindings(Evidence, B)
+                                || B <- Bindings]})}
+    end;
 signed_proof_result(Evidence, fail) ->
     {200, evidence_json(Evidence, #{result => fail})};
 signed_proof_result(Evidence, {fail, Reasons}) when is_list(Reasons) ->
@@ -193,8 +302,6 @@ signed_proof_result(Evidence, {fail, Reasons}) when is_list(Reasons) ->
             #{result => fail,
               reasons => [quod_explorer_http:prolog_text(Reason)
                           || Reason <- Reasons]})};
-signed_proof_result(_Evidence, {error, signed_scope_unavailable}) ->
-    {409, #{error => signed_scope_unavailable}};
 signed_proof_result(_Evidence, {error, read_only}) ->
     {409, #{error => read_only}};
 signed_proof_result(_Evidence, {error, no_such_namespace}) ->
@@ -205,6 +312,18 @@ signed_proof_result(_Evidence, {error, rebuilding}) ->
     {503, #{error => ontology_rebuilding}};
 signed_proof_result(_Evidence, {error, busy}) ->
     {503, #{error => ontology_busy}};
+signed_proof_result(Evidence, {error, {outcome_unknown, _}} = Error) ->
+    case quod_explorer_http:prove_result(Error) of
+        {Code, Json} -> {Code, evidence_json(Evidence, Json)}
+    end;
+signed_proof_result(_Evidence, {error, not_found}) ->
+    {404, #{error => cursor_not_found}};
+signed_proof_result(_Evidence, {error, not_ready}) ->
+    {409, #{error => cursor_not_ready}};
+signed_proof_result(_Evidence, {error, invalid_action}) ->
+    {400, #{error => invalid_action}};
+signed_proof_result(_Evidence, {error, non_backtrackable_action}) ->
+    {400, #{error => non_backtrackable_action}};
 signed_proof_result(_Evidence, {error, _}) ->
     {503, #{error => proof_unavailable}}.
 
@@ -213,11 +332,11 @@ evidence_json(#{request_digest := Digest,
     Result#{request_digest => b64url(Digest),
             operation_id => b64url(OperationId)}.
 
-signed_bindings(#{variables := Variables}, Bindings) when is_map(Bindings) ->
-    maps:from_list(
-      [{Name, quod_explorer_http:prolog_text(Value)}
-       || {Name, Index} <- Variables,
-          {ok, Value} <- [maps:find(Index, Bindings)]]).
+signed_bindings(Evidence, Bindings) ->
+    {ok, Named} = quod_client_goal:named_bindings(Evidence, Bindings),
+    maps:map(
+      fun(_Name, Value) -> quod_explorer_http:prolog_text(Value) end,
+      Named).
 
 auth_reply({ok, #{challenge_id := ChallengeId, server_nonce := ServerNonce,
                   expires_ms := ExpiresMs, node_key := NodeKey,

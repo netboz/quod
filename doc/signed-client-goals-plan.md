@@ -1,14 +1,19 @@
 # Signed client goals
 
-**Status:** Slices 1 through 3 are implemented in the working tree. Slice 1 contains
+**Status:** Slices 1 through 5 are implemented in the working tree. Slice 1 contains
 the pure request codec, signature verifier, and atom-safe parser. Slice 2 adds
-authenticated local `read`: it enters the ordinary read-only proof path as the
-signed user, applies the ontology's normal ACL, and refuses foreign scopes
-until signed scope propagation lands. Slice 3 adds the coordinated durable
+authenticated `read`: it enters the ordinary read-only proof path as the
+signed user and applies the ontology's normal ACL. Slice 3 adds the coordinated durable
 format break, validator-side request/ACL revalidation, one shared operation
 projection for ordinary transactions and DTX Begins, and Explorer rendering.
-It is awaiting independent review. No public signed write, signed cursor, or
-any-node forwarding endpoint exists yet.
+Slice 4 adds local signed execution and cursors, moves the Explorer console to
+that same authenticated path, and replaces specialized home registration with
+the ordinary signed `create_user_home` goal. Slice 5 carries the same signed
+user and request through remote and nested scopes, activates signed
+multi-ontology commit, makes missing root identity retryable during history
+validation, and persists unresolved browser writes. Any-node forwarding is
+still Slice 6 work. Deployment of this hard protocol break remains withheld
+until the clean re-found and release gates are explicitly authorized.
 
 ## Purpose
 
@@ -159,7 +164,7 @@ implicitly by a node.
 
 ## Parsing and canonical goal binding
 
-The current Explorer parser is not the new trust boundary: it parses text into
+The former Explorer parser was not a suitable trust boundary: it parsed text into
 VM atoms before user authentication. The public client path needs one bounded,
 atom-safe parser boundary.
 
@@ -178,6 +183,15 @@ each anonymous variable deterministically by occurrence, so every validator
 derives the same durable goal blob. It must reject malformed or ambiguous
 syntax, trailing terms, excessive nesting, excessive symbol count, and invalid
 UTF-8 before execution.
+
+The verified evidence, including that name-to-variable-id table, is carried
+through the one proof context. A committing node uses it to give the selected
+durable result the exact signed binary variable names without parsing the goal
+again. Unsigned node-local proofs retain their traditional atom-named result;
+both forms converge on the same canonical durable result encoding. Each `_`
+occurrence remains a distinct variable in the proof but has no signed name, so
+the one shared result projection omits it from read replies, cursor replies,
+and durable execute/accept results.
 
 All non-operator symbols must use the existing opaque-symbol representation
 during parsing, even if a same-named atom already happens to exist in one
@@ -244,6 +258,11 @@ There is no `case Predicate of ...` authorization table at HTTP ingress. If an
 ontology permits a predicate through its existing policies and proof rules, the
 signed client may use it. If the ontology refuses it, the normal bounded failure
 reasons are returned.
+
+The direct `quod_prolog:prove/2`, `prove_ro/2`, `execute/2`, and `run_action/2`
+functions remain trusted in-VM operator and test interfaces. They are not HTTP
+client routes, are not mounted by Explorer, and do not compete with the signed
+browser boundary.
 
 For a signed local read, the exact target anchor is carried into the proof
 worker and checked there again before the frozen ontology snapshot is used.
@@ -542,8 +561,9 @@ retried as a fresh proof.
 
 ## Explorer and client relationship
 
-The Explorer is currently an operator console with a separate unauthenticated
-goal endpoint. Slice 4 moves it to the same client login and signed-goal API:
+The ledger browser may remain public, but its interactive console is mounted at
+`/explorer/` on the TLS client listener and uses the same login and signed-goal
+API as the browser client:
 
 - the Explorer console is simply one signed-goal editor;
 - its Next/Accept/Stop controls use the signed cursor flow;
@@ -552,14 +572,11 @@ goal endpoint. Slice 4 moves it to the same client login and signed-goal API:
 - ontology lists continue to update from runtime projection events;
 - no Explorer-only proof or ACL bypass remains.
 
-This is one replacement, not a compatibility period. Slice 4 first refactors
-the existing Explorer cursor coordinator into the shared signed-goal cursor
-owner, then switches the Explorer UI to signed `execute` and `cursor` requests,
-and finally deletes `/api/prove`, `/api/proof-cursors*`, the current
-atom-creating Explorer goal parser, and their unsigned server entry points in
-the same change. No deployment or re-found may expose both the specialized and
-signed write entrances. Ledger browsing may remain public if desired;
-submitting a goal always uses the authenticated client boundary.
+This was one replacement, not a compatibility period. The cursor coordinator
+is now the UI-neutral `quod_client_cursor`; `/api/prove`,
+`/api/proof-cursors*`, the atom-creating Explorer goal parser, and the
+specialized registration endpoint/executor are absent. No deployment or
+re-found may expose both the specialized and signed write entrances.
 
 ## Protocol break and deployment
 
@@ -591,12 +608,12 @@ Enabling signed writes therefore requires a deliberate clean re-found. The
 pure request codec, parser, signatures, and read-only ingress may be developed
 and reviewed before that deployment break is activated.
 
-Slices 3 through 5 are development stages of this one protocol generation, not
+Slices 3 through 5 were development stages of this one protocol generation, not
 three deployment generations. Slice 3 lands all affected V8/V4, plan V5, DTX
-V2, and scope V4 data shapes behind disabled signed-write ingress. Slice 5
-completes and activates scope propagation. There is no deployment or re-found
-between those slices. After Slice 5 passes its full replay, crash, and
-multi-ontology gates, the generation is activated with one clean re-found.
+V2, and scope V4 data shapes; Slice 5 completes scope propagation. There was no
+deployment or re-found between those slices. The working tree has passed its
+focused replay, crash, and multi-ontology gates. Activation on a network still
+uses one deliberate clean re-found; there is no rolling mixed-version upgrade.
 
 ## Implementation slices
 
@@ -618,9 +635,9 @@ No execution endpoint lands before this slice is independently reviewed.
 - Thread request evidence and `{user, Key}` into `prove_ro`.
 - Use the normal top-level ACL and return normal bindings/failure reasons.
 - Add per-user and per-peer bounded admission.
-- Reject any attempted foreign scope with the bounded
-  `signed_scope_unavailable` refusal until Slice 5; V3 must never substitute the
-  forwarding node principal for the signed user, even on a read-only proof.
+- During this intermediate slice, reject a foreign scope rather than
+  substituting the forwarding node principal for the signed user. Slice 5
+  removes that temporary gate by carrying the exact signed authentication.
 
 This proves origin-local predicates without changing a ledger format.
 
@@ -667,13 +684,12 @@ cannot rebind an already-admitted read.
   custody; replay at the signed deadline; and crashes before and after every
   origin claim checkpoint.
 
-Because signed user scopes deliberately remain unavailable until Slice 5, the
-Slice-3 foreign-only case is fixture-tested by constructing the signed plans
-in-VM, as existing DTX tests do. Slice 3 must not make that public path
-reachable by weakening `signed_scope_unavailable`.
+At the Slice-3 boundary, the foreign-only case was fixture-tested by
+constructing signed plans in-VM while remote signed scopes remained closed.
+Slice 5 now exercises that record shape through the real scope transport.
 
-Public signed writes remain disabled while this slice is independently
-reviewed and until the later activation slices pass their replay/crash gates.
+Public deployment remains disabled until this coordinated generation is
+released through its required clean re-found.
 
 ### Slice 4: local signed execute and cursor
 
@@ -681,8 +697,8 @@ reviewed and until the later activation slices pass their replay/crash gates.
   cursor state machine rather than a second implementation. Refactor that
   state machine into a neutral signed-goal cursor owner; do not retain an
   Explorer-specific coordinator beside it.
-- Pass verified goals through the existing `execute_as`/proof boundary without
-  adding signing-specific predicate dispatch.
+- Pass verified goals through the ordinary proof boundary with their verified
+  request evidence, without adding signing-specific predicate dispatch.
 - Carry the already-verified request evidence through proof and transaction
   construction. The submitting node must not repeat signature verification or
   parsing merely to derive the transaction and its outcome reference;
@@ -700,11 +716,16 @@ reviewed and until the later activation slices pass their replay/crash gates.
   duplicates, registration migration, removal of every replaced specialized
   route, and uncertain outcomes.
 
-Until Slice 5 completes, this development stage permits only proofs whose
-material plans all belong to the origin. A signed proof that touches a foreign
-scope returns a bounded `signed_scope_unavailable` refusal before durable
-handoff; it never falls through to the V3 node-principal behavior. Public signed
-write ingress remains disabled in deployed releases throughout this interval.
+Implemented closure includes a composed signed cursor test that opens,
+advances, accepts, reads the committed fact, and verifies that the ledger
+transaction retained the original request evidence and operation ID. The TLS
+client-listener test also fetches the mounted `/explorer/` bundle; the
+disabled-listener test proves that mount is unavailable when the client
+listener is disabled.
+
+At the Slice-4 boundary, signed proofs were still limited to origin-local
+material plans. That temporary development restriction is removed by Slice 5;
+it never fell through to the old node-principal behavior.
 
 ### Slice 5: activate scopes and multi-ontology goals
 
@@ -716,6 +737,40 @@ write ingress remains disabled in deployed releases throughout this interval.
 - Test two- and three-ontology user writes, restrictive target ACLs, principal
   substitution, altered request bytes, stripped evidence, route failover,
   coordinator crash, abort, and Complete recovery.
+- Before public activation, make a temporarily unavailable root-network
+  identity a retryable history-validation result rather than an invalid
+  committed transaction. Carry that result through the shared replay and
+  catch-up validator instead of adding a special catch-up exception.
+- Before ordinary signed writes are enabled in the browser, persist the signed
+  request and operation ID until its anchored outcome is definite. The current
+  deterministic `create_user_home` helper can reconstruct its exact request;
+  arbitrary goals cannot, so a lost response must not depend on browser memory.
+
+Implemented closure uses the existing scope V4 path for local, co-hosted, and
+remote targets. The scope-open authentication contains the exact signed request
+and user principal; each target verifies those bytes and then runs its ordinary
+`can_invoke/4` proof. Every sealed plan binds the same request digest, while the
+origin Begin carries the complete request once. A foreign-only material write
+uses the same origin-Begin protocol even when it has one participant.
+
+Root-network identity unavailability is one typed retry result shared by live
+preview, replay, catch-up, and foreign-history verification. It is not a
+catch-up exception and never converts a committed signed record into invalid
+history merely because the local root projection is temporarily unavailable.
+
+The browser journals at most 64 unresolved durable operations in IndexedDB.
+It writes the exact request and signature before Execute or cursor Accept,
+never evicts an unresolved row, and removes it only after a definite outcome.
+Reload recovery sends those bytes only to `POST /api/goals/outcomes`; it never
+re-proves or resubmits the goal. If durable browser storage is unavailable,
+login, reads, and cursor browsing remain usable, while Execute and Accept fail
+closed before submission.
+
+The real three-node suite sends one browser-equivalent signed goal through two
+remote scope hops and commits three participant plans under the same user
+request. It also covers target ACL refusal, exact wire evidence, route
+failover, and composes with the existing coordinator Decision-boundary crash
+test, which proves recovery from certified records without re-proving.
 
 ### Slice 6: any-node ingress and client goal builders
 
@@ -799,9 +854,9 @@ The review must answer these before implementation:
   same first outcome.
 - Cross-node resolution of `outcome_unknown` requires the existing certified
   current-view threshold and ignores one Byzantine conflicting response.
-- Before Slice 5 activation, a signed proof touching a foreign scope receives
-  the specified bounded refusal and creates no transaction, Begin, or foreign
-  diff.
+- A remote or nested scope rejects altered request bytes, a substituted user,
+  a mismatched authentication digest, and missing evidence; the valid exact
+  request reaches the normal target ACL and transaction path.
 
 ## Explicit non-goals
 

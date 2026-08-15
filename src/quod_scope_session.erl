@@ -17,7 +17,7 @@ a synchronous call to itself.
 -include("quod_proof_limits.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/3, attest_plan/3, submit_plan/4,
+         seal/4, attest_plan/3, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
          dispatch/1, remaining_ms/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
@@ -137,20 +137,20 @@ remote scope seals over the wire — where the returned plan must decode, carry
 the exact bound identities, and verify under the authenticated target key.
 """.
 -spec seal(handle() | term(), quod_proof_context:identity(),
-           quod_dtx:principal()) ->
+           quod_dtx:principal(), quod_client_goal:request_binding()) ->
           {ok, quod_dtx:plan()} | not_material | {error, term()}.
 seal({local_scope, _ScopeId, Ns, Anchor, Height, Session},
-     OriginIdentity, Principal) ->
+     OriginIdentity, Principal, RequestBinding) ->
     quod_proof_session:seal(
       Session,
       #{target => {Ns, Anchor}, base_height => Height,
         proof_id => quod_proof_context:proof_id(),
         origin => OriginIdentity,
         principal => Principal,
-        request_binding => none});
+        request_binding => RequestBinding});
 seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
       _Ns, _Anchor} = Handle,
-     OriginIdentity, _Principal) ->
+     OriginIdentity, _Principal, _RequestBinding) ->
     case command_remaining_ms() of
         0 ->
             {error, current_execution_limit()};
@@ -173,12 +173,13 @@ seal({quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
                 demonitor(MRef, [flush])
             end
     end;
-seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, _Principal) ->
-    remote_seal(Handle);
-seal(_Handle, _OriginIdentity, _Principal) ->
+seal({remote_scope, _, _, _, _} = Handle, _OriginIdentity, Principal,
+     RequestBinding) ->
+    remote_seal(Handle, Principal, RequestBinding);
+seal(_Handle, _OriginIdentity, _Principal, _RequestBinding) ->
     {error, {protocol_error, session_binding}}.
 
-remote_seal(Handle) ->
+remote_seal(Handle, Principal, RequestBinding) ->
     case bind_remote_router(Handle) of
         {ok, Router, MRef} ->
             case command_remaining_ms() of
@@ -189,7 +190,8 @@ remote_seal(Handle) ->
                            Handle, RemainingMs, scope_seal) of
                         {ok, RequestId} ->
                             await_remote_seal(
-                              Handle, RequestId, Router, MRef, RemainingMs);
+                              Handle, Principal, RequestBinding,
+                              RequestId, Router, MRef, RemainingMs);
                         {sent, _RequestId} ->
                             {error, {protocol_error, request_binding}};
                         {error, _} = Error ->
@@ -200,11 +202,13 @@ remote_seal(Handle) ->
             Error
     end.
 
-await_remote_seal(Handle, RequestId, Router, MRef, RemainingMs) ->
+await_remote_seal(
+  Handle, Principal, RequestBinding,
+  RequestId, Router, MRef, RemainingMs) ->
     receive
         {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
          {plan_sealed, Blob}} ->
-            checked_remote_plan(Handle, Blob);
+            checked_remote_plan(Handle, Principal, RequestBinding, Blob);
         {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
          plan_not_material} ->
             not_material;
@@ -229,7 +233,7 @@ checked_remote_plan(
    {scope_binding, _OriginKey, TargetKey, ProofId, _ScopeId,
     OriginIdentity, TargetIdentity, _Mode,
     Principal, _AuthenticationDigest}, _RequestLink},
-  Blob) ->
+  Principal, RequestBinding, Blob) ->
     case quod_scope_wire:decode_plan_payload(Blob) of
         {ok, Plan} ->
             case quod_dtx:signer(Plan) =:= TargetKey andalso
@@ -237,7 +241,8 @@ checked_remote_plan(
                  quod_dtx:target(Plan) =:= TargetIdentity andalso
                  quod_dtx:origin(Plan) =:= OriginIdentity andalso
                  quod_dtx:proof_id(Plan) =:= ProofId andalso
-                 quod_dtx:principal(Plan) =:= Principal of
+                 quod_dtx:principal(Plan) =:= Principal andalso
+                 quod_dtx:request_binding(Plan) =:= RequestBinding of
                 true -> {ok, Plan};
                 false -> {error, {protocol_error, bad_payload}}
             end;
@@ -360,7 +365,8 @@ submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult) ->
                     {error, current_execution_limit()};
                 RemainingMs ->
                     remote_submit(
-                      Handle, Plan, Goal, DurableResult, RemainingMs,
+                      Handle, Plan, Goal, DurableResult,
+                      quod_proof_context:request_auth(), RemainingMs,
                       Router, MRef)
             end;
         {error, _} = Error ->
@@ -369,8 +375,10 @@ submit_plan({remote_scope, _, _, _, _} = Handle, Plan, Goal, DurableResult) ->
 submit_plan(_Handle, _Plan, _Goal, _DurableResult) ->
     {error, {protocol_error, session_binding}}.
 
-remote_submit(Handle, Plan, Goal, DurableResult, RemainingMs, Router, MRef) ->
-    case encode_submit_operation(Plan, Goal, DurableResult) of
+remote_submit(
+  Handle, Plan, Goal, DurableResult, RequestAuth,
+  RemainingMs, Router, MRef) ->
+    case encode_submit_operation(Plan, Goal, DurableResult, RequestAuth) of
         {ok, Operation, OutcomeRef} ->
             case quod_ask_router:command(Handle, RemainingMs, Operation) of
                 {ok, RequestId} ->
@@ -386,13 +394,13 @@ remote_submit(Handle, Plan, Goal, DurableResult, RemainingMs, Router, MRef) ->
             Error
     end.
 
-encode_submit_operation(Plan, Goal, Bindings) ->
+encode_submit_operation(Plan, Goal, Bindings, RequestAuth) ->
     case quod_scope_wire:encode_payload(plan, Plan) of
         {ok, PlanBlob} ->
             case quod_transaction:encode_durable_submission(Goal, Bindings) of
                 {ok, GoalBlob, ResultBlob} ->
                     OutcomeRef = quod_transaction:plan_outcome_ref(
-                                   Plan, GoalBlob, ResultBlob, none),
+                                   Plan, GoalBlob, ResultBlob, RequestAuth),
                     {ok, {submit_plan, PlanBlob, GoalBlob,
                           ResultBlob,
                           quod_trace:inject(quod_trace:context())},

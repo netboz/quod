@@ -4,7 +4,7 @@ uniform vec4 vDecalInfos;uniform mat4 decalMatrix;
 `;e.IncludesShadersStore[c]||(e.IncludesShadersStore[c]=l);var ue={name:c,shader:l},u=`defaultVertexDeclaration`,d=`uniform mat4 viewProjection;
 #ifdef MULTIVIEW
 mat4 viewProjectionR;
-#endif
+#endif 
 uniform mat4 view;
 #ifdef DIFFUSE
 uniform mat4 diffuseMatrix;uniform vec2 vDiffuseInfos;
@@ -60,7 +60,7 @@ uniform mat4 previousViewProjection;varying vec4 vCurrentPosition;varying vec4 v
 varying vec2 v_VARYINGNAME_UV;
 #endif
 `;e.IncludesShadersStore[_]||(e.IncludesShadersStore[_]=v);var y={name:_,shader:v},b=`bumpVertexDeclaration`,x=`#if defined(BUMP) || defined(PARALLAX) || defined(CLEARCOAT_BUMP) || defined(ANISOTROPIC)
-#if defined(TANGENT) && defined(NORMAL)
+#if defined(TANGENT) && defined(NORMAL) 
 varying mat3 vTBN;
 #endif
 #endif
@@ -118,9 +118,9 @@ varying vec4 vPositionFromLight{X};varying float vDepthMetric{X};uniform mat4 li
 #endif
 `;e.IncludesShadersStore[w]||(e.IncludesShadersStore[w]=T);var he={name:w,shader:T},E=`morphTargetsVertexGlobalDeclaration`,D=`#ifdef MORPHTARGETS
 uniform float morphTargetInfluences[NUM_MORPH_INFLUENCERS];
-#ifdef MORPHTARGETS_TEXTURE
+#ifdef MORPHTARGETS_TEXTURE 
 uniform float morphTargetTextureIndices[NUM_MORPH_INFLUENCERS];uniform vec3 morphTargetTextureInfo;uniform highp sampler2DArray morphTargets;vec3 readVector3FromRawSampler(int targetIndex,float vertexIndex)
-{
+{ 
 #if defined(WEBGL2) || defined(WEBGPU)
 int textureWidth=int(morphTargetTextureInfo.y);int y=int(vertexIndex)/textureWidth;int x=int(vertexIndex) % textureWidth;return texelFetch(morphTargets,ivec3(x,y,int(morphTargetTextureIndices[targetIndex])),0).xyz;
 #else
@@ -128,7 +128,7 @@ float y=floor(vertexIndex/morphTargetTextureInfo.y);float x=vertexIndex-y*morphT
 #endif
 }
 vec4 readVector4FromRawSampler(int targetIndex,float vertexIndex)
-{
+{ 
 #if defined(WEBGL2) || defined(WEBGPU)
 int textureWidth=int(morphTargetTextureInfo.y);int y=int(vertexIndex)/textureWidth;int x=int(vertexIndex) % textureWidth;return texelFetch(morphTargets,ivec3(x,y,int(morphTargetTextureIndices[targetIndex])),0);
 #else
@@ -241,22 +241,22 @@ vCurrentPosition=viewProjection*worldPos;
 mat4 previousInfluence;previousInfluence=mPreviousBones[int(matricesIndices[0])]*matricesWeights[0];
 #if NUM_BONE_INFLUENCERS>1
 previousInfluence+=mPreviousBones[int(matricesIndices[1])]*matricesWeights[1];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>2
 previousInfluence+=mPreviousBones[int(matricesIndices[2])]*matricesWeights[2];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>3
 previousInfluence+=mPreviousBones[int(matricesIndices[3])]*matricesWeights[3];
 #endif
 #if NUM_BONE_INFLUENCERS>4
 previousInfluence+=mPreviousBones[int(matricesIndicesExtra[0])]*matricesWeightsExtra[0];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>5
 previousInfluence+=mPreviousBones[int(matricesIndicesExtra[1])]*matricesWeightsExtra[1];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>6
 previousInfluence+=mPreviousBones[int(matricesIndicesExtra[2])]*matricesWeightsExtra[2];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>7
 previousInfluence+=mPreviousBones[int(matricesIndicesExtra[3])]*matricesWeightsExtra[3];
 #endif

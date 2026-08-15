@@ -54,6 +54,9 @@ init([]) ->
          #{id => quod_client_auth,
            start => {quod_client_auth, start_link, []},
            type => worker},
+         #{id => quod_client_cursor,
+           start => {quod_client_cursor, start_link, []},
+           type => worker},
          #{id => quod_client,
            start => {quod_client, start_link, []},
            type => worker}

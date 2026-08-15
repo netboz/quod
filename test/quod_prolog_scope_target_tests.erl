@@ -51,7 +51,7 @@ unknown_internal_error_is_not_put_on_the_wire_test() ->
        quod_prolog:test_public_scope_reason(
          {protocol_error, not_in_the_wire_catalog}, Ns)).
 
-signed_scope_authentication_is_verified_then_explicitly_unavailable_test() ->
+signed_scope_authentication_is_verified_and_bound_test() ->
     Network = <<91:256>>,
     Origin = {<<"quod:signed-origin">>, <<92:256>>},
     Fixture = quod_ct:signed_goal_fixture(
@@ -66,11 +66,16 @@ signed_scope_authentication_is_verified_then_explicitly_unavailable_test() ->
     quod_ct:with_network_identity(
       Network,
       fun() ->
+          {ok, Authorization} =
+              quod_prolog:test_scope_authentication_reason(
+                Authentication, OriginKey, Origin, {user, User},
+                AuthenticationDigest),
           ?assertEqual(
-             {error, signed_scope_unavailable},
-             quod_prolog:test_scope_authentication_reason(
-               Authentication, OriginKey, Origin, {user, User},
-               AuthenticationDigest)),
+             quod_client_goal:request_binding(Fixture),
+             maps:get(request_binding, Authorization)),
+          ?assertEqual(
+             quod_client_goal:request_auth(Fixture),
+             maps:get(request_auth, Authorization)),
           lists:foreach(
             fun({Auth, Identity, Principal, Digest}) ->
                 ?assertEqual(
@@ -87,6 +92,31 @@ signed_scope_authentication_is_verified_then_explicitly_unavailable_test() ->
                maps:get(signature, Fixture)},
               Origin, {user, User}, AuthenticationDigest}])
       end).
+
+signed_scope_waits_when_network_identity_is_temporarily_unavailable_test() ->
+    Origin = {<<"quod:signed-origin">>, <<96:256>>},
+    Fixture = quod_ct:signed_goal_fixture(#{target => Origin}),
+    Authentication =
+        {signed_goal, maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture)},
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(Authentication),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    application:set_env(quod, namespace_desired, #{content => #{}}),
+    try
+        ?assertMatch(
+           {error, {ontology_rebuilding, _}},
+           quod_prolog:test_scope_authentication_reason(
+             Authentication, <<97:256>>, Origin,
+             {user, maps:get(user, Fixture)}, AuthenticationDigest))
+    after
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
+    end.
 
 target_owns_scope_timeout_classification_test() ->
     Ns = <<"quod:target">>,

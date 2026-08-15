@@ -150,7 +150,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
         {ok, Handle} = gen_server:call(
                          Pid,
                          {scope_open, ScopeId, ProofId, Anchor, false,
-                          Deadline}),
+                          Deadline, {Ns, Anchor}, {node, Pubkey}, node}),
         InvocationId = <<50:128>>,
         {ok, OpenRef} = quod_scope_session:invoke_open(
                           Handle, InvocationId,
@@ -166,7 +166,7 @@ keyed_engine_threads_its_signer_into_scope_plans_test() ->
               ProofId, false, {Ns, Anchor}, Deadline, {node, Pubkey}),
         try
             {ok, Plan} = quod_scope_session:seal(
-                           Handle, {Ns, Anchor}, {node, Pubkey}),
+                           Handle, {Ns, Anchor}, {node, Pubkey}, none),
             ?assertEqual(Pubkey, quod_dtx:signer(Plan)),
             ?assert(quod_dtx:verify(Plan))
         after
@@ -276,7 +276,6 @@ prolog_test_() ->
      [fun t_unknown_fails/1,
       fun t_explicit_failure_reason_and_internal_bare_fail/1,
       fun t_apply_and_read/1,
-      fun t_user_principal_is_typed_and_server_owned/1,
       fun t_occ_reject/1,
       fun t_policy_self_seal/1,
       fun t_batch_apply/1,
@@ -760,40 +759,6 @@ t_apply_and_read({Ns, _}) ->
         %% a second committed block advances the applied height
         ok = ab(Ns, 2, batch(change(Ns, diff_for({parent, ann, eve}), #{}))),
         ?assertMatch({ok, [#{'P' := ann}], 2}, quod_prolog:prove(Ns, {parent, {'P'}, eve}))
-    end.
-
-t_user_principal_is_typed_and_server_owned({Ns, _}) ->
-    fun() ->
-        AllowedKey = <<42:256>>,
-        User = {user, AllowedKey},
-        OtherUser = {user, <<43:256>>},
-        %% The founding host-entry clause admits only an empty chain. A user
-        %% proof must take the non-host path and match this explicit policy;
-        %% otherwise `prove_as/3` would silently grant every user host power.
-        UserPolicy = {can_invoke, {user_visible, true}, User, {'Chain'}, Ns},
-        ok = ab(Ns, 1, with_host_policy(
-                         Ns,
-                         batch(change(Ns, diff_for({user_visible, true}), #{})))),
-        %% The injected host-entry policy grants only an empty chain. It still
-        %% admits the engine's own top-level proof, but not a browser user.
-        ?assertEqual(
-           {ok, [#{}], 1},
-           quod_prolog:prove(Ns, {user_visible, true})),
-        ?assertMatch(
-           {fail, _},
-           quod_prolog:prove_as(Ns, {user_visible, true}, User)),
-        ok = ab(Ns, 2, batch(change(Ns, diff_for(UserPolicy), #{}))),
-        %% This trusted in-VM entry point is the bridge used by the typed
-        %% client-command dispatcher; it is deliberately not an HTTP goal API.
-        ?assertEqual(
-           {ok, [#{}], 2},
-           quod_prolog:prove_as(Ns, {user_visible, true}, User)),
-        ?assertMatch(
-           {fail, _},
-           quod_prolog:prove_as(Ns, {user_visible, true}, OtherUser)),
-        ?assertEqual(
-           {error, invalid_user_principal},
-           quod_prolog:prove_as(Ns, {user_visible, true}, anonymous))
     end.
 
 t_occ_reject({Ns, _}) ->

@@ -763,6 +763,79 @@ unsigned_begin_history_replay_does_not_require_root_identity_test() ->
         end
     end.
 
+signed_content_history_replay_waits_for_root_identity_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Target = maps:get(target, Fixture),
+    Network = maps:get(network, Fixture),
+    Transaction = maps:get(transaction, Fixture),
+    #{pubkey := Author} = maps:get(node_identity, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Deadline = maps:get(deadline, Fixture),
+    Projection0 = quod_simplex:history_projection(
+                    [Author], undefined, #{Author => Admission}, #{}, 0),
+    Entry = #entry{index = 2, data = {batch, [Transaction]},
+                   timestamp = Deadline},
+    without_network_identity(
+      fun() ->
+          ?assertEqual(
+             {error, {unavailable, network_identity, not_hosted}},
+             quod_simplex:history_validate_advance(
+               Target, Entry, Projection0))
+      end),
+    quod_ct:with_network_identity(
+      Network,
+      fun() ->
+          ?assertMatch(
+             {ok, _Projection1},
+             quod_simplex:history_validate_advance(
+               Target, Entry, Projection0))
+      end).
+
+signed_begin_history_replay_waits_for_root_identity_test() ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Target = {Ns, Anchor} = maps:get(target, Fixture),
+    Network = maps:get(network, Fixture),
+    Control = maps:get(begin_control, Fixture),
+    #{pubkey := Author} = Identity = maps:get(node_identity, Fixture),
+    Admission = maps:get(admission, Fixture),
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Data = {dtx, ControlBlob},
+    Block = #block{slot = 1, parent = 0, payload = Data, timestamp = 1},
+    BlockHash = quod_simplex:block_hash(Block),
+    Domain = quod_simplex:consensus_domain(Ns, Anchor),
+    #share{sig = Signature} = quod_simplex:make_share(
+                                Domain, commit, 1, BlockHash, Identity),
+    Entry = #entry{index = 1, data = Data, timestamp = 1,
+                   cert = #cert{kind = commit, slot = 1,
+                                block_hash = BlockHash,
+                                sigs = [{Author, Signature}]}},
+    Projection0 =
+        (quod_simplex:history_projection(
+           [Author], <<1:256>>, #{Author => Admission}, #{}, 0))#{
+          dtx := quod_dtx:initial_projection(Target, 0)},
+    Dir = relay_store_dir("signed_begin_history_identity"),
+    {ok, PhaseIndex} = quod_dtx_phase_index:open(Dir, Ns),
+    try
+        without_network_identity(
+          fun() ->
+              ?assertEqual(
+                 {error, {unavailable, network_identity, not_hosted}},
+                 quod_simplex:history_advance(
+                   Target, Entry, Projection0, PhaseIndex))
+          end),
+        quod_ct:with_network_identity(
+          Network,
+          fun() ->
+              ?assertMatch(
+                 {ok, _Projection1, _Effects},
+                 quod_simplex:history_advance(
+                   Target, Entry, Projection0, PhaseIndex))
+          end)
+    after
+        ok = quod_dtx_phase_index:close(PhaseIndex),
+        _ = file:del_dir_r(Dir)
+    end.
+
 dtx_retained_selection_skips_an_older_ineligible_group_test() ->
     Older = quod_ct:dtx_prepare_fixture(),
     Active = quod_ct:dtx_prepare_fixture(),
@@ -7466,6 +7539,19 @@ stop_registered_owner(Pid) ->
         {'DOWN', Ref, process, Pid, _} -> ok
     after 1000 ->
         error(prolog_owner_stop_timeout)
+    end.
+
+without_network_identity(Fun) when is_function(Fun, 0) ->
+    SavedDesired = application:get_env(quod, namespace_desired),
+    application:unset_env(quod, namespace_desired),
+    try Fun()
+    after
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
     end.
 
 validation_owner() ->

@@ -9,16 +9,20 @@ import {
   stopProofCursor,
 } from './api'
 import type { ProveReply } from './api'
+import { useSignedSession } from './session-context'
 
 const EXAMPLES = ['isa(X, Y)', 'assertz(capital(france, paris))', 'capital(france, X)']
 
-export function Console({ ns }: { ns: string }) {
+export function Console({ ns, anchor }: { ns: string; anchor: string }) {
+  const { identity, error: sessionError } = useSignedSession()
   const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
   const [reply, setReply] = useState<ProveReply | null>(null)
   const [cursor, setCursor] = useState<string | null>(null)
   const [solutionNumber, setSolutionNumber] = useState(0)
   const cursorRef = useRef<string | null>(null)
+  const identityRef = useRef(identity)
+  identityRef.current = identity
   const nsRef = useRef(ns)
   nsRef.current = ns
 
@@ -34,14 +38,16 @@ export function Console({ ns }: { ns: string }) {
       setCursor(null)
       setReply(null)
       setSolutionNumber(0)
-      void stopProofCursor(openCursor)
+      if (identityRef.current) void stopProofCursor(identityRef.current, openCursor)
     }
   }, [ns])
 
   useEffect(() => {
     return () => {
       const openCursor = cursorRef.current
-      if (openCursor) void stopProofCursor(openCursor)
+      if (openCursor && identityRef.current) {
+        void stopProofCursor(identityRef.current, openCursor)
+      }
     }
   }, [])
 
@@ -63,15 +69,15 @@ export function Console({ ns }: { ns: string }) {
   }
 
   const run = async () => {
-    if (!goal.trim() || busy || cursor) return
+    if (!identity || !goal.trim() || busy || cursor) return
     setBusy(true)
     setReply(null)
     const requestNs = ns
     try {
-      const next = await openProofCursor(requestNs, goal)
+      const next = await openProofCursor(identity, requestNs, anchor, goal)
       if (nsRef.current !== requestNs) {
         if ('result' in next && next.result === 'solution') {
-          void stopProofCursor(next.cursor)
+          void stopProofCursor(identity, next.cursor)
         }
         return
       }
@@ -84,16 +90,16 @@ export function Console({ ns }: { ns: string }) {
   }
 
   const command = async (kind: 'next' | 'accept' | 'stop') => {
-    if (!cursor || busy) return
+    if (!identity || !cursor || busy) return
     setBusy(true)
     const requestNs = ns
     try {
       const next =
         kind === 'next'
-          ? await nextProofSolution(cursor)
+          ? await nextProofSolution(identity, cursor)
           : kind === 'accept'
-            ? await acceptProofSolution(cursor)
-            : await stopProofCursor(cursor)
+            ? await acceptProofSolution(identity, cursor)
+            : await stopProofCursor(identity, cursor)
       if (nsRef.current !== requestNs) return
       applyReply(next, kind === 'next')
     } catch (e) {
@@ -112,12 +118,18 @@ export function Console({ ns }: { ns: string }) {
         <span className="text-[11px] text-cream/70">reads answer · writes commit</span>
       </header>
       <div className="p-4">
+        {!identity && (
+          <div className="mb-3 rounded-lg border border-gold/45 bg-gold-soft/15 px-3 py-2 text-sm text-teal">
+            Sign in above to run a goal. The console signs the exact Prolog text; the ontology's normal ACL still decides whether it is allowed.
+            {sessionError && <span className="ml-2 text-rose">{sessionError}</span>}
+          </div>
+        )}
         <div className="flex items-start gap-2">
           <span className="pt-2 font-mono text-sm text-gray select-none">?-</span>
           <textarea
             value={goal}
             onChange={(e) => setGoal(e.target.value)}
-            disabled={cursor !== null}
+            disabled={cursor !== null || identity === null}
             onKeyDown={(e) => {
               if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault()
@@ -131,7 +143,7 @@ export function Console({ ns }: { ns: string }) {
           />
           <button
             onClick={() => void run()}
-            disabled={busy || !goal.trim() || cursor !== null}
+            disabled={busy || !identity || !goal.trim() || cursor !== null}
             className="rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-teal shadow-sm transition hover:bg-gold-soft disabled:opacity-40"
           >
             {busy ? 'Proving…' : 'Run'}
@@ -139,7 +151,7 @@ export function Console({ ns }: { ns: string }) {
         </div>
         <div className="mt-2 flex gap-2 text-[11px] text-gray">
           {EXAMPLES.map((e) => (
-            <button key={e} disabled={cursor !== null} onClick={() => setGoal(e)} className="rounded bg-gold-soft/35 px-2 py-0.5 font-mono text-teal-light hover:bg-gold-soft/60 hover:text-teal disabled:opacity-40">
+            <button key={e} disabled={cursor !== null || identity === null} onClick={() => setGoal(e)} className="rounded bg-gold-soft/35 px-2 py-0.5 font-mono text-teal-light hover:bg-gold-soft/60 hover:text-teal disabled:opacity-40">
               {e}
             </button>
           ))}

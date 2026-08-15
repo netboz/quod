@@ -37,7 +37,8 @@ encode_result(Bindings) when is_map(Bindings) ->
     case result_pairs(Bindings) of
         {ok, Pairs} ->
         case lists:all(
-               fun({Name, _Value}) -> byte_size(Name) > 0 end, Pairs) of
+               fun({Name, _Value}) -> byte_size(Name) > 0 end, Pairs)
+             andalso unique_result_names(Pairs) of
             true -> encode(result, Pairs, ?QUOD_MAX_DURABLE_RESULT_BYTES);
             false -> {error, invalid_result}
             end;
@@ -47,17 +48,29 @@ encode_result(Bindings) when is_map(Bindings) ->
 encode_result(_) ->
     {error, invalid_result}.
 
-%% Keep input validation separate from the codec. An invalid variable name is
-%% a caller error; a codec failure is not and must retain its own result.
+%% Keep input validation separate from the codec. Signed browser goals retain
+%% their atom-free binary variable names; trusted in-VM callers still use the
+%% traditional atom keys. Both converge on the same durable binary-name form.
 result_pairs(Bindings) ->
     try
         {ok,
          lists:sort(
-           [{atom_to_binary(Name, utf8), Value}
+           [{result_name(Name), Value}
             || {Name, Value} <- maps:to_list(Bindings)])}
     catch
         error:badarg -> error
     end.
+
+result_name(Name) when is_atom(Name) -> atom_to_binary(Name, utf8);
+result_name(Name) when is_binary(Name) -> Name;
+result_name(_Name) -> error(badarg).
+
+unique_result_names([], _Previous) -> true;
+unique_result_names([{Name, _Value} | _Rest], Name) -> false;
+unique_result_names([{Name, _Value} | Rest], _Previous) ->
+    unique_result_names(Rest, Name).
+
+unique_result_names(Pairs) -> unique_result_names(Pairs, none).
 
 -doc "Decode and validate the canonical ordered durable solution pairs.".
 -spec decode_result(binary()) -> {ok, [{binary(), term()}]} | codec_error().

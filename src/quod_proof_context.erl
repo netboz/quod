@@ -11,7 +11,9 @@ the scope wire as Erlang references.
 
 -include("quod_proof_limits.hrl").
 
--export([start/5, stop/2, proof_id/0, origin_identity/0, principal/0,
+-export([start/5, start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
+         request_auth/0, request_binding/0, scope_authentication/0,
+         durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0,
          finalize/1, seal_plans/0, scope_handle/1,
          bind_router/3,
@@ -55,6 +57,8 @@ the scope wire as Erlang references.
 -record(ctx, {proof_id  :: <<_:256>>,
               origin_identity :: identity(),
               principal :: quod_dtx:principal(),
+              request_evidence = none :: none | quod_client_goal:evidence(),
+              request_binding = none :: quod_client_goal:request_binding(),
               deadline_ms :: integer(),
               read_only = false :: boolean(),
               finalization = open :: open | ok | {error, term()},
@@ -82,13 +86,27 @@ the scope wire as Erlang references.
 start(<<_:256>> = ProofId, ReadOnly,
       {Ns, <<_:256>>} = OriginIdentity, DeadlineMs, Principal)
   when is_boolean(ReadOnly), is_binary(Ns), is_integer(DeadlineMs) ->
+    start(ProofId, ReadOnly, OriginIdentity, DeadlineMs, Principal, none).
+
+-spec start(<<_:256>>, boolean(), identity(), integer(),
+            quod_dtx:principal(),
+            none | quod_client_goal:evidence()) -> handle().
+start(<<_:256>> = ProofId, ReadOnly,
+      {Ns, <<_:256>>} = OriginIdentity, DeadlineMs, Principal, RequestEvidence)
+  when is_boolean(ReadOnly), is_binary(Ns), is_integer(DeadlineMs) ->
     undefined = get(?KEY),
     put(?KEY, #ctx{proof_id = ProofId,
                    origin_identity = OriginIdentity,
                    principal = Principal,
+                   request_evidence = RequestEvidence,
+                   request_binding = request_binding_of(RequestEvidence),
                    deadline_ms = DeadlineMs,
                    read_only = ReadOnly}),
     {quod_proof_context, ProofId, self()}.
+
+request_binding_of(none) -> none;
+request_binding_of(Evidence) ->
+    quod_client_goal:request_binding(quod_client_goal:request_auth(Evidence)).
 
 -doc "Close all selected scopes and invocation proxies, then discard proof-local control state.".
 -spec stop(fun((term()) -> term()), fun(({actor(), term()}) -> term())) -> ok.
@@ -119,6 +137,35 @@ origin_identity() -> (context())#ctx.origin_identity.
 
 -spec principal() -> quod_dtx:principal().
 principal() -> (context())#ctx.principal.
+
+-spec request_auth() -> none | quod_client_goal:request_auth().
+request_auth() ->
+    case (context())#ctx.request_evidence of
+        none -> none;
+        Evidence -> quod_client_goal:request_auth(Evidence)
+    end.
+
+-spec request_binding() -> quod_client_goal:request_binding().
+request_binding() -> (context())#ctx.request_binding.
+
+-doc "Return the one scope-wire authentication object for this proof.".
+-spec scope_authentication() -> quod_scope_wire:authentication().
+scope_authentication() ->
+    case (context())#ctx.request_evidence of
+        none -> node;
+        #{request_bytes := Bytes, signature := Signature} ->
+            {signed_goal, Bytes, Signature}
+    end.
+
+-doc "Give a committed result the stable variable names verified at ingress.".
+-spec durable_bindings(map()) -> {ok, map()} | {error, invalid_result}.
+durable_bindings(Bindings) when is_map(Bindings) ->
+    case (context())#ctx.request_evidence of
+        none -> {ok, Bindings};
+        Evidence -> quod_client_goal:durable_bindings(Evidence, Bindings)
+    end;
+durable_bindings(_Bindings) ->
+    {error, invalid_result}.
 
 -spec read_only() -> boolean().
 read_only() -> (context())#ctx.read_only.
@@ -211,11 +258,13 @@ seal_material_scopes(#ctx{read_only = true}) ->
     {ok, #{}};
 seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
                           origin_identity = OriginIdentity,
-                          principal = Principal}) ->
+                          principal = Principal,
+                          request_binding = RequestBinding}) ->
     case proof_material(Scopes, Dirty) of
         {ok, false} -> {ok, #{}};
         {ok, true} -> seal_scopes(lists:sort(maps:to_list(Scopes)),
-                                  OriginIdentity, Principal, #{});
+                                  OriginIdentity, Principal,
+                                  RequestBinding, #{});
         {error, _} = Error -> {Error, #{}}
     end.
 
@@ -242,16 +291,19 @@ local_scope_material([#scope{} | Rest]) ->
 local_scope_material([]) ->
     {ok, false}.
 
-seal_scopes([], _OriginIdentity, _Principal, Plans) ->
+seal_scopes([], _OriginIdentity, _Principal, _RequestBinding, Plans) ->
     {ok, Plans};
 seal_scopes([{Identity, #scope{handle = Handle}} | Rest],
-            OriginIdentity, Principal, Plans) ->
-    case quod_scope_session:seal(Handle, OriginIdentity, Principal) of
+            OriginIdentity, Principal, RequestBinding, Plans) ->
+    case quod_scope_session:seal(
+           Handle, OriginIdentity, Principal, RequestBinding) of
         {ok, Plan} ->
             seal_scopes(
-              Rest, OriginIdentity, Principal, Plans#{Identity => Plan});
+              Rest, OriginIdentity, Principal, RequestBinding,
+              Plans#{Identity => Plan});
         not_material ->
-            seal_scopes(Rest, OriginIdentity, Principal, Plans);
+            seal_scopes(
+              Rest, OriginIdentity, Principal, RequestBinding, Plans);
         {error, _} = Error ->
             {Error, Plans}
     end.

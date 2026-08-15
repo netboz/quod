@@ -8,9 +8,7 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { PALETTE } from './palette.js'
 import {
-  b64url,
   createKeyProvider,
-  fromB64url,
   hasLocalKeyProvider,
   importEncryptedKeyProvider,
   loadLocalKeyProvider,
@@ -18,6 +16,12 @@ import {
   exportEncryptedKeyProvider,
   saveLocalKeyProvider,
 } from './key-provider.js'
+import {
+  assertCrypto,
+  authenticateKey,
+  resolveSignedOperations,
+  signedGoal,
+} from './signed-client.js'
 import './style.css'
 
 const canvas = document.querySelector('#world')
@@ -194,20 +198,31 @@ registerButton.addEventListener('click', async () => {
   registerButton.disabled = true
   try {
     status.textContent = 'Creating your user home on this node…'
-    const clientNonce = crypto.getRandomValues(new Uint8Array(32))
-    const signature = new Uint8Array(await identity.provider.sign(
-      registrationBytes(identity.networkId, identity.provider.publicKey, clientNonce),
-    ))
-    const result = await postJson('/api/user/register', {
-      session_id: identity.session.session_id,
-      client_nonce: b64url(clientNonce),
-      signature: b64url(signature),
+    const reply = await signedGoal(identity, {
+      mode: 'execute',
+      namespace: 'quod:root',
+      anchor: identity.networkId,
+      goal: 'create_user_home.',
     })
-    registerButton.textContent = 'User home ready'
-    status.textContent = `Your user home is ready on this node: ${result.namespace}`
+    if (reply.result === 'ok') {
+      registerButton.textContent = 'User home ready'
+      status.textContent = `Your user home is ready on this node: ${identity.session.namespace}`
+    } else if (reply.result === 'pending') {
+      registerButton.textContent = 'Home outcome pending'
+      status.textContent = 'The home request may still commit. Do not submit it again; resolve the displayed anchored outcome first.'
+    } else if (reply.result === 'fail') {
+      throw new Error(reply.reasons?.join('; ') || 'the root ontology refused home creation')
+    } else {
+      throw new Error(reply.error || 'home creation did not complete')
+    }
   } catch (error) {
-    status.textContent = `Could not create your user home: ${error.message || 'unknown error'}`
-    registerButton.disabled = false
+    if (error.outcomeUnknown) {
+      registerButton.textContent = 'Home outcome unknown'
+      status.textContent = 'The request may have reached the node. Do not submit it again; resolve its outcome before taking another action.'
+    } else {
+      status.textContent = `Could not create your user home: ${error.message || 'unknown error'}`
+      registerButton.disabled = false
+    }
   }
 })
 
@@ -226,10 +241,7 @@ async function withIdentityButton(button, operation) {
 // anything but localhost simply has no crypto.subtle. Naming that cause beats
 // reporting "unavailable" and leaving someone to guess at their browser.
 function assertKeysUsable() {
-  if (globalThis.crypto?.subtle) return
-  throw new Error(globalThis.isSecureContext === false
-    ? 'this page must be served over https for the browser to allow key handling'
-    : 'this browser does not provide Web Crypto')
+  assertCrypto()
 }
 
 async function confirmedPassphrase(promptText) {
@@ -244,20 +256,16 @@ async function confirmedPassphrase(promptText) {
 }
 
 async function authenticate(providerPromise) {
-  const provider = await providerPromise
-  const clientNonce = crypto.getRandomValues(new Uint8Array(32))
-  const challenge = await postJson('/api/auth/challenge', {
-    public_key: b64url(provider.publicKey),
-    client_nonce: b64url(clientNonce),
-  })
-  const signature = new Uint8Array(await provider.sign(
-    challengeBytes(challenge, provider.publicKey, clientNonce),
-  ))
-  const session = await postJson('/api/auth/complete', {
-    challenge_id: challenge.challenge_id,
-    signature: b64url(signature),
-  })
-  identity = { provider, session, networkId: fromB64url(challenge.network_id) }
+  identity = await authenticateKey(await providerPromise)
+  const { provider, session } = identity
+  let recovered = []
+  let journalWarning = ''
+  try {
+    recovered = await resolveSignedOperations(identity)
+  } catch {
+    journalWarning = ' Durable write storage is unavailable, so reads remain available but writes are disabled.'
+  }
+  const unresolved = recovered.filter(({ reply }) => reply?.terminal !== true).length
   identityButton.textContent = 'Identity active'
   identityButton.disabled = true
   // Saved means *this* key is saved. A browser holding an older key must still
@@ -269,46 +277,8 @@ async function authenticate(providerPromise) {
   exportButton.hidden = false
   exportButton.disabled = false
   registerButton.hidden = false
-  registerButton.disabled = false
-  status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'} You can now create its user home here.`
-}
-
-async function postJson(url, body) {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify(body),
-  })
-  const payload = await response.json().catch(() => ({}))
-  if (!response.ok) throw new Error(payload.error || `request failed (${response.status})`)
-  return payload
-}
-
-function challengeBytes(challenge, publicKey, clientNonce) {
-  const domain = new TextEncoder().encode('quod_user_challenge_v1\0')
-  const network = fromB64url(challenge.network_id)
-  const node = fromB64url(challenge.node_key)
-  const challengeId = fromB64url(challenge.challenge_id)
-  const serverNonce = fromB64url(challenge.server_nonce)
-  const expiry = new Uint8Array(8)
-  new DataView(expiry.buffer).setBigUint64(0, BigInt(challenge.expires_ms), false)
-  return joinBytes(domain, network, node, challengeId, publicKey, clientNonce, serverNonce, expiry)
-}
-
-function registrationBytes(networkId, publicKey, clientNonce) {
-  const domain = new TextEncoder().encode('quod_user_registration_v1\0')
-  return joinBytes(domain, networkId, publicKey, clientNonce)
-}
-
-function joinBytes(...parts) {
-  const length = parts.reduce((total, part) => total + part.length, 0)
-  const result = new Uint8Array(length)
-  let offset = 0
-  for (const part of parts) {
-    result.set(part, offset)
-    offset += part.length
-  }
-  return result
+  registerButton.disabled = journalWarning !== ''
+  status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'}${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}${journalWarning || ' You can now create its user home here.'}`
 }
 
 void updateHealth()

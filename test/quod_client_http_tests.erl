@@ -19,7 +19,7 @@ assertions include the absence of crash reports, not only the responses.
 
 -define(PEER, {127, 0, 0, 1}).
 
-signed_read_result_keeps_parser_variable_names_test() ->
+signed_goal_result_keeps_parser_variable_names_test() ->
     Evidence = #{request_digest => <<1:256>>,
                  request => #{operation_id => <<2:256>>},
                  variables => [{<<"Person">>, 0}]},
@@ -28,12 +28,32 @@ signed_read_result_keeps_parser_variable_names_test() ->
                request_digest => b64url(<<1:256>>),
                operation_id => b64url(<<2:256>>),
                bindings => [#{<<"Person">> => <<"bob">>}]}},
-       quod_client_http:signed_read_result(
+       quod_client_http:signed_goal_result(
          {ok, Evidence, {ok, [#{0 => bob}], 7}})),
     ?assertEqual(
-       {409, #{error => signed_scope_unavailable}},
-       quod_client_http:signed_read_result(
-         {ok, Evidence, {error, signed_scope_unavailable}})).
+       {409, #{error => read_only}},
+       quod_client_http:signed_goal_result(
+         {ok, Evidence, {error, read_only}})).
+
+signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
+    Evidence = #{request_digest => <<1:256>>,
+                 request => #{operation_id => <<2:256>>}},
+    ?assertEqual(
+       {202, #{result => operation_outcome, status => pending,
+               terminal => false,
+               request_digest => b64url(<<1:256>>),
+               operation_id => b64url(<<2:256>>)}},
+       quod_client_http:signed_goal_result(
+         {ok, Evidence, {operation_pending, ignored}})),
+    ?assertEqual(
+       {200, #{result => operation_outcome, status => committed,
+               terminal => true, claim_height => 3, height => 4,
+               request_digest => b64url(<<1:256>>),
+               operation_id => b64url(<<2:256>>)}},
+       quod_client_http:signed_goal_result(
+         {ok, Evidence,
+          {operation_outcome, #{height => 3},
+           #{status => committed, height => 4}}})).
 
 client_http_test_() ->
     {setup, fun setup/0, fun cleanup/1,
@@ -68,7 +88,7 @@ api_reply_is_clean(Port) ->
                  request(Connection, post, "/api/auth/challenge", <<"{}">>)),
     ?assertMatch({400, _, _},
                  request(Connection, post, "/api/auth/complete", <<"nonsense">>)),
-    ?assertMatch({400, _, _},
+    ?assertMatch({404, _, _},
                  request(Connection, post, "/api/user/register", <<"{}">>)),
     ?assertMatch({400, _, _},
                  request(Connection, post, "/api/goals/read", <<"{}">>)),
@@ -88,6 +108,9 @@ routes_are_crash_free(Port) ->
                     _ = request(Connection, post, "/api/auth/complete", <<"{}">>),
                     _ = request(Connection, post, "/api/user/register", <<"{}">>),
                     _ = request(Connection, post, "/api/goals/read", <<"{}">>),
+                    _ = request(Connection, post, "/api/goals/execute", <<"{}">>),
+                    _ = request(Connection, post, "/api/goals/outcomes", <<"{}">>),
+                    _ = request(Connection, post, "/api/goals/cursors", <<"{}">>),
                     _ = request(Connection, get, "/api/auth/challenge", <<>>),
                     _ = request(Connection, post, "/api/auth/challenge",
                                 binary:copy(<<"A">>, 8192)),
@@ -185,8 +208,16 @@ routes() ->
     [{'_', [{"/health", quod_client_http, health},
             {"/api/auth/challenge", quod_client_http, auth_challenge},
             {"/api/auth/complete", quod_client_http, auth_complete},
-            {"/api/user/register", quod_client_http, user_register},
-            {"/api/goals/read", quod_client_http, signed_goal_read}]}].
+            {"/api/goals/read", quod_client_http, signed_goal_read},
+            {"/api/goals/execute", quod_client_http, signed_goal_execute},
+            {"/api/goals/outcomes", quod_client_http, signed_goal_outcome},
+            {"/api/goals/cursors", quod_client_http, signed_goal_cursor},
+            {"/api/goals/cursors/:id/next", quod_client_http,
+             signed_cursor_next},
+            {"/api/goals/cursors/:id/accept", quod_client_http,
+             signed_cursor_accept},
+            {"/api/goals/cursors/:id", quod_client_http,
+             signed_cursor_stop}]}].
 
 tls_dir() ->
     Dir = filename:join(["/tmp", "quod-client-http-tests",

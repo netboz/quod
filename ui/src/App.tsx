@@ -11,8 +11,12 @@ import { addHistory, mergeFull, replaceHistory, startWs, useExplorerStore } from
 import type { LiveTx } from './store'
 import { TxDetail } from './TxDetail'
 import { TxTable } from './TxTable'
+import { SessionControls } from './Session'
 
 export default function App() {
+  // The TLS client mounts this bundle at /explorer/ and owns the signed-goal
+  // routes. The standalone HTTP Explorer remains a read-only ledger browser.
+  const interactive = window.location.pathname.startsWith('/explorer/')
   const store = useExplorerStore()
   const qc = useQueryClient()
   const summary = useQuery({ queryKey: ['summary'], queryFn: fetchSummary })
@@ -88,11 +92,14 @@ export default function App() {
           setSelected(null)
           setSelectedControl(current ? { ns: current, block } : null)
         }}
+        interactive={interactive}
       />
       {nsInfo && <StatCards info={nsInfo} liveHeight={store.heights[nsInfo.ns] ?? nsInfo.height} />}
       <main className="mt-4 flex flex-1 flex-col gap-4 lg:flex-row lg:items-start">
         <div className="min-w-0 flex-1 space-y-4">
-          {current && <Console ns={current} />}
+          {interactive && current && nsInfo?.genesis && (
+            <Console ns={current} anchor={nsInfo.genesis} />
+          )}
           {firstPage.isError && rows.length === 0 && (
             <div className="flex items-center justify-between rounded-xl border border-rose/30 bg-rose/5 px-4 py-2.5 text-sm text-rose">
               <span>Couldn't load transaction history.</span>
@@ -132,6 +139,7 @@ function Header({
   ws,
   onFound,
   onControl,
+  interactive,
 }: {
   namespaces: NsSummary[]
   current: string | null
@@ -139,6 +147,7 @@ function Header({
   ws: 'connecting' | 'live' | 'down'
   onFound: (tx: LiveTx) => void
   onControl: (block: Block) => void
+  interactive: boolean
 }) {
   return (
     <header className="-mx-4 mb-4 bg-teal px-4 text-cream shadow-md">
@@ -165,6 +174,7 @@ function Header({
           ))}
         </nav>
         <div className="ml-auto flex items-center gap-4">
+          {interactive && <SessionControls />}
           {current && <Search ns={current} onFound={onFound} onControl={onControl} />}
           <span className="flex items-center gap-1.5 text-xs">
             <span

@@ -20,7 +20,10 @@ unknown_symbol_remains_roundtripable_data_test() ->
 result_names_are_canonical_binary_keys_test() ->
     {ok, Blob} = quod_durable_term:encode_result(#{z => 2, a => 1}),
     ?assertEqual({ok, [{<<"a">>, 1}, {<<"z">>, 2}]},
-                 quod_durable_term:decode_result(Blob)).
+                 quod_durable_term:decode_result(Blob)),
+    ?assertEqual(
+       {ok, Blob},
+       quod_durable_term:encode_result(#{<<"z">> => 2, <<"a">> => 1})).
 
 duplicate_result_names_are_rejected_test() ->
     {ok, Wire} = quod_wire_term:encode(
@@ -31,7 +34,10 @@ duplicate_result_names_are_rejected_test() ->
 
 empty_result_name_is_rejected_before_encoding_test() ->
     ?assertEqual({error, invalid_result},
-                 quod_durable_term:encode_result(#{'' => value})).
+                 quod_durable_term:encode_result(#{'' => value})),
+    ?assertEqual(
+       {error, invalid_result},
+       quod_durable_term:encode_result(#{same => 1, <<"same">> => 2})).
 
 noncanonical_etf_is_rejected_test() ->
     Goal = lists:duplicate(200, durable_repeated_value),

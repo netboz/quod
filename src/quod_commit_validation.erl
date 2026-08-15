@@ -46,11 +46,13 @@ new({_Ns, <<_:256>>} = Target, Applied, Est, Outcomes, Signer)
 outcomes(#context{outcomes = Outcomes}) -> Outcomes.
 
 -spec content(term(), term(), mode(), context()) -> result(term()).
-content(Transactions, BlockTimestamp, Mode, Context)
+content(Transactions, BlockTimestamp, Mode,
+        Context = #context{target = Target})
   when is_list(Transactions), is_integer(BlockTimestamp),
        BlockTimestamp >= 0 ->
     case quod_ontology:network_identity(
-           quod_transaction:requires_network_identity(Transactions)) of
+           quod_transaction:requires_network_identity(Transactions),
+           Target) of
         {ok, Network} ->
             validate_content_transactions(
               Transactions, Network, BlockTimestamp, Mode, #{}, Context);
@@ -241,7 +243,7 @@ dtx_request_verdict(Control, BlockTimestamp, Mode, Context) ->
 validate_dtx_begin_request(Control, BlockTimestamp, Mode,
                            Context0 = #context{target = Target}) ->
     case quod_ontology:network_identity(
-           quod_dtx:requires_network_identity(Control)) of
+           quod_dtx:requires_network_identity(Control), Target) of
         {ok, Network} ->
             case quod_dtx:validate_request(
                    Network, Target, BlockTimestamp, Control) of

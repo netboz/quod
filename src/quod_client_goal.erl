@@ -18,6 +18,7 @@ when they need the complete validator check.
 -export([encode/1, decode/1, verify/2, verify_for/5,
          digest/1, operation_ref/1,
          request_auth/1, request_binding/1,
+         named_bindings/2, durable_bindings/2,
          valid_request_binding/1, authorization_transcript/3,
          verify_durable_authorization/3,
          validate_durable_authorization/6]).
@@ -456,6 +457,34 @@ parsed_evidence(#{goal_text := GoalText,
         {error, _} ->
             {error, invalid_goal}
     end.
+
+-doc "Project proof bindings onto the variables named by the signed request.".
+-spec named_bindings(evidence(), map()) ->
+          {ok, map()} | {error, invalid_result}.
+named_bindings(#{variables := Variables}, Bindings)
+  when is_list(Variables), is_map(Bindings) ->
+    named_bindings(Variables, Bindings, []);
+named_bindings(_Evidence, _Bindings) ->
+    {error, invalid_result}.
+
+named_bindings([], _Bindings, Named) ->
+    {ok, maps:from_list(lists:reverse(Named))};
+named_bindings([{Name, Index} | Rest], Bindings, Named)
+  when is_binary(Name), is_integer(Index), Index >= 0 ->
+    case maps:find(Index, Bindings) of
+        {ok, Value} ->
+            named_bindings(Rest, Bindings, [{Name, Value} | Named]);
+        error ->
+            named_bindings(Rest, Bindings, Named)
+    end;
+named_bindings(_MalformedVariables, _Bindings, _Named) ->
+    {error, invalid_result}.
+
+-doc "Replace parser-local named variable ids with their signed binary names.".
+-spec durable_bindings(evidence(), map()) ->
+          {ok, map()} | {error, invalid_result}.
+durable_bindings(Evidence, Bindings) ->
+    named_bindings(Evidence, Bindings).
 
 validate_context(_Request, _ExpectedNetwork, _ExpectedTarget,
                  AdmissionMs, _Evidence)

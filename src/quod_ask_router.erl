@@ -21,13 +21,13 @@ by the fixed `quod_scope_wire` decoder.
 -include("quod_proof_limits.hrl").
 
 -export([start_link/0,
-         identify/3, ensure_scope/3,
+         identify/3, ensure_scope/4,
          command/3, cancel/2, close/2, finalize/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
 
 -ifdef(TEST).
--export([identify/4, ensure_scope/4, unregister/1,
+-export([identify/4, ensure_scope/5, unregister/1,
          test_start_link/2, test_start_link/3, test_stats/1]).
 -endif.
 
@@ -121,18 +121,22 @@ by the fixed `quod_scope_wire` decoder.
 start_link() ->
     gen_server:start_link(quod_reg:via(?KEY), ?MODULE, [], []).
 
--spec ensure_scope(term(), binding(), non_neg_integer()) ->
+-spec ensure_scope(term(), binding(), quod_scope_wire:authentication(),
+                   non_neg_integer()) ->
           {ok, remote_handle()} | pending() | {error, term()}.
-ensure_scope(Endpoint, Binding, RemainingMs) ->
+ensure_scope(Endpoint, Binding, Authentication, RemainingMs) ->
     with_router(
       fun(Router) ->
-          ensure_scope(Router, Endpoint, Binding, RemainingMs)
+          ensure_scope(Router, Endpoint, Binding, Authentication, RemainingMs)
       end).
 
--spec ensure_scope(gen_server:server_ref(), term(), binding(), non_neg_integer()) ->
+-spec ensure_scope(gen_server:server_ref(), term(), binding(),
+                   quod_scope_wire:authentication(), non_neg_integer()) ->
           {ok, remote_handle()} | pending() | {error, term()}.
-ensure_scope(Router, Endpoint, Binding, RemainingMs) ->
-    guarded_call(Router, {ensure_scope, self(), Endpoint, Binding, RemainingMs}).
+ensure_scope(Router, Endpoint, Binding, Authentication, RemainingMs) ->
+    guarded_call(
+      Router,
+      {ensure_scope, self(), Endpoint, Binding, Authentication, RemainingMs}).
 
 -spec identify(term(), binary(), non_neg_integer()) ->
           pending() | {error, term()}.
@@ -264,8 +268,11 @@ handle_call({identify, Owner, Endpoint, Namespace, RemainingMs}, _From, S0) ->
         {ok, OpenRef, S1} -> {reply, pending(OpenRef, S1), S1};
         {error, _} = Error -> {reply, Error, S0}
     end;
-handle_call({ensure_scope, Owner, Endpoint, Binding, RemainingMs}, _From, S0) ->
-    case validate_open(Owner, Endpoint, Binding, RemainingMs, S0) of
+handle_call(
+  {ensure_scope, Owner, Endpoint, Binding, Authentication, RemainingMs},
+  _From, S0) ->
+    case validate_open(
+           Owner, Endpoint, Binding, Authentication, RemainingMs, S0) of
         {reuse, #scope{status = active} = Scope} ->
             {reply, {ok, handle(Scope, S0)}, S0};
         {reuse, #scope{open_ref = OpenRef}} ->
@@ -453,10 +460,10 @@ probe_owner_admission(#owner{poison = {poisoned, Reason}}) ->
     {error, {proof_poisoned, Reason}};
 probe_owner_admission(#owner{}) -> ok.
 
-validate_open(Owner, Endpoint, Binding, RemainingMs,
+validate_open(Owner, Endpoint, Binding, Authentication, RemainingMs,
               #s{origin_key = OriginKey, reuse = Reuse, scopes = Scopes})
   when is_pid(Owner) ->
-    case open_fields(Binding, OriginKey) of
+    case open_fields(Binding, Authentication, OriginKey) of
         {ok, Fields} ->
             ProofId = maps:get(proof_id, Fields),
             TargetIdentity = maps:get(target_identity, Fields),
@@ -474,18 +481,18 @@ validate_open(Owner, Endpoint, Binding, RemainingMs,
                     end;
                 undefined ->
                     validate_new_open(
-                      Endpoint, Binding, RemainingMs,
+                      Endpoint, Binding, Authentication, RemainingMs,
                       Fields#{reuse_key => ReuseKey})
             end;
         {error, _} = Error -> Error
     end;
-validate_open(_Owner, _Endpoint, _Binding, _RemainingMs, _S) ->
+validate_open(_Owner, _Endpoint, _Binding, _Authentication, _RemainingMs, _S) ->
     {error, invalid_owner}.
 
-validate_new_open(Endpoint, Binding, RemainingMs, Fields) ->
+validate_new_open(Endpoint, Binding, Authentication, RemainingMs, Fields) ->
     RequestId = new_id(),
     Command = {scope_command, Binding, 1, RequestId, RemainingMs,
-               {scope_open, node}},
+               {scope_open, Authentication}},
     case {quod_quic:valid_endpoint(Endpoint),
           quod_scope_wire:encode_command(Command)} of
         {false, _} -> {error, invalid_endpoint};
@@ -497,22 +504,39 @@ validate_new_open(Endpoint, Binding, RemainingMs, Fields) ->
 open_fields(
   Binding = {scope_binding, OriginKey, TargetKey, ProofId, ScopeId,
              _OriginIdentity, TargetIdentity = {TargetNs, Anchor}, _Mode,
-             {node, OriginKey}, AuthenticationDigest},
-  OriginKey)
+             Principal, AuthenticationDigest},
+  Authentication, OriginKey)
   when is_binary(TargetKey), byte_size(TargetKey) =:= 32,
        is_binary(ProofId), byte_size(ProofId) =:= 32,
        is_binary(ScopeId), byte_size(ScopeId) =:= ?ID_BYTES,
        is_binary(TargetNs), byte_size(TargetNs) > 0,
        is_binary(Anchor), byte_size(Anchor) =:= 32,
        is_binary(AuthenticationDigest), byte_size(AuthenticationDigest) =:= 32 ->
-    {ok, #{binding => Binding,
-           key => {ProofId, ScopeId},
-           proof_id => ProofId,
-           target_key => TargetKey,
-           target_identity => TargetIdentity,
-           request_channel => quod_scope_wire:request_channel(TargetNs)}};
-open_fields(_Binding, _OriginKey) ->
+    case scope_authentication_matches(
+           Principal, Authentication, AuthenticationDigest, OriginKey) of
+        true ->
+            {ok, #{binding => Binding,
+                   key => {ProofId, ScopeId},
+                   proof_id => ProofId,
+                   target_key => TargetKey,
+                   target_identity => TargetIdentity,
+                   request_channel =>
+                       quod_scope_wire:request_channel(TargetNs)}};
+        false ->
+            {error, invalid_binding}
+    end;
+open_fields(_Binding, _Authentication, _OriginKey) ->
     {error, invalid_binding}.
+
+scope_authentication_matches({node, OriginKey}, node, Digest, OriginKey) ->
+    quod_scope_wire:authentication_digest(node) =:= {ok, Digest};
+scope_authentication_matches(
+  {user, <<_:256>>},
+  {signed_goal, _RequestBytes, <<_:512>>} = Authentication,
+  Digest, _OriginKey) ->
+    quod_scope_wire:authentication_digest(Authentication) =:= {ok, Digest};
+scope_authentication_matches(_Principal, _Authentication, _Digest, _OriginKey) ->
+    false.
 
 reusable_binding(
   {scope_binding, OriginKey, _NewTargetKey, ProofId, _NewScopeId,

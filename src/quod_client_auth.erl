@@ -32,7 +32,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -behaviour(gen_server).
 
 -export([start_link/0, issue_challenge/3, complete_challenge/2, session/1,
-         reserve_registration/1, admit_goal/2, materialize_goal/3]).
+         admit_goal/2, materialize_goal/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([start_link/1]).
@@ -44,13 +44,8 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -define(MAX_SESSIONS, 256).
 -define(PRUNE_INTERVAL_MS, 30000).
 -define(WINDOW_MS, 60000).
-%% Logins are cheap and common, registrations are durable and rare, so they get
-%% separate budgets rather than one shared number.
 -define(CHALLENGE_LIMIT,
         #{window_ms => ?WINDOW_MS, max_total => 256, max_per_key => 16,
-          max_keys => 256}).
--define(REGISTRATION_LIMIT,
-        #{window_ms => ?WINDOW_MS, max_total => 64, max_per_key => 4,
           max_keys => 256}).
 
 -include("quod_client_goal_limits.hrl").
@@ -85,7 +80,6 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
             session_ttl_ms :: pos_integer(),
             max_sessions :: pos_integer(),
             challenge_rate :: quod_rate:limiter(),
-            registration_rate :: quod_rate:limiter(),
             goal_user_rate :: quod_rate:limiter(),
             goal_peer_rate :: quod_rate:limiter(),
             symbol_user_rate :: quod_rate:limiter(),
@@ -142,16 +136,6 @@ complete_challenge(ChallengeId, Signature) ->
 session(SessionId) ->
     call({session, SessionId}).
 
--doc """
-Charge one open-registration attempt for `Peer`.
-
-Called only once a registration request has proved its own signature, so junk
-cannot spend the budget that protects durable ontology creation.
-""".
--spec reserve_registration(term()) -> ok | {error, term()}.
-reserve_registration(Peer) ->
-    call({reserve_registration, Peer}).
-
 -doc "Resolve a live session and atomically charge its user and peer goal budgets.".
 -spec admit_goal(binary(), term()) -> {ok, map()} | {error, term()}.
 admit_goal(SessionId, Peer) ->
@@ -179,9 +163,6 @@ init(Options) ->
             challenge_rate = quod_rate:new(
                                maps:get(challenge_limit, Options,
                                         ?CHALLENGE_LIMIT)),
-            registration_rate = quod_rate:new(
-                                  maps:get(registration_limit, Options,
-                                           ?REGISTRATION_LIMIT)),
             goal_user_rate = quod_rate:new(
                                maps:get(goal_user_limit, Options,
                                         ?GOAL_USER_LIMIT)),
@@ -207,8 +188,6 @@ handle_call({bind_session, Identity}, _From, S) ->
     reply(bind_session(Identity, S));
 handle_call({session, SessionId}, _From, S) ->
     reply(lookup_session(SessionId, S));
-handle_call({reserve_registration, Peer}, _From, S) ->
-    reply(charge(#s.registration_rate, Peer, client_registration, S));
 handle_call({admit_goal, SessionId, Peer}, _From, S) ->
     reply(admit_goal_request(SessionId, Peer, S));
 handle_call({materialize_goal, PublicKey, Peer, Goal}, _From, S) ->
@@ -385,9 +364,7 @@ charge(Field, Peer, Tag, S) ->
     end.
 
 tagged(client_auth, busy) -> client_auth_busy;
-tagged(client_auth, rate_limited) -> client_auth_rate_limited;
-tagged(client_registration, busy) -> client_registration_busy;
-tagged(client_registration, rate_limited) -> client_registration_rate_limited.
+tagged(client_auth, rate_limited) -> client_auth_rate_limited.
 
 %% ======================================================================
 %% signed goals

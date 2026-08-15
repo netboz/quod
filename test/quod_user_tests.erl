@@ -43,24 +43,6 @@ invalid_public_key_test() ->
     ?assertEqual({error, invalid_public_key}, quod_user:home_options(not_a_key)),
     ?assertEqual({error, invalid_public_key}, quod_user:principal(<<1, 2, 3>>)).
 
-registration_is_network_and_nonce_bound_test() ->
-    Network = <<16#10:256>>,
-    Nonce = <<16#20:256>>,
-    {PublicKey, _Seed} = KeyPair = quod_identity:generate(),
-    {ok, Bytes} = quod_user:registration_bytes(Network, PublicKey, Nonce),
-    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
-    {ok, #{public_key := PublicKey, namespace := Namespace,
-           options := Options}} =
-        quod_user:verify_registration(Network, PublicKey, Nonce, Signature),
-    ?assert(quod_user:valid_home(PublicKey, Options)),
-    ?assertMatch(<<"user:", _/binary>>, Namespace),
-    ?assertEqual(
-       {error, invalid_registration_signature},
-       quod_user:verify_registration(<<16#11:256>>, PublicKey, Nonce, Signature)),
-    ?assertEqual(
-       {error, invalid_registration_signature},
-       quod_user:verify_registration(Network, PublicKey, <<16#21:256>>, Signature)).
-
 signed_wire_bytes_are_browser_reproducible_test() ->
     Network = <<16#10:256>>,
     Node = <<16#11:256>>,
@@ -69,10 +51,6 @@ signed_wire_bytes_are_browser_reproducible_test() ->
     ClientNonce = <<16#14:256>>,
     ServerNonce = <<16#15:256>>,
     Expires = 1_700_000_000_000,
-    {ok, Registration} = quod_user:registration_bytes(Network, PublicKey, ClientNonce),
-    ?assertEqual(
-       <<"quod_user_registration_v1", 0, Network/binary, PublicKey/binary,
-         ClientNonce/binary>>, Registration),
     {ok, Challenge} = quod_user:challenge_bytes(
                         Network, Node, ChallengeId, PublicKey, ClientNonce,
                         ServerNonce, Expires),
@@ -80,14 +58,6 @@ signed_wire_bytes_are_browser_reproducible_test() ->
        <<"quod_user_challenge_v1", 0, Network/binary, Node/binary,
          ChallengeId/binary, PublicKey/binary, ClientNonce/binary,
          ServerNonce/binary, Expires:64/unsigned-big>>, Challenge).
-
-malformed_registration_is_rejected_test() ->
-    ?assertEqual(
-       {error, invalid_registration_request},
-       quod_user:registration_bytes(<<1, 2>>, <<3:256>>, <<4:256>>)),
-    ?assertEqual(
-       {error, invalid_registration_request},
-       quod_user:verify_registration(<<1:256>>, <<2:256>>, <<3:256>>, <<4:256>>)).
 
 challenge_is_bound_to_node_and_expiry_test() ->
     Network = <<16#10:256>>,

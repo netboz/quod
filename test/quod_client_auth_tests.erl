@@ -113,22 +113,6 @@ full_challenge_table_does_not_charge_the_peer_test() ->
             quod_client_auth:issue_challenge(PublicKey, <<16#43:256>>, ?PEER))
       end).
 
-registration_budget_is_bounded_per_peer_test() ->
-    with_auth(
-      #{registration_limit => #{window_ms => 60000, max_total => 3,
-                                max_per_key => 2, max_keys => 2}},
-      fun() ->
-         ?assertEqual(ok, quod_client_auth:reserve_registration(?PEER)),
-         ?assertEqual(ok, quod_client_auth:reserve_registration(?PEER)),
-         ?assertEqual(
-            {error, client_registration_rate_limited},
-            quod_client_auth:reserve_registration(?PEER)),
-         ?assertEqual(ok, quod_client_auth:reserve_registration({127, 0, 0, 2})),
-         ?assertEqual(
-            {error, client_registration_busy},
-            quod_client_auth:reserve_registration({127, 0, 0, 3}))
-      end).
-
 signed_goal_admission_is_bounded_by_user_and_peer_test() ->
     Limit = #{window_ms => 60000, max_total => 8,
               max_per_key => 1, max_keys => 8},

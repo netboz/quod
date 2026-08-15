@@ -19,7 +19,7 @@ uniform previousViewProjection: mat4x4f;varying vCurrentPosition: vec4f;varying 
 varying v_VARYINGNAME_UV: vec2f;
 #endif
 `;e.IncludesShadersStoreWGSL[p]||(e.IncludesShadersStoreWGSL[p]=m);var h={name:p,shader:m},g=`bumpVertexDeclaration`,_=`#if defined(BUMP) || defined(PARALLAX) || defined(CLEARCOAT_BUMP) || defined(ANISOTROPIC)
-#if defined(TANGENT) && defined(NORMAL)
+#if defined(TANGENT) && defined(NORMAL) 
 varying vTBN0: vec3f;varying vTBN1: vec3f;varying vTBN2: vec3f;
 #endif
 #endif
@@ -83,13 +83,13 @@ varying vPositionFromLight{X}: vec4f;varying vDepthMetric{X}: f32;uniform lightM
 #endif
 `;e.IncludesShadersStoreWGSL[x]||(e.IncludesShadersStoreWGSL[x]=S);var fe={name:x,shader:S},C=`morphTargetsVertexGlobalDeclaration`,w=`#ifdef MORPHTARGETS
 uniform morphTargetInfluences : array<f32,NUM_MORPH_INFLUENCERS>;
-#ifdef MORPHTARGETS_TEXTURE
+#ifdef MORPHTARGETS_TEXTURE 
 uniform morphTargetTextureIndices : array<f32,NUM_MORPH_INFLUENCERS>;uniform morphTargetTextureInfo : vec3<f32>;var morphTargets : texture_2d_array<f32>;fn readVector3FromRawSampler(targetIndex : i32,vertexIndex : f32)->vec3<f32>
-{
+{ 
 let textureWidth: i32=i32(uniforms.morphTargetTextureInfo.y);let y: i32=i32(vertexIndex)/textureWidth;let x: i32=i32(vertexIndex) % textureWidth;return textureLoad(morphTargets,vec2i(x,y),i32(uniforms.morphTargetTextureIndices[targetIndex]),0).xyz;}
 fn readVector4FromRawSampler(targetIndex : i32,vertexIndex : f32)->vec4<f32>
-{
-let textureWidth: i32=i32(uniforms.morphTargetTextureInfo.y);
+{ 
+let textureWidth: i32=i32(uniforms.morphTargetTextureInfo.y); 
 let y: i32=i32(vertexIndex)/textureWidth;let x: i32=i32(vertexIndex) % textureWidth;return textureLoad(morphTargets,vec2i(x,y),i32(uniforms.morphTargetTextureIndices[targetIndex]),0);}
 #endif
 #endif
@@ -161,19 +161,19 @@ var<storage,read> matricesIndices : array<u32>;var<storage,read> matricesWeights
 var<storage,read> matricesIndicesExtra : array<u32>;var<storage,read> matricesWeightsExtra : array<f32>;uniform vp_matricesIndicesExtra_info : vec4f;uniform vp_matricesWeightsExtra_info : vec4f;
 #endif
 #endif
-fn vp_convertToFloat(word : u32,byteInWord : u32,dataType : u32,normalized : bool)->f32 {switch (dataType) {case 5120u: {
+fn vp_convertToFloat(word : u32,byteInWord : u32,dataType : u32,normalized : bool)->f32 {switch (dataType) {case 5120u: { 
 let shift=byteInWord*8u;let value=(word>>shift) & 0xFFu;let signedValue=f32(i32(value<<24u)>>24u);if (normalized) { return signedValue/127.0; }
 return signedValue;}
-case 5121u: {
+case 5121u: { 
 let shift=byteInWord*8u;let value=(word>>shift) & 0xFFu;if (normalized) { return f32(value)/255.0; }
 return f32(value);}
-case 5122u: {
+case 5122u: { 
 let shift=(byteInWord & 0xFFFFFFFEu)*8u;let value=(word>>shift) & 0xFFFFu;let signedValue=f32(i32(value<<16u)>>16u);if (normalized) { return signedValue/32767.0; }
 return signedValue;}
-case 5123u: {
+case 5123u: { 
 let shift=(byteInWord & 0xFFFFFFFEu)*8u;let value=(word>>shift) & 0xFFFFu;if (normalized) { return f32(value)/65535.0; }
 return f32(value);}
-case 5126u: {
+case 5126u: { 
 return bitcast<f32>(word);}
 default: { return 0.0; }}}
 fn vp_componentSize(dataType : u32)->u32 {return select(select(2u,1u,dataType==5120u || dataType==5121u),4u,dataType==5126u);}
@@ -479,22 +479,22 @@ vertexOutputs.vCurrentPosition=scene.viewProjection*worldPos;
 var previousInfluence: mat4x4f;previousInfluence=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndices[0])]*vertexInputs.matricesWeights[0];
 #if NUM_BONE_INFLUENCERS>1
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndices[1])]*vertexInputs.matricesWeights[1];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>2
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndices[2])]*vertexInputs.matricesWeights[2];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>3
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndices[3])]*vertexInputs.matricesWeights[3];
 #endif
 #if NUM_BONE_INFLUENCERS>4
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndicesExtra[0])]*vertexInputs.matricesWeightsExtra[0];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>5
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndicesExtra[1])]*vertexInputs.matricesWeightsExtra[1];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>6
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndicesExtra[2])]*vertexInputs.matricesWeightsExtra[2];
-#endif
+#endif 
 #if NUM_BONE_INFLUENCERS>7
 previousInfluence+=uniforms.mPreviousBones[ i32(vertexInputs.matricesIndicesExtra[3])]*vertexInputs.matricesWeightsExtra[3];
 #endif
@@ -564,7 +564,7 @@ vertexOutputs.vDepthMetric{X}_1=(-vertexOutputs.vPositionFromLight{X}_1.z+light{
 #else
 vertexOutputs.vDepthMetric{X}_1= (vertexOutputs.vPositionFromLight{X}_1.z+light{X}.depthValues.x)/light{X}.depthValues.y;
 #endif
-#endif
+#endif 
 #if SHADOWCSMNUM_CASCADES{X}>2
 vertexOutputs.vPositionFromLight{X}_2=uniforms.lightMatrix{X}[2]*worldPos;
 #ifdef USE_REVERSE_DEPTHBUFFER
@@ -572,7 +572,7 @@ vertexOutputs.vDepthMetric{X}_2=(-vertexOutputs.vPositionFromLight{X}_2.z+light{
 #else
 vertexOutputs.vDepthMetric{X}_2= (vertexOutputs.vPositionFromLight{X}_2.z+light{X}.depthValues.x)/light{X}.depthValues.y;
 #endif
-#endif
+#endif 
 #if SHADOWCSMNUM_CASCADES{X}>3
 vertexOutputs.vPositionFromLight{X}_3=uniforms.lightMatrix{X}[3]*worldPos;
 #ifdef USE_REVERSE_DEPTHBUFFER
@@ -580,7 +580,7 @@ vertexOutputs.vDepthMetric{X}_3=(-vertexOutputs.vPositionFromLight{X}_3.z+light{
 #else
 vertexOutputs.vDepthMetric{X}_3= (vertexOutputs.vPositionFromLight{X}_3.z+light{X}.depthValues.x)/light{X}.depthValues.y;
 #endif
-#endif
+#endif 
 #elif defined(SHADOW{X}) && !defined(SHADOWCUBE{X})
 vertexOutputs.vPositionFromLight{X}=uniforms.lightMatrix{X}*worldPos;
 #ifdef USE_REVERSE_DEPTHBUFFER

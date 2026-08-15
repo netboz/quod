@@ -28,6 +28,14 @@ client_serves_https_from_config_test() ->
           try
               Port = ranch:get_port(quod_client_listener),
               ?assertEqual(<<"ok\n">>, get_health(Port)),
+              {308, RedirectHead, <<>>} =
+                  get_response(Port, <<"/explorer">>),
+              ?assertNotEqual(
+                 nomatch,
+                 binary:match(
+                   RedirectHead, <<"\r\nlocation: /explorer/">>)),
+              {200, Explorer} = get_path(Port, <<"/explorer/">>),
+              ?assertNotEqual(nomatch, binary:match(Explorer, <<"root">>)),
               %% The keypair is persisted, so a visitor's accepted certificate
               %% keeps working across restarts.
               ?assert(filelib:is_regular(filename:join(Dir, "client_tls.key"))),
@@ -129,15 +137,28 @@ client_serves_operator_managed_tls_without_renewal_test() ->
 %% ======================================================================
 
 get_health(Port) ->
+    {200, Body} = get_path(Port, <<"/health">>),
+    Body.
+
+get_path(Port, Path) ->
+    {Status, _Head, Body} = get_response(Port, Path),
+    {Status, Body}.
+
+get_response(Port, Path) ->
     {ok, Socket} = ssl:connect("127.0.0.1", Port,
                                [binary, {active, false}, {verify, verify_none}],
                                5000),
     try
-        ok = ssl:send(Socket,
-                      <<"GET /health HTTP/1.1\r\nhost: localhost\r\n"
-                        "connection: close\r\n\r\n">>),
-        [_Head, Body] = binary:split(recv_all(Socket, <<>>), <<"\r\n\r\n">>),
-        Body
+        ok = ssl:send(
+               Socket,
+               <<"GET ", Path/binary, " HTTP/1.1\r\nhost: localhost\r\n"
+                 "connection: close\r\n\r\n">>),
+        [Head, Body] = binary:split(
+                         recv_all(Socket, <<>>), <<"\r\n\r\n">>),
+        [StatusLine | _] = binary:split(Head, <<"\r\n">>, [global]),
+        [<<"HTTP/1.1">>, Status | _ReasonWords] =
+            binary:split(StatusLine, <<" ">>, [global]),
+        {binary_to_integer(Status), Head, Body}
     after ssl:close(Socket)
     end.
 

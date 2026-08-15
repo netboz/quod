@@ -1,5 +1,8 @@
 // Types mirroring quod_explorer_http's JSON, plus thin fetch helpers.
 
+import { signedCursorCommand, signedGoal } from '../../client/src/signed-client.js'
+import type { SignedIdentity } from '../../client/src/signed-client.js'
+
 export type PeerId = { id: string; pubkey: string | null }
 export type Origin = { ns: string; anchor: string } | null
 
@@ -199,32 +202,26 @@ export const fetchBlock = (ns: string, slot: number) =>
 export const fetchTx = (ns: string, id: string) =>
   get<FoundOutcome | { error: string }>(`api/tx/${encodeURIComponent(ns)}/${encodeURIComponent(id)}`)
 
-export const prove = async (ns: string, goal: string): Promise<ProveReply> => {
-  const r = await fetch('api/prove', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ ns, goal }),
-  })
-  return (await r.json()) as ProveReply
+export const openProofCursor = (
+  identity: SignedIdentity,
+  ns: string,
+  anchor: string,
+  goal: string,
+) => signedGoal(
+  identity,
+  { mode: 'cursor', namespace: ns, anchor: hex32(anchor), goal },
+) as Promise<ProveReply>
+
+export const nextProofSolution = (identity: SignedIdentity, cursor: string) =>
+  signedCursorCommand(identity, cursor, 'next') as Promise<ProveReply>
+
+export const acceptProofSolution = (identity: SignedIdentity, cursor: string) =>
+  signedCursorCommand(identity, cursor, 'accept') as Promise<ProveReply>
+
+export const stopProofCursor = (identity: SignedIdentity, cursor: string) =>
+  signedCursorCommand(identity, cursor, 'stop') as Promise<ProveReply>
+
+function hex32(value: string) {
+  if (!/^[0-9a-fA-F]{64}$/.test(value)) throw new Error('invalid ontology anchor')
+  return Uint8Array.from(value.match(/../g)!, (byte) => Number.parseInt(byte, 16))
 }
-
-async function proofCursorRequest(url: string, method: 'POST' | 'DELETE', body?: object): Promise<ProveReply> {
-  const r = await fetch(url, {
-    method,
-    headers: body ? { 'content-type': 'application/json' } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  })
-  return (await r.json()) as ProveReply
-}
-
-export const openProofCursor = (ns: string, goal: string) =>
-  proofCursorRequest('api/proof-cursors', 'POST', { ns, goal })
-
-export const nextProofSolution = (cursor: string) =>
-  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}/next`, 'POST')
-
-export const acceptProofSolution = (cursor: string) =>
-  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}/accept`, 'POST')
-
-export const stopProofCursor = (cursor: string) =>
-  proofCursorRequest(`api/proof-cursors/${encodeURIComponent(cursor)}`, 'DELETE')

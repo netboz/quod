@@ -8954,20 +8954,8 @@ valid_history_entry({Ns, Anchor} = Target, I, {batch, Payload},
                     IdMode)
   when is_binary(Ns), is_binary(Anchor), is_integer(I), I > 1,
        is_list(Committee) ->
-    bounded_transaction_list(Payload)
-        andalso Payload =/= []
-        andalso encoded_block_payload_fits({batch, Payload})
-        andalso lists:all(
-                  fun(Change) ->
-                      historical_change_shape_acceptable(Change, Committee)
-                          andalso history_id_valid(IdMode, Target, Change)
-                  end,
-                  Payload)
-        andalso verify_transaction_signatures(
-                  Target, Admissions, Payload, replay)
-        andalso historical_requests_valid(Target, Timestamp, Payload)
-        andalso unique_tx_ids(Payload)
-        andalso membership_batch_shape_ok(Payload);
+    history_content_verdict(
+      Target, I, Payload, Timestamp, Committee, Admissions, IdMode) =:= valid;
 %% Each DTX phase becomes valid only through the shared phase reducer, sequence
 %% lane, and certified-reference checks. Keep every kind visibly fail-closed
 %% until those checks are wired; no control record is inert history.
@@ -8985,24 +8973,50 @@ valid_history_entry(_Binding, I, {dtx, Blob}, _Timestamp,
 valid_history_entry(_Binding, _I, _Data, _Timestamp, _Committee, _IdMode) ->
     false.
 
-historical_requests_valid(Target, Timestamp, Transactions) ->
-    case content_network_identity(Transactions) of
-        {ok, Network} ->
-            lists:all(
-              fun(Transaction) ->
-                      case quod_transaction:validate_request(
-                             Network, Target, Timestamp, Transaction) of
-                          {ok, _} -> true;
-                          {error, _} -> false
-                      end
-              end, Transactions);
-        {error, _} ->
-            false
+history_content_verdict(
+  Target, _I, Payload, Timestamp, Committee, Admissions, IdMode) ->
+    BasicValid =
+        bounded_transaction_list(Payload)
+        andalso Payload =/= []
+        andalso encoded_block_payload_fits({batch, Payload})
+        andalso lists:all(
+                  fun(Change) ->
+                      historical_change_shape_acceptable(Change, Committee)
+                          andalso history_id_valid(IdMode, Target, Change)
+                  end,
+                  Payload)
+        andalso verify_transaction_signatures(
+                  Target, Admissions, Payload, replay)
+        andalso unique_tx_ids(Payload)
+        andalso membership_batch_shape_ok(Payload),
+    case BasicValid of
+        false ->
+            invalid;
+        true ->
+            history_request_verdict(Target, Timestamp, Payload)
     end.
 
-content_network_identity(Transactions) ->
+history_request_verdict(Target, Timestamp, Payload) ->
+    case content_network_identity(Target, Payload) of
+        {ok, Network} ->
+            case lists:all(
+                   fun(Transaction) ->
+                           case quod_transaction:validate_request(
+                                  Network, Target, Timestamp, Transaction) of
+                               {ok, _} -> true;
+                               {error, _} -> false
+                           end
+                   end, Payload) of
+                true -> valid;
+                false -> invalid
+            end;
+        {error, Reason} ->
+            {unavailable, network_identity, Reason}
+    end.
+
+content_network_identity(Target, Transactions) ->
     quod_ontology:network_identity(
-      quod_transaction:requires_network_identity(Transactions)).
+      quod_transaction:requires_network_identity(Transactions), Target).
 
 history_id_valid(verify_id, Target, Change) ->
     valid_target_transaction_id(Target, Change).
@@ -11170,7 +11184,8 @@ entry_history_hash(#entry{} = Entry) ->
 -spec history_advance({binary(), <<_:256>>}, #entry{}, history_projection(),
                       quod_dtx_phase_index:index()) ->
           {ok, history_projection(), list()} |
-          {error, {invalid_transaction, pos_integer()}}.
+          {error, {invalid_transaction, pos_integer()} |
+                  {unavailable, network_identity, term()}}.
 history_advance(Binding, Entry, Projection, PhaseIndex) ->
     history_validate_advance(Binding, Entry, Projection, PhaseIndex).
 
@@ -11246,6 +11261,8 @@ checked_log_projection_step(
   Binding, #entry{index = I} = Entry, Projection) ->
     case history_validate_advance(Binding, Entry, Projection) of
         {ok, Projection1} -> Projection1;
+        {error, {unavailable, network_identity, Reason}} ->
+            error({history_dependency_unavailable, network_identity, Reason});
         {error, _} -> error({invalid_transaction_history, I})
     end.
 
@@ -11253,13 +11270,17 @@ checked_log_projection_step(
   Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
     case history_validate_advance(Binding, Entry, Projection, PhaseIndex) of
         {ok, Projection1, _Effects} -> Projection1;
+        {error, {unavailable, network_identity, Reason}} ->
+            error({history_dependency_unavailable, network_identity, Reason});
         {error, _} -> error({invalid_transaction_history, I})
     end.
 
 -doc "Validate one historical entry and advance the projection atomically on success.".
 -spec history_validate_advance({binary(), binary()}, #entry{},
                                history_projection()) ->
-        {ok, history_projection()} | {error, {invalid_transaction, pos_integer()}}.
+        {ok, history_projection()} |
+        {error, {invalid_transaction, pos_integer()} |
+                {unavailable, network_identity, term()}}.
 history_validate_advance(
   Binding, #entry{index = I} = Entry, Projection) ->
     case history_projection_before_entry(I, Projection) of
@@ -11273,11 +11294,31 @@ history_validate_content(
   {Ns, _Anchor} = Binding,
   #entry{index = I, data = Data} = Entry,
   #{sequences := Seqs} = Projection) ->
+    case history_entry_verdict(
+           Binding, I, Data, Entry#entry.timestamp, Projection, verify_id) of
+        valid ->
+            case historical_sequences_ok(I, Data, Seqs) of
+                true -> {ok, history_advance(Ns, Entry, Projection)};
+                false -> {error, {invalid_transaction, I}}
+            end;
+        {unavailable, network_identity, _Reason} = Unavailable ->
+            {error, Unavailable};
+        invalid ->
+            {error, {invalid_transaction, I}}
+    end.
+
+history_entry_verdict(
+  Target = {Ns, Anchor}, I, {batch, Payload}, Timestamp,
+  #{committee := Committee, admissions := Admissions}, IdMode)
+  when is_binary(Ns), is_binary(Anchor), is_integer(I), I > 1,
+       is_list(Committee) ->
+    history_content_verdict(
+      Target, I, Payload, Timestamp, Committee, Admissions, IdMode);
+history_entry_verdict(Binding, I, Data, Timestamp, Projection, IdMode) ->
     case valid_history_entry(
-           Binding, I, Data, Entry#entry.timestamp, Projection, verify_id)
-         andalso historical_sequences_ok(I, Data, Seqs) of
-        true  -> {ok, history_advance(Ns, Entry, Projection)};
-        false -> {error, {invalid_transaction, I}}
+           Binding, I, Data, Timestamp, Projection, IdMode) of
+        true -> valid;
+        false -> invalid
     end.
 
 -doc "Verify local finality, then advance content or exact DTX history.".
@@ -11285,7 +11326,8 @@ history_validate_content(
                                history_projection(),
                                quod_dtx_phase_index:index()) ->
         {ok, history_projection(), list()} |
-        {error, {invalid_transaction, pos_integer()}}.
+        {error, {invalid_transaction, pos_integer()} |
+                {unavailable, network_identity, term()}}.
 history_validate_advance(
   Binding, #entry{index = I} = Entry, Projection, PhaseIndex) ->
     case history_projection_before_entry(I, Projection) of
@@ -11360,8 +11402,20 @@ history_advance_dtx(
   Control,
   #{dtx := Dtx0} = Projection,
   PhaseIndex) ->
-    case valid_dtx_history_request(Binding, Entry, Control) andalso
-         validated_dtx_entry(Binding, Entry, Control, Projection) of
+    case valid_dtx_history_request(Binding, Entry, Control) of
+        valid ->
+            history_advance_validated_dtx(
+              Binding, Entry, Control, Projection, PhaseIndex, Dtx0);
+        {unavailable, network_identity, _Reason} = Unavailable ->
+            {error, Unavailable};
+        invalid ->
+            {error, {invalid_transaction, I}}
+    end.
+
+history_advance_validated_dtx(
+  Binding, #entry{index = I} = Entry, Control,
+  Projection, PhaseIndex, Dtx0) ->
+    case validated_dtx_entry(Binding, Entry, Control, Projection) of
         {ok, Ref, Lane, Sequence} ->
             case quod_dtx_phase_index:apply(
                    PhaseIndex, Control, Ref, Dtx0) of
@@ -11374,7 +11428,7 @@ history_advance_dtx(
                 {error, _} ->
                     {error, {invalid_transaction, I}}
             end;
-        Invalid when Invalid =:= false; Invalid =:= error ->
+        error ->
             {error, {invalid_transaction, I}}
     end.
 
@@ -11383,17 +11437,18 @@ valid_dtx_history_request(
     case quod_dtx:control_kind(Control) of
         'begin' ->
             case quod_ontology:network_identity(
-                   quod_dtx:requires_network_identity(Control)) of
+                   quod_dtx:requires_network_identity(Control), Binding) of
                 {ok, Network} ->
                     case quod_dtx:validate_request(
                            Network, Binding, Timestamp, Control) of
-                        {ok, _} -> true;
-                        {error, _} -> false
+                        {ok, _} -> valid;
+                        {error, _} -> invalid
                     end;
-                {error, _} -> false
+                {error, Reason} ->
+                    {unavailable, network_identity, Reason}
             end;
         _ ->
-            true
+            valid
     end.
 
 validated_dtx_entry(
@@ -11432,7 +11487,8 @@ project_dtx_transition(
         {binary(), binary()}, #entry{}, history_projection(),
         quod_dtx_phase_index:index(), quod_dtx_phase_index:delta()) ->
           {ok, history_projection(), list(), quod_dtx_phase_index:delta()} |
-          {error, {invalid_transaction, pos_integer()}}.
+          {error, {invalid_transaction, pos_integer()} |
+                  {unavailable, network_identity, term()}}.
 history_preview_advance(
   Binding, #entry{index = I, data = Data} = Entry,
   Projection, PhaseIndex, Delta0) ->
@@ -11472,6 +11528,20 @@ preview_content(Binding, Entry, Projection, Delta) ->
 
 preview_dtx(Binding, #entry{index = I} = Entry, Control,
             #{dtx := Dtx0} = Projection, PhaseIndex, Delta0) ->
+    case valid_dtx_history_request(Binding, Entry, Control) of
+        valid ->
+            preview_validated_dtx(
+              Binding, Entry, Control, Projection,
+              PhaseIndex, Delta0, Dtx0);
+        {unavailable, network_identity, _Reason} = Unavailable ->
+            {error, Unavailable};
+        invalid ->
+            {error, {invalid_transaction, I}}
+    end.
+
+preview_validated_dtx(
+  Binding, #entry{index = I} = Entry, Control,
+  Projection, PhaseIndex, Delta0, Dtx0) ->
     case validated_dtx_entry(Binding, Entry, Control, Projection) of
         {ok, Ref, Lane, Sequence} ->
             case quod_dtx_phase_index:preview(

@@ -2,7 +2,10 @@
 
 **Status:** APPROVED (Yan, 2026-07-17). Slices 1 and 2 are delivered; Slice 3
 and later remain pending. The corrected target-driven action/transaction
-prerequisite landed in Quod 0.7.58.
+prerequisite landed in Quod 0.7.58. The separate signed-client work now
+provides the cryptographically verified base `{user, Key}` principal; agent
+delegation, capabilities, wielding, and the full `subject/3` chain remain in
+this plan.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.
@@ -899,8 +902,10 @@ This is the proof of the architecture and remains trusted-fleet-only.
 - Deliver one durable outbox message between two agents.
 - Restart the runtime, agent process, and owner node during delivery.
 
-This slice deliberately has no FIPA ACL encoding, AMS search, DF, user login,
-dynamic handler declaration, or directory federation.
+This slice deliberately has no FIPA ACL encoding, AMS search, DF, agent
+delegation, dynamic handler declaration, or directory federation. Browser
+login and the signed base-user principal are supplied by the separate
+signed-client architecture and do not make a user into an agent.
 
 Acceptance:
 
@@ -910,11 +915,12 @@ Acceptance:
 - restarting runtime reconstructs the agent without replaying completed E;
 - the action and delivery path uses no copied KB.
 
-### Slice 5 -- signed users and subjects
+### Slice 5 -- agent subjects and delegation
 
-- Build user/subject authorization on the implemented transaction signatures.
-- Add `quod:user`.
-- Implement authentication and immutable subjects.
+- Extend the implemented signed base-user identity into immutable agent
+  subjects.
+- Add delegation, capabilities, and receiving-side subject validation without
+  replacing the existing signed-goal or `can_invoke/4` paths.
 - Test whole-chain authorization and laundering attempts.
 
 Acceptance:

@@ -1,7 +1,7 @@
 -module(quod_explorer_http).
 -moduledoc """
-REST side of the explorer (`m:quod_explorer`): JSON reads over the durable ledger and
-the running consensus/kb processes, plus the prove/submit endpoint.
+REST side of the explorer (`m:quod_explorer`): JSON reads over the durable
+ledger and the running consensus/kb processes.
 
 | endpoint | answers |
 | -------- | ------- |
@@ -9,11 +9,6 @@ the running consensus/kb processes, plus the prove/submit endpoint.
 | `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
 | `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
-| `POST /api/prove` `{ns, goal}` | run a term through `quod_prolog:execute/2` — ordinary goals prove normally; declared lifecycle actions run their policy-checked Erlang effect |
-| `POST /api/proof-cursors` `{ns, goal}` | open one retained ordinary proof and return its first solution |
-| `POST /api/proof-cursors/:id/next` | backtrack the retained proof to its next solution |
-| `POST /api/proof-cursors/:id/accept` | accept the displayed solution and commit any staged writes |
-| `DELETE /api/proof-cursors/:id` | stop the proof and discard staged state |
 
 History reads use the same pattern as `quod_catchup:serve_blocks/4`: a read-only
 store view per request (`quod_ledger_store:open_ro/2`), never the writer's handle.
@@ -29,29 +24,19 @@ the live stream, so a transaction renders identically live and from history.
 """.
 -export([init/2]).
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, block_json/2, tx_id_text/1, encode/1, prolog_text/1]).
+-export([summary/0, block_json/2, tx_id_text/1, encode/1, prolog_text/1,
+         prove_result/1]).
 -ifdef(TEST).
 %% Pure surfaces driven directly by eunit.
--export([txs_page/3, parse_goal/1, parse_tx_id/1,
-         prove_result/1, cursor_result/1, parse_cursor_id/1, outcome_json/1,
+-export([txs_page/3, parse_tx_id/1, outcome_json/1,
          committee_status_json/1,
          test_transaction_outcome/4, tx_json_full/3, entry_txs/1]).
 -endif.
 -include("quod_ledger.hrl").
--include("quod_vm_limits.hrl").
--include("quod_directory_limits.hrl").
 
 -define(DEFAULT_PAGE, 25).
 -define(MAX_PAGE, 100).
 -define(SCAN_SLOTS, 1000).          %% max blocks walked per /api/txs page
--define(MAX_GOAL_BYTES, 4096).      %% /api/prove goal-text cap — a query is small; anything larger is refused
-%% A JSON string can use six wire bytes for one raw byte (`\u00xx`).  This cap
-%% therefore admits every valid maximum goal and namespace after escaping;
-%% their independent raw limits below still decide semantic size errors.
--define(MAX_PROVE_BODY,
-        ((?MAX_GOAL_BYTES + ?DIRECTORY_MAX_NAMESPACE_BYTES) * 6 + 1024)).
-%% Parsing goal text mints atoms (erlog's scanner uses `list_to_atom`), so the
-%% endpoint refuses before consuming the VM-wide safety reserve.
 
 %%%===================================================================
 %%% cowboy handler
@@ -111,159 +96,6 @@ handle(block, Req) ->
                 not_found -> json_reply(404, #{error => not_found}, Req);
                 Block     -> json_reply(200, Block, Req)
             end
-    end;
-handle(cursor_open, Req0) ->
-    case cowboy_req:method(Req0) of
-        <<"POST">> ->
-            case read_prove_body(Req0) of
-                {ok, Decoded, Req} ->
-                    open_cursor(Decoded, Req);
-                {error, body_too_large, Req} ->
-                    json_reply(413, #{error => body_too_large}, Req)
-            end;
-        _ ->
-            json_reply(405, #{error => method_not_allowed}, Req0)
-    end;
-handle(cursor_next, Req) ->
-    cursor_command(next, <<"POST">>, Req);
-handle(cursor_accept, Req) ->
-    cursor_command(accept, <<"POST">>, Req);
-handle(cursor_stop, Req) ->
-    cursor_command(stop, <<"DELETE">>, Req);
-handle(prove, Req0) ->
-    case cowboy_req:method(Req0) of
-        <<"POST">> ->
-            case read_prove_body(Req0) of
-                {ok, Decoded, Req} ->
-                    prove(Decoded, Req);
-                {error, body_too_large, Req} ->
-                    json_reply(413, #{error => body_too_large}, Req)
-            end;
-        _ ->
-            json_reply(405, #{error => method_not_allowed}, Req0)
-    end.
-
-%% Cowboy's `length` is a read chunk size, not a total request limit: a body
-%% delivered in one piece may be larger.  Both Explorer write endpoints share
-%% this explicit post-read cap, matching the dedicated client boundary.
-read_prove_body(Req0) ->
-    case cowboy_req:read_body(Req0, #{length => ?MAX_PROVE_BODY}) of
-        {ok, Body, Req} when byte_size(Body) =< ?MAX_PROVE_BODY ->
-            Decoded = try json:decode(Body) catch _:_ -> bad_json end,
-            {ok, Decoded, Req};
-        {ok, _Oversized, Req} ->
-            {error, body_too_large, Req};
-        {more, _Partial, Req} ->
-            {error, body_too_large, Req}
-    end.
-
-%%%===================================================================
-%%% prove — the submit console
-%%%===================================================================
-
-prove(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
-       is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
-    quod_trace:with_span(
-      quod_trace:extract(trace_headers(Req)), <<"quod.http.prove">>, server,
-      #{'quod.namespace' => Ns, 'quod.goal.bytes' => byte_size(Text),
-        'http.request.method' => <<"POST">>, 'url.path' => <<"/api/prove">>},
-      fun(SpanCtx) ->
-          case atom_headroom_ok() of
-              false ->
-                  _ = quod_trace:result(SpanCtx, {error, atom_table_pressure}),
-                  json_reply(503, #{error => atom_table_pressure}, Req);
-              true ->
-                  case parse_goal(Text) of
-                      {ok, Goal} ->
-                          %% `execute/2` is the common top-level boundary:
-                          %% normal predicates prove as before, while a typed
-                          %% lifecycle action follows its declared action
-                          %% proof and effect path. The console does not
-                          %% implement a second create/join mechanism.
-                          Result = quod_prolog:execute(Ns, Goal),
-                          _ = quod_trace:result(SpanCtx, Result),
-                          {Code, Reply} = prove_result(Result),
-                          json_reply(Code, Reply, Req);
-                      {error, Detail} ->
-                          _ = quod_trace:result(SpanCtx, {error, parse_error}),
-                          json_reply(400, #{error => parse_error, detail => Detail}, Req)
-                  end
-          end
-      end);
-prove(#{<<"goal">> := Text}, Req) when is_binary(Text), byte_size(Text) > ?MAX_GOAL_BYTES ->
-    json_reply(413, #{error => goal_too_large}, Req);
-prove(_Bad, Req) ->
-    json_reply(400, #{error => bad_request}, Req).
-
-open_cursor(#{<<"ns">> := Ns, <<"goal">> := Text}, Req)
-  when is_binary(Ns), byte_size(Ns) > 0,
-       byte_size(Ns) =< ?DIRECTORY_MAX_NAMESPACE_BYTES,
-       is_binary(Text), byte_size(Text) =< ?MAX_GOAL_BYTES ->
-    case atom_headroom_ok() of
-        false ->
-            json_reply(503, #{error => atom_table_pressure}, Req);
-        true ->
-            case parse_goal(Text) of
-                {ok, Goal} ->
-                    %% Lifecycle actions deliberately remain one-shot: their
-                    %% local durable effect begins only after ordering and has
-                    %% no meaningful redo. Ordinary goals retain their exact
-                    %% Erlog continuation in the engine worker.
-                    Result = case quod_predicates:action_transition(Goal) of
-                                 true -> quod_prolog:execute(Ns, Goal);
-                                 false -> quod_explorer:cursor_open(Ns, Goal)
-                             end,
-                    {Code, Reply} = cursor_result(Result),
-                    json_reply(Code, Reply, Req);
-                {error, Detail} ->
-                    json_reply(
-                      400, #{error => parse_error, detail => Detail}, Req)
-            end
-    end;
-open_cursor(#{<<"goal">> := Text}, Req)
-  when is_binary(Text), byte_size(Text) > ?MAX_GOAL_BYTES ->
-    json_reply(413, #{error => goal_too_large}, Req);
-open_cursor(_Bad, Req) ->
-    json_reply(400, #{error => bad_request}, Req).
-
-cursor_command(Command, Method, Req0) ->
-    case cowboy_req:method(Req0) of
-        Method ->
-            case parse_cursor_id(cowboy_req:binding(id, Req0)) of
-                {ok, CursorId} ->
-                    {Code, Reply} = cursor_result(
-                                      quod_explorer:cursor_command(
-                                        CursorId, Command)),
-                    json_reply(Code, Reply, Req0);
-                error ->
-                    json_reply(400, #{error => bad_cursor_id}, Req0)
-            end;
-        _ ->
-            json_reply(405, #{error => method_not_allowed}, Req0)
-    end.
-
-%% Parsing goal text mints atoms; refuse before doing so if too few atoms remain, so `/api/prove` can
-%% never exhaust the table and crash the VM (it just stops serving until the node is restarted).
-atom_headroom_ok() ->
-    erlang:system_info(atom_count) + ?QUOD_ATOM_SAFETY_MARGIN <
-        erlang:system_info(atom_limit).
-
-trace_headers(Req) ->
-    [{Name, Value}
-     || Name <- [<<"traceparent">>, <<"tracestate">>],
-        Value <- [cowboy_req:header(Name, Req, undefined)],
-        is_binary(Value)].
-
-%% Goal text is one Prolog term; the parser requires the closing `.`, so add it when the
-%% console user (reasonably) left it off.
-parse_goal(Text) ->
-    S0 = string:trim(unicode:characters_to_list(Text)),
-    S = case lists:suffix(".", S0) of true -> S0; false -> S0 ++ " ." end,
-    case erlog_io:read_string(S) of
-        {ok, Goal}           -> {ok, Goal};
-        {error, {_L, _M, E}} -> {error, text(E)}
     end.
 
 prove_result(
@@ -322,34 +154,6 @@ prove_result({error, invalid_action}) ->
     {400, #{error => invalid_action}};
 prove_result({error, Reason}) ->
     {503, #{error => text(Reason)}}.
-
-cursor_result({solution, <<_:256>> = CursorId, Bindings, Height})
-  when is_map(Bindings), is_integer(Height), Height >= 0 ->
-    {200, #{result => solution,
-            cursor => binary:encode_hex(CursorId, lowercase),
-            height => Height,
-            bindings => [bindings_json(Bindings)]}};
-cursor_result({ok, stopped}) ->
-    {200, #{result => stopped}};
-cursor_result({error, not_found}) ->
-    {404, #{error => cursor_not_found}};
-cursor_result({error, not_ready}) ->
-    {409, #{error => cursor_not_ready}};
-cursor_result({error, busy}) ->
-    {409, #{error => cursor_busy}};
-cursor_result({error, ontology_unavailable}) ->
-    {503, #{error => ontology_unavailable}};
-cursor_result(Result) ->
-    prove_result(Result).
-
-parse_cursor_id(Id) when is_binary(Id), byte_size(Id) =:= 64 ->
-    try binary:decode_hex(Id) of
-        <<_:256>> = CursorId -> {ok, CursorId};
-        _ -> error
-    catch _:_ -> error
-    end;
-parse_cursor_id(_) ->
-    error.
 
 outcome_ref_json(Ns, Anchor, TxId) ->
     #{ns => Ns,

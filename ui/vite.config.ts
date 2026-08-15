@@ -11,6 +11,8 @@ export default defineConfig({
   build: { outDir: '../priv/explorer', emptyOutDir: true },
   server: {
     proxy: {
+      '/api/auth': { target: 'https://127.0.0.1:14570', secure: false },
+      '/api/goals': { target: 'https://127.0.0.1:14570', secure: false },
       '/api': 'http://127.0.0.1:14569',
       '/ws': { target: 'ws://127.0.0.1:14569', ws: true },
     },

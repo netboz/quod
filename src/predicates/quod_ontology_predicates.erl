@@ -20,6 +20,7 @@ remote authorization boundaries.
 
 -export([authorized_ontology_lifecycle_predicate/3,
          lifecycle_transition_predicate/3,
+         current_user_home_predicate/3,
          user_home_genesis_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3]).
@@ -116,6 +117,31 @@ user_home_genesis({user_home_genesis, PublicKey, Namespace, Options}, Next, St)
 user_home_genesis(_Goal, _Next, St) ->
     erlog_int:fail(St).
 
+-doc "Bind the current signed user's deterministic home inside an action proof.".
+-spec current_user_home_predicate(term(), term(), tuple()) -> term().
+current_user_home_predicate(Goal, Next, #est{bs = Bs} = St) ->
+    case {quod_predicates:ctx_ns(quod_predicates:context(St)),
+          quod_erlog_db_local_prove:lifecycle_principal(St)} of
+        {?ROOT_NS, {ok, {user, PublicKey}}} ->
+            current_user_home(
+              erlog_int:dderef(Goal, Bs), PublicKey, Next, St);
+        _ ->
+            erlog_int:fail(St)
+    end.
+
+current_user_home(
+  {current_user_home, Namespace, Options}, PublicKey, Next, St) ->
+    case {quod_user:home_namespace(PublicKey),
+          quod_user:home_options(PublicKey)} of
+        {{ok, HomeNamespace}, {ok, HomeOptions}} ->
+            erlog_int:prove_body(
+              [{'=', Namespace, HomeNamespace},
+               {'=', Options, HomeOptions} | Next], St);
+        _ -> erlog_int:fail(St)
+    end;
+current_user_home(_Goal, _PublicKey, _Next, St) ->
+    erlog_int:fail(St).
+
 -doc """
 Authorize one already-ground lifecycle action against the captured committed
 root state. The node principal is engine-owned; callers cannot supply it
@@ -149,6 +175,14 @@ policy_goal({create_ontology, Name, Options}, Principal) ->
     {ok, {can_create_ontology, Principal, Name, Options}};
 policy_goal({join_ontology, Name, GenesisHash, Seeds}, Principal) ->
     {ok, {can_join_ontology, Principal, Name, GenesisHash, Seeds}};
+policy_goal(create_user_home, {user, PublicKey} = Principal) ->
+    case quod_user:identity(PublicKey) of
+        {ok, Identity} ->
+            {create_ontology, Namespace, Options} =
+                quod_user:home_action(Identity),
+            {ok, {can_create_ontology, Principal, Namespace, Options}};
+        {error, _} -> error
+    end;
 policy_goal(_Action, _Principal) ->
     error.
 
@@ -163,6 +197,8 @@ lifecycle_error({create_ontology, _, _} = Action, Reason) ->
     failure_reason(Action, creation_reason(Reason));
 lifecycle_error({join_ontology, _, _, _} = Action, Reason) ->
     failure_reason(Action, join_reason(Reason));
+lifecycle_error(create_user_home = Action, Reason) ->
+    failure_reason(Action, creation_reason(Reason));
 lifecycle_error(Action, _Reason) ->
     failure_reason(Action, invalid_action).
 
@@ -171,6 +207,8 @@ failure_reason({create_ontology, _, _}, Reason) ->
     {ontology_creation_failed, Reason};
 failure_reason({join_ontology, _, _, _}, Reason) ->
     {ontology_join_failed, Reason};
+failure_reason(create_user_home, Reason) ->
+    {ontology_creation_failed, Reason};
 failure_reason(_Action, Reason) ->
     {ontology_lifecycle_failed, Reason}.
 

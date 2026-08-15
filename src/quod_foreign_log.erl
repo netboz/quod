@@ -1385,6 +1385,11 @@ open_cache(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot) ->
                                                   PhaseIndex),
                                             _ = quod_ledger_store:close(Store),
                                             {error, cache_corrupt};
+                                        {error, retry} ->
+                                            _ = quod_dtx_phase_index:close(
+                                                  PhaseIndex),
+                                            _ = quod_ledger_store:close(Store),
+                                            {error, retry};
                                         {error, _} ->
                                             _ = quod_dtx_phase_index:close(
                                                   PhaseIndex),
@@ -1473,6 +1478,8 @@ replay_cache(Store, Ns, Anchor, From, Height, Projection0, PhaseIndex,
                                       TargetProjection1);
                                 false -> {error, cache_corrupt}
                             end;
+                        {error, {unavailable, network_identity, _Reason}} ->
+                            {error, retry};
                         {error, _} -> {error, cache_corrupt}
                     end;
                 _ -> {error, cache_corrupt}
@@ -1516,7 +1523,7 @@ fetch_to_height(Owner, RequestRef, Peer, Endpoint, Slot,
                                       FetchFun, PageTimeout);
                                 {error, _} = Error -> Error
                             end;
-                        {error, _} -> {error, invalid_history}
+                        {error, _} = Error -> Error
                     end;
                 _ ->
                     {error, retry}
@@ -1542,6 +1549,8 @@ prepare_verified_page(
                         false ->
                             {error, invalid_history}
                     end;
+                {error, {unavailable, network_identity, _Reason}} ->
+                    {error, retry};
                 {error, _} ->
                     {error, invalid_history}
             end;
@@ -1723,7 +1732,9 @@ advance_snapshot_sources(
                     advance_snapshot_sources(
                       Rest, Owner, RequestRef, Ns, Anchor, Identity,
                       Store0, Height0, Projection0, PhaseIndex, Root,
-                      Target, FetchFun, PageTimeout)
+                      Target, FetchFun, PageTimeout);
+                {error, retry} ->
+                    {error, retry}
             end;
         _ ->
             advance_snapshot_sources(

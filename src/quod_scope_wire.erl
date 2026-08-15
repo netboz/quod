@@ -847,7 +847,6 @@ valid_uint64(Integer) ->
 %% Typed failures are a closed vocabulary.  Prolog failures and Erlog errors
 %% remain opaque bounded quod_wire_term blobs in their dedicated operations.
 validate_public_error(read_only) -> ok;
-validate_public_error(signed_scope_unavailable) -> ok;
 validate_public_error({Tag, Value} = Reason) ->
     case namespaced_error_tag(Tag) of
         true ->

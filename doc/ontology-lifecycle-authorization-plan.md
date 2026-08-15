@@ -2,7 +2,9 @@
 
 **Status:** the node-local authorization foundation is committed and deployed
 in 0.7.57. The target-driven action correction, prepared-genesis seam, and
-transaction checkpoint support landed in Quod 0.7.58.
+transaction checkpoint support landed in Quod 0.7.58. The signed-client work
+now routes the verified `{user, Key}` principal through these same lifecycle
+and `can_invoke/4` gates; it adds no second lifecycle authority path.
 
 ## 1. Goal
 
@@ -53,10 +55,11 @@ The implemented slice is intentionally small. It authorizes a currently
 admitted root validator to create or join an ontology **on itself**. This is host/operator
 authority, not user ownership.
 
-It is also not presented as hostile-network user authorization: the current
-prove endpoint can still cause node-authored writes, and there is deliberately
-no remote lifecycle-effect endpoint. The full subject milestone in section 4
-is what closes user-command and validator-side write authorization.
+This original slice was not presented as hostile-network user authorization:
+its then-current unsigned prove endpoint could cause node-authored writes. The
+later signed-client slice has now removed that HTTP route and lets a verified
+`{user, PublicKey}` request enter the same action proof. The full wielded-agent
+subject milestone in section 4 remains separate.
 
 ### 3.1 Engine-owned principal
 

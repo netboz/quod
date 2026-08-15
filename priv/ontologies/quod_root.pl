@@ -47,6 +47,15 @@ action(join_ontology(Name, GenesisHash, Seeds),
         ontology_join_state(Name, not_hosted)],
        ontology_joined(Name, GenesisHash)).
 
+%% A browser signs this ordinary, argument-free goal. The action-only helper
+%% derives the exact namespace and genesis from the engine-owned user key; the
+%% same can_create_ontology/3 policy and lifecycle effect path remain in force.
+action(create_user_home,
+       [authorized_ontology_lifecycle(create_user_home),
+        current_user_home(Name, _Options),
+        ontology_join_state(Name, not_hosted)],
+       ontology_hosted(Name)).
+
 %% First-slice host authority: a node may change only its own hosting state and
 %% only while its key is a currently admitted validator of quod:root.
 can_create_ontology(node(NodeKey), _Name, _Options) :-

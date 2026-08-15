@@ -598,7 +598,8 @@ did pre-fix). The loadtest's own over-f can't reliably force this — it self-de
 **Controlled >f outage validator (`scripts/overf-recovery-test.sh`) — RAN, VERDICT PASS ✅.** New sibling to
 `loadtest.sh` that reproduces the slot-713 incident on a *quiescent, caught-up* committee (what the loadtest
 can't force — it self-defers over-f under load). Keeps the H+1 leader up, SIGKILLs f+1 compute validators
-(6<7 quorum), submits one write via `POST /api/prove` INTO the outage, watches `quod_consensus_quorum_pauses`
+(6<7 quorum), submitted one write through the then-current `POST /api/prove`
+(now removed) INTO the outage, watched `quod_consensus_quorum_pauses`
 climb while the slot holds, then asserts the retained slot **commits with `quod_consensus_skips` flat**.
 Live run 2026-07-19 @ H=3742: pause precondition **observed (peak quorum_pauses=16)**, **net skips=0**,
 retained slot **committed at 3743**, fact present → **PASS**. This is the exact incident reproduced and

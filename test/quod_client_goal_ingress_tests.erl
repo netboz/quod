@@ -16,7 +16,9 @@ signed_local_read_test_() ->
           ?_test(same_ontology_scope_keeps_the_user_principal(Ctx)),
           ?_test(opaque_data_binding_renders_as_the_original_symbol(Ctx)),
           ?_test(anchor_is_checked_at_ingress_and_inside_the_worker(Ctx)),
-          ?_test(session_and_signed_deadline_are_both_bound(Ctx))]
+          ?_test(session_and_signed_deadline_are_both_bound(Ctx)),
+          ?_test(operation_absence_remains_unresolved(Ctx)),
+          ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
      end}.
 
 local_read_uses_user_acl_and_returns_named_bindings(
@@ -27,7 +29,7 @@ local_read_uses_user_acl_and_returns_named_bindings(
                            <<"lookup(X).">>),
     {ok, #{variables := [{<<"X">>, 0}]},
      {ok, [#{0 := bob}], 1}} =
-        quod_client_goal_ingress:read(
+        quod_client_goal_ingress:submit(read,
           maps:get(session_id, Session), Bytes, Signature, ?PEER).
 
 forged_request_never_materializes_its_functor(
@@ -39,7 +41,7 @@ forged_request_never_materializes_its_functor(
     {Bytes, _Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
     ?assertEqual(
        {error, invalid_signature},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          maps:get(session_id, Session), Bytes, <<0:512>>, ?PEER)),
     ?assertError(badarg, binary_to_existing_atom(Functor, utf8)).
 
@@ -52,21 +54,21 @@ read_mode_cannot_write_or_open_a_foreign_scope(
                                      <<"assertz(should_not_exist).">>),
     ?assertMatch(
        {ok, _, {error, read_only}},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          SessionId, WriteBytes, WriteSignature, ?PEER)),
     {AbsentBytes, AbsentSignature} = signed_read(
                                        Ns, ?ANCHOR, KeyPair, Session,
                                        <<"should_not_exist.">>),
     ?assertMatch(
        {ok, _, {fail, _}},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          SessionId, AbsentBytes, AbsentSignature, ?PEER)),
     {ScopeBytes, ScopeSignature} = signed_read(
                                      Ns, ?ANCHOR, KeyPair, Session,
                                      <<"\"foreign\"::true.">>),
     ?assertMatch(
-       {ok, _, {error, signed_scope_unavailable}},
-       quod_client_goal_ingress:read(
+       {ok, _, {error, {unknown_ontology, <<"foreign">>}}},
+       quod_client_goal_ingress:submit(read,
          SessionId, ScopeBytes, ScopeSignature, ?PEER)).
 
 same_ontology_scope_keeps_the_user_principal(
@@ -76,7 +78,7 @@ same_ontology_scope_keeps_the_user_principal(
     {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
     ?assertMatch(
        {ok, _, {ok, [#{0 := bob}], 1}},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          maps:get(session_id, Session), Bytes, Signature, ?PEER)).
 
 opaque_data_binding_renders_as_the_original_symbol(
@@ -86,33 +88,38 @@ opaque_data_binding_renders_as_the_original_symbol(
     ?assertError(badarg, binary_to_existing_atom(Symbol, utf8)),
     Text = <<"X = ", Symbol/binary, ".">>,
     {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
-    {ok, Evidence, Result} = quod_client_goal_ingress:read(
+    {ok, Evidence, Result} = quod_client_goal_ingress:submit(read,
                                maps:get(session_id, Session), Bytes,
                                Signature, ?PEER),
     ?assertMatch({ok, [#{0 := {'$quod_symbol', Symbol}}], 1}, Result),
     ?assertMatch(
        {200, #{bindings := [#{<<"X">> := Symbol}]}},
-       quod_client_http:signed_read_result({ok, Evidence, Result})),
+       quod_client_http:signed_goal_result({ok, Evidence, Result})),
     ?assertError(badarg, binary_to_existing_atom(Symbol, utf8)).
 
 anchor_is_checked_at_ingress_and_inside_the_worker(
   #{namespace := Ns, engine := Engine, table := Table,
-    key_pair := {PublicKey, _}}) ->
+    key_pair := KeyPair, session := Session}) ->
     OtherAnchor = <<16#75:256>>,
-    User = {user, PublicKey},
+    SessionId = maps:get(session_id, Session),
+    {WrongBytes, WrongSignature} =
+        signed_read(Ns, OtherAnchor, KeyPair, Session, <<"lookup(X).">>),
     ?assertEqual(
-       {error, wrong_genesis_anchor},
-       quod_prolog:prove_ro_as({Ns, OtherAnchor}, {lookup, {0}}, User)),
+       {error, wrong_target},
+       quod_client_goal_ingress:submit(
+         read, SessionId, WrongBytes, WrongSignature, ?PEER)),
     %% Freeze the engine after the public check, wait until the anchored request
     %% is in its mailbox, then simulate an incarnation change.  The worker must
     %% compare the carried anchor again and refuse the old request.
     ok = sys:suspend(Engine),
+    {Bytes, Signature} =
+        signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>),
     Parent = self(),
     Caller = spawn(
                fun() ->
                    Parent ! {anchored_proof_result, self(),
-                             quod_prolog:prove_ro_as(
-                               {Ns, ?ANCHOR}, {lookup, {0}}, User)}
+                             quod_client_goal_ingress:submit(
+                               read, SessionId, Bytes, Signature, ?PEER)}
                end),
     try
         ok = await_anchored_public_cast(Engine, 1000),
@@ -120,7 +127,8 @@ anchor_is_checked_at_ingress_and_inside_the_worker(
         ok = sys:resume(Engine),
         receive
             {anchored_proof_result, Caller, Reply} ->
-                ?assertEqual({error, wrong_genesis_anchor}, Reply)
+                ?assertMatch(
+                   {ok, _Evidence, {error, wrong_genesis_anchor}}, Reply)
         after 5000 ->
             error(anchored_proof_timeout)
         end
@@ -143,12 +151,41 @@ session_and_signed_deadline_are_both_bound(
                   Bytes, quod_identity:key_term(KeyPair)),
     ?assertEqual(
        {error, deadline_exceeds_session},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          maps:get(session_id, Session), Bytes, Signature, ?PEER)),
     ?assertEqual(
        {error, invalid_session},
-       quod_client_goal_ingress:read(
+       quod_client_goal_ingress:submit(read,
          <<0:256>>, Bytes, Signature, ?PEER)).
+
+operation_absence_remains_unresolved(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    {Bytes, Signature} = signed_read(
+                           Ns, ?ANCHOR, KeyPair, Session, <<"true.">>),
+    ?assertMatch(
+       {ok, _Evidence, {operation_pending, {operation, Ns, ?ANCHOR, _, _}}},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), Bytes, Signature, ?PEER)).
+
+operation_resolution_follows_the_existing_claim(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Fixture = quod_ct:signed_dtx_begin_fixture(
+                #{network => ?NETWORK, target => {Ns, ?ANCHOR},
+                  key_pair => KeyPair,
+                  deadline => min(maps:get(expires_ms, Session),
+                                  quod_time:now_ms() + 30000),
+                  submitted_at => 2}),
+    Transaction = maps:get(transaction, Fixture),
+    ok = quod_prolog:apply_entry(
+           Ns, #entry{index = 2, data = {batch, [Transaction]}}, live),
+    ?assertMatch(
+       {ok, _Evidence,
+        {operation_outcome,
+         #{status := claimed, request_digest := _},
+         #{status := committed, height := 2}}},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture), ?PEER)).
 
 %% ===================================================================
 %% fixture
@@ -258,7 +295,8 @@ await_anchored_public_cast(Engine, Remaining) ->
 
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
-                 _TraceCtx, {user, <<_:256>>}, ?ANCHOR}}) ->
+                 {proof_request, _TraceCtx, {user, <<_:256>>},
+                  ?ANCHOR, _RequestAuth}}}) ->
     true;
 is_anchored_public_cast(_) ->
     false.

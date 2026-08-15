@@ -192,11 +192,16 @@ authorization boundary.
 
 ## Explorer console
 
-The Explorer console is an operator tool, not an authenticated browser-client
-boundary. It may submit the same lifecycle terms through `execute/2`, including
-`{source_file, Path}`; therefore it can read a Prolog source file accessible to
-the hosting node and make its contents durable. It also has no registration
-rate limit. Expose it only where that operator authority is intended.
+The interactive Explorer console is now an authenticated signed client. It
+submits lifecycle terms through the same signed-goal boundary and receives the
+same `can_invoke/4` and lifecycle-policy decision as any browser client. It has
+no special operator authority and no separate executor.
+
+Trusted node operators may still call the in-VM `execute/2` or `run_action/2`
+APIs. A `{source_file, Path}` creation can therefore read a file visible to the
+hosting node only when that trusted API is used, or when root policy explicitly
+authorizes the signed user lifecycle request. The client never uploads source
+under a file-path disguise.
 
 ## Tests
 

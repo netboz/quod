@@ -54,12 +54,12 @@ var lightDataTexture{X}: texture_2d<f32>;var<storage,read> tileMaskBuffer{X}: ar
 #ifdef SHADOWCSM{X}
 uniform lightMatrix{X}: array<mat4x4f,SHADOWCSMNUM_CASCADES{X}>;uniform viewFrustumZ{X}: array<f32,SHADOWCSMNUM_CASCADES{X}>;uniform frustumLengths{X}: array<f32,SHADOWCSMNUM_CASCADES{X}>;uniform cascadeBlendFactor{X}: f32;varying vPositionFromLight{X}_0: vec4f;varying vDepthMetric{X}_0: f32;varying vPositionFromLight{X}_1: vec4f;varying vDepthMetric{X}_1: f32;varying vPositionFromLight{X}_2: vec4f;varying vDepthMetric{X}_2: f32;varying vPositionFromLight{X}_3: vec4f;varying vDepthMetric{X}_3: f32;varying vPositionFromCamera{X}: vec4f;var<private> vPositionFromLight{X}: array<vec4f,4>;var<private> vDepthMetric{X} : array<f32,4>;
 #if defined(SHADOWPCSS{X})
-var shadowTexture{X}Sampler: sampler_comparison;
+var shadowTexture{X}Sampler: sampler_comparison; 
 var shadowTexture{X}: texture_depth_2d_array;var depthTexture{X}Sampler: sampler;var depthTexture{X}: texture_2d_array<f32>;uniform lightSizeUVCorrection{X}: array<vec2f,SHADOWCSMNUM_CASCADES{X}>;uniform depthCorrection{X}: array<f32,SHADOWCSMNUM_CASCADES{X}>;uniform penumbraDarkness{X}: f32;
 #elif defined(SHADOWPCF{X})
 var shadowTexture{X}Sampler: sampler_comparison;var shadowTexture{X}: texture_depth_2d_array;
-#else
-var shadowTexture{X}Sampler: sampler;
+#else 
+var shadowTexture{X}Sampler: sampler; 
 var shadowTexture{X}: texture_2d_array<f32>;
 #endif
 #ifdef SHADOWCSMDEBUG{X}
@@ -80,13 +80,13 @@ var shadowTexture{X}Sampler: sampler;var shadowTexture{X}: texture_cube<f32>;
 #else
 varying vPositionFromLight{X}: vec4f;varying vDepthMetric{X}: f32;
 #if defined(SHADOWPCSS{X})
-var shadowTexture{X}Sampler: sampler_comparison;
-var shadowTexture{X}: texture_depth_2d;var depthTexture{X}Sampler: sampler;
+var shadowTexture{X}Sampler: sampler_comparison; 
+var shadowTexture{X}: texture_depth_2d;var depthTexture{X}Sampler: sampler; 
 var depthTexture{X}: texture_2d<f32>;
 #elif defined(SHADOWPCF{X})
 var shadowTexture{X}Sampler: sampler_comparison;var shadowTexture{X}: texture_depth_2d;
 #else
-var shadowTexture{X}Sampler: sampler;
+var shadowTexture{X}Sampler: sampler; 
 var shadowTexture{X}: texture_2d<f32>;
 #endif
 uniform lightMatrix{X}: mat4x4f;
@@ -101,12 +101,12 @@ else
 {thetaSintheta=0.5*inverseSqrt( max( 1.0-x*x,0.00000001 ) )-v;}
 return cross( v1,v2 )*thetaSintheta;}
 fn LTCEvaluate( N:vec3f,V:vec3f,P:vec3f,mInv: mat3x3<f32>,rectCoords0:vec3f,rectCoords1:vec3f,rectCoords2:vec3f,rectCoords3:vec3f )->vec3f {var v1:vec3f=rectCoords1-rectCoords0;var v2:vec3f=rectCoords3-rectCoords0;var lightNormal:vec3f=cross( v1,v2 );if( dot( lightNormal,P-rectCoords0 )<0.0 ){return vec3f( 0.0 );}
-var T1:vec3f=normalize( V-N*dot( V,N ) );var T2:vec3f=- cross( N,T1 );
+var T1:vec3f=normalize( V-N*dot( V,N ) );var T2:vec3f=- cross( N,T1 ); 
 var mat: mat3x3<f32>=mInv*transposeMat3( mat3x3<f32>( T1,T2,N ) );var coords0: vec3f=mat*( rectCoords0-P );var coords1: vec3f=mat*( rectCoords1-P );var coords2: vec3f=mat*( rectCoords2-P );var coords3: vec3f=mat*( rectCoords3-P );coords0=normalize( coords0 );coords1=normalize( coords1 );coords2=normalize( coords2 );coords3=normalize( coords3 );var vectorFormFactor:vec3f=vec3( 0.0 );vectorFormFactor+=LTCEdgeVectorFormFactor( coords0,coords1 );vectorFormFactor+=LTCEdgeVectorFormFactor( coords1,coords2 );vectorFormFactor+=LTCEdgeVectorFormFactor( coords2,coords3 );vectorFormFactor+=LTCEdgeVectorFormFactor( coords3,coords0 );var result:f32=LTCClippedSphereFormFactor( vectorFormFactor );return vec3f( result );}
 struct areaLightData
 {Diffuse: vec3f,
 Specular: vec3f,
-Fresnel: vec4f};fn computeAreaLightSpecularDiffuseFresnel(ltc1: texture_2d<f32>,ltc1Sampler:sampler,ltc2:texture_2d<f32>,ltc2Sampler:sampler,viewDir: vec3f,normal:vec3f,position:vec3f,lightPos:vec3f,halfWidth:vec3f, halfHeight:vec3f,roughness:f32)->areaLightData {var result: areaLightData;var rectCoords0:vec3f=lightPos+halfWidth-halfHeight;
+Fresnel: vec4f};fn computeAreaLightSpecularDiffuseFresnel(ltc1: texture_2d<f32>,ltc1Sampler:sampler,ltc2:texture_2d<f32>,ltc2Sampler:sampler,viewDir: vec3f,normal:vec3f,position:vec3f,lightPos:vec3f,halfWidth:vec3f, halfHeight:vec3f,roughness:f32)->areaLightData {var result: areaLightData;var rectCoords0:vec3f=lightPos+halfWidth-halfHeight; 
 var rectCoords1:vec3f=lightPos-halfWidth-halfHeight;var rectCoords2:vec3f=lightPos-halfWidth+halfHeight;var rectCoords3:vec3f=lightPos+halfWidth+halfHeight;
 #ifdef SPECULARTERM
 var uv:vec2f=LTCUv( normal,viewDir,roughness );var t1:vec4f=textureSample( ltc1,ltc1Sampler,uv );var t2:vec4f=textureSample( ltc2,ltc2Sampler,uv );var mInv:mat3x3<f32>=mat3x3<f32>(
@@ -123,7 +123,7 @@ vec3f( 0,0,1 )
 fn FetchDiffuseFilteredTexture(texLightFiltered: texture_2d<f32>,texLightFilteredSampler: sampler,p1_: vec3f,p2_: vec3f,p3_: vec3f,p4_: vec3f)->vec3f {var V1: vec3f=p2_-p1_;var V2: vec3f=p4_-p1_;var planeOrtho: vec3f=cross(V1,V2);var planeAreaSquared: f32=dot(planeOrtho,planeOrtho);var planeDistxPlaneArea: f32=dot(planeOrtho,p1_);var P: vec3f=planeDistxPlaneArea*planeOrtho/planeAreaSquared-p1_;var dot_V1_V2: f32=dot(V1,V2);var inv_dot_V1_V1: f32=1.0/dot(V1,V1);var V2_: vec3f=V2-V1*dot_V1_V2*inv_dot_V1_V1;var Puv: vec2f;Puv.y=dot(V2_,P)/dot(V2_,V2_);Puv.x=dot(V1,P)*inv_dot_V1_V1-dot_V1_V2*inv_dot_V1_V1*Puv.y;var d: f32=abs(planeDistxPlaneArea)/pow(planeAreaSquared,0.75);var sampleLOD: f32=log(2048.0*d)/log(3.0);var sampleUV: vec2f=vec2f(0.125,0.125)+(vec2f(0.75)*Puv);sampleUV.x=1.0-sampleUV.x;return textureSampleLevel(texLightFiltered,texLightFilteredSampler,sampleUV,sampleLOD).rgb;}
 fn LTCEvaluateWithEmission(N: vec3f,V: vec3f,P: vec3f,mInv: mat3x3<f32>,rectCoords0: vec3f,rectCoords1: vec3f,rectCoords2: vec3f,rectCoords3: vec3f,texFilteredMap: texture_2d<f32>,texFilteredMapSampler: sampler)->vec3f {var v1: vec3f=rectCoords1-rectCoords0;var v2: vec3f=rectCoords3-rectCoords0;var lightNormal: vec3f=cross(v1,v2);if (dot(lightNormal,P-rectCoords0)<0.0) {return vec3f(0.0);}
 var T1: vec3f=normalize(V-N*dot(V,N));var T2: vec3f=-cross(N,T1);var mat: mat3x3<f32>=mInv*transposeMat3(mat3x3<f32>(T1,T2,N));var coords0: vec3f=mat*(rectCoords0-P);var coords1: vec3f=mat*(rectCoords1-P);var coords2: vec3f=mat*(rectCoords2-P);var coords3: vec3f=mat*(rectCoords3-P);var textureLight: vec3f=FetchDiffuseFilteredTexture(texFilteredMap,texFilteredMapSampler,coords0,coords1,coords2,coords3);coords0=normalize(coords0);coords1=normalize(coords1);coords2=normalize(coords2);coords3=normalize(coords3);var vectorFormFactor: vec3f=vec3f(0.0);vectorFormFactor+=LTCEdgeVectorFormFactor(coords0,coords1);vectorFormFactor+=LTCEdgeVectorFormFactor(coords1,coords2);vectorFormFactor+=LTCEdgeVectorFormFactor(coords2,coords3);vectorFormFactor+=LTCEdgeVectorFormFactor(coords3,coords0);var result: f32=LTCClippedSphereFormFactor(vectorFormFactor);return vec3f(result)*textureLight;}
-fn computeAreaLightSpecularDiffuseFresnelWithEmission(ltc1: texture_2d<f32>,ltc1Sampler:sampler,ltc2:texture_2d<f32>,ltc2Sampler:sampler,emissionTexture: texture_2d<f32>,emissionTextureSampler:sampler,viewDir: vec3f,normal:vec3f,position:vec3f,lightPos:vec3f,halfWidth:vec3f, halfHeight:vec3f,roughness:f32)->areaLightData {var result: areaLightData;var rectCoords0: vec3f=lightPos+halfWidth-halfHeight;
+fn computeAreaLightSpecularDiffuseFresnelWithEmission(ltc1: texture_2d<f32>,ltc1Sampler:sampler,ltc2:texture_2d<f32>,ltc2Sampler:sampler,emissionTexture: texture_2d<f32>,emissionTextureSampler:sampler,viewDir: vec3f,normal:vec3f,position:vec3f,lightPos:vec3f,halfWidth:vec3f, halfHeight:vec3f,roughness:f32)->areaLightData {var result: areaLightData;var rectCoords0: vec3f=lightPos+halfWidth-halfHeight; 
 var rectCoords1: vec3f=lightPos-halfWidth-halfHeight;var rectCoords2: vec3f=lightPos-halfWidth+halfHeight;var rectCoords3: vec3f=lightPos+halfWidth+halfHeight;
 #ifdef SPECULARTERM
 var uv: vec2f=LTCUv(normal,viewDir,roughness);var t1: vec4f=textureSample(ltc1,ltc1Sampler,uv);var t2: vec4f=textureSample(ltc2,ltc2Sampler,uv);var mInv: mat3x3<f32>=mat3x3<f32>(
@@ -237,7 +237,7 @@ vNormal: vec3f,
 lightData: vec4f,
 sliceRange: vec2u,
 glossiness: f32
-)->lightingInfo {var result: lightingInfo;let tilePosition=vec2u(fragmentInputs.position.xy*lightData.xy);let maskResolution=vec2u(lightData.zw);var tileIndex=(tilePosition.x*maskResolution.x+tilePosition.y)*maskResolution.y;let batchRange=sliceRange/CLUSTLIGHT_BATCH;var batchOffset=batchRange.x*CLUSTLIGHT_BATCH;tileIndex+=batchRange.x;for (var i=batchRange.x; i<=batchRange.y; i+=1) {var mask=tileMaskBuffer[tileIndex];tileIndex+=1;let maskOffset=max(sliceRange.x,batchOffset)-batchOffset;
+)->lightingInfo {var result: lightingInfo;let tilePosition=vec2u(fragmentInputs.position.xy*lightData.xy);let maskResolution=vec2u(lightData.zw);var tileIndex=(tilePosition.x*maskResolution.x+tilePosition.y)*maskResolution.y;let batchRange=sliceRange/CLUSTLIGHT_BATCH;var batchOffset=batchRange.x*CLUSTLIGHT_BATCH;tileIndex+=batchRange.x;for (var i=batchRange.x; i<=batchRange.y; i+=1) {var mask=tileMaskBuffer[tileIndex];tileIndex+=1;let maskOffset=max(sliceRange.x,batchOffset)-batchOffset; 
 let maskWidth=min(sliceRange.y-batchOffset+1,CLUSTLIGHT_BATCH);mask=extractBits(mask,maskOffset,maskWidth);while mask != 0 {let trailing=firstTrailingBit(mask);mask ^= 1u<<trailing;let light=getClusteredLight(lightDataTexture,batchOffset+maskOffset+trailing);var info: lightingInfo;if light.vLightDirection.w<0.0 {info=computeLighting(viewDirectionW,vNormal,light.vLightData,light.vLightDiffuse.rgb,light.vLightSpecular.rgb,light.vLightDiffuse.a,glossiness);} else {info=computeSpotLighting(viewDirectionW,vNormal,light.vLightData,light.vLightDirection,light.vLightDiffuse.rgb,light.vLightSpecular.rgb,light.vLightDiffuse.a,glossiness);}
 result.diffuse+=info.diffuse;
 #ifdef SPECULARTERM
@@ -337,7 +337,7 @@ fn computeShadowWithCloseESM(vPositionFromLight: vec4f,depthMetric: f32,shadowTe
 {var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uv: vec2f=0.5*clipSpace.xy+ vec2f(0.5);if (uv.x<0. || uv.x>1.0 || uv.y<0. || uv.y>1.0)
 {return 1.0;}
 else
-{var shadowPixelDepth: f32=clamp(depthMetric,0.,1.0);
+{var shadowPixelDepth: f32=clamp(depthMetric,0.,1.0); 
 #ifndef SHADOWFLOAT
 var shadowMapSample: f32=unpack(textureSampleLevel(shadowTexture,shadowSampler,uv,0.));
 #else
@@ -357,34 +357,34 @@ const GREATEST_LESS_THAN_ONE: f32=0.99999994;
 fn computeShadowWithCSMPCF1(layer: i32,vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d_array,shadowSampler: sampler_comparison,darkness: f32,frustumEdgeFalloff: f32)->f32
 {var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=clamp(getZInClip(clipSpace,uvDepth),0.,GREATEST_LESS_THAN_ONE);var shadow: f32=textureSampleCompare(shadowTexture,shadowSampler,uvDepth.xy,layer,uvDepth.z);shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}
 fn computeShadowWithCSMPCF3(layer: i32,vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d_array,shadowSampler: sampler_comparison,shadowMapSizeAndInverse: vec2f,darkness: f32,frustumEdgeFalloff: f32)->f32
-{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=clamp(getZInClip(clipSpace,uvDepth),0.,GREATEST_LESS_THAN_ONE);var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x;
-uv+=0.5;
-var st: vec2f=fract(uv);
-var base_uv: vec2f=floor(uv)-0.5;
-base_uv*=shadowMapSizeAndInverse.y;
+{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=clamp(getZInClip(clipSpace,uvDepth),0.,GREATEST_LESS_THAN_ONE);var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x; 
+uv+=0.5; 
+var st: vec2f=fract(uv); 
+var base_uv: vec2f=floor(uv)-0.5; 
+base_uv*=shadowMapSizeAndInverse.y; 
 var uvw0: vec2f=3.-2.*st;var uvw1: vec2f=1.+2.*st;var u: vec2f= vec2f((2.-st.x)/uvw0.x-1.,st.x/uvw1.x+1.)*shadowMapSizeAndInverse.y;var v: vec2f= vec2f((2.-st.y)/uvw0.y-1.,st.y/uvw1.y+1.)*shadowMapSizeAndInverse.y;var shadow: f32=0.;shadow+=uvw0.x*uvw0.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[0]),layer,uvDepth.z);shadow+=uvw1.x*uvw0.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[0]),layer,uvDepth.z);shadow+=uvw0.x*uvw1.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[1]),layer,uvDepth.z);shadow+=uvw1.x*uvw1.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[1]),layer,uvDepth.z);shadow=shadow/16.;shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}
 fn computeShadowWithCSMPCF5(layer: i32,vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d_array,shadowSampler: sampler_comparison,shadowMapSizeAndInverse: vec2f,darkness: f32,frustumEdgeFalloff: f32)->f32
-{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=clamp(getZInClip(clipSpace,uvDepth),0.,GREATEST_LESS_THAN_ONE);var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x;
-uv+=0.5;
-var st: vec2f=fract(uv);
-var base_uv: vec2f=floor(uv)-0.5;
-base_uv*=shadowMapSizeAndInverse.y;
+{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=clamp(getZInClip(clipSpace,uvDepth),0.,GREATEST_LESS_THAN_ONE);var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x; 
+uv+=0.5; 
+var st: vec2f=fract(uv); 
+var base_uv: vec2f=floor(uv)-0.5; 
+base_uv*=shadowMapSizeAndInverse.y; 
 var uvw0: vec2f=4.-3.*st;var uvw1: vec2f= vec2f(7.);var uvw2: vec2f=1.+3.*st;var u: vec3f= vec3f((3.-2.*st.x)/uvw0.x-2.,(3.+st.x)/uvw1.x,st.x/uvw2.x+2.)*shadowMapSizeAndInverse.y;var v: vec3f= vec3f((3.-2.*st.y)/uvw0.y-2.,(3.+st.y)/uvw1.y,st.y/uvw2.y+2.)*shadowMapSizeAndInverse.y;var shadow: f32=0.;shadow+=uvw0.x*uvw0.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[0]),layer,uvDepth.z);shadow+=uvw1.x*uvw0.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[0]),layer,uvDepth.z);shadow+=uvw2.x*uvw0.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[0]),layer,uvDepth.z);shadow+=uvw0.x*uvw1.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[1]),layer,uvDepth.z);shadow+=uvw1.x*uvw1.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[1]),layer,uvDepth.z);shadow+=uvw2.x*uvw1.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[1]),layer,uvDepth.z);shadow+=uvw0.x*uvw2.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[2]),layer,uvDepth.z);shadow+=uvw1.x*uvw2.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[2]),layer,uvDepth.z);shadow+=uvw2.x*uvw2.y*textureSampleCompare(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[2]),layer,uvDepth.z);shadow=shadow/144.;shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}
 fn computeShadowWithPCF1(vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d,shadowSampler: sampler_comparison,darkness: f32,frustumEdgeFalloff: f32)->f32
 {var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=getZInClip(clipSpace,uvDepth);if (depthMetric<0.0 || depthMetric>1.0 || uvDepth.x<0. || uvDepth.x>1.0 || uvDepth.y<0. || uvDepth.y>1.0) {return 1.0;} else {var shadow: f32=textureSampleCompareLevel(shadowTexture,shadowSampler,uvDepth.xy,uvDepth.z);shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}}
 fn computeShadowWithPCF3(vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d,shadowSampler: sampler_comparison,shadowMapSizeAndInverse: vec2f,darkness: f32,frustumEdgeFalloff: f32)->f32
-{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=getZInClip(clipSpace,uvDepth);if (depthMetric<0.0 || depthMetric>1.0 || uvDepth.x<0. || uvDepth.x>1.0 || uvDepth.y<0. || uvDepth.y>1.0) {return 1.0;} else {var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x;
-uv+=0.5;
-var st: vec2f=fract(uv);
-var base_uv: vec2f=floor(uv)-0.5;
-base_uv*=shadowMapSizeAndInverse.y;
+{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=getZInClip(clipSpace,uvDepth);if (depthMetric<0.0 || depthMetric>1.0 || uvDepth.x<0. || uvDepth.x>1.0 || uvDepth.y<0. || uvDepth.y>1.0) {return 1.0;} else {var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x; 
+uv+=0.5; 
+var st: vec2f=fract(uv); 
+var base_uv: vec2f=floor(uv)-0.5; 
+base_uv*=shadowMapSizeAndInverse.y; 
 var uvw0: vec2f=3.-2.*st;var uvw1: vec2f=1.+2.*st;var u: vec2f= vec2f((2.-st.x)/uvw0.x-1.,st.x/uvw1.x+1.)*shadowMapSizeAndInverse.y;var v: vec2f= vec2f((2.-st.y)/uvw0.y-1.,st.y/uvw1.y+1.)*shadowMapSizeAndInverse.y;var shadow: f32=0.;shadow+=uvw0.x*uvw0.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[0]),uvDepth.z);shadow+=uvw1.x*uvw0.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[0]),uvDepth.z);shadow+=uvw0.x*uvw1.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[1]),uvDepth.z);shadow+=uvw1.x*uvw1.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[1]),uvDepth.z);shadow=shadow/16.;shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}}
 fn computeShadowWithPCF5(vPositionFromLight: vec4f,depthMetric: f32,shadowTexture: texture_depth_2d,shadowSampler: sampler_comparison,shadowMapSizeAndInverse: vec2f,darkness: f32,frustumEdgeFalloff: f32)->f32
-{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=getZInClip(clipSpace,uvDepth);if (depthMetric<0.0 || depthMetric>1.0 || uvDepth.x<0. || uvDepth.x>1.0 || uvDepth.y<0. || uvDepth.y>1.0) {return 1.0;} else {var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x;
-uv+=0.5;
-var st: vec2f=fract(uv);
-var base_uv: vec2f=floor(uv)-0.5;
-base_uv*=shadowMapSizeAndInverse.y;
+{var clipSpace: vec3f=vPositionFromLight.xyz/vPositionFromLight.w;var uvDepth: vec3f= vec3f(0.5*clipSpace.xyz+ vec3f(0.5));uvDepth.z=getZInClip(clipSpace,uvDepth);if (depthMetric<0.0 || depthMetric>1.0 || uvDepth.x<0. || uvDepth.x>1.0 || uvDepth.y<0. || uvDepth.y>1.0) {return 1.0;} else {var uv: vec2f=uvDepth.xy*shadowMapSizeAndInverse.x; 
+uv+=0.5; 
+var st: vec2f=fract(uv); 
+var base_uv: vec2f=floor(uv)-0.5; 
+base_uv*=shadowMapSizeAndInverse.y; 
 var uvw0: vec2f=4.-3.*st;var uvw1: vec2f= vec2f(7.);var uvw2: vec2f=1.+3.*st;var u: vec3f= vec3f((3.-2.*st.x)/uvw0.x-2.,(3.+st.x)/uvw1.x,st.x/uvw2.x+2.)*shadowMapSizeAndInverse.y;var v: vec3f= vec3f((3.-2.*st.y)/uvw0.y-2.,(3.+st.y)/uvw1.y,st.y/uvw2.y+2.)*shadowMapSizeAndInverse.y;var shadow: f32=0.;shadow+=uvw0.x*uvw0.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[0]),uvDepth.z);shadow+=uvw1.x*uvw0.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[0]),uvDepth.z);shadow+=uvw2.x*uvw0.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[0]),uvDepth.z);shadow+=uvw0.x*uvw1.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[1]),uvDepth.z);shadow+=uvw1.x*uvw1.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[1]),uvDepth.z);shadow+=uvw2.x*uvw1.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[1]),uvDepth.z);shadow+=uvw0.x*uvw2.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[0],v[2]),uvDepth.z);shadow+=uvw1.x*uvw2.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[1],v[2]),uvDepth.z);shadow+=uvw2.x*uvw2.y*textureSampleCompareLevel(shadowTexture,shadowSampler, base_uv.xy+ vec2f(u[2],v[2]),uvDepth.z);shadow=shadow/144.;shadow=mix(darkness,1.,shadow);return computeFallOff(shadow,clipSpace.xy,frustumEdgeFalloff);}}
 const PoissonSamplers32: array<vec3f,64>=array<vec3f,64> (
 vec3f(0.06407013,0.05409927,0.),
@@ -759,13 +759,13 @@ fn TEXRD(t: texture_2d<f32>,ts: sampler,uv: vec2f)->vec4f {return textureSample(
 #define TEXRD_DEFINED
 #endif
 #if defined(BUMP) || defined(CLEARCOAT_BUMP) || defined(ANISOTROPIC) || defined(DETAIL)
-#if defined(TANGENT) && defined(NORMAL)
+#if defined(TANGENT) && defined(NORMAL) 
 varying vTBN0: vec3f;varying vTBN1: vec3f;varying vTBN2: vec3f;
 #endif
 #ifdef OBJECTSPACE_NORMALMAP
 uniform normalMatrix: mat4x4f;fn toNormalMatrix(m: mat4x4f)->mat4x4f
-{var a00=m[0][0];var a01=m[0][1];var a02=m[0][2];var a03=m[0][3];var a10=m[1][0];var a11=m[1][1];var a12=m[1][2];var a13=m[1][3];var a20=m[2][0];
-var a21=m[2][1];var a22=m[2][2];var a23=m[2][3];var a30=m[3][0];
+{var a00=m[0][0];var a01=m[0][1];var a02=m[0][2];var a03=m[0][3];var a10=m[1][0];var a11=m[1][1];var a12=m[1][2];var a13=m[1][3];var a20=m[2][0]; 
+var a21=m[2][1];var a22=m[2][2];var a23=m[2][3];var a30=m[3][0]; 
 var a31=m[3][1];var a32=m[3][2];var a33=m[3][3];var b00=a00*a11-a01*a10;var b01=a00*a12-a02*a10;var b02=a00*a13-a03*a10;var b03=a01*a12-a02*a11;var b04=a01*a13-a03*a11;var b05=a02*a13-a03*a12;var b06=a20*a31-a21*a30;var b07=a20*a32-a22*a30;var b08=a20*a33-a23*a30;var b09=a21*a32-a22*a31;var b10=a21*a33-a23*a31;var b11=a22*a33-a23*a32;var det=b00*b11-b01*b10+b02*b09+b03*b08-b04*b07+b05*b06;var mi=mat4x4<f32>(
 (a11*b11-a12*b10+a13*b09)/det,
 (a02*b10-a01*b11-a03*b09)/det,
@@ -838,7 +838,7 @@ var normalScale: f32=uniforms.vBumpInfos.y;
 var normalScale: f32=1.0;
 #endif
 #if defined(TANGENT) && defined(NORMAL)
-var TBN: mat3x3f=mat3x3<f32>(input.vTBN0,input.vTBN1,input.vTBN2);
+var TBN: mat3x3f=mat3x3<f32>(input.vTBN0,input.vTBN1,input.vTBN2); 
 #elif defined(BUMP)
 var TBNUV: vec2f=select(-fragmentInputs.vBumpUV,fragmentInputs.vBumpUV,fragmentInputs.frontFacing);var TBN: mat3x3f=cotangent_frame(normalW*normalScale,input.vPositionW,TBNUV,uniforms.vTangentSpaceParams);
 #else
@@ -846,7 +846,7 @@ var TBNUV: vec2f=select(-fragmentInputs.vDetailUV,fragmentInputs.vDetailUV,fragm
 #endif
 #elif defined(ANISOTROPIC)
 #if defined(TANGENT) && defined(NORMAL)
-var TBN: mat3x3f=mat3x3<f32>(input.vTBN0,input.vTBN1,input.vTBN2);
+var TBN: mat3x3f=mat3x3<f32>(input.vTBN0,input.vTBN1,input.vTBN2); 
 #else
 var TBNUV: vec2f=select( -fragmentInputs.vMainUV1,fragmentInputs.vMainUV1,fragmentInputs.frontFacing);var TBN: mat3x3f=cotangent_frame(normalW,input.vPositionW,TBNUV, vec2f(1.,1.));
 #endif
@@ -870,9 +870,9 @@ normalW=normalize(TEXRD(bumpSampler,bumpSamplerSampler,fragmentInputs.vBumpUV).x
 normalW=perturbNormal(TBN,TEXRD(bumpSampler,bumpSamplerSampler,fragmentInputs.vBumpUV+uvOffset).xyz,uniforms.vBumpInfos.y);
 #else
 var bumpNormal: vec3f=TEXRD(bumpSampler,bumpSamplerSampler,fragmentInputs.vBumpUV+uvOffset).xyz*2.0-1.0;
-#if DETAIL_NORMALBLENDMETHOD==0
+#if DETAIL_NORMALBLENDMETHOD==0 
 detailNormal=vec3f(detailNormal.xy*uniforms.vDetailInfos.z,detailNormal.z);var blendedNormal: vec3f=normalize( vec3f(bumpNormal.xy+detailNormal.xy,bumpNormal.z*detailNormal.z));
-#elif DETAIL_NORMALBLENDMETHOD==1
+#elif DETAIL_NORMALBLENDMETHOD==1 
 detailNormal=vec3f(detailNormal.xy*uniforms.vDetailInfos.z,detailNormal.z);bumpNormal+= vec3f(0.0,0.0,1.0);detailNormal*= vec3f(-1.0,-1.0,1.0);var blendedNormal: vec3f=bumpNormal*dot(bumpNormal,detailNormal)/bumpNormal.z-detailNormal;
 #endif
 normalW=perturbNormalBase(TBN,blendedNormal,uniforms.vBumpInfos.y);
@@ -902,7 +902,7 @@ return fragmentOutputs;
 #if defined(SHADOWONLY) || defined(LIGHTMAP) && defined(LIGHTMAPEXCLUDED{X}) && defined(LIGHTMAPNOSPECULAR{X})
 #else
 var diffuse{X}: vec4f=light{X}.vLightDiffuse;
-#define CUSTOM_LIGHT{X}_COLOR
+#define CUSTOM_LIGHT{X}_COLOR 
 #if defined(PBR) && defined(CLUSTLIGHT{X})
 {let sliceIndex=min(getClusteredSliceIndex(light{X}.vSliceData,fragmentInputs.vViewDepth),CLUSTLIGHT_SLICES-1);info=computeClusteredLighting(
 lightDataTexture{X},
@@ -1013,7 +1013,7 @@ info.diffuse=computeHemisphericDiffuseLighting(preInfo,diffuse{X}.rgb,light{X}.v
 info.diffuse=computeAreaDiffuseLighting(preInfo,diffuse{X}.rgb);
 #elif defined(SS_TRANSLUCENCY)
 #ifndef SS_TRANSLUCENCY_LEGACY
-info.diffuse=computeDiffuseLighting(preInfo,diffuse{X}.rgb)*(1.0-subSurfaceOut.translucencyIntensity);info.diffuseTransmission=computeDiffuseTransmittedLighting(preInfo,diffuse{X}.rgb,subSurfaceOut.transmittance);
+info.diffuse=computeDiffuseLighting(preInfo,diffuse{X}.rgb)*(1.0-subSurfaceOut.translucencyIntensity);info.diffuseTransmission=computeDiffuseTransmittedLighting(preInfo,diffuse{X}.rgb,subSurfaceOut.transmittance); 
 #else
 info.diffuse=computeDiffuseTransmittedLighting(preInfo,diffuse{X}.rgb,subSurfaceOut.transmittance);
 #endif
@@ -1289,7 +1289,7 @@ sheenBase+=info.sheen.rgb*shadow;
 fragmentOutputs.fragDepth=log2(fragmentInputs.vFragmentDepth)*uniforms.logarithmicDepthConstant*0.5;
 #endif
 `;e.IncludesShadersStoreWGSL[J]||(e.IncludesShadersStoreWGSL[J]=Y);var be={name:J,shader:Y},X=`oitFragment`,Z=`#ifdef ORDER_INDEPENDENT_TRANSPARENCY
-var fragDepth: f32=fragmentInputs.position.z;
+var fragDepth: f32=fragmentInputs.position.z; 
 #ifdef ORDER_INDEPENDENT_TRANSPARENCY_16BITS
 var halfFloat: u32=pack2x16float( vec2f(fragDepth));var full: vec2f=unpack2x16float(halfFloat);fragDepth=full.x;
 #endif
@@ -1598,7 +1598,7 @@ color=vec4f(color.rgb*color.a, color.a);
 #if SCENE_MRT_COUNT>0
 var writeGeometryInfo: f32=select(0.0,1.0,color.a>0.4);var fragData: array<vec4<f32>,SCENE_MRT_COUNT>;
 #ifdef PREPASS_COLOR
-fragData[PREPASS_COLOR_INDEX]=color;
+fragData[PREPASS_COLOR_INDEX]=color; 
 #endif
 #ifdef PREPASS_POSITION
 fragData[PREPASS_POSITION_INDEX]=vec4f(fragmentInputs.vPositionW,writeGeometryInfo);
@@ -1613,10 +1613,10 @@ var velocity : vec2f=vec2f(0.5)*((fragmentInputs.vPreviousPosition.xy/fragmentIn
 (fragmentInputs.vCurrentPosition.xy/fragmentInputs.vCurrentPosition.w));fragData[PREPASS_VELOCITY_LINEAR_INDEX]=vec4f(velocity,0.0,writeGeometryInfo);
 #endif
 #ifdef PREPASS_IRRADIANCE
-fragData[PREPASS_IRRADIANCE_INDEX]=vec4f(0.0,0.0,0.0,writeGeometryInfo);
+fragData[PREPASS_IRRADIANCE_INDEX]=vec4f(0.0,0.0,0.0,writeGeometryInfo); 
 #endif
 #ifdef PREPASS_DEPTH
-fragData[PREPASS_DEPTH_INDEX]=vec4f(fragmentInputs.vViewPos.z,0.0,0.0,writeGeometryInfo);
+fragData[PREPASS_DEPTH_INDEX]=vec4f(fragmentInputs.vViewPos.z,0.0,0.0,writeGeometryInfo); 
 #endif
 #ifdef PREPASS_SCREENSPACE_DEPTH
 fragData[PREPASS_SCREENSPACE_DEPTH_INDEX]=vec4f(fragmentInputs.position.z,0.0,0.0,writeGeometryInfo);
@@ -1642,7 +1642,7 @@ fragData[PREPASS_ALBEDO_SQRT_INDEX]=vec4f(sqrt(baseColor.rgb),writeGeometryInfo)
 #endif
 #ifdef PREPASS_REFLECTIVITY
 #if defined(SPECULAR)
-fragData[PREPASS_REFLECTIVITY_INDEX]=vec4f(toLinearSpaceVec4(specularMapColor))*writeGeometryInfo;
+fragData[PREPASS_REFLECTIVITY_INDEX]=vec4f(toLinearSpaceVec4(specularMapColor))*writeGeometryInfo; 
 #else
 fragData[PREPASS_REFLECTIVITY_INDEX]=vec4f(toLinearSpaceVec3(specularColor),1.0)*writeGeometryInfo;
 #endif

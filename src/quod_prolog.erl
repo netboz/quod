@@ -5744,6 +5744,8 @@ commit_validation_result({ok, Verdict, Context}, S) ->
     {Verdict,
      S#s{outcomes = quod_commit_validation:outcomes(Context)}};
 commit_validation_result({outcome_error, Reason}, _S) ->
+    %% Projection corruption/unavailability is never an ordinary invalid
+    %% proposal: fail the owner so replay can rebuild the authoritative index.
     outcome_index_failure(Reason).
 
 wait_for_apply_dependency(Reason, S = #s{apply_dependency = none}) ->

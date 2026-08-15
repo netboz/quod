@@ -48,7 +48,122 @@ dtx_begin_check_and_committed_claim_share_one_validator_test() ->
                Control, 1, {claim, 2}, Claimed))
       end).
 
+missing_network_identity_splits_check_from_committed_claim_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    {Fixture, Context, Outcomes} = signed_fixture(),
+    try
+        without_network_identity(
+          fun() ->
+              Transaction = maps:get(transaction, Fixture),
+              Control = maps:get(begin_control, Fixture),
+              ?assertMatch(
+                 {ok, abstain, _},
+                 quod_commit_validation:content(
+                   [Transaction], 1, check, Context)),
+              ?assertMatch(
+                 {ok, {unavailable, network_identity, not_hosted}, _},
+                 quod_commit_validation:content(
+                   [Transaction], 1, {claim, 2}, Context)),
+              ?assertMatch(
+                 {ok, abstain, _},
+                 quod_commit_validation:dtx(Control, 1, check, Context)),
+              ?assertMatch(
+                 {ok, {unavailable, network_identity, not_hosted}, _},
+                 quod_commit_validation:dtx(
+                   Control, 1, {claim, 2}, Context))
+          end)
+    after
+        ok = quod_outcome:close(Outcomes)
+    end.
+
+membership_validation_contract_is_owned_here_test() ->
+    Ns = <<"quod:commit-membership">>,
+    Anchor = <<223:256>>,
+    Candidate = <<224:256>>,
+    Host = "member.example",
+    Port = 14567,
+    Assert = membership_assert(Candidate, Host, Port),
+    CanJoin = {can_join, Ns, [Host, Port], Candidate},
+    with_context(
+      Ns, Anchor, [CanJoin],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, valid, _},
+             validate_membership(Ns, Assert, Context))
+      end),
+    with_context(
+      Ns, Anchor,
+      [{peer_admitted, Candidate, Host, Port, Candidate}, CanJoin],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, already_admitted}, _},
+             validate_membership(Ns, Assert, Context))
+      end),
+    SideEffectingCanJoin =
+        {':-', {can_join, Ns, [Host, Port], Candidate},
+               {assertz, {membership_side_effect, true}}},
+    with_context(
+      Ns, Anchor, [SideEffectingCanJoin],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, can_join_side_effects}, _},
+             validate_membership(Ns, Assert, Context))
+      end),
+    Missing = <<225:256>>,
+    Retract = membership_retract(Missing, Host, Port),
+    with_context(
+      Ns, Anchor, [],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, no_such_member}, _},
+             validate_membership(Ns, Retract, Context))
+      end).
+
+prepare_validation_and_materialization_are_owned_here_test() ->
+    Fixture = valid_prepare_fixture(),
+    {TargetNs, TargetAnchor} = maps:get(target, Fixture),
+    Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
+    Control = maps:get(prepare_control, Fixture),
+    {ok, Manifest, PlanDigest, PlanBlob} =
+        quod_dtx:prepare_payload(Control),
+    {ok, Plan} = quod_dtx:decode(PlanBlob),
+    [{_InvocationId, FullChain, GoalBlob, _Verdict, _Answers,
+      _Digest, _Tag}] = quod_dtx:transcript(Plan),
+    {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
+    CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
+    Policy = {can_invoke, Goal, quod_dtx:principal(Plan),
+              CallerNamespaces, TargetNs},
+    Member = {peer_admitted, Signer, "validator", 14567, Signer},
+    with_context(
+      TargetNs, TargetAnchor, [Policy, Member],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {valid, _History}, _},
+             quod_commit_validation:dtx(Control, 1, check, Context)),
+          ?assertMatch(
+             {ok, _EventContext, #{diff := _}},
+             quod_commit_validation:prepared_material(
+               Manifest, PlanDigest, PlanBlob, Context))
+      end),
+    with_context(
+      TargetNs, TargetAnchor, [Policy],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, [signer_not_admitted]}, _},
+             quod_commit_validation:dtx(Control, 1, check, Context))
+      end).
+
 with_signed_fixture(Fun) ->
+    {Fixture, Context, Outcomes} = signed_fixture(),
+    Network = maps:get(network, Fixture),
+    try
+        quod_ct:with_network_identity(
+          Network, fun() -> Fun(Fixture, Context) end)
+    after
+        ok = quod_outcome:close(Outcomes)
+    end.
+
+signed_fixture() ->
     Ns = <<"quod:commit-validation">>,
     Anchor = <<221:256>>,
     Network = <<222:256>>,
@@ -64,9 +179,62 @@ with_signed_fixture(Fun) ->
                        Ns, Anchor, #{outcome_backend => memory}),
     Context = quod_commit_validation:new(
                 {Ns, Anchor}, 1, ParentEst, Outcomes, none),
+    {Fixture, Context, Outcomes}.
+
+without_network_identity(Fun) ->
+    Root = quod_ontology:root_ns(),
+    undefined = quod_reg:where({quod_simplex, Root}),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    application:set_env(
+      quod, namespace_desired,
+      Desired0#{content => maps:remove(Root, Content0)}),
     try
-        quod_ct:with_network_identity(
-          Network, fun() -> Fun(Fixture, Context) end)
+        Fun()
     after
-        ok = quod_outcome:close(Outcomes)
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
     end.
+
+valid_prepare_fixture() ->
+    Target = {TargetNs, TargetAnchor} =
+        {<<"quod:commit-prepare">>, <<226:256>>},
+    Fixture0 = quod_ct:signed_dtx_begin_fixture(
+                 #{target => Target, network => <<227:256>>,
+                   submitted_at => 1}),
+    Begin = maps:get('begin', Fixture0),
+    {ok, BeginRef} = quod_dtx:certified_ref(
+                       TargetNs, TargetAnchor, 1, <<228:256>>,
+                       quod_dtx:group_id(Begin), <<"qc">>),
+    {ok, Prepare} = quod_dtx:new_prepare(Begin, BeginRef, Target),
+    {ok, PrepareControl} = quod_dtx:sign_control(
+                             Target, Prepare, maps:get(admission, Fixture0),
+                             1, 1, maps:get(node_identity, Fixture0)),
+    Fixture0#{prepare => Prepare, prepare_control => PrepareControl}.
+
+with_context(Ns, Anchor, Facts, Fun) ->
+    ParentEst = quod_ct:committed_kb(Facts),
+    {ok, Outcomes} = quod_outcome:open(
+                       Ns, Anchor, #{outcome_backend => memory}),
+    Context = quod_commit_validation:new(
+                {Ns, Anchor}, 1, ParentEst, Outcomes, none),
+    try Fun(Context)
+    after ok = quod_outcome:close(Outcomes)
+    end.
+
+validate_membership(Ns, Diff, Context) ->
+    Change = quod_ct:change(Ns, Diff, #{}),
+    quod_commit_validation:content([Change], 1, check, Context).
+
+membership_assert(Pubkey, Host, Port) ->
+    quod_ct:diff_for({peer_admitted, Pubkey, Host, Port, Pubkey}).
+
+membership_retract(Pubkey, Host, Port) ->
+    [{assert, Clause}] = quod_ct:diff_for(
+                           {peer_admitted, Pubkey, Host, Port, Pubkey}),
+    [{retract, Clause}].

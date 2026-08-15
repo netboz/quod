@@ -237,9 +237,7 @@ request_evidence(Target, GoalBlob, Auth, Authorization,
     checked_request_target(
       Target,
       quod_client_goal:validate_durable_authorization(
-        Auth, Authorization, Network, Target, AdmissionMs, GoalBlob));
-request_evidence(_Target, _GoalBlob, _Auth, _Authorization, _Mode) ->
-    {error, invalid_request_binding}.
+        Auth, Authorization, Network, Target, AdmissionMs, GoalBlob)).
 
 checked_request_target(
   {Ns, Anchor},

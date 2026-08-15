@@ -51,7 +51,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 
 -export([start_link/2, prove/2, prove_ro/2,
          execute/2, execute_signed/3,
-         open_cursor/4, open_cursor/5, cancel_cursor/3,
+         open_cursor/5, cancel_cursor/3,
          submit_plan/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
          project_pending_begin/2,
@@ -66,7 +66,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -export([prove_est/2, prove_est_read_only/2]).
 %% prove against a raw #est{} handle (runtime + isolated policy reads)
 -ifdef(TEST).
--export([test_active_command_stack/1,
+-export([open_cursor/4,
+         test_active_command_stack/1,
          test_scope_capacity_available/3,
          test_public_scope_reason/2,
          test_scope_timeout_reason/2,
@@ -294,6 +295,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_prolog, Ns}), ?MODULE, {Ns, Config}, []).
 
+-ifdef(TEST).
 -doc """
 Open one bounded, resumable top-level proof owned by `Owner`.
 
@@ -324,6 +326,7 @@ open_cursor(TargetNs, Goal, Owner, <<_:256>> = CursorId)
     end;
 open_cursor(_TargetNs, _Goal, _Owner, _CursorId) ->
     {error, bad_request}.
+-endif.
 
 -doc "Open the existing cursor proof under one already-verified signed request.".
 -spec open_cursor(quod_client_goal:evidence(), term(),
@@ -1235,14 +1238,6 @@ handle_cast({public_proof, Caller, CallRef, Kind, _Goal,
        (Kind =:= prove orelse Kind =:= prove_ro) ->
     reply_client({async, Caller, CallRef}, {error, rebuilding}),
     {noreply, S};
-handle_cast({public_proof, Caller, CallRef, Kind, _Goal,
-             #proof_request{}},
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when is_pid(Caller), is_reference(CallRef),
-       (Kind =:= prove orelse Kind =:= prove_ro),
-       map_size(Workers) >= Max ->
-    reply_client({async, Caller, CallRef}, {error, busy}),
-    {noreply, S};
 handle_cast({public_proof, Caller, CallRef, Kind, Goal,
              #proof_request{principal = Principal,
                             request_evidence = RequestEvidence} = Request}, S)
@@ -1250,9 +1245,8 @@ handle_cast({public_proof, Caller, CallRef, Kind, Goal,
        (Kind =:= prove orelse Kind =:= prove_ro) ->
     case valid_proof_auth(Principal, RequestEvidence) of
         true ->
-            {noreply,
-             spawn_proof(
-               Kind, Goal, {async, Caller, CallRef}, Request, S)};
+            admit_public_proof(
+              Kind, Goal, {async, Caller, CallRef}, Request, S);
         false ->
             reply_client({async, Caller, CallRef}, {error, invalid_user_principal}),
             {noreply, S}
@@ -1267,12 +1261,6 @@ handle_cast({public_action, Caller, CallRef, _Action, _Structural,
   when is_pid(Caller), is_reference(CallRef) ->
     reply_client({async, Caller, CallRef}, {error, rebuilding}),
     {noreply, S};
-handle_cast({public_action, Caller, CallRef, _Action, _Structural,
-             #proof_request{}},
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when is_pid(Caller), is_reference(CallRef), map_size(Workers) >= Max ->
-    reply_client({async, Caller, CallRef}, {error, busy}),
-    {noreply, S};
 handle_cast({public_action, Caller, CallRef, Action, Structural,
              #proof_request{principal = Requested,
                             request_evidence = RequestEvidence} = Request},
@@ -1283,10 +1271,9 @@ handle_cast({public_action, Caller, CallRef, Action, Structural,
         {ok, Principal} ->
             case valid_proof_auth(Principal, RequestEvidence) of
                 true ->
-                    {noreply,
-                     spawn_proof(
-                       action, {Action, Structural}, From,
-                       Request#proof_request{principal = Principal}, S)};
+                    admit_public_proof(
+                      action, {Action, Structural}, From,
+                      Request#proof_request{principal = Principal}, S);
                 false ->
                     reply_client(From, {error, invalid_user_principal}),
                     {noreply, S}
@@ -1742,23 +1729,10 @@ scope_authentication_reason(
   {signed_goal, RequestBytes, Signature} = Authentication,
   _OriginKey, OriginIdentity, {user, UserKey}, AuthenticationDigest,
   S) ->
-    case {quod_scope_wire:authentication_digest(Authentication),
-          quod_client_goal:verify(RequestBytes, Signature)} of
-        {{ok, AuthenticationDigest},
-         {ok, Evidence =
-                #{request := #{network_identity := Network,
-                               user_public_key := UserKey,
-                               target_namespace := OriginNs,
-                               target_genesis_anchor := OriginAnchor}}}}
-          when {OriginNs, OriginAnchor} =:= OriginIdentity ->
-            case quod_ontology:network_identity() of
-                {ok, Network} ->
-                    {ok, #{request_binding =>
-                               quod_client_goal:request_binding(Evidence),
-                           request_auth =>
-                               quod_client_goal:request_auth(Evidence)}};
-                _ -> {error, scope_network_identity_unavailable(S)}
-            end;
+    case quod_scope_wire:authentication_digest(Authentication) of
+        {ok, AuthenticationDigest} ->
+            verify_scope_authentication(
+              RequestBytes, Signature, OriginIdentity, UserKey, S);
         _ ->
             {error, {protocol_error, request_binding}}
     end;
@@ -1767,8 +1741,30 @@ scope_authentication_reason(
   _AuthenticationDigest, _S) ->
     {error, {protocol_error, request_binding}}.
 
+verify_scope_authentication(
+  RequestBytes, Signature, OriginIdentity, UserKey, S = #s{ns = Ns}) ->
+    case quod_ontology:network_identity() of
+        {ok, Network} ->
+            case quod_client_goal:verify_for(
+                   RequestBytes, Signature, Network, OriginIdentity,
+                   quod_time:now_ms()) of
+                {ok, Evidence =
+                       #{request := #{user_public_key := UserKey}}} ->
+                    {ok, #{request_binding =>
+                               quod_client_goal:request_binding(Evidence),
+                           request_auth =>
+                               quod_client_goal:request_auth(Evidence)}};
+                {error, expired} ->
+                    {error, {scope_expired, Ns}};
+                _ ->
+                    {error, {protocol_error, request_binding}}
+            end;
+        _ ->
+            {error, scope_network_identity_unavailable(S)}
+    end.
+
 scope_network_identity_unavailable(#s{ns = Ns}) ->
-    {ontology_rebuilding, Ns}.
+    {network_identity_unavailable, Ns}.
 
 -ifdef(TEST).
 test_scope_authentication_reason(
@@ -3352,6 +3348,66 @@ terminate(_Reason, #s{ns = Ns, workers = W,
 %%% proof execution (worker-per-proof; copy-on-write overlay)
 %%%===================================================================
 
+%% Capacity and the already-applied operation index are checked by the one
+%% engine owner before a proof starts. An in-flight proof is deliberately not
+%% treated as an operation claim: it may still fail authorization or proof.
+%% Concurrent valid proofs converge only at the existing consensus claim.
+admit_public_proof(Kind, Goal, From, Request,
+                   S = #s{workers = Workers,
+                          max_proof_workers = Max}) ->
+    case proof_operation_gate(Request, S) of
+        {new, S1} when map_size(Workers) < Max ->
+            {noreply, spawn_proof(Kind, Goal, From, Request, S1)};
+        {new, S1} ->
+            reply_client(From, {error, busy}),
+            {noreply, S1};
+        {{alias, OperationRef}, S1} ->
+            reply_client(From, {error, {outcome_unknown, OperationRef}}),
+            {noreply, S1};
+        {conflict, S1} ->
+            reply_client(From, {error, operation_conflict}),
+            {noreply, S1};
+        {{unknown, OperationRef}, S1} ->
+            reply_client(From, {error, {outcome_unknown, OperationRef}}),
+            {noreply, S1}
+    end.
+
+proof_operation_gate(Request, S) ->
+    case proof_request_operation(Request) of
+        none -> {new, S};
+        Operation -> applied_operation(Operation, S)
+    end.
+
+proof_request_operation(
+  #proof_request{
+     request_evidence =
+       #{request := #{mode := execute,
+                      user_public_key := User,
+                      operation_id := OperationId},
+         request_digest := Digest,
+         operation_ref := OperationRef}})
+  when is_binary(User), byte_size(User) =:= 32,
+       is_binary(OperationId), byte_size(OperationId) =:= 32,
+       is_binary(Digest), byte_size(Digest) =:= 32 ->
+    {{User, OperationId}, Digest, OperationRef};
+proof_request_operation(_Request) ->
+    none.
+
+applied_operation(
+  {_Key, Digest, OperationRef}, S = #s{outcomes = Outcomes0}) ->
+    case quod_outcome:lookup_ref(Outcomes0, OperationRef) of
+        {{ok, #{status := claimed, request_digest := Digest}}, Outcomes1} ->
+            {{alias, OperationRef}, S#s{outcomes = Outcomes1}};
+        {{ok, #{status := claimed}}, Outcomes1} ->
+            {conflict, S#s{outcomes = Outcomes1}};
+        {not_found, Outcomes1} ->
+            {new, S#s{outcomes = Outcomes1}};
+        {wrong_anchor, Outcomes1} ->
+            {{unknown, OperationRef}, S#s{outcomes = Outcomes1}};
+        {{error, _Reason}, Outcomes1} ->
+            {{unknown, OperationRef}, S#s{outcomes = Outcomes1}}
+    end.
+
 %% Spawn one worker for this proof. The worker gets a small table/height snapshot handle,
 %% never the committed KB contents, plus the height stamped on the public reply.
 %% The engine only tracks the monitor + a kill timer; it never runs the proof.
@@ -3739,7 +3795,7 @@ submit_single_plan(Origin, Target, Plan, Goal, Bindings) ->
 
 submit_single_ordinary_plan(
   #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
-  {TargetNs, TargetAnchor} = Target, Plan, Goal, Bindings,
+  Target, Plan, Goal, Bindings,
   GoalBlob, ResultBlob) ->
     RequestAuth = quod_proof_context:request_auth(),
     OutcomeRef = quod_transaction:plan_outcome_ref(
@@ -3749,18 +3805,26 @@ submit_single_ordinary_plan(
                     Result = submit_single_plan_at_target(
                                Target, Plan, Goal, Bindings,
                                GoalBlob, ResultBlob, RequestAuth),
-                    case {Result, Target} of
-                        {{ok, _B, Index, _TxId}, {Ns, Anchor}} ->
-                            {committed, Bindings, Index};
-                        {{ok, _B, _Index, TxId}, _Foreign} ->
-                            {committed, Bindings,
-                             {transaction, TargetNs, TargetAnchor, TxId}};
-                        {{error, _} = Error, _} ->
+                    case Result of
+                        {ok, _B, Index, _TxId} ->
+                            Handle = committed_plan_handle(
+                                       RequestAuth, Target, {Ns, Anchor},
+                                       Index, OutcomeRef),
+                            {committed, Bindings, Handle};
+                        {error, _} = Error ->
                             Error
                     end;
                 {error, _} = Error ->
                     Error
     end.
+
+%% The trusted in-VM API historically reports a same-ontology commit as its
+%% local height. A signed client write instead needs the anchored transaction
+%% reference: a bare integer is indistinguishable from a read result at the
+%% shared result boundary and cannot be resolved after uncertainty.
+committed_plan_handle(none, Identity, Identity, Index, _OutcomeRef) -> Index;
+committed_plan_handle(_RequestAuth, _Target, _Origin, _Index, OutcomeRef) ->
+    OutcomeRef.
 
 submit_single_effect_plan(
   #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
@@ -4274,7 +4338,9 @@ complete_committed_lifecycle(
     case quod_effect_journal:await(
            quod_effect:effect_id(Effect),
            max(1, quod_proof_context:remaining_ms())) of
-        ok -> {committed, #{}, Height};
+        ok ->
+            {committed, #{},
+             committed_lifecycle_handle(Height, OutcomeRef)};
         {error, outcome_unknown} ->
             {error, {outcome_unknown, OutcomeRef}};
         {error, Reason} ->
@@ -4283,6 +4349,12 @@ complete_committed_lifecycle(
 complete_committed_lifecycle(
   _Effect, Other, _Bindings, _ReadSet) ->
     Other.
+
+committed_lifecycle_handle(Height, OutcomeRef) ->
+    case quod_proof_context:request_auth() of
+        none -> Height;
+        _SignedRequest -> OutcomeRef
+    end.
 
 lifecycle_success() -> {ok, #{}, [], #{}}.
 
@@ -4330,9 +4402,9 @@ retain_group_waiter(
             Timer = erlang:send_after(Ttl, self(),
                                       {group_wait_timeout, GroupId}),
             Waiter = #group_waiter{
-                        from = From, caller_mref = CallerMRef,
-                        timer = Timer, group_ref = GroupRef,
-                        bindings = Bindings},
+                from = From, caller_mref = CallerMRef,
+                timer = Timer, group_ref = GroupRef,
+                bindings = Bindings},
             S1 = S#s{waiting_workers = Waiting1,
                      group_waiters = GroupWaiters#{GroupId => Waiter}},
             %% Complete may have crossed this worker's scope-cleanup/result

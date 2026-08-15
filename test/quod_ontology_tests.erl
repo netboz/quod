@@ -997,11 +997,13 @@ authenticated_registration_creates_its_home(_Fixture) ->
                                                 ?ROOT_NS, NetworkId, execute,
                                                 SessionExpires,
                                                 <<"create_user_home.">>),
-            ?assertMatch(
-               {ok, _DeniedEvidence,
-                {fail, [{not_allowed, ?ROOT_NS}]}},
-               quod_client_goal_ingress:submit(
-                 execute, SessionId, DeniedBytes, DeniedSignature, Peer))
+            {ok, _DeniedEvidence,
+             {normalized, {failed, DeniedReasonsBlob}}} =
+                quod_client_goal_ingress:submit(
+                  execute, SessionId, DeniedBytes, DeniedSignature, Peer),
+            ?assertEqual(
+               {ok, [{not_allowed, ?ROOT_NS}]},
+               quod_wire_term:decode_failure_reasons(DeniedReasonsBlob))
         after
             commit_root({assertz, OpenInvoke})
         end,
@@ -1012,7 +1014,9 @@ authenticated_registration_creates_its_home(_Fixture) ->
                                              SessionExpires,
                                              <<"create_user_home.">>),
         ?assertMatch(
-           {ok, _Evidence, {ok, [#{}], _}},
+           {ok, _Evidence,
+            {normalized,
+             {committed, [_], {transaction, ?ROOT_NS, NetworkId, _}}}},
            quod_client_goal_ingress:submit(
              execute, SessionId, RequestBytes, RequestSignature, Peer)),
         ok = wait_ready(UserNs, 200),
@@ -1063,17 +1067,26 @@ signed_cursor_accept_preserves_operation(_Fixture) ->
               SessionExpires,
               <<"pick(X), ignored(_), assertz(chosen(X)).">>),
         {ok, Evidence0,
-         {solution, CursorId, #{0 := first}, _Height0}} =
+         {normalized, {solution, CursorId, _Height0, FirstBlob}}} =
             quod_client_goal_ingress:submit(
               cursor, SessionId, RequestBytes, RequestSignature, Peer),
+        ?assertEqual({ok, [{<<"X">>, first}]},
+                     quod_durable_term:decode_result(FirstBlob)),
         {ok, Evidence1,
-         {solution, CursorId, #{0 := second}, _Height1}} =
+         {normalized, {solution, CursorId, _Height1, SecondBlob}}} =
             quod_client_goal_ingress:cursor_command(
               SessionId, CursorId, next, Peer),
+        ?assertEqual({ok, [{<<"X">>, second}]},
+                     quod_durable_term:decode_result(SecondBlob)),
         ?assertEqual(Evidence0, Evidence1),
-        {ok, Evidence2, {ok, [#{0 := second}], Height}} =
+        {ok, Evidence2,
+         {normalized,
+          {committed, [AcceptedBlob],
+           {transaction, Ns, Anchor, _} = OutcomeRef}}} =
             quod_client_goal_ingress:cursor_command(
               SessionId, CursorId, accept, Peer),
+        ?assertEqual({ok, [{<<"X">>, second}]},
+                     quod_durable_term:decode_result(AcceptedBlob)),
         ?assertEqual(Evidence0, Evidence2),
         ?assertMatch({ok, [#{}], _},
                      quod_prolog:prove_ro(Ns, {chosen, second})),
@@ -1082,6 +1095,8 @@ signed_cursor_accept_preserves_operation(_Fixture) ->
         OperationRef = maps:get(operation_ref, Evidence0),
         Desired = application:get_env(quod, namespace_desired, #{}),
         Config = maps:get(Ns, maps:get(content, Desired)),
+        {ok, #{status := committed, height := Height}} =
+            quod_prolog:outcome(OutcomeRef),
         {ok, Store} = quod_ledger_store:open_ro(
                         Ns, quod_ledger_store:ledger_dir(Config)),
         try
@@ -1139,7 +1154,9 @@ signed_execute_omits_anonymous_bindings(_Fixture) ->
               SessionExpires,
               <<"draft(_), assertz(final(ok)).">>),
         ?assertMatch(
-           {ok, _Evidence, {ok, [#{}], _Height}},
+           {ok, _Evidence,
+            {normalized,
+             {committed, [_], {transaction, Ns, Anchor, _}}}},
            quod_client_goal_ingress:submit(
              execute, SessionId, RequestBytes, RequestSignature, Peer)),
         ?assertMatch(
@@ -1207,9 +1224,11 @@ signed_multi_ontology_write_preserves_one_user_request(#{dir := Dir}) ->
               NetworkId, PublicKey, KeyPair, Origin, OriginAnchor, execute,
               SessionExpires, GoalText),
         {ok, Evidence,
-         {ok, [#{}],
-          #{ref := {group, Origin, OriginAnchor, _, _, _} = GroupRef,
-            participant_slots := Slots}}} =
+         {normalized,
+          {committed, [_],
+           {group_outcome,
+            {group, Origin, OriginAnchor, _, _, _} = GroupRef,
+            _Height, Slots}}}} =
             quod_client_goal_ingress:submit(
               execute, SessionId, RequestBytes, RequestSignature, Peer),
         %% The origin's top-level ACL read is itself a committed dependency,
@@ -1228,9 +1247,12 @@ signed_multi_ontology_write_preserves_one_user_request(#{dir := Dir}) ->
             signed_user_goal(
               NetworkId, PublicKey, KeyPair, Origin, OriginAnchor, execute,
               SessionExpires, DeniedGoal),
-        {ok, _DeniedEvidence, {fail, DeniedReasons}} =
+        {ok, _DeniedEvidence,
+         {normalized, {failed, DeniedReasonsBlob}}} =
             quod_client_goal_ingress:submit(
               execute, SessionId, DeniedBytes, DeniedSignature, Peer),
+        {ok, DeniedReasons} =
+            quod_wire_term:decode_failure_reasons(DeniedReasonsBlob),
         ?assert(lists:member({not_allowed, Denied}, DeniedReasons)),
         ?assertMatch({fail, _}, quod_prolog:prove_ro(Left, must_roll_back)),
         ?assertMatch({fail, _},

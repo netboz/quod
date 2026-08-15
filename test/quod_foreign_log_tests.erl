@@ -232,6 +232,127 @@ identity_current_view_starts_at_genesis_and_tracks_rotation_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+identity_current_bootstrap_fails_over_before_certified_routes_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Right = maps:get(pub, Fixture),
+    Wrong = <<0:256>>,
+    Endpoint = {"127.0.0.1", 19000},
+    TestPid = self(),
+    FetchTag = make_ref(),
+    RightFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Fetch =
+        fun(Peer, GivenEndpoint, RequestedNs, From, To) ->
+            TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
+            case {Peer, GivenEndpoint} of
+                {Wrong, Endpoint} -> {error, retry};
+                {Right, Endpoint} ->
+                    RightFetch(Peer, GivenEndpoint, RequestedNs, From, To);
+                _ -> {error, wrong_route}
+            end
+        end,
+    Dir = temp_dir("identity-current-route-failover"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, committee := [Right]}},
+           quod_foreign_log:current(
+             [{Wrong, Endpoint}, {Right, Endpoint}], Identity, 5000)),
+        Calls = collect_bootstrap_route_fetches(FetchTag, []),
+        ?assertMatch([{Wrong, 1}, {Right, 1} | _], Calls),
+        %% After the genesis page certifies Right for Endpoint, the conflicting
+        %% discovery hint is never consulted again.
+        ?assertEqual(
+           1, length([ok || {Peer, _} <- Calls, Peer =:= Wrong]))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+identity_current_bootstrap_continues_after_selected_source_retry_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Right = maps:get(pub, Fixture),
+    Wrong = <<0:256>>,
+    Endpoint = {"127.0.0.1", 19000},
+    TestPid = self(),
+    FetchTag = make_ref(),
+    ChainFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Fetch =
+        fun(Peer, GivenEndpoint, RequestedNs, From, To) ->
+            TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
+            case {Peer, GivenEndpoint, To} of
+                {Wrong, Endpoint, 1} ->
+                    %% The discovery page is valid, but this source becomes
+                    %% unavailable while the verified history is downloaded.
+                    ChainFetch(Peer, GivenEndpoint, RequestedNs, From, To);
+                {Wrong, Endpoint, _Later} ->
+                    {error, retry};
+                {Right, Endpoint, _} ->
+                    ChainFetch(Peer, GivenEndpoint, RequestedNs, From, To);
+                _ ->
+                    {error, wrong_route}
+            end
+        end,
+    Dir = temp_dir("identity-current-selected-route-retry"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{identity := Identity, committee := [Right]}},
+           quod_foreign_log:current(
+             [{Wrong, Endpoint}, {Right, Endpoint}], Identity, 5000)),
+        Calls = collect_bootstrap_route_fetches(FetchTag, []),
+        ?assertEqual(
+           2, length([ok || {Peer, _} <- Calls, Peer =:= Wrong])),
+        ?assert(lists:any(fun({Peer, _}) -> Peer =:= Right end, Calls))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+identity_current_global_network_dependency_stops_route_failover_test() ->
+    Fixture = signed_content_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    First = maps:get(pub, Fixture),
+    Second = key(253),
+    FirstEndpoint = {"127.0.0.1", 19000},
+    SecondEndpoint = {"127.0.0.1", 19001},
+    TestPid = self(),
+    FetchTag = make_ref(),
+    ChainFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Fetch =
+        fun(Peer, Endpoint, RequestedNs, From, To) ->
+            TestPid ! {bootstrap_route_fetch, FetchTag, Peer, From},
+            case {Peer, Endpoint} of
+                {First, FirstEndpoint} ->
+                    ChainFetch(Peer, Endpoint, RequestedNs, From, To);
+                {Second, SecondEndpoint} ->
+                    ChainFetch(Peer, Endpoint, RequestedNs, From, To);
+                _ ->
+                    {error, wrong_route}
+            end
+        end,
+    Dir = temp_dir("identity-current-global-dependency"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        without_network_identity(
+          fun() ->
+              ?assertEqual(
+                 {error, retry},
+                 quod_foreign_log:current(
+                   [{First, FirstEndpoint}, {Second, SecondEndpoint}],
+                   Identity, 5000))
+          end),
+        Calls = collect_bootstrap_route_fetches(FetchTag, []),
+        ?assertEqual([], [ok || {Peer, _} <- Calls, Peer =:= Second])
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 local_identity_current_view_needs_no_phase_reference_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
@@ -794,6 +915,23 @@ foreign_fixture(Ns) ->
     #{ns => Ns, pub => Pub, signer => Signer, anchor => Anchor,
       chain => [Genesis, Entry], ref => Ref, control => Control}.
 
+signed_content_fixture(Ns) ->
+    Base = fixture_base(Ns),
+    Pub = maps:get(pub, Base),
+    Signer = maps:get(signer, Base),
+    Anchor = maps:get(anchor, Base),
+    Admission = maps:get(admission, Base),
+    Network = key(254),
+    RequestFixture = quod_ct:signed_dtx_begin_fixture(
+                       #{target => {Ns, Anchor}, network => Network}),
+    Unsigned = (maps:get(transaction, RequestFixture))#transaction{
+                 author = Pub, author_seq = 1, sig = none},
+    {ok, Signed} = quod_transaction:sign(
+                     {Ns, Anchor, Admission}, Unsigned, Signer),
+    Entry = content_entry(Ns, Anchor, Pub, Signer, 2, [Signed]),
+    Base#{ns => Ns, network => Network,
+          chain => [maps:get(genesis, Base), Entry]}.
+
 membership_after_finalize_fixture(Ns) ->
     Fixture = foreign_fixture(Ns),
     OldPub = maps:get(pub, Fixture),
@@ -1029,6 +1167,32 @@ collect_identity_current_fetches(Acc) ->
             collect_identity_current_fetches([From | Acc])
     after 50 ->
         lists:reverse(Acc)
+    end.
+
+collect_bootstrap_route_fetches(Tag, Acc) ->
+    receive
+        {bootstrap_route_fetch, Tag, Peer, From} ->
+            collect_bootstrap_route_fetches(Tag, [{Peer, From} | Acc])
+    after 50 ->
+        lists:reverse(Acc)
+    end.
+
+without_network_identity(Fun) when is_function(Fun, 0) ->
+    Root = quod_ontology:root_ns(),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    Desired0 = application:get_env(quod, namespace_desired, #{}),
+    Content0 = maps:get(content, Desired0, #{}),
+    application:set_env(
+      quod, namespace_desired,
+      Desired0#{content => maps:remove(Root, Content0)}),
+    try Fun()
+    after
+        case SavedDesired of
+            {ok, Desired} ->
+                application:set_env(quod, namespace_desired, Desired);
+            undefined ->
+                application:unset_env(quod, namespace_desired)
+        end
     end.
 
 start_owner(Dir, Fetch) ->

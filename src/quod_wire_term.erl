@@ -226,10 +226,31 @@ collect_goal_symbols(Tuple, Acc) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         findall -> collect_goal_positions(Tuple, [3], Acc);
         bagof -> collect_goal_positions(Tuple, [3], Acc);
         setof -> collect_goal_positions(Tuple, [3], Acc);
+        asserta -> collect_clause_symbol(Tuple, 2, Acc);
+        assertz -> collect_clause_symbol(Tuple, 2, Acc);
+        retract -> collect_clause_symbol(Tuple, 2, Acc);
+        retractall -> collect_clause_symbol(Tuple, 2, Acc);
         _ -> {ok, Acc}
     end;
 collect_goal_symbols(_Goal, Acc) ->
     {ok, Acc}.
+
+%% A clause passed to a database-update predicate contains executable syntax:
+%% its head is a callable and a rule body is a goal.  Ordinary arguments of
+%% that head remain opaque data, exactly like arguments of any other goal.
+collect_clause_symbol(Tuple, Position, Acc)
+  when Position =< tuple_size(Tuple) ->
+    collect_clause_symbols(element(Position, Tuple), Acc);
+collect_clause_symbol(_Tuple, _Position, _Acc) ->
+    error.
+
+collect_clause_symbols({':-', Head, Body}, Acc) ->
+    case collect_goal_symbols(Head, Acc) of
+        {ok, Acc1} -> collect_goal_symbols(Body, Acc1);
+        error -> error
+    end;
+collect_clause_symbols(Clause, Acc) ->
+    collect_goal_symbols(Clause, Acc).
 
 collect_goal_positions(_Tuple, [], Acc) ->
     {ok, Acc};
@@ -260,10 +281,25 @@ replace_goal_symbols(Tuple) when is_tuple(Tuple), tuple_size(Tuple) >= 2 ->
         findall -> replace_goal_positions(Tuple, [3]);
         bagof -> replace_goal_positions(Tuple, [3]);
         setof -> replace_goal_positions(Tuple, [3]);
+        asserta -> replace_clause_symbol(Tuple, 2);
+        assertz -> replace_clause_symbol(Tuple, 2);
+        retract -> replace_clause_symbol(Tuple, 2);
+        retractall -> replace_clause_symbol(Tuple, 2);
         _ -> Tuple
     end;
 replace_goal_symbols(Goal) ->
     Goal.
+
+replace_clause_symbol(Tuple, Position) when Position =< tuple_size(Tuple) ->
+    setelement(Position, Tuple,
+               replace_clause_symbols(element(Position, Tuple)));
+replace_clause_symbol(Tuple, _Position) ->
+    Tuple.
+
+replace_clause_symbols({':-', Head, Body}) ->
+    {':-', replace_goal_symbols(Head), replace_goal_symbols(Body)};
+replace_clause_symbols(Clause) ->
+    replace_goal_symbols(Clause).
 
 replace_goal_positions(Tuple, Positions) ->
     lists:foldl(

@@ -542,6 +542,8 @@ target_open_error(Target, {ontology_rate_limited, Target} = Reason) ->
     {retry, Reason};
 target_open_error(Target, {ontology_rebuilding, Target} = Reason) ->
     {retry, Reason};
+target_open_error(Target, {network_identity_unavailable, Target} = Reason) ->
+    {retry, Reason};
 target_open_error(Target, {anchor_conflict, Target} = Reason) ->
     {fatal, Reason};
 target_open_error(Target, {ontology_unreachable, Target} = Reason) ->

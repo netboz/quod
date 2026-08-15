@@ -1334,7 +1334,7 @@ Channel property: `{channel, term_to_binary({log, Ns}, [deterministic])}` — di
 **`quod_brahms` — discovery only (#28).** Never started/stopped/restarted or read on the create path; only
 `quod_ledger`'s join path reads `quod_brahms:view/1` / `sample/1`, then filters against the in-log committee.
 
-**`quod_sup` wiring:** replace the `%% TODO` line (`quod_sup.erl:31`) with:
+**`quod_sup` wiring (implemented):** the namespace supervisor child is:
 
 ```erlang
 #{id => quod_ns_sup, start => {quod_ns_sup, start_link, []}, type => supervisor}

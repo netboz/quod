@@ -13,6 +13,10 @@ remote_route_errors_retry_only_before_execution_test() ->
        quod_ask:test_remote_open_error(
          Target, {ontology_busy, Target})),
     ?assertEqual(
+       {retry, {network_identity_unavailable, Target}},
+       quod_ask:test_remote_open_error(
+         Target, {network_identity_unavailable, Target})),
+    ?assertEqual(
        {retry, {not_allowed, Target}},
        quod_ask:test_remote_open_error(
          Target, {not_allowed, Target})),
@@ -241,6 +245,7 @@ ask_test_() ->
           ?_test(t_scope_owner_death_reaps_session(Ctx)),
           ?_test(t_scope_worker_crash_is_protocol_error(Ctx)),
           ?_test(t_permission_gate(Ctx)),
+          ?_test(t_signed_nested_scope_uses_target_policy(Ctx)),
           ?_test(t_failure_reasons_cross_local_ask(Ctx)),
           {timeout, 30, ?_test(t_foreign_write_commits_group(Ctx))},
           {timeout, 30,
@@ -344,6 +349,23 @@ t_backtracking_all_answers(#{pets := P}) ->
     ?assertMatch({ok, [#{'L' := [kibble, meat]}], _},
                  prove(P, {findall, {'D'},
                            {'::', animals, {diet, dog, {'D'}}}, {'L'}})).
+
+t_signed_nested_scope_uses_target_policy(#{pets := Pets}) ->
+    Network = <<16#78:256>>,
+    Target = {Pets, quod_simplex:genesis_hash(Pets)},
+    Fixture = quod_ct:signed_goal_fixture(
+                #{network => Network, target => Target,
+                  goal_text => <<"private::hidden(x).">>}),
+    #{goal := FrozenGoal} = maps:get(evidence, Fixture),
+    {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+    quod_ct:with_network_identity(
+      Network,
+      fun() ->
+          {fail, Reasons} = quod_prolog:execute_signed(
+                              maps:get(evidence, Fixture), Goal,
+                              {user, maps:get(user, Fixture)}),
+          ?assert(lists:member({not_allowed, <<"private">>}, Reasons))
+      end).
 
 t_cursor_backtracks_across_ontology(#{pets := P}) ->
     CursorId = crypto:strong_rand_bytes(32),

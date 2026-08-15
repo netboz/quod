@@ -33,4 +33,20 @@
         (32 + (4 * 32) + 2 + ?DIRECTORY_MAX_NAMESPACE_BYTES +
          1 + 1 + 8 + 4 + ?QUOD_CLIENT_GOAL_TEXT_BYTES)).
 
+%% One complete signed-client reply is deliberately a single bounded frame.
+%% Large nondeterministic reads use the existing cursor instead of growing a
+%% second multi-frame result stream.  The envelope allowance covers the fixed
+%% endpoint wrapper, trace/correlation fields, and deterministic ETF framing.
+-define(QUOD_CLIENT_GOAL_MAX_REPLY_BYTES, (512 * 1024)).
+-define(QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES,
+        (?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES + (16 * 1024))).
+
+%% Node-wide signed-goal routing owns only volatile correlations/workers.  The
+%% target proof engine and cursor owner retain their existing independent caps.
+-define(QUOD_CLIENT_GOAL_MAX_CORRELATIONS, 256).
+-define(QUOD_CLIENT_GOAL_MAX_INBOUND_WORKERS, 64).
+-define(QUOD_CLIENT_GOAL_MAX_INBOUND_PER_FORWARDER, 8).
+-define(QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS, 60000).
+-define(QUOD_CLIENT_GOAL_REQUEST_ID_BITS, 128).
+
 -endif.

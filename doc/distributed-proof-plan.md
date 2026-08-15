@@ -741,6 +741,7 @@ and `foreign_write_unsupported` results disappear:
 | `{error, {ontology_busy, Ns}}` | target admission quota is full |
 | `{error, {ontology_rate_limited, Ns}}` | authenticated scope-open rate exceeded before execution |
 | `{error, {ontology_rebuilding, Ns}}` | target is not ready to open a scope |
+| `{error, {network_identity_unavailable, Ns}}` | target is ready, but cannot yet obtain the root identity needed to verify a signed scope request |
 | `{error, {ontology_unavailable, Ns}}` | the selected local engine died before any durable-submission checkpoint |
 | `{error, {proof_limit_exceeded, Ns}}` | active derivation exceeded its budget |
 | `{error, {scope_expired, Ns}}` | the bounded session expired while idle |
@@ -949,9 +950,13 @@ As built in the current working tree:
   gone. `submit_plan/4` (plan, bounded goal, bindings) is the one
   submission primitive; the engine accepts only a plan its OWN node
   witnessed for its OWN `{Ns, Anchor}` at a base at-or-below its applied
-  head. A proof with no writes returns directly and seals no plan. For a
+  head. A read-only proof with no writes returns directly and seals no plan.
+  An admitted signed execute/Accept seals its origin plan even when the
+  requested mutation is already present, so the existing transaction/DTX
+  record can carry its durable operation claim with an empty diff. For a
   writing proof, single-participant routing counts every plan whose signed
-  diff is non-empty **or** whose signed read set is non-empty. It submits the
+  diff is non-empty, whose signed read set is non-empty, or which carries that
+  origin operation claim. It submits the
   sole participant's plan engine-direct
   (local/co-hosted) or over the scope's
   `submit_plan` frame (remote — outcome only crosses back:

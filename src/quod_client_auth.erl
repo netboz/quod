@@ -4,7 +4,7 @@ Bounded, node-local proof-of-key challenges and sessions for the browser client.
 
 This service proves that a browser controls an Ed25519 key and issues an
 opaque, short-lived session bound to that key. It neither creates an ontology
-nor authorizes a world command; typed command ingress owns those later steps.
+nor authorizes a goal; signed-goal ingress owns those later steps.
 
 Challenges are held only in memory, expire quickly, and are consumed before
 signature verification. A captured completion therefore cannot be replayed.
@@ -31,11 +31,11 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 
 -behaviour(gen_server).
 
--export([start_link/0, issue_challenge/3, complete_challenge/2, session/1,
-         admit_goal/2, materialize_goal/3]).
+-export([start_link/0, issue_challenge/3, complete_challenge/2,
+         admit_goal/2, admit_forwarded_goal/2, materialize_goal/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([start_link/1]).
+-export([start_link/1, session/1]).
 -endif.
 
 -define(TTL_MS, 60000).
@@ -90,10 +90,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -define(ATOM_BASELINE_KEY, {?MODULE, atom_baseline}).
 
 start_link() ->
-    case application:get_env(quod, client_enabled, false) of
-        true -> gen_server:start_link({local, ?MODULE}, ?MODULE, #{}, []);
-        _ -> ignore
-    end.
+    gen_server:start_link({local, ?MODULE}, ?MODULE, #{}, []).
 
 -ifdef(TEST).
 -spec start_link(map()) -> gen_server:start_ret().
@@ -131,15 +128,25 @@ complete_challenge(ChallengeId, Signature) ->
         {error, _} = Error -> Error
     end.
 
+-ifdef(TEST).
 -doc "Return the still-valid public session binding for a typed ingress command.".
 -spec session(binary()) -> {ok, map()} | {error, invalid_session | client_auth_unavailable}.
 session(SessionId) ->
     call({session, SessionId}).
+-endif.
 
 -doc "Resolve a live session and atomically charge its user and peer goal budgets.".
 -spec admit_goal(binary(), term()) -> {ok, map()} | {error, term()}.
 admit_goal(SessionId, Peer) ->
     call({admit_goal, SessionId, Peer}).
+
+-doc "Charge one verified user request forwarded by an authenticated node.".
+-spec admit_forwarded_goal(<<_:256>>, <<_:256>>) ->
+          ok | {error, term()}.
+admit_forwarded_goal(<<_:256>> = PublicKey, <<_:256>> = ForwarderKey) ->
+    call({admit_forwarded_goal, PublicKey, ForwarderKey});
+admit_forwarded_goal(_PublicKey, _ForwarderKey) ->
+    {error, invalid_user_principal}.
 
 -doc "Materialize one already-verified goal under exact user, peer and VM budgets.".
 -spec materialize_goal(<<_:256>>, term(), term()) ->
@@ -190,6 +197,8 @@ handle_call({session, SessionId}, _From, S) ->
     reply(lookup_session(SessionId, S));
 handle_call({admit_goal, SessionId, Peer}, _From, S) ->
     reply(admit_goal_request(SessionId, Peer, S));
+handle_call({admit_forwarded_goal, PublicKey, ForwarderKey}, _From, S) ->
+    reply(admit_forwarded_goal_request(PublicKey, ForwarderKey, S));
 handle_call({materialize_goal, PublicKey, Peer, Goal}, _From, S) ->
     reply(materialize_verified_goal(PublicKey, Peer, Goal, S));
 handle_call(_Request, _From, S) ->
@@ -382,6 +391,17 @@ admit_goal_request(SessionId, Peer, S0) ->
         {{error, _} = Error, S1} ->
             {Error, S1}
     end.
+
+admit_forwarded_goal_request(
+  <<_:256>> = PublicKey, <<_:256>> = ForwarderKey, S0) ->
+    case charge_pair(
+           #s.goal_user_rate, PublicKey,
+           #s.goal_peer_rate, ForwarderKey, S0) of
+        {ok, S1} -> {ok, S1};
+        {{error, _} = Error, S1} -> {Error, S1}
+    end;
+admit_forwarded_goal_request(_PublicKey, _ForwarderKey, S) ->
+    {{error, invalid_user_principal}, S}.
 
 materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
     case quod_wire_term:goal_symbol_names(Goal) of

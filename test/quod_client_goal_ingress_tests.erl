@@ -17,6 +17,9 @@ signed_local_read_test_() ->
           ?_test(opaque_data_binding_renders_as_the_original_symbol(Ctx)),
           ?_test(anchor_is_checked_at_ingress_and_inside_the_worker(Ctx)),
           ?_test(session_and_signed_deadline_are_both_bound(Ctx)),
+          ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
+          ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
+          ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
           ?_test(operation_absence_remains_unresolved(Ctx)),
           ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
      end}.
@@ -28,7 +31,7 @@ local_read_uses_user_acl_and_returns_named_bindings(
                            Ns, ?ANCHOR, KeyPair, Session,
                            <<"lookup(X).">>),
     {ok, #{variables := [{<<"X">>, 0}]},
-     {ok, [#{0 := bob}], 1}} =
+     {normalized, {answers, 1, [_]}}} =
         quod_client_goal_ingress:submit(read,
           maps:get(session_id, Session), Bytes, Signature, ?PEER).
 
@@ -53,21 +56,21 @@ read_mode_cannot_write_or_open_a_foreign_scope(
                                      Ns, ?ANCHOR, KeyPair, Session,
                                      <<"assertz(should_not_exist).">>),
     ?assertMatch(
-       {ok, _, {error, read_only}},
+       {ok, _, {normalized, {error, read_only}}},
        quod_client_goal_ingress:submit(read,
          SessionId, WriteBytes, WriteSignature, ?PEER)),
     {AbsentBytes, AbsentSignature} = signed_read(
                                        Ns, ?ANCHOR, KeyPair, Session,
                                        <<"should_not_exist.">>),
     ?assertMatch(
-       {ok, _, {fail, _}},
+       {ok, _, {normalized, {failed, _}}},
        quod_client_goal_ingress:submit(read,
          SessionId, AbsentBytes, AbsentSignature, ?PEER)),
     {ScopeBytes, ScopeSignature} = signed_read(
                                      Ns, ?ANCHOR, KeyPair, Session,
                                      <<"\"foreign\"::true.">>),
     ?assertMatch(
-       {ok, _, {error, {unknown_ontology, <<"foreign">>}}},
+       {ok, _, {normalized, {error, proof_unavailable}}},
        quod_client_goal_ingress:submit(read,
          SessionId, ScopeBytes, ScopeSignature, ?PEER)).
 
@@ -77,7 +80,7 @@ same_ontology_scope_keeps_the_user_principal(
     Text = <<$", Ns/binary, "\"::lookup(X).">>,
     {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, Text),
     ?assertMatch(
-       {ok, _, {ok, [#{0 := bob}], 1}},
+       {ok, _, {normalized, {answers, 1, [_]}}},
        quod_client_goal_ingress:submit(read,
          maps:get(session_id, Session), Bytes, Signature, ?PEER)).
 
@@ -91,7 +94,7 @@ opaque_data_binding_renders_as_the_original_symbol(
     {ok, Evidence, Result} = quod_client_goal_ingress:submit(read,
                                maps:get(session_id, Session), Bytes,
                                Signature, ?PEER),
-    ?assertMatch({ok, [#{0 := {'$quod_symbol', Symbol}}], 1}, Result),
+    ?assertMatch({normalized, {answers, 1, [_]}}, Result),
     ?assertMatch(
        {200, #{bindings := [#{<<"X">> := Symbol}]}},
        quod_client_http:signed_goal_result({ok, Evidence, Result})),
@@ -128,7 +131,8 @@ anchor_is_checked_at_ingress_and_inside_the_worker(
         receive
             {anchored_proof_result, Caller, Reply} ->
                 ?assertMatch(
-                   {ok, _Evidence, {error, wrong_genesis_anchor}}, Reply)
+                   {ok, _Evidence,
+                    {normalized, {error, target_unavailable}}}, Reply)
         after 5000 ->
             error(anchored_proof_timeout)
         end
@@ -158,6 +162,95 @@ session_and_signed_deadline_are_both_bound(
        quod_client_goal_ingress:submit(read,
          <<0:256>>, Bytes, Signature, ?PEER)).
 
+wrong_network_and_expired_request_stop_at_ingress(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    SessionId = maps:get(session_id, Session),
+    WrongNetwork = quod_ct:signed_goal_fixture(
+                     #{network => <<16#76:256>>,
+                       target => {Ns, ?ANCHOR}, mode => read,
+                       key_pair => KeyPair,
+                       deadline => quod_time:now_ms() + 30000,
+                       goal_text => <<"lookup(X).">>}),
+    ?assertEqual(
+       {error, wrong_network},
+       quod_client_goal_ingress:submit(
+         read, SessionId, maps:get(request_bytes, WrongNetwork),
+         maps:get(signature, WrongNetwork), ?PEER)),
+    Expired = quod_ct:signed_goal_fixture(
+                #{network => ?NETWORK, target => {Ns, ?ANCHOR}, mode => read,
+                  key_pair => KeyPair, deadline => quod_time:now_ms() - 1,
+                  goal_text => <<"lookup(X).">>}),
+    ?assertEqual(
+       {error, expired},
+       quod_client_goal_ingress:submit(
+         read, SessionId, maps:get(request_bytes, Expired),
+         maps:get(signature, Expired), ?PEER)).
+
+route_eligible_refusals_advance_to_the_next_validator(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    {Bytes, Signature} = signed_read(Ns, ?ANCHOR, KeyPair, Session, <<"true.">>),
+    {ok, Evidence} = quod_client_goal_target:verify_request(Bytes, Signature),
+    First = #{node_key => <<1:256>>, endpoint => {{127, 0, 0, 1}, 5001}},
+    Second = #{node_key => <<2:256>>, endpoint => {{127, 0, 0, 1}, 5002}},
+    lists:foreach(
+      fun(Refusal) ->
+          Parent = self(),
+          Submit =
+              fun(#{node_key := <<1:256>>}, _Owner, _Ev, _Req, _Sig,
+                  _Cursor, _Trace, _Expires, _Timeout) ->
+                      Parent ! {attempt, Refusal, first},
+                      {error, {refused, Refusal}};
+                 (#{node_key := <<2:256>>}, _Owner, Ev, _Req, _Sig,
+                  _Cursor, _Trace, _Expires, _Timeout) ->
+                      Parent ! {attempt, Refusal, second},
+                      {ok, Ev, {normalized, fail}}
+              end,
+          ?assertEqual(
+             {ok, Evidence, {normalized, fail}},
+             quod_client_goal_ingress:test_forward_routes(
+               [First, Second], Evidence, Submit)),
+          receive {attempt, Refusal, first} -> ok
+          after 0 -> error(first_route_not_attempted)
+          end,
+          receive {attempt, Refusal, second} -> ok
+          after 0 -> error(second_route_not_attempted)
+          end
+      end, [not_ready, busy, rate_limited]).
+
+directory_anchor_conflict_is_not_flattened(
+  #{key_pair := KeyPair, session := Session}) ->
+    Ns = <<"signed-conflict:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Expected = crypto:hash(sha256, <<Ns/binary, ":expected">>),
+    Other = crypto:hash(sha256, <<Ns/binary, ":other">>),
+    K1 = <<16#78:256>>,
+    K2 = <<16#79:256>>,
+    stop_directory(),
+    {ok, Directory} = quod_directory:start_link(
+                        #{allowlist => #{Ns => [K1, K2]},
+                          expire_tick_ms => 60000, ttl_ms => 10000,
+                          renew_min_ms => 1}),
+    try
+        {ok, _} = quod_directory:install_record(
+                    K1, {"127.0.0.1", 5001},
+                    [{Ns, Expected, validator}], 1, 1),
+        {ok, _} = quod_directory:install_record(
+                    K2, {"127.0.0.1", 5002},
+                    [{Ns, Other, validator}], 1, 1),
+        {Bytes, Signature} = signed_read(
+                               Ns, Expected, KeyPair, Session, <<"true.">>),
+        ?assertEqual(
+           {error, {anchor_conflict, Ns}},
+           quod_client_goal_ingress:submit(
+             read, maps:get(session_id, Session), Bytes, Signature, ?PEER)),
+        ?assertEqual(
+           {409, #{error => anchor_conflict, namespace => Ns}},
+           quod_client_http:signed_goal_result(
+             {error, {anchor_conflict, Ns}}))
+    after
+        gen_server:stop(Directory)
+    end.
+
 operation_absence_remains_unresolved(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
     {Bytes, Signature} = signed_read(
@@ -169,11 +262,12 @@ operation_absence_remains_unresolved(
 
 operation_resolution_follows_the_existing_claim(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Deadline = min(maps:get(expires_ms, Session),
+                   quod_time:now_ms() + 30000),
     Fixture = quod_ct:signed_dtx_begin_fixture(
                 #{network => ?NETWORK, target => {Ns, ?ANCHOR},
                   key_pair => KeyPair,
-                  deadline => min(maps:get(expires_ms, Session),
-                                  quod_time:now_ms() + 30000),
+                  deadline => Deadline,
                   submitted_at => 2}),
     Transaction = maps:get(transaction, Fixture),
     ok = quod_prolog:apply_entry(
@@ -185,7 +279,18 @@ operation_resolution_follows_the_existing_claim(
          #{status := committed, height := 2}}},
        quod_client_goal_ingress:resolve_operation(
          maps:get(session_id, Session), maps:get(request_bytes, Fixture),
-         maps:get(signature, Fixture), ?PEER)).
+         maps:get(signature, Fixture), ?PEER)),
+    Other = quod_ct:signed_goal_fixture(
+              #{network => ?NETWORK, target => {Ns, ?ANCHOR},
+                key_pair => KeyPair,
+                operation_id => maps:get(operation_id, Fixture),
+                deadline => Deadline,
+                goal_text => <<"assertz(saved(other)).">>}),
+    ?assertEqual(
+       {error, operation_conflict},
+       quod_client_goal_ingress:resolve_operation(
+         maps:get(session_id, Session), maps:get(request_bytes, Other),
+         maps:get(signature, Other), ?PEER)).
 
 %% ===================================================================
 %% fixture
@@ -303,6 +408,12 @@ is_anchored_public_cast(_) ->
 
 stop_auth() ->
     case whereis(quod_client_auth) of
+        undefined -> ok;
+        Pid -> stop_process(Pid)
+    end.
+
+stop_directory() ->
+    case quod_reg:where({directory, node}) of
         undefined -> ok;
         Pid -> stop_process(Pid)
     end.

@@ -95,6 +95,7 @@ load_config() ->
             apply_transport_env(Cfg),
             apply_identity(Cfg),
             apply_directory(Cfg),
+            apply_foreign_log(Cfg),
             Blocks = maps:get(content, Cfg),
             Blocks
     end.
@@ -153,6 +154,17 @@ content_data_dir(Cfg) ->
         [Dir | _] -> binary_to_list(Dir);
         []        -> filename:join(filename:basedir(user_cache, "quod"), "data")
     end.
+
+%% The foreign-history cache is node state, not a machine-global test or
+%% operator cache. Keep it beside this node's configured durable data while
+%% preserving any explicitly supplied worker tuning.
+apply_foreign_log(Cfg) ->
+    Existing = application:get_env(quod, foreign_log, #{}),
+    application:set_env(
+      quod, foreign_log,
+      Existing#{cache_dir => filename:join(
+                                content_data_dir(Cfg), "foreign-log")}),
+    ok.
 
 %% Build the operator-controlled directory configuration. System publication
 %% uses exact namespace/key allowlists; private routes are namespace-scoped

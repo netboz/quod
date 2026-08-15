@@ -31,8 +31,9 @@ from the sealing target's `Signer`.
 
 ## Materiality and the live-bridge gate
 
-A scope with an empty diff AND an empty read set seals to `not_material` — it
-contributed nothing a commit could depend on. A scope with a **material diff**
+A scope with an empty diff AND an empty read set seals to `not_material` unless
+it is the signed request's origin plan, which durably carries the operation
+claim even when the requested mutation is already present. A scope with a **material diff**
 that consulted a live reality bridge (`m:quod_predicates` query-class external
 predicates) cannot seal: its decisions rest on node-local, non-replayable
 state that no later validation can re-prove, so sealing fails
@@ -81,7 +82,7 @@ its proof fence but never change consensus-derived generation state.
          sign_control/6, encode_control/1, decode_control/1,
          verify_control/2, control_kind/1, control_target/1,
          control_body/1, control_metadata/1, prepare_payload/1,
-         request_auth/1, request_authorization/1,
+         request_auth/1,
          request_claim/1, validate_request/4, requires_network_identity/1,
          prepare_matches_begin/2, validate_references/2, event_context/2,
          record_digest/1, group_id/1, decision_failure_reasons/1,
@@ -92,6 +93,9 @@ its proof fence but never change consensus-derived generation state.
          proposal_allowed/2,
          initial_group_history/0, preview/6, reduce/4,
          acknowledge_finalize/4]).
+-ifdef(TEST).
+-export([request_authorization/1]).
+-endif.
 
 -export_type([plan/0, principal/0, transcript_entry/0,
               manifest/0, attestation/0, certified_ref/0,
@@ -194,8 +198,9 @@ seal_session_checked(Session, Target, BaseHeight, ProofId, Origin, Principal,
     ReadCheck = quod_proof_session:read_set(Session),
     Effects = quod_proof_session:effects(Session),
     Result =
-        case {Diff, map_size(ReadCheck), Effects} of
-            {[], 0, []} ->
+        case {Diff, map_size(ReadCheck), Effects,
+              operation_claim_plan(Target, Origin, RequestBinding)} of
+            {[], 0, [], false} ->
                 not_material;
             _ ->
                 seal_material(
@@ -463,11 +468,17 @@ digest(Plan) -> crypto:hash(sha256, plan_bytes(core(Plan))).
 -spec diff_ops(plan()) -> non_neg_integer().
 diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
 
--doc "Whether this signed plan contributes writes or OCC reads; safe on a foreign plan.".
+-doc "Whether this signed plan contributes data/OCC material or the origin operation claim.".
 -spec participates(plan()) -> boolean().
 participates(Plan) ->
     diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0 orelse
-        effects_count(Plan) > 0.
+        effects_count(Plan) > 0 orelse
+        operation_claim_plan(
+          target(Plan), origin(Plan), request_binding(Plan)).
+
+operation_claim_plan(
+  Identity, Identity, {user_goal_v1, <<_:256>>}) -> true;
+operation_claim_plan(_Target, _Origin, _RequestBinding) -> false.
 
 -doc "The signed count of staged direct effects; safe on a foreign plan.".
 -spec effects_count(plan()) -> non_neg_integer().
@@ -1641,6 +1652,7 @@ request_auth(
    _Authorization, _Bundles}) ->
     RequestAuth.
 
+-ifdef(TEST).
 -doc "Return the recorded top-level authorization carried only by an origin Begin.".
 -spec request_authorization(control() | control_record()) ->
           none | {user_goal_v1, binary()}.
@@ -1651,6 +1663,7 @@ request_authorization(
   {quod_dtx_begin, ?RECORD_VERSION, _Manifest, _RequestAuth,
    Authorization, _Bundles}) ->
     Authorization.
+-endif.
 
 -doc "Return one Begin's bounded operation claim without runtime state.".
 -spec request_claim(control() | control_record()) ->

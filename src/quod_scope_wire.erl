@@ -924,7 +924,9 @@ namespaced_error_tag(Tag) ->
     Tag =:= unknown_ontology orelse Tag =:= anchor_conflict orelse
         Tag =:= not_allowed orelse Tag =:= ontology_unreachable orelse
         Tag =:= ontology_busy orelse Tag =:= ontology_rate_limited orelse
-        Tag =:= ontology_rebuilding orelse Tag =:= proof_limit_exceeded orelse
+        Tag =:= ontology_rebuilding orelse
+        Tag =:= network_identity_unavailable orelse
+        Tag =:= proof_limit_exceeded orelse
         Tag =:= scope_expired orelse Tag =:= too_many_answers.
 
 valid_protocol_kind(Kind) ->

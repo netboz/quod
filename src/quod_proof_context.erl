@@ -11,7 +11,7 @@ the scope wire as Erlang references.
 
 -include("quod_proof_limits.hrl").
 
--export([start/5, start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
+-export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
          request_auth/0, request_binding/0, scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0,
@@ -25,7 +25,7 @@ the scope wire as Erlang references.
          mark_dirty/2,
          tx_request/2, materialize/2]).
 -ifdef(TEST).
--export([scopes/0, registered_scope/1]).
+-export([start/5, scopes/0, registered_scope/1]).
 -endif.
 
 -type opaque_id() :: <<_:128>>.
@@ -81,12 +81,14 @@ the scope wire as Erlang references.
 -type handle() :: {quod_proof_context, <<_:256>>, pid()}.
 -export_type([identity/0, handle/0]).
 
+-ifdef(TEST).
 -spec start(<<_:256>>, boolean(), identity(), integer(),
             quod_dtx:principal()) -> handle().
 start(<<_:256>> = ProofId, ReadOnly,
       {Ns, <<_:256>>} = OriginIdentity, DeadlineMs, Principal)
   when is_boolean(ReadOnly), is_binary(Ns), is_integer(DeadlineMs) ->
     start(ProofId, ReadOnly, OriginIdentity, DeadlineMs, Principal, none).
+-endif.
 
 -spec start(<<_:256>>, boolean(), identity(), integer(),
             quod_dtx:principal(),
@@ -260,7 +262,7 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
                           origin_identity = OriginIdentity,
                           principal = Principal,
                           request_binding = RequestBinding}) ->
-    case proof_material(Scopes, Dirty) of
+    case proof_material(Scopes, Dirty, RequestBinding) of
         {ok, false} -> {ok, #{}};
         {ok, true} -> seal_scopes(lists:sort(maps:to_list(Scopes)),
                                   OriginIdentity, Principal,
@@ -271,11 +273,18 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
 %% Plans exist to carry writes: only a proof that staged at least one write
 %% anywhere seals, and then every scope it read from participates — an
 %% empty-diff scope's read set is exactly what the eventual commit depends on.
-proof_material(Scopes, Dirty) ->
+proof_material(_Scopes, _Dirty, {user_goal_v1, <<_:256>>}) ->
+    %% Execute/Accept requests are durable operations even if their goal's
+    %% database mutation is already present. The origin plan carries that one
+    %% claim; untouched foreign scopes still seal to `not_material`.
+    {ok, true};
+proof_material(Scopes, Dirty, none) ->
     case lists:any(fun(Value) -> Value =:= true end, maps:values(Dirty)) of
         true -> {ok, true};
         false -> local_scope_material(maps:values(Scopes))
-    end.
+    end;
+proof_material(_Scopes, _Dirty, _MalformedBinding) ->
+    {error, invalid_request_binding}.
 
 local_scope_material(
   [#scope{handle = {local_scope, _ScopeId, _Ns, _Anchor,

@@ -60,9 +60,9 @@ fields(explorer) ->
     , {port,    hoconsc:mk(integer(), #{default => 14569})}
     ];
 fields(client) ->
-    %% Static bootstrap, fixed challenge-response authentication, and one
-    %% constrained user-home registration route. Typed world commands remain
-    %% absent until their authenticated protocol is implemented.
+    %% Static bootstrap, fixed challenge-response authentication, and bounded
+    %% signed-goal ingress. Predicate authorization remains exclusively in the
+    %% target ontology's ordinary can_invoke/4 path.
     %%
     %% Always TLS: a browser withholds Web Crypto outside a secure context, so
     %% plaintext would leave the client unable to hold a key at all. Both PEM

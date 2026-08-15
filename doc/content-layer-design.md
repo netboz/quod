@@ -562,8 +562,8 @@ trusted-fleet boundary still applies to who may request a write.
 This sequence predates the running content engine and DispersedSimplex implementation.
 Current gaps and priorities live in `deferred.md`.
 
-1. **Single-node content engine** — wire erlog per namespace (fills the
-   `quod_prolog` TODO in `quod_sup.erl`); staged proved-scope proving (port
+1. **Single-node content engine** — wire erlog per namespace (this originally
+   filled the then-missing `quod_prolog` child in `quod_sup.erl`); staged proved-scope proving (port
    `local_prove` + `differ`); a **per-namespace ordered log** (single sequencer to
    start) so every node applies the same diffs in the same order; local
    goal-position `::`. *Caveat (review):* as scoped this exercises **no

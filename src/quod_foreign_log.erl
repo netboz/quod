@@ -399,7 +399,6 @@ init(Opts) ->
     PageTimeout = maps:get(page_timeout_ms, Opts, ?DEFAULT_PAGE_TIMEOUT_MS),
     case valid_options(Root, FetchFun, PageTimeout) of
         true ->
-            ok = filelib:ensure_path(filename:join(Root, "cache")),
             {Histories, Total} = load_histories(Root),
             S0 = #s{root = Root, fetch_fun = FetchFun,
                     page_timeout_ms = PageTimeout,
@@ -565,7 +564,7 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
                        fun() ->
                            verification_worker(
                              Owner, RequestRef, Work,
-                             Root, FetchFun, PageTimeout)
+                             Root, FetchFun, PageTimeout, TimeoutMs)
                        end,
                        [{max_heap_size,
                          #{size => foreign_worker_heap_words(),
@@ -1054,41 +1053,44 @@ subscribe_histories(S0) ->
 %%% Verification worker
 %%%===================================================================
 
-verification_worker(Owner, RequestRef, Work, Root, FetchFun, PageTimeout) ->
+verification_worker(
+  Owner, RequestRef, Work, Root, FetchFun, PageTimeout, RequestTimeout) ->
     %% Probe children are linked so killing a timed-out verification also
     %% kills every in-flight route fetch. Expected transport exits are
     %% normalized where the dependency is called; an internal fault takes
     %% down this monitored worker and remains visible to the runtime.
     Result0 = verification_work(
-                Work, Owner, RequestRef, Root, FetchFun, PageTimeout),
+                Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
+                RequestTimeout),
     {Result, Meta} = normalize_worker_result(Result0),
     Owner ! {foreign_worker_done, RequestRef, Result, Meta}.
 
 verification_work(
   {exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, _RequestTimeout) ->
     verify_cached(
       Owner, RequestRef, Peer, Endpoint, Ref, Phase, ref_identity(Ref),
       Root, FetchFun, PageTimeout, true, false);
 verification_work(
   {current, Routes, Ref}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, RequestTimeout) ->
     verify_current_cached(
-      Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout);
+      Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout,
+      RequestTimeout);
 verification_work(
   {local_current, LedgerRoot, Ref}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, _RequestTimeout) ->
     verify_local_current_cached(
       Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout);
 verification_work(
   {current_identity, Routes, Identity}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, RequestTimeout) ->
     certified_current_snapshot(
       Owner, RequestRef, Routes, Identity,
-      Root, FetchFun, PageTimeout);
+      Root, FetchFun, PageTimeout, RequestTimeout);
 verification_work(
   {local_current_identity, LedgerRoot, Identity}, Owner, RequestRef,
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, _RequestTimeout) ->
     verify_local_current_identity_cached(
       Owner, RequestRef, LedgerRoot, Identity,
       Root, FetchFun, PageTimeout).
@@ -1171,7 +1173,8 @@ retry_corrupt_cache(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
     end.
 
 verify_current_cached(
-  Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout) ->
+  Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout,
+  RequestTimeout) ->
     Identity = ref_identity(Ref),
     case verify_current_reference(
            Routes, Owner, RequestRef, Ref, Identity,
@@ -1179,7 +1182,7 @@ verify_current_cached(
         {{ok, _FinalizeEvidence}, _Meta} ->
             certified_current_snapshot(
               Owner, RequestRef, Routes, Identity,
-              Root, FetchFun, PageTimeout);
+              Root, FetchFun, PageTimeout, RequestTimeout);
         {{error, _} = Error, Meta} ->
             {Error, Meta}
     end.
@@ -1206,19 +1209,16 @@ verify_current_reference(
 
 certified_current_snapshot(
   Owner, RequestRef, Routes, Identity = {Ns, Anchor},
-  Root, FetchFun, PageTimeout) ->
+  Root, FetchFun, PageTimeout, RequestTimeout) ->
     case open_cache(Owner, RequestRef, Identity, Root, none) of
         {ok, Store0, Height0, Projection0, PhaseIndex, _RefProjection} ->
             Outcome =
                 try
                     Hints = current_route_hints(Routes, Projection0),
-                    Results = probe_pages(
-                                Owner, RequestRef, Hints, Ns, Height0,
-                                FetchFun, PageTimeout),
-                    case advance_snapshot(
-                           Owner, RequestRef, Identity, Store0, Height0,
-                           Projection0, PhaseIndex, Root, Results,
-                           FetchFun, PageTimeout) of
+                    case advance_current_snapshot(
+                           Owner, RequestRef, Hints, Identity, Store0,
+                           Height0, Projection0, PhaseIndex, Root,
+                           FetchFun, PageTimeout, RequestTimeout) of
                         {ok, Height1, Projection1} ->
                             ConfirmHints = current_route_hints(
                                              Routes, Projection1),
@@ -1549,8 +1549,8 @@ prepare_verified_page(
                         false ->
                             {error, invalid_history}
                     end;
-                {error, {unavailable, network_identity, _Reason}} ->
-                    {error, retry};
+                {error, {unavailable, network_identity, _Reason}} = Global ->
+                    Global;
                 {error, _} ->
                     {error, invalid_history}
             end;
@@ -1606,10 +1606,107 @@ persist_verified_page(
 current_route_hints(Supplied, Projection) ->
     Certified = maps:to_list(
                   quod_simplex:history_validator_routes(Projection)),
-    Hints = lists:usort(Certified ++ Supplied),
+    %% The replayed projection is certificate-verified; caller routes are
+    %% discovery hints only. Once history names the key for an endpoint, a
+    %% contradictory caller claim for that address has no authority and is
+    %% discarded. Before slot 1 there is no certified route, so bootstrap uses
+    %% ordered failover below instead of trusting or racing the hints.
+    CertifiedEndpoints = maps:from_keys(
+                           [Endpoint || {_Peer, Endpoint} <- Certified], true),
+    Unshadowed = [Route || Route = {_Peer, Endpoint} <- Supplied,
+                           not maps:is_key(Endpoint, CertifiedEndpoints)],
+    Hints = lists:usort(Certified ++ Unshadowed),
     case length(Hints) =< ?MAX_CURRENT_ROUTE_HINTS of
         true -> Hints;
         false -> []
+    end.
+
+advance_current_snapshot(
+  Owner, RequestRef, Hints, Identity, Store0, Height0, Projection0,
+  PhaseIndex, Root, FetchFun, PageTimeout, RequestTimeout) ->
+    case maps:size(quod_simplex:history_validator_routes(Projection0)) of
+        0 ->
+            bootstrap_snapshot_sources(
+              Hints, Owner, RequestRef, Identity, Store0, Height0,
+              Projection0, PhaseIndex, Root, FetchFun,
+              bootstrap_route_timeout(
+                PageTimeout, RequestTimeout, length(Hints)),
+              PageTimeout);
+        _ ->
+            {Ns, _Anchor} = Identity,
+            Results = probe_pages(
+                        Owner, RequestRef, Hints, Ns, Height0,
+                        FetchFun, PageTimeout),
+            advance_snapshot(
+              Owner, RequestRef, Identity, Store0, Height0, Projection0,
+              PhaseIndex, Root, Results, FetchFun, PageTimeout)
+    end.
+
+bootstrap_route_timeout(PageTimeout, RequestTimeout, RouteCount) ->
+    %% Discovery gets at most half the request. The remaining half is reserved
+    %% for downloading and verifying the selected history and corroborating
+    %% its resulting committee view.
+    PerRoute = erlang:max(1, RequestTimeout div (2 * erlang:max(1, RouteCount))),
+    erlang:min(PageTimeout, PerRoute).
+
+%% Before genesis is replayed every route is only a discovery hint. Trying
+%% them concurrently lets contradictory credentials for one address contend
+%% during first contact. Walk the bounded list instead: a source must deliver
+%% a page that passes the ordinary certificate/history fold before it wins.
+bootstrap_snapshot_sources(
+  [], _Owner, _RequestRef, _Identity, _Store, _Height, _Projection,
+  _PhaseIndex, _Root, _FetchFun, _BootstrapTimeout, _PageTimeout) ->
+    {error, invalid_history};
+bootstrap_snapshot_sources(
+  [Source | Rest], Owner, RequestRef,
+  Identity, Store0, Height0, Projection0, PhaseIndex,
+  Root, FetchFun, BootstrapTimeout, PageTimeout) ->
+    case bootstrap_snapshot_source(
+           Source, Owner, RequestRef, Identity, Store0, Height0,
+           Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
+           PageTimeout) of
+        {ok, _Height1, _Projection1} = Ok -> Ok;
+        {error, {unavailable, network_identity, _}} = Global -> Global;
+        {error, Reason} ->
+            logger:debug(
+              "foreign history bootstrap source failed identity=~p "
+              "source=~p reason=~p",
+              [Identity, Source, Reason]),
+            bootstrap_snapshot_sources(
+              Rest, Owner, RequestRef, Identity, Store0, Height0,
+              Projection0, PhaseIndex, Root, FetchFun, BootstrapTimeout,
+              PageTimeout)
+    end.
+
+bootstrap_snapshot_source(
+  Source = {Peer, Endpoint}, Owner, RequestRef,
+  Identity = {Ns, Anchor}, Store0, Height0, Projection0, PhaseIndex,
+  Root, FetchFun, BootstrapTimeout, PageTimeout) ->
+    ProbeTo = Height0 + 1,
+    case fetch_page(
+           Owner, RequestRef, Peer, Endpoint, Ns,
+           Height0 + 1, ProbeTo, FetchFun, BootstrapTimeout) of
+        {ok, Entries, RemoteHeight}
+          when is_integer(RemoteHeight), RemoteHeight > Height0 ->
+            case validate_page(
+                   Entries, Height0 + 1, ProbeTo, RemoteHeight) of
+                {ok, _Count, _Bytes} ->
+                    Target = min(
+                               RemoteHeight,
+                               Height0 + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                    case advance_snapshot_sources(
+                           [Source], Owner, RequestRef, Ns, Anchor, Identity,
+                           Store0, Height0, Projection0, PhaseIndex, Root,
+                           Target, FetchFun, PageTimeout) of
+                        Result -> Result
+                    end;
+                {error, Reason} ->
+                    {error, {bootstrap_page, Reason}}
+            end;
+        {ok, _Entries, _RemoteHeight} ->
+            {error, no_new_page};
+        {error, Reason} ->
+            {error, {bootstrap_fetch, Reason}}
     end.
 
 probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout) ->
@@ -1733,8 +1830,8 @@ advance_snapshot_sources(
                       Rest, Owner, RequestRef, Ns, Anchor, Identity,
                       Store0, Height0, Projection0, PhaseIndex, Root,
                       Target, FetchFun, PageTimeout);
-                {error, retry} ->
-                    {error, retry}
+                {error, {unavailable, network_identity, _}} = Global ->
+                    Global
             end;
         _ ->
             advance_snapshot_sources(

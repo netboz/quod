@@ -49,6 +49,24 @@ goal_symbol_names_is_atom_safe_and_uses_callable_positions_test() ->
                  quod_wire_term:goal_symbol_names(
                    {{'$quod_symbol', not_binary}, ok})).
 
+database_update_clause_heads_are_callable_positions_test() ->
+    HeadName = <<"wire_new_clause_head_",
+                 (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    BodyName = <<"wire_new_clause_body_",
+                 (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    OpaqueData = <<"wire_opaque_clause_data">>,
+    Goal = {assertz,
+            {':-', {{'$quod_symbol', HeadName},
+                    {'$quod_symbol', OpaqueData}},
+             {{'$quod_symbol', BodyName}, ok}}},
+    ?assertEqual({ok, lists:sort([HeadName, BodyName])},
+                 quod_wire_term:goal_symbol_names(Goal)),
+    {ok, Materialized} = quod_wire_term:materialize_goal_symbols(Goal),
+    {assertz, {':-', {HeadAtom, {'$quod_symbol', OpaqueData}},
+                       {BodyAtom, ok}}} = Materialized,
+    ?assertEqual(HeadName, atom_to_binary(HeadAtom, utf8)),
+    ?assertEqual(BodyName, atom_to_binary(BodyAtom, utf8)).
+
 depth_limit_test() ->
     Deep = lists:foldl(fun(_, Acc) -> [Acc] end, ok, lists:seq(1, 70)),
     ?assertEqual({error, bad_term}, quod_wire_term:encode(Deep)).

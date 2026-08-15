@@ -996,6 +996,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                 count = 0 :: non_neg_integer(),
                 bytes = 0 :: non_neg_integer(),
                 tx_ids = #{} :: #{binary() => true},
+                operation_claims = #{} :: map(),
                 sequences = #{} :: #{{node_id(), pos_integer()} => true},
                 sequence_floor = #{} :: #{node_id() => non_neg_integer()},
                 opened_at = 0 :: integer()}).   %% monotonic ms; measures collection wait on this proposer
@@ -1647,9 +1648,11 @@ test_batch(#s{collecting = none}) ->
 test_batch(
   #s{collecting =
          #batch{count = Count, bytes = Bytes, tx_ids = TxIds,
+                operation_claims = OperationClaims,
                 sequences = Sequences}}) ->
     #{count => Count, bytes => Bytes,
-      tx_ids => TxIds, sequences => Sequences}.
+      tx_ids => TxIds, operation_claims => OperationClaims,
+      sequences => Sequences}.
 test_origin(local) -> local;
 test_origin({relayed, #relay_ref{}}) -> relayed.
 test_drain(S0) ->
@@ -5767,10 +5770,12 @@ collect_append(
   S = #s{collecting = none})
   when is_boolean(Membership) ->
     Bytes = ?BATCH_ENVELOPE_BYTES + encoded_change_size(Change),
-    case approved_author_seqs(S) of
-        error ->
+    case {approved_author_seqs(S), operation_claim(Change)} of
+        {error, _} ->
             reject_append(From, stale_seq, S);
-        {ok, SequenceFloor} ->
+        {_, error} ->
+            reject_append(From, bad_change, S);
+        {{ok, SequenceFloor}, Claim} ->
             case advance_transaction_sequence(
                    Change, SequenceFloor, #{}) of
                 error ->
@@ -5784,6 +5789,8 @@ collect_append(
                                slot = Slot, parent = S#s.approved,
                                items_rev = [{From, Change}], count = 1,
                                bytes = Bytes, tx_ids = #{TxId => true},
+                               operation_claims = add_operation_claim(
+                                                    Claim, #{}),
                                sequences = Sequences,
                                sequence_floor = SequenceFloor,
                                opened_at = quod_time:mono_ms()},
@@ -5805,14 +5812,22 @@ collect_append(From, Change, _Membership, Slot,
                S = #s{collecting = #batch{slot = Slot, items_rev = Items,
                                           count = Count, bytes = Bytes,
                                           tx_ids = TxIds,
+                                          operation_claims = OperationClaims,
                                           sequences = Sequences,
                                           sequence_floor = SequenceFloor} = Batch}) ->
     Added = encoded_change_size(Change),
     TxId = Change#transaction.tx_id,
-    case maps:is_key(TxId, TxIds) of
-        true ->
+    case {maps:is_key(TxId, TxIds),
+          classify_operation_claim(Change, OperationClaims)} of
+        {true, _} ->
             reject_append(From, bad_change, S);
-        false ->
+        {false, error} ->
+            reject_append(From, bad_change, S);
+        {false, {conflict, _OperationRef}} ->
+            reject_append(From, bad_change, S);
+        {false, {alias, OperationRef}} ->
+            retain_operation_alias(From, OperationRef, S);
+        {false, {new, OperationClaims1}} ->
             case advance_transaction_sequence(
                    Change, SequenceFloor, Sequences) of
                 error ->
@@ -5826,6 +5841,7 @@ collect_append(From, Change, _Membership, Slot,
                           items_rev = [{From, Change} | Items],
                           count = Count + 1, bytes = Bytes + Added,
                           tx_ids = TxIds#{TxId => true},
+                          operation_claims = OperationClaims1,
                           sequences = Sequences1},
                     S1 = S#s{
                            collecting = Batch1,
@@ -5839,6 +5855,47 @@ collect_append(From, Change, _Membership, Slot,
                     end
             end
     end.
+
+operation_claim(Change = #transaction{}) ->
+    case quod_transaction:request_claim(Change) of
+        none -> none;
+        {ok, #{key := Key, digest := Digest,
+               operation_ref := OperationRef}}
+          when is_tuple(Key), is_binary(Digest), byte_size(Digest) =:= 32 ->
+            {claim, Key, Digest, OperationRef};
+        _ -> error
+    end.
+
+add_operation_claim(none, Claims) -> Claims;
+add_operation_claim({claim, Key, Digest, OperationRef}, Claims) ->
+    Claims#{Key => {Digest, OperationRef}}.
+
+classify_operation_claim(Change, Claims) ->
+    case operation_claim(Change) of
+        none -> {new, Claims};
+        error -> error;
+        {claim, Key, Digest, _OperationRef} = Claim ->
+            case maps:get(Key, Claims, undefined) of
+                undefined -> {new, add_operation_claim(Claim, Claims)};
+                {Digest, ExistingRef} -> {alias, ExistingRef};
+                {_OtherDigest, ExistingRef} ->
+                    {conflict, ExistingRef}
+            end
+    end.
+
+%% The first candidate remains the sole ledger write.  A second local custody
+%% record stays attached to the same slot and is released only after that slot
+%% certifies the matching operation claim.  A relay source likewise keeps its
+%% own custody until it observes the certified slot; the proposer owns no
+%% second durable-status path.
+retain_operation_alias(
+  #waiter{reply_to = {custody, _SubmissionId}}, _OperationRef, S) ->
+    {S, []};
+retain_operation_alias(
+  Waiter = #waiter{reply_to = {relay, #relay_ref{}}}, _OperationRef, S) ->
+    reply_now(Waiter, {error, not_in_charge, none}, S);
+retain_operation_alias(From, OperationRef, S) ->
+    reply_now(From, {error, {outcome_unknown, OperationRef}}, S).
 
 advance_transaction_sequence(
   #transaction{author = Author, author_seq = Seq},
@@ -6196,11 +6253,13 @@ persist_entry(Store, Entry, Slot, S) ->
 
 resolve_committed_submissions(Payload, Slot, S) ->
     Included = payload_submission_ids(Payload),
+    OperationClaims = payload_operation_claims(Payload),
     retire_committed_effect_custody(
       payload_effect_transaction_ids(Payload),
       resolve_committed_relays(
       Included, Slot,
-      resolve_committed_custody(Included, Slot, S))).
+      resolve_committed_custody(
+        Included, OperationClaims, Slot, S))).
 
 retire_committed_effect_custody(Included,
                                 S = #s{signing_journal = Journal}) ->
@@ -6233,15 +6292,52 @@ payload_effect_transaction_ids(Data) ->
     end.
 
 resolve_committed_custody(
-  _Included, _Slot, S = #s{custody = Custody})
+  _Included, _OperationClaims, _Slot, S = #s{custody = Custody})
   when map_size(Custody) =:= 0 ->
     S;
-resolve_committed_custody(Included, Slot, S) ->
-    maps:fold(
+resolve_committed_custody(Included, OperationClaims, Slot, S0) ->
+    S1 = maps:fold(
       fun(SubmissionId, _Present, Acc) ->
               complete_custody(
                 SubmissionId, {ok, Slot}, Acc)
-      end, S, Included).
+      end, S0, Included),
+    maps:fold(
+      fun(SubmissionId, #custody{change = Change}, Acc) ->
+              case committed_operation_alias(Change, OperationClaims) of
+                  {ok, OperationRef} ->
+                      complete_custody(
+                        SubmissionId,
+                        {error, {outcome_unknown, OperationRef}}, Acc);
+                  false ->
+                      Acc
+              end
+      end, S1, S1#s.custody).
+
+committed_operation_alias(Change, Claims) ->
+    case operation_claim(Change) of
+        {claim, Key, Digest, _OperationRef} ->
+            case maps:get(Key, Claims, undefined) of
+                {Digest, FirstOperationRef} -> {ok, FirstOperationRef};
+                _ -> false
+            end;
+        _ -> false
+    end.
+
+payload_operation_claims(Data) ->
+    case quod_ledger:classify(Data) of
+        {content, Transactions} ->
+            lists:foldl(
+              fun(Change, Claims) ->
+                      case operation_claim(Change) of
+                          {claim, Key, Digest, OperationRef} ->
+                              Claims#{Key => {Digest, OperationRef}};
+                          none -> Claims;
+                          error -> Claims
+                      end
+              end, #{}, Transactions);
+        _ ->
+            #{}
+    end.
 
 resolve_committed_relays(_Included, _Slot, S = #s{relay_pending = Pending})
   when map_size(Pending) =:= 0 ->
@@ -6651,6 +6747,8 @@ trace_reply_attributes({ok, Slot}) ->
     #{'quod.outcome' => <<"committed">>, 'quod.consensus.slot' => Slot};
 trace_reply_attributes({error, Reason}) when is_atom(Reason) ->
     #{'quod.outcome' => atom_to_binary(Reason, utf8)};
+trace_reply_attributes({error, {outcome_unknown, _OperationRef}}) ->
+    #{'quod.outcome' => <<"outcome_unknown">>};
 trace_reply_attributes({error, not_in_charge, _Hint}) ->
     #{'quod.outcome' => <<"not_in_charge">>}.
 

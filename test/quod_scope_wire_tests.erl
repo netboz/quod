@@ -192,7 +192,8 @@ seal_operations_round_trip_and_stay_bounded_test() ->
                        quod_scope_wire:decode_response(EncodedError))
       end,
       [{too_large, transcript}, {too_large, plan}, {too_large, result},
-       {non_transactional_dependency, {directory_host, 5}}]),
+       {non_transactional_dependency, {directory_host, 5}},
+       {network_identity_unavailable, <<"quod:target">>}]),
     ?assertEqual(
        {error, {protocol_error, bad_error_code}},
        quod_scope_wire:encode_event(

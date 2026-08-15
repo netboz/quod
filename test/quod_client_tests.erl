@@ -13,7 +13,15 @@ client_schema_defaults_test() ->
 
 client_listener_is_opt_in_test() ->
     with_env(#{client_enabled => false},
-             fun() -> ?assertEqual(ignore, quod_client:start_link()) end).
+             fun() ->
+                 ?assertEqual(ignore, quod_client:start_link()),
+                 {ok, {_Flags, Children}} = quod_sup:init([]),
+                 Ids = [maps:get(id, Child) || Child <- Children],
+                 ?assert(lists:member(quod_client_auth, Ids)),
+                 ?assert(lists:member(quod_client_cursor, Ids)),
+                 ?assert(lists:member(quod_client_goal_router, Ids)),
+                 ?assert(lists:member(quod_client, Ids))
+             end).
 
 %% The path that only ever runs in production: application env to a bound,
 %% serving HTTPS listener. The handler tests drive the routes directly, so

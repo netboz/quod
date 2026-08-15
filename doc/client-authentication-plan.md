@@ -2,10 +2,11 @@
 
 **Status:** deterministic user identity, node-bound Ed25519
 challenge-response, short-lived node-local sessions, signed goals and cursors,
-signed multi-ontology scopes, unresolved-operation persistence, and the
-constrained user-home foundation are implemented in the working tree. Any-node
-forwarding and deployment of the hard protocol break remain staged as
-specified in `doc/signed-client-goals-plan.md`.
+signed multi-ontology scopes, unresolved-operation persistence, the
+constrained user-home foundation, and any-node signed-goal forwarding are
+implemented in the working tree. The combined hard protocol break is not yet
+committed or deployed; its review and release gates remain as specified in
+`doc/signed-client-goals-plan.md`.
 
 ## Goal
 
@@ -190,10 +191,15 @@ principal. Each target verifies the evidence before running its existing
 `can_invoke/4` policy, and every participant plan binds the same request digest.
 No target substitutes the hosting node identity and no second ACL exists.
 
-**Ingress is still target-local.** The node receiving a signed HTTP request
-must host the exact target ontology. Forwarding an unchanged signed request
-from an arbitrary gateway to a target validator belongs to Slice 6; scope
-transport inside an admitted proof is already implemented.
+**Ingress may enter through any client node.** The HTTP node verifies the
+browser session and signed request, then either invokes a co-hosted exact
+target or forwards the unchanged request bytes and signature to one pinned
+validator for that namespace and genesis anchor. The target independently
+verifies the signature, network, target identity, deadline, and authenticated
+forwarding node before entering the same proof and `can_invoke/4` path as a
+local request. Browser session identifiers and addresses are never forwarded.
+Scope transport inside an admitted proof continues to carry the same signed
+user and request evidence.
 
 **User-home creation is rate-limited but not capped.** A node bounds signed
 goals per user and peer, not homes in total, and each new key may found a durable

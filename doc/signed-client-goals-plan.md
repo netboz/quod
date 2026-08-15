@@ -1,6 +1,6 @@
 # Signed client goals
 
-**Status:** Slices 1 through 5 are implemented in the working tree. Slice 1 contains
+**Status:** Slices 1 through 6 are implemented in the current working tree. Slice 1 contains
 the pure request codec, signature verifier, and atom-safe parser. Slice 2 adds
 authenticated `read`: it enters the ordinary read-only proof path as the
 signed user and applies the ontology's normal ACL. Slice 3 adds the coordinated durable
@@ -11,9 +11,13 @@ that same authenticated path, and replaces specialized home registration with
 the ordinary signed `create_user_home` goal. Slice 5 carries the same signed
 user and request through remote and nested scopes, activates signed
 multi-ontology commit, makes missing root identity retryable during history
-validation, and persists unresolved browser writes. Any-node forwarding is
-still Slice 6 work. Deployment of this hard protocol break remains withheld
-until the clean re-found and release gates are explicitly authorized.
+validation, and persists unresolved browser writes. Slice 6 lets any client
+node route the unchanged signed request to one exact target validator, while
+the target still uses the same proof, ACL, transaction, DTX, lifecycle, cursor,
+and outcome paths. It also adds predicate-neutral client term builders. These
+changes are not yet committed or deployed; deployment of the combined hard
+protocol break remains withheld until review and the release gates are
+explicitly authorized.
 
 ## Purpose
 
@@ -525,6 +529,14 @@ ordinary and distributed writes.
 Read-only requests do not need ledger rows. Their operation ID remains useful
 for request correlation but does not create durable state.
 
+An admitted `execute` request, and a cursor request once Accept is chosen,
+always records exactly one durable operation claim. If its requested database
+change is already present, the ordinary transaction or DTX origin plan carries
+that claim with an empty diff; it does not invent a root write or a second
+record format. Untouched foreign scopes remain non-participants. This makes a
+successful no-change write resolvable after reply loss while signed reads stay
+ledger-free.
+
 ### Expired custody
 
 Before placing retained work, a proposer compares the request deadline with the
@@ -737,14 +749,14 @@ it never fell through to the old node-principal behavior.
 - Test two- and three-ontology user writes, restrictive target ACLs, principal
   substitution, altered request bytes, stripped evidence, route failover,
   coordinator crash, abort, and Complete recovery.
-- Before public activation, make a temporarily unavailable root-network
-  identity a retryable history-validation result rather than an invalid
-  committed transaction. Carry that result through the shared replay and
-  catch-up validator instead of adding a special catch-up exception.
-- Before ordinary signed writes are enabled in the browser, persist the signed
-  request and operation ID until its anchored outcome is definite. The current
-  deterministic `create_user_home` helper can reconstruct its exact request;
-  arbitrary goals cannot, so a lost response must not depend on browser memory.
+- Make a temporarily unavailable root-network identity a retryable
+  history-validation result rather than an invalid committed transaction.
+  Carry that result through the shared replay and catch-up validator instead
+  of adding a special catch-up exception.
+- Persist the signed request and operation ID until its anchored outcome is
+  definite. The current deterministic `create_user_home` helper can
+  reconstruct its exact request; arbitrary goals cannot, so a lost response
+  must not depend on browser memory.
 
 Implemented closure uses the existing scope V4 path for local, co-hosted, and
 remote targets. The scope-open authentication contains the exact signed request
@@ -774,11 +786,359 @@ test, which proves recovery from certified records without re-proving.
 
 ### Slice 6: any-node ingress and client goal builders
 
-- Forward unchanged signed requests from a non-host gateway to an exact target
-  validator.
-- Add optional client-side builders that produce inspectable goals.
-- Prove direct text, received events, menus, forms, scripts, and other inputs all
-  converge on byte-identical signed requests and receive identical ACL results.
+**Working-tree implementation:** one bounded node-level router now carries
+the exact request bytes and signature between a gateway and an
+identity-pinned target. Browser sessions and addresses remain local to the
+gateway; the target derives the user from the signature, derives the
+forwarder from the authenticated link, independently verifies the request,
+and enters the same target executor used by local ingress. Authentication,
+cursor, and router owners run on every node, while `client_enabled` still
+controls only the public listener. Local and remote replies share one closed,
+bounded result codec and one HTTP renderer. The generalized cursor owner
+handles both local sessions and authenticated forwarders, and the gateway
+keeps only a bounded volatile route to the owning target. Optional JavaScript
+term builders produce inspectable goal text and feed the existing signer;
+they contain no predicate or authorization catalogue. The shared wire-goal
+materializer also treats the heads and bodies of the standard database-update
+predicates as callable positions, so fresh predicates use the same atom-safe
+target materialization path rather than an ingress exception. Real three-node
+tests exercise remote read, execute, cursor commands, lifecycle execution,
+and two- and three-participant signed writes through a gateway that does not
+host the target.
+
+This slice changes where a signed request may enter the network. It does not
+add another way to execute a goal. A browser remains authenticated to the node
+whose HTTP listener it chose (the **gateway**); the ontology engine that owns
+the exact signed target remains the **target**.
+
+#### One gateway, one target executor
+
+Refactor the current local-only ingress into these two boundaries:
+
+1. The gateway validates its node-local browser session, charges the existing
+   browser peer and user request budgets, verifies the exact signed request,
+   and checks the signed network identity and session deadline.
+2. If the gateway hosts the exact `{Namespace, GenesisAnchor}`, it calls the
+   target executor locally with that verified evidence.
+3. Otherwise it resolves only
+   `quod_directory:validator_routes(Namespace, GenesisAnchor)`, opens an
+   identity-pinned link to one ready validator, and forwards the exact request
+   bytes and signature unchanged.
+4. The target independently verifies the signature, network, exact local
+   target identity, parser version, and deadline. It charges the same generic
+   user request budget plus an authenticated-forwarding-node budget, performs
+   callable-symbol materialization on the target VM, and calls the same target
+   executor as the local path.
+5. That executor enters the existing `quod_prolog` signed proof path. The
+   existing `can_invoke/4`, proof, scope, OCC, transaction, DTX, lifecycle
+   effect, and outcome machinery remain the only implementations.
+
+The gateway never sends its browser session id or browser IP to the target.
+They are local transport facts, not user authority. The target derives the
+user solely from the verified request and derives the forwarding peer solely
+from the authenticated node link. A forwarding node need not be a validator:
+it routes a user-signed request but gains no permission from doing so.
+
+The gateway and target verification intentionally repeat the bounded signature
+and atom-safe parse: each protects a different trust boundary. Profile this
+cost under remote load before considering an optimization; do not introduce a
+gateway-attested shortcut or a second evidence format merely to avoid parsing
+at most one bounded V1 request twice.
+
+The internal authentication/materialization owner and signed cursor owner must
+run on every node that may host a target, even when that node's public client
+listener is disabled. `client_enabled` continues to control only the public
+HTTP listener. Concretely, remove the `client_enabled` checks from
+`quod_client_auth:start_link/0` and `quod_client_cursor:start_link/0`; start
+both idle owners unconditionally under `quod_sup`, and leave the existing check
+only in `quod_client:start_link/0`. Do not introduce a second
+"target-capable" flag. Do not add target-only copies of the rate limiters or
+symbol allocator; expose one sessionless, verified-forwarder admission
+operation on the existing owner and reuse its current atomic user/peer charging
+logic.
+
+#### Transport owner and closed wire
+
+Add one node-level signed-goal router outside `quod_simplex` and
+`quod_prolog`. It owns only:
+
+- a single fixed signed-goal transport channel;
+- bounded outbound request correlations and exact pinned peer/link identity;
+- bounded inbound workers and per-forwarder admission;
+- same-link replies, timers, monitors, and cleanup; and
+- volatile cursor routes from a gateway cursor id to its exact target peer.
+
+The router uses the existing `quod_quic`/`quod_link` pinned-link and channel
+infrastructure with one new deterministic channel name. It does not introduce
+another link manager. Live authenticated links are reused per target peer and
+multiplex bounded request ids; do not open one transport connection per goal.
+
+It owns no Prolog state, overlay, plan, ACL result, transaction, or durable
+outcome. Raw signed goals must not be put through the existing transaction
+relay: that relay begins after proof and belongs to consensus custody, while a
+signed goal is still bounded untrusted proof input. They also must not be
+modelled as a fake remote scope; a top-level request has no origin proof or
+scope session yet.
+
+Use a process-free codec beside the router. Its outer and inner forms are
+closed, canonical, atom-safe, and smaller than the shared transport frame
+limit. The request algebra contains only:
+
+```text
+submit(RequestId, exact RequestBytes, exact Signature, optional CursorId,
+       trace carrier)
+cursor(RequestId, CursorId, next | accept | stop)
+```
+
+The reply algebra contains only pre-execution refusal, one bounded normalized
+proof result, and typed availability/protocol failure. There is no separate
+accepted frame: a correlated refusal is route-eligible, a correlated result or
+error is terminal, and silence after send is uncertain.
+Every reply binds the exact request id; cursor replies additionally bind the
+exact cursor id. Peer identity always comes from `quod_link:peer_key/1`, never
+from a payload field.
+
+The router mailbox performs only outer frame admission, peer/link and request
+correlation, worker admission, and delivery. Like `quod_ask_router`, it hands
+the still-bounded result payload directly to the waiting request worker for
+closed decoding and HTTP rendering. It must not deserialize proof bindings,
+format failure reasons, or wait for proof execution in its serialized loop.
+
+Factor proof-result normalization out of the HTTP renderer. Local execution
+and a remote target both produce the same closed result form. Bindings use the
+existing signed variable-name projection and `quod_durable_term` result codec;
+failure stacks use the existing bounded failure-reason codec; anchored outcome
+references use their existing validated forms. The gateway's HTTP renderer
+then renders that one normalized result regardless of where it ran. Do not
+send arbitrary Erlang terms or JSON between nodes and do not add a second
+result renderer.
+
+A shared `QUOD_CLIENT_GOAL_MAX_REPLY_BYTES` bound is derived below
+`QUOD_TRANSPORT_MAX_FRAME_BYTES` with the codec's fixed envelope allowance.
+Apply that same source-of-truth bound to local HTTP results so routing does not
+change observable semantics. A read whose complete answer list exceeds that
+bound fails with the same typed `result_too_large` reply locally and remotely
+and may be performed with the existing cursor mode instead; do not add a
+private multi-frame result stream in this slice.
+
+#### Admission, route changes, and uncertainty
+
+Directory routes are hints, not authority. The request's signed namespace and
+anchor are authoritative, and an `anchor_conflict` fails the whole lookup.
+The gateway may try the next exact validator only when link establishment
+failed before the request was sent, or when a target explicitly refused it
+before acquiring durable custody because it was not ready or had no worker
+capacity.
+A missing, malformed, or non-correlating reply after send is uncertainty, not
+a pre-execution refusal, and never permits automatic route advancement.
+
+The closed route-eligible refusal set is exactly `not_ready`, `busy`, and
+`rate_limited`, and each is emitted only while no durable handoff exists.
+Rate-limit refusal is route-eligible because the budget
+protects that one target and distributing admitted load across validators is
+intentional. `invalid_request`, `invalid_signature`, `wrong_network`,
+`wrong_target`, and `expired` are terminal request failures and never cause
+route shopping. Every other response after send is uncertain.
+
+Once a request has been sent, it is pinned unless that target returns one of
+the three explicit pre-execution refusals above. A timeout, link loss,
+malformed reply, or gateway restart never causes an automatic proof on another
+validator:
+
+- `execute` returns the existing stable operation reference as
+  `outcome_unknown`; the browser retains its already-journalled request and
+  resolves it through `POST /api/goals/outcomes`;
+- `accept` uses that same operation reference and uncertainty rule;
+- `read` has no durable side effect and returns target unavailable;
+- a lost cursor open/next/stop makes that volatile cursor unavailable rather
+  than guessing its proof position.
+
+The existing outcome path is reused unchanged. `quod_prolog:outcome/1` already
+resolves a foreign operation through a certified current target view and
+requires `f + 1` identical current-validator replies. Ordinary absence remains
+uncertain. The new goal channel must not grow another outcome query or trust a
+single target's claim that an uncertain write never happened.
+
+An authenticated target's live read, solution, or logical failure has the same
+serving-node trust boundary as the current local client endpoint. Durable
+write certainty continues to come from the existing ledger/outcome path; the
+transport reply does not become a new certificate.
+
+#### One cursor coordinator
+
+Keep `quod_client_cursor` as the only proof-cursor state machine. Generalize
+its owner binding from a local `{SessionId, User}` pair to one exact volatile
+owner capability:
+
+```text
+local browser:    {session, SessionId, User}
+forwarded cursor: {forwarder, GatewayNodeKey, RequestLink, User}
+```
+
+The cursor owner's internal key is the full
+`{OwnerCapability, CursorId}` pair, never the externally supplied cursor id
+alone. The gateway creates one random cursor id before local execution or
+forwarding and retains a bounded route row tying an **opaque** owner capability
+to the exact target identity and pinned target peer/link. Session lookup and
+interpretation remain solely in `quod_client_auth`; the router only compares
+the capability for exact equality. A target opens the ordinary
+`quod_client_cursor` under the authenticated gateway key and that same cursor
+id. Next, Accept, and Stop pass through the gateway route to the same target;
+the target accepts them only from the authenticated peer and exact link that
+opened the cursor. The cursor owner monitors that link directly, so the target
+router does not retain a second cursor table. No target can inspect the
+gateway's browser session, and no second cursor continuation or proof state
+lives at the gateway.
+
+Cursor state remains deliberately volatile. A gateway or target restart loses
+it. Link or command uncertainty invalidates the gateway route instead of
+issuing a fresh Next and possibly skipping a solution. Accept is the one
+exception in durability, not in code path: once it may have crossed handoff,
+the existing detached-observer behavior lets the write finish and the browser
+uses its operation journal to resolve the outcome. Stopping, expiry, engine
+death, link death, router death, session mismatch, and peer mismatch must each
+clean the exact route, monitors, workers, and cursor once.
+
+#### Predicate-neutral client goal builders
+
+Add optional pure client-side term builders next to `signed-client.js`. They
+construct and render ordinary inspectable Prolog goal text from generic term
+parts such as atoms, strings, numbers, variables, compounds, and lists. They
+must:
+
+- escape according to the frozen V1 parser contract;
+- contain no predicate catalogue, action catalogue, ACL, namespace policy, or
+  server-side intent mapping;
+- return the exact goal text before signing so a UI can display it;
+- feed the existing `signedGoal` function without a second request encoder;
+  and
+- remain optional: direct text and application-specific builders continue to
+  work.
+
+Menus, forms, received events, scripts, and future world interactions are
+only possible callers of these generic helpers. The subject of a goal is not
+part of this transport slice, and Prolog's `action` design pattern is not
+reinterpreted as a UI action system.
+
+Fixture tests freeze the operation id and deadline and prove that direct text
+and every builder origin producing the same goal text yield byte-identical
+request bytes and signatures. They then submit those requests through local
+and remote ingress and require identical normal `can_invoke/4` results.
+
+#### Required pre-activation closure from Slices 1 through 5
+
+Slice 6 is the last implementation slice before a separately authorized
+activation. It therefore owns these already-identified closures; none may be
+left as an implicit follow-up:
+
+- Remote signed scope admission must enforce the request's `not_after_ms`.
+  Refactor `scope_authentication_reason` to use the same contextual signed-goal
+  validator with the exact origin identity and target admission time rather
+  than calling bare `quod_client_goal:verify/2`. An expired request cannot open
+  a new remote or nested scope merely because its origin proof began earlier.
+- Resolving an operation row whose stored request digest differs from the exact
+  signed request is a typed operation-id conflict, not
+  `outcome_index_corrupt`. Preserve genuine corrupt-index handling, but map
+  this expected first-claim conflict explicitly as `operation_conflict`
+  through ingress and HTTP.
+- A ready target that temporarily lacks the root network identity is not
+  necessarily rebuilding. Replace that scope-admission misnomer with one exact
+  `network_identity_unavailable` retry result through the scope wire, Ask
+  mapping, docs, and tests; retain `ontology_rebuilding` only for an ontology
+  that is actually not ready.
+- Audit and remove or TEST-fence the production-dead legacy exports
+  `quod_ontology:network_identity/1`, `prepare_action/1`, `create/2`, `join/3`,
+  `quod_proof_context:start/5`, `quod_prolog:open_cursor/4`,
+  `quod_dtx:request_authorization/1`, and `quod_client_auth:session/1`.
+  Update their tests to exercise the surviving production boundary instead of
+  preserving an obsolete API for fixtures. Keep an export only if a fresh
+  complete caller audit proves that it remains a deliberate supported API.
+- Add the missing real-path negatives for wrong network at admission, expired
+  signed request, and a restrictive foreign target refusing a nested sub-goal
+  through its ordinary `can_invoke/4` policy.
+
+These are code and test closures, not new protocol features. Their stale
+"before public activation" wording is removed from Slice 5 because the two
+implemented items there are already described as completed; this list is the
+authoritative remaining pre-activation work.
+
+#### Implementation order and deletion rule
+
+1. Close the inherited Slices 1-through-5 items above and run their focused
+   tests before widening ingress.
+2. Add the pure closed wire/result codec and adversarial codec fixtures.
+3. Extract one normalized signed-client result boundary and make the existing
+   local HTTP path use it.
+4. Split gateway session admission from the shared target executor; keep one
+   local call into that executor and add the bounded router's remote call.
+5. Generalize the existing cursor owner, then route local and remote cursor
+   operations through that one owner and the gateway's volatile route table.
+6. Add generic client builders and byte-identity fixtures.
+7. Delete the local-only target gate, temporary result branches, old cursor
+   ownership shape, and any test-only routing scaffold before broad gates.
+
+There is no ledger or consensus format change in Slice 6 and therefore no new
+re-found requirement. This slice must not deploy while it is being developed.
+Before review it must pass compile, full EUnit, the real local and three-node
+signed-goal suites, xref, Dialyzer, diff check, client tests/build, Explorer
+lint/build, and a stale-path grep.
+
+Required non-vacuous Slice-6 tests include:
+
+- a gateway that does not host the target performs read, execute, cursor
+  Next/Accept/Stop, a lifecycle effect, and a multi-ontology write;
+- exact request bytes and signature observed at the target equal the browser
+  bytes, while session id and browser address are absent;
+- wrong anchor, whole-directory anchor conflict, wrong network, changed bytes,
+  changed signature, changed user, unauthenticated peer, and non-validator
+  target all fail before proof;
+- local and forwarded forms of the same request reach the same target executor
+  and return the same normalized result and ACL reasons;
+- gateway and target user/peer limits, inbound worker caps, correlation caps,
+  result caps, timeouts, caller death, link death, and router restart leave no
+  retained worker, route, monitor, or subscription;
+- a first unavailable route may advance to a second route before execution,
+  while loss after admission never starts a second proof;
+- two gateways racing the same execute still converge through the existing
+  operation claim on one durable record, at most one material diff, and one
+  outcome;
+- remote execute and Accept reply loss retain the browser journal row and are
+  resolved only through the existing certified outcome path;
+- cursor peer/session substitution fails, ambiguous Next invalidates rather
+  than advances the route twice, and ambiguous Accept completes at most once;
+- a second authenticated gateway cannot open or command a cursor using an id
+  already minted by the first gateway;
+- a buggy gateway forwarding one admitted execute to two validators still
+  converges through the existing operation claim on one durable record and at
+  most one material diff;
+- an unresolved browser journal row from a dead gateway resolves through a
+  new authenticated session on another gateway without resubmitting the goal;
+- an expired forwarded request is refused independently at the target before
+  proof or cursor creation;
+- an oversized read returns the identical typed `result_too_large` refusal on
+  local and forwarded paths; and
+- disabling the public client listener leaves target forwarding available but
+  exposes no HTTP client routes.
+
+The Slice-6 review must answer explicitly:
+
+1. Is the new node owner transport-only, with all goal execution still
+   converging on one target function and the existing Prolog path?
+2. Are browser-session authority, authenticated forwarding-peer identity, and
+   signed user identity separated without trusting a forwarded field?
+3. Do typed refusals permit route changes only before durable handoff, while
+   every ambiguous post-send write returns the stable operation reference
+   without automatic re-proof?
+4. Does the generalized cursor owner keep exactly one proof continuation and
+   make link loss, Next uncertainty, and Accept uncertainty unambiguous?
+5. Is the normalized result codec canonical, atom-safe, bounded, and shared by
+   local HTTP and remote transport rather than becoming a second renderer?
+6. Does operation recovery reuse certified current-view outcome resolution
+   without trusting one target or adding another status owner?
+7. Are client builders purely predicate-neutral term renderers whose output is
+   visible before the existing request encoder signs it?
+8. Can an HTTP-disabled target accept forwarded signed goals without exposing
+   a public listener or duplicating auth, rate, cursor, or symbol state?
 
 ## Required review questions
 

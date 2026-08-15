@@ -105,7 +105,7 @@ signed_scope_waits_when_network_identity_is_temporarily_unavailable_test() ->
     application:set_env(quod, namespace_desired, #{content => #{}}),
     try
         ?assertMatch(
-           {error, {ontology_rebuilding, _}},
+           {error, {network_identity_unavailable, _}},
            quod_prolog:test_scope_authentication_reason(
              Authentication, <<97:256>>, Origin,
              {user, maps:get(user, Fixture)}, AuthenticationDigest))
@@ -117,6 +117,27 @@ signed_scope_waits_when_network_identity_is_temporarily_unavailable_test() ->
                 application:unset_env(quod, namespace_desired)
         end
     end.
+
+expired_signed_scope_is_refused_before_execution_test() ->
+    Network = <<98:256>>,
+    Origin = {<<"quod:expired-origin">>, <<99:256>>},
+    Fixture = quod_ct:signed_goal_fixture(
+                #{network => Network, target => Origin,
+                  deadline => quod_time:now_ms() - 1}),
+    Authentication =
+        {signed_goal, maps:get(request_bytes, Fixture),
+         maps:get(signature, Fixture)},
+    {ok, AuthenticationDigest} =
+        quod_scope_wire:authentication_digest(Authentication),
+    quod_ct:with_network_identity(
+      Network,
+      fun() ->
+          ?assertEqual(
+             {error, {scope_expired, <<"quod:test-target">>}},
+             quod_prolog:test_scope_authentication_reason(
+               Authentication, <<100:256>>, Origin,
+               {user, maps:get(user, Fixture)}, AuthenticationDigest))
+      end).
 
 target_owns_scope_timeout_classification_test() ->
     Ns = <<"quod:target">>,

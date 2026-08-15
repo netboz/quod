@@ -1,10 +1,12 @@
 -module(quod_client_goal_ingress).
 -moduledoc """
-Authenticated local ingress for every user-signed goal mode.
+Authenticated gateway ingress for every user-signed goal mode.
 
-This module performs one shared session, signature, target and materialization
-sequence, then hands the verified goal to the existing proof engine.  It does
-not classify predicates or authorize them: the ontology's normal
+This module performs one shared session and signature admission, then invokes
+the exact target locally or forwards the unchanged signed request through the
+bounded node router. The target performs the shared target and materialization
+sequence before handing the verified goal to the existing proof engine. It
+does not classify predicates or authorize them: the ontology's normal
 `can_invoke/4` proof remains the only ACL.  Read, execute and cursor differ
 only at the final proof-mode selection.
 
@@ -13,12 +15,17 @@ each target applies its ordinary `can_invoke/4` policy to that principal.
 """.
 
 -export([submit/5, resolve_operation/4, cursor_command/4]).
+-ifdef(TEST).
+-export([test_forward_routes/3]).
+-endif.
+
+-include("quod_client_goal_limits.hrl").
 
 -type mode() :: read | execute | cursor.
 -type result() ::
         {ok, quod_client_goal:evidence(), term()} | {error, term()}.
 
--doc "Verify, materialize, and run one signed local goal request.".
+-doc "Admit and run or route one signed goal request.".
 -spec submit(mode(), binary(), binary(), binary(), term()) -> result().
 submit(ExpectedMode, SessionId, RequestBytes, Signature, Peer)
   when ExpectedMode =:= read; ExpectedMode =:= execute;
@@ -51,8 +58,8 @@ cursor_command(SessionId, CursorId, Command, Peer)
   when Command =:= next; Command =:= accept; Command =:= stop ->
     case quod_client_auth:admit_goal(SessionId, Peer) of
         {ok, #{principal := Principal}} ->
-            quod_client_cursor:command(
-              SessionId, Principal, CursorId, Command);
+            Owner = local_owner(SessionId, Principal),
+            cursor_owner_command(Owner, CursorId, Command);
         {error, _} = Error ->
             Error
     end;
@@ -68,8 +75,8 @@ admitted(ExpectedMode, SessionId,
             case request_session_binding(
                    Request, ExpectedMode, PublicKey, SessionExpires) of
                 ok ->
-                    verified_context(
-                      SessionId, Request, RequestBytes, Signature,
+                    verified_gateway(
+                      SessionId, RequestBytes, Signature,
                       Principal, PublicKey, Peer);
                 {error, _} = Error -> Error
             end;
@@ -128,67 +135,162 @@ resolved_operation(Evidence, _Digest, OperationRef, {error, _}) ->
     %% Absence is never permission to create a fresh operation: the request
     %% could be between durable custody and publication on the queried node.
     {ok, Evidence, {operation_pending, OperationRef}};
+resolved_operation(
+  _Evidence, Digest, _OperationRef,
+  {ok, #{status := claimed, request_digest := OtherDigest}})
+  when is_binary(OtherDigest), OtherDigest =/= Digest ->
+    {error, operation_conflict};
 resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}) ->
     {error, outcome_index_corrupt}.
 
-verified_context(SessionId, #{target_namespace := Namespace},
-                 RequestBytes, Signature, Principal, PublicKey, Peer) ->
-    case {network_identity(), local_target(Namespace)} of
-        {{ok, Network}, {ok, Target}} ->
-            AdmissionMs = quod_time:now_ms(),
-            case quod_client_goal:verify_for(
-                   RequestBytes, Signature, Network, Target, AdmissionMs) of
-                {ok, Evidence} ->
-                    materialized(
-                      SessionId, Evidence, Principal, PublicKey, Peer);
-                {error, _} = Error ->
-                    Error
-            end;
-        {{error, _} = Error, _} ->
-            Error;
-        {_, {error, _} = Error} ->
+verified_gateway(SessionId, RequestBytes, Signature,
+                 Principal, PublicKey, Peer) ->
+    case quod_client_goal_target:verify_request(RequestBytes, Signature) of
+        {ok, #{request := #{user_public_key := PublicKey}} = Evidence} ->
+            Owner = local_owner(SessionId, Principal),
+            execute_gateway(
+              Evidence, RequestBytes, Signature, Principal, PublicKey, Peer,
+              Owner);
+        {ok, _OtherUser} ->
+            {error, session_principal_mismatch};
+        {error, _} = Error ->
             Error
     end.
 
-materialized(SessionId,
-             #{goal_blob := GoalBlob,
-               request := #{mode := Mode}} = Evidence,
-             Principal, PublicKey, Peer) ->
-    %% Re-decode at the owning ontology before callable materialization.  The
-    %% canonical parser kept every non-operator symbol opaque; this decode
-    %% safely reuses only atoms already owned by the ontology.
-    case quod_durable_term:decode_goal(GoalBlob) of
-        {ok, OwnerGoal} ->
-            case quod_client_auth:materialize_goal(
-                   PublicKey, Peer, OwnerGoal) of
-                {ok, Goal} ->
-                    run(Mode, SessionId, Evidence, Goal, Principal);
-                {error, _} = Error ->
-                    Error
+execute_gateway(
+  #{request := #{mode := Mode, target_namespace := Ns,
+                 target_genesis_anchor := Anchor}} = Evidence,
+  RequestBytes, Signature, Principal, _PublicKey, Peer, Owner) ->
+    CursorBinding = cursor_binding(Mode),
+    case quod_client_goal_target:available({Ns, Anchor}) of
+        ok ->
+            case quod_client_goal_target:prepare_local(
+                   Evidence, Peer, Owner, CursorBinding) of
+                {ok, {Evidence, Goal, Principal, Owner}} ->
+                    quod_client_goal_target:execute(
+                      Evidence, Goal, Principal, Owner, CursorBinding);
+                {error, _} = Error -> Error
             end;
-        {error, _} ->
-            {error, invalid_goal}
+        {error, wrong_target} ->
+            {error, wrong_target};
+        {error, _NotLocal} ->
+            forward_gateway(
+              Evidence, RequestBytes, Signature, Owner, CursorBinding)
     end.
 
-run(cursor, SessionId, Evidence, Goal, Principal) ->
-    quod_client_cursor:open(SessionId, Evidence, Goal, Principal);
-run(Mode, _SessionId, Evidence, Goal, Principal)
-  when Mode =:= read; Mode =:= execute ->
-    {ok, Evidence, quod_prolog:execute_signed(Evidence, Goal, Principal)}.
+cursor_binding(cursor) -> crypto:strong_rand_bytes(32);
+cursor_binding(read) -> none;
+cursor_binding(execute) -> none.
+
+forward_gateway(
+  #{request := #{target_namespace := Ns,
+                 target_genesis_anchor := Anchor}} = Evidence,
+  RequestBytes, Signature, Owner, CursorBinding) ->
+    case quod_directory:validator_routes(Ns, Anchor) of
+        {ok, Routes} when Routes =/= [] ->
+            TraceCarrier = quod_trace:inject(quod_trace:context()),
+            ExpiresMs = maps:get(not_after_ms, maps:get(request, Evidence)),
+            forward_routes(
+              Routes, Evidence, RequestBytes, Signature, Owner,
+              CursorBinding, TraceCarrier, ExpiresMs);
+        {ok, []} -> {error, signed_target_unavailable};
+        {error, anchor_conflict} -> {error, {anchor_conflict, Ns}};
+        {error, _} -> {error, signed_target_unavailable}
+    end.
+
+forward_routes([], _Evidence, _RequestBytes, _Signature, _Owner,
+               _CursorBinding, _TraceCarrier, _ExpiresMs) ->
+    {error, signed_target_unavailable};
+forward_routes([Route | Rest], Evidence, RequestBytes, Signature, Owner,
+               CursorBinding, TraceCarrier, ExpiresMs) ->
+    Submit = fun quod_client_goal_router:submit/9,
+    forward_routes(
+      [Route | Rest], Evidence, RequestBytes, Signature, Owner,
+      CursorBinding, TraceCarrier, ExpiresMs, Submit).
+
+forward_routes([], _Evidence, _RequestBytes, _Signature, _Owner,
+               _CursorBinding, _TraceCarrier, _ExpiresMs, _Submit) ->
+    {error, signed_target_unavailable};
+forward_routes([Route | Rest], Evidence, RequestBytes, Signature, Owner,
+               CursorBinding, TraceCarrier, ExpiresMs, Submit) ->
+    TimeoutMs = request_timeout(ExpiresMs),
+    case Submit(Route, Owner, Evidence, RequestBytes, Signature, CursorBinding,
+                TraceCarrier, ExpiresMs, TimeoutMs) of
+        {ok, Evidence, {normalized, _} = Normalized} ->
+            {ok, Evidence, Normalized};
+        {error, pre_send} ->
+            forward_routes(
+              Rest, Evidence, RequestBytes, Signature, Owner,
+              CursorBinding, TraceCarrier, ExpiresMs, Submit);
+        {error, {refused, Reason}}
+          when Reason =:= not_ready; Reason =:= busy;
+               Reason =:= rate_limited ->
+            forward_routes(
+              Rest, Evidence, RequestBytes, Signature, Owner,
+              CursorBinding, TraceCarrier, ExpiresMs, Submit);
+        {error, {uncertain, Evidence}} ->
+            uncertain_submit(Evidence);
+        {error, unavailable} ->
+            uncertain_submit(Evidence);
+        {error, Reason} ->
+            {error, Reason}
+    end.
+
+-ifdef(TEST).
+test_forward_routes(Routes,
+                    #{request := #{user_public_key := User,
+                                   mode := Mode,
+                                   not_after_ms := ExpiresMs},
+                      request_bytes := RequestBytes,
+                      signature := Signature} = Evidence,
+                    Submit) when is_function(Submit, 9) ->
+    Owner = {session, <<0:256>>, User},
+    forward_routes(Routes, Evidence, RequestBytes, Signature, Owner,
+                   cursor_binding(Mode), [], ExpiresMs, Submit).
+-endif.
+
+uncertain_submit(#{request := #{mode := execute}} = Evidence) ->
+    {ok, Evidence, {normalized, {pending, maps:get(operation_ref, Evidence)}}};
+uncertain_submit(_Evidence) ->
+    {error, signed_target_unavailable}.
+
+request_timeout(ExpiresMs) ->
+    Remaining = erlang:max(1, ExpiresMs - quod_time:now_ms()),
+    erlang:min(Remaining, ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS).
+
+cursor_owner_command(Owner, CursorId, Command) ->
+    case quod_client_cursor:command(Owner, CursorId, Command) of
+        {ok, Evidence, Raw} ->
+            {ok, Evidence,
+             {normalized, quod_client_result:normalize(Evidence, Raw)}};
+        {error, not_found} ->
+            forwarded_cursor_command(Owner, CursorId, Command);
+        {error, _} = Error -> Error
+    end.
+
+forwarded_cursor_command(Owner, CursorId, Command) ->
+    case quod_client_goal_router:cursor(
+           Owner, CursorId, Command,
+           ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS) of
+        {ok, Evidence, {normalized, _} = Normalized} ->
+            {ok, Evidence, Normalized};
+        {error, {uncertain, Evidence}} when Command =:= accept ->
+            {ok, Evidence,
+             {normalized, {pending, maps:get(operation_ref, Evidence)}}};
+        {error, {uncertain, _Evidence}} ->
+            {error, client_cursor_unavailable};
+        {error, {refused, _}} ->
+            {error, client_cursor_unavailable};
+        {error, unavailable} ->
+            {error, client_cursor_unavailable};
+        {error, Reason} -> {error, Reason}
+    end.
+
+local_owner(SessionId, {user, <<_:256>> = User}) ->
+    {session, SessionId, User}.
 
 network_identity() ->
     case quod_ontology:network_identity() of
         {ok, <<_:256>> = Network} -> {ok, Network};
         _ -> {error, signed_goal_unavailable}
-    end.
-
-local_target(Namespace) ->
-    case quod_reg:where({quod_prolog, Namespace}) of
-        undefined ->
-            {error, signed_target_unavailable};
-        _Pid ->
-            case quod_simplex:genesis_hash(Namespace) of
-                <<_:256>> = Anchor -> {ok, {Namespace, Anchor}};
-                undefined -> {error, signed_target_unavailable}
-            end
     end.

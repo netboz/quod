@@ -340,7 +340,12 @@ valid_source(_) ->
 call_current_view(Source, Basis, Deadline, Dependencies) ->
     case remaining(Deadline) of
         0 -> {error, retry};
-        Timeout ->
+        Remaining ->
+            %% Freezing the committee and asking that committee are one
+            %% operation. Do not let a cold history fetch consume the caller's
+            %% entire deadline and make the mandatory corroboration probe
+            %% impossible. A retry can reuse the shared history cache.
+            Timeout = erlang:max(1, Remaining - erlang:max(1, Remaining div 4)),
             View = maps:get(view, Dependencies),
             try View(Source, Basis, Timeout)
             catch exit:_ -> {error, retry}

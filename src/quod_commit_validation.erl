@@ -8,10 +8,13 @@ frozen parent context, uses the returned outcome projection, and remains the
 only owner of scheduling, ordered apply, replay, and publication.
 
 Consensus checking and committed apply both enter through `content/4` and
-`dtx/4`; the mode selects whether an operation claim is only checked or is
-recorded at its committed slot.  Keeping that distinction here prevents the
-two callers from drifting while preserving the one existing authorization
-path (`quod_ask:validate_authorization_transcript/6`).
+`dtx/4`; the mode selects whether admission policy is being checked before a
+vote or a certified record is being projected at its committed slot.  Apply
+records the operation claim but does not rerun live `can_join` policy: the
+commit certificate proves that the voting committee already did so.  Keeping
+that stage distinction here prevents replay from depending on node-local
+liveness observations while preserving the one existing authorization path
+(`quod_ask:validate_authorization_transcript/6`).
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
@@ -170,7 +173,7 @@ continue_ordinary_content_validation(
             validate_content_transactions(
               Rest, Network, BlockTimestamp, Mode, Seen, Context);
         true ->
-            case membership_verdict(Change, Context) of
+            case membership_verdict(Mode, Change, Context) of
                 valid ->
                     validate_content_transactions(
                       Rest, Network, BlockTimestamp, Mode, Seen, Context);
@@ -439,8 +442,14 @@ diff_touches_membership(Diff) ->
 is_membership_change(Change) ->
     quod_simplex:committee_delta(Change) =/= {[], []}.
 
-membership_verdict(#transaction{diff = Diff}, Context) ->
-    membership_diff_verdict(Diff, Context).
+membership_verdict(check, #transaction{diff = Diff}, Context) ->
+    membership_diff_verdict(Diff, Context);
+membership_verdict({claim, _Slot}, #transaction{}, _Context) ->
+    %% A certified membership record already passed the pure shape/cap gate
+    %% and every supporter's parent-state can_join verdict. Replaying that
+    %% live policy would make projection depend on this node's current feed
+    %% observations, so committed apply only records the durable result.
+    valid.
 
 membership_diff_verdict(
   [{assert, {{peer_admitted, Pk, H, P, Pk}, _B}}],

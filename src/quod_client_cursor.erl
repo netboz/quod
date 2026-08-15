@@ -3,7 +3,7 @@
 One bounded owner for signed client proof cursors.
 
 This is the existing proof-cursor coordinator, independent of any UI.  It
-owns only volatile cursor/session correlation.  The ontology engine still
+owns only volatile cursor/capability correlation.  The ontology engine still
 owns proof execution, authorization, staging, sealing and durable handoff.
 Every cursor retains the original verified request evidence; `accept` resumes
 that exact proof and cannot replace its goal, user, target or operation id.
@@ -11,32 +11,50 @@ that exact proof and cannot replace its goal, user, target or operation id.
 
 -behaviour(gen_server).
 
--export([start_link/0, open/4, command/4]).
+-export([start_link/0, open/5, command/3, command_forwarded/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 start_link() ->
-    case application:get_env(quod, client_enabled, false) of
-        true -> gen_server:start_link({local, ?MODULE}, ?MODULE, [], []);
-        _ -> ignore
-    end.
+    gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
--spec open(<<_:256>>, quod_client_goal:evidence(), term(),
+-type owner() ::
+        {session, <<_:256>>, <<_:256>>} |
+        {forwarder, <<_:256>>, pid(), <<_:256>>}.
+
+-spec open(owner(), <<_:256>>, quod_client_goal:evidence(), term(),
            {user, <<_:256>>}) ->
           {ok, quod_client_goal:evidence(), term()} | {error, term()}.
-open(<<_:256>> = SessionId, Evidence, Goal,
-     {user, <<_:256>>} = Principal) ->
-    call({open, SessionId, Evidence, Goal, Principal});
-open(_SessionId, _Evidence, _Goal, _Principal) ->
+open(Owner, <<_:256>> = CursorId, Evidence, Goal,
+     {user, <<_:256>> = User} = Principal) ->
+    case valid_owner(Owner, User) of
+        true -> call({open, Owner, CursorId, Evidence, Goal, Principal});
+        false -> {error, invalid_signed_goal}
+    end;
+open(_Owner, _CursorId, _Evidence, _Goal, _Principal) ->
     {error, invalid_signed_goal}.
 
--spec command(<<_:256>>, {user, <<_:256>>}, <<_:256>>,
-              next | accept | stop) ->
+-spec command(owner(), <<_:256>>, next | accept | stop) ->
           {ok, quod_client_goal:evidence(), term()} | {error, term()}.
-command(<<_:256>> = SessionId, {user, <<_:256>>} = Principal,
-        <<_:256>> = CursorId, Command)
+command(Owner, <<_:256>> = CursorId, Command)
   when Command =:= next; Command =:= accept; Command =:= stop ->
-    call({command, SessionId, Principal, CursorId, Command});
-command(_SessionId, _Principal, _CursorId, _Command) ->
+    case valid_owner_shape(Owner) of
+        true -> call({command, Owner, CursorId, Command});
+        false -> {error, bad_request}
+    end;
+command(_Owner, _CursorId, _Command) ->
+    {error, bad_request}.
+
+-doc "Resume the cursor owned by this exact authenticated gateway link.".
+-spec command_forwarded(<<_:256>>, pid(), <<_:256>>,
+                        next | accept | stop) ->
+          {ok, quod_client_goal:evidence(), term()} | {error, term()}.
+command_forwarded(<<_:256>> = GatewayKey, Link, <<_:256>> = CursorId,
+                  Command) when is_pid(Link),
+                                (Command =:= next orelse
+                                 Command =:= accept orelse
+                                 Command =:= stop) ->
+    call({command_forwarded, GatewayKey, Link, CursorId, Command});
+command_forwarded(_GatewayKey, _Link, _CursorId, _Command) ->
     {error, bad_request}.
 
 call(Request) ->
@@ -47,28 +65,35 @@ call(Request) ->
 init([]) ->
     {ok, #{cursors => #{}}}.
 
-handle_call({open, SessionId, Evidence, Goal, Principal}, From,
+handle_call({open, Owner, CursorId, Evidence, Goal, Principal}, From,
             State = #{cursors := Cursors}) ->
-    CursorId = new_cursor_id(Cursors),
-    case quod_prolog:open_cursor(Evidence, Goal, Principal, self(), CursorId) of
-        {ok, Engine, CallRef} ->
-            EngineMRef = monitor(process, Engine),
-            CallerMRef = monitor(process, element(1, From)),
-            Cursor = #{engine => Engine, engine_mref => EngineMRef,
-                       call_ref => CallRef, worker => undefined,
-                       checkpoint => none,
-                       session_id => SessionId, principal => Principal,
-                       evidence => Evidence,
-                       pending => {From, CallerMRef, open}},
-            {noreply, State#{cursors => Cursors#{CursorId => Cursor}}};
+    Key = {Owner, CursorId},
+    case cursor_open_admission(Key, CursorId, Cursors) of
+        ok ->
+            case quod_prolog:open_cursor(
+                   Evidence, Goal, Principal, self(), CursorId) of
+                {ok, Engine, CallRef} ->
+                    EngineMRef = monitor(process, Engine),
+                    CallerMRef = monitor(process, element(1, From)),
+                    OwnerMRef = monitor_owner(Owner),
+                    Cursor = #{engine => Engine, engine_mref => EngineMRef,
+                               owner_mref => OwnerMRef,
+                               call_ref => CallRef, worker => undefined,
+                               checkpoint => none, owner => Owner,
+                               principal => Principal, evidence => Evidence,
+                               pending => {From, CallerMRef, open}},
+                    {noreply, State#{cursors => Cursors#{Key => Cursor}}};
+                {error, _} = Error ->
+                    {reply, Error, State}
+            end;
         {error, _} = Error ->
             {reply, Error, State}
     end;
-handle_call({command, SessionId, Principal, CursorId, Command}, From,
+handle_call({command, Owner, CursorId, Command}, From,
             State = #{cursors := Cursors}) ->
-    case maps:find(CursorId, Cursors) of
-        {ok, #{session_id := SessionId, principal := Principal,
-               pending := none, worker := Worker,
+    Key = {Owner, CursorId},
+    case maps:find(Key, Cursors) of
+        {ok, #{pending := none, worker := Worker,
                call_ref := CallRef} = Cursor}
           when is_pid(Worker) ->
             CommandRef = make_ref(),
@@ -78,14 +103,19 @@ handle_call({command, SessionId, Principal, CursorId, Command}, From,
             Cursor1 = Cursor#{pending =>
                                 {From, CallerMRef,
                                  {CommandRef, Command}}},
-            {noreply, State#{cursors => Cursors#{CursorId => Cursor1}}};
-        {ok, #{session_id := SessionId, principal := Principal,
-               pending := none}} ->
+            {noreply, State#{cursors => Cursors#{Key => Cursor1}}};
+        {ok, #{pending := none}} ->
             {reply, {error, not_ready}, State};
-        {ok, #{session_id := SessionId, principal := Principal}} ->
+        {ok, _Busy} ->
             {reply, {error, busy}, State};
-        {ok, _WrongOwner} ->
-            {reply, {error, not_found}, State};
+        error ->
+            {reply, {error, not_found}, State}
+    end;
+handle_call({command_forwarded, GatewayKey, Link, CursorId, Command}, From,
+            State = #{cursors := Cursors}) ->
+    case find_forwarded_owner(GatewayKey, Link, CursorId, Cursors) of
+        {ok, Owner} ->
+            handle_call({command, Owner, CursorId, Command}, From, State);
         error ->
             {reply, {error, not_found}, State}
     end;
@@ -97,9 +127,10 @@ handle_cast(_Message, State) -> {noreply, State}.
 handle_info(
   {quod_cursor_solution, Worker, CallRef, CursorId, CommandRef,
    Bindings, Height}, State = #{cursors := Cursors}) ->
-    case maps:find(CursorId, Cursors) of
-        {ok, #{call_ref := CallRef, worker := Existing,
-               evidence := Evidence, pending := Pending} = Cursor}
+    case find_cursor_by_call_ref(CallRef, CursorId, Cursors) of
+        {ok, Key,
+         #{worker := Existing, evidence := Evidence,
+           pending := Pending} = Cursor}
           when Existing =:= undefined; Existing =:= Worker ->
             case cursor_solution_pending(CommandRef, Pending) of
                 {ok, From, CallerMRef} ->
@@ -110,10 +141,10 @@ handle_info(
                        {solution, CursorId, Bindings, Height}}),
                     Cursor1 = Cursor#{worker => Worker, pending => none},
                     {noreply,
-                     State#{cursors => Cursors#{CursorId => Cursor1}}};
+                     State#{cursors => Cursors#{Key => Cursor1}}};
                 error ->
                     stop_unknown_cursor(Cursor),
-                    {noreply, drop_cursor(CursorId, State)}
+                    {noreply, drop_cursor(Key, State)}
             end;
         _ ->
             {noreply, State}
@@ -121,9 +152,9 @@ handle_info(
 handle_info({quod_proof_checkpoint, Engine, CallRef, Ref},
             State = #{cursors := Cursors}) ->
     case find_cursor_by_call(Engine, CallRef, Cursors) of
-        {ok, CursorId, Cursor} ->
+        {ok, Key, Cursor} ->
             {noreply,
-             State#{cursors => Cursors#{CursorId =>
+             State#{cursors => Cursors#{Key =>
                                           Cursor#{checkpoint => Ref}}}};
         error ->
             {noreply, State}
@@ -131,9 +162,9 @@ handle_info({quod_proof_checkpoint, Engine, CallRef, Ref},
 handle_info({quod_proof_reply, Engine, CallRef, Reply},
             State = #{cursors := Cursors}) ->
     case find_cursor_by_call(Engine, CallRef, Cursors) of
-        {ok, CursorId, Cursor} ->
+        {ok, Key, Cursor} ->
             reply_pending(Cursor, Reply),
-            {noreply, drop_cursor(CursorId, State)};
+            {noreply, drop_cursor(Key, State)};
         error ->
             {noreply, State}
     end;
@@ -147,6 +178,8 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
                     end,
             reply_pending(Cursor, Reply),
             {noreply, drop_cursor(CursorId, State)};
+        {owner, CursorId, Cursor} ->
+            owner_down(CursorId, Cursor, State);
         {caller, CursorId, Cursor} ->
             case detach_accept_observer(MRef, Cursor) of
                 {ok, Cursor1} ->
@@ -164,16 +197,9 @@ handle_info({'DOWN', MRef, process, _Pid, _Reason},
 handle_info(_Message, State) -> {noreply, State}.
 
 terminate(_Reason, #{cursors := Cursors}) ->
-    maps:foreach(fun(_CursorId, Cursor) -> stop_cursor_on_terminate(Cursor) end,
+    maps:foreach(fun(_Key, Cursor) -> stop_cursor_on_terminate(Cursor) end,
                  Cursors),
     ok.
-
-new_cursor_id(Cursors) ->
-    CursorId = crypto:strong_rand_bytes(32),
-    case maps:is_key(CursorId, Cursors) of
-        true -> new_cursor_id(Cursors);
-        false -> CursorId
-    end.
 
 cursor_solution_pending(open, {From, MRef, open}) ->
     {ok, From, MRef};
@@ -185,25 +211,39 @@ cursor_solution_pending(_CommandRef, _Pending) ->
 
 find_cursor_by_call(Engine, CallRef, Cursors) ->
     maps:fold(
-      fun(CursorId,
+      fun(Key,
           #{engine := Engine0, call_ref := CallRef0} = Cursor, Acc) ->
               case Acc of
                   error when Engine0 =:= Engine, CallRef0 =:= CallRef ->
-                      {ok, CursorId, Cursor};
+                      {ok, Key, Cursor};
+                  _ -> Acc
+              end
+      end, error, Cursors).
+
+find_cursor_by_call_ref(CallRef, CursorId, Cursors) ->
+    maps:fold(
+      fun(Key = {_Owner, CursorId0},
+          #{call_ref := CallRef0} = Cursor, Acc) ->
+              case Acc of
+                  error when CursorId0 =:= CursorId,
+                             CallRef0 =:= CallRef ->
+                      {ok, Key, Cursor};
                   _ -> Acc
               end
       end, error, Cursors).
 
 find_cursor_monitor(MRef, Cursors) ->
     maps:fold(
-      fun(CursorId, Cursor, Acc) ->
+      fun(Key, Cursor, Acc) ->
               case Acc of
                   error ->
                       case Cursor of
                           #{engine_mref := MRef} ->
-                              {engine, CursorId, Cursor};
+                              {engine, Key, Cursor};
+                          #{owner_mref := MRef} ->
+                              {owner, Key, Cursor};
                           #{pending := {_From, MRef, _Command}} ->
-                              {caller, CursorId, Cursor};
+                              {caller, Key, Cursor};
                           _ -> error
                       end;
                   _ -> Acc
@@ -226,10 +266,11 @@ detach_accept_observer(_MRef, _Cursor) ->
 stop_cursor_on_terminate(#{pending := detached_accept}) -> ok;
 stop_cursor_on_terminate(Cursor) -> stop_unknown_cursor(Cursor).
 
-drop_cursor(CursorId, State = #{cursors := Cursors}) ->
-    case maps:take(CursorId, Cursors) of
+drop_cursor(Key, State = #{cursors := Cursors}) ->
+    case maps:take(Key, Cursors) of
         {Cursor, Cursors1} ->
             demonitor(maps:get(engine_mref, Cursor), [flush]),
+            demonitor_optional(maps:get(owner_mref, Cursor, undefined)),
             case maps:get(pending, Cursor) of
                 {_From, CallerMRef, _Command} ->
                     demonitor(CallerMRef, [flush]);
@@ -245,3 +286,64 @@ stop_unknown_cursor(#{worker := Worker}) when is_pid(Worker) ->
     ok;
 stop_unknown_cursor(#{engine := Engine, call_ref := CallRef}) ->
     quod_prolog:cancel_cursor(Engine, self(), CallRef).
+
+valid_owner({session, <<_:256>>, <<_:256>> = User}, User) -> true;
+valid_owner({forwarder, <<_:256>>, Link, <<_:256>> = User}, User)
+  when is_pid(Link) -> true;
+valid_owner(_Owner, _User) -> false.
+
+valid_owner_shape({session, <<_:256>>, <<_:256>>}) -> true;
+valid_owner_shape({forwarder, <<_:256>>, Link, <<_:256>>})
+  when is_pid(Link) -> true;
+valid_owner_shape(_Owner) -> false.
+
+monitor_owner({forwarder, <<_:256>>, Link, <<_:256>>}) ->
+    monitor(process, Link);
+monitor_owner({session, <<_:256>>, <<_:256>>}) ->
+    undefined.
+
+cursor_open_admission(Key, CursorId, Cursors) ->
+    case maps:is_key(Key, Cursors) of
+        true -> {error, busy};
+        false ->
+            case lists:any(
+                   fun({_Owner, ExistingId}) -> ExistingId =:= CursorId end,
+                   maps:keys(Cursors)) of
+                true -> {error, not_found};
+                false -> ok
+            end
+    end.
+
+find_forwarded_owner(GatewayKey, Link, CursorId, Cursors) ->
+    Matches =
+        [Owner || {{Owner = {forwarder, Key, Link0, _User}, Id}, _Cursor}
+                      <- maps:to_list(Cursors),
+                  Key =:= GatewayKey, Link0 =:= Link, Id =:= CursorId],
+    case Matches of [Owner] -> {ok, Owner}; _ -> error end.
+
+owner_down(Key, Cursor, State) ->
+    case maps:get(pending, Cursor) of
+        {_From, _CallerMRef, {_CommandRef, accept}} ->
+            reply_pending(
+              Cursor,
+              {error, {outcome_unknown,
+                       operation_ref(maps:get(evidence, Cursor))}}),
+            Cursors = maps:get(cursors, State),
+            Cursor1 = Cursor#{owner_mref => undefined,
+                              pending => detached_accept},
+            {noreply, State#{cursors => Cursors#{Key => Cursor1}}};
+        _ ->
+            reply_pending(Cursor, {error, client_cursor_unavailable}),
+            stop_unknown_cursor(Cursor),
+            {noreply, drop_cursor(Key, State)}
+    end.
+
+operation_ref(#{operation_ref := Ref}) -> Ref;
+operation_ref(#{request := #{target_namespace := Ns,
+                             target_genesis_anchor := Anchor,
+                             user_public_key := User,
+                             operation_id := OperationId}}) ->
+    {operation, Ns, Anchor, User, OperationId}.
+
+demonitor_optional(undefined) -> ok;
+demonitor_optional(MRef) -> demonitor(MRef, [flush]), ok.

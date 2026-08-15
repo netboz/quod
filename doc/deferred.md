@@ -21,8 +21,9 @@ vote, rebuild, and catch-up. Remaining, gated:
   `admit`/`remove` external predicates, membership rework Slice 1+2). The HARDENING is the deferred
   membership-safety work in §3: an author-aware authorization policy,
   epoch-frozen voting sets, and a `can_replicate` policy for private
-  read-replicas. Per-node `can_join` re-validation and signed membership
-  transactions are already live.
+  read-replicas. Per-node `can_join` validation before membership votes and
+  signed membership transactions are already live; certified apply/replay
+  deliberately records the voted result without consulting local liveness.
 ## 2. Transport hardening (hostile-net)
 
 - **Mutual TLS is opportunistic at the library level, but quod binds it.**
@@ -607,6 +608,15 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 
 ## 5. Parked (deliberately — don't reopen without a reason)
 
+- **Browser signed-operation journal reclamation needs certified terminal
+  absence.** An uncertain signed write stays in the browser's bounded local
+  journal until its anchored operation reaches a terminal outcome. Ordinary
+  absence is not proof that submission never happened, so a row must not be
+  removed or automatically resubmitted merely because its request deadline
+  elapsed. Reclamation needs the current-view outcome path to prove both that
+  the request is expired and that the operation can no longer appear; until
+  then a journal filled by unresolved uncertainty correctly refuses new
+  writes.
 - **Outcome-index pending-row reclamation requires durable exclusion.** A
   submission admitted locally but never committed remains `pending` across
   restart so an ambiguous client result can never become a false retry signal.

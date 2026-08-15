@@ -316,6 +316,7 @@ looks complete. The final distributed-proof catalog is normative in
 | `{error, {ontology_busy, Ns}}` | the target's bounded scope-worker capacity is full |
 | `{error, {ontology_rate_limited, Ns}}` | the authenticated peer exceeded the scope-open rate |
 | `{error, {ontology_rebuilding, Ns}}` | the target is not ready to freeze a scope |
+| `{error, {network_identity_unavailable, Ns}}` | the target is ready, but cannot yet obtain the root identity needed to verify a signed scope request |
 | `{error, {ontology_unavailable, Ns}}` | a local engine died before any durable-submission checkpoint |
 | `{fail, [{not_allowed, Ns} \| _]}` | the target's `can_invoke/4` policy refused; ordinary logical failure with a bounded reason, not an error |
 | `{error, {proof_limit_exceeded, Ns}}` | the selected worker exceeded a generated-state or heap bound |

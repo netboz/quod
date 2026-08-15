@@ -91,6 +91,18 @@ membership_validation_contract_is_owned_here_test() ->
              {ok, valid, _},
              validate_membership(Ns, Assert, Context))
       end),
+    %% Live admission policy is a pre-vote check. A certified record is
+    %% projected without consulting this node's current peer_ready state.
+    with_context(
+      Ns, Anchor, [],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, can_join}, _},
+             validate_membership(Ns, Assert, Context)),
+          ?assertMatch(
+             {ok, valid, _},
+             validate_committed_membership(Ns, Assert, Context))
+      end),
     with_context(
       Ns, Anchor,
       [{peer_admitted, Candidate, Host, Port, Candidate}, CanJoin],
@@ -230,6 +242,10 @@ with_context(Ns, Anchor, Facts, Fun) ->
 validate_membership(Ns, Diff, Context) ->
     Change = quod_ct:change(Ns, Diff, #{}),
     quod_commit_validation:content([Change], 1, check, Context).
+
+validate_committed_membership(Ns, Diff, Context) ->
+    Change = quod_ct:change(Ns, Diff, #{}),
+    quod_commit_validation:content([Change], 1, {claim, 2}, Context).
 
 membership_assert(Pubkey, Host, Port) ->
     quod_ct:diff_for({peer_admitted, Pubkey, Host, Port, Pubkey}).

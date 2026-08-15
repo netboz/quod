@@ -224,6 +224,10 @@ signed_goal_result({error, signed_goal_unavailable}) ->
     {503, #{error => signed_goal_unavailable}};
 signed_goal_result({error, client_cursor_unavailable}) ->
     {503, #{error => client_cursor_unavailable}};
+signed_goal_result({error, operation_conflict}) ->
+    {409, #{error => operation_conflict}};
+signed_goal_result({error, {anchor_conflict, Ns}}) when is_binary(Ns) ->
+    {409, #{error => anchor_conflict, namespace => Ns}};
 signed_goal_result({error, expired}) ->
     {410, #{error => signed_goal_expired}};
 signed_goal_result({error, Reason})
@@ -265,78 +269,13 @@ signed_operation_outcome(
 signed_operation_outcome(_Evidence, _Claim, _Outcome) ->
     {503, #{error => outcome_index_corrupt}}.
 
-signed_proof_result(Evidence, {ok, Bindings, Height})
-  when is_list(Bindings), is_integer(Height), Height >= 0 ->
-    {200, evidence_json(
-            Evidence,
-            #{result => ok, height => Height,
-              bindings => [signed_bindings(Evidence, B) || B <- Bindings]})};
-signed_proof_result(Evidence,
-                    {solution, <<_:256>> = CursorId, Bindings, Height})
-  when is_map(Bindings), is_integer(Height), Height >= 0 ->
-    {200, evidence_json(
-            Evidence,
-            #{result => solution, cursor => b64url(CursorId),
-              height => Height,
-              bindings => [signed_bindings(Evidence, Bindings)]})};
-signed_proof_result(Evidence, {ok, stopped}) ->
-    {200, evidence_json(Evidence, #{result => stopped})};
-signed_proof_result(Evidence, {ok, Bindings, Outcome})
-  when is_list(Bindings) ->
-    %% Reuse the Explorer's one anchored outcome renderer.  Empty bindings
-    %% keep it independent of VM atoms; the signed parser names are restored
-    %% from Evidence below.
-    case quod_explorer_http:prove_result({ok, [], Outcome}) of
-        {Code, Json} ->
-            {Code, evidence_json(
-                     Evidence,
-                     Json#{bindings =>
-                               [signed_bindings(Evidence, B)
-                                || B <- Bindings]})}
-    end;
-signed_proof_result(Evidence, fail) ->
-    {200, evidence_json(Evidence, #{result => fail})};
-signed_proof_result(Evidence, {fail, Reasons}) when is_list(Reasons) ->
-    {200, evidence_json(
-            Evidence,
-            #{result => fail,
-              reasons => [quod_explorer_http:prolog_text(Reason)
-                          || Reason <- Reasons]})};
-signed_proof_result(_Evidence, {error, read_only}) ->
-    {409, #{error => read_only}};
-signed_proof_result(_Evidence, {error, no_such_namespace}) ->
-    {503, #{error => signed_target_unavailable}};
-signed_proof_result(_Evidence, {error, wrong_genesis_anchor}) ->
-    {503, #{error => signed_target_unavailable}};
-signed_proof_result(_Evidence, {error, rebuilding}) ->
-    {503, #{error => ontology_rebuilding}};
-signed_proof_result(_Evidence, {error, busy}) ->
-    {503, #{error => ontology_busy}};
-signed_proof_result(Evidence, {error, {outcome_unknown, _}} = Error) ->
-    case quod_explorer_http:prove_result(Error) of
-        {Code, Json} -> {Code, evidence_json(Evidence, Json)}
-    end;
-signed_proof_result(_Evidence, {error, not_found}) ->
-    {404, #{error => cursor_not_found}};
-signed_proof_result(_Evidence, {error, not_ready}) ->
-    {409, #{error => cursor_not_ready}};
-signed_proof_result(_Evidence, {error, invalid_action}) ->
-    {400, #{error => invalid_action}};
-signed_proof_result(_Evidence, {error, non_backtrackable_action}) ->
-    {400, #{error => non_backtrackable_action}};
-signed_proof_result(_Evidence, {error, _}) ->
-    {503, #{error => proof_unavailable}}.
+signed_proof_result(Evidence, {normalized, Result}) ->
+    quod_client_result:http_normalized(Evidence, Result).
 
 evidence_json(#{request_digest := Digest,
                 request := #{operation_id := OperationId}}, Result) ->
     Result#{request_digest => b64url(Digest),
             operation_id => b64url(OperationId)}.
-
-signed_bindings(Evidence, Bindings) ->
-    {ok, Named} = quod_client_goal:named_bindings(Evidence, Bindings),
-    maps:map(
-      fun(_Name, Value) -> quod_explorer_http:prolog_text(Value) end,
-      Named).
 
 auth_reply({ok, #{challenge_id := ChallengeId, server_nonce := ServerNonce,
                   expires_ms := ExpiresMs, node_key := NodeKey,

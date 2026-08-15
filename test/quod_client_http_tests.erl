@@ -29,11 +29,14 @@ signed_goal_result_keeps_parser_variable_names_test() ->
                operation_id => b64url(<<2:256>>),
                bindings => [#{<<"Person">> => <<"bob">>}]}},
        quod_client_http:signed_goal_result(
-         {ok, Evidence, {ok, [#{0 => bob}], 7}})),
+         {ok, Evidence,
+          {normalized,
+           quod_client_result:normalize(Evidence,
+                                        {ok, [#{0 => bob}], 7})}})),
     ?assertEqual(
        {409, #{error => read_only}},
        quod_client_http:signed_goal_result(
-         {ok, Evidence, {error, read_only}})).
+         {ok, Evidence, {normalized, {error, read_only}}})).
 
 signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
     Evidence = #{request_digest => <<1:256>>,
@@ -53,7 +56,10 @@ signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
        quod_client_http:signed_goal_result(
          {ok, Evidence,
           {operation_outcome, #{height => 3},
-           #{status => committed, height => 4}}})).
+           #{status => committed, height => 4}}})),
+    ?assertEqual(
+       {409, #{error => operation_conflict}},
+       quod_client_http:signed_goal_result({error, operation_conflict})).
 
 client_http_test_() ->
     {setup, fun setup/0, fun cleanup/1,

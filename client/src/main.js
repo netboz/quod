@@ -22,6 +22,7 @@ import {
   resolveSignedOperations,
   signedGoal,
 } from './signed-client.js'
+import { atom, goalText } from './prolog-term.js'
 import './style.css'
 
 const canvas = document.querySelector('#world')
@@ -202,7 +203,7 @@ registerButton.addEventListener('click', async () => {
       mode: 'execute',
       namespace: 'quod:root',
       anchor: identity.networkId,
-      goal: 'create_user_home.',
+      goal: goalText(atom('create_user_home')),
     })
     if (reply.result === 'ok') {
       registerButton.textContent = 'User home ready'

@@ -145,6 +145,39 @@ untouched_scope_is_not_material_test() ->
         quod_proof_session:stop(Session)
     end.
 
+signed_origin_scope_seals_operation_claim_without_database_diff_test() ->
+    Session = session([]),
+    try
+        {_Id, {solution, _}} = first(Session, true),
+        Identity = {?NS, key(1)},
+        Binding = {user_goal_v1, key(44)},
+        {ok, Plan} = quod_dtx:seal_session(
+                       Session,
+                       (bind())#{origin := Identity,
+                                 request_binding := Binding}),
+        ?assertEqual(Identity, quod_dtx:target(Plan)),
+        ?assertEqual(Identity, quod_dtx:origin(Plan)),
+        ?assertEqual(Binding, quod_dtx:request_binding(Plan)),
+        ?assertEqual([], quod_dtx:diff(Plan)),
+        ?assertEqual(#{}, quod_dtx:read_check(Plan)),
+        ?assert(quod_dtx:participates(Plan))
+    after
+        quod_proof_session:stop(Session)
+    end.
+
+signed_non_origin_empty_scope_remains_not_material_test() ->
+    Session = session([]),
+    try
+        {_Id, {solution, _}} = first(Session, true),
+        ?assertEqual(
+           not_material,
+           quod_dtx:seal_session(
+             Session,
+             (bind())#{request_binding := {user_goal_v1, key(45)}}))
+    after
+        quod_proof_session:stop(Session)
+    end.
+
 read_only_participant_seals_empty_diff_with_read_check_test() ->
     Session = session([{parent, tom, bob}]),
     try

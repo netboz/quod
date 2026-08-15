@@ -3144,6 +3144,93 @@ batch_rejects_duplicate_author_sequence_without_mutation_test() ->
         {error, stale_seq}},
        receive_relay_control(Ns)).
 
+batch_operation_claims_coalesce_aliases_and_reject_conflicts_test() ->
+    Ns = <<"t">>,
+    Anchor = <<0:256>>,
+    OperationId = <<77:256>>,
+    UserKey = quod_identity:generate(),
+    Base = quod_ct:signed_dtx_begin_fixture(
+             #{target => {Ns, Anchor}, operation_id => OperationId,
+               key_pair => UserKey}),
+    First0 = maps:get(transaction, Base),
+    #{pubkey := Author} = NodeIdentity = maps:get(node_identity, Base),
+    Admission = maps:get(admission, Base),
+    First = First0#transaction{author = Author, author_seq = 0, sig = none},
+    AliasFixture = quod_ct:signed_dtx_begin_fixture(
+                     #{target => {Ns, Anchor},
+                       operation_id => OperationId, key_pair => UserKey,
+                       proof_id => <<210:256>>}),
+    Alias = (maps:get(transaction, AliasFixture))#transaction{
+              author = Author, author_seq = 0, sig = none},
+    ConflictFixture = quod_ct:signed_dtx_begin_fixture(
+                        #{target => {Ns, Anchor},
+                          operation_id => OperationId, key_pair => UserKey,
+                          proof_id => <<211:256>>,
+                          goal_text => <<"assertz(saved(conflict)).">>}),
+    Conflict = (maps:get(transaction, ConflictFixture))#transaction{
+                 author = Author, author_seq = 0, sig = none},
+    ?assertNotEqual(First#transaction.tx_id, Alias#transaction.tx_id),
+    {ok, FirstClaim} = quod_transaction:request_claim(First),
+    {ok, AliasClaim} = quod_transaction:request_claim(Alias),
+    {ok, ConflictClaim} = quod_transaction:request_claim(Conflict),
+    ?assertEqual(maps:get(key, FirstClaim), maps:get(key, AliasClaim)),
+    ?assertEqual(maps:get(digest, FirstClaim), maps:get(digest, AliasClaim)),
+    ?assertEqual(maps:get(key, FirstClaim), maps:get(key, ConflictClaim)),
+    ?assertNotEqual(maps:get(digest, FirstClaim),
+                    maps:get(digest, ConflictClaim)),
+    quod_ct:with_network_identity(
+      maps:get(network, Base),
+      fun() ->
+          S0 = st(#{ns => Ns, self => Author,
+                    id => NodeIdentity,
+                    genesis_hash => Anchor,
+                    consensus_domain => quod_simplex:consensus_domain(
+                                            Ns, Anchor),
+                    validators => [Author],
+                    author_admissions => #{Author => Admission},
+                    author_seqs => #{Author => 0}, sync => ready,
+                    slot => 3, approved => 3,
+                    eng => quod_simplex:eng_with_certs(3, [])}),
+          FirstRef = make_ref(),
+          AliasRef = make_ref(),
+          {S1, _BatchTimer} = quod_simplex:test_append(
+                                {self(), FirstRef}, First, S0),
+          {S2, []} = quod_simplex:test_append(
+                       {self(), AliasRef}, Alias, S1),
+          #{count := 1, operation_claims := Claims} =
+              quod_simplex:test_batch(S2),
+          ?assertEqual(1, map_size(Claims)),
+          ?assertEqual(2, length(quod_simplex:test_custody(S2))),
+          [{_FirstSubmissionId, 1, FirstSubmission,
+            _FirstPlacement, _FirstDeadline, _FirstAttempts}] =
+              quod_simplex:test_custody(S1),
+          {ok, SignedFirst} = quod_transaction:decode_verified_submission(
+                                {Ns, Anchor, Admission}, FirstSubmission),
+          Settled = quod_simplex:test_resolve_committed_submissions(
+                      {batch, [SignedFirst]}, 4, S2),
+          receive {FirstRef, {ok, 4}} -> ok
+          after 0 -> ?assert(false)
+          end,
+          OperationRef = maps:get(operation_ref, FirstClaim),
+          receive
+              {AliasRef, {error, {outcome_unknown, OperationRef}}} -> ok
+          after 0 -> ?assert(false)
+          end,
+          ?assertEqual([], quod_simplex:test_custody(Settled)),
+
+          ConflictRef = make_ref(),
+          ConflictFrom = {self(), ConflictRef},
+          {C1, _ConflictBatchTimer} = quod_simplex:test_append(
+                                        {self(), make_ref()}, First, S0),
+          {C2, ConflictActions} = quod_simplex:test_append(
+                                    ConflictFrom, Conflict, C1),
+          ?assert(lists:member(
+                    {reply, ConflictFrom, {error, bad_change}},
+                    ConflictActions)),
+          #{count := 1} = quod_simplex:test_batch(C2),
+          ?assertEqual(1, length(quod_simplex:test_custody(C2)))
+      end).
+
 batch_flushes_exactly_at_256_cached_items_test() ->
     Ns = <<"t">>,
     [{Author, AuthorId}] = Committee = committee(1),

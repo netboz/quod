@@ -22,13 +22,15 @@ descriptor before the effect journal calls them.
 -include("quod_proof_limits.hrl").
 -include("quod_ledger.hrl").
 
--export([create/2, join/3,
-         validate_action/1, prepare_action/1, prepare_action/2,
+-export([validate_action/1, prepare_action/2,
          execute_prepared/1,
          prepared_effect/4, prepared_bytes/1, decode_prepared/1,
          local_state/1, genesis_anchor/1,
-         network_identity/0, network_identity/1, network_identity/2,
+         network_identity/0, network_identity/2,
          root_ns/0]).
+-ifdef(TEST).
+-export([create/2, join/3, prepare_action/1, network_identity/1]).
+-endif.
 -export_type([structural_descriptor/0, prepared_descriptor/0]).
 
 -define(ROOT_NS, <<"quod:root">>).
@@ -45,10 +47,12 @@ descriptor before the effect journal calls them.
 
 -type local_state() :: not_hosted | starting | joining | ready | stopping.
 
+-ifdef(TEST).
 -type input_option() ::
         {source_file, file:filename()} |
         {source, unicode:chardata()} |
         {terms, [term()]}.
+-endif.
 
 -record(lifecycle_request, {
     kind :: create | join | user_home,
@@ -67,6 +71,7 @@ descriptor before the effect journal calls them.
 -opaque structural_descriptor() :: #lifecycle_request{}.
 -opaque prepared_descriptor() :: #prepared_lifecycle{}.
 
+-ifdef(TEST).
 -spec create(term(), [input_option()]) -> creation().
 create(Name, Options) ->
     execute_action({create_ontology, Name, Options}).
@@ -74,6 +79,7 @@ create(Name, Options) ->
 -spec join(term(), unicode:chardata(), [term()]) -> joining().
 join(Name, GenesisHash, Seeds) ->
     execute_action({join_ontology, Name, GenesisHash, Seeds}).
+-endif.
 
 -doc """
 Validate a typed lifecycle action without reading source paths, compiling
@@ -142,9 +148,11 @@ state. The lifecycle runner calls this only after authorization; the trusted
 same-VM API calls it directly. Create sources are read, parsed, and compiled
 exactly once into the descriptor; join inputs are already normalized.
 """.
+-ifdef(TEST).
 -spec prepare_action(structural_descriptor()) ->
           {ok, prepared_descriptor()} | {error, term()}.
 prepare_action(Structural) -> prepare_action(Structural, none).
+-endif.
 
 -spec prepare_action(structural_descriptor(), term()) ->
           {ok, prepared_descriptor()} | {error, term()}.
@@ -200,6 +208,7 @@ execute_prepared(
 execute_prepared(_InvalidDescriptor) ->
     {error, invalid_action}.
 
+-ifdef(TEST).
 execute_action(Action) ->
     case validate_action(Action) of
         {error, _} = Error ->
@@ -210,6 +219,7 @@ execute_action(Action) ->
                 {ok, Prepared} -> execute_prepared(Prepared)
             end
     end.
+-endif.
 
 -spec local_state(term()) -> {ok, local_state()} | {error, term()}.
 local_state(Name) ->
@@ -251,11 +261,13 @@ genesis_anchor(Name) ->
 network_identity() ->
     genesis_anchor(root_ns()).
 
+-ifdef(TEST).
 -doc "Return the network identity only when a validated record requires it.".
 -spec network_identity(boolean()) ->
           {ok, none | <<_:256>>} | {error, term()}.
 network_identity(true) -> network_identity();
 network_identity(false) -> {ok, none}.
+-endif.
 
 -doc "Return the network identity from the validation target when it is the root.".
 -spec network_identity(boolean(), {binary(), <<_:256>>}) ->

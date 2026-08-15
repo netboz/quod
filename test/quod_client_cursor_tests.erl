@@ -5,12 +5,13 @@
 
 -define(SESSION, <<16#21:256>>).
 -define(PRINCIPAL, {user, <<16#22:256>>}).
+-define(OWNER, {session, ?SESSION, <<16#22:256>>}).
 
 cursor_command_busy_and_solution_correlation_test() ->
     {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
     Tag = make_ref(),
     {noreply, State1} = quod_client_cursor:handle_call(
-                          {command, ?SESSION, ?PRINCIPAL, CursorId, next},
+                          {command, ?OWNER, CursorId, next},
                           {self(), Tag}, State0),
     CommandRef = receive
         {worker_message, Worker,
@@ -21,7 +22,7 @@ cursor_command_busy_and_solution_correlation_test() ->
     ?assertMatch(
        {reply, {error, busy}, _},
        quod_client_cursor:handle_call(
-         {command, ?SESSION, ?PRINCIPAL, CursorId, accept},
+         {command, ?OWNER, CursorId, accept},
          {self(), make_ref()}, State1)),
     {noreply, State2} = quod_client_cursor:handle_info(
                           {quod_cursor_solution, Worker, CallRef, CursorId,
@@ -31,7 +32,7 @@ cursor_command_busy_and_solution_correlation_test() ->
                {solution, CursorId, #{'X' := second}, 7}}} -> ok
     after 1000 -> error(cursor_solution_reply_missing)
     end,
-    #{CursorId := #{pending := none}} = maps:get(cursors, State2),
+    #{{?OWNER, CursorId} := #{pending := none}} = maps:get(cursors, State2),
     {noreply, State3} = quod_client_cursor:handle_info(
                           {quod_proof_reply, Engine, CallRef, cursor_stopped},
                           State2),
@@ -42,7 +43,7 @@ cursor_stale_solution_kills_exact_worker_test() ->
     {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
     WorkerMRef = monitor(process, Worker),
     {noreply, State1} = quod_client_cursor:handle_call(
-                          {command, ?SESSION, ?PRINCIPAL, CursorId, next},
+                          {command, ?OWNER, CursorId, next},
                           {self(), make_ref()}, State0),
     receive {worker_message, Worker, _} -> ok
     after 1000 -> error(cursor_command_missing)
@@ -61,12 +62,12 @@ cursor_owner_is_exact_test() ->
     ?assertMatch(
        {reply, {error, not_found}, _},
        quod_client_cursor:handle_call(
-         {command, <<0:256>>, ?PRINCIPAL, CursorId, next},
+         {command, {session, <<0:256>>, <<16#22:256>>}, CursorId, next},
          {self(), make_ref()}, State0)),
     ?assertMatch(
        {reply, {error, not_found}, _},
        quod_client_cursor:handle_call(
-         {command, ?SESSION, {user, <<0:256>>}, CursorId, next},
+         {command, {session, ?SESSION, <<0:256>>}, CursorId, next},
          {self(), make_ref()}, State0)),
     stop_cursor_fixture(Engine, Worker).
 
@@ -76,7 +77,7 @@ cursor_caller_down_cancels_next_but_detaches_accept_test() ->
     NextWorkerMRef = monitor(process, NextWorker),
     NextCaller = spawn(fun cursor_fixture_loop/0),
     {noreply, NextState1} = quod_client_cursor:handle_call(
-                              {command, ?SESSION, ?PRINCIPAL, NextId, next},
+                              {command, ?OWNER, NextId, next},
                               {NextCaller, make_ref()}, NextState0),
     receive {worker_message, NextWorker, _} -> ok
     after 1000 -> error(next_command_missing)
@@ -100,8 +101,7 @@ cursor_caller_down_cancels_next_but_detaches_accept_test() ->
         cursor_state(none, none),
     AcceptCaller = spawn(fun cursor_fixture_loop/0),
     {noreply, AcceptState1} = quod_client_cursor:handle_call(
-                                {command, ?SESSION, ?PRINCIPAL,
-                                 AcceptId, accept},
+                                {command, ?OWNER, AcceptId, accept},
                                 {AcceptCaller, make_ref()}, AcceptState0),
     receive {worker_message, AcceptWorker, _} -> ok
     after 1000 -> error(accept_command_missing)
@@ -115,7 +115,7 @@ cursor_caller_down_cancels_next_but_detaches_accept_test() ->
     end,
     {noreply, AcceptState2} =
         quod_client_cursor:handle_info(AcceptDown, AcceptState1),
-    #{AcceptId := #{pending := detached_accept}} =
+    #{{?OWNER, AcceptId} := #{pending := detached_accept}} =
         maps:get(cursors, AcceptState2),
     ?assert(is_process_alive(AcceptWorker)),
     {noreply, AcceptState3} = quod_client_cursor:handle_info(
@@ -157,26 +157,140 @@ cursor_terminate_preserves_detached_accept_worker_test() ->
         cursor_state(detached_accept, none),
     ?assertEqual(ok, quod_client_cursor:terminate(shutdown, State0)),
     ?assert(is_process_alive(Worker)),
-    ?assert(maps:is_key(CursorId, maps:get(cursors, State0))),
+    ?assert(maps:is_key({?OWNER, CursorId}, maps:get(cursors, State0))),
     stop_cursor_fixture(Engine, Worker).
 
+forwarded_cursor_requires_the_exact_gateway_and_link_test() ->
+    Link = spawn(fun cursor_fixture_loop/0),
+    Gateway = <<16#31:256>>,
+    Owner = {forwarder, Gateway, Link, <<16#22:256>>},
+    {CursorId, Engine, Worker, CallRef, State0} =
+        cursor_state(none, none, Owner),
+    Tag = make_ref(),
+    {noreply, State1} = quod_client_cursor:handle_call(
+                          {command_forwarded, Gateway, Link, CursorId, next},
+                          {self(), Tag}, State0),
+    CommandRef = receive
+        {worker_message, Worker,
+         {quod_cursor_command, _Coordinator, CallRef, CursorId,
+          Ref, next}} -> Ref
+    after 1000 -> error(forwarded_cursor_command_missing)
+    end,
+    ?assertMatch(
+       {reply, {error, not_found}, _},
+       quod_client_cursor:handle_call(
+         {command_forwarded, <<0:256>>, Link, CursorId, next},
+         {self(), make_ref()}, State0)),
+    OtherLink = spawn(fun cursor_fixture_loop/0),
+    ?assertMatch(
+       {reply, {error, not_found}, _},
+       quod_client_cursor:handle_call(
+         {command_forwarded, Gateway, OtherLink, CursorId, next},
+         {self(), make_ref()}, State0)),
+    {noreply, State2} = quod_client_cursor:handle_info(
+                          {quod_cursor_solution, Worker, CallRef, CursorId,
+                           CommandRef, #{}, 7}, State1),
+    receive {Tag, {ok, _, {solution, CursorId, #{}, 7}}} -> ok
+    after 1000 -> error(forwarded_cursor_reply_missing)
+    end,
+    stop_cursor_fixture(Engine, Worker),
+    stop_cursor_fixture(Link, OtherLink),
+    _ = State2,
+    ok.
+
+second_gateway_cannot_open_an_existing_cursor_id_test() ->
+    Link1 = spawn(fun cursor_fixture_loop/0),
+    Link2 = spawn(fun cursor_fixture_loop/0),
+    Owner1 = {forwarder, <<16#33:256>>, Link1, <<16#22:256>>},
+    Owner2 = {forwarder, <<16#34:256>>, Link2, <<16#22:256>>},
+    {CursorId, Engine, Worker, _CallRef, State0} =
+        cursor_state(none, none, Owner1),
+    #{{Owner1, CursorId} := #{evidence := Evidence}} =
+        maps:get(cursors, State0),
+    ?assertMatch(
+       {reply, {error, not_found}, _},
+       quod_client_cursor:handle_call(
+         {open, Owner2, CursorId, Evidence, true, ?PRINCIPAL},
+         {self(), make_ref()}, State0)),
+    stop_cursor_fixture(Engine, Worker),
+    stop_cursor_fixture(Link1, Link2).
+
+forwarded_link_down_cancels_next_but_detaches_accept_test() ->
+    lists:foreach(
+      fun({PendingKind, Detached}) ->
+          Link = spawn(fun cursor_fixture_loop/0),
+          Gateway = <<16#32:256>>,
+          Owner = {forwarder, Gateway, Link, <<16#22:256>>},
+          {CursorId, Engine, Worker, _CallRef, State0} =
+              cursor_state(none, none, Owner),
+          Tag = make_ref(),
+          {noreply, State1} = quod_client_cursor:handle_call(
+                                {command, Owner, CursorId, PendingKind},
+                                {self(), Tag}, State0),
+          receive {worker_message, Worker, _} -> ok
+          after 1000 -> error(forwarded_command_missing)
+          end,
+          OwnerMRef = cursor_owner_mref(Owner, CursorId, State1),
+          exit(Link, kill),
+          Down = receive
+              {'DOWN', OwnerMRef, process, Link, killed} = Message -> Message
+          after 1000 -> error(forwarder_down_missing)
+          end,
+          WorkerMRef = monitor(process, Worker),
+          {noreply, State2} = quod_client_cursor:handle_info(Down, State1),
+          case Detached of
+              true ->
+                  receive
+                      {Tag, {ok, _,
+                             {error, {outcome_unknown,
+                                      {operation, _, _, _, _}}}}} -> ok
+                  after 1000 -> error(accept_uncertainty_missing)
+                  end,
+                  #{{Owner, CursorId} := #{pending := detached_accept}} =
+                      maps:get(cursors, State2),
+                  ?assert(is_process_alive(Worker));
+              false ->
+                  receive
+                      {Tag, {ok, _, {error, client_cursor_unavailable}}} -> ok
+                  after 1000 -> error(next_unavailable_missing)
+                  end,
+                  ?assertEqual(#{}, maps:get(cursors, State2)),
+                  receive {'DOWN', WorkerMRef, process, Worker, killed} -> ok
+                  after 1000 -> error(next_worker_survived_link)
+                  end
+          end,
+          stop_cursor_fixture(Engine, Worker)
+      end,
+      [{next, false}, {accept, true}]).
+
 cursor_state(Pending, Checkpoint) ->
+    cursor_state(Pending, Checkpoint, ?OWNER).
+
+cursor_state(Pending, Checkpoint, Owner) ->
     Parent = self(),
     Engine = spawn(fun cursor_fixture_loop/0),
     Worker = spawn(fun() -> cursor_worker_loop(Parent) end),
     EngineMRef = monitor(process, Engine),
+    OwnerMRef = case Owner of
+                    {forwarder, _, Link, _} -> monitor(process, Link);
+                    _ -> undefined
+                end,
     CursorId = crypto:strong_rand_bytes(32),
     CallRef = make_ref(),
     Evidence = #{request_digest => <<16#23:256>>,
+                 operation_ref =>
+                     {operation, <<"test">>, <<16#25:256>>,
+                      <<16#22:256>>, <<16#24:256>>},
                  request => #{operation_id => <<16#24:256>>},
                  variables => []},
     Cursor = #{engine => Engine, engine_mref => EngineMRef,
+               owner_mref => OwnerMRef,
                call_ref => CallRef, worker => Worker,
                checkpoint => Checkpoint, pending => Pending,
-               session_id => ?SESSION, principal => ?PRINCIPAL,
+               owner => Owner, principal => ?PRINCIPAL,
                evidence => Evidence},
     {CursorId, Engine, Worker, CallRef,
-     #{cursors => #{CursorId => Cursor}}}.
+     #{cursors => #{{Owner, CursorId} => Cursor}}}.
 
 cursor_worker_loop(Parent) ->
     receive
@@ -190,12 +304,16 @@ cursor_fixture_loop() ->
     receive stop -> ok end.
 
 pending_caller_mref(CursorId, State) ->
-    #{CursorId := #{pending := {_From, MRef, _Command}}} =
+    #{{?OWNER, CursorId} := #{pending := {_From, MRef, _Command}}} =
         maps:get(cursors, State),
     MRef.
 
 cursor_engine_mref(CursorId, State) ->
-    #{CursorId := #{engine_mref := MRef}} = maps:get(cursors, State),
+    #{{?OWNER, CursorId} := #{engine_mref := MRef}} = maps:get(cursors, State),
+    MRef.
+
+cursor_owner_mref(Owner, CursorId, State) ->
+    #{{Owner, CursorId} := #{owner_mref := MRef}} = maps:get(cursors, State),
     MRef.
 
 stop_cursor_fixture(Engine, Worker) ->

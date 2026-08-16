@@ -517,7 +517,7 @@ fixes:
   architecture changes.
 
   The dedicated `{ingress, Ns}` stream is now separate from `{log, Ns}`, but both
-  subscriptions still feed the same `quod_simplex` process, so the channel split
+  channel consumers still feed the same `quod_simplex` process, so the channel split
   alone does not reduce its serial mailbox. The next split is process ownership.
   Keep detailed probes off by default. Extract the complete ingress contract
   together: local unsigned submissions, authenticated relay envelopes,
@@ -550,7 +550,7 @@ fixes:
   cheap sound version records the queried functor only for `predicate_property/2` and needs a
   considered design for the enumeration case). Decide with Yan before changing semantics.
 
-## 4. Reader/subscriber arc — the path to "millions read root"
+## 4. Reader/replica arc — the path to "millions read root"
 
 P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-giggling-reddy.md`.
 
@@ -586,13 +586,17 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
     the parked "adaptive sizing" bucket (with the Brahms view/sample sizes). Use the new signed
     `estimated_n` population metric only after its error and churn response are measured at scale.
     Watch `feed_dropped{reason=duplicate}` vs `ingested` to tune `k`.
-- **P3 — bounded-cache subscribers (the millions tier).** Predicate cache
+- **P3 — bounded-cache read replicas (the millions tier).** Predicate cache
   (warmup = root schema + system-ontology registry) + consume the P2 feed +
   invalidate touched predicates on *live* commit (never replay) + lazy refetch
   through the authenticated ontology-ask API on miss.
-- **P4 — per-predicate read-set routing** ("read-set is subscription") + cache GC (refcount + 60 s
-  debounce, onia §10). The mutation-version read-set (`quod_erlog_db_mvcc:version_token/2`) already
-  produces the per-predicate keys.
+- **Explicit ontology subscriptions.** The former P4 "read-set is
+  subscription" proposal is retired. Read-set tokens remain proof-local OCC
+  dependencies. Long-lived following is one durable subscriber-owned ontology
+  fact; source-qualified `react_on/3` declarations provide the event interests
+  compiled into a host-to-host runtime registration. The local projection is
+  certified by extending `quod_foreign_log`; its reviewable slices are in
+  `ontology-subscription-plan.md`.
 
 - **Link backpressure signalling (still useful; relay amplification mitigated).** `quod_link`'s plain
   `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,

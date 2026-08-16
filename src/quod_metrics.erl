@@ -40,8 +40,8 @@ Two collection paths:
 | `quod_consensus_signing_journal_vote_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
-| `quod_runtime_healthy/handlers_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, rebuilt-through height, effect-release frontier, queued events |
-| `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused dynamic handler declarations |
+| `quod_runtime_healthy/handlers_active/subscriptions_active/reactions_active/source_targets_active/source_interests_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, local subscription/reaction catalogue, rebuilt-through height, effect-release frontier, queued events |
+| `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused executable declarations, and malformed subscription clauses |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
@@ -213,13 +213,18 @@ declare(NodeId) ->
     %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
     _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Missing means the runtime process is absent. A persistent 0 means it cannot currently release effects; check runtime logs and the failure metrics."),
     _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
+    _ = G(quod_runtime_subscriptions_active, "How many distinct valid anchored subscribes/2 facts are active in this namespace's local runtime catalogue."),
+    _ = G(quod_runtime_reactions_active, "How many founding-authorized react_on/3 declarations are active; Slice 1 compiles them but executes none."),
+    _ = G(quod_runtime_source_targets_active, "How many distinct anchored remote ontologies have at least one active source-qualified reaction interest."),
+    _ = G(quod_runtime_source_interests_active, "How many active source-qualified react_on/3 interests are compiled across all targets."),
     _ = G(quod_runtime_p_height,        "The newest block whose derived working state this node has finished rebuilding."),
     _ = G(quod_runtime_e_frontier,      "The newest block fully processed by every handler; effects for a block are released only once this reaches it."),
     _ = G(quod_runtime_queue_len,       "Change events waiting for the handlers right now."),
     _ = G(quod_runtime_reconciles,      "Total full rebuilds of the derived working state (only ever goes up). One per boot or recovery is normal; climbing steadily means handlers keep failing."),
     _ = G(quod_runtime_collapses,       "Total times pending handler work was thrown away and replaced by one full rebuild, due to overload or a handler failure (only ever goes up)."),
     _ = G(quod_runtime_dropped_events,  "Total change events dropped because a rebuild made them redundant or the queue overflowed (only ever goes up)."),
-    _ = G(quod_runtime_rejected_dynamic,"Total handler declarations refused because they were written after the ontology was founded (only ever goes up). Any value above 0 deserves a look: someone tried to install running code."),
+    _ = G(quod_runtime_rejected_dynamic,"Total executable runtime declarations refused because they were written after the ontology was founded (only ever goes up). Any value above 0 deserves a look: someone tried to install running code."),
+    _ = G(quod_runtime_rejected_subscriptions,"Total malformed subscribes/2 clauses ignored by local runtime reconciliation (only ever goes up)."),
     _ = G(quod_runtime_heavy_pending,   "Heavy background jobs queued, one slot per resource (newer jobs replace older queued ones)."),
     _ = G(quod_runtime_heavy_running,   "Heavy background jobs running right now."),
     _ = G(quod_runtime_heavy_superseded,"Total queued heavy jobs replaced by a newer job for the same resource before they ran (only ever goes up)."),
@@ -391,13 +396,20 @@ refresh_ns(Ns) ->
 
 refresh_runtime_ns(Ns) ->
     case quod_runtime:stats(Ns) of
-        #{mode := Mode, handlers_active := HA, p_height := PH, e_frontier := EF,
+        #{mode := Mode, handlers_active := HA, subscriptions_active := SA,
+          reactions_active := RA, source_targets_active := STA,
+          source_interests_active := SIA, p_height := PH, e_frontier := EF,
           queue_len := QL, reconciles := RC, collapses := CO, dropped_events := DE,
-          rejected_dynamic := RJ, heavy_pending := HP, heavy_running := HR,
+          rejected_dynamic := RJ, rejected_subscriptions := RS,
+          heavy_pending := HP, heavy_running := HR,
           heavy_superseded := HS, heavy_rejected := HX, heavy_failures := HF} ->
             S = fun(Name, V) -> prometheus_gauge:set(Name, [label(Ns)], V) end,
             _ = S(quod_runtime_healthy, case Mode of live -> 1; _ -> 0 end),
             _ = S(quod_runtime_handlers_active, HA),
+            _ = S(quod_runtime_subscriptions_active, SA),
+            _ = S(quod_runtime_reactions_active, RA),
+            _ = S(quod_runtime_source_targets_active, STA),
+            _ = S(quod_runtime_source_interests_active, SIA),
             _ = S(quod_runtime_p_height, PH),
             _ = S(quod_runtime_e_frontier, EF),
             _ = S(quod_runtime_queue_len, QL),
@@ -405,6 +417,7 @@ refresh_runtime_ns(Ns) ->
             _ = S(quod_runtime_collapses, CO),
             _ = S(quod_runtime_dropped_events, DE),
             _ = S(quod_runtime_rejected_dynamic, RJ),
+            _ = S(quod_runtime_rejected_subscriptions, RS),
             _ = S(quod_runtime_heavy_pending, HP),
             _ = S(quod_runtime_heavy_running, HR),
             _ = S(quod_runtime_heavy_superseded, HS),
@@ -417,9 +430,12 @@ refresh_runtime_ns(Ns) ->
 remove_runtime_metrics(Ns) ->
     Labels = [label(Ns)],
     Names = [quod_runtime_healthy, quod_runtime_handlers_active,
+             quod_runtime_subscriptions_active, quod_runtime_reactions_active,
+             quod_runtime_source_targets_active, quod_runtime_source_interests_active,
              quod_runtime_p_height, quod_runtime_e_frontier, quod_runtime_queue_len,
              quod_runtime_reconciles, quod_runtime_collapses, quod_runtime_dropped_events,
-             quod_runtime_rejected_dynamic, quod_runtime_heavy_pending,
+             quod_runtime_rejected_dynamic, quod_runtime_rejected_subscriptions,
+             quod_runtime_heavy_pending,
              quod_runtime_heavy_running, quod_runtime_heavy_superseded,
              quod_runtime_heavy_rejected, quod_runtime_heavy_failures],
     _ = [prometheus_gauge:remove(Name, Labels) || Name <- Names],

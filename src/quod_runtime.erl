@@ -18,6 +18,20 @@ action-pattern shape, hand-rolled); this slice restricts Needs to exactly those 
 `current/1` edges so the whole graph is validated statically at reconcile — a cycle or
 missing dependency fails loudly up front, never mid-run.
 
+The same reconciliation owns the local ontology-subscription catalogue. An
+ordinary stored `subscribes(TargetNamespace, TargetAnchor)` fact contributes
+one anchored target identity. A founding-authorized `react_on/3` whose Pattern
+is source-qualified with `from(TargetNamespace, TargetAnchor, EventPattern)`
+contributes one event interest for that identity. The first `react_on/3`
+argument is instead the logical owner of the resulting effect; it is not an
+agent type or an event-source selector. Any ontology-defined callable owner
+term is valid when the event pattern binds all of its variables. Slice 1 only
+compiles this rebuildable catalogue: it opens no route, starts no follower,
+and delivers no event. Later slices consume the same state from this owner.
+They may narrow reaction candidates here, but the actual event match must
+cross into Prolog through `erlog_int:unify_prove_body`; this runtime must not
+grow a parallel unifier or variable-binding representation.
+
 ## Who may declare a handler
 
 Handlers are executable — writing the fact must not be enough to activate it. Until the
@@ -76,9 +90,9 @@ observers therefore maintain current P without reconstructing best-effort effect
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
-%% the pure planning + event-matching core — driven directly by eunit
+%% the pure planning + handler-selection core — driven directly by eunit
 -export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4,
-         test_read_founding/2]).
+         test_read_founding/2, plan_runtime_catalog/2, alpha_normalize/1]).
 -endif.
 
 -define(RECONCILE_BUDGET_MS, 30000).
@@ -107,7 +121,13 @@ observers therefore maintain current P without reconstructing best-effort effect
             order = [] :: [term()],                   %% converge order (deps first)
             index = #{} :: #{tuple() => [term()]},    %% Functor => [HandlerId] (event matching)
             dependents = #{} :: #{term() => [term()]},%% Id => ids that Need it (reverse edges)
-            founding = unknown :: unknown | {ok, [tuple()]},  %% cached slot-1 heads
+            %% Cached slot-1 declarations. Reactions retain exact compiled
+            %% clauses because their intentional variables require
+            %% alpha-normalized full-clause authority checks.
+            founding = unknown :: unknown | {ok, map()},
+            subscriptions = [] :: [{binary(), binary()}],
+            reactions = [] :: [tuple()],
+            source_interests = #{} :: #{{binary(), binary()} => [tuple()]},
             %% ONE killable runner at a time — a reconcile or an ordered-tier event batch
             runner = none :: none | {reconcile | events, pid(), reference(), reference(),
                                      reference()},
@@ -126,6 +146,7 @@ observers therefore maintain current P without reconstructing best-effort effect
             collapses = 0 :: non_neg_integer(),       %% queue overflows + execution collapses
             dropped_events = 0 :: non_neg_integer(),
             rejected_dynamic = 0 :: non_neg_integer(),
+            rejected_subscriptions = 0 :: non_neg_integer(),
             events_seen = 0 :: non_neg_integer(),     %% direct applied_live received
             %% heavy-worker framework (§8): queue-fed per-resource workers OUTSIDE the
             %% ordered pipeline. One COALESCED pending slot per resource (jobs are
@@ -216,6 +237,11 @@ handle_continue(try_attach, S) ->
 handle_call(get_stats, _From, S) ->
     {reply, #{mode => mode_tag(S#s.mode), height => S#s.height,
               handlers_active => map_size(S#s.handlers),
+              subscriptions_active => length(S#s.subscriptions),
+              reactions_active => length(S#s.reactions),
+              source_targets_active => map_size(S#s.source_interests),
+              source_interests_active =>
+                  lists:sum([length(Is) || Is <- maps:values(S#s.source_interests)]),
               p_height => S#s.p_height, e_frontier => S#s.e_frontier,
               queue_len => S#s.queue_len,
               reconciles => S#s.reconciles,
@@ -223,6 +249,7 @@ handle_call(get_stats, _From, S) ->
               collapses => S#s.collapses,
               dropped_events => S#s.dropped_events,
               rejected_dynamic => S#s.rejected_dynamic,
+              rejected_subscriptions => S#s.rejected_subscriptions,
               events_seen => S#s.events_seen,
               heavy_pending => map_size(S#s.heavy_pending),
               heavy_running => map_size(S#s.heavy_running),
@@ -461,13 +488,13 @@ spawn_runner(Kind, Budget, Fun, S) ->
 %% Runner body (reconcile). Returns {ok, FoundingCache, Plan} | {error, Reason}.
 run_reconcile(Ns, Config, Cached, Est, H) ->
     try
-        {FoundingCache, G} =
+        {FoundingCache, Founding} =
             case Cached of
-                {ok, Gc} -> {keep, Gc};
+                {ok, Fc} -> {keep, Fc};
                 unknown  ->
                     case read_founding(Ns, Config) of
-                        {ok, Gr}     -> {{cache, Gr}, Gr};
-                        no_log       -> {keep, []};
+                        {ok, Fr}     -> {{cache, Fr}, Fr};
+                        no_log       -> {keep, empty_founding()};
                         {error, R0}  -> throw({founding_read_failed, R0})
                     end
             end,
@@ -475,35 +502,36 @@ run_reconcile(Ns, Config, Cached, Est, H) ->
                      {ok, K}         -> K;
                      {error, R1}     -> throw({discovery_failed, R1})
                  end,
-        case plan_handlers(G, Stored) of
+        StoredCatalog = case stored_runtime_catalog(Est) of
+                            {ok, C}         -> C;
+                            {error, R2}     -> throw({discovery_failed, R2})
+                        end,
+        case plan_runtime(Founding, Stored, StoredCatalog) of
             {ok, Plan = #{handlers := Hs, order := Order}} ->
                 lists:foreach(fun(Id) ->
                                       #handler{goal = Goal} = maps:get(Id, Hs),
                                       converge(Ns, Est, H, Id, Goal, all)
                               end, Order),
                 {ok, FoundingCache, Plan};
-            {error, R2} ->
-                throw(R2)
+            {error, R3} ->
+                throw(R3)
         end
     catch throw:R -> {error, R}
     end.
 
-reconcile_finished({ok, FoundingCache, #{handlers := Hs, order := Order, index := Index,
-                                         dependents := Dependents,
-                                         rejected_dynamic := Rej}},
+reconcile_finished({ok, FoundingCache,
+                    Plan = #{handlers := Hs, order := Order, index := Index,
+                             dependents := Dependents}},
                    S0 = #s{ns = Ns, height = H}) ->
-    Rej =:= 0 orelse
-        logger:warning("quod_runtime[~s]: ~b non-founding state_handler declaration(s) "
-                       "refused (no can_declare_runtime authorization yet)", [Ns, Rej]),
-    S1 = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
-              founding = case FoundingCache of
-                             {cache, G} -> {ok, G};
-                             keep       -> S0#s.founding
-                         end,
-              p_height = H, e_frontier = H,
-              rejected_dynamic = S0#s.rejected_dynamic + Rej,
-              reconciles = S0#s.reconciles + 1,
-              exec_failures = 0},
+    Base = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
+                founding = case FoundingCache of
+                               {cache, F} -> {ok, F};
+                               keep       -> S0#s.founding
+                           end,
+                p_height = H, e_frontier = H,
+                reconciles = S0#s.reconciles + 1,
+                exec_failures = 0},
+    S1 = install_catalog_update(Plan, Base),
     _ = maybe_reconcile_direct_effects(Ns),
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
@@ -536,6 +564,9 @@ config_error({missing_founding, _})     -> true;
 config_error({nonground_founding, _})   -> true;
 config_error({duplicate_handler_id, _}) -> true;
 config_error({invalid_declaration, _})  -> true;
+config_error({invalid_founding_reaction, _}) -> true;
+config_error({missing_founding_reaction, _}) -> true;
+config_error(invalid_runtime_catalog) -> true;
 config_error({missing_dependency, _, _})-> true;
 config_error({handler_cycle, _})        -> true;
 config_error({founding_read_failed, _}) -> true;
@@ -567,8 +598,9 @@ maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
     %% final snapshot, so a handler need converge once per block over the UNION of its changed
     %% heads, not once per tx (O(txs/block) redundant proofs otherwise).
     Blocks = coalesce_blocks(lists:reverse(Q)),
-    case map_size(Hs) of
-        0 ->
+    RefreshCatalog = catalog_changed(Blocks),
+    case {map_size(Hs), RefreshCatalog} of
+        {0, false} ->
             %% no handlers: the tier is trivially complete through the batch tip
             {Tip, TipEst} = batch_tip(Blocks),
             Effects = batch_effects(Blocks),
@@ -584,9 +616,15 @@ maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
             Cap = application:get_env(quod, runtime_event_budget_cap_ms, ?EVENT_BUDGET_CAP_MS),
             Budget = min(length(Blocks) * Per, Cap),
             #s{ns = Ns, order = Order, index = Index, dependents = Deps,
-               handlers = Handlers} = S,
+               handlers = Handlers, founding = FoundingCache} = S,
+            Founding = case FoundingCache of
+                           {ok, F} -> F;
+                           unknown -> empty_founding()
+                       end,
             spawn_runner(events, Budget,
-                         fun() -> run_events(Ns, Blocks, Handlers, Order, Index, Deps) end,
+                         fun() -> run_events(Ns, Blocks, Handlers, Order, Index, Deps,
+                                             Founding, RefreshCatalog)
+                         end,
                          S#s{queue = [], queue_len = 0})
     end;
 maybe_run_events(S) ->
@@ -621,7 +659,7 @@ batch_effects(Blocks) ->
 
 %% Runner body (event batch): per BLOCK, run the invalidated handlers in converge order, each
 %% with its watched subset of the block's changed heads as scope. Returns {ok,Tip,Est}|{error,R}.
-run_events(Ns, Blocks, Handlers, Order, Index, Deps) ->
+run_events(Ns, Blocks, Handlers, Order, Index, Deps, Founding, RefreshCatalog) ->
     try
         {Tip, TipEst} =
             lists:foldl(
@@ -634,9 +672,34 @@ run_events(Ns, Blocks, Handlers, Order, Index, Deps) ->
                         end, Run),
                       {H, Est}
               end, {0, undefined}, Blocks),
-        {ok, Tip, TipEst, batch_effects(Blocks)}
+        CatalogUpdate =
+            case RefreshCatalog of
+                false -> keep;
+                true ->
+                    case stored_runtime_catalog(TipEst) of
+                        {ok, StoredCatalog} ->
+                            case plan_runtime_catalog(
+                                   maps:get(reactions, Founding, []), StoredCatalog) of
+                                {ok, Plan} -> Plan;
+                                {error, Reason} -> throw(Reason)
+                            end;
+                        {error, Reason} ->
+                            throw({discovery_failed, Reason})
+                    end
+            end,
+        {ok, Tip, TipEst, batch_effects(Blocks), CatalogUpdate}
     catch throw:R -> {error, R}
     end.
+
+catalog_changed(Blocks) ->
+    lists:any(
+      fun({_H, _Est, Heads, _Effects}) ->
+              lists:any(fun catalog_head/1, Heads)
+      end, Blocks).
+
+catalog_head({subscribes, _, _}) -> true;
+catalog_head({react_on, _, _, _}) -> true;
+catalog_head(_) -> false.
 
 %% The full dereferenced head terms of the envelope's diff — INCLUDING retracted heads, so
 %% per-key convergence can observe removals (nothing in the snapshot for key K ⇒ delete P[K]).
@@ -685,9 +748,10 @@ scope_for(Id, Heads, Index) ->
         _  -> {keys, Watched}
     end.
 
-events_finished({ok, Tip, TipEst, Effects}, S = #s{mode = live}) ->
+events_finished({ok, Tip, TipEst, Effects, CatalogUpdate}, S0 = #s{mode = live}) ->
     %% advance est/height to the batch tip so heavy workers (started here) and the floor track
     %% the head; p_height/e_frontier are the P-before-E barrier
+    S = install_catalog_update(CatalogUpdate, S0),
     S1 = S#s{est = TipEst, height = Tip,
              p_height = max(S#s.p_height, Tip),
              e_frontier = max(S#s.e_frontier, Tip),
@@ -696,6 +760,26 @@ events_finished({ok, Tip, TipEst, Effects}, S = #s{mode = live}) ->
     next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S1))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
+
+install_catalog_update(keep, S) ->
+    S;
+install_catalog_update(
+  #{subscriptions := Subscriptions, reactions := Reactions,
+    source_interests := SourceInterests, rejected_dynamic := RejectedDynamic,
+    rejected_subscriptions := RejectedSubscriptions},
+  S = #s{ns = Ns}) ->
+    RejectedDynamic =:= 0 orelse
+        logger:warning("quod_runtime[~s]: ~b non-founding runtime declaration(s) "
+                       "refused (no can_declare_runtime authorization yet)",
+                       [Ns, RejectedDynamic]),
+    RejectedSubscriptions =:= 0 orelse
+        logger:warning("quod_runtime[~s]: ~b malformed subscribes/2 clause(s) ignored",
+                       [Ns, RejectedSubscriptions]),
+    S#s{subscriptions = Subscriptions, reactions = Reactions,
+        source_interests = SourceInterests,
+        rejected_dynamic = S#s.rejected_dynamic + RejectedDynamic,
+        rejected_subscriptions =
+            S#s.rejected_subscriptions + RejectedSubscriptions}.
 
 %% After any runner completes: a parked ready edge wins; otherwise drain what queued.
 next_after_runner(S = #s{pending_edge = none}) ->
@@ -996,7 +1080,7 @@ read_founding(Ns, Config) ->
 %% an empty set of declarations.
 founding_payload(Data) ->
     case quod_ledger:classify(Data) of
-        {content, Txs} -> {ok, founding_heads(Txs)};
+        {content, Txs} -> {ok, founding_runtime(Txs)};
         {'begin', _Control} -> {error, invalid_genesis_payload};
         {prepare, _Control} -> {error, invalid_genesis_payload};
         {decision, _Control} -> {error, invalid_genesis_payload};
@@ -1009,6 +1093,17 @@ founding_payload(Data) ->
 -ifdef(TEST).
 test_read_founding(Ns, Config) -> read_founding(Ns, Config).
 -endif.
+
+empty_founding() -> #{handlers => [], reactions => []}.
+
+founding_runtime(Txs) ->
+    #{handlers => founding_heads(Txs),
+      reactions => founding_clauses(Txs, {react_on, 3})}.
+
+founding_clauses(Txs, Functor) ->
+    [Clause || #transaction{diff = Diff} <- Txs,
+               {assert, {Head, _Body} = Clause} <- Diff,
+               erlog_int:functor(Head) =:= Functor].
 
 %% The state_handler heads asserted by the founding block's transactions (full terms).
 founding_heads(Txs) ->
@@ -1032,8 +1127,254 @@ stored_declarations(Est) ->
         {error, Reason} -> {error, Reason}
     end.
 
+%% Exact clauses, not proved solutions. A rule which happens to derive a
+%% subscribes/2 or react_on/3 answer is application logic, not a runtime
+%% declaration, and must not silently become one.
+stored_runtime_catalog(Est) ->
+    case {quod_diff:interpreted_clauses(Est, {subscribes, 2}),
+          quod_diff:interpreted_clauses(Est, {react_on, 3})} of
+        {{ok, Subscriptions}, {ok, Reactions}} ->
+            {ok, #{subscriptions => Subscriptions, reactions => Reactions}};
+        {{error, Reason}, _} ->
+            {error, {{subscribes, 2}, Reason}};
+        {_, {error, Reason}} ->
+            {error, {{react_on, 3}, Reason}}
+    end.
+
+plan_runtime(Founding, StoredHandlers, StoredCatalog) ->
+    case plan_handlers(maps:get(handlers, Founding, []), StoredHandlers) of
+        {ok, HandlerPlan} ->
+            case plan_runtime_catalog(
+                   maps:get(reactions, Founding, []), StoredCatalog) of
+                {ok, CatalogPlan} ->
+                    Rejected = maps:get(rejected_dynamic, HandlerPlan)
+                               + maps:get(rejected_dynamic, CatalogPlan),
+                    {ok, (maps:merge(HandlerPlan, CatalogPlan))#{
+                           rejected_dynamic => Rejected}};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
+
 %%%===================================================================
-%%% the founding gate + validation + ordering (pure)
+%%% subscription/reaction catalogue + the founding gate (pure)
+%%%===================================================================
+
+%% Slice 1's entire product: a deterministic catalogue derived from one
+%% committed snapshot. It owns no process, route, verifier, delivery state, or
+%% event matcher. Alpha normalization establishes declaration identity only;
+%% later event matching and continuation belong to erlog_int:unify_prove_body.
+plan_runtime_catalog(FoundingReactions, StoredCatalog)
+  when is_list(FoundingReactions), is_map(StoredCatalog) ->
+    case plan_reactions(FoundingReactions,
+                        maps:get(reactions, StoredCatalog, [])) of
+        {ok, Reactions, SourceInterests, RejectedDynamic} ->
+            {Subscriptions, RejectedSubscriptions} =
+                plan_subscriptions(maps:get(subscriptions, StoredCatalog, [])),
+            {ok, #{subscriptions => Subscriptions,
+                   reactions => Reactions,
+                   source_interests => SourceInterests,
+                   rejected_dynamic => RejectedDynamic,
+                   rejected_subscriptions => RejectedSubscriptions}};
+        {error, _} = Error ->
+            Error
+    end;
+plan_runtime_catalog(_FoundingReactions, _StoredCatalog) ->
+    {error, invalid_runtime_catalog}.
+
+plan_subscriptions(Clauses) when is_list(Clauses) ->
+    {Targets, Rejected} =
+        lists:foldl(
+          fun(Clause, {Accepted, Refused}) ->
+                  case valid_subscription_clause(Clause) of
+                      {ok, Target} -> {Accepted#{Target => true}, Refused};
+                      ignore       -> {Accepted, Refused};
+                      error        -> {Accepted, Refused + 1}
+                  end
+          end, {#{}, 0}, Clauses),
+    {lists:sort(maps:keys(Targets)), Rejected};
+plan_subscriptions(_Malformed) ->
+    {[], 1}.
+
+valid_subscription_clause(
+  {{subscribes, Ns, <<_:256>> = Anchor} = Head, {[], false}}) ->
+    case quod_directory_auth:valid_namespace(Ns)
+         andalso bounded_term(Head) of
+        true  -> {ok, {Ns, Anchor}};
+        false -> error
+    end;
+valid_subscription_clause(
+  {{subscribes, _Ns, _Anchor}, {Goals, _HasCut}})
+  when is_list(Goals), Goals =/= [] ->
+    %% An ordinary rule that can prove subscribes/2 is application logic, not
+    %% a runtime declaration and not malformed configuration.
+    ignore;
+valid_subscription_clause(_) ->
+    error.
+
+plan_reactions(Founding, Stored) when is_list(Founding), is_list(Stored) ->
+    case canonical_founding_reactions(Founding, #{}) of
+        {ok, FoundingByKey} ->
+            {StoredByKey, InvalidStored} = canonical_stored_reactions(Stored, #{}, 0),
+            Missing = lists:sort(
+                        [Key || Key <- maps:keys(FoundingByKey),
+                                not is_map_key(Key, StoredByKey)]),
+            case Missing of
+                [] ->
+                    Dynamic = [Key || Key <- maps:keys(StoredByKey),
+                                      not is_map_key(Key, FoundingByKey)],
+                    Active = lists:sort([maps:get(Key, FoundingByKey)
+                                         || Key <- maps:keys(FoundingByKey)]),
+                    {ok, Active, source_interest_index(Active),
+                     length(Dynamic) + InvalidStored};
+                _ ->
+                    {error, {missing_founding_reaction, Missing}}
+            end;
+        {error, _} = Error ->
+            Error
+    end;
+plan_reactions(_Founding, _Stored) ->
+    {error, invalid_runtime_catalog}.
+
+canonical_founding_reactions([Clause | Rest], Acc) ->
+    Canonical = alpha_normalize(Clause),
+    case valid_reaction_clause(Canonical) of
+        {ok, _Source} ->
+            canonical_founding_reactions(Rest, Acc#{Canonical => reaction_head(Canonical)});
+        error ->
+            {error, {invalid_founding_reaction, Canonical}}
+    end;
+canonical_founding_reactions([], Acc) ->
+    {ok, Acc}.
+
+canonical_stored_reactions([Clause | Rest], Acc, Invalid) ->
+    Canonical = alpha_normalize(Clause),
+    case valid_reaction_clause(Canonical) of
+        {ok, _Source} ->
+            canonical_stored_reactions(Rest, Acc#{Canonical => true}, Invalid);
+        error ->
+            case inert_reaction_rule(Canonical) of
+                true  -> canonical_stored_reactions(Rest, Acc, Invalid);
+                false -> canonical_stored_reactions(Rest, Acc, Invalid + 1)
+            end
+    end;
+canonical_stored_reactions([], Acc, Invalid) ->
+    {Acc, Invalid}.
+
+inert_reaction_rule(
+  {{react_on, _Executor, _Pattern, _EffectGoal}, {Goals, _HasCut}})
+  when is_list(Goals), Goals =/= [] ->
+    true;
+inert_reaction_rule(_) ->
+    false.
+
+reaction_head({Head, _Body}) -> Head.
+
+valid_reaction_clause(
+  {{react_on, Executor, Pattern, EffectGoal} = Head, {[], false}}) ->
+    case {reaction_pattern(Pattern), valid_callable(Executor),
+          valid_callable(EffectGoal), bounded_term(Head)} of
+        {{ok, Source, EventPattern}, true, true, true} ->
+            PatternVars = variable_set(EventPattern),
+            UsedVars = maps:merge(variable_set(Executor), variable_set(EffectGoal)),
+            case lists:all(fun(V) -> is_map_key(V, PatternVars) end,
+                           maps:keys(UsedVars)) of
+                true  -> {ok, Source};
+                false -> error
+            end;
+        _ ->
+            error
+    end;
+valid_reaction_clause(_) ->
+    error.
+
+reaction_pattern({from, Ns, <<_:256>> = Anchor, EventPattern}) ->
+    case quod_directory_auth:valid_namespace(Ns)
+         andalso valid_event_pattern(EventPattern) of
+        true  -> {ok, {remote, {Ns, Anchor}}, EventPattern};
+        false -> error
+    end;
+reaction_pattern(EventPattern) ->
+    case valid_event_pattern(EventPattern) of
+        true  -> {ok, local, EventPattern};
+        false -> error
+    end.
+
+valid_event_pattern({Kind, FactPattern}) when Kind =:= assert; Kind =:= retract ->
+    valid_callable(FactPattern) andalso bounded_term(FactPattern);
+valid_event_pattern(_) ->
+    false.
+
+valid_callable(Term) when is_atom(Term) -> true;
+valid_callable(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->
+    is_atom(element(1, Term));
+valid_callable(_) -> false.
+
+bounded_term(Term) ->
+    case quod_wire_term:encode(Term) of
+        {ok, _} -> true;
+        {error, bad_term} -> false
+    end.
+
+source_interest_index(Reactions) ->
+    Reversed =
+        lists:foldl(
+          fun({react_on, _Executor,
+              {from, Ns, <<_:256>> = Anchor, _EventPattern}, _EffectGoal} = Reaction,
+              Index) ->
+                  Target = {Ns, Anchor},
+                  maps:update_with(Target, fun(Existing) -> [Reaction | Existing] end,
+                                   [Reaction], Index);
+             (_LocalReaction, Index) ->
+                  Index
+          end, #{}, Reactions),
+    maps:map(fun(_Target, Interests) -> lists:reverse(Interests) end, Reversed).
+
+%% Alpha-normalize Erlog variables by first occurrence. Stored clauses use
+%% one-tuples (`{0}`, `{1}`, ...); founding and snapshot reads may allocate
+%% different ids for the same declaration, so process-local ids can never be
+%% authority. Anonymous `_` is treated as a fresh variable at every occurrence.
+alpha_normalize(Term) ->
+    {Normalized, _Vars, _Next} = alpha_normalize(Term, #{}, 0),
+    Normalized.
+
+alpha_normalize({Var}, Vars, Next) ->
+    case Var of
+        '_' -> {{Next}, Vars, Next + 1};
+        _ ->
+            case maps:find(Var, Vars) of
+                {ok, Canonical} -> {{Canonical}, Vars, Next};
+                error -> {{Next}, Vars#{Var => Next}, Next + 1}
+            end
+    end;
+alpha_normalize(Term, Vars, Next) when is_tuple(Term) ->
+    {Items, Vars1, Next1} = alpha_list(tuple_to_list(Term), Vars, Next),
+    {list_to_tuple(Items), Vars1, Next1};
+alpha_normalize([Head | Tail], Vars, Next) ->
+    {Head1, Vars1, Next1} = alpha_normalize(Head, Vars, Next),
+    {Tail1, Vars2, Next2} = alpha_normalize(Tail, Vars1, Next1),
+    {[Head1 | Tail1], Vars2, Next2};
+alpha_normalize(Term, Vars, Next) ->
+    {Term, Vars, Next}.
+
+alpha_list([Item | Rest], Vars, Next) ->
+    {Item1, Vars1, Next1} = alpha_normalize(Item, Vars, Next),
+    {Rest1, Vars2, Next2} = alpha_list(Rest, Vars1, Next1),
+    {[Item1 | Rest1], Vars2, Next2};
+alpha_list([], Vars, Next) ->
+    {[], Vars, Next}.
+
+variable_set(Term) -> variable_set(Term, #{}).
+
+variable_set({Var}, Acc) -> Acc#{Var => true};
+variable_set(Term, Acc) when is_tuple(Term) ->
+    lists:foldl(fun variable_set/2, Acc, tuple_to_list(Term));
+variable_set([Head | Tail], Acc) ->
+    variable_set(Tail, variable_set(Head, Acc));
+variable_set(_Term, Acc) -> Acc.
+
+%%%===================================================================
+%%% handler validation and ordering (pure)
 %%%===================================================================
 
 %% plan_handlers(FoundingHeads, StoredHeads) -> {ok, Plan} | {error, Reason}.

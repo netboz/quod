@@ -78,6 +78,7 @@ with them.
 | Rejections & failures | Append rejections by reason · Failed writes | Overload/wrong or closed target slot/skip vs OCC conflicts and request timeouts |
 | Dissemination feed | Feed activity · Dropped blocks | Gossip push/ingest/pull health; gap-drop bursts |
 | Brahms overlay | View/sample/links · estimated population N | Overlay connectivity plus each node's bounded estimate of total live population |
+| Runtime P tier | Runtime · Ontology subscription catalogue | Whether local projections are healthy; counts of compiled `subscribes/2`, authorized `react_on/3`, and source interests. The Slice 1 catalogue panel does not imply a network follower exists yet. |
 
 ## Metric reference
 

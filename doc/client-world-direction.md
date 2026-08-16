@@ -100,13 +100,13 @@ Durable D facts describe:
   parameters;
 - current logical simulation authority and monotonically increasing epoch;
 - structured GUI component trees, durable pending interactions, private
-  user-owned menu entries and preferences, and view subscriptions;
+  user-owned menu entries and preferences, and client view sessions;
 - sparse voxel edits and semantic checkpoints.
 
 Rebuildable P contains:
 
 - shared scene and spatial indexes;
-- filtered per-agent subscriptions;
+- filtered per-agent client view sessions;
 - client model and GUI indexes;
 - projected contextual menus, session device capabilities, and unsubmitted GUI
   drafts;
@@ -183,8 +183,8 @@ The internal `ontology_event/7` from the agent plan is not a client protocol.
 Client projection derives typed envelopes:
 
 ```text
-state_snapshot(SubscriptionId, Namespace, Height, State)
-state_delta(SubscriptionId, Namespace, Height, TransactionId, Operations)
+state_snapshot(ViewSessionId, Namespace, Height, State)
+state_delta(ViewSessionId, Namespace, Height, TransactionId, Operations)
 simulation_frame(WorldId, AuthorityEpoch, Tick, StateDelta)
 client_cue(EffectId, Origin, Deadline, Audience, Descriptor)
 ```
@@ -215,8 +215,14 @@ transform(EntityId, Transform).
 attached(ChildId, ParentId, Socket, LocalTransform).
 gui_component(ViewId, ComponentId, Kind).
 gui_attribute(ViewId, ComponentId, Name, Value).
-view_subscription(AgentId, Source, ViewType).
+client_view_session(AgentId, Source, ViewType).
 ```
+
+`client_view_session/3` names session-local P-state for one connected client.
+It is deliberately distinct from the durable ontology-to-ontology
+`subscribes/2` relation in `ontology-subscription-plan.md`. A client view may
+consume an ontology projection, but its visibility window, reconnect cursor,
+and queue are not committed ontology subscriptions.
 
 The exact vocabulary belongs to future `quod:world` and `quod:client`
 ontologies, not hard-coded Erlang dispatch.
@@ -650,7 +656,7 @@ statistics.
   and bounded.
 - Every metric has user-facing Prometheus help and a matching Grafana panel.
 
-Metrics should cover subscriptions, snapshot size/latency, delta depth,
+Metrics should cover client view sessions, snapshot size/latency, delta depth,
 resnapshot cause, GUI submit latency and failure class, stale/deduplicated GUI
 input, pending-interaction age, menu projection/refresh, profile/capability
 selection, cue rejection/expiry, frame age/loss, authority epochs, chunk
@@ -675,7 +681,7 @@ These milestones are intentionally outside the numbered agent/FIPA slices.
 
 ### C1 -- client projection and GUI
 
-- Negotiate a versioned protocol and authenticated subscription.
+- Negotiate a versioned protocol and authenticated client view session.
 - Deliver an atomic scene snapshot and model create/update/remove deltas for a
   primitive, a content-addressed mesh, and one composite attachment tree.
 - Deliver one bounded versioned explosion cue.

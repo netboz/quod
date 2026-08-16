@@ -13,6 +13,12 @@
 d(Id, Needs)       -> d(Id, Needs, projection_noop).
 d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
 
+reaction_clause(Executor, Pattern, Effect) ->
+    {{react_on, Executor, Pattern, Effect}, {[], false}}.
+
+subscription_clause(Ns, Anchor) ->
+    {{subscribes, Ns, Anchor}, {[], false}}.
+
 ae(Ns, Index, Data, Origin) ->
     quod_prolog:apply_entry(
       Ns, #entry{index = Index, data = Data}, Origin).
@@ -156,6 +162,187 @@ founding_heads_test() ->
                               {retract, {d(b, []), {[], false}}}],
                       read_check = #{}, author = <<0:256>>, sig = none},
     ?assertEqual([d(a, [])], quod_runtime:founding_heads([Tx])).
+
+%%%===================================================================
+%%% ontology-subscription Slice 1: pure local catalogue
+%%%===================================================================
+
+alpha_normalization_preserves_reaction_bindings_test() ->
+    A = reaction_clause(
+          {agent, {name_a}},
+          {from, <<"target">>, <<1:256>>,
+           {assert, {pose, {name_a}, {value_a}}}},
+          {notify, {name_a}, {value_a}}),
+    B = reaction_clause(
+          {agent, {17}},
+          {from, <<"target">>, <<1:256>>,
+           {assert, {pose, {17}, {42}}}},
+          {notify, {17}, {42}}),
+    ?assertEqual(quod_runtime:alpha_normalize(A),
+                 quod_runtime:alpha_normalize(B)).
+
+subscription_catalog_accepts_only_exact_anchored_facts_test() ->
+    Ns = <<"target">>,
+    Anchor = <<2:256>>,
+    Stored = #{subscriptions =>
+                   [subscription_clause(Ns, Anchor),
+                    subscription_clause(Ns, Anchor),
+                     {{subscribes, Ns, Anchor}, {['not', a, fact], false}},
+                    {{subscribes, invalid_namespace, Anchor}, {[], false}},
+                    {{subscribes, Ns, <<1, 2, 3>>}, {[], false}}],
+               reactions => []},
+    {ok, Plan} = quod_runtime:plan_runtime_catalog([], Stored),
+    ?assertEqual([{Ns, Anchor}], maps:get(subscriptions, Plan)),
+    %% The body-bearing clause is an ordinary inert rule, not malformed
+    %% runtime configuration. Only the two malformed fact heads are counted.
+    ?assertEqual(2, maps:get(rejected_subscriptions, Plan)),
+    ?assertEqual(#{}, maps:get(source_interests, Plan)).
+
+subscription_rule_is_neutral_application_logic_test() ->
+    Ns = <<"target">>,
+    Anchor = <<13:256>>,
+    Rule = {{subscribes, Ns, Anchor},
+            {[{subscription_enabled, Ns, Anchor}], false}},
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [], #{subscriptions => [Rule], reactions => []}),
+    ?assertEqual([], maps:get(subscriptions, Plan)),
+    ?assertEqual(0, maps:get(rejected_subscriptions, Plan)).
+
+large_subscription_catalog_keeps_every_exact_identity_test() ->
+    Clauses =
+        [subscription_clause(
+           <<"target:", (integer_to_binary(I))/binary>>, <<I:256>>)
+         || I <- lists:seq(1, 1000)],
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [], #{subscriptions => Clauses, reactions => []}),
+    ?assertEqual(1000, length(maps:get(subscriptions, Plan))),
+    ?assertEqual(0, maps:get(rejected_subscriptions, Plan)).
+
+founding_source_reaction_is_alpha_matched_and_indexed_test() ->
+    Ns = <<"target">>,
+    Anchor = <<3:256>>,
+    Founding = reaction_clause(
+                 {agent, {agent_name}},
+                 {from, Ns, Anchor,
+                  {assert, {pose, {agent_name}, {pose_value}}}},
+                 {notify, {agent_name}, {pose_value}}),
+    Stored = reaction_clause(
+               {agent, {51}},
+               {from, Ns, Anchor, {assert, {pose, {51}, {72}}}},
+               {notify, {51}, {72}}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [Founding], #{subscriptions => [], reactions => [Stored]}),
+    [Canonical] = maps:get(reactions, Plan),
+    ?assertEqual([Canonical], maps:get({Ns, Anchor}, maps:get(source_interests, Plan))),
+    ?assertEqual(0, maps:get(rejected_dynamic, Plan)).
+
+%% Executor is a logical single-owner term, not an agent class. The catalogue
+%% accepts any callable ontology vocabulary whose variables are supplied by
+%% the event pattern; later execution resolves that bound term to one host.
+non_agent_executor_is_alpha_matched_and_indexed_test() ->
+    Ns = <<"target">>,
+    Anchor = <<12:256>>,
+    Founding = reaction_clause(
+                 {service, {service_name}},
+                 {from, Ns, Anchor,
+                  {assert, {service_ready, {service_name}, {payload}}}},
+                 {refresh_service, {service_name}, {payload}}),
+    Stored = reaction_clause(
+               {service, {81}},
+               {from, Ns, Anchor,
+                {assert, {service_ready, {81}, {93}}}},
+               {refresh_service, {81}, {93}}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [Founding], #{subscriptions => [], reactions => [Stored]}),
+    [Canonical] = maps:get(reactions, Plan),
+    ?assertMatch({react_on, {service, _}, _, _}, Canonical),
+    ?assertEqual([Canonical],
+                 maps:get({Ns, Anchor}, maps:get(source_interests, Plan))).
+
+%% A bare variable is not a logical owner. It cannot select one effect host,
+%% even if an unrelated event variable happens to be bound.
+bare_variable_executor_is_refused_test() ->
+    Bad = reaction_clause(
+            {executor},
+            {assert, {service_ready, {executor}}},
+            {refresh_service, {executor}}),
+    ?assertMatch(
+       {error, {invalid_founding_reaction, _}},
+       quod_runtime:plan_runtime_catalog(
+         [Bad], #{subscriptions => [], reactions => [Bad]})).
+
+local_reaction_has_no_remote_source_interest_test() ->
+    Reaction = reaction_clause(
+                 {service, {service_name}},
+                 {assert, {service_ready, {service_name}, {payload}}},
+                 {refresh_service, {service_name}, {payload}}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [Reaction],
+                   #{subscriptions => [], reactions => [Reaction]}),
+    ?assertEqual(1, length(maps:get(reactions, Plan))),
+    ?assertEqual(#{}, maps:get(source_interests, Plan)).
+
+reaction_rule_is_neutral_application_logic_test() ->
+    Head = {react_on,
+            {service, {service_name}},
+            {assert, {service_ready, {service_name}}},
+            {refresh_service, {service_name}}},
+    Rule = {Head, {[{reaction_enabled, {service_name}}], false}},
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [], #{subscriptions => [], reactions => [Rule]}),
+    ?assertEqual([], maps:get(reactions, Plan)),
+    ?assertEqual(0, maps:get(rejected_dynamic, Plan)).
+
+dynamic_reaction_is_inert_and_counted_test() ->
+    Ns = <<"target">>,
+    Anchor = <<4:256>>,
+    Dynamic = reaction_clause(
+                {agent, {0}},
+                {from, Ns, Anchor, {assert, {pose, {0}, {1}}}},
+                {notify, {0}, {1}}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [], #{subscriptions => [], reactions => [Dynamic]}),
+    ?assertEqual([], maps:get(reactions, Plan)),
+    ?assertEqual(#{}, maps:get(source_interests, Plan)),
+    ?assertEqual(1, maps:get(rejected_dynamic, Plan)).
+
+reaction_effect_cannot_introduce_unbound_variables_test() ->
+    Ns = <<"target">>,
+    Anchor = <<5:256>>,
+    Bad = reaction_clause(
+            {agent, {0}},
+            {from, Ns, Anchor, {assert, {pose, {0}}}},
+            {notify, {0}, {not_bound_by_pattern}}),
+    ?assertMatch(
+       {error, {invalid_founding_reaction, _}},
+       quod_runtime:plan_runtime_catalog(
+         [Bad], #{subscriptions => [], reactions => [Bad]})).
+
+reaction_rule_cannot_impersonate_a_founding_fact_test() ->
+    Ns = <<"target">>,
+    Anchor = <<6:256>>,
+    Fact = reaction_clause(
+             {agent, {0}},
+             {from, Ns, Anchor, {assert, {pose, {0}}}},
+             {notify, {0}}),
+    {Head, _FactBody} = Fact,
+    Rule = {Head, {[{call, true}], false}},
+    ?assertMatch(
+       {error, {missing_founding_reaction, _}},
+       quod_runtime:plan_runtime_catalog(
+         [Fact], #{subscriptions => [], reactions => [Rule]})).
+
+retracted_founding_reaction_is_loud_test() ->
+    Ns = <<"target">>,
+    Anchor = <<7:256>>,
+    Fact = reaction_clause(
+             {agent, {0}},
+             {from, Ns, Anchor, {assert, {pose, {0}}}},
+             {notify, {0}}),
+    ?assertMatch(
+       {error, {missing_founding_reaction, _}},
+       quod_runtime:plan_runtime_catalog(
+         [Fact], #{subscriptions => [], reactions => []})).
 
 %% Slot 1 is ontology content, never an empty skip or malformed payload. The
 %% old catch-all silently turned either into an ontology with no founding
@@ -377,6 +564,21 @@ setup_founded(GenesisTerms) ->
     unlink(Sup),
     {Dir, Ns, Sup}.
 
+setup_founded_terms(Terms) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U   = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_rt_terms_" ++ U),
+    ok  = filelib:ensure_path(Dir),
+    Ns  = list_to_binary("rtterms:" ++ U),
+    {Pub, Seed} = quod_identity:generate(),
+    Key = quod_identity:key_term({Pub, Seed}),
+    Id  = #{pubkey => Pub, key => Key},
+    Cfg = #{node_id => Pub, identity => Id, data_dir => Dir,
+            mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)},
+    {ok, Sup} = quod_ns:start_link(Ns, Cfg),
+    unlink(Sup),
+    {Dir, Ns, Sup}.
+
 cleanup_founded({Dir, Ns, _Sup}) ->
     case quod_reg:where({quod_ns, Ns}) of
         undefined -> ok;
@@ -397,6 +599,129 @@ founded_handlers_active_test_() ->
     try
         ok = wait_stats(Ns, fun(#{mode := live, handlers_active := N}) -> N =:= 2;
                                (_) -> false end)
+    after cleanup_founded(F) end
+    end}.
+
+%% subscriptions are ordinary D: the normal prove/transaction/apply path changes the
+%% runtime's local catalogue. No subscription-specific consensus record or executor exists.
+subscription_create_remove_uses_ordinary_transactions_test_() ->
+    {timeout, 60, fun() ->
+    F = setup_founded(<<>>),
+    {_, Ns, _} = F,
+    TargetNs = <<"private:target">>,
+    Anchor = <<8:256>>,
+    Fact = {subscribes, TargetNs, Anchor},
+    try
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
+                               (_) -> false end),
+        H0 = quod_prolog:applied(Ns),
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, Fact})),
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 1,
+                                  source_targets_active := 0}) -> true;
+                               (_) -> false end),
+        ?assert(quod_prolog:applied(Ns) > H0),
+        ?assertMatch({ok, _, _}, rp(Ns, Fact)),
+        ?assertMatch({ok, _, _}, rp(Ns, {retract, Fact})),
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
+                               (_) -> false end)
+    after cleanup_founded(F) end
+    end}.
+
+%% The catalogue is P, not another status store: killing only the runtime loses
+%% the in-memory list, and the supervisor rebuilds the identical list from D.
+subscription_reconciles_after_runtime_restart_test_() ->
+    {timeout, 60, fun() ->
+    F = setup_founded(<<>>),
+    {_, Ns, _} = F,
+    Fact = {subscribes, <<"private:restart-target">>, <<12:256>>},
+    try
+        ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, Fact})),
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 1}) -> true;
+                               (_) -> false end),
+        Height = quod_prolog:applied(Ns),
+        Runtime0 = quod_reg:where({quod_runtime, Ns}),
+        ok = gen_server:stop(Runtime0),
+        ok = wait_until(
+               fun() ->
+                       Runtime1 = quod_reg:where({quod_runtime, Ns}),
+                       is_pid(Runtime1) andalso Runtime1 =/= Runtime0
+                           andalso case quod_runtime:stats(Ns) of
+                                       #{mode := live, subscriptions_active := 1} -> true;
+                                       _ -> false
+                                   end
+               end),
+        ?assertEqual(Height, quod_prolog:applied(Ns))
+    after cleanup_founded(F) end
+    end}.
+
+%% A founding variable-bearing reaction survives different Erlog variable ids because the
+%% one declaration gate compares alpha-normalized exact clauses. Slice 1 only indexes it.
+founding_source_reaction_compiles_locally_test_() ->
+    {timeout, 60, fun() ->
+    TargetNs = <<"private:events">>,
+    Anchor = <<9:256>>,
+    Reaction =
+        {react_on, {agent, {'Agent'}},
+         {from, TargetNs, Anchor, {assert, {pose, {'Agent'}, {'Value'}}}},
+         {notify, {'Agent'}, {'Value'}}},
+    F = setup_founded_terms([Reaction]),
+    {_, Ns, _} = F,
+    try
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reactions_active := 1,
+                     source_targets_active := 1, source_interests_active := 1,
+                     subscriptions_active := 0}) -> true;
+                  (_) -> false
+               end),
+        %% No network/follower product exists in Slice 1: compiling an interest
+        %% cannot create a subscription relation or mutate D.
+        ?assertEqual(1, quod_prolog:applied(Ns))
+    after cleanup_founded(F) end
+    end}.
+
+%% A derived Prolog answer is not a subscription declaration. Runtime reads exact clauses,
+%% while the ordinary query engine remains free to prove the application rule.
+derived_subscription_answer_is_not_runtime_vocabulary_test_() ->
+    {timeout, 60, fun() ->
+    TargetNs = <<"private:derived">>,
+    Anchor = <<10:256>>,
+    Enabled = {subscription_enabled, TargetNs, Anchor},
+    Rule = {':-', {subscribes, TargetNs, Anchor}, Enabled},
+    F = setup_founded_terms([Enabled, Rule]),
+    {_, Ns, _} = F,
+    try
+        ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+        Stats = quod_runtime:stats(Ns),
+        ?assertEqual(0, maps:get(subscriptions_active, Stats)),
+        ?assertEqual(0, maps:get(rejected_subscriptions, Stats)),
+        ?assertMatch({ok, _, _}, rp(Ns, {subscribes, TargetNs, Anchor}))
+    after cleanup_founded(F) end
+    end}.
+
+%% A later writable reaction fact remains durable content but is inert until the one
+%% can_declare_runtime authority exists. There is no reaction-only authorization shortcut.
+dynamic_source_reaction_stays_inert_test_() ->
+    {timeout, 60, fun() ->
+    F = setup_founded(<<>>),
+    {_, Ns, _} = F,
+    TargetNs = <<"private:dynamic-reaction">>,
+    Anchor = <<11:256>>,
+    Reaction =
+        {react_on, {agent, {'Agent'}},
+         {from, TargetNs, Anchor, {assert, {pose, {'Agent'}}}},
+         {notify, {'Agent'}}},
+    try
+        ok = wait_stats(Ns, fun(#{mode := live}) -> true; (_) -> false end),
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, Reaction})),
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reactions_active := 0,
+                     source_interests_active := 0,
+                     rejected_dynamic := Rejected}) -> Rejected >= 1;
+                  (_) -> false
+               end)
     after cleanup_founded(F) end
     end}.
 

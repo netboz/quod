@@ -434,9 +434,19 @@ directory route, and does not publish it into the shared transport address
 cache. Pinned and seed-confirmation links share one internal policy mechanism;
 they are not duplicate link implementations.
 
-The parent or caller that needs a private ontology owns its seed configuration.
-Changing a private host is therefore as simple as adding a new seed address;
+The parent or caller that needs a private ontology currently owns its seed
+configuration. Changing a private host is therefore a local control operation;
 no global directory change is required.
+
+The planned ontology-subscription facility may cause a subscriber host to keep
+following a private target, but it does not make the route durable. The
+subscriber ledger records only the target's anchored identity; event interests
+remain the subscriber's existing source-qualified `react_on/3` declarations.
+An already-configured direct seed supplies runtime
+reachability, and the normal authenticated confirmation pins the current host.
+Without a reconstructible route the subscription remains durable but inactive.
+Endpoints and node routes are never copied into `subscribes/2`. See
+`ontology-subscription-plan.md`.
 
 ## 7. What remains unchanged
 
@@ -471,12 +481,13 @@ no global directory change is required.
 
 ### B. Private component ontology
 
-1. `body` is configured with a direct seed for `character_42:arm`.
+1. `body`'s host is configured with a direct seed for `character_42:arm`.
 2. The arm never announces itself to the shared directory.
 3. `body` selects the arm through its confirmed direct route. A global
    `directory_host(character_42:arm, ...)` query produces no answer.
-4. Moving the arm means supplying body with a new seed; no platform-wide
-   registration or durable transaction occurs.
+4. Moving the arm means supplying the current body host with a new seed; no
+   platform-wide route transaction occurs. A separate durable subscription
+   fact may express that body follows arm state, but contains no seed address.
 
 ### C. Stale or hostile information
 

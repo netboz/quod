@@ -570,6 +570,11 @@ The declaration remains the approved form:
 react_on(Executor, Pattern, EffectGoal).
 ```
 
+Despite this plan's agent examples, `Executor` is a generic logical effect
+owner, not an event source or agent class. Other ontologies may use
+`service(S)`, `node(NodeKey)`, or another callable term with exactly one owner;
+source selection remains inside the local or source-qualified `Pattern`.
+
 For this slice `Pattern` is one `assert(FactPattern)` or
 `retract(FactPattern)`. Variables may connect the pattern to `Executor` and
 `EffectGoal`, as in the approved example. It matches only plain-fact operations
@@ -577,6 +582,11 @@ For this slice `Pattern` is one `assert(FactPattern)` or
 exact live-applied local diff. Rule changes do not accidentally look like fact
 events. Matching is not a scan of the later KB and it does not collapse several
 commit identities into one reaction.
+
+The exact interpreter seam is `erlog_int:unify_prove_body`: runtime indexing
+may reduce the candidate declarations, but matching the concrete event and
+continuing the reaction with its bindings is one Prolog operation. Do not add
+an Erlang term-equality shortcut or another unifier.
 
 Reaction declarations use the same founding-only authority as
 `state_handler/4`, adapted for their intentional variables:

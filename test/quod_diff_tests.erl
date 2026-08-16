@@ -43,6 +43,22 @@ valid_ops_test() ->
     ?assertNot(quod_diff:valid_ops(
                  [{assert, {{fact, {1.5}}, true}}])).
 
+interpreted_clauses_returns_content_not_proved_answers_test() ->
+    Fact = {catalog_entry, fact},
+    Enabled = {catalog_enabled, rule},
+    Rule = {':-', {catalog_entry, rule}, Enabled},
+    Est = quod_ct:committed_kb([Fact, Enabled, Rule]),
+    {ok, Clauses} = quod_diff:interpreted_clauses(Est, {catalog_entry, 1}),
+    ?assertEqual(2, length(Clauses)),
+    ?assert(lists:any(fun({Head, {[], false}}) -> Head =:= Fact;
+                         (_) -> false
+                      end, Clauses)),
+    ?assert(lists:any(fun({{catalog_entry, rule}, Body}) -> Body =/= {[], false};
+                         (_) -> false
+                      end, Clauses)),
+    ?assertEqual({ok, []},
+                 quod_diff:interpreted_clauses(Est, {catalog_absent, 1})).
+
 %%%===================================================================
 %%% The pure genesis policy-presence primitives (slice 3).
 %%%===================================================================

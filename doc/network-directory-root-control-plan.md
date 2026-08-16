@@ -403,10 +403,12 @@ replacement for local operator-controlled configuration. After signed root
 administration exists, this policy can live in root and be projected into a
 bounded ETS authorization index; the HOCON allowlist can then be deleted.
 
-Private direct seeds may later become facts owned by the calling/parent
-ontology, which fits the private `body -> arm` composition model. That requires
-a separate design for projecting caller-local route policy into the resolver.
-The current local-only direct-seed behavior remains unchanged here.
+Private direct seeds remain local route P-state. The calling/parent ontology
+may instead own a durable, endpoint-free `subscribes/2` relation to the private
+child, as planned in `ontology-subscription-plan.md`; that relation can activate
+only where the runtime can already reconstruct a confirmed route. Persisting or
+projecting private seed addresses still requires a separate control-plane
+design. The current local-only direct-seed behavior remains unchanged here.
 
 ## 10. Implementation order
 

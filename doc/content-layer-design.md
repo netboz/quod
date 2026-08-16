@@ -23,6 +23,15 @@ the questions still open. Inspiration is taken from onia (Architecture-H),
 > **Historical reading note.** Several sections intentionally retain rejected alternatives and the
 > original build sequence. They explain decisions; they are not a status report or implementation spec.
 
+> **Subscription correction (2026-08-16).** The original "read-set is the
+> subscription" proposal is retired. Read sets are proof-local OCC
+> dependencies and create no durable or runtime notification relationship.
+> Long-lived ontology interest is one explicit fact in the subscriber's
+> ledger; source-qualified `react_on/3` declarations separately select live
+> events and reactions, as specified by `inter-ontology.md` and
+> `ontology-subscription-plan.md`. Historical comparisons with bbsvx below do
+> not revive automatic subscription-by-reading.
+
 ---
 
 ## 0. The one idea everything hangs on
@@ -41,14 +50,16 @@ keep growing across solutions — see §5 *Backtracking*.)
 
 That pair — the closure of everything the proof touched — is the **proved
 scope**. It is the unit the network re-checks and agrees on. Relations,
-cross-ontology calls, conflict detection, notification, and consensus are all
-*views over the proved scope*, not separate subsystems.
+cross-ontology calls, conflict detection, and consensus are views over the
+proved scope. Long-lived notification is explicitly separate because a closed
+proof must leave no invisible relationship behind.
 
 The agreed pillars:
 
 1. **Proved scope is the central primitive.** (§2)
-2. **The inter-ontology graph is the central standing structure** — produced by
-   proved scopes, consumed for routing and notification. (§3)
+2. **The inter-ontology graph is explicit durable content plus runtime routing
+   state.** Proved scopes do not create durable graph edges or subscriptions.
+   (§3)
 3. **`::` is explicit**, one operator with two positions. (§4)
 4. **Commit is uniform _within an ontology_**: a scope commits iff *its owning*
    transaction commits. Cross-ontology atomicity is **opt-in, not default** (§5).
@@ -171,11 +182,10 @@ onia already does this.
 - **write-set** = the `differ`'s ordered op-log of asserts/retracts (each tied to
   the committing transaction).
 - **read-set** = the `differ`'s per-functor mutation-version tokens — what the
-  proof looked at, for conflict-check and notification. *Caveat (review):* this is
-  **per-predicate** (a whole functor hashed as one), **not per-fact** — so two
-  writes to *different* facts of the same predicate falsely conflict, and one
-  fact change notifies *every* reader of that predicate. Per-fact granularity is
-  a decision owed (§12).
+  proof looked at, solely for conflict validation. It is **per-predicate** (a
+  whole functor hashed as one), **not per-fact**, so two writes to different
+  facts of the same predicate can falsely conflict. It is not retained as a
+  notification index.
 
 ### Reads: a goal emitted from a caller ontology
 
@@ -202,25 +212,18 @@ onia already does this.
 Same mechanism, different size. There is no separate "relation network" and
 "cross-ontology call" feature — there is one primitive.
 
-### The graph emerges; we index it
+### The graph has explicit semantic edges and temporary routes
 
-The graph's **arcs are proved scopes**; its **labels are the relation
-functors**. We do not author it as a separate map — proving *populates* it (via
-cross-ontology reads), and we maintain it as an **index/cache** for two
-purposes:
+Durable cross-ontology relations are ordinary authored facts. An explicit
+`subscribes/2` fact is the long-lived ontology edge. Source-qualified
+`react_on/3` facts declare which target events matter. Proved scopes may
+produce temporary execution traces and reusable proof-local handles, but those
+disappear when the proof closes.
 
-- **Routing (pull):** to send a `::` call, look up which node hosts the target
-  (see *Finding the target node* below).
-- **Notification (push):** the **read-set is the subscription**. When a fact
-  changes, the nodes to notify are exactly the proved scopes that *read* it. You
-  never declare a subscription — reading B's fact *is* subscribing to it. The
-  relation label gives differentiated routing. (This is the "notify others
-  quickly when something happens to an ontology" requirement — *caveat (review):*
-  today it fires **per predicate**, not per fact, see §2/§12.)
-
-Because relations can be *derived* (proven by rules, not just stored), the graph
-is a **runtime trace we cache**, not a static authored structure. Same "run it to
-find the scope" principle as §2.
+Routing remains a local P-state index: to send a `::` call or establish a live
+subscription registration, resolve which authenticated nodes currently host
+the target. Endpoint churn never edits the durable relation. Notification uses
+the explicit subscription plan, not the OCC read set.
 
 ### Finding the target node
 
@@ -572,8 +575,8 @@ Current gaps and priorities live in `deferred.md`.
    **undesigned** (§6/§12) and must be designed before this ships. The genuinely
    distributed, useful-to-onia milestone is the *end of Phase 2*, not Phase 1.
    (The ordered log is now **sketched in §13** — per-namespace DispersedSimplex.)
-2. **Inter-ontology graph** — index cross-ontology reads; read-set-driven
-   notification; remote `::` over QUIC streams (replace `scope_ws`);
+2. **Inter-ontology graph** — remote `::` over QUIC streams (replace
+   `scope_ws`) and explicit durable subscription relationships;
    argument-position `::` (the link-following clauses of §4).
 3. **Physics lane** — QUIC datagram broadcast for dynamic state, LWW, no log.
 4. **Hardening** — per-namespace sequencer → consensus (Tendermint or lighter)
@@ -629,9 +632,9 @@ all are real gaps or decisions owed before building. Roughly in priority order.
    1-voter→N, protocol pluggable behind a stable log API).
 
 2. **Read-set is per-predicate, not per-fact.** The ported `differ` hashes a whole
-   functor's clauses, so conflicts *and* notifications fire per predicate. Decide:
-   build per-fact granularity, or accept and document per-predicate (false
-   conflicts + notification fan-out).
+   functor's clauses, so unrelated facts of one predicate may conflict. This is
+   an OCC precision issue only; subscriptions use explicit ontology relations
+   plus source-qualified `react_on/3` interests.
 
 3. **Cross-ontology atomicity default.** The sword move is the lost/duplicated-item
    hazard; "independent commit by default" is unsafe for conserved resources
@@ -676,9 +679,10 @@ all are real gaps or decisions owed before building. Roughly in priority order.
     serializing commit/apply, with read-only proofs on copy-on-write overlays —
     state it; getting it wrong is a rewrite.
 
-11. **Cross-namespace read-set validation seam.** Connect "record the read height"
-    (§2) to the notification index (§3) and commit-time validation (§6) into one
-    explicit path — this is where cross-ontology serializability actually lives.
+11. **Cross-namespace read-set validation seam.** Connect "record the read
+    height" (§2) to commit-time validation (§6). Subscription projection is a
+    separate consumer of certified foreign history and must not be coupled to
+    proof-local OCC tokens.
 
 12. **Contention management.** OCC needs backoff + retry cap + a fallback to
     pessimistic single-owner for hot keys, or hot facts livelock under load.
@@ -803,12 +807,11 @@ reads) — edits to one ontology are handled one at a time by its committee. Fix
 more edit capacity in parallel. (That's why we have one committee per ontology, not
 one global one.)
 
-This read path is the "read-set is the subscription" idea (§3) doing double duty (a
-copy + notify-on-change). Honest caveats: caching *foreign* facts brings back the
-per-fact "where did this come from" tracking we deferred in §2; a cached copy can be
-a beat behind (fine for schema; go to the committee for guaranteed-latest); and the
-per-predicate notification granularity of §12 #2 applies (a `root` change pings
-every holder — fine because `root` rarely changes).
+Long-lived foreign copies use explicit subscriptions and certified history, not
+proof read sets. Caching foreign facts requires exact source identity, certified
+height, and reconnect/resnapshot behavior; those contracts are in
+`ontology-subscription-plan.md`. Ordinary proof-local caching remains free to use
+read tokens as invalidation hints without creating a semantic relationship.
 
 ### How a change commits (the edit interface)
 
@@ -919,8 +922,9 @@ view-change/availability protocol rather than more timeout exceptions.
   distribution (matching how Brahms was built). `ra` and the Raft paper were early references only.
 - **Read freshness** — stale-copy-OK (default) vs go-to-committee for the
   guaranteed-latest value.
-- **Read-copies** — who holds a read-only copy of a popular ontology, and how
-  they're kept current (the §3 notify path).
+- **Read-copies** — who holds a read-only copy of a popular ontology. Explicit
+  subscriptions cover selected foreign projections; full read replicas remain
+  a separate hosting/replication decision.
 - **One `quod_prolog` per ontology** serialises edits; read-only proofs run on
   cheap copies alongside.
 - **Trimming history** — opt-in, later.
@@ -940,8 +944,8 @@ Every committed change runs in three layers, in order:
 
 - **The fact change (D)** — the assert/retract into the kb. *This is what the
   ordering layer already applies (§13).*
-- **Derived views (P)** — in-memory state computed from the facts: indexes, the
-  "who-read-what" subscription table, (later) a scene graph. Rebuilt
+- **Derived views (P)** — in-memory state computed from the facts: indexes,
+  explicit active-subscription projections, and (later) a scene graph. Rebuilt
   **synchronously, right after D**, so that by the time anyone is notified the
   derived views are already consistent.
 - **Reactions (E)** — the outward/reactive stuff: `react_on` rules firing,
@@ -968,19 +972,25 @@ Phase 2's notification hooks onto the live apply path, never replay.
 
 ### `react_on` and effects are facts
 
-A reaction is declared as content — `react_on(Pattern, Goal)` (stored as an
-`event_handler` fact); an operation's effects as `effect/4` facts. Fits the
-"config is facts + predicates" spine. The discipline that keeps replay safe:
+A reaction is declared directly as ordinary content —
+`react_on(Executor, Pattern, EffectGoal)`; an operation's effects as `effect/4`
+facts. Fits the "config is facts + predicates" spine. Slice 1 now recognizes
+only exact founding-authorized `react_on/3` clauses and compiles their
+source-qualified interests. `Executor` is a generic ontology-defined logical
+effect owner, not the event source and not necessarily an agent; it exists so
+only one host performs E for a replicated ontology. Slice 1 does not execute
+reactions yet. The discipline that
+keeps replay safe:
 **effect bodies may only touch the kb; the outward stuff lives in the reaction (E)
 handlers fired on live delivery.**
 
-### This is how §3's "read-set is the subscription" actually works
+### Explicit subscriptions enter through the same P-before-E barrier
 
-"Notify the proved scopes that read a changed fact" *is* the E layer: after a live
-commit, match the changed facts against the read-sets / `react_on` patterns and
-fire the matching reactions. So §3's notification isn't a separate subsystem — it's
-event delivery on the live apply path. (Caveat: today's read-set is per-predicate,
-§12 #2, so notifications fire per predicate, not per fact.)
+After a live target commit, a subscriber advances its local projection only
+through certified target history. The resulting source-qualified changed heads
+enter the existing `state_handler` tier. The runtime therefore reuses the same
+P-before-E ordering without retaining a proof read set or creating a second
+reaction scheduler.
 
 ### One change → one notification; and a loop guard
 
@@ -996,6 +1006,7 @@ we'll need the same.
   deferred effects* — they fire **once, on the submitting node, at commit** (parked
   by `tx_id`), never on other members, never on replay (at-most-once). The narrow,
   safe case; the spec implements it.
-- **Phase 2:** generalize to **reactors** — `react_on` rules, the
-  read-set→notification index, cross-ontology notification — all on the live apply
-  path, with the loop guard. Out of scope for the first build.
+- **Phase 2:** generalize to **reactors** — `react_on` rules and explicit
+  cross-ontology subscription projections — through the live P-before-E path,
+  with the loop guard. The current plan is
+  `ontology-subscription-plan.md`.

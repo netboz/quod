@@ -387,7 +387,12 @@ The post-apply origin and event contract is useful independently of agents:
 
 - deferred reader arc P3 can invalidate bounded predicate caches only from
   `applied_live`, never replay;
-- P4 can route read-set notifications from the same transaction-scoped event.
+- The ontology-subscription plan can route certified foreign-projection
+  changes through the same ordered handler tier, then through this plan's one
+  `react_on/3` reaction owner. Source-qualified `react_on/3` patterns are also
+  the subscriber's event interests registered with the target; there is no
+  second event-subscription rule. Proof-local read sets remain OCC dependencies
+  and are not notification registrations.
 
 These consumers reuse the origin boundary and handler indexing from Slices 1--2
 without depending on hosted agents, FIPA, or client/world work.
@@ -493,6 +498,18 @@ The first handlers will own:
 
 `react_on(Executor, Pattern, Goal)` is durable ontology content, but its body is
 an E rule and therefore runs only for live events.
+
+`Executor` is the logical owner of the effect, not the source or class of the
+event, and it is not agent-specific. `agent(A)` is the common FIPA case;
+`service(S)`, `node(NodeKey)`, or another ontology-defined single-owner term
+uses the same mechanism. Local and remote event sources remain part of
+`Pattern`.
+
+Reaction matching is Prolog work. `quod_runtime` may index candidates by event
+functor, but the actual match and continuation use
+`erlog_int:unify_prove_body`, which installs the pattern's variable bindings
+before executor resolution and effect validation. There is no Erlang-side
+matcher or parallel binding representation.
 
 `Executor` may contain variables bound by `Pattern`, for example:
 
@@ -700,9 +717,15 @@ is accepted. Conversation IDs are globally unique and non-empty.
   context.
 - `query_if(Goal)` uses a bounded target proof and returns an `inform`.
 - `query_ref(Goal)` streams target answers into one or more `inform` messages.
-- `subscribe(Goal)` will use durable subscription state and completion/read-set
-  tracking when that facility is implemented.
-- `cancel` retracts the corresponding durable commitment or subscription.
+- A FIPA `subscribe(Goal)` performative is application-level protocol state. It
+  may establish or reuse the explicit durable subscriber-owned ontology
+  relation and a source-qualified `react_on/3` interest described by
+  `ontology-subscription-plan.md`; it is not itself a second transport
+  subscription and is never inferred from query completion or a proof read
+  set.
+- `cancel` retracts the corresponding reaction/protocol commitment and removes
+  the ontology relation only when no other local consumer still needs it, all
+  through ordinary authorized transactions.
 
 The Erlang MTS routes envelopes and enforces transport bounds. Prolog owns their
 meaning, authorization, and protocol transitions.
@@ -973,7 +996,8 @@ Acceptance:
 ### Deferred FIPA extensions
 
 - Add query-if and query-ref over the existing ask engine.
-- Add subscribe/cancel after completion subscriptions exist.
+- Add subscribe/cancel after the explicit certified ontology-subscription
+  slices in `ontology-subscription-plan.md` exist.
 - Add bounded DF federation only when more than one real AP directory needs it.
 - Add broker/recruit/contract-net only when required by a real application.
 
@@ -981,7 +1005,9 @@ Acceptance:
 
 Once approved and implemented:
 
-- `doc/content-layer-design.md` section 14 becomes historical and points here;
+- `doc/content-layer-design.md` section 14 becomes historical for agent
+  reactions; explicit ontology following is governed separately by
+  `doc/ontology-subscription-plan.md`;
 - Onia/BBSvx D/P/E and action references are no longer treated as implementation
   specifications;
 - `doc/client-world-direction.md` remains a non-normative consumer and
@@ -1010,8 +1036,8 @@ Do not begin with FIPA message syntax.
 The substrate checkpoint is Slices 1--3: prove that Quod can repeatedly
 transition between live and catch-up apply, rebuild runtime state without KB
 copies, and deliver a durable effect without loss or replay duplication. The
-same checkpoint unlocks deferred reader-cache invalidation and read-set
-notification routing.
+same checkpoint unlocks deferred reader-cache invalidation and the explicit
+certified ontology projections in `ontology-subscription-plan.md`.
 
 The product checkpoint is Slice 4: two statically configured agents, one action,
 one owner-gated durable message, and recovery under process and owner failure.

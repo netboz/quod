@@ -21,6 +21,10 @@ Pure helpers over the committed erlog database for the content layer.
 - `has_clause/4` — is a specific `{Head, Body}` clause present in the committed db? It
   performs the same body normalization as `apply_ops`, then uses the same content-identity
   check. The membership verdict uses it to prove that a removal names an exact clause.
+- `interpreted_clauses/2` — read the exact stored clauses for one interpreted
+  functor from a frozen `#est{}`. Runtime declaration reconciliation uses this
+  instead of executing the predicate and accidentally treating derived answers
+  as declarations.
 
 `op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
 `erlog_int.hrl`.
@@ -29,7 +33,8 @@ Pure helpers over the committed erlog database for the content layer.
 -include("quod_ledger.hrl").
 
 -export([valid_read_check/1, valid_ops/1,
-         validate/2, apply_ops/2, apply_ops_preserving_policy/2, has_clause/4]).
+         validate/2, apply_ops/2, apply_ops_preserving_policy/2, has_clause/4,
+         interpreted_clauses/2]).
 -export([assertion_only/1, asserts_functor/2]).
 
 -doc "Whether an untrusted read check uses only valid functor keys and durable MVCC tokens.".
@@ -115,6 +120,22 @@ apply_ops_preserving_policy(Est, Ops) ->
 has_clause(M, R, H, B0) ->
     B = normalize_body(B0),
     clause_present(M, R, erlog_int:functor(H), H, B).
+
+-doc "Return exact stored `{Head, Body}` clauses for one interpreted functor in a frozen snapshot.".
+-spec interpreted_clauses(tuple(), {atom(), non_neg_integer()}) ->
+          {ok, [clause()]} | {error, not_interpreted}.
+interpreted_clauses(#est{db = #db{mod = M, ref = R}}, {F, A} = Functor)
+  when is_atom(F), is_integer(A), A >= 0 ->
+    case M:get_procedure(R, Functor) of
+        {clauses, Clauses} ->
+            {ok, [{Head, Body} || {_Tag, Head, Body} <- Clauses]};
+        undefined ->
+            {ok, []};
+        _BuiltInOrCompiled ->
+            {error, not_interpreted}
+    end;
+interpreted_clauses(_Est, _Functor) ->
+    {error, not_interpreted}.
 
 %%%===================================================================
 %%% internals

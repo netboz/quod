@@ -130,30 +130,31 @@ actually need what's over there. Every relation follows its links this way by
 default — an ontology that wants a relation's foreign names left alone states a
 `no_follow` fact for it.
 
-Because these links are just facts, the **web of connections between ontologies
-builds itself** as questions run. We don't draw the map by hand — it emerges from
-use, and we keep a directory of it for two jobs: knowing where to send a
-cross-notebook question, and knowing who to tell when something changes (next
-section).
+These links describe durable semantic relationships. Current host locations are
+kept separately in the live network directory, while continuing notification
+interest is an explicit subscription fact (next section). A completed question does
+not leave either kind of relationship behind by accident.
 
 ---
 
-## 4. Reading something means watching it
+## 4. Watching something is explicit
 
-Here's a nice payoff from recording "what a question read." When the *pets* notebook
-reads a fact that lives in the *animals* notebook, pets automatically becomes
-*interested* in that fact — without having to say so. So if animals later changes
-it, the system already knows exactly who to tell: everyone whose recent questions
-read it.
+The read-set recorded while answering a question exists to detect conflicts: if a
+fact the proof depended on changes before commit, the proposed change is no longer
+fresh. The read-set disappears with the proof. Reading another ontology never creates
+a lasting relationship as an invisible side effect.
 
-You never declare "please notify me when this changes" — **reading it is subscribing
-to it.** That gives change notifications across the whole network essentially for
-free, and the kind of link tells the system where to send each one.
+Long-lived interest is explicit and durable. If *pets* wants continuing updates from
+*animals*, pets commits an ordinary subscription fact in its own history. That fact is
+visible, auditable, removable, and subject to pets' normal write policy. Animals keeps
+no duplicate durable row; its normal `can_invoke/4` policy decides whether a live
+delivery registration is allowed.
 
-(The honest catch: today the system tracks interest in broad *groups* of facts, not
-single ones — for example, all "door" facts together rather than one specific door.
-So a change to one door can ping everyone watching any door. For rarely-changing
-things that's harmless; making it fact-by-fact precise is a later refinement.)
+The runtime then maintains a certified local projection of the target facts
+needed by the subscriber's accepted `react_on/3` interests. Routes,
+registrations, queues, and cursors remain temporary local state and are rebuilt
+after restart. The complete planned contract is
+[`ontology-subscription-plan.md`](ontology-subscription-plan.md).
 
 ---
 
@@ -161,24 +162,19 @@ things that's harmless; making it fact-by-fact precise is a later refinement.)
 
 A fact belongs to the ontology that holds it, and **only that ontology may change
 it.** Each ontology is the one that decides its own permissions and runs its own
-rules when something is added or changed (adding a fact can trigger other rules,
-fill in default values, and so on). *(Today the permission checks are stubbed —
-computers trust each other's stated names; real checks arrive with the
-trust-the-stranger work in section 9. This section describes the intended shape.)*
+rules when something is added or changed. Signed node/user principals now reach the
+target ontology's ordinary `can_invoke/4` policy; identity proves who asked, while
+the ontology's own content decides whether that goal is allowed.
 
 That has a clean consequence: to change something in another ontology, you can't
 just reach in and overwrite it — you have to **ask the owner to do it**, through the
 owner's own rules. "Inventory, please add this sword" — not "I'll just stick this
 sword in your inventory."
 
-For now we keep it simple: a question may **read** across ontologies freely, but may
-only **change** facts in its own. Changing facts across ontologies — moving a sword
-out of one notebook's chest and into another's bag — is genuinely harder: you must
-make sure the sword isn't lost or duplicated if something fails halfway. **And this
-is not an exotic case — it's the common one.** Every trade, pickup, and crafting
-recipe in a game moves something between ontologies. So it matters a lot; it's just
-the next big thing to build, not a corner case. When we add it, the safe default
-will be **all or nothing** — both the take and the give happen, or neither does.
+A goal may read and write through explicitly selected ontologies. If more than one
+ontology changes, Quod's durable transaction protocol commits the whole touched set
+atomically: both the take and the give happen, or neither does. Each target still
+executes its own rules and authorization; the origin cannot write around them.
 
 ---
 
@@ -361,7 +357,7 @@ Once a change is official, three things happen, in order:
 
 1. **The facts change** — the add or remove is applied.
 2. **Summaries update** — anything the system keeps that's calculated from the facts
-   (quick-lookup tables, the "who's watching what" list, and later things like a
+   (quick-lookup tables, active subscription projections, and later things like a
    visual view of the world) is recomputed. This happens immediately, before anyone
    is told, so that by the time you're notified everything lines up.
 3. **Reactions happen** — rules that say "when X happens, do Y" now run, messages go
@@ -375,10 +371,11 @@ Otherwise a computer catching up on a thousand old changes would re-send a thous
 old messages. (An earlier, related system handled this badly and only worked by
 chance; here the rule is explicit.)
 
-Reactions, like everything else, are just facts: "when this kind of change happens,
-run this." This reaction system — together with the cross-ontology notifications
-from section 4 — is the next thing to build once the core is solid. The first build
-already handles the narrow, safe version of it.
+Reaction and projection declarations are facts: "when this kind of change happens,
+converge this view." The existing runtime already separates live apply from replay and
+runs its ordered projection-handler tier before outward effects. The planned ontology
+subscription path feeds certified foreign projection changes into that same tier; it
+does not add a second event runner.
 
 ---
 
@@ -411,9 +408,10 @@ section 5.
   building block the whole system uses.
 - A change is re-checked at the moment it's made official; if something it relied on
   changed underneath it, it's rejected and retried.
-- `:` names a thing in another ontology, `::` asks it a question (`inter-ontology.md`);
-  reading across is allowed now, changing across is deferred.
-- Reading a fact subscribes you to it — that's the notification system.
+- `:` names a thing in another ontology and `::` asks it a question
+  (`inter-ontology.md`). Multi-ontology writes use the implemented durable DTX path.
+- A long-lived subscription is an explicit fact in the subscriber's ledger. Read sets
+  are proof-local OCC dependencies, never subscription semantics.
 - Each ontology is run by a small committee that agrees on an ordered list of
   changes; one computer grows to several with the same code.
 - The full change history is kept permanently and is browsable.
@@ -424,19 +422,20 @@ section 5.
 
 **Still open (and honestly so):**
 
-- **Changing facts across ontologies** — the move-it-without-losing-or-duplicating
-  problem. It's common (every trade and pickup), so it matters; it's deferred, and
-  the safe **all-or-nothing** version comes next.
+- **Ontology subscriptions** — explicit durable subscriber-owned relations,
+  certificate-verified foreign projections, and bounded live delivery are planned in
+  `ontology-subscription-plan.md`.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.
-- **Write authorization** — committee identities and votes are signed, but transaction
-  authors are not yet cryptographically bound to their requests. Membership therefore
-  remains restricted to a trusted administrative fleet.
+- **Open deployment policy** — signed user goals and target `can_invoke/4`
+  authorization are implemented, while each deployment still chooses which policies
+  and memberships it exposes to untrusted networks.
 - **Reading two ontologies at once** can catch each at a slightly different instant,
   so they may not perfectly line up. We accept that for now.
-- **Notification precision** — today we notify about whole groups of facts at once,
-  not single facts.
+- **Subscription event-interest performance** — Slice 1 freezes and locally
+  compiles the source-qualified `react_on/3` grammar. Later slices still need
+  to implement and measure target-side filtering and fan-out.
 
 ---
 
@@ -444,9 +443,8 @@ section 5.
 
 The careful route is running: each ontology has a signed Byzantine committee, a
 durable ordered history, trustless catch-up, deterministic Prolog apply, optimistic
-conflict checks, per-ontology transaction batches (25 ms collection window by
-default), and a one-block consensus pipeline.
+conflict checks, atomic multi-ontology transactions, signed client goals, and
+per-ontology transaction batching.
 `ordering-layer-spec.md` records the superseded Raft design; the current consensus
-implementation and `simplex_extended.pdf` are authoritative. The remaining work is
-tracked in `deferred.md`, especially author-aware authorization, epoch-frozen
-membership, cross-ontology writes, and history compaction.
+implementation and `simplex_extended.pdf` are authoritative. Remaining work is
+tracked in `deferred.md` and the focused plans it references.

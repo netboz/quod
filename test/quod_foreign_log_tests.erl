@@ -4,6 +4,8 @@
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
+-export([identity_current_global_network_dependency_case/0]).
+
 -define(GENESIS_TX_VERSION, 1).
 -define(GENESIS_TX_TAG, "quod/genesis").
 
@@ -313,11 +315,34 @@ identity_current_bootstrap_continues_after_selected_source_retry_test() ->
     end.
 
 identity_current_global_network_dependency_stops_route_failover_test() ->
+    Name = list_to_atom(
+             "foreign_identity_"
+             ++ integer_to_list(erlang:unique_integer([positive]))),
+    {ok, Peer, _Node} = peer:start(
+                          #{name => Name, connection => standard_io,
+                            args => ["-pa" | code:get_path()]}),
+    try
+        ?assertEqual(
+           ok,
+           peer:call(
+             Peer, ?MODULE,
+             identity_current_global_network_dependency_case, [], 15000))
+    after
+        _ = peer:stop(Peer)
+    end.
+
+%% Run in a fresh VM so no namespace started by another EUnit module can
+%% satisfy the deliberately unavailable root-network dependency. This keeps
+%% the route-policy test local without changing production identity precedence.
+identity_current_global_network_dependency_case() ->
     Fixture = signed_content_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
-    First = maps:get(pub, Fixture),
-    Second = key(253),
+    %% Bootstrap routes are untrusted fetch hints, so they need not be the
+    %% ledger signer.  Fix their canonical order explicitly: the assertion
+    %% must exercise dependency failure at the selected first source rather
+    %% than depend on a random signing key's sort position.
+    [First, Second] = lists:sort([key(252), key(253)]),
     FirstEndpoint = {"127.0.0.1", 19000},
     SecondEndpoint = {"127.0.0.1", 19001},
     TestPid = self(),
@@ -338,16 +363,14 @@ identity_current_global_network_dependency_stops_route_failover_test() ->
     Dir = temp_dir("identity-current-global-dependency"),
     Pid = start_owner(Dir, Fetch),
     try
-        without_network_identity(
-          fun() ->
-              ?assertEqual(
-                 {error, retry},
-                 quod_foreign_log:current(
-                   [{First, FirstEndpoint}, {Second, SecondEndpoint}],
-                   Identity, 5000))
-          end),
+        ?assertEqual(
+           {error, retry},
+           quod_foreign_log:current(
+             [{First, FirstEndpoint}, {Second, SecondEndpoint}],
+             Identity, 5000)),
         Calls = collect_bootstrap_route_fetches(FetchTag, []),
-        ?assertEqual([], [ok || {Peer, _} <- Calls, Peer =:= Second])
+        ?assertEqual([], [ok || {PeerKey, _} <- Calls, PeerKey =:= Second]),
+        ok
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -1175,24 +1198,6 @@ collect_bootstrap_route_fetches(Tag, Acc) ->
             collect_bootstrap_route_fetches(Tag, [{Peer, From} | Acc])
     after 50 ->
         lists:reverse(Acc)
-    end.
-
-without_network_identity(Fun) when is_function(Fun, 0) ->
-    Root = quod_ontology:root_ns(),
-    SavedDesired = application:get_env(quod, namespace_desired),
-    Desired0 = application:get_env(quod, namespace_desired, #{}),
-    Content0 = maps:get(content, Desired0, #{}),
-    application:set_env(
-      quod, namespace_desired,
-      Desired0#{content => maps:remove(Root, Content0)}),
-    try Fun()
-    after
-        case SavedDesired of
-            {ok, Desired} ->
-                application:set_env(quod, namespace_desired, Desired);
-            undefined ->
-                application:unset_env(quod, namespace_desired)
-        end
     end.
 
 start_owner(Dir, Fetch) ->

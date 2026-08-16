@@ -1532,13 +1532,15 @@ Out of scope (each has a design home, deferred):
 - **History trimming** — the block list is kept in full permanently (#20); snapshotting (M3) compacts only
   the materialized live log, never the durable browsable block list.
 - **Per-fact read-set granularity** — MVP hashes whole predicates (#4); same-functor different-fact changes
-  cause accepted false conflicts; the read-set→notification index is also later.
+  cause accepted false conflicts. Read sets are OCC-only; explicit ontology
+  subscriptions are specified separately in `ontology-subscription-plan.md`.
 - **Consistent cross-namespace snapshots** — read skew across namespaces tolerated (#7 caveat); no snapshots
   retained for reads.
 - **Exactly-once effects across crashes** — effects-after-commit is at-most-once (no effect log).
 - **Reactive event system** (`react_on` / D-P-E / live notifications, the
-  read-set→notification index, cross-ontology notify) — Phase 2; see
-  `content-layer-design.md` §14. Phase 1's only reactions are a write's own deferred
+  explicit-subscription certified foreign projection, cross-ontology notify) —
+  later; see `content-layer-design.md` §14 and
+  `ontology-subscription-plan.md`. Phase 1's only reactions are a write's own deferred
   effects, fired once on the submitting node at commit, never on other members,
   never on replay (§4.5–4.6, at-most-once).
 - **Adaptive committee sizing / partition heal** — parked.

@@ -118,44 +118,49 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
         <span className="text-[11px] text-cream/70">reads answer · writes commit</span>
       </header>
       <div className="p-4">
-        {!identity && (
-          <div className="mb-3 rounded-lg border border-gold/45 bg-gold-soft/15 px-3 py-2 text-sm text-teal">
-            Sign in above to run a goal. The console signs the exact Prolog text; the ontology's normal ACL still decides whether it is allowed.
+        {identity ? (
+          <>
+            <div className="flex items-start gap-2">
+              <span className="pt-2 font-mono text-sm text-gray select-none">?-</span>
+              <textarea
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                disabled={cursor !== null}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault()
+                    void run()
+                  }
+                }}
+                rows={2}
+                spellCheck={false}
+                placeholder="assertz(capital(france, paris))"
+                className="min-h-9 flex-1 resize-y rounded-lg border border-teal-light/45 bg-cream px-3 py-2 font-mono text-sm text-teal focus:border-teal-light focus:ring-2 focus:ring-gold/55 focus:outline-none"
+              />
+              <button
+                onClick={() => void run()}
+                disabled={busy || !goal.trim() || cursor !== null}
+                className="rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-teal shadow-sm transition hover:bg-gold-soft disabled:opacity-40"
+              >
+                {busy ? 'Proving…' : 'Run'}
+              </button>
+            </div>
+            <div className="mt-2 flex gap-2 text-[11px] text-gray">
+              {EXAMPLES.map((e) => (
+                <button key={e} disabled={cursor !== null} onClick={() => setGoal(e)} className="rounded bg-gold-soft/35 px-2 py-0.5 font-mono text-teal-light hover:bg-gold-soft/60 hover:text-teal disabled:opacity-40">
+                  {e}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <div className="rounded-lg border border-gold/45 bg-gold-soft/15 px-3 py-2 text-sm text-teal">
+            Sign in above to run a goal. The Explorer keeps its own session: unlock the same
+            saved key you use on the client to act as the same user. The console signs the exact
+            Prolog text; the ontology's normal ACL still decides whether it is allowed.
             {sessionError && <span className="ml-2 text-rose">{sessionError}</span>}
           </div>
         )}
-        <div className="flex items-start gap-2">
-          <span className="pt-2 font-mono text-sm text-gray select-none">?-</span>
-          <textarea
-            value={goal}
-            onChange={(e) => setGoal(e.target.value)}
-            disabled={cursor !== null || identity === null}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault()
-                void run()
-              }
-            }}
-            rows={2}
-            spellCheck={false}
-            placeholder="assertz(capital(france, paris))"
-            className="min-h-9 flex-1 resize-y rounded-lg border border-teal-light/45 bg-cream px-3 py-2 font-mono text-sm text-teal focus:border-teal-light focus:ring-2 focus:ring-gold/55 focus:outline-none"
-          />
-          <button
-            onClick={() => void run()}
-            disabled={busy || !identity || !goal.trim() || cursor !== null}
-            className="rounded-lg bg-gold px-5 py-2 text-sm font-semibold text-teal shadow-sm transition hover:bg-gold-soft disabled:opacity-40"
-          >
-            {busy ? 'Proving…' : 'Run'}
-          </button>
-        </div>
-        <div className="mt-2 flex gap-2 text-[11px] text-gray">
-          {EXAMPLES.map((e) => (
-            <button key={e} disabled={cursor !== null || identity === null} onClick={() => setGoal(e)} className="rounded bg-gold-soft/35 px-2 py-0.5 font-mono text-teal-light hover:bg-gold-soft/60 hover:text-teal disabled:opacity-40">
-              {e}
-            </button>
-          ))}
-        </div>
         {reply && <Reply reply={reply} solutionNumber={solutionNumber} />}
         {cursor && (
           <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-teal/15 pt-3">

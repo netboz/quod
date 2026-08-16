@@ -35,6 +35,7 @@ const exportButton = document.querySelector('#export')
 const importButton = document.querySelector('#import')
 const importFile = document.querySelector('#import-file')
 const registerButton = document.querySelector('#register')
+const explorerLink = document.querySelector('#explorer')
 
 let identity = null
 
@@ -269,6 +270,10 @@ async function authenticate(providerPromise) {
   const unresolved = recovered.filter(({ reply }) => reply?.terminal !== true).length
   identityButton.textContent = 'Identity active'
   identityButton.disabled = true
+  // This session already holds one key. Offering to unlock or import another
+  // one here would silently propose a different user than the signed-in one.
+  unlockButton.hidden = true
+  importButton.hidden = true
   // Saved means *this* key is saved. A browser holding an older key must still
   // be offered Save, or a freshly created identity could be used to found a
   // permanent user home and then vanish when the tab closes.
@@ -281,6 +286,17 @@ async function authenticate(providerPromise) {
   registerButton.disabled = journalWarning !== ''
   status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'}${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}${journalWarning || ' You can now create its user home here.'}`
 }
+
+// The Explorer runs its own session on this node. A key held only by this tab
+// cannot be unlocked there, so signing in again would act as a different user
+// than the one owning this home.
+explorerLink.addEventListener('click', (event) => {
+  if (identity && !localKeyMatches(identity.provider)) {
+    event.preventDefault()
+    status.textContent =
+      'The Explorer signs in separately. Save your encrypted key here first, then unlock the same key there.'
+  }
+})
 
 void updateHealth()
 unlockButton.hidden = !hasLocalKeyProvider()

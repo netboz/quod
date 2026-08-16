@@ -11,19 +11,12 @@
 -define(QUOD_CLIENT_GOAL_MAX_NUMBER_CHARS, 1024).
 -define(QUOD_CLIENT_GOAL_MAX_SYMBOL_BYTES, 1024).
 
-%% The authenticated browser boundary admits ordinary goals and vocabulary
-%% growth under separate budgets.  A caller that uses no new callable symbols
-%% pays only the request budget.  The cumulative ceiling is per VM lifetime:
-%% atoms disappear when the VM restarts, so persisting this counter would make
-%% the limit stricter without protecting any additional state.
--define(QUOD_CLIENT_GOAL_RATE_WINDOW_MS, 60000).
--define(QUOD_CLIENT_GOAL_RATE_TOTAL, 1024).
--define(QUOD_CLIENT_GOAL_RATE_PER_USER, 60).
--define(QUOD_CLIENT_GOAL_RATE_PER_PEER, 120).
--define(QUOD_CLIENT_GOAL_RATE_KEYS, 512).
--define(QUOD_CLIENT_SYMBOL_RATE_TOTAL, 4096).
--define(QUOD_CLIENT_SYMBOL_RATE_PER_USER, 256).
--define(QUOD_CLIENT_SYMBOL_RATE_PER_PEER, 512).
+%% Ordinary client traffic is governed by the existing bounded ingress and
+%% worker pools, not a product-level per-user request quota. An operator may
+%% opt into a temporary rate policy through `client_rate_limits`; the client
+%% boundary ships with no rate policy by default. The cumulative atom ceiling
+%% remains a VM-safety bound: atoms disappear when the VM restarts, so
+%% persisting this counter would make it stricter without protecting more.
 -define(QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS, 16384).
 
 %% domain+NUL, four 32-byte values, namespace length/body, mode, parser,

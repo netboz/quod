@@ -175,7 +175,8 @@ atom-safe parser boundary.
 The sequence is:
 
 1. enforce HTTP/body and field bounds;
-2. resolve the live session and rate limit the authenticated user and peer;
+2. resolve the live session and, only when an operator enabled one, apply the
+   configured rate policy;
 3. verify the Ed25519 signature over the exact request bytes;
 4. atom-safely lex and parse `goal_text` under `parser_version`;
 5. encode the parsed term with `quod_durable_term:encode_goal/1`;
@@ -206,14 +207,14 @@ and then try to count new atoms afterward. This is a resource boundary, not a
 predicate allowlist.
 
 New callable-symbol materialization is charged only after authentication. It
-has a per-request maximum, per-user and per-peer rate budgets, and one global
-node headroom/cumulative safety ceiling so creating free user keys cannot
-exhaust the BEAM atom table slowly. Existing symbols do not consume that
-allocation budget. Exceeding any limit fails before proof execution and does
-not grow the atom table. User and peer charges commit together: if either
-budget refuses, neither allowance is spent. The cumulative ceiling uses one
-VM-lifetime atom-count baseline retained across auth-owner restarts, matching
-the lifetime of the atom table it protects.
+has a per-request maximum and one global node headroom/cumulative safety ceiling
+so creating free user keys cannot exhaust the BEAM atom table slowly. Operators
+may additionally enable per-user and per-peer rate budgets, but Quod ships with
+no request-rate policy by default. Existing symbols do not consume allocation
+budget. Exceeding a safety or explicitly configured policy limit fails before
+proof execution and does not grow the atom table. The cumulative ceiling uses
+one VM-lifetime atom-count baseline retained across auth-owner restarts,
+matching the lifetime of the atom table it protects.
 
 Every validator later repeats the signature check and deterministic parse and
 requires the derived goal blob to equal the durable goal binding carried by the
@@ -646,7 +647,8 @@ No execution endpoint lands before this slice is independently reviewed.
 - Add authenticated `read` ingress on the client listener.
 - Thread request evidence and `{user, Key}` into `prove_ro`.
 - Use the normal top-level ACL and return normal bindings/failure reasons.
-- Add per-user and per-peer bounded admission.
+- Reuse the bounded ingress and worker admission. An operator may opt into
+  per-user or per-peer rate policy; it is disabled by default.
 - During this intermediate slice, reject a foreign scope rather than
   substituting the forwarding node principal for the signed user. Slice 5
   removes that temporary gate by carrying the exact signed authentication.
@@ -669,14 +671,19 @@ logical-failure replies include the request digest and operation id for
 correlation; reads create no ledger operation row. Named variables are returned
 under the exact UTF-8 names from the frozen parser, not VM-created atoms.
 
-Admission is bounded independently per user and peer. Authenticated requests
-that introduce new callable vocabulary also use per-user and per-peer symbol
-budgets plus a VM-lifetime cumulative ceiling that survives auth-owner
-restarts. Paired user/peer charges are all-or-nothing. Existing symbols are
-free, ordinary data atoms are not allocated merely because the request
-mentioned them, and the shared VM headroom limit remains authoritative. The
-exact signed anchor is checked once more inside the proof worker so a re-found
-cannot rebind an already-admitted read.
+Admission uses the shared bounded ingress and worker pools. An operator may
+opt into per-user or per-peer request and symbol rate policies, but neither is
+enabled by default. New callable vocabulary remains subject to the
+VM-lifetime cumulative safety ceiling that survives auth-owner restarts.
+Existing symbols are free, ordinary data atoms are not allocated merely because
+the request mentioned them, and the shared VM headroom limit remains
+authoritative. The exact signed anchor is checked once more inside the proof
+worker so a re-found cannot rebind an already-admitted read.
+
+An internet-facing client listener should explicitly configure a
+`challenge_limit` inside `client_rate_limits`, because login challenge issuance
+is unauthenticated. On a trusted network, the bounded challenge and session
+tables are the default capacity protection.
 
 ### Slice 3: durable request and operation binding
 
@@ -852,10 +859,9 @@ HTTP listener. Concretely, remove the `client_enabled` checks from
 `quod_client_auth:start_link/0` and `quod_client_cursor:start_link/0`; start
 both idle owners unconditionally under `quod_sup`, and leave the existing check
 only in `quod_client:start_link/0`. Do not introduce a second
-"target-capable" flag. Do not add target-only copies of the rate limiters or
-symbol allocator; expose one sessionless, verified-forwarder admission
-operation on the existing owner and reuse its current atomic user/peer charging
-logic.
+"target-capable" flag. Do not add target-only copies of optional rate policy
+or the symbol allocator; expose one sessionless, verified-forwarder admission
+operation on the existing owner and reuse its current admission logic.
 
 #### Transport owner and closed wire
 
@@ -934,9 +940,9 @@ a pre-execution refusal, and never permits automatic route advancement.
 
 The closed route-eligible refusal set is exactly `not_ready`, `busy`, and
 `rate_limited`, and each is emitted only while no durable handoff exists.
-Rate-limit refusal is route-eligible because the budget
-protects that one target and distributing admitted load across validators is
-intentional. `invalid_request`, `invalid_signature`, `wrong_network`,
+`rate_limited` can occur only when an operator enabled a policy; it is
+route-eligible because that policy protects one target and distributing
+admitted load across validators is intentional. `invalid_request`, `invalid_signature`, `wrong_network`,
 `wrong_target`, and `expired` are terminal request failures and never cause
 route shopping. Every other response after send is uncertain.
 

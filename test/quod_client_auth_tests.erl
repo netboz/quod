@@ -35,6 +35,67 @@ session_is_node_local_and_bounded_test() ->
                       quod_client_auth:session(SessionId))
       end).
 
+default_client_goal_admission_has_no_rate_policy_test() ->
+    with_auth(
+      fun() ->
+         KeyPair = quod_identity:generate(),
+         {ok, #{session_id := SessionId}} = open_session(KeyPair, <<16#79:256>>),
+         lists:foreach(
+           fun(_) ->
+               ?assertMatch({ok, _},
+                            quod_client_auth:admit_goal(SessionId, ?PEER))
+           end,
+           lists:seq(1, 128))
+      end).
+
+default_challenge_admission_has_no_rate_policy_test() ->
+    with_auth(
+      #{max_challenges => 128},
+      fun() ->
+         lists:foreach(
+           fun(N) ->
+               {PublicKey, _} = quod_identity:generate(),
+               ?assertMatch(
+                  {ok, _},
+                  quod_client_auth:issue_challenge(
+                    PublicKey, <<N:256>>, ?PEER))
+           end,
+           lists:seq(1, 64))
+      end).
+
+application_rate_policy_is_applied_and_explicit_options_override_test() ->
+    Previous = application:get_env(quod, client_rate_limits),
+    Limit = #{window_ms => 60000, max_total => 8,
+              max_per_key => 1, max_keys => 8},
+    try
+        ok = application:set_env(
+               quod, client_rate_limits,
+               #{goal_user_limit => Limit,
+                 goal_peer_limit => Limit#{max_per_key => 2}}),
+        with_auth(
+          fun() ->
+             {ok, #{session_id := SessionId}} =
+                 open_session(quod_identity:generate(), <<16#7A:256>>),
+             ?assertMatch(
+                {ok, _}, quod_client_auth:admit_goal(SessionId, ?PEER)),
+             ?assertEqual(
+                {error, client_goal_rate_limited},
+                quod_client_auth:admit_goal(SessionId, {127, 0, 0, 2}))
+          end),
+        with_auth(
+          #{goal_user_limit => none, goal_peer_limit => none},
+          fun() ->
+             {ok, #{session_id := SessionId}} =
+                 open_session(quod_identity:generate(), <<16#7B:256>>),
+             ?assertMatch(
+                {ok, _}, quod_client_auth:admit_goal(SessionId, ?PEER)),
+             ?assertMatch(
+                {ok, _}, quod_client_auth:admit_goal(SessionId, ?PEER))
+          end)
+    after
+        restore_rate_policy(Previous)
+    end.
+
 invalid_signature_consumes_challenge_test() ->
     with_auth(
       fun() ->
@@ -293,3 +354,8 @@ stop_auth(Pid) ->
     receive {'DOWN', MRef, process, Pid, _} -> ok
     after 5000 -> demonitor(MRef, [flush]), error(client_auth_stop_timeout)
     end.
+
+restore_rate_policy({ok, Value}) ->
+    application:set_env(quod, client_rate_limits, Value);
+restore_rate_policy(undefined) ->
+    application:unset_env(quod, client_rate_limits).

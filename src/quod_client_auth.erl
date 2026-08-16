@@ -43,33 +43,7 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -define(SESSION_TTL_MS, 600000).
 -define(MAX_SESSIONS, 256).
 -define(PRUNE_INTERVAL_MS, 30000).
--define(WINDOW_MS, 60000).
--define(CHALLENGE_LIMIT,
-        #{window_ms => ?WINDOW_MS, max_total => 256, max_per_key => 16,
-          max_keys => 256}).
-
 -include("quod_client_goal_limits.hrl").
-
--define(GOAL_USER_LIMIT,
-        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
-          max_total => ?QUOD_CLIENT_GOAL_RATE_TOTAL,
-          max_per_key => ?QUOD_CLIENT_GOAL_RATE_PER_USER,
-          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
--define(GOAL_PEER_LIMIT,
-        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
-          max_total => ?QUOD_CLIENT_GOAL_RATE_TOTAL,
-          max_per_key => ?QUOD_CLIENT_GOAL_RATE_PER_PEER,
-          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
--define(SYMBOL_USER_LIMIT,
-        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
-          max_total => ?QUOD_CLIENT_SYMBOL_RATE_TOTAL,
-          max_per_key => ?QUOD_CLIENT_SYMBOL_RATE_PER_USER,
-          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
--define(SYMBOL_PEER_LIMIT,
-        #{window_ms => ?QUOD_CLIENT_GOAL_RATE_WINDOW_MS,
-          max_total => ?QUOD_CLIENT_SYMBOL_RATE_TOTAL,
-          max_per_key => ?QUOD_CLIENT_SYMBOL_RATE_PER_PEER,
-          max_keys => ?QUOD_CLIENT_GOAL_RATE_KEYS}).
 
 -record(s, {network_id :: binary() | undefined,
             node_key :: binary() | undefined,
@@ -79,11 +53,11 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
             max_challenges :: pos_integer(),
             session_ttl_ms :: pos_integer(),
             max_sessions :: pos_integer(),
-            challenge_rate :: quod_rate:limiter(),
-            goal_user_rate :: quod_rate:limiter(),
-            goal_peer_rate :: quod_rate:limiter(),
-            symbol_user_rate :: quod_rate:limiter(),
-            symbol_peer_rate :: quod_rate:limiter(),
+            challenge_rate :: none | quod_rate:limiter(),
+            goal_user_rate :: none | quod_rate:limiter(),
+            goal_peer_rate :: none | quod_rate:limiter(),
+            symbol_user_rate :: none | quod_rate:limiter(),
+            symbol_peer_rate :: none | quod_rate:limiter(),
             atom_baseline :: non_neg_integer(),
             max_materialized_atoms :: non_neg_integer()}).
 
@@ -107,9 +81,10 @@ start_link(Options) when is_map(Options) ->
 -doc """
 Issue one short-lived challenge for `PublicKey`.
 
-`Peer` is the requesting address, charged against the per-peer login budget:
-issuing is unauthenticated, so without it one address could hold every challenge
-slot on the node and lock everyone else out of logging in.
+`Peer` is retained for an operator-enabled rate policy. By default there is no
+per-peer request quota; the bounded challenge table is the normal protection.
+An internet-facing deployment should explicitly configure `challenge_limit`
+under `client_rate_limits`; a trusted network may rely on the table cap.
 """.
 -spec issue_challenge(binary(), binary(), term()) -> {ok, map()} | {error, term()}.
 issue_challenge(PublicKey, ClientNonce, Peer) ->
@@ -161,31 +136,43 @@ call(Request) ->
 
 init(Options) ->
     schedule_prune(),
+    RateLimits = configured_rate_limits(),
     {ok, #s{network_id = maps:get(network_id, Options, undefined),
             node_key = maps:get(node_key, Options, undefined),
             ttl_ms = maps:get(ttl_ms, Options, ?TTL_MS),
             max_challenges = maps:get(max_challenges, Options, ?MAX_CHALLENGES),
             session_ttl_ms = maps:get(session_ttl_ms, Options, ?SESSION_TTL_MS),
             max_sessions = maps:get(max_sessions, Options, ?MAX_SESSIONS),
-            challenge_rate = quod_rate:new(
-                               maps:get(challenge_limit, Options,
-                                        ?CHALLENGE_LIMIT)),
-            goal_user_rate = quod_rate:new(
-                               maps:get(goal_user_limit, Options,
-                                        ?GOAL_USER_LIMIT)),
-            goal_peer_rate = quod_rate:new(
-                               maps:get(goal_peer_limit, Options,
-                                        ?GOAL_PEER_LIMIT)),
-            symbol_user_rate = quod_rate:new(
-                                 maps:get(symbol_user_limit, Options,
-                                          ?SYMBOL_USER_LIMIT)),
-            symbol_peer_rate = quod_rate:new(
-                                 maps:get(symbol_peer_limit, Options,
-                                          ?SYMBOL_PEER_LIMIT)),
+            challenge_rate = optional_rate(
+                               rate_limit(challenge_limit, Options, RateLimits)),
+            goal_user_rate = optional_rate(
+                               rate_limit(goal_user_limit, Options, RateLimits)),
+            goal_peer_rate = optional_rate(
+                               rate_limit(goal_peer_limit, Options, RateLimits)),
+            symbol_user_rate = optional_rate(
+                                 rate_limit(symbol_user_limit, Options, RateLimits)),
+            symbol_peer_rate = optional_rate(
+                                 rate_limit(symbol_peer_limit, Options, RateLimits)),
             atom_baseline = atom_baseline(Options),
             max_materialized_atoms =
                 maps:get(max_materialized_atoms, Options,
                          ?QUOD_CLIENT_MAX_CUMULATIVE_NEW_ATOMS)}}.
+
+%% Rate policy is operator-controlled and opt-in. Normal client traffic is
+%% limited only by the existing bounded queues and workers. Tests pass an
+%% explicit per-owner option so they do not depend on application state.
+configured_rate_limits() ->
+    case application:get_env(quod, client_rate_limits, #{}) of
+        Limits when is_map(Limits) -> Limits;
+        Invalid -> error({invalid_client_rate_limits, Invalid})
+    end.
+
+rate_limit(Name, Options, Config) ->
+    maps:get(Name, Options, maps:get(Name, Config, none)).
+
+optional_rate(none) -> none;
+optional_rate(Config) when is_map(Config) -> quod_rate:new(Config);
+optional_rate(Invalid) -> error({invalid_client_rate_limit, Invalid}).
 
 handle_call({issue, PublicKey, ClientNonce, Peer}, _From, S) ->
     reply(issue(PublicKey, ClientNonce, Peer, S));
@@ -364,12 +351,17 @@ sessions_full(#s{sessions = Sessions, max_sessions = Max}) ->
 %% ======================================================================
 
 charge(Field, Peer, Tag, S) ->
-    case quod_rate:allow(Peer, quod_time:mono_ms(), element(Field, S)) of
-        {ok, Rate} -> {ok, setelement(Field, S, Rate)};
-        {busy, Rate} ->
-            {{error, tagged(Tag, busy)}, setelement(Field, S, Rate)};
-        {rate_limited, Rate} ->
-            {{error, tagged(Tag, rate_limited)}, setelement(Field, S, Rate)}
+    case element(Field, S) of
+        none ->
+            {ok, S};
+        Rate0 ->
+            case quod_rate:allow(Peer, quod_time:mono_ms(), Rate0) of
+                {ok, Rate} -> {ok, setelement(Field, S, Rate)};
+                {busy, Rate} ->
+                    {{error, tagged(Tag, busy)}, setelement(Field, S, Rate)};
+                {rate_limited, Rate} ->
+                    {{error, tagged(Tag, rate_limited)}, setelement(Field, S, Rate)}
+            end
     end.
 
 tagged(client_auth, busy) -> client_auth_busy;
@@ -470,6 +462,8 @@ charge_pair_many(FirstField, FirstKey, SecondField, SecondKey, Count, S)
 
 allow_many(_Key, 0, _Now, Rate) ->
     {ok, Rate};
+allow_many(_Key, _Remaining, _Now, none) ->
+    {ok, none};
 allow_many(Key, Remaining, Now, Rate0) ->
     case quod_rate:allow(Key, Now, Rate0) of
         {ok, Rate1} -> allow_many(Key, Remaining - 1, Now, Rate1);

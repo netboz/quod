@@ -33,7 +33,9 @@ Pure helpers over the committed erlog database for the content layer.
 -include("quod_ledger.hrl").
 
 -export([valid_read_check/1, valid_ops/1,
-         validate/2, apply_ops/2, apply_ops_preserving_policy/2, has_clause/4,
+         validate/2, apply_ops/2, apply_ops_report/2,
+         apply_ops_preserving_policy/2,
+         apply_ops_preserving_policy_report/2, has_clause/4,
          interpreted_clauses/2]).
 -export([assertion_only/1, asserts_functor/2]).
 
@@ -95,9 +97,22 @@ validate(ReadCheck, Ref) ->
 
 -doc "Apply a diff (`[op()]`) to a committed erlog state, with content-identity dedup.".
 -spec apply_ops(tuple(), [op()]) -> {ok, tuple()}.
-apply_ops(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
-    R1 = lists:foldl(fun(Op, R) -> apply_op(M, R, Op) end, R0, Ops),
-    {ok, Est#est{db = Db#db{ref = R1}}}.
+apply_ops(#est{} = Est, Ops) ->
+    {ok, Est1, _AppliedOps} = apply_ops_report(Est, Ops),
+    {ok, Est1}.
+
+-doc "Apply a diff and return only the operations that changed the committed projection.".
+-spec apply_ops_report(tuple(), [op()]) -> {ok, tuple(), [op()]}.
+apply_ops_report(#est{db = #db{mod = M, ref = R0} = Db} = Est, Ops) ->
+    {R1, RevApplied} =
+        lists:foldl(
+          fun(Op, {R, Applied}) ->
+                  case apply_op(M, R, Op) of
+                      {RNext, changed} -> {RNext, [normalize_op(Op) | Applied]};
+                      {RNext, unchanged} -> {RNext, Applied}
+                  end
+          end, {R0, []}, Ops),
+    {ok, Est#est{db = Db#db{ref = R1}}, lists:reverse(RevApplied)}.
 
 -doc """
 Apply `Ops`, rejecting a final state with no interpreted `can_invoke/4` clause.
@@ -109,10 +124,23 @@ so an atomic replacement is valid regardless of operation order.
 -spec apply_ops_preserving_policy(tuple(), [op()]) ->
           {ok, tuple()} | {error, policy_self_seal_forbidden}.
 apply_ops_preserving_policy(Est, Ops) ->
-    {ok, Candidate} = apply_ops(Est, Ops),
+    case apply_ops_preserving_policy_report(Est, Ops) of
+        {ok, Candidate, _AppliedOps} -> {ok, Candidate};
+        {error, _} = Error -> Error
+    end.
+
+-doc "Policy-preserving apply with the exact operations that changed the projection.".
+-spec apply_ops_preserving_policy_report(tuple(), [op()]) ->
+          {ok, tuple(), [op()]} | {error, policy_self_seal_forbidden}.
+apply_ops_preserving_policy_report(Est, Ops) ->
+    {ok, Candidate, AppliedOps} = apply_ops_report(Est, Ops),
     case touches_functor(Ops, {can_invoke, 4}) of
-        false -> {ok, Candidate};
-        true -> require_interpreted_policy(Candidate)
+        false -> {ok, Candidate, AppliedOps};
+        true ->
+            case require_interpreted_policy(Candidate) of
+                {ok, Candidate} -> {ok, Candidate, AppliedOps};
+                {error, _} = Error -> Error
+            end
     end.
 
 -doc "Is the exact `{Head, Body}` clause present in the committed db `Mod:Ref`? (Content identity.)".
@@ -214,10 +242,10 @@ apply_op(M, R, {assert, Clause}) ->
     {H, B} = normalize_clause(Clause),
     F = erlog_int:functor(H),
     case clause_present(M, R, F, H, B) of
-        true  -> R;                                   %% content dedup: no-op
+        true  -> {R, unchanged};                       %% content dedup: no-op
         false -> case M:assertz_clause(R, F, H, B) of
-                     {ok, R1} -> R1;
-                     error    -> R
+                     {ok, R1} -> {R1, changed};
+                     error    -> {R, unchanged}
                  end
     end;
 apply_op(M, R, {retract, Clause}) ->
@@ -225,11 +253,13 @@ apply_op(M, R, {retract, Clause}) ->
     F = erlog_int:functor(H),
     case find_tag(M, R, F, H, B) of
         {ok, Tag} -> case M:retract_clause(R, F, Tag) of
-                         {ok, R1} -> R1;
-                         error    -> R
+                         {ok, R1} -> {R1, changed};
+                         error    -> {R, unchanged}
                      end;
-        none      -> R
+        none      -> {R, unchanged}
     end.
+
+normalize_op({Kind, Clause}) -> {Kind, normalize_clause(Clause)}.
 
 %% Live proofs already emit Erlog's durable `{Code, HasCut}` body. Normalize the
 %% legal source-body form accepted from explicitly constructed transactions so

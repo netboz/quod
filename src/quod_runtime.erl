@@ -25,10 +25,15 @@ is source-qualified with `from(TargetNamespace, TargetAnchor, EventPattern)`
 contributes one event interest for that identity. The first `react_on/3`
 argument is instead the logical owner of the resulting effect; it is not an
 agent type or an event-source selector. Any ontology-defined callable owner
-term is valid when the event pattern binds all of its variables. Slice 1 only
-compiles this rebuildable catalogue: it opens no route, starts no follower,
-and delivers no event. Later slices consume the same state from this owner.
-They may narrow reaction candidates here, but the actual event match must
+term is valid when the event pattern binds all of its variables.
+
+Each durable subscription now owns one local consumer reference into the
+node-wide `quod_foreign_log` follower. Multiple hosted ontologies following
+the same anchored target share its certified cache and one fact projection;
+this runtime retains only building/ready/unreachable state and the correlated
+projection revision. It starts no verifier, cache, or second worker pool.
+This slice still delivers no foreign reaction. Later slices may narrow
+reaction candidates here, but the actual event match must
 cross into Prolog through `erlog_int:unify_prove_body`; this runtime must not
 grow a parallel unifier or variable-binding representation.
 
@@ -104,6 +109,7 @@ observers therefore maintain current P without reconstructing best-effort effect
 -define(DEFAULT_MAX_HEAVY_WORKERS, 8).    %% global concurrent resource-worker cap
 -define(DEFAULT_MAX_HEAVY_PENDING, 1024). %% distinct queued resources, coalescing included
 -define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
+-define(DEFAULT_SOURCE_FOLLOW_RETRY_MS, 5000).
 
 %% raw declaration fields — UNVALIDATED wire/KB terms until validate/2 has passed them
 -record(handler, {id :: term(),
@@ -128,6 +134,10 @@ observers therefore maintain current P without reconstructing best-effort effect
             subscriptions = [] :: [{binary(), binary()}],
             reactions = [] :: [tuple()],
             source_interests = #{} :: #{{binary(), binary()} => [tuple()]},
+            %% One local consumer reference per exact durable subscription.
+            %% Verification, cache and materialized P remain shared node-wide.
+            source_views = #{} :: #{{binary(), binary()} => map()},
+            foreign_log_monitor = none :: none | {pid(), reference()},
             %% ONE killable runner at a time — a reconcile or an ordered-tier event batch
             runner = none :: none | {reconcile | events, pid(), reference(), reference(),
                                      reference()},
@@ -242,6 +252,11 @@ handle_call(get_stats, _From, S) ->
               source_targets_active => map_size(S#s.source_interests),
               source_interests_active =>
                   lists:sum([length(Is) || Is <- maps:values(S#s.source_interests)]),
+              source_views_active => map_size(S#s.source_views),
+              source_views_ready => source_state_count(ready, S#s.source_views),
+              source_views_building => source_state_count(building, S#s.source_views),
+              source_views_unreachable =>
+                  source_state_count(unreachable, S#s.source_views),
               p_height => S#s.p_height, e_frontier => S#s.e_frontier,
               queue_len => S#s.queue_len,
               reconciles => S#s.reconciles,
@@ -349,6 +364,18 @@ handle_info({replay_started, Id, _From}, S) ->
     %% Stop every old-snapshot reader. Keep their monitors until DOWN and only then tell
     %% quod_prolog to release the MVCC pin; queued state is covered by the ready reconciliation.
     {noreply, begin_replay(Id, S)};
+handle_info(
+  {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}, S0) ->
+    {noreply, install_source_notice(
+                FollowRef, NoticeRef, Identity, Notice, S0)};
+handle_info({source_follow_retry, Identity, Token}, S0) ->
+    {noreply, retry_source_follow(Identity, Token, S0)};
+handle_info({source_follow_start, Identity}, S0) ->
+    {noreply, begin_source_follow(Identity, S0)};
+handle_info(
+  {'DOWN', MRef, process, Pid, _Reason},
+  S = #s{foreign_log_monitor = {Pid, MRef}}) ->
+    {noreply, foreign_log_down(S)};
 %% The direct post-commit envelope (est-carrying): the ordered tier's input. Enqueue in
 %% arrival (= height) order; overflow collapses to one reconciliation at the newest snapshot.
 handle_info({applied_live, Env, Est}, S0 = #s{mode = live}) ->
@@ -432,7 +459,7 @@ handle_info(_Info, S) -> {noreply, S}.
 %% with us), an orphan executing a looping goal would burn a scheduler unbounded while its
 %% snapshot pin is released out from under it.
 terminate(_Reason, S) ->
-    _ = kill_runner(S), ok.
+    _ = stop_source_views(kill_runner(S)), ok.
 
 %%%===================================================================
 %%% reconciliation
@@ -577,7 +604,7 @@ unhealthy(Reason, S = #s{ns = Ns}) ->
     %% tier runner AND every heavy worker + clear their pending (kill_runner), so nothing keeps
     %% installing revisions or pinning snapshots in a terminally-dead runtime, then fail waiters.
     logger:error("quod_runtime[~s]: unhealthy: ~0p", [Ns, Reason]),
-    S1 = kill_runner(S),
+    S1 = stop_source_views(kill_runner(S)),
     fail_waiters(drop_queue(S1#s{mode = {unhealthy, Reason}})).
 
 park_waiter(From, Resource, Rev, TimeoutMs, S) ->
@@ -775,11 +802,233 @@ install_catalog_update(
     RejectedSubscriptions =:= 0 orelse
         logger:warning("quod_runtime[~s]: ~b malformed subscribes/2 clause(s) ignored",
                        [Ns, RejectedSubscriptions]),
-    S#s{subscriptions = Subscriptions, reactions = Reactions,
-        source_interests = SourceInterests,
-        rejected_dynamic = S#s.rejected_dynamic + RejectedDynamic,
-        rejected_subscriptions =
-            S#s.rejected_subscriptions + RejectedSubscriptions}.
+    S1 = S#s{subscriptions = Subscriptions, reactions = Reactions,
+             source_interests = SourceInterests,
+             rejected_dynamic = S#s.rejected_dynamic + RejectedDynamic,
+             rejected_subscriptions =
+                 S#s.rejected_subscriptions + RejectedSubscriptions},
+    reconcile_source_views(Subscriptions, S1).
+
+%%%===================================================================
+%%% Shared certified source follows (Slice 2: state only, no reactions)
+%%%===================================================================
+
+reconcile_source_views(Subscriptions, S0) ->
+    Desired = maps:from_keys(Subscriptions, true),
+    Removed = [Identity || Identity <- maps:keys(S0#s.source_views),
+                           not maps:is_key(Identity, Desired)],
+    S1 = lists:foldl(fun stop_source_view/2, S0, Removed),
+    S2 = lists:foldl(
+           fun(Identity, Acc) ->
+                   case maps:is_key(Identity, Acc#s.source_views) of
+                       true -> Acc;
+                       false -> enqueue_source_follow(Identity, Acc)
+                   end
+           end, S1, Subscriptions),
+    maybe_release_foreign_log_monitor(S2).
+
+enqueue_source_follow(Identity, S0) ->
+    Height = case maps:get(Identity, S0#s.source_views, undefined) of
+                 #{state := State} -> source_last_height(State);
+                 undefined -> 0
+             end,
+    self() ! {source_follow_start, Identity},
+    S0#s{source_views =
+             (S0#s.source_views)#{
+               Identity => #{follow_ref => pending,
+                             state => {building, Height}}}}.
+
+begin_source_follow(Identity, S0) ->
+    case maps:get(Identity, S0#s.source_views, undefined) of
+        #{follow_ref := pending} -> attach_source_follow(Identity, S0);
+        _ -> S0
+    end.
+
+attach_source_follow(Identity, S0) ->
+    case quod_foreign_log:follow(Identity) of
+        {ok, FollowRef} ->
+            case ensure_foreign_log_monitor(S0) of
+                {ok, S1} ->
+                    Row = #{follow_ref => FollowRef,
+                            state => {building, 0}},
+                    S1#s{source_views =
+                             (S1#s.source_views)#{Identity => Row}};
+                {error, S1} ->
+                    %% The owner died between its reply and our monitor. The
+                    %% reference died with it; retain only explicit P state.
+                    schedule_source_retry(
+                      Identity, unavailable, 0,
+                      S1#s{source_views =
+                               (S1#s.source_views)#{
+                                 Identity => #{follow_ref => none,
+                                               state =>
+                                                   {unreachable,
+                                                    unavailable, 0}}}})
+            end;
+        {error, Reason} ->
+            schedule_source_retry(
+              Identity, Reason, 0,
+              S0#s{source_views =
+                       (S0#s.source_views)#{
+                         Identity => #{follow_ref => none,
+                                       state => {unreachable, Reason, 0}}}})
+    end.
+
+ensure_foreign_log_monitor(
+  S = #s{foreign_log_monitor = {Pid, _MRef}}) when is_pid(Pid) ->
+    case quod_reg:where({foreign_log, node}) of
+        Pid -> {ok, S};
+        NewPid when is_pid(NewPid) ->
+            replace_foreign_log_monitor(NewPid, S);
+        undefined -> {error, clear_foreign_log_monitor(S)}
+    end;
+ensure_foreign_log_monitor(S) ->
+    case quod_reg:where({foreign_log, node}) of
+        Pid when is_pid(Pid) -> replace_foreign_log_monitor(Pid, S);
+        undefined -> {error, S}
+    end.
+
+replace_foreign_log_monitor(Pid, S0) ->
+    S1 = clear_foreign_log_monitor(S0),
+    MRef = erlang:monitor(process, Pid),
+    {ok, S1#s{foreign_log_monitor = {Pid, MRef}}}.
+
+clear_foreign_log_monitor(S = #s{foreign_log_monitor = none}) -> S;
+clear_foreign_log_monitor(
+  S = #s{foreign_log_monitor = {_Pid, MRef}}) ->
+    _ = erlang:demonitor(MRef, [flush]),
+    S#s{foreign_log_monitor = none}.
+
+install_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
+    case maps:get(Identity, S0#s.source_views, undefined) of
+        #{follow_ref := FollowRef} = Row0 ->
+            case source_notice_state(Notice) of
+                {ok, State} ->
+                    Row1 = Row0#{state => State},
+                    S1 = S0#s{source_views =
+                                  (S0#s.source_views)#{Identity => Row1}},
+                    ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+                    S1;
+                error ->
+                    S0
+            end;
+        _ ->
+            S0
+    end.
+
+source_notice_state({building, Height})
+  when is_integer(Height), Height >= 0 ->
+    {ok, {building, Height}};
+source_notice_state({unreachable, Reason, Height})
+  when is_integer(Height), Height >= 0 ->
+    {ok, {unreachable, Reason, Height}};
+source_notice_state(
+  {advanced, From, To, <<_:256>> = ProjectionId, Freshness, Heads})
+  when is_integer(From), is_integer(To), To >= From,
+       is_map(Freshness), is_list(Heads) ->
+    {ok, {ready, To, ProjectionId, Freshness,
+          #{from => From, changed_heads => Heads, resnapshot => false}}};
+source_notice_state(
+  {resnapshot, To, <<_:256>> = ProjectionId, Freshness})
+  when is_integer(To), To >= 0, is_map(Freshness) ->
+    {ok, {ready, To, ProjectionId, Freshness,
+          #{from => 0, changed_heads => [], resnapshot => true}}};
+source_notice_state(_) ->
+    error.
+
+retry_source_follow(Identity, Token, S0) ->
+    case maps:get(Identity, S0#s.source_views, undefined) of
+        #{follow_ref := none, retry_token := Token} = Row0 ->
+            cancel_source_retry(maps:get(retry_timer, Row0, none)),
+            Views1 = (S0#s.source_views)#{
+                       Identity => maps:without(
+                                     [retry_token, retry_timer], Row0)},
+            enqueue_source_follow(Identity, S0#s{source_views = Views1});
+        _ ->
+            S0
+    end.
+
+schedule_source_retry(Identity, Reason, Height, S0) ->
+    Row0 = maps:get(Identity, S0#s.source_views),
+    cancel_source_retry(maps:get(retry_timer, Row0, none)),
+    Token = make_ref(),
+    Timer = erlang:send_after(
+              source_retry_ms(S0), self(),
+              {source_follow_retry, Identity, Token}),
+    Row1 = Row0#{follow_ref => none,
+                 state => {unreachable, Reason, Height},
+                 retry_token => Token, retry_timer => Timer},
+    S0#s{source_views = (S0#s.source_views)#{Identity => Row1}}.
+
+source_retry_ms(#s{config = Config}) ->
+    Value = maps:get(
+              subscription_follow_retry_ms, Config,
+              application:get_env(
+                quod, subscription_follow_retry_ms,
+                ?DEFAULT_SOURCE_FOLLOW_RETRY_MS)),
+    case is_integer(Value) andalso Value > 0 andalso Value =< 16#FFFFFFFF of
+        true -> Value;
+        false -> ?DEFAULT_SOURCE_FOLLOW_RETRY_MS
+    end.
+
+cancel_source_retry(none) -> ok;
+cancel_source_retry(Timer) ->
+    _ = erlang:cancel_timer(Timer),
+    ok.
+
+stop_source_view(Identity, S0) ->
+    case maps:take(Identity, S0#s.source_views) of
+        {Row, Views1} ->
+            cancel_source_retry(maps:get(retry_timer, Row, none)),
+            case maps:get(follow_ref, Row, none) of
+                FollowRef when is_reference(FollowRef) ->
+                    ok = quod_foreign_log:unfollow(FollowRef);
+                pending -> ok;
+                none -> ok
+            end,
+            S0#s{source_views = Views1};
+        error ->
+            S0
+    end.
+
+stop_source_views(S0) ->
+    S1 = lists:foldl(
+           fun stop_source_view/2, S0, maps:keys(S0#s.source_views)),
+    clear_foreign_log_monitor(S1).
+
+maybe_release_foreign_log_monitor(S = #s{source_views = Views}) ->
+    case lists:any(
+           fun(#{follow_ref := Ref}) -> is_reference(Ref) end,
+           maps:values(Views)) of
+        true -> S;
+        false -> clear_foreign_log_monitor(S)
+    end.
+
+foreign_log_down(S0) ->
+    S1 = S0#s{foreign_log_monitor = none},
+    maps:fold(
+      fun(Identity, Row, Acc) ->
+              Height = source_last_height(maps:get(state, Row)),
+              Base = Row#{follow_ref => none,
+                          state => {unreachable, unavailable, Height}},
+              schedule_source_retry(
+                Identity, unavailable, Height,
+                Acc#s{source_views =
+                          (Acc#s.source_views)#{Identity => Base}})
+      end, S1, S1#s.source_views).
+
+source_last_height({building, Height}) -> Height;
+source_last_height({unreachable, _Reason, Height}) -> Height;
+source_last_height({ready, Height, _ProjectionId, _Freshness, _Delta}) -> Height;
+source_last_height(_) -> 0.
+
+source_state_count(Status, Views) ->
+    length([ok || Row <- maps:values(Views),
+                  source_state_tag(maps:get(state, Row)) =:= Status]).
+
+source_state_tag({ready, _, _, _, _}) -> ready;
+source_state_tag({building, _}) -> building;
+source_state_tag({unreachable, _, _}) -> unreachable.
 
 %% After any runner completes: a parked ready edge wins; otherwise drain what queued.
 next_after_runner(S = #s{pending_edge = none}) ->
@@ -847,7 +1096,7 @@ await_worker_downs(Pending) ->
     end.
 
 begin_replay(Id, S0) ->
-    S1 = kill_runner(S0),
+    S1 = kill_runner(stop_source_views(S0)),
     %% All readers are now dead, so releasing the base pin cannot invalidate a proof. The
     %% cast precedes any later re-attach call from this process by Erlang signal ordering.
     ok = quod_prolog:runtime_detach(S1#s.ns),

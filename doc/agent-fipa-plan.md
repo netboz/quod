@@ -511,6 +511,32 @@ functor, but the actual match and continuation use
 before executor resolution and effect validation. There is no Erlang-side
 matcher or parallel binding representation.
 
+### Logical agent versus live Erlang process
+
+An agent is durable ontology identity and state in D. Its Erlang process is
+only the current live P incarnation on the node selected by committed
+ownership/residency facts. The process owns bounded mailbox draining, timers,
+conversation progress, and effects; it keeps no private knowledge base and can
+be killed, restarted, or moved without changing the agent's identity. Any
+durable change it requests still enters as an ordinary signed goal through the
+same Prolog, `can_invoke/4`, OCC/DTX, consensus, and outcome path.
+
+Events are not broadcast blindly to every agent process in an ontology. The
+ontology receives an event once; its committed `react_on/3` clauses are matched
+centrally through `erlog_int:unify_prove_body`. Each successful match grounds
+an `Executor`, such as `agent(Bob)`. Runtime then proves that this node is the
+unique current host and delivers only that grounded reaction to Bob's live
+process. A rule may intentionally produce several agent executors, but that
+fan-out is explicit, bounded, and observable. Agent processes never implement
+a second matcher or receive every raw event merely because they belong to the
+ontology.
+
+Only active locally hosted agents have processes. Dormant, historical, or
+remotely owned agent facts allocate no Erlang process here. The existing
+runtime reconciliation is the sole process start/stop owner; a later agent
+slice may split a supervisor only when the concrete hosted-agent workload
+requires it, not as advance scaffolding.
+
 `Executor` may contain variables bound by `Pattern`, for example:
 
 ```prolog

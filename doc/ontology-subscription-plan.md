@@ -1,8 +1,10 @@
 # Ontology subscriptions and certified event following — plan
 
-**Status:** Slice 1 (vocabulary and local reconciliation) is implemented in the
-working tree. Slices 2--6 remain planning only. No ledger, transaction,
-certificate, DTX, genesis, or wire-format change is involved in Slice 1.
+**Status:** Slices 1 (vocabulary and local reconciliation) and 2 (shared
+continuous certified follow) are implemented in the working tree. Slice 2 is
+awaiting its separate adversarial review and hardware acceptance run. Slices
+3--6 remain planning only. Neither implemented slice changes a ledger,
+transaction, certificate, DTX, genesis, or wire format.
 
 This document is the authority for long-lived ontology-to-ontology
 subscriptions. `inter-ontology.md` remains the authority for proved `::`
@@ -48,10 +50,11 @@ the proof's dependency record.
 Quod already has the local `applied_live` boundary, the ordered
 `state_handler/4` P tier, `quod_feed`, certified one-shot
 `quod_foreign_log`, directory/private-seed resolution, and ordinary
-`can_invoke/4` scope authorization. Slice 1 now recognizes exact ordinary
+`can_invoke/4` scope authorization. Slice 1 recognizes exact ordinary
 `subscribes/2` facts and founding-authorized source-qualified `react_on/3`
-facts during the existing runtime reconciliation. It does **not** yet follow a
-foreign ontology, register remote event interests, deliver events, or execute
+facts during the existing runtime reconciliation. Slice 2 follows the exact
+anchored ontology into local certified P. It does **not** yet register remote
+event interests, deliver events, or execute
 `react_on/3`. Those are later roadmap slices, not hidden as-built claims.
 
 BBSvx validates the useful conceptual split: `subscribed_to(SourceNs)` names
@@ -652,7 +655,7 @@ complete.
 
 ### Slice 1 — vocabulary and local reconciliation
 
-**Status: IMPLEMENTED IN THE WORKING TREE.** `quod_runtime` derives both
+**Status: IMPLEMENTED.** `quod_runtime` derives both
 catalogues from its frozen committed snapshot. A small read-only helper in
 `quod_diff` enumerates exact interpreted clauses, so a rule-derived answer
 cannot become runtime configuration. Founding reaction clauses are compared
@@ -674,12 +677,321 @@ state owner in this slice.
 
 ### Slice 2 — shared continuous certified follow
 
-- Extend `quod_foreign_log` interests from one-shot verification to a shared
-  continuous target-identity follow.
-- Reuse the catch-up codec, history fold, certified current view, cache owner,
-  worker limits, and corruption recovery.
-- Factor one canonical content transition if needed; do not duplicate apply.
-- Produce source-qualified P snapshots/deltas locally.
+**Status: IMPLEMENTED IN THE WORKING TREE.** This slice makes
+the Slice-1 catalogue operational only as a local certified follower. It does
+not register an event pattern at the target, push a source event, execute a
+handler/reaction, or change `::`. Those remain Slices 3--5.
+
+#### Slice-2 outcome
+
+After `quod_runtime` reconciles its ordinary `subscribes/2` facts, each exact
+target identity has one of three visible P states:
+
+```text
+unreachable(Reason, LastCertifiedHeight)
+building(LastCertifiedHeight)
+ready(CertifiedHeight, ProjectionId, Freshness)
+```
+
+`ready` means the projection is a valid certified prefix, not that every live
+host has proved there is no newer slot. A separate current-view corroboration
+can establish zero lag; temporary staleness is reported rather than hidden.
+`Freshness` is explicit local P:
+
+```text
+#{last_probe_ms, last_advance_ms,
+  hinted_height => unknown | Height,
+  lag => unknown | NonNegativeInteger,
+  current_view => confirmed | unconfirmed}
+```
+
+The times are receiver-local monotonic observations. A remote height and the
+derived lag are diagnostics only; neither is certification. `current_view` may
+be `confirmed` only after the existing full current-committee corroboration.
+
+`ProjectionId` names a node-local, rebuildable materialization of the target's
+published facts at that exact certified height. It is not a target outcome
+reference, is never written to D, and is not a public proof handle. Slice 2
+does not yet expose a Prolog query bridge over it; that prevents a temporary
+internal representation from becoming a second `::` API before Slice 4 defines
+the source-qualified read contract.
+
+The runtime stores only `{TargetIdentity, FollowRef, State}`. The node-wide
+foreign-log owner keeps the shared materialization. Two local ontologies which
+subscribe to the same target receive distinct consumer references but point at
+the same certified history and projection. Removing the final local consumer
+stops polling and discards the local materialization; the existing
+disposable certified-history cache may remain.
+
+#### One public follow lifecycle
+
+The implementation adds one asynchronous lifecycle to `quod_foreign_log`:
+
+```erlang
+follow(TargetIdentity) -> {ok, FollowRef} |
+                          {error, invalid_identity | capacity | unavailable}.
+ack(FollowRef, NoticeRef) -> ok.
+unfollow(FollowRef) -> ok.
+```
+
+The caller is the consumer: `follow/1` monitors the calling process, so no PID
+or owner identity is accepted as caller-supplied data. It allocates no network
+or disk work in the `gen_server` call. Results arrive as correlated messages:
+
+```erlang
+{quod_foreign_follow, FollowRef, NoticeRef, TargetIdentity,
+ {building, LastCertifiedHeight}}
+{quod_foreign_follow, FollowRef, NoticeRef, TargetIdentity,
+ {advanced, FromHeight, ToHeight, ProjectionId, Freshness, ChangedHeads}}
+{quod_foreign_follow, FollowRef, NoticeRef, TargetIdentity,
+ {resnapshot, ToHeight, ProjectionId, Freshness}}
+{quod_foreign_follow, FollowRef, NoticeRef, TargetIdentity,
+ {unreachable, Reason, LastCertifiedHeight}}
+```
+
+There is at most one unacknowledged notice per consumer. The runtime installs
+the correlated state and calls `ack/2`. While that notice is outstanding, a
+second projection advance collapses directly to `resnapshot` rather than
+retaining a growing delta union or fabricating a partial delta. This
+acknowledges only local P delivery; it has no network, authorization, or
+transaction meaning.
+
+`ChangedHeads` is the bounded, stable-deduplicated set of heads whose **actual
+published state** changed, including retracted heads. It is derived after the
+canonical apply verdict, not copied blindly from the ledger transaction. The
+target identity in the same message supplies source qualification; the
+subscriber runtime must retain it beside every head. Initial construction and
+gap repair may coalesce many entries into one `advanced` notification. Such a
+notification may update P but is never historical E and schedules no
+`react_on/3` in this slice.
+
+`unfollow/1`, consumer `DOWN`, runtime replay, and runtime termination all use
+the same removal function. Late messages are ignored by exact `FollowRef`.
+Late acknowledgements are ignored by exact `{FollowRef, NoticeRef}`.
+Reconciliation computes the set difference between old and new catalogue
+identities; it does not stop/recreate unchanged follows.
+
+#### One target, one short advancement lane
+
+Extend the existing `#history{}` row rather than create a second cache or
+registered service. Long-lived consumer interest is separate from
+`#history.active`: the latter continues to mean one short cache/verification
+operation. A follow therefore never owns the active slot while idle.
+
+For one target:
+
+1. resolve the exact anchored source through the current directory/private-seed
+   view, preferring an exact read-ready local ledger through one generalized
+   local-history-source helper;
+2. run at most one bounded catch-up page through the existing codec,
+   certificate verifier, phase index, cache reservation, append, and atomic
+   checkpoint path;
+3. apply that verified page to the shared fact materialization;
+4. publish one coalesced advance and yield the lane before scheduling another
+   page.
+
+The generic local-history-source helper is a refactor of the readiness,
+identity, and ledger-root checks currently hidden behind the DTX-only local
+evidence source. DTX and subscription callers project their narrower answers
+from that helper; no subscription-only local-ledger exception is added.
+
+Remote source selection starts from
+`quod_directory:validator_routes(TargetNs, TargetAnchor)`. Confirmed private
+seeds already appear through that same exact-anchor lookup. Directory rows and
+remote heights are hints only. Every accepted entry still requires its
+certificate and exact ordered history transition. Route failure or a
+non-advancing host rotates to another current candidate; an anchor conflict
+fails the whole refresh. Certified committee/route transitions learned while
+folding replace stale hints naturally.
+
+Until Slice 5 adds authorized push wake-ups, a configurable timer requests the
+next page. Success at an unchanged head uses the normal poll interval; failure
+uses capped exponential backoff plus jitter. A newly learned route or consumer
+causes one immediate refresh. All waiting is `send_after` plus messages—no
+`wait_until`, sleeping worker, synchronous network call in `quod_runtime`, or
+busy loop. The exact default cadence is an operator setting chosen and pinned
+by the load gate, not a semantic constant.
+
+A target refused only because the active-history or projection-memory capacity
+is full remains an explicit inactive P row and retries on the same bounded
+timer cadence as an unreachable target. It does not wait forever for an
+unrelated catalogue edit, and it does not spin or evict an active target.
+
+Foreground DTX/reference verification and continuous follow share the same
+per-history serialization and global request/cache accounting. A follow page
+is deliberately one bounded turn; it cannot retain the lane indefinitely or
+starve an exact DTX check. Conversely, a busy exact check merely coalesces one
+follow refresh requirement rather than creating a retry queue.
+
+#### One canonical committed-state transition
+
+Certified history alone is insufficient to copy a transaction's raw `diff`:
+ordinary OCC may reject at apply, duplicate transaction IDs must not apply
+twice, and a DTX publishes its hidden diff only at Finalize(commit). Therefore
+Slice 2 first extracts the deterministic committed-state transition currently
+embedded in `quod_prolog` into one process-free module,
+`quod_committed_projection`.
+
+The extracted reducer owns no process, route, worker, or policy. Given the
+target identity, parent fact state, outcome projection, certified entry, and
+already-verified DTX effects, it:
+
+- calls the existing `quod_commit_validation` and `quod_diff` functions;
+- preserves the exact membership, OCC-rejection, duplicate-operation,
+  duplicate-transaction, policy-self-seal, Prepare, Finalize, and noop rules;
+- returns the new fact/outcome state plus actual applied operations and changed
+  heads;
+- emits no runtime message, client reply, effect, or Simplex acknowledgement.
+
+The foreign materializer builds the same common-predicate base and uses the
+existing bounded, rebuildable `quod_outcome` DETS backend for
+duplicate/operation/DTX state; it does not invent a lighter outcome rule or an
+unbounded per-target map. Each worker gets a private disposable directory, so
+overlapping worker shutdown/rebuild generations never share mutable derived
+state. Its database backend is exactly
+`quod_erlog_db_mvcc`, and every certified entry commits at its ledger height as
+live apply does. The per-functor MVCC version heights are part of the
+deterministic materialized state: without them a later OCC read-check could
+produce a different verdict. Its deterministic `ProjectionId` is derived from
+the exact target identity, certified height, and certified history head, which
+bind that complete deterministic MVCC state; rebuilding the same prefix must
+yield the same identifier and version tokens.
+
+`quod_prolog` is refactored to call this reducer and retains scheduling,
+waiters, outcome/event publication, MVCC pinning, and the Finalize
+acknowledgement. It also retains every `quod_effect_journal` reservation,
+handoff, activation, retirement, and reconciliation operation. A foreign
+materializer applies an effect-bearing transaction's D diff but never touches
+effect custody or executes the effect. The foreign materializer calls the same
+reducer after `quod_catchup:verify_forward` and retains only P. This ordering
+is mandatory: extract with parity tests first, then add the follower. A copied
+subset of `apply_transaction`, a raw-diff shortcut, or another DTX materializer
+is a release blocker.
+
+The materialized fact state is owned by one bounded internal projection worker
+per **actively followed target**, not per `subscribes/2` fact or per reaction.
+It is monitored by `quod_foreign_log`, has no registered name or independent
+cache, and waits idle for messages between short advancement turns. This small
+worker owns its Erlog ETS table; if it dies, the foreign-log owner discards the
+generation and rebuilds it from the already-certified cache. Thus it is an
+implementation resource, not a second authority.
+
+Initial materialization replays the certified cache in the same page-sized
+turns and publishes nothing until it reaches one internally consistent height.
+New pages are verified once, persisted once, and applied once. The materialized
+facts are not added to the foreign-cache checkpoint in this slice: after a node
+restart they are rebuilt lazily from certified cached entries. Consequently
+the existing cache version and every ledger/wire byte remain unchanged.
+
+#### Bounds, backpressure, and runtime integration
+
+The existing bounds remain authoritative: at most 64 retained foreign
+identities, 32 foreground requests, 256 entries/900 KiB per page, and 128 MiB
+of encoded foreign cache. Slice 2 adds derived bounds, in the shared limits
+header, for active follow consumers and total materialized-projection memory.
+They are capacity/safety ceilings, not user request-rate quotas. Per-target
+consumers are bounded by the node's hosted-namespace capacity; the global
+consumer ceiling is derived from that capacity times the foreign-history
+ceiling rather than copied as another literal.
+
+One target keeps at most one coalesced refresh request and one current
+projection generation. A slow runtime receives only the newest correlated
+state through the one-notice/ack lifecycle; intermediate notifications
+collapse to a resnapshot requirement. It
+never creates an unbounded page, delta, timer, or mailbox-owned retry list.
+MVCC projection memory is measured after every page. The outcome side uses its
+existing fixed-size resident cache over disposable DETS rather than an
+unbounded map. Crossing the configured global MVCC ceiling discards the newly
+built generation, reports `capacity`, and leaves D and the certified cache
+intact.
+
+Ten thousand durable subscription facts remain valid catalogue data, but this
+slice does not pretend that ten thousand simultaneously materialized remote
+ontologies fit inside the current 64-history node capacity. Excess targets are
+reported as inactive/capacity-limited P and are measured in Slice 6; there is
+no silent partial activation and no process per excess fact.
+
+`quod_runtime` adds only a source-view map and exact follow reconciliation. It
+does not acquire a second worker pool or dependency graph. It records advances,
+staleness, and heights, but does not yet hand foreign heads to
+`state_handler/4` or run `react_on/3`; Slice 4 connects those states to the one
+existing ordered tier.
+
+#### Slice-2 failure and replay contract
+
+| Edge | Required result |
+|---|---|
+| runtime/consumer dies | Monitor removes only its reference; shared target follows for remaining consumers |
+| last consumer disappears | Cancel timer/work, delete materialized P, retain only evictable certified cache |
+| foreign-log owner restarts | No consumer or projection is trusted; runtimes re-reconcile and rebuild from certified cache |
+| projection worker dies | Drop its generation, report building/stale, rebuild through the same cache replay |
+| cache corrupt or checkpoint disagrees | Existing one-time delete/rebuild rule; never salvage projected facts independently |
+| route disappears | Keep durable subscription and last certified height; mark unreachable and retry directory resolution |
+| capacity is temporarily full | Keep an explicit inactive row and retry on the bounded unreachable cadence; never spin or evict an active follow |
+| target committee changes | Accept only certified transition, replace route hints, continue one ordered history |
+| duplicate/stale/reordered page | Existing verifier rejects/no-ops it; no projection notification |
+| root network identity is temporarily unavailable while applying signed material | Keep the last certified/materialized height, report building, and retry; never classify the entry invalid or crash-loop the worker |
+| subscriber replay begins | Remove follow refs before releasing the local runtime snapshot; ready reconciliation recreates current P without E |
+| target advances while subscriber is down | Rebuild/catch up to current certified state; emit one current P advance and no historical reaction |
+
+#### Slice-2 tests and gates
+
+1. Before extraction, freeze a scripted ledger and its current Prolog
+   per-height fact/outcome digests as golden fixtures. After extraction, drive
+   that ledger through both the local `quod_prolog` caller and foreign
+   materializer: genesis, ordinary apply, OCC reject, duplicate, membership,
+   effect-only, noop, Prepare/Finalize(commit), abort, and Complete must match
+   the golden fixtures and each other **at every height**. The old apply code is
+   then deleted; it is never retained as a test-only compatibility path.
+2. Two runtimes following one identity create one history/materializer and two
+   monitored consumer refs; removing either one does not interrupt the other.
+3. A 257-entry advance yields page-sized work and allows a foreground exact
+   reference verification between follow turns.
+4. Raw diffs from OCC-rejected and duplicate transactions never enter the
+   projected facts; a prepared DTX diff appears exactly once at Finalize.
+   The OCC case includes a read-check which conflicts only because of an older
+   per-functor MVCC mutation height.
+5. Cache wipe, cache corruption, foreign-log restart, projection-worker crash,
+   and runtime restart rebuild the identical ProjectionId/fact state from
+   certified history.
+6. Wrong anchor, directory anchor conflict, outsider route, forged cert,
+   missing/reordered entry, and stale committee route never advance P.
+7. Public and confirmed-private routes reach the same exact-anchor path; local
+   co-hosting uses the generalized local source without a network self-dial.
+8. Removing a subscription during an in-flight page produces no late accepted
+   state for the removed `FollowRef`.
+9. Poll/retry timers coalesce; a prolonged outage retains O(targets) state and
+   produces no worker/timer/mailbox growth or synchronous runtime stall.
+10. Capacity tests fill histories, consumers, encoded cache, and projection
+    memory independently and prove typed refusal with existing consumers
+    unaffected.
+11. Runtime restart/replay restores current P only; no `state_handler` or
+    `react_on` is invoked in this slice.
+12. An effect-bearing transaction materializes its D diff with an instrumented
+    assertion that no `quod_effect_journal` API was called.
+13. Root network identity unavailable midway through materialization reports
+    building/retry; restoring it reaches the same ProjectionId and MVCC tokens
+    as uninterrupted replay.
+14. Compile, xref, Dialyzer, full EUnit, focused CT, diff check, and a mixed DTX
+    plus 64-follow load run are green before Slice 3 begins. The load result
+    records aggregate poll requests/second, pages/second, bytes/second, DTX
+    latency change, and consensus latency change at the proposed default poll
+    cadence. The default is accepted only with that fleet-wide multiplier
+    measured; a one-target result cannot set it.
+
+Metrics introduced with the owner (and added to the dashboard in this slice)
+are node-wide active follows, consumers, projection workers/memory, building,
+unreachable and capacity-limited targets, verified follow pages/entries/bytes,
+poll requests/pages/bytes, coalesced refreshes, retries, rebuilds, and maximum
+certified lag. Labels must remain bounded; arbitrary target namespaces are not
+Prometheus labels. Existing per-subscriber runtime metrics add
+ready/building/unreachable source counts.
+
+Working-tree verification at implementation handoff is recorded with the
+review rather than weakening the acceptance list above. Compile, xref,
+Dialyzer, all 1,238 EUnit tests, and formatting checks are green. The focused
+CT and mixed DTX plus 64-follow hardware run remain acceptance gates before
+Slice 3 starts; the code is not deployed by this slice.
 
 ### Slice 3 — registration and event authorization
 

@@ -136,7 +136,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_binding/1, register_dtx_begin/5, activate_dtx_begin/3,
          cancel_dtx_begin/3, submit_dtx/3, dtx_group_barrier/3,
          dtx_endpoint_request/6, dtx_endpoint_local/3,
-         dtx_local_evidence/3, dtx_applied_source/2, dtx_outcome_lookup/2,
+         history_source/1, dtx_local_evidence/3, dtx_applied_source/2,
+         dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
          stats/1, namespaces/0]).
@@ -2070,6 +2071,18 @@ dtx_outcome_lookup(OutcomeRef, TimeoutMs)
 dtx_outcome_lookup(OutcomeRef, _TimeoutMs) ->
     {error, {outcome_unknown, OutcomeRef}}.
 
+-doc "Return the read-ready local durable source for one exact ontology identity.".
+-spec history_source({binary(), <<_:256>>}) ->
+          {ok, file:filename_all()} |
+          {error, not_ready | invalid_identity}.
+history_source({Ns, <<_:256>>} = Identity) when is_binary(Ns), byte_size(Ns) > 0 ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}), {history_source, Identity}, 1000)
+    catch exit:_ -> {error, not_ready}
+    end;
+history_source(_Identity) ->
+    {error, invalid_identity}.
+
 dtx_outcome_result(_OutcomeRef, {ok, Status}) when is_map(Status) ->
     {ok, Status};
 dtx_outcome_result(
@@ -2845,6 +2858,8 @@ running_impl(
     {keep_state, S,
      [{reply, From,
        local_dtx_evidence_source(Ref, ExpectedPhase, S)}]};
+running_impl({call, From}, {history_source, Identity}, S) ->
+    {keep_state, S, [{reply, From, local_history_source(Identity, S)}]};
 running_impl({call, From}, get_dtx_binding, S) ->
     Reply = case current_dtx_binding(S) of
                 {ok, Binding} -> {ok, Binding};
@@ -7630,21 +7645,29 @@ verify_local_dtx_reference(
 
 local_dtx_evidence_source(
   Ref, ExpectedPhase,
-  S = #s{slot = Committed, ledger_root = LedgerRoot}) ->
+  S = #s{slot = Committed}) ->
     TargetIdentity = target_identity(S),
-    case {endpoint_read_ready(S), valid_dtx_phase(ExpectedPhase),
+    case {local_history_source(TargetIdentity, S), valid_dtx_phase(ExpectedPhase),
           quod_dtx:certified_ref_binding(Ref)} of
-        {true, true, {ok, TargetIdentity, Slot, _Digest}}
-          when Slot =< Committed,
-               (is_list(LedgerRoot) orelse is_binary(LedgerRoot)) ->
+        {{ok, LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
+          when Slot =< Committed ->
             {ok, LedgerRoot};
-        {true, true, {ok, TargetIdentity, Slot, _Digest}}
+        {{ok, _LedgerRoot}, true, {ok, TargetIdentity, Slot, _Digest}}
           when Slot > Committed ->
             {error, not_found};
-        {false, _, _} ->
+        {{error, not_ready}, _, _} ->
             {error, not_ready};
         _ ->
             {error, invalid_request}
+    end.
+
+local_history_source(
+  Identity, S = #s{ledger_root = LedgerRoot}) ->
+    case {endpoint_read_ready(S), Identity =:= target_identity(S),
+          is_list(LedgerRoot) orelse is_binary(LedgerRoot)} of
+        {true, true, true} -> {ok, LedgerRoot};
+        {false, _, _} -> {error, not_ready};
+        _ -> {error, invalid_identity}
     end.
 
 valid_dtx_phase('begin') -> true;

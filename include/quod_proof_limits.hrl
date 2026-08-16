@@ -2,6 +2,7 @@
 -define(QUOD_PROOF_LIMITS_HRL, true).
 
 -include("quod_ingress_limits.hrl").
+-include("quod_directory_limits.hrl").
 
 %% One source of truth for the bounded distributed-proof worker state.
 -define(QUOD_MAX_ACTIVE_PROOF_DEPTH, 8).
@@ -77,6 +78,16 @@
 -define(QUOD_MAX_FOREIGN_CACHE_BYTES, (128 * 1024 * 1024)).
 -define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
 -define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
+%% Continuous follows share the existing 64 history rows.  A node can host at
+%% most DIRECTORY_MAX_NAMESPACES runtimes, and each runtime may consume every
+%% retained history.  This is a capacity ceiling, never a request-rate quota.
+-define(QUOD_MAX_FOREIGN_FOLLOW_CONSUMERS,
+        (?QUOD_MAX_FOREIGN_HISTORIES * ?DIRECTORY_MAX_NAMESPACES)).
+%% Materialized P is disposable and independently bounded from the encoded
+%% certified cache.  Keep the default aggregate at the same audited memory
+%% class without copying another byte literal.
+-define(QUOD_MAX_FOREIGN_PROJECTION_BYTES,
+        ?QUOD_MAX_FOREIGN_CACHE_BYTES).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).

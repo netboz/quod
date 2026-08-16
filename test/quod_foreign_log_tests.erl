@@ -75,6 +75,95 @@ invalid_public_timeout_is_rejected_without_owner_test() ->
          key(90), {"127.0.0.1", 19090},
          ref({<<"timeout">>, key(9)}, 1, 10), finalize, invalid)).
 
+foreign_log_start_removes_only_disposable_projection_state_test() ->
+    Dir = temp_dir("projection-start-cleanup"),
+    ProjectionDir = filename:join([Dir, "projections", "stale-generation"]),
+    Marker = filename:join(ProjectionDir, "outcome.dets"),
+    ok = filelib:ensure_dir(Marker),
+    ok = file:write_file(Marker, <<"derived">>),
+    Pid = start_owner(Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    try
+        ?assertNot(filelib:is_dir(filename:join(Dir, "projections")))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+follow_consumers_share_one_history_and_cleanup_exactly_test() ->
+    Dir = temp_dir("follow-lifecycle"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    Pid = start_owner_opts(
+            Dir, NoFetch,
+            #{follow_poll_ms => 50, follow_retry_ms => 10,
+              follow_max_retry_ms => 50}),
+    Identity = {unique_ns(), key(101)},
+    try
+        {ok, Follow1} = quod_foreign_log:follow(Identity),
+        Notice1 = receive_follow(Follow1, Identity),
+        ?assertMatch({building, 0}, element(2, Notice1)),
+        ok = quod_foreign_log:ack(Follow1, element(1, Notice1)),
+        Unreachable1 = receive_follow(Follow1, Identity),
+        ?assertMatch({unreachable, unavailable, 0}, element(2, Unreachable1)),
+        ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
+        FollowStats = quod_foreign_log:stats(),
+        ?assertMatch(
+           #{follow_unreachable := 1, follow_capacity_limited := 0},
+           FollowStats),
+        ?assert(maps:get(follow_polls, FollowStats) > 0),
+        ?assert(maps:get(follow_retries, FollowStats) > 0),
+
+        {ok, Follow2} = quod_foreign_log:follow(Identity),
+        Notice2 = receive_follow(Follow2, Identity),
+        ?assertMatch({building, 0}, element(2, Notice2)),
+        ok = quod_foreign_log:ack(Follow2, element(1, Notice2)),
+        ?assertMatch(
+           #{histories := 1, followed_histories := 1,
+             follow_consumers := 2}, quod_foreign_log:stats()),
+
+        ok = quod_foreign_log:unfollow(Follow1),
+        ?assertEqual(1, maps:get(follow_consumers, quod_foreign_log:stats())),
+        ok = quod_foreign_log:unfollow(Follow2),
+        ?assertMatch(
+           #{histories := 1, followed_histories := 0,
+             follow_consumers := 0, projection_workers := 0},
+           quod_foreign_log:stats())
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+follow_owner_identity_and_consumer_down_are_fail_closed_test() ->
+    Dir = temp_dir("follow-owner"),
+    NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,
+    Pid = start_owner_opts(
+            Dir, NoFetch,
+            #{follow_poll_ms => 1000, follow_retry_ms => 100,
+              follow_max_retry_ms => 1000}),
+    Identity = {unique_ns(), key(102)},
+    Parent = self(),
+    Consumer = spawn(
+                 fun() ->
+                         Result = quod_foreign_log:follow(Identity),
+                         Parent ! {child_follow, self(), Result},
+                         receive stop -> ok end
+                 end),
+    try
+        FollowRef = receive
+                        {child_follow, Consumer, {ok, Ref}} -> Ref
+                    after 2000 -> error(missing_child_follow)
+                    end,
+        %% A different process cannot remove the child's consumer reference.
+        ok = quod_foreign_log:unfollow(FollowRef),
+        ?assertEqual(1, maps:get(follow_consumers, quod_foreign_log:stats())),
+        exit(Consumer, kill),
+        ok = wait_follow_count(0, 2000),
+        ?assertEqual(0, maps:get(followed_histories, quod_foreign_log:stats()))
+    after
+        catch exit(Consumer, kill),
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 verify_exact_reference_and_persisted_cache_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Dir = temp_dir("verify"),
@@ -1201,15 +1290,39 @@ collect_bootstrap_route_fetches(Tag, Acc) ->
     end.
 
 start_owner(Dir, Fetch) ->
+    start_owner_opts(Dir, Fetch, #{}).
+
+start_owner_opts(Dir, Fetch, Extra) ->
     {ok, _} = application:ensure_all_started(gproc),
     case quod_reg:where({foreign_log, node}) of
         Existing when is_pid(Existing) -> stop_owner(Existing);
         undefined -> ok
     end,
     {ok, Pid} = quod_foreign_log:start_link(
-                  #{cache_dir => Dir, fetch_fun => Fetch,
-                    page_timeout_ms => 1000}),
+                  maps:merge(
+                    #{cache_dir => Dir, fetch_fun => Fetch,
+                      page_timeout_ms => 1000}, Extra)),
     Pid.
+
+receive_follow(FollowRef, Identity) ->
+    receive
+        {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice} ->
+            {NoticeRef, Notice}
+    after 3000 ->
+        error({missing_follow_notice, FollowRef, Identity})
+    end.
+
+wait_follow_count(Expected, Left) when Left =< 0 ->
+    case maps:get(follow_consumers, quod_foreign_log:stats()) of
+        Expected -> ok;
+        Actual -> error({follow_count_timeout, Expected, Actual})
+    end;
+wait_follow_count(Expected, Left) ->
+    case maps:get(follow_consumers, quod_foreign_log:stats()) of
+        Expected -> ok;
+        _ -> receive after 10 -> ok end,
+             wait_follow_count(Expected, Left - 10)
+    end.
 
 stop_owner(Pid) when is_pid(Pid) ->
     unlink(Pid),

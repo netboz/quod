@@ -150,10 +150,11 @@ visible, auditable, removable, and subject to pets' normal write policy. Animals
 no duplicate durable row; its normal `can_invoke/4` policy decides whether a live
 delivery registration is allowed.
 
-The runtime then maintains a certified local projection of the target facts
-needed by the subscriber's accepted `react_on/3` interests. Routes,
-registrations, queues, and cursors remain temporary local state and are rebuilt
-after restart. The complete planned contract is
+The runtime now maintains one shared certified local projection of each exact
+subscribed target. Routes, queues, projection workers, and consumer references
+remain temporary local state and are rebuilt after restart. Target-side event
+registration, filtering, and reaction delivery are later slices. The complete
+contract is
 [`ontology-subscription-plan.md`](ontology-subscription-plan.md).
 
 ---
@@ -373,9 +374,9 @@ chance; here the rule is explicit.)
 
 Reaction and projection declarations are facts: "when this kind of change happens,
 converge this view." The existing runtime already separates live apply from replay and
-runs its ordered projection-handler tier before outward effects. The planned ontology
-subscription path feeds certified foreign projection changes into that same tier; it
-does not add a second event runner.
+runs its ordered projection-handler tier before outward effects. Ontology subscriptions
+now maintain certified foreign projections; the later delivery slice will feed their
+changes into that same tier rather than add a second event runner.
 
 ---
 
@@ -412,6 +413,9 @@ section 5.
   (`inter-ontology.md`). Multi-ontology writes use the implemented durable DTX path.
 - A long-lived subscription is an explicit fact in the subscriber's ledger. Read sets
   are proof-local OCC dependencies, never subscription semantics.
+- Active subscriptions share the existing certified foreign-history cache and
+  canonical committed-state reducer; restart rebuilds their local projections
+  without replaying reactions.
 - Each ontology is run by a small committee that agrees on an ordered list of
   changes; one computer grows to several with the same code.
 - The full change history is kept permanently and is browsable.
@@ -422,9 +426,10 @@ section 5.
 
 **Still open (and honestly so):**
 
-- **Ontology subscriptions** — explicit durable subscriber-owned relations,
-  certificate-verified foreign projections, and bounded live delivery are planned in
-  `ontology-subscription-plan.md`.
+- **Ontology-subscription delivery** — explicit durable subscriber-owned
+  relations and certificate-verified foreign projections are implemented.
+  Target-side authorization/filter registration and bounded live reaction
+  delivery remain in `ontology-subscription-plan.md`.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.

@@ -24,6 +24,11 @@ committee evidence.
 perspective. The gen_server never waits for network, disk replay, certificate
 verification, or crypto; DTX validation callers invoke them from their existing
 asynchronous verdict/recovery worker boundary.
+
+Long-lived ontology follows are another consumer of this same owner and cache.
+They add no verifier or history path: a short monitored verification worker
+advances at most one certified page, and one unregistered materializer folds
+only the already-persisted cache through `quod_committed_projection`.
 """.
 
 -behaviour(gen_server).
@@ -37,6 +42,7 @@ asynchronous verdict/recovery worker boundary.
          verify/5, verify_local/4,
          verify_current/3, verify_local_current/3,
          current/3, local_current/3,
+         follow/1, ack/2, unfollow/1,
          required_references/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -54,6 +60,26 @@ asynchronous verdict/recovery worker boundary.
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
 -define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
+-define(DEFAULT_FOLLOW_POLL_MS, 5000).
+-define(DEFAULT_FOLLOW_RETRY_MS, 250).
+-define(DEFAULT_FOLLOW_MAX_RETRY_MS, 30000).
+-define(MAX_CHANGED_HEADS, ?QUOD_MAX_PLAN_DIFF_OPS).
+
+-record(consumer, {
+          pid :: pid(),
+          mref :: reference(),
+          outstanding = none :: none | {reference(), term()},
+          pending = none :: none | term()
+         }).
+
+-record(materializer, {
+          pid :: pid(),
+          mref :: reference(),
+          generation :: reference(),
+          height = 0 :: non_neg_integer(),
+          projection_id = none :: none | <<_:256>>,
+          memory_bytes = 0 :: non_neg_integer()
+         }).
 
 -record(history, {
           identity :: {binary(), <<_:256>>},
@@ -62,11 +88,22 @@ asynchronous verdict/recovery worker boundary.
           bytes = 0 :: non_neg_integer(),
           projection = undefined :: undefined | map(),
           last_used = 0 :: integer(),
-          active = none :: none | reference()
+          active = none :: none | reference(),
+          consumers = #{} :: #{reference() => #consumer{}},
+          follow_timer = none :: none | reference(),
+          follow_token = none :: none | reference(),
+          retry_ms = ?DEFAULT_FOLLOW_RETRY_MS :: pos_integer(),
+          materializer = none :: none | #materializer{},
+          last_probe_ms = 0 :: integer(),
+          last_advance_ms = 0 :: integer(),
+          hinted_height = unknown :: unknown | non_neg_integer(),
+          current_view = unconfirmed :: confirmed | unconfirmed,
+          projection_state = building :: building | ready,
+          reachability = unknown :: reachable | unknown | {unreachable, term()}
          }).
 
 -record(request, {
-          from :: gen_server:from(),
+          from :: gen_server:from() | {follow, {binary(), <<_:256>>}, reference()},
           peer :: term(),
           identity :: {binary(), <<_:256>>},
           worker :: pid(),
@@ -90,7 +127,21 @@ asynchronous verdict/recovery worker boundary.
           peer_counts = #{} :: #{binary() => pos_integer()},
           pulls = #{} :: #{reference() => #pull{}},
           histories = #{} :: #{{binary(), binary()} => #history{}},
+          follows = #{} :: #{reference() => {binary(), <<_:256>>}},
           total_bytes = 0 :: non_neg_integer(),
+          projection_bytes = 0 :: non_neg_integer(),
+          projection_max_bytes = ?QUOD_MAX_FOREIGN_PROJECTION_BYTES :: pos_integer(),
+          follow_poll_ms = ?DEFAULT_FOLLOW_POLL_MS :: pos_integer(),
+          follow_retry_ms = ?DEFAULT_FOLLOW_RETRY_MS :: pos_integer(),
+          follow_max_retry_ms = ?DEFAULT_FOLLOW_MAX_RETRY_MS :: pos_integer(),
+          follow_polls = 0 :: non_neg_integer(),
+          follow_pages = 0 :: non_neg_integer(),
+          follow_entries = 0 :: non_neg_integer(),
+          follow_bytes = 0 :: non_neg_integer(),
+          follow_coalesced = 0 :: non_neg_integer(),
+          follow_retries = 0 :: non_neg_integer(),
+          projection_rebuilds = 0 :: non_neg_integer(),
+          max_follow_lag = 0 :: non_neg_integer(),
           channels = #{} :: #{binary() => {binary(), pos_integer()}}
          }).
 
@@ -288,6 +339,52 @@ local_current(LedgerRoot, Identity, TimeoutMs)
 local_current(_LedgerRoot, _Identity, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
+-doc "Start one monitored consumer of the shared certified target projection.".
+-spec follow({binary(), <<_:256>>}) ->
+          {ok, reference()} |
+          {error, invalid_identity | capacity | unavailable}.
+follow(Identity) ->
+    case valid_identity(Identity) of
+        true ->
+            case quod_reg:where(?KEY) of
+                Pid when is_pid(Pid) ->
+                    try gen_server:call(Pid, {follow, Identity}, 1000)
+                    catch exit:_ -> {error, unavailable}
+                    end;
+                undefined ->
+                    {error, unavailable}
+            end;
+        false ->
+            {error, invalid_identity}
+    end.
+
+-doc "Acknowledge installation of one exact local follow notice.".
+-spec ack(reference(), reference()) -> ok.
+ack(FollowRef, NoticeRef)
+  when is_reference(FollowRef), is_reference(NoticeRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, {ack, FollowRef, NoticeRef}, 1000)
+            catch exit:_ -> ok
+            end;
+        undefined -> ok
+    end;
+ack(_FollowRef, _NoticeRef) ->
+    ok.
+
+-doc "Remove one exact follow owned by the calling consumer.".
+-spec unfollow(reference()) -> ok.
+unfollow(FollowRef) when is_reference(FollowRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, {unfollow, FollowRef}, 1000)
+            catch exit:_ -> ok
+            end;
+        undefined -> ok
+    end;
+unfollow(_FollowRef) ->
+    ok.
+
 -doc """
 Return every foreign reference carried by one already-decoded DTX control.
 
@@ -383,7 +480,12 @@ stats() ->
 
 empty_stats() ->
     #{pending => 0, pulls => 0, histories => 0, cache_bytes => 0,
-      peers => 0}.
+      peers => 0, follow_consumers => 0, followed_histories => 0,
+      projection_workers => 0, projection_bytes => 0,
+      follow_building => 0, follow_unreachable => 0,
+      follow_capacity_limited => 0, follow_polls => 0, follow_pages => 0,
+      follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
+      follow_retries => 0, projection_rebuilds => 0, max_follow_lag => 0}.
 
 %%%===================================================================
 %%% gen_server
@@ -397,30 +499,100 @@ init(Opts) ->
                quod_ledger_store:default_data_dir(), "foreign-log")),
     FetchFun = maps:get(fetch_fun, Opts, undefined),
     PageTimeout = maps:get(page_timeout_ms, Opts, ?DEFAULT_PAGE_TIMEOUT_MS),
-    case valid_options(Root, FetchFun, PageTimeout) of
+    FollowPoll = maps:get(follow_poll_ms, Opts, ?DEFAULT_FOLLOW_POLL_MS),
+    FollowRetry = maps:get(follow_retry_ms, Opts, ?DEFAULT_FOLLOW_RETRY_MS),
+    FollowMaxRetry = maps:get(
+                       follow_max_retry_ms, Opts,
+                       ?DEFAULT_FOLLOW_MAX_RETRY_MS),
+    ProjectionMax = maps:get(
+                      projection_max_bytes, Opts,
+                      ?QUOD_MAX_FOREIGN_PROJECTION_BYTES),
+    case valid_options(Root, FetchFun, PageTimeout, FollowPoll, FollowRetry,
+                       FollowMaxRetry, ProjectionMax) of
         true ->
+            %% Materialized projections are rebuildable P state. A normal
+            %% worker shutdown removes its generation directory; clearing the
+            %% dedicated parent here also reclaims anything left by an
+            %% untrappable kill before this owner restarted.
+            cleanup_projection_dirs(Root),
             {Histories, Total} = load_histories(Root),
             S0 = #s{root = Root, fetch_fun = FetchFun,
                     page_timeout_ms = PageTimeout,
+                    follow_poll_ms = FollowPoll,
+                    follow_retry_ms = FollowRetry,
+                    follow_max_retry_ms = FollowMaxRetry,
+                    projection_max_bytes = ProjectionMax,
                     histories = Histories, total_bytes = Total},
             {ok, subscribe_histories(S0)};
         false ->
             {stop, bad_foreign_log_config}
     end.
 
-valid_options(Root, FetchFun, PageTimeout) ->
+valid_options(Root, FetchFun, PageTimeout, FollowPoll, FollowRetry,
+              FollowMaxRetry, ProjectionMax) ->
     (is_list(Root) orelse is_binary(Root)) andalso
         (FetchFun =:= undefined orelse is_function(FetchFun, 5)) andalso
         is_integer(PageTimeout) andalso PageTimeout > 0 andalso
-        PageTimeout =< ?MAX_TIMER_MS - 1000.
+        PageTimeout =< ?MAX_TIMER_MS - 1000 andalso
+        valid_timer(FollowPoll) andalso valid_timer(FollowRetry) andalso
+        valid_timer(FollowMaxRetry) andalso FollowRetry =< FollowMaxRetry andalso
+        is_integer(ProjectionMax) andalso ProjectionMax > 0 andalso
+        ProjectionMax =< ?QUOD_MAX_FOREIGN_PROJECTION_BYTES.
+
+valid_timer(Value) ->
+    is_integer(Value) andalso Value > 0 andalso Value =< ?MAX_TIMER_MS.
+
+cleanup_projection_dirs(Root) ->
+    _ = file:del_dir_r(filename:join(Root, "projections")),
+    ok.
 
 handle_call(stats, _From, S) ->
+    Followed = [H || H <- maps:values(S#s.histories),
+                     map_size(H#history.consumers) > 0],
     Reply = #{pending => map_size(S#s.pending),
               pulls => map_size(S#s.pulls),
               histories => map_size(S#s.histories),
               cache_bytes => S#s.total_bytes,
-              peers => map_size(S#s.peer_counts)},
+              peers => map_size(S#s.peer_counts),
+              follow_consumers => map_size(S#s.follows),
+              followed_histories => length(Followed),
+              projection_workers => length(
+                                      [ok || #history{materializer = M} <- Followed,
+                                             M =/= none]),
+              projection_bytes => S#s.projection_bytes,
+              follow_building => length(
+                                   [ok || #history{projection_state = building} <-
+                                              Followed]),
+              follow_unreachable => length(
+                                      [ok || #history{
+                                               reachability =
+                                                   {unreachable, _}} <- Followed]),
+              follow_capacity_limited => length(
+                                           [ok || #history{
+                                                    reachability =
+                                                        {unreachable,
+                                                         capacity}} <- Followed]),
+              follow_polls => S#s.follow_polls,
+              follow_pages => S#s.follow_pages,
+              follow_entries => S#s.follow_entries,
+              follow_bytes => S#s.follow_bytes,
+              follow_coalesced => S#s.follow_coalesced,
+              follow_retries => S#s.follow_retries,
+              projection_rebuilds => S#s.projection_rebuilds,
+              max_follow_lag => S#s.max_follow_lag},
     {reply, Reply, S};
+handle_call({follow, Identity}, From, S0) ->
+    {ConsumerPid, _Tag} = From,
+    case add_follow(Identity, ConsumerPid, S0) of
+        {ok, FollowRef, S1} -> {reply, {ok, FollowRef}, S1};
+        {error, Reason, S1} -> {reply, {error, Reason}, S1}
+    end;
+handle_call({ack, FollowRef, NoticeRef}, From, S0) ->
+    {ConsumerPid, _Tag} = From,
+    {reply, ok, acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0)};
+handle_call({unfollow, FollowRef}, From, S0) ->
+    {ConsumerPid, _Tag} = From,
+    {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
 handle_call(
   {verify, Peer, Endpoint, Ref, Phase, TimeoutMs}, From, S0) ->
     case validate_request(Peer, Endpoint, Ref, Phase, TimeoutMs) of
@@ -555,6 +727,12 @@ begin_verification(Peer, Endpoint, Ref, Phase, TimeoutMs, FetchFun,
       {exact, Peer, Endpoint, Ref, Phase}, FetchFun, From, S0).
 
 begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
+    case start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) of
+        {ok, S1} -> {noreply, S1};
+        {error, Reason, S1} -> {reply, {error, Reason}, S1}
+    end.
+
+start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     case admit_request(Peer, Identity, S0) of
         {ok, RequestRef, S1} ->
             Owner = self(),
@@ -577,9 +755,9 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
                                identity = Identity, worker = Worker,
                                mref = MRef, timer = Timer},
             Pending1 = (S1#s.pending)#{RequestRef => Request},
-            {noreply, S1#s{pending = Pending1}};
+            {ok, S1#s{pending = Pending1}};
         {error, Reason, S1} ->
-            {reply, {error, Reason}, S1}
+            {error, Reason, S1}
     end.
 
 handle_cast(_Message, S) ->
@@ -594,7 +772,9 @@ handle_info(
 handle_info({foreign_worker_done, RequestRef, Result, Meta}, S0) ->
     case maps:get(RequestRef, S0#s.pending, undefined) of
         #request{timed_out = false} ->
-            S1 = install_worker_meta(RequestRef, Meta, S0),
+            S1 = install_worker_meta(
+                   RequestRef, Meta,
+                   record_follow_progress(RequestRef, Meta, S0)),
             {noreply, finish_request(RequestRef, Result, S1)};
         #request{timed_out = true} ->
             {noreply, finish_request(RequestRef, {error, retry}, S0)};
@@ -623,17 +803,37 @@ handle_info({pull_timeout, ReqId}, S0) ->
         error ->
             {noreply, S0}
     end;
-handle_info({'DOWN', MRef, process, _Pid, _Reason}, S0) ->
+handle_info({follow_refresh, Identity, Token}, S0) ->
+    {noreply, begin_follow_refresh(Identity, Token, S0)};
+handle_info(
+  {foreign_projection_building, Identity, Generation, Height}, S0) ->
+    {noreply, projection_building(Identity, Generation, Height, S0)};
+handle_info(
+  {foreign_projection_waiting, Identity, Generation, _Reason, Height}, S0) ->
+    {noreply, projection_waiting(Identity, Generation, Height, S0)};
+handle_info(
+  {foreign_projection_ready, Identity, Generation, Result}, S0) ->
+    {noreply, projection_ready(Identity, Generation, Result, S0)};
+handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
     case request_by_monitor(MRef, S0#s.pending) of
         {ok, RequestRef} ->
             {noreply, finish_request(RequestRef, {error, retry}, S0)};
         error ->
-            {noreply, S0}
+            case consumer_by_monitor(MRef, S0) of
+                {ok, FollowRef} ->
+                    {noreply, remove_follow_any(FollowRef, S0)};
+                error ->
+                    {noreply, projection_down(MRef, Pid, Reason, S0)}
+            end
     end;
 handle_info(_Info, S) ->
     {noreply, S}.
 
-terminate(_Reason, #s{channels = Channels}) ->
+terminate(_Reason, #s{channels = Channels, histories = Histories}) ->
+    maps:foreach(
+      fun(_Identity, #history{materializer = Materializer}) ->
+              stop_materializer(Materializer)
+      end, Histories),
     _ = [catch quod_reg:unsubscribe({channel, Chan})
          || Chan <- maps:keys(Channels)],
     ok.
@@ -878,7 +1078,10 @@ make_byte_room(Bytes, Identity, S0) ->
 
 evict_one(S = #s{histories = Histories}, ExceptIdentity) ->
     Candidates =
-        [H || {Identity, H = #history{active = none}} <- maps:to_list(Histories),
+        [H || {Identity,
+               H = #history{active = none, consumers = Consumers,
+                            materializer = none}} <- maps:to_list(Histories),
+              map_size(Consumers) =:= 0,
               Identity =/= ExceptIdentity],
     case Candidates of
         [] -> {error, S};
@@ -906,12 +1109,18 @@ evict_history(Identity = {Ns, _}, S0) ->
 reset_cache_accounting(RequestRef, S0) ->
     case request_identity(RequestRef, S0) of
         {ok, Identity} ->
-            H0 = maps:get(Identity, S0#s.histories),
+            H00 = maps:get(Identity, S0#s.histories),
+            S1 = case H00#history.materializer of
+                     none -> S0;
+                     #materializer{} = M ->
+                         discard_materializer(Identity, H00, M, S0)
+                 end,
+            H0 = maps:get(Identity, S1#s.histories),
             H1 = H0#history{height = 0, bytes = 0,
                             projection = undefined},
-            {ok, S0#s{histories = (S0#s.histories)#{Identity => H1},
+            {ok, S1#s{histories = (S1#s.histories)#{Identity => H1},
                       total_bytes = max(
-                                      0, S0#s.total_bytes - H0#history.bytes)}};
+                                      0, S1#s.total_bytes - H0#history.bytes)}};
         error -> error
     end.
 
@@ -934,7 +1143,6 @@ finish_request(RequestRef, Reply, S0) ->
                   mref = MRef, timer = Timer}, Pending1} ->
             _ = erlang:cancel_timer(Timer),
             _ = erlang:demonitor(MRef, [flush]),
-            gen_server:reply(From, Reply),
             Count = maps:get(Peer, S0#s.peer_counts, 1),
             Counts1 = case Count of
                           1 -> maps:remove(Peer, S0#s.peer_counts);
@@ -951,10 +1159,527 @@ finish_request(RequestRef, Reply, S0) ->
                 end,
             S1 = S0#s{pending = Pending1, peer_counts = Counts1,
                       histories = Histories1},
-            cancel_request_pulls(RequestRef, S1);
+            S2 = cancel_request_pulls(RequestRef, S1),
+            case From of
+                {follow, Identity, Token} ->
+                    finish_follow_refresh(Identity, Token, Reply, S2);
+                _ ->
+                    gen_server:reply(From, Reply),
+                    S2
+            end;
         error ->
             S0
     end.
+
+%%%===================================================================
+%%% Continuous certified follow lifecycle
+%%%===================================================================
+
+add_follow(Identity, ConsumerPid, S0)
+  when is_pid(ConsumerPid) ->
+    case map_size(S0#s.follows) < ?QUOD_MAX_FOREIGN_FOLLOW_CONSUMERS of
+        false ->
+            {error, capacity, S0};
+        true ->
+            case ensure_history(Identity, S0) of
+                {ok, S1} ->
+                    H0 = maps:get(Identity, S1#s.histories),
+                    case map_size(H0#history.consumers) <
+                         ?DIRECTORY_MAX_NAMESPACES of
+                        false ->
+                            {error, capacity, S1};
+                        true ->
+                            FollowRef = make_ref(),
+                            MRef = erlang:monitor(process, ConsumerPid),
+                            Consumer = #consumer{pid = ConsumerPid, mref = MRef},
+                            H1 = H0#history{
+                                   consumers = (H0#history.consumers)#{
+                                                 FollowRef => Consumer},
+                                   projection_state = building,
+                                   last_used = quod_time:mono_ms()},
+                            S2 = S1#s{
+                                   histories = (S1#s.histories)#{Identity => H1},
+                                   follows = (S1#s.follows)#{FollowRef => Identity}},
+                            S3 = notify_follow(
+                                   FollowRef,
+                                   {building, materialized_height(H1)}, S2),
+                            {ok, FollowRef, schedule_follow(Identity, 0, S3)}
+                    end;
+                {error, S1} ->
+                    {error, capacity, S1}
+            end
+    end.
+
+acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{pid = ConsumerPid,
+                                outstanding = {NoticeRef, _Notice}} = C0,
+         H0} ->
+            C1 = C0#consumer{outstanding = none},
+            H1 = put_consumer(FollowRef, C1, H0),
+            S1 = put_history(Identity, H1, S0),
+            case C1#consumer.pending of
+                none -> S1;
+                Pending ->
+                    notify_follow(
+                      FollowRef, Pending,
+                      put_history(
+                        Identity,
+                        put_consumer(
+                          FollowRef, C1#consumer{pending = none}, H1),
+                        S1))
+            end;
+        _ ->
+            S0
+    end.
+
+remove_follow(FollowRef, ConsumerPid, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, _Identity, #consumer{pid = ConsumerPid}, _H} ->
+            remove_follow_any(FollowRef, S0);
+        _ ->
+            S0
+    end.
+
+remove_follow_any(FollowRef, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{mref = MRef}, H0} ->
+            _ = erlang:demonitor(MRef, [flush]),
+            Consumers1 = maps:remove(FollowRef, H0#history.consumers),
+            H1 = H0#history{consumers = Consumers1,
+                            last_used = quod_time:mono_ms()},
+            S1 = put_history(
+                   Identity, H1,
+                   S0#s{follows = maps:remove(FollowRef, S0#s.follows)}),
+            case map_size(Consumers1) of
+                0 -> stop_follow_target(Identity, S1);
+                _ -> S1
+            end;
+        error ->
+            S0
+    end.
+
+follow_consumer(FollowRef, S) ->
+    case maps:get(FollowRef, S#s.follows, undefined) of
+        undefined -> error;
+        Identity ->
+            case maps:get(Identity, S#s.histories, undefined) of
+                #history{} = H ->
+                    case maps:get(FollowRef, H#history.consumers, undefined) of
+                        #consumer{} = C -> {ok, Identity, C, H};
+                        undefined -> error
+                    end;
+                undefined -> error
+            end
+    end.
+
+consumer_by_monitor(MRef, S) ->
+    Matches =
+        [FollowRef
+         || {FollowRef, Identity} <- maps:to_list(S#s.follows),
+            #history{} = H <- [maps:get(Identity, S#s.histories)],
+            #consumer{mref = ConsumerMRef} <-
+                [maps:get(FollowRef, H#history.consumers)],
+            ConsumerMRef =:= MRef],
+    case Matches of
+        [FollowRef] -> {ok, FollowRef};
+        [] -> error
+    end.
+
+put_consumer(FollowRef, Consumer, H) ->
+    H#history{consumers = (H#history.consumers)#{FollowRef => Consumer}}.
+
+put_history(Identity, H, S) ->
+    S#s{histories = (S#s.histories)#{Identity => H}}.
+
+notify_history(Identity, Notice, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{consumers = Consumers} ->
+            lists:foldl(
+              fun(FollowRef, Acc) -> notify_follow(FollowRef, Notice, Acc) end,
+              S0, maps:keys(Consumers));
+        undefined -> S0
+    end.
+
+notify_follow(FollowRef, Notice, S0) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{outstanding = none, pid = Pid} = C0, H0} ->
+            NoticeRef = make_ref(),
+            Pid ! {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice},
+            C1 = C0#consumer{outstanding = {NoticeRef, Notice}},
+            put_history(Identity, put_consumer(FollowRef, C1, H0), S0);
+        {ok, Identity, #consumer{pending = Pending0} = C0, H0} ->
+            C1 = C0#consumer{pending = coalesce_notice(Pending0, Notice)},
+            put_history(
+              Identity, put_consumer(FollowRef, C1, H0),
+              S0#s{follow_coalesced = S0#s.follow_coalesced + 1});
+        error ->
+            S0
+    end.
+
+coalesce_notice(none, Notice) -> Notice;
+coalesce_notice(
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0},
+  {advanced, _From, To, Projection, Freshness, _Heads}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {resnapshot, _To0, _Projection0, _Fresh0},
+  {advanced, _From, To, Projection, Freshness, _Heads}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0},
+  {resnapshot, To, Projection, Freshness}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(
+  {resnapshot, _To0, _Projection0, _Fresh0},
+  {resnapshot, To, Projection, Freshness}) ->
+    {resnapshot, To, Projection, Freshness};
+coalesce_notice(_Previous, Newest) ->
+    Newest.
+
+schedule_follow(Identity, Delay, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{consumers = Consumers} = H0 when map_size(Consumers) > 0 ->
+            cancel_follow_timer(H0#history.follow_timer),
+            Token = make_ref(),
+            Timer = erlang:send_after(
+                      max(0, Delay), self(), {follow_refresh, Identity, Token}),
+            put_history(
+              Identity,
+              H0#history{follow_timer = Timer, follow_token = Token}, S0);
+        _ ->
+            S0
+    end.
+
+cancel_follow_timer(none) -> ok;
+cancel_follow_timer(Timer) ->
+    _ = erlang:cancel_timer(Timer),
+    ok.
+
+begin_follow_refresh(Identity, Token, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{follow_token = Token, consumers = Consumers,
+                 active = none} = H0 when map_size(Consumers) > 0 ->
+            H1 = H0#history{follow_timer = none, follow_token = none},
+            S1 = put_history(Identity, H1, S0),
+            Timeout = follow_request_timeout(S1),
+            case start_worker(
+                   {follow, Identity}, Identity, Timeout,
+                   {follow, Identity}, S1#s.fetch_fun,
+                   {follow, Identity, Token}, S1) of
+                {ok, S2} ->
+                    S2#s{follow_polls = S2#s.follow_polls + 1};
+                {error, cache_full, S2} ->
+                    retry_follow(
+                      Identity, capacity,
+                      notify_history(
+                        Identity,
+                        {unreachable, capacity, materialized_height(H1)}, S2));
+                {error, _Busy, S2} ->
+                    retry_follow(Identity, history_busy, S2)
+            end;
+        #history{follow_token = Token, consumers = Consumers} = H0
+          when map_size(Consumers) > 0 ->
+            H1 = H0#history{follow_timer = none, follow_token = none},
+            retry_follow(Identity, history_busy,
+                         put_history(Identity, H1, S0));
+        _ ->
+            S0
+    end.
+
+follow_request_timeout(S) ->
+    min(?MAX_TIMER_MS - 1000, 2 * S#s.page_timeout_ms + 1000).
+
+finish_follow_refresh(Identity, _Token, Reply, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{consumers = Consumers} when map_size(Consumers) =:= 0 ->
+            S0;
+        #history{} = H0 ->
+            Now = quod_time:mono_ms(),
+            {View, Hint, Reason, NormalDelay} =
+                case Reply of
+                    {ok, Evidence} when is_map(Evidence) ->
+                        {maps:get(current_view, Evidence, confirmed),
+                         maps:get(hinted_height, Evidence,
+                                  maps:get(slot, Evidence, unknown)),
+                         none, S0#s.follow_poll_ms};
+                    {error, {unreachable, Why}} ->
+                        {unconfirmed, H0#history.hinted_height, Why,
+                         retry_delay(H0, S0)};
+                    {error, _} ->
+                        {unconfirmed, H0#history.hinted_height, unavailable,
+                         retry_delay(H0, S0)}
+                end,
+            H1 = H0#history{last_probe_ms = Now, hinted_height = Hint,
+                            current_view = View,
+                            reachability =
+                                case Reason of
+                                    none -> reachable;
+                                    _ -> {unreachable, Reason}
+                                end,
+                            retry_ms = case Reason of
+                                           none -> S0#s.follow_retry_ms;
+                                           _ -> next_retry(H0, S0)
+                                       end},
+            S1 = put_history(
+                   Identity, H1,
+                   case Reason of
+                       none -> S0;
+                       _ -> S0#s{follow_retries = S0#s.follow_retries + 1}
+                   end),
+            S2 = ensure_materializer_advanced(Identity, S1),
+            S3 = case Reason of
+                     none -> S2;
+                     _ -> notify_history(
+                            Identity,
+                            {unreachable, Reason,
+                             materialized_height(
+                               maps:get(Identity, S2#s.histories))}, S2)
+                 end,
+            schedule_follow(Identity, NormalDelay, S3);
+        undefined ->
+            S0
+    end.
+
+retry_follow(Identity, Reason, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            Delay = retry_delay(H0, S0),
+            H1 = H0#history{retry_ms = next_retry(H0, S0),
+                            reachability = {unreachable, Reason}},
+            schedule_follow(
+              Identity, Delay,
+              put_history(
+                Identity, H1,
+                S0#s{follow_retries = S0#s.follow_retries + 1}));
+        undefined -> S0
+    end.
+
+retry_delay(#history{retry_ms = Retry}, S) ->
+    Span = max(1, Retry div 4),
+    min(S#s.follow_max_retry_ms,
+        Retry + erlang:phash2({self(), quod_time:mono_ms()}, Span)).
+
+next_retry(#history{retry_ms = Retry}, S) ->
+    min(S#s.follow_max_retry_ms, max(S#s.follow_retry_ms, Retry * 2)).
+
+ensure_materializer_advanced(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{height = Height, projection = Projection,
+                 materializer = Materializer,
+                 consumers = Consumers} = H0
+          when Height > 0, is_map(Projection), map_size(Consumers) > 0 ->
+            case history_head(Projection) of
+                {Height, <<_:256>>} = Head ->
+                    case Materializer of
+                        none ->
+                            {Pid, MRef, Generation} =
+                                quod_foreign_projection:start_monitor(
+                                  self(), Identity, S0#s.root,
+                                  H0#history.cache_ns),
+                            M = #materializer{pid = Pid, mref = MRef,
+                                              generation = Generation},
+                            quod_foreign_projection:advance(
+                              Pid, Generation, Height, Head),
+                            put_history(
+                              Identity,
+                              H0#history{materializer = M,
+                                         projection_state = building},
+                              S0#s{projection_rebuilds =
+                                       S0#s.projection_rebuilds + 1});
+                        #materializer{pid = Pid, generation = Generation} ->
+                            quod_foreign_projection:advance(
+                              Pid, Generation, Height, Head),
+                            S0
+                    end;
+                _ ->
+                    S0
+            end;
+        _ ->
+            S0
+    end.
+
+history_head(Projection) when is_map(Projection) ->
+    maps:get(history_head, Projection, none).
+
+projection_building(Identity, Generation, Height, S0) ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, H0, _M} ->
+            notify_history(
+              Identity, {building, Height},
+              put_history(
+                Identity, H0#history{projection_state = building}, S0));
+        error -> S0
+    end.
+
+projection_waiting(Identity, Generation, Height, S0) ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, _H, _M} ->
+            retry_follow(
+              Identity, network_identity,
+              notify_history(Identity, {building, Height}, S0));
+        error -> S0
+    end.
+
+projection_ready(Identity, Generation,
+                 #{from := From, height := Height,
+                   projection_id := ProjectionId,
+                   changed_heads := Heads0, resnapshot := Resnapshot0,
+                   memory_bytes := MemoryBytes}, S0)
+  when is_integer(From), is_integer(Height), Height >= From,
+       is_binary(ProjectionId), byte_size(ProjectionId) =:= 32,
+       is_list(Heads0), is_integer(MemoryBytes), MemoryBytes >= 0 ->
+    case materializer_matches(Identity, Generation, S0) of
+        {ok, H0, M0} ->
+            Total = max(
+                      0, S0#s.projection_bytes -
+                             M0#materializer.memory_bytes + MemoryBytes),
+            case Total =< S0#s.projection_max_bytes of
+                true ->
+                    M1 = M0#materializer{
+                           height = Height, projection_id = ProjectionId,
+                           memory_bytes = MemoryBytes},
+                    LastAdvance = case Height > M0#materializer.height of
+                                      true -> quod_time:mono_ms();
+                                      false -> H0#history.last_advance_ms
+                                  end,
+                    H1 = H0#history{materializer = M1,
+                                    last_advance_ms = LastAdvance,
+                                    projection_state = ready},
+                    S1 = put_history(
+                           Identity, H1,
+                           S0#s{projection_bytes = Total,
+                                max_follow_lag = max(
+                                                   S0#s.max_follow_lag,
+                                                   follow_lag(H1, Height))}),
+                    Freshness = follow_freshness(H1, Height),
+                    {Resnapshot, Heads} = bounded_heads(
+                                            Resnapshot0 orelse From =:= 0,
+                                            Heads0),
+                    Notice = case Resnapshot of
+                                 true -> {resnapshot, Height, ProjectionId,
+                                          Freshness};
+                                 false -> {advanced, From, Height, ProjectionId,
+                                           Freshness, Heads}
+                             end,
+                    notify_history(Identity, Notice, S1);
+                false ->
+                    S1 = discard_materializer(Identity, H0, M0, S0),
+                    retry_follow(
+                      Identity, capacity,
+                      notify_history(
+                        Identity, {unreachable, capacity, Height}, S1))
+            end;
+        error -> S0
+    end;
+projection_ready(_Identity, _Generation, _Result, S) ->
+    S.
+
+bounded_heads(true, _Heads) -> {true, []};
+bounded_heads(false, Heads) ->
+    case stable_bounded_heads(Heads, ?MAX_CHANGED_HEADS, #{}, []) of
+        {ok, Unique} -> {false, Unique};
+        overflow -> {true, []}
+    end.
+
+stable_bounded_heads([], _Left, _Seen, Acc) ->
+    {ok, lists:reverse(Acc)};
+stable_bounded_heads([Head | Rest], Left, Seen, Acc) ->
+    case maps:is_key(Head, Seen) of
+        true -> stable_bounded_heads(Rest, Left, Seen, Acc);
+        false when Left > 0 ->
+            stable_bounded_heads(
+              Rest, Left - 1, Seen#{Head => true}, [Head | Acc]);
+        false -> overflow
+    end.
+
+follow_freshness(H, Height) ->
+    Hint = H#history.hinted_height,
+    Lag = case Hint of
+              N when is_integer(N), N >= Height -> N - Height;
+              _ -> unknown
+          end,
+    #{last_probe_ms => H#history.last_probe_ms,
+      last_advance_ms => H#history.last_advance_ms,
+      hinted_height => Hint, lag => Lag,
+      current_view => H#history.current_view}.
+
+follow_lag(#history{hinted_height = Hint}, Height)
+  when is_integer(Hint), Hint >= Height -> Hint - Height;
+follow_lag(_H, _Height) -> 0.
+
+materializer_matches(Identity, Generation, S) ->
+    case maps:get(Identity, S#s.histories, undefined) of
+        #history{materializer =
+                     #materializer{generation = Generation} = M} = H ->
+            {ok, H, M};
+        _ -> error
+    end.
+
+projection_down(MRef, _Pid, _Reason, S0) ->
+    Matches =
+        [{Identity, H, M}
+         || {Identity, H = #history{materializer = M}} <-
+                maps:to_list(S0#s.histories),
+            is_record(M, materializer), M#materializer.mref =:= MRef],
+    case Matches of
+        [{Identity, H0, M0}] ->
+            S1 = discard_materializer(Identity, H0, M0, S0),
+            retry_follow(
+              Identity, materializer_down,
+              notify_history(
+                Identity, {building, materialized_height(H0)}, S1));
+        [] -> S0
+    end.
+
+discard_materializer(Identity, H0, M0, S0) ->
+    stop_materializer(M0),
+    put_history(
+      Identity,
+      H0#history{materializer = none, projection_state = building},
+      S0#s{projection_bytes = max(
+                                  0, S0#s.projection_bytes -
+                                         M0#materializer.memory_bytes)}).
+
+materialized_height(#history{materializer = none}) -> 0;
+materialized_height(#history{materializer = #materializer{height = Height}}) ->
+    Height.
+
+stop_follow_target(Identity, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{} = H0 ->
+            cancel_follow_timer(H0#history.follow_timer),
+            S1 = case H0#history.materializer of
+                     none -> S0;
+                     #materializer{} = M ->
+                         discard_materializer(Identity, H0, M, S0)
+                 end,
+            H1 = maps:get(Identity, S1#s.histories),
+            H2 = H1#history{follow_timer = none, follow_token = none,
+                            retry_ms = S1#s.follow_retry_ms,
+                            hinted_height = unknown,
+                            current_view = unconfirmed,
+                            projection_state = building,
+                            reachability = unknown},
+            S2 = put_history(Identity, H2, S1),
+            cancel_active_follow(Identity, S2);
+        undefined -> S0
+    end.
+
+cancel_active_follow(Identity, S0) ->
+    Matches =
+        [{Ref, Worker}
+         || {Ref,
+             #request{from = {follow, RequestIdentity, _}, worker = Worker}} <-
+                maps:to_list(S0#s.pending),
+            RequestIdentity =:= Identity],
+    lists:foreach(fun({_Ref, Worker}) -> exit(Worker, kill) end, Matches),
+    S0.
+
+stop_materializer(none) -> ok;
+stop_materializer(#materializer{pid = Pid, mref = MRef}) ->
+    _ = erlang:demonitor(MRef, [flush]),
+    quod_foreign_projection:stop(Pid).
 
 cancel_request_pulls(RequestRef, S0) ->
     {Keep, Drop} = maps:fold(
@@ -991,6 +1716,28 @@ install_worker_meta(RequestRef, Meta, S0) when is_map(Meta) ->
         error -> S0
     end;
 install_worker_meta(_RequestRef, _Meta, S) -> S.
+
+record_follow_progress(RequestRef, Meta, S0) when is_map(Meta) ->
+    case maps:get(RequestRef, S0#s.pending, undefined) of
+        #request{from = {follow, Identity, _Token}} ->
+            case maps:get(Identity, S0#s.histories, undefined) of
+                #history{height = OldHeight, bytes = OldBytes} ->
+                    Height = maps:get(height, Meta, OldHeight),
+                    Bytes = maps:get(bytes, Meta, OldBytes),
+                    Entries = max(0, Height - OldHeight),
+                    Pages = case Entries of
+                                0 -> 0;
+                                _ -> (Entries + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES - 1)
+                                     div ?QUOD_MAX_FOREIGN_PAGE_ENTRIES
+                            end,
+                    S0#s{follow_pages = S0#s.follow_pages + Pages,
+                         follow_entries = S0#s.follow_entries + Entries,
+                         follow_bytes = S0#s.follow_bytes + max(0, Bytes - OldBytes)};
+                undefined -> S0
+            end;
+        _ -> S0
+    end;
+record_follow_progress(_RequestRef, _Meta, S) -> S.
 
 foreign_worker_heap_words() ->
     max(1, ?QUOD_SCOPE_WORKER_MAX_HEAP_BYTES div erlang:system_info(wordsize)).
@@ -1093,12 +1840,110 @@ verification_work(
   Root, FetchFun, PageTimeout, _RequestTimeout) ->
     verify_local_current_identity_cached(
       Owner, RequestRef, LedgerRoot, Identity,
-      Root, FetchFun, PageTimeout).
+      Root, FetchFun, PageTimeout);
+verification_work(
+  {follow, Identity}, Owner, RequestRef,
+  Root, FetchFun, PageTimeout, RequestTimeout) ->
+    follow_identity(
+      Owner, RequestRef, Identity, Root, FetchFun,
+      PageTimeout, RequestTimeout).
 
 normalize_worker_result({{ok, _} = Result, Meta}) when is_map(Meta) ->
     {Result, Meta};
 normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
     {Result, Meta}.
+
+follow_identity(Owner, RequestRef, Identity = {Ns, Anchor}, Root,
+                FetchFun, PageTimeout, RequestTimeout) ->
+    case quod_simplex:history_source(Identity) of
+        {ok, LedgerRoot} ->
+            LocalPeer = {local, Identity},
+            LocalFetch =
+                fun(_Peer, _Endpoint, RequestedNs, FromIndex, ToIndex) ->
+                    case RequestedNs =:= Ns of
+                        true -> quod_catchup:serve_blocks(
+                                  Ns, LedgerRoot, FromIndex, ToIndex);
+                        false -> {error, wrong_namespace}
+                    end
+                end,
+            follow_local_snapshot(
+              Owner, RequestRef, LocalPeer, LedgerRoot, Identity,
+              Root, LocalFetch, PageTimeout);
+        {error, _} ->
+            case quod_directory:validator_routes(Ns, Anchor) of
+                {ok, Rows} ->
+                    Routes0 =
+                        [{Peer, Endpoint}
+                         || #{node_key := Peer, endpoint := Endpoint} <- Rows],
+                    case normalize_route_hints(Routes0) of
+                        {ok, [_ | _] = Routes} ->
+                            certified_current_snapshot(
+                              Owner, RequestRef, Routes, Identity,
+                              Root, FetchFun, PageTimeout, RequestTimeout);
+                        _ ->
+                            {{error, {unreachable, unavailable}}, #{}}
+                    end;
+                {error, Reason} ->
+                    {{error, {unreachable, Reason}}, #{}}
+            end
+    end.
+
+follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
+                      Identity = {Ns, Anchor}, Root, FetchFun, PageTimeout) ->
+    case quod_ledger_store:open_ro(Ns, LedgerRoot) of
+        {ok, Source} ->
+            Tip = quod_ledger_store:last(Source),
+            _ = quod_ledger_store:close(Source),
+            case open_cache(Owner, RequestRef, Identity, Root, none) of
+                {ok, Store0, Height0, Projection0, PhaseIndex, _} ->
+                    Outcome =
+                        try
+                            case Tip > Height0 of
+                                true ->
+                                    Target = min(
+                                               Tip,
+                                               Height0 +
+                                                   ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
+                                    advance_snapshot_sources(
+                                      [{LocalPeer, local}], Owner, RequestRef,
+                                      Ns, Anchor, Identity, Store0, Height0,
+                                      Projection0, PhaseIndex, Root, Target,
+                                      FetchFun, PageTimeout);
+                                false ->
+                                    {ok, Height0, Projection0}
+                            end
+                        after
+                            _ = quod_dtx_phase_index:close(PhaseIndex),
+                            _ = quod_ledger_store:close(Store0)
+                        end,
+                    case Outcome of
+                        {ok, Height1, Projection1} ->
+                            View = case Height1 >= Tip of
+                                       true -> confirmed;
+                                       false -> unconfirmed
+                                   end,
+                            Evidence = (current_view_evidence(
+                                          Identity, Height1, Projection1))#{
+                                         hinted_height => Tip,
+                                         current_view => View},
+                            {{ok, Evidence},
+                             #{height => Height1,
+                               bytes => cache_persisted_bytes(
+                                          Root, cache_namespace(Identity)),
+                               projection => Projection1}};
+                        {error, _} ->
+                            {{error, retry},
+                             #{height => Height0,
+                               bytes => cache_persisted_bytes(
+                                          Root, cache_namespace(Identity)),
+                               projection => Projection0}}
+                    end;
+                {error, _} ->
+                    {{error, retry}, #{}}
+            end;
+        _ ->
+            {{error, {unreachable, unavailable}}, #{}}
+    end.
 
 verify_cached(Owner, RequestRef, Peer, Endpoint, Ref, Phase, Identity,
               Root, FetchFun, PageTimeout, RequirePeer, Retried) ->

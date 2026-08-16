@@ -617,14 +617,66 @@ subscription_create_remove_uses_ordinary_transactions_test_() ->
         H0 = quod_prolog:applied(Ns),
         ?assertMatch({ok, _, _}, rp(Ns, {assertz, Fact})),
         ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 1,
-                                  source_targets_active := 0}) -> true;
+                                  source_targets_active := 0,
+                                  source_views_active := 1}) -> true;
                                (_) -> false end),
         ?assert(quod_prolog:applied(Ns) > H0),
         ?assertMatch({ok, _, _}, rp(Ns, Fact)),
         ?assertMatch({ok, _, _}, rp(Ns, {retract, Fact})),
-        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0,
+                                  source_views_active := 0}) -> true;
                                (_) -> false end)
     after cleanup_founded(F) end
+    end}.
+
+%% A co-hosted target uses the same certified foreign-history cache and the
+%% same committed reducer.  Runtime owns only its consumer reference/state.
+local_subscription_reaches_one_shared_ready_projection_test_() ->
+    {timeout, 60, fun() ->
+    Target = setup_founded(<<>>),
+    ForeignDir = temp_runtime_dir("foreign-follow"),
+    {ForeignOwner, OwnForeignOwner} = ensure_foreign_owner(ForeignDir),
+    Subscriber = setup_founded(<<>>),
+    {_, TargetNs, _} = Target,
+    {_, SubscriberNs, _} = Subscriber,
+    try
+        ok = wait_stats(TargetNs, fun(#{mode := live}) -> true; (_) -> false end),
+        ok = wait_stats(SubscriberNs,
+                        fun(#{mode := live}) -> true; (_) -> false end),
+        Anchor = quod_simplex:genesis_hash(TargetNs),
+        ?assertMatch(<<_:256>>, Anchor),
+        ?assertMatch(
+           {ok, _, _},
+           rp(SubscriberNs, {assertz, {subscribes, TargetNs, Anchor}})),
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{mode := live, subscriptions_active := 1,
+                     source_views_active := 1,
+                     source_views_ready := 1}) -> true;
+                  (_) -> false
+               end),
+        FollowStats = quod_foreign_log:stats(),
+        ?assertMatch(
+           #{followed_histories := 1, follow_consumers := 1,
+             projection_workers := 1, follow_building := 0,
+             follow_unreachable := 0}, FollowStats),
+        ?assert(maps:get(follow_pages, FollowStats) > 0),
+        ?assert(maps:get(follow_entries, FollowStats) > 0),
+        ?assert(maps:get(projection_rebuilds, FollowStats) > 0),
+        ?assertMatch(
+           {ok, _, _},
+           rp(SubscriberNs, {retract, {subscribes, TargetNs, Anchor}})),
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{subscriptions_active := 0, source_views_active := 0}) -> true;
+                  (_) -> false
+               end)
+    after
+        cleanup_founded(Subscriber),
+        cleanup_founded(Target),
+        stop_foreign_owner(ForeignOwner, OwnForeignOwner),
+        _ = file:del_dir_r(ForeignDir)
+    end
     end}.
 
 %% The catalogue is P, not another status store: killing only the runtime loses
@@ -973,3 +1025,26 @@ ready_without_started_quiesces_snapshot_readers_test_() ->
 %% poll the runtime's stats until Pred approves them (Pred must handle #{} — a restart gap)
 wait_stats(Ns, Pred) ->
     wait_until(fun() -> Pred(quod_runtime:stats(Ns)) end).
+
+ensure_foreign_owner(Dir) ->
+    case quod_reg:where({foreign_log, node}) of
+        Pid when is_pid(Pid) -> {Pid, false};
+        undefined ->
+            {ok, Pid} = quod_foreign_log:start_link(
+                          #{cache_dir => Dir, page_timeout_ms => 1000,
+                            follow_poll_ms => 50,
+                            follow_retry_ms => 10,
+                            follow_max_retry_ms => 50}),
+            {Pid, true}
+    end.
+
+stop_foreign_owner(_Pid, false) -> ok;
+stop_foreign_owner(Pid, true) ->
+    unlink(Pid),
+    try gen_server:stop(Pid) catch exit:_ -> ok end.
+
+temp_runtime_dir(Label) ->
+    filename:join(
+      "/tmp",
+      Label ++ "_" ++
+          integer_to_list(erlang:unique_integer([positive, monotonic]))).

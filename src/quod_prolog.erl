@@ -951,7 +951,8 @@ engine_anchor_without_genesis(_Signer, _Cfg) ->
 
 init_opened(Ns, Cfg, Self, Signer, MaxProofWorkers, MaxScopeWorkers,
             Outcomes) ->
-    S = #s{ns = Ns, self = Self, signer = Signer, est = build_kb(),
+    S = #s{ns = Ns, self = Self, signer = Signer,
+           est = quod_committed_projection:new_est(),
            outcomes = Outcomes,
            requests = gen_statem:reqids_new(),
            ttl = maps:get(transaction_ttl_ms, Cfg),
@@ -5231,102 +5232,91 @@ apply_step(#entry{index = Index}, _Origin, S = #s{ns = Ns, applied = A}) when In
 %% kind without a deterministic apply implementation fails loudly; it is never
 %% confused with `noop`, the one kind that legitimately applies no data change.
 %%
-%% Caller completions and outcome events are buffered through the fold and
-%% delivered only after `publish_snapshot` commits the outcome index and MVCC
-%% version. A successful API reply can therefore be followed immediately by a
-%% terminal outcome lookup or a read of the committed state. All envelopes in
-%% a block share that block-final snapshot.
-apply_step(#entry{index = Index, data = Data,
-                  timestamp = BlockTimestamp} = Entry, Origin, S) ->
-    case quod_ledger:classify(Data) of
-        {content, Transactions} ->
-            case apply_content_validation(
-                   Transactions, BlockTimestamp, Index, S) of
-                {valid, Validated} ->
-                    {S1, RevPostApply} =
-                        lists:foldl(
-                          fun(T, {Acc, PostApply}) ->
-                              {Acc1, Item} = apply_transaction(
-                                               T, Index, Origin, Acc),
-                              {Acc1, [Item | PostApply]}
-                          end, {Validated, []}, Transactions),
-                    complete_transactions(
-                      lists:reverse(RevPostApply),
-                      publish_snapshot(Index, S1));
-                {{unavailable, network_identity, Reason}, Deferred} ->
-                    wait_for_apply_dependency(Reason, Deferred);
-                {Invalid, _S1} ->
-                    error({invalid_committed_content, Index, Invalid})
-            end;
-        {'begin', Control} ->
-            apply_dtx_entry(Control, Entry, Origin, S);
-        {prepare, Control} ->
-            apply_dtx_entry(Control, Entry, Origin, S);
-        {decision, Control} ->
-            apply_dtx_entry(Control, Entry, Origin, S);
-        {finalize, Control} ->
-            apply_dtx_entry(Control, Entry, Origin, S);
-        {complete, Control} ->
-            apply_dtx_entry(Control, Entry, Origin, S);
-        noop ->
-            publish_snapshot(Index, S);
-        invalid ->
-            skip_unexpected(Index, Data, S)
+%% Caller completions and outcome events are buffered through the fold. The
+%% canonical reducer flushes the outcome index and publishes the MVCC version
+%% before returning them. A successful API reply can therefore be followed
+%% immediately by a terminal outcome lookup or a read of the committed state.
+%% All envelopes in a block share that block-final snapshot.
+apply_step(#entry{index = Index} = Entry, Origin, S0) ->
+    Projection0 = committed_projection(S0),
+    Floor = oldest_snapshot(Index, S0),
+    case quod_committed_projection:apply_entry(Entry, Floor, Projection0) of
+        {ok, Projection1, Result} ->
+            finish_projection_result(
+              Result, Index, Origin,
+              install_committed_projection(Projection1, S0));
+        {wait, network_identity, Reason, Projection1} ->
+            wait_for_apply_dependency(
+              Reason, install_committed_projection(Projection1, S0));
+        {error, {outcome_index, Reason}} ->
+            outcome_index_failure(Reason);
+        {error, Reason} ->
+            error(Reason)
     end.
 
-apply_content_validation(Transactions, BlockTimestamp, Slot, S) ->
-    commit_validation_result(
-      quod_commit_validation:content(
-        Transactions, BlockTimestamp, {claim, Slot},
-        commit_validation_context(S)), S).
+committed_projection(
+  #s{ns = Ns, applied = Applied, est = Est,
+     outcomes = Outcomes, signer = Signer}) ->
+    quod_committed_projection:new(
+      {Ns, target_anchor(Ns)}, Applied, Est, Outcomes, Signer).
 
-%% Apply one certified DTX record through the same pure reducer used by
-%% consensus history.  Prepare validates but does not publish its hidden plan;
-%% Finalize(commit) is the only phase that changes D.  The outcome projection
-%% is flushed with the ordered floor before MVCC publication, and only then is
-%% Simplex allowed to reopen the proof fence.
-apply_dtx_entry(Control,
-                #entry{index = Index, timestamp = BlockTimestamp} = Entry,
-                Origin,
-                S0 = #s{ns = Ns}) ->
-    Binding = {Ns, target_anchor(Ns)},
-    true = quod_dtx:verify_control(Binding, Control),
-    {ok, CertifiedRef} = quod_dtx:certified_entry_ref(
-                           Binding, Entry, Control),
-    GroupId = quod_dtx:group_id(Control),
-    {History0, Validated} =
-        case dtx_validation_verdict(
-               Control, BlockTimestamp, {claim, Index}, S0) of
-            {{valid, History}, RequestValidated} ->
-                {History, RequestValidated};
-            {{unavailable, network_identity, Reason}, Deferred} ->
-                {deferred, wait_for_apply_dependency(Reason, Deferred)};
-            {Invalid, _InvalidState} ->
-                error({invalid_committed_dtx, Index, Invalid})
-        end,
-    apply_validated_dtx(
-      History0, Validated, Control, CertifiedRef, Entry, Index, Origin,
-      GroupId).
+install_committed_projection(Projection, S) ->
+    S#s{applied = quod_committed_projection:applied(Projection),
+        est = quod_committed_projection:est(Projection),
+        outcomes = quod_committed_projection:outcomes(Projection)}.
 
-apply_validated_dtx(deferred, Deferred, _Control, _CertifiedRef, _Entry,
-                    _Index, _Origin, _GroupId) ->
-    Deferred;
-apply_validated_dtx(History0, Validated, Control, CertifiedRef, _Entry,
-                    Index, Origin, GroupId) ->
-    Outcomes1 = Validated#s.outcomes,
-    Projection0 = maps:get(projection, quod_outcome:dtx_state(Outcomes1)),
-    {ok, History1, Projection1, Effects} =
-        quod_dtx:reduce(Control, CertifiedRef, History0, Projection0),
-    {EffectState, Event} = apply_dtx_effects(
-                           Effects, Index,
-                           Validated#s{outcomes = Outcomes1}),
-    {ok, Outcomes2, DeferredAck} = quod_outcome:apply_dtx(
-                                      EffectState#s.outcomes, Index, Control,
-                                      History1, Projection1, Effects),
-    S2 = publish_snapshot(Index, EffectState#s{outcomes = Outcomes2}),
-    S3 = publish_dtx_outcome(Event, Index, Origin, S2),
-    S4 = finish_dtx_apply(DeferredAck, Control, Origin, S3),
-    maybe_release_completed_group(Control, GroupId, S4).
+finish_projection_result(
+  #{kind := content, transactions := Results, stats := Stats},
+  Index, Origin, S0) ->
+    S1 = add_projection_stats(Stats, S0),
+    complete_transactions(
+      [content_post_apply(Result, Index, Origin, S1) || Result <- Results],
+      S1);
+finish_projection_result(
+  #{kind := dtx, control := Control, group_id := GroupId,
+    publication := Publication, deferred_ack := DeferredAck,
+    stats := Stats}, Index, Origin, S0) ->
+    S1 = add_projection_stats(Stats, S0),
+    S2 = publish_dtx_outcome(Publication, Index, Origin, S1),
+    S3 = finish_dtx_apply(DeferredAck, Control, Origin, S2),
+    maybe_release_completed_group(Control, GroupId, S3);
+finish_projection_result(#{kind := noop}, _Index, _Origin, S) ->
+    S;
+finish_projection_result(
+  #{kind := unexpected, payload := Payload}, Index, _Origin,
+  S = #s{ns = Ns}) ->
+    logger:warning(
+      "quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p",
+      [Ns, Index, Payload]),
+    S;
+finish_projection_result(#{kind := already_applied}, _Index, _Origin, S) ->
+    S.
+
+content_post_apply(
+  #{status := applied, change := Change, height := Height},
+  Index, Origin, S) ->
+    #transaction{tx_id = Tx} = Change,
+    {outcome_applied(Change, Index, Origin, S), {committed, Tx, Height}};
+content_post_apply(
+  #{status := rejected, change := Change, reason := Reason,
+    height := Height}, Index, Origin, S) ->
+    #transaction{tx_id = Tx} = Change,
+    {outcome_rejected(Change, Index, Origin, S),
+     {rejected, Tx, Reason, Height}};
+content_post_apply(
+  #{status := duplicate_committed, change := #transaction{tx_id = Tx},
+    height := Height}, _Index, _Origin, _S) ->
+    {none, {committed, Tx, Height}};
+content_post_apply(
+  #{status := duplicate_rejected, change := #transaction{tx_id = Tx},
+    reason := Reason}, _Index, _Origin, _S) ->
+    {none, {rejected, Tx, Reason}}.
+
+add_projection_stats(
+  #{applies := Applies, rejects := Rejects, conflicts := Conflicts},
+  S = #s{applies = A0, rejects = R0, conflicts = C0}) ->
+    S#s{applies = A0 + Applies, rejects = R0 + Rejects,
+        conflicts = C0 + Conflicts}.
 
 local_dtx_group_state(GroupId, Outcomes0) ->
     Dtx = quod_outcome:dtx_state(Outcomes0),
@@ -5456,47 +5446,6 @@ test_release_absent_group_waiter(
     {CallRef, map_size(S1#s.group_waiters)}.
 -endif.
 
-apply_dtx_effects([], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{prepared, _GroupId, _Ref, _Manifest, _PlanDigest, _PlanBlob,
-    _Generation}], _Index, S) ->
-    %% `dtx/4` validated this exact Prepare against the frozen parent before
-    %% the reducer could produce the effect. Do not run a second validator.
-    {S, none};
-apply_dtx_effects(
-  [{apply_prepared, GroupId, Manifest, PlanDigest, PlanBlob,
-    _Ref, _Generation}], Index, S) ->
-    case quod_commit_validation:prepared_material(
-           Manifest, PlanDigest, PlanBlob,
-           commit_validation_context(S)) of
-        {ok, Context, #{diff := Diff}} ->
-            {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            {S#s{est = Est1, applies = S#s.applies + 1},
-             {group_applied, GroupId, Context, Diff}};
-        {error, Reason} ->
-            error({invalid_committed_dtx_finalize, Index, Reason})
-    end;
-apply_dtx_effects(
-  [{discard_prepared, _GroupId, _Manifest, _PlanDigest, _PlanBlob,
-    _Ref, _Generation}], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{origin_started, _GroupId, _Ref}], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{decided, _GroupId, _Verdict, _Ref}], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{direct_applied_abort, _GroupId, _Ref, _Generation}], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{completed, _GroupId, commit, _Ref}], _Index, S) ->
-    {S, none};
-apply_dtx_effects(
-  [{completed, _GroupId, abort, _Ref, _Reasons}], _Index, S) ->
-    {S, none}.
-
 finish_dtx_apply(none, _Control, _Origin, S) ->
     S;
 finish_dtx_apply(
@@ -5504,97 +5453,6 @@ finish_dtx_apply(
   S = #s{ns = Ns}) ->
     ok = quod_simplex:finalize_applied(Ns, GroupId, Slot, Generation),
     S.
-
-apply_transaction(#transaction{plan_digest = none} = Change,
-                  Index, Origin, S) ->
-    apply_new_transaction(Change, Index, Origin, new, S);
-apply_transaction(#transaction{} = Change, Index, Origin,
-                  S = #s{outcomes = Outcomes0}) ->
-    case quod_outcome:classify(Outcomes0, Change) of
-        {new, Candidate, Outcomes1} ->
-            apply_new_transaction(
-              Change, Index, Origin, {new, Candidate},
-              S#s{outcomes = Outcomes1});
-        {pending, Candidate, Outcomes1} ->
-            apply_new_transaction(
-              Change, Index, Origin, {pending, Candidate},
-              S#s{outcomes = Outcomes1});
-        {terminal, Stored, Outcomes1} ->
-            apply_known_transaction(
-              Change, Index, Origin, Stored,
-              S#s{outcomes = Outcomes1});
-        {error, Reason} ->
-            outcome_index_failure(Reason)
-    end.
-
-%% The outcome index survives an engine restart; the MVCC projection does not.
-%% Re-apply the transaction at its recorded terminal slot to rebuild that fresh
-%% projection, but skip any later duplicate occurrence of the same semantic tx.
-apply_known_transaction(Change, Index, Origin,
-                        #{status := Status} = Stored, S) ->
-    case terminal_slot(Status) of
-        Index ->
-            apply_new_transaction(
-              Change, Index, Origin, {terminal, Stored}, S);
-        Slot when Slot < Index -> apply_duplicate_transaction(Change, Stored, S);
-        _FutureSlot -> error({outcome_index_conflict, terminal_slot_order})
-    end.
-
-terminal_slot({committed, Slot}) -> Slot;
-terminal_slot({rejected, _Reason, Slot}) -> Slot;
-terminal_slot(_Status) -> error({outcome_index_conflict, bad_status}).
-
-apply_new_transaction(#transaction{tx_id = Tx, diff = Diff} = Change,
-                      Index, Origin, Prior, S) ->
-    %% A committee-changing transaction applies UNCONDITIONALLY — skip the OCC read-check. It was
-    %% re-validated against the parent state before the vote (`request_content_verdict/6`), so OCC is
-    %% redundant here AND is the source of a real divergence: the Simplex
-    %% history projection folds the
-    %% validator set unconditionally at commit, so an OCC-skipped membership diff would leave the KB fact
-    %% behind the validator set. Applying it here keeps the two projections in lockstep. (On a single
-    %% `peer_admitted` op — Slice A guarantees exactly one — apply is idempotent: an already-present
-    %% assert dedups, an absent retract is a no-op.) Content txs keep OCC.
-    case is_membership_change(Change) of
-        true ->
-            {ok, Est1} = quod_diff:apply_ops(S#s.est, Diff),
-            S0 = record_terminal(Change, Index, committed, Prior,
-                                 S#s{est = Est1,
-                                     applies = S#s.applies + 1}),
-            {S0, {outcome_applied(Change, Index, Origin, S0),
-                  {committed, Tx, Index}}};
-        false ->
-            apply_content(Change, Index, Origin, Prior, S)
-    end.
-
-apply_duplicate_transaction(#transaction{tx_id = Tx}, Stored, S) ->
-    case terminal_result(Stored) of
-        {committed, Slot, Tx} ->
-            {S, {none, {committed, Tx, Slot}}};
-        {rejected, Reason} ->
-            {S, {none, {rejected, Tx, Reason}}};
-        _ ->
-            error(outcome_index_corrupt)
-    end.
-
-skip_unexpected(Index, Other, S = #s{ns = Ns}) ->
-    logger:warning("quod_prolog[~s]: skipping unexpected committed payload at ~p: ~0p", [Ns, Index, Other]),
-    publish_snapshot(Index, S).
-
-publish_snapshot(Index, S = #s{est = #est{db = #db{mod = quod_erlog_db_mvcc,
-                                                     ref = Ref0} = Db} = Est,
-                                outcomes = Outcomes0}) ->
-    %% Every ledger entry advances the outcome projection's ordered floor,
-    %% including content and noops. DTX terminal visibility therefore cannot
-    %% jump across an unrecorded ordinary prefix. All rows accumulated by this
-    %% block and that floor become one DETS insert; on failure the process stops
-    %% before publishing the MVCC height and replay rebuilds both projections.
-    OutcomesStaged = require_outcome_index(
-                       quod_outcome:advance_applied(Outcomes0, Index)),
-    Outcomes1 = require_outcome_index(quod_outcome:flush(OutcomesStaged)),
-    Floor = oldest_snapshot(Index, S),
-    Ref1 = quod_erlog_db_mvcc:commit(Ref0, Index, Floor),
-    S#s{est = Est#est{db = Db#db{ref = Ref1}},
-        outcomes = Outcomes1, applied = Index}.
 
 oldest_snapshot(Current, #s{workers = Workers,
                             scope_workers = ScopeWorkers,
@@ -5611,55 +5469,6 @@ oldest_snapshot(Current, #s{workers = Workers,
         {_Pid, _MRef, PinFloor} -> min(PinFloor, ScopeFloor);
         none -> ScopeFloor
     end.
-
-%% A normal content transaction: OCC re-check the read-set, build the candidate
-%% state, then enforce invariants before publishing it.
-apply_content(#transaction{tx_id = Tx, diff = Diff, read_check = RC} = Change,
-              Index, Origin, Prior, S) ->
-    #est{db = #db{mod = quod_erlog_db_mvcc, ref = R}} = S#s.est,
-    case quod_diff:validate(RC, R) of
-        ok ->
-            case quod_diff:apply_ops_preserving_policy(S#s.est, Diff) of
-                {ok, Est1} ->
-                    S0 = record_terminal(Change, Index, committed, Prior,
-                                         S#s{est = Est1,
-                                             applies = S#s.applies + 1}),
-                    {S0, {outcome_applied(Change, Index, Origin, S0),
-                          {committed, Tx, Index}}};
-                {error, policy_self_seal_forbidden} ->
-                    reject_content(Change, Index, Origin, Prior,
-                                   policy_self_seal_forbidden, S)
-            end;
-        {conflict, _F} ->
-            reject_content(Change, Index, Origin, Prior, conflict_retry,
-                           S#s{conflicts = S#s.conflicts + 1})
-    end.
-
-%% A deterministic apply-time rejection leaves D unchanged but still records
-%% the exact typed reason for the submitting proof (including a foreign caller)
-%% and the durable outcome index. Replay is silent at the event layer only.
-reject_content(#transaction{tx_id = Tx} = Change, Index, Origin, Prior,
-               Reason, S) ->
-    S0 = record_terminal(Change, Index, {rejected, Reason}, Prior,
-                         S#s{rejects = S#s.rejects + 1}),
-    {S0, {outcome_rejected(Change, Index, Origin, S0),
-          {rejected, Tx, Reason, Index}}}.
-
-record_terminal(#transaction{plan_digest = none}, _Index, _Verdict, _Prior, S) ->
-    S;
-record_terminal(_Change, Index, Verdict, Prior,
-                S = #s{outcomes = Outcomes0}) ->
-    case quod_outcome:terminal(
-           Outcomes0, Index, Verdict, Prior) of
-        {_NewOrDuplicate, _Stored, Outcomes1} ->
-            S#s{outcomes = Outcomes1};
-        {error, Reason} ->
-            outcome_index_failure(Reason)
-    end.
-
-%% A committee-changing tx = its diff asserts/retracts `peer_admitted` (a PURE fold in quod_simplex —
-%% no process message, so no append<->apply deadlock).
-is_membership_change(Change) -> quod_simplex:committee_delta(Change) =/= {[], []}.
 
 %%%===================================================================
 %%% post-apply event layer (doc/agent-fipa-plan.md §7)
@@ -6069,7 +5878,7 @@ transaction (incarnation + committee facts + root content).
 """.
 -spec terms_to_diff([term()]) -> [op()].
 terms_to_diff(Terms) ->
-    Base = build_kb(),
+    Base = quod_committed_projection:new_est(),
     W0 = quod_erlog_db_local_prove:wrap_state(Base, #{read_set => false}),
     try
         WN = lists:foldl(
@@ -6089,56 +5898,4 @@ terms_to_diff(Terms) ->
 -doc "Parse a `.pl` file into a list of Prolog terms; a missing/unparseable file throws `{genesis_failed, _}`.".
 -spec read_terms(file:filename()) -> [term()].
 read_terms(File) ->
-    Res = try erlog_io:read_file(File) catch C0:E0 -> {caught, C0, E0} end,
-    case Res of
-        {ok, Terms}     -> Terms;
-        {error, Reason} -> throw({genesis_failed, {read_file, File, Reason}});
-        {caught, C, E}  -> throw({genesis_failed, {parse, File, {C, E}}})
-    end.
-
-build_kb() ->
-    %% erlog:new/2 loads bips + lists + dcg; #est{} is element 3 of #erlog{vs, est}.
-    %% The MVCC database keeps the full KB once in an unnamed ETS table. Proof workers
-    %% receive only its table/height handle; interpreted predicate versions give each
-    %% worker a stable frozen view while commits continue.
-    {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
-    Est0 = element(3, Erl),
-    %% Admit diagnostics against the exact atom-safe representation used by
-    %% ontology scope replies and durable abort Decisions. Anything retained
-    %% here is therefore guaranteed to cross either boundary unchanged; an
-    %% excess is represented at creation by fail_reasons_truncated.
-    EstReasonBounded = erlog_int:set_failure_reason_policy(
-                         {quod_wire_term, valid_failure_reason_stack}, Est0),
-    %% unknown predicate => fail (not error): a goal over an undefined predicate just
-    %% has no solution, rather than crashing.
-    {succeed, Est1} = erlog_int:prove_goal(
-                        {set_prolog_flag, unknown, fail}, EstReasonBounded),
-    %% Register every static Erlang predicate BEFORE loading the shared interpreted
-    %% clauses. A collision in common_predicates.pl then fails as an attempted
-    %% modification of a static procedure instead of shadowing a governed boundary.
-    Est2 = quod_predicates:load(Est1),
-    Est3 = quod_ask:load(Est2),
-    Est4 = quod_transaction_predicates:load(Est3),
-    Est5 = quod_action_predicates:load(Est4),
-    %% Publish the loaded common predicates as the height-0 base: every handle
-    %% a proof wraps is then a PUBLISHED snapshot even before the first block,
-    %% which read-set capture requires (tokens for the base read {present, 0}).
-    #est{db = #db{ref = Ref0} = Db} = Est6 = load_common_predicates(Est5),
-    Est6#est{db = Db#db{ref = quod_erlog_db_mvcc:publish_base(Ref0)}}.
-
-load_common_predicates(#est{db = Db0} = Est) ->
-    File = filename:join(code:priv_dir(quod),
-                         "ontologies/common_predicates.pl"),
-    Terms =
-        try read_terms(File)
-        catch
-            throw:{genesis_failed, ReadReason} ->
-                throw({common_predicates_failed, ReadReason})
-        end,
-    try
-        Db1 = lists:foldl(fun erlog_int:assertz_clause/2, Db0, Terms),
-        Est#est{db = Db1}
-    catch
-        Class:LoadReason ->
-            throw({common_predicates_failed, {Class, LoadReason}})
-    end.
+    quod_committed_projection:read_terms(File).

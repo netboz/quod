@@ -40,9 +40,10 @@ Two collection paths:
 | `quod_consensus_signing_journal_vote_sync_seconds{namespace}` | histogram | | time to make one local vote decision crash-durable before its signature is sent |
 | `quod_consensus_redrives/weak_cert_waits{namespace}` | gauge | | running totals: proposals re-sent while waiting, and blocks held back for lack of votes |
 | `quod_consensus_ahead_gap{namespace}` | gauge | | how many final blocks the network is ahead of this node (0 = up to date) |
-| `quod_runtime_healthy/handlers_active/subscriptions_active/reactions_active/source_targets_active/source_interests_active/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, local subscription/reaction catalogue, rebuilt-through height, effect-release frontier, queued events |
+| `quod_runtime_healthy/handlers_active/subscriptions_active/reactions_active/source_targets_active/source_interests_active/source_views_active/source_views_ready/source_views_building/source_views_unreachable/p_height/e_frontier/queue_len{namespace}` | gauge | | the P tier: live flag, active founding handlers, local subscription/reaction catalogue and certified source-view states, rebuilt-through height, effect-release frontier, queued events |
 | `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused executable declarations, and malformed subscription clauses |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
+| `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes whose final outcome was still unknown when their caller deadline elapsed |
@@ -126,6 +127,7 @@ handle_info(refresh, State) ->
     _ = [refresh_ns(Ns)        || Ns <- quod_brahms:namespaces()],
     _ = [refresh_log_ns(Ns)    || Ns <- quod_simplex:namespaces()],
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
+    _ = refresh_foreign_log(),                                      %% one shared owner per node
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
     _ = refresh_transport(),                                          %% per-peer QUIC srtt/cwnd/in-flight
@@ -155,6 +157,10 @@ declare(NodeId) ->
     H = fun(Name, Help, Buckets) ->
             prometheus_histogram:declare([{name, Name}, {help, Help}, {labels, [namespace]},
                                           {buckets, Buckets}, {constant_labels, CL}])
+        end,
+    N = fun(Name, Help) ->
+            prometheus_gauge:declare([{name, Name}, {help, Help},
+                                      {constant_labels, CL}])
         end,
     %% Peer discovery: how this node finds and keeps track of the other nodes.
     _ = G(quod_brahms_view_size,   "How many other nodes this node currently knows about."),
@@ -217,6 +223,10 @@ declare(NodeId) ->
     _ = G(quod_runtime_reactions_active, "How many founding-authorized react_on/3 declarations are active; Slice 1 compiles them but executes none."),
     _ = G(quod_runtime_source_targets_active, "How many distinct anchored remote ontologies have at least one active source-qualified reaction interest."),
     _ = G(quod_runtime_source_interests_active, "How many active source-qualified react_on/3 interests are compiled across all targets."),
+    _ = G(quod_runtime_source_views_active, "How many durable subscription targets this namespace runtime is currently following or retrying."),
+    _ = G(quod_runtime_source_views_ready, "How many subscribed foreign projections are currently certified and materialized for this namespace."),
+    _ = G(quod_runtime_source_views_building, "How many subscribed foreign projections are currently rebuilding from certified history."),
+    _ = G(quod_runtime_source_views_unreachable, "How many durable subscription targets this runtime cannot currently certify or reach."),
     _ = G(quod_runtime_p_height,        "The newest block whose derived working state this node has finished rebuilding."),
     _ = G(quod_runtime_e_frontier,      "The newest block fully processed by every handler; effects for a block are released only once this reaches it."),
     _ = G(quod_runtime_queue_len,       "Change events waiting for the handlers right now."),
@@ -230,6 +240,24 @@ declare(NodeId) ->
     _ = G(quod_runtime_heavy_superseded,"Total queued heavy jobs replaced by a newer job for the same resource before they ran (only ever goes up)."),
     _ = G(quod_runtime_heavy_rejected,  "Total heavy jobs refused before retention because the bounded pending-resource queue was full or the encoded job exceeded its size limit (only ever goes up). Any increase means handlers are producing work faster or larger than configured."),
     _ = G(quod_runtime_heavy_failures,  "Total heavy background jobs that failed or were killed (only ever goes up). These are isolated from the handler pipeline; a climbing value means one heavy resource is broken while the rest of the node keeps working."),
+    %% One node-wide certified foreign-history/fact owner. Target namespaces
+    %% are deliberately absent from labels so hostile or high-cardinality
+    %% durable subscription catalogues cannot grow Prometheus series.
+    _ = N(quod_foreign_follow_targets, "Distinct foreign ontology histories actively followed on this node."),
+    _ = N(quod_foreign_follow_consumers, "Local runtime consumer references sharing the node-wide certified follows."),
+    _ = N(quod_foreign_projection_workers, "Foreign fact-projection workers currently materializing or holding certified state."),
+    _ = N(quod_foreign_projection_bytes, "MVCC memory bytes held by all foreign fact projections; their outcome indexes use bounded resident caches over disposable disk state."),
+    _ = N(quod_foreign_follow_building, "Followed targets whose certified fact projection is rebuilding."),
+    _ = N(quod_foreign_follow_unreachable, "Followed targets currently unreachable or not certifiable."),
+    _ = N(quod_foreign_follow_capacity_limited, "Followed targets currently inactive because the bounded projection capacity is full."),
+    _ = N(quod_foreign_follow_polls, "Total certified-follow refresh attempts started (only ever goes up)."),
+    _ = N(quod_foreign_follow_pages, "Total certified history pages added by follow refreshes (only ever goes up)."),
+    _ = N(quod_foreign_follow_entries, "Total certified ledger entries added by follow refreshes (only ever goes up)."),
+    _ = N(quod_foreign_follow_bytes, "Total certified cache bytes added by follow refreshes (only ever goes up)."),
+    _ = N(quod_foreign_follow_coalesced, "Total source-view notices collapsed behind an unacknowledged notice (only ever goes up)."),
+    _ = N(quod_foreign_follow_retries, "Total certified-follow retries scheduled after unavailable work (only ever goes up)."),
+    _ = N(quod_foreign_projection_rebuilds, "Total foreign fact-projection generations started (only ever goes up)."),
+    _ = N(quod_foreign_follow_max_lag, "Largest certified source height lag observed since this owner started."),
     %% Stored data: this node's own copy of the shared data.
     _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
     _ = G(quod_prolog_applies,       "Total finished changes this node has written into its stored data (only ever goes up)."),
@@ -399,6 +427,8 @@ refresh_runtime_ns(Ns) ->
         #{mode := Mode, handlers_active := HA, subscriptions_active := SA,
           reactions_active := RA, source_targets_active := STA,
           source_interests_active := SIA, p_height := PH, e_frontier := EF,
+          source_views_active := SVA, source_views_ready := SVR,
+          source_views_building := SVB, source_views_unreachable := SVU,
           queue_len := QL, reconciles := RC, collapses := CO, dropped_events := DE,
           rejected_dynamic := RJ, rejected_subscriptions := RS,
           heavy_pending := HP, heavy_running := HR,
@@ -410,6 +440,10 @@ refresh_runtime_ns(Ns) ->
             _ = S(quod_runtime_reactions_active, RA),
             _ = S(quod_runtime_source_targets_active, STA),
             _ = S(quod_runtime_source_interests_active, SIA),
+            _ = S(quod_runtime_source_views_active, SVA),
+            _ = S(quod_runtime_source_views_ready, SVR),
+            _ = S(quod_runtime_source_views_building, SVB),
+            _ = S(quod_runtime_source_views_unreachable, SVU),
             _ = S(quod_runtime_p_height, PH),
             _ = S(quod_runtime_e_frontier, EF),
             _ = S(quod_runtime_queue_len, QL),
@@ -432,6 +466,9 @@ remove_runtime_metrics(Ns) ->
     Names = [quod_runtime_healthy, quod_runtime_handlers_active,
              quod_runtime_subscriptions_active, quod_runtime_reactions_active,
              quod_runtime_source_targets_active, quod_runtime_source_interests_active,
+             quod_runtime_source_views_active, quod_runtime_source_views_ready,
+             quod_runtime_source_views_building,
+             quod_runtime_source_views_unreachable,
              quod_runtime_p_height, quod_runtime_e_frontier, quod_runtime_queue_len,
              quod_runtime_reconciles, quod_runtime_collapses, quod_runtime_dropped_events,
              quod_runtime_rejected_dynamic, quod_runtime_rejected_subscriptions,
@@ -439,6 +476,28 @@ remove_runtime_metrics(Ns) ->
              quod_runtime_heavy_running, quod_runtime_heavy_superseded,
              quod_runtime_heavy_rejected, quod_runtime_heavy_failures],
     _ = [prometheus_gauge:remove(Name, Labels) || Name <- Names],
+    ok.
+
+refresh_foreign_log() ->
+    Stats = quod_foreign_log:stats(),
+    Set = fun(Name, Key) ->
+                  prometheus_gauge:set(Name, maps:get(Key, Stats, 0))
+          end,
+    _ = Set(quod_foreign_follow_targets, followed_histories),
+    _ = Set(quod_foreign_follow_consumers, follow_consumers),
+    _ = Set(quod_foreign_projection_workers, projection_workers),
+    _ = Set(quod_foreign_projection_bytes, projection_bytes),
+    _ = Set(quod_foreign_follow_building, follow_building),
+    _ = Set(quod_foreign_follow_unreachable, follow_unreachable),
+    _ = Set(quod_foreign_follow_capacity_limited, follow_capacity_limited),
+    _ = Set(quod_foreign_follow_polls, follow_polls),
+    _ = Set(quod_foreign_follow_pages, follow_pages),
+    _ = Set(quod_foreign_follow_entries, follow_entries),
+    _ = Set(quod_foreign_follow_bytes, follow_bytes),
+    _ = Set(quod_foreign_follow_coalesced, follow_coalesced),
+    _ = Set(quod_foreign_follow_retries, follow_retries),
+    _ = Set(quod_foreign_projection_rebuilds, projection_rebuilds),
+    _ = Set(quod_foreign_follow_max_lag, max_follow_lag),
     ok.
 
 refresh_log_ns(Ns) ->

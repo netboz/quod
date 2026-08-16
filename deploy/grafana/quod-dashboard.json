@@ -1466,7 +1466,7 @@
     {
       "type": "timeseries",
       "id": 113,
-      "title": "Ontology subscription catalogue (local P)",
+      "title": "Ontology subscriptions and certified follows",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -1477,7 +1477,7 @@
         "x": 12,
         "y": 145
       },
-      "description": "Slice 1 local derived state only. subscriptions counts valid anchored subscribes/2 facts; reactions counts founding-authorized react_on/3 declarations; source targets/interests show the compiled remote-event index. These lines do not claim that a network follower or registration exists yet. Rejected subscriptions counts malformed subscribes/2 clauses seen during reconciliation.",
+      "description": "Durable subscriptions and the rebuildable certified source views they activate. Runtime lines are per subscriber ontology. Node follow lines show the shared foreign-history/projection owner, so two local subscribers of one target share one target and one worker. Unreachable or capacity-limited values above zero require attention; no reaction executes in Slice 2.",
       "fieldConfig": {
         "defaults": {
           "unit": "short",
@@ -1512,6 +1512,41 @@
           "refId": "E",
           "expr": "quod_runtime_rejected_subscriptions{node_id=~\"$node\", namespace=~\"$namespace\"}",
           "legendFormat": "rejected subscriptions · {{namespace}} · {{node_id}}"
+        },
+        {
+          "refId": "F",
+          "expr": "quod_runtime_source_views_ready{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "source views ready · {{namespace}} · {{node_id}}"
+        },
+        {
+          "refId": "G",
+          "expr": "quod_runtime_source_views_building{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "source views building · {{namespace}} · {{node_id}}"
+        },
+        {
+          "refId": "H",
+          "expr": "quod_runtime_source_views_unreachable{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "source views unreachable · {{namespace}} · {{node_id}}"
+        },
+        {
+          "refId": "I",
+          "expr": "quod_foreign_follow_targets{node_id=~\"$node\"}",
+          "legendFormat": "shared follow targets · {{node_id}}"
+        },
+        {
+          "refId": "J",
+          "expr": "quod_foreign_projection_workers{node_id=~\"$node\"}",
+          "legendFormat": "projection workers · {{node_id}}"
+        },
+        {
+          "refId": "K",
+          "expr": "quod_foreign_follow_unreachable{node_id=~\"$node\"}",
+          "legendFormat": "follow unreachable · {{node_id}}"
+        },
+        {
+          "refId": "L",
+          "expr": "quod_foreign_follow_capacity_limited{node_id=~\"$node\"}",
+          "legendFormat": "follow capacity limited · {{node_id}}"
         }
       ]
     },

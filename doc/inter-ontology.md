@@ -270,14 +270,14 @@ publication floor, unavailable coordinator, or insufficient agreement remains ou
 There is no per-invocation subscription residue. In particular, an OCC read-set
 is never a notification subscription.
 
-The planned "tell me when it changes" facility is specified by
+The separate "keep following this ontology" facility is specified by
 `ontology-subscription-plan.md`: one explicit durable `subscribes/2` fact in
-the subscriber's ledger establishes the ontology relationship. Its existing
-source-qualified `react_on/3` declarations supply the event interests compiled
-into a host-to-host runtime registration and certificate-verified local foreign
-projection. The target stores no duplicate durable row. Registration uses the
-target's ordinary `can_invoke/4` policy, and routes remain local directory
-P-state.
+the subscriber's ledger establishes the ontology relationship. Its hosting
+runtime now maintains a shared certificate-verified local foreign projection
+through the existing `quod_foreign_log` cache and verifier. Target-side event
+registration and filtering from source-qualified `react_on/3` declarations
+remain a later slice. The target stores no duplicate durable row, and routes
+remain local directory P-state.
 
 That facility does not alter this document's scope invariant. For a nested A ->
 B -> C proof, origin A still owns route selection, scope custody, and DTX
@@ -466,11 +466,11 @@ directory/ask benchmark, not a second consensus benchmark.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 
-- **Ontology subscriptions** ("follow this ontology and deliver the source
-  events selected by my `react_on/3` rules"). Slice 1's local vocabulary and
-  runtime catalogue are implemented; certified following and delivery remain
-  planned in `ontology-subscription-plan.md`. Section 5 explains why none of it
-  is inferred from dead per-ask state.
+- **Ontology-subscription event delivery.** The local vocabulary, runtime
+  catalogue, and shared certified following are implemented. Authorized
+  target registration, filtering, and reaction delivery remain planned in
+  `ontology-subscription-plan.md`. Section 5 explains why none of it is
+  inferred from dead per-ask state.
 - **The source-qualified `react_on/3` pattern grammar.** It is frozen and
   locally validated in `ontology-subscription-plan.md` Slice 1, not inferred
   from OCC granularity. Network filtering measurements belong to later slices.

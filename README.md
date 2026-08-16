@@ -131,10 +131,11 @@ NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# ROUTINE UPGRADE — the common case. The ledger format is unchanged, so the
-# existing anchored volumes are resumed. One task group makes this a
-# fleet-wide max_parallel=1 roll that waits for consensus recovery between
-# allocations. Supply the anchor the fleet was founded with.
+# STEADY-STATE REDEPLOY — use this only after the network has already been
+# founded with this persistence generation. Release 0.7.72 activates signed
+# client writes and deliberately rejects older ledger records, so upgrading
+# to 0.7.72 must use the clean founding procedure below. Later 0.7.72
+# redeploys resume the new anchored volumes with this command.
 nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
   -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
   -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad

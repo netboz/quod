@@ -289,12 +289,19 @@ async function authenticate(providerPromise) {
 
 // The Explorer runs its own session on this node. A key held only by this tab
 // cannot be unlocked there, so signing in again would act as a different user
-// than the one owning this home.
+// than the one owning this home. Reading the Explorer signed out stays valid,
+// so this asks rather than refuses.
 explorerLink.addEventListener('click', (event) => {
   if (identity && !localKeyMatches(identity.provider)) {
-    event.preventDefault()
-    status.textContent =
-      'The Explorer signs in separately. Save your encrypted key here first, then unlock the same key there.'
+    const proceed = window.confirm(
+      'The Explorer signs in separately and cannot unlock a key that exists only in this tab.\n\n'
+        + 'Save your encrypted key here first to act as the same user there.\n\n'
+        + 'Open the Explorer anyway?')
+    if (!proceed) {
+      event.preventDefault()
+      status.textContent =
+        'Save your encrypted key, then open the Explorer and unlock that same key.'
+    }
   }
 })
 

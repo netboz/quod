@@ -1615,11 +1615,25 @@ current_route_hints(Supplied, Projection) ->
                            [Endpoint || {_Peer, Endpoint} <- Certified], true),
     Unshadowed = [Route || Route = {_Peer, Endpoint} <- Supplied,
                            not maps:is_key(Endpoint, CertifiedEndpoints)],
-    Hints = lists:usort(Certified ++ Unshadowed),
+    %% Preserve discovery order.  Bootstrap deliberately walks sources in
+    %% order, so sorting here would silently change which authenticated
+    %% source is tried first (and made that choice depend on random keys).
+    Hints = stable_unique_routes(Certified ++ Unshadowed),
     case length(Hints) =< ?MAX_CURRENT_ROUTE_HINTS of
         true -> Hints;
         false -> []
     end.
+
+stable_unique_routes(Routes) ->
+    {Unique, _Seen} =
+        lists:foldl(
+          fun(Route, {Acc, Seen}) ->
+              case maps:is_key(Route, Seen) of
+                  true -> {Acc, Seen};
+                  false -> {[Route | Acc], Seen#{Route => true}}
+              end
+          end, {[], #{}}, Routes),
+    lists:reverse(Unique).
 
 advance_current_snapshot(
   Owner, RequestRef, Hints, Identity, Store0, Height0, Projection0,

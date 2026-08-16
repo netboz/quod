@@ -35,7 +35,6 @@ const exportButton = document.querySelector('#export')
 const importButton = document.querySelector('#import')
 const importFile = document.querySelector('#import-file')
 const registerButton = document.querySelector('#register')
-const explorerLink = document.querySelector('#explorer')
 
 let identity = null
 
@@ -142,8 +141,17 @@ saveButton.addEventListener('click', async () => {
   saveButton.disabled = true
   try {
     await saveLocalKeyProvider(identity.provider, passphrase)
-    saveButton.textContent = 'Encrypted key saved'
-    status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser.`
+    // Read the store back. A browser that silently drops site data would
+    // otherwise leave someone believing a key exists that they can never
+    // unlock again, here or in the Explorer.
+    if (localKeyMatches(identity.provider)) {
+      saveButton.textContent = 'Encrypted key saved'
+      status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser. Unlock this same key in the Explorer to act as the same user there.`
+    } else {
+      saveButton.disabled = false
+      status.textContent =
+        'This browser did not keep the encrypted key. Export it to a file instead — private browsing or blocked site data prevents saving.'
+    }
   } catch (error) {
     status.textContent = `Could not save the key: ${error.message || 'unknown error'}`
     saveButton.disabled = false
@@ -286,24 +294,6 @@ async function authenticate(providerPromise) {
   registerButton.disabled = journalWarning !== ''
   status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'}${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}${journalWarning || ' You can now create its user home here.'}`
 }
-
-// The Explorer runs its own session on this node. A key held only by this tab
-// cannot be unlocked there, so signing in again would act as a different user
-// than the one owning this home. Reading the Explorer signed out stays valid,
-// so this asks rather than refuses.
-explorerLink.addEventListener('click', (event) => {
-  if (identity && !localKeyMatches(identity.provider)) {
-    const proceed = window.confirm(
-      'The Explorer signs in separately and cannot unlock a key that exists only in this tab.\n\n'
-        + 'Save your encrypted key here first to act as the same user there.\n\n'
-        + 'Open the Explorer anyway?')
-    if (!proceed) {
-      event.preventDefault()
-      status.textContent =
-        'Save your encrypted key, then open the Explorer and unlock that same key.'
-    }
-  }
-})
 
 void updateHealth()
 unlockButton.hidden = !hasLocalKeyProvider()

@@ -7,6 +7,7 @@ import { fetchBlock, fetchSummary, fetchTx, fetchTxs } from './api'
 import type { Block, NsSummary } from './api'
 import { Console } from './Console'
 import { ControlDetail } from './ControlDetail'
+import { NamespacePicker } from './NamespacePicker'
 import { addHistory, mergeFull, replaceHistory, startWs, useExplorerStore } from './store'
 import type { LiveTx } from './store'
 import { TxDetail } from './TxDetail'
@@ -158,21 +159,7 @@ function Header({
             quod <span className="text-gold">∴</span> explorer
           </h1>
         </div>
-        <nav className="flex gap-1">
-          {namespaces.map((n) => (
-            <button
-              key={n.ns}
-              onClick={() => onNs(n.ns)}
-              className={
-                'rounded-lg px-3 py-1 font-mono text-sm transition ' +
-                (n.ns === current ? 'bg-gold font-semibold text-teal' : 'text-cream/80 hover:bg-teal-light')
-              }
-            >
-              {n.ns}
-              {n.syncing && <span className="ml-1.5 text-[10px] text-gold-soft">syncing</span>}
-            </button>
-          ))}
-        </nav>
+        <NamespacePicker namespaces={namespaces} current={current} onNs={onNs} />
         <div className="ml-auto flex items-center gap-4">
           {interactive && <SessionControls />}
           {current && <Search ns={current} onFound={onFound} onControl={onControl} />}

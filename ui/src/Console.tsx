@@ -10,6 +10,7 @@ import {
 } from './api'
 import type { ProveReply } from './api'
 import { useSignedSession } from './session-context'
+import { shortNamespace } from './namespace'
 
 const EXAMPLES = ['isa(X, Y)', 'assertz(capital(france, paris))', 'capital(france, X)']
 
@@ -112,8 +113,11 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
   return (
     <div className="rounded-xl border border-teal/35 bg-white/90 shadow-sm">
       <header className="flex items-center justify-between border-b border-teal-dark/30 bg-teal px-4 py-2.5 text-cream">
-        <h2 className="text-[11px] font-semibold tracking-wider text-cream/80 uppercase">
-          Prove console — <span className="font-mono normal-case">{ns}</span>
+        <h2 className="min-w-0 text-[11px] font-semibold tracking-wider text-cream/80 uppercase">
+          Prove console —{' '}
+          <span className="font-mono normal-case" title={ns}>
+            {shortNamespace(ns)}
+          </span>
         </h2>
         <span className="text-[11px] text-cream/70">reads answer · writes commit</span>
       </header>
@@ -155,9 +159,9 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
           </>
         ) : (
           <div className="rounded-lg border border-gold/45 bg-gold-soft/15 px-3 py-2 text-sm text-teal">
-            Sign in above to run a goal. The Explorer keeps its own session: unlock the same
-            saved key you use on the client to act as the same user. The console signs the exact
-            Prolog text; the ontology's normal ACL still decides whether it is allowed.
+            Create an identity above to run a goal. This browser then stays signed in here and
+            on the client. The console signs the exact Prolog text; the ontology's normal ACL
+            still decides whether it is allowed.
             {sessionError && <span className="ml-2 text-rose">{sessionError}</span>}
           </div>
         )}

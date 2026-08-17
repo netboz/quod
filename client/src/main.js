@@ -43,63 +43,89 @@ let identity = null
 const navy = Color3.FromHexString(PALETTE.navy)
 const greyBlue = Color3.FromHexString(PALETTE.greyBlue)
 
-const engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true })
-const scene = new Scene(engine)
-const sky = navy.scale(0.34)
-scene.clearColor.set(sky.r, sky.g, sky.b, 1)
+// The world preview is decoration; signing goals is the product. A browser
+// with WebGL disabled or blocklisted must still create keys, log in, and act
+// as its user, so nothing below the preview may depend on the scene existing.
+let scene = null
+let ground = null
 
-const camera = new ArcRotateCamera(
-  'observer',
-  -Math.PI / 2.2,
-  Math.PI / 2.7,
-  12,
-  new Vector3(0, 0.5, 0),
-  scene,
-)
-camera.lowerRadiusLimit = 5
-camera.upperRadiusLimit = 20
-camera.attachControl(canvas, true)
+function startWorldPreview() {
+  const engine = new Engine(canvas, true, { preserveDrawingBuffer: false, stencil: true })
+  scene = new Scene(engine)
+  const sky = navy.scale(0.34)
+  scene.clearColor.set(sky.r, sky.g, sky.b, 1)
 
-const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
-light.intensity = 0.9
+  const camera = new ArcRotateCamera(
+    'observer',
+    -Math.PI / 2.2,
+    Math.PI / 2.7,
+    12,
+    new Vector3(0, 0.5, 0),
+    scene,
+  )
+  camera.lowerRadiusLimit = 5
+  camera.upperRadiusLimit = 20
+  camera.attachControl(canvas, true)
 
-const ground = MeshBuilder.CreateDisc('ground', { radius: 4, tessellation: 80 }, scene)
-ground.rotation.x = Math.PI / 2
-const groundMaterial = new StandardMaterial('ground-material', scene)
-groundMaterial.diffuseColor = greyBlue.scale(0.30)
-groundMaterial.emissiveColor = navy.scale(0.22)
-ground.material = groundMaterial
+  const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
+  light.intensity = 0.9
 
-// Red action, gold manifested effect, green material state — the semantic
-// triad of doc/client-world-direction.md §6.5, standing in for real entities.
-for (const [index, color] of [
-  Color3.FromHexString(PALETTE.red),
-  Color3.FromHexString(PALETTE.gold),
-  Color3.FromHexString(PALETTE.green),
-].entries()) {
-  const orb = MeshBuilder.CreateSphere(`presence-${index}`, { diameter: 1.15, segments: 32 }, scene)
-  const angle = (index / 3) * Math.PI * 2 + 0.4
-  orb.position = new Vector3(Math.cos(angle) * 2.2, 0.55, Math.sin(angle) * 2.2)
-  const material = new StandardMaterial(`presence-material-${index}`, scene)
-  material.diffuseColor = color
-  material.emissiveColor = color.scale(0.18)
-  orb.material = material
+  ground = MeshBuilder.CreateDisc('ground', { radius: 4, tessellation: 80 }, scene)
+  ground.rotation.x = Math.PI / 2
+  const groundMaterial = new StandardMaterial('ground-material', scene)
+  groundMaterial.diffuseColor = greyBlue.scale(0.30)
+  groundMaterial.emissiveColor = navy.scale(0.22)
+  ground.material = groundMaterial
+
+  // Red action, gold manifested effect, green material state — the semantic
+  // triad of doc/client-world-direction.md §6.5, standing in for real entities.
+  for (const [index, color] of [
+    Color3.FromHexString(PALETTE.red),
+    Color3.FromHexString(PALETTE.gold),
+    Color3.FromHexString(PALETTE.green),
+  ].entries()) {
+    const orb = MeshBuilder.CreateSphere(`presence-${index}`, { diameter: 1.15, segments: 32 }, scene)
+    const angle = (index / 3) * Math.PI * 2 + 0.4
+    orb.position = new Vector3(Math.cos(angle) * 2.2, 0.55, Math.sin(angle) * 2.2)
+    const material = new StandardMaterial(`presence-material-${index}`, scene)
+    material.diffuseColor = color
+    material.emissiveColor = color.scale(0.18)
+    orb.material = material
+  }
+
+  engine.runRenderLoop(() => scene.render())
+  window.addEventListener('resize', () => engine.resize())
 }
 
-engine.runRenderLoop(() => scene.render())
-window.addEventListener('resize', () => engine.resize())
+let worldPreviewNote = ''
+try {
+  startWorldPreview()
+} catch {
+  scene = null
+  ground = null
+  canvas.hidden = true
+  xrButton.hidden = true
+  worldPreviewNote =
+    ' The 3D preview is off because this browser has no WebGL — check hardware acceleration in its settings. Identities and goals are unaffected.'
+}
 
 async function updateHealth() {
   try {
     const response = await fetch('/health', { cache: 'no-store' })
     if (!response.ok) throw new Error(`health ${response.status}`)
-    status.textContent = 'This node is ready. You can start a temporary signed identity.'
+    status.textContent =
+      `This node is ready. You can start a temporary signed identity.${worldPreviewNote}`
   } catch {
-    status.textContent = 'This node is not ready yet. The world preview remains local.'
+    status.textContent =
+      `This node is not ready yet. The world preview remains local.${worldPreviewNote}`
   }
 }
 
 xrButton.addEventListener('click', async () => {
+  if (!scene) {
+    status.textContent = 'Immersive mode needs the 3D preview, which this browser cannot start.'
+    return
+  }
   xrButton.disabled = true
   try {
     // XR is optional and expensive.  Keep it out of the first scene bundle;

@@ -629,6 +629,64 @@ subscription_create_remove_uses_ordinary_transactions_test_() ->
     after cleanup_founded(F) end
     end}.
 
+%% A catalogue far larger than the node's foreign-history capacity must cost one
+%% shared retry lane, not one timer and one attach per durable fact. With no
+%% foreign-log owner every follow attempt fails, so every view stays in the
+%% waiting set and the sweep bound is the only thing keeping attempts finite.
+subscription_catalogue_retries_through_one_bounded_sweep_test_() ->
+    {timeout, 60, fun() ->
+    Previous = application:get_env(quod, subscription_follow_retry_ms),
+    application:set_env(quod, subscription_follow_retry_ms, 200),
+    F = setup_founded(<<>>),
+    {_, Ns, _} = F,
+    Targets = 40,
+    try
+        ok = wait_stats(Ns, fun(#{mode := live, subscriptions_active := 0}) -> true;
+                               (_) -> false end),
+        lists:foreach(
+          fun(N) ->
+              Fact = {subscribes, <<"private:sweep-", (integer_to_binary(N))/binary>>,
+                      <<N:256>>},
+              ?assertMatch({ok, _, _}, rp(Ns, {assertz, Fact}))
+          end, lists:seq(1, Targets)),
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, subscriptions_active := Active,
+                     source_views_active := Views})
+                     when Active =:= Targets, Views =:= Targets -> true;
+                  (_) -> false end),
+        %% Every view is tracked and waiting, and one armed sweep serves them
+        %% all. Its next turn attaches at most a batch rather than all forty,
+        %% which is what keeps a large catalogue off a per-target timer.
+        #{source_sweep_armed := Armed, source_attempts := Before} =
+            quod_runtime:stats(Ns),
+        ?assert(Armed),
+        ok = wait_stats(
+               Ns,
+               fun(#{source_attempts := Now}) -> Now > Before;
+                  (_) -> false end),
+        #{source_attempts := After} = quod_runtime:stats(Ns),
+        ?assert(After - Before =< 16),
+        %% Removing the catalogue drops every view and disarms the lane.
+        lists:foreach(
+          fun(N) ->
+              Fact = {subscribes, <<"private:sweep-", (integer_to_binary(N))/binary>>,
+                      <<N:256>>},
+              ?assertMatch({ok, _, _}, rp(Ns, {retract, Fact}))
+          end, lists:seq(1, Targets)),
+        ok = wait_stats(Ns, fun(#{mode := live, source_views_active := 0}) -> true;
+                               (_) -> false end)
+    after
+        cleanup_founded(F),
+        case Previous of
+            {ok, Value} ->
+                application:set_env(quod, subscription_follow_retry_ms, Value);
+            undefined ->
+                application:unset_env(quod, subscription_follow_retry_ms)
+        end
+    end
+    end}.
+
 %% A co-hosted target uses the same certified foreign-history cache and the
 %% same committed reducer.  Runtime owns only its consumer reference/state.
 local_subscription_reaches_one_shared_ready_projection_test_() ->

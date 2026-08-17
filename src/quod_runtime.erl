@@ -110,6 +110,12 @@ observers therefore maintain current P without reconstructing best-effort effect
 -define(DEFAULT_MAX_HEAVY_PENDING, 1024). %% distinct queued resources, coalescing included
 -define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
 -define(DEFAULT_SOURCE_FOLLOW_RETRY_MS, 5000).
+%% One sweep serves every source view that still needs a follow reference, so a
+%% catalogue far larger than the node's foreign-history capacity costs one timer
+%% and a bounded number of attach attempts per turn rather than one timer and
+%% one attach per durable fact.
+-define(SOURCE_FOLLOW_SWEEP_BATCH, 16).
+-define(SOURCE_FOLLOW_RETRY_CAP_MS, 60000).
 
 %% raw declaration fields — UNVALIDATED wire/KB terms until validate/2 has passed them
 -record(handler, {id :: term(),
@@ -137,6 +143,12 @@ observers therefore maintain current P without reconstructing best-effort effect
             %% One local consumer reference per exact durable subscription.
             %% Verification, cache and materialized P remain shared node-wide.
             source_views = #{} :: #{{binary(), binary()} => map()},
+            %% One shared retry lane for every source view awaiting a follow
+            %% reference: the armed sweep, its current backoff, and the counter
+            %% that keeps attach attempts fair across a large catalogue.
+            source_sweep = none :: none | {reference(), reference()},
+            source_sweep_delay = 0 :: non_neg_integer(),
+            source_attempts = 0 :: non_neg_integer(),
             foreign_log_monitor = none :: none | {pid(), reference()},
             %% ONE killable runner at a time — a reconcile or an ordered-tier event batch
             runner = none :: none | {reconcile | events, pid(), reference(), reference(),
@@ -257,6 +269,10 @@ handle_call(get_stats, _From, S) ->
               source_views_building => source_state_count(building, S#s.source_views),
               source_views_unreachable =>
                   source_state_count(unreachable, S#s.source_views),
+              %% One shared retry lane, and the running attach count that
+              %% proves a large catalogue stays bounded per sweep.
+              source_sweep_armed => S#s.source_sweep =/= none,
+              source_attempts => S#s.source_attempts,
               p_height => S#s.p_height, e_frontier => S#s.e_frontier,
               queue_len => S#s.queue_len,
               reconciles => S#s.reconciles,
@@ -368,10 +384,11 @@ handle_info(
   {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}, S0) ->
     {noreply, install_source_notice(
                 FollowRef, NoticeRef, Identity, Notice, S0)};
-handle_info({source_follow_retry, Identity, Token}, S0) ->
-    {noreply, retry_source_follow(Identity, Token, S0)};
-handle_info({source_follow_start, Identity}, S0) ->
-    {noreply, begin_source_follow(Identity, S0)};
+handle_info({source_follow_sweep, Token},
+            S0 = #s{source_sweep = {_Timer, Token}}) ->
+    {noreply, run_source_sweep(S0#s{source_sweep = none})};
+handle_info({source_follow_sweep, _StaleToken}, S) ->
+    {noreply, S};
 handle_info(
   {'DOWN', MRef, process, Pid, _Reason},
   S = #s{foreign_log_monitor = {Pid, MRef}}) ->
@@ -825,54 +842,58 @@ reconcile_source_views(Subscriptions, S0) ->
                        false -> enqueue_source_follow(Identity, Acc)
                    end
            end, S1, Subscriptions),
-    maybe_release_foreign_log_monitor(S2).
+    %% A new subscription enters the same sweep as a retry, so reconciling ten
+    %% thousand facts never issues ten thousand immediate attach calls.
+    maybe_release_foreign_log_monitor(sweep_source_views_now(S2)).
 
 enqueue_source_follow(Identity, S0) ->
     Height = case maps:get(Identity, S0#s.source_views, undefined) of
                  #{state := State} -> source_last_height(State);
                  undefined -> 0
              end,
-    self() ! {source_follow_start, Identity},
-    S0#s{source_views =
-             (S0#s.source_views)#{
-               Identity => #{follow_ref => pending,
-                             state => {building, Height}}}}.
-
-begin_source_follow(Identity, S0) ->
-    case maps:get(Identity, S0#s.source_views, undefined) of
-        #{follow_ref := pending} -> attach_source_follow(Identity, S0);
-        _ -> S0
-    end.
+    put_source_view(
+      Identity,
+      #{follow_ref => none, state => {building, Height}, attempt => 0}, S0).
 
 attach_source_follow(Identity, S0) ->
+    Height = source_view_height(Identity, S0),
+    {Attempt, S1} = next_source_attempt(S0),
     case quod_foreign_log:follow(Identity) of
         {ok, FollowRef} ->
-            case ensure_foreign_log_monitor(S0) of
-                {ok, S1} ->
-                    Row = #{follow_ref => FollowRef,
-                            state => {building, 0}},
-                    S1#s{source_views =
-                             (S1#s.source_views)#{Identity => Row}};
-                {error, S1} ->
+            case ensure_foreign_log_monitor(S1) of
+                {ok, S2} ->
+                    put_source_view(
+                      Identity,
+                      #{follow_ref => FollowRef, state => {building, Height},
+                        attempt => Attempt}, S2);
+                {error, S2} ->
                     %% The owner died between its reply and our monitor. The
                     %% reference died with it; retain only explicit P state.
-                    schedule_source_retry(
-                      Identity, unavailable, 0,
-                      S1#s{source_views =
-                               (S1#s.source_views)#{
-                                 Identity => #{follow_ref => none,
-                                               state =>
-                                                   {unreachable,
-                                                    unavailable, 0}}}})
+                    mark_source_unreachable(
+                      Identity, unavailable, Height, Attempt, S2)
             end;
         {error, Reason} ->
-            schedule_source_retry(
-              Identity, Reason, 0,
-              S0#s{source_views =
-                       (S0#s.source_views)#{
-                         Identity => #{follow_ref => none,
-                                       state => {unreachable, Reason, 0}}}})
+            mark_source_unreachable(Identity, Reason, Height, Attempt, S1)
     end.
+
+source_view_height(Identity, #s{source_views = Views}) ->
+    case maps:get(Identity, Views, undefined) of
+        #{state := State} -> source_last_height(State);
+        undefined -> 0
+    end.
+
+put_source_view(Identity, Row, S) ->
+    S#s{source_views = (S#s.source_views)#{Identity => Row}}.
+
+next_source_attempt(S = #s{source_attempts = Attempts}) ->
+    {Attempts + 1, S#s{source_attempts = Attempts + 1}}.
+
+mark_source_unreachable(Identity, Reason, Height, Attempt, S0) ->
+    S1 = put_source_view(
+           Identity,
+           #{follow_ref => none, state => {unreachable, Reason, Height},
+             attempt => Attempt}, S0),
+    schedule_source_sweep(S1).
 
 ensure_foreign_log_monitor(
   S = #s{foreign_log_monitor = {Pid, _MRef}}) when is_pid(Pid) ->
@@ -936,29 +957,68 @@ source_notice_state(
 source_notice_state(_) ->
     error.
 
-retry_source_follow(Identity, Token, S0) ->
-    case maps:get(Identity, S0#s.source_views, undefined) of
-        #{follow_ref := none, retry_token := Token} = Row0 ->
-            cancel_source_retry(maps:get(retry_timer, Row0, none)),
-            Views1 = (S0#s.source_views)#{
-                       Identity => maps:without(
-                                     [retry_token, retry_timer], Row0)},
-            enqueue_source_follow(Identity, S0#s{source_views = Views1});
-        _ ->
-            S0
+%% One armed sweep at a time. Views waiting for a follow reference are attached
+%% oldest attempt first, so a catalogue larger than the node's foreign-history
+%% capacity still rotates through its excess instead of starving it behind the
+%% same leading targets.
+run_source_sweep(S0) ->
+    Batch = source_sweep_batch(S0),
+    S1 = lists:foldl(fun attach_source_follow/2, S0, Batch),
+    Attached = lists:any(
+                 fun(Identity) ->
+                         case maps:get(Identity, S1#s.source_views, undefined) of
+                             #{follow_ref := Ref} -> is_reference(Ref);
+                             _ -> false
+                         end
+                 end, Batch),
+    case Attached of
+        true -> schedule_source_sweep(S1#s{source_sweep_delay = 0});
+        false -> schedule_source_sweep(S1)
     end.
 
-schedule_source_retry(Identity, Reason, Height, S0) ->
-    Row0 = maps:get(Identity, S0#s.source_views),
-    cancel_source_retry(maps:get(retry_timer, Row0, none)),
+source_sweep_batch(#s{source_views = Views}) ->
+    Waiting = lists:sort(
+                [{maps:get(attempt, Row, 0), Identity}
+                 || {Identity, Row} <- maps:to_list(Views),
+                    maps:get(follow_ref, Row, none) =:= none]),
+    [Identity || {_Attempt, Identity} <-
+                     lists:sublist(Waiting, ?SOURCE_FOLLOW_SWEEP_BATCH)].
+
+source_sweep_pending(#s{source_views = Views}) ->
+    lists:any(fun(Row) -> maps:get(follow_ref, Row, none) =:= none end,
+              maps:values(Views)).
+
+schedule_source_sweep(S = #s{source_sweep = {_Timer, _Token}}) ->
+    S;
+schedule_source_sweep(S) ->
+    case source_sweep_pending(S) of
+        false -> S;
+        true -> arm_source_sweep(next_source_sweep_delay(S), S)
+    end.
+
+%% A catalogue change deserves one prompt attempt without waiting out a backoff
+%% earned by unrelated unreachable targets.
+sweep_source_views_now(S0) ->
+    case source_sweep_pending(S0) of
+        false -> S0;
+        true -> arm_source_sweep(0, cancel_source_sweep(S0))
+    end.
+
+arm_source_sweep(Delay, S) ->
     Token = make_ref(),
-    Timer = erlang:send_after(
-              source_retry_ms(S0), self(),
-              {source_follow_retry, Identity, Token}),
-    Row1 = Row0#{follow_ref => none,
-                 state => {unreachable, Reason, Height},
-                 retry_token => Token, retry_timer => Timer},
-    S0#s{source_views = (S0#s.source_views)#{Identity => Row1}}.
+    Timer = erlang:send_after(Delay, self(), {source_follow_sweep, Token}),
+    S#s{source_sweep = {Timer, Token}, source_sweep_delay = Delay}.
+
+cancel_source_sweep(S = #s{source_sweep = none}) ->
+    S;
+cancel_source_sweep(S = #s{source_sweep = {Timer, _Token}}) ->
+    _ = erlang:cancel_timer(Timer),
+    S#s{source_sweep = none}.
+
+next_source_sweep_delay(S = #s{source_sweep_delay = 0}) ->
+    source_retry_ms(S);
+next_source_sweep_delay(S = #s{source_sweep_delay = Delay}) ->
+    erlang:min(Delay * 2, source_retry_cap_ms(S)).
 
 source_retry_ms(#s{config = Config}) ->
     Value = maps:get(
@@ -971,19 +1031,15 @@ source_retry_ms(#s{config = Config}) ->
         false -> ?DEFAULT_SOURCE_FOLLOW_RETRY_MS
     end.
 
-cancel_source_retry(none) -> ok;
-cancel_source_retry(Timer) ->
-    _ = erlang:cancel_timer(Timer),
-    ok.
+source_retry_cap_ms(S) ->
+    erlang:max(source_retry_ms(S), ?SOURCE_FOLLOW_RETRY_CAP_MS).
 
 stop_source_view(Identity, S0) ->
     case maps:take(Identity, S0#s.source_views) of
         {Row, Views1} ->
-            cancel_source_retry(maps:get(retry_timer, Row, none)),
             case maps:get(follow_ref, Row, none) of
                 FollowRef when is_reference(FollowRef) ->
                     ok = quod_foreign_log:unfollow(FollowRef);
-                pending -> ok;
                 none -> ok
             end,
             S0#s{source_views = Views1};
@@ -994,7 +1050,7 @@ stop_source_view(Identity, S0) ->
 stop_source_views(S0) ->
     S1 = lists:foldl(
            fun stop_source_view/2, S0, maps:keys(S0#s.source_views)),
-    clear_foreign_log_monitor(S1).
+    clear_foreign_log_monitor(cancel_source_sweep(S1)).
 
 maybe_release_foreign_log_monitor(S = #s{source_views = Views}) ->
     case lists:any(
@@ -1005,16 +1061,16 @@ maybe_release_foreign_log_monitor(S = #s{source_views = Views}) ->
     end.
 
 foreign_log_down(S0) ->
-    S1 = S0#s{foreign_log_monitor = none},
+    %% Every reference died with the owner. Reset the shared backoff so the
+    %% restarted owner is retried promptly, not at whatever delay the previous
+    %% outage had earned.
+    S1 = S0#s{foreign_log_monitor = none, source_sweep_delay = 0},
     maps:fold(
-      fun(Identity, Row, Acc) ->
+      fun(Identity, Row, Acc0) ->
               Height = source_last_height(maps:get(state, Row)),
-              Base = Row#{follow_ref => none,
-                          state => {unreachable, unavailable, Height}},
-              schedule_source_retry(
-                Identity, unavailable, Height,
-                Acc#s{source_views =
-                          (Acc#s.source_views)#{Identity => Base}})
+              {Attempt, Acc1} = next_source_attempt(Acc0),
+              mark_source_unreachable(
+                Identity, unavailable, Height, Attempt, Acc1)
       end, S1, S1#s.source_views).
 
 source_last_height({building, Height}) -> Height;

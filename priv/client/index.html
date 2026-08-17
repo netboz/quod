@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#0B3954">
     <title>Quod</title>
-    <script type="module" crossorigin src="./assets/index-BMkw8VV1.js"></script>
+    <script type="module" crossorigin src="./assets/index-CFYSr4UF.js"></script>
     <link rel="modulepreload" crossorigin href="./assets/engineStore-B7HFbPTa.js">
     <link rel="modulepreload" crossorigin href="./assets/internalTexture-SZsaZuGP.js">
     <link rel="modulepreload" crossorigin href="./assets/logger-CuBYPcDK.js">
@@ -34,11 +34,12 @@
         <p id="status">Checking this node…</p>
         <div class="actions">
           <button id="xr" type="button">Enter immersive mode</button>
-          <button id="identity" type="button">Create identity</button>
+          <button id="identity" type="button" hidden>Create identity</button>
           <button id="unlock" type="button" hidden>Unlock saved identity</button>
           <button id="save" type="button" hidden>Save encrypted key</button>
           <button id="export" type="button" hidden>Export encrypted key</button>
-          <button id="import" type="button">Import encrypted key</button>
+          <button id="import" type="button" hidden>Import encrypted key</button>
+          <button id="sign-out" type="button" hidden>Sign out</button>
           <button id="register" type="button" hidden>Create user home</button>
           <a class="button-link" href="/explorer/">Open Explorer</a>
           <input id="import-file" type="file" accept="application/json,.quodkey" hidden>

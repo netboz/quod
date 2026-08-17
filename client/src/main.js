@@ -8,13 +8,16 @@ import { StandardMaterial } from '@babylonjs/core/Materials/standardMaterial'
 import { Vector3 } from '@babylonjs/core/Maths/math.vector'
 import { PALETTE } from './palette.js'
 import {
+  clearActiveKeyProvider,
   createKeyProvider,
   hasLocalKeyProvider,
   importEncryptedKeyProvider,
+  loadActiveKeyProvider,
   loadLocalKeyProvider,
   localKeyMatches,
   exportEncryptedKeyProvider,
   saveLocalKeyProvider,
+  storeActiveKeyProvider,
 } from './key-provider.js'
 import {
   assertCrypto,
@@ -35,6 +38,7 @@ const exportButton = document.querySelector('#export')
 const importButton = document.querySelector('#import')
 const importFile = document.querySelector('#import-file')
 const registerButton = document.querySelector('#register')
+const signOutButton = document.querySelector('#sign-out')
 
 let identity = null
 
@@ -145,6 +149,18 @@ identityButton.addEventListener('click', async () => {
     status.textContent = 'Creating an Ed25519 identity…'
     await authenticate(createKeyProvider())
   })
+})
+
+// Leaving is explicit and complete: the browser keeps no identity afterwards,
+// so an exported file is the only way back to this user.
+signOutButton.addEventListener('click', async () => {
+  signOutButton.disabled = true
+  try {
+    await clearActiveKeyProvider()
+  } catch {
+    /* nothing kept it; reloading still lands on a signed-out page */
+  }
+  window.location.reload()
 })
 
 unlockButton.addEventListener('click', async () => {
@@ -294,6 +310,15 @@ async function confirmedPassphrase(promptText) {
 async function authenticate(providerPromise) {
   identity = await authenticateKey(await providerPromise)
   const { provider, session } = identity
+  // Keep the identity for the next page and the next visit. Every entry point
+  // funnels through here, so creating, unlocking and importing all persist.
+  let identityStorageNote = ''
+  try {
+    await storeActiveKeyProvider(provider)
+  } catch {
+    identityStorageNote =
+      ' This browser will not keep the identity, so it must be imported again next time.'
+  }
   let recovered = []
   let journalWarning = ''
   try {
@@ -302,24 +327,48 @@ async function authenticate(providerPromise) {
     journalWarning = ' Durable write storage is unavailable, so reads remain available but writes are disabled.'
   }
   const unresolved = recovered.filter(({ reply }) => reply?.terminal !== true).length
-  identityButton.textContent = 'Identity active'
-  identityButton.disabled = true
-  // This session already holds one key. Offering to unlock or import another
-  // one here would silently propose a different user than the signed-in one.
+  // One identity per browser: the ways in are gone once someone is signed in,
+  // and the way out is explicit.
+  identityButton.hidden = true
   unlockButton.hidden = true
   importButton.hidden = true
-  // Saved means *this* key is saved. A browser holding an older key must still
-  // be offered Save, or a freshly created identity could be used to found a
-  // permanent user home and then vanish when the tab closes.
-  const saved = localKeyMatches(provider)
-  saveButton.hidden = saved
-  saveButton.disabled = false
+  saveButton.hidden = true
   exportButton.hidden = false
   exportButton.disabled = false
+  signOutButton.hidden = false
+  signOutButton.disabled = false
   registerButton.hidden = false
   registerButton.disabled = journalWarning !== ''
-  status.textContent = `Signed in as ${session.user_id.slice(0, 17)}… ${saved ? 'This key is saved on this browser.' : 'Save it before you leave this tab.'}${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}${journalWarning || ' You can now create its user home here.'}`
+  status.textContent =
+    `Signed in as ${session.user_id.slice(0, 17)}…`
+    + ` This browser stays signed in, including in the Explorer.`
+    + `${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}`
+    + `${journalWarning || ' You can create its user home here.'}`
+    + identityStorageNote
+    + worldPreviewNote
+}
+
+// Sign in before anything is clicked when this browser already holds the
+// identity. Nobody should retype a passphrase to keep being the same user.
+async function resumeIdentity() {
+  const provider = await loadActiveKeyProvider()
+  if (!provider) {
+    identityButton.hidden = false
+    unlockButton.hidden = !hasLocalKeyProvider()
+    importButton.hidden = false
+    return
+  }
+  try {
+    status.textContent = 'Signing in with this browser’s identity…'
+    await authenticate(Promise.resolve(provider))
+  } catch (error) {
+    identityButton.hidden = false
+    unlockButton.hidden = !hasLocalKeyProvider()
+    importButton.hidden = false
+    status.textContent =
+      `Could not sign in with the stored identity: ${error.message || 'unknown error'}`
+  }
 }
 
 void updateHealth()
-unlockButton.hidden = !hasLocalKeyProvider()
+void resumeIdentity()

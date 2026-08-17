@@ -1,11 +1,14 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
+  clearActiveKeyProvider,
   createKeyProvider,
   hasLocalKeyProvider,
+  loadActiveKeyProvider,
   loadLocalKeyProvider,
   localKeyMatches,
   saveLocalKeyProvider,
+  storeActiveKeyProvider,
 } from '../../client/src/key-provider.js'
 import {
   assertCrypto,
@@ -29,6 +32,13 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
       assertCrypto()
       const next = await authenticateKey(await providerPromise)
       setIdentity(next)
+      // Same identity store as the client page of this origin, so signing in
+      // on either surface signs in on both.
+      try {
+        await storeActiveKeyProvider(next.provider)
+      } catch {
+        /* a browser that keeps nothing still works for this session */
+      }
       setSaved(localKeyMatches(next.provider))
       try {
         const recovered = await resolveSignedOperations(next)
@@ -47,6 +57,32 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   }
 
   const create = () => login(createKeyProvider())
+
+  const signOut = async () => {
+    setBusy(true)
+    try {
+      await clearActiveKeyProvider()
+    } catch {
+      /* nothing kept it */
+    }
+    setIdentity(null)
+    setSaved(false)
+    setUnresolved(0)
+    setError(null)
+    setBusy(false)
+  }
+
+  // Resume the browser's identity before anything is clicked. Reaching the
+  // Explorer from the client must not ask anyone to log in a second time.
+  const resumed = useRef(false)
+  useEffect(() => {
+    if (resumed.current) return
+    resumed.current = true
+    void (async () => {
+      const provider = await loadActiveKeyProvider()
+      if (provider) await login(Promise.resolve(provider))
+    })()
+  }, [])
 
   const unlock = async () => {
     const passphrase = window.prompt('Passphrase for your saved Quod identity')
@@ -76,7 +112,8 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   }
 
   return (
-    <SessionContext.Provider value={{ identity, busy, saved, unresolved, error, create, unlock, save }}>
+    <SessionContext.Provider
+      value={{ identity, busy, saved, unresolved, error, create, unlock, save, signOut }}>
       {children}
     </SessionContext.Provider>
   )
@@ -90,16 +127,14 @@ export function SessionControls() {
         <span className="font-mono text-cream/80">
           {session.identity.session.user_id.slice(0, 17)}…
         </span>
-        {!session.saved && (
-          <button
-            type="button"
-            disabled={session.busy}
-            onClick={() => void session.save()}
-            className="rounded-md border border-gold/60 px-2 py-1 text-gold hover:bg-teal-light disabled:opacity-40"
-          >
-            Save key
-          </button>
-        )}
+        <button
+          type="button"
+          disabled={session.busy}
+          onClick={() => void session.signOut()}
+          className="rounded-md border border-cream/40 px-2 py-1 text-cream hover:bg-teal-light disabled:opacity-40"
+        >
+          Sign out
+        </button>
         {session.unresolved > 0 && (
           <span className="text-gold-soft">
             {session.unresolved} unresolved {session.unresolved === 1 ? 'write' : 'writes'}

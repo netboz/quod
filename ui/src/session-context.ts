@@ -10,6 +10,7 @@ export type SessionState = {
   create: () => Promise<void>
   unlock: () => Promise<void>
   save: () => Promise<void>
+  signOut: () => Promise<void>
 }
 
 export const SessionContext = createContext<SessionState | null>(null)

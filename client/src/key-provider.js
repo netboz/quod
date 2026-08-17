@@ -1,4 +1,8 @@
 const STORAGE_KEY = 'quod.user-key.v1'
+const IDENTITY_DATABASE = 'quod.identity.v1'
+const IDENTITY_STORE = 'identity'
+const IDENTITY_VERSION = 1
+const ACTIVE_KEY = 'active'
 const BUNDLE_VERSION = 1
 const PBKDF2_ITERATIONS = 600_000
 const encoder = new TextEncoder()
@@ -66,6 +70,79 @@ export async function importEncryptedKeyProvider(encoded, passphrase) {
 
 export async function saveLocalKeyProvider(provider, passphrase) {
   localStorage.setItem(STORAGE_KEY, await exportEncryptedKeyProvider(provider, passphrase))
+}
+
+// The active identity of this browser. It is held as a live key pair so every
+// page of this origin signs as the same user without asking for a passphrase
+// again; an encrypted export remains the way to carry the identity elsewhere.
+// The trade is deliberate: a passphrase on every page load is what makes people
+// reuse one weak phrase, and this origin serves no third-party code.
+export async function storeActiveKeyProvider(provider) {
+  const database = await openIdentityDatabase()
+  try {
+    await identityTransaction(
+      database, 'readwrite',
+      store => store.put({ id: ACTIVE_KEY, key_pair: provider.keyPair }))
+  } finally {
+    database.close()
+  }
+}
+
+export async function loadActiveKeyProvider() {
+  if (!globalThis.indexedDB) return null
+  let database
+  try {
+    database = await openIdentityDatabase()
+  } catch {
+    return null
+  }
+  try {
+    const stored = await identityTransaction(
+      database, 'readonly', store => store.get(ACTIVE_KEY))
+    const keyPair = stored?.key_pair
+    if (!keyPair?.privateKey || !keyPair?.publicKey) return null
+    return providerFromKeyPair(keyPair)
+  } catch {
+    return null
+  } finally {
+    database.close()
+  }
+}
+
+export async function clearActiveKeyProvider() {
+  if (!globalThis.indexedDB) return
+  const database = await openIdentityDatabase()
+  try {
+    await identityTransaction(
+      database, 'readwrite', store => store.delete(ACTIVE_KEY))
+  } finally {
+    database.close()
+  }
+}
+
+function openIdentityDatabase() {
+  return new Promise((resolve, reject) => {
+    const open = indexedDB.open(IDENTITY_DATABASE, IDENTITY_VERSION)
+    open.onupgradeneeded = () => {
+      if (!open.result.objectStoreNames.contains(IDENTITY_STORE)) {
+        open.result.createObjectStore(IDENTITY_STORE, { keyPath: 'id' })
+      }
+    }
+    open.onsuccess = () => resolve(open.result)
+    open.onerror = () => reject(open.error || new Error('no identity storage'))
+    open.onblocked = () => reject(new Error('identity storage is blocked'))
+  })
+}
+
+function identityTransaction(database, mode, operation) {
+  return new Promise((resolve, reject) => {
+    const transaction = database.transaction(IDENTITY_STORE, mode)
+    const request = operation(transaction.objectStore(IDENTITY_STORE))
+    transaction.oncomplete = () => resolve(request.result)
+    transaction.onerror = () => reject(
+      transaction.error || new Error('identity storage failed'))
+    transaction.onabort = transaction.onerror
+  })
 }
 
 export async function exportEncryptedKeyProvider(provider, passphrase) {

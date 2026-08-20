@@ -525,6 +525,7 @@ dtx_outbound_response_normalizes_transport_identity_test() ->
 dtx_endpoint_peer_rate_is_bounded_before_worker_test() ->
     Ns = <<"quod:dtx-rate">>,
     {Peer, _} = id(),
+    PeerIdentity = {Peer, {"127.0.0.1", 15971}},
     S0 = st(#{ns => Ns}),
     {S1, Replies} =
         lists:foldl(
@@ -532,7 +533,7 @@ dtx_endpoint_peer_rate_is_bounded_before_worker_test() ->
                   Request = {phase, <<N:128>>, <<25:256>>, prepare},
                   {ok, Frame} = quod_dtx_endpoint:encode_request(Ns, Request),
                   {SNext, []} = quod_simplex:test_dtx_endpoint_frame(
-                                  Ns, serve, Peer, self(), Frame, SAcc),
+                                  Ns, serve, PeerIdentity, self(), Frame, SAcc),
                   Reply = receive
                               {send, ReplyFrame} ->
                                   {ok, Decoded} =
@@ -611,6 +612,64 @@ dtx_submission_keeps_one_exact_waiter_test() ->
        {error, busy},
        quod_simplex:test_retain_dtx_record(Record, Second, S0)),
     ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)).
+
+dtx_prepare_contact_is_bound_to_its_certified_origin_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    ?assertEqual(
+       {ok, maps:get(origin, Fixture)},
+       quod_simplex:test_dtx_source_identity(
+         maps:get(prepare, Fixture), maps:get(target, Fixture))),
+    %% A co-hosted origin needs no foreign bootstrap association, and record
+    %% kinds without an authenticated source reference create none.
+    ?assertEqual(
+       none,
+       quod_simplex:test_dtx_source_identity(
+         maps:get(prepare, Fixture), maps:get(origin, Fixture))),
+    ?assertEqual(
+       none,
+       quod_simplex:test_dtx_source_identity(
+         maps:get('begin', Fixture), maps:get(target, Fixture))).
+
+dtx_validation_cleanup_retries_the_same_head_on_the_consensus_tick_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    #{pubkey := Self} = maps:get(signer, Fixture),
+    Control = maps:get(prepare_control, Fixture),
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Payload = {dtx, ControlBlob},
+    Block = #block{slot = 2, parent = 1, payload = Payload},
+    BH = quod_simplex:block_hash(Block),
+    ParentToken = {1, <<214:256>>},
+    Prolog = registered_prolog_forwarder(Ns, self()),
+    try
+        Base = st(#{ns => Ns, genesis_hash => Anchor, self => Self,
+                    validators => [Self], sync => ready,
+                    slot => 1, approved => 1,
+                    history_head => ParentToken,
+                    eng => quod_simplex:eng_new(?DOMAIN, [Self], 1)}),
+        {_Monitor, Active} = quod_simplex:test_latch_dtx_validation(
+                               2, BH, ParentToken, Prolog, Block, Base),
+        Cleared = quod_simplex:test_release_dtx_validation_for_retry(
+                    2, BH, ParentToken, Prolog, Active),
+        {none, none, {BH, Block}, none, _} =
+            quod_simplex:test_dtx_round(2, Cleared),
+
+        Retried = quod_simplex:test_retry_idle_dtx_validation(Cleared),
+        receive
+            {prolog_forward,
+             {'$gen_cast',
+              {dtx_verdict_req, Control, _Timestamp, 2, _ReplyTo,
+               {2, BH, ParentToken}}}} -> ok
+        after 1000 ->
+            error(missing_tick_dtx_validation_retry)
+        end,
+        {BH, {dtx, ParentToken, Prolog, _RetryMonitor},
+         {BH, Block}, none, _} =
+            quod_simplex:test_dtx_round(2, Retried)
+    after
+        stop_registered_owner(Prolog)
+    end.
 
 %% The endpoint deadline owns only its waiter, not the durable semantic
 %% submission.  Once the owner dies, a later recovery request can attach one
@@ -7617,6 +7676,27 @@ registered_prolog_owner(Ns) ->
         {registered_prolog_owner, Pid} -> Pid
     after 1000 ->
         error(prolog_owner_registration_timeout)
+    end.
+
+registered_prolog_forwarder(Ns, Parent) ->
+    Pid = spawn_link(
+            fun() ->
+                true = quod_reg:reg({quod_prolog, Ns}),
+                Parent ! {registered_prolog_owner, self()},
+                prolog_forward_loop(Parent)
+            end),
+    receive
+        {registered_prolog_owner, Pid} -> Pid
+    after 1000 ->
+        error(prolog_owner_registration_timeout)
+    end.
+
+prolog_forward_loop(Parent) ->
+    receive
+        stop -> ok;
+        Message ->
+            Parent ! {prolog_forward, Message},
+            prolog_forward_loop(Parent)
     end.
 
 stop_registered_owner(Pid) ->

@@ -6,10 +6,10 @@ The two child supervisors are intentionally replaceable. Their dynamic child
 specs disappear if either supervisor process is restarted, so this manager
 keeps the node's desired namespace configurations separately and reconciles
 them after an exact supervisor `DOWN`. Desired state is serialized here and
-mirrored in the application environment so a manager restart does not forget
-it. A full application start clears that mirror before the supervision tree is
-created; only namespaces requested during the current application lifetime are
-recovered.
+mirrored in the application environment. Dynamically created and joined
+content is also checkpointed by this same owner, so a full application restart
+restores deliberate hosting without scanning directories or starting unrelated
+ledger data.
 
 This process is also the sole publisher of the explorer's namespace-to-ledger
 projection. A caller may die or time out after a start request is accepted, so
@@ -34,7 +34,8 @@ post-start genesis validation and publication must not live in that caller.
     ns_monitor = undefined,
     brahms_sup = undefined,
     brahms_monitor = undefined,
-    retry = undefined
+    retry = undefined,
+    durable_content = #{}
 }).
 
 start_link() ->
@@ -79,9 +80,21 @@ stop_child(_Kind, _Ns) ->
     {error, not_found}.
 
 init([]) ->
-    Desired = desired_env(),
+    Durable0 = quod_namespace_desired_store:load(),
+    Desired0 = desired_env(),
+    Static = application:get_env(quod, namespace_static_content, #{}),
+    %% Static operator configuration takes ownership of a same-name ontology.
+    %% Remove the superseded dynamic row instead of leaving latent intent that
+    %% could unexpectedly reappear if the static block is removed later.
+    Durable = maps:without(maps:keys(Static), Durable0),
+    ok = persist_durable_if_changed(Durable0, Durable),
+    Content = maps:merge(
+                maps:merge(Durable, Static),
+                maps:get(content, Desired0)),
+    Desired = Desired0#{content => Content},
+    persist_desired(Desired),
     self() ! reconcile,
-    {ok, #s{desired = Desired}}.
+    {ok, #s{desired = Desired, durable_content = Durable}}.
 
 handle_call(
   {start_new, content, Ns, Config}, _From,
@@ -138,20 +151,23 @@ handle_call(
     end;
 handle_call(
   {stop, Kind, Ns}, _From,
-  S = #s{desired = Desired})
+  S = #s{desired = Desired, durable_content = Durable})
   when Kind =:= content; Kind =:= brahms ->
     KindDesired = maps:get(Kind, Desired),
     case maps:is_key(Ns, KindDesired) of
         false ->
             {reply, {error, not_found}, S};
         true ->
+            Durable1 = remove_durable(Kind, Ns, Durable),
+            ok = persist_durable_if_changed(Durable, Durable1),
             Desired1 =
                 Desired#{Kind => maps:remove(Ns, KindDesired)},
             persist_desired(Desired1),
             Result = stop_one(Kind, Ns),
             maybe_notify_directory(Kind, Result),
             Normalized = normalize_stop(Result),
-            S1 = S#s{desired = Desired1},
+            S1 = S#s{desired = Desired1,
+                     durable_content = Durable1},
             {reply, Normalized,
              schedule_reconcile_if_stop_error(Normalized, S1)}
     end;
@@ -159,15 +175,23 @@ handle_call(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
 complete_new_content(Ns, Config,
-                     S = #s{desired = Desired}) ->
+                     S = #s{desired = Desired,
+                            durable_content = Durable}) ->
     case started_genesis(Ns, Config) of
         {ok, GenesisHash} ->
+            DurableConfig =
+                quod_namespace_desired_store:resume_config(
+                  Config, GenesisHash),
+            Durable1 = Durable#{Ns => DurableConfig},
+            ok = quod_namespace_desired_store:store(Durable1),
             Content = maps:get(content, Desired),
             Desired1 = Desired#{content => Content#{Ns => Config}},
             persist_desired(Desired1),
             publish_storage(Ns, Config),
             notify_content_changed(),
-            {reply, {ok, GenesisHash}, S#s{desired = Desired1}};
+            {reply, {ok, GenesisHash},
+             S#s{desired = Desired1,
+                 durable_content = Durable1}};
         {error, Reason} ->
             stop_rejected_new_content(Ns, S, Reason)
     end.
@@ -246,6 +270,13 @@ desired_env() ->
 
 persist_desired(Desired) ->
     application:set_env(quod, ?DESIRED_ENV, Desired).
+
+remove_durable(content, Ns, Durable) -> maps:remove(Ns, Durable);
+remove_durable(brahms, _Ns, Durable) -> Durable.
+
+persist_durable_if_changed(Content, Content) -> ok;
+persist_durable_if_changed(_Old, New) ->
+    quod_namespace_desired_store:store(New).
 
 bind_supervisors(S) ->
     {NsSup, NsMonitor} =

@@ -114,10 +114,13 @@ quod_ontology:create(Name, Options) ->
   latter case the supplied options are not applied and the explicit result prevents
   a caller from mistaking resume for a new creation.
 
-For this first test slice, a whole application restart does **not**
-automatically reopen dynamically created ontologies.  Calling `create/2` again
-with an existing local ledger resumes it as `mode = create`; automatic durable
-hosting intent is deliberately deferred rather than introducing a manifest.
+The namespace manager durably checkpoints the configurations it admitted
+through `start_new_content/2`. A whole application restart reloads that
+node-local desired set and reopens each existing ledger at its exact genesis
+anchor. Static content configuration overrides a same-name checkpoint at boot.
+The checkpoint is not a replicated ontology catalogue and grants no network
+authority; it records only what this node deliberately hosts. An explicit
+`stop_content/1` removes the corresponding checkpoint before stopping it.
 
 ## Authorized action runner
 
@@ -202,7 +205,7 @@ than being caller variables.
 ## Explicit non-goals
 
 - No root `ontology/2` fact and no replicated catalogue.
-- No durable hosting manifest or automatic recreation after a full app restart.
+- No replicated hosting catalogue or automatic hosting on another node.
 - No directory advertisement: private reachability remains local/direct-seed.
 - No user/agent identity or ownership, payment, atom-capacity, deletion,
   transfer, or remote membership design beyond the node-local

@@ -1683,6 +1683,8 @@ handle_remote_scope_open(
                    Authentication, OriginKey, OriginIdentity, Principal,
                    AuthenticationDigest, S) of
                 {ok, RequestAuthorization} ->
+                    observe_scope_origin_candidate(
+                      OriginIdentity, {Ns, Anchor}, {PeerKey, Endpoint}),
                     open_authenticated_remote_scope(
                       PeerKey, Endpoint, RequestLink, Binding,
                       RequestAuthorization, RequestId, RemainingMs,
@@ -1696,6 +1698,12 @@ handle_remote_scope_open(
   _PeerKey, _Endpoint, _RequestLink, _Binding, _Authentication,
   _CommandSeq, _RequestId, _RemainingMs, S) ->
     S.
+
+observe_scope_origin_candidate(OriginIdentity, TargetIdentity, Contact)
+  when OriginIdentity =/= TargetIdentity ->
+    quod_foreign_log:observe_candidate(OriginIdentity, Contact);
+observe_scope_origin_candidate(_OriginIdentity, _TargetIdentity, _Contact) ->
+    ok.
 
 open_authenticated_remote_scope(
   PeerKey, Endpoint, RequestLink, Binding, RequestAuthorization,

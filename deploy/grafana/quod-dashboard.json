@@ -1547,6 +1547,36 @@
           "refId": "L",
           "expr": "quod_foreign_follow_capacity_limited{node_id=~\"$node\"}",
           "legendFormat": "follow capacity limited · {{node_id}}"
+        },
+        {
+          "refId": "M",
+          "expr": "quod_foreign_bootstrap_candidates{node_id=~\"$node\"}",
+          "legendFormat": "authenticated route candidates · {{node_id}}"
+        },
+        {
+          "refId": "N",
+          "expr": "quod_foreign_bootstrap_accepted{node_id=~\"$node\"}",
+          "legendFormat": "route candidates accepted · {{node_id}}"
+        },
+        {
+          "refId": "O",
+          "expr": "quod_foreign_bootstrap_rejected{node_id=~\"$node\"}",
+          "legendFormat": "route candidates rejected · {{node_id}}"
+        },
+        {
+          "refId": "P",
+          "expr": "quod_foreign_bootstrap_evicted{node_id=~\"$node\"}",
+          "legendFormat": "route candidates evicted · {{node_id}}"
+        },
+        {
+          "refId": "Q",
+          "expr": "rate(quod_dtx_validation_events_total{node_id=~\"$node\"}[$__rate_interval])",
+          "legendFormat": "DTX validation {{event}}/s · {{node_id}}"
+        },
+        {
+          "refId": "R",
+          "expr": "rate(quod_dtx_submit_fanout_total{node_id=~\"$node\"}[$__rate_interval])",
+          "legendFormat": "DTX fan-out {{result}}/s · {{node_id}}"
         }
       ]
     },

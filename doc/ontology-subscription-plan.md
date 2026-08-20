@@ -1,9 +1,9 @@
 # Ontology subscriptions and certified event following — plan
 
 **Status:** Slices 1 (vocabulary and local reconciliation) and 2 (shared
-continuous certified follow) are implemented in the working tree. Slice 2 is
-awaiting its separate adversarial review and hardware acceptance run. Slices
-3--6 remain planning only. Neither implemented slice changes a ledger,
+continuous certified follow) are reviewed, committed, and deployed through
+release 0.7.80. Slice 2's mixed-DTX plus 64-follow hardware acceptance run is
+still pending. Slices 3--6 remain planning only. Neither implemented slice changes a ledger,
 transaction, certificate, DTX, genesis, or wire format.
 
 This document is the authority for long-lived ontology-to-ontology
@@ -773,15 +773,15 @@ identities; it does not stop/recreate unchanged follows.
 
 #### One target, one short advancement lane
 
-Extend the existing `#history{}` row rather than create a second cache or
+The existing `#history{}` row carries this state; there is no second cache or
 registered service. Long-lived consumer interest is separate from
 `#history.active`: the latter continues to mean one short cache/verification
 operation. A follow therefore never owns the active slot while idle.
 
 For one target:
 
-1. resolve the exact anchored source through the current directory/private-seed
-   view, preferring an exact read-ready local ledger through one generalized
+1. select an exact anchored source through the shared bounded foreign-log
+   selector, preferring an exact read-ready local ledger through one generalized
    local-history-source helper;
 2. run at most one bounded catch-up page through the existing codec,
    certificate verifier, phase index, cache reservation, append, and atomic
@@ -795,14 +795,14 @@ identity, and ledger-root checks currently hidden behind the DTX-only local
 evidence source. DTX and subscription callers project their narrower answers
 from that helper; no subscription-only local-ledger exception is added.
 
-Remote source selection starts from
-`quod_directory:validator_routes(TargetNs, TargetAnchor)`. Confirmed private
-seeds already appear through that same exact-anchor lookup. Directory rows and
-remote heights are hints only. Every accepted entry still requires its
+Remote source selection uses `quod_foreign_log`'s one bounded selector. It
+combines exact-anchor directory/private-seed rows, already certified history
+routes, and volatile contacts learned from authenticated scope or DTX peers.
+All are discovery hints only. Every accepted entry still requires its
 certificate and exact ordered history transition. Route failure or a
 non-advancing host rotates to another current candidate; an anchor conflict
 fails the whole refresh. Certified committee/route transitions learned while
-folding replace stale hints naturally.
+folding take precedence over bootstrap contacts naturally.
 
 Until Slice 5 adds authorized push wake-ups, a configurable timer requests the
 next page. Success at an unchanged head uses the normal poll interval; failure
@@ -989,9 +989,10 @@ ready/building/unreachable source counts.
 
 Working-tree verification at implementation handoff is recorded with the
 review rather than weakening the acceptance list above. Compile, xref,
-Dialyzer, all 1,238 EUnit tests, and formatting checks are green. The focused
-CT and mixed DTX plus 64-follow hardware run remain acceptance gates before
-Slice 3 starts; the code is not deployed by this slice.
+Dialyzer, full EUnit, the focused inter-ontology CT, and formatting checks are
+green. The mixed-DTX plus 64-follow hardware run remains an acceptance gate
+before Slice 3 starts. Deployment of Slices 1--2 does not replace that
+acceptance result.
 
 ### Slice 3 — registration and event authorization
 

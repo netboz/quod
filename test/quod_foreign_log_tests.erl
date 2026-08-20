@@ -66,14 +66,137 @@ required_references_is_exhaustive_test() ->
        quod_foreign_log:required_references(
          control(complete, Target,
                  {quod_dtx_complete, 2, key(20), Decision,
-                  [{A, FinalizeA, 16#10000000000000000}]}))).
+                  [{A, FinalizeA, 16#10000000000000000}]}))),
+    %% Ingress sees the unsigned canonical record before consensus wraps it;
+    %% it must use the same exhaustive reference extractor as validators.
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    ?assertEqual(
+       {ok, [{'begin', maps:get(begin_ref, Fixture)}]},
+       quod_foreign_log:required_references(maps:get(prepare, Fixture))).
 
 invalid_public_timeout_is_rejected_without_owner_test() ->
     ?assertEqual(
        {error, bad_foreign_reference},
-       quod_foreign_log:verify(
-         key(90), {"127.0.0.1", 19090},
+       quod_foreign_log:verify_reference(
          ref({<<"timeout">>, key(9)}, 1, 10), finalize, invalid)).
+
+authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
+    Dir = temp_dir("bootstrap-bounds"),
+    Pid = start_owner(
+            Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    Identity = {unique_ns(), key(95)},
+    Limit = 2 * ?MAX_VALIDATORS,
+    try
+        lists:foreach(
+          fun(N) ->
+              quod_foreign_log:observe_candidate(
+                Identity, {key(1000 + N), {"127.0.0.1", 20000 + N}})
+          end, lists:seq(1, Limit + 1)),
+        Stats1 = quod_foreign_log:stats(),
+        ?assertEqual(Limit, maps:get(bootstrap_candidates, Stats1)),
+        ?assertEqual(Limit + 1, maps:get(bootstrap_accepted, Stats1)),
+        ?assertEqual(1, maps:get(bootstrap_evicted, Stats1)),
+
+        %% Re-observing one authenticated peer replaces its endpoint; it
+        %% cannot consume another source slot for the same identity.
+        Peer = key(1000 + Limit + 1),
+        Replacement = {"127.0.0.1", 29999},
+        quod_foreign_log:observe_candidate(Identity, {Peer, Replacement}),
+        {ok, Selected} = quod_foreign_log:route_hints(Identity, []),
+        ?assert(length(Selected) =< ?MAX_VALIDATORS),
+        ?assertEqual(length(Selected),
+                     length(lists:usort([K || {K, _} <- Selected]))),
+        ?assertEqual([{Peer, Replacement}],
+                     [Row || Row = {K, _} <- Selected, K =:= Peer]),
+        ?assertEqual(Limit,
+                     maps:get(bootstrap_candidates,
+                              quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+bootstrap_candidates_respect_the_global_history_cap_without_eviction_test() ->
+    Dir = temp_dir("bootstrap-history-cap"),
+    Pid = start_owner(
+            Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    try
+        lists:foreach(
+          fun(N) ->
+              quod_foreign_log:observe_candidate(
+                {<<"candidate:", (integer_to_binary(N))/binary>>, key(N)},
+                {key(2000 + N), {"127.0.0.1", 30000 + N}})
+          end, lists:seq(1, ?QUOD_MAX_FOREIGN_HISTORIES + 1)),
+        Stats = quod_foreign_log:stats(),
+        ?assertEqual(?QUOD_MAX_FOREIGN_HISTORIES,
+                     maps:get(histories, Stats)),
+        ?assertEqual(?QUOD_MAX_FOREIGN_HISTORIES,
+                     maps:get(bootstrap_candidates, Stats)),
+        ?assertEqual(1, maps:get(bootstrap_rejected, Stats))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+one_peer_cannot_monopolize_bootstrap_identity_rows_test() ->
+    Dir = temp_dir("bootstrap-peer-identity-cap"),
+    Pid = start_owner(
+            Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    Peer = key(97),
+    OtherPeer = key(98),
+    try
+        lists:foreach(
+          fun(N) ->
+              quod_foreign_log:observe_candidate(
+                {<<"peer-cap:", (integer_to_binary(N))/binary>>, key(N)},
+                {Peer, {"127.0.0.1", 31000 + N}})
+          end, lists:seq(1, ?DIRECTORY_MAX_NAMESPACES + 1)),
+        OtherIdentity = {<<"peer-cap:other">>, key(999)},
+        quod_foreign_log:observe_candidate(
+          OtherIdentity, {OtherPeer, {"127.0.0.1", 31999}}),
+        Stats = quod_foreign_log:stats(),
+        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 1,
+                     maps:get(histories, Stats)),
+        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 1,
+                     maps:get(bootstrap_candidates, Stats)),
+        ?assertEqual(1, maps:get(bootstrap_rejected, Stats)),
+        ?assertMatch({ok, [{OtherPeer, _}]},
+                     quod_foreign_log:route_hints(OtherIdentity, []))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+verify_reference_uses_authenticated_candidate_and_route_failover_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Dir = temp_dir("candidate-verify"),
+    Identity = {maps:get(ns, Fixture), maps:get(anchor, Fixture)},
+    GoodPeer = maps:get(pub, Fixture),
+    BadPeer = key(96),
+    GoodEndpoint = {"127.0.0.1", 19096},
+    BadEndpoint = {"127.0.0.1", 19097},
+    Fetch = peer_chain_fetch(
+              maps:get(ns, Fixture), maps:get(chain, Fixture), [GoodPeer]),
+    Pid = start_owner(Dir, Fetch),
+    try
+        quod_foreign_log:observe_candidate(
+          Identity, {GoodPeer, GoodEndpoint}),
+        %% Newest candidate is tried first, so this unavailable route proves
+        %% exact verification fails over within the one shared selector.
+        quod_foreign_log:observe_candidate(
+          Identity, {BadPeer, BadEndpoint}),
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify_reference(
+             maps:get(ref, Fixture), finalize, 5000)),
+        %% Once certified history is installed, its committee routes replace
+        %% the temporary contacts instead of retaining stale guesses behind it.
+        ?assertEqual(
+           0, maps:get(bootstrap_candidates, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
 
 foreign_log_start_removes_only_disposable_projection_state_test() ->
     Dir = temp_dir("projection-start-cleanup"),
@@ -922,7 +1045,7 @@ assert_fetch_failure_reason(
 assert_fetch_failure_reason(Expected, Actual) ->
     error({unexpected_fetch_failure_reason, Expected, Actual}).
 
-per_peer_bound_is_applied_before_fifth_worker_test() ->
+selected_sources_keep_the_per_peer_pending_bound_test() ->
     Dir = temp_dir("peer-bound"),
     TestPid = self(),
     Blocking =
@@ -933,21 +1056,32 @@ per_peer_bound_is_applied_before_fifth_worker_test() ->
     Pid = start_owner(Dir, Blocking),
     Peer = key(94),
     Endpoint = {"127.0.0.1", 19094},
-    Refs = [ref({<<"peer-bound:", I>>, key(210 + I)}, 1, 220 + I)
-            || I <- lists:seq(1, ?QUOD_MAX_FOREIGN_PENDING_PER_PEER + 1)],
+    IdentityRefs =
+        [begin
+             Identity = {<<"peer-bound:", I>>, key(210 + I)},
+             {Identity, ref(Identity, 1, 220 + I)}
+         end || I <- lists:seq(
+                         1, ?QUOD_MAX_FOREIGN_PENDING_PER_PEER + 1)],
+    lists:foreach(
+      fun({Identity, _Ref}) ->
+          quod_foreign_log:observe_candidate(
+            Identity, {Peer, Endpoint})
+      end, IdentityRefs),
     Callers =
         [spawn(fun() ->
                    TestPid ! {verify_result, self(),
-                              quod_foreign_log:verify(
-                                Peer, Endpoint, Ref, finalize, 10000)}
+                              quod_foreign_log:verify_reference(
+                                Ref, finalize, 10000)}
                end)
-         || Ref <- lists:sublist(Refs, ?QUOD_MAX_FOREIGN_PENDING_PER_PEER)],
+         || {_Identity, Ref} <- lists:sublist(
+                                  IdentityRefs,
+                                  ?QUOD_MAX_FOREIGN_PENDING_PER_PEER)],
     try
         Workers = receive_fetches(?QUOD_MAX_FOREIGN_PENDING_PER_PEER, []),
         ?assertEqual(
            {error, busy},
-           quod_foreign_log:verify(
-             Peer, Endpoint, lists:last(Refs), finalize, 1000)),
+           quod_foreign_log:verify_reference(
+             element(2, lists:last(IdentityRefs)), finalize, 1000)),
         ?assertEqual(?QUOD_MAX_FOREIGN_PENDING_PER_PEER,
                      maps:get(pending, quod_foreign_log:stats())),
         _ = [W ! release || W <- Workers],

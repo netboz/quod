@@ -72,6 +72,32 @@ export async function saveLocalKeyProvider(provider, passphrase) {
   localStorage.setItem(STORAGE_KEY, await exportEncryptedKeyProvider(provider, passphrase))
 }
 
+// Saving is complete only when the browser can read back this exact identity.
+// Both browser surfaces use this seam so neither can claim that a different or
+// silently discarded key is a usable backup.
+export async function saveVerifiedLocalKeyProvider(provider, passphrase) {
+  await saveLocalKeyProvider(provider, passphrase)
+  if (!localKeyMatches(provider)) {
+    throw new Error(
+      'This browser did not keep the encrypted key. Export it to a file instead.',
+    )
+  }
+}
+
+export async function downloadEncryptedKeyProvider(provider, passphrase, filename) {
+  const encoded = await exportEncryptedKeyProvider(provider, passphrase)
+  const blob = new Blob([encoded], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    link.click()
+  } finally {
+    URL.revokeObjectURL(url)
+  }
+}
+
 // The active identity of this browser. It is held as a live key pair so every
 // page of this origin signs as the same user without asking for a passphrase
 // again; an encrypted export remains the way to carry the identity elsewhere.

@@ -3,11 +3,12 @@ import type { ReactNode } from 'react'
 import {
   clearActiveKeyProvider,
   createKeyProvider,
+  downloadEncryptedKeyProvider,
   hasLocalKeyProvider,
   loadActiveKeyProvider,
   loadLocalKeyProvider,
   localKeyMatches,
-  saveLocalKeyProvider,
+  saveVerifiedLocalKeyProvider,
   storeActiveKeyProvider,
 } from '../../client/src/key-provider.js'
 import {
@@ -59,6 +60,11 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const create = () => login(createKeyProvider())
 
   const signOut = async () => {
+    if (identity && !saved && !window.confirm(
+      'This identity has no encrypted backup saved in this browser.\n\n'
+        + 'Export it before signing out unless you already have a key file.\n\n'
+        + 'Sign out anyway?',
+    )) return
     setBusy(true)
     try {
       await clearActiveKeyProvider()
@@ -102,8 +108,32 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     setBusy(true)
     setError(null)
     try {
-      await saveLocalKeyProvider(identity.provider, passphrase)
+      await saveVerifiedLocalKeyProvider(identity.provider, passphrase)
       setSaved(true)
+    } catch (reason) {
+      setError(message(reason))
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const exportKey = async () => {
+    if (!identity) return
+    const passphrase = window.prompt('Passphrase for the encrypted key file (at least 12 characters)')
+    if (passphrase === null) return
+    const confirmation = window.prompt('Repeat the passphrase')
+    if (confirmation !== passphrase) {
+      setError('The passphrases did not match. Nothing was exported.')
+      return
+    }
+    setBusy(true)
+    setError(null)
+    try {
+      await downloadEncryptedKeyProvider(
+        identity.provider,
+        passphrase,
+        `${identity.session.user_id}.quodkey`,
+      )
     } catch (reason) {
       setError(message(reason))
     } finally {
@@ -113,7 +143,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
 
   return (
     <SessionContext.Provider
-      value={{ identity, busy, saved, unresolved, error, create, unlock, save, signOut }}>
+      value={{ identity, busy, saved, unresolved, error, create, unlock, save, exportKey, signOut }}>
       {children}
     </SessionContext.Provider>
   )
@@ -127,6 +157,24 @@ export function SessionControls() {
         <span className="font-mono text-cream/80">
           {session.identity.session.user_id.slice(0, 17)}…
         </span>
+        {!session.saved && (
+          <button
+            type="button"
+            disabled={session.busy}
+            onClick={() => void session.save()}
+            className="rounded-md border border-gold/60 px-2 py-1 text-gold hover:bg-teal-light disabled:opacity-40"
+          >
+            Save encrypted key
+          </button>
+        )}
+        <button
+          type="button"
+          disabled={session.busy}
+          onClick={() => void session.exportKey()}
+          className="rounded-md border border-cream/40 px-2 py-1 text-cream hover:bg-teal-light disabled:opacity-40"
+        >
+          Export encrypted key
+        </button>
         <button
           type="button"
           disabled={session.busy}

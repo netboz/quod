@@ -33,15 +33,15 @@ cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
           Digest = quod_dtx:record_digest(Begin),
           {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
           ?assertEqual(
-             retry_remote,
+             uncertain,
              quod_dtx_coordinator:test_local_submit_result(
                Request, {ok, {error, RequestId, not_ready}, local})),
           ?assertEqual(
-             retry_remote,
+             uncertain,
              quod_dtx_coordinator:test_local_submit_result(
                Request, {ok, {error, RequestId, busy}, local})),
           ?assertEqual(
-             retry_remote,
+             uncertain,
              quod_dtx_coordinator:test_local_submit_result(
                Request, {error, unavailable})),
           ?assertEqual(
@@ -75,6 +75,72 @@ cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
              quod_dtx_coordinator:test_remote_submit_result(
                Request, {accepted, RequestId, Digest, Ref}))
       end).
+
+submit_fanout_starts_every_source_and_cleans_losers_test() ->
+    with_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          {ok, RecordBlob} = quod_dtx:encode_record(Begin),
+          Request = {submit, <<201:128>>, RecordBlob},
+          RequestId = element(2, Request),
+          Digest = quod_dtx:record_digest(Begin),
+          {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
+          Sources = [{remote, digest(211), {"127.0.0.1", 3211}},
+                     {remote, digest(212), {"127.0.0.1", 3212}},
+                     {remote, digest(213), {"127.0.0.1", 3213}}],
+          Parent = self(),
+          RequestFun =
+              fun(Source) ->
+                  Parent ! {fanout_started, Source, self()},
+                  receive {fanout_result, Result} -> Result end
+              end,
+          Caller = spawn(
+                     fun() ->
+                         Parent !
+                           {fanout_reply, self(),
+                            quod_dtx_coordinator:
+                              test_submit_endpoint_requests(
+                                Sources, Request, 2000, RequestFun)}
+                     end),
+          Started = receive_fanout_started(length(Sources), #{}),
+          ?assertEqual(lists:sort(Sources), lists:sort(maps:keys(Started))),
+          Monitors = maps:map(
+                       fun(_Source, Pid) ->
+                           erlang:monitor(process, Pid)
+                       end, Started),
+          Winner = hd(Sources),
+          maps:get(Winner, Started) !
+              {fanout_result,
+               {ok, {accepted, RequestId, Digest, Ref}, Winner}},
+          receive
+              {fanout_reply, Caller,
+               {reply, {accepted, RequestId, Digest, Ref}, Winner}} -> ok
+          after 1000 ->
+              error(missing_fanout_terminal_reply)
+          end,
+          lists:foreach(
+            fun({Source, Pid}) when Source =:= Winner ->
+                    MRef = maps:get(Source, Monitors),
+                    receive {'DOWN', MRef, process, Pid, normal} -> ok
+                    after 1000 -> error({fanout_winner_not_reaped, Pid})
+                    end;
+               ({Source, Pid}) ->
+                    MRef = maps:get(Source, Monitors),
+                    receive {'DOWN', MRef, process, Pid, killed} -> ok
+                    after 1000 -> error({fanout_worker_not_cleaned, Pid})
+                    end
+            end, maps:to_list(Started))
+      end).
+
+receive_fanout_started(0, Acc) ->
+    Acc;
+receive_fanout_started(N, Acc) ->
+    receive
+        {fanout_started, Source, Pid} ->
+            receive_fanout_started(N - 1, Acc#{Source => Pid})
+    after 1000 ->
+        error({missing_fanout_workers, N})
+    end.
 
 historical_routes_may_be_a_valid_committee_subset_test() ->
     KeyA = digest(2),

@@ -167,6 +167,9 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_progress/1, test_progress_rearms/1, test_support_grace/1,
          test_round/2, test_dtx_round/2,
          test_latch_dtx_validation/6, test_on_dtx_verdict/7,
+         test_release_dtx_validation_for_retry/5,
+         test_retry_idle_dtx_validation/1,
+         test_dtx_source_identity/2,
          test_consensus_barrier/1, test_dtx_consensus_barrier/2,
          test_requested/1,
          test_progress_counts/1, test_committed_store/1, test_link_peers/1,
@@ -1449,6 +1452,14 @@ test_latch_dtx_validation(Slot, BH, ParentToken, EnginePid, Block, S) ->
 test_on_dtx_verdict(Slot, BH, ParentToken, EnginePid, Floor, Verdict, S) ->
     on_dtx_verdict(
       Slot, BH, ParentToken, EnginePid, Floor, Verdict, S).
+test_release_dtx_validation_for_retry(
+  Slot, BH, ParentToken, EnginePid, S) ->
+    release_dtx_validation_for_retry(
+      Slot, BH, ParentToken, EnginePid, S).
+test_retry_idle_dtx_validation(S) ->
+    retry_idle_dtx_validation(S).
+test_dtx_source_identity(Record, TargetIdentity) ->
+    dtx_source_identity(Record, TargetIdentity).
 test_consensus_barrier(S) -> consensus_barrier(S).
 test_dtx_consensus_barrier(Record, S) -> dtx_consensus_barrier(Record, S).
 test_dtx_slot_route(Slot, S) -> dtx_slot_route(Slot, S).
@@ -2049,14 +2060,9 @@ dtx_outcome_lookup(OutcomeRef, TimeoutMs)
        TimeoutMs =< ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS ->
     case {quod_outcome:ref_identity(OutcomeRef),
           lists:sort(namespaces())} of
-        {{ok, {TargetNs, Anchor}}, [OwnerNs | _]} ->
-            case quod_directory:validator_routes(TargetNs, Anchor) of
-                {ok, Routes} ->
-                    SourceRoutes =
-                        [{PeerKey, Endpoint}
-                         || #{node_key := <<_:256>> = PeerKey,
-                              endpoint := Endpoint} <- Routes,
-                            quod_quic:valid_endpoint(Endpoint)],
+        {{ok, Identity}, [OwnerNs | _]} ->
+            case quod_foreign_log:route_hints(Identity, []) of
+                {ok, SourceRoutes} ->
                     case quod_dtx_current_view:lookup_outcome(
                            OwnerNs, {remote, SourceRoutes}, OutcomeRef,
                            TimeoutMs) of
@@ -3001,10 +3007,10 @@ running_impl(
 %% accepted only for an exact peer/request correlation; requests are charged
 %% to the authenticated peer before any worker or monitor is allocated.
 running_impl(
-  info, {quod_message, {{Peer, _Addr}, InLink}, DtxChan, Payload},
+  info, {quod_message, {{Peer, Addr}, InLink}, DtxChan, Payload},
   S0 = #s{dtx_chan = DtxChan}) ->
     {S1, Actions} = handle_dtx_endpoint_frame(
-                      S0#s.ns, serve, Peer, InLink, Payload, S0),
+                      S0#s.ns, serve, {Peer, Addr}, InLink, Payload, S0),
     keep_progress(S0, S1, Actions);
 running_impl(
   info, {quod_message, {PeerIdentity, _Link}, Channel, Payload}, S0) ->
@@ -3138,9 +3144,10 @@ running_impl({timeout, progress}, {progress_timeout, V}, S0) ->
 %% re-dial every peer whose link never came up (its frames are still buffered), AND arm sync — the one
 %% place a boot-sync / member gap-fill is kicked (`maybe_arm_sync`, single-flight + paced, off the hot path).
 running_impl({timeout, tick}, tick, S0) ->
-    S1 = maybe_arm_sync(
-           redrive_relays(redrive_inflight(redial_pending(
-             sweep_stale_dials(expire_custody(expire_ingress(S0))))))),
+    S1 = retry_idle_dtx_validation(
+           maybe_arm_sync(
+             redrive_relays(redrive_inflight(redial_pending(
+               sweep_stale_dials(expire_custody(expire_ingress(S0)))))))),
     keep_progress(S0, S1, [tick_timeout()]);
 %% Only the recovery coordinator can produce `{ready, Height}`: it has pulled every available committee
 %% source and observed a certificate quorum at the final local height. Bind completion to the monitored
@@ -3737,19 +3744,24 @@ release_dtx_target_channel(
     end.
 
 handle_dtx_endpoint_frame(
-  TargetNs, serve, Peer, InLink, Payload, S)
-  when is_binary(Peer), byte_size(Peer) =:= 32, is_pid(InLink),
-       is_binary(Payload) ->
-    case quod_dtx_endpoint:decode_response(TargetNs, Payload) of
-        {ok, Response} ->
-            accept_dtx_endpoint_response(Peer, Response, S);
-        {error, _} ->
-            case quod_dtx_endpoint:decode_request(TargetNs, Payload) of
-                {ok, Request} ->
-                    admit_dtx_endpoint_request(Peer, InLink, Request, S);
+  TargetNs, serve, PeerIdentity, InLink, Payload, S)
+  when is_pid(InLink), is_binary(Payload) ->
+    case quod_link:peer_key(PeerIdentity) of
+        <<_:256>> = Peer ->
+            case quod_dtx_endpoint:decode_response(TargetNs, Payload) of
+                {ok, Response} ->
+                    accept_dtx_endpoint_response(Peer, Response, S);
                 {error, _} ->
-                    {S, []}
-            end
+                    case quod_dtx_endpoint:decode_request(TargetNs, Payload) of
+                        {ok, Request} ->
+                            admit_dtx_endpoint_request(
+                              PeerIdentity, InLink, Request, S);
+                        {error, _} ->
+                            {S, []}
+                    end
+            end;
+        undefined ->
+            {S, []}
     end;
 handle_dtx_endpoint_frame(_TargetNs, _Mode, _Peer, _InLink, _Payload, S) ->
     {S, []}.
@@ -3827,8 +3839,9 @@ timeout_dtx_correlation(
             {S, []}
     end.
 
-admit_dtx_endpoint_request(Peer, InLink, Request,
+admit_dtx_endpoint_request(PeerIdentity, InLink, Request,
                            S0 = #s{dtx_rate_buckets = Buckets0}) ->
+    Peer = endpoint_peer(PeerIdentity),
     Now = quod_time:mono_ms(),
     case quod_token_bucket:charge(
            Peer, Now,
@@ -3845,11 +3858,13 @@ admit_dtx_endpoint_request(Peer, InLink, Request,
             {S1, []};
         {ok, Buckets1} ->
             S1 = S0#s{dtx_rate_buckets = Buckets1},
-            admit_dtx_endpoint_worker(Peer, InLink, Request, S1)
+            admit_dtx_endpoint_worker(
+              PeerIdentity, InLink, Request, S1)
     end.
 
 admit_dtx_endpoint_worker(
-  Peer, InLink, Request, S = #s{dtx_workers = Workers}) ->
+  PeerIdentity, InLink, Request, S = #s{dtx_workers = Workers}) ->
+    Peer = endpoint_peer(PeerIdentity),
     RequestId = quod_dtx_endpoint:request_id(Request),
     case {dtx_endpoint_operation_ready(Request, S),
           map_size(Workers) < ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
@@ -3868,7 +3883,7 @@ admit_dtx_endpoint_worker(
             {S, []};
         {true, true, false} ->
             case start_dtx_endpoint_operation(
-                   Peer, {link, InLink}, Request,
+                   PeerIdentity, {link, InLink}, Request,
                    ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, S) of
                 {ok, S1} ->
                     {S1, []};
@@ -3913,10 +3928,14 @@ start_dtx_endpoint_operation(Peer, Destination, Request, TimeoutMs, S) ->
 %% Consequently a later phase query cannot overtake submit admission and see
 %% a false absence while the semantic record is already in flight.
 start_dtx_submit_owner(
-  Peer, Destination, Request = {submit, _RequestId, RecordBlob}, TimeoutMs,
+  PeerIdentity, Destination,
+  Request = {submit, _RequestId, RecordBlob}, TimeoutMs,
   S = #s{dtx_workers = Workers}) ->
     case quod_dtx:decode_record(RecordBlob) of
         {ok, Record} ->
+            Peer = endpoint_peer(PeerIdentity),
+            ok = observe_dtx_source_candidate(
+                   Record, PeerIdentity, target_identity(S)),
             Digest = quod_dtx:record_digest(Record),
             Parent = self(),
             OwnerMRef = dtx_worker_owner_monitor(Destination),
@@ -3962,8 +3981,9 @@ endpoint_submit_error(busy) -> busy;
 endpoint_submit_error(invalid_dtx_submission) -> invalid_request;
 endpoint_submit_error(_) -> not_ready.
 
-start_dtx_server_worker(Peer, Destination, Request, TimeoutMs,
+start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
                         S = #s{ns = Ns, dtx_workers = Workers}) ->
+    Peer = endpoint_peer(PeerIdentity),
     Parent = self(),
     OwnerMRef = dtx_worker_owner_monitor(Destination),
     {Pid, Monitor} = spawn_monitor(
@@ -3997,6 +4017,39 @@ dtx_worker_pending(Peer, RequestId, Workers) ->
                   (WorkerPeer =:= Peer andalso
                    quod_dtx_endpoint:request_id(Request) =:= RequestId)
       end, false, Workers).
+
+endpoint_peer(local) -> local;
+endpoint_peer({<<_:256>> = Peer, _Endpoint}) -> Peer.
+
+observe_dtx_source_candidate(
+  Record, {<<_:256>> = Peer, Endpoint}, TargetIdentity) ->
+    case dtx_source_identity(Record, TargetIdentity) of
+        {ok, Identity} ->
+            quod_foreign_log:observe_candidate(Identity, {Peer, Endpoint});
+        none ->
+            ok
+    end;
+observe_dtx_source_candidate(_Record, _LocalOrLegacyPeer, _TargetIdentity) ->
+    ok.
+
+dtx_source_identity(Record, TargetIdentity) ->
+    case {quod_dtx:record_kind(Record),
+          quod_foreign_log:required_references(Record)} of
+        {prepare, {ok, [{'begin', Ref} | _]}} ->
+            foreign_ref_identity(Ref, TargetIdentity);
+        {finalize, {ok, [{decision, Ref} | _]}} ->
+            foreign_ref_identity(Ref, TargetIdentity);
+        _ ->
+            none
+    end.
+
+foreign_ref_identity(Ref, TargetIdentity) ->
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, Identity, _Slot, _Digest} when Identity =/= TargetIdentity ->
+            {ok, Identity};
+        _ ->
+            none
+    end.
 
 endpoint_write_ready(S = #s{sync = ready, prolog_ready = true}) ->
     case current_dtx_binding(S) of
@@ -7371,10 +7424,9 @@ on_dtx_verdict(Sl, BH, ParentToken, EnginePid, AppliedFloor, Verdict,
     Round = round_state(Sl, S),
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
-        {BH, {dtx, ParentToken, EnginePid, Monitor},
+        {BH, {dtx, ParentToken, EnginePid, _Monitor},
          {BH, #block{payload = Payload} = Block}} ->
-            _ = erlang:demonitor(Monitor, [flush]),
-            Round0 = Round#round{validating = none, validation = none},
+            Round0 = release_dtx_validation_round(Round),
             S0 = put_round(Sl, Round0, S),
             continue_dtx_verdict(
               Verdict, Payload, Block, Sl, BH, ParentToken, S0);
@@ -7440,12 +7492,11 @@ on_dtx_foreign_verdict(
     case {Round#round.validating, Round#round.validation,
           Round#round.candidate} of
         {BH,
-         {dtx_foreign, ParentToken, WorkerPid, Monitor, History},
+         {dtx_foreign, ParentToken, WorkerPid, _Monitor, History},
          {BH, #block{payload = Payload} = Block}} ->
-            _ = erlang:demonitor(Monitor, [flush]),
             S0 = put_round(
                    Sl,
-                   Round#round{validating = none, validation = none}, S),
+                   release_dtx_validation_round(Round), S),
             case Verdict of
                 valid ->
                     apply_dtx_verdict(
@@ -7456,6 +7507,7 @@ on_dtx_foreign_verdict(
                       {invalid, Reason}, Payload, Block, Sl, BH,
                       ParentToken, S0);
                 abstain ->
+                    quod_metrics:count_dtx_validation(S0#s.ns, abstain),
                     S0
             end;
         _ ->
@@ -7604,19 +7656,9 @@ complete_remote_applied_source({Ns, Anchor}, Evidence) ->
             _ ->
                 []
         end,
-    Directory =
-        case quod_directory:validator_routes(Ns, Anchor) of
-            {ok, Rows} ->
-                [{PeerKey, Endpoint}
-                 || #{node_key := PeerKey, endpoint := Endpoint} <- Rows,
-                    is_binary(PeerKey), byte_size(PeerKey) =:= 32,
-                    quod_quic:valid_endpoint(Endpoint)];
-            {error, _} ->
-                []
-        end,
-    case lists:usort(Historical ++ Directory) of
-        [_ | _] = Hints -> {ok, {remote, Hints}};
-        [] -> retry
+    case quod_foreign_log:route_hints({Ns, Anchor}, Historical) of
+        {ok, [_ | _] = Hints} -> {ok, {remote, Hints}};
+        {error, _} -> retry
     end.
 
 validate_dtx_reference_evidence(Control, Evidence) ->
@@ -7730,38 +7772,27 @@ verify_remote_dtx_reference(Ref, Phase, {Ns, Anchor}) ->
     end.
 
 verify_remote_dtx_reference_routes(Ref, Phase, Ns, Anchor) ->
-    case quod_directory:validator_routes(Ns, Anchor) of
-        {ok, Routes} ->
-            Candidates =
-                [{NodeKey, Endpoint}
-                 || #{node_key := NodeKey, endpoint := Endpoint} <- Routes,
-                    is_binary(NodeKey), byte_size(NodeKey) =:= 32],
-            verify_remote_dtx_candidates(
-              Candidates, Ref, Phase, no_answer);
-        {error, _} ->
-            abstain
+    case quod_dtx:certified_ref_binding(Ref) of
+        {ok, {Ns, Anchor}, _Slot, _Digest} ->
+            verify_remote_dtx_reference_result(
+              quod_foreign_log:verify_reference(
+                Ref, Phase, ?DTX_FOREIGN_VERIFY_MS));
+        _ ->
+            {invalid, foreign_reference}
     end.
 
-verify_remote_dtx_candidates([], _Ref, _Phase, no_answer) ->
-    abstain;
-verify_remote_dtx_candidates([], _Ref, _Phase, definitive_invalid) ->
-    {invalid, foreign_reference};
-verify_remote_dtx_candidates(
-  [{PeerKey, Endpoint} | Rest], Ref, Phase, Prior) ->
-    case quod_foreign_log:verify(
-           PeerKey, Endpoint, Ref, Phase, ?DTX_FOREIGN_VERIFY_MS) of
+verify_remote_dtx_reference_result(Result) ->
+    case Result of
         {ok, #{control := _Control} = Evidence} ->
             {valid, Evidence};
         {ok, _MalformedEvidence} ->
             {invalid, foreign_reference};
         {error, phase_mismatch} ->
-            verify_remote_dtx_candidates(
-              Rest, Ref, Phase, definitive_invalid);
+            {invalid, foreign_reference};
         {error, invalid_foreign_reference} ->
-            verify_remote_dtx_candidates(
-              Rest, Ref, Phase, definitive_invalid);
+            {invalid, foreign_reference};
         {error, _Unavailable} ->
-            verify_remote_dtx_candidates(Rest, Ref, Phase, Prior)
+            abstain
     end.
 
 apply_dtx_verdict({valid, History}, Payload, Block, Sl, BH, ParentToken,
@@ -7797,7 +7828,9 @@ apply_dtx_verdict({invalid, Reasons}, Payload, _Block, Sl, BH,
     %% recovery re-reads the now-current certified phase chain and replans.
     S = retire_invalid_dtx_submission(Payload, Reasons, S0),
     reject_dtx_candidate(Sl, BH, Reasons, S);
-apply_dtx_verdict(abstain, _Payload, _Block, _Sl, _BH, _ParentToken, S) ->
+apply_dtx_verdict(abstain, _Payload, _Block, _Sl, _BH, _ParentToken,
+                  S = #s{ns = Ns}) ->
+    quod_metrics:count_dtx_validation(Ns, abstain),
     S;
 apply_dtx_verdict(_Malformed, _Payload, _Block, Sl, BH, _ParentToken, S) ->
     reject_dtx_candidate(Sl, BH, malformed_verdict, S).
@@ -7864,11 +7897,15 @@ prepare_refusal_blob({Ns, Anchor}, _Malformed) ->
 
 clear_dtx_validation(Sl, S) ->
     Round = round_state(Sl, S),
-    _ = release_validation_monitor(Round),
     put_round(
       Sl,
-      Round#round{validating = none, validation = none,
-                  candidate = none, dtx_parent = none}, S).
+      (release_dtx_validation_round(Round))#round{
+        candidate = none}, S).
+
+release_dtx_validation_round(Round) ->
+    _ = release_validation_monitor(Round),
+    Round#round{validating = none, validation = none,
+                dtx_parent = none}.
 
 release_validation_monitor(
   #round{validation = {dtx, _Token, _Pid, Monitor}}) ->
@@ -7892,32 +7929,30 @@ dtx_validation_active(#round{}) -> false.
 %% exact no-op and cannot clear a newer request for the same slot.
 release_dtx_validation_for_retry(Sl, BH, ParentToken, EnginePid, S) ->
     Round = round_state(Sl, S),
-    case {Round#round.validating, Round#round.validation} of
-        {BH, {dtx, ParentToken, EnginePid, _Monitor}} ->
-            _ = release_validation_monitor(Round),
-            put_round(
-              Sl,
-              Round#round{validating = none, validation = none,
-                          dtx_parent = none}, S);
-        {BH, {dtx_foreign, ParentToken, EnginePid, _Monitor, _History}} ->
-            _ = release_validation_monitor(Round),
-            put_round(
-              Sl,
-              Round#round{validating = none, validation = none,
-                          dtx_parent = none}, S);
+    case {Round#round.validating, dtx_validation_owner(Round)} of
+        {BH, {ParentToken, EnginePid}} ->
+            put_round(Sl, release_dtx_validation_round(Round), S);
         _ ->
             S
     end.
+
+dtx_validation_owner(
+  #round{validation = {dtx, ParentToken, Pid, _Monitor}}) ->
+    {ParentToken, Pid};
+dtx_validation_owner(
+  #round{validation =
+           {dtx_foreign, ParentToken, Pid, _Monitor, _History}}) ->
+    {ParentToken, Pid};
+dtx_validation_owner(#round{}) ->
+    none.
 
 drop_dtx_validation_monitor(Ref, Pid, S = #s{rounds = Rounds}) ->
     case [Sl || {Sl, Round} <- maps:to_list(Rounds),
                 dtx_validation_monitor(Round) =:= {Pid, Ref}] of
         [Sl] ->
             Round = round_state(Sl, S),
-            {true,
-             put_round(
-               Sl,
-               Round#round{validating = none, validation = none}, S)};
+            {true, put_round(
+                     Sl, release_dtx_validation_round(Round), S)};
         [] ->
             false
     end.
@@ -8534,6 +8569,35 @@ resume_dtx_candidates(S = #s{rounds = Rounds}) ->
          (_, Acc) ->
               Acc
       end, S, lists:sort(maps:to_list(Rounds))).
+
+%% A foreign evidence check can legitimately abstain while an authenticated
+%% route is still being learned. Retry only the current DTX head, through the
+%% ordinary validation path, and only when no validation worker is active.
+%% The consensus tick therefore remains the single bounded retry clock.
+retry_idle_dtx_validation(S) ->
+    case may_vote(S) of
+        false ->
+            S;
+        true ->
+            Sl = S#s.approved + 1,
+            Round = round_state(Sl, S),
+            case {Round#round.candidate, Round#round.validating,
+                  Round#round.validation} of
+                {{BH, #block{payload = Payload} = Block}, none, none} ->
+                    case quod_ledger:classify(Payload) of
+                        {Kind, _Control}
+                          when Kind =:= 'begin'; Kind =:= prepare;
+                               Kind =:= decision; Kind =:= finalize;
+                               Kind =:= complete ->
+                            quod_metrics:count_dtx_validation(S#s.ns, redrive),
+                            support_or_validate(Block, BH, S);
+                        _ ->
+                            S
+                    end;
+                _ ->
+                    S
+            end
+    end.
 
 resume_ready_slot(Sl, S = #s{slot = Committed}) when Sl =< Committed ->
     S;

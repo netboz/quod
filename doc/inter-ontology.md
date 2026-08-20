@@ -423,6 +423,15 @@ Pinned and identity-discovery links suppress the ordinary link-header address-ca
 learning through their whole `quod_quic` → `quod_conn` → `quod_link` path, so directory
 addresses cannot contaminate consensus/feed dialing. Ordinary links retain auto-learning.
 
+An authenticated scope or DTX request may still provide a useful return
+contact for the requester's own anchored ontology. The receiver records that
+`{NodeKey, Endpoint}` only in `quod_foreign_log`'s bounded volatile history row.
+It grants no role or permission: exact reference verification and subscription
+following still replay certified history before using an answer. Public `::`
+target selection remains the directory's job; this contact continuity exists
+for post-scope DTX recovery and certified following, not as a second scope
+resolver.
+
 A route does not certify a read answer. In the first slice, answer integrity rests on the
 operator's exact allowlist of trusted system hosts. Self-managed discoverable ontologies are
 deferred until both advertisement authority and answer authority are designed (for example,

@@ -87,6 +87,44 @@ dtx_commits_are_counted_by_phase_test() ->
        prometheus_counter:value(
          quod_dtx_committed_total, [Ns, <<"decision">>])).
 
+dtx_route_continuity_metrics_use_only_fixed_event_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"metrics:dtx-route:",
+           (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:count_dtx_validation(Ns, abstain),
+        ok = quod_metrics:count_dtx_validation(Ns, redrive),
+        ok = quod_metrics:count_dtx_submit_fanout(Ns, attempted, 3),
+        ok = quod_metrics:count_dtx_submit_fanout(Ns, accepted, 1),
+        %% Unknown labels and negative counts cannot create a series.
+        ok = quod_metrics:count_dtx_validation(Ns, attacker_label),
+        ok = quod_metrics:count_dtx_submit_fanout(
+               Ns, attacker_label, 100),
+        ok = quod_metrics:count_dtx_submit_fanout(Ns, uncertain, -1),
+        ?assertEqual(
+           1, prometheus_counter:value(
+                quod_dtx_validation_events_total, [Ns, <<"abstain">>])),
+        ?assertEqual(
+           1, prometheus_counter:value(
+                quod_dtx_validation_events_total, [Ns, <<"redrive">>])),
+        ?assertEqual(
+           3, prometheus_counter:value(
+                quod_dtx_submit_fanout_total, [Ns, <<"attempted">>])),
+        ?assertEqual(
+           1, prometheus_counter:value(
+                quod_dtx_submit_fanout_total, [Ns, <<"accepted">>])),
+        ?assertEqual(
+           undefined, prometheus_counter:value(
+                        quod_dtx_submit_fanout_total,
+                        [Ns, <<"attacker_label">>]))
+    after
+        Placeholder ! stop
+    end.
+
 %% The link-send drop counter makes quod_link's deliberately ignored backpressure
 %% returns visible, classified by reason, receiving peer, and a bounded channel
 %% class. Only exact deterministic Simplex channel identities get `log`/`ingress`;

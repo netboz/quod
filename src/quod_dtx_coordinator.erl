@@ -25,6 +25,7 @@ owner death terminates the worker.
          test_valid_phase_evidence/5,
          test_initial_commands/4,
          test_local_submit_result/2, test_remote_submit_result/2,
+         test_submit_endpoint_requests/4,
          test_status/1]).
 -endif.
 
@@ -633,10 +634,9 @@ verify_phase(Target = {Ns, _Anchor}, GroupId, Kind, Ref, local, S) ->
         {error, _} -> {retry, S}
     end;
 verify_phase(Target, GroupId, Kind, Ref,
-             {remote, PeerKey, Endpoint}, S = #state{config = Config}) ->
-    case quod_foreign_log:verify(
-           PeerKey, Endpoint, Ref, Kind,
-           Config#config.request_timeout_ms) of
+             {remote, _PeerKey, _Endpoint}, S = #state{config = Config}) ->
+    case quod_foreign_log:verify_reference(
+           Ref, Kind, Config#config.request_timeout_ms) of
         {ok, Evidence} -> install_phase_evidence(
                             Target, GroupId, Kind, Ref, Evidence, S);
         {error, _} -> {retry, S}
@@ -775,57 +775,34 @@ applied_source({Ns, _Anchor} = Target, FinalizeRef, HistoricalRoutes) ->
                 {error, _} -> {error, retry}
             end;
         false ->
-            Hints = remote_applied_hints(Target, HistoricalRoutes),
-            case Hints of
-                [_ | _] -> {ok, {remote, Hints}};
-                [] -> {error, retry}
+            Historical =
+                [{PeerKey, Endpoint}
+                 || {PeerKey, Endpoint} <- maps:to_list(HistoricalRoutes),
+                    quod_quic:valid_endpoint(Endpoint)],
+            case quod_foreign_log:route_hints(Target, Historical) of
+                {ok, [_ | _] = Hints} -> {ok, {remote, Hints}};
+                {error, _} -> {error, retry}
             end
     end.
-
-remote_applied_hints(Target, HistoricalRoutes) ->
-    Historical =
-        [{PeerKey, Endpoint}
-         || {PeerKey, Endpoint} <- maps:to_list(HistoricalRoutes),
-            quod_quic:valid_endpoint(Endpoint)],
-    lists:usort(Historical ++ routes(Target)).
 
 %% ------------------------------------------------------------------
 %% Endpoint selection
 %% ------------------------------------------------------------------
 
 submit_endpoint_request(Target, Request, S) ->
-    case cohosted(Target) of
-        true ->
-            Local = endpoint_request(local, Target, Request, S),
-            case local_submit_result(Request, Local) of
-                terminal -> submit_reply(Local);
-                retry_remote ->
-                    submit_endpoint_request_remote(
-                      Target, Request, routes(Target), S,
-                      local_submit_uncertain(Request, Local))
-            end;
-        false ->
-            submit_endpoint_request_remote(
-              Target, Request, routes(Target), S, false)
-    end.
+    Sources = endpoint_sources(Target, any),
+    submit_endpoint_requests(Sources, Target, Request, S).
 
 submit_reply({ok, Response, Source}) -> {reply, Response, Source}.
-
-local_submit_uncertain(
-  Request, {ok, {error, _RequestId, Reason} = Response, local})
-  when Reason =:= busy; Reason =:= not_ready; Reason =:= not_found ->
-    quod_dtx_endpoint:correlates(Request, Response);
-local_submit_uncertain(_Request, _Result) ->
-    false.
 
 local_submit_result(
   Request, {ok, Response, local}) ->
     case endpoint_retryable(Response, Request) of
-        true -> retry_remote;
+        true -> uncertain;
         false -> terminal
     end;
 local_submit_result(_Request, {error, _}) ->
-    retry_remote.
+    uncertain.
 
 -ifdef(TEST).
 test_local_submit_result(Request, Result) ->
@@ -850,46 +827,146 @@ endpoint_request({remote, PeerKey, Endpoint}, Target, Request, S) ->
     end.
 
 endpoint_sources(Target, Preferred) ->
+    Cohosted = cohosted(Target),
+    LocalKey = case {Cohosted, application:get_env(quod, node_pubkey)} of
+                   {true, {ok, <<_:256>> = Key}} -> Key;
+                   _ -> none
+               end,
     Remote = [{remote, PeerKey, Endpoint}
-              || {PeerKey, Endpoint} <- routes(Target)],
-    All = case cohosted(Target) of true -> [local | Remote]; false -> Remote end,
+              || {PeerKey, Endpoint} <- routes(Target),
+                 PeerKey =/= LocalKey],
+    All = case Cohosted of true -> [local | Remote]; false -> Remote end,
     case Preferred of
         any -> All;
         _ -> [Preferred | lists:delete(Preferred, All)]
     end.
 
-submit_endpoint_request_remote(
-  _Target, _Request, [], _S, true) ->
-    outcome_unknown;
-submit_endpoint_request_remote(
-  _Target, _Request, [], _S, false) ->
+submit_endpoint_requests([], _Target, _Request, _S) ->
     not_submitted;
-submit_endpoint_request_remote(
-  {TargetNs, _Anchor} = Target, Request,
-  [{PeerKey, Endpoint} | Rest],
-  #state{owner_ns = OwnerNs, config = Config} = S, Uncertain0) ->
-    Result = quod_simplex:dtx_endpoint_request(
-               OwnerNs, TargetNs, PeerKey, Endpoint, Request,
-               Config#config.request_timeout_ms),
-    case Result of
-        {ok, Response} ->
-            case remote_submit_result(Request, Response) of
-                terminal ->
-                    {reply, Response, {remote, PeerKey, Endpoint}};
-                uncertain ->
-                    submit_endpoint_request_remote(
-                      Target, Request, Rest, S, true);
-                next ->
-                    submit_endpoint_request_remote(
-                      Target, Request, Rest, S, Uncertain0)
+submit_endpoint_requests(Sources, Target, Request,
+                         #state{owner_ns = OwnerNs, config = Config} = S) ->
+    quod_metrics:count_dtx_submit_fanout(
+      OwnerNs, attempted, length(Sources)),
+    RequestFun = fun(Source) ->
+                     endpoint_request(Source, Target, Request, S)
+                 end,
+    submit_endpoint_requests_with(
+      Sources, Request, Config#config.request_timeout_ms, RequestFun,
+      OwnerNs).
+
+submit_endpoint_requests_with(
+  Sources, Request, TimeoutMs, RequestFun, MetricsNs) ->
+    Parent = self(),
+    BatchRef = make_ref(),
+    Pending = maps:from_list(
+                [begin
+                     {Pid, MRef} = spawn_monitor(
+                       fun() ->
+                           Result = RequestFun(Source),
+                           Parent ! {dtx_submit_endpoint_result,
+                                     BatchRef, self(), Source, Result}
+                       end),
+                     {Pid, {MRef, Source}}
+                 end || Source <- Sources]),
+    Deadline = quod_time:mono_ms() + TimeoutMs,
+    collect_submit_endpoint_results(
+      BatchRef, Pending, Request, false, Deadline, MetricsNs).
+
+-ifdef(TEST).
+test_submit_endpoint_requests(Sources, Request, TimeoutMs, RequestFun) ->
+    submit_endpoint_requests_with(
+      Sources, Request, TimeoutMs, RequestFun, <<"quod:test">>).
+-endif.
+
+collect_submit_endpoint_results(
+  _BatchRef, Pending, _Request, Uncertain, _Deadline, _MetricsNs)
+  when map_size(Pending) =:= 0 ->
+    case Uncertain of true -> outcome_unknown; false -> not_submitted end;
+collect_submit_endpoint_results(
+  BatchRef, Pending, Request, Uncertain0, Deadline, MetricsNs) ->
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    receive
+        {dtx_submit_endpoint_result, BatchRef, Pid, Source, Result} ->
+            case maps:take(Pid, Pending) of
+                {{MRef, Source}, Pending1} ->
+                    _ = erlang:demonitor(MRef, [flush]),
+                    Classification = classify_submit_endpoint_result(
+                                       Source, Request, Result),
+                    count_submit_endpoint_result(
+                      MetricsNs, Classification, Result),
+                    case Classification of
+                        terminal ->
+                            stop_submit_endpoint_workers(Pending1),
+                            submit_reply(Result);
+                        uncertain ->
+                            collect_submit_endpoint_results(
+                              BatchRef, Pending1, Request, true, Deadline,
+                              MetricsNs);
+                        next ->
+                            collect_submit_endpoint_results(
+                              BatchRef, Pending1, Request, Uncertain0,
+                              Deadline, MetricsNs)
+                    end;
+                error ->
+                    collect_submit_endpoint_results(
+                      BatchRef, Pending, Request, Uncertain0, Deadline,
+                      MetricsNs)
             end;
-        {error, timeout} ->
-            submit_endpoint_request_remote(
-              Target, Request, Rest, S, true);
-        {error, _} ->
-            submit_endpoint_request_remote(
-              Target, Request, Rest, S, Uncertain0)
+        {'DOWN', MRef, process, Pid, _Reason} ->
+            case maps:get(Pid, Pending, undefined) of
+                {MRef, _Source} ->
+                    count_submit_endpoint_result(
+                      MetricsNs, next, {error, worker_down}),
+                    collect_submit_endpoint_results(
+                      BatchRef, maps:remove(Pid, Pending), Request,
+                      Uncertain0, Deadline, MetricsNs);
+                _ ->
+                    collect_submit_endpoint_results(
+                      BatchRef, Pending, Request, Uncertain0, Deadline,
+                      MetricsNs)
+            end
+    after Remaining ->
+        count_submit_endpoint_timeout(MetricsNs, map_size(Pending)),
+        stop_submit_endpoint_workers(Pending),
+        outcome_unknown
     end.
+
+count_submit_endpoint_result(
+  Ns, terminal, {ok, {accepted, _, _, _}, _Source}) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, accepted, 1);
+count_submit_endpoint_result(
+  Ns, terminal, {ok, {refused, _, _, _, _, _}, _Source}) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, refused, 1);
+count_submit_endpoint_result(Ns, terminal, _Result) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, unavailable, 1);
+count_submit_endpoint_result(Ns, uncertain, _Result) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, uncertain, 1);
+count_submit_endpoint_result(Ns, next, _Result) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, unavailable, 1).
+
+count_submit_endpoint_timeout(Ns, Count) ->
+    quod_metrics:count_dtx_submit_fanout(Ns, uncertain, Count).
+
+classify_submit_endpoint_result(local, Request, Result) ->
+    local_submit_result(Request, Result);
+classify_submit_endpoint_result(
+  {remote, _PeerKey, _Endpoint}, Request,
+  {ok, Response, _Source}) ->
+    remote_submit_result(Request, Response);
+classify_submit_endpoint_result(
+  {remote, _PeerKey, _Endpoint}, _Request, {error, timeout}) ->
+    uncertain;
+classify_submit_endpoint_result(
+  {remote, _PeerKey, _Endpoint}, _Request, {error, _}) ->
+    next.
+
+stop_submit_endpoint_workers(Pending) ->
+    maps:foreach(
+      fun(Pid, {MRef, _Source}) ->
+          _ = erlang:demonitor(MRef, [flush]),
+          exit(Pid, kill)
+      end, Pending),
+    ok.
 
 remote_submit_result(
   Request, {accepted, _RequestId, _Digest, _Ref} = Response) ->
@@ -926,13 +1003,10 @@ cohosted({Ns, Anchor}) ->
         undefined -> false
     end.
 
-routes({Ns, Anchor}) ->
-    case quod_directory:validator_routes(Ns, Anchor) of
+routes(Identity) ->
+    case quod_foreign_log:route_hints(Identity, []) of
         {ok, Rows} ->
-            lists:usort(
-              [{NodeKey, Endpoint}
-               || #{node_key := NodeKey, endpoint := Endpoint} <- Rows,
-                  quod_quic:valid_endpoint(Endpoint)]);
+            Rows;
         {error, _} ->
             []
     end.

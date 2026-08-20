@@ -4,7 +4,9 @@ export function createKeyProvider(): Promise<KeyProvider>
 export function loadLocalKeyProvider(passphrase: string): Promise<KeyProvider>
 export function importEncryptedKeyProvider(encoded: string, passphrase: string): Promise<KeyProvider>
 export function saveLocalKeyProvider(provider: KeyProvider, passphrase: string): Promise<void>
+export function saveVerifiedLocalKeyProvider(provider: KeyProvider, passphrase: string): Promise<void>
 export function exportEncryptedKeyProvider(provider: KeyProvider, passphrase: string): Promise<string>
+export function downloadEncryptedKeyProvider(provider: KeyProvider, passphrase: string, filename: string): Promise<void>
 export function storeActiveKeyProvider(provider: KeyProvider): Promise<void>
 export function loadActiveKeyProvider(): Promise<KeyProvider | null>
 export function clearActiveKeyProvider(): Promise<void>

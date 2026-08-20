@@ -333,19 +333,21 @@ committee member. Admission remains the ontology's existing, separate
 `admit/3` transaction, including its `can_join/3` and `peer_ready/1` checks.
 
 Calling `join/3` again while the namespace is live fails as `already_hosted`
-without altering the existing process or desired map. After a deliberate stop
-or full application restart, calling it with the same anchor resumes the local
-ledger. The existing join startup validation rejects a different anchor for an
-existing ledger; no migration or compatibility path is added.
+without altering the existing process or desired map. A full application
+restart reloads the namespace manager's node-local hosting checkpoint and
+resumes the exact anchored ledger automatically. After a deliberate stop,
+calling `join/3` with the same anchor resumes it explicitly. The existing join
+startup validation rejects a different anchor for an existing ledger; no
+migration or compatibility path is added.
 
 At the Prolog boundary, repeating the exact `join_ontology` action succeeds
 without calling `join/3` again because `ontology_joined(Name, GenesisHash)` is
 already true. Repeating it with a different anchor fails: the desired state is
 false and the namespace is not `not_hosted`.
 
-As with runtime creation, a full application restart forgets the dynamic
-hosting intention. Reissuing the join action resumes it. Durable manifests,
-automatic admission and restart orchestration are separate future work.
+As with runtime creation, the checkpoint contains only local desired hosting.
+It neither admits this node to the target committee nor publishes a directory
+record; those remain separate authorized operations.
 
 ## Tests
 
@@ -416,7 +418,7 @@ slice is ready for commit.
 - No new catch-up, feed, consensus, retry or lifecycle worker.
 - No automatic committee admission or `can_join/3` bypass.
 - No directory publication; dynamically joined ontologies remain private.
-- No durable hosting manifest or automatic restart rejoin.
+- No replicated hosting catalogue or automatic committee re-admission.
 - No user/agent identity, ontology ownership, payment or quota model beyond
   the node-local self-admitted-validator policy.
 - No blocking `wait_until_joined` predicate and no polling loop inside Erlog.

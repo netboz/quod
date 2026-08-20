@@ -6,9 +6,10 @@ ontology through its pinned genesis anchor.
 Creation deliberately reuses the normal namespace manager, namespace
 supervision tree, genesis builder, and root storage placement. The authorized
 public action is recorded as an ordinary root transaction with a typed direct
-effect, but it adds no root catalogue or durable hosting manifest: a full
-application restart forgets the runtime hosting intent, and calling `create/2`
-again resumes the existing ledger.
+effect, but it adds no root catalogue. The namespace manager records the
+node-local hosting intent beside the ledgers after the exact genesis anchor is
+known, so a full application restart resumes only ontologies this node had
+deliberately created or joined. Explicit local stop removes that intent.
 Joining uses that same lifecycle asynchronously: acceptance starts the existing
 catch-up process, and `local_state/1` reports its local progress.
 

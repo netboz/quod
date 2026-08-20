@@ -2350,8 +2350,8 @@ semantic mode is kept.
    barriers, and never enter a content batch. Do not add five phase-specific
    append/relay stacks or duplicate the existing consensus engine.
 
-7. **Verify foreign finality through one bounded owner.** Implement the planned
-   `quod_foreign_log` verifier/cache by reusing the existing catch-up page and
+7. **Verify foreign finality through one bounded owner.** Use the bounded
+   `quod_foreign_log` verifier/cache, which reuses the existing catch-up page and
    certificate-fold code. It is the only new long-lived service. It keys state
    by exact `{Namespace, GenesisAnchor}`, enforces the declared global/per-peer,
    history, committee, entry, and byte bounds before allocation, and verifies
@@ -2359,7 +2359,7 @@ semantic mode is kept.
    shared 64-validator cap is already enforced at genesis, live membership
    admission/proposal validation, restart replay, local catch-up, and
    certificate shape admission before signer-list traversal or cryptography.
-   Apply that same bound at the new foreign-projection entrance. Before changing
+   That same bound applies at the foreign-projection entrance. Before changing
    `quod_catchup:cap_bytes/2`, pin
    the concrete bound from §8: two 256 KiB payloads plus two 64-signer
    certificates at 96 bytes each are 536,576 bytes before framing, below the
@@ -2368,7 +2368,11 @@ semantic mode is kept.
    Under that invariant the keep-first branch is progress-preserving and the
    stale "needs chunking (deferred)" comment is removed; do not add an
    unreachable rejection/chunking protocol. A missing route/history is
-   retry/abstain, never acceptance. Local boot does not
+   retry/abstain, never acceptance. Exact-reference checks, current-view
+   checks, and continuous follows all select sources through this same owner:
+   certified directory/history routes plus bounded authenticated bootstrap
+   contacts. A contact proves only how to reach its TLS key; replayed history
+   still proves ontology authority. Local boot does not
    contact foreign peers: the local control-record QC proves that live voters
    completed the foreign check. Do not add a second history codec or verifier.
 
@@ -2380,6 +2384,14 @@ semantic mode is kept.
    process and owns no durable phase state. The namespace engine owns
    authenticated-peer checks, rate/correlation accounting, and monitored
    workers using the library's shared limits.
+   Submission of one canonical DTX control is delivered concurrently, under
+   one deadline, to the bounded selected target-validator set. This is one
+   semantic record, not one transaction per validator; existing digest
+   coalescing and waiter ownership remain authoritative. Each reached voter can
+   retain the authenticated submitter contact long enough to verify the exact
+   foreign phase after proof scopes close. A temporary verification abstention
+   releases its one validation worker/monitor, and the consensus tick re-enters
+   the ordinary validation path for the same current immutable candidate.
    The same channel serves the bounded transaction/group outcome query. It
    first corroborates a view-bound outcome snapshot from `f + 1` distinct keys
    in one certified current committee; only a subsequent group-only pre-Begin

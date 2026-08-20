@@ -38,12 +38,15 @@ start(_StartType, _StartArgs) ->
     %% from an earlier in-VM run. A control-child restart after this barrier
     %% sees `true` and safely re-derives the live set.
     application:set_env(quod, directory_tracking, false),
-    %% Desired dynamic children survive their own supervisor/manager restarts,
-    %% but a full application start is a new lifecycle and rebuilds intent from
-    %% the freshly loaded content configuration below.
+    %% The manager reloads dynamic hosting intent from its node-local durable
+    %% snapshot. The environment is only an in-VM mirror; static configuration
+    %% is supplied separately and wins any same-name collision at boot.
     application:set_env(
       quod, namespace_desired,
       #{content => #{}, brahms => #{}}),
+    application:set_env(quod, namespace_static_content,
+                        static_content(Content)),
+    maybe_clear_dynamic_path(Content),
     {ok, Sup} = quod_sup:start_link(),
     ok = maybe_join(Content),
     ok = maybe_start_ns(Content),
@@ -117,10 +120,14 @@ drop_content_env_overrides() ->
 %% `node_id` and the cert/key drive transport mutual TLS and signed directory records. A node
 %% with no identity is useless, so a failure here is fatal — fail-fast like genesis.
 apply_identity(Cfg) ->
+    DataDir = content_data_dir(Cfg),
     Dir = identity_dir(Cfg),
     %% Published so the other per-node secrets that live beside `node.key` — the
     %% browser-TLS keypair — resolve the same directory without re-deriving it.
     application:set_env(quod, identity_dir, Dir),
+    application:set_env(
+      quod, namespace_desired_path,
+      filename:join(DataDir, "hosted_namespaces.qnd")),
     case quod_identity:ensure(Dir) of
         {ok, #{pubkey := Pub, cert := Cert, key := Key}} ->
             application:set_env(quod, node_pubkey, Pub),
@@ -133,6 +140,14 @@ apply_identity(Cfg) ->
             logger:error("quod: node identity load/create failed in ~s: ~p", [Dir, Reason]),
             error({identity_failed, Reason})
     end.
+
+static_content(none) -> #{};
+static_content(Blocks) when is_list(Blocks) ->
+    maps:from_list([build_ns_config(Block) || Block <- Blocks]).
+
+maybe_clear_dynamic_path(none) ->
+    application:unset_env(quod, namespace_desired_path);
+maybe_clear_dynamic_path(_Blocks) -> ok.
 
 %% `identity.dir` if set, else `<data_dir>/identity` — i.e. INSIDE the same dir the ledger
 %% resolves (`data_dir/1`), so identity always shares the ledger's durability domain and

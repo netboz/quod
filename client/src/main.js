@@ -15,8 +15,8 @@ import {
   loadActiveKeyProvider,
   loadLocalKeyProvider,
   localKeyMatches,
-  exportEncryptedKeyProvider,
-  saveLocalKeyProvider,
+  downloadEncryptedKeyProvider,
+  saveVerifiedLocalKeyProvider,
   storeActiveKeyProvider,
 } from './key-provider.js'
 import {
@@ -154,6 +154,11 @@ identityButton.addEventListener('click', async () => {
 // Leaving is explicit and complete: the browser keeps no identity afterwards,
 // so an exported file is the only way back to this user.
 signOutButton.addEventListener('click', async () => {
+  if (identity && !localKeyMatches(identity.provider) && !window.confirm(
+    'This identity has no encrypted backup saved in this browser.\n\n'
+      + 'Export it before signing out unless you already have a key file.\n\n'
+      + 'Sign out anyway?',
+  )) return
   signOutButton.disabled = true
   try {
     await clearActiveKeyProvider()
@@ -182,18 +187,9 @@ saveButton.addEventListener('click', async () => {
   if (passphrase === null) return
   saveButton.disabled = true
   try {
-    await saveLocalKeyProvider(identity.provider, passphrase)
-    // Read the store back. A browser that silently drops site data would
-    // otherwise leave someone believing a key exists that they can never
-    // unlock again, here or in the Explorer.
-    if (localKeyMatches(identity.provider)) {
-      saveButton.textContent = 'Encrypted key saved'
-      status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser. Unlock this same key in the Explorer to act as the same user there.`
-    } else {
-      saveButton.disabled = false
-      status.textContent =
-        'This browser did not keep the encrypted key. Export it to a file instead — private browsing or blocked site data prevents saving.'
-    }
+    await saveVerifiedLocalKeyProvider(identity.provider, passphrase)
+    saveButton.textContent = 'Encrypted key saved'
+    status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser.`
   } catch (error) {
     status.textContent = `Could not save the key: ${error.message || 'unknown error'}`
     saveButton.disabled = false
@@ -206,14 +202,11 @@ exportButton.addEventListener('click', async () => {
   if (passphrase === null) return
   exportButton.disabled = true
   try {
-    const encoded = await exportEncryptedKeyProvider(identity.provider, passphrase)
-    const blob = new Blob([encoded], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = `${identity.session.user_id}.quodkey`
-    link.click()
-    URL.revokeObjectURL(url)
+    await downloadEncryptedKeyProvider(
+      identity.provider,
+      passphrase,
+      `${identity.session.user_id}.quodkey`,
+    )
     status.textContent = 'Encrypted key file exported. You may store it on a USB stick.'
   } catch (error) {
     status.textContent = `Could not export the key: ${error.message || 'unknown error'}`
@@ -332,7 +325,8 @@ async function authenticate(providerPromise) {
   identityButton.hidden = true
   unlockButton.hidden = true
   importButton.hidden = true
-  saveButton.hidden = true
+  saveButton.hidden = localKeyMatches(provider)
+  saveButton.disabled = false
   exportButton.hidden = false
   exportButton.disabled = false
   signOutButton.hidden = false

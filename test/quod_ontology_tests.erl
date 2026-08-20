@@ -37,7 +37,7 @@ ontology_creation_test_() ->
           ?_test(lifecycle_actions_leave_root_facts_unchanged(Fixture)),
           ?_test(join_validation_and_state(Fixture)),
           ?_test(join_resume_anchor_is_exact(Fixture)),
-          ?_test(action_resume_after_content_tree_restart(Fixture))]
+          ?_test(dynamic_hosting_survives_content_tree_restart(Fixture))]
      end}.
 
 cursor_backtracks_in_predicate_created_ontology(_Fixture) ->
@@ -160,7 +160,8 @@ setup() ->
     Dir = filename:join("/tmp", "quod_ontology_" ++ Suffix),
     Saved = save_env(
               [node_pubkey, identity_key, node_addr,
-               namespace_desired, content_storage_dirs]),
+               namespace_desired, namespace_static_content,
+               namespace_desired_path, content_storage_dirs]),
     {Pub, Seed} = quod_identity:generate(),
     application:set_env(quod, node_pubkey, Pub),
     application:set_env(
@@ -169,6 +170,9 @@ setup() ->
     application:set_env(
       quod, namespace_desired,
       #{content => #{}, brahms => #{}}),
+    application:set_env(
+      quod, namespace_desired_path,
+      filename:join(Dir, "hosted_namespaces.qnd")),
     application:set_env(quod, content_storage_dirs, #{}),
     {ok, BrahmsSup} = quod_brahms_sup:start_link(),
     unlink(BrahmsSup),
@@ -183,6 +187,8 @@ setup() ->
           seeds => []},
     {?ROOT_NS, RootConfig0} = quod_app:build_ns_config(RootBlock),
     RootConfig = RootConfig0#{proof_timeout_ms => 500},
+    application:set_env(
+      quod, namespace_static_content, #{?ROOT_NS => RootConfig}),
     {ok, _RootPid} =
         quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
     ok = wait_ready(?ROOT_NS, 200),
@@ -1499,6 +1505,8 @@ action_resume_reuses_existing_anchor(_Fixture) ->
     ?assertMatch(<<_:256>>, Anchor),
     ok = quod_namespace_manager:stop_content(Ns),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
+    ?assertNot(maps:is_key(
+                 Ns, quod_namespace_desired_store:load())),
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:run_action(?ROOT_NS, Action)),
@@ -1565,21 +1573,27 @@ lifecycle_actions_leave_root_facts_unchanged(
         ok = quod_ledger_store:close(Store)
     end.
 
-%% The supported recovery boundary is wider than stop_content/1: after the
-%% namespace manager and the whole content supervisor tree disappear, a new
-%% application-lifetime manager has no hosting intent for the user ontology.
-%% Reissuing the action must inspect the preserved ledger and reuse slot 1's
-%% exact anchor rather than previewing a new incarnation.
-action_resume_after_content_tree_restart(
+%% A complete content-tree replacement reloads deliberate dynamic hosting from
+%% the namespace manager's own durable snapshot. It must reuse the existing
+%% ledger and exact slot-1 anchor without replaying the lifecycle goal.
+dynamic_hosting_survives_content_tree_restart(
   #{manager := Manager, ns_sup := NsSup, root_config := RootConfig}) ->
     Ns = unique_ns(<<"action-tree-restart">>),
     Action = {create_ontology, Ns, [open_policy()]},
     ?assertMatch({ok, [#{}], _}, quod_prolog:run_action(?ROOT_NS, Action)),
     ok = wait_ready(Ns, 200),
     Anchor = quod_simplex:genesis_hash(Ns),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
 
     stop_process(Manager),
     stop_process(NsSup),
+    %% A stale dynamic row under a now-static name must be consumed, not only
+    %% shadowed, or removing that static block later could resurrect old intent.
+    Stored0 = quod_namespace_desired_store:load(),
+    ok = quod_namespace_desired_store:store(
+           Stored0#{?ROOT_NS =>
+                     quod_namespace_desired_store:resume_config(
+                       RootConfig#{mode => create}, RootAnchor)}),
     application:set_env(
       quod, namespace_desired, #{content => #{}, brahms => #{}}),
     application:set_env(quod, content_storage_dirs, #{}),
@@ -1587,13 +1601,22 @@ action_resume_after_content_tree_restart(
     unlink(NewNsSup),
     {ok, NewManager} = quod_namespace_manager:start_link(),
     unlink(NewManager),
-    {ok, _RootPid} =
-        quod_namespace_manager:start_content(?ROOT_NS, RootConfig),
     ok = wait_ready(?ROOT_NS, 200),
-    ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
-    ?assertMatch({ok, [#{}], _}, quod_prolog:run_action(?ROOT_NS, Action)),
     ok = wait_ready(Ns, 200),
-    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)).
+    ?assertEqual({ok, ready}, quod_ontology:local_state(Ns)),
+    ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)),
+    Desired = application:get_env(quod, namespace_desired, #{}),
+    Config = maps:get(Ns, maps:get(content, Desired)),
+    ?assertEqual(Anchor, maps:get(genesis_hash, Config)),
+    ?assertNot(maps:is_key(prepared_genesis_entry, Config)),
+    ?assertNot(maps:is_key(genesis_diff, Config)),
+    %% Keep the parameter load-bearing: static root configuration also came
+    %% back through the same manager merge and was not replaced by disk state.
+    ?assertEqual(
+       RootConfig,
+       maps:get(?ROOT_NS, maps:get(content, Desired))),
+    ?assertNot(maps:is_key(
+                 ?ROOT_NS, quod_namespace_desired_store:load())).
 
 join_validation_and_state(#{dir := Dir}) ->
     Ns = unique_ns(<<"join-validation">>),

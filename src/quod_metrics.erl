@@ -57,6 +57,8 @@ Two collection paths:
 | `quod_tx_diff_ops{namespace}` | histogram | | pieces of data added or removed per finished change, attributed to the target ontology |
 | `quod_tx_committed_total{namespace}` | counter | `author` | finished changes in the target ontology, by its submitting node |
 | `quod_dtx_committed_total{namespace}` | counter | `phase` | committed distributed-control barriers, by protocol phase |
+| `quod_dtx_validation_events_total{namespace}` | counter | `event` | temporary DTX validation abstentions and normal-path redrives |
+| `quod_dtx_submit_fanout_total{namespace}` | counter | `result` | bounded target-validator DTX delivery attempts and outcomes |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
@@ -76,7 +78,8 @@ Two collection paths:
          observe_signing_journal_vote_sync/2,
          observe_tx_latency/2, count_link_send_drop/3, observe_round_phase/3,
          observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3,
-         observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2]).
+         observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2,
+         count_dtx_validation/2, count_dtx_submit_fanout/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -258,6 +261,10 @@ declare(NodeId) ->
     _ = N(quod_foreign_follow_retries, "Total certified-follow retries scheduled after unavailable work (only ever goes up)."),
     _ = N(quod_foreign_projection_rebuilds, "Total foreign fact-projection generations started (only ever goes up)."),
     _ = N(quod_foreign_follow_max_lag, "Largest certified source height lag observed since this owner started."),
+    _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained within the shared bounded history cache."),
+    _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the bounded cache (only ever goes up)."),
+    _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by shape or capacity checks (only ever goes up)."),
+    _ = N(quod_foreign_bootstrap_evicted, "Total older candidate endpoints evicted by the per-identity source bound (only ever goes up)."),
     %% Stored data: this node's own copy of the shared data.
     _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
     _ = G(quod_prolog_applies,       "Total finished changes this node has written into its stored data (only ever goes up)."),
@@ -328,6 +335,14 @@ declare(NodeId) ->
     _ = prometheus_counter:declare([{name, quod_dtx_committed_total},
                                     {help, "Committed distributed-transaction control barriers, grouped by protocol phase."},
                                     {labels, [namespace, phase]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_dtx_validation_events_total},
+           {help, "Distributed-control validation attempts that temporarily abstained or were redriven through the normal validation path."},
+           {labels, [namespace, event]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_dtx_submit_fanout_total},
+           {help, "Bounded target-validator delivery attempts and their correlated results for distributed controls."},
+           {labels, [namespace, result]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
@@ -498,6 +513,10 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_follow_retries, follow_retries),
     _ = Set(quod_foreign_projection_rebuilds, projection_rebuilds),
     _ = Set(quod_foreign_follow_max_lag, max_follow_lag),
+    _ = Set(quod_foreign_bootstrap_candidates, bootstrap_candidates),
+    _ = Set(quod_foreign_bootstrap_accepted, bootstrap_accepted),
+    _ = Set(quod_foreign_bootstrap_rejected, bootstrap_rejected),
+    _ = Set(quod_foreign_bootstrap_evicted, bootstrap_evicted),
     ok.
 
 refresh_log_ns(Ns) ->
@@ -939,6 +958,43 @@ count_tx_retry(Ns, Reason)
     end;
 count_tx_retry(_Ns, _Reason) ->
     ok.
+
+-doc "Count one temporary DTX validation abstention or normal-path redrive.".
+-spec count_dtx_validation(binary(), abstain | redrive) -> ok.
+count_dtx_validation(Ns, Event)
+  when is_binary(Ns), (Event =:= abstain orelse Event =:= redrive) ->
+    count_fixed_event(
+      quod_dtx_validation_events_total, Ns, Event, 1);
+count_dtx_validation(_Ns, _Event) ->
+    ok.
+
+-doc "Count bounded DTX target-delivery attempts and correlated outcomes.".
+-spec count_dtx_submit_fanout(
+        binary(), attempted | accepted | refused | uncertain | unavailable,
+        non_neg_integer()) -> ok.
+count_dtx_submit_fanout(Ns, Result, Count)
+  when is_binary(Ns), is_integer(Count), Count >= 0,
+       (Result =:= attempted orelse Result =:= accepted orelse
+        Result =:= refused orelse Result =:= uncertain orelse
+        Result =:= unavailable) ->
+    count_fixed_event(quod_dtx_submit_fanout_total, Ns, Result, Count);
+count_dtx_submit_fanout(_Ns, _Result, _Count) ->
+    ok.
+
+count_fixed_event(_Name, _Ns, _Event, 0) ->
+    ok;
+count_fixed_event(Name, Ns, Event, Count) ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_counter:inc(
+                      Name, [label(Ns), atom_to_binary(Event, utf8)], Count),
+                ok
+            catch _:_ -> ok
+            end
+    end.
 
 %% --- labels --------------------------------------------------------------
 

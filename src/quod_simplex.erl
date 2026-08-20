@@ -2583,7 +2583,8 @@ reconcile_signing_journal(Slot, Projection, Journal) ->
     quod_signing_journal:reconcile(
       Journal,
       #{committed_slot => Slot,
-        live_dtx_lanes => maps:get(dtx_lanes, Projection, #{}),
+        live_dtx_lanes => maps:get(dtx_lanes, Projection),
+        current_admissions => maps:get(admissions, Projection),
         pending => Pending}).
 
 seed_pending_begin(Journal, Projection) ->

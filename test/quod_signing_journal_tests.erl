@@ -237,6 +237,102 @@ dtx_floors_are_scoped_by_author_admission_test() ->
           ok = quod_signing_journal:close(J5)
       end).
 
+uncommitted_dtx_floor_survives_unrelated_reconciliation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Signer, Admission, Control} = finalize_control(23, 1),
+          Author = maps:get(pubkey, Signer),
+          Lane = {Admission, Author},
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control),
+
+          %% A different committed entry may reconcile the journal before the
+          %% retained DTX control certifies.  Membership still owns this lane,
+          %% so its durable allocation must remain the next-sequence floor.
+          {ok, J2} = quod_signing_journal:reconcile(
+                       J1, summary(
+                             1, #{}, #{Author => Admission}, none)),
+          ?assertEqual(1, quod_signing_journal:dtx_floor(J2, Lane)),
+          ?assertError(
+             {dtx_sequence_conflict, Lane, 1, 1},
+             quod_signing_journal:record_dtx(J2, Control)),
+          Meta = quod_dtx:control_metadata(Control),
+          {ok, Control2} = quod_dtx:sign_control(
+                             maps:get(target, Meta),
+                             quod_dtx:control_body(Control),
+                             Admission, 2, 0, Signer),
+          {ok, J3, _} = quod_signing_journal:record_dtx(J2, Control2),
+          ?assertEqual(2, quod_signing_journal:dtx_floor(J3, Lane)),
+          ok = quod_signing_journal:close(J3),
+
+          {ok, J4} = quod_signing_journal:recover(Ns, domain(1), Dir),
+          ?assertEqual(2, quod_signing_journal:dtx_floor(J4, Lane)),
+          ok = quod_signing_journal:close(J4)
+      end).
+
+uncommitted_dtx_floor_is_pruned_by_admission_rotation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Signer, Admission1, Control} = finalize_control(24, 1),
+          Author = maps:get(pubkey, Signer),
+          Lane1 = {Admission1, Author},
+          Admission2 = hash(7024),
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control),
+          {ok, J2} = quod_signing_journal:reconcile(
+                       J1, summary(
+                             1, #{}, #{Author => Admission2}, none)),
+          ?assertEqual(0, quod_signing_journal:dtx_floor(J2, Lane1)),
+          ok = quod_signing_journal:close(J2)
+      end).
+
+committed_dtx_floor_survives_without_local_record_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Signer, Admission, _Control} = finalize_control(25, 1),
+          Author = maps:get(pubkey, Signer),
+          Lane = {Admission, Author},
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          {ok, J1} = quod_signing_journal:reconcile(
+                       J0, summary(
+                             1, #{Lane => 5},
+                             #{Author => Admission}, none)),
+          ?assertEqual(5, quod_signing_journal:dtx_floor(J1, Lane)),
+          ok = quod_signing_journal:close(J1)
+      end).
+
+committed_dtx_floor_wins_over_lower_local_floor_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {Signer, Admission, Control} = finalize_control(26, 1),
+          Author = maps:get(pubkey, Signer),
+          Lane = {Admission, Author},
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          {ok, J1, _} = quod_signing_journal:record_dtx(J0, Control),
+          {ok, J2} = quod_signing_journal:reconcile(
+                       J1, summary(
+                             1, #{Lane => 5},
+                             #{Author => Admission}, none)),
+          ?assertEqual(5, quod_signing_journal:dtx_floor(J2, Lane)),
+          ok = quod_signing_journal:close(J2)
+      end).
+
+malformed_current_admissions_rejects_reconciliation_test() ->
+    with_dir(
+      fun(Ns, Dir) ->
+          {ok, J0} = quod_signing_journal:initialize(Ns, domain(1), Dir),
+          ?assertError(
+             invalid_signing_journal_reconciliation,
+             quod_signing_journal:reconcile(
+               J0, summary(0, #{}, #{hash(1) => malformed}, none))),
+          ?assertError(
+             invalid_signing_journal_reconciliation,
+             quod_signing_journal:reconcile(
+               J0, #{committed_slot => 0, live_dtx_lanes => #{},
+                     pending => none})),
+          ok = quod_signing_journal:close(J0)
+      end).
+
 invalid_dtx_control_cannot_mutate_the_journal_test() ->
     with_dir(
       fun(Ns, Dir) ->
@@ -548,7 +644,14 @@ with_dir(Fun) ->
     end.
 
 summary(Slot, Live, Pending) ->
-    #{committed_slot => Slot, live_dtx_lanes => Live, pending => Pending}.
+    Admissions = maps:from_list(
+                   [{Author, Admission}
+                    || {{Admission, Author}, _Floor} <- maps:to_list(Live)]),
+    summary(Slot, Live, Admissions, Pending).
+
+summary(Slot, Live, Admissions, Pending) ->
+    #{committed_slot => Slot, live_dtx_lanes => Live,
+      current_admissions => Admissions, pending => Pending}.
 
 finalize_control(N, Sequence) ->
     {Pub, Seed} = quod_identity:generate(),

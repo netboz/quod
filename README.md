@@ -125,7 +125,7 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.82
+TAG=0.7.83
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .

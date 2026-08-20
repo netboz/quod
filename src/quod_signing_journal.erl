@@ -247,13 +247,15 @@ retire_effect(J = #journal{effects = Effects}, <<_:256>> = TxId) ->
 -spec reconcile(handle(),
                 #{committed_slot := non_neg_integer(),
                   live_dtx_lanes := #{lane() => non_neg_integer()},
+                  current_admissions := #{<<_:256>> => <<_:256>>},
                   pending := none | {<<_:256>>, lane()}}) -> {ok, handle()}.
 reconcile(J = #journal{rounds = Rounds, dtx_floors = Floors,
                        pending = Pending}, Validated) ->
     case valid_reconciliation(Validated, Pending) of
-        {ok, Slot, LiveLanes, Pending1} ->
+        {ok, Slot, LiveLanes, Admissions, Pending1} ->
             Rounds1 = maps:filter(fun(S, _) -> S > Slot end, Rounds),
-            Floors1 = reconciled_floors(Floors, LiveLanes, Pending1),
+            Floors1 = reconciled_floors(
+                        Floors, LiveLanes, Admissions, Pending1),
             J1 = J#journal{rounds = Rounds1, dtx_floors = Floors1,
                            pending = Pending1},
             %% Clearing a pending Begin must retire its old append record
@@ -669,30 +671,44 @@ trim(Fd, Offset) ->
 
 valid_reconciliation(
   #{committed_slot := Slot, live_dtx_lanes := Live,
+    current_admissions := Admissions,
     pending := PendingRef} = Summary, Pending)
-  when map_size(Summary) =:= 3, is_integer(Slot), Slot >= 0,
+  when map_size(Summary) =:= 4, is_integer(Slot), Slot >= 0,
        Slot =< ?MAX_SLOT,
-       is_map(Live), map_size(Live) =< ?MAX_VALIDATORS ->
-    case valid_live_lanes(maps:to_list(Live)) of
+       is_map(Live), map_size(Live) =< ?MAX_VALIDATORS,
+       is_map(Admissions), map_size(Admissions) =< ?MAX_VALIDATORS ->
+    case valid_live_lanes(maps:to_list(Live)) andalso
+         valid_admissions(maps:to_list(Admissions)) of
         true ->
             case {PendingRef, Pending} of
-                {none, _} -> {ok, Slot, Live, none};
+                {none, _} -> {ok, Slot, Live, Admissions, none};
                 {{GroupId, Lane},
                  #{group_id := GroupId, lane := Lane} = Kept}
                   when is_binary(GroupId), byte_size(GroupId) =:= 32 ->
-                    {ok, Slot, Live, Kept};
+                    {ok, Slot, Live, Admissions, Kept};
                 _ -> error
             end;
         false -> error
     end;
 valid_reconciliation(_, _) -> error.
 
-reconciled_floors(LocalFloors, CommittedFloors, Pending) ->
+reconciled_floors(LocalFloors, CommittedFloors, Admissions, Pending) ->
+    %% An allocated sequence is anti-equivocation state even before its
+    %% control commits.  Retain it for the exact currently admitted lane;
+    %% validated membership retirement is the only authority that can prune
+    %% it.  Otherwise a content commit between signing and DTX certification
+    %% could make the live process allocate the same sequence twice while the
+    %% first allocation remained durably present in this journal.
     Floors = maps:fold(
-               fun(Lane, Committed, Acc) ->
-                       Local = maps:get(Lane, LocalFloors, 0),
-                       Acc#{Lane => erlang:max(Local, Committed)}
-               end, #{}, CommittedFloors),
+               fun(Lane, Local, Acc) ->
+                       case lane_is_current(Lane, Admissions) of
+                           true ->
+                               Acc#{Lane => erlang:max(
+                                              Local,
+                                              maps:get(Lane, Acc, 0))};
+                           false -> Acc
+                       end
+               end, CommittedFloors, LocalFloors),
     case Pending of
         none -> Floors;
         #{lane := Lane, sequence := Sequence} ->
@@ -703,6 +719,15 @@ valid_live_lanes([]) -> true;
 valid_live_lanes([{Lane, Floor} | Rest]) ->
     valid_lane(Lane) andalso is_integer(Floor) andalso Floor >= 0 andalso
         Floor =< ?MAX_SLOT andalso valid_live_lanes(Rest).
+
+valid_admissions([]) -> true;
+valid_admissions([{Author, Admission} | Rest]) ->
+    is_binary(Author) andalso byte_size(Author) =:= 32 andalso
+        is_binary(Admission) andalso byte_size(Admission) =:= 32 andalso
+        valid_admissions(Rest).
+
+lane_is_current({Admission, Author}, Admissions) ->
+    maps:get(Author, Admissions, undefined) =:= Admission.
 
 valid_lane({Admission, Author}) ->
     is_binary(Admission) andalso byte_size(Admission) =:= 32 andalso

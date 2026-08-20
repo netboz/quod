@@ -106,7 +106,7 @@ authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
         ?assert(length(Selected) =< ?MAX_VALIDATORS),
         ?assertEqual(length(Selected),
                      length(lists:usort([K || {K, _} <- Selected]))),
-        ?assertEqual([{Peer, Replacement}],
+        ?assertEqual([{Peer, [Replacement]}],
                      [Row || Row = {K, _} <- Selected, K =:= Peer]),
         ?assertEqual(Limit,
                      maps:get(bootstrap_candidates,
@@ -160,7 +160,7 @@ one_peer_cannot_monopolize_bootstrap_identity_rows_test() ->
         ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 1,
                      maps:get(bootstrap_candidates, Stats)),
         ?assertEqual(1, maps:get(bootstrap_rejected, Stats)),
-        ?assertMatch({ok, [{OtherPeer, _}]},
+        ?assertMatch({ok, [{OtherPeer, [_]}]},
                      quod_foreign_log:route_hints(OtherIdentity, []))
     after
         stop_owner(Pid),
@@ -193,6 +193,178 @@ verify_reference_uses_authenticated_candidate_and_route_failover_test() ->
         %% the temporary contacts instead of retaining stale guesses behind it.
         ?assertEqual(
            0, maps:get(bootstrap_candidates, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+authenticated_live_endpoint_precedes_certified_history_with_fallback_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Ref = maps:get(ref, Fixture),
+    Historical = {"127.0.0.1", 19000},
+    Live = {"127.0.0.1", 19990},
+    Supplied = {"127.0.0.1", 19991},
+    TestPid = self(),
+    BaseFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    Fetch = fun(P, Endpoint, RequestedNs, From, To) ->
+                    TestPid ! {route_rotation_fetch, Endpoint, From},
+                    case Endpoint of
+                        Live -> {error, retry};
+                        Historical ->
+                            BaseFetch(P, Endpoint, RequestedNs, From, To);
+                        _ -> {error, wrong_route}
+                    end
+            end,
+    Dir = temp_dir("authenticated-live-fallback"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, _},
+           quod_foreign_log:verify(
+             Peer, Historical, Ref, finalize, 5000)),
+        %% A caller-supplied address never displaces certified history.
+        ?assertEqual(
+           {ok, [{Peer, [Historical]}]},
+           quod_foreign_log:route_hints(Identity, [{Peer, Supplied}])),
+        %% Learning the already-certified address does not manufacture a
+        %% second attempt for the same peer.
+        quod_foreign_log:observe_candidate(Identity, {Peer, Historical}),
+        ?assertEqual(
+           {ok, [{Peer, [Historical]}]},
+           quod_foreign_log:route_hints(Identity, [])),
+        %% A contact learned from the peer itself is fresher reachability, but
+        %% the certified address remains the same-key fallback.
+        quod_foreign_log:observe_candidate(Identity, {Peer, Live}),
+        ?assertEqual(
+           {ok, [{Peer, [Live, Historical]}]},
+           quod_foreign_log:route_hints(Identity, [])),
+        ?assertMatch(
+           {ok, #{identity := Identity}},
+           quod_foreign_log:verify_current(
+             [{Peer, [Live, Historical]}], Ref, 5000)),
+        Calls = collect_route_rotation_fetches([]),
+        ?assert(lists:member(Live, Calls)),
+        ?assert(lists:member(Historical, Calls))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+cross_key_live_endpoint_cannot_displace_certified_fallback_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Old = maps:get(pub, Fixture),
+    New = maps:get(new_pub, Fixture),
+    Ref = maps:get(ref, Fixture),
+    OldEndpoint = {"127.0.0.1", 19000},
+    NewEndpoint = {"127.0.0.1", 19101},
+    Initial = route_candidates(
+                [{Old, OldEndpoint}, {New, NewEndpoint}]),
+    BaseFetch = chain_fetch(Ns, maps:get(chain, Fixture)),
+    TestPid = self(),
+    Fetch = fun(Peer, Endpoint, RequestedNs, From, To) ->
+                    TestPid ! {cross_key_fetch, Peer, Endpoint},
+                    case {Peer, Endpoint} of
+                        {Old, OldEndpoint} ->
+                            BaseFetch(Peer, Endpoint, RequestedNs, From, To);
+                        {New, NewEndpoint} ->
+                            BaseFetch(Peer, Endpoint, RequestedNs, From, To);
+                        _ ->
+                            {error, tls_identity_mismatch}
+                    end
+            end,
+    Dir = temp_dir("cross-key-live-route"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        ?assertMatch(
+           {ok, #{committee := [_, _]}},
+           quod_foreign_log:verify_current(Initial, Ref, 5000)),
+        %% A live hint may be stale or wrongly associated. It is tried only
+        %% under Old's key and cannot remove Old's certified address.
+        quod_foreign_log:observe_candidate(
+          Identity, {Old, NewEndpoint}),
+        {ok, Candidates} = quod_foreign_log:route_hints(Identity, []),
+        ?assertEqual(
+           [NewEndpoint, OldEndpoint],
+           proplists:get_value(Old, Candidates)),
+        ?assertEqual(
+           [NewEndpoint],
+           proplists:get_value(New, Candidates)),
+        ?assertMatch(
+           {ok, #{committee := [_, _]}},
+           quod_foreign_log:verify_current(Candidates, Ref, 5000)),
+        Calls = collect_cross_key_fetches([]),
+        ?assert(lists:member({Old, NewEndpoint}, Calls)),
+        ?assert(lists:member({Old, OldEndpoint}, Calls))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
+collect_cross_key_fetches(Acc) ->
+    receive
+        {cross_key_fetch, Peer, Endpoint} ->
+            collect_cross_key_fetches([{Peer, Endpoint} | Acc])
+    after 0 ->
+        lists:reverse(Acc)
+    end.
+
+collect_route_rotation_fetches(Acc) ->
+    receive
+        {route_rotation_fetch, Endpoint, _From} ->
+            collect_route_rotation_fetches([Endpoint | Acc])
+    after 0 ->
+        lists:reverse(Acc)
+    end.
+
+bootstrap_capacity_preserves_current_committee_contacts_test() ->
+    Fixture = membership_after_finalize_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Old = maps:get(pub, Fixture),
+    New = maps:get(new_pub, Fixture),
+    Ref = maps:get(ref, Fixture),
+    OldHistorical = {"127.0.0.1", 19000},
+    NewHistorical = {"127.0.0.1", 19101},
+    OldLive = {"127.0.0.1", 19980},
+    NewLive = {"127.0.0.1", 19981},
+    Dir = temp_dir("bootstrap-protected-eviction"),
+    Pid = start_owner(
+            Dir, peer_chain_fetch(
+                   Ns, maps:get(chain, Fixture), [Old, New])),
+    try
+        ?assertMatch(
+           {ok, #{committee := [_, _]}},
+           quod_foreign_log:verify_current(
+             route_candidates(
+               [{Old, OldHistorical}, {New, NewHistorical}]),
+             Ref, 5000)),
+        quod_foreign_log:observe_candidate(Identity, {Old, OldLive}),
+        quod_foreign_log:observe_candidate(Identity, {New, NewLive}),
+        lists:foreach(
+          fun(N) ->
+              quod_foreign_log:observe_candidate(
+                Identity,
+                {key(3000 + N), {"127.0.0.1", 22000 + N}})
+          end, lists:seq(1, 2 * ?MAX_VALIDATORS)),
+        {ok, Candidates} = quod_foreign_log:route_hints(Identity, []),
+        ?assertEqual(
+           [OldLive, OldHistorical],
+           proplists:get_value(Old, Candidates)),
+        ?assertEqual(
+           [NewLive, NewHistorical],
+           proplists:get_value(New, Candidates)),
+        ?assertEqual(
+           lists:sort([Old, New]),
+           lists:sort([Key || {Key, _Endpoints} <- Candidates])),
+        Stats = quod_foreign_log:stats(),
+        ?assertEqual(2 * ?MAX_VALIDATORS,
+                     maps:get(bootstrap_candidates, Stats)),
+        ?assertEqual(2, maps:get(bootstrap_evicted, Stats))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -367,8 +539,9 @@ certified_current_view_advances_past_finalize_membership_test() ->
     Ns = maps:get(ns, Fixture),
     Old = maps:get(pub, Fixture),
     New = maps:get(new_pub, Fixture),
-    Routes = [{Old, {"127.0.0.1", 19000}},
-              {New, {"127.0.0.1", 19101}}],
+    Routes = route_candidates(
+               [{Old, {"127.0.0.1", 19000}},
+                {New, {"127.0.0.1", 19101}}]),
     Pid = start_owner(
             Dir, peer_chain_fetch(Ns, maps:get(chain, Fixture), [Old, New])),
     try
@@ -383,9 +556,7 @@ certified_current_view_advances_past_finalize_membership_test() ->
         ?assertNotEqual(maps:get(committee_id, Historical),
                         maps:get(committee_id, Current)),
         ?assertEqual(
-           #{Old => {"127.0.0.1", 19000},
-             New => {"127.0.0.1", 19101}},
-           maps:get(routes, Current))
+           lists:keysort(1, Routes), maps:get(route_candidates, Current))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
@@ -419,8 +590,9 @@ identity_current_view_starts_at_genesis_and_tracks_rotation_test() ->
     Anchor = maps:get(anchor, Fixture),
     Old = maps:get(pub, Fixture),
     New = maps:get(new_pub, Fixture),
-    Routes = [{Old, {"127.0.0.1", 19000}},
-              {New, {"127.0.0.1", 19101}}],
+    Routes = route_candidates(
+               [{Old, {"127.0.0.1", 19000}},
+                {New, {"127.0.0.1", 19101}}]),
     TestPid = self(),
     Fetch0 = peer_chain_fetch(
                Ns, maps:get(chain, Fixture), [Old, New]),
@@ -436,9 +608,7 @@ identity_current_view_starts_at_genesis_and_tracks_rotation_test() ->
         ?assertEqual(3, maps:get(slot, Current)),
         ?assertEqual(lists:sort([Old, New]), maps:get(committee, Current)),
         ?assertEqual(
-           #{Old => {"127.0.0.1", 19000},
-             New => {"127.0.0.1", 19101}},
-           maps:get(routes, Current)),
+           lists:keysort(1, Routes), maps:get(route_candidates, Current)),
         Fetches = collect_identity_current_fetches([]),
         ?assert(lists:member(1, Fetches))
     after
@@ -472,7 +642,8 @@ identity_current_bootstrap_fails_over_before_certified_routes_test() ->
         ?assertMatch(
            {ok, #{identity := Identity, committee := [Right]}},
            quod_foreign_log:current(
-             [{Wrong, Endpoint}, {Right, Endpoint}], Identity, 5000)),
+             route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
+             Identity, 5000)),
         Calls = collect_bootstrap_route_fetches(FetchTag, []),
         ?assertMatch([{Wrong, 1}, {Right, 1} | _], Calls),
         %% After the genesis page certifies Right for Endpoint, the conflicting
@@ -516,7 +687,8 @@ identity_current_bootstrap_continues_after_selected_source_retry_test() ->
         ?assertMatch(
            {ok, #{identity := Identity, committee := [Right]}},
            quod_foreign_log:current(
-             [{Wrong, Endpoint}, {Right, Endpoint}], Identity, 5000)),
+             route_candidates([{Wrong, Endpoint}, {Right, Endpoint}]),
+             Identity, 5000)),
         Calls = collect_bootstrap_route_fetches(FetchTag, []),
         ?assertEqual(
            2, length([ok || {Peer, _} <- Calls, Peer =:= Wrong])),
@@ -578,7 +750,8 @@ identity_current_global_network_dependency_case() ->
         ?assertEqual(
            {error, retry},
            quod_foreign_log:current(
-             [{First, FirstEndpoint}, {Second, SecondEndpoint}],
+             route_candidates(
+               [{First, FirstEndpoint}, {Second, SecondEndpoint}]),
              Identity, 5000)),
         Calls = collect_bootstrap_route_fetches(FetchTag, []),
         ?assertEqual([], [ok || {PeerKey, _} <- Calls, PeerKey =:= Second]),
@@ -617,7 +790,7 @@ identity_current_view_rejects_stale_malformed_and_uncertified_history_test() ->
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
     Peer = maps:get(pub, Fixture),
-    Routes = [{Peer, {"127.0.0.1", 19000}}],
+    Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
     [Genesis, Finalize, Membership] = maps:get(chain, Fixture),
     Cases =
         [{identity_stale,
@@ -670,7 +843,7 @@ outsider_cannot_establish_identity_current_view_test() ->
         ?assertEqual(
            {error, retry},
            quod_foreign_log:current(
-             [{Outsider, {"127.0.0.1", 19196}}],
+             route_candidates([{Outsider, {"127.0.0.1", 19196}}]),
              Identity, 2000))
     after
         stop_owner(Pid),
@@ -681,7 +854,7 @@ malformed_identity_current_request_is_rejected_before_owner_test() ->
     ?assertEqual(
        {error, bad_foreign_reference},
        quod_foreign_log:current(
-         [{key(197), {"127.0.0.1", 19197}}],
+         route_candidates([{key(197), {"127.0.0.1", 19197}}]),
          {<<>>, key(198)}, 1000)),
     ?assertEqual(
        {error, bad_foreign_reference},
@@ -692,7 +865,7 @@ current_view_rejects_stale_malformed_and_uncertified_pages_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Peer = maps:get(pub, Fixture),
-    Routes = [{Peer, {"127.0.0.1", 19000}}],
+    Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
     Ref = maps:get(ref, Fixture),
     [Genesis, Finalize, Membership] = maps:get(chain, Fixture),
     Cases =
@@ -748,7 +921,7 @@ nonmember_route_cannot_corroborate_current_view_test() ->
         ?assertEqual(
            {error, retry},
            quod_foreign_log:verify_current(
-             [{Outsider, {"127.0.0.1", 19102}}],
+             route_candidates([{Outsider, {"127.0.0.1", 19102}}]),
              maps:get(ref, Fixture), 2000))
     after
         stop_owner(Pid),
@@ -760,7 +933,7 @@ current_view_timeout_keeps_verified_cache_bounded_and_reusable_test() ->
     Ns = maps:get(ns, Fixture),
     Peer = maps:get(pub, Fixture),
     Ref = maps:get(ref, Fixture),
-    Routes = [{Peer, {"127.0.0.1", 19000}}],
+    Routes = route_candidates([{Peer, {"127.0.0.1", 19000}}]),
     Mode = atomics:new(1, []),
     TestPid = self(),
     BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
@@ -1009,7 +1182,8 @@ fetch_dependency_failure_case(Failure, ExpectedReason) ->
                    TestPid !
                        {foreign_fetch_result, Failure,
                         quod_foreign_log:current(
-                          [{Peer, Endpoint}], Identity, 2000)}
+                          route_candidates([{Peer, Endpoint}]),
+                          Identity, 2000)}
                end),
     try
         Probe = receive
@@ -1524,3 +1698,6 @@ temp_dir(Suffix) ->
           integer_to_list(erlang:unique_integer([positive, monotonic]))).
 
 key(N) -> crypto:hash(sha256, term_to_binary({foreign_key, N})).
+
+route_candidates(Routes) ->
+    [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].

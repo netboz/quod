@@ -76,6 +76,96 @@ cohosted_submit_falls_through_only_on_retryable_local_results_test() ->
                Request, {accepted, RequestId, Digest, Ref}))
       end).
 
+remote_endpoint_fallback_preserves_uncertainty_and_correlation_test() ->
+    with_fixture(
+      fun(F) ->
+          Begin = maps:get('begin', F),
+          {ok, RecordBlob} = quod_dtx:encode_record(Begin),
+          Request = {submit, <<205:128>>, RecordBlob},
+          RequestId = element(2, Request),
+          Digest = quod_dtx:record_digest(Begin),
+          {_Target, _Control, Ref} = evidence(
+                                      maps:get(origin, F), Begin, 1, F),
+          Peer = digest(214),
+          Live = {"127.0.0.1", 3214},
+          Historical = {"127.0.0.1", 3215},
+
+          TimeoutThenClosed =
+              fun(Endpoint, CandidateRequest, _Timeout) ->
+                  self() ! {fallback_attempt, Endpoint, CandidateRequest},
+                  case Endpoint of
+                      Live -> {error, timeout};
+                      Historical -> {error, closed}
+                  end
+              end,
+          ?assertEqual(
+             {error, timeout},
+             quod_dtx_coordinator:test_endpoint_request_candidates(
+               [Live, Historical], Peer, Request, 1000,
+               TimeoutThenClosed)),
+          assert_fallback_attempts(Live, Historical, Request),
+
+          BusyThenClosed =
+              fun(Endpoint, CandidateRequest, _Timeout) ->
+                  self() ! {fallback_attempt, Endpoint, CandidateRequest},
+                  case Endpoint of
+                      Live -> {ok, {error, RequestId, busy}};
+                      Historical -> {error, closed}
+                  end
+              end,
+          ?assertEqual(
+             {ok, {error, RequestId, busy}, {remote, Peer}},
+             quod_dtx_coordinator:test_endpoint_request_candidates(
+               [Live, Historical], Peer, Request, 1000, BusyThenClosed)),
+          assert_fallback_attempts(Live, Historical, Request),
+
+          AcceptedFallback =
+              fun(Endpoint, CandidateRequest, _Timeout) ->
+                  self() ! {fallback_attempt, Endpoint, CandidateRequest},
+                  case Endpoint of
+                      Live -> {error, closed};
+                      Historical ->
+                          {ok, {accepted, RequestId, Digest, Ref}}
+                  end
+              end,
+          ?assertEqual(
+             {ok, {accepted, RequestId, Digest, Ref}, {remote, Peer}},
+             quod_dtx_coordinator:test_endpoint_request_candidates(
+               [Live, Historical], Peer, Request, 1000,
+               AcceptedFallback)),
+          assert_fallback_attempts(Live, Historical, Request),
+
+          InvalidRequest =
+              fun(Endpoint, CandidateRequest, _Timeout) ->
+                  self() ! {fallback_attempt, Endpoint, CandidateRequest},
+                  {ok, {error, RequestId, invalid_request}}
+              end,
+          ?assertEqual(
+             {ok, {error, RequestId, invalid_request}, {remote, Peer}},
+             quod_dtx_coordinator:test_endpoint_request_candidates(
+               [Live, Historical], Peer, Request, 1000, InvalidRequest)),
+          receive
+              {fallback_attempt, Live, Request} -> ok
+          after 1000 -> error(missing_authoritative_rejection)
+          end,
+          receive
+              {fallback_attempt, Historical, _} ->
+                  error(redialed_authoritative_rejection)
+          after 0 -> ok
+          end
+      end).
+
+assert_fallback_attempts(First, Second, Request) ->
+    receive {fallback_attempt, First, Request} -> ok
+    after 1000 -> error({missing_fallback_attempt, First})
+    end,
+    receive {fallback_attempt, Second, Request} -> ok
+    after 1000 -> error({missing_fallback_attempt, Second})
+    end,
+    receive {fallback_attempt, _, _} -> error(extra_fallback_attempt)
+    after 0 -> ok
+    end.
+
 submit_fanout_starts_every_source_and_cleans_losers_test() ->
     with_fixture(
       fun(F) ->
@@ -85,9 +175,9 @@ submit_fanout_starts_every_source_and_cleans_losers_test() ->
           RequestId = element(2, Request),
           Digest = quod_dtx:record_digest(Begin),
           {_Target, _Control, Ref} = evidence(maps:get(origin, F), Begin, 1, F),
-          Sources = [{remote, digest(211), {"127.0.0.1", 3211}},
-                     {remote, digest(212), {"127.0.0.1", 3212}},
-                     {remote, digest(213), {"127.0.0.1", 3213}}],
+          Sources = [{remote, digest(211), [{"127.0.0.1", 3211}]},
+                     {remote, digest(212), [{"127.0.0.1", 3212}]},
+                     {remote, digest(213), [{"127.0.0.1", 3213}]}],
           Parent = self(),
           RequestFun =
               fun(Source) ->

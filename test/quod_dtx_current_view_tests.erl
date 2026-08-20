@@ -29,6 +29,36 @@ exact_threshold_of_distinct_current_validators_succeeds_test() ->
        {ok, #{committee := [A, B, C, D]}},
        verify(F, Deps)).
 
+same_key_endpoint_fallback_reuses_one_request_id_test() ->
+    F0 = fixture(1),
+    [Key] = maps:get(committee, F0),
+    Old = {"127.0.0.1", 21001},
+    New = {"127.0.0.1", 21002},
+    View = (maps:get(view, F0))#{route_candidates => [{Key, [Old, New]}]},
+    F = F0#{view => View, source_routes => [{Key, [Old, New]}]},
+    TestPid = self(),
+    Target = maps:get(identity, View),
+    CommitteeId = maps:get(committee_id, View),
+    Deps = #{view => fun(_Source, _Ref, _Timeout) -> {ok, View} end,
+             local => fun(_Ns, _Request, _Timeout) -> {error, not_ready} end,
+             remote =>
+                 fun(_OwnerNs, _TargetNs, _PinnedKey,
+                     Endpoint, Request, _Timeout) ->
+                         TestPid ! {fallback_request, Endpoint, element(2, Request)},
+                         case Endpoint of
+                             Old -> {error, not_ready};
+                             New -> applied_reply(Request, Target, CommitteeId)
+                         end
+                 end,
+             node_key => fun() -> none end},
+    ?assertMatch({ok, _}, verify(F, Deps)),
+    RequestId = receive
+                    {fallback_request, Old, Id} -> Id
+                after 1000 -> error(no_old)
+                end,
+    receive {fallback_request, New, RequestId} -> ok after 1000 -> error(no_new) end,
+    receive {fallback_request, _, _} -> error(extra_correlation) after 0 -> ok end.
+
 one_below_threshold_is_retry_test() ->
     F = fixture(7),
     [Only | _] = maps:get(committee, F),
@@ -58,10 +88,24 @@ duplicate_committee_keys_are_rejected_and_route_hints_cannot_amplify_test() ->
                          applied_reply(Request, Target, CommitteeId)
                  end),
     [Route | _] = maps:get(source_routes, F),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_dtx_current_view:test_verify_applied(
+         maps:get(owner_ns, F), {remote, [Route, Route]},
+         maps:get(claim, F), 1000, GoodDeps)),
+    {RouteKey, [Endpoint]} = Route,
+    ?assertEqual(
+       {error, invalid_request},
+       quod_dtx_current_view:test_verify_applied(
+         maps:get(owner_ns, F),
+         {remote, [{RouteKey,
+                    [Endpoint, {"127.0.0.1", 29998},
+                     {"127.0.0.1", 29999}]}]},
+         maps:get(claim, F), 1000, GoodDeps)),
     ?assertMatch(
        {ok, _},
        quod_dtx_current_view:test_verify_applied(
-         maps:get(owner_ns, F), {remote, [Route, Route]},
+         maps:get(owner_ns, F), {remote, [Route]},
          maps:get(claim, F), 1000, GoodDeps)).
 
 malformed_view_and_reply_are_retryable_not_success_test() ->
@@ -658,9 +702,11 @@ fixture(N) ->
     Target = {<<"quod:target">>, digest(1)},
     Committee = lists:sort([digest(I) || I <- lists:seq(10, 9 + N)]),
     CommitteeId = digest(2),
-    Routes = maps:from_list(
+    RouteMap = maps:from_list(
                [{Key, {"127.0.0.1", 20000 + I}}
                 || {Key, I} <- lists:zip(Committee, lists:seq(1, N))]),
+    Routes = [{Key, [Endpoint]}
+              || {Key, Endpoint} <- maps:to_list(RouteMap)],
     {TargetNs, Anchor} = Target,
     {ok, FinalizeRef} = quod_dtx:certified_ref(
                           TargetNs, Anchor, 7, digest(3), digest(4), <<1>>),
@@ -669,9 +715,9 @@ fixture(N) ->
               verdict => commit},
     View = #{identity => Target, slot => 8, generation => 9,
              committee => Committee, committee_id => CommitteeId,
-             routes => Routes},
+             route_candidates => Routes},
     #{owner_ns => OwnerNs, claim => Claim, view => View,
-      committee => Committee, source_routes => maps:to_list(Routes)}.
+      committee => Committee, source_routes => Routes}.
 
 collect_started(0, Acc) ->
     Acc;

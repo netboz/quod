@@ -2371,8 +2371,11 @@ semantic mode is kept.
    retry/abstain, never acceptance. Exact-reference checks, current-view
    checks, and continuous follows all select sources through this same owner:
    certified directory/history routes plus bounded authenticated bootstrap
-   contacts. A contact proves only how to reach its TLS key; replayed history
-   still proves ontology authority. Local boot does not
+   contacts. Selection is keyed by certified committee member, with at most one
+   first-party live endpoint and one certified historical fallback per key.
+   Fallback reuses the same request id, worker, and deadline, so it cannot
+   amplify quorum weight or correlation capacity. A contact proves only how to
+   reach its TLS key; replayed history still proves ontology authority. Local boot does not
    contact foreign peers: the local control-record QC proves that live voters
    completed the foreign check. Do not add a second history codec or verifier.
 

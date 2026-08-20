@@ -12,7 +12,8 @@ Routes are identity-pinned transport hints, never committee evidence. There is
 no owner process, second history cache, or retained proof object: every call
 uses the shared `quod_foreign_log` cache and bounded temporary probes, and
 returns `retry` whenever history, routing, membership, application, or a reply
-is uncertain.
+is uncertain. One probe is created per validator key; that probe may try two
+ordered endpoints sequentially without creating another vote or request id.
 """.
 
 -include("quod_proof_limits.hrl").
@@ -31,7 +32,7 @@ is uncertain.
 -type identity() :: {binary(), <<_:256>>}.
 -type source() ::
         {local, file:filename_all()} |
-        {remote, [{<<_:256>>, term()}]}.
+        {remote, [{<<_:256>>, [term()]}]}.
 -type claim() ::
         #{target := identity(),
           group_id := <<_:256>>,
@@ -329,11 +330,8 @@ resolve_quorum_absence(
 valid_source({local, LedgerRoot}) ->
     is_list(LedgerRoot) orelse is_binary(LedgerRoot);
 valid_source({remote, Routes}) when is_list(Routes), Routes =/= [],
-                                    length(Routes) =< 2 * ?MAX_VALIDATORS ->
-    lists:all(
-      fun({<<_:256>>, Endpoint}) -> quod_quic:valid_endpoint(Endpoint);
-         (_) -> false
-      end, Routes);
+                                    length(Routes) =< ?MAX_VALIDATORS ->
+    quod_foreign_log:valid_route_candidates(Routes);
 valid_source(_) ->
     false.
 
@@ -395,13 +393,13 @@ valid_identity_current_view(
   Target,
   #{identity := Target, slot := Slot, generation := Generation,
     committee := Committee, committee_id := <<_:256>> = CommitteeId,
-    routes := Routes} = View)
+    route_candidates := Routes} = View)
   when map_size(View) =:= 6,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0, Generation =< ?MAX_UINT64,
        is_list(Committee), Committee =/= [],
        length(Committee) =< ?MAX_VALIDATORS,
-       is_map(Routes), map_size(Routes) =< ?MAX_VALIDATORS ->
+       is_list(Routes), length(Routes) =< ?MAX_VALIDATORS ->
     case Committee =:= lists:usort(Committee) andalso
          lists:all(fun valid_key/1, Committee) andalso
          valid_routes(Routes, Committee) of
@@ -415,11 +413,10 @@ valid_key(<<_:256>>) -> true;
 valid_key(_) -> false.
 
 valid_routes(Routes, Committee) ->
-    maps:fold(
-      fun(Key, Endpoint, Valid) ->
-              Valid andalso lists:member(Key, Committee) andalso
-                  quod_quic:valid_endpoint(Endpoint)
-      end, true, Routes).
+    quod_foreign_log:valid_route_candidates(Routes) andalso
+        lists:all(
+          fun({Key, _Endpoints}) -> lists:member(Key, Committee) end,
+          Routes).
 
 probe_sources(Source, Committee, Routes, Dependencies) ->
     LocalKey = case Source of
@@ -430,9 +427,10 @@ probe_sources(Source, Committee, Routes, Dependencies) ->
       fun(Key) when Key =:= LocalKey, LocalKey =/= none ->
               {true, {Key, local}};
          (Key) ->
-              case maps:find(Key, Routes) of
-                  {ok, Endpoint} -> {true, {Key, {remote, Endpoint}}};
-                  error -> false
+              case lists:keyfind(Key, 1, Routes) of
+                  {Key, Endpoints} ->
+                      {true, {Key, {remote, Endpoints}}};
+                  false -> false
               end
       end, Committee).
 
@@ -599,19 +597,47 @@ probe_outcome(OwnerNs, PeerKey, Source,
               Deadline, Dependencies) ->
     Request = {outcome, request_id(), OutcomeRef,
                CommitteeId, MinimumSlot},
-    case call_endpoint(
-           OwnerNs, TargetNs, PeerKey, Source, Request,
-           Deadline, Dependencies) of
-        {ok, {outcome, _RequestId, Target, CommitteeId, _AppliedFloor,
-              Outcome} = Response} ->
-            case quod_dtx_endpoint:correlates(Request, Response) andalso
-                 quorum_outcome_allowed(Outcome) of
-                true -> {ok, Outcome};
-                false -> ignore
-            end;
-        _ ->
-            ignore
-    end.
+    probe_outcome_source(
+      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
+      CommitteeId, Deadline, Dependencies).
+
+probe_outcome_source(
+  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
+  Target, CommitteeId, Deadline, Dependencies) ->
+    walk_remote_candidates(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptDeadline) ->
+          call_endpoint(
+            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
+            AttemptDeadline, Dependencies)
+      end,
+      fun(Result) ->
+          case outcome_response(Request, Target, CommitteeId, Result) of
+              ignore -> continue;
+              Accepted -> {done, Accepted}
+          end
+      end,
+      ignore);
+probe_outcome_source(
+  local, OwnerNs, TargetNs, PeerKey, Request, Target,
+  CommitteeId, Deadline, Dependencies) ->
+    outcome_response(
+      Request, Target, CommitteeId,
+      call_endpoint(
+        OwnerNs, TargetNs, PeerKey, local, Request,
+        Deadline, Dependencies)).
+
+outcome_response(
+  Request, Target, CommitteeId,
+  {ok, {outcome, _RequestId, Target, CommitteeId, _AppliedFloor,
+        Outcome} = Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) andalso
+         quorum_outcome_allowed(Outcome) of
+        true -> {ok, Outcome};
+        false -> ignore
+    end;
+outcome_response(_Request, _Target, _CommitteeId, _Result) ->
+    ignore.
 
 %% `pending_begin` is journal/handoff state owned only by the exact
 %% coordinator. It is deliberately excluded from current-view voting and is
@@ -628,18 +654,47 @@ probe_outcome_barrier(
   Deadline, Dependencies) ->
     Request = {outcome_barrier, request_id(), GroupRef,
                CommitteeId, MinimumSlot},
-    case call_endpoint(
-           OwnerNs, TargetNs, Coordinator, Source, Request,
-           Deadline, Dependencies) of
-        {ok, {outcome_barrier, _RequestId, Target, CommitteeId,
-              _AppliedFloor, Status} = Response} ->
-            case quod_dtx_endpoint:correlates(Request, Response) of
-                true -> barrier_result(Status, GroupRef);
-                false -> {error, retry}
-            end;
-        _ ->
-            {error, retry}
-    end.
+    probe_outcome_barrier_source(
+      Source, OwnerNs, TargetNs, Coordinator, Request, Target,
+      CommitteeId, GroupRef, Deadline, Dependencies).
+
+probe_outcome_barrier_source(
+  {remote, Endpoints}, OwnerNs, TargetNs, Coordinator, Request,
+  Target, CommitteeId, GroupRef, Deadline, Dependencies) ->
+    walk_remote_candidates(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptDeadline) ->
+          call_endpoint(
+            OwnerNs, TargetNs, Coordinator, {remote, Endpoint}, Request,
+            AttemptDeadline, Dependencies)
+      end,
+      fun(Result) ->
+          case barrier_response(
+                 Request, Target, CommitteeId, GroupRef, Result) of
+              {error, retry} -> continue;
+              Accepted -> {done, Accepted}
+          end
+      end,
+      {error, retry});
+probe_outcome_barrier_source(
+  local, OwnerNs, TargetNs, Coordinator, Request, Target,
+  CommitteeId, GroupRef, Deadline, Dependencies) ->
+    barrier_response(
+      Request, Target, CommitteeId, GroupRef,
+      call_endpoint(
+        OwnerNs, TargetNs, Coordinator, local, Request,
+        Deadline, Dependencies)).
+
+barrier_response(
+  Request, Target, CommitteeId, GroupRef,
+  {ok, {outcome_barrier, _RequestId, Target, CommitteeId,
+        _AppliedFloor, Status} = Response}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> barrier_result(Status, GroupRef);
+        false -> {error, retry}
+    end;
+barrier_response(_Request, _Target, _CommitteeId, _GroupRef, _Result) ->
+    {error, retry}.
 
 barrier_result(pending_begin, GroupRef) ->
     {ok, #{status => pending, phase => pending_begin, ref => GroupRef}};
@@ -676,8 +731,33 @@ probe_applied(OwnerNs, PeerKey, Source,
               Deadline, Dependencies) ->
     Request = {applied, request_id(), GroupId, FinalizeRef,
                Generation, Verdict},
+    probe_applied_source(
+      Source, OwnerNs, TargetNs, PeerKey, Request, Target,
+      CommitteeId, Deadline, Dependencies).
+
+probe_applied_source(
+  {remote, Endpoints}, OwnerNs, TargetNs, PeerKey, Request,
+  Target, CommitteeId, Deadline, Dependencies) ->
+    walk_remote_candidates(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptDeadline) ->
+          call_endpoint(
+            OwnerNs, TargetNs, PeerKey, {remote, Endpoint}, Request,
+            AttemptDeadline, Dependencies)
+      end,
+      fun(Result) ->
+          case applied_response_valid(
+                 Request, Target, CommitteeId, Result) of
+              true -> {done, true};
+              false -> continue
+          end
+      end,
+      false);
+probe_applied_source(
+  local, OwnerNs, TargetNs, PeerKey, Request,
+  Target, CommitteeId, Deadline, Dependencies) ->
     Result = call_endpoint(
-               OwnerNs, TargetNs, PeerKey, Source, Request,
+               OwnerNs, TargetNs, PeerKey, local, Request,
                Deadline, Dependencies),
     applied_response_valid(Request, Target, CommitteeId, Result).
 
@@ -697,6 +777,27 @@ threshold(N) ->
 
 remaining(Deadline) ->
     max(0, Deadline - quod_time:mono_ms()).
+
+candidate_deadline(Deadline, CandidatesLeft) ->
+    Now = quod_time:mono_ms(),
+    Remaining = max(0, Deadline - Now),
+    case Remaining of
+        0 -> Deadline;
+        _ -> Now + max(1, Remaining div max(1, CandidatesLeft))
+    end.
+
+walk_remote_candidates([], _Deadline, _Attempt, _Accept, Exhausted) ->
+    Exhausted;
+walk_remote_candidates(
+  [Endpoint | Rest], Deadline, Attempt, Accept, Exhausted) ->
+    Result = Attempt(
+               Endpoint, candidate_deadline(Deadline, length(Rest) + 1)),
+    case Accept(Result) of
+        {done, Accepted} -> Accepted;
+        continue ->
+            walk_remote_candidates(
+              Rest, Deadline, Attempt, Accept, Exhausted)
+    end.
 
 -ifdef(TEST).
 test_verify_applied(OwnerNs, Source, Claim, TimeoutMs, Dependencies) ->

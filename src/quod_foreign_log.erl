@@ -44,7 +44,7 @@ only the already-persisted cache through `quod_committed_projection`.
          verify/5, verify_reference/3, verify_local/4,
          verify_current/3, verify_local_current/3,
          current/3, local_current/3,
-         observe_candidate/2, route_hints/2,
+         observe_candidate/2, route_hints/2, valid_route_candidates/1,
          follow/1, ack/2, unfollow/1,
          required_references/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
@@ -241,12 +241,16 @@ observe_candidate(_Identity, _Contact) ->
 -doc """
 Return the one bounded route-hint view for an exact ontology identity.
 
-`Supplied` may contain already-certified historical routes from a caller.  It
+`Supplied` may contain already-certified historical routes from a caller. It
 is merged inside the foreign-log owner with directory, cached-history, and
-authenticated bootstrap hints; no caller should reimplement that merge.
+authenticated bootstrap hints; no caller should reimplement that merge. Before
+a committee is certified, each result row contains one discovery endpoint.
+After certification, each row contains at most two ordered endpoints: a
+first-party live contact, its certified historical fallback, or—only when no
+certified endpoint exists—a supplied discovery fallback.
 """.
 -spec route_hints({binary(), <<_:256>>}, [{<<_:256>>, term()}]) ->
-          {ok, [{<<_:256>>, term()}]} |
+          {ok, [{<<_:256>>, [term()]}]} |
           {error, unavailable | anchor_conflict | invalid_request}.
 route_hints(Identity, Supplied) ->
     case quod_reg:where(?KEY) of
@@ -256,6 +260,14 @@ route_hints(Identity, Supplied) ->
             end;
         undefined ->
             {error, unavailable}
+    end.
+
+-doc "Validate the one bounded keyed route-candidate representation.".
+-spec valid_route_candidates(term()) -> boolean().
+valid_route_candidates(Routes) ->
+    case normalize_route_candidates(Routes) of
+        {ok, _Normalized} -> true;
+        error -> false
     end.
 
 -doc """
@@ -298,14 +310,19 @@ snapshot, then requires a full quorum of distinct keys in the resulting
 committee to report a durable height at least as high.  Content appended after
 the snapshot is deliberately not chased; an applied-status committee-id
 mismatch makes the caller take another snapshot.
+
+Each key owns one ordered endpoint list. Fallback stays inside that key's
+worker and the same request deadline; endpoints never become extra voters.
+The returned current-view evidence names these hints `route_candidates`;
+exact phase evidence keeps its distinct certified `routes` map.
 """.
--spec verify_current([{<<_:256>>, term()}], quod_dtx:certified_ref(),
+-spec verify_current([{<<_:256>>, [term()]}], quod_dtx:certified_ref(),
                      pos_integer()) ->
           {ok, map()} | {error, term()}.
 verify_current(Routes0, Ref, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case normalize_route_hints(Routes0) of
+    case normalize_route_candidates(Routes0) of
         {ok, [_ | _] = Routes} ->
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
@@ -358,13 +375,18 @@ It starts from the pinned genesis anchor, advances the shared bounded history
 cache through certified entries, then requires a full quorum of the resulting
 committee to corroborate the captured durable height.  Supplied routes remain
 identity-pinned fetch hints only.
+
+Before genesis is certified, candidates retain discovery order. Afterwards
+only certified committee keys remain, with live first-party reachability ahead
+of the certified historical endpoint for the same key. The returned view uses
+`route_candidates`, distinct from exact phase evidence's certified `routes`.
 """.
--spec current([{<<_:256>>, term()}], {binary(), <<_:256>>}, pos_integer()) ->
+-spec current([{<<_:256>>, [term()]}], {binary(), <<_:256>>}, pos_integer()) ->
           {ok, map()} | {error, term()}.
 current(Routes0, Identity, TimeoutMs)
   when is_integer(TimeoutMs), TimeoutMs > 0,
        TimeoutMs =< ?MAX_TIMER_MS - 1000 ->
-    case {normalize_route_hints(Routes0), valid_identity(Identity)} of
+    case {normalize_route_candidates(Routes0), valid_identity(Identity)} of
         {{ok, [_ | _] = Routes}, true} ->
             case quod_reg:where(?KEY) of
                 Pid when is_pid(Pid) ->
@@ -694,14 +716,17 @@ handle_call(
   {verify_reference, Ref, Phase, TimeoutMs}, From, S0) ->
     case validate_reference_request(Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            case selected_route_hints(Identity, [], S0) of
-                {ok, [{ChargePeer, _} | _] = Routes} ->
-                    begin_worker(
-                      ChargePeer, Identity, TimeoutMs,
-                      {exact_routes, Routes, Ref, Phase},
-                      S0#s.fetch_fun, From, S0);
-                {ok, []} ->
-                    {reply, {error, retry}, S0};
+            case selected_route_sources(Identity, [], S0) of
+                {ok, Sources} ->
+                    case flatten_route_candidates(route_candidates(Sources)) of
+                        [{ChargePeer, _} | _] = Routes ->
+                            begin_worker(
+                              ChargePeer, Identity, TimeoutMs,
+                              {exact_routes, Routes, Ref, Phase},
+                              S0#s.fetch_fun, From, S0);
+                        [] ->
+                            {reply, {error, retry}, S0}
+                    end;
                 {error, anchor_conflict} ->
                     {reply, {error, retry}, S0}
             end;
@@ -711,9 +736,12 @@ handle_call(
 handle_call({route_hints, Identity, Supplied}, _From, S0) ->
     case {valid_identity(Identity), normalize_route_hints(Supplied)} of
         {true, {ok, Normalized}} ->
-            case selected_route_hints(Identity, Normalized, S0) of
-                {ok, [_ | _] = Routes} -> {reply, {ok, Routes}, S0};
-                {ok, []} -> {reply, {error, unavailable}, S0};
+            case selected_route_sources(Identity, Normalized, S0) of
+                {ok, Sources} ->
+                    case route_candidates(Sources) of
+                        [_ | _] = Routes -> {reply, {ok, Routes}, S0};
+                        [] -> {reply, {error, unavailable}, S0}
+                    end;
                 {error, anchor_conflict} ->
                     {reply, {error, anchor_conflict}, S0}
             end;
@@ -740,10 +768,10 @@ handle_call(
   {verify_current, Routes, Ref, TimeoutMs}, From, S0) ->
     case validate_current_request(Routes, Ref, TimeoutMs) of
         {ok, Identity} ->
-            [{ChargePeer, _} | _] = Routes,
-            begin_worker(
-              ChargePeer, Identity, TimeoutMs,
-              {current, Routes, Ref}, S0#s.fetch_fun, From, S0);
+            begin_current_worker(
+              Identity, flatten_route_candidates(Routes), TimeoutMs,
+              fun(Sources) -> {current, Sources, Ref} end,
+              From, S0);
         {error, Reason} ->
             {reply, {error, Reason}, S0}
     end;
@@ -769,11 +797,10 @@ handle_call(
     case validate_current_identity_request(
            Routes, Identity, TimeoutMs) of
         ok ->
-            [{ChargePeer, _} | _] = Routes,
-            begin_worker(
-              ChargePeer, Identity, TimeoutMs,
-              {current_identity, Routes, Identity},
-              S0#s.fetch_fun, From, S0);
+            begin_current_worker(
+              Identity, flatten_route_candidates(Routes), TimeoutMs,
+              fun(Sources) -> {current_identity, Sources, Identity} end,
+              From, S0);
         {error, Reason} ->
             {reply, {error, Reason}, S0}
     end;
@@ -847,6 +874,21 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     case start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) of
         {ok, S1} -> {noreply, S1};
         {error, Reason, S1} -> {reply, {error, Reason}, S1}
+    end.
+
+begin_current_worker(Identity, Supplied, TimeoutMs, WorkFun, From, S0) ->
+    case selected_route_sources(Identity, Supplied, S0) of
+        {ok, Sources} ->
+            case route_candidates(Sources) of
+                [{ChargePeer, _Endpoints} | _] ->
+                    begin_worker(
+                      ChargePeer, Identity, TimeoutMs, WorkFun(Sources),
+                      S0#s.fetch_fun, From, S0);
+                [] ->
+                    {reply, {error, retry}, S0}
+            end;
+        {error, anchor_conflict} ->
+            {reply, {error, retry}, S0}
     end.
 
 start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
@@ -1012,7 +1054,7 @@ validate_local_request(_LedgerRoot, _Ref, _Phase, _TimeoutMs) ->
     {error, bad_foreign_reference}.
 
 validate_current_request([_ | _] = Routes, Ref, TimeoutMs) ->
-    case normalize_route_hints(Routes) of
+    case normalize_route_candidates(Routes) of
         {ok, Routes} ->
             validate_current_ref(Ref, TimeoutMs);
         _ ->
@@ -1029,7 +1071,7 @@ validate_local_current_request(LedgerRoot, Ref, TimeoutMs) ->
     end.
 
 validate_current_identity_request([_ | _] = Routes, Identity, TimeoutMs) ->
-    case normalize_route_hints(Routes) of
+    case normalize_route_candidates(Routes) of
         {ok, Routes} ->
             validate_current_identity(Identity, TimeoutMs);
         _ ->
@@ -1099,7 +1141,31 @@ normalize_route_hints(
 normalize_route_hints(_, _Count, _Acc) ->
     error.
 
-selected_route_hints(Identity = {Ns, Anchor}, Supplied, S) ->
+normalize_route_candidates(Routes) when is_list(Routes) ->
+    normalize_route_candidates(Routes, 0, []);
+normalize_route_candidates(_) ->
+    error.
+
+normalize_route_candidates([], _Count, Acc) ->
+    {ok, lists:reverse(Acc)};
+normalize_route_candidates(
+  [{<<_:256>> = Peer, Endpoints0} | Rest], Count, Acc)
+  when is_list(Endpoints0), Count < ?MAX_VALIDATORS ->
+    Endpoints = lists:uniq(Endpoints0),
+    case Endpoints0 =:= Endpoints andalso Endpoints =/= [] andalso
+         length(Endpoints) =< 2 andalso
+         lists:all(fun quod_quic:valid_endpoint/1, Endpoints) andalso
+         not lists:keymember(Peer, 1, Acc) of
+        true ->
+            normalize_route_candidates(
+              Rest, Count + 1, [{Peer, Endpoints} | Acc]);
+        false ->
+            error
+    end;
+normalize_route_candidates(_, _Count, _Acc) ->
+    error.
+
+selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
     case directory_route_hints(Ns, Anchor) of
         {error, anchor_conflict} ->
             {error, anchor_conflict};
@@ -1109,16 +1175,22 @@ selected_route_hints(Identity = {Ns, Anchor}, Supplied, S) ->
                     #history{projection = P, bootstrap_hints = B} -> {P, B};
                     undefined -> {undefined, []}
                 end,
-            Discovery = lists:sublist(
-                          stable_unique_routes(
-                            Directory ++ Supplied ++ Bootstrap),
-                          ?MAX_CURRENT_ROUTE_HINTS - ?MAX_VALIDATORS),
-            Hints0 = case is_map(Projection) of
-                         true -> current_route_hints(Discovery, Projection);
-                         false -> Discovery
-                     end,
-            {ok, lists:sublist(Hints0, ?MAX_VALIDATORS)}
+            {ok, #{directory => Directory, supplied => Supplied,
+                   bootstrap => Bootstrap, projection => Projection}}
     end.
+
+route_candidates(#{directory := Directory, supplied := Supplied,
+                   bootstrap := Bootstrap, projection := Projection} = Sources) ->
+    case is_map(Projection) of
+        true -> current_route_candidates(Sources, Projection);
+        false -> discovery_route_candidates(Directory, Supplied, Bootstrap)
+    end.
+
+discovery_route_candidates(Directory, Supplied, Bootstrap) ->
+    Routes = lists:sublist(
+               stable_unique_routes(Directory ++ Supplied ++ Bootstrap),
+               ?MAX_VALIDATORS),
+    [{Peer, [Endpoint]} || {Peer, Endpoint} <- Routes].
 
 directory_route_hints(Ns, Anchor) ->
     case quod_directory:validator_routes(Ns, Anchor) of
@@ -1148,7 +1220,8 @@ remember_bootstrap_candidate(Identity, PeerKey, Endpoint, S0) ->
                     H0 = maps:get(Identity, S1#s.histories),
                     {Hints, Evicted} = put_bootstrap_hint(
                                          PeerKey, Endpoint,
-                                         H0#history.bootstrap_hints),
+                                         H0#history.bootstrap_hints,
+                                         H0#history.projection),
                     H1 = H0#history{bootstrap_hints = Hints,
                                     last_used = quod_time:mono_ms()},
                     S2 = put_history(
@@ -1196,13 +1269,44 @@ ensure_bootstrap_history(Identity, S = #s{histories = Histories})
 ensure_bootstrap_history(_Identity, S) ->
     {error, S}.
 
-put_bootstrap_hint(PeerKey, Endpoint, Hints0) ->
+put_bootstrap_hint(PeerKey, Endpoint, Hints0, Projection) ->
     WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0,
                                   Peer =/= PeerKey],
     Hints1 = [{PeerKey, Endpoint} | WithoutPeer],
     case length(Hints1) =< ?MAX_CURRENT_ROUTE_HINTS of
         true -> {Hints1, 0};
-        false -> {lists:sublist(Hints1, ?MAX_CURRENT_ROUTE_HINTS), 1}
+        false ->
+            Committee = case is_map(Projection) of
+                            true -> quod_simplex:history_committee(Projection);
+                            false -> []
+                        end,
+            {evict_oldest_unprotected(Hints1, Committee), 1}
+    end.
+
+evict_oldest_unprotected(Hints, ProtectedKeys) ->
+    Reversed = lists:reverse(Hints),
+    case drop_first(
+           fun({Peer, _Endpoint}) ->
+                   not lists:member(Peer, ProtectedKeys)
+           end, Reversed) of
+        {ok, Kept} -> lists:reverse(Kept);
+        %% Defensive only: an overflow list cannot be entirely protected
+        %% while committees are bounded below the hint cap. If that invariant
+        %% ever changes, refuse the newest contact rather than evicting a
+        %% current committee member.
+        none -> tl(Hints)
+    end.
+
+drop_first(_Predicate, []) ->
+    none;
+drop_first(Predicate, [Item | Rest]) ->
+    case Predicate(Item) of
+        true -> {ok, Rest};
+        false ->
+            case drop_first(Predicate, Rest) of
+                {ok, Kept} -> {ok, [Item | Kept]};
+                none -> none
+            end
     end.
 
 valid_phase('begin') -> true;
@@ -1600,7 +1704,7 @@ begin_follow_refresh(Identity, Token, S0) ->
             H1 = H0#history{follow_timer = none, follow_token = none},
             S1 = put_history(Identity, H1, S0),
             Timeout = follow_request_timeout(S1),
-            case selected_route_hints(Identity, [], S1) of
+            case selected_route_sources(Identity, [], S1) of
                 {error, anchor_conflict} ->
                     retry_follow(
                       Identity, anchor_conflict,
@@ -1608,10 +1712,10 @@ begin_follow_refresh(Identity, Token, S0) ->
                         Identity,
                         {unreachable, anchor_conflict,
                          materialized_height(H1)}, S1));
-                {ok, Routes} ->
+                {ok, Sources} ->
                     case start_worker(
                            {follow, Identity}, Identity, Timeout,
-                           {follow, Identity, Routes}, S1#s.fetch_fun,
+                           {follow, Identity, Sources}, S1#s.fetch_fun,
                            {follow, Identity, Token}, S1) of
                         {ok, S2} ->
                             S2#s{follow_polls = S2#s.follow_polls + 1};
@@ -2079,10 +2183,10 @@ verification_work(
       Routes, Owner, RequestRef, Ref, Phase, ref_identity(Ref),
       Root, FetchFun, PageTimeout, none, #{});
 verification_work(
-  {current, Routes, Ref}, Owner, RequestRef,
+  {current, Sources, Ref}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout) ->
     verify_current_cached(
-      Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout,
+      Owner, RequestRef, Sources, Ref, Root, FetchFun, PageTimeout,
       RequestTimeout);
 verification_work(
   {local_current, LedgerRoot, Ref}, Owner, RequestRef,
@@ -2090,10 +2194,10 @@ verification_work(
     verify_local_current_cached(
       Owner, RequestRef, LedgerRoot, Ref, Root, FetchFun, PageTimeout);
 verification_work(
-  {current_identity, Routes, Identity}, Owner, RequestRef,
+  {current_identity, Sources, Identity}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout) ->
     certified_current_snapshot(
-      Owner, RequestRef, Routes, Identity,
+      Owner, RequestRef, Sources, Identity,
       Root, FetchFun, PageTimeout, RequestTimeout);
 verification_work(
   {local_current_identity, LedgerRoot, Identity}, Owner, RequestRef,
@@ -2102,10 +2206,10 @@ verification_work(
       Owner, RequestRef, LedgerRoot, Identity,
       Root, FetchFun, PageTimeout);
 verification_work(
-  {follow, Identity, Routes}, Owner, RequestRef,
+  {follow, Identity, Sources}, Owner, RequestRef,
   Root, FetchFun, PageTimeout, RequestTimeout) ->
     follow_identity(
-      Owner, RequestRef, Identity, Routes, Root, FetchFun,
+      Owner, RequestRef, Identity, Sources, Root, FetchFun,
       PageTimeout, RequestTimeout).
 
 verify_exact_routes(
@@ -2141,7 +2245,7 @@ normalize_worker_result({{ok, _} = Result, Meta}) when is_map(Meta) ->
 normalize_worker_result({{error, _} = Result, Meta}) when is_map(Meta) ->
     {Result, Meta}.
 
-follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Routes, Root,
+follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Sources, Root,
                 FetchFun, PageTimeout, RequestTimeout) ->
     case quod_simplex:history_source(Identity) of
         {ok, LedgerRoot} ->
@@ -2158,10 +2262,10 @@ follow_identity(Owner, RequestRef, Identity = {Ns, _Anchor}, Routes, Root,
               Owner, RequestRef, LocalPeer, LedgerRoot, Identity,
               Root, LocalFetch, PageTimeout);
         {error, _} ->
-            case Routes of
+            case route_candidates(Sources) of
                 [_ | _] ->
                     certified_current_snapshot(
-                      Owner, RequestRef, Routes, Identity,
+                      Owner, RequestRef, Sources, Identity,
                       Root, FetchFun, PageTimeout, RequestTimeout);
                 [] ->
                     {{error, {unreachable, unavailable}}, #{}}
@@ -2203,7 +2307,10 @@ follow_local_snapshot(Owner, RequestRef, LocalPeer, LedgerRoot,
                                        false -> unconfirmed
                                    end,
                             Evidence = (current_view_evidence(
-                                          Identity, Height1, Projection1))#{
+                                          Identity, Height1, Projection1,
+                                          current_route_candidates(
+                                            empty_route_sources(),
+                                            Projection1)))#{
                                          hinted_height => Tip,
                                          current_view => View},
                             {{ok, Evidence},
@@ -2298,15 +2405,17 @@ retry_corrupt_cache(Owner, RequestRef, Peer, Endpoint, Ref, Phase,
     end.
 
 verify_current_cached(
-  Owner, RequestRef, Routes, Ref, Root, FetchFun, PageTimeout,
+  Owner, RequestRef, Sources, Ref, Root, FetchFun, PageTimeout,
   RequestTimeout) ->
     Identity = ref_identity(Ref),
+    Routes = flatten_route_candidates(route_candidates(Sources)),
+    Deadline = quod_time:mono_ms() + RequestTimeout,
     case verify_current_reference(
            Routes, Owner, RequestRef, Ref, Identity,
-           Root, FetchFun, PageTimeout) of
+           Root, FetchFun, PageTimeout, Deadline) of
         {{ok, _FinalizeEvidence}, _Meta} ->
             certified_current_snapshot(
-              Owner, RequestRef, Routes, Identity,
+              Owner, RequestRef, Sources, Identity,
               Root, FetchFun, PageTimeout, RequestTimeout);
         {{error, _} = Error, Meta} ->
             {Error, Meta}
@@ -2314,39 +2423,51 @@ verify_current_cached(
 
 verify_current_reference(
   [], _Owner, _RequestRef, _Ref, _Identity,
-  _Root, _FetchFun, _PageTimeout) ->
+  _Root, _FetchFun, _PageTimeout, _Deadline) ->
     {{error, retry}, #{}};
 verify_current_reference(
   [{Peer, Endpoint} | Rest], Owner, RequestRef, Ref, Identity,
-  Root, FetchFun, PageTimeout) ->
-    case verify_cached(
-           Owner, RequestRef, Peer, Endpoint, Ref, finalize, Identity,
-           Root, FetchFun, PageTimeout, false, false) of
-        {{ok, _} = Ok, Meta} ->
-            {Ok, Meta};
-        {{error, retry}, _Meta} ->
-            verify_current_reference(
-              Rest, Owner, RequestRef, Ref, Identity,
-              Root, FetchFun, PageTimeout);
-        Definitive ->
-            Definitive
+  Root, FetchFun, PageTimeout, Deadline) ->
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    case Remaining of
+        0 ->
+            {{error, retry}, #{}};
+        _ ->
+            %% Reserve time for at least one fallback. Fast failures may walk
+            %% more keys, but one dead live contact cannot consume the whole
+            %% verification deadline before its certified address is tried.
+            AttemptTimeout = min(
+                               PageTimeout,
+                               max(1, Remaining div min(2, length(Rest) + 1))),
+            case verify_cached(
+                   Owner, RequestRef, Peer, Endpoint, Ref, finalize, Identity,
+                   Root, FetchFun, AttemptTimeout, false, false) of
+                {{ok, _} = Ok, Meta} ->
+                    {Ok, Meta};
+                {{error, retry}, _Meta} ->
+                    verify_current_reference(
+                      Rest, Owner, RequestRef, Ref, Identity,
+                      Root, FetchFun, PageTimeout, Deadline);
+                Definitive ->
+                    Definitive
+            end
     end.
 
 certified_current_snapshot(
-  Owner, RequestRef, Routes, Identity = {Ns, Anchor},
+  Owner, RequestRef, Sources, Identity = {Ns, Anchor},
   Root, FetchFun, PageTimeout, RequestTimeout) ->
     case open_cache(Owner, RequestRef, Identity, Root, none) of
         {ok, Store0, Height0, Projection0, PhaseIndex, _RefProjection} ->
             Outcome =
                 try
-                    Hints = current_route_hints(Routes, Projection0),
+                    Hints = current_route_candidates(Sources, Projection0),
                     case advance_current_snapshot(
                            Owner, RequestRef, Hints, Identity, Store0,
                            Height0, Projection0, PhaseIndex, Root,
                            FetchFun, PageTimeout, RequestTimeout) of
                         {ok, Height1, Projection1} ->
-                            ConfirmHints = current_route_hints(
-                                             Routes, Projection1),
+                            ConfirmHints = current_route_candidates(
+                                             Sources, Projection1),
                             case current_view_confirmed(
                                    Owner, RequestRef, ConfirmHints, Ns,
                                    Anchor, Identity, Height1, Projection1,
@@ -2354,7 +2475,8 @@ certified_current_snapshot(
                                    FetchFun, PageTimeout) of
                                 true ->
                                     {ok, current_view_evidence(
-                                           Identity, Height1, Projection1),
+                                           Identity, Height1, Projection1,
+                                           ConfirmHints),
                                      Height1, Projection1};
                                 false ->
                                     {unconfirmed, Height1, Projection1}
@@ -2453,7 +2575,10 @@ verify_local_current_height(
                                 ok ->
                                     {ok, current_view_evidence(
                                            Identity, Height,
-                                           CurrentProjection),
+                                           CurrentProjection,
+                                           current_route_candidates(
+                                             empty_route_sources(),
+                                             CurrentProjection)),
                                      CacheHeight, CacheProjection};
                                 {error, _} = Error -> Error
                             end;
@@ -2728,37 +2853,81 @@ persist_verified_page(
             {error, cache_full}
     end.
 
-current_route_hints(Supplied, Projection) ->
-    Certified = maps:to_list(
-                  quod_simplex:history_validator_routes(Projection)),
-    %% The replayed projection is certificate-verified; caller routes are
-    %% discovery hints only. Once history names the key for an endpoint, a
-    %% contradictory caller claim for that address has no authority and is
-    %% discarded. Before slot 1 there is no certified route, so bootstrap uses
-    %% ordered failover below instead of trusting or racing the hints.
-    CertifiedEndpoints = maps:from_keys(
-                           [Endpoint || {_Peer, Endpoint} <- Certified], true),
-    Unshadowed = [Route || Route = {_Peer, Endpoint} <- Supplied,
-                           not maps:is_key(Endpoint, CertifiedEndpoints)],
-    %% Preserve discovery order.  Bootstrap deliberately walks sources in
-    %% order, so sorting here would silently change which authenticated
-    %% source is tried first (and made that choice depend on random keys).
-    Hints = stable_unique_routes(Certified ++ Unshadowed),
-    case length(Hints) =< ?MAX_CURRENT_ROUTE_HINTS of
-        true -> Hints;
-        false -> []
+current_route_candidates(
+  #{directory := Directory, supplied := Supplied,
+    bootstrap := Bootstrap}, Projection) ->
+    Committee = quod_simplex:history_committee(Projection),
+    case Committee of
+        [] -> discovery_route_candidates(Directory, Supplied, Bootstrap);
+        [_ | _] ->
+            Certified = quod_simplex:history_validator_routes(Projection),
+            CertifiedEndpoints = maps:from_keys(
+                                   maps:values(Certified), true),
+            lists:filtermap(
+              fun(Peer) ->
+                  Endpoints = current_peer_endpoints(
+                                Peer, Bootstrap, Directory, Supplied,
+                                Certified, CertifiedEndpoints),
+                  case Endpoints of
+                      [] -> false;
+                      [_ | _] -> {true, {Peer, Endpoints}}
+                  end
+              end, Committee)
+    end.
+
+current_peer_endpoints(Peer, Bootstrap, Directory, Supplied,
+                       Certified, CertifiedEndpoints) ->
+    Historical = maps:get(Peer, Certified, none),
+    Live = first_live_endpoint(Peer, Bootstrap, Directory),
+    ThirdParty = permitted_supplied_endpoint(
+                   Peer, Historical, Supplied, CertifiedEndpoints),
+    lists:sublist(
+      lists:uniq(
+        [Endpoint || Endpoint <- [Live, Historical, ThirdParty],
+                     Endpoint =/= none]),
+      2).
+
+empty_route_sources() ->
+    #{directory => [], supplied => [], bootstrap => [],
+      projection => undefined}.
+
+first_live_endpoint(Peer, Bootstrap, Directory) ->
+    case first_peer_endpoint(Peer, Bootstrap) of
+        none ->
+            case quod_quic:resolve(Peer) of
+                {ok, Endpoint} -> Endpoint;
+                _ -> first_peer_endpoint(Peer, Directory)
+            end;
+        Endpoint -> Endpoint
+    end.
+
+first_peer_endpoint(Peer, Routes) ->
+    case lists:keyfind(Peer, 1, Routes) of
+        {Peer, Endpoint} -> Endpoint;
+        false -> none
+    end.
+
+permitted_supplied_endpoint(_Peer, Historical, _Supplied,
+                            _CertifiedEndpoints)
+  when Historical =/= none ->
+    none;
+permitted_supplied_endpoint(Peer, none, Supplied, CertifiedEndpoints) ->
+    case first_peer_endpoint(Peer, Supplied) of
+        none -> none;
+        Endpoint ->
+            case maps:is_key(Endpoint, CertifiedEndpoints) of
+                true -> none;
+                false -> Endpoint
+            end
     end.
 
 stable_unique_routes(Routes) ->
-    {Unique, _Seen} =
-        lists:foldl(
-          fun({PeerKey, _Endpoint} = Route, {Acc, Seen}) ->
-              case maps:is_key(PeerKey, Seen) of
-                  true -> {Acc, Seen};
-                  false -> {[Route | Acc], Seen#{PeerKey => true}}
-              end
-          end, {[], #{}}, Routes),
-    lists:reverse(Unique).
+    lists:uniq(fun({PeerKey, _Endpoint}) -> PeerKey end, Routes).
+
+flatten_route_candidates(Candidates) ->
+    [{Peer, Endpoint}
+     || {Peer, Endpoints} <- Candidates,
+        Endpoint <- Endpoints].
 
 advance_current_snapshot(
   Owner, RequestRef, Hints, Identity, Store0, Height0, Projection0,
@@ -2766,10 +2935,12 @@ advance_current_snapshot(
     case maps:size(quod_simplex:history_validator_routes(Projection0)) of
         0 ->
             bootstrap_snapshot_sources(
-              Hints, Owner, RequestRef, Identity, Store0, Height0,
+              flatten_route_candidates(Hints),
+              Owner, RequestRef, Identity, Store0, Height0,
               Projection0, PhaseIndex, Root, FetchFun,
               bootstrap_route_timeout(
-                PageTimeout, RequestTimeout, length(Hints)),
+                PageTimeout, RequestTimeout,
+                length(flatten_route_candidates(Hints))),
               PageTimeout);
         _ ->
             {Ns, _Anchor} = Identity,
@@ -2855,11 +3026,26 @@ probe_pages(Owner, RequestRef, Hints, Ns, Height, FetchFun, PageTimeout) ->
     To = Height + 1,
     parallel_probes(
       Hints,
-      fun({Peer, Endpoint}) ->
-          fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
-                     Height + 1, To, FetchFun, PageTimeout)
+      fun({Peer, Endpoints}) ->
+          probe_page_endpoints(
+            Endpoints, Owner, RequestRef, Peer, Ns,
+            Height + 1, To, FetchFun, PageTimeout)
       end,
       PageTimeout).
+
+probe_page_endpoints(Endpoints, Owner, RequestRef, Peer, Ns,
+                     From, To, FetchFun, PageTimeout) ->
+    Deadline = quod_time:mono_ms() + PageTimeout,
+    probe_candidate_endpoints(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptTimeout) ->
+          fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
+                     From, To, FetchFun, AttemptTimeout)
+      end,
+      fun({ok, _Entries, _RemoteHeight} = Ok) -> {done, Ok};
+         ({error, _}) -> continue
+      end,
+      {error, retry}).
 
 parallel_probes(Items, Probe, TimeoutMs) ->
     Parent = self(),
@@ -2929,11 +3115,12 @@ advance_snapshot(
             Target = min(
                        Advertised,
                        Height0 + ?QUOD_MAX_FOREIGN_PAGE_ENTRIES),
-            Sources = [Source
+            CandidateSources = [Source
                        || {_H, Source} <- lists:reverse(
                                              lists:keysort(1, Candidates))],
             advance_snapshot_sources(
-              Sources, Owner, RequestRef, Ns, Anchor, Identity,
+              flatten_route_candidates(CandidateSources),
+              Owner, RequestRef, Ns, Anchor, Identity,
               Store0, Height0, Projection0, PhaseIndex, Root, Target,
               FetchFun, PageTimeout)
     end.
@@ -2996,54 +3183,59 @@ current_view_confirmed(
 current_committee_confirmed(
   Committee, Owner, RequestRef, Hints, Ns, Anchor, Identity, Height,
   Projection, PhaseIndex, FetchFun, PageTimeout) ->
-    ByPeer = route_hints_by_peer(Hints, Committee),
+    Candidates = [{Peer, Endpoints}
+                  || {Peer, Endpoints} <- Hints,
+                     lists:member(Peer, Committee)],
     Needed = quod_simplex:quorum(length(Committee)),
     Results = parallel_probes(
-                maps:to_list(ByPeer),
+                Candidates,
                 fun({Peer, Endpoints}) ->
-                    probe_peer_endpoints(
+                    probe_confirmed_endpoint(
                       Endpoints, Owner, RequestRef, Peer, Ns, Height,
+                      Anchor, Identity, Projection, PhaseIndex,
                       FetchFun, PageTimeout)
                 end,
                 PageTimeout),
-    Confirmed = lists:usort(
-                  [Peer
-                   || {{Peer, _Endpoints}, Responses} <- Results,
-                      lists:member(Peer, Committee),
-                      lists:any(
-                        fun(Response) ->
-                            tip_response_at_least(
-                              Response, Ns, Anchor, Identity, Height,
-                              Projection, PhaseIndex)
-                        end,
-                        Responses)]),
+    Confirmed = [Peer || {{Peer, _Endpoints}, true} <- Results],
     length(Confirmed) >= Needed.
 
-route_hints_by_peer(Hints, Committee) ->
-    lists:foldl(
-      fun({Peer, Endpoint}, Acc) ->
-          case lists:member(Peer, Committee) of
-              true ->
-                  Acc#{Peer => lists:usort(
-                                  [Endpoint | maps:get(Peer, Acc, [])])};
-              false -> Acc
-          end
-      end, #{}, Hints).
-
-probe_peer_endpoints(
-  [], _Owner, _RequestRef, _Peer, _Ns, _Height,
-  _FetchFun, _PageTimeout) ->
-    [];
-probe_peer_endpoints(
-  [Endpoint | Rest], Owner, RequestRef, Peer, Ns, Height,
-  FetchFun, PageTimeout) ->
+probe_confirmed_endpoint(
+  Endpoints, Owner, RequestRef, Peer, Ns, Height,
+  Anchor, Identity, Projection, PhaseIndex, FetchFun, PageTimeout) ->
     To = Height + 1,
-    Result = fetch_page(
-               Owner, RequestRef, Peer, Endpoint, Ns,
-               Height + 1, To, FetchFun, PageTimeout),
-    [Result | probe_peer_endpoints(
-                Rest, Owner, RequestRef, Peer, Ns, Height,
-                FetchFun, PageTimeout)].
+    Deadline = quod_time:mono_ms() + PageTimeout,
+    probe_candidate_endpoints(
+      Endpoints, Deadline,
+      fun(Endpoint, AttemptTimeout) ->
+          fetch_page(Owner, RequestRef, Peer, Endpoint, Ns,
+                     Height + 1, To, FetchFun, AttemptTimeout)
+      end,
+      fun(Result) ->
+          case tip_response_at_least(
+                 Result, Ns, Anchor, Identity, Height,
+                 Projection, PhaseIndex) of
+              true -> {done, true};
+              false -> continue
+          end
+      end,
+      false).
+
+probe_candidate_endpoints([], _Deadline, _Attempt, _Accept, Exhausted) ->
+    Exhausted;
+probe_candidate_endpoints(
+  [Endpoint | Rest], Deadline, Attempt, Accept, Exhausted) ->
+    Remaining = max(0, Deadline - quod_time:mono_ms()),
+    case Remaining of
+        0 -> Exhausted;
+        _ ->
+            AttemptTimeout = max(1, Remaining div (length(Rest) + 1)),
+            case Accept(Attempt(Endpoint, AttemptTimeout)) of
+                {done, Result} -> Result;
+                continue ->
+                    probe_candidate_endpoints(
+                      Rest, Deadline, Attempt, Accept, Exhausted)
+            end
+    end.
 
 tip_response_at_least(
   {ok, [], RemoteHeight}, _Ns, _Anchor, _Identity,
@@ -3063,14 +3255,14 @@ tip_response_at_least(
   _Result, _Ns, _Anchor, _Identity, _Height, _Projection, _PhaseIndex) ->
     false.
 
-current_view_evidence(Identity, Height, Projection) ->
+current_view_evidence(Identity, Height, Projection, Routes) ->
     Dtx = maps:get(dtx, Projection),
     #{identity => Identity,
       slot => Height,
       generation => maps:get(generation, Dtx),
       committee => quod_simplex:history_committee(Projection),
       committee_id => maps:get(committee_id, Projection),
-      routes => quod_simplex:history_validator_routes(Projection)}.
+      route_candidates => Routes}.
 
 fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, undefined,
            PageTimeout) ->

@@ -147,10 +147,17 @@ Candidate sources are:
 
 An authenticated source/identity association is only a hint. `quod_foreign_log`
 must fetch and verify the exact anchor, contiguous certified history, committee
-transitions, and requested reference before returning evidence. On success,
-the certified projection's committee routes replace bootstrap guesses. On
-failure, the hint is rotated or discarded; no invalid ledger conclusion is
-drawn from transport failure.
+transitions, and requested reference before returning evidence. Once a
+committee is certified, selection is keyed by its members: a member's
+first-party live contact is tried first and its certified historical endpoint
+is retained as the fallback. Caller-supplied third-party hints never displace a
+certified endpoint. Each key remains one probe and one vote; its fallback is a
+sequential resend of the same request id under the same deadline. Before
+genesis is certified, the bounded discovery-ordered bootstrap walk remains in
+use. At the existing hint cap, eviction removes the oldest non-committee
+contact first, so contact churn cannot silently discard a current member's
+only live endpoint. Transport failure never becomes an invalid-ledger
+conclusion.
 
 This is an extension of source selection around the existing verifier, not a
 new verification path. Both foreground DTX checks and continuous subscription

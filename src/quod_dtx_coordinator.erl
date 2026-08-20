@@ -26,6 +26,7 @@ owner death terminates the worker.
          test_initial_commands/4,
          test_local_submit_result/2, test_remote_submit_result/2,
          test_submit_endpoint_requests/4,
+         test_endpoint_request_candidates/5,
          test_status/1]).
 -endif.
 
@@ -463,7 +464,9 @@ verify_accepted_phase_sources([], _Target, _GroupId, _Kind, _Ref, S) ->
     {retry, S};
 verify_accepted_phase_sources(
   [Source | Rest], Target, GroupId, Kind, Ref, S) ->
-    case {Source, verify_phase(Target, GroupId, Kind, Ref, Source, S)} of
+    EvidenceSource = endpoint_evidence_source(Source),
+    case {Source,
+          verify_phase(Target, GroupId, Kind, Ref, EvidenceSource, S)} of
         {_Any, {progress, _S1, _Phase} = Progress} ->
             Progress;
         {_Any, {retry, S1}} ->
@@ -471,12 +474,17 @@ verify_accepted_phase_sources(
               Rest, Target, GroupId, Kind, Ref, S1);
         {local, {fatal, _Reason, _S1} = Fatal} ->
             Fatal;
-        {{remote, _Peer, _Endpoint}, {fatal, _Reason, S1}} ->
+        {{remote, _Peer, _Endpoints}, {fatal, _Reason, S1}} ->
             %% A bad authenticated route cannot override certified evidence
             %% obtainable from another current validator.
             verify_accepted_phase_sources(
               Rest, Target, GroupId, Kind, Ref, S1)
     end.
+
+endpoint_evidence_source(local) ->
+    local;
+endpoint_evidence_source({remote, PeerKey, _Endpoints}) ->
+    {remote, PeerKey}.
 
 phase_request(Target, GroupId, Kind, S) ->
     observe_phase(Target, GroupId, Kind, any, S).
@@ -515,7 +523,7 @@ uncertain_phase_sources(
               Rest, Target, GroupId, Kind, SawAbsent, true, S1);
         {local, {fatal, _Reason, _S1} = Fatal} ->
             Fatal;
-        {{remote, _Peer, _Endpoint}, {fatal, _Reason, S1}} ->
+        {{remote, _Peer, _Endpoints}, {fatal, _Reason, S1}} ->
             uncertain_phase_sources(
               Rest, Target, GroupId, Kind, SawAbsent, true, S1)
     end.
@@ -580,7 +588,7 @@ phase_sources([Source | Rest], Target, GroupId, Kind, S) ->
         {_Any, {retry, S1}} ->
             phase_sources(Rest, Target, GroupId, Kind, S1);
         {local, {fatal, _Reason, _S1} = Fatal} -> Fatal;
-        {{remote, _Peer, _Endpoint}, {fatal, _Reason, S1}} ->
+        {{remote, _Peer, _Endpoints}, {fatal, _Reason, S1}} ->
             %% An authenticated validator may still be Byzantine. A bad
             %% response is a route failure; another exact validator gets the
             %% same request before the round backs off.
@@ -634,7 +642,7 @@ verify_phase(Target = {Ns, _Anchor}, GroupId, Kind, Ref, local, S) ->
         {error, _} -> {retry, S}
     end;
 verify_phase(Target, GroupId, Kind, Ref,
-             {remote, _PeerKey, _Endpoint}, S = #state{config = Config}) ->
+             {remote, _PeerKey}, S = #state{config = Config}) ->
     case quod_foreign_log:verify_reference(
            Ref, Kind, Config#config.request_timeout_ms) of
         {ok, Evidence} -> install_phase_evidence(
@@ -816,15 +824,79 @@ endpoint_request(local, {Ns, _Anchor}, Request,
         {ok, Response} -> {ok, Response, local};
         {error, _} = Error -> Error
     end;
-endpoint_request({remote, PeerKey, Endpoint}, Target, Request, S) ->
+endpoint_request({remote, PeerKey, Endpoints}, Target, Request, S) ->
     {TargetNs, _Anchor} = Target,
     #state{owner_ns = OwnerNs, config = Config} = S,
-    case quod_simplex:dtx_endpoint_request(
-           OwnerNs, TargetNs, PeerKey, Endpoint, Request,
-           Config#config.request_timeout_ms) of
-        {ok, Response} -> {ok, Response, {remote, PeerKey, Endpoint}};
-        {error, _} = Error -> Error
+    Deadline = quod_time:mono_ms() + Config#config.request_timeout_ms,
+    RequestFun =
+        fun(Endpoint, CandidateRequest, Timeout) ->
+            quod_simplex:dtx_endpoint_request(
+              OwnerNs, TargetNs, PeerKey, Endpoint, CandidateRequest, Timeout)
+        end,
+    endpoint_request_candidates(
+      Endpoints, PeerKey, Request, Deadline, undefined, RequestFun).
+
+endpoint_request_candidates([], _PeerKey, _Request, _Deadline,
+                            undefined, _RequestFun) ->
+    {error, not_ready};
+endpoint_request_candidates([], _PeerKey, _Request, _Deadline,
+                            Last, _RequestFun) ->
+    Last;
+endpoint_request_candidates([Endpoint | Rest], PeerKey, Request,
+                            Deadline, Last, RequestFun) ->
+    case max(0, Deadline - quod_time:mono_ms()) of
+        0 ->
+            case Last of undefined -> {error, timeout}; _ -> Last end;
+        Timeout ->
+            AttemptTimeout = max(1, Timeout div (length(Rest) + 1)),
+            Result = RequestFun(Endpoint, Request, AttemptTimeout),
+            case Result of
+                {ok, Response} ->
+                    Candidate = {ok, Response, {remote, PeerKey}},
+                    case endpoint_candidate_terminal(Request, Response) of
+                        true -> Candidate;
+                        false -> endpoint_request_candidates(
+                                   Rest, PeerKey, Request, Deadline,
+                                   preferred_candidate_result(
+                                     Request, Candidate, Last),
+                                   RequestFun)
+                    end;
+                {error, _} ->
+                    endpoint_request_candidates(
+                      Rest, PeerKey, Request, Deadline,
+                      preferred_candidate_result(Request, Result, Last),
+                      RequestFun)
+            end
     end.
+
+endpoint_candidate_terminal(Request, Response) ->
+    quod_dtx_endpoint:correlates(Request, Response) andalso
+        case Response of
+            {accepted, _, _, _} -> true;
+            {refused, _, _, _, _, _} -> true;
+            {phase, _, _, _} -> true;
+            {error, _, invalid_request} -> true;
+            _ -> false
+        end.
+
+preferred_candidate_result(_Request, Candidate, undefined) ->
+    Candidate;
+preferred_candidate_result(Request, Candidate, Current) ->
+    case candidate_result_rank(Request, Candidate) >
+         candidate_result_rank(Request, Current) of
+        true -> Candidate;
+        false -> Current
+    end.
+
+candidate_result_rank(Request, {ok, Response, _Source}) ->
+    case quod_dtx_endpoint:correlates(Request, Response) of
+        true -> 3;
+        false -> 1
+    end;
+candidate_result_rank(_Request, {error, timeout}) ->
+    2;
+candidate_result_rank(_Request, _Result) ->
+    1.
 
 endpoint_sources(Target, Preferred) ->
     Cohosted = cohosted(Target),
@@ -832,13 +904,18 @@ endpoint_sources(Target, Preferred) ->
                    {true, {ok, <<_:256>> = Key}} -> Key;
                    _ -> none
                end,
-    Remote = [{remote, PeerKey, Endpoint}
-              || {PeerKey, Endpoint} <- routes(Target),
+    Remote = [{remote, PeerKey, Endpoints}
+              || {PeerKey, Endpoints} <- routes(Target),
                  PeerKey =/= LocalKey],
     All = case Cohosted of true -> [local | Remote]; false -> Remote end,
     case Preferred of
         any -> All;
-        _ -> [Preferred | lists:delete(Preferred, All)]
+        local -> [local | lists:delete(local, All)];
+        {remote, PreferredKey} ->
+            case lists:keytake(PreferredKey, 2, All) of
+                {value, PreferredSource, Rest} -> [PreferredSource | Rest];
+                false -> All
+            end
     end.
 
 submit_endpoint_requests([], _Target, _Request, _S) ->
@@ -876,6 +953,12 @@ submit_endpoint_requests_with(
 test_submit_endpoint_requests(Sources, Request, TimeoutMs, RequestFun) ->
     submit_endpoint_requests_with(
       Sources, Request, TimeoutMs, RequestFun, <<"quod:test">>).
+
+test_endpoint_request_candidates(
+  Endpoints, PeerKey, Request, TimeoutMs, RequestFun) ->
+    endpoint_request_candidates(
+      Endpoints, PeerKey, Request,
+      quod_time:mono_ms() + TimeoutMs, undefined, RequestFun).
 -endif.
 
 collect_submit_endpoint_results(
@@ -950,14 +1033,14 @@ count_submit_endpoint_timeout(Ns, Count) ->
 classify_submit_endpoint_result(local, Request, Result) ->
     local_submit_result(Request, Result);
 classify_submit_endpoint_result(
-  {remote, _PeerKey, _Endpoint}, Request,
+  {remote, _PeerKey, _Endpoints}, Request,
   {ok, Response, _Source}) ->
     remote_submit_result(Request, Response);
 classify_submit_endpoint_result(
-  {remote, _PeerKey, _Endpoint}, _Request, {error, timeout}) ->
+  {remote, _PeerKey, _Endpoints}, _Request, {error, timeout}) ->
     uncertain;
 classify_submit_endpoint_result(
-  {remote, _PeerKey, _Endpoint}, _Request, {error, _}) ->
+  {remote, _PeerKey, _Endpoints}, _Request, {error, _}) ->
     next.
 
 stop_submit_endpoint_workers(Pending) ->

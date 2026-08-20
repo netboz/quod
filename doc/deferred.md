@@ -249,8 +249,10 @@ stages, not carried forward:
     host ports (which change on every reschedule/rolling update) that address ROTS; refresh today = `remove`
     + re-`admit` (two quorum operations). The Slice-D dial hint is fresh only at the admission moment;
     afterward rot-recovery is Consul-rendered seeds + inbound headers + Brahms (the live-evidence
-    `learn`-overwrite channel), never the log. **Consider static Nomad ports for committee members** so the
-    logged address stays valid. Sub-residual: a cold replay of a `remove`+re-`add` of the same pubkey across
+    `learn`-overwrite channel), never the log. The foreign-history selector now tolerates this rot by
+    trying a first-party live contact before the same key's certified historical endpoint; that repairs
+    reachability without rewriting ledger history. Static ports may still reduce failed first dials.
+    Sub-residual: a cold replay of a `remove`+re-`add` of the same pubkey across
     DIFFERENT catch-up windows keeps the FIRST address (learn-if-absent skips the later re-add) — healed by
     the header-overwrite path on first live contact; harmless (a wrong hint is at worst a failed dial, mTLS
     binds every connection to the expected pubkey).

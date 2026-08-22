@@ -8,7 +8,9 @@ format break, validator-side request/ACL revalidation, one shared operation
 projection for ordinary transactions and DTX Begins, and Explorer rendering.
 Slice 4 adds local signed execution and cursors, moves the Explorer console to
 that same authenticated path, and replaces specialized home registration with
-the ordinary signed `create_user_home` goal. Slice 5 carries the same signed
+the ordinary signed `create_user_home` goal. That goal is now only a root
+Prolog convenience over generic `create_ontology/2`; it has no special Erlang
+lifecycle operation. Slice 5 carries the same signed
 user and request through remote and nested scopes, activates signed
 multi-ontology commit, makes missing root identity retryable during history
 validation, and persists unresolved browser writes. Slice 6 lets any client

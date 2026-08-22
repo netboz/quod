@@ -207,11 +207,12 @@ transition for each domain change. Deliberate administrative rule/fact edits
 continue to use Quod's existing direct `assertz`/`retract` transaction path.
 There is no compatibility wrapper.
 
-Node-local ontology lifecycle uses the same action and proof path as every
+Ontology lifecycle uses the same action and proof path as every
 other durable goal. The public staging predicate first validates only the
 ground action's structure and registers one opaque proof-local request. The
 shared `action/3` relation then applies the normal `can_invoke/4` entry policy
-and the `quod:node` action prerequisites. Only the internal continuation for
+and the controlling ontology's prerequisites: root for create, node for join.
+Only the internal continuation for
 that exact request reads or compiles mutable source input, builds one immutable
 descriptor, and stages one direct effect in the proof overlay.
 
@@ -255,8 +256,8 @@ builder; runtime input is compiled before entering it. Resume may discard its
 once-compiled, ignored replacement diff after confirming the existing V3
 ledger.
 
-The original ground action remains the term matched by the `quod:node`
-declarations and policy. The descriptor carries canonical namespace/options plus the already-read
+The original ground action remains the term matched by root's creation or
+node's join declaration and policy. The descriptor carries canonical namespace/options plus the already-read
 and compiled `InitialDiff` for create, or the raw 32-byte anchor plus normalized
 seeds for join. Factor the structural and full preparation functions out of
 `quod_ontology`'s current private option/hash/seed handling. The trusted public
@@ -297,8 +298,25 @@ validation always precedes the target check. Creation retains its documented
 resume behavior: valid new `Options` are ignored only when the namespace already
 has a live ledger, and that result is explicitly `resumed`. Join additionally
 proves that the live namespace's anchor equals the requested `GenesisHash`;
-seeds remain non-authoritative route hints. The `quod:node` declarations use explicit
-helpers such as:
+seeds remain non-authoritative route hints. Creation is declared in
+`quod:root`; join is declared in `quod:node`. They use the same explicit helper
+shape:
+
+```prolog
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
+action('$quod_stage_ontology'(Handle,
+                              create_ontology(Name, Options),
+                              ontology_hosted(Name)),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
+        ontology_join_state(Name, not_hosted)],
+       ontology_hosted(Name)).
+```
+
+The node declaration is:
 
 ```prolog
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
@@ -308,14 +326,6 @@ ontology_hosted(Name) :- ontology_join_state(Name, ready).
 ontology_joined(Name, GenesisHash) :-
     ontology_hosted(Name),
     ontology_genesis_anchor(Name, GenesisHash).
-
-action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
-                              ontology_hosted(Name)),
-       [current_principal(Agent),
-        can_create_ontology(Agent, Name, Options),
-        ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
 
 action('$quod_stage_ontology'(Handle,
                               join_ontology(Name, GenesisHash, Seeds),
@@ -329,7 +339,9 @@ action('$quod_stage_ontology'(Handle,
 Thus a repeated valid create request uses explicit resume semantics, while a
 repeated join returns immediately only for the requested anchor. The existing
 public state predicate still distinguishes `starting`, `joining`, and `ready`
-for polling. `ontology_hosted/1` is intentionally the creation target: startup
+for polling. Mirrored `ontology_hosted/1` rules in root and node observe the
+same node-local state; they do not duplicate execution. `ontology_hosted/1` is
+intentionally the creation target: startup
 `mode=create|join` is not a durable ontology property, and a founder is normally
 restarted later in join mode, so inventing `ontology_created/1` would encode
 deployment history rather than desired state. A valid prior join may therefore

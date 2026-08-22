@@ -373,9 +373,9 @@ modules pinned by its certified genesis:
 | `peer_ready/1`, `admit/3`, `remove/1` | query/staging | common membership primitives registered in every ontology; policy still decides whether they may be invoked |
 | `directory_host/5`, `directory_control_peer/1` | `query` | `quod:root` or a later directory system ontology; one owner only |
 | `ontology_join_state/2`, `ontology_genesis_anchor/2` | `query` | move with lifecycle ownership to the `quod:node` predicate module; node policy reuses these local observations rather than duplicating them |
-| `current_principal/1`, `create_ontology/2`, `join_ontology/3` | query plus ordinary action/staging | move to `quod:node`; the principal query binds existing proof authority, while create/join reuse the normal action path and the one prepared-effect journal because they change what a node hosts |
+| `current_principal/1`, `create_ontology/2`, `join_ontology/3` | query plus ordinary action/staging | the principal query binds existing proof authority; root owns creation of a new identity and node owns joining an existing identity, while both reuse the normal action path and one prepared-effect journal |
 | `effect_custody_capacity/1`, `set_effect_custody_capacity/1`, internal capacity projection | ordinary D plus one founding `projection` bridge | root is the sole policy owner because it starts before any other system ontology; default 64 or one committed override (including `unlimited`) is projected through the existing state-handler tier into the one node-wide journal |
-| current user-home helpers | mixed action/query | remove as a generic identity path; initialise class/key/ACL facts through ordinary transactions or the existing generic `create_ontology/2` genesis input; add no agent-specific executor |
+| current user-home helpers | Prolog convenience plus query | the temporary root rule derives fixed home arguments and calls generic creation; remove it at the agent-format break, and add no agent-specific executor |
 | `projection_noop/1`, `enqueue_projection/2` | `projection` | common runtime machinery registered in every ontology |
 
 `ask`, `transaction`, `goal`, and the common action relation are Prolog execution
@@ -684,7 +684,7 @@ foreign read plus creation currently ends as
 `effect_requires_single_participant`; removing the local verdict must not be
 misrepresented as removing that protocol rule. The simple first workflow is
 for a FIPA or other external approval process to commit an approval fact in
-`quod:node`, then let the later creation action read it locally. Atomic foreign
+`quod:root`, then let the later creation action read it locally. Atomic foreign
 approval plus a local effect would require a separately reviewed DTX-effect
 design.
 

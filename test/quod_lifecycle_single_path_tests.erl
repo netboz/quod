@@ -17,22 +17,24 @@ lifecycle_single_path_test_() ->
           {timeout, 30, ?_test(failed_transaction_branch_discards_its_effect(Fixture))},
           {timeout, 30, ?_test(join_uses_the_same_goal_path(Fixture))},
           {timeout, 30, ?_test(signed_user_home_uses_the_same_goal_path(Fixture))},
+          {timeout, 30, ?_test(signed_root_create_obeys_entry_acl(Fixture))},
           {timeout, 30, ?_test(prepared_source_is_used_exactly_once(Fixture))},
           {timeout, 30, ?_test(action_timeout_returns_exact_outcome(Fixture))},
           {timeout, 30, ?_test(effect_completion_survives_journal_restart(Fixture))},
+          {timeout, 30, ?_test(legacy_user_home_row_executes_generic_create(Fixture))},
           {timeout, 30, ?_test(stopped_ontology_resumes_same_anchor(Fixture))},
           ?_test(wrong_anchor_is_not_a_satisfied_effect(Fixture)),
           ?_test(structural_validation_is_total(Fixture)),
           ?_test(current_principal_is_engine_owned(Fixture)),
           ?_test(internal_staging_continuation_cannot_be_forged(Fixture)),
           ?_test(foreign_prerequisite_uses_normal_scope_boundary(Fixture)),
-          ?_test(user_is_gated_by_node_can_invoke(Fixture)),
-          ?_test(root_does_not_own_generic_hosting_policy(Fixture)),
+          ?_test(user_is_gated_by_root_creation_policy(Fixture)),
+          ?_test(node_does_not_own_generic_creation_policy(Fixture)),
           ?_test(invalid_create_never_reaches_hosting(Fixture)),
           ?_test(reserved_initial_terms_never_reach_hosting(Fixture)),
           ?_test(collisions_preserve_existing_state(Fixture)),
           ?_test(failed_admission_rolls_back(Fixture)),
-          ?_test(failed_node_policy_does_not_read_or_stage(Fixture)),
+          ?_test(failed_root_policy_does_not_read_or_stage(Fixture)),
           ?_test(committed_local_approval_uses_the_same_action(Fixture)),
           {timeout, 30, ?_test(false_postcondition_is_reported(Fixture))},
           ?_test(reconcile_republishes_running_content(Fixture)),
@@ -116,19 +118,10 @@ setup() ->
           [{source_file, NodeSource},
            {external_predicate_modules, [quod_ontology_predicates]}]),
     ok = wait_ready(?NODE_NS, 300),
-    %% Lifecycle actions now use the ordinary proof deadline of their owning
-    %% ontology. Restart this TEST ontology with a short deadline so the
-    %% uncertainty test exercises that one shared path without waiting for the
-    %% production default.
-    NodeConfig0 = desired_content(?NODE_NS),
-    ok = quod_namespace_manager:stop_content(?NODE_NS),
-    NodeConfig = NodeConfig0#{proof_timeout_ms => 1000},
-    {ok, _} = quod_namespace_manager:start_content(?NODE_NS, NodeConfig),
-    ok = wait_ready(?NODE_NS, 300),
     ok = wait_effect_capacity(64, 300),
     #{dir => Dir, saved => Saved, manager => Manager,
       ns_sup => NsSup, brahms_sup => BrahmsSup, journal => Journal,
-      root_config => RootConfig, node_config => NodeConfig}.
+      root_config => RootConfig}.
 
 cleanup(#{dir := Dir, saved := Saved, manager := Manager,
           ns_sup := NsSup, brahms_sup := BrahmsSup, journal := Journal}) ->
@@ -154,18 +147,18 @@ cleanup(#{dir := Dir, saved := Saved, manager := Manager,
     _ = file:del_dir_r(Dir),
     ok.
 
-create_is_one_normal_effect_transaction(#{node_config := NodeConfig}) ->
+create_is_one_normal_effect_transaction(#{root_config := RootConfig}) ->
     Ns = unique_ns(<<"created">>),
     Goal =
         {create_ontology, Ns,
          [{source,
            <<"can_invoke(_, _, _, _).\n"
              "hello(world).\n">>}]},
-    {ok, [#{}], Height} = quod_prolog:execute(?NODE_NS, Goal),
+    {ok, [#{}], Height} = quod_prolog:execute(?ROOT_NS, Goal),
     ok = wait_ready(Ns, 300),
     ?assertMatch({ok, [#{}], _}, quod_prolog:prove_ro(Ns, {hello, world})),
     {ok, Store} = quod_ledger_store:open_ro(
-                    ?NODE_NS, quod_ledger_store:ledger_dir(NodeConfig)),
+                    ?ROOT_NS, quod_ledger_store:ledger_dir(RootConfig)),
     try
         {ok, #entry{data = {batch, Transactions}}} =
             quod_ledger_store:read_at(Store, Height),
@@ -185,11 +178,11 @@ create_is_one_normal_effect_transaction(#{node_config := NodeConfig}) ->
 repeated_create_is_a_noop(_Fixture) ->
     Ns = unique_ns(<<"repeated">>),
     Goal = {create_ontology, Ns, []},
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Goal)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok = wait_ready(Ns, 300),
-    Before = maps:get(committed, quod_simplex:stats(?NODE_NS)),
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Goal)),
-    ?assertEqual(Before, maps:get(committed, quod_simplex:stats(?NODE_NS))).
+    Before = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
+    ?assertEqual(Before, maps:get(committed, quod_simplex:stats(?ROOT_NS))).
 
 failed_transaction_branch_discards_its_effect(_Fixture) ->
     FirstNs = unique_ns(<<"discarded">>),
@@ -199,7 +192,7 @@ failed_transaction_branch_discards_its_effect(_Fixture) ->
          {transaction,
           {',', {create_ontology, FirstNs, []}, fail}},
          {create_ontology, SecondNs, []}},
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Goal)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok = wait_ready(SecondNs, 300),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(FirstNs)),
     ?assertEqual({ok, ready}, quod_ontology:local_state(SecondNs)).
@@ -208,7 +201,7 @@ join_uses_the_same_goal_path(_Fixture) ->
     Ns = unique_ns(<<"join">>),
     Create = {create_ontology, Ns,
               [{source, <<"can_invoke(_, _, _, _).\njoined_fact(ok).\n">>}]},
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Create)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Create)),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
     ok = quod_namespace_manager:stop_content(Ns),
@@ -249,6 +242,41 @@ signed_user_home_uses_the_same_goal_path(_Fixture) ->
         stop_process(AuthPid)
     end.
 
+signed_root_create_obeys_entry_acl(_Fixture) ->
+    OpenClause = root_open_invoke_clause(),
+    HostEntry = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
+    ok = replace_root_invocation_policy([HostEntry]),
+    try
+        {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
+        {ok, NodeKey} = application:get_env(quod, node_pubkey),
+        {PublicKey, _} = KeyPair = quod_identity:generate(),
+        Peer = {127, 0, 0, 5},
+        {ok, AuthPid} = quod_client_auth:start_link(
+                          #{network_id => NetworkId, node_key => NodeKey,
+                            max_challenges => 4, max_sessions => 4}),
+        unlink(AuthPid),
+        try
+            #{session_id := SessionId, expires_ms := SessionExpires} =
+                open_client_session(NetworkId, NodeKey, KeyPair, Peer),
+            {RequestBytes, Signature} = signed_user_goal(
+                                          NetworkId, PublicKey, KeyPair,
+                                          ?ROOT_NS, NetworkId, execute,
+                                          SessionExpires,
+                                          <<"create_user_home.">>),
+            {ok, _, {normalized, {failed, ReasonsBlob}}} =
+                quod_client_goal_ingress:submit(
+                  execute, SessionId, RequestBytes, Signature, Peer),
+            {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
+            ?assert(lists:member({not_allowed, ?ROOT_NS}, Reasons)),
+            {ok, HomeNs} = quod_user:home_namespace(PublicKey),
+            ?assertEqual({ok, not_hosted}, quod_ontology:local_state(HomeNs))
+        after
+            stop_process(AuthPid)
+        end
+    after
+        ok = replace_root_invocation_policy([HostEntry, OpenClause])
+    end.
+
 prepared_source_is_used_exactly_once(#{dir := Dir}) ->
     Ns = unique_ns(<<"prepared-once">>),
     SourcePath = filename:join(Dir, "prepared-once.pl"),
@@ -273,13 +301,13 @@ action_timeout_returns_exact_outcome(#{manager := Manager}) ->
     Ns = unique_ns(<<"action-timeout">>),
     ok = sys:suspend(Manager),
     Result =
-        try quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []})
+        try quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})
         after ok = sys:resume(Manager)
         end,
     ?assertMatch(
        {error,
         {outcome_unknown,
-         {transaction, ?NODE_NS, <<_:256>>, <<_:256>>}}},
+         {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}},
        Result),
     {error, {outcome_unknown, Ref}} = Result,
     ok = wait_ready(Ns, 300),
@@ -300,7 +328,7 @@ effect_completion_survives_journal_restart(#{dir := Dir}) ->
               Parent !
                   {journal_restart_result, self(),
                    quod_prolog:execute(
-                     ?NODE_NS, {create_ontology, Ns, []})}
+                     ?ROOT_NS, {create_ontology, Ns, []})}
           end),
     try
         Worker =
@@ -336,7 +364,7 @@ effect_completion_survives_journal_restart(#{dir := Dir}) ->
         ?assertMatch(
            {error,
             {outcome_unknown,
-             {transaction, ?NODE_NS, <<_:256>>, <<_:256>>}}},
+             {transaction, ?ROOT_NS, <<_:256>>, <<_:256>>}}},
            Result),
         ok = wait_ready(Ns, 300),
         Anchor = quod_simplex:genesis_hash(Ns),
@@ -353,16 +381,49 @@ effect_completion_survives_journal_restart(#{dir := Dir}) ->
         exit(Caller, kill)
     end.
 
+legacy_user_home_row_executes_generic_create(_Fixture) ->
+    Ns = unique_ns(<<"legacy-home-row">>),
+    Create = {create_ontology, Ns, []},
+    {ok, Structural} = quod_ontology:validate_action(Create),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    {ok, Executor} = application:get_env(quod, node_pubkey),
+    LegacyAction = create_user_home,
+    Desired = {ontology_hosted, Ns},
+    {ok, Effect} = quod_ontology:prepared_effect(
+                     LegacyAction, Prepared, Executor, {node, Executor}),
+    {ok, GoalBlob} = quod_durable_term:encode_goal(LegacyAction),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
+    Change = quod_transaction:bind_id(
+               {?ROOT_NS, RootAnchor},
+               #transaction{origin = {?ROOT_NS, RootAnchor},
+                            proof_id = crypto:strong_rand_bytes(32),
+                            plan_digest = crypto:strong_rand_bytes(32),
+                            goal = GoalBlob, result = ResultBlob,
+                            diff = [], read_check = #{}, effects = [Effect],
+                            author = Executor}),
+    Ref = {transaction, ?ROOT_NS, RootAnchor,
+           Change#transaction.tx_id},
+    {ok, Reservation} = quod_effect_journal:reserve(self()),
+    ok = quod_effect_journal:stage(
+           Reservation, LegacyAction, Desired, Effect, Prepared),
+    ok = quod_effect_journal:bind_transaction(Effect, Change, Ref),
+    quod_effect_journal:release_applied(2, [Effect]),
+    ok = wait_ready(Ns, 300),
+    ok = wait_effect_target_state(Ns, applied, 300),
+    ?assertMatch({ok, #{state := applied, result := ok}},
+                 quod_effect_journal:status(quod_effect:effect_id(Effect))).
+
 stopped_ontology_resumes_same_anchor(_Fixture) ->
     Ns = unique_ns(<<"resume-anchor">>),
     Action = {create_ontology, Ns, []},
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Action)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Action)),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
     ?assertMatch(<<_:256>>, Anchor),
     ok = quod_namespace_manager:stop_content(Ns),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)),
-    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?NODE_NS, Action)),
+    ?assertMatch({ok, [#{}], _}, quod_prolog:execute(?ROOT_NS, Action)),
     ok = wait_ready(Ns, 300),
     ?assertEqual(Anchor, quod_simplex:genesis_hash(Ns)).
 
@@ -370,7 +431,7 @@ wrong_anchor_is_not_a_satisfied_effect(_Fixture) ->
     Ns = unique_ns(<<"wrong-anchor">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
     ok = wait_ready(Ns, 300),
     Actual = quod_simplex:genesis_hash(Ns),
     <<First, Rest/binary>> = Actual,
@@ -386,7 +447,7 @@ wrong_anchor_is_not_a_satisfied_effect(_Fixture) ->
     ?assertEqual(
        incompatible,
        quod_effect_journal:test_desired_state(
-         ?NODE_NS, {ontology_hosted, Ns}, Effect)).
+         ?ROOT_NS, {ontology_hosted, Ns}, Effect)).
 
 structural_validation_is_total(_Fixture) ->
     ?assertEqual({error, invalid_action},
@@ -418,14 +479,14 @@ current_principal_is_engine_owned(_Fixture) ->
     ?assertMatch(
        {fail, _},
        quod_prolog:prove_ro(
-         ?NODE_NS,
+         ?ROOT_NS,
          {current_principal, {node, crypto:strong_rand_bytes(32)}})).
 
 internal_staging_continuation_cannot_be_forged(_Fixture) ->
     Ns = unique_ns(<<"forged-continuation">>),
     Goal = {'$quod_stage_ontology', forged_handle,
             {create_ontology, Ns, []}, {ontology_hosted, Ns}},
-    {fail, Reasons} = quod_prolog:execute(?NODE_NS, Goal),
+    {fail, Reasons} = quod_prolog:execute(?ROOT_NS, Goal),
     ?assertEqual({ontology_creation_failed, invalid_action},
                  lists:last(Reasons)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
@@ -439,18 +500,18 @@ foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
             <<"can_invoke(_, _, _, _).\n"
               "lifecycle_ready(yes).\n">>}]),
     ok = wait_ready(ForeignNs, 300),
-    Original = node_creation_action(),
+    Original = root_creation_action(),
     {action, Transition, Prerequisites, Desired} = Original,
     ForeignCheck = {'::', ForeignNs, {lifecycle_ready, yes}},
     Modified = {action, Transition,
                 Prerequisites ++ [ForeignCheck], Desired},
-    ok = commit_node({',', {retract, Original}, {asserta, Modified}}),
+    ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
     TargetNs = unique_ns(<<"effect-with-foreign-read">>),
     try
         ?assertEqual(
            {error, effect_requires_single_participant},
            quod_prolog:execute(
-             ?NODE_NS, {create_ontology, TargetNs, []})),
+             ?ROOT_NS, {create_ontology, TargetNs, []})),
         ?assertEqual({ok, not_hosted}, quod_ontology:local_state(TargetNs)),
         ?assertEqual(
            [],
@@ -458,13 +519,12 @@ foreign_prerequisite_uses_normal_scope_boundary(_Fixture) ->
                        quod_effect_journal:rows(),
                    RowNs =:= TargetNs])
     after
-        ok = commit_node(
+        ok = commit_root(
                {',', {retract, Modified}, {assertz, Original}})
     end.
 
-user_is_gated_by_node_can_invoke(_Fixture) ->
+user_is_gated_by_root_creation_policy(_Fixture) ->
     {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
-    {ok, NodeAnchor} = quod_ontology:genesis_anchor(?NODE_NS),
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {PublicKey, _} = KeyPair = quod_identity:generate(),
     Peer = {127, 0, 0, 2},
@@ -477,22 +537,27 @@ user_is_gated_by_node_can_invoke(_Fixture) ->
             open_client_session(NetworkId, NodeKey, KeyPair, Peer),
         {RequestBytes, Signature} = signed_user_goal(
                                       NetworkId, PublicKey, KeyPair,
-                                      ?NODE_NS, NodeAnchor, execute,
+                                      ?ROOT_NS, NetworkId, execute,
                                       SessionExpires,
                                       <<"create_ontology(\"denied:user\", []).">>),
         {ok, _, {normalized, {failed, ReasonsBlob}}} =
             quod_client_goal_ingress:submit(
               execute, SessionId, RequestBytes, Signature, Peer),
         {ok, Reasons} = quod_wire_term:decode_failure_reasons(ReasonsBlob),
-        ?assert(lists:member({not_allowed, ?NODE_NS}, Reasons))
+        ?assert(
+           lists:any(
+             fun({can_create_ontology, {user, Key}, _, _})
+                   when Key =:= PublicKey -> true;
+                (_) -> false
+             end, Reasons))
     after
         stop_process(AuthPid)
     end.
 
-root_does_not_own_generic_hosting_policy(_Fixture) ->
+node_does_not_own_generic_creation_policy(_Fixture) ->
     Ns = unique_ns(<<"wrong-owner">>),
     {fail, Reasons} =
-        quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []}),
+        quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []}),
     ?assertEqual({ontology_creation_failed, wrong_ontology},
                  lists:last(Reasons)),
     ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns)).
@@ -500,13 +565,13 @@ root_does_not_own_generic_hosting_policy(_Fixture) ->
 invalid_create_never_reaches_hosting(_Fixture) ->
     BadNs = <<>>,
     {fail, Reasons} =
-        quod_prolog:execute(?NODE_NS, {create_ontology, BadNs, []}),
+        quod_prolog:execute(?ROOT_NS, {create_ontology, BadNs, []}),
     ?assertEqual({ontology_creation_failed, invalid_name},
                  lists:last(Reasons)),
     ?assertEqual({error, invalid_name}, quod_ontology:local_state(BadNs)),
     {fail, VariableReasons} =
         quod_prolog:execute(
-          ?NODE_NS, {create_ontology, {'Namespace'}, []}),
+          ?ROOT_NS, {create_ontology, {'Namespace'}, []}),
     ?assertEqual({ontology_creation_failed, invalid_arguments},
                  lists:last(VariableReasons)).
 
@@ -536,7 +601,7 @@ collisions_preserve_existing_state(_Fixture) ->
     ?assertMatch(
        {ok, [#{}], _},
        quod_prolog:execute(
-         ?NODE_NS,
+         ?ROOT_NS,
          {create_ontology, Ns,
           [{source,
             <<"can_invoke(_, _, _, _).\nkept(true).\n">>}]})),
@@ -590,14 +655,10 @@ failed_admission_rolls_back(#{dir := Dir, manager := Manager}) ->
         Orphan ! stop
     end.
 
-failed_node_policy_does_not_read_or_stage(_Fixture) ->
-    %% Permit signed users through the one entry ACL, while leaving the
-    %% committed can_create_ontology/3 prerequisite node-only.
-    UserInvoke = {can_invoke, {'Goal'}, {user, {'User'}},
-                  {'Chain'}, {'TargetNs'}},
-    ok = commit_node({assertz, UserInvoke}),
+failed_root_policy_does_not_read_or_stage(_Fixture) ->
+    %% Root's entry ACL is currently open, while can_create_ontology/3 still
+    %% permits a user only its exact deterministic home.
     {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
-    {ok, NodeAnchor} = quod_ontology:genesis_anchor(?NODE_NS),
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {PublicKey, _} = KeyPair = quod_identity:generate(),
     Peer = {127, 0, 0, 3},
@@ -607,7 +668,7 @@ failed_node_policy_does_not_read_or_stage(_Fixture) ->
     unlink(AuthPid),
     Ns = unique_ns(<<"policy-denied-before-source">>),
     Missing = <<"/this/path/must/not/be/read.pl">>,
-    BeforeHeight = maps:get(committed, quod_simplex:stats(?NODE_NS)),
+    BeforeHeight = maps:get(committed, quod_simplex:stats(?ROOT_NS)),
     BeforeRows = quod_effect_journal:rows(),
     try
         #{session_id := SessionId, expires_ms := SessionExpires} =
@@ -617,7 +678,7 @@ failed_node_policy_does_not_read_or_stage(_Fixture) ->
                   "\", [source_file(\"", Missing, "\")])."]),
         {RequestBytes, Signature} = signed_user_goal(
                                       NetworkId, PublicKey, KeyPair,
-                                      ?NODE_NS, NodeAnchor, execute,
+                                      ?ROOT_NS, NetworkId, execute,
                                       SessionExpires, Goal),
         {ok, _, {normalized, {failed, ReasonsBlob}}} =
             quod_client_goal_ingress:submit(
@@ -635,7 +696,7 @@ failed_node_policy_does_not_read_or_stage(_Fixture) ->
                 (_) -> false
              end, Reasons)),
         ?assertEqual(BeforeHeight,
-                     maps:get(committed, quod_simplex:stats(?NODE_NS))),
+                     maps:get(committed, quod_simplex:stats(?ROOT_NS))),
         ?assertEqual(BeforeRows, quod_effect_journal:rows()),
         ?assertEqual({ok, not_hosted}, quod_ontology:local_state(Ns))
     after
@@ -644,20 +705,16 @@ failed_node_policy_does_not_read_or_stage(_Fixture) ->
 
 committed_local_approval_uses_the_same_action(_Fixture) ->
     {ok, NetworkId} = quod_ontology:genesis_anchor(?ROOT_NS),
-    {ok, NodeAnchor} = quod_ontology:genesis_anchor(?NODE_NS),
     {ok, NodeKey} = application:get_env(quod, node_pubkey),
     {PublicKey, _} = KeyPair = quod_identity:generate(),
     Ns = unique_ns(<<"locally-approved-user">>),
-    UserInvoke = {can_invoke, {'Goal'}, {user, {'User'}},
-                  {'Chain'}, {'TargetNs'}},
     Approval = {creation_approved, PublicKey},
     ApprovalPolicy =
         {':-',
          {can_create_ontology, {user, {'AgentKey'}}, {'Name'}, {'Options'}},
          {creation_approved, {'AgentKey'}}},
-    ok = commit_node(
-           {',', {assertz, UserInvoke},
-            {',', {assertz, ApprovalPolicy}, {assertz, Approval}}}),
+    ok = commit_root(
+           {',', {assertz, ApprovalPolicy}, {assertz, Approval}}),
     Peer = {127, 0, 0, 4},
     {ok, AuthPid} = quod_client_auth:start_link(
                       #{network_id => NetworkId, node_key => NodeKey,
@@ -672,13 +729,13 @@ committed_local_approval_uses_the_same_action(_Fixture) ->
                   "\\napproved(ok).\\n\")])."]),
         {RequestBytes, Signature} = signed_user_goal(
                                       NetworkId, PublicKey, KeyPair,
-                                      ?NODE_NS, NodeAnchor, execute,
+                                      ?ROOT_NS, NetworkId, execute,
                                       SessionExpires, Goal),
         case quod_client_goal_ingress:submit(
                execute, SessionId, RequestBytes, Signature, Peer) of
             {ok, _,
              {normalized,
-              {committed, [_], {transaction, ?NODE_NS, NodeAnchor, _}}}} ->
+              {committed, [_], {transaction, ?ROOT_NS, NetworkId, _}}}} ->
                 ok;
             {ok, _, {normalized, {failed, FailureBlob}}} ->
                 {ok, FailureReasons} =
@@ -695,7 +752,7 @@ committed_local_approval_uses_the_same_action(_Fixture) ->
     end.
 
 false_postcondition_is_reported(_Fixture) ->
-    Original = node_creation_action(),
+    Original = root_creation_action(),
     {action,
      {'$quod_stage_ontology', Handle,
       {create_ontology, Name, Options}, _OriginalDesired},
@@ -706,16 +763,16 @@ false_postcondition_is_reported(_Fixture) ->
          {'$quod_stage_ontology', Handle,
           {create_ontology, Name, Options}, FalseDesired},
          Prerequisites, FalseDesired},
-    ok = commit_node({',', {retract, Original}, {asserta, Modified}}),
+    ok = commit_root({',', {retract, Original}, {asserta, Modified}}),
     Ns = unique_ns(<<"false-postcondition">>),
     try
         ?assertEqual(
            {error, {operator_error, postcondition_failed}},
-           quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []})),
+           quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
         ok = wait_ready(Ns, 300),
         ?assertEqual({ok, ready}, quod_ontology:local_state(Ns))
     after
-        ok = commit_node(
+        ok = commit_root(
                {',', {retract, Modified}, {assertz, Original}})
     end.
 
@@ -723,7 +780,7 @@ reconcile_republishes_running_content(#{manager := Manager}) ->
     Ns = unique_ns(<<"reconcile-publish">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
     ok = wait_ready(Ns, 300),
     Config = desired_content(Ns),
     ExpectedDirs = #{data => quod_ledger_store:data_dir(Config),
@@ -737,7 +794,7 @@ dynamic_hosting_survives_content_tree_restart(
     Ns = unique_ns(<<"tree-restart">>),
     ?assertMatch(
        {ok, [#{}], _},
-       quod_prolog:execute(?NODE_NS, {create_ontology, Ns, []})),
+       quod_prolog:execute(?ROOT_NS, {create_ontology, Ns, []})),
     ok = wait_ready(Ns, 300),
     Anchor = quod_simplex:genesis_hash(Ns),
     RootAnchor = quod_simplex:genesis_hash(?ROOT_NS),
@@ -762,21 +819,32 @@ dynamic_hosting_survives_content_tree_restart(
     ?assertNot(maps:is_key(genesis_diff, Config)),
     ok = wait_effect_capacity(64, 300).
 
-commit_node(Goal) ->
-    ?assertMatch({ok, [_ | _], _}, quod_prolog:execute(?NODE_NS, Goal)),
-    ok.
-
 commit_root(Goal) ->
     ?assertMatch({ok, [_ | _], _}, quod_prolog:execute(?ROOT_NS, Goal)),
     ok.
 
-node_creation_action() ->
-    File = filename:join(code:priv_dir(quod), "ontologies/quod_node.pl"),
+root_creation_action() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     [Declaration] =
         [Term || {action,
                   {'$quod_stage_ontology', _, {create_ontology, _, _}, _},
                   _, _} = Term <- quod_prolog:read_terms(File)],
     Declaration.
+
+root_open_invoke_clause() ->
+    File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
+    [Clause] =
+        [Term || {can_invoke, _, _, _, _} = Term <-
+                     quod_prolog:read_terms(File)],
+    Clause.
+
+replace_root_invocation_policy(Clauses) ->
+    Assertions = [{assertz, Clause} || Clause <- Clauses],
+    Goal = lists:foldr(
+             fun(Assertion, Tail) -> {',', Assertion, Tail} end,
+             true, Assertions),
+    commit_root(
+      {',', {abolish, {'/', can_invoke, 4}}, Goal}).
 
 open_client_session(NetworkId, NodeKey,
                     KeyPair = {PublicKey, _Seed}, Peer) ->

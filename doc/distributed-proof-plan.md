@@ -243,13 +243,14 @@ interpretation, reverse effect lookup, `assert_effect/1`, generic
 lifecycle declarations, and their stale tests and comments. There is no
 compatibility wrapper.
 
-Node-local create/join operations use the same `execute` proof and `action/3`
+Ontology create/join operations use the same `execute` proof and `action/3`
 relation as every other durable goal. Their staging bridge prepares one typed
 effect in the proof overlay; it never performs IO during the proof. The
-controlling ontology transaction commits that effect request, and the one
-node-wide journal invokes the typed helper once after commit, then verifies the
-real desired state. This is the D/P/E boundary made explicit, not a second
-executor or a claim that external IO is rollback-capable.
+root transaction controls creation and the node transaction controls join.
+That transaction commits the effect request, and the one node-wide journal
+invokes the typed helper once after commit, then verifies the real desired
+state. This is the D/P/E boundary made explicit, not a second executor or a
+claim that external IO is rollback-capable.
 
 ## 4. One proof context, one scope per ontology
 

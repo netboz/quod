@@ -69,7 +69,7 @@ silently changing the caller's input.
 
 All validation happens before consulting the namespace manager or filesystem.
 Names reuse the exact canonicalisation and bounds already enforced by
-`create/2`. A `quod:*` ontology is created normally under `quod:node` policy and only
+`create/2`. A `quod:*` ontology is created normally under root creation policy and only
 becomes a system ontology when root later records its exact anchor; malformed
 names fail before any lifecycle work. The shared name, root-storage and ledger-state helpers remain in
 `quod_ontology`; they are factored rather than copied into a join module.
@@ -205,9 +205,26 @@ The node-local slice carries its engine-owned principal in the private overlay;
 the later authenticated `subject/3` design can use the same policy and action
 shape.
 
-## Ordinary node action
+## Ordinary lifecycle actions
 
-`quod:node` contains the ordinary action and policy clauses:
+Creation and join use the same ordinary action/effect machinery, but have
+different policy owners. `quod:root` contains the creation action:
+
+```prolog
+ontology_hosted(Name) :- ontology_join_state(Name, starting).
+ontology_hosted(Name) :- ontology_join_state(Name, joining).
+ontology_hosted(Name) :- ontology_join_state(Name, ready).
+
+action('$quod_stage_ontology'(Handle,
+                              create_ontology(Name, Options),
+                              ontology_hosted(Name)),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
+        ontology_join_state(Name, not_hosted)],
+       ontology_hosted(Name)).
+```
+
+`quod:node` contains the join action:
 
 ```prolog
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
@@ -219,14 +236,6 @@ ontology_joined(Name, GenesisHash) :-
     ontology_genesis_anchor(Name, GenesisHash).
 
 action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
-                              ontology_hosted(Name)),
-       [current_principal(Agent),
-        can_create_ontology(Agent, Name, Options),
-        ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
-
-action('$quod_stage_ontology'(Handle,
                               join_ontology(Name, GenesisHash, Seeds),
                               ontology_joined(Name, GenesisHash)),
        [current_principal(Agent),
@@ -234,25 +243,23 @@ action('$quod_stage_ontology'(Handle,
         ontology_join_state(Name, not_hosted)],
        ontology_joined(Name, GenesisHash)).
 
-can_create_ontology(node(NodeKey), _Name, _Options) :-
-    peer_admitted(NodeKey, _, _, NodeKey).
-
 can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 ```
 
-The public fully ground `create_ontology/2` or `join_ontology/3` goal targets
-`quod:node` and runs as one ordinary proof. Signed requests carry their verified
-principal; node-authored requests derive `node(NodePublicKey)` from the engine.
-The normal `can_invoke/4` entry and the action prerequisites make the complete
-policy decision. There is no lifecycle-specific policy proof.
+The public fully ground `create_ontology/2` goal targets root;
+`join_ontology/3` targets node. Each runs as one ordinary proof. Signed
+requests carry their verified principal; node-authored requests derive
+`node(NodePublicKey)` from the engine. The target's normal `can_invoke/4` entry
+and action prerequisites make the complete policy decision. There is no
+lifecycle-specific policy proof.
 
 The public staging bridge structurally validates the request and registers one
 opaque proof-local handle. After the declared prerequisites succeed, the exact
 internal continuation prepares input once and stages one closed create/join
-effect. Backtracking or proof failure discards it. Commit records that effect in
-the `quod:node` transaction; the node-wide journal executes it after apply and
-checks the real desired state before retry. An uncertain result carries the
+effect. Backtracking or proof failure discards it. Commit records that effect
+in the controlling root or node transaction; the node-wide journal executes
+it after apply and checks the real desired state before retry. An uncertain result carries the
 exact transaction reference. The manager remains the authoritative atomic
 collision check.
 

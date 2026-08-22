@@ -17,7 +17,7 @@ deterministic_identity_test() ->
 
 fixed_home_genesis_test() ->
     Key = <<16#24:256>>,
-    {ok, #{user_id := UserId, namespace := Namespace} = Identity} =
+    {ok, #{user_id := UserId, namespace := Namespace}} =
         quod_user:identity(Key),
     {ok, Options} = quod_user:home_options(Key),
     %% The exact genesis a registration is allowed to found: four facts derived
@@ -29,14 +29,7 @@ fixed_home_genesis_test() ->
                  {user_home_version, 1}]},
         {source, <<"can_invoke(_, user(Key), _, _) :- user_key(_, Key, active).\n">>}],
        Options),
-    ?assert(quod_user:valid_home(Key, Options)),
-    [{terms, Terms} | Rest] = Options,
-    ?assertNot(
-       quod_user:valid_home(
-         Key, [{terms, [{user, <<"attacker">>} | tl(Terms)]} | Rest])),
-    ?assertNot(quod_user:valid_home(<<1, 2, 3>>, Options)),
-    ?assertEqual({create_ontology, Namespace, Options},
-                 quod_user:home_action(Identity)).
+    ?assertEqual({ok, Namespace}, quod_user:home_namespace(Key)).
 
 invalid_public_key_test() ->
     ?assertEqual({error, invalid_public_key}, quod_user:identity(<<1, 2, 3>>)),

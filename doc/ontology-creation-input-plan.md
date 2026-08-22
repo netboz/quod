@@ -7,7 +7,7 @@ list of input options. The common top-level Quod entry is:
 
 ```erlang
 quod_prolog:execute(
-  <<"quod:node">>,
+  <<"quod:root">>,
   {create_ontology, {':', user, notes},
    [{source_file, "./test.pl"},
     {source_file, "./test2.pl"},
@@ -29,10 +29,11 @@ is no `create_source/2`, legacy argument detection, or compatibility branch.
 All inputs converge before validation and use the existing atomic creation
 path.
 
-`create_ontology/2` and `join_ontology/3` are governed staging predicates owned
-by `quod:node`. They enter the same ordinary proof and `action/3` relation as
-other goals; there is no top-level router or lifecycle executor. An ontology
-that wants an unrelated domain predicate should choose a different name.
+`create_ontology/2` is a governed staging predicate owned by `quod:root`;
+`join_ontology/3` is owned by `quod:node`. Both enter the same ordinary proof,
+`action/3`, preparation, and direct-effect machinery; there is no top-level
+router or lifecycle executor. An ontology that wants an unrelated domain
+predicate should choose a different name.
 Namespace names accept a binary, an atom, the structured `owner:name` form, or
 a quoted Prolog string such as `"owner:name"`; all four become the same
 canonical namespace.

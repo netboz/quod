@@ -18,14 +18,6 @@ ontology_joined(Name, GenesisHash) :-
     ontology_genesis_anchor(Name, GenesisHash).
 
 action('$quod_stage_ontology'(Handle,
-                              create_ontology(Name, Options),
-                              ontology_hosted(Name)),
-       [current_principal(Agent),
-        can_create_ontology(Agent, Name, Options),
-        ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
-
-action('$quod_stage_ontology'(Handle,
                               join_ontology(Name, GenesisHash, Seeds),
                               ontology_joined(Name, GenesisHash)),
        [current_principal(Agent),
@@ -34,10 +26,8 @@ action('$quod_stage_ontology'(Handle,
        ontology_joined(Name, GenesisHash)).
 
 %% First-slice authority: an admitted node may change its own hosting state.
-%% Later policy may delegate these goals to stable agent references without
-%% changing the Erlang bridge or action machinery.
-can_create_ontology(node(NodeKey), _Name, _Options) :-
-    peer_admitted(NodeKey, _, _, NodeKey).
-
+%% Root separately governs creation of a new ontology identity. Later policy
+%% may delegate joining to stable agent references without changing the Erlang
+%% bridge or action machinery.
 can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
     peer_admitted(NodeKey, _, _, NodeKey).

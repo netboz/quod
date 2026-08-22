@@ -87,7 +87,8 @@ The client creates its key locally, authenticates it, and signs the ordinary
 argument-free Prolog goal `create_user_home.` against the exact `quod:root`
 identity. The goal uses the same canonical signed request, operation ID, proof,
 ACL, lifecycle effect, and durable outcome path as every other local signed
-write. There is no registration-only protocol or executor.
+write. It is a Prolog convenience over generic root-owned
+`create_ontology/2`, not a registration-only protocol or executor.
 
 There is no global ontology containing every user. In the current format, a key
 deterministically names one home namespace:

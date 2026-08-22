@@ -6,18 +6,15 @@ The target shared vocabulary is `quod:human_user`; it is *not* a global table
 of people. The current `{user, Key}` protocol name remains transitional until
 the reviewed agent-identity format break. Each Ed25519 public key
 deterministically names one small home ontology. The ordinary signed
-`create_user_home` action uses
-this module to derive its exact foundation request before it reaches the
-ontology lifecycle effect.
+`create_user_home` Prolog convenience uses this module to derive the exact
+arguments it passes to generic root-owned `create_ontology/2`.
 
 This module deliberately does not authenticate a browser or create an
 ontology. It only derives one identity and the fixed owner ACL used by a valid
-home; the ordinary signed `create_user_home` goal performs creation through
-the normal lifecycle-effect path.
+home.
 """.
 
--export([identity/1, home_namespace/1, home_options/1, home_action/1,
-         valid_home/2,
+-export([identity/1, home_namespace/1, home_options/1,
          challenge_bytes/7, verify_challenge/7, principal/1]).
 
 -define(USER_DOMAIN, <<"quod-user-id-v1:">>).
@@ -81,21 +78,6 @@ terms_of(#{user_id := UserId, namespace := Namespace, public_key := PublicKey}) 
 %% a fixed source rule over the fixed key fact.
 options_of(Identity) ->
     [{terms, terms_of(Identity)}, {source, ?HOME_ACL_SOURCE}].
-
--doc "Verify that `Options` are exactly the fixed genesis for `PublicKey`.".
--spec valid_home(term(), term()) -> boolean().
-valid_home(PublicKey, Options) ->
-    case home_options(PublicKey) of
-        {ok, Options} -> true;
-        _ -> false
-    end.
-
--doc """
-The sole legal lifecycle action founding this user's home.
-""".
--spec home_action(#{namespace := namespace(), _ => _}) -> tuple().
-home_action(#{namespace := Namespace} = Identity) ->
-    {create_ontology, Namespace, options_of(Identity)}.
 
 -doc """
 Canonical bytes for one short-lived login challenge.

@@ -178,7 +178,9 @@ This separates two useful forms of global update:
 The implemented local-client slice establishes the dedicated TLS endpoint,
 node-bound Ed25519 challenge-response, short-lived node-local sessions, and one
 signed-goal API for reads, writes, cursors, and the ordinary
-`create_user_home.` root goal. The interactive Explorer console uses that same
+`create_user_home.` root goal. That term is a small Prolog convenience which
+derives fixed arguments and invokes generic root-owned `create_ontology/2`; it
+has no separate lifecycle operation. The interactive Explorer console uses that same
 login and API; the standalone Explorer listener is read-only. The same signed
 request and current user-labelled principal now cross remote and nested ontology scopes through
 the ordinary scope/DTX path. Any-node HTTP ingress forwarding, bundle

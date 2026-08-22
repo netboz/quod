@@ -9,9 +9,9 @@
 
 ## Goal
 
-The public `quod:node` action prepares and starts a local N=1 ontology from
+The public `quod:root` action prepares and starts a local N=1 ontology from
 ordered term, inline-source, and file-source inputs. It records a typed create
-effect in one ordinary transaction in the node ontology; local hosting starts
+effect in one ordinary transaction in root; local hosting starts
 only after that transaction is applied. The preparation and execution helpers
 are internal. Production exposes no raw lifecycle shortcut around the governed
 Prolog path.
@@ -31,7 +31,7 @@ provided terms, the generated `consensus_incarnation/1`, and its self-only
 `peer_admitted/4` fact.
 
 There is still no per-created-ontology catalogue fact, ownership table, or
-quota. The public action creates a `quod:node` ledger transaction with an empty
+quota. The public action creates a `quod:root` ledger transaction with an empty
 Prolog diff and a closed effect descriptor. TEST's
 `quod_ontology:create/2` wrapper reuses the same low-level preparation and
 execution code but is not a production API.
@@ -61,7 +61,7 @@ the same preparation and execution functions directly.
 - `Name` is first canonicalised, then checked
   before any manager or filesystem call.  The resulting namespace must be a
   non-empty, valid UTF-8 binary of at most 128 bytes. A `quod:*` name uses the
-  same lifecycle as any other ontology: `quod:node` policy decides who may create it,
+  same lifecycle as any other ontology: `quod:root` policy decides who may create it,
   and only a later exact `system_ontology/2` transaction makes it a system
   ontology. This grammar also bounds the two existing ETS-name atoms created
   for a running namespace; the wider atom/economic policy remains separate.
@@ -149,7 +149,7 @@ authority; it records only what this node deliberately hosts. An explicit
 
 ## Ordinary governed action
 
-`quod:node` declares creation through the shared `action/3` relation. A public
+`quod:root` declares creation through the shared `action/3` relation. A public
 `execute` of `create_ontology(Name, Options)` enters the ordinary proof, is
 checked by `can_invoke/4`, and is bound to one opaque proof-local internal
 transition. That transition's prerequisites read `current_principal/1`, apply
@@ -157,7 +157,7 @@ transition. That transition's prerequisites read `current_principal/1`, apply
 
 The internal staging continuation compiles the source once into an immutable
 prepared descriptor and stages one typed direct effect. The controlling
-`quod:node` transaction normally has an empty fact diff but durably records the
+`quod:root` transaction normally has an empty fact diff but durably records the
 effect. The one node-wide journal runs the low-level helper after commit and
 verifies `ontology_hosted(Name)`. A repeated request whose desired state is
 already true stages no effect. There is no lifecycle-specific worker,

@@ -15,7 +15,7 @@ acl_sovereign(quod:root).
 %% or `anonymous`);
 %% a refusal is ordinary failure carrying not_allowed(Ns).
 %%
-%% NOTE: this is not the whole effective policy. Founding injects an invisible
+%% NOTE: this is not the whole effective policy. Founding injects a generated
 %% bodyless host-entry clause `can_invoke(_, _, [], _)` into EVERY genesis, so a
 %% proof entered on the host itself (an empty call chain) is always admitted and
 %% cannot be locked out by narrowing this clause. Author clauses here govern
@@ -55,26 +55,35 @@ reconcile_effect_custody_capacity(Scope) :-
     findall(Capacity, effect_custody_capacity(Capacity), Capacities),
     '$quod_project_effect_custody_capacity'(Capacities, Scope).
 
-%% Transitional browser home creation. Generic create/join hosting policy lives
-%% in quod:node; this helper remains only until the stable agent format replaces
-%% the old user term. It uses the same common action relation and direct-effect
-%% journal as every node action.
+%% Root governs the creation of new ontology identities. The node which authors
+%% the accepted root transaction remains the direct-effect executor and
+%% initially hosts the new ontology; other nodes join that exact identity
+%% through quod:node.
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
 ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
 
-action('$quod_stage_ontology'(Handle, create_user_home,
+action('$quod_stage_ontology'(Handle, create_ontology(Name, Options),
                               ontology_hosted(Name)),
-       [current_principal(user(PublicKey)),
-        user_home_genesis(PublicKey, Name, Options),
-        can_create_ontology(user(PublicKey), Name, Options),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
         ontology_join_state(Name, not_hosted)],
        ontology_hosted(Name)).
 
-%% Open registration is intentionally narrow. `user_home_genesis/3` is an
-%% engine query predicate that accepts only the deterministic namespace and
-%% fixed genesis options derived from this exact Ed25519 key. It cannot accept
-%% a user-selected name, source file, or arbitrary initial policy.
+%% The current browser convenience is ordinary Prolog over generic creation.
+%% It has no lifecycle action, effect kind, or Erlang dispatcher of its own.
+create_user_home :-
+    current_principal(user(PublicKey)),
+    user_home_genesis(PublicKey, Name, Options),
+    create_ontology(Name, Options).
+
+%% First-slice creation policy. An admitted root validator may found a general
+%% ontology. Transitional browser registration remains narrow:
+%% `user_home_genesis/3` accepts only the deterministic namespace and fixed
+%% genesis derived from the authenticated Ed25519 key.
+can_create_ontology(node(NodeKey), _Name, _Options) :-
+    peer_admitted(NodeKey, _, _, NodeKey).
+
 can_create_ontology(user(PublicKey), Name, Options) :-
     user_home_genesis(PublicKey, Name, Options).
 

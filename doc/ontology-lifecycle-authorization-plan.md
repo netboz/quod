@@ -22,9 +22,10 @@ new code or documentation.
 
 ## Current contract
 
-1. Public create and join requests are ordinary `execute` goals in
-   `quod:node`. The transitional `create_user_home` goal remains in
-   `quod:root` until the reviewed agent identity format replaces it.
+1. Public creation is an ordinary `execute` goal in `quod:root`; public join
+   is an ordinary `execute` goal in `quod:node`. The transitional
+   `create_user_home` term is only a root Prolog convenience which derives the
+   fixed home arguments and calls generic `create_ontology/2`.
 2. The normal top-level `can_invoke/4` check is the only entry ACL. The
    action's declared Prolog prerequisites express its remaining policy and may
    use normal local or `::` proof calls.

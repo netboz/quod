@@ -121,8 +121,10 @@ a system ontology before an ontology actually needs them.
 
 ### 2.2 Subscription, hosting, routing, and proof scopes are separate
 
-- `create_ontology` and `join_ontology` change where an ontology is hosted.
-  A future non-destructive `leave_ontology` belongs to that lifecycle family.
+- Root-owned `create_ontology` introduces an identity and makes the transaction
+  author its first host. Node-owned `join_ontology` adds a host for an existing
+  identity. A future non-destructive `leave_ontology` belongs to the hosting
+  lifecycle family.
 - The directory and private seeds describe current reachability. Routes are
   local P-state and may expire or change without a transaction.
 - A subscription records durable semantic interest. It neither hosts the

@@ -277,20 +277,28 @@ temporary fallback path.
 
 ## 3. Prolog ownership
 
-Lifecycle policy moves from the transitional root ontology to the already
-planned `quod:node` system ontology because create and join change what one
-node hosts. Root remains bootstrap and system-catalogue authority; it does not
-remain a permanent node-control API.
+Lifecycle policy has two explicit owners while execution stays one path.
+`quod:root` governs creation because it introduces a new ontology identity;
+`quod:node` governs join because it changes what one node hosts. The node that
+authors an accepted root creation transaction still executes the existing
+direct effect and initially hosts the new ontology. Root gains no hosting
+catalogue or route table.
 
 The intended shape is illustrative; exact internal continuation names are
 implementation details:
+
+In `quod:root`:
 
 ```prolog
 action(create_ontology(Name, Options),
        [current_principal(Agent),
         can_create_ontology(Agent, Name, Options)],
        ontology_hosted(Name)).
+```
 
+In `quod:node`:
+
+```prolog
 action(join_ontology(Name, Anchor, Seeds),
        [current_principal(Agent),
         can_join_ontology(Agent, Name, Anchor, Seeds)],
@@ -303,15 +311,13 @@ prerequisites. `ontology_join_state/2` remains a local observation; the
 namespace manager remains the final collision check. No durable hosting row or
 endpoint is added to root.
 
-`create_user_home` and the `quod_user` terminology are transitional code, not a
-third lifecycle case. They must be deleted by the agent-format slice. An agent
+`create_user_home` and the `quod_user` terminology are transitional, not a
+third lifecycle case. The current root rule derives fixed arguments from the
+authenticated principal and invokes generic `create_ontology/2`; there is no
+special Erlang staging registration, descriptor, or effect. The stable-agent
+format later removes that convenience rather than renaming it. An agent
 ontology—including one containing a `human_user` instance—is created with the
-same generic `create_ontology/2` goal and ordinary genesis facts. Do not
-recreate its behaviour as `create_agent` or another Erlang action.
-If `create_user_home` must exist between the two changes, route it through the
-same generic staging action and make its principal-derived helper a normal
-query using `current_principal/1`; do not retain the old action/effect worker
-solely for this temporary term.
+same generic goal and ordinary genesis facts.
 
 ## 4. Creator provenance
 
@@ -408,13 +414,13 @@ The reviewed module map is:
 | `quod_prolog` | execute/signed ingress, pinned origin, sealer, final reply | move direct-effect await and result shaping into generic effect submission | `run_action`, public-action messages, action admission/worker/origin, lifecycle runner and principal helpers, structural ingress fork |
 | `quod_erlog_db_local_prove` | effects list, staging, read dependencies, read-only frames | none | lifecycle principal and singular lifecycle-effect fields/APIs |
 | `quod_predicates` | registration, dispatch, ordinary contexts | remove action role and, if ownerless, effect class/context | no compatibility rows |
-| `quod_ontology_predicates` | lifecycle failure mapping that remains meaningful | create/join become staging bridges owned by `quod:node`; add `current_principal/1` | hidden authorization predicate/helper, policy-goal mapping, root guards; user-home rows at the agent break |
+| `quod_ontology_predicates` | lifecycle failure mapping that remains meaningful | create is root-owned and join is node-owned; add `current_principal/1` | hidden authorization predicate/helper, policy-goal mapping, duplicate owner guards; special user-home staging rows |
 | `common_predicates.pl` | `goal`, shared prerequisite/transition/action helpers | add the small exact `run_declared_action` relation over those helpers | all three lifecycle-only preparation relations |
 | `quod_action_predicates` | all four current private mechanics | none beyond loading/ownership changes | none |
 | `quod_effect` / `quod_effect_journal` | descriptor validation, reservation, recovery, post-apply execution, await | derive controlling namespace from transaction reference at every seam | root literals and root-assuming comments |
 | `quod_proof_session` | effects and signer APIs | none | singular lifecycle-effect passthrough |
 | `quod_ontology` / `quod_namespace_manager` | preparation, prepared execution, one hosting owner | comments and generic caller wording | lifecycle-runner references |
-| `quod_root.pl` / `quod_node.pl` | root bootstrap/catalogue; node ontology policy | move create/join action and policy to `quod:node` | root lifecycle actions and hidden authorization prerequisites |
+| `quod_root.pl` / `quod_node.pl` | root bootstrap/catalogue and creation policy; node hosting policy | root owns create and node owns join while both reuse the common action/effect machinery | special user-home lifecycle action and duplicate ownership declarations |
 
 Review every match in `src/`, `priv/`, `test/`, and active architecture docs.
 Delete obsolete tests; do not rename them around new internals. Rewrite tests
@@ -423,10 +429,9 @@ action path. Remove stale comments saying lifecycle uses an isolated verdict,
 a private lifecycle principal, a dedicated runner, two authorization checks,
 or root-only permanent ownership.
 
-Because predicate modules are pinned per ontology, moving the lifecycle
-module to `quod:node` provides its containment. Remove the five explicit
-`?ROOT_NS`/`root_only` guards instead of mechanically changing their literal to
-`quod:node`; do not keep two ownership checks.
+Because predicate modules are pinned per ontology, the bridge dispatcher can
+enforce the exact root-create/node-join matrix without a second policy engine.
+Do not duplicate these owner checks in preparation or effect execution.
 
 The documentation sweep explicitly includes `ontology-creation-plan.md`,
 `ontology-creation-input-plan.md`, `ontology-join-plan.md`,
@@ -449,8 +454,8 @@ do not preserve compatibility aliases.
 
 ## 8. Required tests
 
-1. Node-authored and signed create goals both enter the normal `can_invoke/4`
-   path and the same action relation.
+1. Node-authored and signed create goals target root, enter its normal
+   `can_invoke/4` path, and use the same action relation.
 2. A denied `can_invoke/4` or failed `can_create_ontology/3` performs no source
    read, journal reservation, manager call, or ledger write.
 3. `current_principal/1` binds the engine-owned value and cannot be forged by a
@@ -480,7 +485,8 @@ do not preserve compatibility aliases.
     stable agent references land; caller-supplied duplicates or reserved heads
     are rejected.
 12. Root system discovery and `quod:node` startup remain ordinary system-
-    ontology behaviour; lifecycle movement adds no Nomad or Erlang catalogue.
+    ontology behaviour; root creation ownership adds no Nomad or Erlang
+    catalogue.
 13. Create no-op is name-only, while join no-op is bound to the exact anchor;
     both follow the one common state-first action rule.
 14. The default, an asserted override, the setter, `unlimited`, journal restart,
@@ -492,8 +498,8 @@ do not preserve compatibility aliases.
 1. **Complete.** Review this architecture and settle the no-op input-validation
    rule and the current cross-ontology limitation.
 2. **Complete.** In one atomic implementation change, refactor the common action relation and
-   proof-local prepared-effect custody, move create/join policy and bridge
-   ownership to `quod:node`, and delete the complete old lifecycle corridor.
+   proof-local prepared-effect custody, assign creation to root and join to
+   node, and delete the complete old lifecycle corridor.
    The replacement and the old path must never coexist as compatibility routes.
 3. **Complete.** Update every active architecture document and module comment
    from the final code, then run stale-symbol and dead-export sweeps.

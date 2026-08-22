@@ -3,8 +3,9 @@
 Runtime creation of a local, self-founded ontology and joining of an existing
 ontology through its pinned genesis anchor.
 
-Creation deliberately reuses the normal namespace manager, namespace
-supervision tree, genesis builder, and node storage placement. A governed
+Root-owned creation and node-owned join deliberately reuse the normal namespace
+manager, namespace supervision tree, genesis builder, and node storage
+placement. A governed
 Prolog action is recorded as an ordinary transaction in its controlling
 ontology with a typed direct effect, but it adds no catalogue fact. The namespace manager records the
 node-local hosting intent beside the ledgers after the exact genesis anchor is
@@ -60,7 +61,7 @@ conveniences around that preparation and execution code.
 -endif.
 
 -record(lifecycle_request, {
-    kind :: create | join | user_home,
+    kind :: create | join,
     namespace :: binary() | undefined,
     payload :: term()
 }).
@@ -92,7 +93,6 @@ Prolog, inspecting storage, or changing hosting state.
 """.
 valid_action_shape({create_ontology, _, _}) -> true;
 valid_action_shape({join_ontology, _, _, _}) -> true;
-valid_action_shape(create_user_home) -> true;
 valid_action_shape(_) -> false.
 
 -spec validate_action(term()) ->
@@ -145,10 +145,7 @@ validate_ground_action(
                                 payload = {RawGenesisHash, SeedPeers}}}
                     end
             end
-    end;
-validate_ground_action(create_user_home) ->
-    {ok, #lifecycle_request{kind = user_home,
-                            namespace = undefined, payload = none}}.
+    end.
 
 -doc """
 Finish a structurally validated lifecycle request without mutating hosting
@@ -200,21 +197,6 @@ prepare_action(
   when is_binary(RawGenesisHash), byte_size(RawGenesisHash) =:= 32,
        is_list(SeedPeers) ->
     prepare_join(Ns, RawGenesisHash, SeedPeers);
-prepare_action(#lifecycle_request{kind = user_home},
-               {user, PublicKey}) ->
-    case quod_user:identity(PublicKey) of
-        {ok, Identity} ->
-            %% The derived action is fixed, but it still uses the one normal
-            %% creation validator. This keeps source/text normalization and
-            %% every genesis limit identical to create_ontology/2.
-            case validate_ground_action(quod_user:home_action(Identity)) of
-                {ok, #lifecycle_request{kind = create} = Create} ->
-                    prepare_action(Create, {user, PublicKey});
-                {error, _} = Error -> Error
-            end;
-        {error, _} ->
-            {error, invalid_action}
-    end;
 prepare_action(_InvalidDescriptor, _Principal) ->
     {error, invalid_action}.
 

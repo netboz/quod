@@ -94,6 +94,9 @@ predicate_modules_are_engine_local_test() ->
            quod_predicates:descriptor(Root, {create_ontology, 2})),
         ?assertEqual(
            undefined,
+           quod_predicates:descriptor(Root, {create_user_home, 0})),
+        ?assertEqual(
+           undefined,
            quod_predicates:descriptor(Common, {create_ontology, 2}))
     after
         delete_est(Common),

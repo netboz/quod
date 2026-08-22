@@ -207,11 +207,12 @@ post-Complete execution before this exclusion can ever be removed.
 
 This slice adds no new permission system.
 
-The ordinary `can_invoke/4` entry and the `can_create_ontology/3` /
-`can_join_ontology/4` action prerequisites in `quod:node` are the authority for
-creation and join. A future delete predicate must add its policy clause and
-action declaration in that controlling ontology. The external effect machinery
-does not grant permission merely because it recognizes an operation.
+The ordinary `can_invoke/4` entry and the action prerequisites are the only
+authority: root's `can_create_ontology/3` governs creation of a new identity,
+while node's `can_join_ontology/4` governs local hosting of an existing one. A
+future delete predicate must add its policy clause and action declaration in
+its chosen controlling ontology. The external effect machinery does not grant
+permission merely because it recognizes an operation.
 
 The engine-owned authenticated principal remains private proof state. It is
 bound into the sealed plan, durable transaction, and effect descriptor; a
@@ -566,8 +567,8 @@ schema changes. Land compatible schema changes in the same release, then:
 1. complete and review the signed client-goal generation described in
    `signed-client-goals-plan.md` (implemented in the working tree);
 2. run the coordinated protocol and release gates;
-3. found the network once from the current root source, including the approved
-   signed `create_user_home` policy clause;
+3. found the network once from the current root source, including root's
+   generic creation policy and its signed `create_user_home` convenience rule;
 4. never apply a separate temporary live root-policy migration immediately
    before that planned re-found.
 

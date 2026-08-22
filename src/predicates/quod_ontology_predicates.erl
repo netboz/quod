@@ -1,9 +1,9 @@
 -module(quod_ontology_predicates).
 -moduledoc """
-Governed Prolog bridges for node-local ontology hosting.
+Governed Prolog bridges for ontology creation and node-local hosting.
 
-`create_ontology/2`, `join_ontology/3`, and the transitional
-`create_user_home/0` are ordinary staging predicates. A public call is
+`create_ontology/2` and `join_ontology/3` are ordinary staging predicates. A
+public call is
 structurally validated, bound to an opaque proof-local handle, and continued
 through the shared `action/3` relation in `common_predicates.pl`. Only the
 private continuation reached after that relation's declared prerequisites may
@@ -40,7 +40,6 @@ load(Est0) ->
     Entries =
         [{{create_ontology, 2}, staging, lifecycle_request_predicate},
          {{join_ontology, 3}, staging, lifecycle_request_predicate},
-         {{create_user_home, 0}, staging, lifecycle_request_predicate},
          {{?CONTINUATION, 3}, staging, lifecycle_continuation_predicate},
          {{current_principal, 1}, query, current_principal_predicate},
          {{user_home_genesis, 3}, query, user_home_genesis_predicate},
@@ -76,12 +75,8 @@ lifecycle_request_predicate(Goal, Next, #est{bs = Bs} = St) ->
             fail_reason(failure_reason(Action, wrong_ontology), St)
     end.
 
-supported_action(?NODE_NS, {create_ontology, _, _}) -> true;
+supported_action(?ROOT_NS, {create_ontology, _, _}) -> true;
 supported_action(?NODE_NS, {join_ontology, _, _, _}) -> true;
-%% Transitional browser registration remains on root until the stable agent
-%% format removes this helper. It still uses the same action relation and
-%% continuation as every other lifecycle request.
-supported_action(?ROOT_NS, create_user_home) -> true;
 supported_action(_, _) -> false.
 
 -doc "Prepare and stage only a request carrying this proof's exact opaque handle.".
@@ -138,13 +133,12 @@ user_home_genesis_predicate(
   {user_home_genesis, PublicKey0, Namespace, Options}, Next,
   #est{bs = Bs} = St) ->
     PublicKey = erlog_int:dderef(PublicKey0, Bs),
-    case quod_user:identity(PublicKey) of
-        {ok, Identity} ->
-            {create_ontology, HomeNamespace, HomeOptions} =
-                quod_user:home_action(Identity),
+    case {quod_user:home_namespace(PublicKey),
+          quod_user:home_options(PublicKey)} of
+        {{ok, HomeNamespace}, {ok, HomeOptions}} ->
             erlog_int:unify_prove_body(
               [Namespace, Options], [HomeNamespace, HomeOptions], Next, St);
-        {error, _} -> erlog_int:fail(St)
+        _ -> erlog_int:fail(St)
     end;
 user_home_genesis_predicate(_Goal, _Next, St) ->
     erlog_int:fail(St).
@@ -155,8 +149,6 @@ lifecycle_error({create_ontology, _, _} = Action, Reason) ->
     failure_reason(Action, creation_reason(Reason));
 lifecycle_error({join_ontology, _, _, _} = Action, Reason) ->
     failure_reason(Action, join_reason(Reason));
-lifecycle_error(create_user_home = Action, Reason) ->
-    failure_reason(Action, creation_reason(Reason));
 lifecycle_error(Action, _Reason) ->
     failure_reason(Action, invalid_action).
 
@@ -165,8 +157,6 @@ failure_reason({create_ontology, _, _}, Reason) ->
     {ontology_creation_failed, Reason};
 failure_reason({join_ontology, _, _, _}, Reason) ->
     {ontology_join_failed, Reason};
-failure_reason(create_user_home, Reason) ->
-    {ontology_creation_failed, Reason};
 failure_reason(_Action, Reason) ->
     {ontology_lifecycle_failed, Reason}.
 

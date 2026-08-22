@@ -4,8 +4,6 @@
 -include("quod_ingress_limits.hrl").
 
 -define(NS, <<"ns">>).
--define(GENESIS_TX_VERSION, 1).
--define(GENESIS_TX_TAG, "quod/genesis").
 -define(GENESIS_NONCE, <<16#5c:256>>).
 
 %%%===================================================================
@@ -32,25 +30,29 @@ sign_tx(Transaction, GenesisCommittee) ->
                       Binding, Bound, signer(author())),
     Signed.
 
-%% Slot 1: the self-signed genesis (no cert) records its incarnation and
-%% asserts each founding member's peer_admitted fact, establishing C1.
+%% Slot 1 uses the same canonical genesis constructor as production.  Keeping
+%% a second hand-written genesis here would let catch-up tests silently drift
+%% from founding/restart validation when a reserved genesis fact is added.
 genesis(Pubs) ->
-    Nonce = ?GENESIS_NONCE,
-    %% Founding injects the bodyless host-entry can_invoke/4 default; a valid
-    %% genesis always carries it, so the fixture mirrors that.
-    Diff = [{assert, {{consensus_incarnation, Nonce}, true}},
-            {assert, {{can_invoke, {'G'}, {'P'}, [], {'N'}}, true}} |
-            [{assert, {{peer_admitted, Pk, undefined, undefined, Pk}, true}}
-             || Pk <- Pubs]],
-    Transaction = #transaction{tx_id = genesis_id(?NS, Nonce),
-                               origin = {?NS, <<0:256>>}, diff = Diff,
-                               read_check = #{}, author = hd(Pubs), sig = none},
+    [Self | OtherFounders] = Pubs,
+    Transaction =
+        quod_simplex:test_genesis_tx(
+          #{committee => OtherFounders,
+            external_predicate_modules => []},
+          ?NS, Self, ?GENESIS_NONCE),
     #entry{index = 1, cert = none,
            data = {batch, [Transaction]}}.
 
-genesis_id(Ns, Nonce) ->
-    <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
-      (byte_size(Ns)):32, Ns/binary, Nonce/binary>>.
+%% Build an over-cap record without teaching the canonical founding helper how
+%% to create invalid state.  The verifier must reject this wire/history input.
+oversized_genesis(Pubs) ->
+    Founding = lists:sublist(Pubs, ?MAX_VALIDATORS),
+    Extra = lists:nth(?MAX_VALIDATORS + 1, Pubs),
+    #entry{data = {batch, [Tx0]}} = Entry0 = genesis(Founding),
+    ExtraAdmission =
+        {assert, {{peer_admitted, Extra, undefined, undefined, Extra}, true}},
+    Tx1 = Tx0#transaction{diff = Tx0#transaction.diff ++ [ExtraAdmission]},
+    Entry0#entry{data = {batch, [Tx1]}}.
 
 genesis_hash(C) ->
     gen_hash(genesis(pubs(C))).
@@ -164,9 +166,12 @@ validator_cap_history_boundary_test() ->
        {ok, [_], CappedPubs},
        verify_chain(Capped, [], 1, [genesis(CappedPubs)])),
     Oversized = committee(N + 1),
+    OversizedGenesis = oversized_genesis(pubs(Oversized)),
     ?assertEqual(
        {error, {invalid_transaction, 1}},
-       verify_chain(Oversized, [], 1, [genesis(pubs(Oversized))])),
+       quod_catchup:verify_forward(
+         ?NS, gen_hash(OversizedGenesis), quod_simplex:history_projection(),
+         1, [OversizedGenesis])),
     {ExtraPub, _} = quod_identity:generate(),
     CertifiedAdmission = committed(
                            2, admit_tx(ExtraPub, Capped), Capped,

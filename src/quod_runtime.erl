@@ -89,9 +89,11 @@ observers therefore maintain current P without reconstructing best-effort effect
 
 -behaviour(gen_server).
 
+-include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 
--export([start_link/2, stats/1, enqueue_heavy/4, revision/2, await_revision/4]).
+-export([start_link/2, stats/1, effect_frontier/1,
+         enqueue_heavy/4, revision/2, await_revision/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_continue/2, handle_info/2,
          terminate/2]).
 -ifdef(TEST).
@@ -111,9 +113,8 @@ observers therefore maintain current P without reconstructing best-effort effect
 -define(DEFAULT_MAX_HEAVY_JOB_BYTES, 65536).
 -define(DEFAULT_SOURCE_FOLLOW_RETRY_MS, 5000).
 %% One sweep serves every source view that still needs a follow reference, so a
-%% catalogue far larger than the node's foreign-history capacity costs one timer
-%% and a bounded number of attach attempts per turn rather than one timer and
-%% one attach per durable fact.
+%% large catalogue costs one timer and a fixed amount of scheduler work per turn
+%% rather than one timer and one attach attempt per durable fact.
 -define(SOURCE_FOLLOW_SWEEP_BATCH, 16).
 -define(SOURCE_FOLLOW_RETRY_CAP_MS, 60000).
 
@@ -202,6 +203,19 @@ stats(Ns) ->
     try gen_server:call(quod_reg:via({quod_runtime, Ns}), get_stats, 1000)
     catch _:_ -> #{} end.
 
+-doc "Return the ordered P-before-E frontier used to release direct effects.".
+-spec effect_frontier(binary()) -> {ok, non_neg_integer()} | {error, unavailable}.
+effect_frontier(Ns) when is_binary(Ns), byte_size(Ns) > 0 ->
+    case quod_reg:where({quod_runtime, Ns}) of
+        undefined -> {error, unavailable};
+        Pid ->
+            try gen_server:call(Pid, effect_frontier, 1000)
+            catch exit:_ -> {error, unavailable}
+            end
+    end;
+effect_frontier(_Ns) ->
+    {error, unavailable}.
+
 -doc """
 Queue heavy work for `Resource` at requested revision `Rev` (the enqueueing event's height).
 Called synchronously by the `enqueue_projection/2` bridge so queue/size backpressure is loud:
@@ -288,6 +302,8 @@ handle_call(get_stats, _From, S) ->
               heavy_rejected => S#s.heavy_rejected,
               heavy_failures => S#s.heavy_failures,
               waiters => map_size(S#s.waiters)}, S};
+handle_call(effect_frontier, _From, S) ->
+    {reply, {ok, S#s.e_frontier}, S};
 handle_call({revision, Resource}, _From, S) ->
     {reply, effective_revision(Resource, S), S};
 handle_call({await_revision, Resource, Rev, TimeoutMs}, From, S) ->
@@ -550,7 +566,7 @@ run_reconcile(Ns, Config, Cached, Est, H) ->
                             {ok, C}         -> C;
                             {error, R2}     -> throw({discovery_failed, R2})
                         end,
-        case plan_runtime(Founding, Stored, StoredCatalog) of
+        case plan_runtime(Est, Founding, Stored, StoredCatalog) of
             {ok, Plan = #{handlers := Hs, order := Order}} ->
                 lists:foreach(fun(Id) ->
                                       #handler{goal = Goal} = maps:get(Id, Hs),
@@ -566,7 +582,7 @@ run_reconcile(Ns, Config, Cached, Est, H) ->
 reconcile_finished({ok, FoundingCache,
                     Plan = #{handlers := Hs, order := Order, index := Index,
                              dependents := Dependents}},
-                   S0 = #s{ns = Ns, height = H}) ->
+                    S0 = #s{height = H}) ->
     Base = S0#s{handlers = Hs, order = Order, index = Index, dependents = Dependents,
                 founding = case FoundingCache of
                                {cache, F} -> {ok, F};
@@ -576,7 +592,7 @@ reconcile_finished({ok, FoundingCache,
                 reconciles = S0#s.reconciles + 1,
                 exec_failures = 0},
     S1 = install_catalog_update(Plan, Base),
-    _ = maybe_reconcile_direct_effects(Ns),
+    _ = reconcile_direct_effects(),
     case S1#s.pending_edge of
         none -> maybe_run_events(drop_stale_queue(
                                    pump_heavy(release_ready_waiters(S1#s{mode = live}))));
@@ -598,9 +614,8 @@ reconcile_finished({error, Reason}, S0 = #s{ns = Ns}) ->
             replace_snapshot_and_reconcile(Id, S1)
     end.
 
-maybe_reconcile_direct_effects(<<"quod:root">>) ->
-    quod_effect_journal:reconcile();
-maybe_reconcile_direct_effects(_Ns) -> ok.
+reconcile_direct_effects() ->
+    quod_effect_journal:reconcile().
 
 %% Founding configuration errors are permanent (only new founding content or a code fix can
 %% change them); execution failures are transient and go through collapse + backoff.
@@ -958,9 +973,9 @@ source_notice_state(_) ->
     error.
 
 %% One armed sweep at a time. Views waiting for a follow reference are attached
-%% oldest attempt first, so a catalogue larger than the node's foreign-history
-%% capacity still rotates through its excess instead of starving it behind the
-%% same leading targets.
+%% oldest attempt first, so a repeatedly unavailable target cannot starve later
+%% subscriptions. The catalogue itself is not capped; this only bounds work in
+%% one asynchronous sweep.
 run_source_sweep(S0) ->
     Batch = source_sweep_batch(S0),
     S1 = lists:foldl(fun attach_source_follow/2, S0, Batch),
@@ -1446,8 +1461,8 @@ stored_runtime_catalog(Est) ->
             {error, {{react_on, 3}, Reason}}
     end.
 
-plan_runtime(Founding, StoredHandlers, StoredCatalog) ->
-    case plan_handlers(maps:get(handlers, Founding, []), StoredHandlers) of
+plan_runtime(Est, Founding, StoredHandlers, StoredCatalog) ->
+    case plan_handlers(Est, maps:get(handlers, Founding, []), StoredHandlers) of
         {ok, HandlerPlan} ->
             case plan_runtime_catalog(
                    maps:get(reactions, Founding, []), StoredCatalog) of
@@ -1688,42 +1703,52 @@ variable_set(_Term, Acc) -> Acc.
 %% is refused + counted (healthy). Founding-but-not-stored (a retracted founding declaration)
 %% is a distinct loud config error, as is a NONGROUND founding declaration — findall renames
 %% variables, so a nonground term can never match itself and would misreport as retracted.
+-ifdef(TEST).
 plan_handlers(Founding, Stored) ->
+    Est = quod_committed_projection:new_est(),
+    try plan_handlers(Est, Founding, Stored)
+    after
+        #est{db = #db{ref = Ref}} = Est,
+        quod_erlog_db_mvcc:delete(Ref)
+    end.
+-endif.
+
+plan_handlers(Est, Founding, Stored) ->
     case [D || D <- Founding, erlog:vars_in(D) =/= []] of
-        []        -> plan_ground(Founding, Stored);
+        []        -> plan_ground(Est, Founding, Stored);
         Nonground -> {error, {nonground_founding, Nonground}}
     end.
 
-plan_ground(Founding, Stored) ->
+plan_ground(Est, Founding, Stored) ->
     FSet     = maps:from_keys(Founding, true),
     SSet     = maps:from_keys(Stored, true),
     Active   = [D || D <- Stored, is_map_key(D, FSet)],
     Rejected = length(Stored) - length(Active),
     case [D || D <- Founding, not is_map_key(D, SSet)] of
-        []      -> validate(Active, Rejected);
+        []      -> validate(Est, Active, Rejected);
         Missing -> {error, {missing_founding, Missing}}
     end.
 
-validate(Decls, Rejected) ->
+validate(Est, Decls, Rejected) ->
     Hs = [#handler{id = I, watch = W, needs = N, goal = G}
           || {state_handler, I, W, N, G} <- Decls],
     Ids = [H#handler.id || H <- Hs],
     case Ids -- lists:usort(Ids) of
         []  ->
-            case first_invalid(Hs, Ids) of
+            case first_invalid(Est, Hs, Ids) of
                 none            -> order(Hs, Rejected);
                 {error, Reason} -> {error, Reason}
             end;
         Dup -> {error, {duplicate_handler_id, lists:usort(Dup)}}
     end.
 
-first_invalid([], _Ids) -> none;
-first_invalid([#handler{id = Id, watch = W, needs = N, goal = G} | Rest], Ids) ->
-    case valid_watch(W) andalso is_list(N) andalso valid_goal(G) of
+first_invalid(_Est, [], _Ids) -> none;
+first_invalid(Est, [#handler{id = Id, watch = W, needs = N, goal = G} | Rest], Ids) ->
+    case valid_watch(W) andalso is_list(N) andalso valid_goal(Est, G) of
         false -> {error, {invalid_declaration, Id}};
         true  ->
             case [X || X <- N, not valid_need(X, Ids)] of
-                []  -> first_invalid(Rest, Ids);
+                []  -> first_invalid(Est, Rest, Ids);
                 Bad -> {error, {missing_dependency, Id, Bad}}
             end
     end.
@@ -1745,10 +1770,10 @@ valid_need(_, _Ids)            -> false.
 %% The ConvergeGoal is invoked with the scope argument APPENDED (declared arity N runs as
 %% N+1 — this erlog has no call/2). If the invoked functor is governed, its class must be
 %% projection/query; the dynamic class matrix stays the real fail-closed boundary.
-valid_goal(G) ->
+valid_goal(Est, G) ->
     case functor_of(G) of
         {F, A} when is_atom(F) ->
-            case quod_predicates:class({F, A + 1}) of
+            case quod_predicates:class(Est, {F, A + 1}) of
                 undefined  -> true;         %% ordinary content predicate
                 projection -> true;
                 query      -> true;

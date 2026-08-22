@@ -70,8 +70,8 @@ directory_control_peer(NodeKey) :-
     peer_admitted(_, _, _, NodeKey).
 ```
 
-The implementation belongs in `quod_directory_predicates`, is registered in
-both `quod_predicates:governed/0` and `quod_predicates:registry/1`, and reuses
+The implementation belongs in `quod_directory_predicates`, registers itself
+in root's exact engine through `quod_predicates:register/6`, and reuses
 `quod_committee_predicates:admitted_pubkeys/1`. It must:
 
 1. succeed only in a `quod:root` execution context;
@@ -414,8 +414,8 @@ design. The current local-only direct-seed behavior remains unchanged here.
 
 Expected source scope:
 
-- `quod_predicates`: add `{directory_control_peer, 1}` to `governed/0` and add
-  its `query` handler to `registry/1`; both registrations are required;
+- `quod_directory_predicates`: register `{directory_control_peer, 1}` as a
+  `query` bridge in root's exact engine through its `load/1` callback;
 - `quod_directory_predicates`: export/implement
   `directory_control_peer_1/3` and factor both directory enumerations through
   `member/2`;
@@ -462,10 +462,10 @@ one atomic source change.
 
 ### Root predicate
 
-- A KB loaded through `quod_predicates:load/1` reports
-  `quod_predicates:class({directory_control_peer, 1}) =:= query` and enumerates
-  a non-empty set through normal Prolog backtracking. This catches a missing
-  `governed/0` entry or `registry/1` handler rather than testing the handler in
+- A root KB loaded through `quod_predicates:load_modules/2` reports
+  `quod_predicates:class(Est, {directory_control_peer, 1}) =:= query` and
+  enumerates a non-empty set through normal Prolog backtracking. This catches
+  a missing module-local registration rather than testing the handler in
   isolation.
 - An integration case invokes the real local
   `quod_prolog:prove_ro(<<"quod:root">>, findall(...), <<"quod:root">>)`

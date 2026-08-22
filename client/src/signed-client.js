@@ -10,17 +10,18 @@ const cursorOperations = new Map()
 
 // Authenticate one key through the same challenge flow used by every browser
 // surface. The returned object is also the only input accepted by signedGoal.
-export async function authenticateKey(provider) {
+export async function authenticateKey(provider, options = {}) {
   assertCrypto()
+  const post = options.post || postJson
   const clientNonce = crypto.getRandomValues(new Uint8Array(32))
-  const challenge = await postJson('/api/auth/challenge', {
+  const challenge = await post('/api/auth/challenge', {
     public_key: b64url(provider.publicKey),
     client_nonce: b64url(clientNonce),
   })
   const signature = new Uint8Array(await provider.sign(
     challengeBytes(challenge, provider.publicKey, clientNonce),
   ))
-  const session = await postJson('/api/auth/complete', {
+  const session = await post('/api/auth/complete', {
     challenge_id: challenge.challenge_id,
     signature: b64url(signature),
   })
@@ -30,17 +31,18 @@ export async function authenticateKey(provider) {
 // Sign and submit one ordinary Prolog goal. Modes select proof behaviour only;
 // they do not classify predicates or create a second authorization path.
 export async function signedGoal(identity, { mode, namespace, anchor, goal }, options = {}) {
+  const post = options.post || postJson
   const request = goalRequestBytes(identity, { mode, namespace, anchor, goal })
   const signature = new Uint8Array(await identity.provider.sign(request))
   const body = signedBody(identity, request, signature)
-  if (mode === 'read') return postJson('/api/goals/read', body)
+  if (mode === 'read') return post('/api/goals/read', body)
 
   const operation = await operationRow(identity, request, signature)
   if (mode === 'execute') {
     const journal = options.journal || signedOperationJournal()
-    return submitDurable(journal, operation, '/api/goals/execute', body)
+    return submitDurable(journal, operation, '/api/goals/execute', body, post)
   }
-  const reply = await postJson('/api/goals/cursors', body)
+  const reply = await post('/api/goals/cursors', body)
   if (reply.result === 'solution' && typeof reply.cursor === 'string') {
     cursorOperations.set(
       reply.cursor,
@@ -121,10 +123,10 @@ export function goalRequestBytes(identity, { mode, namespace, anchor, goal }) {
   })
 }
 
-async function submitDurable(journal, operation, url, body) {
+async function submitDurable(journal, operation, url, body, post) {
   await journal.put(operation)
   try {
-    const reply = await postJson(url, body)
+    const reply = await post(url, body)
     if (reply.result !== 'pending') await journal.delete(operation.id)
     return reply
   } catch (error) {
@@ -201,7 +203,9 @@ export function assertCrypto() {
     : 'this browser does not provide Web Crypto')
 }
 
-async function postJson(url, body, method = 'POST') {
+// Exported for non-browser callers that need to supply an absolute URL while
+// retaining the client's one HTTP error/uncertain-outcome boundary.
+export async function postJson(url, body, method = 'POST') {
   let response
   try {
     response = await fetch(url, {

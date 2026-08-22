@@ -265,12 +265,6 @@ top_level_deadline_and_crash_use_current_public_errors_test() ->
        {error, {protocol_error, proof_worker_crash}},
        quod_prolog:test_proof_down_reply(prove, unexpected_crash, Ns)),
     ?assertEqual(
-       {error, outcome_unknown},
-       quod_prolog:test_proof_down_reply(action, unexpected_crash, Ns)),
-    ?assertEqual(
-       {error, outcome_unknown},
-       quod_prolog:test_proof_down_reply(action, killed, Ns)),
-    ?assertEqual(
        {error, {outcome_unknown, OutcomeRef}},
        quod_prolog:test_proof_down_reply(
          prove, unexpected_crash, Ns, OutcomeRef)).

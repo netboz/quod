@@ -134,6 +134,33 @@ apply_entry(_Entry, _Floor, _Projection) ->
     {error, bad_projection_entry}.
 
 apply_content_entry(Transactions, Timestamp, Index, Floor, Projection0) ->
+    case prepare_genesis_modules(Transactions, Index, Projection0) of
+        {ok, ProjectionPrepared} ->
+            apply_prepared_content_entry(
+              Transactions, Timestamp, Index, Floor, ProjectionPrepared);
+        {error, _} = Error -> Error
+    end.
+
+prepare_genesis_modules(
+  [Genesis], 1,
+  Projection = #projection{applied = 0, est = Est}) ->
+    case quod_simplex:genesis_predicate_manifest(Genesis) of
+        {ok, Manifest} ->
+            case quod_predicates:load_manifest(Est, Manifest) of
+                {ok, Est1} -> {ok, Projection#projection{est = Est1}};
+                {error, Reason} ->
+                    {error, {predicate_modules_unavailable, Reason}}
+            end;
+        %% Structural commit validation is the single authority that rejects a
+        %% missing or malformed slot-1 manifest.  Defer here so projection and
+        %% validation share that verdict instead of inventing a second one.
+        error -> {ok, Projection}
+    end;
+prepare_genesis_modules(_Transactions, _Index, Projection) ->
+    {ok, Projection}.
+
+apply_prepared_content_entry(
+  Transactions, Timestamp, Index, Floor, Projection0) ->
     case quod_commit_validation:content(
            Transactions, Timestamp, {claim, Index},
            validation_context(Projection0)) of

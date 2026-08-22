@@ -36,6 +36,12 @@ init([]) ->
          #{id => quod_foreign_log,
            start => {quod_foreign_log, start_link, []},
            type => worker},
+         %% One node-wide owner for private direct-effect custody. Public
+         %% effect descriptors remain in their controlling ontology ledgers;
+         %% this process only retains the local preparation until ordered apply.
+         #{id => quod_effect_journal,
+           start => {quod_effect_journal, start_link, []},
+           type => worker},
          #{id => quod_brahms_sup,
            start => {quod_brahms_sup, start_link, []},
            type => supervisor},

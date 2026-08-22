@@ -168,17 +168,24 @@ continue_content_validation(
 
 continue_ordinary_content_validation(
   Change, Rest, Network, BlockTimestamp, Mode, Seen, Context) ->
-    case is_membership_change(Change) of
-        false ->
-            validate_content_transactions(
-              Rest, Network, BlockTimestamp, Mode, Seen, Context);
+    case quod_diff:touches_functor(
+           Change#transaction.diff, {external_predicate_modules, 1}) of
         true ->
-            case membership_verdict(Mode, Change, Context) of
-                valid ->
+            {ok, {invalid, immutable_external_predicate_manifest}, Context};
+        false ->
+            case is_membership_change(Change) of
+                false ->
                     validate_content_transactions(
                       Rest, Network, BlockTimestamp, Mode, Seen, Context);
-                {invalid, Reason} ->
-                    {ok, {invalid, Reason}, Context}
+                true ->
+                    case membership_verdict(Mode, Change, Context) of
+                        valid ->
+                            validate_content_transactions(
+                              Rest, Network, BlockTimestamp,
+                              Mode, Seen, Context);
+                        {invalid, Reason} ->
+                            {ok, {invalid, Reason}, Context}
+                    end
             end
     end.
 
@@ -365,8 +372,13 @@ validate_prepared_material(
         false ->
             {error, malformed_plan_material};
         true ->
-            validate_prepared_occ(
-              Plan, Diff, ReadCheck, Transcript, Est, Context)
+            case quod_diff:touches_functor(
+                   Diff, {external_predicate_modules, 1}) of
+                true -> {error, immutable_external_predicate_manifest};
+                false ->
+                    validate_prepared_occ(
+                      Plan, Diff, ReadCheck, Transcript, Est, Context)
+            end
     end.
 
 validate_prepared_occ(

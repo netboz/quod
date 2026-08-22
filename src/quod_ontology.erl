@@ -4,28 +4,32 @@ Runtime creation of a local, self-founded ontology and joining of an existing
 ontology through its pinned genesis anchor.
 
 Creation deliberately reuses the normal namespace manager, namespace
-supervision tree, genesis builder, and root storage placement. The authorized
-public action is recorded as an ordinary root transaction with a typed direct
-effect, but it adds no root catalogue. The namespace manager records the
+supervision tree, genesis builder, and node storage placement. A governed
+Prolog action is recorded as an ordinary transaction in its controlling
+ontology with a typed direct effect, but it adds no catalogue fact. The namespace manager records the
 node-local hosting intent beside the ledgers after the exact genesis anchor is
 known, so a full application restart resumes only ontologies this node had
 deliberately created or joined. Explicit local stop removes that intent.
 Joining uses that same lifecycle asynchronously: acceptance starts the existing
 catch-up process, and `local_state/1` reports its local progress.
 
-These functions are trusted same-VM APIs; they do not authenticate a remote
-caller. Node-local Prolog lifecycle requests must enter through
-`quod_prolog:run_action/2`, which proves root policy and commits the typed
-descriptor before the effect journal calls them.
+The low-level preparation and execution functions are trusted same-VM
+internals; they do not authenticate a remote caller. Public lifecycle requests
+are ordinary Prolog goals. Their ontology's normal `can_invoke/4` check and
+declared `action/3` prerequisites govern the request before the ordinary
+transaction path commits the typed descriptor and the effect journal calls
+these internals. `create/2` and `join/3` exist only in TEST as fixture
+conveniences around that preparation and execution code.
 """.
 
 -include("quod_ingress_limits.hrl").
 -include("quod_proof_limits.hrl").
 -include("quod_ledger.hrl").
 
--export([validate_action/1, prepare_action/2,
+-export([validate_action/1, prepare_action/2, canonical_name/1,
          execute_prepared/1,
          prepared_effect/4, prepared_bytes/1, decode_prepared/1,
+         prepare_system_join/3,
          local_state/1, genesis_anchor/1,
          network_identity/0, network_identity/2,
          root_ns/0]).
@@ -86,14 +90,17 @@ join(Name, GenesisHash, Seeds) ->
 Validate a typed lifecycle action without reading source paths, compiling
 Prolog, inspecting storage, or changing hosting state.
 """.
+valid_action_shape({create_ontology, _, _}) -> true;
+valid_action_shape({join_ontology, _, _, _}) -> true;
+valid_action_shape(create_user_home) -> true;
+valid_action_shape(_) -> false.
+
 -spec validate_action(term()) ->
           {ok, structural_descriptor()} | {error, term()}.
 validate_action(Action) ->
-    case Action of
-        {create_ontology, _, _} -> validate_typed_action(Action);
-        {join_ontology, _, _, _} -> validate_typed_action(Action);
-        create_user_home -> validate_typed_action(Action);
-        _ -> {error, invalid_action}
+    case valid_action_shape(Action) of
+        true -> validate_typed_action(Action);
+        false -> {error, invalid_action}
     end.
 
 validate_typed_action(Action) ->
@@ -103,7 +110,7 @@ validate_typed_action(Action) ->
     end.
 
 validate_ground_action({create_ontology, Name, Options}) ->
-    case normalize_user_name(Name) of
+    case canonical_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
@@ -119,7 +126,7 @@ validate_ground_action({create_ontology, Name, Options}) ->
     end;
 validate_ground_action(
   {join_ontology, Name, GenesisHash, Seeds}) ->
-    case normalize_user_name(Name) of
+    case canonical_name(Name) of
         {error, _} = Error ->
             Error;
         {ok, Ns} ->
@@ -145,9 +152,11 @@ validate_ground_action(create_user_home) ->
 
 -doc """
 Finish a structurally validated lifecycle request without mutating hosting
-state. The lifecycle runner calls this only after authorization; the trusted
-same-VM API calls it directly. Create sources are read, parsed, and compiled
-exactly once into the descriptor; join inputs are already normalized.
+state. The ordinary action continuation calls this only after its declared
+prerequisites. TEST fixture helpers may call it directly, but production
+hosting requests enter through the governed predicate. Create sources are
+read, parsed, and compiled exactly once into the descriptor; join inputs are
+already normalized.
 """.
 -ifdef(TEST).
 -spec prepare_action(structural_descriptor()) ->
@@ -160,17 +169,28 @@ prepare_action(Structural) -> prepare_action(Structural, none).
 prepare_action(
   #lifecycle_request{kind = create, namespace = Ns, payload = Options},
   _Principal) ->
-    case load_options(Options) of
+    case split_create_options(Options) of
         {error, _} = Error ->
             Error;
-        {ok, InitialTerms} ->
-            case validate_initial_terms(InitialTerms) of
-                {error, _} = Error ->
-                    Error;
-                {ok, InitialDiff} ->
-                    case initial_diff_size(InitialDiff) of
-                        ok -> prepare_create(Ns, InitialDiff);
-                        {error, _} = Error -> Error
+        {ok, SourceOptions, Modules} ->
+            case quod_predicates:module_manifest(Modules) of
+                {error, _} -> {error, invalid_options};
+                {ok, _Manifest} ->
+                    case load_options(SourceOptions) of
+                        {error, _} = Error ->
+                            Error;
+                        {ok, InitialTerms} ->
+                            case validate_initial_terms(InitialTerms) of
+                                {error, _} = Error ->
+                                    Error;
+                                {ok, InitialDiff} ->
+                                    case initial_diff_size(InitialDiff) of
+                                        ok ->
+                                            prepare_create(
+                                              Ns, InitialDiff, Modules);
+                                        {error, _} = Error -> Error
+                                    end
+                            end
                     end
             end
     end;
@@ -230,10 +250,10 @@ local_state(Name) ->
     end.
 
 -doc """
-The root namespace name — the ACL authority anchor every network is founded on.
+The root namespace name — the identity anchor every network is founded on.
 
-Exported so callers stop re-declaring the literal: this module owns the root
-ontology's lifecycle, so it owns its name.
+Exported so callers stop re-declaring the literal while resolving the network
+identity and system-ontology catalogue.
 """.
 -spec root_ns() -> binary().
 root_ns() -> ?ROOT_NS.
@@ -330,8 +350,32 @@ normalize_option_shapes([{source_file, Path0} | Rest], AccRev) ->
         error ->
             {error, invalid_options}
     end;
+normalize_option_shapes(
+  [{external_predicate_modules, Modules} | Rest], AccRev) ->
+    case quod_predicates:valid_module_names(Modules) of
+        true ->
+            normalize_option_shapes(
+              Rest, [{external_predicate_modules, Modules} | AccRev]);
+        false -> {error, invalid_options}
+    end;
 normalize_option_shapes(_ImproperOrInvalid, _AccRev) ->
     {error, invalid_options}.
+
+split_create_options(Options) ->
+    split_create_options(Options, [], undefined).
+
+split_create_options([], SourceRev, undefined) ->
+    {ok, lists:reverse(SourceRev), []};
+split_create_options([], SourceRev, Modules) ->
+    {ok, lists:reverse(SourceRev), Modules};
+split_create_options(
+  [{external_predicate_modules, Modules} | Rest], SourceRev, undefined) ->
+    split_create_options(Rest, SourceRev, Modules);
+split_create_options(
+  [{external_predicate_modules, _Modules} | _Rest], _SourceRev, _Existing) ->
+    {error, invalid_options};
+split_create_options([Option | Rest], SourceRev, Modules) ->
+    split_create_options(Rest, [Option | SourceRev], Modules).
 
 load_options(Options) ->
     load_options(Options, 1, []).
@@ -344,9 +388,7 @@ load_options([Option | Rest], Index, AccRev) ->
             load_options(Rest, Index + 1, lists:reverse(Terms, AccRev));
         {error, _} = Error ->
             Error
-    end;
-load_options(_ImproperOrNonList, _Index, _AccRev) ->
-    {error, invalid_options}.
+    end.
 
 load_option({terms, Terms}, _Index) ->
     {ok, Terms};
@@ -420,7 +462,7 @@ read_source_file(Path, Index) ->
 source_file_error(Index, Path, Reason) ->
     {error, {source_file_error, Index, Path, Reason}}.
 
-prepare_create(Ns, InitialDiff) ->
+prepare_create(Ns, InitialDiff, Modules) ->
     case root_storage() of
         {error, _} = Error ->
             Error;
@@ -433,7 +475,8 @@ prepare_create(Ns, InitialDiff) ->
                 maps:merge(
                   BaseConfig,
                   Storage#{committee => [],
-                           genesis_diff => InitialDiff}),
+                           genesis_diff => InitialDiff,
+                           external_predicate_modules => Modules}),
             case existing_ledger(Ns, Config) of
                 {error, _} = Error ->
                     Error;
@@ -503,6 +546,27 @@ prepare_join(Ns, RawGenesisHash, SeedPeers) ->
             end
     end.
 
+-doc """
+Prepare the normal pinned join configuration for a root-catalogued system
+ontology.  Registration never creates an ontology: callers must supply its
+already-known exact genesis anchor and certified route hints (or resume its
+existing local ledger).
+""".
+-spec prepare_system_join(binary(), <<_:256>>, [term()]) ->
+          {ok, map()} | {error, term()}.
+prepare_system_join(Ns, Anchor, SeedPeers)
+  when is_binary(Ns), is_list(SeedPeers) ->
+    case prepare_join(Ns, Anchor, SeedPeers) of
+        {ok, #prepared_lifecycle{status = resumed, config = Config}} ->
+            {ok, Config#{system_ontology => true}};
+        {ok, #prepared_lifecycle{status = joining, config = Config}}
+          when SeedPeers =/= [] ->
+            {ok, Config#{system_ontology => true}};
+        {ok, #prepared_lifecycle{status = joining}} ->
+            {error, unavailable};
+        {error, _} = Error -> Error
+    end.
+
 -doc "Build the closed public descriptor for one exact private preparation.".
 -spec prepared_effect(term(), prepared_descriptor(), <<_:256>>,
                       {node, <<_:256>>} | {user, <<_:256>>}) ->
@@ -544,7 +608,11 @@ prepared_bytes(_) -> {error, invalid_action}.
           {ok, prepared_descriptor()} | {error, invalid_action}.
 decode_prepared(Bytes)
   when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES ->
-    try binary_to_term(Bytes, [safe]) of
+    %% These bytes were created locally before hand-off and are accepted by
+    %% the journal only when their SHA-256 digest matches the certified public
+    %% effect descriptor. They may legitimately contain atoms introduced by
+    %% the prepared genesis which do not exist yet after a full VM restart.
+    try binary_to_term(Bytes) of
         {quod_prepared_lifecycle, 1, #prepared_lifecycle{} = Prepared} ->
             case prepared_bytes(Prepared) of
                 {ok, Bytes} -> {ok, Prepared};
@@ -595,16 +663,6 @@ validate_name(Ns) ->
         _ -> {error, invalid_name}
     catch _:_ ->
         {error, invalid_name}
-    end.
-
--doc "Canonicalize a non-system ontology name without touching hosting state or storage.".
--spec normalize_user_name(term()) -> {ok, binary()} | {error, term()}.
-normalize_user_name(Name) ->
-    case canonical_name(Name) of
-        {ok, <<"quod">>} -> {error, reserved_system_namespace};
-        {ok, <<"quod:", _/binary>>} ->
-            {error, reserved_system_namespace};
-        Other -> Other
     end.
 
 normalize_genesis_hash(Value) ->
@@ -693,6 +751,7 @@ clause_head(Fact) -> Fact.
 
 reserved_clause_head({consensus_incarnation, _}) -> true;
 reserved_clause_head({peer_admitted, _, _, _, _}) -> true;
+reserved_clause_head({external_predicate_modules, _}) -> true;
 reserved_clause_head(_) -> false.
 
 compile_initial_terms(Terms) ->

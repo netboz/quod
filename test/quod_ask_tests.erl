@@ -490,7 +490,7 @@ t_raw_snapshot_selector_boundary(#{pets := P, animals := A}) ->
                        Est0, quod_predicates:verdict_context(P, Height)),
         ?assertEqual(
            {error, ask_in_membership_verdict},
-           quod_prolog:prove_est_read_only(
+           quod_prolog:prove_est(
              {'::', A, {diet, cat, fish}}, VerdictEst)),
         ?assertEqual(TargetProves, maps:get(proves, quod_prolog:stats(A)))
     after

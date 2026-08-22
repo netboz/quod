@@ -1,11 +1,13 @@
 # Quod agents and FIPA -- architecture and implementation plan
 
-**Status:** APPROVED (Yan, 2026-07-17). Slices 1 and 2 are delivered; Slice 3
-and later remain pending. The corrected target-driven action/transaction
-prerequisite landed in Quod 0.7.58. The separate signed-client work now
-provides the cryptographically verified base `{user, Key}` principal; agent
-delegation, capabilities, wielding, and the full `subject/3` chain remain in
-this plan.
+**Status:** revised architecture direction. Slices 1 and 2 are delivered;
+later FIPA work remains pending. `ontology-actor-architecture.md` is the
+authority for actor identity, system-ontology bootstrap, key ownership, and
+hosting. It corrects this document's former Agent Platform record model: every
+durable agent is a classed instance in ontology state and its optional Erlang
+process is a rebuildable projection.
+The current `{user, Key}` signed-goal label is transitional implementation
+terminology, not the target generic actor model.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.
@@ -36,14 +38,13 @@ truth. They either:
 The implementation must make those three roles explicit and enforce when each
 role may run.
 
-The first system ontology vocabulary will be:
-
-- `quod:user`: user identities and authentication policy;
-- `quod:agent`: agent classes, ownership, lifecycle, AIDs, wielding, AMS, and DF
-  vocabulary.
-
-Agent instances are not themselves ontologies. An agent is a durable instance in
-an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
+The system ontology vocabulary includes `quod:node`, `quod:agent`, and
+`quod:human_user`, discovered from root's committed system catalogue.
+`quod:agent` defines the generic actor vocabulary; `quod:human_user` defines
+the human-specific subclass. A concrete agent is a local instance in an
+ontology, identified externally by that ontology's exact identity plus the
+local instance name. Its optional hosted Erlang process is a rebuildable
+projection of committed facts.
 
 ## 2. Non-negotiable invariants
 
@@ -60,8 +61,10 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
    executed by the target ontology, never a foreign ready-made diff.
 7. **No global FIPA message ledger.** Communication is routed to the involved
    agents. Only state that an agent chooses to remember is committed.
-8. **Identity domains remain separate.** Node keys, users, agents, ontologies,
-   and transport addresses are different types.
+8. **Ontology identity is universal.** Nodes, agents, users, services, and
+   other actors are represented by classed instances in ontology state. Public
+   keys, class facts, and policies are durable facts in the containing
+   ontology; endpoints and private keys are not.
 9. **The authenticated subject is end-to-end.** No caller may construct or
    shorten its own authority chain.
 10. **Bounded work.** Proofs, reactions, projections, conversations, queues, and
@@ -69,7 +72,7 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
 11. **One logical effect executor.** Every E effect names one durable logical
     executor. Only the node currently hosting that executor may schedule it.
     Receiver deduplication handles crash retries and the bounded overlap during
-    an ownership transfer; it is not the normal defense against every replica
+    a host-epoch transfer; it is not the normal defense against every replica
     emitting the same effect.
 12. **Runtime declarations are privileged code.** `state_handler`,
     `state_handler_depends_on`, and `react_on` facts are executable
@@ -83,7 +86,8 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
 - BBSvx's prove-before-broadcast principle.
 - The later Onia model: an Agent Platform is an ontology-level authority and a
   hosted agent is a supervised runtime instance.
-- Onia's `subject(User, AgentChain, Capabilities)` authorization context.
+- Onia's three-part subject authorization context, generalised in Quod to
+  `subject(Agent, AgentChain, Capabilities)`.
 - Onia's distinction between deterministic state, runtime projection, and
   external effect.
 - Prolog definitions for communicative acts, protocols, lifecycle rules, and
@@ -96,7 +100,7 @@ an Agent Platform ontology plus, while hosted, a rebuildable Erlang process.
 
 ### Rejected
 
-- The early "agent is an ontology" model.
+- A separate Agent Platform record as the durable identity of an agent.
 - Copying subscribed foreign facts into another KB.
 - Replaying effects from transaction history.
 - A generic effect dispatcher that can invoke any compiled predicate by functor.
@@ -151,21 +155,38 @@ from replay.
 
 ## 5. External predicate contract
 
-External Erlang predicates are divided into four explicit classes.
+External Erlang predicates are divided into three explicit classes.
 
 | Class | May read runtime | May stage D | May mutate P | May perform E |
 |---|---:|---:|---:|---:|
 | `query` | yes | no | no | no |
 | `staging` | yes | yes | no | no |
 | `projection` | yes | no | yes | no |
-| `effect` | yes | no | no | yes |
+
+External effects are not a fourth callable-predicate class. A `staging`
+predicate may prepare a bounded effect request as part of the ordinary proof;
+the node-wide effect journal performs that request only after the controlling
+transaction commits and verifies the real result. This keeps authorization,
+proof, sealing, and consensus on one path.
+
+A `query` may call Erlang and bind its answer into the continuing Prolog goal
+with `unify_prove_body`. If the completed goal stages no durable change or
+effect request, it is a read and creates no ledger entry. Query predicates must
+therefore be safe to repeat during backtracking or proof retry.
+
+One narrow subtype is authority-releasing without changing durable truth. The
+node-vault predicate that signs a typed canonical Quod request still uses the
+same `query` execution path, but its module declaration and ordinary Prolog
+policy must explicitly authorize that operation. It may not accept arbitrary
+bytes or become a second permission path.
 
 Examples:
 
 - `peer_ready/1` is `query`.
 - `admit/3` and `remove/1` are `staging`.
 - `ensure_agent_started/2` is `projection`.
-- `mts_send/2` is `effect`.
+- a future `mts_send/2` action would use a `staging` bridge to prepare its
+  post-commit send; the bridge would not send during the proof.
 
 Each predicate declares:
 
@@ -178,34 +199,38 @@ Each predicate declares:
 The former per-proof process-dictionary namespace values have been replaced by
 one explicit execution context carried in Erlog's `#est.fs` flags. These flags
 are created by the engine, survive the MVCC proof boundary, and are not
-caller-supplied. The context per kind is:
+caller-supplied. Its four kinds are:
 
 ```text
 proof(Namespace, Height, Subject)
+verdict(Namespace, Height)
+policy_verdict(Namespace, Height)
 projection(Namespace, Height, HandlerId)
-effect(Namespace, Height, TransactionId, EffectId, Subject)
 ```
 
 Registration and invocation fail closed when a predicate is used in the wrong
-context. Effect predicates are never callable from ordinary ontology proofs.
+context. Staging predicates are callable only from ordinary proofs; projection
+predicates remain confined to projection apply.
 
-> **As built (Slice 1).** The context is one `#qctx{kind, ns, height, subject,
+> **As built.** The context is one `#qctx{kind, ns, height, subject,
 > chain}` record (owned by `m:quod_predicates`), stored under a single
-> `none`-valued `#est.fs` flag. `kind` is `proof | verdict | projection | effect`
-> — the unified record replaces the separate `proof(…)`/`projection(…)`/`effect(…)`
-> tuples above, and adds `chain` (the inter-ontology ask chain, which used to be a
-> separate `$quod_ask_chain` value) and a `verdict` kind (a strictly-local
-> membership re-proof). `none`-valued means ontology content can neither set nor
+> `none`-valued `#est.fs` flag. `kind` is `proof | verdict |
+> policy_verdict | projection`. The record also carries `chain` (the
+> inter-ontology ask chain, which used to be a separate `$quod_ask_chain`
+> value). `verdict` is a strictly local membership re-proof;
+> `policy_verdict` is a strictly local policy re-proof with governed bridges
+> disabled. `none`-valued means ontology content can neither set nor
 > clear it (`set_prolog_flag/2` refuses a `none` flag), so it cannot be forged;
 > content may still *read* it via `current_prolog_flag/2` (forge-resistant, not
 > secret). Today's fields are fine to expose (`ns`/`height`/`kind`/`chain` are
 > already visible to `can_read` policies), but the authenticated **subject** (§10)
-> must be carried out-of-band — the `#lp{}`-overlay pattern (as for
+> must be carried out-of-band — the `#lp{}` overlay pattern (as for
 > `follow_disabled`), not this readable flag. All four kinds now have concrete
-> constructors: normal proofs and membership verdicts, runtime projections, and
-> the dedicated snapshot-pinned `quod_prolog:run_action/2` lifecycle path. That
-> path derives its node principal in the engine and carries it privately in the
-> overlay; ordinary `goal/1` proofs cannot execute lifecycle IO. The
+> constructors: normal proofs, membership verdicts, policy verdicts, and
+> runtime projections. Lifecycle
+> is no longer another context: signed and node-authored `execute` use the
+> ordinary proof context, whose private request record already carries the
+> authenticated principal. The
 > four process-dictionary values (`$quod_ns`/`$quod_applied`/`$quod_ask_chain`/
 > `$quod_in_verdict`) are removed, not retained as a second mechanism.
 
@@ -239,7 +264,7 @@ action is tried. Total failure restores the transaction's entry state; an
 Erlog error restores it before the same error propagates. A selected candidate
 succeeds only after its desired state has been proved again.
 
-The common clauses are loaded by `quod_prolog:build_kb/0` into every ontology's
+The common clauses are loaded by `quod_committed_projection:new_est/0` into every ontology's
 code baseline; they are not copied into genesis transactions. There is no
 reverse-effect lookup, generic fact action, direct-call fallback, or
 `assert_effect/1` compatibility path. Domain changes use explicit named
@@ -263,17 +288,14 @@ the engine-owned execution context; it is not a positional field of
 Most actions change durable reality and their runtime consequences are derived
 from the committed diff by P and E handlers. Explicit node-local lifecycle
 actions use the same desired-state declaration shape, for example
-`ontology_hosted(Name)` and `ontology_joined(Name, GenesisHash)`, but run only
-through the typed `quod_prolog:run_action/2` boundary.
-
-That runner validates the exact ground declaration and authorizes its private
-engine-owned principal before reading caller-selected source input. It prepares
-the input once, selects the desired state and prerequisites in a read-only
-view, and re-authorizes. An already-true target returns success without
-lifecycle IO. Otherwise the runner calls the typed create/join helper exactly
-once and verifies the exact desired state afterward. Once external IO starts it
-is never backtracked; an unobservable completion is `outcome_unknown`.
-Lifecycle IO is runner behavior, not the third argument of `action/3`, and no
+`ontology_hosted(Name)` and `ontology_joined(Name, GenesisHash)`, and run only
+through the same ordinary action relation. Signed and node-authored `execute`
+are the entries. The target's `can_invoke/4` and declared action prerequisites
+run before the governed bridge reads or prepares input. The bridge stages a
+closed effect; the ordinary transaction commits it, and the node-wide journal
+performs it only after ordered apply. An already-true target returns success
+without lifecycle IO. An unobservable completion is `outcome_unknown`.
+Lifecycle IO is journal behavior, not the third argument of `action/3`, and no
 volatile hosting fact is asserted into consensus.
 
 ## 7. Apply, replay, reconciliation, and events
@@ -484,8 +506,10 @@ an authenticated trusted node could technically commit the fact.
 After signing lands, validators authorize a declaration before committing it.
 The runtime also verifies the committed provenance before activation as a
 defense-in-depth check. External predicate functors referenced by a declaration
-must already exist in the release's typed predicate registry; ontology content
-cannot load arbitrary Erlang modules.
+must be provided by an audited module named and hash-pinned by that ontology's
+immutable genesis, and that module must be shipped in the release. Root names
+only the ontology identity. Ontology content cannot load
+arbitrary Erlang modules; there is no application-global predicate catalogue.
 
 The first handlers will own:
 
@@ -513,7 +537,7 @@ matcher or parallel binding representation.
 
 ### Logical agent versus live Erlang process
 
-An agent is durable ontology identity and state in D. Its Erlang process is
+An agent is a durable classed instance and state in D. Its Erlang process is
 only the current live P incarnation on the node selected by committed
 ownership/residency facts. The process owns bounded mailbox draining, timers,
 conversation progress, and effects; it keeps no private knowledge base and can
@@ -609,35 +633,78 @@ Client and world effects consume this ownership and delivery machinery but do
 not define it. Their directional design lives in
 `doc/client-world-direction.md`.
 
-## 10. Users and authorization
+## 10. Agents, users, and authorization
 
-### `quod:user`
+`agent` is the generic acting class. `human_user` is its human-specific
+subclass, not a name for every public-key holder. `quod:agent` and
+`quod:human_user` provide shared class rules; they are not global registries
+that replace an actor's authoritative containing ontology.
 
-The system ontology defines:
+Each acting instance records its class and active public key in its containing
+ontology. Its stable identity is
+`agent_instance_ref(Namespace, GenesisAnchor, Instance)`. Genesis stores the
+local `Instance`, because an ontology cannot contain its own not-yet-known
+anchor; the external reference is formed after slot 1 exists. The private key
+stays outside the ledger: a browser-controlled instance uses its client key
+provider, while an autonomous instance uses the node-local vault on its
+committed host. Moving an agent rotates to a key staged in the destination
+vault; it never transports the old secret. A signed request therefore proves
+possession of an active key bound to the instance; the ordinary target
+`can_invoke/4` policy decides what that agent may do.
+
+`quod:human_user` defines the human-specific subclass and related profile
+vocabulary. It does not contain a row for every human, define a second
+authentication authority, or own a special creation executor. A new ontology
+may include local facts such as
+`instance_of(human_user, local_human_1)` and
+`agent_key(local_human_1, PublicKey, active)` in its ordinary genesis; an
+existing ontology may add the same facts through an ordinary transaction.
+There is no core `create_agent` or `create_human_user` predicate.
+
+The creator, contained instance, signing key, ACL permissions, and runtime host
+are separate. An agent reference grants none of them implicitly. Ordinary
+creation policy may authorize only a specific existing agent to call
+`create_ontology/2`; that caller may be a FIPA agent whose conversation and
+approval facts satisfy changeable Prolog prerequisites. This is ordinary ACL
+and action policy, not a separate delegation feature.
+
+The current transport authenticates a key under the implementation label
+`{user, Key}`. The actor migration in `ontology-actor-architecture.md` will
+replace that signer label and its request binding in one format change, without
+a second ACL or a legacy signed route. That signer identity does not replace or
+redefine the ACL subject.
+
+The ACL term remains exactly:
 
 ```prolog
-user(UserId).
-user_key(UserId, PublicKey, Status).
-user_home(UserId, Namespace).
-can_authenticate(UserId, PublicKey).
-can_manage_user(Subject, UserId).
+subject(Agent, AgentChain, Capabilities)
 ```
 
-It contains identity and routing information, not arbitrary private profile
-data. Private data belongs in user-owned ontologies.
+- `Agent` is the originating `agent_instance_ref/3` on whose behalf the chain began;
+  it may belong to any `agent` subclass;
+- `AgentChain` is the non-empty delegation chain, current agent first, and
+  every member is also an `agent_instance_ref/3`; and
+- `Capabilities` are derived for the current agent by the receiver and replace
+  the previous agent's capabilities.
 
-### Authentication
+The signing credential and ACL subject are orthogonal. The signature proves
+that an active key bound to the claimed agent instance signed the exact
+request. `subject/3` states on whose behalf, through which agents, and with
+which current capabilities it acts. Wielding and agent-to-agent delegation
+construct the triplet; merely possessing an `agent_key/3` never fabricates
+one.
 
-1. The transport challenges an Ed25519 user key.
-2. `quod:user` resolves it to `UserId`.
-3. The user selects an agent to wield.
-4. The hosting AP proves `accepts_wielding/2`.
-5. The resulting subject is pinned to the session.
-
-The base subject is:
+Examples:
 
 ```prolog
-subject(UserId, [AgentId], Capabilities)
+%% H and A are agent_instance_ref/3 terms. Human agent H wields avatar A.
+subject(H, [A], AvatarCapabilities).
+
+%% A delegates to B; B is now the current invoker.
+subject(H, [B, A], BCapabilities).
+
+%% Autonomous or load-test agent M acts directly.
+subject(M, [M], MCapabilities).
 ```
 
 At an agent-to-agent hop:
@@ -660,27 +727,40 @@ express that explicitly against the immutable chain.
 
 ### `quod:agent`
 
-The system ontology defines:
+`quod:agent` defines only the common acting vocabulary:
 
 ```prolog
 isa(agent, thing).
-isa(agent_platform, agent).
-agent_owner(AgentId, UserId).
-agent_platform(AgentId, PlatformNamespace).
-agent_state(AgentId, State).
-agent_owner_node(AgentId, NodeId).
-agent_name(AgentId, Name).
-has_capability(AgentId, Capability).
-accepts_wielding(AgentId, Subject).
+agent_key(LocalInstance, PublicKey, Status).
+agent_platform(AgentRef, PlatformNamespace).
+agent_hosted_on(AgentRef, NodeRef, Epoch).
+agent_name(AgentRef, Name).
+has_capability(AgentRef, Capability).
+accepts_wielding(AgentRef, Subject).
 ```
 
-The actual instance facts live in the AP ontology that manages the agent.
-`quod:agent` owns the common vocabulary and rules.
+Each specialised system ontology owns its own subclass statement:
+`quod:node` defines `isa(node, agent)`, `quod:human_user` defines
+`isa(human_user, agent)`, and the FIPA vocabulary defines
+`isa(fipa_agent, agent)` and `isa(agent_platform, agent)`. An application or
+load-test ontology may similarly define `isa(monkey_user, agent)` without an
+Erlang or generic-vocabulary change.
+
+Concrete actors use the existing class-first instance convention, for example
+`instance_of(fipa_agent, local_agent_1)`; `isa/2` above is only class
+inheritance. The external `agent_instance_ref/3` combines that local name with
+the containing ontology's exact identity.
+
+The actual instance facts live in an ordinary ontology. Independently managed
+agents will normally use a dedicated ontology, while policy may deliberately
+place several instances in one ontology. An Agent Platform is another ontology
+that may coordinate, discover, or authorize work; containment alone does not
+make it the instance's ACL authority.
 
 The hosted process is P-state:
 
-- it exists only on the current owner node;
-- it obtains durable state from the AP ontology;
+- it exists only on the current committed host node;
+- it obtains durable state from its containing ontology;
 - its in-process state is a cache or working set;
 - restart and migration reconstruct it from D;
 - stopping the process does not delete the agent.
@@ -769,8 +849,11 @@ Brahms, and signed announcements.
 
 ### AMS -- white pages
 
-Each Agent Platform has one logical AMS authority represented by rules and facts
-in its AP ontology. It manages AIDs, lifecycle, residency, and AP description.
+Each Agent Platform is itself an ontology with one logical AMS authority. It
+manages AID registration, discovery, residency coordination, and AP
+description. A managed agent keeps its authoritative class, key, and state in
+the ontology named by its `agent_instance_ref/3`; an AP record is not a
+substitute identity.
 
 ### DF -- yellow pages
 
@@ -932,7 +1015,7 @@ Acceptance:
 
 - history replay sends nothing;
 - a crash between commit and delivery is recovered;
-- an ownership transfer may overlap sends but receiver deduplication preserves
+- a host-epoch transfer may overlap sends but receiver deduplication preserves
   one logical effect;
 - duplicate delivery does not duplicate the receiver's action;
 - load tests price the two-commit durable path separately from acknowledged
@@ -943,52 +1026,56 @@ Acceptance:
 
 This is the proof of the architecture and remains trusted-fleet-only.
 
-- Add minimal genesis content for `quod:user` and `quod:agent`.
-- Add one AP ontology with statically declared agent owners.
-- Reconcile one hosted-agent process on only its owner node.
+- Add root-catalogued `quod:node`, `quod:agent`, and `quod:human_user` system
+  ontology vocabulary.
+- Create two agent ontologies, each with its own committed state and public
+  key binding.
+- Reconcile one hosted-agent process only on each agent's committed host epoch.
 - Execute one target-driven `goal(DesiredState)` whose selected transition
-  changes AP facts.
+  changes an agent's own facts.
 - Deliver one durable outbox message between two agents.
-- Restart the runtime, agent process, and owner node during delivery.
+- Restart the runtime, agent process, and host node during delivery.
 
 This slice deliberately has no FIPA ACL encoding, AMS search, DF, agent
 delegation, dynamic handler declaration, or directory federation. Browser
-login and the signed base-user principal are supplied by the separate
-signed-client architecture and do not make a user into an agent.
+login and the transitional signed-user principal are supplied by the separate
+signed-client architecture; the actor migration generalises that same path to
+the `agent` class, of which `human_user` is one specialisation.
 
 Acceptance:
 
-- every replica commits the same outbox fact but only the owner sends it;
-- owner failover resumes a pending delivery;
+- every replica commits the same outbox fact but only the current host sends it;
+- host failover resumes a pending delivery from the agent's containing ontology;
 - receiver deduplication makes a crash retry harmless;
 - restarting runtime reconstructs the agent without replaying completed E;
 - the action and delivery path uses no copied KB.
 
 ### Slice 5 -- agent subjects and delegation
 
-- Extend the implemented signed base-user identity into immutable agent
-  subjects.
+- Replace the transitional signed base-user label with the generic
+  agent-bound identity defined in `ontology-actor-architecture.md`, then extend
+  it into immutable delegated subjects.
 - Add delegation, capabilities, and receiving-side subject validation without
   replacing the existing signed-goal or `can_invoke/4` paths.
 - Test whole-chain authorization and laundering attempts.
 
 Acceptance:
 
-- a node cannot forge a user or remove a delegation hop;
+- a node cannot forge an origin agent or remove a delegation hop;
 - signature replay and subject substitution fail;
-- private user facts are not exposed by directory queries.
+- private origin-agent facts are not exposed by directory queries.
 
 ### Slice 6 -- complete agent lifecycle and local AMS
 
 - Complete `quod:agent` beyond the Slice 4 minimum.
-- Add AP lifecycle and migration actions.
+- Add `quod:node`-governed host assignment and migration actions.
 - Implement AID construction and AMS operations.
 - Implement wielding.
 
 Acceptance:
 
 - killing an agent process reconstructs it from facts;
-- moving ownership starts exactly one owner process;
+- moving the committed host epoch starts exactly one current process;
 - an unauthorized user cannot wield or manage an agent;
 - AID identity remains stable when endpoints change.
 
@@ -1042,14 +1129,13 @@ Once approved and implemented:
 - each public predicate and metric documents its user-visible meaning and
   execution context.
 
-## 18. Decisions needed before Slice 5
+## 18. Decisions needed before later FIPA slices
 
 These do not block Slices 1--4:
 
-1. Whether one `quod:user` committee holds every `user_key/3`, or whether it
-   stores only user-home pointers and delegates key ownership to sharded
-   user-authority ontologies. The recommended initial implementation is one
-   sparse registry, with private data elsewhere.
+1. The concrete capability vocabulary carried by `subject/3` for wielding and
+   delegation. The ACL shape and `agent_instance_ref/3` identities are already
+   fixed.
 2. The canonical globally unique AID name format. The recommended form is a
    stable agent ID qualified by its home AP, not by its current node.
 3. Whether durable ACL inbox facts are retained indefinitely, retained by
@@ -1065,8 +1151,9 @@ copies, and deliver a durable effect without loss or replay duplication. The
 same checkpoint unlocks deferred reader-cache invalidation and the explicit
 certified ontology projections in `ontology-subscription-plan.md`.
 
-The product checkpoint is Slice 4: two statically configured agents, one action,
-one owner-gated durable message, and recovery under process and owner failure.
+The product checkpoint is Slice 4: two statically configured agent ontologies,
+one action, one host-fenced durable message, and recovery under process and
+host failure.
 
 Only after both checkpoints survive restart, repeated catch-up, churn, and load
 testing do signing, complete lifecycle, FIPA syntax, directories, and federation

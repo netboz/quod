@@ -40,6 +40,12 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | `quod_ledger_store` | append-only durable block log; one fsync per committed batch |
 | `quod_catchup` / `quod_feed` | verified historical catch-up and live dissemination |
 
+The target actor and system-startup model is specified in
+[`doc/ontology-actor-architecture.md`](doc/ontology-actor-architecture.md):
+nodes, agents, human-facing users, and services are classed instances in exact
+containing ontologies; Prolog actions own policy and governed Erlang external
+predicates bridge committed truth to the live node and network.
+
 **Identity.** A node's id is its **Ed25519 public key** (`node_id`), generated on first
 boot and persisted; the address `{Host, Port}` is demoted to a resolvable routing hint.
 The first frame on a stream is a header announcing the opener's `{Pubkey, Addr}` + channel,
@@ -125,7 +131,7 @@ deploying on substantially larger dedicated resources.
 ```bash
 set -euo pipefail
 
-TAG=0.7.83
+TAG=0.7.84
 REGISTRY=192.168.1.11:5000
 NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
@@ -219,5 +225,8 @@ anchored rolling update.
   implicit predecessor finality, signed transaction relay, inter-ontology asks,
   retained-custody ingress, the signed live ontology directory with private
   direct routes, runtime projection, metrics, and durable Docker/Nomad deployment.
-- **Next:** build user/agent authorization and the functional AMS/DF layers
-  described in `doc/agent-fipa-plan.md` and `doc/deferred.md`.
+- **Next:** complete generic agent identity and node-hosted agent processes as
+  specified by `doc/ontology-actor-architecture.md`, then continue the FIPA
+  AMS/DF layers in `doc/agent-fipa-plan.md`. Root-driven system-ontology startup
+  and engine-local external-predicate ownership are implemented in the current
+  working tree.

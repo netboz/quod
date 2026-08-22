@@ -99,6 +99,7 @@ load_config() ->
             apply_identity(Cfg),
             apply_directory(Cfg),
             apply_foreign_log(Cfg),
+            apply_effect_journal(Cfg),
             Blocks = maps:get(content, Cfg),
             Blocks
     end.
@@ -179,6 +180,13 @@ apply_foreign_log(Cfg) ->
       quod, foreign_log,
       Existing#{cache_dir => filename:join(
                                 content_data_dir(Cfg), "foreign-log")}),
+    ok.
+
+%% Direct-effect custody is node state, shared by every hosted ontology. Keep
+%% it in the same durability domain as the node identity and hosted-set intent,
+%% rather than making one ontology its accidental supervisor or path owner.
+apply_effect_journal(Cfg) ->
+    application:set_env(quod, effect_journal_data_dir, content_data_dir(Cfg)),
     ok.
 
 %% Build the operator-controlled directory configuration. System publication
@@ -434,6 +442,8 @@ build_ns_config(Content) ->
              scope_step_timeout_ms => maps:get(scope_step_timeout_ms, Content, 30000),
              detailed_consensus_metrics =>
                  maps:get(detailed_consensus_metrics, Content, false),
+             external_predicate_modules =>
+                 external_predicate_modules(Content),
              seed_peers => content_seeds(Content)},
     {Ns, with_genesis_hash(Content,
           with_genesis_file(Content,
@@ -474,6 +484,18 @@ content_seeds(Content) ->
 
 default_node_id() ->
     {"127.0.0.1", application:get_env(quod, listen_port, 14567)}.
+
+external_predicate_modules(Content) ->
+    case maps:get(namespace, Content) of
+        %% Root is the only configuration bootstrap exception: this list is
+        %% used when founding root and becomes part of root's hashed genesis
+        %% manifest. Replay and joiners load that committed manifest, not this
+        %% node-local setting. Other ontologies choose modules only during
+        %% their ordinary creation and pin them the same way.
+        <<"quod:root">> ->
+            [quod_directory_predicates, quod_ontology_predicates];
+        _ -> []
+    end.
 
 %% --- helpers -----------------------------------------------------------------
 

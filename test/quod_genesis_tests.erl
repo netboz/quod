@@ -89,6 +89,45 @@ generated_genesis_source_equivalence_test() ->
     InitialOffset = length(FullDiff) - length(InitialDiff),
     ?assertEqual(InitialDiff, lists:nthtail(InitialOffset, FullDiff)).
 
+generated_genesis_contains_one_pinned_predicate_manifest_test() ->
+    Self = <<0:256>>,
+    Ns = <<"genesis:predicate-manifest">>,
+    Modules = [quod_directory_predicates, quod_ontology_predicates],
+    Genesis = quod_simplex:test_genesis_tx(
+                (base_config(Self))#{external_predicate_modules => Modules},
+                Ns, Self, <<16#5b:256>>),
+    {ok, Expected} = quod_predicates:module_manifest(Modules),
+    ?assertEqual(
+       {ok, Expected}, quod_simplex:genesis_predicate_manifest(Genesis)).
+
+caller_cannot_supply_the_reserved_predicate_manifest_test() ->
+    Self = <<0:256>>,
+    Ns = <<"genesis:reserved-predicate-manifest">>,
+    InitialDiff = quod_prolog:terms_to_diff(
+                    [{external_predicate_modules, []}]),
+    ?assertThrow(
+       {genesis_failed, reserved_genesis_manifest},
+       quod_simplex:test_genesis_tx(
+         (base_config(Self))#{genesis_diff => InitialDiff},
+         Ns, Self, <<16#5c:256>>)).
+
+genesis_rejects_a_second_or_malformed_predicate_manifest_test() ->
+    Self = <<0:256>>,
+    Ns = <<"genesis:duplicate-predicate-manifest">>,
+    Genesis0 = quod_simplex:test_genesis_tx(
+                 base_config(Self), Ns, Self, <<16#5d:256>>),
+    #transaction{diff = Diff0} = Genesis0,
+    Duplicate = {assert, {{external_predicate_modules, []}, {[], false}}},
+    ?assertEqual(
+       error,
+       quod_simplex:genesis_predicate_manifest(
+         Genesis0#transaction{diff = [Duplicate | Diff0]})),
+    Malformed = {retract, {{external_predicate_modules, []}, {[], false}}},
+    ?assertEqual(
+       error,
+       quod_simplex:genesis_predicate_manifest(
+         Genesis0#transaction{diff = [Malformed | Diff0]})).
+
 complete_genesis_keeps_block_bound_test() ->
     Self = <<0:256>>,
     Ns = <<"genesis:complete-bound">>,

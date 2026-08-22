@@ -55,18 +55,26 @@ action_shape_3({?ACTION_SHAPE, Transition, Prerequisites, DesiredState},
 -spec state_check_1(term(), list(), tuple()) -> term().
 state_check_1({?STATE_CHECK, Inner}, Next,
               #est{cps = OuterCps, bs = Bs, vn = Vn} = St) ->
-    {Frame, ReadOnly} = quod_erlog_db_local_prove:enter_read_only(St),
-    Ref = make_ref(),
-    Scope = #read_scope{ref = Ref, frame = Frame, caller_next = Next},
-    Failed = fun state_check_failed/3,
-    Boundary = #cp{type = compiled, label = {?MODULE, Ref},
-                   data = Failed, next = Scope, bs = Bs, vn = Vn},
-    Active = ReadOnly#est{cps = [Boundary | OuterCps]},
-    run_read_only(
-      fun() ->
-          erlog_int:prove_body(
-            [{call, Inner}, {?STATE_CHECK_YIELD, Ref}], Active)
-      end, Scope, Active).
+    Desired = erlog_int:dderef(Inner, Bs),
+    case quod_erlog_db_local_prove:staged_desired_state(St, Desired) of
+        true ->
+            erlog_int:prove_body(Next, St);
+        false ->
+            {Frame, ReadOnly} =
+                quod_erlog_db_local_prove:enter_read_only(St),
+            Ref = make_ref(),
+            Scope = #read_scope{ref = Ref, frame = Frame,
+                                caller_next = Next},
+            Failed = fun state_check_failed/3,
+            Boundary = #cp{type = compiled, label = {?MODULE, Ref},
+                           data = Failed, next = Scope, bs = Bs, vn = Vn},
+            Active = ReadOnly#est{cps = [Boundary | OuterCps]},
+            run_read_only(
+              fun() ->
+                  erlog_int:prove_body(
+                    [{call, Inner}, {?STATE_CHECK_YIELD, Ref}], Active)
+              end, Scope, Active)
+    end.
 
 -spec state_check_yield_1(term(), list(), tuple()) -> term().
 state_check_yield_1({?STATE_CHECK_YIELD, Ref}, _InternalNext,

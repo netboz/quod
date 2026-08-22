@@ -44,6 +44,7 @@ Two collection paths:
 | `quod_runtime_reconciles/collapses/dropped_events/rejected_dynamic/rejected_subscriptions{namespace}` | gauge | | running totals: full P rebuilds, work collapsed into a rebuild, dropped events, refused executable declarations, and malformed subscription clauses |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
+| `quod_effect_custody_*` | gauge | | node-wide direct-effect rows, reservations, and the committed capacity policy projected from root |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes whose final outcome was still unknown when their caller deadline elapsed |
@@ -131,6 +132,7 @@ handle_info(refresh, State) ->
     _ = [refresh_log_ns(Ns)    || Ns <- quod_simplex:namespaces()],
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = refresh_foreign_log(),                                      %% one shared owner per node
+    _ = refresh_effect_custody(),                                   %% one shared owner per node
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
     _ = refresh_transport(),                                          %% per-peer QUIC srtt/cwnd/in-flight
@@ -249,10 +251,9 @@ declare(NodeId) ->
     _ = N(quod_foreign_follow_targets, "Distinct foreign ontology histories actively followed on this node."),
     _ = N(quod_foreign_follow_consumers, "Local runtime consumer references sharing the node-wide certified follows."),
     _ = N(quod_foreign_projection_workers, "Foreign fact-projection workers currently materializing or holding certified state."),
-    _ = N(quod_foreign_projection_bytes, "MVCC memory bytes held by all foreign fact projections; their outcome indexes use bounded resident caches over disposable disk state."),
+    _ = N(quod_foreign_projection_bytes, "MVCC memory bytes held by foreign fact projections currently active on this node."),
     _ = N(quod_foreign_follow_building, "Followed targets whose certified fact projection is rebuilding."),
     _ = N(quod_foreign_follow_unreachable, "Followed targets currently unreachable or not certifiable."),
-    _ = N(quod_foreign_follow_capacity_limited, "Followed targets currently inactive because the bounded projection capacity is full."),
     _ = N(quod_foreign_follow_polls, "Total certified-follow refresh attempts started (only ever goes up)."),
     _ = N(quod_foreign_follow_pages, "Total certified history pages added by follow refreshes (only ever goes up)."),
     _ = N(quod_foreign_follow_entries, "Total certified ledger entries added by follow refreshes (only ever goes up)."),
@@ -261,10 +262,19 @@ declare(NodeId) ->
     _ = N(quod_foreign_follow_retries, "Total certified-follow retries scheduled after unavailable work (only ever goes up)."),
     _ = N(quod_foreign_projection_rebuilds, "Total foreign fact-projection generations started (only ever goes up)."),
     _ = N(quod_foreign_follow_max_lag, "Largest certified source height lag observed since this owner started."),
-    _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained within the shared bounded history cache."),
-    _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the bounded cache (only ever goes up)."),
-    _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by shape or capacity checks (only ever goes up)."),
+    _ = N(quod_foreign_bootstrap_candidates, "TLS-authenticated foreign route candidates retained separately from dormant verified histories."),
+    _ = N(quod_foreign_bootstrap_accepted, "Total authenticated foreign route candidate observations accepted into the lazy history owner (only ever goes up)."),
+    _ = N(quod_foreign_bootstrap_rejected, "Total authenticated foreign route candidate observations refused by validation (only ever goes up)."),
     _ = N(quod_foreign_bootstrap_evicted, "Total older candidate endpoints evicted by the per-identity source bound (only ever goes up)."),
+    %% One node-wide direct-effect journal. Capacity comes from committed
+    %% root policy; the two flags distinguish a real zero capacity from
+    %% unlimited or a node that has not received its projection yet.
+    _ = N(quod_effect_custody_active, "Direct effects in crash-durable custody that have not reached a terminal result."),
+    _ = N(quod_effect_custody_reservations, "Direct-effect custody places reserved by proofs that have not yet bound their transaction."),
+    _ = N(quod_effect_custody_terminal, "Completed direct-effect rows retained for local outcome lookup or later compaction."),
+    _ = N(quod_effect_custody_capacity, "Committed bounded direct-effect custody capacity. Zero is also used when the separate unlimited or configured flag explains that no numeric bound applies yet."),
+    _ = N(quod_effect_custody_capacity_configured, "1 after committed root policy has configured direct-effect custody; 0 while startup projection is unavailable."),
+    _ = N(quod_effect_custody_capacity_unlimited, "1 when committed root policy explicitly makes direct-effect custody unlimited; 0 for a numeric capacity or before configuration."),
     %% Stored data: this node's own copy of the shared data.
     _ = G(quod_prolog_applied,       "The number of the newest block this node has written into its stored data."),
     _ = G(quod_prolog_applies,       "Total finished changes this node has written into its stored data (only ever goes up)."),
@@ -504,7 +514,6 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_projection_bytes, projection_bytes),
     _ = Set(quod_foreign_follow_building, follow_building),
     _ = Set(quod_foreign_follow_unreachable, follow_unreachable),
-    _ = Set(quod_foreign_follow_capacity_limited, follow_capacity_limited),
     _ = Set(quod_foreign_follow_polls, follow_polls),
     _ = Set(quod_foreign_follow_pages, follow_pages),
     _ = Set(quod_foreign_follow_entries, follow_entries),
@@ -518,6 +527,41 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_bootstrap_rejected, bootstrap_rejected),
     _ = Set(quod_foreign_bootstrap_evicted, bootstrap_evicted),
     ok.
+
+refresh_effect_custody() ->
+    case quod_effect_journal:stats() of
+        #{capacity := Capacity, active := Active,
+          reservations := Reservations, terminal := Terminal} ->
+            _ = prometheus_gauge:set(quod_effect_custody_active, Active),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_reservations, Reservations),
+            _ = prometheus_gauge:set(quod_effect_custody_terminal, Terminal),
+            {Value, Configured, Unlimited} =
+                effect_capacity_metrics(Capacity),
+            _ = prometheus_gauge:set(quod_effect_custody_capacity, Value),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_capacity_configured, Configured),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_capacity_unlimited, Unlimited),
+            ok;
+        _ ->
+            _ = prometheus_gauge:set(quod_effect_custody_active, 0),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_reservations, 0),
+            _ = prometheus_gauge:set(quod_effect_custody_terminal, 0),
+            _ = prometheus_gauge:set(quod_effect_custody_capacity, 0),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_capacity_configured, 0),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_capacity_unlimited, 0),
+            ok
+    end.
+
+effect_capacity_metrics(unconfigured) -> {0, 0, 0};
+effect_capacity_metrics(unlimited) -> {0, 1, 1};
+effect_capacity_metrics(Capacity)
+  when is_integer(Capacity), Capacity >= 0 ->
+    {Capacity, 1, 0}.
 
 refresh_log_ns(Ns) ->
     case quod_simplex:stats(Ns) of

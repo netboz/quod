@@ -269,24 +269,6 @@ pure_read_no_writes_test() ->
     {Changes, _ReadSet} = scope(C, {parent, tom, {'X'}}),
     ?assertEqual([], Changes).
 
-%%%===================================================================
-%%% private lifecycle authority + isolated committed view
-%%%===================================================================
-
-lifecycle_principal_is_private_overlay_state_test() ->
-    C0 = committed([]),
-    C = quod_predicates:set_context(
-          C0, quod_predicates:effect_context(<<"quod:root">>, 7)),
-    Principal = {node, <<42:256>>},
-    W = quod_erlog_db_local_prove:wrap_state(
-          C, #{lifecycle_principal => Principal}),
-    ?assertEqual({ok, Principal},
-                 quod_erlog_db_local_prove:lifecycle_principal(W)),
-    ?assertEqual(undefined,
-                 quod_erlog_db_local_prove:lifecycle_principal(C)),
-    %% Carrying authority does not alter the Prolog-visible flag store.
-    ?assertEqual(C#est.fs, W#est.fs).
-
 committed_state_drops_staged_data_and_resets_proof_frame_test() ->
     C0 = committed([{parent, tom, bob}]),
     %% The first solution leaves a live choicepoint which would turn a later

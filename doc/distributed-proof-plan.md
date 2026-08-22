@@ -44,8 +44,8 @@ while selected ontologies used a second resumable loop in
 dropped the read set and rejected every overlay change. Steps 2 and 3 replace
 both with one reusable resumable scope runner combining the old continuation
 mechanics with the normal overlay setup, annotation, error mapping, and cleanup.
-Ordinary local and selected proofs delegate to it; `prove_est*` remains only a
-thin synchronous wrapper for runtime/verdict calls. The separate answer
+Ordinary local and selected proofs delegate to it; `prove_est/2` remains only a
+thin synchronous wrapper for runtime projection calls. The separate answer
 interpreter is deleted rather than preserved as a third proof engine.
 
 Across machines there must still be a worker process on the machine hosting the
@@ -243,15 +243,13 @@ interpretation, reverse effect lookup, `assert_effect/1`, generic
 lifecycle declarations, and their stale tests and comments. There is no
 compatibility wrapper.
 
-Node-local create/join operations remain typed external lifecycle operations:
-their declarations use the same argument meaning, but ordinary `goal/1` and
-`transaction/1` reject E-class predicates. The dedicated `run_action` entry is
-restricted to the existing typed create/join allowlist: it checks DesiredState,
-selects the exact requested Transition declaration, proves its prerequisites
-and policy read-only, calls the typed Erlang helper once, then checks
-DesiredState again. Once IO starts it is never backtracked into another action
-clause. This is the existing D/P/E boundary made explicit, not a generic effect
-dispatcher or a claim that external IO is rollback-capable.
+Node-local create/join operations use the same `execute` proof and `action/3`
+relation as every other durable goal. Their staging bridge prepares one typed
+effect in the proof overlay; it never performs IO during the proof. The
+controlling ontology transaction commits that effect request, and the one
+node-wide journal invokes the typed helper once after commit, then verifies the
+real desired state. This is the D/P/E boundary made explicit, not a second
+executor or a claim that external IO is rollback-capable.
 
 ## 4. One proof context, one scope per ontology
 
@@ -335,8 +333,7 @@ resource bounds, not a special circular-call semantics.
 
 Local, co-hosted, and remote selection share this one handler. Location changes
 only transport. This selector authority belongs to engine-owned anchored
-content proofs and to the explicitly anchored, read-only prerequisite phase of
-`run_action`. Raw verdict, projection, and committed-policy adapters remain
+content proofs. Raw verdict, projection, and committed-policy adapters remain
 local deterministic boundaries and cannot manufacture origin authority from
 the content-readable execution context.
 
@@ -521,19 +518,23 @@ helper over the already-built immutable state, not a Prolog proof or operator
 bypass.
 
 The old `can_read/3` clauses are removed in the same hard break rather than
-loaded beside the new rule. Normal same-VM proof and lifecycle entry does not
-bypass `can_invoke`; trusted lifecycle APIs may create/join hosting state but
-are not a raw-content repair path. Arbitrary host VM control remains outside the
-authorization boundary, but no supported operator policy override is added.
+loaded beside the new rule. Same-VM and signed create/join requests are ordinary
+`execute` goals: both pass through `can_invoke/4`, the declared Prolog action,
+sealing, and the transaction/effect path. The raw manager helpers are private
+execution machinery (and TEST-only convenience wrappers), not a supported
+authorization or content-repair API. Arbitrary host VM control remains outside
+the authorization boundary, but no operator policy override is added.
 
 This does not claim to complete the separate user/agent authorization
 milestone. It preserves the current trusted-administrative-fleet boundary
 documented in `content-layer.md`: the target's current validator owns the scope,
 seals its own plan, and authors its own ledger records. A caller never supplies
 or signs a target ontology's diff. When authenticated
-`subject(User, AgentChain, Capabilities)` lands, it replaces the explicit node
+`subject(Agent, AgentChain, Capabilities)` lands, it replaces the explicit node
 principal at this same policy seam without changing distributed proof
-semantics. The still-unauthenticated public prove endpoint remains an existing
+semantics. `Agent` is the originating actor and it and every chain member use the stable
+`agent_instance_ref(Namespace, GenesisAnchor, Instance)` shape; the request
+signature separately proves the submitting active key. The still-unauthenticated public prove endpoint remains an existing
 deployment boundary and is not falsely presented as fixed here.
 
 The public proof API becomes `quod_prolog:prove(Namespace, Goal)`; origin
@@ -629,7 +630,7 @@ Starting limits are concrete and schema-validated:
 | pending foreign verifications global / per authenticated peer | 32 / 4 |
 | pending exact group-phase lookups per ontology | 2, one per depth-one live pipeline slot |
 | outgoing DTX endpoint correlations / inbound endpoint workers per ontology | 512 (`8 participants * 64 validators`) / 8 |
-| cached foreign ontology histories / total cache bytes | 64 / 128 MiB |
+| cached foreign ontology histories / total cache bytes | no protocol population ceiling; dormant disk caches reopen lazily and operator storage monitoring remains operational policy |
 | validators in one committee | 64 |
 
 The same constants are used by schema, producer, decoder, validator, replay,
@@ -851,8 +852,8 @@ signature binds the transcript bytes and digest, `ProofId`, origin identity,
 base, read check, and diff. For a distributed proof, a distinct target
 attestation binds `{TargetIdentity, PlanDigest, ManifestDigest}` without
 changing or duplicating the signed-plan format. Session expiry remains volatile
-and is not part of a consensus validity decision. No fictional user subject is
-encoded while the engine context still has no authenticated user; the current
+and is not part of a consensus validity decision. No fictional agent subject is
+encoded while the engine context still has no authenticated agent; the current
 target-validator/node principal is explicit.
 
 As built in this Step-4 slice (`quod_dtx`), with the same binding properties:
@@ -1322,7 +1323,7 @@ Replace the namespace-only public projection with
 `/4` form. During step 3, the advertised validator/observer role is only a route
 hint: the target authoritatively rechecks that its own key is a current, ready
 validator before admitting a potentially writable scope, and the origin tries
-the next pinned route on an observer rejection. Step 4's bounded foreign-ledger
+the next pinned route on an observer rejection. Step 4's foreign-ledger
 verifier then lets the resolver independently verify the anchored ontology's
 current committee projection and accept only a route whose `NodeKey` is a
 current validator at the pinned base/committee id. A directory entry remains
@@ -1331,10 +1332,11 @@ only an endpoint hint in both steps. Observer routes may serve explicit
 returns `ontology_unreachable`. A membership change invalidates the session or
 causes Prepare to abort under the namespace membership lock.
 
-One bounded, read-only foreign-ledger verifier/cache reuses the existing
+One node-wide, read-only foreign-ledger verifier/cache reuses the existing
 catch-up page format, server bounds, and certificate-validation core, but not
 `quod_catchup:pull/4`: that client assumes a local per-namespace process and its
-pending map is not the required bounded foreign-history owner. For a foreign witness
+pending map is not the required foreign-history owner. Dormant verified histories
+remain on disk and are reopened only when needed. For a foreign witness
 it:
 
 1. starts from the exact pinned genesis;
@@ -1681,7 +1683,7 @@ Keep the change factored rather than adding phase exceptions throughout
   the ordered replay stream from which `quod_outcome` rebuilds;
 - `quod_ledger`: own `classify/1`, the single enumeration of committed
   entry-data kinds that every per-variant consumer dispatches on;
-- `quod_foreign_log`: bounded anchored foreign-history verification and cache;
+- `quod_foreign_log`: lazy anchored foreign-history verification and cache;
 - `quod_simplex`: accept the explicit record union, singleton control barriers,
   asynchronous validation hooks, the one bounded register/activate Begin intent
   and local status barrier, mutually exclusive bounded `genesis_diff` input for
@@ -1819,16 +1821,15 @@ replaces the old QUIC ask protocol outright:
    proof, and leaves every scope at its prior revision. No unbounded or full-KB
    snapshot is hidden behind the hook.
 2. **Give every engine-owned proof the same anchored context, not every raw
-   snapshot.** Normal `prove`/`prove_ro` and lifecycle `run_action` workers use
+   snapshot.** Normal `prove`/`prove_ro`/`execute` workers use
    one factored pinned-origin helper with their engine-generated `ProofId`,
    bounded deadline, root `quod_proof_session`, and `quod_proof_context`.
-   Lifecycle preparation, foreign prerequisites, typed execution, and
-   post-state verification run as fresh invocations in that one read-only
-   anchored session, so repeated foreign prerequisites reuse their scopes.
-   Raw `prove_est*` remains a strictly one-ontology internal snapshot adapter
+   Action declarations and prerequisites run as ordinary invocations in that
+   anchored proof, so repeated foreign prerequisites reuse their scopes.
+   Raw `prove_est/2` remains a strictly one-ontology internal snapshot adapter
    and delegates through `quod_proof_session:run_first`, not a parallel
-   interpreter. Runtime projection/heavy jobs and committed policy subproofs do
-   not acquire distributed origin authority merely because their
+   interpreter. Runtime projection/heavy jobs do not acquire distributed
+   origin authority merely because their
    content-readable `#est.fs` context contains a namespace. Attempting a foreign
    `::` without the private engine-derived anchored metadata fails before
    resolution or dialing as `{ask_requires_anchored_proof, Namespace}`. A
@@ -1836,9 +1837,9 @@ replaces the old QUIC ask protocol outright:
    retain their earlier, stricter `ask_in_membership_verdict` refusal. There is
    no context-less transport fallback and no second `::` implementation after
    the legacy answer loop is deleted. Cross-ontology projection/effect
-   execution is not part of the D-proof selector and remains forbidden; only
-   `run_action`'s explicit read-only prerequisite proof receives this anchored
-   selection authority.
+   execution is not part of the D-proof selector and remains forbidden. An
+   action receives no exceptional selector authority: its prerequisites have
+   exactly the authority of the ordinary proof containing them.
 3. **Use one hard-break scope wire.** A fixed-version, safe-ETF envelope carries
    scope open/close, invocation open/next/cancel, nested-selection requests and
    replies, and savepoint checkpoint/restore/release. It binds the authenticated origin key,
@@ -2350,16 +2351,16 @@ semantic mode is kept.
    barriers, and never enter a content batch. Do not add five phase-specific
    append/relay stacks or duplicate the existing consensus engine.
 
-7. **Verify foreign finality through one bounded owner.** Use the bounded
+7. **Verify foreign finality through one owner.** Use the
    `quod_foreign_log` verifier/cache, which reuses the existing catch-up page and
    certificate-fold code. It is the only new long-lived service. It keys state
-   by exact `{Namespace, GenesisAnchor}`, enforces the declared global/per-peer,
-   history, committee, entry, and byte bounds before allocation, and verifies
+   by exact `{Namespace, GenesisAnchor}`, opens dormant verified caches lazily,
+   and verifies
    the referenced slot, block hash, record digest, committee and phase. The
    shared 64-validator cap is already enforced at genesis, live membership
    admission/proposal validation, restart replay, local catch-up, and
    certificate shape admission before signer-list traversal or cryptography.
-   That same bound applies at the foreign-projection entrance. Before changing
+   Before changing
    `quod_catchup:cap_bytes/2`, pin
    the concrete bound from §8: two 256 KiB payloads plus two 64-signer
    certificates at 96 bytes each are 536,576 bytes before framing, below the

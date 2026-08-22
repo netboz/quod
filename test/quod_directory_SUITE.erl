@@ -321,6 +321,11 @@ start_node(Name, {Host, Port}, {Pub, Seed} = KeyPair,
     Set(node_pubkey, Pub),
     Set(identity_key, quod_identity:key_term({Pub, Seed})),
     Set(identity_cert, quod_identity:mint_cert(KeyPair)),
+    %% The effect journal is node-wide durable state. Keep each CT peer in the
+    %% suite's private directory instead of sharing the developer machine's
+    %% default path (or stale snapshots from another run).
+    Set(effect_journal_data_dir,
+        filename:join(IdentityDir, "effect_journal")),
     Directory =
         case DirectoryServer of
             true ->
@@ -341,14 +346,15 @@ start_root_founder(Peer, {Pub, Seed}, Config) ->
                 ?config(priv_dir, Config),
                 "directory_target_root"),
     KeyTerm = quod_identity:key_term({Pub, Seed}),
-    RootConfig =
-        #{mode => create, role => member, node_id => Pub,
-          identity => #{pubkey => Pub, key => KeyTerm},
-          committee => [], data_dir => DataDir,
-          genesis_file =>
-              filename:join(
-                code:priv_dir(quod),
-                "ontologies/quod_root.pl")},
+    RootContent =
+        #{namespace => ?ROOT, mode => create,
+          genesis_file => <<"ontologies/quod_root.pl">>,
+          data_dir => list_to_binary(DataDir), seeds => []},
+    {?ROOT, RootBase} = peer:call(
+                          Peer, quod_app, build_ns_config, [RootContent]),
+    RootConfig = RootBase#{node_id => Pub,
+                           identity => #{pubkey => Pub, key => KeyTerm},
+                           committee => []},
     {ok, _} = peer:call(
                 Peer, quod_ns_sup, start_namespace,
                 [?ROOT, RootConfig]),

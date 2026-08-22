@@ -1,13 +1,12 @@
 -module(quod_foreign_log).
 -moduledoc """
-Bounded node-wide verifier/cache for foreign certified DTX references.
+Node-wide verifier/cache for foreign certified DTX references.
 
 The owner is intentionally separate from every hosted namespace.  It selects
 from certified directory/history routes, caller-supplied historical routes,
-and bounded contacts learned from authenticated peers.  Callers may also name
-one explicit authenticated route.  The owner admits an exact certified
-reference under global/per-peer and history/cache bounds, then a monitored
-worker pulls the existing catch-up page format over an identity-pinned
+and authenticated contacts learned from peers. Callers may also name one
+explicit authenticated route. The owner admits an exact certified reference,
+then a monitored worker pulls the existing catch-up page format over an identity-pinned
 connection.  The worker folds the history from the caller-pinned
 `{Namespace, GenesisAnchor}` through `quod_catchup`; no route, peer response,
 cache checkpoint, or reference field is trusted by itself.
@@ -31,6 +30,11 @@ Long-lived ontology follows are another consumer of this same owner and cache.
 They add no verifier or history path: a short monitored verification worker
 advances at most one certified page, and one unregistered materializer folds
 only the already-persisted cache through `quod_committed_projection`.
+
+There is no numeric limit on foreign identities, follows, encoded cache, or
+materialized projections. Inactive histories are hibernated: their verified
+cache remains on disk, while decoded history, workers, and channels are opened
+only for an active proof or follow.
 """.
 
 -behaviour(gen_server).
@@ -63,7 +67,6 @@ only the already-persisted cache through `quod_committed_projection`.
 -define(MAX_TIMER_MS, 16#FFFFFFFF).
 -define(MANIFEST_RESERVE_BYTES, 4096).
 -define(MAX_CURRENT_ROUTE_HINTS, (2 * ?MAX_VALIDATORS)).
--define(MAX_BOOTSTRAP_IDENTITIES_PER_PEER, ?DIRECTORY_MAX_NAMESPACES).
 -define(DEFAULT_FOLLOW_POLL_MS, 5000).
 -define(DEFAULT_FOLLOW_RETRY_MS, 250).
 -define(DEFAULT_FOLLOW_MAX_RETRY_MS, 30000).
@@ -133,9 +136,12 @@ only the already-persisted cache through `quod_committed_projection`.
           pulls = #{} :: #{reference() => #pull{}},
           histories = #{} :: #{{binary(), binary()} => #history{}},
           follows = #{} :: #{reference() => {binary(), <<_:256>>}},
+          %% Unverified, TLS-authenticated transport contacts are small P
+          %% hints. They survive releasing an inactive decoded history, but
+          %% are never durable evidence and never carry a projection.
+          bootstrap = #{} :: #{{binary(), binary()} => [{<<_:256>>, term()}]},
           total_bytes = 0 :: non_neg_integer(),
           projection_bytes = 0 :: non_neg_integer(),
-          projection_max_bytes = ?QUOD_MAX_FOREIGN_PROJECTION_BYTES :: pos_integer(),
           follow_poll_ms = ?DEFAULT_FOLLOW_POLL_MS :: pos_integer(),
           follow_retry_ms = ?DEFAULT_FOLLOW_RETRY_MS :: pos_integer(),
           follow_max_retry_ms = ?DEFAULT_FOLLOW_MAX_RETRY_MS :: pos_integer(),
@@ -239,7 +245,7 @@ observe_candidate(_Identity, _Contact) ->
     ok.
 
 -doc """
-Return the one bounded route-hint view for an exact ontology identity.
+Return the route-hint view for one exact ontology identity.
 
 `Supplied` may contain already-certified historical routes from a caller. It
 is merged inside the foreign-log owner with directory, cached-history, and
@@ -273,7 +279,7 @@ valid_route_candidates(Routes) ->
 -doc """
 Verify one exact reference against a co-hosted namespace's durable ledger.
 
-The same bounded cache and forward verifier as `verify/5` are used, but pages
+The same lazy cache and forward verifier as `verify/5` are used, but pages
 come from `LedgerRoot` instead of the network and no route-peer membership
 claim is needed.  Returned generation, committee, committee id, and validator
 routes are those immediately after the referenced slot, never current state.
@@ -371,7 +377,7 @@ verify_local_current(_LedgerRoot, _Ref, _TimeoutMs) ->
 Return one certificate-verified current committee view for an anchored identity.
 
 Unlike `verify_current/3`, this form has no phase reference to establish first.
-It starts from the pinned genesis anchor, advances the shared bounded history
+It starts from the pinned genesis anchor, advances the shared lazy history
 cache through certified entries, then requires a full quorum of the resulting
 committee to corroborate the captured durable height.  Supplied routes remain
 identity-pinned fetch hints only.
@@ -438,7 +444,7 @@ local_current(_LedgerRoot, _Identity, _TimeoutMs) ->
 -doc "Start one monitored consumer of the shared certified target projection.".
 -spec follow({binary(), <<_:256>>}) ->
           {ok, reference()} |
-          {error, invalid_identity | capacity | unavailable}.
+          {error, invalid_identity | unavailable}.
 follow(Identity) ->
     case valid_identity(Identity) of
         true ->
@@ -586,7 +592,7 @@ empty_stats() ->
       peers => 0, follow_consumers => 0, followed_histories => 0,
       projection_workers => 0, projection_bytes => 0,
       follow_building => 0, follow_unreachable => 0,
-      follow_capacity_limited => 0, follow_polls => 0, follow_pages => 0,
+      follow_polls => 0, follow_pages => 0,
       follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
       follow_retries => 0, projection_rebuilds => 0, max_follow_lag => 0}.
 
@@ -607,40 +613,32 @@ init(Opts) ->
     FollowMaxRetry = maps:get(
                        follow_max_retry_ms, Opts,
                        ?DEFAULT_FOLLOW_MAX_RETRY_MS),
-    ProjectionMax = maps:get(
-                      projection_max_bytes, Opts,
-                      ?QUOD_MAX_FOREIGN_PROJECTION_BYTES),
     case valid_options(Root, FetchFun, PageTimeout, FollowPoll, FollowRetry,
-                       FollowMaxRetry, ProjectionMax) of
+                       FollowMaxRetry) of
         true ->
             %% Materialized projections are rebuildable P state. A normal
             %% worker shutdown removes its generation directory; clearing the
             %% dedicated parent here also reclaims anything left by an
             %% untrappable kill before this owner restarted.
             cleanup_projection_dirs(Root),
-            {Histories, Total} = load_histories(Root),
             S0 = #s{root = Root, fetch_fun = FetchFun,
                     page_timeout_ms = PageTimeout,
                     follow_poll_ms = FollowPoll,
                     follow_retry_ms = FollowRetry,
-                    follow_max_retry_ms = FollowMaxRetry,
-                    projection_max_bytes = ProjectionMax,
-                    histories = Histories, total_bytes = Total},
-            {ok, subscribe_histories(S0)};
+                    follow_max_retry_ms = FollowMaxRetry},
+            {ok, S0};
         false ->
             {stop, bad_foreign_log_config}
     end.
 
 valid_options(Root, FetchFun, PageTimeout, FollowPoll, FollowRetry,
-              FollowMaxRetry, ProjectionMax) ->
+              FollowMaxRetry) ->
     (is_list(Root) orelse is_binary(Root)) andalso
         (FetchFun =:= undefined orelse is_function(FetchFun, 5)) andalso
         is_integer(PageTimeout) andalso PageTimeout > 0 andalso
         PageTimeout =< ?MAX_TIMER_MS - 1000 andalso
         valid_timer(FollowPoll) andalso valid_timer(FollowRetry) andalso
-        valid_timer(FollowMaxRetry) andalso FollowRetry =< FollowMaxRetry andalso
-        is_integer(ProjectionMax) andalso ProjectionMax > 0 andalso
-        ProjectionMax =< ?QUOD_MAX_FOREIGN_PROJECTION_BYTES.
+        valid_timer(FollowMaxRetry) andalso FollowRetry =< FollowMaxRetry.
 
 valid_timer(Value) ->
     is_integer(Value) andalso Value > 0 andalso Value =< ?MAX_TIMER_MS.
@@ -670,11 +668,6 @@ handle_call(stats, _From, S) ->
                                       [ok || #history{
                                                reachability =
                                                    {unreachable, _}} <- Followed]),
-              follow_capacity_limited => length(
-                                           [ok || #history{
-                                                    reachability =
-                                                        {unreachable,
-                                                         capacity}} <- Followed]),
               follow_polls => S#s.follow_polls,
               follow_pages => S#s.follow_pages,
               follow_entries => S#s.follow_entries,
@@ -683,19 +676,15 @@ handle_call(stats, _From, S) ->
               follow_retries => S#s.follow_retries,
               projection_rebuilds => S#s.projection_rebuilds,
               max_follow_lag => S#s.max_follow_lag,
-              bootstrap_candidates => lists:sum(
-                                        [length(H#history.bootstrap_hints)
-                                         || H <- maps:values(S#s.histories)]),
+              bootstrap_candidates => bootstrap_candidate_count(S),
               bootstrap_accepted => S#s.bootstrap_accepted,
               bootstrap_rejected => S#s.bootstrap_rejected,
               bootstrap_evicted => S#s.bootstrap_evicted},
     {reply, Reply, S};
 handle_call({follow, Identity}, From, S0) ->
     {ConsumerPid, _Tag} = From,
-    case add_follow(Identity, ConsumerPid, S0) of
-        {ok, FollowRef, S1} -> {reply, {ok, FollowRef}, S1};
-        {error, Reason, S1} -> {reply, {error, Reason}, S1}
-    end;
+    {FollowRef, S1} = add_follow(Identity, ConsumerPid, S0),
+    {reply, {ok, FollowRef}, S1};
 handle_call({ack, FollowRef, NoticeRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0)};
@@ -716,19 +705,21 @@ handle_call(
   {verify_reference, Ref, Phase, TimeoutMs}, From, S0) ->
     case validate_reference_request(Ref, Phase, TimeoutMs) of
         {ok, Identity} ->
-            case selected_route_sources(Identity, [], S0) of
+            S1 = ensure_history(Identity, S0),
+            case selected_route_sources(Identity, [], S1) of
                 {ok, Sources} ->
                     case flatten_route_candidates(route_candidates(Sources)) of
                         [{ChargePeer, _} | _] = Routes ->
                             begin_worker(
                               ChargePeer, Identity, TimeoutMs,
                               {exact_routes, Routes, Ref, Phase},
-                              S0#s.fetch_fun, From, S0);
+                              S1#s.fetch_fun, From, S1);
                         [] ->
-                            {reply, {error, retry}, S0}
+                            {reply, {error, retry},
+                             hibernate_history(Identity, S1)}
                     end;
                 {error, anchor_conflict} ->
-                    {reply, {error, retry}, S0}
+                    {reply, {error, retry}, hibernate_history(Identity, S1)}
             end;
         {error, Reason} ->
             {reply, {error, Reason}, S0}
@@ -736,15 +727,17 @@ handle_call(
 handle_call({route_hints, Identity, Supplied}, _From, S0) ->
     case {valid_identity(Identity), normalize_route_hints(Supplied)} of
         {true, {ok, Normalized}} ->
-            case selected_route_sources(Identity, Normalized, S0) of
-                {ok, Sources} ->
-                    case route_candidates(Sources) of
-                        [_ | _] = Routes -> {reply, {ok, Routes}, S0};
-                        [] -> {reply, {error, unavailable}, S0}
-                    end;
-                {error, anchor_conflict} ->
-                    {reply, {error, anchor_conflict}, S0}
-            end;
+            S1 = ensure_history(Identity, S0),
+            Reply = case selected_route_sources(Identity, Normalized, S1) of
+                        {ok, Sources} ->
+                            case route_candidates(Sources) of
+                                [_ | _] = Routes -> {ok, Routes};
+                                [] -> {error, unavailable}
+                            end;
+                        {error, anchor_conflict} ->
+                            {error, anchor_conflict}
+                    end,
+            {reply, Reply, hibernate_history(Identity, S1)};
         _ ->
             {reply, {error, invalid_request}, S0}
     end;
@@ -848,13 +841,13 @@ handle_call({reserve_page, RequestRef, Bytes}, _From, S0)
   when is_integer(Bytes), Bytes >= 0 ->
     case reserve_page(RequestRef, Bytes, S0) of
         {ok, S1} -> {reply, ok, S1};
-        {error, S1} -> {reply, {error, cache_full}, S1}
+        {error, S1} -> {reply, {error, retry}, S1}
     end;
 handle_call({set_cache_size, RequestRef, Bytes}, _From, S0)
   when is_integer(Bytes), Bytes >= 0 ->
     case set_cache_size(RequestRef, Bytes, S0) of
         {ok, S1} -> {reply, ok, S1};
-        {error, S1} -> {reply, {error, cache_full}, S1}
+        {error, S1} -> {reply, {error, retry}, S1}
     end;
 handle_call({reset_cache, RequestRef}, _From, S0) ->
     case reset_cache_accounting(RequestRef, S0) of
@@ -877,18 +870,19 @@ begin_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
     end.
 
 begin_current_worker(Identity, Supplied, TimeoutMs, WorkFun, From, S0) ->
-    case selected_route_sources(Identity, Supplied, S0) of
+    S1 = ensure_history(Identity, S0),
+    case selected_route_sources(Identity, Supplied, S1) of
         {ok, Sources} ->
             case route_candidates(Sources) of
                 [{ChargePeer, _Endpoints} | _] ->
                     begin_worker(
                       ChargePeer, Identity, TimeoutMs, WorkFun(Sources),
-                      S0#s.fetch_fun, From, S0);
+                      S1#s.fetch_fun, From, S1);
                 [] ->
-                    {reply, {error, retry}, S0}
+                    {reply, {error, retry}, hibernate_history(Identity, S1)}
             end;
         {error, anchor_conflict} ->
-            {reply, {error, retry}, S0}
+            {reply, {error, retry}, hibernate_history(Identity, S1)}
     end.
 
 start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
@@ -1173,7 +1167,7 @@ selected_route_sources(Identity = {Ns, Anchor}, Supplied, S) ->
             {Projection, Bootstrap} =
                 case maps:get(Identity, S#s.histories, undefined) of
                     #history{projection = P, bootstrap_hints = B} -> {P, B};
-                    undefined -> {undefined, []}
+                    undefined -> {undefined, bootstrap_hints(Identity, S)}
                 end,
             {ok, #{directory => Directory, supplied => Supplied,
                    bootstrap => Bootstrap, projection => Projection}}
@@ -1209,65 +1203,35 @@ directory_route_hints(Ns, Anchor) ->
 remember_bootstrap_candidate(Identity, PeerKey, Endpoint, S0) ->
     case valid_identity(Identity) andalso
          is_binary(PeerKey) andalso byte_size(PeerKey) =:= 32 andalso
-         quod_quic:valid_endpoint(Endpoint) andalso
-         bootstrap_peer_admissible(
-           Identity, PeerKey, S0#s.histories) of
+         quod_quic:valid_endpoint(Endpoint) of
         false ->
             S0#s{bootstrap_rejected = S0#s.bootstrap_rejected + 1};
         true ->
-            case ensure_bootstrap_history(Identity, S0) of
-                {ok, S1} ->
-                    H0 = maps:get(Identity, S1#s.histories),
-                    {Hints, Evicted} = put_bootstrap_hint(
-                                         PeerKey, Endpoint,
-                                         H0#history.bootstrap_hints,
-                                         H0#history.projection),
-                    H1 = H0#history{bootstrap_hints = Hints,
-                                    last_used = quod_time:mono_ms()},
-                    S2 = put_history(
-                           Identity, H1,
-                           S1#s{bootstrap_accepted =
-                                    S1#s.bootstrap_accepted + 1,
-                                bootstrap_evicted =
-                                    S1#s.bootstrap_evicted + Evicted}),
-                    schedule_follow(Identity, 0, S2);
-                {error, S1} ->
-                    S1#s{bootstrap_rejected =
-                             S1#s.bootstrap_rejected + 1}
-            end
+            S1 = ensure_bootstrap_history(Identity, S0),
+            H0 = maps:get(Identity, S1#s.histories),
+            {Hints, Evicted} = put_bootstrap_hint(
+                                 PeerKey, Endpoint,
+                                 H0#history.bootstrap_hints,
+                                 H0#history.projection),
+            H1 = H0#history{bootstrap_hints = Hints,
+                            last_used = quod_time:mono_ms()},
+            S2 = put_history(
+                   Identity, H1,
+                   S1#s{bootstrap_accepted =
+                            S1#s.bootstrap_accepted + 1,
+                        bootstrap_evicted =
+                            S1#s.bootstrap_evicted + Evicted}),
+            hibernate_history(
+              Identity, schedule_follow(Identity, 0, S2))
     end.
 
-bootstrap_peer_admissible(Identity, PeerKey, Histories) ->
-    case maps:get(Identity, Histories, undefined) of
-        #history{bootstrap_hints = Hints} ->
-            lists:keymember(PeerKey, 1, Hints) orelse
-                bootstrap_identity_count(PeerKey, Histories) <
-                    ?MAX_BOOTSTRAP_IDENTITIES_PER_PEER;
-        undefined ->
-            bootstrap_identity_count(PeerKey, Histories) <
-                ?MAX_BOOTSTRAP_IDENTITIES_PER_PEER
-    end.
-
-bootstrap_identity_count(PeerKey, Histories) ->
-    maps:fold(
-      fun(_Identity, #history{bootstrap_hints = Hints}, Count) ->
-          case lists:keymember(PeerKey, 1, Hints) of
-              true -> Count + 1;
-              false -> Count
-          end
-      end, 0, Histories).
-
-%% A transport hint must never evict verified history.  Candidate-only rows
-%% consume the existing global history budget and are refused once it is full;
-%% normal verified/follow work retains the existing LRU eviction policy.
+%% A transport hint creates only a lazy, dormant history row. It never evicts
+%% verified history: there is no global history budget to compete for.
 ensure_bootstrap_history(Identity, S = #s{histories = Histories})
   when is_map_key(Identity, Histories) ->
-    {ok, S};
-ensure_bootstrap_history(Identity, S = #s{histories = Histories})
-  when map_size(Histories) < ?QUOD_MAX_FOREIGN_HISTORIES ->
-    ensure_history(Identity, S);
-ensure_bootstrap_history(_Identity, S) ->
-    {error, S}.
+    S;
+ensure_bootstrap_history(Identity, S) ->
+    ensure_history(Identity, S).
 
 put_bootstrap_hint(PeerKey, Endpoint, Hints0, Projection) ->
     WithoutPeer = [{Peer, Ep} || {Peer, Ep} <- Hints0,
@@ -1323,59 +1287,39 @@ admit_request(Peer, Identity, S0) ->
         false ->
             {error, busy, S0};
         true ->
-            case ensure_history(Identity, S0) of
-                {ok, S1} ->
-                    History = maps:get(Identity, S1#s.histories),
-                    case History#history.active of
-                        none ->
-                            Ref = make_ref(),
-                            H1 = History#history{active = Ref,
-                                                 last_used = quod_time:mono_ms()},
-                            Counts1 = (S1#s.peer_counts)#{Peer => PeerCount + 1},
-                            {ok, Ref,
-                             S1#s{histories =
-                                      (S1#s.histories)#{Identity => H1},
-                                   peer_counts = Counts1}};
-                        _ ->
-                            {error, history_busy, S1}
-                    end;
-                {error, S1} ->
-                    {error, cache_full, S1}
+            S1 = ensure_history(Identity, S0),
+            History = maps:get(Identity, S1#s.histories),
+            case History#history.active of
+                none ->
+                    Ref = make_ref(),
+                    H1 = History#history{active = Ref,
+                                         last_used = quod_time:mono_ms()},
+                    Counts1 = (S1#s.peer_counts)#{Peer => PeerCount + 1},
+                    {ok, Ref,
+                     S1#s{histories =
+                              (S1#s.histories)#{Identity => H1},
+                           peer_counts = Counts1}};
+                _ ->
+                    {error, history_busy, S1}
             end
     end.
 
 ensure_history(Identity, S = #s{histories = Histories})
   when is_map_key(Identity, Histories) ->
-    {ok, S};
+    S;
 ensure_history(Identity = {Ns, _Anchor}, S0) ->
-    case make_history_room(S0) of
-        {ok, S1} ->
-            CacheNs = cache_namespace(Identity),
-            H = #history{identity = Identity, cache_ns = CacheNs,
-                         last_used = quod_time:mono_ms()},
-            S2 = add_channel(Ns, S1),
-            {ok, S2#s{histories = (S2#s.histories)#{Identity => H}}};
-        {error, S1} ->
-            {error, S1}
-    end.
-
-make_history_room(S) when map_size(S#s.histories) < ?QUOD_MAX_FOREIGN_HISTORIES ->
-    {ok, S};
-make_history_room(S) ->
-    evict_one(S, none).
+    H0 = load_or_new_history(S0#s.root, Identity),
+    H = H0#history{bootstrap_hints = bootstrap_hints(Identity, S0)},
+    S1 = add_channel(Ns, S0#s{bootstrap = maps:remove(Identity, S0#s.bootstrap)}),
+    S1#s{histories = (S1#s.histories)#{Identity => H}}.
 
 reserve_page(RequestRef, Bytes, S0) ->
     case request_identity(RequestRef, S0) of
         {ok, Identity} ->
-            case make_byte_room(Bytes, Identity, S0) of
-                {ok, S1} ->
-                    H0 = maps:get(Identity, S1#s.histories),
-                    H1 = H0#history{bytes = H0#history.bytes + Bytes},
-                    {ok, S1#s{histories =
-                                  (S1#s.histories)#{Identity => H1},
-                               total_bytes = S1#s.total_bytes + Bytes}};
-                {error, S1} -> {error, S1}
-            end;
+            H0 = maps:get(Identity, S0#s.histories),
+            H1 = H0#history{bytes = H0#history.bytes + Bytes},
+            {ok, S0#s{histories = (S0#s.histories)#{Identity => H1},
+                      total_bytes = S0#s.total_bytes + Bytes}};
         error -> {error, S0}
     end.
 
@@ -1393,59 +1337,13 @@ set_cache_size(RequestRef, Bytes, S0) ->
                                        (H0#history.bytes - Bytes)}};
                 false ->
                     Delta = Bytes - H0#history.bytes,
-                    case make_byte_room(Delta, Identity, S0) of
-                        {ok, S1} ->
-                            H1 = H0#history{bytes = Bytes},
-                            {ok, S1#s{histories =
-                                         (S1#s.histories)#{Identity => H1},
-                                      total_bytes = S1#s.total_bytes + Delta}};
-                        {error, S1} -> {error, S1}
-                    end
+                    H1 = H0#history{bytes = Bytes},
+                    {ok, S0#s{histories =
+                                  (S0#s.histories)#{Identity => H1},
+                               total_bytes = S0#s.total_bytes + Delta}}
             end;
         error -> {error, S0}
     end.
-
-make_byte_room(Bytes, _Identity, S)
-  when Bytes > ?QUOD_MAX_FOREIGN_CACHE_BYTES ->
-    {error, S};
-make_byte_room(Bytes, _Identity, S)
-  when S#s.total_bytes + Bytes =< ?QUOD_MAX_FOREIGN_CACHE_BYTES ->
-    {ok, S};
-make_byte_room(Bytes, Identity, S0) ->
-    case evict_one(S0, Identity) of
-        {ok, S1} -> make_byte_room(Bytes, Identity, S1);
-        {error, S1} -> {error, S1}
-    end.
-
-evict_one(S = #s{histories = Histories}, ExceptIdentity) ->
-    Candidates =
-        [H || {Identity,
-               H = #history{active = none, consumers = Consumers,
-                            materializer = none}} <- maps:to_list(Histories),
-              map_size(Consumers) =:= 0,
-              Identity =/= ExceptIdentity],
-    case Candidates of
-        [] -> {error, S};
-        _ ->
-            [First | Tail] = Candidates,
-            Victim = lists:foldl(
-                       fun(H = #history{last_used = Used},
-                           Best = #history{last_used = BestUsed}) ->
-                               case Used < BestUsed of
-                                   true -> H;
-                                   false -> Best
-                               end
-                       end, First, Tail),
-            evict_history(Victim#history.identity, S)
-    end.
-
-evict_history(Identity = {Ns, _}, S0) ->
-    H = maps:get(Identity, S0#s.histories),
-    _ = file:del_dir_r(cache_dir(S0#s.root, H#history.cache_ns)),
-    Histories1 = maps:remove(Identity, S0#s.histories),
-    S1 = S0#s{histories = Histories1,
-              total_bytes = max(0, S0#s.total_bytes - H#history.bytes)},
-    {ok, remove_channel(Ns, S1)}.
 
 reset_cache_accounting(RequestRef, S0) ->
     case request_identity(RequestRef, S0) of
@@ -1506,7 +1404,7 @@ finish_request(RequestRef, Reply, S0) ->
                     finish_follow_refresh(Identity, Token, Reply, S2);
                 _ ->
                     gen_server:reply(From, Reply),
-                    S2
+                    hibernate_history(Identity, S2)
             end;
         error ->
             S0
@@ -1518,38 +1416,22 @@ finish_request(RequestRef, Reply, S0) ->
 
 add_follow(Identity, ConsumerPid, S0)
   when is_pid(ConsumerPid) ->
-    case map_size(S0#s.follows) < ?QUOD_MAX_FOREIGN_FOLLOW_CONSUMERS of
-        false ->
-            {error, capacity, S0};
-        true ->
-            case ensure_history(Identity, S0) of
-                {ok, S1} ->
-                    H0 = maps:get(Identity, S1#s.histories),
-                    case map_size(H0#history.consumers) <
-                         ?DIRECTORY_MAX_NAMESPACES of
-                        false ->
-                            {error, capacity, S1};
-                        true ->
-                            FollowRef = make_ref(),
-                            MRef = erlang:monitor(process, ConsumerPid),
-                            Consumer = #consumer{pid = ConsumerPid, mref = MRef},
-                            H1 = H0#history{
-                                   consumers = (H0#history.consumers)#{
-                                                 FollowRef => Consumer},
-                                   projection_state = building,
-                                   last_used = quod_time:mono_ms()},
-                            S2 = S1#s{
-                                   histories = (S1#s.histories)#{Identity => H1},
-                                   follows = (S1#s.follows)#{FollowRef => Identity}},
-                            S3 = notify_follow(
-                                   FollowRef,
-                                   {building, materialized_height(H1)}, S2),
-                            {ok, FollowRef, schedule_follow(Identity, 0, S3)}
-                    end;
-                {error, S1} ->
-                    {error, capacity, S1}
-            end
-    end.
+    S1 = ensure_history(Identity, S0),
+    H0 = maps:get(Identity, S1#s.histories),
+    FollowRef = make_ref(),
+    MRef = erlang:monitor(process, ConsumerPid),
+    Consumer = #consumer{pid = ConsumerPid, mref = MRef},
+    H1 = H0#history{
+           consumers = (H0#history.consumers)#{FollowRef => Consumer},
+           projection_state = building,
+           last_used = quod_time:mono_ms()},
+    S2 = S1#s{
+           histories = (S1#s.histories)#{Identity => H1},
+           follows = (S1#s.follows)#{FollowRef => Identity}},
+    S3 = notify_follow(
+           FollowRef,
+           {building, materialized_height(H1)}, S2),
+    {FollowRef, schedule_follow(Identity, 0, S3)}.
 
 acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0) ->
     case follow_consumer(FollowRef, S0) of
@@ -1593,7 +1475,7 @@ remove_follow_any(FollowRef, S0) ->
                    Identity, H1,
                    S0#s{follows = maps:remove(FollowRef, S0#s.follows)}),
             case map_size(Consumers1) of
-                0 -> stop_follow_target(Identity, S1);
+                0 -> hibernate_history(Identity, stop_follow_target(Identity, S1));
                 _ -> S1
             end;
         error ->
@@ -1632,6 +1514,36 @@ put_consumer(FollowRef, Consumer, H) ->
 
 put_history(Identity, H, S) ->
     S#s{histories = (S#s.histories)#{Identity => H}}.
+
+%% A cache is durable verified data. Once no request or follow owns it, keep
+%% it on disk but drop its decoded projection, route hints, channel subscription
+%% and owner row. A later exact use reopens and verifies the same cache lazily.
+hibernate_history(Identity = {Ns, _}, S0) ->
+    case maps:get(Identity, S0#s.histories, undefined) of
+        #history{active = none, consumers = Consumers, materializer = none,
+                 follow_timer = none} = H
+          when map_size(Consumers) =:= 0 ->
+            Bootstrap = case H#history.bootstrap_hints of
+                            [] -> maps:remove(Identity, S0#s.bootstrap);
+                            Hints -> (S0#s.bootstrap)#{Identity => Hints}
+                        end,
+            S1 = S0#s{histories = maps:remove(Identity, S0#s.histories),
+                      bootstrap = Bootstrap,
+                      total_bytes = max(0, S0#s.total_bytes - H#history.bytes)},
+            remove_channel(Ns, S1);
+        _ ->
+            S0
+    end.
+
+bootstrap_hints(Identity, #s{histories = Histories, bootstrap = Bootstrap}) ->
+    case maps:get(Identity, Histories, undefined) of
+        #history{bootstrap_hints = Hints} -> Hints;
+        undefined -> maps:get(Identity, Bootstrap, [])
+    end.
+
+bootstrap_candidate_count(#s{histories = Histories, bootstrap = Bootstrap}) ->
+    lists:sum([length(H#history.bootstrap_hints) || H <- maps:values(Histories)]) +
+        lists:sum([length(Hints) || Hints <- maps:values(Bootstrap)]).
 
 notify_history(Identity, Notice, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -1719,13 +1631,6 @@ begin_follow_refresh(Identity, Token, S0) ->
                            {follow, Identity, Token}, S1) of
                         {ok, S2} ->
                             S2#s{follow_polls = S2#s.follow_polls + 1};
-                        {error, cache_full, S2} ->
-                            retry_follow(
-                              Identity, capacity,
-                              notify_history(
-                                Identity,
-                                {unreachable, capacity,
-                                 materialized_height(H1)}, S2));
                         {error, _Busy, S2} ->
                             retry_follow(Identity, history_busy, S2)
                     end
@@ -1745,7 +1650,7 @@ follow_request_timeout(S) ->
 finish_follow_refresh(Identity, _Token, Reply, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
         #history{consumers = Consumers} when map_size(Consumers) =:= 0 ->
-            S0;
+            hibernate_history(Identity, S0);
         #history{} = H0 ->
             Now = quod_time:mono_ms(),
             {View, Hint, Reason, NormalDelay} =
@@ -1886,42 +1791,33 @@ projection_ready(Identity, Generation,
             Total = max(
                       0, S0#s.projection_bytes -
                              M0#materializer.memory_bytes + MemoryBytes),
-            case Total =< S0#s.projection_max_bytes of
-                true ->
-                    M1 = M0#materializer{
-                           height = Height, projection_id = ProjectionId,
-                           memory_bytes = MemoryBytes},
-                    LastAdvance = case Height > M0#materializer.height of
-                                      true -> quod_time:mono_ms();
-                                      false -> H0#history.last_advance_ms
-                                  end,
-                    H1 = H0#history{materializer = M1,
-                                    last_advance_ms = LastAdvance,
-                                    projection_state = ready},
-                    S1 = put_history(
-                           Identity, H1,
-                           S0#s{projection_bytes = Total,
-                                max_follow_lag = max(
-                                                   S0#s.max_follow_lag,
-                                                   follow_lag(H1, Height))}),
-                    Freshness = follow_freshness(H1, Height),
-                    {Resnapshot, Heads} = bounded_heads(
-                                            Resnapshot0 orelse From =:= 0,
-                                            Heads0),
-                    Notice = case Resnapshot of
-                                 true -> {resnapshot, Height, ProjectionId,
-                                          Freshness};
-                                 false -> {advanced, From, Height, ProjectionId,
-                                           Freshness, Heads}
-                             end,
-                    notify_history(Identity, Notice, S1);
-                false ->
-                    S1 = discard_materializer(Identity, H0, M0, S0),
-                    retry_follow(
-                      Identity, capacity,
-                      notify_history(
-                        Identity, {unreachable, capacity, Height}, S1))
-            end;
+            M1 = M0#materializer{
+                   height = Height, projection_id = ProjectionId,
+                   memory_bytes = MemoryBytes},
+            LastAdvance = case Height > M0#materializer.height of
+                              true -> quod_time:mono_ms();
+                              false -> H0#history.last_advance_ms
+                          end,
+            H1 = H0#history{materializer = M1,
+                            last_advance_ms = LastAdvance,
+                            projection_state = ready},
+            S1 = put_history(
+                   Identity, H1,
+                   S0#s{projection_bytes = Total,
+                        max_follow_lag = max(
+                                           S0#s.max_follow_lag,
+                                           follow_lag(H1, Height))}),
+            Freshness = follow_freshness(H1, Height),
+            {Resnapshot, Heads} = bounded_heads(
+                                    Resnapshot0 orelse From =:= 0,
+                                    Heads0),
+            Notice = case Resnapshot of
+                         true -> {resnapshot, Height, ProjectionId,
+                                  Freshness};
+                         false -> {advanced, From, Height, ProjectionId,
+                                   Freshness, Heads}
+                     end,
+            notify_history(Identity, Notice, S1);
         error -> S0
     end;
 projection_ready(_Identity, _Generation, _Result, S) ->
@@ -2148,11 +2044,6 @@ remove_channel(Ns, S0) ->
             S0#s{channels = (S0#s.channels)#{Chan => {Ns, Count - 1}}};
         _ -> S0
     end.
-
-subscribe_histories(S0) ->
-    lists:foldl(
-      fun({Ns, _Anchor}, Acc) -> add_channel(Ns, Acc) end,
-      S0, maps:keys(S0#s.histories)).
 
 %%%===================================================================
 %%% Verification worker
@@ -2850,7 +2741,7 @@ persist_verified_page(
                 {error, cache_corrupt}
             end;
         {error, _} ->
-            {error, cache_full}
+            {error, cache_unavailable}
     end.
 
 current_route_candidates(
@@ -3400,7 +3291,7 @@ ensure_manifest(Owner, RequestRef, Root, {Ns, Anchor}, CacheNs) ->
                     atomic_write(
                       Path, term_to_binary(Expected, [deterministic]));
                 {error, _} ->
-                    {error, cache_full}
+                    {error, cache_unavailable}
             end;
         _ ->
             {error, corrupt_manifest}
@@ -3492,29 +3383,21 @@ sync_dir(Dir) ->
         {error, Reason} -> {error, Reason}
     end.
 
-load_histories(Root) ->
-    case file:list_dir(Root) of
-        {ok, Names} -> load_history_dirs(Root, Names, #{}, 0);
-        {error, enoent} -> {#{}, 0};
-        {error, _} -> {#{}, 0}
-    end.
-
-load_history_dirs(_Root, [], Histories, Total) ->
-    {Histories, Total};
-load_history_dirs(Root, [Name | Rest], Histories0, Total0) ->
-    Dir = filename:join(Root, Name),
+%% Foreign caches are durable D state, not a resident catalogue.  Opening an
+%% owner must not materialize every remote ontology the node has ever touched:
+%% an exact identity is loaded only when proof verification or a follow needs
+%% it.  A bad cache is disposable derived state and is rebuilt from the
+%% authenticated source on that first use.
+load_or_new_history(Root, Identity) ->
+    CacheNs = cache_namespace(Identity),
+    Dir = cache_dir(Root, CacheNs),
     case load_history_dir(Root, Dir) of
-        {ok, H = #history{identity = Identity, bytes = Bytes}}
-          when map_size(Histories0) < ?QUOD_MAX_FOREIGN_HISTORIES,
-               Total0 + Bytes =< ?QUOD_MAX_FOREIGN_CACHE_BYTES ->
-            load_history_dirs(
-              Root, Rest, Histories0#{Identity => H}, Total0 + Bytes);
-        {ok, _OverLimit} ->
+        {ok, #history{identity = Identity} = H} ->
+            H#history{last_used = quod_time:mono_ms()};
+        _ ->
             _ = remove_cache_path(Dir),
-            load_history_dirs(Root, Rest, Histories0, Total0);
-        error ->
-            _ = remove_cache_path(Dir),
-            load_history_dirs(Root, Rest, Histories0, Total0)
+            #history{identity = Identity, cache_ns = CacheNs,
+                     last_used = quod_time:mono_ms()}
     end.
 
 load_history_dir(Root, Dir) ->

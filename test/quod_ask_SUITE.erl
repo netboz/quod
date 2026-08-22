@@ -91,9 +91,7 @@ init_per_suite(Config) ->
             "secret(42).\n"
             "hidden(99).\n"]),
     start_namespace(Target, TargetPub, ?PRIVATE_NS, PrivateGenesis, [], Config),
-    RootGenesis = filename:join(
-                    code:priv_dir(quod), "ontologies/quod_root.pl"),
-    start_namespace(Target, TargetPub, ?ROOT_NS, RootGenesis, [], Config),
+    start_root_namespace(Target, TargetPub, Config),
     start_brahms(Target, ?NS, TargetAddr, []),
     DirectoryAllow = #{?NS => [WrongPub, TargetPub],
                        ?THIRD_NS => [ThirdPub],
@@ -1090,6 +1088,10 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
     Set(node_pubkey, Pub),
     Set(identity_key, Key),
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
+    Set(effect_journal_data_dir,
+        filename:join(
+          ?config(priv_dir, Config),
+          atom_to_list(Name) ++ "_effect_journal")),
     Set(foreign_log,
         #{cache_dir => filename:join(
                          ?config(priv_dir, Config),
@@ -1114,6 +1116,22 @@ start_namespace(Peer, Pub, Ns, Genesis, Seeds, Config) ->
             data_dir => DataDir, seed_peers => Seeds,
             genesis_file => Genesis},
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [Ns, Cfg]),
+    ok.
+
+start_root_namespace(Peer, Pub, Config) ->
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                unicode:characters_to_list(
+                  [atom_to_list(peer:call(Peer, erlang, node, [])),
+                   "_", ?ROOT_NS])),
+    Content = #{namespace => ?ROOT_NS, mode => create,
+                genesis_file => <<"ontologies/quod_root.pl">>,
+                data_dir => list_to_binary(DataDir), seeds => []},
+    {?ROOT_NS, Cfg0} = peer:call(
+                         Peer, quod_app, build_ns_config, [Content]),
+    {ok, _} = peer:call(
+                Peer, quod_ns_sup, start_namespace,
+                [?ROOT_NS, Cfg0#{node_id => Pub}]),
     ok.
 
 start_brahms(Peer, Ns, SelfAddr, Seeds) ->

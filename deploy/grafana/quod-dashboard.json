@@ -1544,11 +1544,6 @@
           "legendFormat": "follow unreachable · {{node_id}}"
         },
         {
-          "refId": "L",
-          "expr": "quod_foreign_follow_capacity_limited{node_id=~\"$node\"}",
-          "legendFormat": "follow capacity limited · {{node_id}}"
-        },
-        {
           "refId": "M",
           "expr": "quod_foreign_bootstrap_candidates{node_id=~\"$node\"}",
           "legendFormat": "authenticated route candidates · {{node_id}}"
@@ -2116,6 +2111,124 @@
           "expr": "max(quod_consensus_batch_window_ms{node_id=~\"$node\", namespace=~\"$namespace\"})",
           "legendFormat": "configured window",
           "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 230,
+      "type": "row",
+      "title": "Direct-effect custody",
+      "collapsed": false,
+      "gridPos": {
+        "x": 0,
+        "y": 197,
+        "w": 24,
+        "h": 1
+      },
+      "panels": []
+    },
+    {
+      "id": 231,
+      "type": "timeseries",
+      "title": "Effect custody pressure",
+      "description": "Node-wide crash-durable effects waiting for completion, reservations held by active proofs, retained terminal rows, and the numeric capacity committed in quod:node. When unlimited is enabled the capacity line is zero and the adjacent policy panel says unlimited.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 198,
+        "w": 16,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_effect_custody_active{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} active",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_effect_custody_reservations{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} reservations",
+          "refId": "B"
+        },
+        {
+          "expr": "quod_effect_custody_terminal{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} terminal",
+          "refId": "C"
+        },
+        {
+          "expr": "quod_effect_custody_capacity{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} capacity",
+          "refId": "D"
+        }
+      ]
+    },
+    {
+      "id": 232,
+      "type": "stat",
+      "title": "Effect custody policy",
+      "description": "Configured is 1 after the committed quod:node policy has reached the journal. Unlimited is 1 only when that policy explicitly removes the numeric capacity.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 198,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      },
+      "targets": [
+        {
+          "expr": "quod_effect_custody_capacity_configured{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} configured",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_effect_custody_capacity_unlimited{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} unlimited",
+          "refId": "B"
         }
       ]
     }

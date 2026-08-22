@@ -294,6 +294,19 @@ stages, not carried forward:
   enough validators have commit-latched the block, no node can safely recreate its payload. A later
   availability layer (DispersedSimplex dispersal/erasure fragments or durable proposal storage) must close
   that bound. Do not claim unconditional liveness for arbitrary `>f` crash schedules until both are solved.
+- **Ontology actors and system bootstrap — planned architecture migration.**
+  `doc/ontology-actor-architecture.md` replaces the old split user/agent/AP
+  identity model. Governed external-predicate ownership and root-driven
+  synchronisation of `quod:node`, `quod:agent`, and `quod:human_user` are
+  implemented in the current working tree, pending review and commit.
+  Remaining work is: one agent-bound signed-request format replacing
+  `{user, Key}`; anchored
+  classed instances and their containing ontologies; committed host fencing
+  and projection-driven process restart; a node-local encrypted vault; and
+  migration by destination key rotation rather than secret transport. This
+  work reuses normal
+  transactions/DTX and does not change the consensus algorithm. The concrete
+  capability vocabulary for delegation remains deferred.
 - **Runtime (P tier, agents Slice 2) — remaining follow-ups.** (1) *Validator-side
   declaration authorization*: `can_declare_runtime/3` is still conceptual — activation is gated
   solely by the full-term founding-block match in `quod_runtime`; the committee judging a

@@ -121,17 +121,17 @@ as a side effect. This is an internal plumbing correction, not transport work.
 
 The existing `quod_quic` address cache has neither capacity eviction nor
 expiry. This closure does not widen or depend on it: new identity associations
-live under `quod_foreign_log`'s existing bounded route-hint policy. The address
+live under `quod_foreign_log`'s volatile route-hint state. The address
 cache's trusted-fleet posture remains separate deferred transport hardening and
 must not be described as already bounded.
 
-### 4.2 One bounded bootstrap-candidate seam in `quod_foreign_log`
+### 4.2 One bootstrap-candidate seam in `quod_foreign_log`
 
-`quod_foreign_log`'s **existing bounded route-hint state** now also retains volatile
-bootstrap candidates for an exact ontology identity. Do not add a parallel
-per-identity map. The existing `?MAX_CURRENT_ROUTE_HINTS` policy and the
-history row's certified post-slot committee routes remain the one storage and
-selection mechanism.
+`quod_foreign_log` retains volatile bootstrap candidates for an exact ontology
+identity. When its decoded verified history hibernates, these small transport
+hints remain separate P state; no endpoint is written to the durable cache.
+On the next use, the owner combines them with the lazily reopened certified
+history through the same route-selection function.
 
 A candidate is `{NodeKey, Endpoint}` from an authenticated link or existing
 route source. It is never treated as a validator route merely because it is
@@ -320,8 +320,8 @@ configured reverse seed is required after step 4.
   under the existing foreign-log hint cap. One node key may occupy at most the
   existing directory namespace bound, so it cannot fill the global history
   budget by claiming arbitrary identities.
-- Reuse the existing foreign-history cap, DTX participant cap, validator cap,
-  correlation cap, and request deadlines. The pre-existing uncapped QUIC
+- Reuse the DTX participant cap, validator cap, correlation cap, and request
+  deadlines. Foreign histories themselves have no numeric cap. The pre-existing uncapped QUIC
   address cache is neither expanded nor treated as the new association owner.
 - Prefer an already-live authenticated connection, but never wait indefinitely
   for it.

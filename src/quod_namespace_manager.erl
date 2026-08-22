@@ -11,9 +11,18 @@ content is also checkpointed by this same owner, so a full application restart
 restores deliberate hosting without scanning directories or starting unrelated
 ledger data.
 
+After the statically configured root becomes ready, this same owner reads its
+committed `system_ontology/2` catalogue. Exact anchored system joins are
+merged into the existing desired-state projection; there is no second system
+ontology supervisor or restart mechanism. Local dynamic stop requests remove
+only local intent and cannot override static or committed-root ownership.
+
 This process is also the sole publisher of the explorer's namespace-to-ledger
 projection. A caller may die or time out after a start request is accepted, so
 post-start genesis validation and publication must not live in that caller.
+Every potentially slow supervisor start or stop—direct lifecycle or desired
+state reconciliation—runs through one monitored mutation lane. The manager
+itself only owns state, ordering, persistence, and replies.
 """.
 
 -behaviour(gen_server).
@@ -27,6 +36,11 @@ post-start genesis validation and publication must not live in that caller.
 -define(KEY, {namespace_manager, node}).
 -define(DESIRED_ENV, namespace_desired).
 -define(RETRY_MS, 250).
+-define(RETRY_MAX_MS, 60000).
+-define(SYSTEM_RETRY_MIN_MS, 1000).
+-define(SYSTEM_RETRY_MAX_MS, 60000).
+-define(SYSTEM_QUERY_TIMEOUT_MS, 15000).
+-define(ROOT_NS, <<"quod:root">>).
 
 -record(s, {
     desired = #{content => #{}, brahms => #{}},
@@ -35,7 +49,20 @@ post-start genesis validation and publication must not live in that caller.
     brahms_sup = undefined,
     brahms_monitor = undefined,
     retry = undefined,
-    durable_content = #{}
+    mutation_worker = undefined,
+    reconcile_dirty = false,
+    reconcile_incomplete = false,
+    pending_calls = undefined,
+    durable_content = #{},
+    static_content = #{},
+    ephemeral_content = #{},
+    system_content = #{},
+    system_blocked = #{},
+    system_query = undefined,
+    system_retry = undefined,
+    system_retry_ms = ?SYSTEM_RETRY_MIN_MS,
+    system_dirty = false,
+    reconcile_retry_ms = ?RETRY_MS
 }).
 
 start_link() ->
@@ -88,15 +115,30 @@ init([]) ->
     %% could unexpectedly reappear if the static block is removed later.
     Durable = maps:without(maps:keys(Static), Durable0),
     ok = persist_durable_if_changed(Durable0, Durable),
-    Content = maps:merge(
-                maps:merge(Durable, Static),
-                maps:get(content, Desired0)),
+    Mirrored = maps:get(content, Desired0),
+    System = maps:filter(
+               fun(_Ns, Config) ->
+                   is_map(Config)
+                       andalso maps:get(system_ontology, Config, false) =:= true
+               end, Mirrored),
+    Ephemeral = maps:without(
+                  maps:keys(maps:merge(maps:merge(Durable, Static), System)),
+                  Mirrored),
+    Content = content_projection(Durable, Ephemeral, System, Static),
     Desired = Desired0#{content => Content},
     persist_desired(Desired),
+    true = quod_reg:subscribe({runtime, ?ROOT_NS}),
     self() ! reconcile,
-    {ok, #s{desired = Desired, durable_content = Durable}}.
+    self() ! refresh_system_catalogue,
+    {ok, #s{desired = Desired, durable_content = Durable,
+            static_content = Static, ephemeral_content = Ephemeral,
+            system_content = System, pending_calls = queue:new()}}.
 
-handle_call(
+handle_call(Request, From, S) ->
+    S0 = reset_reconcile_backoff(S),
+    {noreply, continue_work(enqueue_call(Request, From, S0))}.
+
+begin_request(
   {start_new, content, Ns, Config}, _From,
   S = #s{desired = Desired}) ->
     Content = maps:get(content, Desired),
@@ -108,48 +150,25 @@ handle_call(
             %% attach a new config to a process that was started under another.
             {reply, {error, {already_configured, Ns}}, S};
         {false, undefined} ->
-            Result = start_one(content, Ns, Config),
-            case Result of
-                {ok, Pid} when is_pid(Pid) ->
-                    complete_new_content(Ns, Config, S);
-                {ok, Pid, _Info} when is_pid(Pid) ->
-                    complete_new_content(Ns, Config, S);
-                {error, {already_started, _Pid}} ->
-                    {reply, {error, {already_configured, Ns}}, S};
-                {error, already_present} ->
-                    {reply, {error, {already_configured, Ns}}, S};
-                {error, {already_present, _Child}} ->
-                    {reply, {error, {already_configured, Ns}}, S};
-                _ ->
-                    {reply, Result, S}
-            end
+            {work, {start_new, Ns, Config}, S}
     end;
-handle_call(
+begin_request(
   {start, Kind, Ns, Config}, _From,
   S = #s{desired = Desired})
   when Kind =:= content; Kind =:= brahms ->
     KindDesired = maps:get(Kind, Desired),
     case maps:get(Ns, KindDesired, undefined) of
         undefined ->
-            Desired1 =
-                Desired#{Kind => KindDesired#{Ns => Config}},
+            SAdded = add_desired(Kind, Ns, Config, S),
+            Desired1 = SAdded#s.desired,
             persist_desired(Desired1),
-            S0 = S#s{desired = Desired1},
-            {RawResult, S1} = ensure_one(Kind, Ns, Config, S0),
-            Result = complete_started_child(
-                       Kind, Ns, Config, RawResult),
-            maybe_notify_directory(Kind, Result),
-            {reply, Result, schedule_reconcile_if_error(Result, S1)};
+            {work, {ensure, Kind, Ns, Config}, SAdded};
         Config ->
-            {RawResult, S1} = ensure_one(Kind, Ns, Config, S),
-            Result = complete_started_child(
-                       Kind, Ns, Config, RawResult),
-            maybe_notify_directory(Kind, Result),
-            {reply, Result, schedule_reconcile_if_error(Result, S1)};
+            {work, {ensure, Kind, Ns, Config}, S};
         _OtherConfig ->
             {reply, {error, {already_configured, Ns}}, S}
     end;
-handle_call(
+begin_request(
   {stop, Kind, Ns}, _From,
   S = #s{desired = Desired, durable_content = Durable})
   when Kind =:= content; Kind =:= brahms ->
@@ -160,41 +179,95 @@ handle_call(
         true ->
             Durable1 = remove_durable(Kind, Ns, Durable),
             ok = persist_durable_if_changed(Durable, Durable1),
-            Desired1 =
-                Desired#{Kind => maps:remove(Ns, KindDesired)},
+            SRemoved = remove_desired(Kind, Ns, S#s{
+                                                    durable_content = Durable1}),
+            Desired1 = SRemoved#s.desired,
             persist_desired(Desired1),
-            Result = stop_one(Kind, Ns),
-            maybe_notify_directory(Kind, Result),
-            Normalized = normalize_stop(Result),
-            S1 = S#s{desired = Desired1,
-                     durable_content = Durable1},
-            {reply, Normalized,
-             schedule_reconcile_if_stop_error(Normalized, S1)}
+            %% A local stop removes only local dynamic intent.  Static operator
+            %% configuration and the committed root catalogue are independent,
+            %% stronger desired-state owners; if either still names the
+            %% ontology, stopping its child would only create a pointless
+            %% stop/restart cycle and a window in which the system contract is
+            %% false.
+            Retained = maps:is_key(Ns, maps:get(Kind, Desired1)),
+            case Retained of
+                true -> {reply, ok, SRemoved};
+                false -> {work, {stop, Kind, Ns}, SRemoved}
+            end
     end;
-handle_call(_Request, _From, S) ->
+begin_request(_Request, _From, S) ->
     {reply, {error, unknown_call}, S}.
 
-complete_new_content(Ns, Config,
-                     S = #s{desired = Desired,
-                            durable_content = Durable}) ->
-    case started_genesis(Ns, Config) of
-        {ok, GenesisHash} ->
-            DurableConfig =
-                quod_namespace_desired_store:resume_config(
-                  Config, GenesisHash),
-            Durable1 = Durable#{Ns => DurableConfig},
-            ok = quod_namespace_desired_store:store(Durable1),
-            Content = maps:get(content, Desired),
-            Desired1 = Desired#{content => Content#{Ns => Config}},
-            persist_desired(Desired1),
-            publish_storage(Ns, Config),
-            notify_content_changed(),
-            {reply, {ok, GenesisHash},
-             S#s{desired = Desired1,
-                 durable_content = Durable1}};
-        {error, Reason} ->
-            stop_rejected_new_content(Ns, S, Reason)
-    end.
+run_request_work({start_new, Ns, Config}) ->
+    case start_one(content, Ns, Config) of
+        Result when is_tuple(Result) ->
+            case start_succeeded(Result) of
+                true ->
+                    case started_genesis(Ns, Config) of
+                        {ok, GenesisHash} ->
+                            {start_new, Ns, Config,
+                             {accepted, GenesisHash}};
+                        {error, Reason} ->
+                            Cleanup = normalize_stop(stop_one(content, Ns)),
+                            {start_new, Ns, Config,
+                             {rejected, Reason, Cleanup}}
+                    end;
+                false ->
+                    {start_new, Ns, Config, {start_result, Result}}
+            end
+    end;
+run_request_work({ensure, Kind, Ns, Config}) ->
+    RawResult = ensure_one(Kind, Ns, Config),
+    Validation =
+        case {Kind, start_succeeded(RawResult)} of
+            {content, true} -> started_genesis(Ns, Config);
+            {brahms, true} -> ok;
+            {_, false} -> skipped
+        end,
+    {ensure, Kind, Ns, Config, RawResult, Validation};
+run_request_work({stop, Kind, Ns}) ->
+    {stop, Kind, normalize_stop(stop_one(Kind, Ns))}.
+
+finish_request(
+  {start_new, Ns, Config, {accepted, GenesisHash}},
+  S = #s{desired = Desired, durable_content = Durable}) ->
+    DurableConfig =
+        quod_namespace_desired_store:resume_config(Config, GenesisHash),
+    Durable1 = Durable#{Ns => DurableConfig},
+    ok = quod_namespace_desired_store:store(Durable1),
+    Content = content_projection(
+                Durable1, S#s.ephemeral_content,
+                S#s.system_content, S#s.static_content),
+    Desired1 = Desired#{content => Content},
+    persist_desired(Desired1),
+    publish_storage(Ns, Config),
+    notify_content_changed(),
+    {{ok, GenesisHash},
+     S#s{desired = Desired1, durable_content = Durable1}};
+finish_request(
+  {start_new, _Ns, _Config, {rejected, Reason, Cleanup}}, S) ->
+    {{error, Reason}, schedule_reconcile_if_stop_error(Cleanup, S)};
+finish_request(
+  {start_new, Ns, _Config, {start_result, Result}}, S) ->
+    Reply = normalize_new_start_result(Ns, Result),
+    {Reply, S};
+finish_request(
+  {ensure, Kind, Ns, Config, RawResult, Validation}, S) ->
+    Result = complete_ensured_child(
+               Kind, Ns, Config, RawResult, Validation),
+    maybe_notify_directory(Kind, Result),
+    {Result, schedule_reconcile_if_error(Result, S)};
+finish_request({stop, Kind, Result}, S) ->
+    maybe_notify_directory(Kind, Result),
+    {Result, schedule_reconcile_if_stop_error(Result, S)}.
+
+normalize_new_start_result(Ns, {error, {already_started, _Pid}}) ->
+    {error, {already_configured, Ns}};
+normalize_new_start_result(Ns, {error, already_present}) ->
+    {error, {already_configured, Ns}};
+normalize_new_start_result(Ns, {error, {already_present, _Child}}) ->
+    {error, {already_configured, Ns}};
+normalize_new_start_result(_Ns, Result) -> Result.
 
 started_genesis(Ns, Config) ->
     case quod_simplex:genesis_hash(Ns) of
@@ -214,50 +287,371 @@ started_genesis(Ns, Config) ->
             {error, genesis_unavailable}
     end.
 
-stop_rejected_new_content(Ns, S, Reason) ->
-    %% No desired entry exists yet, so a manager crash cannot resurrect this
-    %% rejected admission. The replacement manager will also stop any child
-    %% left behind by a failed cleanup.
-    StopResult = normalize_stop(stop_one(content, Ns)),
-    {reply, {error, Reason},
-     schedule_reconcile_if_stop_error(StopResult, S)}.
-
 handle_cast(_Message, S) ->
     {noreply, S}.
 
-handle_info(reconcile, S) ->
+handle_info(reconcile, S = #s{mutation_worker = undefined}) ->
     S0 = S#s{retry = undefined},
-    {Changed, Complete, S1} = reconcile_all(bind_supervisors(S0)),
+    case queue:is_empty(S0#s.pending_calls) of
+        true -> {noreply, start_reconcile(S0)};
+        false -> {noreply, S0#s{reconcile_dirty = true}}
+    end;
+handle_info(reconcile, S) ->
+    {noreply, S#s{retry = undefined, reconcile_dirty = true}};
+handle_info(
+  {mutation_result, Token,
+   {reconcile, Changed, Complete, StorageAdds}},
+  S = #s{mutation_worker = {_Pid, MRef, Token, reconcile}}) ->
+    demonitor(MRef, [flush]),
+    publish_reconcile_storage(StorageAdds),
     case Changed of
         true -> notify_content_changed();
         false -> ok
     end,
+    S0 = S#s{mutation_worker = undefined,
+             reconcile_incomplete = not Complete},
+    S1 = case Complete of
+             true -> reset_reconcile_backoff(S0);
+             false -> S0
+         end,
+    {noreply, continue_work(S1)};
+handle_info(
+  {mutation_result, Token, {call, From, Result}},
+  S = #s{mutation_worker = {_Pid, MRef, Token, {call, From}}}) ->
+    demonitor(MRef, [flush]),
+    {Reply, S0} = finish_request(Result, S#s{mutation_worker = undefined}),
+    gen_server:reply(From, Reply),
+    {noreply, continue_work(S0)};
+handle_info(
+  {'DOWN', MRef, process, Pid, Reason},
+  S = #s{mutation_worker = {Pid, MRef, _Token, Kind}}) ->
+    logger:error("quod: namespace mutation worker failed: ~p", [Reason]),
+    reply_failed_mutation(Kind),
+    %% A failed worker must not strand either its caller or lifecycle callers
+    %% queued behind it. Drain the queue, then reconcile the uncertain result.
     {noreply,
-     case Complete of
-         true -> S1;
-         false -> schedule_reconcile(S1)
-     end};
+     continue_work(
+       S#s{mutation_worker = undefined,
+           reconcile_incomplete = true})};
+handle_info(process_pending_call,
+            S = #s{mutation_worker = undefined, pending_calls = Queue0}) ->
+    case queue:out(Queue0) of
+        {empty, _} ->
+            {noreply, finish_reconcile_cycle(S)};
+        {{value, {Request, From}}, Queue1} ->
+            case begin_request(
+                   Request, From, S#s{pending_calls = Queue1}) of
+                {reply, Reply, S1} ->
+                    gen_server:reply(From, Reply),
+                    {noreply, continue_work(S1)};
+                {work, Work, S1} ->
+                    {noreply, start_call_worker(Work, From, S1)}
+            end
+    end;
+handle_info(refresh_system_catalogue, S0) ->
+    S = cancel_system_retry(S0),
+    {noreply, start_system_query(S)};
+handle_info({replay_ready, _Id, _Height}, S) ->
+    {noreply, request_system_refresh(reset_system_backoff(S))};
+handle_info({applied_live, Envelope}, S) ->
+    case system_catalogue_changed(Envelope) of
+        true ->
+            {noreply, request_system_refresh(reset_system_backoff(S))};
+        false -> {noreply, S}
+    end;
+handle_info(
+  {system_catalogue_result, Token, Result},
+  S = #s{system_query = {_Pid, MRef, Token, Timer}}) ->
+    cancel_timer(Timer),
+    demonitor(MRef, [flush]),
+    S0 = S#s{system_query = undefined},
+    {noreply, continue_system_refresh(finish_system_query(Result, S0))};
+handle_info(
+  {'DOWN', Ref, process, Pid, Reason},
+  S = #s{system_query = {Pid, Ref, _Token, Timer}}) ->
+    cancel_timer(Timer),
+    logger:error(
+      "quod: system-ontology catalogue worker failed: ~p", [Reason]),
+    {noreply,
+     schedule_system_retry(S#s{system_query = undefined})};
+handle_info(
+  {system_catalogue_timeout, Token},
+  S = #s{system_query = {Pid, MRef, Token, _Timer}}) ->
+    demonitor(MRef, [flush]),
+    exit(Pid, kill),
+    logger:error("quod: system-ontology catalogue query timed out"),
+    {noreply,
+     schedule_system_retry(S#s{system_query = undefined})};
 handle_info(
   {'DOWN', Ref, process, Pid, _Reason},
   S = #s{ns_monitor = Ref, ns_sup = Pid}) ->
     {noreply,
      schedule_reconcile(
-       S#s{ns_sup = undefined, ns_monitor = undefined})};
+       reset_reconcile_backoff(
+         S#s{ns_sup = undefined, ns_monitor = undefined}))};
 handle_info(
   {'DOWN', Ref, process, Pid, _Reason},
   S = #s{brahms_monitor = Ref, brahms_sup = Pid}) ->
     {noreply,
      schedule_reconcile(
-       S#s{brahms_sup = undefined,
-           brahms_monitor = undefined})};
+       reset_reconcile_backoff(
+         S#s{brahms_sup = undefined,
+             brahms_monitor = undefined}))};
 handle_info(_Info, S) ->
     {noreply, S}.
 
 terminate(_Reason, S) ->
     cancel_retry(S#s.retry),
+    stop_mutation(S#s.mutation_worker),
+    cancel_timer(S#s.system_retry),
+    stop_system_query(S#s.system_query),
     demonitor_if(S#s.ns_monitor),
     demonitor_if(S#s.brahms_monitor),
+    _ = catch quod_reg:unsubscribe({runtime, ?ROOT_NS}),
     ok.
+
+%% Supervisor termination may legitimately wait for an ontology subtree to
+%% finish.  Keep that wait out of the desired-state owner's mailbox: one
+%% monitored worker executes the existing reconciliation path, while this
+%% process continues accepting catalogue changes and records that another pass
+%% is needed.  There is still exactly one reconciler and one desired-state
+%% owner.
+start_reconcile(S0) ->
+    S = bind_supervisors(S0),
+    Parent = self(),
+    Token = make_ref(),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+              {Changed, Complete, StorageAdds} = reconcile_all(S),
+              Parent !
+                  {mutation_result, Token,
+                   {reconcile, Changed, Complete, StorageAdds}}
+          end),
+    S#s{mutation_worker = {Pid, MRef, Token, reconcile},
+        reconcile_dirty = false}.
+
+enqueue_call(Request, From, S = #s{pending_calls = Queue}) ->
+    S#s{pending_calls = queue:in({Request, From}, Queue)}.
+
+continue_work(S = #s{mutation_worker = Worker}) when Worker =/= undefined -> S;
+continue_work(S = #s{pending_calls = Queue}) ->
+    case queue:is_empty(Queue) of
+        false ->
+            self() ! process_pending_call,
+            S;
+        true -> finish_reconcile_cycle(S)
+    end.
+
+finish_reconcile_cycle(S = #s{reconcile_dirty = true}) ->
+    self() ! reconcile,
+    S#s{reconcile_dirty = false, reconcile_incomplete = false};
+finish_reconcile_cycle(S = #s{reconcile_incomplete = true}) ->
+    schedule_reconcile(S#s{reconcile_incomplete = false});
+finish_reconcile_cycle(S) -> reset_reconcile_backoff(S).
+
+stop_mutation({Pid, MRef, _Token, _Kind}) ->
+    demonitor(MRef, [flush]),
+    exit(Pid, kill),
+    ok;
+stop_mutation(_) -> ok.
+
+start_call_worker(Work, From, S) ->
+    Parent = self(),
+    Token = make_ref(),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+              Parent !
+                  {mutation_result, Token,
+                   {call, From, run_request_work(Work)}}
+          end),
+    S#s{mutation_worker = {Pid, MRef, Token, {call, From}}}.
+
+reply_failed_mutation({call, From}) ->
+    gen_server:reply(From, {error, outcome_unknown});
+reply_failed_mutation(reconcile) -> ok.
+
+request_system_refresh(S = #s{system_query = undefined}) ->
+    self() ! refresh_system_catalogue,
+    S;
+request_system_refresh(S) ->
+    S#s{system_dirty = true}.
+
+start_system_query(S = #s{system_query = undefined}) ->
+    Parent = self(),
+    Token = make_ref(),
+    {Pid, MRef} =
+        spawn_monitor(
+          fun() ->
+              Result =
+                  case quod_system_ontology:catalog() of
+                      {ok, Height, Descriptors, Rejected} ->
+                          case quod_system_ontology:materialize(
+                                 Descriptors, S#s.system_content) of
+                              {ok, Configs, Pending, Blocked} ->
+                                  {ok, Height, Descriptors, Rejected,
+                                   Configs, Pending, Blocked};
+                              {error, _} = Error -> Error
+                          end;
+                      {error, _} = Error -> Error
+                  end,
+              Parent ! {system_catalogue_result, Token, Result}
+          end),
+    Timer = erlang:send_after(
+              ?SYSTEM_QUERY_TIMEOUT_MS, self(),
+              {system_catalogue_timeout, Token}),
+    S#s{system_query = {Pid, MRef, Token, Timer},
+        system_dirty = false};
+start_system_query(S) ->
+    S#s{system_dirty = true}.
+
+finish_system_query(
+  {ok, _Height, Descriptors, Rejected, Configs, Pending, Blocked}, S0) ->
+    Retained = retain_pending_systems(
+                 Pending, Descriptors, S0#s.system_content, Configs),
+    System = retain_rejected_systems(
+               Rejected, S0#s.system_content, Retained),
+    Reported = reported_system_failures(Rejected, Blocked),
+    log_blocked_systems(Reported, S0#s.system_blocked),
+    S1 = install_system_content(
+           System, S0#s{system_blocked = Reported}),
+    case Pending of
+        [] -> reset_system_backoff(S1);
+        _ -> schedule_system_retry(S1)
+    end;
+%% Root itself is started by static bootstrap configuration.  Its replay-ready
+%% event is the retry signal; polling a root which does not exist yet would only
+%% produce log noise.  A malformed committed catalogue also waits for its next
+%% root change rather than re-reading the same bad state in a tight loop.
+finish_system_query({error, no_such_namespace}, S) -> S;
+finish_system_query({error, root_not_ready}, S) -> S;
+finish_system_query({error, {ontology_rebuilding, ?ROOT_NS}}, S) -> S;
+finish_system_query({error, malformed_system_catalogue}, S) ->
+    log_invalid_system_catalogue(malformed_system_catalogue, S);
+finish_system_query({error, Reason}, S) ->
+    logger:error(
+      "quod: system-ontology catalogue unavailable or invalid: ~p",
+      [Reason]),
+    schedule_system_retry(S).
+
+log_invalid_system_catalogue(Reason, S) ->
+    logger:error(
+      "quod: invalid committed system-ontology catalogue: ~p", [Reason]),
+    S.
+
+continue_system_refresh(S = #s{system_dirty = true}) ->
+    request_system_refresh(S#s{system_dirty = false});
+continue_system_refresh(S) -> S.
+
+%% Root may carry unrelated policy and directory traffic. Re-reading and
+%% re-materializing the whole system catalogue after every root transaction
+%% would turn that traffic into work proportional to the catalogue size.
+%% Replay-ready remains the full resnapshot boundary; live refreshes narrow to
+%% exact changed `system_ontology/2` heads.
+system_catalogue_changed(Envelope) when is_map(Envelope) ->
+    quod_diff:touches_functor(
+      maps:get(diff, Envelope, []), {system_ontology, 2});
+system_catalogue_changed(_) -> false.
+
+retain_pending_systems(Pending, Descriptors, Old, Resolved) ->
+    ByName = maps:from_list(
+               [{maps:get(namespace, D), D} || D <- Descriptors]),
+    Kept = lists:foldl(
+             fun(Ns, Acc) ->
+                 case {maps:get(Ns, Old, undefined),
+                       maps:get(Ns, ByName, undefined)} of
+                     {Config, Descriptor}
+                       when is_map(Config), is_map(Descriptor) ->
+                         case config_matches_descriptor(Config, Descriptor) of
+                             true -> Acc#{Ns => Config};
+                             false -> Acc
+                         end;
+                     _ -> Acc
+                 end
+             end, #{}, Pending),
+    maps:merge(Kept, Resolved).
+
+retain_rejected_systems(Rejected, Old, Resolved) ->
+    maps:fold(
+      fun(Ns, #{reason := conflicting_system_ontology,
+                anchors := Anchors}, Acc)
+            when is_binary(Ns), is_list(Anchors) ->
+              case maps:get(Ns, Old, undefined) of
+                  #{genesis_hash := Anchor,
+                    system_ontology := true} = Config ->
+                      case lists:member(Anchor, Anchors) of
+                          true -> Acc#{Ns => Config};
+                          false -> Acc
+                      end;
+                  _ -> Acc
+              end;
+         (_Id, _Problem, Acc) -> Acc
+      end, Resolved, Rejected).
+
+reported_system_failures(Rejected, Blocked) ->
+    maps:merge(
+      Rejected,
+      maps:map(fun(_Ns, Reason) -> #{reason => Reason} end, Blocked)).
+
+config_matches_descriptor(
+  Config, #{anchor := Anchor}) ->
+    maps:get(genesis_hash, Config, undefined) =:= Anchor
+        andalso maps:get(system_ontology, Config, false) =:= true.
+
+install_system_content(System,
+                       S = #s{system_content = OldSystem})
+  when System =:= OldSystem ->
+    S;
+install_system_content(System,
+                       S = #s{desired = Desired}) ->
+    NewContent = content_projection(
+                   S#s.durable_content, S#s.ephemeral_content,
+                   System, S#s.static_content),
+    Desired1 = Desired#{content => NewContent},
+    persist_desired(Desired1),
+    self() ! reconcile,
+    reset_reconcile_backoff(
+      S#s{desired = Desired1, system_content = System}).
+
+schedule_system_retry(S = #s{system_retry = Ref})
+  when is_reference(Ref) -> S;
+schedule_system_retry(S = #s{system_retry_ms = Delay}) ->
+    Ref = erlang:send_after(
+            Delay, self(), refresh_system_catalogue),
+    S#s{system_retry = Ref,
+        system_retry_ms = min(?SYSTEM_RETRY_MAX_MS, Delay * 2)}.
+
+reset_system_backoff(S) ->
+    S#s{system_retry_ms = ?SYSTEM_RETRY_MIN_MS}.
+
+log_blocked_systems(Blocked, OldBlocked) ->
+    maps:foreach(
+      fun(Id, Problem) ->
+          case maps:get(Id, OldBlocked, undefined) of
+              Problem -> ok;
+              _ ->
+                  logger:error(
+                    "quod: rejected or unavailable system ontology ~p: ~p",
+                    [Id, Problem])
+          end
+      end, Blocked).
+
+cancel_system_retry(S = #s{system_retry = Ref}) ->
+    cancel_timer(Ref),
+    S#s{system_retry = undefined}.
+
+stop_system_query({Pid, MRef, _Token, Timer}) ->
+    cancel_timer(Timer),
+    demonitor(MRef, [flush]),
+    exit(Pid, kill),
+    ok;
+stop_system_query(_) -> ok.
+
+cancel_timer(Ref) when is_reference(Ref) ->
+    _ = erlang:cancel_timer(Ref),
+    ok;
+cancel_timer(_) -> ok.
 
 desired_env() ->
     case application:get_env(quod, ?DESIRED_ENV, undefined) of
@@ -270,6 +664,37 @@ desired_env() ->
 
 persist_desired(Desired) ->
     application:set_env(quod, ?DESIRED_ENV, Desired).
+
+content_projection(Durable, Ephemeral, System, Static) ->
+    %% Static configuration owns ordinary hosting over stale node-local intent.
+    %% A committed root system descriptor is stronger still: local config must
+    %% never replace its exact genesis anchor.
+    maps:merge(
+      maps:merge(maps:merge(Durable, Ephemeral), Static), System).
+
+add_desired(content, Ns, Config,
+            S = #s{desired = Desired, ephemeral_content = Ephemeral}) ->
+    Ephemeral1 = Ephemeral#{Ns => Config},
+    Content = content_projection(
+                S#s.durable_content, Ephemeral1,
+                S#s.system_content, S#s.static_content),
+    S#s{desired = Desired#{content => Content},
+        ephemeral_content = Ephemeral1};
+add_desired(brahms, Ns, Config, S = #s{desired = Desired}) ->
+    Brahms = maps:get(brahms, Desired),
+    S#s{desired = Desired#{brahms => Brahms#{Ns => Config}}}.
+
+remove_desired(content, Ns, S = #s{desired = Desired}) ->
+    Durable = maps:remove(Ns, S#s.durable_content),
+    Ephemeral = maps:remove(Ns, S#s.ephemeral_content),
+    Content = content_projection(
+                Durable, Ephemeral,
+                S#s.system_content, S#s.static_content),
+    S#s{desired = Desired#{content => Content},
+        durable_content = Durable, ephemeral_content = Ephemeral};
+remove_desired(brahms, Ns, S = #s{desired = Desired}) ->
+    Brahms = maps:get(brahms, Desired),
+    S#s{desired = Desired#{brahms => maps:remove(Ns, Brahms)}}.
 
 remove_durable(content, Ns, Durable) -> maps:remove(Ns, Durable);
 remove_durable(brahms, _Ns, Durable) -> Durable.
@@ -303,18 +728,18 @@ bind_supervisor(_Pid, OldPid, OldRef) ->
     {OldPid, OldRef}.
 
 reconcile_all(S = #s{desired = Desired}) ->
-    {ContentChanged, ContentComplete, S1} =
+    {ContentChanged, ContentComplete, StorageAdds} =
         reconcile_kind(
           content, maps:get(content, Desired), S),
-    {_BrahmsChanged, BrahmsComplete, S2} =
+    {_BrahmsChanged, BrahmsComplete, _NoStorage} =
         reconcile_kind(
-          brahms, maps:get(brahms, Desired), S1),
-    {ContentChanged, ContentComplete andalso BrahmsComplete, S2}.
+          brahms, maps:get(brahms, Desired), S),
+    {ContentChanged, ContentComplete andalso BrahmsComplete, StorageAdds}.
 
 reconcile_kind(Kind, Desired, S) ->
     case supervisor_available(Kind, S) of
         false ->
-            {false, false, S};
+            {false, false, #{}};
         true ->
             Running = running_children(Kind),
             Undesired =
@@ -329,7 +754,8 @@ reconcile_kind(Kind, Desired, S) ->
             Results =
                 [{Ns, start_one(Kind, Ns, Config)}
                  || {Ns, Config} <- Missing],
-            {Ready, Validated} = complete_running_children(Kind, Desired),
+            {Ready, Validated, StorageAdds} =
+                complete_running_children(Kind, Desired),
             Changed = lists:any(fun stop_succeeded/1, StopResults)
                 orelse lists:any(
                          fun({Ns, Result}) ->
@@ -342,7 +768,7 @@ reconcile_kind(Kind, Desired, S) ->
                               start_succeeded(Result)
                           end, Results)
                 andalso Ready,
-            {Changed, Complete, S}
+            {Changed, Complete, StorageAdds}
     end.
 
 supervisor_available(content, #s{ns_sup = Pid}) ->
@@ -355,12 +781,12 @@ running_children(content) ->
 running_children(brahms) ->
     quod_brahms_sup:children().
 
-ensure_one(Kind, Ns, Config, S) ->
+ensure_one(Kind, Ns, Config) ->
     case running_pid(Kind, Ns) of
         Pid when is_pid(Pid) ->
-            {{ok, Pid}, S};
+            {ok, Pid};
         undefined ->
-            {start_one(Kind, Ns, Config), S}
+            start_one(Kind, Ns, Config)
     end.
 
 running_pid(content, Ns) ->
@@ -369,22 +795,14 @@ running_pid(brahms, Ns) ->
     quod_reg:where({quod_brahms, Ns}).
 
 start_one(content, Ns, Config) ->
-    try quod_ns_sup:start_child(Ns, Config)
-    catch exit:_ -> {error, supervisor_unavailable}
-    end;
+    quod_ns_sup:start_child(Ns, Config);
 start_one(brahms, Ns, Config) ->
-    try quod_brahms_sup:start_child(Ns, Config)
-    catch exit:_ -> {error, supervisor_unavailable}
-    end.
+    quod_brahms_sup:start_child(Ns, Config).
 
 stop_one(content, Ns) ->
-    try quod_ns_sup:stop_child(Ns)
-    catch exit:_ -> {error, supervisor_unavailable}
-    end;
+    quod_ns_sup:stop_child(Ns);
 stop_one(brahms, Ns) ->
-    try quod_brahms_sup:stop_child(Ns)
-    catch exit:_ -> {error, supervisor_unavailable}
-    end.
+    quod_brahms_sup:stop_child(Ns).
 
 start_succeeded({ok, Pid}) when is_pid(Pid) -> true;
 start_succeeded({ok, Pid, _Info}) when is_pid(Pid) -> true;
@@ -416,59 +834,48 @@ notify_content_changed() ->
            lists:usort(quod_simplex:namespaces())}),
     ok.
 
-complete_started_child(content, Ns, Config, Result) ->
-    case start_succeeded(Result) of
-        true ->
-            case validate_and_publish_content(Ns, Config) of
-                ok -> Result;
-                {error, _} = Error -> Error
-            end;
-        false ->
-            Result
-    end;
-complete_started_child(brahms, _Ns, _Config, Result) ->
+complete_ensured_child(content, Ns, Config, Result, {ok, _GenesisHash}) ->
+    publish_storage(Ns, Config),
+    Result;
+complete_ensured_child(content, _Ns, _Config, _Result, {error, _} = Error) ->
+    Error;
+complete_ensured_child(content, _Ns, _Config, Result, skipped) ->
+    Result;
+complete_ensured_child(brahms, _Ns, _Config, Result, _Validation) ->
     Result.
 
 complete_running_children(brahms, _Desired) ->
-    {true, #{}};
+    {true, #{}, #{}};
 complete_running_children(content, Desired) ->
-    Storage0 = application:get_env(quod, content_storage_dirs, #{}),
-    {Complete, Storage, Validated} =
+    {Complete, Validated, StorageAdds} =
         maps:fold(
-          fun(Ns, Config, {Complete0, DirsAcc, ValidAcc}) ->
+          fun(Ns, Config, {Complete0, ValidAcc, DirsAcc}) ->
               case running_pid(content, Ns) of
                   Pid when is_pid(Pid) ->
                       case started_genesis(Ns, Config) of
                           {ok, _GenesisHash} ->
                               Dirs = content_storage(Config),
-                              {Complete0, DirsAcc#{Ns => Dirs},
-                               ValidAcc#{Ns => true}};
+                              {Complete0, ValidAcc#{Ns => true},
+                               DirsAcc#{Ns => Dirs}};
                           {error, _} ->
-                              {false, DirsAcc, ValidAcc}
+                              {false, ValidAcc, DirsAcc}
                       end;
                   undefined ->
-                      {false, DirsAcc, ValidAcc}
+                      {false, ValidAcc, DirsAcc}
               end
-          end, {true, Storage0, #{}}, Desired),
-    case Storage =:= Storage0 of
-        true -> ok;
-        false -> application:set_env(quod, content_storage_dirs, Storage)
-    end,
-    {Complete, Validated}.
+          end, {true, #{}, #{}}, Desired),
+    {Complete, Validated, StorageAdds}.
+
+publish_reconcile_storage(StorageAdds) when map_size(StorageAdds) =:= 0 -> ok;
+publish_reconcile_storage(StorageAdds) ->
+    Storage0 = application:get_env(quod, content_storage_dirs, #{}),
+    application:set_env(
+      quod, content_storage_dirs, maps:merge(Storage0, StorageAdds)).
 
 completed_start_succeeded(content, Ns, Result, Validated) ->
     start_succeeded(Result) andalso maps:is_key(Ns, Validated);
 completed_start_succeeded(brahms, _Ns, Result, _Validated) ->
     start_succeeded(Result).
-
-validate_and_publish_content(Ns, Config) ->
-    case started_genesis(Ns, Config) of
-        {ok, _GenesisHash} ->
-            publish_storage(Ns, Config),
-            ok;
-        {error, _} = Error ->
-            Error
-    end.
 
 %% The manager serializes every writer of this projection. Stopped ontologies
 %% deliberately remain addressable by the explorer, so entries are not removed
@@ -497,9 +904,13 @@ schedule_reconcile_if_stop_error(Result, S) ->
 schedule_reconcile(S = #s{retry = Ref})
   when is_reference(Ref) ->
     S;
-schedule_reconcile(S) ->
-    Ref = erlang:send_after(?RETRY_MS, self(), reconcile),
-    S#s{retry = Ref}.
+schedule_reconcile(S = #s{reconcile_retry_ms = Delay}) ->
+    Ref = erlang:send_after(Delay, self(), reconcile),
+    S#s{retry = Ref,
+        reconcile_retry_ms = min(?RETRY_MAX_MS, Delay * 2)}.
+
+reset_reconcile_backoff(S) ->
+    S#s{reconcile_retry_ms = ?RETRY_MS}.
 
 cancel_retry(Ref) when is_reference(Ref) ->
     _ = erlang:cancel_timer(Ref),

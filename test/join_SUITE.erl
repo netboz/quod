@@ -42,7 +42,7 @@ identity, so the catch-up request/response is genuine loopback QUIC — the depl
 %% Ordered: the joiner first catches up (height 2), then — after being STOPPED and the founder committing a
 %% NEW fact while it is down — a restart RESUMES catch-up from its persisted height and picks up the delta;
 %% then the founder ADMITS the caught-up observer and it self-promotes to a voting member (S5b). A fresh
-%% node next exercises that same join through the public root action. Finally, an observer with a USELESS
+%% node next exercises that same join through the public quod:node action. Finally, an observer with a USELESS
 %% (self-only) seed list catches up via the Brahms view (the wedge regression).
 all() -> [joiner_catches_up, joiner_resumes_after_restart, joiner_promoted_to_voter,
           runtime_join_action_catches_up, self_seeded_joiner_catches_up].
@@ -122,8 +122,11 @@ start_app_node(Port, {Pub, Seed}, Config) ->
     Set(node_pubkey,   Pub),
     Set(identity_key,  KeyTerm),
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
-    {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
+    %% Configuration-free CT nodes still need the one node-wide effect journal
+    %% in the same private durability domain as their ledgers.
+    Set(effect_journal_data_dir, DataDir),
+    {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     {Peer, DataDir}.
 
 %%%===================================================================
@@ -284,8 +287,9 @@ self_seeded_joiner_catches_up(Config) ->
         catch peer:stop(Obs)
     end.
 
-%% The public root action reuses the typed quod_ontology join pipeline rather
-%% than a second implementation. A fresh node founds its own root, invokes the
+%% The public node-ontology action reuses the typed quod_ontology join pipeline
+%% rather than a second implementation. A fresh node founds root and the node
+%% system ontology, invokes the
 %% asynchronous action, then catches up through genuine loopback QUIC.
 runtime_join_action_catches_up(Config) ->
     {joiner_promoted_to_voter, Saved} = ?config(saved_config, Config),
@@ -296,6 +300,7 @@ runtime_join_action_catches_up(Config) ->
     Key = quod_identity:generate(),
     {ActionNode, DataDir} = start_app_node(?ACTION_PORT, Key, Config),
     RootNs = <<"quod:root">>,
+    NodeNs = <<"quod:node">>,
     try
         RootContent =
             #{namespace => RootNs, mode => create,
@@ -315,13 +320,32 @@ runtime_join_action_catches_up(Config) ->
                      ActionNode, quod_prolog, prove_ro,
                      [RootNs, true]))
              end, 10000)),
+        NodeSource = list_to_binary(
+                       filename:join(
+                         code:priv_dir(quod), "ontologies/quod_node.pl")),
+        ?assertMatch(
+           {ok, created, NodeNs, _},
+           peer:call(
+             ActionNode, quod_ontology, create,
+             [NodeNs,
+              [{source_file, NodeSource},
+               {external_predicate_modules,
+                [quod_ontology_predicates]}]])),
+        ?assert(
+           eventually(
+             fun() ->
+                 match_ok(
+                   peer:call(
+                     ActionNode, quod_prolog, prove_ro,
+                     [NodeNs, true]))
+             end, 10000)),
         Action =
             {join_ontology, ?NS, binary:encode_hex(GenesisHash),
              [{seed, "127.0.0.1", ?FOUNDER_PORT}]},
         ?assertMatch(
            {ok, [#{}], _},
-           peer:call(ActionNode, quod_prolog, run_action,
-                     [RootNs, Action])),
+           peer:call(ActionNode, quod_prolog, execute,
+                     [NodeNs, Action])),
         ?assert(
            eventually(
              fun() ->
@@ -345,8 +369,8 @@ runtime_join_action_catches_up(Config) ->
         %% a different, unsatisfied target and fails.
         ?assertMatch(
            {ok, [#{}], _},
-           peer:call(ActionNode, quod_prolog, run_action,
-                     [RootNs, Action])),
+           peer:call(ActionNode, quod_prolog, execute,
+                     [NodeNs, Action])),
         <<First, Rest/binary>> = GenesisHash,
         WrongAction =
             {join_ontology, ?NS,
@@ -354,8 +378,8 @@ runtime_join_action_catches_up(Config) ->
              [{seed, "127.0.0.1", ?FOUNDER_PORT}]},
         ?assertMatch(
            {fail, [_ | _]},
-           peer:call(ActionNode, quod_prolog, run_action,
-                     [RootNs, WrongAction])),
+           peer:call(ActionNode, quod_prolog, execute,
+                     [NodeNs, WrongAction])),
         {save_config, [{founder2, Founder}, {joiner2, Joiner}]}
     after
         catch peer:stop(ActionNode)

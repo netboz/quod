@@ -1,9 +1,18 @@
 # Durable lifecycle effects
 
-**Status:** IMPLEMENTED IN QUOD 0.7.71. The protocol, durable custody,
-checkpointed public outcome, P-before-E execution, recovery, and Explorer
-rendering described here are present. Its incompatible ledger generation was
-introduced by a clean re-found; no compatibility decoder was retained.
+> **Architecture update:** the transaction effect, durable effect journal, and
+> post-apply execution described here remain authoritative. The lifecycle-only
+> authorization proof, action worker, private principal/effect slots, and
+> duplicate checks described below were removed by
+> `ontology-lifecycle-single-path-plan.md`. They are historical, not
+> compatibility requirements.
+
+**Status:** the base protocol was implemented in Quod 0.7.71. The later
+single-path refactor is implemented only in the current working tree and is
+not a rolling upgrade. Its next deployment requires the coordinated clean
+re-found and private-journal cleanup specified in
+`ontology-lifecycle-single-path-plan.md` §2.6; no compatibility decoder is
+retained.
 
 ## 1. Goal
 
@@ -13,16 +22,16 @@ An authorized external action such as:
 create_ontology("demo:console", [{terms, [hello(world)]}]).
 ```
 
-must leave one normal, visible transaction in the `quod:root` ledger before
+must leave one normal, visible transaction in the controlling ontology's ledger before
 the node creates the ontology. The transaction records that the action was
 accepted and identifies its exact typed effect. It does **not** assert a
 catalogue fact into the root knowledge base.
 
 This distinction is intentional:
 
-- the root ledger is the durable history of accepted operations;
-- the root D projection remains unchanged when an operation has no logical
-  root fact to add;
+- the controlling ledger is the durable history of accepted operations;
+- its D projection remains unchanged when an operation has no logical fact to
+  add;
 - the node-local ontology manager performs the external E operation only after
   the transaction commits.
 
@@ -77,8 +86,8 @@ bytes. It is data, not an arbitrary callback, MFA, module name, or Prolog goal.
 
 The descriptor is deliberately small. Creation source, compiled genesis diff,
 filesystem paths, seed details, and private manager configuration do not get
-copied into the root ledger. The original durable goal already records the
-public request. A local prepared-action journal holds the exact opaque payload
+copied into the controlling ontology's ledger. The original durable goal already
+records the public request. The node-wide prepared-action journal holds the exact opaque payload
 and the transaction binds it through `prepared_digest`.
 
 The protocol hard break must cover all of these together:
@@ -96,56 +105,42 @@ markers are not OCC tokens; they document which node-local observations
 influenced an effect-only plan and let validators enforce the narrow admission
 rule in section 4.1.
 
-## 4. Effect staging uses the external-predicate boundary
+## 4. Effect staging uses the ordinary proof boundary
 
-An effect-class external predicate must **stage data**, never perform the
-external operation while Prolog is running.
+A `staging` external predicate may prepare data for an effect, but never
+performs the external operation while Prolog is running. It uses the same
+governed-predicate dispatcher and the same proof overlay as staged D changes;
+there is no effect predicate class or lifecycle executor.
 
-The generic action flow is:
+The generic flow is:
 
 ```text
-execute(Action)
-  -> select action(Action, Prerequisites, DesiredState)
-  -> prove existing ACL/prerequisites in the pinned root view
-  -> invoke the registered effect-class Transition
-  -> validate and stage one typed effect descriptor in the proof session
-  -> seal and submit the ordinary root transaction
+execute(Goal)
+  -> ordinary can_invoke/4 entry
+  -> shared action/3 relation and ordinary prerequisites
+  -> exact internal staging continuation
+  -> validate and stage one typed effect in the proof overlay
+  -> seal and submit the ordinary controlling-ontology transaction
   -> ordered apply and P-before-E handoff
-  -> execute the prepared local effect
-  -> verify DesiredState and return
+  -> node-wide journal executes the prepared local effect
+  -> journal verifies the real DesiredState and releases the reply
 ```
 
-The proof-session overlay owns the staged effect list just as it owns staged D
-operations. Checkpoint, restore, failed alternatives, cancellation, and scope
-sealing must restore both together. A failed action candidate can therefore
-leave neither a D write nor an E descriptor behind.
+The overlay owns the staged effect list just as it owns staged D operations.
+Checkpoint, restore, failed alternatives, cancellation, and scope sealing
+restore both together. A failed action candidate therefore leaves neither a D
+write nor an effect descriptor behind.
 
-The action session remains read-only for Prolog D: `assert`, `retract`, and
-`abolish` are still forbidden. Only the exact registry-selected
-`action_transition` handler may replace the overlay revision with one carrying
-a validated staged-effect value. That value is part of the immutable revision
-captured by Erlog choice points and Quod savepoints; it is not a monotonic ETS
-side channel and therefore disappears when an alternative is restored.
+The action itself is not read-only: its normal Prolog transition may stage D.
+For a direct external effect, the exact internal continuation adds the prepared
+effect to the same immutable overlay revision. The action postcondition may
+recognize that exact staged promise; the journal must still verify real node
+state after execution. The promise is not a side channel and disappears when
+the candidate or savepoint is restored.
 
-For the first slice, one action may stage exactly one `local_durable` effect.
-This keeps failure semantics honest: Quod does not pretend that several
-unrelated external operations can be rolled back atomically. The common data
-path should nevertheless use a bounded list so the protocol does not need
-another hard break if a later, separately reviewed effect class supports a
-safe batch.
-
-`quod_dtx:participates/1` becomes true when a sealed plan contains a D diff,
-an OCC read check, or a direct effect. An effect-only action therefore produces
-a normal transaction even when its root diff is empty.
-
-Top-level routing must be registry-driven rather than a growing list of
-predicate names. Extend the existing governed-predicate metadata with the
-closed role `action_transition`; only an exact registered effect-class functor
-with that role uses the action runner. Authorization helpers and reaction
-handlers are effect-class but are not top-level actions. Every other goal uses
-the ordinary proof path. The action runner still requires a matching committed
-`action/3` declaration. Calling the effect predicate from an ordinary proof
-remains a context violation.
+`quod_dtx:participates/1` is true when a sealed plan contains a D diff, an OCC
+read check, or a direct effect. An effect-only action therefore produces a
+normal transaction even when its controlling ontology diff is empty.
 
 ### 4.1 Committed reads and local observations are different
 
@@ -160,17 +155,14 @@ Only the first kind enters the transaction's OCC `read_check`. The existing
 overlay already separates real read tokens from `'$quod_live_bridge'` markers;
 this slice must not collapse them back into one map.
 
-The lifecycle policy sub-proof must return both its committed read tokens and
-its live-bridge markers. Keep `absorb_read_set/2` for real OCC tokens and add a
-sibling `absorb_live_bridges/2` (or one typed `absorb_dependencies/2` that
-validates both key alphabets) for the markers. Do not rely on the current
-read-set function name accepting an undocumented marker shape.
-
-Consequently every committed predicate read by declaration selection,
-authorization, and policy becomes an exact root OCC dependency, while every
-bridge observation reaches the parent overlay separately.
-`quod_proof_session:read_set/1` excludes markers and `live_bridges/1` returns
-them for the signed plan core.
+There is no lifecycle policy sub-proof or absorb-back step. The normal proof
+selects the action declaration, checks `can_invoke/4` and the action
+prerequisites, and records both dependency kinds in its one rollback-safe
+overlay. Consequently every committed predicate read by declaration selection,
+authorization, and policy becomes an exact controlling-ontology OCC
+dependency, while every bridge observation remains a separately typed live
+marker. `quod_proof_session:read_set/1` excludes those markers and
+`live_bridges/1` returns them for the signed plan core.
 
 `quod_dtx:seal_admissible` gains one deliberately narrow rule:
 
@@ -215,10 +207,10 @@ post-Complete execution before this exclusion can ever be removed.
 
 This slice adds no new permission system.
 
-The current `authorized_ontology_lifecycle/1` prerequisite and
-`can_create_ontology/3` / `can_join_ontology/4` policies remain the authority
-for creation and join. A future delete predicate must add its policy clause and
-action declaration in the same root ontology. The external effect machinery
+The ordinary `can_invoke/4` entry and the `can_create_ontology/3` /
+`can_join_ontology/4` action prerequisites in `quod:node` are the authority for
+creation and join. A future delete predicate must add its policy clause and
+action declaration in that controlling ontology. The external effect machinery
 does not grant permission merely because it recognizes an operation.
 
 The engine-owned authenticated principal remains private proof state. It is
@@ -228,9 +220,7 @@ browser cannot provide or replace it.
 The implementation must preserve the existing defense in depth:
 
 - authorization before reading caller-selected source files;
-- exact action declaration and prerequisite proof;
-- final re-authorization against the same pinned view immediately before
-  effect staging/sealing;
+- exact action declaration and prerequisite proof in the same pinned view;
 - executor equals the node that prepared and authors the local effect;
 - a node never executes another node's local lifecycle effect.
 
@@ -309,7 +299,7 @@ hints and are included only in the private prepared payload and its digest.
 Preparation returns:
 
 ```text
-PublicDescriptor  -- bounded data committed in the root transaction
+PublicDescriptor  -- bounded data committed in the controlling transaction
 PrivatePrepared   -- exact local payload needed by the manager
 ```
 
@@ -317,20 +307,27 @@ The canonical digest of `PrivatePrepared` is in `PublicDescriptor`.
 
 ### 6.2 Local prepared-action journal and capacity
 
-Before sealing, the journal owner reserves capacity for the action. The shared
-default maximum is 64 outstanding local effects, matching the current open
-registration burst ceiling, with a separate total-byte ceiling derived from
-that count and the shared maximum prepared-genesis size. Both limits live in
-one shared limits header. Other lifecycle callers consume the same capacity;
-registration rate limits are an additional ingress defense, not storage
-accounting.
+Source reading and preparation occur only after the ordinary Prolog
+prerequisites succeed. Their payload remains rollback-safe proof state while
+the plan is being derived and sealed; an abandoned branch or worker cannot
+leave a durable row.
 
-Journal-full is a loud `busy` refusal before sealing or submission. Preferably
-the slot is reserved before reading a large source file; every failed prepare
-releases it. No accepted burst can create an unbounded number of 192 KiB rows.
+After the plan is sealed and its exact unsigned semantic transaction is built,
+the proof owner reserves the one node-wide journal and datasyncs one bounded
+local row before checkpoint or submission. Every failed hand-off releases its
+reservation. The effective node-wide custody capacity is ordinary committed
+root policy: `effect_custody_capacity/1` defaults to 64, a single
+`effect_custody_capacity_override/1` assertion replaces that default, and
+`set_effect_custody_capacity/1` performs the replacement atomically. Any
+non-negative integer or `unlimited` is valid; there is no compiled maximum.
+Root is the one ontology every node starts before it can create or join the
+remaining system ontologies, avoiding a circular bootstrap dependency. Its
+founding `state_handler/4` projects that fact through the existing P tier into
+the journal, and a full configured capacity is a loud `busy` refusal.
+Per-effect descriptor and byte bounds remain protocol validation; ingress rate
+limits remain a separate concern.
 
-After a plan is sealed and its exact unsigned semantic transaction is built,
-the executor datasyncs one bounded local journal row:
+The row contains:
 
 ```text
 EffectId
@@ -338,15 +335,17 @@ PublicDescriptor
 PrivatePrepared
 TransactionRef
 SealedPlan and exact durable goal/result
-state = prepared | handed_off | committed | applied | retired
+state = bound | prepared | handed_off | committed | applied | retired
 ```
 
-The journal is local execution custody, not ontology D, not rebuildable P, and
-not a second authority database. It exists solely to preserve the private
+The journal is local execution custody, not ontology D and not a second
+authority database. Its cached capacity is a projection of root D; it
+exists solely to preserve the private
 prepared payload and complete an already-authorized local effect across worker
-or node restart. It must use a versioned, checksummed, bounded format, exact
-idempotence, conflict rejection, atomic compaction, and the same fail-loud
-durability discipline as Quod's signing journal.
+or node restart. It must use a versioned, checksummed format with bounded rows,
+exact idempotence, conflict rejection, atomic compaction, and the same
+fail-loud durability discipline as Quod's signing journal. The row count is
+the committed policy above; `unlimited` deliberately imposes no count bound.
 
 The exact `TransactionRef` is checkpointed before submission. From then on an
 engine crash or timeout returns `{outcome_unknown, TransactionRef}`; it never
@@ -355,8 +354,10 @@ prepares a new effect or re-proves the request automatically.
 ### 6.3 Signed-submission custody
 
 The local effect journal owns preparation, but Simplex must durably own every
-signed byte it exposes. Extend the existing signing journal with a bounded
-pending-effect-transaction table keyed by `TxId`. One row contains:
+signed byte it exposes. Extend the existing signing journal with a
+pending-effect-transaction table keyed by `TxId`. Its population is already
+governed by the one node-wide custody reservation; the signing journal does not
+apply a duplicate effect-specific count. One row contains:
 
 ```text
 continuous AuthorAdmission
@@ -367,16 +368,16 @@ exact signed submission envelope
 
 Hand-off is one correlated idempotent operation:
 
-1. the action worker passes the exact journaled semantic transaction to its
+1. the ordinary proof worker passes the exact journaled semantic transaction to its
    local Simplex;
 2. Simplex returns an existing matching custody row or allocates/signs a new
    author sequence;
 3. Simplex appends and datasyncs the exact signed envelope in its signing
-   journal before acknowledging the worker or exposing the bytes;
+journal before acknowledging the proof worker or exposing the bytes;
 4. the action journal records `handed_off` after that acknowledgement.
 
 If Simplex persists the row and crashes before acknowledging, retrying the
-hand-off returns the same custody row. If the action worker crashes before it
+hand-off returns the same custody row. If the proof worker crashes before it
 ever calls Simplex, restart retries the exact sealed semantic transaction from
 its journal. This is not a re-proof and cannot change the effect, goal, result,
 plan digest, transaction id, or private prepared payload.
@@ -398,7 +399,7 @@ admission or re-authorized automatically.
 Only a committed transaction releases its effect. A rejected transaction
 retires the prepared journal row without external IO.
 
-Ordered root apply publishes an `applied_live` envelope even when `diff = []`
+Ordered controlling-ontology apply publishes an `applied_live` envelope even when `diff = []`
 if `effects` is non-empty. The envelope carries the already-decoded bounded
 effect descriptor, not an executable goal. `quod_runtime` first completes P
 through that height, then hands the descriptor to the closed effect registry.
@@ -411,7 +412,7 @@ IO.
 
 After execution, the handler verifies the declared desired state and exact
 anchor, marks the row applied, and releases the original caller. The success
-result includes the ordinary root transaction reference/height. The new
+result includes the ordinary controlling transaction reference/height. The new
 ontology separately has its own slot-1 genesis transaction.
 
 ## 7. Crash, retry, and replay rules
@@ -426,12 +427,15 @@ Recovery follows the exact transaction reference:
   hand-off using the exact sealed semantic bytes;
 - **handed off and pending:** Simplex redrives the exact journaled envelope;
   the ordered custody lane prevents a later local sequence overtaking it, and
-  the action runner never resubmits a newly built transaction;
+  the proof owner never resubmits a newly built transaction;
 - **not found while durable Simplex custody exists:** keep custody and retry;
 - **not found with neither valid custody nor the original continuous
   admission:** retire visibly; never re-prove;
 - **rejected:** retire it and perform no effect;
-- **committed, local state absent:** run the exact prepared effect;
+- **committed, ordered P projection not yet through that height:** keep the
+  handed-off row and wait; the outcome alone does not bypass P-before-E;
+- **committed, ordered P projection complete, local state absent:** run the
+  exact prepared effect;
 - **committed, exact desired state already present:** mark applied;
 - **committed, incompatible local state:** fail closed and expose an operator
   error; never overwrite it.
@@ -444,6 +448,11 @@ outcome reads while rebuilding; before it becomes ready, replay from slot 1
 has recreated every ordinary terminal outcome in a reset or missing index.
 The effect journal therefore retries through rebuild and reads the complete
 projection afterward; it does not depend on an old DETS row surviving.
+For a handed-off row, a committed outcome becomes an executable journal row
+only after `quod_runtime`'s existing `e_frontier` covers the transaction
+height. Live apply and restart recovery therefore cross the same P-before-E
+barrier. A row already persisted as `committed` is itself the durable record
+that this release happened before the crash.
 
 Historical ledger replay never blindly re-executes all effects. The local
 journal and an incremental applied-effect frontier identify unfinished local
@@ -453,7 +462,7 @@ applied descriptors whose executor is this node and whose exact local journal
 payload still exists, in bounded chunks.
 
 Loss of the node's storage loses its prepared payload and hosted ontology
-together. The durable root record remains an audit fact, but another node does
+together. The durable controlling-ledger record remains an audit fact, but another node does
 not recreate the ontology automatically. Hosting elsewhere remains an explicit
 authorized join action.
 
@@ -463,7 +472,7 @@ This design intentionally does not turn a namespace string into a globally
 unique allocation. Quod's ontology identity is `{Namespace, GenesisAnchor}`.
 
 Two nodes can concurrently commit accepted creation effects for the same name
-and then found two different anchors. Both root ledger records are honest
+and then found two different anchors. Both controlling-ledger records are honest
 records of separate node-local operations; neither gives one fork authority
 over the other. This is possible today and the durable record makes it visible
 rather than silently resolving it.
@@ -492,7 +501,7 @@ through the shared mechanism.
 A future deletion predicate must use the same transaction/effect path:
 
 1. authorize and prepare an exact target identity;
-2. commit the root transaction containing the deletion effect descriptor;
+2. commit the controlling ontology transaction containing the deletion effect descriptor;
 3. only then perform the local deletion;
 4. recover or verify it by the same `EffectId` after a crash.
 
@@ -574,7 +583,7 @@ The implementation landed in this order:
    D operations; make effect-only plans material.
 3. Refactor the lifecycle external predicates to prepare and stage descriptors
    instead of executing IO; make top-level effect routing class-driven.
-4. Add the bounded local prepared-action journal and exact OutcomeRef hand-off.
+4. Add the node-wide prepared-action journal and exact OutcomeRef hand-off.
 5. Emit effect-bearing apply envelopes for empty-diff transactions and add the
    one direct-effect path behind the existing P-before-E barrier.
 6. Migrate create and join to the common handler; delete the old
@@ -582,14 +591,14 @@ The implementation landed in this order:
 7. Render effect transactions and add dynamic namespace-list updates in
    Explorer.
 8. Run the complete crash, replay, catch-up, authorization, and protocol gates
-   before deployment. These gates are complete for 0.7.70; deployment still
-   requires the single clean re-found stated above.
+   before deployment, including after any later single-path refactor. The
+   incompatible format still requires the single clean re-found stated above.
 
 No compatibility decoder or dual lifecycle executor remains after this hard
 break.
 
-The same implementation delta updates every document and source contract that
-currently describes direct IO after a read-only lifecycle proof or says that
+The same implementation delta updated every document and source contract that
+previously described direct IO after a read-only lifecycle proof or said that
 `applied_live` exists only for transactions changing D. The mandatory sweep
 includes:
 
@@ -626,20 +635,19 @@ The implementation review must account for at least these concrete seams:
 - `quod_dtx`: plan version/core/material/counts, effect/bridge blobs,
   `participates/1`, the effect-only live-bridge rule, and hard rejection from
   manifests/attestations/group validation.
-- `quod_prolog`: replace the current read-only lifecycle worker's direct
-  `execute_prepared` call with stage, seal, ordinary submit, exact outcome
-  checkpoint, and waiter release after E; emit `applied_live` for non-empty
-  effects even when the diff is empty.
-- `quod_predicates` and `quod_ontology_predicates`: registry-owned
-  `action_transition` role, dependency absorption, typed descriptor staging,
-  and no lifecycle IO from Erlog.
+- `quod_prolog`: the ordinary execute worker stages, seals, submits, checkpoints
+  the exact outcome, and releases its waiter only after E; `applied_live` is
+  emitted for non-empty effects even when the diff is empty.
+- `quod_predicates`, `quod_ontology_predicates`, and the common action relation:
+  one staging-class bridge, an opaque proof-local continuation, typed
+  descriptor staging, and no lifecycle IO from Erlog.
 - `quod_ontology` and `quod_simplex`: factor one pure genesis builder and
   consume frozen creation inputs; add pending effect-transaction custody to
   the existing signing-journal owner.
 - `quod_simplex`, ingress, relay, ledger verification, catch-up, feed, outcome,
   metrics, and schema reflection: validate and preserve the new field and
   empty-diff materiality everywhere.
-- the new prepared-action journal owner and `quod_runtime`: reconcile exact
+- the one node-wide prepared-action journal owner and `quod_runtime`: reconcile exact
   committed/rejected outcomes and admit direct descriptors only after the
   existing `e_frontier` barrier.
 - `quod_namespace_manager`, `quod_explorer`, `quod_explorer_http`, and
@@ -678,57 +686,61 @@ The implementation review must account for at least these concrete seams:
    candidates produce neither transaction nor journal row nor IO.
 9. Savepoint/restore, failed alternatives, worker cancellation, and scope
    teardown remove staged effects exactly as they remove staged D changes.
-10. A future test-only second lifecycle operation uses the same runner without a
-   new `quod_prolog` operation branch.
-11. Journal capacity and total-byte exhaustion refuse before sealing and
-    recover their reservations after failed preparation.
+10. A future test-only second lifecycle operation uses the same ordinary
+    action/staging path without a new `quod_prolog` operation branch.
+11. Journal capacity and total-byte exhaustion refuse after sealing but before
+    checkpoint/submission, and recover their reservations after failed
+    hand-off.
 
 ### Durability and recovery
 
-12. Crash before journal datasync performs no submission or effect.
-13. Crash after the action-journal datasync but before Simplex hand-off retries
-    the exact sealed semantic bytes and completes.
-14. Crash after signing-journal datasync but before hand-off acknowledgement
+12. Crash before journal binding performs no submission or effect.
+13. Crash after the `bound` row datasync but before checkpoint activation
+    retires that row as `not_activated`; losing its monitored Prolog owner can
+    never leave it occupying custody or make it executable.
+14. Crash after activation but before Simplex hand-off retries the exact sealed
+    semantic bytes and completes.
+15. Crash after signing-journal datasync but before hand-off acknowledgement
     recovers the exact signed envelope; a later local author sequence remains
     behind it and cannot make it stale.
-15. Attempt a different envelope for the same effect `TxId`: signing custody
+16. Attempt a different envelope for the same effect `TxId`: signing custody
     rejects it without changing the durable journal.
-16. Crash after OutcomeRef checkpoint, after commit but before E, during E,
+17. Crash after OutcomeRef checkpoint, after commit but before E, during E,
     and after E but before journal completion never duplicates the logical
     operation.
-17. A rejected transaction never executes its effect; an uncertain submission
+18. A rejected transaction never executes its effect; an uncertain submission
     is resolved and never re-proved.
-18. Recovery with an empty outcome index deterministically classifies an
+19. Recovery with an empty outcome index deterministically classifies an
     OCC-rejected effect transaction and retires it without IO.
-19. A forged committed descriptor with no matching local prepared row performs
+20. A forged committed descriptor with no matching local prepared row performs
     no IO.
-20. Creation preview and actual genesis produce the same exact anchor; a
+21. Creation preview and actual genesis produce the same exact anchor; a
     mismatch fails closed.
-21. Changing the advertised address after preparation does not alter the
+22. Changing the advertised address after preparation does not alter the
     frozen founder fact or computed anchor; tampering with a frozen input
     produces an anchor mismatch and no start.
-22. Sequential creation of many user homes adds ledger entries but no per-home
+23. Sequential creation of many user homes adds ledger entries but no per-home
     root Prolog facts.
-23. Two nodes concurrently create the same name: both receipts remain visible,
+24. Two nodes concurrently create the same name: both receipts remain visible,
     the anchors remain distinct, directory resolution reports the conflict,
     and neither fork is silently selected or merged.
-24. A directory-level test supplies competing anchors for one namespace and
+25. A directory-level test supplies competing anchors for one namespace and
     asserts the exact fail-closed conflict from resolution, control, and the
     rendered route allowlist; input order cannot select a winner.
 
 ### Apply, runtime, and Explorer
 
-25. Empty-diff committed effects emit one live apply envelope; replay does not
+26. Empty-diff committed effects emit one live apply envelope; replay does not
     blindly execute them.
-26. P completes through height H before E for H begins.
-27. Effect queue overflow/restart is repaired from the journal/frontier and
+27. P completes through height H before E for H begins.
+28. Effect queue overflow/restart is repaired from the journal/frontier and
     cannot strand committed work.
-28. Explorer renders the root transaction as an effect with no D change,
+29. Explorer renders the controlling transaction as an effect with no D change,
     labels the actor author-node-claimed rather than committee-verified, and
     refreshes the namespace list without a page reload.
-29. A namespace created while an Explorer socket is already open begins
+30. A namespace created while an Explorer socket is already open begins
     streaming blocks/status on that same socket.
-30. A future deletion fixture proves that the ledger entry commits before the
+31. A future deletion fixture proves that the ledger entry commits before the
     destructive handler is allowed to run.
 
 ## 12. Non-goals

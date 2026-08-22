@@ -96,11 +96,14 @@ configure_member(Peer, Ns, Port, {Pub, Seed}, Addrs, BootMode, Config) ->
     Set(identity_key,     KeyTerm),
     Set(identity_cert,    quod_identity:mint_cert({Pub, Seed})),
     Set(simplex_delta_ms, ?DELTA_MS),
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                "data_" ++ integer_to_list(Port)),
+    Set(effect_journal_data_dir, DataDir),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
     %% pre-seed the pubkey→addr resolver for the OTHER validators (the first dial needs it; later
     %% ones ride the link header).
     _ = [peer:call(Peer, quod_quic, learn, [Pj, Addr]) || {Pj, Addr} <- Addrs, Pj =/= Pub],
-    DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
     BaseCfg = #{node_id => Pub,
                 identity => #{pubkey => Pub, key => KeyTerm},
                 data_dir => DataDir},

@@ -35,9 +35,13 @@ be served by three hosts, producing at most three live route records.
    They are not committed facts, leases, consensus transactions, or a
    D-derived `quod_runtime` state-handler projection.
 2. **The directory is exposed to Prolog through an external predicate.** The
-   first system entrypoint lives in `quod:root`, but its answers come directly
-   from an Erlang index.  No normal proof may make a blocking call to a
-   directory server.
+   bootstrap entrypoint is `quod:root`, but its answers come directly from an
+   Erlang index.  No normal proof may make a blocking call to a directory
+   server. Root's ordinary committed `system_ontology/2` facts are the sole
+   source for the other system namespaces a node starts or connects at startup;
+   the existing directory, private-seed, and QUIC mechanisms then locate and
+   verify those ontologies. A root fact is a description, not a route or
+   endpoint. See `ontology-actor-architecture.md`.
 3. **The `::` scope resolver uses the same local Erlang index.** It does not
    make a Prolog selection merely to learn where to send that selection. This
    avoids a resolution loop and keeps scope opening bounded.
@@ -75,12 +79,12 @@ now:
 - **private namespaces**: local, explicit direct seeds; they are never
   advertised or returned by `directory_host/5`.
 
-Self-advertised public/user ontologies are a later slice.  They need the
+Self-advertised actor ontologies are a later slice. They need the
 ontology-owned authorisation and revocation model in section 10; they are not
 silently treated as system namespaces.
 
-The first slice also makes no claim of per-user hidden discovery.  Quod does
-not yet carry an authenticated user subject through a proof.  System entries
+The first slice also makes no claim of per-agent hidden discovery. Quod does
+not yet carry an authenticated agent subject through a proof. System entries
 are intentionally network-visible; private entries stay private by never
 entering the shared directory at all.  A later subject-aware directory policy
 can restrict discoverable entries without pretending that it exists today.
@@ -450,9 +454,9 @@ Endpoints and node routes are never copied into `subscribes/2`. See
 
 ## 7. What remains unchanged
 
-- `peer_admitted` and the consensus committee stay as they are.  A directory
-  host is not necessarily a validator, and an ontology user is never a node
-  member.
+- `peer_admitted` and the consensus committee stay as they are. A directory
+  host is not necessarily a validator, and an acting agent instance is not
+  thereby a node committee member.
 - Consensus, voting, batching, ingress, block format, catch-up and ledger
   storage are untouched.
 - The target's normal ask authentication, `can_read`, bounded worker lifetime,

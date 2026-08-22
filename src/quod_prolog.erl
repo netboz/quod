@@ -24,12 +24,11 @@ order. One `gen_server` per namespace.
   is parked until the ordinary apply or group Complete is published. If its local
   wait expires first, it receives the corresponding anchored
   `outcome_unknown` reference and resolves that reference instead of re-proving.
-- **Lifecycle actions** accept only ground root `create_ontology/2` and
-  `join_ontology/3` requests. One read-only anchored proof session validates the
-  exact target-state declaration, authorizes before source reads, carries one
-  opaque prepared descriptor through prerequisite selection, then re-authorizes,
-  executes the typed request once, and verifies its desired state. Prolog
-  backtracking never owns an external-operation descriptor.
+- **Lifecycle actions** are ordinary writable Prolog goals. The normal
+  `can_invoke/4` gate and shared `action/3` relation prove policy and desired
+  state; a governed staging continuation may then add one typed direct effect
+  to the same rollback-safe plan. The existing effect journal executes it only
+  after ordered apply.
 - **`apply_entry/3`** is the deterministic ordered state machine driven by
   `quod_simplex`. Content transactions re-check their read set (OCC) before apply;
   DTX Prepare retains a hidden plan, Finalize(commit) publishes it once, and
@@ -56,15 +55,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
          project_pending_begin/2,
          dtx_group_resolved/2,
-         run_action/2,
          applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
          request_content_verdict/6, request_dtx_verdict/6,
          stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
--export([prove_est/2, prove_est_read_only/2]).
-%% prove against a raw #est{} handle (runtime + isolated policy reads)
+-export([prove_est/2]).
+%% Prove against a raw #est{} handle for the runtime projection.
 -ifdef(TEST).
 -export([open_cursor/4,
          test_active_command_stack/1,
@@ -106,7 +104,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -define(MAX_SCOPE_REJECTS_PER_SECOND, 32).
 
 -record(proof_worker, {pid         :: pid(),
-                       kind        :: prove | prove_ro | action | cursor,
+                       kind        :: prove | prove_ro | cursor,
                        worker_mref :: reference(),
                        caller_mref :: reference(),
                        from        :: gen_server:from() |
@@ -162,7 +160,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           proof_id    :: <<_:256>>,
           scope_id    :: <<_:128>>,
           deadline_ms :: integer(),
-          kind        :: prove | prove_ro | action | cursor,
+          kind        :: prove | prove_ro | cursor,
           namespace   :: binary(),
           anchor      :: <<_:256>>,
           height      :: non_neg_integer(),
@@ -235,6 +233,11 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% Simplex to replay once the shared dependency is available.
             apply_dependency = none ::
                 none | {network_identity, reference(), reference()},
+            %% A locally unavailable genesis-pinned predicate module is an
+            %% installation problem, not corrupt ledger history.  Keep the
+            %% engine alive but closed until a software restart can replay the
+            %% same certified genesis with the exact required BEAM available.
+            projection_failure = none :: none | term(),
             ttl       = 30000 :: pos_integer(),
             vttl      = 2000 :: pos_integer(),    %% membership-verdict park budget (ms)
             max_proof_workers = 64 :: pos_integer(),
@@ -309,20 +312,16 @@ lifetime.
           {ok, pid(), reference()} | {error, term()}.
 open_cursor(TargetNs, Goal, Owner, <<_:256>> = CursorId)
   when is_binary(TargetNs), is_pid(Owner) ->
-    case quod_predicates:action_transition(Goal) of
-        true -> {error, non_backtrackable_action};
-        false ->
-            case quod_reg:where({quod_prolog, TargetNs}) of
-                undefined -> {error, no_such_namespace};
-                Engine ->
-                    CallRef = make_ref(),
-                    Request = proof_request(
-                                quod_trace:context(), undefined, any, none),
-                    gen_server:cast(
-                      Engine,
-                      {public_cursor, Owner, CallRef, CursorId, Goal, Request}),
-                    {ok, Engine, CallRef}
-            end
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Engine ->
+            CallRef = make_ref(),
+            Request = proof_request(
+                        quod_trace:context(), undefined, any, none),
+            gen_server:cast(
+              Engine,
+              {public_cursor, Owner, CallRef, CursorId, Goal, Request}),
+            {ok, Engine, CallRef}
     end;
 open_cursor(_TargetNs, _Goal, _Owner, _CursorId) ->
     {error, bad_request}.
@@ -339,21 +338,17 @@ open_cursor(
                  mode := cursor}} = Evidence,
   Goal, {user, UserKey} = Principal, Owner, <<_:256>> = CursorId)
   when is_binary(TargetNs), is_pid(Owner) ->
-    case quod_predicates:action_transition(Goal) of
-        true -> {error, non_backtrackable_action};
-        false ->
-            case signed_engine(TargetNs, Anchor) of
-                {ok, Engine} ->
-                    CallRef = make_ref(),
-                    Request = proof_request(
-                                quod_trace:context(), Principal, Anchor,
-                                Evidence),
-                    gen_server:cast(
-                      Engine,
-                      {public_cursor, Owner, CallRef, CursorId, Goal, Request}),
-                    {ok, Engine, CallRef};
-                {error, _} = Error -> Error
-            end
+    case signed_engine(TargetNs, Anchor) of
+        {ok, Engine} ->
+            CallRef = make_ref(),
+            Request = proof_request(
+                        quod_trace:context(), Principal, Anchor,
+                        Evidence),
+            gen_server:cast(
+              Engine,
+              {public_cursor, Owner, CallRef, CursorId, Goal, Request}),
+            {ok, Engine, CallRef};
+        {error, _} = Error -> Error
     end;
 open_cursor(_Evidence, _Goal, _Principal, _Owner, _CursorId) ->
     {error, invalid_signed_goal}.
@@ -405,9 +400,11 @@ model instead of making ontology creation a separate product API.
            log_index() | {transaction, binary(), binary(), binary()} | map()} |
           {error, term()} | fail | {fail, [term()]}.
 execute(TargetNs, Goal) ->
-    case lifecycle_action_term(Goal) of
-        true -> run_action(TargetNs, Goal);
-        false -> prove(TargetNs, Goal)
+    case quod_reg:where({quod_prolog, TargetNs}) of
+        undefined -> {error, no_such_namespace};
+        Engine ->
+            public_proof(
+              Engine, TargetNs, execute, Goal, quod_trace:context())
     end.
 
 -doc "Execute one already-verified signed request through the ordinary proof boundary.".
@@ -425,17 +422,14 @@ execute_signed(
        (Mode =:= read orelse Mode =:= execute) ->
     case signed_engine(TargetNs, Anchor) of
         {ok, Engine} ->
-            case {Mode, lifecycle_action_term(Goal)} of
-                {read, _} ->
+            case Mode of
+                read ->
                     public_proof(
                       Engine, TargetNs, prove_ro, Goal,
                       quod_trace:context(), Principal, Anchor, Evidence);
-                {execute, true} ->
-                    run_action_at(
-                      Engine, TargetNs, Goal, Principal, Anchor, Evidence);
-                {execute, false} ->
+                execute ->
                     public_proof(
-                      Engine, TargetNs, prove, Goal,
+                      Engine, TargetNs, execute, Goal,
                       quod_trace:context(), Principal, Anchor, Evidence)
             end;
         {error, _} = Error -> Error
@@ -454,12 +448,6 @@ signed_engine(TargetNs, <<_:256>> = Anchor) ->
     end;
 signed_engine(_TargetNs, _Anchor) ->
     {error, wrong_genesis_anchor}.
-
-%% These are the typed lifecycle action constructors registered by
-%% `quod_ontology:validate_action/1`. They must enter the action executor even
-%% when malformed, so callers receive its bounded validation failure rather
-%% than silently proving an unrelated ordinary predicate.
-lifecycle_action_term(Goal) -> quod_predicates:action_transition(Goal).
 
 -doc """
 Trusted in-VM read-only prove: like `prove/2` but a write goal is refused
@@ -608,7 +596,7 @@ outcome_not_found(
   AppliedFloor) ->
     {error, {group_not_found, AppliedFloor}};
 outcome_not_found(
-  {transaction, <<"quod:root">>, <<_:256>>, <<_:256>>} = Ref,
+  {transaction, _Ns, <<_:256>>, <<_:256>>} = Ref,
   _AppliedFloor) ->
     case quod_effect_journal:status_ref(Ref) of
         {ok, #{state := retired, result := Reason}} ->
@@ -664,103 +652,11 @@ dtx_group_resolved(Ns,
 dtx_group_resolved(_Ns, _GroupRef) ->
     ok.
 
--doc """
-Authorize and commit one node-local ontology lifecycle action.
-
-This is a trusted in-VM node/operator API, not a client route.
-
-Only fully-ground `create_ontology/2` and `join_ontology/3` actions targeting
-`quod:root` are accepted. A bounded worker validates the committed root
-transition, authorizes the engine-owned node principal before preparing input,
-selects the declaration's desired state or prerequisites read-only, and records
-one typed effect in the ordinary root transaction path.  The effect journal
-invokes the prepared helper only after ordered apply. A worker loss is
-outcome-unknown because the transaction or namespace-manager operation may
-already have been accepted; inspect the returned outcome reference before any
-retry.
-""".
--spec run_action(binary(), term()) ->
-        {ok, [map()], log_index()} | {error, term()} | fail | {fail, [term()]}.
-run_action(TargetNs, Action) ->
-    case validate_action_request(TargetNs, Action) of
-        {ok, Structural} ->
-            case quod_reg:where({quod_prolog, TargetNs}) of
-                undefined -> {error, no_such_namespace};
-                Pid ->
-                    public_action(
-                      Pid, TargetNs, Action, Structural, node, any, none)
-            end;
-        {error, Reason} ->
-            {error, Reason};
-        {fail, Reason} ->
-            {fail, [Reason]}
-    end.
-
-run_action_at(Engine, Ns, Action, Principal, ExpectedAnchor, RequestEvidence) ->
-    case validate_action_request(Ns, Action) of
-        {ok, Structural} ->
-            public_action(
-              Engine, Ns, Action, Structural, Principal,
-              ExpectedAnchor, RequestEvidence);
-        {error, Reason} -> {error, Reason};
-        {fail, Reason} -> {fail, [Reason]}
-    end.
-
-public_action(Engine, Ns, Action, Structural, Principal,
-              ExpectedAnchor, RequestEvidence) ->
-    CallRef = make_ref(),
-    MRef = monitor(process, Engine),
-    Request = proof_request(
-                otel_ctx:new(), Principal, ExpectedAnchor, RequestEvidence),
-    gen_server:cast(
-      Engine,
-      {public_action, self(), CallRef, Action, Structural, Request}),
-    try await_public_proof(Engine, MRef, CallRef, Ns, none)
-    after demonitor(MRef, [flush])
-    end.
-
 proof_request(TraceCtx, Principal, ExpectedAnchor, RequestEvidence) ->
     #proof_request{trace_ctx = TraceCtx,
                    principal = Principal,
                    expected_anchor = ExpectedAnchor,
                    request_evidence = RequestEvidence}.
-
-validate_action_request(TargetNs, Action) ->
-    case quod_ontology:validate_action(Action) of
-        {ok, Structural} when TargetNs =:= ?ROOT_NS ->
-            {ok, Structural};
-        {ok, _Structural} ->
-            {fail,
-             quod_ontology_predicates:failure_reason(Action, root_only)};
-        {error, invalid_action} ->
-            {error, invalid_action};
-        {error, Reason} when TargetNs =:= ?ROOT_NS ->
-            {fail,
-             quod_ontology_predicates:failure_reason(Action, Reason)};
-        {error, _Reason} ->
-            {fail,
-             quod_ontology_predicates:failure_reason(Action, root_only)}
-    end.
-
-lifecycle_principal(NodeKey)
-  when is_binary(NodeKey), byte_size(NodeKey) =:= 32 ->
-    {ok, {node, NodeKey}};
-lifecycle_principal(_InvalidEngineIdentity) ->
-    error.
-
-valid_user_lifecycle_principal({user, <<_:256>>}) -> true;
-valid_user_lifecycle_principal(_) -> false.
-
-lifecycle_request_principal(node, Self) ->
-    case lifecycle_principal(Self) of
-        {ok, Principal} -> {ok, Principal};
-        error -> {error, not_authorized}
-    end;
-lifecycle_request_principal(Principal, _Self) ->
-    case valid_user_lifecycle_principal(Principal) of
-        true -> {ok, Principal};
-        false -> {error, invalid_user_principal}
-    end.
 
 -doc "The committed log index this kb has applied (the freshness height for a read).".
 -spec applied(binary()) -> log_index().
@@ -1198,33 +1094,11 @@ handle_cast(
        (not is_binary(CursorId) orelse byte_size(CursorId) =/= 32) ->
     reply_client({async, Owner, CallRef}, {error, bad_request}),
     {noreply, S};
-handle_cast({public_cursor, Owner, CallRef, <<_:256>>, _Goal,
-             #proof_request{}},
-            S = #s{ready = false})
-  when is_pid(Owner), is_reference(CallRef) ->
-    reply_client({async, Owner, CallRef}, {error, rebuilding}),
-    {noreply, S};
-handle_cast({public_cursor, Owner, CallRef, <<_:256>>, _Goal,
-             #proof_request{}},
-            S = #s{workers = Workers, max_proof_workers = Max})
-  when is_pid(Owner), is_reference(CallRef), map_size(Workers) >= Max ->
-    reply_client({async, Owner, CallRef}, {error, busy}),
-    {noreply, S};
 handle_cast({public_cursor, Owner, CallRef, <<_:256>> = CursorId, Goal,
-             #proof_request{principal = Principal,
-                            request_evidence = RequestEvidence} = Request}, S)
+             #proof_request{} = Request}, S)
   when is_pid(Owner), is_reference(CallRef) ->
-    case valid_proof_auth(Principal, RequestEvidence) of
-        true ->
-            {noreply,
-             spawn_proof(
-               cursor, {Owner, CallRef, CursorId, Goal},
-               {async, Owner, CallRef}, Request, S)};
-        false ->
-            reply_client(
-              {async, Owner, CallRef}, {error, invalid_user_principal}),
-            {noreply, S}
-    end;
+    admit_public_cursor(
+      Owner, CallRef, CursorId, Goal, Request, S);
 handle_cast({cancel_public_cursor, Owner, CallRef}, S = #s{workers = Workers})
   when is_pid(Owner), is_reference(CallRef) ->
     case find_cursor_worker(Owner, CallRef, Workers) of
@@ -1236,58 +1110,20 @@ handle_cast({public_proof, Caller, CallRef, Kind, _Goal,
              #proof_request{}},
             S = #s{ready = false})
   when is_pid(Caller), is_reference(CallRef),
-       (Kind =:= prove orelse Kind =:= prove_ro) ->
+       (Kind =:= prove orelse Kind =:= prove_ro orelse Kind =:= execute) ->
     reply_client({async, Caller, CallRef}, {error, rebuilding}),
     {noreply, S};
 handle_cast({public_proof, Caller, CallRef, Kind, Goal,
              #proof_request{principal = Principal,
                             request_evidence = RequestEvidence} = Request}, S)
   when is_pid(Caller), is_reference(CallRef),
-       (Kind =:= prove orelse Kind =:= prove_ro) ->
+       (Kind =:= prove orelse Kind =:= prove_ro orelse Kind =:= execute) ->
     case valid_proof_auth(Principal, RequestEvidence) of
         true ->
-            admit_public_proof(
+            admit_public_request(
               Kind, Goal, {async, Caller, CallRef}, Request, S);
         false ->
             reply_client({async, Caller, CallRef}, {error, invalid_user_principal}),
-            {noreply, S}
-    end;
-%% Lifecycle actions use the same explicit monitor/checkpoint protocol as
-%% public proofs.  That is what preserves the exact transaction reference if
-%% the root engine restarts after accepting the effect.  `node` is only a
-%% request marker: the actual key is derived from this engine's signer.
-handle_cast({public_action, Caller, CallRef, _Action, _Structural,
-             #proof_request{}},
-            S = #s{ready = false})
-  when is_pid(Caller), is_reference(CallRef) ->
-    reply_client({async, Caller, CallRef}, {error, rebuilding}),
-    {noreply, S};
-handle_cast({public_action, Caller, CallRef, Action, Structural,
-             #proof_request{principal = Requested,
-                            request_evidence = RequestEvidence} = Request},
-            S = #s{self = Self})
-  when is_pid(Caller), is_reference(CallRef) ->
-    From = {async, Caller, CallRef},
-    case lifecycle_request_principal(Requested, Self) of
-        {ok, Principal} ->
-            case valid_proof_auth(Principal, RequestEvidence) of
-                true ->
-                    admit_public_proof(
-                      action, {Action, Structural}, From,
-                      Request#proof_request{principal = Principal}, S);
-                false ->
-                    reply_client(From, {error, invalid_user_principal}),
-                    {noreply, S}
-            end;
-        {error, invalid_user_principal} ->
-            reply_client(From, {error, invalid_user_principal}),
-            {noreply, S};
-        {error, not_authorized} ->
-            reply_client(
-              From,
-              {fail,
-               [quod_ontology_predicates:failure_reason(
-                  Action, not_authorized)]}),
             {noreply, S}
     end;
 handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
@@ -1322,6 +1158,9 @@ handle_cast({proof_result, Ref, Result}, S) ->
 %% apply can also close a replay interval, handled in note_origin/4.
 handle_cast(mark_ready,
             S = #s{apply_dependency = {network_identity, _, _}}) ->
+    {noreply, S};
+handle_cast(mark_ready, S = #s{projection_failure = Reason})
+  when Reason =/= none ->
     {noreply, S};
 handle_cast(mark_ready, S = #s{runtime_mode = {replaying, Id}, ns = Ns, applied = H}) ->
     publish_runtime(Ns, {replay_ready, Id, H}),
@@ -3357,6 +3196,38 @@ terminate(_Reason, #s{ns = Ns, workers = W,
 %%% proof execution (worker-per-proof; copy-on-write overlay)
 %%%===================================================================
 
+admit_public_cursor(Owner, CallRef, _CursorId, _Goal, _Request,
+                    S = #s{ready = false}) ->
+    reply_client({async, Owner, CallRef}, {error, rebuilding}),
+    {noreply, S};
+admit_public_cursor(Owner, CallRef, _CursorId, _Goal, _Request,
+                    S = #s{workers = Workers,
+                           max_proof_workers = Max})
+  when map_size(Workers) >= Max ->
+    reply_client({async, Owner, CallRef}, {error, busy}),
+    {noreply, S};
+admit_public_cursor(
+  Owner, CallRef, CursorId, Goal,
+  #proof_request{principal = Principal,
+                 request_evidence = RequestEvidence} = Request, S) ->
+    case valid_proof_auth(Principal, RequestEvidence) of
+        true ->
+            {noreply,
+             spawn_proof(
+               cursor, {Owner, CallRef, CursorId, Goal},
+               {async, Owner, CallRef}, Request, S)};
+        false ->
+            reply_client(
+              {async, Owner, CallRef}, {error, invalid_user_principal}),
+            {noreply, S}
+    end.
+
+admit_public_request(execute, Goal, From, Request, S) ->
+    admit_public_proof(prove, Goal, From, Request, S);
+admit_public_request(Kind, Goal, From, Request, S)
+  when Kind =:= prove; Kind =:= prove_ro ->
+    admit_public_proof(Kind, Goal, From, Request, S).
+
 %% Capacity and the already-applied operation index are checked by the one
 %% engine owner before a proof starts. An in-flight proof is deliberately not
 %% treated as an operation claim: it may still fail authorization or proof.
@@ -3469,17 +3340,11 @@ proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, Ns, Est,
                end),
     gen_server:cast(Engine, {proof_result, Ref, Result}).
 
-worker_context(action, Ns, Applied) ->
-    quod_predicates:effect_context(Ns, Applied);
 worker_context(_ProofKind, Ns, Applied) ->
-    %% Subject remains none until signed subjects land.
+    %% Authenticated authority stays in private quod_proof_context state; the
+    %% readable predicate context deliberately carries no duplicate subject.
     quod_predicates:proof_context(Ns, Applied, undefined).
 
-run_worker(Engine, Ref, action, ProofId, Deadline, {Action, Structural},
-           #proof_request{} = Request, Ns, Applied, Est, Signer) ->
-    run_lifecycle_origin(
-      Engine, Ref, ProofId, Deadline, Action, Structural, Request, Ns,
-      Applied, Est, Signer);
 run_worker(Engine, Ref, cursor, ProofId, Deadline,
            {Owner, CallRef, CursorId, Goal}, #proof_request{} = Request,
            Ns, Applied, Est, Signer) ->
@@ -3562,38 +3427,10 @@ target_anchor(Ns) ->
         undefined -> <<0:256>>
     end.
 
-run_lifecycle_origin(
-  Engine, Ref, ProofId, Deadline, Action, Structural,
-  #proof_request{expected_anchor = ExpectedAnchor} = Request,
-  Ns, Applied, Est, Signer) ->
-    case quod_simplex:genesis_hash(Ns) of
-        <<_:256>> = Anchor
-          when ExpectedAnchor =:= any; ExpectedAnchor =:= Anchor ->
-            run_pinned_origin(
-              Engine, Ref, action, ProofId, Deadline, Ns, Applied,
-              Anchor, Request, Est, Signer,
-              fun(Origin) ->
-                  run_authorized_lifecycle_action(
-                    Action, Structural, Origin)
-              end);
-        <<_:256>> when is_binary(ExpectedAnchor) ->
-            {error, wrong_genesis_anchor};
-        undefined when is_binary(ExpectedAnchor) ->
-            {error, wrong_genesis_anchor};
-        undefined ->
-            %% A ready production engine always has its immutable genesis
-            %% anchor. A test-only bare engine cannot safely mint distributed
-            %% selector authority for a lifecycle effect.
-            {error, rebuilding}
-    end.
-
 run_pinned_origin(
   Engine, Ref, Kind, ProofId, Deadline, Ns, Applied, Anchor,
   #proof_request{principal = Principal,
                  request_evidence = RequestEvidence}, Est, Signer, RunFun) ->
-    %% Lifecycle actions are ordinary writable proofs whose only permitted
-    %% material is one typed direct effect.  Keeping the proof context
-    %% read-only here would silently discard that effect at sealing time.
     ReadOnly = Kind =:= prove_ro,
     OriginIdentity = {Ns, Anchor},
     AuthPrincipal = case Principal of
@@ -3603,17 +3440,10 @@ run_pinned_origin(
     OriginHandle = quod_proof_context:start(
                      ProofId, ReadOnly, OriginIdentity, Deadline,
                      AuthPrincipal, RequestEvidence),
-    OverlayOpts0 = #{read_set => true,
-                     read_only => ReadOnly,
-                     signer => Signer,
-                     proof_context => {origin, OriginHandle}},
-    %% A client-authenticated proof principal authorizes the proof itself.
-    %% Only lifecycle actions carry their actor through the overlay's separate
-    %% lifecycle-principal channel.
-    OverlayOpts = case Kind =:= action andalso Principal =/= undefined of
-                      true -> OverlayOpts0#{lifecycle_principal => Principal};
-                      false -> OverlayOpts0
-                  end,
+    OverlayOpts = #{read_set => true,
+                    read_only => ReadOnly,
+                    signer => Signer,
+                    proof_context => {origin, OriginHandle}},
     Context = quod_predicates:with_chain(
                 quod_predicates:context(Est), [OriginIdentity]),
     try
@@ -3836,7 +3666,8 @@ committed_plan_handle(_RequestAuth, _Target, _Origin, _Index, OutcomeRef) ->
     OutcomeRef.
 
 submit_single_effect_plan(
-  #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
+  #pinned_origin{namespace = Ns, anchor = Anchor,
+                 session = Session} = Origin,
   {Ns, Anchor} = Target, Plan, Bindings, GoalBlob, ResultBlob) ->
     RequestAuth = quod_proof_context:request_auth(),
     case quod_dtx:material(Plan) of
@@ -3848,18 +3679,18 @@ submit_single_effect_plan(
                        submitted_at = quod_time:now_ms()},
             OutcomeRef = {transaction, Ns, Anchor,
                           Change#transaction.tx_id},
-            case checkpoint_bound_effect(
-                   Origin, Effect, Change, OutcomeRef) of
-                ok ->
-                    case submit_bound_effect_plan(
-                           Target, Plan, Change,
-                           GoalBlob, ResultBlob, Bindings) of
-                        {ok, _B, Index, _TxId} ->
-                            {committed, Bindings,
-                             {effect_commit, Index, OutcomeRef}};
-                        {error, _} = Error -> Error
-                    end;
-                {error, _} = Error -> Error
+            case quod_proof_session:prepared_effect(Session, Effect) of
+                {ok, {Action, Desired, Effect, Prepared}} ->
+                    with_effect_journal_preparation(
+                      Action, Desired, Effect, Prepared,
+                      fun() ->
+                          commit_and_await_effect(
+                            Origin, Target, Plan, Change, Effect,
+                            GoalBlob, ResultBlob, Bindings,
+                            RequestAuth, OutcomeRef)
+                      end);
+                error ->
+                    {error, missing_effect_preparation}
             end;
         _ ->
             {error, invalid_direct_effect}
@@ -3867,6 +3698,48 @@ submit_single_effect_plan(
 submit_single_effect_plan(_Origin, _Target, _Plan, _Bindings,
                           _GoalBlob, _ResultBlob) ->
     {error, effect_executor_not_local}.
+
+with_effect_journal_preparation(Action, Desired, Effect, Prepared, Fun) ->
+    case quod_effect_journal:reserve(self()) of
+        {ok, Reservation} ->
+            try
+                case quod_effect_journal:stage(
+                       Reservation, Action, Desired, Effect, Prepared) of
+                    ok -> Fun();
+                    {error, _} = Error -> Error
+                end
+            after
+                ok = quod_effect_journal:release_reservation(Reservation)
+            end;
+        {error, busy} -> {error, busy};
+        {error, _} -> {error, effect_journal_unavailable}
+    end.
+
+commit_and_await_effect(
+  #pinned_origin{namespace = Ns, anchor = Anchor} = Origin,
+  Target, Plan, Change, Effect, GoalBlob, ResultBlob, Bindings,
+  RequestAuth, OutcomeRef) ->
+    case checkpoint_bound_effect(Origin, Effect, Change, OutcomeRef) of
+        ok ->
+            case submit_bound_effect_plan(
+                   Target, Plan, Change, GoalBlob, ResultBlob, Bindings) of
+                {ok, _B, Index, _TxId} ->
+                    case quod_effect_journal:await(
+                           quod_effect:effect_id(Effect),
+                           max(1, quod_proof_context:remaining_ms())) of
+                        ok ->
+                            Handle = committed_plan_handle(
+                                       RequestAuth, Target, {Ns, Anchor},
+                                       Index, OutcomeRef),
+                            {committed, Bindings, Handle};
+                        {error, outcome_unknown} ->
+                            {error, {outcome_unknown, OutcomeRef}};
+                        {error, Reason} -> {error, Reason}
+                    end;
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end.
 
 submit_bound_effect_plan(
   {TargetNs, TargetAnchor}, Plan, Change, GoalBlob, ResultBlob, Bindings) ->
@@ -4058,9 +3931,6 @@ submit_remote_plan(Handle, Plan, Goal, Bindings) ->
         {error, _} = Error -> Error
     end.
 
-run_origin_invocation(Origin, Goal) ->
-    run_origin_invocation(Origin, Goal, allowed).
-
 run_cursor_goal(
   Owner, CallRef, CursorId, Goal,
   #pinned_origin{scope_id = ScopeId, session = Session,
@@ -4175,197 +4045,6 @@ normalize_read_only_result(_Kind, Result) ->
 close_origin_scope(
   {local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session}) -> ok;
 close_origin_scope(Scope) -> quod_scope_session:close(Scope).
-
-run_authorized_lifecycle_action(Action, Structural, Origin) ->
-    case authorization_verdict(Origin, Action) of
-        allowed -> run_lifecycle_action(Action, Structural, Origin);
-        denied -> run_origin_invocation(Origin, Action, denied)
-    end.
-
-run_lifecycle_action(Action, Structural, Origin) ->
-    case lifecycle_action_declared(Action, Origin) of
-        true ->
-            prepare_lifecycle_input(Action, Structural, Origin);
-        false ->
-            {fail,
-             [quod_ontology_predicates:failure_reason(
-                Action, action_not_declared)]};
-        {error, _Reason} ->
-            {error, action_declaration_failed}
-    end.
-
-lifecycle_action_declared(Action, Origin) ->
-    Goal =
-        {',',
-         {action, Action, {'Prerequisites'}, {'DesiredState'}},
-         {'$quod_action_shape', Action,
-          {'Prerequisites'}, {'DesiredState'}}},
-    case run_origin_invocation(Origin, Goal) of
-        {ok, _Bindings, [], _ReadSet} -> true;
-        {fail, _Reasons} -> false;
-        {error, _} = Error -> Error
-    end.
-
-lifecycle_authorized(Action, Origin) ->
-    case run_origin_invocation(
-           Origin, {authorized_ontology_lifecycle, Action}) of
-        {ok, _Bindings, [], _ReadSet} ->
-            ok;
-        _ ->
-            {error,
-             quod_ontology_predicates:failure_reason(
-               Action, not_authorized)}
-    end.
-
-prepare_lifecycle_input(Action, Structural, Origin) ->
-    case lifecycle_authorized(Action, Origin) of
-        ok ->
-            case quod_effect_journal:reserve(self()) of
-                {ok, Reservation} ->
-                    try
-                        case quod_ontology:prepare_action(
-                               Structural,
-                               quod_proof_context:principal()) of
-                            {ok, Prepared} ->
-                                Goal =
-                                    {prepare_lifecycle_action, Action,
-                                     {'DesiredState'}, {'Mode'}},
-                                Selection = run_origin_invocation(Origin, Goal),
-                                complete_lifecycle_action(
-                                  Action, Prepared, Reservation,
-                                  Origin, Selection);
-                            {error, Reason} ->
-                                {fail,
-                                 [quod_ontology_predicates:lifecycle_error(
-                                    Action, Reason)]}
-                        end
-                    after
-                        ok = quod_effect_journal:release_reservation(
-                               Reservation)
-                    end;
-                {error, busy} ->
-                    {error, busy};
-                {error, _} ->
-                    {error, lifecycle_journal_unavailable}
-            end;
-        {error, Reason} ->
-            {fail, [Reason]}
-    end.
-
-complete_lifecycle_action(Action, Prepared, Reservation, Origin,
-                          {ok, Bindings, [], _ReadSet})
-  when is_map(Bindings) ->
-    case {maps:find('DesiredState', Bindings), maps:find('Mode', Bindings)} of
-        {{ok, DesiredState}, {ok, Mode}}
-          when Mode =:= already; Mode =:= execute ->
-            finish_lifecycle_action(
-              Action, Prepared, Reservation, Origin, DesiredState, Mode);
-        _ ->
-            {error, action_declaration_failed}
-    end;
-complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin,
-                          {ok, _Bindings, _Diff, _ReadSet}) ->
-    {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin,
-                          {error, {erlog,
-                                   {permission_error, modify,
-                                    static_procedure, _Predicate}}}) ->
-    {error, lifecycle_staged_write};
-complete_lifecycle_action(_Action, _Prepared, _Reservation, _Origin, Result) ->
-    Result.
-
-finish_lifecycle_action(Action, Prepared, Reservation,
-                        Origin, DesiredState, Mode) ->
-    case quod_predicates:is_ground(DesiredState) of
-        false ->
-            {error, action_declaration_failed};
-        true ->
-            case lifecycle_authorized(Action, Origin) of
-                {error, Reason} ->
-                    {fail, [Reason]};
-                ok when Mode =:= already ->
-                    lifecycle_success();
-                ok ->
-                    stage_commit_and_execute_lifecycle(
-                      Action, Prepared, Reservation,
-                      Origin, DesiredState)
-            end
-    end.
-
-stage_commit_and_execute_lifecycle(
-  Action, Prepared, Reservation,
-  #pinned_origin{session = Session} = Origin, DesiredState) ->
-    Principal = quod_proof_context:principal(),
-    case quod_proof_session:signer(Session) of
-        #{pubkey := <<_:256>> = Executor} ->
-            case quod_ontology:prepared_effect(
-                   Action, Prepared, Executor, Principal) of
-                {ok, Effect} ->
-                    case quod_effect_journal:stage(
-                           Reservation, Action, DesiredState,
-                           Effect, Prepared) of
-                        ok ->
-                            ok = quod_proof_session:set_lifecycle_effect(
-                                   Session, Effect),
-                            stage_lifecycle_transition(
-                              Action, Effect, Origin, Session);
-                        {error, Reason} ->
-                            {error, Reason}
-                    end;
-                {error, Reason} ->
-                    {fail, [quod_ontology_predicates:lifecycle_error(
-                              Action, Reason)]}
-            end;
-        none ->
-            {error, rebuilding}
-    end.
-
-stage_lifecycle_transition(Action, Effect, Origin, Session) ->
-    case run_origin_invocation(Origin, Action) of
-                        {ok, Bindings, [], ReadSet} = Staged ->
-                            case quod_proof_session:effects(Session) of
-                                [Effect] ->
-                                    Submitted = finish_pinned_proof(
-                                                  prove, Origin, Action,
-                                                  Staged),
-                                    complete_committed_lifecycle(
-                                      Effect, Submitted,
-                                      Bindings, ReadSet);
-                                _ ->
-                                    {error, lifecycle_effect_not_staged}
-                            end;
-                        {ok, _Bindings, _Diff, _ReadSet} ->
-                            {error, lifecycle_staged_write};
-        Other ->
-            Other
-    end.
-
-complete_committed_lifecycle(
-  Effect, {committed, _Bindings,
-           {effect_commit, Height, OutcomeRef}},
-    _Bindings0, _ReadSet) ->
-    case quod_effect_journal:await(
-           quod_effect:effect_id(Effect),
-           max(1, quod_proof_context:remaining_ms())) of
-        ok ->
-            {committed, #{},
-             committed_lifecycle_handle(Height, OutcomeRef)};
-        {error, outcome_unknown} ->
-            {error, {outcome_unknown, OutcomeRef}};
-        {error, Reason} ->
-            {error, Reason}
-    end;
-complete_committed_lifecycle(
-  _Effect, Other, _Bindings, _ReadSet) ->
-    Other.
-
-committed_lifecycle_handle(Height, OutcomeRef) ->
-    case quod_proof_context:request_auth() of
-        none -> Height;
-        _SignedRequest -> OutcomeRef
-    end.
-
-lifecycle_success() -> {ok, #{}, [], #{}}.
 
 %% Every worker result is terminal now: a write proof commits (or fails)
 %% inside the worker through submit_plan/4 before it reports, so the engine's
@@ -4620,8 +4299,6 @@ proof_down_reply(_Kind, _Reason, _Ns, Checkpoint)
 proof_down_reply(Kind, Reason, Ns, none) ->
     proof_down_reply(Kind, Reason, Ns).
 
-proof_down_reply(action, _Reason, _Ns) ->
-    {error, outcome_unknown};
 proof_down_reply(_Kind, killed, Ns) ->
     {error, {proof_limit_exceeded, Ns}};
 proof_down_reply(_Kind, _Reason, _Ns) ->
@@ -4829,7 +4506,7 @@ kill_worker(Pid) ->
 Prove `Goal` against a raw committed `#est{}` handle, in the calling process, through the
 local-prove overlay (staged writes never touch the shared KB table). Returns
 `{ok, Bindings, StagedChanges, ReadSet} | fail | {error, _}`. This is a strictly local adapter
-used by `m:quod_runtime` and committed policy subproofs; a foreign `::` returns
+used by `m:quod_runtime`; a foreign `::` returns
 `{error, {ask_requires_anchored_proof, Namespace}}`, while an exact self-selection stays
 in place. Runtime handlers set a semantic context via `quod_predicates:set_context/2` and
 treat a non-empty `StagedChanges` as a projection violation. The caller must hold a snapshot
@@ -4840,24 +4517,12 @@ race history pruning.
           {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
 prove_est(Goal, Est) -> run_proof_est(Goal, Est).
 
--doc "Prove against a raw committed state while rejecting every database mutation.".
--spec prove_est_read_only(term(), tuple()) ->
-          {ok, [map()] | map(), list(), map()} | fail | {error, term()}.
-prove_est_read_only(Goal, Est) ->
-    run_proof_est(Goal, Est, #{read_only => true}).
-
 run_proof_est(Goal, Est) ->
-    run_proof_est(Goal, Est, #{}).
-
-run_proof_est(Goal, Est, OverlayOpts) ->
-    case run_proof_est_annotated(Goal, Est, OverlayOpts) of
+    case quod_proof_session:run_first(
+           Goal, Est, #{read_set => true}) of
         {fail, _Reasons} -> fail;
         Result -> Result
     end.
-
-run_proof_est_annotated(Goal, Est, OverlayOpts) ->
-    quod_proof_session:run_first(
-      Goal, Est, OverlayOpts#{read_set => true}).
 
 %% Validate one sealed plan against this engine's own identity and turn it
 %% into the signed ordinary transaction envelope. Sealing is target-side, so
@@ -5258,6 +4923,8 @@ apply_step(#entry{index = Index} = Entry, Origin, S0) ->
               Reason, install_committed_projection(Projection1, S0));
         {error, {outcome_index, Reason}} ->
             outcome_index_failure(Reason);
+        {error, {predicate_modules_unavailable, Reason}} ->
+            predicate_modules_unavailable(Reason, S0);
         {error, Reason} ->
             error(Reason)
     end.
@@ -5271,7 +4938,20 @@ committed_projection(
 install_committed_projection(Projection, S) ->
     S#s{applied = quod_committed_projection:applied(Projection),
         est = quod_committed_projection:est(Projection),
-        outcomes = quod_committed_projection:outcomes(Projection)}.
+        outcomes = quod_committed_projection:outcomes(Projection),
+        projection_failure = none}.
+
+predicate_modules_unavailable(
+  Reason, S = #s{ns = Ns, projection_failure = Previous}) ->
+    case Previous =:= Reason of
+        true -> ok;
+        false ->
+            logger:error(
+              "quod_prolog[~s]: genesis predicate modules unavailable: ~0p",
+              [Ns, Reason])
+    end,
+    S#s{ready = false,
+        projection_failure = Reason}.
 
 finish_projection_result(
   #{kind := content, transactions := Results, stats := Stats},

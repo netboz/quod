@@ -116,30 +116,65 @@ authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-bootstrap_candidates_respect_the_global_history_cap_without_eviction_test() ->
-    Dir = temp_dir("bootstrap-history-cap"),
+bootstrap_candidates_do_not_impose_a_global_history_cap_test() ->
+    Dir = temp_dir("bootstrap-history-unbounded"),
     Pid = start_owner(
             Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
+    Count = 96,
     try
         lists:foreach(
           fun(N) ->
               quod_foreign_log:observe_candidate(
                 {<<"candidate:", (integer_to_binary(N))/binary>>, key(N)},
                 {key(2000 + N), {"127.0.0.1", 30000 + N}})
-          end, lists:seq(1, ?QUOD_MAX_FOREIGN_HISTORIES + 1)),
+          end, lists:seq(1, Count)),
         Stats = quod_foreign_log:stats(),
-        ?assertEqual(?QUOD_MAX_FOREIGN_HISTORIES,
-                     maps:get(histories, Stats)),
-        ?assertEqual(?QUOD_MAX_FOREIGN_HISTORIES,
-                     maps:get(bootstrap_candidates, Stats)),
-        ?assertEqual(1, maps:get(bootstrap_rejected, Stats))
+        ?assertEqual(0, maps:get(histories, Stats)),
+        ?assertEqual(Count, maps:get(bootstrap_candidates, Stats)),
+        ?assertEqual(0, maps:get(bootstrap_rejected, Stats))
     after
         stop_owner(Pid),
         _ = file:del_dir_r(Dir)
     end.
 
-one_peer_cannot_monopolize_bootstrap_identity_rows_test() ->
-    Dir = temp_dir("bootstrap-peer-identity-cap"),
+inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 31990},
+    Ref = maps:get(ref, Fixture),
+    Fetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Dir = temp_dir("lazy-history"),
+    Pid1 = start_owner(Dir, Fetch),
+    try
+        %% Exact verification writes a certified cache, then releases all
+        %% owner memory because no proof or follow still owns this history.
+        ?assertMatch(
+           {ok, #{identity := Identity, phase := finalize}},
+           quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
+        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+        stop_owner(Pid1),
+
+        %% Restart does not scan or materialize dormant caches. The next
+        %% ordinary verification opens the exact cache on demand and uses its
+        %% certified route without any caller-supplied route.
+        Pid2 = start_owner(Dir, Fetch),
+        try
+            ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+            ?assertMatch(
+               {ok, #{identity := Identity, phase := finalize}},
+               quod_foreign_log:verify_reference(Ref, finalize, 5000)),
+            ?assertEqual(0, maps:get(histories, quod_foreign_log:stats()))
+        after
+            stop_owner(Pid2)
+        end
+    after
+        _ = file:del_dir_r(Dir)
+    end.
+
+one_peer_can_introduce_many_dormant_bootstrap_identities_test() ->
+    Dir = temp_dir("bootstrap-peer-identities"),
     Pid = start_owner(
             Dir, fun(_, _, _, _, _) -> {error, unavailable} end),
     Peer = key(97),
@@ -155,11 +190,11 @@ one_peer_cannot_monopolize_bootstrap_identity_rows_test() ->
         quod_foreign_log:observe_candidate(
           OtherIdentity, {OtherPeer, {"127.0.0.1", 31999}}),
         Stats = quod_foreign_log:stats(),
-        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 1,
+        ?assertEqual(0,
                      maps:get(histories, Stats)),
-        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 1,
+        ?assertEqual(?DIRECTORY_MAX_NAMESPACES + 2,
                      maps:get(bootstrap_candidates, Stats)),
-        ?assertEqual(1, maps:get(bootstrap_rejected, Stats)),
+        ?assertEqual(0, maps:get(bootstrap_rejected, Stats)),
         ?assertMatch({ok, [{OtherPeer, [_]}]},
                      quod_foreign_log:route_hints(OtherIdentity, []))
     after
@@ -321,7 +356,7 @@ collect_route_rotation_fetches(Acc) ->
         lists:reverse(Acc)
     end.
 
-bootstrap_capacity_preserves_current_committee_contacts_test() ->
+bootstrap_hints_preserve_current_committee_contacts_test() ->
     Fixture = membership_after_finalize_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Identity = {Ns, maps:get(anchor, Fixture)},
@@ -401,9 +436,7 @@ follow_consumers_share_one_history_and_cleanup_exactly_test() ->
         ?assertMatch({unreachable, unavailable, 0}, element(2, Unreachable1)),
         ok = quod_foreign_log:ack(Follow1, element(1, Unreachable1)),
         FollowStats = quod_foreign_log:stats(),
-        ?assertMatch(
-           #{follow_unreachable := 1, follow_capacity_limited := 0},
-           FollowStats),
+        ?assertMatch(#{follow_unreachable := 1}, FollowStats),
         ?assert(maps:get(follow_polls, FollowStats) > 0),
         ?assert(maps:get(follow_retries, FollowStats) > 0),
 
@@ -419,7 +452,7 @@ follow_consumers_share_one_history_and_cleanup_exactly_test() ->
         ?assertEqual(1, maps:get(follow_consumers, quod_foreign_log:stats())),
         ok = quod_foreign_log:unfollow(Follow2),
         ?assertMatch(
-           #{histories := 1, followed_histories := 0,
+           #{histories := 0, followed_histories := 0,
              follow_consumers := 0, projection_workers := 0},
            quod_foreign_log:stats())
     after
@@ -483,7 +516,7 @@ verify_exact_reference_and_persisted_cache_test() ->
            #{maps:get(pub, Fixture) => {"127.0.0.1", 19000}},
            maps:get(routes, Evidence)),
         ?assert(is_binary(maps:get(committee_id, Evidence))),
-        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
         ?assertEqual(
            {error, retry},
            quod_foreign_log:verify(
@@ -531,6 +564,51 @@ verify_local_uses_exact_historical_projection_test() ->
         stop_owner(Pid),
         _ = file:del_dir_r(SourceDir),
         _ = file:del_dir_r(CacheDir)
+    end.
+
+foreign_projection_loads_genesis_pinned_predicates_test() ->
+    Ns = unique_ns(),
+    Pub = key(210),
+    Nonce = key(211),
+    StaticBridgeHead =
+        {directory_host, Ns, key(212), Pub, "127.0.0.1", 19000},
+    Genesis = quod_simplex:test_genesis_tx(
+                #{node_id => Pub, mode => create, committee => [],
+                  node_addr => {"127.0.0.1", 19000},
+                  external_predicate_modules =>
+                      [quod_directory_predicates],
+                  genesis_diff =>
+                      quod_prolog:terms_to_diff([StaticBridgeHead])},
+                Ns, Pub, Nonce),
+    Entry = #entry{index = 1, data = {batch, [Genesis]}, timestamp = 1,
+                   cert = none},
+    Anchor = entry_hash(Entry),
+    Root = temp_dir("projection-manifest"),
+    CacheNs = <<"projection-cache:", Ns/binary>>,
+    {ok, Store0} = quod_ledger_store:open(CacheNs, Root),
+    {ok, Store1} = quod_ledger_store:append(Store0, [Entry]),
+    ok = quod_ledger_store:close(Store1),
+    {Pid, MRef, Generation} = quod_foreign_projection:start_monitor(
+                                self(), {Ns, Anchor}, Root, CacheNs),
+    try
+        ok = quod_foreign_projection:advance(
+               Pid, Generation, 1, {1, entry_hash(Entry)}),
+        Result = receive
+                     {foreign_projection_ready, {Ns, Anchor}, Generation,
+                      Ready} -> Ready
+                 after 3000 ->
+                     error(foreign_projection_timeout)
+                 end,
+        %% If the foreign worker ignored the genesis manifest, this ordinary
+        %% assertion would materialize.  With the pinned bridge installed it
+        %% is the same static procedure as on validators and is not changed.
+        ?assertNot(
+           lists:member(
+             StaticBridgeHead, maps:get(changed_heads, Result)))
+    after
+        quod_foreign_projection:stop(Pid),
+        receive {'DOWN', MRef, process, Pid, _} -> ok after 3000 -> ok end,
+        _ = file:del_dir_r(Root)
     end.
 
 certified_current_view_advances_past_finalize_membership_test() ->
@@ -928,7 +1006,7 @@ nonmember_route_cannot_corroborate_current_view_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
-current_view_timeout_keeps_verified_cache_bounded_and_reusable_test() ->
+current_view_timeout_releases_verified_cache_and_remains_reusable_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Ns = maps:get(ns, Fixture),
     Peer = maps:get(pub, Fixture),
@@ -959,7 +1037,7 @@ current_view_timeout_keeps_verified_cache_bounded_and_reusable_test() ->
            quod_foreign_log:verify_current(Routes, Ref, 100)),
         ?assert(erlang:monotonic_time(millisecond) - Started < 1000),
         ?assertEqual(0, maps:get(pending, quod_foreign_log:stats())),
-        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
         ok = atomics:put(Mode, 1, 0),
         ?assertMatch(
            {ok, #{slot := 2}},
@@ -1516,17 +1594,11 @@ content_entry(Ns, Anchor, Pub, Signer, Slot, Transactions) ->
 
 genesis(Ns, Pub) ->
     Nonce = key(44),
-    Diff = [{assert, {{consensus_incarnation, Nonce}, true}},
-            {assert, {{can_invoke, {'G'}, {'P'}, [], {'N'}}, true}},
-            {assert, {{peer_admitted, Pub, "127.0.0.1", 19000, Pub}, true}}],
-    Tx = #transaction{tx_id = genesis_id(Ns, Nonce),
-                      origin = {Ns, <<0:256>>}, diff = Diff,
-                      read_check = #{}, author = Pub, sig = none},
+    Tx = quod_simplex:test_genesis_tx(
+           #{node_id => Pub, mode => create, committee => [],
+             node_addr => {"127.0.0.1", 19000}},
+           Ns, Pub, Nonce),
     #entry{index = 1, data = {batch, [Tx]}, cert = none}.
-
-genesis_id(Ns, Nonce) ->
-    <<?GENESIS_TX_TAG, 0, ?GENESIS_TX_VERSION:8,
-      (byte_size(Ns)):32, Ns/binary, Nonce/binary>>.
 
 entry_hash(#entry{index = Slot, data = Data, timestamp = Timestamp}) ->
     quod_simplex:block_hash(

@@ -22,8 +22,8 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          open/6, next/2, cancel/2,
          publish/1, refresh/1, context/1,
          access_guard/1, check_access/1, check_mutable/1,
-         committed_state/1, local_changes/1, effects/1, stage_effect/2,
-         set_lifecycle_effect/2,
+         committed_state/1, local_changes/1, effects/1,
+         prepared_effect/2, signer_from_state/1,
          read_set/1, absorb_read_set/2, absorb_live_bridges/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
@@ -335,25 +335,22 @@ effects(Handle) ->
     State = get_session(Handle),
     overlay_effects(State#session_state.current).
 
--doc "Stage one typed direct effect and publish the resulting revision.".
--spec stage_effect(session(), quod_effect:effect()) -> ok.
-stage_effect(Handle, Effect) ->
+-doc "Return private preparation for one effect in the current revision.".
+-spec prepared_effect(session(), quod_effect:effect()) ->
+          {ok, {term(), term(), quod_effect:effect(), term()}} | error.
+prepared_effect(Handle, Effect) ->
     State = get_session(Handle),
-    ensure_lifecycle_mutable(State),
-    Current = quod_erlog_db_local_prove:stage_effect(
-                State#session_state.current, Effect),
-    put_current(Handle, State, Current),
-    ok.
+    quod_erlog_db_local_prove:prepared_effect(
+      State#session_state.current, Effect).
 
--doc "Install the exact private lifecycle effect before invoking its transition.".
--spec set_lifecycle_effect(session(), quod_effect:effect()) -> ok.
-set_lifecycle_effect(Handle, Effect) ->
-    State = get_session(Handle),
-    ensure_lifecycle_mutable(State),
-    Current = quod_erlog_db_local_prove:set_lifecycle_effect(
-                State#session_state.current, Effect),
-    put_current(Handle, State, Current),
-    ok.
+-doc "Return the session signer bound to the exact wrapped proof state.".
+-spec signer_from_state(tuple()) -> map() | none.
+signer_from_state(St) ->
+    case quod_erlog_db_local_prove:proof_context(St) of
+        {ok, {session_ref, #session_ref{} = Handle, _Metadata}} ->
+            signer(Handle);
+        _ -> erlang:error(badarg)
+    end.
 
 -doc "Return the session's monotonic committed-read dependencies.".
 -spec read_set(session()) -> map().

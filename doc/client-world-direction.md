@@ -6,6 +6,13 @@ foundation is implemented in the working tree. The world, agent, presentation,
 and simulation sections remain non-normative direction and must be revalidated
 before their implementation.
 
+The implemented client still calls its signer a user. The target actor model is
+now `ontology-actor-architecture.md`: every acting node, agent, service, or
+human-facing user is a classed instance in an exact ontology history; `agent`
+is the generic acting class and `human_user` is its explicit human-specific
+subclass. This correction reuses the one signed-goal path described here
+rather than adding a world/client identity path.
+
 This document records the intended architecture for client projection,
 renderer-neutral model ontologies, GUI, client profiles, visual cues, hot
 simulation, and editable voxel worlds. It is deliberately separate from
@@ -17,7 +24,7 @@ profile, and semantic-theme directions below were revalidated with Yan on
 2026-08-10. Predicate, module, and wire names remain illustrative until their
 implementation slices are reviewed.
 
-The signed-client work now supplies the base user identity and signed goal path
+The signed-client work now supplies the transitional key identity and signed goal path
 through local and remote ontology scopes. The remaining world-runtime direction
 depends on the agent plan for immutable delegated subjects, hosted agents,
 wielding, post-apply events, runtime reconciliation, and owner-gated effects.
@@ -99,8 +106,9 @@ Durable D facts describe:
   baseline transform, collision shape, component attachment, and simulation
   parameters;
 - current logical simulation authority and monotonically increasing epoch;
-- structured GUI component trees, durable pending interactions, private
-  user-owned menu entries and preferences, and client view sessions;
+- structured GUI component trees, durable pending interactions, private menu
+  entries/preferences governed by the containing ontology's ACL, and client
+  view sessions;
 - sparse voxel edits and semantic checkpoints.
 
 Rebuildable P contains:
@@ -172,7 +180,7 @@ node-bound Ed25519 challenge-response, short-lived node-local sessions, and one
 signed-goal API for reads, writes, cursors, and the ordinary
 `create_user_home.` root goal. The interactive Explorer console uses that same
 login and API; the standalone Explorer listener is read-only. The same signed
-request and user principal now cross remote and nested ontology scopes through
+request and current user-labelled principal now cross remote and nested ontology scopes through
 the ordinary scope/DTX path. Any-node HTTP ingress forwarding, bundle
 distribution, and governed release activation remain separate bounded
 protocols; none is implied by loading the client or holding a session.
@@ -410,8 +418,8 @@ may be derived from:
   equipment, and tools;
 - goals offered by the current target;
 - avatar or tool goals that are applicable to that target;
-- goals the user has pinned in a private user-owned ontology associated with
-  the avatar;
+- goals pinned in a private ontology whose ACL grants the relevant
+  `human_user` instance access, associated with the avatar;
 - a small set of client or platform operations such as opening settings.
 
 Multiple actions may reach the same desired state, so a state-changing menu
@@ -445,8 +453,9 @@ radial input, trigger/squeeze, hand tracking, haptics, mouse, keyboard, and
 gamepad. Durable user preferences may select dominant hand, self-menu hand,
 target-pointer hand, locomotion, comfort, and accessibility options. Security
 decisions remain ontology policy; a claimed device capability never grants
-authority. Arbitrary menu and profile data belongs in a private user-owned
-ontology, not the platform `quod:user` identity/routing ontology.
+authority. Arbitrary menu and profile data belongs in a private ontology whose
+ACL grants the relevant `human_user` instance access, not in the
+`quod:human_user` vocabulary ontology.
 
 The XR adapter supplies stereo cameras, head/controller poses, spatial panels,
 and an XR frame budget. The desktop adapter supplies a conventional camera,

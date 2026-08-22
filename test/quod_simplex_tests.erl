@@ -2682,6 +2682,58 @@ restart_restores_exact_effect_custody_test() ->
         file:del_dir_r(Dir)
     end.
 
+%% Catch-up must retire the same durable signing row as a live commit. Merely
+%% removing the volatile custody record would let the next restart restore and
+%% re-drive an effect transaction that is already in certified history.
+catchup_commit_retires_effect_signing_custody_test() ->
+    Ns = <<"effect:catchup-retirement">>,
+    Anchor = crypto:hash(sha256, <<"effect-catchup-anchor">>),
+    {Author, Identity} = id(),
+    Admission = quod_simplex:test_author_admission(Author),
+    CommitteeId = crypto:hash(sha256, <<"effect-catchup-committee">>),
+    {Signed, Submission} = effect_submission_fixture(
+                             Ns, Anchor, Admission, 1,
+                             Author, Identity),
+    TxId = Signed#transaction.tx_id,
+    Entry = #entry{index = 1, data = {batch, [Signed]}, timestamp = 1},
+    Projection = quod_simplex:history_projection(
+                   [Author], CommitteeId, #{Author => Admission},
+                   #{Author => 1}, 1),
+    Dir = filename:join(
+            "/tmp", "quod_effect_catchup_retirement_" ++
+                        integer_to_list(
+                          erlang:unique_integer([positive]))),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(
+                           Ns, ?DOMAIN, Dir),
+        {ok, Journal1} = quod_signing_journal:record_effect(
+                           Journal0, Signed, Submission),
+        {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+        Restored = quod_simplex:restore_signing_state(
+                     st(#{ns => Ns, genesis_hash => Anchor,
+                          self => Author, id => Identity,
+                          validators => [Author],
+                          author_admissions => #{Author => Admission},
+                          signing_journal => Journal1,
+                          store => Store0, slot => 0, sync => ready})),
+        ?assertMatch(#{TxId := #{}},
+                     quod_signing_journal:pending_effects(
+                       quod_simplex:test_signing_journal(Restored))),
+        {Recovered, ok} = quod_simplex:test_apply_catchup_window(
+                            recovery, [Entry], Projection, Restored),
+        ?assertEqual([], quod_simplex:test_custody(Recovered)),
+        ?assertEqual(
+           #{},
+           quod_signing_journal:pending_effects(
+             quod_simplex:test_signing_journal(Recovered))),
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(Recovered)),
+        {_Slot, Store1} = quod_simplex:test_committed_store(Recovered),
+        ok = quod_ledger_store:close(Store1)
+    after
+        file:del_dir_r(Dir)
+    end.
+
 %% More than one full journal capacity of sequential effect commits must not
 %% accumulate signing custody.  Each committed semantic TxId retires before
 %% the next lifecycle transaction is signed.

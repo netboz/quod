@@ -18,7 +18,23 @@ pending-resource queue fails the handler loudly instead of retaining unbounded w
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([enqueue_projection_2/3]).
+-export([quod_predicate_module/0, load/1,
+         projection_noop_1/3, enqueue_projection_2/3]).
+
+quod_predicate_module() -> true.
+
+-spec load(tuple()) -> tuple().
+load(Est0) ->
+    Est1 = quod_predicates:register(
+             Est0, {projection_noop, 1}, projection,
+             ?MODULE, projection_noop_1),
+    quod_predicates:register(
+      Est1, {enqueue_projection, 2}, projection,
+      ?MODULE, enqueue_projection_2).
+
+-spec projection_noop_1(term(), term(), tuple()) -> term().
+projection_noop_1(_Goal, Next, St) ->
+    erlog_int:prove_body(Next, St).
 
 %% The erlog handler behind the governed `{enqueue_projection, 2}` functor (class
 %% `projection` — dispatchable only from a handler's converge run). Ground both args,

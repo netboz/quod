@@ -10,9 +10,11 @@ directory_control_peer_is_registered_root_snapshot_query_test() ->
              peer_fact(K1, <<"old-a">>, 3001),
              peer_fact(K1, <<"duplicate-address">>, 3999),
              peer_fact(BadShort, <<"malformed">>, 3003)],
-    ?assertEqual(
-       query, quod_predicates:class({directory_control_peer, 1})),
     Erl0 = proof_erlog(<<"quod:root">>, Facts),
+    ?assertEqual(
+       query,
+       quod_predicates:class(
+         element(3, Erl0), {directory_control_peer, 1})),
     Goal = {directory_control_peer, {'Key'}},
     {{succeed, First}, Erl1} = erlog:prove(Goal, Erl0),
     {{succeed, Second}, Erl2} = erlog:next_solution(Erl1),
@@ -44,8 +46,6 @@ directory_host_enumerates_live_system_routes_test() ->
     Ns = <<"quod:agent">>,
     K1 = key(21),
     K2 = key(22),
-    ?assertEqual(undefined, quod_predicates:class({directory_host, 4})),
-    ?assertEqual(query, quod_predicates:class({directory_host, 5})),
     {Goal, Erl0} = with_directory(
       #{allowlist => #{Ns => [K1, K2]}},
       fun(Pid) ->
@@ -56,6 +56,12 @@ directory_host_enumerates_live_system_routes_test() ->
                  K1, {<<"node-a">>, 4001},
                  [{Ns, anchor(1), validator}], 1, 1),
           Erl0 = proof_erlog(<<"quod:root">>),
+          ?assertEqual(
+             undefined,
+             quod_predicates:class(element(3, Erl0), {directory_host, 4})),
+          ?assertEqual(
+             query,
+             quod_predicates:class(element(3, Erl0), {directory_host, 5})),
           Goal = {directory_host, {':', quod, agent},
                   {'Anchor'}, {'Key'}, {'Host'}, {'Port'}},
           {{succeed, First}, Erl1} = erlog:prove(Goal, Erl0),
@@ -115,7 +121,9 @@ proof_erlog(ContextNs) ->
 proof_erlog(ContextNs, Facts) ->
     {ok, Erl0} = erlog:new(erlog_db_dict, null),
     Est0 = element(3, Erl0),
-    Est1 = quod_predicates:load(Est0),
+    Est1 = quod_predicates:load_modules(
+             quod_predicates:load(Est0),
+             [quod_directory_predicates]),
     Est2 = quod_ct:assert_facts(Facts, Est1),
     %% Query bridges run in the local proof overlay. This focused handler test
     %% uses an in-memory dictionary rather than a published MVCC snapshot, so

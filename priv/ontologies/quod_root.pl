@@ -24,42 +24,52 @@ acl_sovereign(quod:root).
 %% queryable fleet-wide.
 can_invoke(_Goal, _Principal, _CallChain, _Ns).
 
-%% Node-local ontology lifecycle. Prolog proves authorization and hosting state,
-%% then records a typed effect in a root transaction with an empty fact diff.
-%% The local effect journal performs the external operation only after that
-%% transaction is durably ordered and applied.
+%% Root is the one ontology every node starts before it can execute durable
+%% effects, so it owns the node-wide custody capacity without a bootstrap
+%% fallback. With no override the effective capacity is 64. An operator may
+%% call the setter or atomically replace the single override fact; there is no
+%% compiled maximum, and `unlimited` is explicit.
+effect_custody_capacity(Capacity) :-
+    effect_custody_capacity_override(Capacity).
+effect_custody_capacity(64) :-
+    \+ effect_custody_capacity_override(_).
+
+valid_effect_custody_capacity(unlimited).
+valid_effect_custody_capacity(Capacity) :-
+    integer(Capacity),
+    Capacity >= 0.
+
+set_effect_custody_capacity(Capacity) :-
+    valid_effect_custody_capacity(Capacity),
+    abolish(effect_custody_capacity_override/1),
+    assertz(effect_custody_capacity_override(Capacity)).
+
+%% This founding handler projects D into the one node-wide journal before E.
+%% The bridge receives the complete solution list and fails loudly unless the
+%% effective policy has exactly one valid value.
+state_handler(effect_custody_capacity_projection,
+              [effect_custody_capacity_override/1], [],
+              reconcile_effect_custody_capacity).
+
+reconcile_effect_custody_capacity(Scope) :-
+    findall(Capacity, effect_custody_capacity(Capacity), Capacities),
+    '$quod_project_effect_custody_capacity'(Capacities, Scope).
+
+%% Transitional browser home creation. Generic create/join hosting policy lives
+%% in quod:node; this helper remains only until the stable agent format replaces
+%% the old user term. It uses the same common action relation and direct-effect
+%% journal as every node action.
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
 ontology_hosted(Name) :- ontology_join_state(Name, joining).
 ontology_hosted(Name) :- ontology_join_state(Name, ready).
 
-ontology_joined(Name, GenesisHash) :-
-    ontology_hosted(Name),
-    ontology_genesis_anchor(Name, GenesisHash).
-
-action(create_ontology(Name, Options),
-       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
+action('$quod_stage_ontology'(Handle, create_user_home,
+                              ontology_hosted(Name)),
+       [current_principal(user(PublicKey)),
+        user_home_genesis(PublicKey, Name, Options),
+        can_create_ontology(user(PublicKey), Name, Options),
         ontology_join_state(Name, not_hosted)],
        ontology_hosted(Name)).
-
-action(join_ontology(Name, GenesisHash, Seeds),
-       [authorized_ontology_lifecycle(
-            join_ontology(Name, GenesisHash, Seeds)),
-        ontology_join_state(Name, not_hosted)],
-       ontology_joined(Name, GenesisHash)).
-
-%% A browser signs this ordinary, argument-free goal. The action-only helper
-%% derives the exact namespace and genesis from the engine-owned user key; the
-%% same can_create_ontology/3 policy and lifecycle effect path remain in force.
-action(create_user_home,
-       [authorized_ontology_lifecycle(create_user_home),
-        current_user_home(Name, _Options),
-        ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
-
-%% First-slice host authority: a node may change only its own hosting state and
-%% only while its key is a currently admitted validator of quod:root.
-can_create_ontology(node(NodeKey), _Name, _Options) :-
-    peer_admitted(NodeKey, _, _, NodeKey).
 
 %% Open registration is intentionally narrow. `user_home_genesis/3` is an
 %% engine query predicate that accepts only the deterministic namespace and
@@ -67,9 +77,6 @@ can_create_ontology(node(NodeKey), _Name, _Options) :-
 %% a user-selected name, source file, or arbitrary initial policy.
 can_create_ontology(user(PublicKey), Name, Options) :-
     user_home_genesis(PublicKey, Name, Options).
-
-can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
-    peer_admitted(NodeKey, _, _, NodeKey).
 
 %% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
 %% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own
@@ -88,9 +95,13 @@ can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
 %% allowlist / signature check once membership signing (Phase B) lands.
 can_join(_Ns, _Addr, Pk) :- peer_ready(Pk).
 
-%% The system-ontology registry: system_ontology(Name, PlFile, ExternalPreds, Flags).
-%% Root declares itself; the real system ontologies (quod:user, quod:node, ... — the
-%% network's own infrastructure knowledge, to be specified from the onia/bbsvx
-%% reference material) are added when they are authored. Demo/user-level ontologies
-%% (animals, pets) are NOT system ontologies and do not belong in this registry.
-system_ontology(quod:root, 'quod_root.pl', [], []).
+%% System ontologies are created through the ordinary lifecycle first.  Once
+%% their exact genesis anchor is known, root may register them as:
+%%
+%% system_ontology(Name, GenesisAnchor).
+%%
+%% Root itself is the configured bootstrap exception and is never listed here.
+%% A catalogue row contains no endpoint, source file, module name, or runtime
+%% option. Nodes join the exact recorded history through normal routing; that
+%% ontology's immutable genesis carries its own hashed predicate-module
+%% manifest.

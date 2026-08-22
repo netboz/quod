@@ -33,25 +33,23 @@ resolve_goal(DesiredState, Visited) :-
                  '$quod_state_check'(DesiredState))),
     !.
 
-%% Prepare one exact node-local lifecycle declaration. Lifecycle IO remains in
-%% the typed Erlang runner: this relation only selects and checks a declaration.
-%% Unlike an ordinary action candidate, every prerequisite is checked strictly
-%% read-only because speculative lifecycle preparation may not stage D writes.
-prepare_lifecycle_action(Action, DesiredState, Mode) :-
-    action(Action, Prerequisites, DesiredState),
-    '$quod_action_shape'(Action, Prerequisites, DesiredState),
-    prepare_lifecycle_candidate(DesiredState, Prerequisites, Mode).
+%% A governed public bridge allocates `Handle` and enters this same action
+%% relation.  Declarations use the private transition shape below so the
+%% public functor never calls itself recursively and an ontology cannot invoke
+%% the continuation without the exact proof-local handle.
+run_declared_action(Action, Handle) :-
+    Transition = '$quod_stage_ontology'(Handle, Action, DesiredState),
+    action(Transition, Prerequisites, DesiredState),
+    '$quod_action_shape'(Transition, Prerequisites, DesiredState),
+    run_declared_candidate(Transition, Prerequisites, DesiredState).
 
-prepare_lifecycle_candidate(DesiredState, _Prerequisites, already) :-
+run_declared_candidate(_Transition, _Prerequisites, DesiredState) :-
     '$quod_state_check'(DesiredState),
     !.
-prepare_lifecycle_candidate(_DesiredState, Prerequisites, execute) :-
-    check_prerequisites(Prerequisites).
-
-check_prerequisites([]).
-check_prerequisites([Prerequisite | Rest]) :-
-    '$quod_state_check'(Prerequisite),
-    check_prerequisites(Rest).
+run_declared_candidate(Transition, Prerequisites, DesiredState) :-
+    transaction((satisfy_prerequisites(Prerequisites, [DesiredState]),
+                 run_transition(Transition),
+                 '$quod_state_check'(DesiredState))).
 
 %% Explicit goal/1 prerequisites may themselves reach a state. Every other
 %% prerequisite is a strict state check over the candidate's current staged

@@ -62,6 +62,25 @@ set -uo pipefail
 : "${TRANSACTION_TTL_MS:=30000}"            # must match content.transaction_ttl_ms on the tested fleet
 : "${WRITER_HTTP_TIMEOUT_S:=}"              # empty => ceil(TRANSACTION_TTL_MS/1000)+1; proof time is deliberately excluded
 
+# optional inter-ontology workload.  It is explicitly configured because this
+# fleet driver cannot invent a safe remote topology or target predicate.  When
+# enabled, the workload runs concurrently with the local writers and chaos,
+# through the existing `Source::TargetGoal` proof path.  It has no retry after
+# an uncertain write outcome.
+: "${INTER_ONTOLOGY:=0}"
+: "${INTER_SOURCE_ENDPOINTS:=}"
+: "${INTER_SOURCE_NS:=}"
+: "${INTER_TARGET_NS:=}"
+: "${INTER_GOAL:=true}"
+: "${INTER_MODE:=read}"
+: "${INTER_REQUESTS:=0}"
+: "${INTER_CONCURRENCY:=0}"
+: "${INTER_HTTP_TIMEOUT_S:=}"
+: "${INTER_PREFLIGHT_TIMEOUT_S:=60}"
+: "${INTER_MAX_FAILURES:=0}"
+: "${INTER_RESULT_DIR:=}"
+: "${INTER_INSECURE_TLS:=0}"
+
 # bursts (fired from here during the chaos loop, on every validator)
 : "${BURST_PROB:=35}"                       # % chance, each chaos tick, of a burst
 : "${BURST_SIZE:=40}"                       # concurrent one-shot submits per burst per validator (stresses backpressure)
@@ -130,6 +149,21 @@ Load and chaos:
   --writer-retry-ms MS      delay between retries (WRITER_RETRY_MS)
   --transaction-ttl-ms MS   deployed write-result wait (TRANSACTION_TTL_MS)
   --writer-http-timeout SEC HTTP deadline; default/min is ceil(transaction TTL)+1s (WRITER_HTTP_TIMEOUT_S)
+  --inter-ontology 0|1     run an explicitly configured remote-proof workload (INTER_ONTOLOGY)
+  --inter-source-endpoints URL[,URL...]
+                            source HTTPS client endpoint(s) (INTER_SOURCE_ENDPOINTS)
+  --inter-source-ns NAME    source ontology namespace (INTER_SOURCE_NS)
+  --inter-target-ns NAME    remote target ontology namespace (INTER_TARGET_NS)
+  --inter-goal TEXT         target-local goal; __QUOD_REQUEST_ID__ makes each operation unique (INTER_GOAL)
+  --inter-mode read|execute signed proof mode (INTER_MODE, default: read)
+  --inter-requests N        exact number of remote proofs (INTER_REQUESTS)
+  --inter-concurrency N     maximum simultaneous remote proofs (INTER_CONCURRENCY)
+  --inter-http-timeout SEC  per-proof deadline (INTER_HTTP_TIMEOUT_S)
+  --inter-preflight-timeout SEC
+                            wait for the remote route before failing (INTER_PREFLIGHT_TIMEOUT_S)
+  --inter-max-failures N    fail the run above this remote-proof failure count (INTER_MAX_FAILURES)
+  --inter-result-dir PATH   retain remote-workload raw results (INTER_RESULT_DIR)
+  --inter-insecure-tls 0|1 allow a development self-signed client certificate (INTER_INSECURE_TLS)
   --burst-prob PCT          burst probability per tick (BURST_PROB)
   --burst-size N            concurrent writes per burst (BURST_SIZE)
   --churn-prob PCT          observer churn probability (CHURN_PROB)
@@ -151,6 +185,9 @@ Load and chaos:
 Examples:
   scripts/loadtest.sh --duration 120 --warmup 30 --overf 0
   scripts/loadtest.sh --duration 900 --membership-churn 1
+  scripts/loadtest.sh --inter-ontology 1 --inter-source-endpoints http://source:14569 \\
+    --inter-source-ns quod:bench_source --inter-target-ns quod:bench_target \\
+    --inter-goal 'benchmark_echo(ok)' --inter-requests 2000 --inter-concurrency 64
   scripts/loadtest.sh --scale 1 --nodes 8 --image-tag 0.7.1 --genesis-hash <hex>
   scripts/loadtest.sh --scale 1 --nodes 16 --random-churn-prob 35 --random-churn-max 10
 EOF
@@ -189,6 +226,19 @@ parse_args() {
       --writer-retry-ms|--writer-retry-ms=*) take_value "$@"; WRITER_RETRY_MS=$ARG_VALUE ;;
       --transaction-ttl-ms|--transaction-ttl-ms=*) take_value "$@"; TRANSACTION_TTL_MS=$ARG_VALUE ;;
       --writer-http-timeout|--writer-http-timeout=*) take_value "$@"; WRITER_HTTP_TIMEOUT_S=$ARG_VALUE ;;
+      --inter-ontology|--inter-ontology=*) take_value "$@"; INTER_ONTOLOGY=$ARG_VALUE ;;
+      --inter-source-endpoints|--inter-source-endpoints=*) take_value "$@"; INTER_SOURCE_ENDPOINTS=$ARG_VALUE ;;
+      --inter-source-ns|--inter-source-ns=*) take_value "$@"; INTER_SOURCE_NS=$ARG_VALUE ;;
+      --inter-target-ns|--inter-target-ns=*) take_value "$@"; INTER_TARGET_NS=$ARG_VALUE ;;
+      --inter-goal|--inter-goal=*) take_value "$@"; INTER_GOAL=$ARG_VALUE ;;
+      --inter-mode|--inter-mode=*) take_value "$@"; INTER_MODE=$ARG_VALUE ;;
+      --inter-requests|--inter-requests=*) take_value "$@"; INTER_REQUESTS=$ARG_VALUE ;;
+      --inter-concurrency|--inter-concurrency=*) take_value "$@"; INTER_CONCURRENCY=$ARG_VALUE ;;
+      --inter-http-timeout|--inter-http-timeout=*) take_value "$@"; INTER_HTTP_TIMEOUT_S=$ARG_VALUE ;;
+      --inter-preflight-timeout|--inter-preflight-timeout=*) take_value "$@"; INTER_PREFLIGHT_TIMEOUT_S=$ARG_VALUE ;;
+      --inter-max-failures|--inter-max-failures=*) take_value "$@"; INTER_MAX_FAILURES=$ARG_VALUE ;;
+      --inter-result-dir|--inter-result-dir=*) take_value "$@"; INTER_RESULT_DIR=$ARG_VALUE ;;
+      --inter-insecure-tls|--inter-insecure-tls=*) take_value "$@"; INTER_INSECURE_TLS=$ARG_VALUE ;;
       --burst-prob|--burst-prob=*) take_value "$@"; BURST_PROB=$ARG_VALUE ;;
       --burst-size|--burst-size=*) take_value "$@"; BURST_SIZE=$ARG_VALUE ;;
       --churn-prob|--churn-prob=*) take_value "$@"; CHURN_PROB=$ARG_VALUE ;;
@@ -241,6 +291,24 @@ validate_config() {
   validate_uint settle-tries "$SETTLE_TRIES"
   validate_uint min-advance "$MIN_ADVANCE"
   validate_uint membership-churn "$MEMBERSHIP_CHURN"
+  [ "$INTER_ONTOLOGY" = 0 ] || [ "$INTER_ONTOLOGY" = 1 ] ||
+    die "inter-ontology must be 0 or 1, got '$INTER_ONTOLOGY'"
+  if [ "$INTER_ONTOLOGY" = 1 ]; then
+    [ -n "$INTER_SOURCE_ENDPOINTS" ] || die "inter-ontology=1 requires inter-source-endpoints"
+    [ -n "$INTER_SOURCE_NS" ] || die "inter-ontology=1 requires inter-source-ns"
+    [ -n "$INTER_TARGET_NS" ] || die "inter-ontology=1 requires inter-target-ns"
+    [ "$INTER_SOURCE_NS" != "$INTER_TARGET_NS" ] || die "inter source and target namespaces must differ"
+    [ -n "$INTER_GOAL" ] || die "inter-ontology=1 requires a non-empty inter-goal"
+    [ "$INTER_MODE" = read ] || [ "$INTER_MODE" = execute ] || die "inter-mode must be read or execute"
+    validate_uint inter-requests "$INTER_REQUESTS"
+    validate_uint inter-concurrency "$INTER_CONCURRENCY"
+    validate_uint inter-preflight-timeout "$INTER_PREFLIGHT_TIMEOUT_S"
+    validate_uint inter-max-failures "$INTER_MAX_FAILURES"
+    [ "$INTER_REQUESTS" -gt 0 ] || die "inter-ontology=1 requires inter-requests>0"
+    [ "$INTER_CONCURRENCY" -gt 0 ] || die "inter-ontology=1 requires inter-concurrency>0"
+    if [ -n "$INTER_HTTP_TIMEOUT_S" ]; then validate_uint inter-http-timeout "$INTER_HTTP_TIMEOUT_S"; fi
+    [ "$INTER_INSECURE_TLS" = 0 ] || [ "$INTER_INSECURE_TLS" = 1 ] || die "inter-insecure-tls must be 0 or 1"
+  fi
   [ "$SCALE" = 0 ] || [ "$SCALE" = 1 ] || die "scale must be 0 or 1, got '$SCALE'"
   [ "$OVERF" = 0 ] || [ "$OVERF" = 1 ] || die "overf must be 0 or 1, got '$OVERF'"
   [ "$RANDOM_CHURN_PROB" -le 100 ] || die "random-churn-prob must be <=100, got '$RANDOM_CHURN_PROB'"
@@ -460,6 +528,64 @@ PY
 # load control — bounded-retry HTTP writers (the real client ingress)
 #==============================================================================
 declare -A WRITER_PIDS=()
+INTER_PID=""
+INTER_LOG=""
+INTER_RESULT="disabled"
+
+start_inter_ontology_workload() {
+  [ "$INTER_ONTOLOGY" = 1 ] || return 0
+  local cross_script result_dir
+  local -a args
+  cross_script="$(pwd)/scripts/cross-ontology-loadtest.sh"
+  [ -x "$cross_script" ] || { LOG "INTER: FAIL — missing executable $cross_script"; INTER_RESULT="start_failed"; return 1; }
+  result_dir=$INTER_RESULT_DIR
+  [ -n "$result_dir" ] || result_dir="$PERFDIR/inter-ontology"
+  INTER_LOG="$PERFDIR/inter-ontology.log"
+  LOG "INTER: starting $INTER_REQUESTS remote proof(s), source=$INTER_SOURCE_NS target=$INTER_TARGET_NS concurrency=$INTER_CONCURRENCY"
+  args=(--source-endpoints "$INTER_SOURCE_ENDPOINTS"
+        --source-ns "$INTER_SOURCE_NS"
+        --target-ns "$INTER_TARGET_NS"
+        --goal "$INTER_GOAL"
+        --mode "$INTER_MODE"
+        --requests "$INTER_REQUESTS"
+        --concurrency "$INTER_CONCURRENCY"
+        --preflight-timeout "$INTER_PREFLIGHT_TIMEOUT_S"
+        --max-failures "$INTER_MAX_FAILURES"
+        --result-dir "$result_dir")
+  [ -n "$INTER_HTTP_TIMEOUT_S" ] && args+=(--http-timeout "$INTER_HTTP_TIMEOUT_S")
+  [ "$INTER_INSECURE_TLS" = 1 ] && args+=(--insecure-tls)
+  "$cross_script" "${args[@]}" >"$INTER_LOG" 2>&1 &
+  INTER_PID=$!
+  INTER_RESULT="running"
+}
+
+stop_inter_ontology_workload() {
+  [ -n "$INTER_PID" ] || return 0
+  if kill -0 "$INTER_PID" 2>/dev/null; then kill "$INTER_PID" 2>/dev/null || true; fi
+  wait "$INTER_PID" 2>/dev/null || true
+  INTER_PID=""
+}
+
+finish_inter_ontology_workload() {
+  [ "$INTER_ONTOLOGY" = 1 ] || return 0
+  [ -n "$INTER_PID" ] || return 1
+  if kill -0 "$INTER_PID" 2>/dev/null; then
+    LOG "INTER: FAIL — workload did not finish within the configured chaos window"
+    stop_inter_ontology_workload
+    INTER_RESULT="incomplete"
+    return 1
+  fi
+  if wait "$INTER_PID"; then
+    INTER_RESULT="pass"
+    INTER_PID=""
+    LOG "INTER: PASS"
+    return 0
+  fi
+  INTER_RESULT="fail"
+  INTER_PID=""
+  LOG "INTER: FAIL — see $INTER_LOG"
+  return 1
+}
 
 # Submit through Cowboy instead of `quod eval`. The latter starts a SECOND BEAM
 # inside the allocation's cgroup; on a 512 MiB task that diagnostic VM can OOM
@@ -846,12 +972,12 @@ poll_unverified() {
 cd "$(git rev-parse --show-toplevel 2>/dev/null || echo .)" || exit 1
 command -v jq >/dev/null || { echo "FATAL: jq required"; exit 1; }
 NS_JSON=$(jq -Rn --arg ns "$NS" '$ns')
-trap 'echo; LOG "interrupted — stopping writers"; stop_writers; exit 130' INT TERM
+trap 'echo; LOG "interrupted — stopping workloads"; stop_inter_ontology_workload; stop_writers; exit 130' INT TERM
 # Unexpected exits only need to reap local children. Normal completion and
 # INT/TERM already run the ledger quiescence check explicitly.
-trap 'stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"; rm -rf "$PERFDIR"' EXIT
+trap 'stop_inter_ontology_workload; stop_local_writers; rm -f "$EPFILE" "$FLEETFILE"; rm -rf "$PERFDIR"' EXIT
 
-LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG predicate=$TX_PREDICATE overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN min_advance=$MIN_ADVANCE ==="
+LOG "=== quod load+chaos (multi-validator) :: DURATION=${DURATION}s tag=$IMAGE_TAG predicate=$TX_PREDICATE overf=$OVERF random_churn=${RANDOM_CHURN_PROB}%/${RANDOM_CHURN_MAX} membership_churn=$MEMBERSHIP_CHURN inter_ontology=$INTER_ONTOLOGY min_advance=$MIN_ADVANCE ==="
 
 if [ "$SCALE" = "1" ]; then
   LOG "scaling homogeneous job to $NODES nodes..."
@@ -883,6 +1009,7 @@ LOG "membership reject baseline: $REJECT_BASELINE"
 
 START_TS=$(date +%s); END=$(( START_TS + DURATION )); tick=0
 start_writers force
+start_inter_ontology_workload || { LOG "INTER: unable to start"; exit 1; }
 perf_snapshot start          # baseline for the load-window latency + bandwidth report
 
 MEMB_AT=$(( DURATION * 40 / 100 ))          # fire the membership cycle ~40% into the window
@@ -916,6 +1043,8 @@ perf_snapshot end            # close the load-window latency + bandwidth measure
 [ -n "$CHURN_PID" ]     && wait "$CHURN_PID" 2>/dev/null
 [ -n "$VAL_CHURN_PID" ] && wait "$VAL_CHURN_PID" 2>/dev/null
 [ -n "$RANDOM_CHURN_PID" ] && wait "$RANDOM_CHURN_PID" 2>/dev/null
+INTER_FAILED=0
+finish_inter_ontology_workload || INTER_FAILED=1
 stop_writers
 
 converged=0; n=0; mx=$START_SLOT; vals=$EXP_VALIDATORS; csmn=$EXP_COMMITTEE; csmx=$EXP_COMMITTEE; wcw=0; vbehind=$EXP_VALIDATORS; recovering=$TOTAL
@@ -976,6 +1105,11 @@ else
   LOG "membership rejects (max) : $MAX_REJECTS  (informational — honest peer_ready split fail-closed)"
 fi
 LOG "weak_cert_waits (drained): $wcw  (peak during chaos: $MAX_WEAK_CERT)"; [ "$wcw" -eq 0 ] || { LOG "  FAIL: weak-cert waits did not drain (a laggard stuck across a committee change)"; FAILED=1; }
+if [ "$INTER_ONTOLOGY" = 1 ]; then
+  LOG "inter-ontology workload : $INTER_RESULT"
+  [ "$INTER_FAILED" -eq 0 ] || { LOG "  FAIL: configured inter-ontology workload did not pass"; FAILED=1; }
+  [ -n "$INTER_LOG" ] && [ -f "$INTER_LOG" ] && sed 's/^/  INTER: /' "$INTER_LOG"
+fi
 if [ "$OVERF_EVENTS" -gt 0 ]; then
   LOG "over-f stalls recovered  : $OVERF_RECOVERED / $OVERF_STALLS_OBSERVED observed ($OVERF_EVENTS churn events, $OVERF_UNOBSERVED unobserved)";
   { [ "$OVERF_RECOVERED" -eq "$OVERF_STALLS_OBSERVED" ] && [ "$STALLED" -eq 0 ]; } || { LOG "  FAIL: a measured deliberate >f stall did not recover"; FAILED=1; }

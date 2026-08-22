@@ -165,6 +165,40 @@ prepare_validation_and_materialization_are_owned_here_test() ->
              quod_commit_validation:dtx(Control, 1, check, Context))
       end).
 
+external_predicate_manifest_is_immutable_after_genesis_test() ->
+    Ns = <<"quod:immutable-predicate-manifest">>,
+    Anchor = <<229:256>>,
+    Diff = quod_ct:diff_for({external_predicate_modules, []}),
+    with_context(
+      Ns, Anchor, [],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid, immutable_external_predicate_manifest}, _},
+             quod_commit_validation:content(
+               [quod_ct:change(Ns, Diff, #{})], 1, check, Context))
+      end).
+
+dtx_prepare_cannot_change_external_predicate_manifest_test() ->
+    Fixture = valid_prepare_fixture(
+                #{goal_text =>
+                      <<"assertz(external_predicate_modules([])).">>}),
+    {TargetNs, TargetAnchor} = maps:get(target, Fixture),
+    Signer = maps:get(pubkey, maps:get(node_identity, Fixture)),
+    Control = maps:get(prepare_control, Fixture),
+    #{goal := FrozenGoal} = maps:get(evidence, Fixture),
+    {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+    Principal = {user, maps:get(user, Fixture)},
+    Policy = {can_invoke, Goal, Principal, [], TargetNs},
+    Member = {peer_admitted, Signer, "validator", 14567, Signer},
+    with_context(
+      TargetNs, TargetAnchor, [Policy, Member],
+      fun(Context) ->
+          ?assertMatch(
+             {ok, {invalid,
+                   [immutable_external_predicate_manifest]}, _},
+             quod_commit_validation:dtx(Control, 1, check, Context))
+      end).
+
 with_signed_fixture(Fun) ->
     {Fixture, Context, Outcomes} = signed_fixture(),
     Network = maps:get(network, Fixture),
@@ -214,11 +248,16 @@ without_network_identity(Fun) ->
     end.
 
 valid_prepare_fixture() ->
+    valid_prepare_fixture(#{}).
+
+valid_prepare_fixture(Overrides) ->
     Target = {TargetNs, TargetAnchor} =
         {<<"quod:commit-prepare">>, <<226:256>>},
     Fixture0 = quod_ct:signed_dtx_begin_fixture(
-                 #{target => Target, network => <<227:256>>,
-                   submitted_at => 1}),
+                 maps:merge(
+                   #{target => Target, network => <<227:256>>,
+                     submitted_at => 1},
+                   Overrides)),
     Begin = maps:get('begin', Fixture0),
     {ok, BeginRef} = quod_dtx:certified_ref(
                        TargetNs, TargetAnchor, 1, <<228:256>>,

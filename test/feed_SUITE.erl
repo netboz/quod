@@ -175,8 +175,11 @@ start_node(Port, {Pub, Seed}, Config, Extra) ->
     Set(node_pubkey,   Pub),
     Set(identity_key,  KeyTerm),
     Set(identity_cert, quod_identity:mint_cert({Pub, Seed})),
+    DataDir = filename:join(
+                ?config(priv_dir, Config),
+                "data_" ++ integer_to_list(Port)),
+    Set(effect_journal_data_dir, DataDir),
     {ok, _} = peer:call(Peer, application, ensure_all_started, [quod]),
-    DataDir = filename:join(?config(priv_dir, Config), "data_" ++ integer_to_list(Port)),
     Cfg = maps:merge(#{node_id => Pub, identity => #{pubkey => Pub, key => KeyTerm}, data_dir => DataDir},
                      Extra),
     {ok, _} = peer:call(Peer, quod_ns_sup, start_namespace, [?NS, Cfg]),

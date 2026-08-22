@@ -1,11 +1,22 @@
 # `create_ontology` — local preparation and durable action
 
+> **Architecture update:** the low-level preparer, generated genesis,
+> namespace-manager operation, transaction effect, and recovery rules in this
+> document remain authoritative. Earlier revisions' dedicated lifecycle runner
+> and hidden authorization proof have been removed. The
+> implemented public path is defined by
+> `ontology-lifecycle-single-path-plan.md`.
+
 ## Goal
 
-The trusted Erlang API prepares and starts a local N=1 ontology from ordered
-term, inline-source, and file-source inputs. The public root action uses that
-same preparer but first records a typed create effect in one ordinary root
-transaction; local hosting starts only after that transaction is applied.
+The public `quod:node` action prepares and starts a local N=1 ontology from
+ordered term, inline-source, and file-source inputs. It records a typed create
+effect in one ordinary transaction in the node ontology; local hosting starts
+only after that transaction is applied. The preparation and execution helpers
+are internal. Production exposes no raw lifecycle shortcut around the governed
+Prolog path.
+
+The following form exists only as a TEST fixture convenience:
 
 ```erlang
 quod_ontology:create(
@@ -19,27 +30,41 @@ The created namespace owns its own slot-1 ledger.  Its genesis contains the
 provided terms, the generated `consensus_incarnation/1`, and its self-only
 `peer_admitted/4` fact.
 
-There is still no root catalogue fact, ownership table, manifest, or quota.
-The public action does create a root ledger transaction with an empty root
-diff and a closed effect descriptor. The low-level `quod_ontology:create/2`
-function remains a trusted same-VM primitive and does not itself authorize or
-write the root ledger.
+There is still no per-created-ontology catalogue fact, ownership table, or
+quota. The public action creates a `quod:node` ledger transaction with an empty
+Prolog diff and a closed effect descriptor. TEST's
+`quod_ontology:create/2` wrapper reuses the same low-level preparation and
+execution code but is not a production API.
 
-## Public API
+The later actor model does not add another lifecycle operation. An ontology
+whose genesis includes, for example,
+`instance_of(human_user, local_human_1)` and
+`agent_key(local_human_1, PublicKey, active)` is still created by this same
+generic action. The external identity
+`agent_instance_ref(Namespace, GenesisAnchor, local_human_1)` is formed only
+after the anchor exists. The ontology creator, the contained instance, its
+key, and its ACL permissions are separate; no permission follows from
+`instance_of/2` itself.
 
-```erlang
-quod_ontology:create(Name, Options) ->
-    {ok, created | resumed, Namespace, GenesisHash} | {error, Reason}.
-```
+There is consequently no core `create_agent` or `create_human_user` action.
+Class-specific Prolog may offer a convenience action which constructs ordinary
+genesis facts, and creation policy may restrict `create_ontology/2` to an exact
+existing agent or inspect dynamically changeable prerequisites. It must still
+use this one preparer, lifecycle effect, and namespace-manager path.
 
-- `Name` is first canonicalised by `quod_ontology_name:flatten/1`, then checked
+## Low-level preparation contract
+
+Production callers reach this contract only through the governed action and
+its committed effect. TEST fixtures may use `quod_ontology:create/2` to exercise
+the same preparation and execution functions directly.
+
+- `Name` is first canonicalised, then checked
   before any manager or filesystem call.  The resulting namespace must be a
-  non-empty, valid UTF-8 binary of at most 128 bytes.  The complete `quod:`
-  system namespace is reserved: `create/2` rejects every name whose canonical
-  binary is exactly `<<"quod">>` or begins with `<<"quod:">>`, not merely the
-  currently-declared `quod:root`. This grammar also bounds the two existing
-  ETS-name atoms created for a running namespace; the wider atom/economic
-  policy remains a separate design.
+  non-empty, valid UTF-8 binary of at most 128 bytes. A `quod:*` name uses the
+  same lifecycle as any other ontology: `quod:node` policy decides who may create it,
+  and only a later exact `system_ontology/2` transaction makes it a system
+  ontology. This grammar also bounds the two existing ETS-name atoms created
+  for a running namespace; the wider atom/economic policy remains separate.
 - `Options` is a proper ordered list of repeatable `{terms, Terms}`,
   `{source, Text}`, and `{source_file, Path}` inputs. Their parsed terms are
   combined in exact option/source order and become the user-controlled part of
@@ -53,7 +78,7 @@ quod_ontology:create(Name, Options) ->
   `quod_prolog:terms_to_diff/1` **before** it calls the namespace manager. A
   compilation error is returned as `{error, Reason}`.  If
   `terms_to_diff/1` throws `{genesis_failed, {assert, Term, InterpreterState}}`,
-  `create/2` keeps the offending `Term` but removes the internal Erlog state
+  the preparer keeps the offending `Term` but removes the internal Erlog state
   from its public error.  Other compiler exceptions are likewise caught and
   mapped to a finite creation error; no `#est{}`, PID, reference, or stacktrace
   crosses the API.  Thus malformed content cannot enter the manager desired
@@ -122,59 +147,33 @@ The checkpoint is not a replicated ontology catalogue and grants no network
 authority; it records only what this node deliberately hosts. An explicit
 `stop_content/1` removes the corresponding checkpoint before stopping it.
 
-## Authorized action runner
+## Ordinary governed action
 
-Root declares creation as an ordinary policy action:
+`quod:node` declares creation through the shared `action/3` relation. A public
+`execute` of `create_ontology(Name, Options)` enters the ordinary proof, is
+checked by `can_invoke/4`, and is bound to one opaque proof-local internal
+transition. That transition's prerequisites read `current_principal/1`, apply
+`can_create_ontology/3`, and require `not_hosted` before source input is read.
 
-```prolog
-ontology_hosted(Name) :- ontology_join_state(Name, starting).
-ontology_hosted(Name) :- ontology_join_state(Name, joining).
-ontology_hosted(Name) :- ontology_join_state(Name, ready).
+The internal staging continuation compiles the source once into an immutable
+prepared descriptor and stages one typed direct effect. The controlling
+`quod:node` transaction normally has an empty fact diff but durably records the
+effect. The one node-wide journal runs the low-level helper after commit and
+verifies `ontology_hosted(Name)`. A repeated request whose desired state is
+already true stages no effect. There is no lifecycle-specific worker,
+authorization proof, or executor.
 
-action(create_ontology(Name, Options),
-       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
-        ontology_join_state(Name, not_hosted)],
-       ontology_hosted(Name)).
-```
-
-The public node-local entry is:
-
-```erlang
-quod_prolog:run_action(
-  <<"quod:root">>,
-  {create_ontology, Name, Options}).
-```
-
-It accepts only a fully ground `create_ontology/2` or `join_ontology/3` action
-targeting `quod:root`. The engine derives `node(NodePublicKey)` from its own
-identity and stores it only in the private proof overlay; callers and Prolog
-cannot provide or forge that principal. Root policy authorizes creation only
-when that key is currently self-admitted in the committed root snapshot.
-
-The bounded action worker first validates the exact transition declaration and
-authorizes the engine-owned principal before reading caller-selected source
-paths. It compiles the source once into an opaque prepared descriptor, then a
-read-only Prolog preparer checks the selected desired state or the declaration's
-ordered prerequisites. The first attempted assert, retract, or abolish fails
-even if later backtracking would have left an empty diff. The runner
-re-authorizes before either idempotent success or execution; execution invokes
-only the typed prepared helper once and verifies `ontology_hosted(Name)`
-afterward. A missing valid declaration fails as `action_not_declared`; a staged
-write fails as `lifecycle_staged_write` and executes nothing.
-
-The low-level `quod_ontology:create/2` API remains available to trusted code in
-the same VM. It does not authenticate remote callers and must not be exposed as
-a network authorization boundary.
+The low-level preparation/execution functions remain trusted same-VM
+internals. They do not authenticate callers and must not be exposed as a
+network authorization boundary. Production contains no second raw creation
+entry beside the ordinary action path.
 
 The lifecycle-specific creation vocabulary includes:
 
 ```prolog
 ontology_creation_failed(invalid_arguments)
-ontology_creation_failed(root_only)
-ontology_creation_failed(not_authorized)
-ontology_creation_failed(action_not_declared)
+ontology_creation_failed(wrong_ontology)
 ontology_creation_failed(invalid_name)
-ontology_creation_failed(reserved_system_namespace)
 ontology_creation_failed(invalid_options)
 ontology_creation_failed(invalid_initial_terms)
 ontology_creation_failed(initial_content_too_large)
@@ -186,11 +185,10 @@ ontology_creation_failed(start_failed)
 
 It does not copy arbitrary Erlang error terms into failure reasons: child-start errors
 may contain PIDs, references, paths, or other non-portable implementation
-details. The Erlang API retains its detailed `{error, Reason}` for operators;
+details. The low-level preparer retains its detailed `{error, Reason}` for diagnostics;
 the typed executor maps that result to the bounded, always-ground public reason
-above. Generic runner states such as `busy`, `rebuilding`, or
-`action_declaration_failed` remain explicit engine errors, and an ambiguous
-manager/action-worker completion is `{error, outcome_unknown}` rather than a
+above. Generic engine states such as `busy` or `rebuilding` remain explicit
+errors, and an ambiguous post-commit journal completion is `{error, outcome_unknown}` rather than a
 definite failure reason. The existing Erlog failure-reason stack remains available while proving
 prerequisites; post-proof executor errors are returned explicitly in the same
 bounded term shape. There is no second error stack.
@@ -207,9 +205,10 @@ than being caller variables.
 - No root `ontology/2` fact and no replicated catalogue.
 - No replicated hosting catalogue or automatic hosting on another node.
 - No directory advertisement: private reachability remains local/direct-seed.
-- No user/agent identity or ownership, payment, atom-capacity, deletion,
-  transfer, or remote membership design beyond the node-local
-  self-admitted-validator policy.
+- This implemented slice contains no agent identity or ownership enforcement,
+  payment, atom-capacity, deletion, transfer, or remote membership design
+  beyond the node-local self-admitted-validator policy. The target actor model
+  above remains later policy work, not an alternate creation API.
 - No default remote ACL or `can_join/3`: apart from the injected local
   host-entry rule, the supplied initial terms define the ontology's policy. A
   test that needs remote or cross-ontology calls includes the corresponding
@@ -217,16 +216,17 @@ than being caller variables.
 
 ## Tests
 
-1. `quod_ontology:create/2` creates an N=1 namespace whose slot 1 contains the
+1. The TEST fixture wrapper creates an N=1 namespace whose slot 1 contains the
    supplied ordered inputs, exactly one generated incarnation and founding-member
    fact, and an available genesis anchor. Its operational config comes from
    `build_ns_config/1`, its resolved data/ledger paths equal root's, and the
    explorer data-directory map is published after the successful start.
-2. Empty, invalid-UTF-8, over-128-byte, and `quod:` system names are rejected
+2. Empty, invalid-UTF-8, and over-128-byte names are rejected
    before manager/filesystem work. Each starts no child, creates no ledger
    directory, and leaves the desired map unchanged.
 3. Malformed options or terms, bad source/file input, and user-supplied
-   `consensus_incarnation/1` or `peer_admitted/4` clause heads are rejected
+   `consensus_incarnation/1`, `peer_admitted/4`, or
+   `external_predicate_modules/1` clause heads are rejected
    before the manager. The detailed API error identifies the offending term
    without containing an Erlog interpreter state, and no retry timer or desired
    entry remains.
@@ -237,17 +237,15 @@ than being caller variables.
    An undesired live child proves that supervisor collisions are not adopted or
    stopped; `already_started` and `already_present` receive the same collision
    classification.
-5. `quod_prolog:run_action/2` accepts the ground root action and calls the same
-   API only after the committed root policy authorizes the engine-owned node
-   principal. Wrong scope, invalid input, missing action declaration,
+5. The ordinary proof accepts the ground `quod:node` action and calls the same
+   preparer only after `can_invoke/4` and committed node policy authorize the
+   authenticated principal. Signed and node-authored `execute` share this one
+   entry. Wrong scope, invalid input, missing action declaration,
    non-membership, collision, and start errors return the matching bounded
    `ontology_creation_failed/1` reason.
-6. Ordinary proof contexts and the removed low-level effect functor perform no
-   lifecycle IO. The monitored action worker rejects both staged writes and a
-   policy that attempts any mutation; the executor's second authorization
-   still rejects a declaration from which the visible policy prerequisite was
-   removed. Any action-worker loss conservatively reports `outcome_unknown`,
-   because the engine does not maintain a second phase-tracking framework.
+6. Proof execution performs no lifecycle IO. A failed or backtracked candidate
+   discards its prepared effect. After commit, the shared effect journal owns
+   retry and reports an exact uncertain outcome without a second phase tracker.
 7. Repeating the API against an existing ledger returns `resumed` and does not
    append a second genesis block or silently apply new initial terms.
 8. Reconciliation republishes an already-running desired namespace only after

@@ -685,10 +685,10 @@ event is worth resolving.
 
 > **Correction — the draft does not say who may submit a resolution.** The
 > submitter is the world's current physics authority, acting as a node principal.
-> Today that shape exists only via the typed `quod_prolog:run_action/2` boundary
-> with an engine-owned principal; agent subjects and delegation are Slice 5 of
-> `doc/agent-fipa-plan.md` and are unbuilt. Until then, a world's resolution
-> action is a node-principal action, and the write ACL for injury, critical, and
+> Today that shape uses the same typed action executor as signed client goals;
+> the trusted node route derives its engine-owned principal, while signed goals
+> carry their verified principal. Delegated FIPA authority remains future work.
+> Until then, a world's resolution action is a node-principal action, and the write ACL for injury, critical, and
 > death facts must be restricted to the authority for that world — otherwise any
 > writer to the namespace can assert an arterial laceration.
 

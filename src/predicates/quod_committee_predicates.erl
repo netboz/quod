@@ -45,16 +45,30 @@ the committee stays a pure, deterministic projection of the committed log on eve
 > clause to be present). See `doc/deferred.md` §3. (Signed membership authorship — closing committee
 > *packing* — is Phase B.)
 
-Registered per-node in `quod_prolog:build_kb/0` — via `m:quod_predicates`, which routes them through
+Registered in every ontology engine by `m:quod_predicates`, which routes them through
 its class-enforcing dispatcher (`admit`/`remove` are `staging`, `peer_ready` is `query`) — so they are
 identical on every member and never carried in the log; only their resulting `peer_admitted` diff is.
 """.
 
--export([admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1,
+-export([quod_predicate_module/0, load/1,
+         admit_3/3, remove_1/3, peer_ready_1/3, admitted_pubkeys/1,
          membership_diff/1]).
 
 -include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ingress_limits.hrl").
+
+quod_predicate_module() -> true.
+
+-spec load(tuple()) -> tuple().
+load(Est0) ->
+    Est1 = quod_predicates:register(
+             Est0, {peer_ready, 1}, query,
+             ?MODULE, peer_ready_1),
+    Est2 = quod_predicates:register(
+             Est1, {admit, 3}, staging,
+             ?MODULE, admit_3),
+    quod_predicates:register(
+      Est2, {remove, 1}, staging, ?MODULE, remove_1).
 
 %% admit(Pubkey, Host, Port): prove can_join, then stage the peer_admitted assert. Gate + stage are ONE
 %% erlog conjunction — if can_join fails, the assert is never reached, so nothing is staged and the prove

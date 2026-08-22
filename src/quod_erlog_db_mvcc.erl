@@ -107,7 +107,7 @@ Publish the boot-time KB (the loaded common predicates) as the height-0 base,
 so every handle a proof can wrap is a published snapshot from the first
 instant — a fresh namespace serves and tokens its base as `{present, 0}`
 before any block applies. Legal exactly once per store, before any `commit/3`;
-`build_kb` is deterministic per release, so the base rows are identical on
+`quod_committed_projection:new_est/0` is deterministic per release, so the base rows are identical on
 every node.
 """.
 -spec publish_base(ref()) -> ref().

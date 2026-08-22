@@ -118,7 +118,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          make_share/5, verify_share/2,
          verify_cert/3,
          may_commit/2, may_complain/2, well_formed_block/1,
-         valid_genesis_transaction/2,
+         valid_genesis_transaction/2, genesis_predicate_manifest/1,
          valid_history_entry/4, valid_history_entry/5,
          history_projection/0, history_projection/1, history_projection/5,
          history_committee/1, history_validator_routes/1,
@@ -1848,14 +1848,18 @@ start_link(Ns, Config) ->
 
 -doc "Durably accept one exact local effect transaction into signed custody.".
 -spec handoff_effect(binary(), <<_:256>>, #transaction{}) ->
-          ok | {error, busy | bad_change | not_in_charge | outcome_unknown}.
+          ok | {error, busy | bad_change | not_in_charge |
+                       unavailable | outcome_unknown}.
 handoff_effect(Ns, <<_:256>> = Admission, #transaction{} = Change)
   when is_binary(Ns) ->
     try gen_statem:call(
           quod_reg:via({quod_simplex, Ns}),
           {handoff_effect, Admission, Change}, 8000)
     catch
-        exit:{noproc, _} -> {error, not_in_charge};
+        %% Process absence says nothing about durable authority. The node-wide
+        %% effect journal starts before dynamically hosted ontologies are
+        %% restored, so only a live Simplex may return `not_in_charge`.
+        exit:{noproc, _} -> {error, unavailable};
         exit:{timeout, _} -> {error, outcome_unknown};
         exit:_ -> {error, outcome_unknown}
     end;
@@ -2692,6 +2696,17 @@ genesis_tx(Cfg, Ns, Self, Incarnation) ->
     Founders   = founding(Cfg, Self),
     [{GenesisAuthor, _, _} | _] = Founders,
     InitialDiff = genesis_initial_diff(Cfg),
+    Modules = maps:get(external_predicate_modules, Cfg, []),
+    Manifest =
+        case quod_predicates:module_manifest(Modules) of
+            {ok, Value} -> Value;
+            {error, Reason} -> throw({genesis_failed, Reason})
+        end,
+    case quod_diff:touches_functor(
+           InitialDiff, {external_predicate_modules, 1}) of
+        true -> throw({genesis_failed, reserved_genesis_manifest});
+        false -> ok
+    end,
     GeneratedTerms =
         lists:foldr(
           fun({Pk, Host, Port}, Acc) ->
@@ -2708,7 +2723,8 @@ genesis_tx(Cfg, Ns, Self, Incarnation) ->
     HostEntryPolicy = {can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}},
     GeneratedDiff =
         quod_prolog:terms_to_diff(
-          [{consensus_incarnation, Incarnation}, HostEntryPolicy
+          [{consensus_incarnation, Incarnation},
+           {external_predicate_modules, Manifest}, HostEntryPolicy
            | GeneratedTerms]),
     %% `foldr` is the single list-spine copy needed to prepend generated ops;
     %% InitialDiff itself is retained byte-for-byte and is never repeatedly appended.
@@ -2767,6 +2783,25 @@ genesis_incarnation_matches(Diff, Incarnation) ->
         _ ->
             false
     end.
+
+-doc "Extract the one immutable external-predicate manifest from genesis.".
+-spec genesis_predicate_manifest(term()) ->
+          {ok, quod_predicates:module_manifest()} | error.
+genesis_predicate_manifest(#transaction{diff = Diff}) ->
+    %% Inspect every clause with the reserved head, not only well-formed
+    %% assertions.  A malformed or second clause must not hide beside the one
+    %% canonical generated fact.
+    case [{Action, Manifest, Body}
+          || {Action, {{external_predicate_modules, Manifest}, Body}} <- Diff]
+    of
+        [{assert, Manifest, {[], false}}] ->
+            case quod_predicates:valid_manifest_shape(Manifest) of
+                true -> {ok, Manifest};
+                false -> error
+            end;
+        _ -> error
+    end;
+genesis_predicate_manifest(_) -> error.
 
 %% The founding members as `{Pubkey, Host, Port}` (sorted, self included). `Host`/`Port` are a dial hint the
 %% join path fills in — `undefined` when only a bare pubkey is configured; consensus needs only the pubkey.
@@ -5097,8 +5132,6 @@ sign_and_retain_effect(Change, S0) ->
                                              Deadlines),
                       custody_bytes = S1#s.custody_bytes + Bytes},
             {ok, S2};
-        {error, busy} ->
-            {error, busy, S0};
         {error, _} ->
             {error, bad_change, S0}
     end.
@@ -5128,22 +5161,12 @@ sign_local_change(#transaction{author = Self, sig = none} = Change,
                             {ok, Signed, Submission,
                              S#s{next_author_seq = Seq + 1}};
                         [_Effect] ->
-                            Pending = quod_signing_journal:pending_effects(
-                                        S#s.signing_journal),
-                            case maps:is_key(Signed#transaction.tx_id, Pending)
-                                 orelse map_size(Pending) <
-                                           ?QUOD_MAX_PREPARED_EFFECTS of
-                                true ->
-                                    {ok, Journal1} =
-                                        quod_signing_journal:record_effect(
-                                          S#s.signing_journal,
-                                          Signed, Submission),
-                                    {ok, Signed, Submission,
-                                     S#s{next_author_seq = Seq + 1,
-                                         signing_journal = Journal1}};
-                                false ->
-                                    {error, busy}
-                            end
+                            {ok, Journal1} =
+                                quod_signing_journal:record_effect(
+                                  S#s.signing_journal, Signed, Submission),
+                            {ok, Signed, Submission,
+                             S#s{next_author_seq = Seq + 1,
+                                 signing_journal = Journal1}}
                     end;
                 {error, _} = Error -> Error
             end;
@@ -9239,6 +9262,7 @@ valid_genesis_identity(
   {ok, Incarnation}, Diff, Author, Genesis, ExpectedFounders) ->
     {Adds, Removes} = committee_delta(Genesis),
     genesis_incarnation_matches(Diff, Incarnation)
+        andalso genesis_predicate_manifest(Genesis) =/= error
         andalso Removes =:= []
         andalso Adds =/= []
         andalso length(Adds) =< ?MAX_VALIDATORS
@@ -10872,8 +10896,14 @@ apply_catchup_window(
             Recovered1 = settle_recovery_dtx(Es, Recovered0),
             Recovered2 =
                 settle_recovery_custody(Slot, Included, Recovered1),
+            %% Live commit and catch-up retire effect signing custody through
+            %% the same semantic-TxId path.  Otherwise a later restart can
+            %% restore and re-drive an effect transaction already present in
+            %% this certified window.
+            Recovered3 = retire_committed_effect_custody(
+                           entry_effect_transaction_ids(Es), Recovered2),
             Recovered =
-                settle_recovery_relays(Slot, Included, Recovered2),
+                settle_recovery_relays(Slot, Included, Recovered3),
             {Reconciled, PendingTransition} =
                 reconcile_signing_state(Recovered),
             S1 = reseat_engine(Slot, Reconciled, Included),
@@ -10907,6 +10937,12 @@ committed_submission_slots(Entries) ->
                   noop -> Acc0;
                   invalid -> Acc0
               end
+      end, #{}, Entries).
+
+entry_effect_transaction_ids(Entries) ->
+    lists:foldl(
+      fun(#entry{data = Data}, Acc) ->
+              maps:merge(Acc, payload_effect_transaction_ids(Data))
       end, #{}, Entries).
 
 settle_recovery_dtx(Entries, S) ->

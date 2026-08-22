@@ -19,6 +19,39 @@ changes are not yet committed or deployed; deployment of the combined hard
 protocol break remains withheld until review and the release gates are
 explicitly authorized.
 
+> **Architecture correction.** This document records the implemented signed
+> request whose principal is labelled `{user, Key}`.  That label is temporary:
+> `ontology-actor-architecture.md` defines the target model in which every
+> durable actor state is ontology content and `agent` is the generic signer
+> class. A concrete signer is a local agent instance identified externally by
+> `agent_instance_ref/3`; the containing ontology, its creator, that instance,
+> its key, and its ACL permissions remain distinct. The future
+> agent-bound request is one hard format migration of this same path, not a
+> second client endpoint, executor, or ACL.
+
+> The target model also removes the transitional `create_user_home` helper. It
+> is not renamed to `create_agent`: Quod has no core agent-construction
+> predicate. Existing `create_ontology/2` may place local `instance_of/2`,
+> `agent_key/3`, and ACL facts in genesis, and ordinary transactions may add
+> instances later. `instance_of/2` creates only logical class membership; a
+> separate committed hosting fact controls an optional Erlang runtime.
+
+### Agent-format routing decision
+
+The implemented v1 request enters the selected target ontology directly. The
+agent-format break changes this once: a signed request enters the exact
+ontology containing its claimed agent instance, and another target is reached
+through the existing `Target::Goal` mechanism. The old direct-target form is
+deleted rather than retained beside it.
+
+The containing ontology validates the active `agent_key/3` binding. Remote
+targets must additionally receive one independently verifiable authorization
+from that origin; trusting the single node which opened a scope is not enough.
+The implementation plan must refactor the existing scope/plan authentication
+evidence to transfer that result for reads, cursors, transactions, and DTX.
+It must not add per-target key-verification variants or require every target to
+continuously follow every signer ontology.
+
 ## Purpose
 
 An authenticated client must be able to submit an ordinary Prolog goal. The
@@ -28,10 +61,10 @@ selected from a server-owned catalogue.
 This plan concerns only the path:
 
 ```text
-user interacts with client UI -> client constructs goal -> client signs goal
+agent runtime or human-facing client -> constructs goal -> signs goal
     -> server processes goal
 
-client receives an event -> client constructs goal -> client signs goal
+agent runtime receives an event -> constructs goal -> signs goal
     -> server processes goal
 ```
 
@@ -264,10 +297,11 @@ ontology permits a predicate through its existing policies and proof rules, the
 signed client may use it. If the ontology refuses it, the normal bounded failure
 reasons are returned.
 
-The direct `quod_prolog:prove/2`, `prove_ro/2`, `execute/2`, and `run_action/2`
-functions remain trusted in-VM operator and test interfaces. They are not HTTP
-client routes, are not mounted by Explorer, and do not compete with the signed
-browser boundary.
+The direct `quod_prolog:prove/2`, `prove_ro/2`, and `execute/2` functions remain
+trusted in-VM operator and test interfaces. They are not HTTP client routes,
+are not mounted by Explorer, and do not compete with the signed browser
+boundary. Lifecycle goals use `execute/2` like every other write; the former
+dedicated action interface was deleted.
 
 For a signed local read, the exact target anchor is carried into the proof
 worker and checked there again before the frozen ontology snapshot is used.
@@ -1131,7 +1165,8 @@ The Slice-6 review must answer explicitly:
 1. Is the new node owner transport-only, with all goal execution still
    converging on one target function and the existing Prolog path?
 2. Are browser-session authority, authenticated forwarding-peer identity, and
-   signed user identity separated without trusting a forwarded field?
+   signed actor identity (currently labelled as a user identity) separated
+   without trusting a forwarded field?
 3. Do typed refusals permit route changes only before durable handoff, while
    every ambiguous post-send write returns the stable operation reference
    without automatic re-proof?

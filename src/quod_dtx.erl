@@ -579,7 +579,7 @@ materialize_decoded(Core, Decoded) ->
                                    Effects, maps:get(effects_count, Core), 0)
                          andalso quod_diff:valid_ops(Diff)
                          andalso quod_diff:valid_read_check(ReadCheck)
-                         andalso valid_effects(Effects)
+                         andalso quod_effect:validate_list(Effects)
                          andalso valid_live_bridges(Bridges)
                          andalso seal_admissible(
                                    Diff, ReadCheck, Effects, Bridges) =:= ok
@@ -644,26 +644,6 @@ valid_live_bridges(Bridges) ->
              (_) -> false
           end,
           Bridges).
-
-valid_effects(Effects) ->
-    valid_effects(Effects, 0, #{}).
-
-valid_effects([], Count, _Ids) ->
-    Count =< ?QUOD_MAX_DIRECT_EFFECTS;
-valid_effects([Effect | Rest], Count, Ids)
-  when Count < ?QUOD_MAX_DIRECT_EFFECTS ->
-    case quod_effect:validate(Effect) of
-        true ->
-            Id = quod_effect:effect_id(Effect),
-            case maps:is_key(Id, Ids) of
-                false -> valid_effects(
-                           Rest, Count + 1, Ids#{Id => true});
-                true -> false
-            end;
-        false -> false
-    end;
-valid_effects(_, _Count, _Ids) ->
-    false.
 
 valid_transcript([], Count) ->
     Count =< ?QUOD_MAX_INVOCATIONS_PER_SCOPE;

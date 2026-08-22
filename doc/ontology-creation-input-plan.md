@@ -7,14 +7,14 @@ list of input options. The common top-level Quod entry is:
 
 ```erlang
 quod_prolog:execute(
-  <<"quod:root">>,
+  <<"quod:node">>,
   {create_ontology, {':', user, notes},
    [{source_file, "./test.pl"},
     {source_file, "./test2.pl"},
     {source, "note(inline)."}]}).
 ```
 
-The corresponding Erlang representation is:
+The TEST fixture convenience form is:
 
 ```erlang
 quod_ontology:create(
@@ -29,17 +29,17 @@ is no `create_source/2`, legacy argument detection, or compatibility branch.
 All inputs converge before validation and use the existing atomic creation
 path.
 
-`create_ontology/2` and `join_ontology/3` are reserved top-level action names.
-`execute/2` always routes these exact arities to the root lifecycle action
-executor; an ontology that wants an ordinary domain predicate should choose a
-different name. All other terms continue through the ordinary proof path.
+`create_ontology/2` and `join_ontology/3` are governed staging predicates owned
+by `quod:node`. They enter the same ordinary proof and `action/3` relation as
+other goals; there is no top-level router or lifecycle executor. An ontology
+that wants an unrelated domain predicate should choose a different name.
 Namespace names accept a binary, an atom, the structured `owner:name` form, or
 a quoted Prolog string such as `"owner:name"`; all four become the same
 canonical namespace.
 
 ## Options
 
-`create/2` accepts a proper list containing these options:
+The creation operation accepts a proper list containing these options:
 
 - `{source_file, Path}` reads and parses every Prolog term in `Path`.
 - `{source, Text}` parses every Prolog term in an in-memory UTF-8 source.
@@ -61,7 +61,7 @@ The list is intentionally not converted to a map: repeated sources and their
 order are meaningful, and later options such as identity or visibility need
 not change the input-loading pipeline.
 
-The lifecycle action runner requires the complete action to be ground.
+The ordinary action bridge requires the complete public action to be ground.
 Consequently `{terms, Terms}` can carry ground facts in the action term but not
 clauses containing caller variables. `source/1` and `source_file/1` are the
 normal way to supply rules: variables are parsed as data inside the source,
@@ -69,7 +69,7 @@ not mistaken for variables of the action request.
 
 ## One creation pipeline
 
-`quod_ontology:create/2` performs these steps:
+The shared low-level preparer performs these steps:
 
 1. Canonicalise and validate the namespace exactly as it does now.
 2. Walk the option list once from left to right. Load each option into terms
@@ -175,20 +175,19 @@ ontology_creation_failed(invalid_source(OptionIndex, Line))
 ontology_creation_failed(source_file_error(OptionIndex))
 ```
 
-All existing name, root-only, protected-fact, and start-failure mappings remain
+All existing name, wrong-ontology, protected-fact, and start-failure mappings remain
 available. No raw source, path, parser detail, PID, or interpreter state enters
 the Prolog failure stack.
 
-`source_file/1` is reachable from the authorized lifecycle path only
-through the dedicated root action runner. That runner derives a private node
-principal, proves policy in a read-only committed view, re-authorizes, and then
-calls the typed executor. Ordinary proofs, selected-ontology scope sessions,
-and consensus projections cannot execute it. The Explorer console uses the
-same top-level executor as every other caller: an ordinary term stays an
-ordinary proof, while a typed `create_ontology/2` or `join_ontology/3` term is
-routed through its declared root `action/3` proof and this policy-checked
-effect. The low-level creation API is trusted same-VM code and is not a remote
-authorization boundary.
+`source_file/1` is reached only after the ordinary target `can_invoke/4` check
+and the selected `quod:node` action's declared prerequisites succeed. The
+governed staging bridge then reads and compiles it exactly once. Consensus
+projections cannot execute it. The Explorer console submits the same signed
+goal as every other caller; it has no lifecycle route or extra authority. The
+low-level preparation/execution functions are trusted same-VM internals, not a
+remote authorization boundary. Production has no raw `create/2` shortcut
+beside the governed Prolog action; that wrapper is compiled only for TEST
+fixtures.
 
 ## Explorer console
 
@@ -197,11 +196,10 @@ submits lifecycle terms through the same signed-goal boundary and receives the
 same `can_invoke/4` and lifecycle-policy decision as any browser client. It has
 no special operator authority and no separate executor.
 
-Trusted node operators may still call the in-VM `execute/2` or `run_action/2`
-APIs. A `{source_file, Path}` creation can therefore read a file visible to the
-hosting node only when that trusted API is used, or when root policy explicitly
-authorizes the signed user lifecycle request. The client never uploads source
-under a file-path disguise.
+Trusted node operators use the in-VM `execute/2` API. A
+`{source_file, Path}` creation can therefore read a file visible to the hosting
+node only when `quod:node` policy authorizes that goal. The client never uploads
+source under a file-path disguise.
 
 ## Tests
 
@@ -224,7 +222,7 @@ under a file-path disguise.
 1. A mixed ordered list of `terms`, two `source_file` entries, and `source`
    produces one genesis containing every clause in order.
 2. A source rule containing variables can be queried after creation.
-3. The action runner accepts the same option list and creates that rule; the
+3. The ordinary action path accepts the same option list and creates that rule; the
    former raw term-list call is rejected as `invalid_options`.
 4. A missing file, invalid UTF-8 source, malformed option, improper list, and
    syntax error in a later source leave the desired map, child set, explorer
@@ -235,7 +233,7 @@ under a file-path disguise.
    `terms`, inline source, or a file.
 7. Repeated file/source options prove order is preserved without a duplicate
    option being discarded.
-8. Existing collision, failed-admission, resume, root-only action, authorization, and staged-write
+8. Existing collision, failed-admission, resume, wrong-ontology action, authorization, and rollback
    tests remain green under the new option shape.
 9. A prepared diff at the shared initial-content boundary succeeds; one byte
    beyond the boundary fails before manager, filesystem, or ledger mutation.

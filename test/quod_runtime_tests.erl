@@ -629,8 +629,8 @@ subscription_create_remove_uses_ordinary_transactions_test_() ->
     after cleanup_founded(F) end
     end}.
 
-%% A catalogue far larger than the node's foreign-history capacity must cost one
-%% shared retry lane, not one timer and one attach per durable fact. With no
+%% A large catalogue must cost one shared retry lane, not one timer and one
+%% attach per durable fact. With no
 %% foreign-log owner every follow attempt fails, so every view stays in the
 %% waiting set and the sweep bound is the only thing keeping attempts finite.
 subscription_catalogue_retries_through_one_bounded_sweep_test_() ->

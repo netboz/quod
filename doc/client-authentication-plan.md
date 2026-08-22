@@ -1,6 +1,6 @@
 # Client authentication and key custody
 
-**Status:** deterministic user identity, node-bound Ed25519
+**Status:** deterministic key authentication, node-bound Ed25519
 challenge-response, short-lived node-local sessions, signed goals and cursors,
 signed multi-ontology scopes, unresolved-operation persistence, the
 constrained user-home foundation, and any-node signed-goal forwarding are
@@ -8,23 +8,38 @@ implemented in the working tree. The combined hard protocol break is not yet
 committed or deployed; its review and release gates remain as specified in
 `doc/signed-client-goals-plan.md`.
 
+> **Terminology correction.** The implemented request format calls its signer
+> `{user, Key}`.  That word is a temporary protocol label, not a claim that a
+> signer is human.  `ontology-actor-architecture.md` is the authority for the
+> replacement: every durable actor is represented by an ontology instance;
+> `agent` is the general acting class;
+> `human_user` is the human-specific subclass. The format change must be one
+> hard break, with no second authentication or ACL path.
+
 ## Goal
 
-A person uses an Ed25519 user key to authenticate to a Quod node and receives a
-session bound to that base user identity. The client may submit an ordinary
+A key-holding client uses an Ed25519 key to authenticate to a Quod node and
+receives a session bound to that current implementation identity. The client may submit an ordinary
 bounded Prolog goal; its signature, rather than a server-owned request
 catalogue, binds the exact intent. A later agent milestone may extend that base
 user into an immutable delegated subject after wielding is implemented; the
 current client does not fabricate an agent chain or capabilities.
 
-New user registration is open initially: a fresh key may create its own user
-home ontology. World, agent, and avatar access remain governed by their normal
-ontology policies; registration grants no world authority.
+The current home-creation flow is a narrow transitional convenience. In the
+target actor model `human_user` is simply a subclass of `agent`. A concrete
+local instance and its active public keys are ordinary facts in an ontology;
+independently managed instances will normally use a dedicated ontology, but
+the protocol does not impose one instance per ontology. World, agent, and
+avatar access remain governed by their normal ontology policies; creating an
+ontology or asserting class membership grants no authority by itself.
 
 ## Key custody
 
-The canonical public identity is a 32-byte Ed25519 public key. A private key
-is never sent to Quod and no server-side vault is required.
+In the implemented browser protocol, the authentication credential is a
+32-byte Ed25519 public key. In the target actor model, the stable identity is
+an `agent_instance_ref/3`; one or more active public keys are facts beside its
+local instance in the containing ontology. A private key is never sent to Quod
+or stored in an ontology.
 
 The client implements a key-provider interface:
 
@@ -48,18 +63,25 @@ The first providers are:
 2. **USB-file provider.** The initial client can export and import that same
    encrypted bundle through a user-selected file. A plain USB stick is
    encrypted portable storage, not an automatically trusted hardware signer.
-3. **Remote-vault provider.** Later synchronizes only the encrypted bundle
+3. **Remote client-vault provider.** Later synchronizes only the encrypted bundle
    through an OAuth/WebDAV/object-store adapter. The vault receives neither the
    private key nor the passphrase.
 4. **Hardware signer provider.** Later delegates `sign/1` to a genuine hardware
    key. It is distinct from USB-file storage.
+
+Those providers cover a human-controlled browser agent. An autonomous agent
+uses the node-local vault on its current committed host. Moving it stages a
+new key in the destination vault and commits host/key rotation; it never copies
+the old private key. The vault and later HSM/threshold backends are specified
+in `ontology-actor-architecture.md` and reuse the same canonical signing
+operation. They are not a second signed-goal protocol.
 
 The bundle format, KDF parameters, authenticated encryption, recovery UX, and
 browser support matrix are security-sensitive versioned work. The initial
 implementation must use a reviewed password KDF and authenticated encryption;
 it must not silently fall back to plaintext browser storage.
 
-## User-home creation
+## User-home creation (as built)
 
 The client creates its key locally, authenticates it, and signs the ordinary
 argument-free Prolog goal `create_user_home.` against the exact `quod:root`
@@ -67,8 +89,8 @@ identity. The goal uses the same canonical signed request, operation ID, proof,
 ACL, lifecycle effect, and durable outcome path as every other local signed
 write. There is no registration-only protocol or executor.
 
-There is no global ontology containing every user. `quod:user` is the shared
-model and founding policy; a key deterministically names one home namespace:
+There is no global ontology containing every user. In the current format, a key
+deterministically names one home namespace:
 
 ```text
 user:<sha256("quod-user-id-v1:" || Ed25519PublicKey) as lower-case hex>
@@ -82,6 +104,35 @@ user_key(UserId, PublicKey, active).
 user_home(UserId, Namespace).
 user_home_version(1).
 ```
+
+These `user/1` and `user_key/3` terms document the deployed transitional
+format. The actor migration replaces them with the shared class convention and
+generic key vocabulary in an ordinary ontology:
+
+```prolog
+instance_of(human_user, local_human_1).
+agent_key(local_human_1, PublicKey, active).
+```
+
+The external identity is formed only after the ontology's genesis anchor is
+known:
+
+```prolog
+agent_instance_ref(Namespace, GenesisAnchor, local_human_1)
+```
+
+`quod:human_user` defines that subclass and related profile vocabulary; it does
+not hold every instance or provide a special creation executor. The target
+model removes `create_user_home` rather than renaming it: initial class, key,
+and ACL facts use the existing generic `create_ontology/2` genesis input, while
+later facts use ordinary transactions. Class membership has no hidden runtime
+effect.
+
+Who may create an ontology containing a `human_user` instance is ordinary,
+changeable Prolog policy. Its ACL may name one exact existing agent—possibly a
+FIPA agent—and action prerequisites may require committed approvals, counts,
+or any other domain rule. No hard-coded open-registration rule and no special
+delegation protocol is part of the target identity model.
 
 The lifecycle predicate derives the namespace and these facts from the
 engine-owned signed user principal; it never accepts client-selected namespace
@@ -135,8 +186,13 @@ not itself authorization. The client later requests a wieldable agent. The
 node proves ownership and `accepts_wielding/2`, then pins:
 
 ```prolog
-subject(UserId, [AgentId], Capabilities)
+subject(HumanAgentRef, [WieldedAgentRef], Capabilities)
 ```
+
+Both identities are
+`agent_instance_ref(Namespace, GenesisAnchor, Instance)` terms. The session
+signature identifies the submitting key; this subject separately represents
+the human origin, delegation chain, and receiver-derived capabilities.
 
 Changing wielded agent creates a new immutable session subject rather than
 mutating a subject beneath an in-flight request.
@@ -243,6 +299,9 @@ implementation are specified in `doc/signed-client-goals-plan.md`.
 - no plaintext private key in an exported key file;
 - no unsigned, unbounded, or server-substituted client goal;
 - no bearer session copied into durable facts;
-- no automatic discovery or execution of code from a user ontology;
-- no vault provider until the encrypted bundle format and recovery story are
-  implemented and tested.
+- no automatic discovery or execution of code from an agent's containing
+  ontology;
+- no remote browser-vault provider until the encrypted client bundle format and
+  recovery story are implemented and tested. This exclusion is separate from
+  the node-local autonomous-agent vault in
+  `ontology-actor-architecture.md`.

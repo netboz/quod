@@ -1,26 +1,31 @@
 # `join_ontology` — dynamic hosting slice
 
+> **Architecture update:** validation, exact-anchor join, namespace-manager,
+> effect-journal, and recovery rules remain authoritative. Earlier revisions'
+> dedicated lifecycle runner and hidden authorization proof have been removed.
+> The implemented public path is defined by
+> `ontology-lifecycle-single-path-plan.md`.
+
 ## Goal
 
-Let the root ontology on a node start hosting an existing ontology through the
+Let the node ontology start hosting an existing ontology through the
 normal pinned-genesis join and catch-up path.
 
-```erlang
-quod_prolog:run_action(
-  <<"quod:root">>,
-  {join_ontology,
+```prolog
+"quod:node"::join_ontology(
    {':', user_alice, notes},
    "5f8c...64 hexadecimal characters...",
-   [{seed, "192.168.1.11", 14567}]}).
+   [seed("192.168.1.11", 14567)]).
 ```
 
 The operation is deliberately small: one Erlang API builds the same `mode =
-join` configuration used at boot, and the dedicated lifecycle runner calls
-that API after proving an explicit root-ontology
+join` configuration used at boot, and the ordinary action path calls that API
+after proving an explicit node-ontology
 `action(Transition, Prerequisites, DesiredState)` clause. It does not create a
 second join implementation.
 
-Joining is asynchronous. Success of `quod_prolog:run_action/2` means either
+Joining is asynchronous. Success from ordinary signed or node-authored
+`execute` means either
 that the exact pinned target already held, or that the local join was accepted
 and its supervised catch-up process was started. It does **not** claim that a
 new catch-up has finished. A separate read-only predicate reports the local
@@ -64,8 +69,9 @@ silently changing the caller's input.
 
 All validation happens before consulting the namespace manager or filesystem.
 Names reuse the exact canonicalisation and bounds already enforced by
-`create/2`, including rejection of every reserved `quod` / `quod:*` system
-namespace. The shared name, root-storage and ledger-state helpers remain in
+`create/2`. A `quod:*` ontology is created normally under `quod:node` policy and only
+becomes a system ontology when root later records its exact anchor; malformed
+names fail before any lifecycle work. The shared name, root-storage and ledger-state helpers remain in
 `quod_ontology`; they are factored rather than copied into a join module.
 
 ## Reusing the existing join path
@@ -124,7 +130,7 @@ are observable rather than hidden or persisted.
 Add `priv/ontologies/common_predicates.pl` as Quod's code-owned Prolog baseline
 for every ontology. Loading has one owner and one path:
 
-1. `quod_prolog:build_kb/0` creates Erlog's built-ins, list library and DCG
+1. `quod_committed_projection:new_est/0` creates Erlog's built-ins, list library and DCG
    library, then sets `unknown = fail`, exactly as today.
 2. It registers every governed compiled predicate and the `::` ask predicate.
 3. Only then it resolves `ontologies/common_predicates.pl` under
@@ -138,7 +144,7 @@ procedure. It cannot silently shadow an Erlang security boundary. The common
 source is loaded once per newly constructed KB; it is not consulted by
 `quod_simplex`, the namespace manager, or the ontology-creation API directly.
 
-Every relevant path already converges on `build_kb/0`: a live namespace starts
+Every relevant path already converges on `quod_committed_projection:new_est/0`: a live namespace starts
 from it, a restarted Prolog projection rebuilds from it before ledger replay,
 and `terms_to_diff/1` wraps a KB returned by it before compiling supplied
 genesis terms. Consequently the common clauses are present before ontology
@@ -199,9 +205,9 @@ The node-local slice carries its engine-owned principal in the private overlay;
 the later authenticated `subject/3` design can use the same policy and action
 shape.
 
-## Root lifecycle actions
+## Ordinary node action
 
-Root contains these ordinary action and policy clauses:
+`quod:node` contains the ordinary action and policy clauses:
 
 ```prolog
 ontology_hosted(Name) :- ontology_join_state(Name, starting).
@@ -212,14 +218,19 @@ ontology_joined(Name, GenesisHash) :-
     ontology_hosted(Name),
     ontology_genesis_anchor(Name, GenesisHash).
 
-action(create_ontology(Name, Options),
-       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
+action('$quod_stage_ontology'(Handle,
+                              create_ontology(Name, Options),
+                              ontology_hosted(Name)),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
         ontology_join_state(Name, not_hosted)],
        ontology_hosted(Name)).
 
-action(join_ontology(Name, GenesisHash, Seeds),
-       [authorized_ontology_lifecycle(
-            join_ontology(Name, GenesisHash, Seeds)),
+action('$quod_stage_ontology'(Handle,
+                              join_ontology(Name, GenesisHash, Seeds),
+                              ontology_joined(Name, GenesisHash)),
+       [current_principal(Agent),
+        can_join_ontology(Agent, Name, GenesisHash, Seeds),
         ontology_join_state(Name, not_hosted)],
        ontology_joined(Name, GenesisHash)).
 
@@ -230,62 +241,36 @@ can_join_ontology(node(NodeKey), _Name, _GenesisHash, _Seeds) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 ```
 
-`quod_prolog:run_action/2` accepts only a fully ground root
-`create_ontology/2` or `join_ontology/3` term. The engine derives
-`node(NodePublicKey)` from its own identity and stores it in the private proof
-overlay; neither the caller nor ontology code supplies it. The first-slice
-policy permits only a node whose key is currently self-admitted in the
-committed root snapshot.
+The public fully ground `create_ontology/2` or `join_ontology/3` goal targets
+`quod:node` and runs as one ordinary proof. Signed requests carry their verified
+principal; node-authored requests derive `node(NodePublicKey)` from the engine.
+The normal `can_invoke/4` entry and the action prerequisites make the complete
+policy decision. There is no lifecycle-specific policy proof.
 
-The bounded worker structurally validates the ground request, verifies that the
-committed root declares that exact transition, and authorizes the private node
-principal before reading a caller-selected source path. It then prepares and
-normalizes the input exactly once. Invalid create input therefore cannot be
-hidden by an already-hosted target.
+The public staging bridge structurally validates the request and registers one
+opaque proof-local handle. After the declared prerequisites succeed, the exact
+internal continuation prepares input once and stages one closed create/join
+effect. Backtracking or proof failure discards it. Commit records that effect in
+the `quod:node` transaction; the node-wide journal executes it after apply and
+checks the real desired state before retry. An uncertain result carries the
+exact transaction reference. The manager remains the authoritative atomic
+collision check.
 
-The common lifecycle preparer selects one exact declaration. It first checks
-the declaration's desired state; if that state already holds it reports
-`already` without proving a transition. Otherwise it proves the declaration's
-prerequisites left to right in a read-only overlay and reports `execute`.
-Authorization therefore always precedes source access and lifecycle IO, while
-ordinary prerequisite order remains explicit for an execution candidate.
+`ontology_join_state/2` and `ontology_genesis_anchor/2` are query-class,
+`quod:node`-only local-state predicates. They perform no IO. The old inline-IO
+effect functors, lifecycle worker, and compatibility registrations are absent.
 
-The executor re-runs the same authorization helper against the captured
-committed snapshot for both modes. `already` returns without lifecycle IO.
-`execute` records the closed join effect in one ordinary root transaction,
-then the root runtime releases its frozen prepared descriptor only after
-ordered apply. The effect journal checks the desired state before any retry,
-so a crash after the manager accepted the join cannot start a second logical
-operation. An uncertain result carries the exact root transaction reference.
-The manager remains the authoritative atomic collision check, closing the
-state-check/start race.
-
-`authorized_ontology_lifecycle/1` is the sole governed lifecycle authorization
-predicate and is effect-class, so it is available only inside the action
-worker. It performs no IO. `ontology_join_state/2` remains a query-class,
-root-only local-state predicate. The old inline-IO creation/join effect
-functors and handlers are removed, with no compatibility registrations.
-
-Both authorization checks use an isolated committed view in the existing
-verdict context. Cross-ontology asks, followers, staging, projection, and
-effect calls are disabled there; the overlay also rejects every assert,
-retract, and abolish at the first mutation. A policy denial, error, missing
-clause, or mutation attempt therefore fails before lifecycle IO.
-
-The low-level `quod_ontology:create/2` and `join/3` APIs remain trusted
-same-VM APIs. They do not authenticate remote callers and must not be exposed
-directly as network endpoints. A later authenticated `subject/3` principal can
-reuse the same policy and action shapes without changing these APIs.
+The low-level preparation/execution functions remain trusted same-VM
+internals. They do not authenticate callers and must not be exposed directly
+as network endpoints. Production contains no raw `create/2` or `join/3` route
+beside the ordinary action path; those wrappers are TEST fixture conveniences.
 
 The lifecycle-specific join vocabulary includes:
 
 ```prolog
 ontology_join_failed(invalid_arguments)
-ontology_join_failed(root_only)
-ontology_join_failed(not_authorized)
-ontology_join_failed(action_not_declared)
+ontology_join_failed(wrong_ontology)
 ontology_join_failed(invalid_name)
-ontology_join_failed(reserved_system_namespace)
 ontology_join_failed(invalid_genesis_hash)
 ontology_join_failed(invalid_seeds)
 ontology_join_failed(already_hosted)
@@ -293,12 +278,12 @@ ontology_join_failed(root_unavailable)
 ontology_join_failed(start_failed)
 ```
 
-Detailed Erlang start errors remain available from `quod_ontology:join/3`, but
+Detailed Erlang start errors remain available from the low-level preparer, but
 PIDs, paths, references and nested supervisor terms never cross into Prolog.
 Prerequisite failures retain the normal bounded failure-reason stack;
 post-proof executor failures are returned explicitly in the same bounded
-vocabulary. Generic runner states remain engine errors, and ambiguous
-manager/action-worker completion is `{error, outcome_unknown}`.
+vocabulary. Generic engine states remain errors, and ambiguous post-commit
+journal completion is `{error, outcome_unknown}`.
 
 A manager race returning `{already_configured, Namespace}` is mapped to the bounded
 `ontology_creation_failed(already_hosted)` reason instead of the generic
@@ -307,7 +292,7 @@ The Prolog precondition normally catches it; the manager remains
 the authoritative race closure for both lifecycle operations.
 
 Invalid arguments to `ontology_join_state/2` similarly fail with a bounded
-`ontology_state_failed(invalid_arguments | root_only | invalid_name)` reason.
+`ontology_state_failed(invalid_arguments | wrong_ontology | invalid_name)` reason.
 `not_hosted` is a successful state answer, not an error.
 
 The desired-state check makes create idempotent for an already hosted namespace
@@ -318,12 +303,11 @@ create or wrong-anchor join from reaching the typed executor.
 the Prolog relation expresses policy while the manager closes the check/start
 race.
 
-These action clauses are part of `quod_root.pl`, whose content is committed only at
-root genesis. An existing root ledger does not re-read that file. Testing this
-new action surface on the deployed fleet therefore requires either a deliberate
-root transaction installing the clauses or, preferably during the current test
-stage, a clean re-found. No hidden boot-time injection or compatibility clause
-is added to make an old root appear updated.
+These action clauses are part of `quod_node.pl` and enter the node system
+ontology at its genesis. An existing node ledger does not re-read that file.
+Testing this new action surface on an older deployed fleet therefore requires a
+normal node-ontology policy update or a clean test re-found. No hidden boot-time
+injection or compatibility clause makes old content appear updated.
 
 ## Lifecycle meaning
 
@@ -364,23 +348,21 @@ record; those remain separate authorized operations.
    solution. A common term that collides with a compiled functor is rejected.
    Building a fresh KB does not duplicate common clauses, and
    `terms_to_diff/1` never returns them in a genesis diff.
-3. The action entry is root-only and requires a fully ground action. Wrong
+3. The action entry is `quod:node`-only and requires a fully ground action. Wrong
    scope, non-ground arguments, authorization denial, missing declarations,
    and definite API failures produce the exact bounded reason; ambiguous
    completion remains `{error, outcome_unknown}`. Ordinary proofs and the
    removed inline-IO effect functors perform no lifecycle IO.
-4. The two root `action/3` clauses use `ontology_hosted/1` and the
+4. The two node `action/3` clauses use `ontology_hosted/1` and the
    anchor-sensitive `ontology_joined/2` desired states. Declaration and
    authorization checks precede source reads; valid input is prepared exactly
-   once. An authorized already-true target performs no lifecycle IO, an exact
+   once. An authorized already-true target stages no effect, an exact
    repeated join succeeds, and a wrong-anchor repeat fails. For an execution
-   candidate, authorization precedes `not_hosted` in the read-only prerequisite
-   phase. A staged write or mutation attempt returns
-   `lifecycle_staged_write`, and a declaration missing its visible
-   authorization check is still denied by the executor's mandatory second
-   check. A race after that proof is rejected by `start_new_content/2`.
-5. A real founder commits a fact. A second node invokes
-   `quod_prolog:run_action/2` with
+   candidate, authorization precedes `not_hosted` in the ordinary prerequisite
+   phase. A failed or backtracked candidate discards the prepared effect. A
+   race after commit is rejected by `start_new_content/2`.
+5. A real founder commits a fact. A second node invokes ordinary
+   `quod_prolog:execute/2` against `quod:node` with
    the founder's anchor and endpoint, observes
    `joining` (or `ready` if loopback catch-up wins the race), eventually
    observes `ready`, and proves the fact from its own applied KB. Its role
@@ -403,11 +385,11 @@ record; those remain separate authorized operations.
    real lifecycle transitions; focused manager tests cover the short
    `starting` / `stopping` races without adding sleeps to production code. A
    live process whose status call returns `#{}` reports `joining`; calling the
-   predicate from a non-root ontology fails with `root_only`.
+   predicate from a non-node ontology fails with `wrong_ontology`.
 10. The removed inline-IO lifecycle functors have no compiled registration or
-    handler and cannot perform IO. Creation and joining succeed through the
-    dedicated `run_action/2` boundary, with all existing source-input tests
-    retained there.
+    handler and cannot perform IO. Creation and joining succeed through the one
+    ordinary proof/action path; signed and node-authored execution do not form
+    separate implementations.
 
 Use focused EUnit plus the existing real-QUIC join suite while implementing.
 Run the full compile, xref, Dialyzer, EUnit and CT release gate only once the

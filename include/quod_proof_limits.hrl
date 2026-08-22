@@ -28,11 +28,7 @@
 %% can raise the shared bound without another shape change.
 -define(QUOD_MAX_DIRECT_EFFECTS, 1).
 -define(QUOD_MAX_DIRECT_EFFECT_BYTES, 2048).
--define(QUOD_MAX_PREPARED_EFFECTS, 64).
 -define(QUOD_MAX_PREPARED_EFFECT_BYTES, (256 * 1024)).
--define(QUOD_MAX_PREPARED_EFFECT_TOTAL_BYTES,
-        (?QUOD_MAX_PREPARED_EFFECTS *
-         (?QUOD_MAX_PREPARED_EFFECT_BYTES + (16 * 1024)))).
 %% The committed envelope's durable top-level goal and selected result.
 -define(QUOD_MAX_TOPLEVEL_GOAL_BYTES, (8 * 1024)).
 -define(QUOD_MAX_DURABLE_RESULT_BYTES, (16 * 1024)).
@@ -69,25 +65,14 @@
 -define(QUOD_TOKEN_BUCKET_MAX_BUCKETS, 1024).
 -define(QUOD_TOKEN_BUCKET_IDLE_MS, 60000).
 
-%% One node-wide foreign-history owner (distributed-proof-plan §8).  These
-%% limits cover both admission and the retained verified cache; callers and
-%% tests must not duplicate the literals.
+%% One node-wide foreign-history owner (distributed-proof-plan §8).
+%% Pending work is bounded independently; retained foreign histories and
+%% follows are not. Dormant histories stay as verified disk caches and are
+%% opened only when a proof or a follow needs them.
 -define(QUOD_MAX_FOREIGN_PENDING, 32).
 -define(QUOD_MAX_FOREIGN_PENDING_PER_PEER, 4).
--define(QUOD_MAX_FOREIGN_HISTORIES, 64).
--define(QUOD_MAX_FOREIGN_CACHE_BYTES, (128 * 1024 * 1024)).
 -define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
 -define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
-%% Continuous follows share the existing 64 history rows.  A node can host at
-%% most DIRECTORY_MAX_NAMESPACES runtimes, and each runtime may consume every
-%% retained history.  This is a capacity ceiling, never a request-rate quota.
--define(QUOD_MAX_FOREIGN_FOLLOW_CONSUMERS,
-        (?QUOD_MAX_FOREIGN_HISTORIES * ?DIRECTORY_MAX_NAMESPACES)).
-%% Materialized P is disposable and independently bounded from the encoded
-%% certified cache.  Keep the default aggregate at the same audited memory
-%% class without copying another byte literal.
--define(QUOD_MAX_FOREIGN_PROJECTION_BYTES,
-        ?QUOD_MAX_FOREIGN_CACHE_BYTES).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
 %% converts it to this VM's heap words before installing the hard kill limit.
 -define(QUOD_SCOPE_WORKER_MAX_HEAP_BYTES, (64 * 1024 * 1024)).

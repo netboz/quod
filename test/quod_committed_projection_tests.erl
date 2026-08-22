@@ -16,12 +16,14 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
     Projection0 = quod_committed_projection:new(
                     {Ns, Anchor}, 0,
                     quod_committed_projection:new_est(), Outcomes, none),
-    HostPolicy =
-        (change(
-           Ns,
-           diff_for({can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}}),
-           #{}))#transaction{proof_id = none, plan_digest = none,
-                             goal = undefined, result = undefined},
+    Self = <<0:256>>,
+    HostPolicy = quod_simplex:test_genesis_tx(
+                   #{node_id => Self, mode => create, committee => [],
+                     genesis_diff =>
+                         diff_for(
+                           {can_invoke, {'Goal'}, {'Principal'}, [],
+                            {'Namespace'}})},
+                   Ns, Self, <<1:256>>),
     FactTx = change(Ns, diff_for({projection_fact, one}), #{}),
     ConflictTx = change(
                    Ns, diff_for({must_not_land, true}),
@@ -108,18 +110,17 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
     {Pubkey, Seed} = quod_identity:generate(),
     Signer = #{pubkey => Pubkey,
                key => quod_identity:key_term({Pubkey, Seed})},
-    Admission = <<91:256>>,
+    Admission = Pubkey,
     HostDiff =
-        diff_for({can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}})
-        ++ diff_for({peer_admitted, Pubkey, "127.0.0.1", 14567, Pubkey}),
+        diff_for({can_invoke, {'Goal'}, {'Principal'}, [], {'Namespace'}}),
     %% Membership is the one deliberate OCC exception: consensus already
     %% validated it against its parent and both local and foreign projections
     %% must apply it even when an ordinary transaction would conflict here.
-    Host =
-        (change(Ns, HostDiff,
-                #{{membership_guard, 1} => never_present}))#transaction{
-          proof_id = none, plan_digest = none,
-          goal = undefined, result = undefined},
+    Host = quod_simplex:test_genesis_tx(
+             #{node_id => Pubkey, mode => create, committee => [],
+               node_addr => {"127.0.0.1", 14567},
+               genesis_diff => HostDiff},
+             Ns, Pubkey, <<90:256>>),
     GroupId = <<92:256>>,
     {ok, DecisionRef} = quod_dtx:certified_ref(
                           <<"projection-origin">>, <<93:256>>, 1,
@@ -153,6 +154,85 @@ direct_abort_dtx_uses_the_same_ordered_projection_test() ->
                                        quod_outcome:dtx_state(
                                          quod_committed_projection:outcomes(
                                            Projection2)))))
+    after
+        #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection0),
+        quod_erlog_db_mvcc:delete(Ref),
+        ok = quod_outcome:close(Outcomes)
+    end.
+
+genesis_manifest_loads_the_same_predicates_in_projection_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"projection-manifest:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Anchor = <<0:256>>,
+    Self = <<0:256>>,
+    Genesis = quod_simplex:test_genesis_tx(
+                #{node_id => Self, mode => create, committee => [],
+                  external_predicate_modules =>
+                      [quod_directory_predicates]},
+                Ns, Self, <<96:256>>),
+    {ok, Outcomes} = quod_outcome:open(
+                       Ns, Anchor, #{outcome_backend => memory}),
+    Projection0 = quod_committed_projection:new(
+                    {Ns, Anchor}, 0,
+                    quod_committed_projection:new_est(), Outcomes, none),
+    try
+        ?assertEqual(
+           undefined,
+           quod_predicates:descriptor(
+             quod_committed_projection:est(Projection0),
+             {directory_host, 5})),
+        {ok, Projection1, #{kind := content}} =
+            project(1, {batch, [Genesis]}, Projection0),
+        ?assertMatch(
+           {query, quod_directory_predicates, directory_host_5},
+           quod_predicates:descriptor(
+             quod_committed_projection:est(Projection1),
+             {directory_host, 5}))
+    after
+        #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection0),
+        quod_erlog_db_mvcc:delete(Ref),
+        ok = quod_outcome:close(Outcomes)
+    end.
+
+wrong_genesis_module_digest_keeps_projection_unavailable_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"projection-manifest-wrong:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    Anchor = <<0:256>>,
+    Self = <<0:256>>,
+    Genesis0 = quod_simplex:test_genesis_tx(
+                 #{node_id => Self, mode => create, committee => [],
+                   external_predicate_modules =>
+                       [quod_directory_predicates]},
+                 Ns, Self, <<97:256>>),
+    #transaction{diff = Diff0} = Genesis0,
+    Diff =
+        [case Op of
+             {assert,
+              {{external_predicate_modules,
+                [{quod_directory_predicates, Digest}]}, Body}} ->
+                 <<First, Rest/binary>> = Digest,
+                 {assert,
+                  {{external_predicate_modules,
+                    [{quod_directory_predicates,
+                      <<(First bxor 1), Rest/binary>>}]}, Body}};
+             _ -> Op
+         end || Op <- Diff0],
+    Genesis = Genesis0#transaction{diff = Diff},
+    {ok, Outcomes} = quod_outcome:open(
+                       Ns, Anchor, #{outcome_backend => memory}),
+    Projection0 = quod_committed_projection:new(
+                    {Ns, Anchor}, 0,
+                    quod_committed_projection:new_est(), Outcomes, none),
+    try
+        ?assertEqual(
+           {error,
+            {predicate_modules_unavailable,
+             {predicate_module_digest_mismatch,
+              quod_directory_predicates}}},
+           project(1, {batch, [Genesis]}, Projection0)),
+        ?assertEqual(0, quod_committed_projection:applied(Projection0))
     after
         #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection0),
         quod_erlog_db_mvcc:delete(Ref),

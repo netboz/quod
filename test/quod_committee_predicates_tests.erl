@@ -10,17 +10,22 @@
 %%% quod_ns_SUITE; the happy-path remove needs a live 2-node committee, so its retract shape is pinned here).
 %%%===================================================================
 
-%% a committed MVCC kb built exactly like quod_prolog:build_kb (admit/remove/peer_ready
-%% class-registered via quod_predicates, unknown=fail) + the real quod_root.pl (for can_join) + the
-%% given peer_admitted facts, published at height 1.
+%% A committed MVCC kb built exactly like quod_committed_projection:new_est/0
+%% (admit/remove/peer_ready are common bridges, unknown=fail) plus optional
+%% ontology-declared bridge modules, the real quod_root.pl (for can_join), and
+%% the given peer_admitted facts, published at height 1.
 kb(PeerAdmitted) ->
+    kb(PeerAdmitted, []).
+
+kb(PeerAdmitted, ExternalModules) ->
     {ok, Erl} = erlog:new(quod_erlog_db_mvcc, null),
     Est0 = element(3, Erl),
     {succeed, Est1} = erlog_int:prove_goal({set_prolog_flag, unknown, fail}, Est0),
     Est2 = quod_predicates:load(Est1),
+    Est3 = quod_predicates:load_modules(Est2, ExternalModules),
     File = filename:join(code:priv_dir(quod), "ontologies/quod_root.pl"),
     Terms = quod_prolog:read_terms(File),
-    quod_ct:commit_kb(quod_ct:assert_facts(Terms ++ PeerAdmitted, Est2)).
+    quod_ct:commit_kb(quod_ct:assert_facts(Terms ++ PeerAdmitted, Est3)).
 
 pa(Pub, Host, Port) -> {peer_admitted, Pub, Host, Port, Pub}.
 
@@ -117,8 +122,7 @@ remove_nonmember_fails_test() ->
     ?assertEqual(fail, scope(ctx(<<"cp:rm">>, kb([pa(A, "h", 1), pa(B, "h", 2)])), {remove, <<99>>})).
 
 %% A `staging` predicate is refused inside a VERDICT context (a membership re-proof must be
-%% side-effect-free), and an `effect`-class predicate is refused inside a proof — both fail closed
-%% with the distinct context_violation error rather than running.
+%% side-effect-free) with a distinct context_violation error rather than running.
 staging_refused_in_verdict_test() ->
     Ns = <<"cp:vd">>,
     Est = quod_predicates:set_context(kb([]), quod_predicates:verdict_context(Ns, 0)),
@@ -129,10 +133,3 @@ policy_verdict_refuses_live_query_bridge_test() ->
     Est = quod_predicates:set_context(
             kb([]), quod_predicates:policy_verdict_context(Ns, 0)),
     ?assertEqual(context_violation, scope(Est, {peer_ready, <<1>>})).
-
-effect_refused_in_proof_test() ->
-    ?assertEqual(
-       context_violation,
-       scope(ctx(<<"cp:eff">>, kb([])),
-             {authorized_ontology_lifecycle,
-              {create_ontology, demo, []}})).

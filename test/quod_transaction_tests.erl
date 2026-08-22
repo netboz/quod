@@ -122,6 +122,7 @@ history_genesis_exemption_test() ->
     %% the rule gates every entry, so an ontology born without a policy could
     %% never be given one.
     Policy = {assert, {{can_invoke, {'G'}, {'P'}, {'C'}, {'N'}}, true}},
+    Manifest = {assert, {{external_predicate_modules, []}, {[], false}}},
     Genesis = (unsigned(Pub))#transaction{
                 tx_id = genesis_id(?NS, Nonce),
                 proof_id = none, plan_digest = none,
@@ -129,6 +130,7 @@ history_genesis_exemption_test() ->
                 diff = [
                   {assert, {{consensus_incarnation, Nonce}, true}},
                   {assert, {{peer_admitted, Pub, undefined, undefined, Pub}, true}},
+                  Manifest,
                   Policy
                 ],
                 read_check = #{},

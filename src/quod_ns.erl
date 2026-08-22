@@ -23,7 +23,6 @@ start_link(Ns, Config) ->
 init({Ns, Config}) ->
     Flags = #{strategy => rest_for_one, intensity => 10, period => 10},
     Children =
-        effect_journal_children(Ns, Config) ++
         [#{id => quod_simplex, start => {quod_simplex, start_link, [Ns, Config]},
            restart => permanent, type => worker},
          #{id => quod_prolog, start => {quod_prolog, start_link, [Ns, Config]},
@@ -47,10 +46,3 @@ init({Ns, Config}) ->
          #{id => quod_runtime, start => {quod_runtime, start_link, [Ns, Config]},
            restart => permanent, type => worker}],
     {ok, {Flags, Children}}.
-
-effect_journal_children(<<"quod:root">>, Config) ->
-    [#{id => quod_effect_journal,
-       start => {quod_effect_journal, start_link, [Config]},
-       restart => permanent, type => worker}];
-effect_journal_children(_Ns, _Config) ->
-    [].

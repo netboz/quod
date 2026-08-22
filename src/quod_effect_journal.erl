@@ -2,14 +2,20 @@
 -moduledoc """
 Crash-durable local custody for direct effects authored by this node.
 
-The root ledger records the small public descriptor.  This journal retains the
+The controlling ontology ledger records the small public descriptor. This
+journal retains the
 exact private preparation needed to execute that descriptor after ordered
 apply.  It is deliberately not a catalogue or an authorization database: a
-row can execute only after a matching applied root transaction releases it.
+row can execute only after its matching applied transaction releases it. On
+recovery the same P-before-E frontier must cover the committed height before
+the journal may infer that release from the outcome index.
 
-Lifecycle actions are rare and the table is strictly bounded, so every
-mutation rewrites one checksummed snapshot through datasync + atomic rename.
-That keeps recovery and compaction to one format and one authority path.
+Active custody follows the capacity projected from committed root
+policy. The journal starts unavailable for new reservations until that
+projection arrives, and persists the last projected value beside its rows so a
+journal-only restart cannot briefly restore a different policy. Every mutation
+rewrites one checksummed snapshot through datasync + atomic rename. That keeps
+recovery and compaction to one format and one authority path.
 """.
 
 -behaviour(gen_server).
@@ -17,7 +23,8 @@ That keeps recovery and compaction to one format and one authority path.
 -include("quod_ledger.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/1, reserve/1, release_reservation/1,
+-export([start_link/0, configure_capacity/1, capacity/0, stats/0,
+         reserve/1, release_reservation/1,
          stage/5, bind_transaction/3, release_applied/2,
          activate/1, handoff/1, retire/2, retire_transaction/2,
          await/2, reconcile/0,
@@ -26,13 +33,14 @@ That keeps recovery and compaction to one format and one authority path.
          terminate/2]).
 
 -ifdef(TEST).
--export([test_desired_state/2]).
+-export([start_link/1, test_desired_state/3]).
 -endif.
 
--define(ROOT_NS, <<"quod:root">>).
 -define(MAGIC, 16#51454A31). %% "QEJ1"
 -define(HEADER_BYTES, 40).
 -define(DEFAULT_AWAIT_MS, 60000).
+
+-type capacity() :: non_neg_integer() | unlimited.
 
 -record(row, {
     effect :: quod_effect:effect(),
@@ -57,23 +65,59 @@ That keeps recovery and compaction to one format and one authority path.
 
 -record(s, {
     path :: file:filename_all(),
+    capacity = unconfigured :: unconfigured | capacity(),
     rows = #{} :: #{binary() => #row{}},
     reservations = #{} :: #{reference() => #reservation{}},
     waiters = #{} :: #{binary() => [{gen_server:from(), reference()}]},
     running = none :: none | {binary(), pid(), reference()},
     reconciling = none :: none | {pid(), reference()},
     retry_timer = undefined :: undefined | reference(),
-    retry_ms = 1000 :: pos_integer()
+    retry_ms = 1000 :: pos_integer(),
+    %% A bound row is durable but deliberately ineligible until its owning
+    %% Prolog engine has exposed the exact recovery reference. Monitoring that
+    %% short hand-off closes the engine-crash gap without another timer/store.
+    bound_owners = #{} :: #{binary() => {pid(), reference()}}
 }).
 
 %%%===================================================================
 %%% API
 %%%===================================================================
 
+-spec start_link() -> {ok, pid()} | {error, term()}.
+start_link() ->
+    start_link_at(journal_data_dir()).
+
+-ifdef(TEST).
 -spec start_link(map()) -> {ok, pid()} | {error, term()}.
 start_link(Config) ->
+    start_link_at(quod_ledger_store:data_dir(Config)).
+-endif.
+
+start_link_at(DataDir) ->
     gen_server:start_link(quod_reg:via({quod_effect_journal, node}),
-                          ?MODULE, Config, []).
+                          ?MODULE, DataDir, []).
+
+journal_data_dir() ->
+    application:get_env(
+      quod, effect_journal_data_dir, quod_ledger_store:default_data_dir()).
+
+-doc "Install the exact committed root-policy projection used for new custody.".
+-spec configure_capacity(capacity()) -> ok | {error, term()}.
+configure_capacity(Capacity) ->
+    call({configure_capacity, Capacity}).
+
+-spec capacity() -> unconfigured | capacity() | {error, unavailable}.
+capacity() ->
+    call(capacity).
+
+-doc "Return the node-wide custody policy and current pressure in one snapshot.".
+-spec stats() ->
+          #{capacity := unconfigured | capacity(),
+            active := non_neg_integer(), reservations := non_neg_integer(),
+            terminal := non_neg_integer()} |
+          {error, unavailable}.
+stats() ->
+    call(stats).
 
 -spec reserve(pid()) -> {ok, reference()} | {error, busy | unavailable}.
 reserve(Owner) when is_pid(Owner) ->
@@ -157,24 +201,45 @@ call(Request) ->
 %%% gen_server
 %%%===================================================================
 
-init(Config) ->
-    DataDir = quod_ledger_store:data_dir(Config),
-    Dir = quod_ledger_store:ns_dir(DataDir, ?ROOT_NS),
-    Path = filename:join(Dir, "direct_effects.qej"),
+init(DataDir) ->
+    Path = filename:join(DataDir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
-    Rows0 = load(Path),
+    {Capacity, Rows0} = load(Path),
     Rows = retire_unactivated_rows(Rows0),
-    S0 = #s{path = Path, rows = Rows},
+    S0 = #s{path = Path, capacity = Capacity, rows = Rows},
     S1 = case Rows =:= Rows0 of
              true -> S0;
              false -> persist(S0)
          end,
     {ok, schedule_reconcile(S1)}.
 
+handle_call({configure_capacity, Capacity}, _From, S0)
+  when (is_integer(Capacity) andalso Capacity >= 0) orelse
+       Capacity =:= unlimited ->
+    S1 = install_capacity(Capacity, S0),
+    {reply, ok, S1};
+handle_call({configure_capacity, _Capacity}, _From, S) ->
+    {reply, {error, invalid_capacity}, S};
+handle_call(capacity, _From, S) ->
+    {reply, S#s.capacity, S};
+handle_call(stats, _From,
+            S = #s{capacity = Capacity, rows = Rows,
+                   reservations = Reservations}) ->
+    Active = active_row_count(Rows),
+    {reply,
+     #{capacity => Capacity,
+       active => Active,
+       reservations => map_size(Reservations),
+       terminal => map_size(Rows) - Active},
+     S};
+
 handle_call({reserve, Owner}, _From,
-            S = #s{rows = Rows, reservations = Reservations}) ->
-    case active_row_count(Rows) + map_size(Reservations) <
-         ?QUOD_MAX_PREPARED_EFFECTS of
+            S = #s{capacity = Capacity, rows = Rows,
+                   reservations = Reservations}) ->
+    case capacity_allows(Capacity,
+                         active_row_count(Rows) + map_size(Reservations)) of
+        unavailable ->
+            {reply, {error, unavailable}, S};
         false ->
             {reply, {error, busy}, S};
         true ->
@@ -202,9 +267,14 @@ handle_call({stage, Token, Action, Desired, Effect, Prepared},
         _ ->
             {reply, {error, invalid_reservation}, S}
     end;
-handle_call({bind_transaction, Effect, Transaction, Ref}, _From, S0) ->
+handle_call({bind_transaction, Effect, Transaction, Ref}, {Owner, _}, S0) ->
     case bind_row(Effect, Transaction, Ref, S0) of
-        {ok, S1} -> {reply, ok, schedule_reconcile(S1)};
+        {ok, S1} ->
+            EffectId = quod_effect:effect_id(Effect),
+            case track_bound_owner(EffectId, Owner, S1) of
+                {ok, S2} -> {reply, ok, schedule_reconcile(S2)};
+                {error, Reason} -> {reply, {error, Reason}, S1}
+            end;
         {error, Reason} -> {reply, {error, Reason}, S0}
     end;
 handle_call({activate, EffectId}, _From, S = #s{rows = Rows}) ->
@@ -212,7 +282,8 @@ handle_call({activate, EffectId}, _From, S = #s{rows = Rows}) ->
         #row{state = bound} = Row ->
             S1 = persist(S#s{rows = Rows#{EffectId =>
                                              Row#row{state = prepared}}}),
-            {reply, ok, schedule_reconcile(S1)};
+            {reply, ok,
+             schedule_reconcile(drop_bound_owner(EffectId, S1))};
         #row{state = State}
           when State =:= prepared; State =:= handed_off;
                State =:= committed; State =:= applied ->
@@ -313,7 +384,9 @@ handle_info({'DOWN', MRef, process, Pid, _Reason},
             S = #s{reconciling = {Pid, MRef}}) ->
     {noreply, schedule_reconcile(S#s{reconciling = none})};
 handle_info({'DOWN', MRef, process, _Pid, _Reason}, S) ->
-    {noreply, drop_reservation_monitor(MRef, S)};
+    {noreply,
+     drop_reservation_monitor(
+       MRef, retire_bound_owner_monitor(MRef, S))};
 handle_info({effect_result, EffectId, Worker, Result},
             S = #s{running = {EffectId, Worker, MRef}}) ->
     demonitor(MRef, [flush]),
@@ -372,7 +445,8 @@ encode_staged(Action, Desired, Effect, Prepared) ->
     end.
 
 bind_row(Effect, Transaction, Ref,
-         S = #s{rows = Rows, reservations = Reservations}) ->
+         S = #s{capacity = Capacity, rows = Rows,
+                reservations = Reservations}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
         #row{effect = Effect, transaction = Existing, ref = Ref} ->
@@ -389,7 +463,8 @@ bind_row(Effect, Transaction, Ref,
                         true ->
                             case effect_admission(Effect, Ref) of
                                 {ok, Admission} ->
-                                    Rows1 = make_room_for_active_row(Rows),
+                                    Rows1 = make_room_for_active_row(
+                                              Rows, Capacity),
                                     Row = #row{effect = Effect, action = Action,
                                                desired = Desired,
                                                prepared = Prepared,
@@ -424,10 +499,11 @@ find_staged(EffectId, Effect, Reservations) ->
     end.
 
 valid_bound_transaction(Effect, #transaction{effects = [Effect]} = Tx,
-                        {transaction, ?ROOT_NS, Anchor, TxId}) ->
+                        {transaction, Ns, Anchor, TxId})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
     Tx#transaction.tx_id =:= TxId andalso
-        quod_transaction:valid_id({?ROOT_NS, Anchor}, Tx) andalso
-        quod_effect:validate_transaction(?ROOT_NS, Anchor,
+        quod_transaction:valid_id({Ns, Anchor}, Tx) andalso
+        quod_effect:validate_transaction(Ns, Anchor,
                                          Tx#transaction.author, [Effect]);
 valid_bound_transaction(_Effect, _Transaction, _Ref) -> false.
 
@@ -490,7 +566,8 @@ maybe_start(S = #s{running = none, rows = Rows}) ->
 maybe_start(S) -> S.
 
 execute_row(#row{effect = Effect, action = ActionBytes,
-                 desired = DesiredBytes, prepared = PreparedBytes}) ->
+                 desired = DesiredBytes, prepared = PreparedBytes,
+                 ref = {transaction, ControlNs, _, _}}) ->
     case {quod_ontology:decode_prepared(PreparedBytes),
           quod_durable_term:decode_goal(ActionBytes),
           quod_durable_term:decode_goal(DesiredBytes)} of
@@ -499,9 +576,10 @@ execute_row(#row{effect = Effect, action = ActionBytes,
             %% manager mutation but before this journal records `applied`
             %% restarts here and observes success without issuing a second
             %% create/join request.
-            case desired_state(Desired, Effect) of
+            case desired_state(ControlNs, Desired, Effect) of
                 satisfied -> ok;
-                absent -> execute_and_verify(Effect, Prepared, Desired);
+                absent -> execute_and_verify(
+                            ControlNs, Effect, Prepared, Desired);
                 incompatible -> {error, incompatible_local_state};
                 {unavailable, Reason} -> {retry, Reason}
             end;
@@ -509,13 +587,13 @@ execute_row(#row{effect = Effect, action = ActionBytes,
             {error, corrupt_prepared_effect}
     end.
 
-execute_and_verify(Effect, Prepared, Desired) ->
+execute_and_verify(ControlNs, Effect, Prepared, Desired) ->
     case quod_ontology:execute_prepared(Prepared) of
         {ok, _Status, Ns, Anchor} ->
             case quod_effect:target(Effect) =:= {Ns, Anchor} of
                 true ->
                     maybe_test_after_execute(),
-                    finish_desired_verification(Desired, Effect);
+                    finish_desired_verification(ControlNs, Desired, Effect);
                 false ->
                     {error, lifecycle_anchor_mismatch}
             end;
@@ -525,29 +603,29 @@ execute_and_verify(Effect, Prepared, Desired) ->
             %% A manager reply can be lost after its durable desired-state
             %% update.  Resolve that ambiguity through the same postcondition,
             %% never by treating the duplicate call as success on its own.
-            finish_existing_verification(Desired, Effect);
+            finish_existing_verification(ControlNs, Desired, Effect);
         {error, Reason} ->
             {error, Reason}
     end.
 
-finish_desired_verification(Desired, Effect) ->
-    case desired_state(Desired, Effect) of
+finish_desired_verification(ControlNs, Desired, Effect) ->
+    case desired_state(ControlNs, Desired, Effect) of
         satisfied -> ok;
         absent -> {error, postcondition_failed};
         incompatible -> {error, incompatible_local_state};
         {unavailable, Reason} -> {retry, Reason}
     end.
 
-finish_existing_verification(Desired, Effect) ->
-    case desired_state(Desired, Effect) of
+finish_existing_verification(ControlNs, Desired, Effect) ->
+    case desired_state(ControlNs, Desired, Effect) of
         satisfied -> ok;
         absent -> {error, incompatible_local_state};
         incompatible -> {error, incompatible_local_state};
         {unavailable, Reason} -> {retry, Reason}
     end.
 
-desired_state(Desired, Effect) ->
-    case quod_prolog:prove_ro(?ROOT_NS, Desired) of
+desired_state(ControlNs, Desired, Effect) ->
+    case quod_prolog:prove_ro(ControlNs, Desired) of
         {ok, [_ | _], _} -> desired_target_state(Effect);
         {ok, [], _} -> absent;
         {fail, _Reasons} -> absent;
@@ -564,7 +642,8 @@ desired_target_state(Effect) ->
     end.
 
 -ifdef(TEST).
-test_desired_state(Desired, Effect) -> desired_state(Desired, Effect).
+test_desired_state(ControlNs, Desired, Effect) ->
+    desired_state(ControlNs, Desired, Effect).
 -endif.
 
 -ifdef(TEST).
@@ -624,7 +703,7 @@ retire_one(Effect, Reason, S = #s{rows = Rows}) ->
 
 retire_transaction_row(TxId, Reason, S = #s{rows = Rows}) ->
     case [EffectId || {EffectId,
-                       #row{ref = {transaction, ?ROOT_NS, _Anchor, RowTxId}}}
+                       #row{ref = {transaction, _Ns, _Anchor, RowTxId}}}
                           <- maps:to_list(Rows),
                       RowTxId =:= TxId] of
         [EffectId] -> retire_id(EffectId, Reason, S);
@@ -649,8 +728,18 @@ reconcile_rows(Rows) ->
 
 reconcile_row(#row{state = prepared} = Row) ->
     {handoff, handoff_row(Row)};
-reconcile_row(#row{ref = Ref}) ->
-    {outcome, quod_prolog:outcome(Ref)}.
+reconcile_row(#row{state = handed_off,
+                   ref = {transaction, ControlNs, _, _} = Ref}) ->
+    case quod_prolog:outcome(Ref) of
+        {ok, #{status := committed, height := Height}} = Outcome ->
+            case quod_runtime:effect_frontier(ControlNs) of
+                {ok, Frontier} when Frontier >= Height -> {outcome, Outcome};
+                _ -> projection_pending
+            end;
+        Outcome -> {outcome, Outcome}
+    end;
+reconcile_row(#row{state = committed}) ->
+    released.
 
 apply_reconciliation(Outcomes, S0) ->
     lists:foldl(
@@ -658,7 +747,9 @@ apply_reconciliation(Outcomes, S0) ->
               mark_handed_off(EffectId, S);
          ({EffectId, prepared, {handoff, {error, not_in_charge}}}, S) ->
               retire_id(EffectId, not_in_charge, S);
-         ({EffectId, prepared, {error, Reason}}, S) ->
+         ({EffectId, prepared, {handoff, {error, Reason}}}, S)
+           when Reason =:= bad_change;
+                Reason =:= corrupt_prepared_effect ->
               retire_id(EffectId, Reason, S);
          ({EffectId, _State,
            {outcome, {ok, #{status := committed, height := Height}}}}, S) ->
@@ -679,10 +770,12 @@ mark_handed_off(EffectId, S = #s{rows = Rows}) ->
 
 mark_reconciled_committed(EffectId, Height, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
-        #row{} = Row ->
+        #row{state = State} = Row
+          when State =:= bound; State =:= prepared;
+               State =:= handed_off; State =:= committed ->
             persist(S#s{rows = Rows#{EffectId =>
                               Row#row{state = committed, height = Height}}});
-        undefined -> S
+        _ -> S
     end.
 
 retire_id(EffectId, Reason, S = #s{rows = Rows}) ->
@@ -693,7 +786,10 @@ retire_id(EffectId, Reason, S = #s{rows = Rows}) ->
             Reason1 = bounded_reason(Reason),
             Terminal = compact_terminal_row(
                          Row#row{state = retired, result = Reason1}),
-            S1 = persist(S#s{rows = Rows#{EffectId => Terminal}}),
+            S1 = persist(
+                   drop_bound_owner(
+                     EffectId,
+                     S#s{rows = Rows#{EffectId => Terminal}})),
             reply_waiters(EffectId, {error, Reason1}, S1);
         _ -> S
     end.
@@ -738,17 +834,48 @@ drop_reservation_monitor(MRef, S = #s{reservations = Reservations}) ->
              Reservations),
     S#s{reservations = Rest}.
 
+track_bound_owner(EffectId, Owner,
+                  S = #s{rows = Rows, bound_owners = Owners}) ->
+    case {maps:get(EffectId, Rows, undefined),
+          maps:get(EffectId, Owners, undefined)} of
+        {#row{state = bound}, undefined} ->
+            MRef = monitor(process, Owner),
+            {ok, S#s{bound_owners = Owners#{EffectId => {Owner, MRef}}}};
+        {#row{state = bound}, {Owner, _MRef}} ->
+            {ok, S};
+        {#row{state = bound}, {_OtherOwner, _MRef}} ->
+            {error, effect_journal_conflict};
+        {#row{}, _} ->
+            {ok, S};
+        {undefined, _} ->
+            {error, not_found}
+    end.
+
+drop_bound_owner(EffectId, S = #s{bound_owners = Owners}) ->
+    case maps:take(EffectId, Owners) of
+        {{_Owner, MRef}, Rest} ->
+            demonitor(MRef, [flush]),
+            S#s{bound_owners = Rest};
+        error -> S
+    end.
+
+retire_bound_owner_monitor(MRef, S = #s{bound_owners = Owners}) ->
+    case [EffectId || {EffectId, {_Owner, Ref}} <- maps:to_list(Owners),
+                      Ref =:= MRef] of
+        [EffectId] -> retire_id(EffectId, not_activated, S);
+        [] -> S
+    end.
+
 %%%===================================================================
 %%% durable snapshot
 %%%===================================================================
 
-persist(S = #s{path = Path, rows = Rows}) ->
+persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
     Payload = term_to_binary(
-                {quod_effect_journal, 1,
+                {quod_effect_journal, 3, Capacity,
                  [encode_row(EffectId, Row)
                   || {EffectId, Row} <- lists:sort(maps:to_list(Rows))]},
                 [deterministic]),
-    true = byte_size(Payload) =< ?QUOD_MAX_PREPARED_EFFECT_TOTAL_BYTES,
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big, (byte_size(Payload)):32/unsigned-big,
               Digest/binary, Payload/binary>>,
@@ -767,23 +894,30 @@ persist(S = #s{path = Path, rows = Rows}) ->
 
 load(Path) ->
     case file:read_file(Path) of
-        {error, enoent} -> #{};
+        {error, enoent} -> {unconfigured, #{}};
         {ok, <<?MAGIC:32/unsigned-big, Size:32/unsigned-big,
-               Digest:32/binary, Payload:Size/binary>>}
-          when byte_size(Payload) =< ?QUOD_MAX_PREPARED_EFFECT_TOTAL_BYTES ->
+               Digest:32/binary, Payload:Size/binary>>} ->
             Digest = crypto:hash(sha256, Payload),
             decode_snapshot(binary_to_term(Payload, [safe]));
         {ok, _} -> error(effect_journal_corrupt);
         {error, Reason} -> error({effect_journal_io, Reason})
     end.
 
-decode_snapshot({quod_effect_journal, 1, Encoded})
-  when is_list(Encoded), length(Encoded) =< ?QUOD_MAX_PREPARED_EFFECTS ->
+decode_snapshot({quod_effect_journal, 3, Capacity, Encoded})
+  when ((is_integer(Capacity) andalso Capacity >= 0) orelse
+        Capacity =:= unlimited),
+       is_list(Encoded) ->
     Rows = maps:from_list([decode_row(Row) || Row <- Encoded]),
     case map_size(Rows) =:= length(Encoded) of
-        true -> Rows;
+        true -> {Capacity, Rows};
         false -> error(effect_journal_conflict)
     end;
+decode_snapshot({quod_effect_journal, Version, _Encoded})
+  when is_integer(Version) ->
+    error({effect_journal_format_unsupported, Version});
+decode_snapshot({quod_effect_journal, Version, _Capacity, _Encoded})
+  when is_integer(Version) ->
+    error({effect_journal_format_unsupported, Version});
 decode_snapshot(_) -> error(effect_journal_corrupt).
 
 encode_row(EffectId, #row{effect = Effect, action = Action,
@@ -791,10 +925,10 @@ encode_row(EffectId, #row{effect = Effect, action = Action,
                           transaction = Transaction, ref = Ref,
                           admission = Admission, state = State,
                           height = Height, result = Result}) ->
-    {quod_effect_row, 1, EffectId, Effect, Action, Desired, Prepared,
+    {quod_effect_row, 2, EffectId, Effect, Action, Desired, Prepared,
      Transaction, Ref, Admission, State, Height, Result}.
 
-decode_row({quod_effect_row, 1, EffectId, Effect, Action, Desired, Prepared,
+decode_row({quod_effect_row, 2, EffectId, Effect, Action, Desired, Prepared,
             Transaction, Ref, Admission, State, Height, Result}) ->
     Row = #row{effect = Effect, action = Action, desired = Desired,
                prepared = Prepared, transaction = Transaction, ref = Ref,
@@ -809,7 +943,7 @@ decode_row(_) -> error(effect_journal_corrupt).
 valid_loaded_row(EffectId,
                  #row{effect = Effect, action = Action, desired = Desired,
                       prepared = Prepared, transaction = Transaction,
-                      ref = {transaction, ?ROOT_NS, Anchor, TxId},
+                      ref = {transaction, Ns, Anchor, TxId},
                       admission = Admission, state = State,
                       height = Height, result = Result}) ->
     safe_effect_id(Effect) =:= EffectId andalso
@@ -818,6 +952,7 @@ valid_loaded_row(EffectId,
         is_binary(Prepared) andalso is_binary(Transaction) andalso
         valid_row_payload(State, Effect, Action, Desired,
                           Prepared, Transaction) andalso
+        is_binary(Ns) andalso byte_size(Ns) > 0 andalso
         is_binary(Anchor) andalso byte_size(Anchor) =:= 32 andalso
         is_binary(TxId) andalso byte_size(TxId) =:= 32 andalso
         is_binary(Admission) andalso byte_size(Admission) =:= 32 andalso
@@ -847,9 +982,9 @@ decode_transaction(Bytes) when is_binary(Bytes) ->
     catch _:_ -> error
     end.
 
-effect_admission(Effect, {transaction, ?ROOT_NS, Anchor, _TxId}) ->
-    case quod_simplex:dtx_binding(?ROOT_NS) of
-        {ok, {?ROOT_NS, Anchor, Executor, <<_:256>> = Admission}} ->
+effect_admission(Effect, {transaction, Ns, Anchor, _TxId}) ->
+    case quod_simplex:dtx_binding(Ns) of
+        {ok, {Ns, Anchor, Executor, <<_:256>> = Admission}} ->
             case Executor =:= quod_effect:executor(Effect) of
                 true -> {ok, Admission};
                 false -> {error, not_in_charge}
@@ -857,14 +992,14 @@ effect_admission(Effect, {transaction, ?ROOT_NS, Anchor, _TxId}) ->
         _ -> {error, not_in_charge}
     end.
 
-handoff_row(#row{transaction = Bytes, admission = Admission}) ->
-    handoff_row_bytes(Bytes, Admission).
+handoff_row(#row{transaction = Bytes, admission = Admission,
+                 ref = {transaction, Ns, _, _}}) ->
+    handoff_row_bytes(Ns, Bytes, Admission).
 
-handoff_row_bytes(Bytes, <<_:256>> = Admission) ->
+handoff_row_bytes(Ns, Bytes, <<_:256>> = Admission) ->
     case decode_transaction(Bytes) of
         {ok, #transaction{effects = [_Effect]} = Transaction} ->
-            quod_simplex:handoff_effect(
-              ?ROOT_NS, Admission, Transaction);
+            quod_simplex:handoff_effect(Ns, Admission, Transaction);
         error -> {error, corrupt_prepared_effect}
     end.
 
@@ -876,17 +1011,52 @@ active_row_count(Rows) ->
          (_Id, _Row, Count) -> Count
       end, 0, Rows).
 
-make_room_for_active_row(Rows) when map_size(Rows) < ?QUOD_MAX_PREPARED_EFFECTS ->
+capacity_allows(unconfigured, _Active) -> unavailable;
+capacity_allows(unlimited, _Active) -> true;
+capacity_allows(Capacity, Active)
+  when is_integer(Capacity), Capacity >= 0 ->
+    Active < Capacity.
+
+install_capacity(Capacity,
+                 S = #s{capacity = OldCapacity, rows = Rows}) ->
+    Rows1 = trim_terminal_rows(Rows, Capacity),
+    case Capacity =:= OldCapacity andalso Rows1 =:= Rows of
+        true -> S;
+        false -> persist(S#s{capacity = Capacity, rows = Rows1})
+    end.
+
+trim_terminal_rows(Rows, unlimited) ->
     Rows;
-make_room_for_active_row(Rows) ->
+trim_terminal_rows(Rows, Capacity) when map_size(Rows) =< Capacity ->
+    Rows;
+trim_terminal_rows(Rows, Capacity) ->
     Terminal = lists:sort(
                  [{Row#row.height, EffectId}
                   || {EffectId, #row{state = State} = Row} <- maps:to_list(Rows),
                      State =:= applied orelse State =:= retired orelse
                      State =:= operator_error]),
     case Terminal of
-        [{_Height, EffectId} | _] -> maps:remove(EffectId, Rows);
-        [] -> error(effect_journal_capacity_invariant)
+        [{_Height, EffectId} | _] ->
+            trim_terminal_rows(maps:remove(EffectId, Rows), Capacity);
+        [] -> Rows
+    end.
+
+make_room_for_active_row(Rows, unconfigured) ->
+    Rows;
+make_room_for_active_row(Rows, unlimited) ->
+    Rows;
+make_room_for_active_row(Rows, Capacity) when map_size(Rows) < Capacity ->
+    Rows;
+make_room_for_active_row(Rows, Capacity) ->
+    Terminal = lists:sort(
+                 [{Row#row.height, EffectId}
+                  || {EffectId, #row{state = State} = Row} <- maps:to_list(Rows),
+                     State =:= applied orelse State =:= retired orelse
+                     State =:= operator_error]),
+    case Terminal of
+        [{_Height, EffectId} | _] ->
+            make_room_for_active_row(maps:remove(EffectId, Rows), Capacity);
+        [] -> Rows
     end.
 
 compact_terminal_row(Row) ->

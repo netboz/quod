@@ -1,10 +1,12 @@
 -module(quod_user).
 -moduledoc """
-Pure identity rules for one user's home ontology.
+Pure transitional identity rules for one human user's home ontology.
 
-`quod:user` is the shared user model and home-creation policy; it is *not* a
-global table of people. Each Ed25519 public key deterministically names one
-small user-home ontology. The ordinary signed `create_user_home` action uses
+The target shared vocabulary is `quod:human_user`; it is *not* a global table
+of people. The current `{user, Key}` protocol name remains transitional until
+the reviewed agent-identity format break. Each Ed25519 public key
+deterministically names one small home ontology. The ordinary signed
+`create_user_home` action uses
 this module to derive its exact foundation request before it reaches the
 ontology lifecycle effect.
 

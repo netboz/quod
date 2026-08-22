@@ -85,8 +85,17 @@ t_create_root({_Dir, Ns, Content}) ->
         _Pid = start_ns(Ns, NsCfg),
         %% the genesis content from quod_root.pl is committed + applied into the kb
         ?assertMatch({ok, [#{}], _}, rp(Ns, {acl_sovereign, {':', quod, root}})),
-        ?assertMatch({ok, [#{}], _},
-                     rp(Ns, {system_ontology, {':', quod, root}, 'quod_root.pl', [], []})),
+        %% Root is the configured bootstrap exception, not a recursive entry
+        %% in the system-ontology catalogue.
+        ?assertMatch(
+           {fail, _},
+           rp(Ns, {system_ontology, {'_'}, {'_'}})),
+        %% This fixture uses root's Prolog source under a unique test namespace,
+        %% so its ontology-specific manifest is correctly empty.  The actual
+        %% quod:root bootstrap configuration is checked separately below.
+        ?assertMatch(
+           {ok, [#{'Manifest' := []}], _},
+           rp(Ns, {external_predicate_modules, {'Manifest'}})),
         %% the default-open can_invoke/4 rule unifies with anything
         ?assertMatch({ok, [#{}], _},
                      rp(Ns, {can_invoke, foo, {node, bar}, [], baz})),
@@ -100,6 +109,13 @@ t_create_root({_Dir, Ns, Content}) ->
         ?assertMatch(#{committed := 1, last_applied := 1},
                      quod_simplex:stats(Ns))
     end.
+
+root_bootstrap_pins_its_predicate_modules_test() ->
+    Content = #{namespace => <<"quod:root">>, mode => create},
+    {<<"quod:root">>, Config} = quod_app:build_ns_config(Content),
+    ?assertEqual(
+       [quod_directory_predicates, quod_ontology_predicates],
+       maps:get(external_predicate_modules, Config)).
 
 t_create_root_restart({_Dir, Ns, Content}) ->
     fun() ->

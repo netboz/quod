@@ -25,6 +25,8 @@ Pure helpers over the committed erlog database for the content layer.
   functor from a frozen `#est{}`. Runtime declaration reconciliation uses this
   instead of executing the predicate and accidentally treating derived answers
   as declarations.
+- `touches_functor/2` — one exact clause-head check shared by immutable-manifest
+  validation and root system-catalogue change detection.
 
 `op()` and `clause()` are defined in `quod_ledger.hrl`; `#est{}`/`#db{}` in
 `erlog_int.hrl`.
@@ -36,7 +38,7 @@ Pure helpers over the committed erlog database for the content layer.
          validate/2, apply_ops/2, apply_ops_report/2,
          apply_ops_preserving_policy/2,
          apply_ops_preserving_policy_report/2, has_clause/4,
-         interpreted_clauses/2]).
+         interpreted_clauses/2, touches_functor/2]).
 -export([assertion_only/1, asserts_functor/2]).
 
 -doc "Whether an untrusted read check uses only valid functor keys and durable MVCC tokens.".
@@ -282,7 +284,9 @@ find_tag(M, R, F, H, B) ->
         _ -> none
     end.
 
-touches_functor(Ops, Functor) ->
+-doc "Whether a diff asserts or retracts any clause with the exact functor.".
+-spec touches_functor(list(), {atom(), arity()}) -> boolean().
+touches_functor(Ops, Functor) when is_list(Ops) ->
     lists:any(
       fun({assert, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;
          ({retract, {Head, _Body}}) -> erlog_int:functor(Head) =:= Functor;

@@ -1,9 +1,22 @@
 # Minimal durable agent delivery — Slices 3 and 4
 
-**Status:** the architecture is reviewed. The durable multi-ontology
-transaction prerequisite is implemented in Quod 0.7.69, and the
-target-driven `action/3` and local `transaction/1` foundation landed in Quod
-0.7.58. No agent-delivery component is implemented or deployed.
+**Status:** historical delivery-slice detail. The durable multi-ontology
+transaction prerequisite and `action/3` foundation remain relevant, but its
+former model of agents as records owned by an Agent Platform is superseded by
+`ontology-actor-architecture.md`. No agent-delivery component is implemented
+or deployed under the corrected model.
+
+> **Do not implement the legacy identity and hosting examples below.** In
+> particular, AP-owned `agent_owner_node/2`, a global user registry, and agents
+> without an authoritative containing ontology are retired. The message-state, D/P/E ordering,
+> idempotence, and failure analysis remain reference material and must be
+> rewritten around anchored agent instances and committed host epochs before the
+> delivery slice resumes.
+
+The lifecycle-only authorization and action runner cited in historical
+sections are also being retired. New work follows
+`ontology-lifecycle-single-path-plan.md`: one normal `can_invoke/4` boundary,
+ordinary Prolog action prerequisites, and the existing durable effect journal.
 
 ## 1. Why this is next
 
@@ -13,7 +26,7 @@ hosted agents (Slice 4), before agent delegation and the full `subject/3`
 authority chain.
 
 That order is also required by `doc/ontology-lifecycle-authorization-plan.md`:
-a user subject may not be enabled until Quod has a real wielded agent,
+an agent subject may not be enabled until Quod has a real wielded agent,
 receiving-side `accepts_wielding/2`, an immutable non-empty agent chain,
 authoritative capability derivation, authenticated replay-protected command
 ingress, exact subject propagation through `::`, and validator-side transaction
@@ -26,12 +39,13 @@ the next subject milestone must include the minimum real wielding,
 `accepts_wielding/2`, and capability derivation needed to make its subject
 truthful. It must not enable a subject first and repair it one slice later.
 
-The signed-client work now introduces a real, signature-bound `{user, Key}`
-base principal independently of this milestone. That principal is not a
-temporary agent subject: it contains no agent chain or capabilities and cannot
-claim either. This milestone still introduces no empty agent chain or
-caller-supplied capabilities. Node keys, users, agents, and ontology names
-remain separate identities.
+The signed-client work currently introduces a signature-bound `{user, Key}`
+base principal. That is as-built terminology, not the generic actor model:
+`ontology-actor-architecture.md` requires a single agent-bound replacement in
+one format change. This milestone still introduces no empty agent chain or
+caller-supplied capabilities. Nodes, agents, human users, and services have
+classed instances in exact containing ontologies; endpoints and private keys
+are not ontology facts.
 
 The milestone combines Slices 3 and 4 in one reviewed vertical plan, while
 implementing them in their normative order. The Slice-3 substrate is immediately
@@ -99,7 +113,7 @@ After the transaction commits:
 5. the receiving agent processes the committed inbox item once, independently
    of sender availability.
 
-Crashing the sender, receiver, runtime, agent process, or owner node at any
+Crashing the sender, receiver, runtime, agent process, or current host node at any
 point may cause another transmission, but it must not cause another logical
 receiver action. A pending durable message is recovered from committed facts,
 not from replaying historical reactions.
@@ -193,18 +207,13 @@ transition for each domain change. Deliberate administrative rule/fact edits
 continue to use Quod's existing direct `assertz`/`retract` transaction path.
 There is no compatibility wrapper.
 
-The current node-local lifecycle runner remains narrowly typed because its IO
-cannot be a speculative consensus proof. Preparation has two deliberately
-ordered parts:
-
-1. structurally validate the ground action, namespace, option tags, path value
-   shapes, hash representation, and seed shapes without reading a path; prove
-   that the exact transition is declared, then authorize the engine-owned
-   principal against the captured root view;
-2. only for that declared and authorized request, finish validation and
-   normalization into one immutable prepared descriptor, without manager or
-   ledger mutation. Read and compile create sources exactly once here; decode
-   the join anchor and normalize seeds here.
+Node-local ontology lifecycle uses the same action and proof path as every
+other durable goal. The public staging predicate first validates only the
+ground action's structure and registers one opaque proof-local request. The
+shared `action/3` relation then applies the normal `can_invoke/4` entry policy
+and the `quod:node` action prerequisites. Only the internal continuation for
+that exact request reads or compiles mutable source input, builds one immutable
+descriptor, and stages one direct effect in the proof overlay.
 
 This preserves the existing decision-before-filesystem-IO boundary: an
 undeclared or unauthorized request cannot make Quod read an attacker-selected
@@ -246,18 +255,18 @@ builder; runtime input is compiled before entering it. Resume may discard its
 once-compiled, ignored replacement diff after confirming the existing V3
 ledger.
 
-The original ground action remains the term matched by root declarations and
-policy. The descriptor carries canonical namespace/options plus the already-read
+The original ground action remains the term matched by the `quod:node`
+declarations and policy. The descriptor carries canonical namespace/options plus the already-read
 and compiled `InitialDiff` for create, or the raw 32-byte anchor plus normalized
 seeds for join. Factor the structural and full preparation functions out of
 `quod_ontology`'s current private option/hash/seed handling. The trusted public
 create/join API calls preparation and the corresponding prepared executor in
-sequence; the action runner inserts declaration and authorization checks between
-them and passes the same descriptor to that executor. Both entry paths reuse the
-same validation and neither reads nor compiles mutable input twice.
-These trusted same-VM APIs manage hosting only. Normal same-VM prove/eval and
-lifecycle entry still obey `can_invoke/4`; no supported raw-content policy
-repair or operator authorization bypass is introduced.
+sequence. The ordinary action path inserts declaration and prerequisite checks
+between structural and full preparation and passes the same descriptor to the
+post-commit journal. Both entry paths reuse the same validation and neither
+reads nor compiles mutable input twice. The low-level same-VM API manages
+hosting only; every public Prolog request obeys `can_invoke/4` and the declared
+action prerequisites.
 
 After full preparation, one read-only action preparer enumerates the exact requested transition's
 declarations in Prolog order, binds one declaration and its ground desired state
@@ -268,14 +277,13 @@ rule and remains only the exact-declaration/not-declared classifier, or is
 removed if the preparer can preserve the same public failure distinction
 without it.
 
-The runner reauthorizes the engine-owned principal against the captured root
-view for both results; target-first idempotence never becomes an authorization
-bypass. For authorized `already`, it returns without lifecycle IO. For
-authorized `execute`, it commits to the selected declaration, invokes only the
-existing typed Erlang create/join helper, then proves the selected desired state
-read-only against the updated local lifecycle view. A failed postcondition
-after the typed helper returned success is `outcome_unknown`, never a definite
-logical failure, because local state may already have changed. No generic
+Authorization happens once through the ordinary proof entry and the selected
+action prerequisites; target-first idempotence never bypasses it. If the
+desired state already holds, no effect is staged. Otherwise the proof commits
+the exact prepared effect in the controlling ontology transaction. The one
+node-wide journal invokes only the typed create/join helper after commit and
+verifies the real desired state. A failed real-state check after the helper ran
+is `outcome_unknown`, because local state may already have changed. No generic
 external transition dispatcher is introduced.
 
 If a concurrent start or stop wins after the read-only prerequisite and the
@@ -289,7 +297,7 @@ validation always precedes the target check. Creation retains its documented
 resume behavior: valid new `Options` are ignored only when the namespace already
 has a live ledger, and that result is explicitly `resumed`. Join additionally
 proves that the live namespace's anchor equals the requested `GenesisHash`;
-seeds remain non-authoritative route hints. The root declarations use explicit
+seeds remain non-authoritative route hints. The `quod:node` declarations use explicit
 helpers such as:
 
 ```prolog
@@ -301,14 +309,19 @@ ontology_joined(Name, GenesisHash) :-
     ontology_hosted(Name),
     ontology_genesis_anchor(Name, GenesisHash).
 
-action(create_ontology(Name, Options),
-       [authorized_ontology_lifecycle(create_ontology(Name, Options)),
+action('$quod_stage_ontology'(Handle,
+                              create_ontology(Name, Options),
+                              ontology_hosted(Name)),
+       [current_principal(Agent),
+        can_create_ontology(Agent, Name, Options),
         ontology_join_state(Name, not_hosted)],
        ontology_hosted(Name)).
 
-action(join_ontology(Name, GenesisHash, Seeds),
-       [authorized_ontology_lifecycle(
-            join_ontology(Name, GenesisHash, Seeds)),
+action('$quod_stage_ontology'(Handle,
+                              join_ontology(Name, GenesisHash, Seeds),
+                              ontology_joined(Name, GenesisHash)),
+       [current_principal(Agent),
+        can_join_ontology(Agent, Name, GenesisHash, Seeds),
         ontology_join_state(Name, not_hosted)],
        ontology_joined(Name, GenesisHash)).
 ```
@@ -322,7 +335,7 @@ restarted later in join mode, so inventing `ontology_created/1` would encode
 deployment history rather than desired state. A valid prior join may therefore
 satisfy “this ontology is hosted,” after create input has still been validated.
 
-`ontology_genesis_anchor/2` is a read-only, root-only adapter. It normalizes the
+`ontology_genesis_anchor/2` is a read-only, `quod:node`-only adapter. It normalizes the
 public 64-hex or raw representation and compares raw 32-byte anchors. It reads
 the live `quod_simplex:genesis_hash/1` when available and the serialized
 manager desired config while `starting`, so exact repeated joins do not fail
@@ -547,9 +560,10 @@ snapshot. Zero or multiple answers are an integrity failure and produce no
 external effect. Ownership remains ontology truth; there is no second Erlang
 ownership registry.
 
-`quod:user` in this milestone contains only the minimal common vocabulary
-required by the approved Slice-4 specification. It contains no user records,
-keys, login path, or active authorization. Those arrive together in Slice 5.
+`quod:human_user` in this historical milestone contains only the minimal common
+vocabulary required by its former Slice-4 specification. It contains no human
+records, keys, login path, or active authorization. Those arrive together in
+the corrected actor plan.
 Agent IDs are opaque ground binaries qualified by their AP ontology; this slice
 does not freeze the later public FIPA AID encoding.
 
@@ -856,7 +870,7 @@ The first consumer is one AP ontology with two fixed test agents whose
 `agent_owner_node/2` facts are committed once during setup. The two owners are
 different nodes so the acceptance path cannot accidentally become local.
 `quod_runtime` reconciles one tiny hosted-agent process only on each agent's
-unique owner node. The process:
+unique current host node. The process:
 
 - is P, not D;
 - keeps no private copy of the ontology;
@@ -1001,14 +1015,14 @@ system namespace. Do not weaken either rule.
 
 Add exactly three genesis sources under `priv/ontologies/`:
 
-- `quod_user.pl` for `quod:user`;
+- `quod_human_user.pl` for `quod:human_user`;
 - `quod_agent.pl` for `quod:agent`;
 - `agent_delivery_ap.pl` for the same-AP test ontology.
 
 Their immutable source terms are fixed before implementation review:
 
 ```prolog
-%% quod_user.pl: only the explicit founding invocation policy in Slice 4.
+%% quod_human_user.pl: only the explicit founding invocation policy in Slice 4.
 can_invoke(_Goal, node(NodeKey), _CallChain, _Ns) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 
@@ -1038,54 +1052,40 @@ Root's registry is updated deliberately, not left stale. A normal transaction
 on the existing root asserts exactly:
 
 ```prolog
-system_ontology(quod:user, 'quod_user.pl', [], []).
-system_ontology(quod:agent, 'quod_agent.pl', [], []).
+system_ontology(quod:human_user, HumanUserAnchor).
+system_ontology(quod:agent, AgentAnchor).
 ```
 
-The same two terms are added to `quod_root.pl` for any later fresh root, but the
-already re-founded distributed-proof root obtains them only from that normal
-transaction. The test AP is not a system ontology and is not registered there.
-The later agent slice requires no **additional** root re-found or compatibility
-path.
+These terms are never baked into `quod_root.pl`: their anchors exist only after
+the ontologies have been created normally. A fresh deployment creates them
+through the ordinary lifecycle and then commits the exact rows through a normal
+root transaction. The test AP is not a system ontology and is not registered
+there. No root re-found or compatibility path is required.
 
-Extend the existing Nomad-rendered `content` list with one small, explicit
-three-ontology block controlled by `agent_slice_enabled`,
-`agent_slice_bootstrap`, and one anchor variable per namespace. No generic
-manifest or alternate boot path is added:
+Root's committed system catalogue now supplies the two system ontologies to the
+existing namespace manager; Nomad does not render a second permanent content
+list for them. Deployment first creates and registers them once. The test AP
+remains an ordinary explicitly hosted test ontology:
 
 1. keep the existing root block in anchored `join` mode and keep all existing
    `/quod/data` contents;
-2. with `agent_slice_enabled=true`, `agent_slice_bootstrap=true`, and the three
-   new anchors empty, render the three new `mode=create` blocks only on
-   allocation 0;
-3. capture the three independently logged genesis anchors;
-4. redeploy with `agent_slice_bootstrap=false` and all three anchors set;
-   `quod:user` and `quod:agent` remain intentional singleton committees on
-   allocation 0 because this slice does not query or mutate them, while the AP
-   renders `mode=join` only on compute allocations 0--3 and uses the existing
-   Quod peer service as seed hints;
-5. admit compute allocations 1--3 to the AP, then commit its two agent ownership
-   facts on two distinct AP hosts. Other allocations do not start these idle
-   ontologies.
+2. create `quod:human_user` and `quod:agent` once through the normal root
+   lifecycle and capture their exact anchors;
+3. commit the two `system_ontology/2` rows in root; their already-certified
+   geneses, not root, pin their source-derived facts and predicate modules;
+4. let every node's existing namespace manager resume a local copy or join the
+   exact anchored histories through the normal directory; no Nomad content
+   block or second bootstrap owner is added;
+5. create the test AP as an ordinary ontology, host it on the selected test
+   nodes through the normal lifecycle, admit its committee, and then commit its
+   two agent ownership facts.
 
-Jobspec validation rejects an enabled steady deployment with any missing or
-malformed anchor, and rejects bootstrap when any new anchor is already set.
-The new ledgers use their own namespace subdirectories under the existing
-per-allocation `/quod/data` host volume. After the prerequisite's deliberate
-hard-break re-found, this later slice performs **no additional** root wipe or
-re-found and adds no Ceph volume, public system-ontology creation exception, or compatibility
-reader. With the anchored content blocks left in the rendered config, a full
-application or node restart resumes the namespaces assigned to that allocation
-from their existing ledgers and rejoins at the pinned anchors. The test records
-the incremental idle block/CPU/network cost of two singleton system ontologies
-plus one N=4 AP rather than accidentally creating three extra N=8 committees.
-
-One new required 64-hex `agent_system_node_key` jobspec variable pins allocation
-0's existing persistent identity. When the slice is enabled, the rendered
-directory allowlist adds exact `quod:user` and `quod:agent` entries containing
-only that key; the existing `quod:root` allowlist remains unchanged. The
-private test AP is reached through its committee/member endpoints in this slice
-and is not added to the system directory.
+The new ledgers use normal namespace subdirectories under the existing
+per-allocation `/quod/data` host volume. This slice performs no root wipe,
+re-found, compatibility reader, or special system-ontology creation exception.
+A full application or node restart rebuilds the system set from root and
+resumes the exact local histories. Directory policy still decides which nodes
+may advertise and serve each ontology; the root catalogue contains no endpoint.
 
 ## 9. Explicit bounds and observability
 
@@ -1301,6 +1301,7 @@ the exact uncommitted tree.
   migration layer.
 
 After this milestone passes restart, ownership-churn, and mixed-traffic tests,
-the next reviewed agent milestone can extend the authenticated base user into
-immutable subjects together with the minimum real wielding, receiving-side validation,
-and capability derivation required by the stricter lifecycle specification.
+the next reviewed agent milestone replaces the transitional base-user signer
+label and constructs immutable agent subjects together with the minimum real
+wielding, receiving-side validation, and capability derivation required by the
+stricter lifecycle specification.

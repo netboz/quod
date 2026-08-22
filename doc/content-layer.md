@@ -15,6 +15,19 @@ Two words you'll see throughout:
 - These are written in **Prolog**, a language where you state facts and rules and
   then ask questions, and the system works out the answer from what it knows.
 
+Quod also uses ontologies to describe its actors. A node, autonomous agent,
+human-facing user, service, or world object is represented by an ontology; an
+Erlang process is only its temporary live projection. System ontologies define
+the shared node, agent, and human-user classes and actions. At startup a node first
+synchronises root, then learns and synchronises the system ontologies listed by
+root. The detailed contract is
+[`ontology-actor-architecture.md`](ontology-actor-architecture.md).
+
+Prolog remains the authority for what should happen. Governed Erlang external
+predicates are the bridge to what actually happens on a host: they may observe
+runtime state, stage facts, reconcile a projection, or perform a post-commit
+effect according to their declared class. They are not a parallel policy API.
+
 ---
 
 ## 1. The shape of the problem
@@ -163,7 +176,9 @@ contract is
 
 A fact belongs to the ontology that holds it, and **only that ontology may change
 it.** Each ontology is the one that decides its own permissions and runs its own
-rules when something is added or changed. Signed node/user principals now reach the
+rules when something is added or changed. Signed node/user principals in the
+current protocol—and generic signed agent principals after the planned format
+change—reach the
 target ontology's ordinary `can_invoke/4` policy; identity proves who asked, while
 the ontology's own content decides whether that goal is allowed.
 
@@ -433,7 +448,7 @@ section 5.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.
-- **Open deployment policy** — signed user goals and target `can_invoke/4`
+- **Open deployment policy** — signed goals and target `can_invoke/4`
   authorization are implemented, while each deployment still chooses which policies
   and memberships it exposes to untrusted networks.
 - **Reading two ontologies at once** can catch each at a slightly different instant,

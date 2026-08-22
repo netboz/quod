@@ -212,20 +212,15 @@ record_effect(J = #journal{effects = Effects}, Transaction, Submission) ->
                   body := Body, envelope := Envelope} ->
                     {ok, J};
                 undefined ->
-                    case map_size(Effects) < ?QUOD_MAX_PREPARED_EFFECTS of
-                        true ->
-                            Term = {quod_signing_effect, 1, TxId, Sequence,
-                                    Body, Envelope},
-                            Effects1 = Effects#{TxId =>
-                                #{admission => Admission,
-                                  sequence => Sequence, body => Body,
-                                  envelope => Envelope}},
-                            {ok, persist_mutation(
-                                   Term, J#journal{effects = Effects1,
-                                                   ever_used = true})};
-                        false ->
-                            error(effect_signing_journal_full)
-                    end;
+                    Term = {quod_signing_effect, 1, TxId, Sequence,
+                            Body, Envelope},
+                    Effects1 = Effects#{TxId =>
+                        #{admission => Admission,
+                          sequence => Sequence, body => Body,
+                          envelope => Envelope}},
+                    {ok, persist_mutation(
+                           Term, J#journal{effects = Effects1,
+                                           ever_used = true})};
                 _ ->
                     error({effect_signing_conflict, TxId})
             end;
@@ -586,7 +581,7 @@ apply_record({quod_signing_effect, 1, TxId, Sequence, Body, Envelope},
     case decoded_effect(TxId, Sequence, Body, Envelope) of
         {ok, Row} ->
             case maps:get(TxId, Effects, undefined) of
-                undefined when map_size(Effects) < ?QUOD_MAX_PREPARED_EFFECTS ->
+                undefined ->
                     {Rounds, Floors, Pending, Effects#{TxId => Row}};
                 _ -> error({signing_journal_bad_effect, Offset})
             end;

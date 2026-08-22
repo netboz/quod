@@ -11,6 +11,13 @@ subscriptions. `inter-ontology.md` remains the authority for proved `::`
 scopes and distributed transactions. A subscription does not change those
 semantics.
 
+Actor identity and hosting are governed by
+`ontology-actor-architecture.md`: an agent is a classed instance in an exact
+containing ontology and its optional Erlang process is a rebuildable
+projection. An Agent Platform is another ontology that may coordinate
+subscriptions; it is not a substitute identity or mandatory container for its
+agents.
+
 The design deliberately reuses the three owners already closest to the work:
 
 - `quod_feed` is the hosted target's per-namespace dissemination endpoint;
@@ -331,7 +338,8 @@ never satisfy a `::` goal or substitute for an ordinary proof scope.
 - pulls the catch-up page format over key-pinned routes;
 - verifies certificates and committee transitions;
 - folds history through the canonical history transition;
-- shares a bounded cache per foreign identity;
+- keeps one lazy verified cache per foreign identity; dormant caches retain no
+  decoded history, worker, or materialized projection in memory;
 - derives a certified current view.
 
 Subscription following extends that owner with long-lived interests and
@@ -780,12 +788,11 @@ operation. A follow therefore never owns the active slot while idle.
 
 For one target:
 
-1. select an exact anchored source through the shared bounded foreign-log
+1. select an exact anchored source through the shared foreign-log
    selector, preferring an exact read-ready local ledger through one generalized
    local-history-source helper;
-2. run at most one bounded catch-up page through the existing codec,
-   certificate verifier, phase index, cache reservation, append, and atomic
-   checkpoint path;
+2. run one catch-up page through the existing codec, certificate verifier,
+   phase index, append, and atomic checkpoint path;
 3. apply that verified page to the shared fact materialization;
 4. publish one coalesced advance and yield the lane before scheduling another
    page.
@@ -795,7 +802,7 @@ identity, and ledger-root checks currently hidden behind the DTX-only local
 evidence source. DTX and subscription callers project their narrower answers
 from that helper; no subscription-only local-ledger exception is added.
 
-Remote source selection uses `quod_foreign_log`'s one bounded selector. It
+Remote source selection uses `quod_foreign_log`'s one selector. It
 combines exact-anchor directory/private-seed rows, already certified history
 routes, and volatile contacts learned from authenticated scope or DTX peers.
 All are discovery hints only. Every accepted entry still requires its
@@ -883,33 +890,24 @@ facts are not added to the foreign-cache checkpoint in this slice: after a node
 restart they are rebuilt lazily from certified cached entries. Consequently
 the existing cache version and every ledger/wire byte remain unchanged.
 
-#### Bounds, backpressure, and runtime integration
+#### Resource behaviour, backpressure, and runtime integration
 
-The existing bounds remain authoritative: at most 64 retained foreign
-identities, 32 foreground requests, 256 entries/900 KiB per page, and 128 MiB
-of encoded foreign cache. Slice 2 adds derived bounds, in the shared limits
-header, for active follow consumers and total materialized-projection memory.
-They are capacity/safety ceilings, not user request-rate quotas. Per-target
-consumers are bounded by the node's hosted-namespace capacity; the global
-consumer ceiling is derived from that capacity times the foreign-history
-ceiling rather than copied as another literal.
+There is no numeric ceiling on foreign identities, retained verified caches,
+follow consumers, or materialized foreign projections. A dormant identity is
+only verified cache on disk; it is opened lazily when a proof or follow needs
+it and released again when the last active user leaves. The existing per-page
+wire-format checks validate one received page before it reaches the verifier or
+disk. They do not limit how many ontologies a node may know or follow.
 
 One target keeps at most one coalesced refresh request and one current
 projection generation. A slow runtime receives only the newest correlated
 state through the one-notice/ack lifecycle; intermediate notifications
 collapse to a resnapshot requirement. It
 never creates an unbounded page, delta, timer, or mailbox-owned retry list.
-MVCC projection memory is measured after every page. The outcome side uses its
-existing fixed-size resident cache over disposable DETS rather than an
-unbounded map. Crossing the configured global MVCC ceiling discards the newly
-built generation, reports `capacity`, and leaves D and the certified cache
-intact.
-
-Ten thousand durable subscription facts remain valid catalogue data, but this
-slice does not pretend that ten thousand simultaneously materialized remote
-ontologies fit inside the current 64-history node capacity. Excess targets are
-reported as inactive/capacity-limited P and are measured in Slice 6; there is
-no silent partial activation and no process per excess fact.
+MVCC projection memory is measured after every page. The outcome side keeps its
+own disposable local cache. A durable catalogue may name any number of remote
+ontologies; only identities with an active proof or follow have decoded state
+or a worker on the node.
 
 `quod_runtime` adds only a source-view map and exact follow reconciliation. It
 does not acquire a second worker pool or dependency graph. It records advances,

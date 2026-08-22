@@ -63,11 +63,14 @@ the ontology; whatever follows is the name inside it. A prefix that names no kno
 the loud `unknown_ontology` error (§8) — never a silent failure. ("Known" = hosted
 locally or present in the live directory/direct-route index; §10.)
 
-**Ownership enforcement is NOT in this milestone.** The rule "only user_xxx may create
-`user_xxx:*`" is creation-time end-user permission checking. Node-authored signed writes are
-already live, but authenticated user identity and the ownership registry/policy are separate
-work (`deferred.md` §1). This milestone fixes the *naming convention and resolution* so no name
-ever has to change.
+**Ownership enforcement is NOT in this milestone.** The target actor model
+defines the ontology creator as its owner; contained agent instances do not
+become owners merely through `instance_of/2`. Enforcing "only agent X may
+create `X:*`" is creation-time agent permission checking. Node-authored signed
+writes are already live, but authenticated origin-agent identity and the
+ontology-owned creation policy are separate work (`deferred.md` §1). This
+milestone fixes the *naming convention and resolution* so no name ever has to
+change.
 
 **Parked:** deeper paths inside content terms (`thing:cat:max` as a data path). Nothing
 forbids adding them later; they are not specified now.
@@ -425,7 +428,7 @@ addresses cannot contaminate consensus/feed dialing. Ordinary links retain auto-
 
 An authenticated scope or DTX request may still provide a useful return
 contact for the requester's own anchored ontology. The receiver records that
-`{NodeKey, Endpoint}` only in `quod_foreign_log`'s bounded volatile history row.
+`{NodeKey, Endpoint}` only in `quod_foreign_log`'s volatile route-hint state.
 It grants no role or permission: exact reference verification and subscription
 following still replay certified history before using an answer. Public `::`
 target selection remains the directory's job; this contact continuity exists
@@ -441,23 +444,49 @@ authenticated proof subjects; private unlisted routes need neither feature.
 The implementation contract, bounds, failure semantics and acceptance tests are in
 `network-directory-plan.md`.
 
-### Remote-read load test
+### Remote-proof load test
 
-`scripts/cross-ontology-loadtest.sh` measures only the remote `::` path: it
-submits a read through a source ontology and requires that the target namespace
-is *not* co-hosted by that source endpoint. A successful result therefore
-exercises directory resolution, the key-pinned dial, and streamed answers rather
-than the local fast path. It needs an already-configured two-ontology fleet:
+`scripts/cross-ontology-loadtest.sh` measures the remote `::` path. It submits
+a configured target-local goal through a source ontology and requires that the
+target namespace is *not* co-hosted by that source endpoint. A successful result
+therefore exercises directory resolution, the key-pinned dial, and streamed
+answers rather than the local fast path. It needs an already-configured
+two-ontology fleet:
 
 ```sh
-SOURCE_ENDPOINTS=http://source-host:14569 \
+SOURCE_ENDPOINTS=https://source-host:14569 \
 SOURCE_NS=quod:bench_source TARGET_NS=quod:bench_target \
 GOAL='benchmark_echo(ok)' REQUESTS=2000 CONCURRENCY=64 \
 scripts/cross-ontology-loadtest.sh
 ```
 
-The script intentionally sends no writes. Consensus throughput remains the job
-of `perf-test.sh` and `loadtest.sh`.
+Read goals are the simplest benchmark. Durable-write goals are also valid when
+the target fixture supplies one. Put `__QUOD_REQUEST_ID__` in such a goal to
+give every attempt a distinct operation id; the driver never retries an
+uncertain write.
+
+`scripts/loadtest.sh` can run this remote workload alongside its normal local
+writers and churn. It is opt-in because the main driver cannot guess a safe
+remote topology or application predicate. When enabled, its result is part of
+the main PASS/FAIL verdict:
+
+```sh
+scripts/loadtest.sh --duration 300 --inter-ontology 1 \
+  --inter-source-endpoints https://source-host:14569 \
+  --inter-source-ns quod:bench_source \
+  --inter-target-ns quod:bench_target \
+  --inter-goal 'benchmark_echo(ok)' \
+  --inter-requests 2000 --inter-concurrency 64
+```
+
+For a remote durable-write fixture, use for example
+`--inter-mode execute --inter-goal 'dtx_chain(__QUOD_REQUEST_ID__)'`. The
+driver creates an ephemeral Ed25519 user key and uses the same challenge and
+signed-goal request code as the browser. A development self-signed certificate
+requires the explicit `--insecure-tls` / `--inter-insecure-tls 1` flag. The
+configured number of operations must fit inside the selected chaos window; an
+unfinished remote workload fails the run rather than continuing after the
+local workload ends.
 
 The Nomad job exposes an opt-in two-host demo topology. It is disabled by
 default and leaves quod:root unchanged. Before enabling it, obtain the
@@ -483,8 +512,9 @@ directory/ask benchmark, not a second consensus benchmark.
 - **The source-qualified `react_on/3` pattern grammar.** It is frozen and
   locally validated in `ontology-subscription-plan.md` Slice 1, not inferred
   from OCC granularity. Network filtering measurements belong to later slices.
-- **Ontology-creation authorization** (`user_xxx:*` ownership enforcement). Node signing is
-  already live; authenticated end-user identity and the ownership policy remain separate (§2).
+- **Ontology-creation authorization** (`X:*` ownership enforcement). Node
+  signing is already live; authenticated origin-agent identity and the
+  ontology-owned policy remain separate (§2).
 - **Deeper name paths** (`thing:cat:max` as data). Parked.
 
 ## 12. What this changes for consensus

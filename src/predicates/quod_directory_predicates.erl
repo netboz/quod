@@ -15,9 +15,21 @@ by `quod_directory:directory_hosts/1`.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([directory_host_5/3, directory_control_peer_1/3]).
+-export([quod_predicate_module/0, load/1,
+         directory_host_5/3, directory_control_peer_1/3]).
 
 -define(ROOT_NS, <<"quod:root">>).
+
+quod_predicate_module() -> true.
+
+-spec load(tuple()) -> tuple().
+load(Est0) ->
+    Est1 = quod_predicates:register(
+             Est0, {directory_host, 5}, query,
+             ?MODULE, directory_host_5),
+    quod_predicates:register(
+      Est1, {directory_control_peer, 1}, query,
+      ?MODULE, directory_control_peer_1).
 
 -spec directory_host_5(term(), term(), tuple()) -> term().
 directory_host_5(Goal, Next, #est{bs = Bs} = St) ->

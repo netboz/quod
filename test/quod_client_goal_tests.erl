@@ -57,6 +57,22 @@ browser_ed25519_golden_vector_test() ->
        quod_client_goal:digest(Bytes)),
     ?assertMatch({ok, _}, quod_client_goal:verify(Bytes, Signature)).
 
+v2_binary_literals_are_signed_as_exact_opaque_bytes_test() ->
+    KeyPair = quod_identity:generate(),
+    {PublicKey, _} = KeyPair,
+    GoalText = <<"capture(<<\"\\x00\\\\n\\xff\\\">>).">>,
+    V2 = (request(PublicKey, execute, GoalText))#{parser_version => 2},
+    {ok, Bytes} = quod_client_goal:encode(V2),
+    Signature = quod_identity:sign(Bytes, quod_identity:key_term(KeyPair)),
+    {ok, #{goal := Goal}} = quod_client_goal:verify(Bytes, Signature),
+    ?assertEqual(
+       {{'$quod_symbol', <<"capture">>}, <<0, $\n, 16#ff>>}, Goal),
+    V1 = V2#{parser_version => 1},
+    {ok, V1Bytes} = quod_client_goal:encode(V1),
+    V1Signature = quod_identity:sign(V1Bytes, quod_identity:key_term(KeyPair)),
+    ?assertEqual({error, invalid_goal},
+                 quod_client_goal:verify(V1Bytes, V1Signature)).
+
 non_ascii_browser_signature_vector_test() ->
     Seed = list_to_binary(lists:seq(0, 31)),
     {PublicKey, Seed} = crypto:generate_key(eddsa, ed25519, Seed),
@@ -225,6 +241,9 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
     ?assertEqual(
        {error, invalid_request},
        quod_client_goal:encode(Base#{unexpected => value})),
+    ?assertEqual(
+       {error, invalid_request},
+       quod_client_goal:encode(Base#{parser_version => 3})),
     ?assertEqual(
        {error, {too_large, namespace}},
        quod_client_goal:encode(

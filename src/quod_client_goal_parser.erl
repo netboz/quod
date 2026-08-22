@@ -2,9 +2,11 @@
 -moduledoc """
 Atom-safe parser for the frozen signed-goal text grammar.
 
-Version 1 owns its lexer, token bounds, variable numbering, and exact operator
-table. Every non-operator symbol remains `{'$quod_symbol', Utf8}` until the
-authenticated owning ontology performs controlled callable materialization.
+Each supported version owns its lexer, token bounds, variable numbering, and
+exact operator table. Version 2 adds only Erlang-style `<<"...">>` byte terms;
+version 1 remains frozen. Every non-operator symbol remains
+`{'$quod_symbol', Utf8}` until the authenticated owning ontology performs
+controlled callable materialization.
 The parse result therefore cannot depend on which atoms happen to exist in a
 validator VM.
 
@@ -15,14 +17,14 @@ variable names.
 
 The final expression parser is the SHA-pinned Erlog parser, but it receives
 only this module's tokens. Before use, the complete operator table it exposes is
-compared with the V1 table below; a dependency change therefore fails closed
+compared with the frozen table below; a dependency change therefore fails closed
 instead of silently changing how signed text is interpreted.
 """.
 
 -include("quod_client_goal_limits.hrl").
 -include("quod_vm_limits.hrl").
 
--export([parse/2]).
+-export([parse/2, supported_version/1]).
 
 %% Guard BIFs cannot call local helpers, so keep the ASCII identifier contract
 %% in one macro used by the lexer guard.
@@ -35,39 +37,55 @@ instead of silently changing how signed text is interpreted.
               variables = #{} :: #{binary() => non_neg_integer()},
               variable_names = [] :: [{binary(), non_neg_integer()}],
               next_variable = 0 :: non_neg_integer(),
-              token_count = 0 :: non_neg_integer()}).
+              token_count = 0 :: non_neg_integer(),
+              parser_version = 1 :: 1 | 2}).
 
 -type parse_error() :: invalid_syntax | unsupported_parser |
                        parser_contract_mismatch | {too_large, goal}.
 
--doc "Parse exactly one dot-terminated V1 Prolog term.".
+-doc "Parse exactly one dot-terminated Prolog term under a frozen grammar version.".
 -spec parse(term(), term()) ->
           {ok, #{goal := term(),
                  variables := [{binary(), non_neg_integer()}]}} |
           {error, parse_error()}.
-parse(Text, 1)
+parse(Text, Version)
   when is_binary(Text), byte_size(Text) > 0,
        byte_size(Text) =< ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
-    case unicode:characters_to_list(Text, utf8) of
-        Chars when is_list(Chars) ->
-            parse_chars(Chars);
-        _ ->
-            {error, invalid_syntax}
+    case supported_version(Version) of
+        true ->
+            case unicode:characters_to_list(Text, utf8) of
+                Chars when is_list(Chars) ->
+                    parse_chars(Chars, Version);
+                _ ->
+                    {error, invalid_syntax}
+            end;
+        false ->
+            {error, unsupported_parser}
     end;
-parse(Text, 1) when is_binary(Text),
-                    byte_size(Text) > ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
-    {error, {too_large, goal}};
-parse(_Text, 1) ->
-    {error, invalid_syntax};
-parse(_Text, _Version) ->
-    {error, unsupported_parser}.
+parse(Text, Version)
+  when is_binary(Text), byte_size(Text) > ?QUOD_CLIENT_GOAL_TEXT_BYTES ->
+    case supported_version(Version) of
+        true -> {error, {too_large, goal}};
+        false -> {error, unsupported_parser}
+    end;
+parse(_Text, Version) ->
+    case supported_version(Version) of
+        true -> {error, invalid_syntax};
+        false -> {error, unsupported_parser}
+    end.
 
-parse_chars(Chars) ->
+-doc "Whether this signed-goal grammar version remains accepted.".
+-spec supported_version(term()) -> boolean().
+supported_version(1) -> true;
+supported_version(2) -> true;
+supported_version(_) -> false.
+
+parse_chars(Chars, Version) ->
     case operator_contract() of
         false ->
             {error, parser_contract_mismatch};
         true ->
-            case lex(Chars, 1, false, #lex{}) of
+            case lex(Chars, 1, false, #lex{parser_version = Version}) of
                 {ok, Tokens, Lex} ->
                     parsed(erlog_parse:term(Tokens), Lex);
                 {error, _} = Error ->
@@ -134,6 +152,9 @@ lex_token([$, | Rest], Line, _Layout, Lex0) ->
     continue(Rest, Line, push({',', Line}, Lex0));
 lex_token([$| | Rest], Line, _Layout, Lex0) ->
     continue(Rest, Line, push({'|', Line}, Lex0));
+lex_token([$<, $<, $" | Rest], Line, _Layout,
+          #lex{parser_version = 2} = Lex0) ->
+    lex_binary(Rest, Line, Lex0);
 lex_token([$' | Rest], Line, _Layout, Lex0) ->
     lex_quoted(Rest, Line, $', atom, Lex0);
 lex_token([$" | Rest], Line, _Layout, Lex0) ->
@@ -287,6 +308,29 @@ quoted_token(string, Chars, Rest, TokenLine, NextLine, Lex0) ->
             continue(Rest, NextLine, push({string, TokenLine, Chars}, Lex0));
         _ ->
             {error, invalid_syntax}
+    end.
+
+%% Version 2 recognizes only the quoted byte form `<<"...">>`.  This is
+%% intentionally not Erlang's full bit-syntax: each decoded character must be
+%% an octet, and an unfinished or oversized value is ordinary invalid syntax.
+lex_binary(Rest0, Line, Lex0) ->
+    case quoted_chars(Rest0, $", Line, []) of
+        {ok, Chars, [$>, $> | Rest], NextLine} ->
+            case binary_chars(Chars) of
+                {ok, Bytes} ->
+                    continue(Rest, NextLine, push({binary, Line, Bytes}, Lex0));
+                error ->
+                    {error, invalid_syntax}
+            end;
+        _ ->
+            {error, invalid_syntax}
+    end.
+
+binary_chars(Chars) ->
+    case lists:all(fun(C) -> is_integer(C) andalso C >= 0 andalso C =< 255 end,
+                   Chars) of
+        true -> {ok, list_to_binary(Chars)};
+        false -> error
     end.
 
 quoted_chars([Quote | Rest], Quote, Line, Acc) ->

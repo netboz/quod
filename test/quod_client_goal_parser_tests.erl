@@ -134,7 +134,32 @@ one_dot_terminated_term_only_test() ->
     ?assertEqual({error, invalid_syntax}, parse(<<"f([a,b).">>)),
     ?assertEqual({error, invalid_syntax}, parse(<<"1.0e+.">>)),
     ?assertEqual({error, unsupported_parser},
-                 quod_client_goal_parser:parse(<<"true.">>, 2)).
+                 quod_client_goal_parser:parse(<<"true.">>, 3)).
+
+v2_binary_literals_use_erlang_notation_without_changing_v1_test() ->
+    Literal = <<"payload(<<\"a\\n\">>).">>,
+    ?assertEqual({error, invalid_syntax},
+                 quod_client_goal_parser:parse(Literal, 1)),
+    {ok, #{goal := Goal}} = quod_client_goal_parser:parse(Literal, 2),
+    ?assertEqual(canonical({payload, <<"a\n">>}), canonical(Goal)),
+    ?assertEqual({error, invalid_syntax},
+                 quod_client_goal_parser:parse(
+                   <<"payload(<<\"\\x100\\\">>).">>, 2)),
+    Shift = <<"X is X << 2.">>,
+    {ok, #{goal := V1Shift}} = quod_client_goal_parser:parse(Shift, 1),
+    {ok, #{goal := V2Shift}} = quod_client_goal_parser:parse(Shift, 2),
+    ?assertEqual(canonical({is, {0}, {'<<', {0}, 2}}), canonical(V1Shift)),
+    ?assertEqual(canonical(V1Shift), canonical(V2Shift)),
+    %% V2 deliberately reserves a contiguous <<" sequence.  V1 retains its
+    %% prior shift/string reading, and requests bind the version byte.
+    Collision = <<"X<<\"a\">>Y.">>,
+    ?assertMatch({ok, _}, quod_client_goal_parser:parse(Collision, 1)),
+    ?assertEqual({error, invalid_syntax},
+                 quod_client_goal_parser:parse(Collision, 2)),
+    ?assertEqual({error, invalid_syntax},
+                 quod_client_goal_parser:parse(<<"payload(<<\"abc).">>, 2)),
+    ?assertEqual({error, invalid_syntax},
+                 quod_client_goal_parser:parse(<<"payload(<<\"x\" >>).">>, 2)).
 
 unknown_symbols_do_not_allocate_atoms_test() ->
     %% Warm every called module before taking the VM count.

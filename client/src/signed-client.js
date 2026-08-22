@@ -5,6 +5,7 @@ const encoder = new TextEncoder()
 const GOAL_DOMAIN = encoder.encode('quod.user.goal.v1\0')
 const CHALLENGE_DOMAIN = encoder.encode('quod_user_challenge_v1\0')
 const REQUEST_TTL_MS = 30_000
+const PARSER_VERSION = 2
 const MODE_TAG = { read: 0, execute: 1, cursor: 2 }
 const cursorOperations = new Map()
 
@@ -189,7 +190,7 @@ export function encodeGoalRequest({
     namespaceLength,
     namespaceBytes,
     anchor,
-    new Uint8Array([modeTag, 1]),
+    new Uint8Array([modeTag, PARSER_VERSION]),
     expiry,
     goalLength,
     goalBytes,

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   atom,
+  binary,
   compound,
   goalText,
   list,
@@ -11,7 +12,7 @@ import {
 } from '../src/prolog-term.js'
 import { encodeGoalRequest } from '../src/signed-client.js'
 
-test('generic terms render ordinary inspectable V1 Prolog text', () => {
+test('generic terms render ordinary inspectable Prolog text', () => {
   assert.equal(
     goalText(compound('inspect', [
       atom("owner's value"),
@@ -40,6 +41,13 @@ test('builder text and direct text produce byte-identical signed requests', () =
   assert.deepEqual(
     encodeGoalRequest({ ...fields, goal: built }),
     encodeGoalRequest({ ...fields, goal: direct }),
+  )
+})
+
+test('binary terms use explicit Erlang notation and preserve every byte', () => {
+  assert.equal(
+    goalText(compound('admit', [binary(Uint8Array.from([0x00, 0x22, 0x5c, 0x7f, 0xff]))])),
+    ['admit(<<"', '\\x00\\', '\\"', '\\\\', '\\x7f\\', '\\xff\\', '">>).'].join(''),
   )
 })
 

@@ -26,7 +26,6 @@ when they need the complete validator check.
               request_auth/0, request_binding/0]).
 
 -define(DOMAIN, <<"quod.user.goal.v1", 0>>).
--define(PARSER_VERSION, 1).
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
 -type mode() :: read | execute | cursor.
@@ -37,7 +36,7 @@ when they need the complete validator check.
           target_namespace := binary(),
           target_genesis_anchor := <<_:256>>,
           mode := mode(),
-          parser_version := 1,
+          parser_version := 1 | 2,
           not_after_ms := pos_integer(),
           goal_text := binary()}.
 -type evidence() ::
@@ -56,7 +55,7 @@ when they need the complete validator check.
         invalid_authorization_transcript |
         {too_large, request | namespace | goal_text | goal}.
 
--doc "Encode one exact v1 request into the bytes the browser signs.".
+-doc "Encode one exact signed-goal request into the bytes the browser signs.".
 -spec encode(term()) -> {ok, binary()} | {error, error_reason()}.
 encode(Request) ->
     case validate_request(Request) of
@@ -64,7 +63,7 @@ encode(Request) ->
         {error, _} = Error -> Error
     end.
 
--doc "Decode one exact v1 request without parsing or allocating goal symbols.".
+-doc "Decode one exact signed-goal request without parsing or allocating goal symbols.".
 -spec decode(term()) -> {ok, request()} | {error, error_reason()}.
 decode(Bytes)
   when is_binary(Bytes), byte_size(Bytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
@@ -361,10 +360,13 @@ validate_request(Request) when is_map(Request), map_size(Request) =:= 9 ->
           target_namespace := Namespace,
           target_genesis_anchor := <<_:256>>,
           mode := Mode,
-          parser_version := ?PARSER_VERSION,
+          parser_version := ParserVersion,
           not_after_ms := NotAfter,
           goal_text := GoalText} ->
-            validate_scalars(Namespace, Mode, NotAfter, GoalText);
+            case quod_client_goal_parser:supported_version(ParserVersion) of
+                true -> validate_scalars(Namespace, Mode, NotAfter, GoalText);
+                false -> {error, invalid_request}
+            end;
         _ ->
             {error, invalid_request}
     end;

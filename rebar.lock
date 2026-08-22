@@ -11,7 +11,7 @@
   2},
  {<<"erlog">>,
   {git,"https://github.com/netboz/erlog.git",
-       {ref,"24b2c8b249ce690fc986f3a626eed6f9e5851327"}},
+       {ref,"7516121fb3b3ed19b6174652c2675b2ff5f1c222"}},
   0},
  {<<"getopt">>,{pkg,<<"getopt">>,<<"1.0.3">>},1},
  {<<"gproc">>,{pkg,<<"gproc">>,<<"0.9.1">>},0},

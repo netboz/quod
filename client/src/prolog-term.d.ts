@@ -1,6 +1,7 @@
 export type PrologTerm =
   | { type: 'atom'; value: string }
   | { type: 'string'; value: string }
+  | { type: 'binary'; value: Uint8Array }
   | { type: 'number'; value: number | bigint }
   | { type: 'variable'; value: string }
   | { type: 'compound'; functor: string; args: PrologTerm[] }
@@ -8,6 +9,7 @@ export type PrologTerm =
 
 export function atom(value: string): PrologTerm
 export function string(value: string): PrologTerm
+export function binary(value: Uint8Array): PrologTerm
 export function number(value: number | bigint): PrologTerm
 export function variable(value: string): PrologTerm
 export function compound(functor: string, args: PrologTerm[]): PrologTerm

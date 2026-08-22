@@ -153,7 +153,7 @@ operation_id           = 32 random bytes generated once by the client
 target_namespace       = bounded UTF-8 bytes
 target_genesis_anchor  = 32 bytes
 mode                   = read | execute | cursor
-parser_version         = 1
+parser_version         = 1 | 2
 not_after_ms            = signed admission deadline
 goal_text              = exact bounded UTF-8 bytes
 ```
@@ -173,16 +173,25 @@ identity prevents replay on another Quod network.
 number. It fixes the grammar and operator table without consulting ontology
 state, plus UTF-8 handling, comments, escapes, integer and float syntax,
 character codes, quoted atoms, list syntax, variable naming, and the rule that
-every anonymous `_` is a distinct fresh variable. A later grammar or operator
-change requires another parser version; validators never interpret version 1
-through their current ambient Prolog operator table.
+every anonymous `_` is a distinct fresh variable. Validators never interpret
+version 1 through their current ambient Prolog operator table.
 
-Version 1 accepts exactly one dot-terminated term, followed only by layout or
-comments. Bare identifiers use the Prolog ASCII letter/digit/underscore form;
-UTF-8 remains available inside quoted atoms and strings. A missing terminator,
-a second term, or trailing non-layout input is rejected.
+Version 2 adds the explicit Erlang-style binary literal `<<"...">>`. It
+yields one opaque Erlang binary; ordinary `"..."` remains a Prolog character
+list, and spaced `A << B` remains the shift operator. A contiguous `<<"`
+sequence is intentionally reassigned by Version 2, so the signed parser-version
+byte—not grammar superset compatibility—preserves every existing request's
+meaning. Literal escapes must resolve to bytes (`0..255`); full Erlang
+bit-syntax segments are intentionally outside this grammar. A later grammar or
+operator change requires another parser version.
 
-Quoted values use strict backslash escapes. V1 accepts `n r t v b f e s d`,
+Both supported versions accept exactly one dot-terminated term, followed only
+by layout or comments. Bare identifiers use the Prolog ASCII
+letter/digit/underscore form; UTF-8 remains available inside quoted atoms and
+strings. A missing terminator, a second term, or trailing non-layout input is
+rejected.
+
+Quoted values use strict backslash escapes. Both versions accept `n r t v b f e s d`,
 escaped single quote, double quote, and backslash, plus terminated hexadecimal
 `\x...\` and octal `\...\` numeric escapes. Any other escape, an invalid
 Unicode code point, or ISO doubled-quote syntax is rejected rather than
@@ -884,7 +893,7 @@ The gateway and target verification intentionally repeat the bounded signature
 and atom-safe parse: each protects a different trust boundary. Profile this
 cost under remote load before considering an optimization; do not introduce a
 gateway-attested shortcut or a second evidence format merely to avoid parsing
-at most one bounded V1 request twice.
+at most one bounded signed request twice.
 
 The internal authentication/materialization owner and signed cursor owner must
 run on every node that may host a target, even when that node's public client
@@ -1046,7 +1055,7 @@ construct and render ordinary inspectable Prolog goal text from generic term
 parts such as atoms, strings, numbers, variables, compounds, and lists. They
 must:
 
-- escape according to the frozen V1 parser contract;
+- escape according to the selected frozen parser contract;
 - contain no predicate catalogue, action catalogue, ACL, namespace policy, or
   server-side intent mapping;
 - return the exact goal text before signing so a UI can display it;
@@ -1206,9 +1215,10 @@ The review must answer these before implementation:
 
 ## Mandatory adversarial tests
 
-- Exact parser fixtures cover every V1 operator, comment, escape, integer,
-  float, character-code, quoted-atom, list, named-variable, and anonymous-`_`
-  rule, including malformed and ambiguous inputs.
+- Exact parser fixtures cover every Version-1 operator, comment, escape,
+  integer, float, character-code, quoted-atom, list, named-variable, and
+  anonymous-`_` rule, plus Version-2 byte literals, including malformed and
+  ambiguous inputs.
 - Parsing unknown symbols within the limit produces the same goal blob on
   every validator; exceeding request/user/peer/global symbol budgets fails
   before materialization and does not increase the VM atom count.

@@ -1,4 +1,4 @@
-// Pure, predicate-neutral builders for the frozen signed-goal V1 text grammar.
+// Pure, predicate-neutral builders for the frozen signed-goal text grammar.
 // They produce ordinary inspectable Prolog text; signedGoal remains the only
 // request encoder and signer.
 
@@ -7,6 +7,7 @@ const FUNCTOR = /^[a-z][A-Za-z0-9_]*$/u
 
 export const atom = value => term('atom', value)
 export const string = value => term('string', value)
+export const binary = value => term('binary', value)
 export const number = value => term('number', value)
 export const variable = value => term('variable', value)
 
@@ -33,6 +34,9 @@ export function renderTerm(value) {
     case 'string':
       if (typeof value.value !== 'string') throw new Error('invalid Prolog string')
       return `"${escapeQuoted(value.value, '"')}"`
+    case 'binary':
+      if (!(value.value instanceof Uint8Array)) throw new Error('invalid Prolog binary')
+      return `<<"${escapeBinary(value.value)}">>`
     case 'number':
       return renderNumber(value.value)
     case 'variable':
@@ -104,6 +108,23 @@ function escapeQuoted(value, quote) {
         else if (character.codePointAt(0) < 0x20) {
           result += `\\x${character.codePointAt(0).toString(16)}\\`
         } else result += character
+    }
+  }
+  return result
+}
+
+function escapeBinary(value) {
+  let result = ''
+  for (const byte of value) {
+    switch (byte) {
+      case 0x0a: result += '\\n'; break
+      case 0x0d: result += '\\r'; break
+      case 0x09: result += '\\t'; break
+      case 0x22: result += '\\"'; break
+      case 0x5c: result += '\\\\'; break
+      default:
+        if (byte >= 0x20 && byte <= 0x7e) result += String.fromCharCode(byte)
+        else result += `\\x${byte.toString(16).padStart(2, '0')}\\`
     }
   }
   return result

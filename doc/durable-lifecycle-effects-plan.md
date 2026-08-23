@@ -7,11 +7,11 @@
 > `ontology-lifecycle-single-path-plan.md`. They are historical, not
 > compatibility requirements.
 
-**Status:** the base protocol was implemented in Quod 0.7.71. The later
-single-path refactor is implemented only in the current working tree and is
-not a rolling upgrade. Its next deployment requires the coordinated clean
-re-found and private-journal cleanup specified in
-`ontology-lifecycle-single-path-plan.md` §2.6; no compatibility decoder is
+**Status:** the base protocol was implemented in Quod 0.7.71 and the later
+single-path refactor is implemented in the current repository. The refactor is
+not a rolling format upgrade: activating it on a fleet with older persistence
+requires the coordinated clean re-found and private-journal cleanup specified
+in `ontology-lifecycle-single-path-plan.md` §2.6. No compatibility decoder is
 retained.
 
 ## 1. Goal
@@ -57,14 +57,17 @@ operation changed external node state rather than root Prolog state. The
 transaction goal, result, actor, and typed effect descriptor remain signed and
 durable in the ledger and are rendered by Explorer.
 
-This adds a second source of E work beside `react_on/3`:
+The one post-commit runtime may receive two different durable inputs:
 
-1. **reaction effects** are derived from committed D diff operations;
+1. **reactions** are derived from the canonical reducer's `applied_ops`;
 2. **direct effects** are already present as typed descriptors in the
    committed transaction.
 
-Both cross the existing ordered P-before-E barrier. Neither performs IO in the
-proof, consensus, or apply process.
+Both cross the same ordered P-before-E owner. This is not a second matcher,
+callback registry, or apply path: direct lifecycle descriptors retain their
+existing journal custody, while `react_on/3` handlers use the ordinary Prolog
+reaction dispatcher. Neither performs IO in the proof, consensus, or apply
+process.
 
 ## 3. One ordinary transaction, not a new ledger kind
 

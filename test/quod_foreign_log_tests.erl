@@ -419,6 +419,29 @@ foreign_log_start_removes_only_disposable_projection_state_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+slow_follow_consumer_coalesces_live_occurrences_to_state_only_test() ->
+    Projection1 = key(103),
+    Projection2 = key(104),
+    Freshness = #{committee_id => key(105)},
+    First = {advanced, 7, 8, Projection1, Freshness,
+             [{changed, one}],
+             [{8, [{assert, {{remote_ping, one}, {[], false}}}]}]},
+    Second = {advanced, 8, 9, Projection2, Freshness,
+              [{changed, two}],
+              [{9, [{assert, {{remote_ping, two}, {[], false}}}]}]},
+    %% Once a consumer has missed an acknowledgement boundary, the cache is
+    %% still authoritative for current P but the occurrences are no longer a
+    %% replay-safe E stream. The next notice therefore carries no history.
+    ?assertEqual(
+       {resnapshot, 9, Projection2, Freshness},
+       quod_foreign_log:test_coalesce_notice(First, Second)),
+    ?assertEqual(
+       {resnapshot, 10, Projection2, Freshness},
+       quod_foreign_log:test_coalesce_notice(
+         {resnapshot, 9, Projection1, Freshness},
+         {advanced, 9, 10, Projection2, Freshness, [],
+          [{10, [{retract, {{remote_ping, one}, {[], false}}}]}]})).
+
 follow_consumers_share_one_history_and_cleanup_exactly_test() ->
     Dir = temp_dir("follow-lifecycle"),
     NoFetch = fun(_, _, _, _, _) -> {error, unavailable} end,

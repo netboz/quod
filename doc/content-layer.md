@@ -160,14 +160,15 @@ a lasting relationship as an invisible side effect.
 Long-lived interest is explicit and durable. If *pets* wants continuing updates from
 *animals*, pets commits an ordinary subscription fact in its own history. That fact is
 visible, auditable, removable, and subject to pets' normal write policy. Animals keeps
-no duplicate durable row; its normal `can_invoke/4` policy decides whether a live
-delivery registration is allowed.
+no duplicate durable row; its normal `can_invoke/4` policy decides whether any
+live follow cooperation is allowed.
 
 The runtime now maintains one shared certified local projection of each exact
 subscribed target. Routes, queues, projection workers, and consumer references
-remain temporary local state and are rebuilt after restart. Target-side event
-registration, filtering, and reaction delivery are later slices. The complete
-contract is
+remain temporary local state and are rebuilt after restart. The planned
+reaction slice matches newly applied operations against pets' own
+source-qualified `react_on/3` clauses; it installs no pattern registry in
+animals. The complete contract is
 [`ontology-subscription-plan.md`](ontology-subscription-plan.md).
 
 ---
@@ -376,9 +377,12 @@ Once a change is official, three things happen, in order:
    (quick-lookup tables, active subscription projections, and later things like a
    visual view of the world) is recomputed. This happens immediately, before anyone
    is told, so that by the time you're notified everything lines up.
-3. **Reactions happen** — rules that say "when X happens, do Y" now run, messages go
-   out, screens update. This is the outward-facing part, and it happens only for a
-   genuinely *new* change.
+3. **Reactions happen** — for every operation the existing reducer actually
+   applied, Quod unifies `assert(...)`, `retract(...)`, or an explicit event
+   with the ontology's `react_on/3` rules and continues each matching Prolog
+   handler. This is the outward-facing part, and it happens only for a genuinely
+   *new* live change. Asking to assert an identical fact is not a change and
+   produces no reaction.
 
 That last point carries the one rule that's easy to get wrong: **when a computer
 replays old history** — catching up after falling behind, or rebuilding after a
@@ -387,11 +391,13 @@ Otherwise a computer catching up on a thousand old changes would re-send a thous
 old messages. (An earlier, related system handled this badly and only worked by
 chance; here the rule is explicit.)
 
-Reaction and projection declarations are facts: "when this kind of change happens,
-converge this view." The existing runtime already separates live apply from replay and
-runs its ordered projection-handler tier before outward effects. Ontology subscriptions
-now maintain certified foreign projections; the later delivery slice will feed their
-changes into that same tier rather than add a second event runner.
+Projection and reaction declarations are facts, but they do different jobs.
+`state_handler/4` makes rebuildable local state agree with the facts after live
+apply and restart. `react_on/3` handles only new live occurrences. The existing
+runtime already separates live apply from replay and runs projection handlers
+before reactions. Ontology subscriptions maintain certified foreign
+projections; the reaction slice feeds newly applied remote operations through
+the same dispatcher, never a second event runner.
 
 ---
 
@@ -441,10 +447,12 @@ section 5.
 
 **Still open (and honestly so):**
 
-- **Ontology-subscription delivery** — explicit durable subscriber-owned
+- **Ontology-subscription reactions** — explicit durable subscriber-owned
   relations and certificate-verified foreign projections are implemented.
-  Target-side authorization/filter registration and bounded live reaction
-  delivery remain in `ontology-subscription-plan.md`.
+  Local and subscribed `react_on/3` execution remains planned in
+  `event-reaction-refinement-plan.md`. The initial design follows certified
+  applied operations and filters at the subscriber; it does not install a
+  second target-side pattern registry.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.
@@ -453,9 +461,10 @@ section 5.
   and memberships it exposes to untrusted networks.
 - **Reading two ontologies at once** can catch each at a slightly different instant,
   so they may not perfectly line up. We accept that for now.
-- **Subscription event-interest performance** — Slice 1 freezes and locally
-  compiles the source-qualified `react_on/3` grammar. Later slices still need
-  to implement and measure target-side filtering and fan-out.
+- **Subscription event performance** — source-qualified `react_on/3` is locally
+  compiled today. Later slices still need to execute it and measure certified
+  follow fan-out. Source-side publication filtering is deferred until those
+  measurements justify it.
 
 ---
 

@@ -54,7 +54,7 @@ only for an active proof or follow.
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
--export([cache_namespace/1, valid_projection/2]).
+-export([cache_namespace/1, valid_projection/2, test_coalesce_notice/2]).
 -endif.
 
 -define(KEY, {foreign_log, node}).
@@ -150,6 +150,7 @@ only for an active proof or follow.
           follow_entries = 0 :: non_neg_integer(),
           follow_bytes = 0 :: non_neg_integer(),
           follow_coalesced = 0 :: non_neg_integer(),
+          follow_resnapshots = 0 :: non_neg_integer(),
           follow_retries = 0 :: non_neg_integer(),
           projection_rebuilds = 0 :: non_neg_integer(),
           max_follow_lag = 0 :: non_neg_integer(),
@@ -460,15 +461,13 @@ follow(Identity) ->
             {error, invalid_identity}
     end.
 
--doc "Acknowledge installation of one exact local follow notice.".
+-doc "Acknowledge completion of one exact local follow notice.".
 -spec ack(reference(), reference()) -> ok.
 ack(FollowRef, NoticeRef)
   when is_reference(FollowRef), is_reference(NoticeRef) ->
     case quod_reg:where(?KEY) of
         Pid when is_pid(Pid) ->
-            try gen_server:call(Pid, {ack, FollowRef, NoticeRef}, 1000)
-            catch exit:_ -> ok
-            end;
+            gen_server:cast(Pid, {ack, FollowRef, NoticeRef, self()});
         undefined -> ok
     end;
 ack(_FollowRef, _NoticeRef) ->
@@ -594,6 +593,7 @@ empty_stats() ->
       follow_building => 0, follow_unreachable => 0,
       follow_polls => 0, follow_pages => 0,
       follow_entries => 0, follow_bytes => 0, follow_coalesced => 0,
+      follow_resnapshots => 0,
       follow_retries => 0, projection_rebuilds => 0, max_follow_lag => 0}.
 
 %%%===================================================================
@@ -673,6 +673,7 @@ handle_call(stats, _From, S) ->
               follow_entries => S#s.follow_entries,
               follow_bytes => S#s.follow_bytes,
               follow_coalesced => S#s.follow_coalesced,
+              follow_resnapshots => S#s.follow_resnapshots,
               follow_retries => S#s.follow_retries,
               projection_rebuilds => S#s.projection_rebuilds,
               max_follow_lag => S#s.max_follow_lag,
@@ -685,9 +686,6 @@ handle_call({follow, Identity}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {FollowRef, S1} = add_follow(Identity, ConsumerPid, S0),
     {reply, {ok, FollowRef}, S1};
-handle_call({ack, FollowRef, NoticeRef}, From, S0) ->
-    {ConsumerPid, _Tag} = From,
-    {reply, ok, acknowledge_follow(FollowRef, NoticeRef, ConsumerPid, S0)};
 handle_call({unfollow, FollowRef}, From, S0) ->
     {ConsumerPid, _Tag} = From,
     {reply, ok, remove_follow(FollowRef, ConsumerPid, S0)};
@@ -916,6 +914,10 @@ start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
 handle_cast({observe_candidate, Identity, PeerKey, Endpoint}, S0) ->
     {noreply, remember_bootstrap_candidate(
                 Identity, PeerKey, Endpoint, S0)};
+handle_cast({ack, FollowRef, NoticeRef, ConsumerPid}, S0)
+  when is_reference(FollowRef), is_reference(NoticeRef), is_pid(ConsumerPid) ->
+    {noreply, acknowledge_follow(
+                FollowRef, NoticeRef, ConsumerPid, S0)};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -1560,7 +1562,8 @@ notify_follow(FollowRef, Notice, S0) ->
             NoticeRef = make_ref(),
             Pid ! {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice},
             C1 = C0#consumer{outstanding = {NoticeRef, Notice}},
-            put_history(Identity, put_consumer(FollowRef, C1, H0), S0);
+            S1 = count_follow_resnapshot(Notice, S0),
+            put_history(Identity, put_consumer(FollowRef, C1, H0), S1);
         {ok, Identity, #consumer{pending = Pending0} = C0, H0} ->
             C1 = C0#consumer{pending = coalesce_notice(Pending0, Notice)},
             put_history(
@@ -1570,17 +1573,22 @@ notify_follow(FollowRef, Notice, S0) ->
             S0
     end.
 
+count_follow_resnapshot({resnapshot, _To, _Projection, _Freshness}, S) ->
+    S#s{follow_resnapshots = S#s.follow_resnapshots + 1};
+count_follow_resnapshot(_Notice, S) ->
+    S.
+
 coalesce_notice(none, Notice) -> Notice;
 coalesce_notice(
-  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0},
-  {advanced, _From, To, Projection, Freshness, _Heads}) ->
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0, _Publications0},
+  {advanced, _From, To, Projection, Freshness, _Heads, _Publications}) ->
     {resnapshot, To, Projection, Freshness};
 coalesce_notice(
   {resnapshot, _To0, _Projection0, _Fresh0},
-  {advanced, _From, To, Projection, Freshness, _Heads}) ->
+  {advanced, _From, To, Projection, Freshness, _Heads, _Publications}) ->
     {resnapshot, To, Projection, Freshness};
 coalesce_notice(
-  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0},
+  {advanced, _From0, _To0, _Projection0, _Fresh0, _Heads0, _Publications0},
   {resnapshot, To, Projection, Freshness}) ->
     {resnapshot, To, Projection, Freshness};
 coalesce_notice(
@@ -1589,6 +1597,11 @@ coalesce_notice(
     {resnapshot, To, Projection, Freshness};
 coalesce_notice(_Previous, Newest) ->
     Newest.
+
+-ifdef(TEST).
+test_coalesce_notice(Previous, Newest) ->
+    coalesce_notice(Previous, Newest).
+-endif.
 
 schedule_follow(Identity, Delay, S0) ->
     case maps:get(Identity, S0#s.histories, undefined) of
@@ -1782,10 +1795,12 @@ projection_ready(Identity, Generation,
                  #{from := From, height := Height,
                    projection_id := ProjectionId,
                    changed_heads := Heads0, resnapshot := Resnapshot0,
+                   publications := Publications0,
                    memory_bytes := MemoryBytes}, S0)
   when is_integer(From), is_integer(Height), Height >= From,
        is_binary(ProjectionId), byte_size(ProjectionId) =:= 32,
-       is_list(Heads0), is_integer(MemoryBytes), MemoryBytes >= 0 ->
+       is_list(Heads0), is_list(Publications0),
+       is_integer(MemoryBytes), MemoryBytes >= 0 ->
     case materializer_matches(Identity, Generation, S0) of
         {ok, H0, M0} ->
             Total = max(
@@ -1811,11 +1826,15 @@ projection_ready(Identity, Generation,
             {Resnapshot, Heads} = bounded_heads(
                                     Resnapshot0 orelse From =:= 0,
                                     Heads0),
+            Publications = case Resnapshot of
+                               true -> [];
+                               false -> Publications0
+                           end,
             Notice = case Resnapshot of
                          true -> {resnapshot, Height, ProjectionId,
                                   Freshness};
                          false -> {advanced, From, Height, ProjectionId,
-                                   Freshness, Heads}
+                                   Freshness, Heads, Publications}
                      end,
             notify_history(Identity, Notice, S1);
         error -> S0

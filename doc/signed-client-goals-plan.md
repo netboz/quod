@@ -1,6 +1,6 @@
 # Signed client goals
 
-**Status:** Slices 1 through 6 are implemented in the current working tree. Slice 1 contains
+**Status:** Slices 1 through 6 are implemented and committed. Slice 1 contains
 the pure request codec, signature verifier, and atom-safe parser. Slice 2 adds
 authenticated `read`: it enters the ordinary read-only proof path as the
 signed user and applies the ontology's normal ACL. Slice 3 adds the coordinated durable
@@ -16,10 +16,10 @@ multi-ontology commit, makes missing root identity retryable during history
 validation, and persists unresolved browser writes. Slice 6 lets any client
 node route the unchanged signed request to one exact target validator, while
 the target still uses the same proof, ACL, transaction, DTX, lifecycle, cursor,
-and outcome paths. It also adds predicate-neutral client term builders. These
-changes are not yet committed or deployed; deployment of the combined hard
-protocol break remains withheld until review and the release gates are
-explicitly authorized.
+and outcome paths. It also adds predicate-neutral client term builders. The
+incompatible generation has no compatibility decoder; any fleet still carrying
+an older generation must activate it through the documented clean re-found
+procedure.
 
 > **Architecture correction.** This document records the implemented signed
 > request whose principal is labelled `{user, Key}`.  That label is temporary:
@@ -752,8 +752,8 @@ At the Slice-3 boundary, the foreign-only case was fixture-tested by
 constructing signed plans in-VM while remote signed scopes remained closed.
 Slice 5 now exercises that record shape through the real scope transport.
 
-Public deployment remains disabled until this coordinated generation is
-released through its required clean re-found.
+An older persisted generation cannot be upgraded in place; activation uses the
+required clean re-found.
 
 ### Slice 4: local signed execute and cursor
 

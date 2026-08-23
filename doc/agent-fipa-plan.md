@@ -74,8 +74,8 @@ projection of committed facts.
     Receiver deduplication handles crash retries and the bounded overlap during
     a host-epoch transfer; it is not the normal defense against every replica
     emitting the same effect.
-12. **Runtime declarations are privileged code.** `state_handler`,
-    `state_handler_depends_on`, and `react_on` facts are executable
+12. **Runtime declarations are privileged code.** `state_handler/4` and
+    `react_on/3` facts are executable
     configuration. They may become active only when their provenance satisfies
     the ontology's runtime-declaration policy.
 
@@ -302,7 +302,7 @@ volatile hosting fact is asserted into consensus.
 
 The existing `{committed, Namespace}` publication occurs before
 `quod_prolog` has applied the block. It remains suitable for dissemination and
-observability, but it must not become the agent event source.
+observability, but it must not become the reaction source.
 
 The former undifferentiated apply interface has been replaced with an explicit
 origin:
@@ -378,20 +378,24 @@ Best-effort effects from replayed history remain deliberately absent.
 > guarantees the ready edge cannot overtake the final replay block. `quod_runtime`
 > consumes these boundaries and reconciles once per interval.
 
-### Event envelope
+### Live apply publication
 
-One live-applied material transaction produces this compact event envelope:
+One live-applied material transaction currently produces this compact runtime
+publication:
 
 ```text
 #{ns, height, tx_id, subject, diff, effects}
 ```
 
-Handlers see the committed diff as one transaction, not a stream of independent
-operations. `effects` contains only the already-validated bounded descriptors
-from that transaction; effect-only transactions therefore cross the same
-ordered runtime boundary with `diff = []`. Goal and result remain canonical
-ledger blobs and are decoded only by detail readers, not copied into every
-runtime event.
+`diff` is the signed requested operation list. The canonical committed
+projection separately computes ordered `applied_ops`, excluding identical
+assertions and absent retractions. The reaction slice carries that existing
+result through this publication and converts each applied operation to one
+event; it does not treat requested no-ops as changes and does not add a second
+event envelope. `effects` contains only the already-validated bounded
+descriptors from that transaction; effect-only transactions therefore cross
+the same ordered runtime boundary with `diff = []`. Goal and result remain
+canonical ledger blobs and are decoded only by detail readers.
 
 > **As built (Slice 1).** The envelope is a map carrying exactly those fields,
 > published as
@@ -409,11 +413,11 @@ The post-apply origin and event contract is useful independently of agents:
 
 - deferred reader arc P3 can invalidate bounded predicate caches only from
   `applied_live`, never replay;
-- The ontology-subscription plan can route certified foreign-projection
+- The ontology-subscription plan routes canonical certified foreign-projection
   changes through the same ordered handler tier, then through this plan's one
-  `react_on/3` reaction owner. Source-qualified `react_on/3` patterns are also
-  the subscriber's event interests registered with the target; there is no
-  second event-subscription rule. Proof-local read sets remain OCC dependencies
+  `react_on/3` reaction owner. The subscriber matches its own source-qualified
+  `react_on/3` declarations locally; the first implementation does not install
+  those patterns at the target. Proof-local read sets remain OCC dependencies
   and are not notification registrations.
 
 These consumers reuse the origin boundary and handler indexing from Slices 1--2
@@ -424,29 +428,24 @@ without depending on hosted agents, FIPA, or client/world work.
 Projection declarations are facts:
 
 ```prolog
-state_handler(Id, WatchedPatterns, OnDiffGoal, ReconcileGoal).
-state_handler_depends_on(After, Before).
+state_handler(Id, WatchedPatterns, Needs, ConvergeGoal).
 ```
 
-> **As built (Slice 2, Yan-amended).** ONE recipe per handler, and no separate dependency
-> facts:
->
-> ```prolog
-> state_handler(Id, WatchedPatterns, Needs, ConvergeGoal).
-> ```
->
-> The same `ConvergeGoal` runs everywhere with a scope argument appended (declared arity N
-> is invoked at N+1 — this erlog has no `call/2`): `all` at reconcile, `{keys, ChangedHeads}`
-> after a live change, where the heads are full terms INCLUDING retracted heads, a narrowing
-> hint only — a join-shaped handler may treat it as `all`. This replaces the OnDiff/Reconcile
-> pair (one recipe cannot drift from itself; idempotency is structural). Ordering is the
-> onia/bbsvx action-pattern shape: `Needs` is a list carried IN the declaration, restricted
-> in this slice to ground `current(OtherId)` terms so the whole graph validates statically
-> at reconcile; matched handlers and their transitive dependents run in the global converge
-> order (Kahn, Id-term-order tiebreak — deterministic per node). Arbitrary condition goals
-> in Needs are deferred: under `unknown => fail` a typo'd condition is indistinguishable
-> from a false one, and data-dependent conditions would activate different handler sets on
-> nodes reconciling at different heights.
+There is one recipe per handler and no separate dependency fact. The same
+`ConvergeGoal` runs everywhere with a scope argument appended (declared arity N
+is invoked at N+1 — this erlog has no `call/2`): `all` at reconcile,
+`{keys, ChangedHeads}` after a live change, where the heads are full terms
+INCLUDING retracted heads, a narrowing hint only — a join-shaped handler may
+treat it as `all`. This replaces the OnDiff/Reconcile pair (one recipe cannot
+drift from itself; idempotency is structural). Ordering is the onia/bbsvx
+action-pattern shape: `Needs` is a list carried IN the declaration, restricted
+in this slice to ground `current(OtherId)` terms so the whole graph validates
+statically at reconcile; matched handlers and their transitive dependents run
+in the global converge order (Kahn, Id-term-order tiebreak — deterministic per
+node). Arbitrary condition goals in Needs are deferred: under `unknown => fail`
+a typo'd condition is indistinguishable from a false one, and data-dependent
+conditions would activate different handler sets on nodes reconciling at
+different heights.
 
 Rules:
 
@@ -496,7 +495,9 @@ The policy predicate is:
 can_declare_runtime(Subject, Kind, Declaration).
 ```
 
-`Kind` is `state_handler`, `handler_dependency`, or `reaction`.
+The planned kinds are `state_handler` and `reaction`. The separate
+`handler_dependency` declaration was retired when dependencies moved into the
+`Needs` field of `state_handler/4`.
 
 Transaction-author signatures now exist, but validator-side authorization does
 not. Until it does, only declarations included in a trusted system ontology's
@@ -520,7 +521,7 @@ The first handlers will own:
 
 ## 9. Reactions and reliable effects
 
-`react_on(Executor, Pattern, Goal)` is durable ontology content, but its body is
+`react_on(Executor, Pattern, Handler)` is durable ontology content, but its body is
 an E rule and therefore runs only for live events.
 
 `Executor` is the logical owner of the effect, not the source or class of the
@@ -529,11 +530,18 @@ event, and it is not agent-specific. `agent(A)` is the common FIPA case;
 uses the same mechanism. Local and remote event sources remain part of
 `Pattern`.
 
-Reaction matching is Prolog work. `quod_runtime` may index candidates by event
-functor, but the actual match and continuation use
+Reaction input is the ordered `applied_ops` already produced by the canonical
+committed-state reducer. Reaction matching is Prolog work. `quod_runtime` may
+index candidates by source and event functor, but the actual match and continuation use
 `erlog_int:unify_prove_body`, which installs the pattern's variable bindings
-before executor resolution and effect validation. There is no Erlang-side
+before executor resolution and Handler continuation. There is no Erlang-side
 matcher or parallel binding representation.
+
+The Handler is ordinary trusted Prolog. It runs in the single planned
+`reaction` context: query and reaction-class external predicates are allowed;
+staging and projection predicates are refused. Observable Erlang bridges are
+registered through the existing ontology predicate-module mechanism with
+class `reaction`; there is no typed callback catalogue or second dispatcher.
 
 ### Logical agent versus live Erlang process
 
@@ -975,9 +983,10 @@ Acceptance:
 
 > **As built (Slice 2 — DELIVERED, all four acceptance bullets test-pinned).** `m:quod_runtime`
 > per namespace, LAST in `quod_ns`'s rest_for_one chain; one-recipe handlers with the
-> action-pattern Needs (the §8 as-built note above); §8.1's provenance check is a FULL-TERM
-> match against the founding (slot-1) block — currently the sole lock, since no write ACL
-> exists yet — with retracted/nonground founding declarations a distinct loud unhealthy and
+> action-pattern Needs (the §8 note above); §8.1's provenance check is a FULL-TERM
+> match against the founding (slot-1) block — the declaration-execution lock,
+> distinct from the ordinary `can_invoke/4` write ACL — with
+> retracted/nonground founding declarations a distinct loud unhealthy and
 > dynamic declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
 > killable budgeted runner (never in the server); execution failures collapse pending work
 > into one reconciliation with exponential backoff (crash to the supervisor after 5); the
@@ -993,7 +1002,8 @@ Acceptance:
 
 ### Slice 3 -- reactions and outbox
 
-- Implement transaction-scoped event matching.
+- Implement ordered applied-operation matching through the one dispatcher in
+  `event-reaction-refinement-plan.md`.
 - Add bounded best-effort reactions.
 - Add acknowledged volatile delivery for normal conversation traffic.
 - Add durable outbox delivery, completion, retry, and receiver deduplication.

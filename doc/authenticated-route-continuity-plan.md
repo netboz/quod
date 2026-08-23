@@ -1,7 +1,7 @@
 # Authenticated route continuity and DTX recovery — plan
 
-**Status:** implemented in the working tree; source review and the hardware
-acceptance run remain before the next subscription slice.
+**Status:** implemented and source-gated. The mixed hardware workload in §11
+remains a repeatable release acceptance test, not unfinished route semantics.
 
 This plan closes the remaining hardware acceptance gap for ontology-subscription
 Slice 2 before subscription Slice 3 begins. It does not change subscription
@@ -25,12 +25,13 @@ The work stays in this order:
    implemented.
 2. This plan is a **Slice-2 acceptance closure**, not a new subscription
    feature. It repairs private reachability shared by DTX, certified following,
-   and later subscription registration.
+   and later subscription cooperation.
 3. The mixed 64-follow plus three-participant DTX hardware gate is rerun.
-4. Only after that gate and review pass does subscription Slice 3 add target
-   registration and event authorization.
-5. Subscription Slices 4–6 then continue as already specified: projection and
-   reactions, reliable push/backpressure, and hardware performance evaluation.
+4. Local and subscribed reactions then use the one applied-op dispatcher in
+   `event-reaction-refinement-plan.md`; no target-side pattern registry is
+   added.
+5. Reliable push/backpressure and hardware performance evaluation follow only
+   after the direct certified-follow path is measured.
 
 No reaction, agent, event-filter, Plumtree, physics, or rendering work is added
 to this closure.
@@ -391,7 +392,7 @@ rates. No ontology identity or peer-selected value becomes a metric label.
   selector.
 - Do not change `::`, follow notices, runtime reactions, or subscription facts.
 
-### E — gates and documentation (source gates complete; hardware pending)
+### E — gates and documentation (source gates complete; hardware repeatable)
 
 - Focused transport, directory, foreign-log, Simplex, DTX, scope, and follow
   tests.
@@ -405,8 +406,8 @@ rates. No ontology identity or peer-selected value becomes a metric label.
   fan-out, and validation lifecycle.
 
 Compile, full EUnit, the focused inter-ontology CT, xref, Dialyzer, and the
-formatting check are green in the working tree. The mixed 64-follow hardware
-run below remains pending and is not replaced by these source-level results.
+formatting check were green when this slice landed. The mixed workload below
+remains a release/hardware gate and is not replaced by source-level results.
 
 ## 11. Non-vacuous acceptance tests
 

@@ -14,7 +14,7 @@ or deployed under the corrected model.
 > delivery slice resumes.
 
 The lifecycle-only authorization and action runner cited in historical
-sections are also being retired. New work follows
+sections have been retired. Current work follows
 `ontology-lifecycle-single-path-plan.md`: one normal `can_invoke/4` boundary,
 ordinary Prolog action prerequisites, and the existing durable effect journal.
 
@@ -593,7 +593,7 @@ from the block-final snapshot, and owns the reserved
 The declaration remains the approved form:
 
 ```prolog
-react_on(Executor, Pattern, EffectGoal).
+react_on(Executor, Pattern, Handler).
 ```
 
 Despite this plan's agent examples, `Executor` is a generic logical effect
@@ -603,11 +603,12 @@ source selection remains inside the local or source-qualified `Pattern`.
 
 For this slice `Pattern` is one `assert(FactPattern)` or
 `retract(FactPattern)`. Variables may connect the pattern to `Executor` and
-`EffectGoal`, as in the approved example. It matches only plain-fact operations
-(clause body `true`) and uses Erlog unification against each operation of the
-exact live-applied local diff. Rule changes do not accidentally look like fact
-events. Matching is not a scan of the later KB and it does not collapse several
-commit identities into one reaction.
+`Handler`, as in the approved example. It matches only plain-fact operations
+(clause body `true`) and uses Erlog unification against each operation in the
+canonical reducer's ordered `applied_ops`. Identical assertions and absent
+retractions are no-ops and produce no reaction. Rule changes do not
+accidentally look like fact events. Matching is not a scan of the later KB and
+it does not collapse several commit identities into one reaction.
 
 The exact interpreter seam is `erlog_int:unify_prove_body`: runtime indexing
 may reduce the candidate declarations, but matching the concrete event and
@@ -623,28 +624,22 @@ Reaction declarations use the same founding-only authority as
   not pass the gate merely because variables were renamed;
 - duplicate copies of the same alpha-normalized declaration collapse to one
   active declaration;
-- every variable used by `Executor` or `EffectGoal` must occur in `Pattern`, and
+- every variable used by `Executor` or `Handler` must occur in `Pattern`, and
   both terms must be ground after a concrete match;
 - a later declaration is refused and counted;
 - a retracted or malformed founding declaration makes the runtime unhealthy;
 - only a fact body (`true`) is accepted.
 
-The first slice accepts only one top-level **typed reaction effect term** as
-`EffectGoal`. It is data validated by exact function clauses in the reaction
-planner; it is not an arbitrary Prolog call, callback, module/function term, or
-MFA supplied by ontology content. Conjunctions, `call/1`, staging predicates,
-unknown functors, and dynamically named callbacks are rejected at declaration
-validation. The closed set is `notify_agent/3`, `send_volatile/5`,
-`schedule_outbox/4`, and `wake_agent/2`.
+`Handler` is ordinary trusted Prolog, continued with the bindings installed
+by `erlog_int:unify_prove_body`. It runs in the shared `reaction` context.
+Query-class and reaction-class external predicates are allowed there; staging
+and projection predicates are refused, and any staged D is a loud failure.
+Observable Erlang functions such as notification or outbox wake-up bridges are
+registered by the ontology's existing predicate module with class `reaction`.
+There is no closed typed-effect term catalogue, MFA callback, broad global
+effect registry, or second dispatcher.
 
-After the ordered snapshot phase has completely validated and grounded one of
-those terms, E invokes its corresponding internal Erlang function directly.
-These internal functions are not Erlog predicates and therefore do not receive
-the `_predicate` suffix. Any future Erlang function actually registered and
-called by Erlog must follow the existing functor-and-arity convention. There is
-no broad `effect` registration and no generic effect dispatcher.
-
-The concrete declarations are intentionally small:
+Illustrative declarations remain ordinary Prolog:
 
 ```prolog
 react_on(agent(Receiver),
@@ -712,23 +707,23 @@ block final snapshot
     -> advance the E scheduling frontier
 ```
 
-No external IO runs in the ordered runner. It returns immutable, size-bounded
-descriptors containing the namespace, height, canonical commit identity,
-reaction id, commit ordinal, operation ordinal, executor, and exact ground typed
-effect term. While the runtime still owns its MVCC pin, the ordered worker performs
-**all** Prolog work: indexed declaration
-lookup, alpha-normalized provenance validation, exact operation unification,
-groundness/size checks, typed-effect validation, and unique owner resolution.
-It returns plain immutable Erlang data only. No MVCC handle or Erlog state may
-cross into asynchronous E.
+No external IO runs in the ordered P runner. It selects candidate declarations,
+checks founding authority, unifies each applied operation through
+`unify_prove_body`, and resolves the unique executor. It then schedules one
+bounded reaction worker with the exact committed snapshot, source, declaration,
+event, and installed bindings. That worker continues the ordinary Prolog
+Handler in the `reaction` context and releases the snapshot pin when it exits.
+No unbounded callback, raw process reference, or second effect descriptor
+language crosses the boundary.
 
-Declarations are indexed by `{assert | retract, Functor, Arity}` rather than
-scanned for every operation. Both declarations and applied diff operations use
-one canonical order. After exact duplicate operations collapse, deterministic
-commit and operation ordinals are assigned. The live-only `ReactionId` is a
+Declarations are indexed by source and outer event functor rather than scanned
+for every operation. Both declarations and `applied_ops` use one canonical
+order. Deterministic commit and operation ordinals are assigned after the
+canonical reducer has omitted fact no-ops; explicit event occurrences remain
+distinct. The live-only `ReactionId` is a
 domain-separated hash of namespace, **block height**, canonical commit identity,
 commit ordinal, operation ordinal, alpha-normalized declaration, exact matched
-operation, bound executor, and bound effect term. It is therefore unique for
+operation, bound executor, and bound Handler. It is therefore unique for
 both ordinary and distributed applies, even when transaction-local IDs recur at
 a later height, while distinct matching operations remain distinct. Hash inputs
 use one canonical deterministic term encoding; no process-local term ordering
@@ -1133,14 +1128,15 @@ This slice verifies that baseline; it does not implement the action refactor a
 second time or change the pinned Erlog fork.
 
 1. Extend `quod_runtime`'s existing pure planning section with founding reaction
-   validation/indexing, transaction matching, canonical IDs, typed descriptor
-   validation, and no process state or IO. The existing block P runner calls it
-   while pinned and then performs bounded E admission. Following Quod's module
+   validation/indexing, applied-operation matching, canonical IDs, and executor
+   resolution. The existing block P runner calls it while pinned and then
+   performs bounded E admission. Following Quod's module
    boundary spec, do not create a reaction module before measured complexity or
    a concrete cohesion problem justifies that split.
-2. Add the concrete local best-effort handler. Add the single channel-priority
-   classifier/call and focused transport tests before new traffic shares
-   connections.
+2. Add the one `reaction` predicate class/context row and the concrete
+   ontology-owned reaction bridges through the existing predicate-module
+   dispatcher. Add the single channel-priority classifier/call and focused
+   transport tests before new traffic shares connections.
 3. Add `quod_outbox`: first the concrete acknowledged-volatile wire/retry/dedup
    path, then the bounded snapshot fact fold, generation handoff, durable
    admission/terminal actions, durable receiver receipts, retry, and
@@ -1211,17 +1207,19 @@ it.
    while their P heads are coalesced once through the linear ordered union. A
    distributed apply carries `{group, GroupId}` and cannot collide with an
    ordinary `{transaction, TxId}` containing the same binary id.
-4. A live matching commit schedules one effect; replay, catch-up, boot rebuild,
-   and reconciliation schedule no historical best-effort or volatile effect.
-5. A P failure, malformed/unbound declaration, unknown or compound reaction
-   term, zero owner, or multiple owners performs no E; delaying E beyond
-   snapshot release proves it receives no Erlog state or MVCC handle.
+4. A live matching applied operation schedules one Handler; replay, catch-up,
+   boot rebuild, and reconciliation schedule no historical best-effort or
+   volatile effect. An identical assertion and absent retraction schedule none.
+5. A P failure, malformed/unbound declaration, refused reaction bridge, staged
+   D, zero owner, or multiple owners performs no E. Reaction workers retain
+   only their exact bounded snapshot pin and release it on success, failure,
+   timeout, or cancellation.
 6. A dynamic look-alike `react_on/3` declaration cannot execute; changing any
    field of the founding declaration does not pass the full-term gate.
-7. Indexed matching produces the same canonical order as a reference fold,
-   collapses only exact duplicate matches, and produces different reaction IDs
-   for recurring transaction-local IDs at different heights and for group
-   commit identities.
+7. Indexed matching produces the same canonical order as a reference fold over
+   `applied_ops`, and produces different reaction IDs for recurring explicit
+   events, transaction-local IDs at different heights, and group commit
+   identities.
 8. A best-effort notice is delivered once on the receiver owner; forcing the
    bounded queue full drops and counts it with no retry, acknowledgement, wire,
    or later replay.

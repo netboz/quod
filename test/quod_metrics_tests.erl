@@ -14,6 +14,10 @@ renders_without_non_ascii_help_test() ->
     Rendered = prometheus_text_format:format(),   %% would throw badarg on a bad HELP string
     Bin = iolist_to_binary(Rendered),
     ?assert(byte_size(Bin) > 0),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_foreign_follow_resnapshots ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 
@@ -36,6 +40,40 @@ observe_tx_latency_test() ->
         ok = quod_metrics:observe_tx_latency(Ns, -1),   %% dropped by the guard
         {_Buckets, Sum} = prometheus_histogram:value(quod_tx_commit_latency_ms, [Ns]),
         ?assertEqual(42, Sum)
+    after
+        Placeholder ! stop
+    end.
+
+reaction_latency_uses_only_bounded_result_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"reaction:metrics">>,
+    ok = quod_metrics:observe_runtime_reaction(Ns, executed, 7),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_runtime_reaction(Ns, executed, 1000000),
+        ok = quod_metrics:observe_runtime_reaction(
+               Ns, {inert, attacker_controlled_reason}, 2000000),
+        ok = quod_metrics:observe_runtime_reaction(
+               Ns, {failed, {arbitrary, payload}}, 3000000),
+        {_, Executed} = prometheus_histogram:value(
+                          quod_runtime_reaction_seconds,
+                          [Ns, <<"executed">>]),
+        {_, Inert} = prometheus_histogram:value(
+                       quod_runtime_reaction_seconds,
+                       [Ns, <<"inert">>]),
+        {_, Failed} = prometheus_histogram:value(
+                        quod_runtime_reaction_seconds,
+                        [Ns, <<"failed">>]),
+        ?assertEqual(1.0, Executed),
+        ?assertEqual(2.0, Inert),
+        ?assertEqual(3.0, Failed),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_runtime_reaction_seconds,
+             [Ns, <<"attacker_controlled_reason">>]))
     after
         Placeholder ! stop
     end.

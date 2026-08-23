@@ -1,5 +1,6 @@
 -module(quod_runtime_tests).
 -include_lib("eunit/include/eunit.hrl").
+-include_lib("erlog/src/erlog_int.hrl").
 -include("quod_ledger.hrl").
 -import(quod_ct, [rp/2, diff_for/1, change/2, batch/1, wait_until/1, wait_until/2]).
 
@@ -13,8 +14,8 @@
 d(Id, Needs)       -> d(Id, Needs, projection_noop).
 d(Id, Needs, Goal) -> {state_handler, Id, [{'/', watched, 1}], Needs, Goal}.
 
-reaction_clause(Executor, Pattern, Effect) ->
-    {{react_on, Executor, Pattern, Effect}, {[], false}}.
+reaction_clause(Executor, Pattern, Handler) ->
+    {{react_on, Executor, Pattern, Handler}, {[], false}}.
 
 subscription_clause(Ns, Anchor) ->
     {{subscribes, Ns, Anchor}, {[], false}}.
@@ -30,6 +31,105 @@ anonymous_projection_argument_refused_test() ->
     ?assertNot(quod_predicates:is_ground({job, {'_'}})),
     ?assertNot(quod_predicates:is_ground([resource, {'X'}])),
     ?assert(quod_predicates:is_ground({job, [resource, 1]})).
+
+applied_fact_operations_are_the_only_reaction_events_test() ->
+    Ops = [{assert, {{fact, 1}, {[], false}}},
+           {retract, {{gone, 2}, {[], false}}},
+           {assert, {{rule, {0}}, {[{other, {0}}], false}}}],
+    ?assertEqual(
+       [{assert, {fact, 1}}, {retract, {gone, 2}}],
+       quod_runtime_predicates:diff_to_events(Ops)).
+
+reaction_unification_continues_the_bound_handler_test() ->
+    with_reaction_est(
+      fun(Est) ->
+              Self = <<1:256>>,
+              Reaction =
+                  {react_on, {node, Self},
+                   {assert, {task_ready, {'Agent'}, {'Task'}}},
+                   {member, {pair, {'Agent'}, {'Task'}},
+                    [{pair, alice, t1}]}},
+              ?assertEqual(
+                 executed,
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 7, Self, Reaction,
+                   {assert, {task_ready, alice, t1}}, Est)),
+              ?assertEqual(
+                 {failed, handler_failed},
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 7, Self, Reaction,
+                   {assert, {task_ready, bob, t2}}, Est)),
+              ?assertEqual(
+                 unmatched,
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 7, Self, Reaction,
+                   {retract, {task_ready, alice, t1}}, Est)),
+              %% An ontology with no ownership rule at all is the ordinary
+              %% unresolved case, not an Erlog error or a local fallback.
+              ?assertEqual(
+                 {inert, unresolved_executor},
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 7, Self,
+                   {react_on, {agent, alice}, {assert, ping},
+                    {member, alice, [alice]}},
+                   {assert, ping}, Est))
+      end).
+
+reaction_executor_must_resolve_uniquely_to_this_node_test() ->
+    Self = <<2:256>>,
+    Other = <<3:256>>,
+    Terms =
+        [{executor_owner_node, {agent, alice}, Self},
+         {executor_owner_node, {agent, disputed}, Self},
+         {executor_owner_node, {agent, disputed}, Other}],
+    with_reaction_est(
+      Terms,
+      fun(Est) ->
+              R = fun(Agent) ->
+                          {react_on, {agent, Agent},
+                           {assert, {wake, Agent}},
+                           {member, Agent, [alice]}}
+                  end,
+              ?assertEqual(
+                 executed,
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 8, Self, R(alice),
+                   {assert, {wake, alice}}, Est)),
+              ?assertEqual(
+                 {inert, unresolved_executor},
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 8, Self, R(missing),
+                   {assert, {wake, missing}}, Est)),
+              ?assertEqual(
+                 {inert, ambiguous_executor},
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 8, Self, R(disputed),
+                   {assert, {wake, disputed}}, Est))
+      end).
+
+reaction_handler_cannot_stage_d_test() ->
+    with_reaction_est(
+      fun(Est) ->
+              Self = <<4:256>>,
+              Reaction =
+                  {react_on, {node, Self}, {assert, ping},
+                   {assertz, forbidden}},
+              ?assertMatch(
+                 {failed, {handler_staged_d, [_]}},
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:test">>, 9, Self, Reaction,
+                   {assert, ping}, Est))
+      end).
+
+reaction_context_matrix_test() ->
+    ?assert(quod_predicates:allowed(query, reaction)),
+    ?assert(quod_predicates:allowed(reaction, reaction)),
+    ?assertNot(quod_predicates:allowed(staging, reaction)),
+    ?assertNot(quod_predicates:allowed(projection, reaction)),
+    ?assertNot(quod_predicates:allowed(reaction, proof)),
+    ?assertNot(quod_predicates:allowed(reaction, verdict)),
+    ?assertNot(quod_predicates:allowed(reaction, policy_verdict)),
+    ?assertNot(quod_predicates:allowed(reaction, projection)).
 
 %%%===================================================================
 %%% pure core: plan_handlers/2
@@ -233,7 +333,8 @@ founding_source_reaction_is_alpha_matched_and_indexed_test() ->
     {ok, Plan} = quod_runtime:plan_runtime_catalog(
                    [Founding], #{subscriptions => [], reactions => [Stored]}),
     [Canonical] = maps:get(reactions, Plan),
-    ?assertEqual([Canonical], maps:get({Ns, Anchor}, maps:get(source_interests, Plan))),
+    TargetIndex = maps:get({Ns, Anchor}, maps:get(source_interests, Plan)),
+    ?assertEqual([Canonical], maps:get({assert, 1}, TargetIndex)),
     ?assertEqual(0, maps:get(rejected_dynamic, Plan)).
 
 %% Executor is a logical single-owner term, not an agent class. The catalogue
@@ -256,8 +357,8 @@ non_agent_executor_is_alpha_matched_and_indexed_test() ->
                    [Founding], #{subscriptions => [], reactions => [Stored]}),
     [Canonical] = maps:get(reactions, Plan),
     ?assertMatch({react_on, {service, _}, _, _}, Canonical),
-    ?assertEqual([Canonical],
-                 maps:get({Ns, Anchor}, maps:get(source_interests, Plan))).
+    TargetIndex = maps:get({Ns, Anchor}, maps:get(source_interests, Plan)),
+    ?assertEqual([Canonical], maps:get({assert, 1}, TargetIndex)).
 
 %% A bare variable is not a logical owner. It cannot select one effect host,
 %% even if an unrelated event variable happens to be bound.
@@ -579,6 +680,39 @@ setup_founded_terms(Terms) ->
     unlink(Sup),
     {Dir, Ns, Sup}.
 
+setup_founded_terms_with_identity(TermsFun) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_rt_identity_terms_" ++ U),
+    ok = filelib:ensure_path(Dir),
+    Ns = list_to_binary("rtidentity:" ++ U),
+    {Pub, Seed} = quod_identity:generate(),
+    Key = quod_identity:key_term({Pub, Seed}),
+    Id = #{pubkey => Pub, key => Key},
+    Terms = TermsFun(Pub),
+    Cfg = #{node_id => Pub, identity => Id, data_dir => Dir,
+            mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)},
+    {ok, Sup} = quod_ns:start_link(Ns, Cfg),
+    unlink(Sup),
+    {Dir, Ns, Sup}.
+
+setup_founded_terms_on_node(Terms, Identity) ->
+    setup_founded_terms_on_node_with_identity(fun(_Self) -> Terms end, Identity).
+
+setup_founded_terms_on_node_with_identity(TermsFun, Identity) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    U = integer_to_list(erlang:unique_integer([positive])),
+    Dir = filename:join("/tmp", "quod_rt_node_terms_" ++ U),
+    ok = filelib:ensure_path(Dir),
+    Ns = list_to_binary("rtnode:" ++ U),
+    Pub = maps:get(pubkey, Identity),
+    Terms = TermsFun(Pub),
+    Cfg = #{node_id => Pub, identity => Identity, data_dir => Dir,
+            mode => create, genesis_diff => quod_prolog:terms_to_diff(Terms)},
+    {ok, Sup} = quod_ns:start_link(Ns, Cfg),
+    unlink(Sup),
+    {Dir, Ns, Sup}.
+
 cleanup_founded({Dir, Ns, _Sup}) ->
     case quod_reg:where({quod_ns, Ns}) of
         undefined -> ok;
@@ -588,6 +722,9 @@ cleanup_founded({Dir, Ns, _Sup}) ->
     end,
     _ = file:del_dir_r(Dir),
     ok.
+
+restore_env(Key, {ok, Value}) -> application:set_env(quod, Key, Value);
+restore_env(Key, undefined) -> application:unset_env(quod, Key).
 
 %% two founded handlers with an ordering edge activate at boot
 founded_handlers_active_test_() ->
@@ -737,6 +874,245 @@ local_subscription_reaches_one_shared_ready_projection_test_() ->
     end
     end}.
 
+%% Baseline materialization is state only. Only a later contiguous certified
+%% advance becomes an occurrence, and it enters the same Prolog continuation
+%% as a local reaction with the source wrapper available for unification.
+subscribed_reaction_runs_once_from_live_certified_advance_test_() ->
+    {timeout, 90, fun() ->
+    Target = setup_founded_terms([{remote_ping, old}]),
+    {_, TargetNs, _} = Target,
+    Anchor = quod_simplex:genesis_hash(TargetNs),
+    ForeignDir = temp_runtime_dir("foreign-reaction"),
+    {ForeignOwner, OwnForeignOwner} = ensure_foreign_owner(ForeignDir),
+    Subscriber = setup_founded_terms_with_identity(
+                   fun(Self) ->
+                           [{subscribes, TargetNs, Anchor},
+                            {react_on, {node, Self},
+                             {from, TargetNs, Anchor,
+                              {assert, {remote_ping, {'Value'}}}},
+                             {member, {'Value'},
+                              [fresh, fresh_after_restart,
+                               fresh_after_cache_rebuild]}}]
+                   end),
+    {_, SubscriberNs, _} = Subscriber,
+    try
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{mode := live, subscriptions_active := 1,
+                     source_views_ready := 1,
+                     reactions_executed := 0,
+                     reaction_candidates := 0}) -> true;
+                  (_) -> false
+               end),
+        %% Only the exact owner-issued FollowRef may enter the queue. A forged
+        %% but otherwise well-shaped notice is ignored before its payload is
+        %% interpreted and cannot disturb the real follow that succeeds next.
+        RuntimePid = quod_reg:where({quod_runtime, SubscriberNs}),
+        RuntimePid !
+            {quod_foreign_follow, make_ref(), make_ref(), {TargetNs, Anchor},
+             {advanced, 1, 2, <<99:256>>, #{}, [],
+              [{2, [{assert, {{remote_ping, forged}, {[], false}}}]}]}},
+        ForgedStats = quod_runtime:stats(SubscriberNs),
+        ?assertEqual(0, maps:get(reaction_candidates, ForgedStats)),
+        ?assertEqual(0, maps:get(reactions_executed, ForgedStats)),
+        %% The old fact was folded into the certified baseline and did not fire.
+        ?assertMatch({ok, _, _}, rp(TargetNs, {assertz, {remote_ping, fresh}})),
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{reaction_candidates := 1, reaction_matches := 1,
+                     reactions_executed := 1, reaction_failures := 0}) -> true;
+                  (_) -> false
+               end),
+        %% The canonical reducer suppresses this duplicate; the follower cannot
+        %% manufacture a second occurrence from the requested diff.
+        #{follow_entries := FollowedBefore} = quod_foreign_log:stats(),
+        ?assertMatch({ok, _, _}, rp(TargetNs, {assertz, {remote_ping, fresh}})),
+        ok = wait_until(
+               fun() ->
+                       case quod_foreign_log:stats() of
+                           #{follow_entries := Followed}
+                             when Followed > FollowedBefore -> true;
+                           _ -> false
+                       end
+               end),
+        Stats = quod_runtime:stats(SubscriberNs),
+        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(1, maps:get(reactions_executed, Stats)),
+
+        %% A runtime restart reattaches to the current certified projection as
+        %% a state baseline. It must not replay the already observed event.
+        Runtime0 = quod_reg:where({quod_runtime, SubscriberNs}),
+        ok = gen_server:stop(Runtime0),
+        ok = wait_until(
+               fun() ->
+                       Runtime1 = quod_reg:where({quod_runtime, SubscriberNs}),
+                       is_pid(Runtime1) andalso Runtime1 =/= Runtime0
+                           andalso case quod_runtime:stats(SubscriberNs) of
+                                       #{mode := live, source_views_ready := 1,
+                                         reaction_candidates := 0,
+                                         reactions_executed := 0} -> true;
+                                       _ -> false
+                                   end
+               end),
+        ?assertMatch(
+           {ok, _, _},
+           rp(TargetNs, {assertz, {remote_ping, fresh_after_restart}})),
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{reaction_candidates := 1, reaction_matches := 1,
+                     reactions_executed := 1}) -> true;
+                  (_) -> false
+               end),
+
+        %% Rebuilding the node-wide owner and materializer from certified cache
+        %% is also a baseline, not history replay.
+        true = OwnForeignOwner,
+        #{source_attempts := AttemptsBeforeRebuild} =
+            quod_runtime:stats(SubscriberNs),
+        stop_foreign_owner(ForeignOwner, true),
+        {ok, RebuiltOwner} = quod_foreign_log:start_link(
+                               #{cache_dir => ForeignDir,
+                                 page_timeout_ms => 1000,
+                                 follow_poll_ms => 50,
+                                 follow_retry_ms => 10,
+                                 follow_max_retry_ms => 50}),
+        try
+            ok = wait_stats(
+                   SubscriberNs,
+                   fun(#{source_views_ready := 1,
+                         source_attempts := Attempts,
+                         reaction_candidates := 1,
+                         reactions_executed := 1})
+                         when Attempts > AttemptsBeforeRebuild -> true;
+                      (_) -> false
+                   end),
+            ?assertMatch(
+               {ok, _, _},
+               rp(TargetNs,
+                  {assertz, {remote_ping, fresh_after_cache_rebuild}})),
+            ok = wait_stats(
+                   SubscriberNs,
+                   fun(#{reaction_candidates := 2, reaction_matches := 2,
+                         reactions_executed := 2}) -> true;
+                      (_) -> false
+                   end)
+        after
+            stop_foreign_owner(RebuiltOwner, true)
+        end
+    after
+        cleanup_founded(Subscriber),
+        cleanup_founded(Target),
+        stop_foreign_owner(ForeignOwner, OwnForeignOwner),
+        _ = file:del_dir_r(ForeignDir)
+    end
+    end}.
+
+%% A local catalogue change and a remote occurrence share one ordered fold.
+%% If the local block removes the subscription first, the later queued remote
+%% item is dropped even though the batch began with that subscription active.
+subscription_retraction_precedes_later_queued_remote_reaction_test() ->
+    TargetNs = <<"private:queued-target">>,
+    Anchor = <<81:256>>,
+    Identity = {TargetNs, Anchor},
+    Self = <<82:256>>,
+    Reaction =
+        {react_on, {node, Self},
+         {from, TargetNs, Anchor, {assert, {remote_ping, {'Value'}}}},
+         {member, {'Value'}, [must_not_run]}},
+    ReactionClause = reaction_clause(
+                       {node, Self}, element(3, Reaction), element(4, Reaction)),
+    SubscriptionClause = subscription_clause(TargetNs, Anchor),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [ReactionClause],
+                   #{subscriptions => [SubscriptionClause],
+                     reactions => [ReactionClause]}),
+    with_reaction_est(
+      [Reaction],
+      fun(EstAfterRetraction) ->
+              Work =
+                  [{local, 2, EstAfterRetraction,
+                    [{subscribes, TargetNs, Anchor}], [], []},
+                   {remote, make_ref(), make_ref(), Identity,
+                    [{2, [{assert,
+                           {{remote_ping, must_not_run}, {[], false}}}]}]}],
+              ?assertMatch(
+                 {ok, 2, _, [], #{subscriptions := []},
+                  #{candidates := 0, executed := 0, dropped := 1}},
+                 quod_runtime:test_run_events(
+                   Work, Plan, Self, [ReactionClause], 1,
+                   EstAfterRetraction))
+      end).
+
+%% A participant's fact becomes visible only through DTX Finalize. The
+%% certified follower must expose that applied operation once, and the normal
+%% subscribed-reaction dispatcher must consume it without a DTX-specific path.
+subscribed_reaction_observes_dtx_finalize_once_test_() ->
+    {timeout, 90, fun() ->
+    PreviousPub = application:get_env(quod, node_pubkey),
+    PreviousKey = application:get_env(quod, identity_key),
+    {NodePub, NodeSeed} = quod_identity:generate(),
+    NodeKey = quod_identity:key_term({NodePub, NodeSeed}),
+    NodeIdentity = #{pubkey => NodePub, key => NodeKey},
+    application:set_env(quod, node_pubkey, NodePub),
+    application:set_env(quod, identity_key, NodeKey),
+    Target = setup_founded_terms_on_node([], NodeIdentity),
+    Other = setup_founded_terms_on_node(
+              [{can_invoke, {'Goal'}, {'Principal'}, {'Chain'}, {'Ns'}}],
+              NodeIdentity),
+    {_, TargetNs, _} = Target,
+    {_, OtherNs, _} = Other,
+    Anchor = quod_simplex:genesis_hash(TargetNs),
+    ForeignDir = temp_runtime_dir("foreign-reaction-dtx"),
+    {ForeignOwner, OwnForeignOwner} = ensure_foreign_owner(ForeignDir),
+    Subscriber = setup_founded_terms_on_node_with_identity(
+                   fun(Self) ->
+                           [{subscribes, TargetNs, Anchor},
+                            {react_on, {node, Self},
+                             {from, TargetNs, Anchor,
+                              {assert, {dtx_remote_ping, {'Value'}}}},
+                             {member, {'Value'}, [committed_once]}}]
+                   end, NodeIdentity),
+    {_, SubscriberNs, _} = Subscriber,
+    try
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{mode := live, source_views_ready := 1,
+                     reaction_candidates := 0,
+                     reactions_executed := 0}) -> true;
+                  (_) -> false
+               end),
+        Goal =
+            {',', {assertz, {dtx_remote_ping, committed_once}},
+             {'::', OtherNs,
+              {assertz, {dtx_other_marker, committed_once}}}},
+        ?assertMatch(
+           {ok, [_],
+            #{ref := {group, _, _, _, _, _}, participant_slots := [_, _]}},
+           rp(TargetNs, Goal)),
+        ok = wait_stats(
+               SubscriberNs,
+               fun(#{reaction_candidates := 1, reaction_matches := 1,
+                     reactions_executed := 1, reaction_failures := 0}) -> true;
+                  (_) -> false
+               end),
+        ?assertMatch({ok, _, _}, rp(TargetNs,
+                                     {dtx_remote_ping, committed_once})),
+        ?assertMatch({ok, _, _}, rp(OtherNs,
+                                     {dtx_other_marker, committed_once})),
+        Stats = quod_runtime:stats(SubscriberNs),
+        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(1, maps:get(reactions_executed, Stats))
+    after
+        cleanup_founded(Subscriber),
+        cleanup_founded(Other),
+        cleanup_founded(Target),
+        stop_foreign_owner(ForeignOwner, OwnForeignOwner),
+        _ = file:del_dir_r(ForeignDir),
+        restore_env(node_pubkey, PreviousPub),
+        restore_env(identity_key, PreviousKey)
+    end
+    end}.
+
 %% The catalogue is P, not another status store: killing only the runtime loses
 %% the in-memory list, and the supervisor rebuilds the identical list from D.
 subscription_reconciles_after_runtime_restart_test_() ->
@@ -766,7 +1142,8 @@ subscription_reconciles_after_runtime_restart_test_() ->
     end}.
 
 %% A founding variable-bearing reaction survives different Erlog variable ids because the
-%% one declaration gate compares alpha-normalized exact clauses. Slice 1 only indexes it.
+%% one declaration gate compares alpha-normalized exact clauses. An interest alone does not
+%% create a follow; the durable subscribes/2 fact remains independently required.
 founding_source_reaction_compiles_locally_test_() ->
     {timeout, 60, fun() ->
     TargetNs = <<"private:events">>,
@@ -785,9 +1162,91 @@ founding_source_reaction_compiles_locally_test_() ->
                      subscriptions_active := 0}) -> true;
                   (_) -> false
                end),
-        %% No network/follower product exists in Slice 1: compiling an interest
-        %% cannot create a subscription relation or mutate D.
+        %% Compiling an interest cannot create a subscription relation, follow,
+        %% or D mutation.
         ?assertEqual(1, quod_prolog:applied(Ns))
+    after cleanup_founded(F) end
+    end}.
+
+local_reaction_uses_applied_ops_and_runs_once_test_() ->
+    {timeout, 60, fun() ->
+    F = setup_founded_terms_with_identity(
+          fun(Self) ->
+                  [{':-', {reaction_accept, one}, {reaction_ping, one}},
+                   {react_on, {node, Self},
+                    {assert, {reaction_ping, {'Value'}}},
+                    {reaction_accept, {'Value'}}}]
+          end),
+    {_, Ns, _} = F,
+    try
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reactions_active := 1,
+                     reactions_executed := 0}) -> true;
+                  (_) -> false
+               end),
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, {reaction_ping, one}})),
+        ok = wait_stats(
+               Ns,
+               fun(#{reaction_candidates := 1, reaction_matches := 1,
+                     reactions_executed := 1, reaction_failures := 0}) -> true;
+                  (_) -> false
+               end),
+        %% Both transactions commit, but the canonical reducer reports no
+        %% applied operation, so neither may manufacture a second occurrence.
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, {reaction_ping, one}})),
+        Applied = quod_prolog:applied(Ns),
+        ok = wait_stats(
+               Ns,
+               fun(#{e_frontier := Frontier}) -> Frontier >= Applied;
+                  (_) -> false
+               end),
+        Stats = quod_runtime:stats(Ns),
+        ?assertEqual(1, maps:get(reaction_candidates, Stats)),
+        ?assertEqual(1, maps:get(reactions_executed, Stats)),
+        %% A second applied fact matches the pattern, but its bound handler
+        %% fails. The best-effort failure is counted and cannot make P unhealthy.
+        ?assertMatch({ok, _, _}, rp(Ns, {assertz, {reaction_ping, two}})),
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reaction_candidates := 2,
+                     reaction_matches := 2, reactions_executed := 1,
+                     reaction_failures := 1}) -> true;
+                  (_) -> false
+               end)
+    after cleanup_founded(F) end
+    end}.
+
+removed_founding_reaction_is_rejected_before_same_block_dispatch_test_() ->
+    {timeout, 60, fun() ->
+    Reaction =
+        {react_on, reaction_worker,
+         {assert, {reaction_ping, one}}, reaction_accept},
+    F = setup_founded_terms_with_identity(
+          fun(Self) ->
+                  [reaction_accept,
+                   {executor_owner_node, reaction_worker, Self},
+                   Reaction]
+          end),
+    {_, Ns, _} = F,
+    try
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reactions_active := 1,
+                     reactions_executed := 0}) -> true;
+                  (_) -> false
+               end),
+        %% The committed snapshot no longer authorizes the founding reaction.
+        %% Validate that snapshot before dispatching the other applied event in
+        %% this same transaction; the removed handler must never run once.
+        Goal = {',', {retract, Reaction},
+                     {assertz, {reaction_ping, one}}},
+        ?assertMatch({ok, _, _}, rp(Ns, Goal)),
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := unhealthy, reactions_executed := 0}) -> true;
+                  (_) -> false
+               end)
     after cleanup_founded(F) end
     end}.
 
@@ -1079,6 +1538,30 @@ ready_without_started_quiesces_snapshot_readers_test_() ->
 %%%===================================================================
 %%% helpers
 %%%===================================================================
+
+with_reaction_est(Fun) ->
+    with_reaction_est([], Fun).
+
+with_reaction_est(Terms, Fun) ->
+    Est0 = quod_committed_projection:new_est(),
+    Est =
+        case Terms of
+            [] ->
+                Est0;
+            _ ->
+                Diff = quod_prolog:terms_to_diff(Terms),
+                {ok, Draft, _Applied} =
+                    quod_diff:apply_ops_report(Est0, Diff),
+                #est{db = #db{ref = DraftRef} = Db} = Draft,
+                Draft#est{db = Db#db{
+                                 ref = quod_erlog_db_mvcc:commit(
+                                         DraftRef, 1, 0)}}
+        end,
+    try Fun(Est)
+    after
+        #est{db = #db{ref = Ref}} = Est,
+        quod_erlog_db_mvcc:delete(Ref)
+    end.
 
 %% poll the runtime's stats until Pred approves them (Pred must handle #{} — a restart gap)
 wait_stats(Ns, Pred) ->

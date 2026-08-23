@@ -3,16 +3,18 @@
 Per-namespace runtime projection orchestrator — the P tier of `doc/agent-fipa-plan.md` §4.2/§7/§8.
 
 D (the committed KB) is the truth; P is this node's *derived working state*, rebuilt from D by
-**handlers** declared as ordinary stored facts:
+**state handlers** declared as ordinary stored facts:
 
     state_handler(Id, WatchedPatterns, Needs, ConvergeGoal)
 
 One recipe per handler: `ConvergeGoal` converges the handler's piece of P from the current
 snapshot. The SAME goal runs everywhere, distinguished only by the appended scope argument:
 `all` at reconcile, `{keys, ChangedHeads}` after a live change — where `ChangedHeads` are the
-full head terms of the block's diff INCLUDING retracted heads (so "nothing in the snapshot
-for key K ⇒ delete P[K]" is expressible), and a join-shaped handler whose keys don't align
-with the changed heads may legitimately treat the hint as `all`. `Needs` is a list of
+full head terms of the requested diff INCLUDING retracted heads (so "nothing in the snapshot
+for key K ⇒ delete P[K]" is expressible). This is a conservative invalidation hint: a
+requested no-op may cause a harmless reread. The reaction slice separately carries the
+canonical reducer's `applied_ops`. A join-shaped handler whose keys don't align with the
+changed heads may legitimately treat the hint as `all`. `Needs` is a list of
 `current(OtherId)` terms ordering handlers after their prerequisites (the onia/bbsvx
 action-pattern shape, hand-rolled); this slice restricts Needs to exactly those ground
 `current/1` edges so the whole graph is validated statically at reconcile — a cycle or
@@ -32,18 +34,23 @@ node-wide `quod_foreign_log` follower. Multiple hosted ontologies following
 the same anchored target share its certified cache and one fact projection;
 this runtime retains only building/ready/unreachable state and the correlated
 projection revision. It starts no verifier, cache, or second worker pool.
-This slice still delivers no foreign reaction. Later slices may narrow
-reaction candidates here, but the actual event match must
-cross into Prolog through `erlog_int:unify_prove_body`; this runtime must not
-grow a parallel unifier or variable-binding representation.
+Local and subscribed reactions are dispatched from the canonical reducer's
+`applied_ops`. Candidate indexes narrow by outer event functor (and exact
+source identity for subscribed events), but the actual match, executor
+resolution, and bound Handler continuation cross into Prolog through
+`erlog_int:unify_prove_body`; this runtime has no parallel unifier or binding
+representation. Initial foreign attachment, rebuild and resnapshot establish
+state only; only later contiguous certified advances enter the ordered tier.
 
 ## Who may declare a handler
 
-Handlers are executable — writing the fact must not be enough to activate it. Until the
+Runtime declarations are executable — permission to write their facts must not
+be enough to activate them. Until the
 `can_declare_runtime` authorization lands, a declaration is **active only if its complete
 GROUND term is identical to one in the ontology's founding (slot-1) block**. This
-full-term founding match is currently the *sole* lock (quod has no write ACL yet — the
-intended end state is founding-only *system* ontologies whose ACL is read-only).
+full-term founding match is currently the declaration-execution lock; ordinary
+`can_invoke/4` still governs the write itself but does not grant code-execution
+authority.
 Consequences: later-written declarations are recorded but refused (counted, warned); a
 *retracted* founding declaration (`G∖K`) is a loud, distinct unhealthy — the runtime never
 runs handlers the KB no longer contains; a founding declaration containing a variable is
@@ -53,13 +60,16 @@ refused loudly (a nonground term cannot round-trip through the KB as the same te
 
 Each live block's transactions arrive as direct `{applied_live, Env, Est}` envelopes carrying
 the block-final snapshot. They queue in height order (bounded; overflow collapses the queue
-into one reconciliation) and drain in batches through the single killable runner. Per event:
-the changed heads select the watching handlers via the functor index; those handlers AND
-their transitive dependents are re-converged, in the global converge order — prerequisites
+into one reconciliation) and drain in batches through the single killable runner. Per block,
+the changed heads first select the watching state handlers via the functor index; those handlers
+AND their transitive dependents are re-converged, in the global converge order — prerequisites
 first regardless of Id term order — each with
 its own watched subset of the changed heads as scope (`all` when a chained-in dependent
-watches none of them). When the batch completes through height H, `p_height = e_frontier = H`
-— the namespace-wide P-before-E barrier the effect layer will read.
+watches none of them). The same runner then preserves transaction and operation
+order while matching canonical applied fact events against active local
+`react_on/3` declarations. When the batch completes through height H,
+`p_height = e_frontier = H` — the namespace-wide P-before-E barrier the effect
+layer reads.
 
 ## Failure model
 
@@ -99,7 +109,8 @@ observers therefore maintain current P without reconstructing best-effort effect
 -ifdef(TEST).
 %% the pure planning + handler-selection core — driven directly by eunit
 -export([plan_handlers/2, founding_heads/1, with_scope/2, event_plan/4,
-         test_read_founding/2, plan_runtime_catalog/2, alpha_normalize/1]).
+         test_read_founding/2, plan_runtime_catalog/2, alpha_normalize/1,
+         test_run_events/6]).
 -endif.
 
 -define(RECONCILE_BUDGET_MS, 30000).
@@ -132,7 +143,7 @@ observers therefore maintain current P without reconstructing best-effort effect
             height = 0 :: non_neg_integer(),          %% its height (the reconcile floor)
             handlers = #{} :: #{term() => #handler{}},
             order = [] :: [term()],                   %% converge order (deps first)
-            index = #{} :: #{tuple() => [term()]},    %% Functor => [HandlerId] (event matching)
+            index = #{} :: #{tuple() => [term()]},    %% changed-head functor => state-handler ids
             dependents = #{} :: #{term() => [term()]},%% Id => ids that Need it (reverse edges)
             %% Cached slot-1 declarations. Reactions retain exact compiled
             %% clauses because their intentional variables require
@@ -140,7 +151,9 @@ observers therefore maintain current P without reconstructing best-effort effect
             founding = unknown :: unknown | {ok, map()},
             subscriptions = [] :: [{binary(), binary()}],
             reactions = [] :: [tuple()],
-            source_interests = #{} :: #{{binary(), binary()} => [tuple()]},
+            reaction_index = #{} :: #{tuple() => [tuple()]},
+            source_interests = #{} ::
+                #{{binary(), binary()} => #{tuple() => [tuple()]}},
             %% One local consumer reference per exact durable subscription.
             %% Verification, cache and materialized P remain shared node-wide.
             source_views = #{} :: #{{binary(), binary()} => map()},
@@ -156,11 +169,15 @@ observers therefore maintain current P without reconstructing best-effort effect
                                      reference()},
             pending_edge = none :: none | term(),     %% a ready edge that arrived mid-reconcile
             last_recovery = undefined :: term(),      %% dedup: reconcile once per edge id
-            %% the ordered tier: live envelopes queued in arrival (= height) order, drained in
-            %% batches. (Dependent invalidation is by watch-match + the static dependents graph,
-            %% recomputed per event — no separate marker bookkeeping is needed or kept.)
-            queue = [] :: [{map(), tuple()}],         %% REVERSED accumulation of {Env, Est}
+            %% The one ordered tier carries local apply envelopes and subscribed
+            %% certified advances in arrival order. Local entries converge P
+            %% before dispatch; remote entries enter the same reaction helper.
+            queue = [] :: [tuple()],                  %% REVERSED work items
             queue_len = 0 :: non_neg_integer(),
+            %% Follow acknowledgements owned by the current event runner. They
+            %% are released on success, collapse, replay, or termination, so a
+            %% dead handler can never wedge the shared follower.
+            event_acks = [] :: [{reference(), reference()}],
             p_height = 0 :: non_neg_integer(),        %% ordered tier completed through here
             e_frontier = 0 :: non_neg_integer(),      %% the P-before-E barrier (Slice 3 E reads)
             exec_failures = 0 :: non_neg_integer(),   %% consecutive execution failures (backoff)
@@ -171,6 +188,11 @@ observers therefore maintain current P without reconstructing best-effort effect
             rejected_dynamic = 0 :: non_neg_integer(),
             rejected_subscriptions = 0 :: non_neg_integer(),
             events_seen = 0 :: non_neg_integer(),     %% direct applied_live received
+            reaction_candidates = 0 :: non_neg_integer(),
+            reaction_matches = 0 :: non_neg_integer(),
+            reactions_executed = 0 :: non_neg_integer(),
+            reaction_inert = 0 :: non_neg_integer(),
+            reaction_failures = 0 :: non_neg_integer(),
             %% heavy-worker framework (§8): queue-fed per-resource workers OUTSIDE the
             %% ordered pipeline. One COALESCED pending slot per resource (jobs are
             %% full-rebuild-idempotent in this slice, so a newer job supersedes a queued one);
@@ -277,7 +299,9 @@ handle_call(get_stats, _From, S) ->
               reactions_active => length(S#s.reactions),
               source_targets_active => map_size(S#s.source_interests),
               source_interests_active =>
-                  lists:sum([length(Is) || Is <- maps:values(S#s.source_interests)]),
+                  lists:sum(
+                    [lists:sum([length(Is) || Is <- maps:values(Index)])
+                     || Index <- maps:values(S#s.source_interests)]),
               source_views_active => map_size(S#s.source_views),
               source_views_ready => source_state_count(ready, S#s.source_views),
               source_views_building => source_state_count(building, S#s.source_views),
@@ -296,6 +320,11 @@ handle_call(get_stats, _From, S) ->
               rejected_dynamic => S#s.rejected_dynamic,
               rejected_subscriptions => S#s.rejected_subscriptions,
               events_seen => S#s.events_seen,
+              reaction_candidates => S#s.reaction_candidates,
+              reaction_matches => S#s.reaction_matches,
+              reactions_executed => S#s.reactions_executed,
+              reaction_inert => S#s.reaction_inert,
+              reaction_failures => S#s.reaction_failures,
               heavy_pending => map_size(S#s.heavy_pending),
               heavy_running => map_size(S#s.heavy_running),
               heavy_superseded => S#s.superseded,
@@ -398,7 +427,7 @@ handle_info({replay_started, Id, _From}, S) ->
     {noreply, begin_replay(Id, S)};
 handle_info(
   {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice}, S0) ->
-    {noreply, install_source_notice(
+    {noreply, handle_source_notice(
                 FollowRef, NoticeRef, Identity, Notice, S0)};
 handle_info({source_follow_sweep, Token},
             S0 = #s{source_sweep = {_Timer, Token}}) ->
@@ -417,7 +446,8 @@ handle_info({applied_live, Env, Est}, S0 = #s{mode = live}) ->
         true ->
             {noreply, overflow_collapse(S)};
         false ->
-            S1 = S#s{queue = [{Env, Est} | S#s.queue], queue_len = S#s.queue_len + 1},
+            S1 = S#s{queue = [{local, Env, Est} | S#s.queue],
+                      queue_len = S#s.queue_len + 1},
             {noreply, maybe_run_events(S1)}
     end;
 handle_info({applied_live, Env, Est}, S = #s{mode = {reconciling, _}}) ->
@@ -435,7 +465,7 @@ handle_info({applied_live, Env, Est}, S = #s{mode = {reconciling, _}}) ->
             {noreply, drop_queue(S1#s{pending_edge = Pending,
                                       collapses = S1#s.collapses + 1})};
         false ->
-            {noreply, S1#s{queue = [{Env, Est} | S1#s.queue],
+            {noreply, S1#s{queue = [{local, Env, Est} | S1#s.queue],
                            queue_len = S1#s.queue_len + 1}}
     end;
 handle_info({applied_live, _Env, _Est}, S) ->
@@ -651,18 +681,22 @@ mode_tag(M)                 -> element(1, M).
 %%% the ordered tier — live event batches
 %%%===================================================================
 
-maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
+maybe_run_events(
+  S = #s{mode = live, runner = none, queue = Q, handlers = Hs,
+         reaction_index = ReactionIndex})
   when Q =/= [] ->
-    %% coalesce the queue into ONE unit per block height: every tx in a block shares the block's
-    %% final snapshot, so a handler need converge once per block over the UNION of its changed
-    %% heads, not once per tx (O(txs/block) redundant proofs otherwise).
-    Blocks = coalesce_blocks(lists:reverse(Q)),
-    RefreshCatalog = catalog_changed(Blocks),
-    case {map_size(Hs), RefreshCatalog} of
-        {0, false} ->
+    %% One runner drains both local and certified-remote occurrences. Adjacent
+    %% local transactions at one block height still share one convergence;
+    %% remote notices retain their per-target certified order.
+    Items = lists:reverse(Q),
+    Work = coalesce_work_items(Items),
+    RefreshCatalog = catalog_changed(Work),
+    HasRemote = lists:any(fun is_remote_work/1, Work),
+    case {map_size(Hs), map_size(ReactionIndex), RefreshCatalog, HasRemote} of
+        {0, 0, false, false} ->
             %% no handlers: the tier is trivially complete through the batch tip
-            {Tip, TipEst} = batch_tip(Blocks),
-            Effects = batch_effects(Blocks),
+            {Tip, TipEst} = work_tip(Work, S#s.height, S#s.est),
+            Effects = work_effects(Work),
             S1 = S#s{queue = [], queue_len = 0, est = TipEst, height = Tip,
                      p_height = Tip, e_frontier = Tip},
             release_direct_effects(Effects),
@@ -673,88 +707,231 @@ maybe_run_events(S = #s{mode = live, runner = none, queue = Q, handlers = Hs})
             %% kill collapses to a reconcile, which rebuilds correctly.
             Per = application:get_env(quod, runtime_event_budget_ms, ?EVENT_BUDGET_MS),
             Cap = application:get_env(quod, runtime_event_budget_cap_ms, ?EVENT_BUDGET_CAP_MS),
-            Budget = min(length(Blocks) * Per, Cap),
-            #s{ns = Ns, order = Order, index = Index, dependents = Deps,
-               handlers = Handlers, founding = FoundingCache} = S,
+            Budget = min(max(1, length(Work)) * Per, Cap),
+            #s{ns = Ns, config = Config, order = Order, index = Index,
+               dependents = Deps, handlers = Handlers,
+               reaction_index = Reactions, source_interests = SourceInterests,
+               subscriptions = Subscriptions, founding = FoundingCache} = S,
             Founding = case FoundingCache of
                            {ok, F} -> F;
                            unknown -> empty_founding()
                        end,
-            spawn_runner(events, Budget,
-                         fun() -> run_events(Ns, Blocks, Handlers, Order, Index, Deps,
-                                             Founding, RefreshCatalog)
-                         end,
-                         S#s{queue = [], queue_len = 0})
+            Self = maps:get(node_id, Config),
+            Acks = event_ack_refs(Items),
+            spawn_runner(
+              events, Budget,
+              fun() -> run_events(
+                         Ns, Work, Handlers, Order, Index, Deps,
+                         Reactions, SourceInterests,
+                         maps:from_keys(Subscriptions, true),
+                         Self, Founding, S#s.height, S#s.est)
+              end,
+              S#s{queue = [], queue_len = 0, event_acks = Acks})
     end;
 maybe_run_events(S) ->
     S.
 
-%% [{Env,Est}] (ascending height) => [{Height, Est, UnionedHeads}] one per block, Est/height
-%% = the block-final snapshot shared by that block's txs, heads = union of every tx's diff.
-coalesce_blocks(Batch) ->
+%% One local block retains two deliberately different views of its transactions:
+%% requested heads are unioned for state invalidation, while canonical applied
+%% operations remain in exact transaction/operation order for reactions.
+coalesce_work_items(Batch) ->
     Folded =
         lists:foldl(
-          fun({Env, Est}, Acc) ->
+          fun({local, Env, Est}, Acc) ->
                   H = maps:get(height, Env, 0),
                   Heads = changed_heads(Env),
+                  Events = quod_runtime_predicates:diff_to_events(
+                             maps:get(applied_ops, Env, [])),
                   Effects = maps:get(effects, Env, []),
                   case Acc of
-                      [{H, _E0, H0, E0} | Rest] ->
-                          [{H, Est, H0 ++ Heads, E0 ++ Effects} | Rest];
-                      _ -> [{H, Est, Heads, Effects} | Acc]
+                      [{local, H, _E0, H0, O0, E0} | Rest] ->
+                          [{local, H, Est, H0 ++ Heads, O0 ++ Events,
+                            E0 ++ Effects} | Rest];
+                      _ -> [{local, H, Est, Heads, Events, Effects} | Acc]
                   end
+             ;({remote, _FollowRef, _NoticeRef, _Identity, _Publications} = Item,
+               Acc) ->
+                  [Item | Acc]
           end, [], Batch),
     lists:reverse(
-      [{H, Est, lists:usort(Heads), Effects}
-       || {H, Est, Heads, Effects} <- Folded]).
+      [case Item of
+           {local, H, Est, Heads, Events, Effects} ->
+               {local, H, Est, lists:usort(Heads), Events, Effects};
+           {remote, _, _, _, _} -> Item
+       end || Item <- Folded]).
 
-batch_tip(Blocks) ->
-    {Tip, Est, _Heads, _Effects} = lists:last(Blocks),
-    {Tip, Est}.
+is_remote_work({remote, _, _, _, _}) -> true;
+is_remote_work(_) -> false.
 
-batch_effects(Blocks) ->
+work_tip(Work, Height0, Est0) ->
+    lists:foldl(
+      fun({local, Height, Est, _Heads, _Events, _Effects}, _Acc) ->
+              {Height, Est};
+         ({remote, _, _, _, _}, Acc) ->
+              Acc
+      end, {Height0, Est0}, Work).
+
+work_effects(Work) ->
     [{Height, Effects}
-     || {Height, _Est, _Heads, Effects} <- Blocks, Effects =/= []].
+     || {local, Height, _Est, _Heads, _Events, Effects} <- Work,
+        Effects =/= []].
 
-%% Runner body (event batch): per BLOCK, run the invalidated handlers in converge order, each
-%% with its watched subset of the block's changed heads as scope. Returns {ok,Tip,Est}|{error,R}.
-run_events(Ns, Blocks, Handlers, Order, Index, Deps, Founding, RefreshCatalog) ->
+event_ack_refs(Items) ->
+    [{FollowRef, NoticeRef}
+     || {remote, FollowRef, NoticeRef, _Identity, _Publications} <- Items].
+
+%% Runner body (event batch): per BLOCK, validate any catalogue change, run the
+%% invalidated handlers in converge order, then dispatch canonical reactions.
+%% A removed founding reaction is therefore refused before it can run from the
+%% same block's other applied operations.
+run_events(Ns, Work, Handlers, Order, Index, Deps,
+           Reactions, SourceInterests, Subscriptions,
+           Self, Founding, Height0, Est0) ->
     try
-        {Tip, TipEst} =
+        {Tip, TipEst, ReactionStats, _FinalReactionIndex,
+         _FinalSourceInterests, _FinalSubscriptions, CatalogUpdate} =
             lists:foldl(
-              fun({H, Est, Heads, _Effects}, _Prev) ->
+              fun({local, H, Est, Heads, Events, _Effects},
+                  {_PrevH, _PrevEst, Stats0, Reactions0, Sources0,
+                   Subscriptions0, Catalog0}) ->
+                      {Reactions1, Sources1, Subscriptions1, Catalog1} =
+                          refresh_runtime_catalog(
+                            Heads, Est, Founding, Reactions0, Sources0,
+                            Subscriptions0, Catalog0),
                       {Run, Scopes} = event_plan(Heads, Index, Order, Deps),
                       lists:foreach(
                         fun(Id) ->
                                 #handler{goal = Goal} = maps:get(Id, Handlers),
                                 converge(Ns, Est, H, Id, Goal, maps:get(Id, Scopes))
                         end, Run),
-                      {H, Est}
-              end, {0, undefined}, Blocks),
-        CatalogUpdate =
-            case RefreshCatalog of
-                false -> keep;
-                true ->
-                    case stored_runtime_catalog(TipEst) of
-                        {ok, StoredCatalog} ->
-                            case plan_runtime_catalog(
-                                   maps:get(reactions, Founding, []), StoredCatalog) of
-                                {ok, Plan} -> Plan;
-                                {error, Reason} -> throw(Reason)
-                            end;
-                        {error, Reason} ->
-                            throw({discovery_failed, Reason})
-                    end
-            end,
-        {ok, Tip, TipEst, batch_effects(Blocks), CatalogUpdate}
+                      Stats1 = dispatch_local_reactions(
+                                 Ns, H, Est, Self, Events, Reactions1, Stats0),
+                      {H, Est, Stats1, Reactions1, Sources1,
+                       Subscriptions1, Catalog1};
+                 ({remote, _FollowRef, _NoticeRef, Identity, Publications},
+                  {H, Est, Stats0, Reactions0, Sources0,
+                   Subscriptions0, Catalog0}) ->
+                      Stats1 =
+                          case maps:is_key(Identity, Subscriptions0) of
+                              true ->
+                                  dispatch_remote_reactions(
+                                    Ns, H, Est, Self, Identity, Publications,
+                                    Sources0, Stats0);
+                              false ->
+                                  reaction_stat(dropped, Stats0)
+                          end,
+                      {H, Est, Stats1, Reactions0, Sources0,
+                       Subscriptions0, Catalog0}
+              end,
+              {Height0, Est0, empty_reaction_stats(), Reactions,
+               SourceInterests, Subscriptions, keep}, Work),
+        {ok, Tip, TipEst, work_effects(Work), CatalogUpdate,
+         ReactionStats}
     catch throw:R -> {error, R}
     end.
 
-catalog_changed(Blocks) ->
+-ifdef(TEST).
+%% Drive the real ordered fold without a gen_server race. This is deliberately
+%% narrower than run_events/13: tests supply the already-derived catalogue and
+%% cannot invent an alternative dispatch path.
+test_run_events(Work, Plan, Self, FoundingReactions, Height0, Est0) ->
+    run_events(
+      <<"runtime:test">>, Work, #{}, [], #{}, #{},
+      maps:get(reaction_index, Plan), maps:get(source_interests, Plan),
+      maps:from_keys(maps:get(subscriptions, Plan), true), Self,
+      #{handlers => [], reactions => FoundingReactions}, Height0, Est0).
+-endif.
+
+refresh_runtime_catalog(Heads, Est, Founding, ReactionIndex, SourceInterests,
+                        Subscriptions, CatalogUpdate) ->
+    case lists:any(fun catalog_head/1, Heads) of
+        false ->
+            {ReactionIndex, SourceInterests, Subscriptions, CatalogUpdate};
+        true ->
+            case stored_runtime_catalog(Est) of
+                {ok, StoredCatalog} ->
+                    case plan_runtime_catalog(
+                           maps:get(reactions, Founding, []), StoredCatalog) of
+                        {ok, Plan} ->
+                            {maps:get(reaction_index, Plan),
+                             maps:get(source_interests, Plan),
+                             maps:from_keys(
+                               maps:get(subscriptions, Plan), true),
+                             Plan};
+                        {error, Reason} ->
+                            throw(Reason)
+                    end;
+                {error, Reason} ->
+                    throw({discovery_failed, Reason})
+            end
+    end.
+
+empty_reaction_stats() ->
+    #{candidates => 0, matches => 0, executed => 0,
+      inert => 0, failures => 0, dropped => 0}.
+
+dispatch_local_reactions(_Ns, _Height, _Est, _Self, [], _Index, Stats) ->
+    Stats;
+dispatch_local_reactions(Ns, Height, Est, Self, [Event | Rest], Index, Stats0) ->
+    Candidates = maps:get(functor_key(Event), Index, []),
+    Stats1 = dispatch_reaction_candidates(
+               Ns, Height, Est, Self, Event, Candidates, Stats0),
+    dispatch_local_reactions(Ns, Height, Est, Self, Rest, Index, Stats1).
+
+dispatch_remote_reactions(_Ns, _Height, _Est, _Self, _Identity, [],
+                          _SourceInterests, Stats) ->
+    Stats;
+dispatch_remote_reactions(Ns, Height, Est, Self, Identity,
+                          [{_SourceHeight, AppliedOps} | Rest],
+                          SourceInterests, Stats0) ->
+    Index = maps:get(Identity, SourceInterests, #{}),
+    Stats1 = lists:foldl(
+               fun(Event, Acc) ->
+                       Candidates = maps:get(functor_key(Event), Index, []),
+                       dispatch_reaction_candidates(
+                         Ns, Height, Est, Self,
+                         source_event(Identity, Event), Candidates, Acc)
+               end, Stats0,
+               quod_runtime_predicates:diff_to_events(AppliedOps)),
+    dispatch_remote_reactions(
+      Ns, Height, Est, Self, Identity, Rest, SourceInterests, Stats1).
+
+source_event({TargetNs, Anchor}, Event) ->
+    {from, TargetNs, Anchor, Event}.
+
+%% Local and subscribed occurrences enter this one continuation. Erlang only
+%% narrows the candidate list; unification, executor ownership and Handler
+%% execution remain the single Prolog path in quod_runtime_predicates.
+dispatch_reaction_candidates(Ns, Height, Est, Self, Event, Candidates, Stats0) ->
+    lists:foldl(
+      fun(Reaction, Acc0) ->
+              Acc1 = reaction_stat(candidates, Acc0),
+              Started = erlang:monotonic_time(microsecond),
+              Result = quod_runtime_predicates:run_reaction(
+                         Ns, Height, Self, Reaction, Event, Est),
+              Elapsed = erlang:monotonic_time(microsecond) - Started,
+              ok = quod_metrics:observe_runtime_reaction(Ns, Result, Elapsed),
+              case Result of
+                  unmatched -> Acc1;
+                  executed ->
+                      reaction_stat(executed, reaction_stat(matches, Acc1));
+                  {inert, _Reason} ->
+                      reaction_stat(inert, reaction_stat(matches, Acc1));
+                  {failed, _Reason} ->
+                      reaction_stat(failures, reaction_stat(matches, Acc1))
+              end
+      end, Stats0, Candidates).
+
+reaction_stat(Key, Stats) ->
+    maps:update_with(Key, fun(N) -> N + 1 end, 1, Stats).
+
+catalog_changed(Work) ->
     lists:any(
-      fun({_H, _Est, Heads, _Effects}) ->
-              lists:any(fun catalog_head/1, Heads)
-      end, Blocks).
+      fun({local, _H, _Est, Heads, _Events, _Effects}) ->
+              lists:any(fun catalog_head/1, Heads);
+         ({remote, _, _, _, _}) ->
+              false
+      end, Work).
 
 catalog_head({subscribes, _, _}) -> true;
 catalog_head({react_on, _, _, _}) -> true;
@@ -807,16 +984,31 @@ scope_for(Id, Heads, Index) ->
         _  -> {keys, Watched}
     end.
 
-events_finished({ok, Tip, TipEst, Effects, CatalogUpdate}, S0 = #s{mode = live}) ->
+events_finished(
+  {ok, Tip, TipEst, Effects, CatalogUpdate, ReactionStats},
+  S0 = #s{mode = live}) ->
     %% advance est/height to the batch tip so heavy workers (started here) and the floor track
     %% the head; p_height/e_frontier are the P-before-E barrier
     S = install_catalog_update(CatalogUpdate, S0),
     S1 = S#s{est = TipEst, height = Tip,
              p_height = max(S#s.p_height, Tip),
              e_frontier = max(S#s.e_frontier, Tip),
-             exec_failures = 0},
+             exec_failures = 0,
+             reaction_candidates =
+                 S#s.reaction_candidates + maps:get(candidates, ReactionStats),
+             reaction_matches =
+                 S#s.reaction_matches + maps:get(matches, ReactionStats),
+             reactions_executed =
+                 S#s.reactions_executed + maps:get(executed, ReactionStats),
+             reaction_inert =
+                 S#s.reaction_inert + maps:get(inert, ReactionStats),
+             reaction_failures =
+                 S#s.reaction_failures + maps:get(failures, ReactionStats),
+             dropped_events =
+                 S#s.dropped_events + maps:get(dropped, ReactionStats)},
     release_direct_effects(Effects),
-    next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S1))));
+    S2 = release_event_acks(S1),
+    next_after_runner(floor_raise(pump_heavy(release_ready_waiters(S2))));
 events_finished({error, Reason}, S) ->
     execution_failure({event_tier_failed, Reason}, S).
 
@@ -824,6 +1016,7 @@ install_catalog_update(keep, S) ->
     S;
 install_catalog_update(
   #{subscriptions := Subscriptions, reactions := Reactions,
+    reaction_index := ReactionIndex,
     source_interests := SourceInterests, rejected_dynamic := RejectedDynamic,
     rejected_subscriptions := RejectedSubscriptions},
   S = #s{ns = Ns}) ->
@@ -835,6 +1028,7 @@ install_catalog_update(
         logger:warning("quod_runtime[~s]: ~b malformed subscribes/2 clause(s) ignored",
                        [Ns, RejectedSubscriptions]),
     S1 = S#s{subscriptions = Subscriptions, reactions = Reactions,
+             reaction_index = ReactionIndex,
              source_interests = SourceInterests,
              rejected_dynamic = S#s.rejected_dynamic + RejectedDynamic,
              rejected_subscriptions =
@@ -842,7 +1036,7 @@ install_catalog_update(
     reconcile_source_views(Subscriptions, S1).
 
 %%%===================================================================
-%%% Shared certified source follows (Slice 2: state only, no reactions)
+%%% Shared certified source follows and subscribed reaction delivery
 %%%===================================================================
 
 reconcile_source_views(Subscriptions, S0) ->
@@ -935,18 +1129,18 @@ clear_foreign_log_monitor(
     _ = erlang:demonitor(MRef, [flush]),
     S#s{foreign_log_monitor = none}.
 
-install_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
+handle_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
     case maps:get(Identity, S0#s.source_views, undefined) of
         #{follow_ref := FollowRef} = Row0 ->
             case source_notice_state(Notice) of
-                {ok, State} ->
+                {ok, State, Publications} ->
                     Row1 = Row0#{state => State},
                     S1 = S0#s{source_views =
                                   (S0#s.source_views)#{Identity => Row1}},
-                    ok = quod_foreign_log:ack(FollowRef, NoticeRef),
-                    S1;
+                    enqueue_source_publications(
+                      FollowRef, NoticeRef, Identity, Publications, S1);
                 error ->
-                    S0
+                    erlang:error({invalid_source_follow_notice, Notice})
             end;
         _ ->
             S0
@@ -954,23 +1148,98 @@ install_source_notice(FollowRef, NoticeRef, Identity, Notice, S0) ->
 
 source_notice_state({building, Height})
   when is_integer(Height), Height >= 0 ->
-    {ok, {building, Height}};
+    {ok, {building, Height}, []};
 source_notice_state({unreachable, Reason, Height})
   when is_integer(Height), Height >= 0 ->
-    {ok, {unreachable, Reason, Height}};
+    {ok, {unreachable, Reason, Height}, []};
 source_notice_state(
-  {advanced, From, To, <<_:256>> = ProjectionId, Freshness, Heads})
+  {advanced, From, To, <<_:256>> = ProjectionId, Freshness, Heads,
+   Publications})
   when is_integer(From), is_integer(To), To >= From,
-       is_map(Freshness), is_list(Heads) ->
-    {ok, {ready, To, ProjectionId, Freshness,
-          #{from => From, changed_heads => Heads, resnapshot => false}}};
+       is_map(Freshness), is_list(Heads), is_list(Publications) ->
+    case valid_source_publications(Publications, From, To) of
+        true ->
+            {ok, {ready, To, ProjectionId, Freshness,
+                  #{from => From, changed_heads => Heads,
+                    resnapshot => false}}, Publications};
+        false ->
+            error
+    end;
 source_notice_state(
   {resnapshot, To, <<_:256>> = ProjectionId, Freshness})
   when is_integer(To), To >= 0, is_map(Freshness) ->
     {ok, {ready, To, ProjectionId, Freshness,
-          #{from => 0, changed_heads => [], resnapshot => true}}};
+          #{from => 0, changed_heads => [], resnapshot => true}}, []};
 source_notice_state(_) ->
     error.
+
+valid_source_publications(Publications, From, To) ->
+    valid_source_publications(Publications, From, From, To).
+
+valid_source_publications([], _From, _Previous, _To) -> true;
+valid_source_publications([{Height, AppliedOps} | Rest], From, Previous, To)
+  when is_integer(Height), Height > From, Height >= Previous, Height =< To,
+       AppliedOps =/= [] ->
+    quod_diff:valid_ops(AppliedOps)
+        andalso valid_source_publications(Rest, From, Height, To);
+valid_source_publications(_Malformed, _From, _Previous, _To) -> false.
+
+enqueue_source_publications(FollowRef, NoticeRef, Identity, Publications, S0) ->
+    case source_publications_relevant(Identity, Publications,
+                                      S0#s.source_interests) of
+        false ->
+            ack_source_notice(FollowRef, NoticeRef, S0);
+        true ->
+            enqueue_relevant_source_publications(
+              FollowRef, NoticeRef, Identity, Publications, S0)
+    end.
+
+enqueue_relevant_source_publications(FollowRef, NoticeRef, Identity,
+                                     Publications, S0) ->
+    case event_mode(S0#s.mode) of
+        true ->
+            case S0#s.queue_len < max_queued_events(S0) of
+                true ->
+                    Item = {remote, FollowRef, NoticeRef, Identity, Publications},
+                    S1 = S0#s{queue = [Item | S0#s.queue],
+                              queue_len = S0#s.queue_len + 1},
+                    maybe_run_events(S1);
+                false ->
+                    %% The certified projection is already current. Reactions
+                    %% are best-effort, so overload drops only this occurrence
+                    %% and releases the follower to coalesce later advances.
+                    ack_source_notice(
+                      FollowRef, NoticeRef,
+                      S0#s{dropped_events = S0#s.dropped_events + 1})
+            end;
+        false ->
+            %% Boot/replay/unhealthy never replay historical E. Source views
+            %% are normally absent in those modes; this handles a late notice
+            %% from a superseded follow.
+            ack_source_notice(
+              FollowRef, NoticeRef,
+              S0#s{dropped_events = S0#s.dropped_events + 1})
+    end.
+
+event_mode(live) -> true;
+event_mode({reconciling, _}) -> true;
+event_mode(_) -> false.
+
+source_publications_relevant(Identity, Publications, SourceInterests) ->
+    case maps:get(Identity, SourceInterests, undefined) of
+        undefined -> false;
+        Index ->
+            lists:any(
+              fun({_Height, AppliedOps}) ->
+                      lists:any(
+                        fun(Event) -> maps:is_key(functor_key(Event), Index) end,
+                        quod_runtime_predicates:diff_to_events(AppliedOps))
+              end, Publications)
+    end.
+
+ack_source_notice(FollowRef, NoticeRef, S) ->
+    ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+    S.
 
 %% One armed sweep at a time. Views waiting for a follow reference are attached
 %% oldest attempt first, so a repeatedly unavailable target cannot starve later
@@ -1050,16 +1319,17 @@ source_retry_cap_ms(S) ->
     erlang:max(source_retry_ms(S), ?SOURCE_FOLLOW_RETRY_CAP_MS).
 
 stop_source_view(Identity, S0) ->
-    case maps:take(Identity, S0#s.source_views) of
+    S1 = drop_source_queue(Identity, S0),
+    case maps:take(Identity, S1#s.source_views) of
         {Row, Views1} ->
             case maps:get(follow_ref, Row, none) of
                 FollowRef when is_reference(FollowRef) ->
                     ok = quod_foreign_log:unfollow(FollowRef);
                 none -> ok
             end,
-            S0#s{source_views = Views1};
+            S1#s{source_views = Views1};
         error ->
-            S0
+            S1
     end.
 
 stop_source_views(S0) ->
@@ -1157,7 +1427,8 @@ kill_runner(S0 = #s{heavy_running = Running}) ->
     %% there is no cross-recipient signal ordering. Wait for every DOWN here so no worker can
     %% still read the old snapshot when the pin moves. This runs only on replay/failure/stop.
     await_worker_downs(maps:from_list([{MRef, true} || {_Pid, MRef} <- Workers])),
-    S0#s{runner = none, heavy_running = #{}, heavy_pending = #{}, heavy_order = []}.
+    release_event_acks(
+      S0#s{runner = none, heavy_running = #{}, heavy_pending = #{}, heavy_order = []}).
 
 await_worker_downs(Pending) when map_size(Pending) =:= 0 -> ok;
 await_worker_downs(Pending) ->
@@ -1332,15 +1603,46 @@ handle_info_rest(_Info, S) -> {noreply, S}.
 
 drop_queue(S = #s{queue_len = 0}) -> S;
 drop_queue(S) ->
+    release_queue_acks(S#s.queue),
     S#s{queue = [], queue_len = 0,
         dropped_events = S#s.dropped_events + S#s.queue_len}.
 
 %% After a reconcile at height H: envelopes at or below H are already IN the snapshot.
 drop_stale_queue(S = #s{height = H, queue = Q}) ->
-    Kept = [E || {Env, _} = E <- lists:reverse(Q), maps:get(height, Env, 0) > H],
-    Dropped = S#s.queue_len - length(Kept),
-    S#s{queue = lists:reverse(Kept), queue_len = length(Kept),
+    {Kept0, Dropped0} =
+        lists:partition(
+          fun({local, Env, _Est}) -> maps:get(height, Env, 0) > H;
+             ({remote, _, _, _, _}) -> true
+          end, Q),
+    Dropped = length(Dropped0),
+    S#s{queue = Kept0, queue_len = length(Kept0),
         dropped_events = S#s.dropped_events + Dropped}.
+
+drop_source_queue(Identity, S = #s{queue = Q}) ->
+    {Dropped, Kept} =
+        lists:partition(
+          fun({remote, _, _, Source, _}) -> Source =:= Identity;
+             (_) -> false
+          end, Q),
+    release_queue_acks(Dropped),
+    N = length(Dropped),
+    S#s{queue = Kept, queue_len = S#s.queue_len - N,
+        dropped_events = S#s.dropped_events + N}.
+
+release_queue_acks(Items) ->
+    lists:foreach(
+      fun({remote, FollowRef, NoticeRef, _Identity, _Publications}) ->
+              ok = quod_foreign_log:ack(FollowRef, NoticeRef);
+         (_) -> ok
+      end, Items),
+    ok.
+
+release_event_acks(S = #s{event_acks = Acks}) ->
+    lists:foreach(
+      fun({FollowRef, NoticeRef}) ->
+              ok = quod_foreign_log:ack(FollowRef, NoticeRef)
+      end, Acks),
+    S#s{event_acks = []}.
 
 %% Raise the KB history floor to the oldest snapshot still READ by anything we own: the
 %% freshest processed height, held down by any RUNNING heavy worker's captured est height.
@@ -1480,10 +1782,11 @@ plan_runtime(Est, Founding, StoredHandlers, StoredCatalog) ->
 %%% subscription/reaction catalogue + the founding gate (pure)
 %%%===================================================================
 
-%% Slice 1's entire product: a deterministic catalogue derived from one
-%% committed snapshot. It owns no process, route, verifier, delivery state, or
-%% event matcher. Alpha normalization establishes declaration identity only;
-%% later event matching and continuation belong to erlog_int:unify_prove_body.
+%% A deterministic catalogue derived from one committed snapshot. It owns no
+%% process, route, verifier, delivery state, or event matcher. Alpha
+%% normalization establishes declaration identity only; live matching and the
+%% Handler continuation belong to the ordered tier and
+%% erlog_int:unify_prove_body.
 plan_runtime_catalog(FoundingReactions, StoredCatalog)
   when is_list(FoundingReactions), is_map(StoredCatalog) ->
     case plan_reactions(FoundingReactions,
@@ -1493,6 +1796,7 @@ plan_runtime_catalog(FoundingReactions, StoredCatalog)
                 plan_subscriptions(maps:get(subscriptions, StoredCatalog, [])),
             {ok, #{subscriptions => Subscriptions,
                    reactions => Reactions,
+                   reaction_index => local_reaction_index(Reactions),
                    source_interests => SourceInterests,
                    rejected_dynamic => RejectedDynamic,
                    rejected_subscriptions => RejectedSubscriptions}};
@@ -1582,7 +1886,7 @@ canonical_stored_reactions([], Acc, Invalid) ->
     {Acc, Invalid}.
 
 inert_reaction_rule(
-  {{react_on, _Executor, _Pattern, _EffectGoal}, {Goals, _HasCut}})
+  {{react_on, _Executor, _Pattern, _Handler}, {Goals, _HasCut}})
   when is_list(Goals), Goals =/= [] ->
     true;
 inert_reaction_rule(_) ->
@@ -1591,12 +1895,12 @@ inert_reaction_rule(_) ->
 reaction_head({Head, _Body}) -> Head.
 
 valid_reaction_clause(
-  {{react_on, Executor, Pattern, EffectGoal} = Head, {[], false}}) ->
+  {{react_on, Executor, Pattern, Handler} = Head, {[], false}}) ->
     case {reaction_pattern(Pattern), valid_callable(Executor),
-          valid_callable(EffectGoal), bounded_term(Head)} of
+          valid_callable(Handler), bounded_term(Head)} of
         {{ok, Source, EventPattern}, true, true, true} ->
             PatternVars = variable_set(EventPattern),
-            UsedVars = maps:merge(variable_set(Executor), variable_set(EffectGoal)),
+            UsedVars = maps:merge(variable_set(Executor), variable_set(Handler)),
             case lists:all(fun(V) -> is_map_key(V, PatternVars) end,
                            maps:keys(UsedVars)) of
                 true  -> {ok, Source};
@@ -1640,15 +1944,36 @@ source_interest_index(Reactions) ->
     Reversed =
         lists:foldl(
           fun({react_on, _Executor,
-              {from, Ns, <<_:256>> = Anchor, _EventPattern}, _EffectGoal} = Reaction,
+              {from, Ns, <<_:256>> = Anchor, EventPattern}, _Handler} = Reaction,
               Index) ->
                   Target = {Ns, Anchor},
-                  maps:update_with(Target, fun(Existing) -> [Reaction | Existing] end,
-                                   [Reaction], Index);
+                  Key = functor_key(EventPattern),
+                  TargetIndex = maps:get(Target, Index, #{}),
+                  Updated = maps:update_with(
+                              Key, fun(Existing) -> [Reaction | Existing] end,
+                              [Reaction], TargetIndex),
+                  Index#{Target => Updated};
              (_LocalReaction, Index) ->
                   Index
           end, #{}, Reactions),
-    maps:map(fun(_Target, Interests) -> lists:reverse(Interests) end, Reversed).
+    maps:map(
+      fun(_Target, TargetIndex) ->
+              maps:map(
+                fun(_Key, Candidates) -> lists:reverse(Candidates) end,
+                TargetIndex)
+      end, Reversed).
+
+local_reaction_index(Reactions) ->
+    Reversed =
+        lists:foldl(
+          fun({react_on, _Executor, {from, _, _, _}, _Handler}, Index) ->
+                  Index;
+             ({react_on, _Executor, EventPattern, _Handler} = Reaction, Index) ->
+                  Key = functor_key(EventPattern),
+                  maps:update_with(Key, fun(Existing) -> [Reaction | Existing] end,
+                                   [Reaction], Index)
+          end, #{}, Reactions),
+    maps:map(fun(_Key, Candidates) -> lists:reverse(Candidates) end, Reversed).
 
 %% Alpha-normalize Erlog variables by first occurrence. Stored clauses use
 %% one-tuples (`{0}`, `{1}`, ...); founding and snapshot reads may allocate

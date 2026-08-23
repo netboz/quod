@@ -220,10 +220,10 @@ Durable cross-ontology relations are ordinary authored facts. An explicit
 produce temporary execution traces and reusable proof-local handles, but those
 disappear when the proof closes.
 
-Routing remains a local P-state index: to send a `::` call or establish a live
-subscription registration, resolve which authenticated nodes currently host
-the target. Endpoint churn never edits the durable relation. Notification uses
-the explicit subscription plan, not the OCC read set.
+Routing remains a local P-state index: to send a `::` call or follow a durable
+subscription, resolve which authenticated nodes currently host the target.
+Endpoint churn never edits the durable relation. Notification uses the
+explicit subscription plan, not the OCC read set.
 
 ### Finding the target node
 
@@ -970,35 +970,44 @@ The ordering layer already draws this line: the **live** apply path fires
 reactions; the **replay** path (`ordering-layer-spec.md` §4.6) runs D only.
 Phase 2's notification hooks onto the live apply path, never replay.
 
-### `react_on` and effects are facts
+### `react_on` declarations are facts
 
-A reaction is declared directly as ordinary content —
-`react_on(Executor, Pattern, EffectGoal)`; an operation's effects as `effect/4`
-facts. Fits the "config is facts + predicates" spine. Slice 1 now recognizes
-only exact founding-authorized `react_on/3` clauses and compiles their
-source-qualified interests. `Executor` is a generic ontology-defined logical
-effect owner, not the event source and not necessarily an agent; it exists so
-only one host performs E for a replicated ontology. Slice 1 does not execute
-reactions yet. The discipline that
-keeps replay safe:
-**effect bodies may only touch the kb; the outward stuff lives in the reaction (E)
-handlers fired on live delivery.**
+A reaction is declared directly as ordinary content:
+`react_on(Executor, Pattern, Handler)`. Slice 1 recognizes only exact
+founding-authorized clauses and compiles their source-qualified interests.
+`Executor` is a generic ontology-defined logical owner, not the event source
+and not necessarily an agent; it exists so only one host performs E for a
+replicated ontology. Reaction execution remains planned in
+`event-reaction-refinement-plan.md`.
+
+The Handler is ordinary trusted Prolog continued with bindings installed by
+`erlog_int:unify_prove_body`. It runs in a read-only reaction context: query
+and reaction-class external predicates may run, while staging and projection
+predicates are refused. If a reaction needs durable truth, its resolved actor
+submits an ordinary signed goal through the normal ACL and consensus path.
+There is no typed Erlang callback catalogue.
 
 ### Explicit subscriptions enter through the same P-before-E barrier
 
 After a live target commit, a subscriber advances its local projection only
-through certified target history. The resulting source-qualified changed heads
-enter the existing `state_handler` tier. The runtime therefore reuses the same
-P-before-E ordering without retaining a proof read set or creating a second
-reaction scheduler.
+through certified target history and the canonical committed-state reducer.
+The resulting source-qualified changed heads enter the existing
+`state_handler` tier. Once P is current, that reducer's ordered `applied_ops`
+enter the same local `react_on/3` dispatcher under a `from/3` wrapper. The
+runtime therefore reuses the same P-before-E ordering without retaining a proof
+read set, installing target-side patterns, or creating a second scheduler.
 
-### One change → one notification; and a loop guard
+### Applied operations are events; application truth stops loops
 
-A single change that cascades into many diffs fires reactions **once, at the end**
-(one notification envelope), not per-op. And a reaction triggered by a notification
-must not freely write back and re-trigger — bbsvx uses a "firewall" (a
-subscription-triggered handler can't itself write) to stop amplification loops;
-we'll need the same.
+The canonical reducer already reports which ordered operations actually
+changed state. Each applied fact operation becomes one `assert(...)` or
+`retract(...)` event; a requested fact no-op becomes none. A later
+`trigger_event/1` stages an explicit event in the same signed operation list.
+There is no aggregate notification envelope and no second change detector.
+
+A reaction cannot stage D directly. If it submits a new signed goal, circular
+applications terminate through ordinary committed cause/handled facts and
+idempotency, not an Erlang-only firewall or hop counter.
 
 ### Phasing
 
@@ -1006,7 +1015,7 @@ we'll need the same.
   deferred effects* — they fire **once, on the submitting node, at commit** (parked
   by `tx_id`), never on other members, never on replay (at-most-once). The narrow,
   safe case; the spec implements it.
-- **Phase 2:** generalize to **reactors** — `react_on` rules and explicit
-  cross-ontology subscription projections — through the live P-before-E path,
-  with the loop guard. The current plan is
-  `ontology-subscription-plan.md`.
+- **Phase 2:** execute `react_on` rules for local and certified subscribed
+  applied operations through the live P-before-E path. The current authority is
+  `event-reaction-refinement-plan.md`; `ontology-subscription-plan.md` owns the
+  already-implemented durable relation and certified follower.

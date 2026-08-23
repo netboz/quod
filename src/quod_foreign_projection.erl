@@ -6,8 +6,11 @@ The node-wide `quod_foreign_log` owner supplies only heights already persisted
 in its certificate-verified cache.  This worker owns the corresponding Erlog
 ETS table and folds those cached entries through `quod_committed_projection`;
 it performs no network fetch, certificate verification, effect handling, or
-runtime reaction.  Work is one existing foreign-page window per mailbox turn,
-so rebuilding a long cached history never monopolizes the foreign-log owner.
+runtime reaction. For a live contiguous advance it preserves the canonical
+reducer's ordered `applied_ops`; a first build, rebuild, or resnapshot publishes
+state only and discards historical occurrences. Work is one existing
+foreign-page window per mailbox turn, so rebuilding a long cached history never
+monopolizes the foreign-log owner.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
@@ -27,6 +30,7 @@ so rebuilding a long cached history never monopolizes the foreign-log owner.
           target_head = none :: none | {non_neg_integer(), <<_:256>>},
           from_height = 0 :: non_neg_integer(),
           changed = [] :: [term()] | resnapshot,
+          publications = [] :: [{non_neg_integer(), [op()]}] | resnapshot,
           resnapshot = false :: boolean()
          }).
 
@@ -97,10 +101,14 @@ advance_requested(Height, Head,
         _ when Height =:= Applied ->
             publish_ready(Head, S);
         _ ->
-            Resnapshot = S#s.resnapshot orelse
+            Resnapshot = S#s.resnapshot orelse Applied =:= 0 orelse
                          Height - Applied > ?QUOD_MAX_FOREIGN_PAGE_ENTRIES,
             S1 = S#s{target_height = Height, target_head = Head,
                      from_height = Applied, changed = [],
+                     publications = case Resnapshot of
+                                        true -> resnapshot;
+                                        false -> []
+                                    end,
                      resnapshot = Resnapshot},
             Owner ! {foreign_projection_building, Identity, Generation,
                      Applied},
@@ -119,11 +127,18 @@ materialize_turn(S = #s{identity = {Ns, _Anchor}, root = Root,
                      end,
             case Result of
                 {ok, Entries} when length(Entries) =:= To - From + 1 ->
-                    case apply_entries(Entries, Projection0, []) of
-                        {ok, Projection1, Changed} ->
+                    case apply_entries(Entries, Projection0, [], []) of
+                        {ok, Projection1, Changed, Publications} ->
+                            Changed1 = merge_changed(S#s.changed, Changed),
+                            Resnapshot1 = S#s.resnapshot
+                                          orelse Changed1 =:= resnapshot,
+                            Publications1 =
+                                merge_publications(
+                                  S#s.publications, Publications, Resnapshot1),
                             S1 = S#s{projection = Projection1,
-                                     changed = merge_changed(
-                                                 S#s.changed, Changed)},
+                                     changed = Changed1,
+                                     publications = Publications1,
+                                     resnapshot = Resnapshot1},
                             case quod_committed_projection:applied(Projection1) of
                                 Target -> publish_ready(S1#s.target_head, S1);
                                 _ -> self() ! {continue, S1#s.generation},
@@ -157,6 +172,7 @@ continue_loop(S = #s{generation = Generation}) ->
                                     true -> Head;
                                     false -> S#s.target_head
                                 end,
+                  publications = resnapshot,
                   resnapshot = true});
         {advance, _StaleGeneration, _Height, _Head} ->
             continue_loop(S);
@@ -166,13 +182,16 @@ continue_loop(S = #s{generation = Generation}) ->
         stop -> ok
     end.
 
-apply_entries([], Projection, Changed) ->
-    {ok, Projection, Changed};
-apply_entries([#entry{index = Index} = Entry | Rest], Projection0, Changed0) ->
+apply_entries([], Projection, Changed, Publications) ->
+    {ok, Projection, Changed, Publications};
+apply_entries([#entry{index = Index} = Entry | Rest], Projection0,
+              Changed0, Publications0) ->
     case quod_committed_projection:apply_entry(Entry, Index, Projection0) of
         {ok, Projection1, Result} ->
-            apply_entries(Rest, Projection1,
-                          merge_changed(Changed0, result_heads(Result)));
+            apply_entries(
+              Rest, Projection1,
+              merge_changed(Changed0, result_heads(Result)),
+              Publications0 ++ result_publications(Index, Result));
         {wait, network_identity, Reason, Projection1} ->
             {wait, network_identity, Reason, Projection1};
         {error, _} = Error ->
@@ -185,6 +204,23 @@ result_heads(#{kind := dtx, changed_heads := Heads}) ->
     Heads;
 result_heads(_Result) ->
     [].
+
+result_publications(Index, #{kind := content, transactions := Transactions}) ->
+    [{maps:get(height, Tx, Index), AppliedOps}
+     || Tx <- Transactions,
+        AppliedOps <- [maps:get(applied_ops, Tx, [])],
+        AppliedOps =/= []];
+result_publications(Index, #{kind := dtx} = Result) ->
+    case maps:get(applied_ops, Result, []) of
+        [] -> [];
+        AppliedOps -> [{Index, AppliedOps}]
+    end;
+result_publications(_Index, _Result) ->
+    [].
+
+merge_publications(_Left, _Right, true) -> resnapshot;
+merge_publications(resnapshot, _Right, false) -> resnapshot;
+merge_publications(Left, Right, false) -> Left ++ Right.
 
 merge_changed(resnapshot, _Right) -> resnapshot;
 merge_changed(_Left, Right) when length(Right) > ?QUOD_MAX_PLAN_DIFF_OPS ->
@@ -212,6 +248,7 @@ publish_ready({Height, <<_:256>> = Head},
               S = #s{owner = Owner, identity = Identity,
                      generation = Generation, projection = Projection,
                      from_height = From, changed = Changed,
+                     publications = Publications0,
                      resnapshot = Resnapshot0}) ->
     Height = quod_committed_projection:applied(Projection),
     ProjectionId = crypto:hash(
@@ -224,11 +261,17 @@ publish_ready({Height, <<_:256>> = Head},
             resnapshot -> {true, []};
             _ -> {Resnapshot0, Changed}
         end,
+    Publications = case Resnapshot of
+                       true -> [];
+                       false when is_list(Publications0) -> Publications0
+                   end,
     Owner ! {foreign_projection_ready, Identity, Generation,
              #{from => From, height => Height, projection_id => ProjectionId,
                changed_heads => PublishedHeads, resnapshot => Resnapshot,
+               publications => Publications,
                memory_bytes => projection_memory_bytes(Projection)}},
-    loop(S#s{changed = [], resnapshot = false, from_height = Height});
+    loop(S#s{changed = [], publications = [], resnapshot = false,
+             from_height = Height});
 publish_ready(_BadHead, S) ->
     loop(S).
 

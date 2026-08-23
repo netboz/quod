@@ -675,7 +675,7 @@ straight to the parked client here; a forward gap asks `quod_simplex` to re-driv
 
 `Origin` is `live` for a freshly-finalized commit and `replay` for a rebuild/catch-up re-drive.
 It is decided by the `quod_simplex` path that obtained the block, never inferred here: a `live`
-apply publishes the post-apply `applied_live` event (`doc/agent-fipa-plan.md` §7), a `replay` apply
+apply publishes the post-apply `applied_live` runtime publication (`doc/agent-fipa-plan.md` §7), a `replay` apply
 rebuilds D only. Replay runs also emit `replay_started`/`replay_ready` lifecycle boundaries.
 """.
 -spec apply_entry(binary(), #entry{}, live | replay) -> ok.
@@ -4963,9 +4963,9 @@ finish_projection_result(
 finish_projection_result(
   #{kind := dtx, control := Control, group_id := GroupId,
     publication := Publication, deferred_ack := DeferredAck,
-    stats := Stats}, Index, Origin, S0) ->
+    applied_ops := AppliedOps, stats := Stats}, Index, Origin, S0) ->
     S1 = add_projection_stats(Stats, S0),
-    S2 = publish_dtx_outcome(Publication, Index, Origin, S1),
+    S2 = publish_dtx_outcome(Publication, AppliedOps, Index, Origin, S1),
     S3 = finish_dtx_apply(DeferredAck, Control, Origin, S2),
     maybe_release_completed_group(Control, GroupId, S3);
 finish_projection_result(#{kind := noop}, _Index, _Origin, S) ->
@@ -4981,10 +4981,12 @@ finish_projection_result(#{kind := already_applied}, _Index, _Origin, S) ->
     S.
 
 content_post_apply(
-  #{status := applied, change := Change, height := Height},
+  #{status := applied, change := Change, height := Height,
+    applied_ops := AppliedOps},
   Index, Origin, S) ->
     #transaction{tx_id = Tx} = Change,
-    {outcome_applied(Change, Index, Origin, S), {committed, Tx, Height}};
+    {outcome_applied(Change, AppliedOps, Index, Origin, S),
+     {committed, Tx, Height}};
 content_post_apply(
   #{status := rejected, change := Change, reason := Reason,
     height := Height}, Index, Origin, S) ->
@@ -5159,7 +5161,7 @@ oldest_snapshot(Current, #s{workers = Workers,
     end.
 
 %%%===================================================================
-%%% post-apply event layer (doc/agent-fipa-plan.md §7)
+%%% post-apply runtime publication layer (doc/agent-fipa-plan.md §7)
 %%%===================================================================
 %%
 %% The `{runtime, Ns}` property carries these messages for the explorer (`m:quod_explorer_ws`) and any
@@ -5171,7 +5173,7 @@ oldest_snapshot(Current, #s{workers = Workers,
 %% receives each applied envelope as a direct `{applied_live, Env, Est}` carrying the post-commit
 %% snapshot handle — see publish_outcome/2 for why the handle is never broadcast. The pre-apply
 %% `{committed, Ns}` publication (quod_simplex → feed/metrics) is untouched and is deliberately NOT the
-%% agent event source (it fires before this kb has applied).
+%% reaction/runtime source (it fires before this kb has applied).
 %%
 %% CONSUMER CONTRACT for the attached runtime (`m:quod_runtime`, Slice 2) — the seam creates these
 %% obligations, verified by review; honour them there:
@@ -5211,16 +5213,20 @@ note_origin(live, true, Before, S = #s{runtime_mode = {replaying, Id}, ns = Ns})
     S#s{runtime_mode = live};
 note_origin(_Origin, true, _Before, S) -> S.   %% replay while already replaying, or live while already live
 
-%% One event per ordinary material committed transaction on a LIVE commit only
-%% — never replay. The runtime consumes the concrete diff, validated direct
-%% effects, and identifiers; goal/result remain canonical ledger blobs and are
-%% decoded lazily only by a detail reader. Genesis is not an agent event.
-outcome_applied(#transaction{plan_digest = none}, _Index, _Origin, _S) -> none;
+%% One publication per ordinary material committed transaction on a LIVE commit
+%% only — never replay. The requested diff remains a conservative state-handler
+%% invalidation hint; reactions consume only the canonical reducer's applied_ops.
+%% Direct effects and identifiers share the same envelope; goal/result remain
+%% canonical ledger blobs decoded lazily only by a detail reader. Genesis is not
+%% a reaction occurrence.
+outcome_applied(#transaction{plan_digest = none}, _AppliedOps,
+                _Index, _Origin, _S) -> none;
 outcome_applied(#transaction{tx_id = Tx, diff = Diff, effects = Effects},
-                Index, live, #s{ns = Ns}) ->
+                AppliedOps, Index, live, #s{ns = Ns}) ->
     {applied, #{ns => Ns, height => Index, tx_id => Tx, subject => undefined,
-                diff => Diff, effects => Effects}};
-outcome_applied(_Change, _Index, replay, _S) -> none.
+                diff => Diff, applied_ops => AppliedOps,
+                effects => Effects}};
+outcome_applied(_Change, _AppliedOps, _Index, replay, _S) -> none.
 
 %% One event per committed-but-OCC-rejected transaction, on a LIVE commit only. Mirrors
 %% `outcome_applied` so every live tx in a block yields exactly one outcome event (applied or
@@ -5235,9 +5241,9 @@ outcome_rejected(_Change, _Index, replay, _S) -> none.
 %% published. The caller is released first; event consumers then see the same
 %% already-committed state.
 complete_transactions([], S) -> S;
-complete_transactions([{Event, Completion} | Rest], S0) ->
+complete_transactions([{Publication, Completion} | Rest], S0) ->
     S1 = complete_transaction(Completion, S0),
-    complete_transactions(Rest, publish_outcome(Event, S1)).
+    complete_transactions(Rest, publish_outcome(Publication, S1)).
 
 complete_transaction({committed, Tx, Slot}, S) ->
     release(Tx, {ok, {applied, Slot}},
@@ -5279,23 +5285,26 @@ publish_outcome({rejected, Env}, S = #s{ns = Ns}) ->
 %% signal as an ordinary write, with the durable GroupId as its identity.
 %% Replay, aborts, duplicate controls, and empty participant diffs are silent;
 %% the runtime reconciles replay from the committed snapshot boundary.
-publish_dtx_outcome(none, _Index, _Origin, S) ->
+publish_dtx_outcome(none, _AppliedOps, _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
-  {group_applied, _GroupId, _Context, []}, _Index, _Origin, S) ->
+  {group_applied, _GroupId, _Context, []}, _AppliedOps,
+  _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
   {group_applied, GroupId,
    #{proof_id := ProofId, origin := ProofOrigin,
      principal := Principal, goal := Goal, result := Result,
      plan_digest := PlanDigest}, Diff},
-  Index, live, S = #s{ns = Ns}) ->
+  AppliedOps, Index, live, S = #s{ns = Ns}) ->
     Env = #{ns => Ns, height => Index, tx_id => {group, GroupId},
             proof_id => ProofId, origin => ProofOrigin,
             subject => Principal, goal => Goal, result => Result,
-            plan_digest => PlanDigest, diff => Diff},
+            plan_digest => PlanDigest, diff => Diff,
+            applied_ops => AppliedOps},
     publish_outcome({applied, Env}, S);
-publish_dtx_outcome({group_applied, _, _, _}, _Index, replay, S) ->
+publish_dtx_outcome({group_applied, _, _, _}, _AppliedOps,
+                    _Index, replay, S) ->
     S.
 
 publish_runtime(Ns, Msg) -> _ = quod_reg:publish({runtime, Ns}, Msg), ok.

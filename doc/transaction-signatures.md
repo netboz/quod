@@ -1,9 +1,9 @@
 # Transaction-author signatures
 
-**Status:** the original signature/relay milestone is deployed. The current
-working tree introduces the incompatible V8 signed-user-request extension to
-the admission-generation and semantic-transaction-id contract described below;
-it is not deployed.
+**Status:** the original signature/relay milestone and the incompatible V8
+signed-request extension described below are implemented. V8 has no
+compatibility decoder; a fleet carrying an older transaction generation must
+activate it through a clean persistence reset and re-found.
 
 This milestone un-defers transaction-author Ed25519 signatures and
 follower-to-leader transaction relay. It does not itself authorize new writers.

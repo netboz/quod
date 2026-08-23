@@ -31,6 +31,7 @@ The typed **external-predicate contract** and the per-run **execution context**
    | `query`      | yes | no  | no  | no  |
    | `staging`    | yes | yes | no  | no  |
    | `projection` | yes | no  | yes | no  |
+   | `reaction`   | yes | no  | no  | yes |
 
    Governed predicates register through `load/1`, which routes them via
    `dispatch/3`. Before delegating to the real handler, `dispatch/3` checks the
@@ -41,7 +42,8 @@ The typed **external-predicate contract** and the per-run **execution context**
 The context *kinds* are `proof` (a normal client proof or staged write),
 `verdict` (a committee membership re-proof — strictly local),
 `policy_verdict` (a strictly local authorization re-proof with every governed
-bridge disabled), and `projection` (a runtime P handler, §8).
+bridge disabled), `projection` (a runtime P handler, §8), and `reaction` (one
+post-commit `react_on/3` continuation).
 """.
 -include_lib("erlog/src/erlog_int.hrl").
 
@@ -56,7 +58,7 @@ bridge disabled), and `projection` (a runtime P handler, §8).
 -export([set_context/2, context/1, local_only/1]).
 %% context constructors
 -export([proof_context/3, proof_context/4, verdict_context/2,
-         policy_verdict_context/2]).
+         policy_verdict_context/2, reaction_context/2]).
 %% context accessors
 -export([ctx_kind/1, ctx_ns/1, ctx_height/1, ctx_chain/1,
          with_chain/2]).
@@ -83,8 +85,8 @@ bridge disabled), and `projection` (a runtime P handler, §8).
                %% `undefined` elsewhere.
                id      = undefined :: term()}).
 
--type kind()  :: proof | verdict | policy_verdict | projection.
--type class() :: query | staging | projection.
+-type kind()  :: proof | verdict | policy_verdict | projection | reaction.
+-type class() :: query | staging | projection | reaction.
 -type ctx()   :: #qctx{} | undefined.
 -export_type([kind/0, class/0, ctx/0]).
 
@@ -278,7 +280,7 @@ register(#est{db = Db0, fs = Fs0} = Est, {Name, Arity} = Functor,
          Class, Module, Function)
   when is_atom(Name), is_integer(Arity), Arity >= 0,
        (Class =:= query orelse Class =:= staging orelse
-        Class =:= projection),
+        Class =:= projection orelse Class =:= reaction),
        is_atom(Module), is_atom(Function) ->
     Registry0 = registry(Fs0),
     Descriptor = {Class, Module, Function},
@@ -379,7 +381,9 @@ allowed(query,      _Kind)       -> true;
 allowed(staging,    proof)       -> true;
 allowed(staging,    _Kind)       -> false;
 allowed(projection, projection)  -> true;
-allowed(projection, _Kind)       -> false.
+allowed(projection, _Kind)       -> false;
+allowed(reaction,   reaction)    -> true;
+allowed(reaction,   _Kind)       -> false.
 
 -doc "Whether an Erlog term contains no unbound variable (including anonymous `_`).".
 -spec is_ground(term()) -> boolean().
@@ -450,6 +454,11 @@ content via `current_prolog_flag`, like every context field — forge-resistant,
 projection_context(Ns, Height, HandlerId) ->
     #qctx{kind = projection, ns = Ns, height = Height, subject = undefined,
           id = HandlerId}.
+
+-doc "A post-commit reaction continuation over the frozen block snapshot.".
+-spec reaction_context(binary() | undefined, non_neg_integer()) -> #qctx{}.
+reaction_context(Ns, Height) ->
+    #qctx{kind = reaction, ns = Ns, height = Height, subject = undefined}.
 
 -doc "Install the engine-owned anchored call chain without changing context kind.".
 -spec with_chain(ctx(), [quod_proof_context:identity()]) -> ctx().

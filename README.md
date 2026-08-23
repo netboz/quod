@@ -37,6 +37,9 @@ quod_link (one process per (peer, channel)) ────── framing + publish
 | `quod_transaction` | namespace-bound canonical transaction signing and relay envelopes |
 | `quod_relay` | one-pass relay/consensus wire dispatch and bounded relay-result caching |
 | `quod_prolog` | committed Prolog state, optimistic validation, reads, and ordered apply |
+| `quod_diff` / `quod_committed_projection` | one canonical fact/outcome transition for live apply and certified foreign materialization |
+| `quod_runtime` | per-ontology rebuildable P state, durable subscription catalogue, and P-before-E ordering |
+| `quod_foreign_log` / `quod_foreign_projection` | shared certified foreign history and demand-driven subscribed projection |
 | `quod_ledger_store` | append-only durable block log; one fsync per committed batch |
 | `quod_catchup` / `quod_feed` | verified historical catch-up and live dissemination |
 
@@ -45,6 +48,12 @@ The target actor and system-startup model is specified in
 nodes, agents, human-facing users, and services are classed instances in exact
 containing ontologies; Prolog actions own policy and governed Erlang external
 predicates bridge committed truth to the live node and network.
+Explicit ontology subscriptions and their shared certified projections are
+specified in
+[`doc/ontology-subscription-plan.md`](doc/ontology-subscription-plan.md); the
+single applied-operation-to-`react_on/3` path planned above them is specified
+in
+[`doc/event-reaction-refinement-plan.md`](doc/event-reaction-refinement-plan.md).
 
 **Identity.** A node's id is its **Ed25519 public key** (`node_id`), generated on first
 boot and persisted; the address `{Host, Port}` is demoted to a resolvable routing hint.
@@ -60,7 +69,9 @@ queryable `consensus_incarnation/1` nonce in slot 1, so wiping and re-founding
 the same namespace produces a new signature domain. A write sent
 to a non-leader validator is transparently relayed to the proposer of its exact
 earliest usable slot using the signed canonical bytes; signatures authenticate
-authors but do not replace the still-deferred user/agent authorization policy.
+authors but never replace target `can_invoke/4` authorization. Signed human
+client goals use that path today; the generic anchored agent principal remains
+the next identity format change.
 The canonical consensus signature contract is
 [`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 
@@ -224,9 +235,14 @@ anchored rolling update.
   member recovery, bounded per-ontology transaction micro-batches, depth-one pipelining with
   implicit predecessor finality, signed transaction relay, inter-ontology asks,
   retained-custody ingress, the signed live ontology directory with private
-  direct routes, runtime projection, metrics, and durable Docker/Nomad deployment.
-- **Next:** complete generic agent identity and node-hosted agent processes as
-  specified by `doc/ontology-actor-architecture.md`, then continue the FIPA
-  AMS/DF layers in `doc/agent-fipa-plan.md`. Root-driven system-ontology startup
-  and engine-local external-predicate ownership are implemented in the current
-  working tree.
+  direct routes, runtime projection, durable multi-ontology transactions,
+  signed human-client goals, root-owned ontology creation, root-driven system
+  ontologies, engine-local external-predicate ownership, explicit durable
+  ontology subscriptions, shared certified foreign projections, metrics, and
+  durable Docker/Nomad deployment.
+- **Next:** connect canonical applied operations to the existing
+  `react_on/3` catalogue locally and for subscribed projections, as specified
+  by `doc/event-reaction-refinement-plan.md`; then coordinate explicit events
+  with the generic agent-identity format break in
+  `doc/ontology-actor-architecture.md` before continuing hosted agents and the
+  FIPA AMS/DF layers.

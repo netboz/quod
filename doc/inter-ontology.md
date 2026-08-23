@@ -9,14 +9,12 @@ Decided by Yan, 2026-07-16 (plan `sorted-inventing-bee.md`), hardened by a devil
 review against the actual code. Implementation status: naming/parser, multi-ontology nodes,
 default link following, recursive reusable proof scopes, cross-scope transactions, the
 hard-break scope transport, and both one-participant and atomic multi-participant durable
-submission are implemented in the current working tree. The network ontology directory
-contract and its first system/private slice are implemented (§10). This is not a deployment
-claim: the final local gates passed on 2026-08-11 (compile, xref, Dialyzer,
-EUnit 1,027/1,027, Common Test 68/68, UI lint/build, shell syntax, diff check,
-and stale-text audit). The deliberate format break still requires a clean
-re-found, release/deployment, crash matrix, and chained-write load test in
-`distributed-proof-plan.md` Step 6. Transport-level stream prioritization
-remains future work.
+submission are implemented. The network ontology directory contract and its
+system/private route slices are also implemented (§10). This is the current
+protocol specification, not a record of one deployment. Release activation and
+hardware gates belong to the release procedure; any future incompatible format
+still requires its own coordinated clean re-found. Transport-level stream
+prioritization remains future work.
 
 There is one execution model for self, co-hosted, and remote selection. Location changes only
 how commands reach the selected ontology's proof scope; the deleted per-invocation ask
@@ -277,10 +275,11 @@ The separate "keep following this ontology" facility is specified by
 `ontology-subscription-plan.md`: one explicit durable `subscribes/2` fact in
 the subscriber's ledger establishes the ontology relationship. Its hosting
 runtime now maintains a shared certificate-verified local foreign projection
-through the existing `quod_foreign_log` cache and verifier. Target-side event
-registration and filtering from source-qualified `react_on/3` declarations
-remain a later slice. The target stores no duplicate durable row, and routes
-remain local directory P-state.
+through the existing `quod_foreign_log` cache and verifier. The planned event
+slice converts the canonical reducer's newly applied operations and matches
+source-qualified `react_on/3` locally in the subscriber. The first
+implementation installs no target-side pattern registry. The target stores no
+duplicate durable row, and routes remain local directory P-state.
 
 That facility does not alter this document's scope invariant. For a nested A ->
 B -> C proof, origin A still owns route selection, scope custody, and DTX
@@ -505,13 +504,13 @@ directory/ask benchmark, not a second consensus benchmark.
 ## 11. Non-goals — deliberately NOT in this milestone
 
 - **Ontology-subscription event delivery.** The local vocabulary, runtime
-  catalogue, and shared certified following are implemented. Authorized
-  target registration, filtering, and reaction delivery remain planned in
-  `ontology-subscription-plan.md`. Section 5 explains why none of it is
-  inferred from dead per-ask state.
+  catalogue, and shared certified following are implemented. Local and remote
+  reaction execution remains planned in `event-reaction-refinement-plan.md`.
+  Section 5 explains why none of it is inferred from dead per-ask state.
 - **The source-qualified `react_on/3` pattern grammar.** It is frozen and
   locally validated in `ontology-subscription-plan.md` Slice 1, not inferred
-  from OCC granularity. Network filtering measurements belong to later slices.
+  from OCC granularity. Source-side publication filtering is deferred until
+  certified follow fan-out is measured.
 - **Ontology-creation authorization** (`X:*` ownership enforcement). Node
   signing is already live; authenticated origin-agent identity and the
   ontology-owned policy remain separate (§2).

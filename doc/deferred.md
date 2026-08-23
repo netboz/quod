@@ -298,7 +298,7 @@ stages, not carried forward:
   `doc/ontology-actor-architecture.md` replaces the old split user/agent/AP
   identity model. Governed external-predicate ownership and root-driven
   synchronisation of `quod:node`, `quod:agent`, and `quod:human_user` are
-  implemented in the current working tree, pending review and commit.
+  implemented.
   Remaining work is: one agent-bound signed-request format replacing
   `{user, Key}`; anchored
   classed instances and their containing ontologies; committed host fencing
@@ -608,10 +608,11 @@ P1 (read-replicas + remote-read) is built. Plan: `~/.claude/plans/delightful-gig
 - **Explicit ontology subscriptions.** The former P4 "read-set is
   subscription" proposal is retired. Read-set tokens remain proof-local OCC
   dependencies. Long-lived following is one durable subscriber-owned ontology
-  fact; source-qualified `react_on/3` declarations provide the event interests
-  compiled into a host-to-host runtime registration. The local projection is
-  certified by extending `quod_foreign_log`; its reviewable slices are in
-  `ontology-subscription-plan.md`.
+  fact. Source-qualified `react_on/3` declarations select newly applied events
+  locally in the subscriber; they are not copied into a target-side pattern
+  registry. The local projection is certified by the existing continuous
+  `quod_foreign_log` follow; reaction slices are in
+  `event-reaction-refinement-plan.md`.
 
 - **Link backpressure signalling (still useful; relay amplification mitigated).** `quod_link`'s plain
   `{send, Payload}` deliberately ignores `quic:send_data` returns (`{flow_control_blocked,_}`,

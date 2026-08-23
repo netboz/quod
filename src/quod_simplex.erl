@@ -3204,7 +3204,10 @@ running_impl(cast, {sync_done, Pid, {ready, H}},
 %% next worker resumes from the resulting height, but no signing capability survives the failure.
 running_impl(cast, {sync_done, Pid, _Result}, S0 = #s{sync = {pulling, Pid}}) ->
     keep_progress(S0, recovery_failed(S0), []);
-running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};   %% result from an obsolete worker
+%% A superseded in-flight worker may still deliver its final cast after recovery
+%% ownership moved. The pid-bound clauses above are the only ones allowed to
+%% change state; this stale completion is deliberately ignored.
+running_impl(cast, {sync_done, _Pid, _}, S) -> {keep_state, S};
 %% The sync worker — and, for an observer, the feed's anti-entropy pull — hands each verified, contiguous
 %% window here to persist + replay in slot order. The caller presents an explicit source capability:
 %% `{recovery,Pid}` must match the one monitored recovery owner; `feed` is accepted only by a settled
@@ -4065,7 +4068,7 @@ observe_dtx_source_candidate(
         none ->
             ok
     end;
-observe_dtx_source_candidate(_Record, _LocalOrLegacyPeer, _TargetIdentity) ->
+observe_dtx_source_candidate(_Record, _NonRemoteSource, _TargetIdentity) ->
     ok.
 
 dtx_source_identity(Record, TargetIdentity) ->

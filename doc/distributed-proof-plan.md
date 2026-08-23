@@ -1,18 +1,15 @@
 # Uniform distributed Prolog proofs and atomic ontology writes
 
-**Status:** architecture reviewed; Steps 1-5 are implemented in the current
-working tree. Step 1's local `action/3` and `transaction/1` foundation landed in
+**Status:** architecture reviewed and implemented. Step 1's local `action/3`
+and `transaction/1` foundation landed in
 Quod 0.7.58. Step 2's shared proof context and recursive co-hosted scopes landed
 in Quod 0.7.60. Step 3's hard-break shared scope transport landed in Quod
 0.7.61. Step 4 now includes both the one-participant fast path and the complete
 Begin/Prepare/Decision/Finalize/Complete multi-ontology path, durable recovery,
 certified-current outcome/application corroboration, and the indexed anchored
-outcome contract. This is a working-tree implementation statement, not a
-release or deployment claim. The final local gates passed on 2026-08-11
-(compile, xref, Dialyzer, EUnit 1,027/1,027, Common Test 68/68, UI lint/build,
-shell syntax, diff check, and stale-text audit). The deliberate re-found,
-release, deployment, crash matrix, and chained-write load test in Step 6 remain
-pending.
+outcome contract. Step 6 is the recurring release/hardware acceptance
+procedure, not unfinished transaction semantics. Any later incompatible format
+still requires its own clean re-found and the current release gates.
 
 This plan is the prerequisite correction for the action work in
 `minimal-agent-delivery-plan.md`. It is deliberately complete: it does not ship
@@ -926,7 +923,7 @@ scope call that primitive. Delete the old caller-engine `submit_write/8` shape
 and its `CallerNs =:= Ns` guard so no second foreign submission path or proxy-
 authored transaction survives.
 
-As built in the current working tree:
+As built:
 
 - The ordinary transaction signature binds
   `{Ns, GenesisAnchor, AuthorAdmission}`. The anchor is the
@@ -1608,19 +1605,21 @@ either case. A temporary or permanent loss beyond the consensus bound may leave
 a prepared group safely blocked; this plan does not promise recovery that the
 underlying consensus cannot provide.
 
-Reactions and runtime events fire once for the live post-Finalize mailbox
-application that actually changes D. Begin, Prepare, Decision, Complete, a
+The live post-Finalize mailbox application exposes the canonical reducer's
+ordered `applied_ops` once. Reactions later derive only from those operations.
+Begin, Prepare, Decision, Complete, a
 merely committed Finalize, abort, replay, and duplicate completion evidence
 generate no domain reaction.
 
-The exact live envelope is
+The current live envelope is
 `{applied_live, Ns, Height, {group, GroupId}, ProofId, OriginIdentity,
 PrincipalOrSubject, TopGoal, TopResult, LocalPlanDigest, Diff}`. The bounded
 goal/result are the same canonical values persisted by Begin, not a re-proof or
 digest-only substitute. It is emitted in that ontology's committed Finalize
-order after D and its MVCC publication are applied. `quod_runtime` then
-completes P before scheduling any E reaction; an empty local diff emits no
-domain reaction. The caller's top-level result still waits for the certified
+order after D and its MVCC publication are applied. The reaction slice carries
+the already-computed `applied_ops` beside the signed requested `Diff`, without
+another reducer or event envelope. `quod_runtime` then completes P before E;
+empty `applied_ops` emits no domain reaction. The caller's top-level result still waits for the certified
 origin Complete after all participant applied statuses. Replay reconstructs
 D/P/group state but emits no E, matching the
 existing runtime contract. Ordinary one-ontology transactions keep the
@@ -1756,8 +1755,8 @@ historical quotations.
 ## 12. Implementation order
 
 The work was reviewed in internal deltas, but no partial semantic mode was
-deployed. Steps 1-5 are implemented in the current working tree; Step 6 remains
-partly open as the deployment/release gate:
+deployed. Steps 1-5 are implemented; Step 6 is the recurring
+deployment/release gate:
 
 1. **Implemented.** Correct `action/3` and add semidet `transaction/1` with local
    assertion/retraction/abolish, alternative, cut, nested-transaction, error,
@@ -1772,15 +1771,14 @@ partly open as the deployment/release gate:
    ledger-rebuilt outcome index, anchored foreign verifier,
    Begin/Prepare/Decision/Finalize/Complete, and recovery;
 5. **Implemented.** Remove the old paths and update all normative documentation;
-6. **Local gates complete; environment gates pending.** Compile, xref,
-   Dialyzer, full EUnit, full Common Test, UI lint/build, shell syntax, diff
-   check, and the stale-text audit pass in the final working tree. Re-found
-   because of the deliberate format break, then deploy, execute the
-   failure/crash matrix, and load-test chained ontology writes.
+6. **Release acceptance.** Compile, xref, Dialyzer, full EUnit, full Common
+   Test, UI lint/build, shell syntax, diff check, and stale-text audit. For an
+   incompatible generation, clean re-found before activation; then run the
+   failure/crash matrix and chained-ontology load test on the target hardware.
 
-The working tree contains one enabled hard-break implementation, not a feature
-flag or compatibility mode. It is not release/deployment-ready until the
-remaining Step 6 environment gates prove the complete contract.
+The repository contains one hard-break implementation, not a feature flag or
+compatibility mode. Each release is deployment-ready only after its Step 6
+environment gates prove the complete contract.
 
 ### 12.1 Step 3 internal-delta contract
 
@@ -1929,7 +1927,8 @@ The intermediate `can_read/3` policy was likewise removed when `can_invoke/4`
 landed; there is no compatibility alias. Step 3's scope transport shipped in
 0.7.61 and remains the transport base for Step 4. The status header above is
 the authoritative record: the durable implementation is complete in the
-working tree, while the release/deployment gates remain pending.
+repository, while Step 6 remains the release procedure for each incompatible
+generation.
 
 Its focused gate proves, non-vacuously: co-hosted and remote cross-scope
 transaction rollback for assertions, retractions, abolishes, nested
@@ -1969,11 +1968,10 @@ poisons the proof.
 ### 12.2 Step 4 completion: implementation contract
 
 This atomic multi-ontology slice replaces the former temporary group-refusal
-branch in the current working tree: proving, backtracking, savepoints, scope
+branch: proving, backtracking, savepoints, scope
 reuse, failure reasons, and the one-participant fast path remain single shared
 implementations. Every item below is implemented as one hard-break group path;
-the remaining Step 6 gates decide release and deployment, not whether a second
-semantic mode is kept.
+Step 6 decides release activation, not whether a second semantic mode is kept.
 
 1. **Use one tagged block/ledger payload.** Hard-break `#block.payload` and
    `#entry.data` onto the same representation:
@@ -2703,7 +2701,8 @@ At minimum:
     prepared abort, a committed-but-unapplied Finalize has admission open and
     the proof fence closed until the exact ordered apply/discard acknowledgment.
     A direct no-Prepare abort is applied at Finalize commit. Replay
-    emits no reactions; live post-Finalize apply emits one. With a local pending
+    emits no reactions; live post-Finalize apply exposes its applied operations
+    once. With a local pending
     G1 and ledger-active G2 both populated, outcome-index reset and restart
     reconstruct both independent fields without blocking G2 recovery or losing
     G1's journal hand-off. When the origin is itself a participant, replay of

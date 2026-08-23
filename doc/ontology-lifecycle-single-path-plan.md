@@ -1,7 +1,7 @@
 # Single-path ontology lifecycle refactor
 
-**Status:** implemented in the current working tree; broad release gates remain
-pending. This document is now the authoritative lifecycle architecture. It
+**Status:** implemented and source-gated. This document is the authoritative
+lifecycle architecture. It
 replaces the lifecycle-only proof and authorization machinery described in the
 older creation, join, lifecycle-authorization, and durable-effect documents.
 

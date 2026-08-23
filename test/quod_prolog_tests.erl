@@ -1290,6 +1290,7 @@ t_live_emits_event({Ns, _}) ->
         {applied_live, Env} = recv_rt(applied_live),
         ?assertEqual(1, maps:get(height, Env)),
         ?assertEqual(Diff, maps:get(diff, Env)),
+        ?assertEqual(Diff, maps:get(applied_ops, Env)),
         ?assertEqual(Tx#transaction.tx_id, maps:get(tx_id, Env)),
         ?assertMatch({ok, [_], 1}, quod_prolog:prove(Ns, {parent, tom, {'X'}}))
     end.

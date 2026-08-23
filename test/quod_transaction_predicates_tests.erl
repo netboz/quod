@@ -119,9 +119,51 @@ ordinary_backtracking_remains_non_transactional_test() ->
     {succeed, Final} = prove(Goal, []),
     ?assert(asserted({ordinary, retained}, Final)).
 
+explicit_events_follow_net_fact_diff_in_call_order_test() ->
+    Goal = {',', {trigger_event, {noticed, first}},
+            {',', {assertz, {fact, committed}},
+             {trigger_event, {noticed, second}}}},
+    {succeed, Final} = prove(Goal, []),
+    ?assertMatch(
+       [{assert, {{fact, committed}, _}},
+        {event, {noticed, first}},
+        {event, {noticed, second}}],
+       changes(Final)).
+
+failed_alternative_and_transaction_rollback_remove_events_test() ->
+    Alternative = {transaction,
+                   {';',
+                    {',', {trigger_event, abandoned}, fail},
+                    {trigger_event, selected}}},
+    {succeed, Selected} = prove(Alternative, []),
+    ?assertEqual([{event, selected}], changes(Selected)),
+    {fail, RolledBack} = prove(
+                           {transaction,
+                            {',', {trigger_event, rolled_back}, fail}}, []),
+    ?assertEqual([], changes(RolledBack)).
+
+trigger_event_rejects_invalid_payloads_test() ->
+    lists:foreach(
+      fun(Term) ->
+              ?assertMatch({fail, _}, prove({trigger_event, Term}, []))
+      end,
+      [42, {'Unbound'}, {assert, fact}, {retract, fact},
+       {from, <<"other">>, <<0:256>>, event}]).
+
+trigger_event_is_refused_in_reaction_context_test() ->
+    C = committed([]),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    W1 = quod_predicates:set_context(
+           W0, quod_predicates:reaction_context(<<"test:reaction">>, 1)),
+    ?assertThrow(
+       {erlog_error, {context_violation, {trigger_event, 1}, staging, reaction}},
+       erlog_int:prove_goal({trigger_event, occurred}, W1)).
+
 prove(Goal, Facts) ->
     C = committed(Facts),
-    W = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    W0 = quod_erlog_db_local_prove:wrap_state(C, #{read_set => true}),
+    W = quod_predicates:set_context(
+          W0, quod_predicates:proof_context(<<"test:transaction">>, 1, none)),
     erlog_int:prove_goal(Goal, W).
 
 committed(Facts) ->

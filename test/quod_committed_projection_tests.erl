@@ -53,6 +53,7 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                     diff = [], read_check = #{}, effects = [Effect],
                     author = Author, author_seq = 1, submitted_at = 1,
                     sig = none}),
+    EventTx = change(Ns, [{event, {alarm, disk}}], #{}),
     try
         {ok, Projection1,
          #{kind := content,
@@ -90,11 +91,18 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
            transactions := [#{status := applied, diff := [],
                               applied_ops := [], changed_heads := []}]}} =
             project(5, {batch, [EffectTx]}, Projection4),
-        {ok, Projection6, #{kind := noop}} =
-            project(6, noop, Projection5),
-        ?assertEqual(6, quod_committed_projection:applied(Projection6)),
-        ?assertEqual(6, quod_outcome:applied_floor(
-                          quod_committed_projection:outcomes(Projection6)))
+        {ok, Projection6,
+         #{kind := content,
+           transactions := [#{status := applied,
+                              applied_ops := [{event, {alarm, disk}}],
+                              changed_heads := []}]}} =
+            project(6, {batch, [EventTx]}, Projection5),
+        ?assertEqual(false, proves({alarm, disk}, Projection6)),
+        {ok, Projection7, #{kind := noop}} =
+            project(7, noop, Projection6),
+        ?assertEqual(7, quod_committed_projection:applied(Projection7)),
+        ?assertEqual(7, quod_outcome:applied_floor(
+                          quod_committed_projection:outcomes(Projection7)))
     after
         #est{db = #db{ref = Ref}} = quod_committed_projection:est(Projection0),
         quod_erlog_db_mvcc:delete(Ref),

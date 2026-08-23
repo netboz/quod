@@ -5,8 +5,9 @@ committed knowledge base without touching it.
 
 Wrap a committed erlog state with `wrap_state/1,2`, run the goal, then extract:
 
-- `get_local_changes/1` — the **write-set**: the asserts/retracts the proof made,
-  as content-only `op()`s.
+- `get_local_changes/1` — the ordered durable material: canonical fact
+  asserts/retracts followed by explicit event occurrences staged by the proof,
+  as one `op()` list.
 - `get_read_set/1` — the **read-set**: one mutation-version token per
   `{Functor, Arity}` the proof read from the committed db (for the apply-time
   OCC re-check).
@@ -20,6 +21,7 @@ records `quod_erlog_db_mvcc:version_token/2` — the same function `quod_diff`'s
 apply-time validator resolves — so producer and validator agree bit-for-bit.
 """.
 -include_lib("erlog/src/erlog_int.hrl").
+-include("quod_ledger.hrl").
 
 %% erlog db callbacks
 -export([new/1, add_built_in/2, add_compiled_proc/4,
@@ -33,7 +35,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
          live_transaction_tokens/1,
          committed_state/1, checkpoint/1, restore/2,
          enter_read_only/1, leave_read_only/2,
-         get_local_changes/1, get_read_set/1, get_dependencies/1,
+         get_local_changes/1, stage_event/2, get_read_set/1, get_dependencies/1,
          get_live_bridges/1, record_live_bridge/2, absorb_read_set/2,
          absorb_live_bridges/2, get_effects/1,
          register_action_request/3, action_request/3,
@@ -54,6 +56,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -record(lp, {out_db   :: #db{},
              scope_id = undefined :: reference() | undefined,
              local    = #{}      :: #{term() => #fstate{}},
+             event_ops_rev = [] :: [{event, term()}],
              effects = []       :: [quod_effect:effect()],
              next_tag = 1000000  :: integer(),   %% above any committed-db tag
              read_ets = undefined :: ets:tid() | undefined,
@@ -88,6 +91,7 @@ apply-time validator resolves — so producer and validator agree bit-for-bit.
 -type distributed_token() :: {batch, <<_:128>>} | {pending, <<_:128>>}.
 -record(checkpoint, {scope_id :: reference(),
                      local    :: #{term() => #fstate{}},
+                     event_ops_rev = [] :: [{event, term()}],
                      effects = [] :: [quod_effect:effect()],
                      prepared_effects = #{} :: map(),
                      next_tag :: integer(),
@@ -350,7 +354,7 @@ checkpoint(
     ensure_access(Ov),
     choicepoint_checkpoint(Ov).
 
--doc "Restore staged writes from a checkpoint while retaining monotonic proof reads.".
+-doc "Restore staged writes/events from a checkpoint while retaining monotonic proof reads.".
 -spec restore(tuple(), checkpoint()) -> tuple().
 restore(
   #est{db = #db{mod = ?MODULE, ref = Ov} = Db} = St,
@@ -396,12 +400,34 @@ leave_read_only(
 leave_read_only(_St, _Frame) ->
     erlang:error(badarg).
 
--doc "The write-set: the proof's asserts/retracts as content-only ops.".
--spec get_local_changes(#lp{}) -> [{assert | retract, {term(), term()}}].
+-doc "The proof's canonical net fact diff followed by explicit occurrences.".
+-spec get_local_changes(#lp{}) -> [op()].
 get_local_changes(
-  #lp{local = Local, out_db = #db{mod = M, ref = R}} = Ov) ->
+  #lp{local = Local, event_ops_rev = EventOpsRev,
+      out_db = #db{mod = M, ref = R}} = Ov) ->
     ensure_access(Ov),
-    maps:fold(fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end, [], Local).
+    FactOps = maps:fold(
+                fun(F, FS, Acc) -> functor_ops(F, FS, M, R) ++ Acc end,
+                [], Local),
+    FactOps ++ lists:reverse(EventOpsRev).
+
+-doc "Stage one explicit event occurrence in this rollback-safe proof revision.".
+-spec stage_event(tuple(), term()) -> {ok, tuple()} | error.
+stage_event(
+  #est{db = #db{mod = ?MODULE,
+                ref = #lp{read_only = false,
+                          event_ops_rev = Events} = Ov} = Db} = St,
+  Term) ->
+    ensure_access(Ov),
+    {ok, St#est{db = Db#db{ref = Ov#lp{
+        event_ops_rev = [{event, Term} | Events]}}}};
+stage_event(
+  #est{db = #db{mod = ?MODULE, ref = #lp{read_only = true} = Ov}},
+  _Term) ->
+    ensure_access(Ov),
+    error;
+stage_event(_St, _Term) ->
+    erlang:error(badarg).
 
 -doc "The rollback-safe direct effects staged in this overlay revision.".
 -spec get_effects(#lp{}) -> [quod_effect:effect()].
@@ -571,10 +597,12 @@ new({OutRef, OutMod}) ->
 %% the explicit transaction entry savepoint. Neither callback traverses clause
 %% data; restore retains the current monotonic read-set and overlay metadata.
 choicepoint_checkpoint(
-  #lp{scope_id = ScopeId, local = Local, effects = Effects,
+  #lp{scope_id = ScopeId, local = Local, event_ops_rev = EventOpsRev,
+      effects = Effects,
       prepared_effects = PreparedEffects,
       next_tag = NextTag}) ->
-    #checkpoint{scope_id = ScopeId, local = Local, effects = Effects,
+    #checkpoint{scope_id = ScopeId, local = Local,
+                event_ops_rev = EventOpsRev, effects = Effects,
                 prepared_effects = PreparedEffects,
                 next_tag = NextTag,
                 distributed = quod_transaction_scope:checkpoint_token()}.
@@ -582,11 +610,11 @@ choicepoint_checkpoint(
 choicepoint_restore(
   #lp{scope_id = ScopeId} = Ov,
   #checkpoint{scope_id = ScopeId,
-              local = Local, effects = Effects,
+              local = Local, event_ops_rev = EventOpsRev, effects = Effects,
               prepared_effects = PreparedEffects, next_tag = NextTag,
               distributed = Distributed}) ->
     ok = quod_transaction_scope:restore_token(Distributed),
-    Ov#lp{local = Local, effects = Effects,
+    Ov#lp{local = Local, event_ops_rev = EventOpsRev, effects = Effects,
           prepared_effects = PreparedEffects, next_tag = NextTag};
 choicepoint_restore(_Ov, _Checkpoint) ->
     erlang:error(badarg).

@@ -16,11 +16,14 @@ export type TxRow = {
   author_seq: number
   submitted_at: number // ms epoch, 0 = unset
   ops: number
+  fact_ops: number
   effect_count: number
   effect_operations: string[]
 }
 
-export type Op = { op: 'assert' | 'retract' | 'unknown'; clause: string }
+export type Op =
+  | { op: 'assert' | 'retract'; clause: string }
+  | { op: 'event'; term: string }
 
 export type Effect = {
   effect_id: string

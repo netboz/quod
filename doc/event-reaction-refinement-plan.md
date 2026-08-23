@@ -1,10 +1,11 @@
 # Events, reactions, and restart reconstruction — plan
 
-**Status:** Slice 0 document/comment alignment, Slice 1 local assert/retract
-reactions, and Slice 2 subscribed assert/retract reactions are complete in the
-working tree. Slices 3--5 remain planning only. The implemented slices change
-runtime behavior but do not change the ledger or wire format and are not
-deployed.
+**Status:** Slice 0 document/comment alignment, Slice 1 local reactions, and
+Slice 2 subscribed reactions are complete and committed. Slice 3
+`trigger_event/1` and its V9/V5/plan-V6 format generation are implemented in
+the current working tree, pass the full local gates, and have completed final
+adversarial review with its findings closed. Slices 4--5 remain planning only.
+None of these working-tree changes is deployed.
 
 This plan refines the event sections of `agent-fipa-plan.md`,
 `minimal-agent-delivery-plan.md`, and `ontology-subscription-plan.md`.
@@ -86,14 +87,45 @@ trigger_event(Term)
 ```
 
 During a proof, this staging-class external predicate, owned by the shared
-`quod_transaction_predicates` module, dereferences `Term`, requires it to be
-ground and valid on the normal bounded wire, and appends `{event, Term}` to the
-same staged diff. It does not call a handler immediately. The canonical
-`quod_diff` reducer reports every valid explicit event as applied while making
-no fact mutation, so recurring identical explicit events are not deduplicated.
+`quod_transaction_predicates` module, dereferences `Term`, requires it to be a
+ground callable Prolog term valid on the normal bounded wire, and stages
+`{event, Term}` in the proof overlay. It does not call a handler immediately.
+The canonical `quod_diff` reducer reports every valid explicit event as applied
+while making no fact mutation, so recurring identical explicit events are not
+deduplicated.
+
+The three runtime event wrappers are reserved. `trigger_event/1` refuses
+`assert(_)`, `retract(_)`, and `from(_,_,_)`: an explicit signal must not
+pretend that a fact changed or that it came from a certified remote ontology.
+The same `quod_diff` validation owner governs staging, durable diff validation,
+and reaction-pattern admission; there is no parser-only convention. The
+reserved wrappers have different roles at that boundary: `assert/1`,
+`retract/1`, and `from/3` remain valid outer reaction-pattern structure for
+fact and certified-remote publications, but they are refused as explicit-event
+payloads and as bare explicit-event patterns.
+
+Quod's proof overlay is a final-state differ, not a chronological journal of
+every Erlog database call. In particular, it must reorder `asserta` operations
+to preserve Prolog clause order and erase a staged assertion which is retracted
+before sealing. Slice 3 does not introduce a second mutation model merely to
+invent chronology that the durable diff never had. The exact ordering rule is:
+
+1. the existing canonical net fact diff is retained byte-for-byte and in its
+   existing order;
+2. explicit events follow those fact operations, in `trigger_event/1` call
+   order; and
+3. the resulting single list is the signed diff and the reducer's apply order.
+
+The overlay therefore gains only one rollback-safe occurrence accumulator,
+owned by the existing differ and included in its checkpoints/revisions.
+`get_local_changes/1` remains the sole extraction API and returns
+`FactOps ++ EventOps`. There is no transaction `events` field, event store,
+event owner, or alternative sealing path. This rule also means every reaction
+sees the transaction's final committed snapshot before either fact-derived or
+explicit events run.
 
 If the transaction commits, the event is signed, audited, delivered to
-subscribers with that diff, and dispatched in its exact position. If the
+subscribers with that diff, and dispatched in that canonical order. If the
 transaction fails or is rejected, it disappears with the rest of the staged
 diff. A transaction containing only `{event, Term}` is material and therefore
 still enters the ledger.
@@ -406,22 +438,107 @@ focused EUnit, and full EUnit are green. Not deployed.**
 `ontology-subscription-plan.md` retains the implemented subscription catalogue
 and certified-follow contract and points its remaining reaction work here.
 
-### Slice 3 — `trigger_event/1`
+### Slice 3 — `trigger_event/1` (implemented in the working tree)
 
-- Add `{event, Term}` to the canonical diff operation grammar.
-- Extend `quod_diff:valid_op/1`, `apply_op`, its indexes/helpers, and every
-  exhaustive consumer; explicit events are always reported in `applied_ops`
-  while mutating no facts.
-- Thread it through proof differ, plan sealing, transaction signing,
-  validation, relay, apply, DTX, history, Explorer rendering, and subscribed
-  delivery.
-- Apply makes no fact mutation but reports the occurrence as applied;
-  `diff_to_events` returns `Term`.
-- Require a ground bounded term and preserve order.
-- Make event-only transactions material.
-- Hard-break the format once, delete old decoders, and coordinate the clean
-  re-found with the agent-identity format break in
-  `node-instance-identity-plan.md`; do not schedule two re-founds.
+#### One staging path
+
+- Extend `quod_erlog_db_local_prove` itself with a rollback-safe
+  `event_ops_rev` field and one `stage_event/2` operation. Its existing
+  checkpoint, restore, immutable revision, dirty check, and
+  `get_local_changes/1` path own the new occurrences. Fact staging and fact
+  extraction are not rewritten and no second proof/session field is added.
+- Register `trigger_event/1` as `staging` through the existing
+  `quod_predicates:register/5` dispatcher from
+  `quod_transaction_predicates:load/1`. Keep `transaction/1` as the existing
+  interpreter control predicate; do not create a second transaction module or
+  let `trigger_event/1` bypass the context matrix.
+- Dereference once, validate once through the shared event-term validator,
+  then call `stage_event/2`. `stage_event/2` obeys the overlay's existing
+  `read_only` guard just like every fact mutator, so the first attempted
+  mutation is refused at the owning boundary. Checkpoint-enabled alternatives,
+  `transaction/1` rollback, proof savepoints, and cursor alternatives restore
+  the same overlay revision and therefore remove the event naturally. Ordinary
+  non-transactional Erlog backtracking retains staged mutations exactly as it
+  already retains staged assertions. A reaction reaches the existing
+  staging-class refusal before it can stage anything.
+
+#### One operation grammar and reducer
+
+- Extend `op()` and `quod_diff:valid_ops/1` with `{event, Term}`. Move the
+  generic ground-term walker from `quod_predicates` to `quod_wire_term` and
+  reuse it rather than adding another groundness implementation.
+- Let `quod_diff` own the shared explicit-event term and pattern rules. A
+  concrete event is ground, callable, bounded, and not one of the reserved
+  wrappers. A reaction event-pattern may contain variables, but a bare
+  explicit-event pattern still cannot impersonate the reserved fact or remote
+  wrappers. `quod_runtime` reuses that pattern check while continuing to
+  accept those wrappers as its outer fact/remote pattern structure.
+- `apply_ops_report/2` returns every valid `{event, Term}` in `applied_ops`
+  without changing the Erlog database. It never deduplicates explicit events.
+  `diff_to_events/1` maps the operation to `Term` and the already-shared local
+  and subscribed dispatch path does the rest.
+- Fact-only helpers take their fail-safe direction explicitly: head extraction,
+  functor touches, membership detection, and catalogue invalidation skip
+  events, while `assertion_only` rejects them so genesis cannot contain an
+  event occurrence. Replace the permissive `{_Kind, {Head, Body}}` matches in
+  `quod_committed_projection:changed_heads/1`,
+  `quod_runtime:changed_heads/1`, and
+  `quod_commit_validation:diff_touches_membership/1` with exact fact-operation
+  matches. Audit `quod_simplex:touches_committee/1` and every other exhaustive
+  consumer the same way. In particular, a callable tuple-shaped event payload
+  must never be mistaken for a `{Head, Body}` clause.
+- An event-only diff is material through the existing `local_changes`, plan,
+  transaction, submission, OCC, DTX, history, and outcome machinery. Existing
+  plan operation counts and byte/count bounds include events; no new semantic
+  or population limit is introduced.
+
+#### Exact format break
+
+The data structures stay the same; only their accepted operation alphabet
+changes. The owners which cryptographically identify that alphabet change
+together:
+
+| owner | current | Slice-3 value | reason |
+|---|---:|---:|---|
+| transaction signature tuple | V8 | V9 | validators must reject a signer using the old diff grammar |
+| semantic transaction id | V4 | V5 | the semantic material grammar now includes occurrences |
+| signed DTX plan domain | V5 | V6 | a target plan may now carry event operations |
+
+DTX control, manifest, attestation, certified-reference, scope-wire, ledger
+entry, outcome, client-goal parser, and genesis-id versions do not change:
+they either bind the new plan/transaction digest opaquely or never interpret
+the diff grammar. Add old-version rejection vectors for transaction V8 and
+keyed plan V5, update the semantic-ID V4 golden vectors to V5, and state
+explicitly that unsigned plans are an in-VM test facility rather than a
+versioned network authority. Delete no-longer-current golden constants and do
+not retain decoders or forwarding shims. Replace the signing journal's private
+V8 tuple inspection with one shared current-transaction metadata decoder, so
+the journal cannot drift from `quod_transaction` on the next format change.
+
+This code must not be deployed on the existing anchor. It may land and be
+tested before generic actor identity, but production activation waits until
+that format work is also complete. Both changes receive one coordinated clean
+re-found; no intermediate event-only network is founded.
+
+#### Presentation and closure
+
+- Extend Explorer's one operation renderer and TypeScript discriminated union
+  with an `event` row containing `prolog_text(Term)`, never
+  `clause_text(Term)`. Event-only transactions show a non-empty operation list
+  but `root_facts_changed = false`; make both the backend computation in
+  `quod_explorer_http` and the live-feed derivation in `ui/src/store.ts`
+  fact-operation-aware. Give the current TypeScript `unknown` operation arm a
+  real fail-closed purpose or delete it, then rebuild the committed Explorer
+  assets from source.
+- Update `transaction-signatures.md`, distributed-proof format references,
+  content/event docs, moduledocs, types, comments, and golden vectors in the
+  same slice. Sweep all assert/retract-exhaustive consumers and every literal
+  V8/V4/plan-V5 reference. Delete stale wording rather than documenting two
+  generations.
+- Existing reaction counters and latency metrics already observe explicit
+  events through the common dispatcher. The existing diff-operation metric
+  already counts them. Add no duplicate event metric or dashboard panel unless
+  measurement shows a distinct operational question.
 
 ### Slice 4 — hosting projections
 
@@ -450,9 +567,10 @@ Each slice receives adversarial review before the next begins.
 
 1. `assert(task_ready(bob, t1))` binds variables in Executor and Handler through
    `unify_prove_body` and calls the handler once.
-2. Assert, retract, and explicit events preserve their exact applied order.
-   An identical assertion and an absent retraction produce no reaction;
-   recurring identical explicit events each produce one reaction.
+2. Canonical fact operations run first in their existing net-diff order;
+   explicit events follow in `trigger_event/1` call order. An identical
+   assertion and an absent retraction produce no reaction; recurring identical
+   explicit events each produce one reaction.
 3. Multiple transactions in one block converge state once but dispatch every
    event in commit order.
 4. Replay, restart, cache rebuild, and resnapshot restore state and call zero
@@ -465,12 +583,17 @@ Each slice receives adversarial review before the next begins.
    dispatch nothing.
 8. A subscribed diff and the same local diff produce identical Prolog matches
    and bindings apart from the explicit `from/3` source wrapper.
-9. DTX publishes each participant diff once at committed Finalize.
-10. `trigger_event/1` rejects variables, oversized terms, bad wire terms,
-    rejected transactions, and old format versions.
+9. DTX publishes each participant diff once at committed Finalize. A dedicated
+   event-only participant case proves publication at committed Finalize and
+   silence on abort.
+10. `trigger_event/1` rejects variables, non-callable or oversized terms, bad
+    wire terms, and the reserved `assert/1`, `retract/1`, and `from/3` wrappers;
+    rejected transactions dispatch nothing and old format versions fail
+    closed.
 11. An event-only transaction is signed, committed, visible in Explorer, and
     remotely verifiable.
-12. A reaction cannot stage D or bypass the signed-goal ACL.
+12. A reaction calling `trigger_event/1` receives the existing staging-class
+    `context_violation`; it cannot stage D or bypass the signed-goal ACL.
 13. A dynamically asserted non-founding `react_on/3` remains inert at actual
     execution, not only during catalogue planning.
 14. An unresolvable or ambiguous Executor performs no observable work and is
@@ -481,3 +604,8 @@ Each slice receives adversarial review before the next begins.
     leaves durable effect/outbox work recoverable.
 17. Compile, xref, Dialyzer, full EUnit, focused CT, UI builds, diff check, and
     the hardware load matrix pass at their owning slices.
+18. A `trigger_event/1` reached only in a failed alternative or a rolled-back
+    `transaction/1` leaves no event in the sealed diff; successful alternatives
+    preserve occurrence order.
+19. A callable two-tuple event payload appears in no changed-head set, state
+    hint, catalogue refresh, or membership verdict.

@@ -1,7 +1,8 @@
 # Transaction-author signatures
 
-**Status:** the original signature/relay milestone and the incompatible V8
-signed-request extension described below are implemented. V8 has no
+**Status:** the original signature/relay milestone, the incompatible V8
+signed-request extension, and the current event-capable V9 generation are
+implemented. V9 has no
 compatibility decoder; a fleet carrying an older transaction generation must
 activate it through a clean persistence reset and re-found.
 
@@ -49,7 +50,7 @@ non-canonical nested plan is rejected before transaction construction.
 
 ```erlang
 term_to_binary(
-  {quod_transaction, 8,
+  {quod_transaction, 9,
    TargetNs, GenesisAnchor, AuthorAdmission,
    TxId, Origin, ProofId, PlanDigest, Goal, Result,
    MaterialWire, EffectsWire, RequestAuth, AuthorizationTranscript,
@@ -71,7 +72,7 @@ Both are signed and included in the semantic transaction id. Validators verify
 the request and re-prove the recorded ACL decision against the proposal parent;
 private prepared payloads and executable callbacks are never stored there.
 
-The tuple prefix `{quod_transaction, 8}` is the fixed cryptographic
+The tuple prefix `{quod_transaction, 9}` is the fixed cryptographic
 domain/schema tag. It prevents cross-protocol reuse; changing it is a
 ledger-breaking protocol change that requires a fresh network, and no alternate
 tag is accepted. `TargetNs`, `GenesisAnchor`, and the author's current
@@ -83,6 +84,12 @@ read check its canonical term order before the wire encoding.
 
 `Goal` and `Result` are covered because they are part of the committed audit
 record shown by the Explorer. `sig` is the sole excluded field.
+
+V9 differs from V8 only by admitting ordered `{event, Term}` occurrences in
+the already-signed `MaterialWire` diff alphabet. The semantic transaction-id
+domain is V5 and the signed DTX-plan domain is V6 for the same reason. Older
+V8/V4/V5 material is rejected; it is not translated or accepted beside the
+current generation.
 
 ## Signing and validation
 

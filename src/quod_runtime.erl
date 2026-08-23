@@ -940,7 +940,8 @@ catalog_head(_) -> false.
 %% The full dereferenced head terms of the envelope's diff — INCLUDING retracted heads, so
 %% per-key convergence can observe removals (nothing in the snapshot for key K ⇒ delete P[K]).
 changed_heads(Env) ->
-    [Head || {_Op, {Head, _Body}} <- maps:get(diff, Env, [])].
+    [Head || {Kind, {Head, _Body}} <- maps:get(diff, Env, []),
+             Kind =:= assert orelse Kind =:= retract].
 
 release_direct_effects(HeightEffects) ->
     lists:foreach(
@@ -1926,8 +1927,8 @@ reaction_pattern(EventPattern) ->
 
 valid_event_pattern({Kind, FactPattern}) when Kind =:= assert; Kind =:= retract ->
     valid_callable(FactPattern) andalso bounded_term(FactPattern);
-valid_event_pattern(_) ->
-    false.
+valid_event_pattern(EventPattern) ->
+    quod_diff:valid_event_pattern(EventPattern).
 
 valid_callable(Term) when is_atom(Term) -> true;
 valid_callable(Term) when is_tuple(Term), tuple_size(Term) >= 2 ->

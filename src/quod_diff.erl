@@ -35,6 +35,7 @@ Pure helpers over the committed erlog database for the content layer.
 -include("quod_ledger.hrl").
 
 -export([valid_read_check/1, valid_ops/1,
+         valid_event/1, valid_event_pattern/1,
          validate/2, apply_ops/2, apply_ops_report/2,
          apply_ops_preserving_policy/2,
          apply_ops_preserving_policy_report/2, has_clause/4,
@@ -53,7 +54,7 @@ valid_read_check(ReadCheck) when is_map(ReadCheck) ->
       end, true, ReadCheck);
 valid_read_check(_) -> false.
 
--doc "Whether an untrusted diff is a proper list of legal durable assert/retract operations.".
+-doc "Whether an untrusted diff is a proper list of legal durable operations.".
 -spec valid_ops(term()) -> boolean().
 valid_ops([Op | Rest]) -> valid_op(Op) andalso valid_ops(Rest);
 valid_ops([]) -> true;
@@ -179,7 +180,32 @@ valid_read_token(_) -> false.
 
 valid_op({Kind, {Head, Body}}) when Kind =:= assert; Kind =:= retract ->
     callable_head(Head) andalso valid_stored_term(Head) andalso valid_clause_body(Body);
+valid_op({event, Term}) ->
+    valid_event(Term);
 valid_op(_) -> false.
+
+-doc "Whether one concrete explicit event is ground and valid on the bounded wire.".
+-spec valid_event(term()) -> boolean().
+valid_event(Term) ->
+    quod_wire_term:is_ground(Term) andalso valid_event_pattern(Term).
+
+-doc "Whether one possibly-variable bare explicit-event pattern is valid.".
+-spec valid_event_pattern(term()) -> boolean().
+valid_event_pattern(Term) ->
+    callable_head(Term)
+        andalso not reserved_event_wrapper(Term)
+        andalso valid_wire_term(Term).
+
+reserved_event_wrapper({assert, _}) -> true;
+reserved_event_wrapper({retract, _}) -> true;
+reserved_event_wrapper({from, _, _, _}) -> true;
+reserved_event_wrapper(_) -> false.
+
+valid_wire_term(Term) ->
+    case quod_wire_term:encode(Term) of
+        {ok, _} -> true;
+        {error, bad_term} -> false
+    end.
 
 callable_head(Head) when is_atom(Head) -> true;
 callable_head(Head) when is_tuple(Head), tuple_size(Head) >= 2 ->
@@ -259,9 +285,14 @@ apply_op(M, R, {retract, Clause}) ->
                          error    -> {R, unchanged}
                      end;
         none      -> {R, unchanged}
-    end.
+    end;
+apply_op(_M, R, {event, _Term}) ->
+    {R, changed}.
 
-normalize_op({Kind, Clause}) -> {Kind, normalize_clause(Clause)}.
+normalize_op({Kind, Clause}) when Kind =:= assert; Kind =:= retract ->
+    {Kind, normalize_clause(Clause)};
+normalize_op({event, Term}) ->
+    {event, Term}.
 
 %% Live proofs already emit Erlog's durable `{Code, HasCut}` body. Normalize the
 %% legal source-body form accepted from explicitly constructed transactions so

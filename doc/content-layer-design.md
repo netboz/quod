@@ -934,7 +934,9 @@ view-change/availability protocol rather than more timeout exceptions.
 
 ## 14. The event system — how a committed change notifies what reacts
 
-**Status: design for Phase 2** (Phase 1 handles only the narrow case at the end).
+**Status: Phase 2 is implemented; explicit events are implemented in the
+current working tree** (Phase 1 handles the narrow durable-effect case at the
+end).
 Drawn from onia §14 (the D/P/E model) and §15 (the live-vs-replay split); bbsvx
 implements a looser version we improve on.
 
@@ -1001,7 +1003,7 @@ read set, installing target-side patterns, or creating a second scheduler.
 
 The canonical reducer already reports which ordered operations actually
 changed state. Each applied fact operation becomes one `assert(...)` or
-`retract(...)` event; a requested fact no-op becomes none. A later
+`retract(...)` event; a requested fact no-op becomes none.
 `trigger_event/1` stages an explicit event in the same signed operation list.
 There is no aggregate notification envelope and no second change detector.
 
@@ -1015,7 +1017,7 @@ idempotency, not an Erlang-only firewall or hop counter.
   deferred effects* — they fire **once, on the submitting node, at commit** (parked
   by `tx_id`), never on other members, never on replay (at-most-once). The narrow,
   safe case; the spec implements it.
-- **Phase 2:** execute `react_on` rules for local and certified subscribed
+- **Phase 2 (implemented):** execute `react_on` rules for local and certified subscribed
   applied operations through the live P-before-E path. The current authority is
   `event-reaction-refinement-plan.md`; `ontology-subscription-plan.md` owns the
   already-implemented durable relation and certified follower.

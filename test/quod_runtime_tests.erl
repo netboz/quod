@@ -27,17 +27,20 @@ ae(Ns, Index, Data, Origin) ->
 %% Erlog's vars_in/1 deliberately skips `_`; projection jobs must reject it just like every
 %% other unbound variable, because a queue entry must be stable and fully ground.
 anonymous_projection_argument_refused_test() ->
-    ?assertNot(quod_predicates:is_ground({'_'})),
-    ?assertNot(quod_predicates:is_ground({job, {'_'}})),
-    ?assertNot(quod_predicates:is_ground([resource, {'X'}])),
-    ?assert(quod_predicates:is_ground({job, [resource, 1]})).
+    ?assertNot(quod_wire_term:is_ground({'_'})),
+    ?assertNot(quod_wire_term:is_ground({job, {'_'}})),
+    ?assertNot(quod_wire_term:is_ground([resource, {'X'}])),
+    ?assert(quod_wire_term:is_ground({job, [resource, 1]})).
 
-applied_fact_operations_are_the_only_reaction_events_test() ->
+applied_fact_and_explicit_operations_are_reaction_events_test() ->
     Ops = [{assert, {{fact, 1}, {[], false}}},
            {retract, {{gone, 2}, {[], false}}},
-           {assert, {{rule, {0}}, {[{other, {0}}], false}}}],
+           {assert, {{rule, {0}}, {[{other, {0}}], false}}},
+           {event, {alarm, disk}},
+           {event, {alarm, disk}}],
     ?assertEqual(
-       [{assert, {fact, 1}}, {retract, {gone, 2}}],
+       [{assert, {fact, 1}}, {retract, {gone, 2}},
+        {alarm, disk}, {alarm, disk}],
        quod_runtime_predicates:diff_to_events(Ops)).
 
 reaction_unification_continues_the_bound_handler_test() ->
@@ -73,6 +76,27 @@ reaction_unification_continues_the_bound_handler_test() ->
                    {react_on, {agent, alice}, {assert, ping},
                     {member, alice, [alice]}},
                    {assert, ping}, Est))
+      end).
+
+explicit_event_unification_continues_the_bound_handler_test() ->
+    with_reaction_est(
+      fun(Est) ->
+              Self = <<5:256>>,
+              Reaction =
+                  {react_on, {node, Self},
+                   {alarm, {'Device'}, {'Level'}},
+                   {member, {pair, {'Device'}, {'Level'}},
+                    [{pair, disk, critical}]}},
+              ?assertEqual(
+                 executed,
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:event">>, 10, Self, Reaction,
+                   {alarm, disk, critical}, Est)),
+              ?assertEqual(
+                 unmatched,
+                 quod_runtime_predicates:run_reaction(
+                   <<"reaction:event">>, 10, Self, Reaction,
+                   {assert, {alarm, disk, critical}}, Est))
       end).
 
 reaction_executor_must_resolve_uniquely_to_this_node_test() ->
@@ -382,6 +406,23 @@ local_reaction_has_no_remote_source_interest_test() ->
                    #{subscriptions => [], reactions => [Reaction]}),
     ?assertEqual(1, length(maps:get(reactions, Plan))),
     ?assertEqual(#{}, maps:get(source_interests, Plan)).
+
+explicit_event_reaction_is_a_local_catalogue_entry_test() ->
+    Reaction = reaction_clause(
+                 {service, {service_name}},
+                 {alarm, {service_name}, {severity}},
+                 {notify, {service_name}, {severity}}),
+    {ok, Plan} = quod_runtime:plan_runtime_catalog(
+                   [Reaction],
+                   #{subscriptions => [], reactions => [Reaction]}),
+    ?assertEqual(1, length(maps:get(reactions, Plan))),
+    ?assertEqual(#{}, maps:get(source_interests, Plan)),
+    Reserved = reaction_clause(
+                 {service, one}, {from, one, two, three}, {notify, one}),
+    ?assertMatch(
+       {error, {invalid_founding_reaction, _}},
+       quod_runtime:plan_runtime_catalog(
+         [Reserved], #{subscriptions => [], reactions => [Reserved]})).
 
 reaction_rule_is_neutral_application_logic_test() ->
     Head = {react_on,
@@ -1043,10 +1084,11 @@ subscription_retraction_precedes_later_queued_remote_reaction_test() ->
                    EstAfterRetraction))
       end).
 
-%% A participant's fact becomes visible only through DTX Finalize. The
-%% certified follower must expose that applied operation once, and the normal
-%% subscribed-reaction dispatcher must consume it without a DTX-specific path.
-subscribed_reaction_observes_dtx_finalize_once_test_() ->
+%% A participant's event-only plan becomes visible only through DTX Finalize.
+%% Prepare and the other control phases are silent; the certified follower
+%% exposes the explicit occurrence once, through the normal reaction path,
+%% without creating a fact or adding DTX-specific dispatch.
+subscribed_reaction_observes_event_only_dtx_finalize_once_test_() ->
     {timeout, 90, fun() ->
     PreviousPub = application:get_env(quod, node_pubkey),
     PreviousKey = application:get_env(quod, identity_key),
@@ -1069,7 +1111,7 @@ subscribed_reaction_observes_dtx_finalize_once_test_() ->
                            [{subscribes, TargetNs, Anchor},
                             {react_on, {node, Self},
                              {from, TargetNs, Anchor,
-                              {assert, {dtx_remote_ping, {'Value'}}}},
+                              {dtx_remote_ping, {'Value'}}},
                              {member, {'Value'}, [committed_once]}}]
                    end, NodeIdentity),
     {_, SubscriberNs, _} = Subscriber,
@@ -1082,7 +1124,7 @@ subscribed_reaction_observes_dtx_finalize_once_test_() ->
                   (_) -> false
                end),
         Goal =
-            {',', {assertz, {dtx_remote_ping, committed_once}},
+            {',', {trigger_event, {dtx_remote_ping, committed_once}},
              {'::', OtherNs,
               {assertz, {dtx_other_marker, committed_once}}}},
         ?assertMatch(
@@ -1095,8 +1137,9 @@ subscribed_reaction_observes_dtx_finalize_once_test_() ->
                      reactions_executed := 1, reaction_failures := 0}) -> true;
                   (_) -> false
                end),
-        ?assertMatch({ok, _, _}, rp(TargetNs,
-                                     {dtx_remote_ping, committed_once})),
+        ?assertMatch({fail, _}, quod_prolog:prove(
+                                  TargetNs,
+                                  {dtx_remote_ping, committed_once})),
         ?assertMatch({ok, _, _}, rp(OtherNs,
                                      {dtx_other_marker, committed_once})),
         Stats = quod_runtime:stats(SubscriberNs),
@@ -1214,6 +1257,40 @@ local_reaction_uses_applied_ops_and_runs_once_test_() ->
                      reaction_failures := 1}) -> true;
                   (_) -> false
                end)
+    after cleanup_founded(F) end
+    end}.
+
+local_explicit_event_repeats_without_mutating_facts_test_() ->
+    {timeout, 60, fun() ->
+    F = setup_founded_terms_with_identity(
+          fun(Self) ->
+                  [{react_on, {node, Self},
+                    {alarm, {'Level'}},
+                    {member, {'Level'}, [critical]}}]
+          end),
+    {_, Ns, _} = F,
+    try
+        ok = wait_stats(
+               Ns,
+               fun(#{mode := live, reactions_active := 1,
+                     reactions_executed := 0}) -> true;
+                  (_) -> false
+               end),
+        ?assertMatch({ok, _, _}, rp(Ns, {trigger_event, {alarm, critical}})),
+        ok = wait_stats(
+               Ns,
+               fun(#{reaction_candidates := 1, reaction_matches := 1,
+                     reactions_executed := 1}) -> true;
+                  (_) -> false
+               end),
+        ?assertMatch({ok, _, _}, rp(Ns, {trigger_event, {alarm, critical}})),
+        ok = wait_stats(
+               Ns,
+               fun(#{reaction_candidates := 2, reaction_matches := 2,
+                     reactions_executed := 2}) -> true;
+                  (_) -> false
+               end),
+        ?assertMatch({fail, _}, quod_prolog:prove(Ns, {alarm, critical}))
     after cleanup_founded(F) end
     end}.
 

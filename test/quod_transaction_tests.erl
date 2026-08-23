@@ -73,6 +73,10 @@ deterministic_read_check_order_test() ->
     ?assertEqual(quod_transaction:bytes(?BINDING, A),
                  quod_transaction:bytes(?BINDING, B)).
 
+semantic_id_v5_domain_is_pinned_test() ->
+    Tx = unsigned(<<0:256>>),
+    ?assertNotEqual(Tx#transaction.tx_id, semantic_v4_id(Tx)).
+
 namespace_binding_test() ->
     {Tx, _Identity} = signed(),
     ?assert(quod_transaction:verify(?BINDING, Tx)),
@@ -304,32 +308,42 @@ network_identity_requirement_is_total_and_fail_closed_test() ->
 relay_submission_roundtrip_test() ->
     {Tx, _Identity} = signed(),
     {ok, Submission} = quod_transaction:submission(?BINDING, Tx),
+    {submit, _Author, _Signature, Canonical} = Submission,
     ?assertEqual(16, byte_size(quod_transaction:submission_id(Submission))),
     ?assert(quod_transaction:verify_submission(Submission)),
     ?assertEqual({ok, Tx},
                  quod_transaction:decode_verified_submission(?BINDING, Submission)),
+    ?assertMatch(
+       {ok, #{target := {?NS, ?ANCHOR}, admission := ?ADMISSION,
+              tx_id := <<_:256>>, effects := [], author := <<_:256>>,
+              sequence := 1}},
+       quod_transaction:decode_submission_metadata(Canonical)),
     ?assertMatch({error, namespace_or_author_mismatch},
                  quod_transaction:decode_verified_submission(
                    {<<"other">>, ?ANCHOR, ?ADMISSION}, Submission)).
 
-superseded_v7_transaction_is_explicitly_rejected_test() ->
+superseded_v8_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
-    {ok, V8Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 8, Ns, Anchor, Admission,
+    {ok, V9Bytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 9, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
      MaterialWire, EffectsWire, _RequestAuth, _AuthorizationTranscript,
-     Author, AuthorSeq, SubmittedAt} = binary_to_term(V8Bytes),
-    V7Bytes = term_to_binary(
-                {quod_transaction, 7, Ns, Anchor, Admission,
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(V9Bytes),
+    V8Bytes = term_to_binary(
+                {quod_transaction, 8, Ns, Anchor, Admission,
                  TxId, Origin, ProofId, PlanDigest, Goal, Result,
-                 MaterialWire, EffectsWire, Author, AuthorSeq, SubmittedAt},
+                 MaterialWire, EffectsWire, none, none,
+                 Author, AuthorSeq, SubmittedAt},
                 [deterministic]),
-    V7Signature = quod_identity:sign(V7Bytes, Identity),
-    V7Submission = {submit, Author, V7Signature, V7Bytes},
-    ?assert(quod_transaction:verify_submission(V7Submission)),
+    V8Signature = quod_identity:sign(V8Bytes, Identity),
+    V8Submission = {submit, Author, V8Signature, V8Bytes},
+    ?assert(quod_transaction:verify_submission(V8Submission)),
     ?assertEqual(
        {error, malformed_submission},
-       quod_transaction:decode_verified_submission(?BINDING, V7Submission)).
+       quod_transaction:decode_submission_metadata(V8Bytes)),
+    ?assertEqual(
+       {error, unsupported_version},
+       quod_transaction:decode_verified_submission(?BINDING, V8Submission)).
 
 different_canonical_submissions_have_different_ids_test() ->
     {Tx, Identity} = signed(),
@@ -440,7 +454,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 8, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 9, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, MaterialWire, CanonicalEffects,
            none, none, Author, 1, 0},
@@ -488,3 +502,21 @@ wire_list([]) -> {5};
 wire_list([Head | Tail]) -> {6, Head, wire_list(Tail)}.
 
 flip_first(<<Byte, Rest/binary>>) -> <<(Byte bxor 1), Rest/binary>>.
+
+semantic_v4_id(
+  #transaction{origin = Origin, proof_id = ProofId,
+               plan_digest = PlanDigest, goal = Goal, result = Result,
+               diff = Diff, read_check = ReadCheck, effects = Effects,
+               request_auth = RequestAuth,
+               auth_transcript = AuthTranscript}) ->
+    {ok, DiffBytes} = quod_wire_term:encode_canonical(Diff),
+    {ok, ReadCheckBytes} =
+        quod_wire_term:encode_canonical(maps:to_list(ReadCheck)),
+    {ok, EffectsBytes} = quod_wire_term:encode_canonical(Effects),
+    crypto:hash(
+      sha256,
+      term_to_binary(
+        {quod_semantic_transaction, 4, ?NS, ?ANCHOR, Origin, ProofId,
+         PlanDigest, Goal, Result, DiffBytes, ReadCheckBytes, EffectsBytes,
+         RequestAuth, AuthTranscript},
+        [deterministic])).

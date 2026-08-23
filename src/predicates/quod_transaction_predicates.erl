@@ -6,12 +6,14 @@ Transactional Prolog control over Quod's staged ontology overlay.
 `Goal` until its first complete solution and commits that staged result. Failed
 alternatives restore their exact immutable overlay checkpoint. Total failure or
 an Erlog exception restores the entry checkpoint; reads remain monotonic OCC
-dependencies. Ordinary Erlog proofs never enable checkpoint mode.
+dependencies. `trigger_event(Term)` stages an explicit ordered occurrence in
+that same overlay; it is governed by the ordinary staging context. Ordinary
+Erlog proofs never enable checkpoint mode.
 """.
 
 -include_lib("erlog/src/erlog_int.hrl").
 
--export([load/1, transaction_1/3, commit_1/3]).
+-export([load/1, transaction_1/3, commit_1/3, trigger_event_1/3]).
 
 -define(COMMIT, '$quod_transaction_commit').
 -define(FAILED, '$quod_transaction_failed').
@@ -28,11 +30,28 @@ dependencies. Ordinary Erlog proofs never enable checkpoint mode.
 
 -doc "Register transaction/1 and its private success continuation.".
 -spec load(tuple()) -> tuple().
-load(#est{db = Db0} = Est) ->
+load(#est{db = Db0} = Est0) ->
     Db1 = erlog_int:add_compiled_proc(
             {transaction, 1}, ?MODULE, transaction_1, Db0),
-    Est#est{db = erlog_int:add_compiled_proc(
-                   {?COMMIT, 1}, ?MODULE, commit_1, Db1)}.
+    Est1 = Est0#est{db = erlog_int:add_compiled_proc(
+                     {?COMMIT, 1}, ?MODULE, commit_1, Db1)},
+    quod_predicates:register(
+      Est1, {trigger_event, 1}, staging, ?MODULE, trigger_event_1).
+
+-spec trigger_event_1(term(), list(), tuple()) -> term().
+trigger_event_1({trigger_event, Term0}, Next, #est{bs = Bs} = St) ->
+    Term = erlog_int:dderef(Term0, Bs),
+    case quod_diff:valid_event(Term) of
+        true ->
+            case quod_erlog_db_local_prove:stage_event(St, Term) of
+                {ok, St1} -> erlog_int:prove_body(Next, St1);
+                error ->
+                    erlog_int:erlog_error(
+                      {permission_error, modify, trigger_event}, St)
+            end;
+        false ->
+            erlog_int:fail(St)
+    end.
 
 -spec transaction_1(term(), list(), tuple()) -> term().
 transaction_1(Goal, Next,

@@ -17,8 +17,9 @@
 
 %% A Prolog clause; identity is its content only (Head + Body).
 -type clause() :: {Head :: term(), Body :: term()}.   %% Body == true for a plain fact
-%% The differ's write-set: an ordered op-log of asserts/retracts.
--type op()     :: {assert, clause()} | {retract, clause()}.
+%% The differ's ordered material operations: fact mutations plus explicit
+%% occurrences which the reducer publishes without mutating ontology facts.
+-type op()     :: {assert, clause()} | {retract, clause()} | {event, term()}.
 %% The read-set: one exact mutation-version token per predicate {Functor, Arity}.
 %% This header owns the token alphabet — it is part of the signed transaction
 %% bytes; the MVCC store implements it (`quod_erlog_db_mvcc:version_token/2`).
@@ -51,7 +52,7 @@
                  plan_digest = none :: binary() | none, %% SHA-256 of the sealed plan's canonical bytes; none only for genesis
                  goal = undefined :: binary() | undefined, %% canonical atom-safe goal blob; undefined only for genesis
                  result = undefined :: binary() | undefined, %% canonical atom-safe sorted bindings blob; undefined only for genesis
-                 diff         :: [op()],              %% concrete asserts/retracts
+                 diff         :: [op()],              %% concrete fact mutations and explicit events
                  read_check   :: read_check(),        %% what the proof relied on (OCC)
                  effects = [] :: [quod_effect:effect()], %% bounded typed direct effects; never callbacks/goals
                  request_auth = none :: none | quod_client_goal:request_auth(),

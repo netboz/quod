@@ -64,7 +64,7 @@ post-commit `react_on/3` continuation).
          with_chain/2]).
 -export([projection_context/3]).
 %% class metadata (also drives dispatch)
--export([class/2, allowed/2, is_ground/1]).
+-export([class/2, allowed/2]).
 
 -define(CTX_FLAG, '$quod_ctx').
 -define(REGISTRY_FLAG, '$quod_predicate_registry').
@@ -384,18 +384,6 @@ allowed(projection, projection)  -> true;
 allowed(projection, _Kind)       -> false;
 allowed(reaction,   reaction)    -> true;
 allowed(reaction,   _Kind)       -> false.
-
--doc "Whether an Erlog term contains no unbound variable (including anonymous `_`).".
--spec is_ground(term()) -> boolean().
-is_ground(T) when is_tuple(T), tuple_size(T) =:= 1 -> false;
-is_ground(T) when is_tuple(T) ->
-    lists:all(fun is_ground/1, tuple_to_list(T));
-is_ground([H | T]) ->
-    is_ground(H) andalso is_ground(T);
-is_ground([]) ->
-    true;
-is_ground(_) ->
-    true.
 
 %%%===================================================================
 %%% context: read/write on #est.fs

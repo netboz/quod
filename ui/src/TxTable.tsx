@@ -57,6 +57,13 @@ export function TxTable({
               lifecycle: {c.row.original.effect_operations.join(', ')}
             </span>
           )}
+          {c.row.original.ops > 0 && (
+            <span className="mt-0.5 block text-[11px] text-gray">
+              {c.row.original.ops} operation{c.row.original.ops === 1 ? '' : 's'} ·{' '}
+              {c.row.original.fact_ops} fact change{c.row.original.fact_ops === 1 ? '' : 's'} ·{' '}
+              {c.row.original.ops - c.row.original.fact_ops} event{c.row.original.ops - c.row.original.fact_ops === 1 ? '' : 's'}
+            </span>
+          )}
         </div>
       ),
     }),

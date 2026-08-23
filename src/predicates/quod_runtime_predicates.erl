@@ -48,13 +48,15 @@ load(Est0) ->
       Est4, {'$quod_reaction_complete', 1}, reaction,
       ?MODULE, reaction_complete_1).
 
--doc "Convert canonical applied fact operations to ordered reaction events.".
+-doc "Convert canonical applied operations to ordered reaction events.".
 -spec diff_to_events([op()]) -> [term()].
 diff_to_events(AppliedOps) when is_list(AppliedOps) ->
     lists:filtermap(
       fun({Kind, {Fact, {[], false}}})
             when Kind =:= assert; Kind =:= retract ->
               {true, {Kind, Fact}};
+         ({event, Term}) ->
+              {true, Term};
          (_) ->
               false
       end, AppliedOps).
@@ -175,7 +177,7 @@ enqueue_projection_2({enqueue_projection, Resource0, Job0}, Next, St) ->
     Ctx = quod_predicates:context(St),
     Ns = quod_predicates:ctx_ns(Ctx),
     Height = quod_predicates:ctx_height(Ctx),
-    case quod_predicates:is_ground({Resource, Job}) of
+    case quod_wire_term:is_ground({Resource, Job}) of
         true ->
             case quod_runtime:enqueue_heavy(Ns, Resource, Height, Job) of
                 ok ->

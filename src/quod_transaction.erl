@@ -22,6 +22,7 @@ accepted.
          bytes/2, sign/3, sign_submission/3, verify/2,
          submission/2, submission_id/1, verify_submission/1,
          relay_attempt_id/5, decode_verified_submission/2,
+         decode_submission_metadata/1,
          validate_request/4, request_claim/1,
          requires_network_identity/1]).
 
@@ -29,10 +30,11 @@ accepted.
 
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
--define(ID_VERSION, 4).
-%% V8 binds an author's continuous admission generation, signed-user request,
+-define(ID_VERSION, 5).
+%% V9 binds an author's continuous admission generation, signed-user request,
 %% authorization transcript, and the atom-bearing diff/read set through the
-%% bounded Prolog wire alphabet. The fixed envelope can therefore be decoded
+%% bounded Prolog wire alphabet, including explicit event occurrences. The
+%% fixed envelope can therefore be decoded
 %% safely before a small, explicit
 %% vocabulary allocation is permitted for an authenticated committee author.
 %% Unrelated committee changes do not invalidate retained custody, while
@@ -40,7 +42,7 @@ accepted.
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 8).
+-define(VERSION, 9).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -557,12 +559,50 @@ decode_verified_submission(
                 {error, _} = Error ->
                     Error
             end;
+        {ok, Other}
+          when is_tuple(Other), tuple_size(Other) =:= 18,
+               element(1, Other) =:= ?DOMAIN,
+               element(2, Other) =/= ?VERSION ->
+            {error, unsupported_version};
         {ok, _Other} ->
             {error, namespace_or_author_mismatch};
         {error, _Reason} ->
             {error, malformed_canonical_bytes}
     end;
 decode_verified_submission(_Binding, _Submission) ->
+    {error, malformed_submission}.
+
+-doc "Decode bounded metadata from the one current V9 transaction envelope.".
+-spec decode_submission_metadata(term()) ->
+          {ok, #{target := {binary(), binary()},
+                 admission := binary(), tx_id := binary(),
+                 effects := [quod_effect:effect()], author := binary(),
+                 sequence := non_neg_integer()}} |
+          {error, malformed_submission}.
+decode_submission_metadata(Canonical)
+  when is_binary(Canonical), byte_size(Canonical) =< ?MAX_CANONICAL_BYTES ->
+    case quod_safe_term:decode(Canonical, ?MAX_CANONICAL_BYTES) of
+        {ok,
+         {?DOMAIN, ?VERSION, Ns, <<_:256>> = Anchor,
+          <<_:256>> = Admission, <<_:256>> = TxId,
+          _Origin, _ProofId, _PlanDigest, _Goal, _Result,
+          _MaterialWire, EffectsWire, _RequestAuth, _AuthTranscript,
+          <<_:256>> = Author, Sequence, _SubmittedAt} = Decoded}
+          when is_binary(Ns), is_integer(Sequence), Sequence >= 0 ->
+            case {term_to_binary(Decoded, [deterministic]) =:= Canonical,
+                  quod_wire_term:decode_canonical(
+                    EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES)} of
+                {true, {ok, Effects}} when is_list(Effects) ->
+                    {ok, #{target => {Ns, Anchor}, admission => Admission,
+                           tx_id => TxId, effects => Effects,
+                           author => Author, sequence => Sequence}};
+                _ ->
+                    {error, malformed_submission}
+            end;
+        _ ->
+            {error, malformed_submission}
+    end;
+decode_submission_metadata(_Canonical) ->
     {error, malformed_submission}.
 
 decode_material(MaterialWire, EffectsWire) ->

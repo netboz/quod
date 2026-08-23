@@ -333,6 +333,23 @@ verified_plan_restart_materializes_new_functor_at_owner_test() ->
           ?assertEqual(Name, atom_to_binary(Functor, utf8))
       end).
 
+superseded_keyed_plan_v5_is_rejected_test() ->
+    with_identity(
+      fun(_Pub) ->
+          Current = signed_material_plan([], [], []),
+          {quod_plan, Core, Pubkey, _CurrentSignature} = tuple(Current),
+          #{pubkey := Pubkey} = Signer = configured_test_signer(),
+          V5Bytes = term_to_binary(
+                      {<<"quod.dtx.plan">>, 5, Core}, [deterministic]),
+          V5 = plan(
+                 {quod_plan, Core, Pubkey,
+                  quod_identity:sign(V5Bytes, Signer)}),
+          ?assertNot(quod_dtx:verify(V5)),
+          {ok, Blob} = quod_dtx:encode(V5),
+          {ok, Decoded} = quod_dtx:decode(Blob),
+          ?assertNot(quod_dtx:verify(Decoded))
+      end).
+
 plan_material_has_one_aggregate_64_symbol_budget_test() ->
     with_identity(
       fun(_Pub) ->
@@ -2113,7 +2130,7 @@ signed_material_plan(Diff, ReadPairs, Transcript) ->
              live_bridges => wire_blob([]),
              transcript => wire_blob(Transcript)},
     Bytes = term_to_binary(
-              {<<"quod.dtx.plan">>, 5, Core}, [deterministic]),
+              {<<"quod.dtx.plan">>, 6, Core}, [deterministic]),
     plan({quod_plan, Core, Pubkey, quod_identity:sign(Bytes, Signer)}).
 
 transcript_with_goal(Goal) ->

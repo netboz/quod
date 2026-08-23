@@ -103,7 +103,7 @@ its proof fence but never change consensus-derived generation state.
               group_history/0]).
 
 -define(PLAN_DOMAIN, <<"quod.dtx.plan">>).
--define(PLAN_VERSION, 5).
+-define(PLAN_VERSION, 6).
 
 -define(CONTROL_VERSION, 2).
 -define(MANIFEST_VERSION, 2).
@@ -675,8 +675,8 @@ valid_chain([Identity | Rest], Depth)
 valid_chain(_ImproperOrTooDeep, _Depth) ->
     false.
 
--doc "Decode the plan's staged write-set. Owner-side only: allocates its atoms.".
--spec diff(plan()) -> [{assert | retract, {term(), term()}}].
+-doc "Decode the plan's staged fact mutations and event occurrences. Owner-side only: allocates its atoms.".
+-spec diff(plan()) -> [op()].
 diff(Plan) -> material_value(diff, Plan).
 
 -doc "Decode the plan's exact OCC read tokens. Owner-side only.".

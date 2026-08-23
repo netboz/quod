@@ -333,6 +333,14 @@ read_only_rejects_every_mutation_at_first_attempt_test() ->
                     {retract, {temporary, value}}}],
     lists:foreach(fun(Goal) -> assert_read_only_rejects(C, Goal) end, Goals).
 
+read_only_rejects_explicit_event_staging_without_mutation_test() ->
+    C = committed([]),
+    W = quod_erlog_db_local_prove:wrap_state(C, #{read_only => true}),
+    ?assertEqual(
+       error,
+       quod_erlog_db_local_prove:stage_event(W, {alarm, disk})),
+    ?assertEqual([], quod_erlog_db_local_prove:get_local_changes(db_ref(W))).
+
 read_only_bypasses_mutation_hooks_but_ordinary_overlay_keeps_them_test() ->
     C0 = committed([]),
     #est{db = Db0} = C0,

@@ -9403,7 +9403,8 @@ nonempty_binary(Value) -> is_binary(Value) andalso byte_size(Value) > 0.
 %% Does a diff touch the committee (any `peer_admitted` assert/retract)? Hostile diffs can hold ANY
 %% term as an element — the catch-all keeps the scan total.
 touches_committee(Diff) ->
-    lists:any(fun({_K, {{peer_admitted, _, _, _, _}, _}}) -> true;
+    lists:any(fun({K, {{peer_admitted, _, _, _, _}, _}})
+                    when K =:= assert; K =:= retract -> true;
                  (_)                                      -> false
               end, Diff).
 

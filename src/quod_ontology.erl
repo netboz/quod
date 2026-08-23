@@ -104,7 +104,7 @@ validate_action(Action) ->
     end.
 
 validate_typed_action(Action) ->
-    case quod_predicates:is_ground(Action) of
+    case quod_wire_term:is_ground(Action) of
         true -> validate_ground_action(Action);
         false -> {error, invalid_arguments}
     end.

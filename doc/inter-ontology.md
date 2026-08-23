@@ -275,8 +275,8 @@ The separate "keep following this ontology" facility is specified by
 `ontology-subscription-plan.md`: one explicit durable `subscribes/2` fact in
 the subscriber's ledger establishes the ontology relationship. Its hosting
 runtime now maintains a shared certificate-verified local foreign projection
-through the existing `quod_foreign_log` cache and verifier. The planned event
-slice converts the canonical reducer's newly applied operations and matches
+through the existing `quod_foreign_log` cache and verifier. The event path
+converts the canonical reducer's newly applied operations and matches
 source-qualified `react_on/3` locally in the subscriber. The first
 implementation installs no target-side pattern registry. The target stores no
 duplicate durable row, and routes remain local directory P-state.
@@ -504,8 +504,9 @@ directory/ask benchmark, not a second consensus benchmark.
 ## 11. Non-goals — deliberately NOT in this milestone
 
 - **Ontology-subscription event delivery.** The local vocabulary, runtime
-  catalogue, and shared certified following are implemented. Local and remote
-  reaction execution remains planned in `event-reaction-refinement-plan.md`.
+  catalogue, shared certified following, and local/remote reaction execution
+  are implemented. Explicit events are implemented in the current working
+  tree; hardware acceptance remains in `event-reaction-refinement-plan.md`.
   Section 5 explains why none of it is inferred from dead per-ask state.
 - **The source-qualified `react_on/3` pattern grammar.** It is frozen and
   locally validated in `ontology-subscription-plan.md` Slice 1, not inferred

@@ -265,10 +265,17 @@ function DiffSection({ diff, status, loading }: { diff: Op[]; status: TxStatus; 
           <li key={i} className="flex gap-2 font-mono text-[13px]">
             <span
               className={
-                'font-bold ' + (!applied ? 'text-gray' : op.op === 'assert' ? 'text-olive' : 'text-rose')
+                'font-bold ' +
+                (!applied
+                  ? 'text-gray'
+                  : op.op === 'assert'
+                    ? 'text-olive'
+                    : op.op === 'event'
+                      ? 'text-teal-light'
+                      : 'text-rose')
               }
             >
-              {op.op === 'assert' ? '+' : '−'}
+              {op.op === 'assert' ? '+' : op.op === 'retract' ? '−' : '•'}
             </span>
             <span
               className={
@@ -277,10 +284,12 @@ function DiffSection({ diff, status, loading }: { diff: Op[]; status: TxStatus; 
                   ? 'text-gray'
                   : op.op === 'assert'
                     ? 'text-olive'
-                    : 'text-rose line-through')
+                    : op.op === 'event'
+                      ? 'text-teal-light'
+                      : 'text-rose line-through')
               }
             >
-              {op.clause}
+              {op.op === 'event' ? op.term : op.clause}
             </span>
           </li>
         ))}

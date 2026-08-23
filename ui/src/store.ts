@@ -51,7 +51,7 @@ export function useExplorerStore(): State {
 const asHistory = (t: TxRow): LiveTx => ({
   result: null,
   diff: [],
-  root_facts_changed: t.ops > 0,
+  root_facts_changed: t.fact_ops > 0,
   effects: [],
   read_predicates: 0,
   origin: null,

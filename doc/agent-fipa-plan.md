@@ -389,10 +389,10 @@ publication:
 
 `diff` is the signed requested operation list. The canonical committed
 projection separately computes ordered `applied_ops`, excluding identical
-assertions and absent retractions. The reaction slice carries that existing
-result through this publication and converts each applied operation to one
-event; it does not treat requested no-ops as changes and does not add a second
-event envelope. `effects` contains only the already-validated bounded
+assertions and absent retractions while preserving every explicit event
+occurrence. The runtime publication carries that existing result and converts
+each applied operation to one event; it does not treat requested no-ops as
+changes and does not add a second event envelope. `effects` contains only the already-validated bounded
 descriptors from that transaction; effect-only transactions therefore cross
 the same ordered runtime boundary with `diff = []`. Goal and result remain
 canonical ledger blobs and are decoded only by detail readers.
@@ -537,7 +537,7 @@ index candidates by source and event functor, but the actual match and continuat
 before executor resolution and Handler continuation. There is no Erlang-side
 matcher or parallel binding representation.
 
-The Handler is ordinary trusted Prolog. It runs in the single planned
+The Handler is ordinary trusted Prolog. It runs in the single
 `reaction` context: query and reaction-class external predicates are allowed;
 staging and projection predicates are refused. Observable Erlang bridges are
 registered through the existing ontology predicate-module mechanism with

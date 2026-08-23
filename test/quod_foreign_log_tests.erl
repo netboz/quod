@@ -1506,13 +1506,13 @@ prepared_fixture(Ns) ->
              effects => EmptyBlob, live_bridges => EmptyBlob,
              transcript => EmptyBlob},
     PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 5, Core}, [deterministic]),
+                  {<<"quod.dtx.plan">>, 6, Core}, [deterministic]),
     Plan = {quod_plan, Core, Pub,
             quod_identity:sign(PlanBytes, Signer)},
     {ok, PlanBlob} = quod_dtx:encode(Plan),
     OtherCore = Core#{target := Other, diff_ops := 0, diff := EmptyBlob},
     OtherPlanBytes = term_to_binary(
-                       {<<"quod.dtx.plan">>, 5, OtherCore}, [deterministic]),
+                       {<<"quod.dtx.plan">>, 6, OtherCore}, [deterministic]),
     OtherPlan = {quod_plan, OtherCore, Pub,
                  quod_identity:sign(OtherPlanBytes, Signer)},
     {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),

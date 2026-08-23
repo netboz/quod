@@ -869,8 +869,9 @@ As built in this Step-4 slice (`quod_dtx`), with the same binding properties:
   `fail_with_reason(not_allowed(TargetNs))`. The requested goal therefore never
   executes, but every participant can re-prove the exact decision whose result
   changed the caller's control flow against the absorbed policy read set.
-- The plan envelope is `{quod_plan, Core, Signer, Signature}` under witness
-  domain `quod.dtx.plan` v3; `Core`'s diff/read-check/transcript values are
+- The plan envelope is `{quod_plan, Core, Signer, Signature}` under the current
+  witness domain `quod.dtx.plan` V6; `Core`'s
+  diff/read-check/transcript values are
   nested deterministic ETF binaries, so the origin verifies the signature and
   outer shape without ever allocating another ontology's atoms.
 - `peer_ready/1` is exempt from the live-bridge gate only when the exact diff

@@ -447,7 +447,8 @@ exact_membership_parent(_Diff, _Est) ->
 
 diff_touches_membership(Diff) ->
     lists:any(
-      fun({_Kind, {{peer_admitted, _, _, _, _}, _Body}}) -> true;
+      fun({Kind, {{peer_admitted, _, _, _, _}, _Body}})
+            when Kind =:= assert; Kind =:= retract -> true;
          (_) -> false
       end, Diff).
 

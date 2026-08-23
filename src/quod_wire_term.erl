@@ -29,6 +29,7 @@ payload; one aggregate payload gets one bounded allocation budget.
          encode_canonical/1, decode_canonical/2,
          materialize_symbols/1, materialize_goal_symbols/1,
          goal_symbol_names/1,
+         is_ground/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
 
@@ -37,6 +38,18 @@ payload; one aggregate payload gets one bounded allocation budget.
 -define(MAX_SYMBOL_BYTES, 1024).
 
 -type wire() :: term().
+
+-doc "Whether an Erlog term contains no unbound variable (including anonymous `_`).".
+-spec is_ground(term()) -> boolean().
+is_ground(T) when is_tuple(T), tuple_size(T) =:= 1 -> false;
+is_ground(T) when is_tuple(T) ->
+    lists:all(fun is_ground/1, tuple_to_list(T));
+is_ground([H | T]) ->
+    is_ground(H) andalso is_ground(T);
+is_ground([]) ->
+    true;
+is_ground(_) ->
+    true.
 
 -spec encode(term()) -> {ok, wire()} | {error, bad_term}.
 encode(Term) ->

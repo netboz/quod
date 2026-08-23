@@ -350,7 +350,8 @@ paging_test() ->
 tx_json_full_test() ->
     J = quod_explorer_http:tx_json_full(
           <<"ont:target">>, tx(7), entry(2, [tx(7)])),
-    ?assertMatch(#{height := 2, time := 2002, ops := 1, effect_count := 0,
+    ?assertMatch(#{height := 2, time := 2002, ops := 1, fact_ops := 1,
+                   effect_count := 0,
                    effect_operations := [], effects := [],
                    root_facts_changed := true, read_predicates := 0,
                    ns := <<"ont:target">>, submitted_at := 1007}, J),
@@ -364,6 +365,18 @@ tx_json_full_test() ->
     ?assertEqual(unsigned, maps:get(signature_status, J)),
     ?assertEqual(null, maps:get(signature, J)),
     %% the whole thing must be JSON-encodable
+    ?assert(is_binary(quod_explorer_http:encode(J))).
+
+event_tx_json_is_visible_without_claiming_a_fact_change_test() ->
+    T = (tx(10))#transaction{diff = [{event, {alarm, disk}}]},
+    J = quod_explorer_http:tx_json_full(
+          <<"ont:root">>, T, entry(5, [T])),
+    ?assertEqual(1, maps:get(ops, J)),
+    ?assertEqual(0, maps:get(fact_ops, J)),
+    ?assertEqual(false, maps:get(root_facts_changed, J)),
+    ?assertEqual(
+       [#{op => event, term => <<"alarm(disk)">>}],
+       maps:get(diff, J)),
     ?assert(is_binary(quod_explorer_http:encode(J))).
 
 effect_tx_json_is_explicit_and_does_not_claim_root_diff_test() ->

@@ -2,10 +2,10 @@
 
 **Status:** the durable subscription catalogue and shared continuous certified
 follow have been implemented and deployed since release 0.7.80. Local and
-subscribed assert/retract reactions are complete in the current working tree
-but are not deployed. Reliable push, explicit events, and hardware acceptance
-remain planned in `event-reaction-refinement-plan.md`. The implemented slices
-change no ledger, transaction, certificate, DTX, genesis, or wire format.
+subscribed reactions are complete. Explicit events are implemented in the
+current working tree but not deployed; reliable push and hardware acceptance
+remain planned in `event-reaction-refinement-plan.md`. Explicit events change
+the transaction and DTX-plan grammar but add no new ledger record kind.
 
 This document is the authority for the subscription relation and certified
 foreign projection. `inter-ontology.md` remains authoritative for `::`, ACL,
@@ -274,7 +274,7 @@ budgets are operator-configurable; no semantic population ceiling is added.
 The implemented subscription fact and continuous follow changed no durable or
 wire format. Local assert/retract reactions also need no format change.
 
-The later `{event, Term}` operation added by `trigger_event/1` changes the
+The `{event, Term}` operation added by `trigger_event/1` changes the
 canonical transaction grammar and every exhaustive diff consumer. That one
 hard break is coordinated with the agent-identity re-found; old decoders and
 compatibility paths are deleted together.
@@ -291,7 +291,8 @@ compatibility paths are deleted together.
 5. **Partly implemented:** pull-follow acknowledgement, coalescing, and
    reaction-free resnapshot use the same follow lifecycle. Reliable page push
    remains a later freshness optimization.
-6. **Planned:** `trigger_event/1` format break and coordinated clean re-found.
+6. **Implemented in the working tree:** `trigger_event/1` and its coordinated
+   format break; activation still requires the planned clean re-found.
 7. **Planned:** hardware fan-out, churn, recovery, and chained-load acceptance.
 
 Each planned slice receives adversarial review and deletes any path it replaces

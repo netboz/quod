@@ -411,7 +411,8 @@ tx_json_decoded(Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
     #{tx_id => tx_id_text(Id), ns => Ns, height => Slot, time => Timestamp,
       goal => GoalJson, author => id_json(Author), author_seq => AuthorSeq,
       submitted_at => SubmittedAt,
-      ops => length(Diff), effect_count => length(Effects),
+      ops => length(Diff), fact_ops => fact_op_count(Diff),
+      effect_count => length(Effects),
       effect_operations => [effect_operation(Effect) || Effect <- Effects]}.
 
 -doc "The detail rendering: the row plus result bindings, authentication, the diff, and OCC extent.".
@@ -433,7 +434,7 @@ tx_json_full_decoded(
        Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
        Diff, Effects, Slot, Timestamp))#{result => ResultJson,
                      diff => [op_json(Op) || Op <- Diff],
-                     root_facts_changed => Diff =/= [],
+                     root_facts_changed => fact_op_count(Diff) > 0,
                      effects => [effect_json(Effect) || Effect <- Effects],
                      read_predicates => map_size(RC),
                      origin => origin_json(Origin),
@@ -703,7 +704,12 @@ result_json(Durable) ->
        || {Name, Value} <- Durable]).
 
 op_json({assert, Clause})  -> #{op => assert,  clause => clause_text(Clause)};
-op_json({retract, Clause}) -> #{op => retract, clause => clause_text(Clause)}.
+op_json({retract, Clause}) -> #{op => retract, clause => clause_text(Clause)};
+op_json({event, Term})     -> #{op => event, term => prolog_text(Term)}.
+
+fact_op_count(Diff) ->
+    length([ok || {Kind, {_Head, _Body}} <- Diff,
+                  Kind =:= assert orelse Kind =:= retract]).
 
 %% A stored clause body is erlog's COMPILED `{Goals, HasCut}` form (`well_form_body`): a plain
 %% fact compiles to `{[], _}` and renders as its head alone; a rule's goal list renders as the

@@ -636,7 +636,14 @@ is now the UI-neutral `quod_client_cursor`; `/api/prove`,
 specialized registration endpoint/executor are absent. No deployment or
 re-found may expose both the specialized and signed write entrances.
 
-## Protocol break and deployment
+## Historical signed-client protocol break and deployment
+
+This section records the generation introduced by the signed-client work. The
+current event-capable generation is transaction V9, semantic transaction ID
+V5, and signed DTX plan V6; `doc/transaction-signatures.md` and
+`doc/event-reaction-refinement-plan.md` are authoritative for those current
+formats. The V8/V4/plan-V5 values below are retained only as the history of the
+earlier coordinated break, not as accepted formats.
 
 The deployed 0.7.71 protocol uses transaction V7, semantic transaction ID V3,
 plan V4, scope wire V3, and DTX V1 records. Signed writes are a separate future
@@ -1192,7 +1199,7 @@ The Slice-6 review must answer explicitly:
 8. Can an HTTP-disabled target accept forwarded signed goals without exposing
    a public listener or duplicating auth, rate, cursor, or symbol state?
 
-## Required review questions
+## Historical required review questions
 
 The review must answer these before implementation:
 

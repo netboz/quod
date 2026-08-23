@@ -449,10 +449,10 @@ section 5.
 
 - **Ontology-subscription reactions** — explicit durable subscriber-owned
   relations and certificate-verified foreign projections are implemented.
-  Local and subscribed `react_on/3` execution remains planned in
-  `event-reaction-refinement-plan.md`. The initial design follows certified
-  applied operations and filters at the subscriber; it does not install a
-  second target-side pattern registry.
+  Local and subscribed `react_on/3` execution is implemented, and explicit
+  `trigger_event/1` occurrences are implemented in the current working tree.
+  The design follows certified applied operations and filters at the
+  subscriber; it does not install a second target-side pattern registry.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door
   open) are both frequent and must-be-agreed, so today they pay the careful route's
   cost. Whether they deserve a third, faster route is still open.
@@ -462,7 +462,7 @@ section 5.
 - **Reading two ontologies at once** can catch each at a slightly different instant,
   so they may not perfectly line up. We accept that for now.
 - **Subscription event performance** — source-qualified `react_on/3` is locally
-  compiled today. Later slices still need to execute it and measure certified
+  compiled and executed today. Later slices still need to measure certified
   follow fan-out. Source-side publication filtering is deferred until those
   measurements justify it.
 

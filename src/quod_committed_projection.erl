@@ -478,7 +478,8 @@ add_stats(A, B) ->
 
 changed_heads(AppliedOps) ->
     stable_unique(
-      [Head || {_Kind, {Head, _Body}} <- AppliedOps], #{}, []).
+      [Head || {Kind, {Head, _Body}} <- AppliedOps,
+               Kind =:= assert orelse Kind =:= retract], #{}, []).
 
 stable_unique([], _Seen, Rev) ->
     lists:reverse(Rev);

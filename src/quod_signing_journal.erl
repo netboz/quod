@@ -388,16 +388,11 @@ decoded_effect(<<_:256>> = TxId, Sequence, Body, Envelope)
 decoded_effect(_, _, _, _) -> error.
 
 canonical_effect_identity(Body, TxId, Sequence, Author) ->
-    case quod_safe_term:decode(Body, ?MAX_BLOCK_BYTES) of
-        {ok, {quod_transaction, 8, _Ns, _Anchor, <<_:256>> = Admission,
-              TxId, _Origin, _ProofId, _PlanDigest, _Goal, _Result,
-              _MaterialWire, EffectsWire, _RequestAuth, _AuthTranscript,
-              Author, Sequence, _SubmittedAt}} ->
-            case quod_wire_term:decode_canonical(
-                   EffectsWire, ?QUOD_MAX_DIRECT_EFFECT_BYTES) of
-                {ok, [_Effect]} -> {ok, Admission};
-                _ -> error
-            end;
+    case quod_transaction:decode_submission_metadata(Body) of
+        {ok, #{admission := Admission, tx_id := TxId,
+               effects := [_Effect], author := Author,
+               sequence := Sequence}} ->
+            {ok, Admission};
         _ -> error
     end.
 

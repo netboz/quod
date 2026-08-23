@@ -32,7 +32,8 @@ valid_ops_test() ->
              branch_label}],
            true}}},
     ?assert(quod_diff:valid_ops([])),
-    ?assert(quod_diff:valid_ops([Raw, Compiled])),
+    ?assert(quod_diff:valid_ops(
+              [Raw, Compiled, {event, alarm}, {event, {alarm, disk}}])),
     ?assertNot(quod_diff:valid_ops(not_a_list)),
     ?assertNot(quod_diff:valid_ops([Raw | improper_tail])),
     ?assertNot(quod_diff:valid_ops([{replace, {{fact, x}, true}}])),
@@ -41,7 +42,20 @@ valid_ops_test() ->
     ?assertNot(quod_diff:valid_ops(
                  [{assert, {{fact, x}, {[{{cut}, -1, false}], false}}}])),
     ?assertNot(quod_diff:valid_ops(
-                 [{assert, {{fact, {1.5}}, true}}])).
+                 [{assert, {{fact, {1.5}}, true}}])),
+    ?assertNot(quod_diff:valid_ops([{event, {'Variable'}}])),
+    ?assertNot(quod_diff:valid_ops([{event, 42}])),
+    ?assertNot(quod_diff:valid_ops([{event, {assert, fact}}])),
+    ?assertNot(quod_diff:valid_ops([{event, {retract, fact}}])),
+    ?assertNot(quod_diff:valid_ops(
+                 [{event, {from, <<"ns">>, <<0:256>>, signal}}])).
+
+explicit_events_are_applied_occurrences_without_fact_mutation_test() ->
+    Est0 = quod_ct:committed_kb([]),
+    Events = [{event, {alarm, disk}}, {event, {alarm, disk}}],
+    {ok, Est1, Applied} = quod_diff:apply_ops_report(Est0, Events),
+    ?assertEqual(Events, Applied),
+    ?assertEqual((Est0#est.db)#db.ref, (Est1#est.db)#db.ref).
 
 interpreted_clauses_returns_content_not_proved_answers_test() ->
     Fact = {catalog_entry, fact},
@@ -72,7 +86,8 @@ assertion_only_test() ->
     ?assertNot(quod_diff:assertion_only(
                  [{assert, {{can_invoke, a, b, c, d}, true}},
                   {retract, {{can_invoke, a, b, c, d}, true}}])),
-    ?assertNot(quod_diff:assertion_only([{retract, {{f, x}, true}}])).
+    ?assertNot(quod_diff:assertion_only([{retract, {{f, x}, true}}])),
+    ?assertNot(quod_diff:assertion_only([{event, founded}])).
 
 asserts_functor_test() ->
     %% head is `{can_invoke, _, _, _, _}` ⇒ functor {can_invoke, 4}

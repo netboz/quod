@@ -87,7 +87,7 @@ lifecycle_continuation_predicate(
     Handle = erlog_int:dderef(Handle0, Bs),
     Action = erlog_int:dderef(Action0, Bs),
     Desired = erlog_int:dderef(Desired0, Bs),
-    case {quod_predicates:is_ground({Action, Desired}),
+    case {quod_wire_term:is_ground({Action, Desired}),
           quod_erlog_db_local_prove:action_request(St, Handle, Action)} of
         {true, {ok, Structural}} ->
             stage_prepared_action(Action, Desired, Structural, Next, St);
@@ -186,7 +186,7 @@ ontology_join_state_predicate(Goal, Next, #est{bs = Bs} = St) ->
     state(erlog_int:dderef(Goal, Bs), Next, St).
 
 state({ontology_join_state, Name, State}, Next, St) ->
-    case quod_predicates:is_ground(Name) of
+    case quod_wire_term:is_ground(Name) of
         false ->
             fail_reason({ontology_state_failed, invalid_arguments}, St);
         true ->
@@ -205,7 +205,7 @@ ontology_genesis_anchor_predicate(Goal, Next, #est{bs = Bs} = St) ->
     genesis_anchor(erlog_int:dderef(Goal, Bs), Next, St).
 
 genesis_anchor({ontology_genesis_anchor, Name, Expected}, Next, St) ->
-    case quod_predicates:is_ground(Name) of
+    case quod_wire_term:is_ground(Name) of
         false ->
             fail_reason({ontology_anchor_failed, invalid_arguments}, St);
         true ->

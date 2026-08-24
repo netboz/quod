@@ -1,11 +1,12 @@
 # Durable effects in multi-ontology transactions
 
-**Status:** implemented in the current working tree; not committed or deployed.
+**Status:** implemented and deployed in 0.7.86 after the coordinated clean
+re-found.
 Protocol, custody, recovery, signed-agent lifecycle, browser, and distributed
 tests are green. Full EUnit is green at 1,326 tests; the complete distributed
 ask suite is green at 15 tests; compile, xref, Dialyzer, client/UI builds, and
-diff-check are green. Independent review is complete; the coordinated clean
-re-found remains pending.
+diff-check are green. Independent review and the coordinated clean re-found
+are complete.
 
 The former group-wide `effect_requires_single_participant` rejection is gone.
 The separate rule forbidding a D diff and direct effect in the **same plan**

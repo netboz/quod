@@ -1,8 +1,8 @@
 # Generic ontology-backed agent identity
 
-**Status:** implemented in the working tree, not committed or deployed. The
-identity and certificate cleanup described here must pass the complete gate
-set before activation. `ontology-actor-architecture.md` remains authoritative
+**Status:** implemented and deployed in 0.7.86 after the coordinated clean
+re-found. The identity and certificate cleanup described here passed the
+complete gate set before activation. `ontology-actor-architecture.md` remains authoritative
 for the actor model; this document owns the request, identity-certificate, and
 durable-operation contracts.
 

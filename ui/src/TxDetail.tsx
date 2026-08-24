@@ -133,14 +133,14 @@ export function TxDetail({ tx, onClose }: { tx: LiveTx; onClose: () => void }) {
 
 function SignedRequestSection({ request }: { request: SignedRequest }) {
   return (
-    <Section title="Signed user request">
+    <Section title="Signed agent request">
       <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
         <Dt>Status</Dt>
         <dd>{request.status}</dd>
-        {request.user && (
+        {request.agent && (
           <>
-            <Dt>User</Dt>
-            <dd className="font-mono break-all" title={request.user.pubkey ?? undefined}>{request.user.id}</dd>
+            <Dt>Agent</Dt>
+            <dd className="font-mono break-all">{request.agent.reference}</dd>
           </>
         )}
         <Dt>Request digest</Dt>
@@ -161,7 +161,7 @@ function SignedRequestSection({ request }: { request: SignedRequest }) {
         <dd>{request.not_after_ms == null ? 'invalid' : timestamp(request.not_after_ms)}</dd>
         {request.signature && (
           <>
-            <Dt>User signature</Dt>
+            <Dt>Agent signature</Dt>
             <dd className="font-mono text-[11px] break-all text-gray">{request.signature}</dd>
           </>
         )}
@@ -195,8 +195,14 @@ function EffectsSection({ effects, loading }: { effects: Effect[]; loading: bool
                 {effect.target.ns} <span className="text-gray">({shortHex(effect.target.anchor, 12)})</span>
               </dd>
               <Dt>Actor</Dt>
-              <dd className="font-mono break-all" title={effect.actor.identity.pubkey ?? undefined}>
-                {effect.actor.kind}:{effect.actor.identity.id}
+              <dd className="font-mono break-all">
+                {effect.actor.kind === 'node'
+                  ? <span title={effect.actor.identity.pubkey ?? undefined}>
+                      node:{effect.actor.identity.id}
+                    </span>
+                  : <span title={effect.actor.identity?.anchor}>
+                      agent:{effect.actor.reference}
+                    </span>}
               </dd>
               <Dt>Authorized by</Dt>
               <dd>the transaction author node</dd>

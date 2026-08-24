@@ -2,6 +2,7 @@
 
 import { signedCursorCommand, signedGoal } from '../../client/src/signed-client.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
+import type { AgentReference } from '../../client/src/signed-client.js'
 
 export type PeerId = { id: string; pubkey: string | null }
 export type Origin = { ns: string; anchor: string } | null
@@ -29,12 +30,13 @@ export type Effect = {
   effect_id: string
   operation: string
   executor: PeerId
-  actor: { kind: 'node' | 'user'; identity: PeerId }
-  actor_authority: 'author_node_claimed'
+  actor: Actor
+  actor_authority: 'author_node_claimed' | 'signed_agent_request'
   target: { ns: string; anchor: string }
   request_digest: string
   prepared_digest: string
   local_execution: 'pending' | 'applied' | 'retired' | 'operator_error' | 'unavailable' | 'not_this_node'
+  local_custody_state?: 'transaction_bound' | 'transaction_ready' | 'transaction_submitted' | 'group_pending' | 'released' | 'applied' | 'retired' | 'operator_error'
   local_execution_height?: number
   local_execution_result?: string | null
 }
@@ -56,13 +58,13 @@ export type TxFull = TxRow & {
 export type SignedRequest = {
   status: 'verified' | 'invalid'
   request_digest: string | null
-  user: PeerId | null
+  agent: AgentActor | null
   operation_id: string | null
   operation_ref: {
     kind: 'operation'
     ns: string
     anchor: string
-    user: PeerId
+    agent: AgentActor
     operation_id: string
   } | null
   target: Origin
@@ -80,6 +82,15 @@ export type SignedRequest = {
     group_id?: string
   } | null
 }
+
+export type AgentActor = {
+  kind: 'agent'
+  identity: { ns: string; anchor: string } | null
+  reference: string
+  reference_wire: string | null
+}
+
+export type Actor = { kind: 'node'; identity: PeerId } | AgentActor
 
 export type Cert = {
   kind: string
@@ -128,6 +139,8 @@ export type Control = {
   sequence: number
   submitted_at: number
   participant_count?: number
+  participants?: ParticipantPlan[]
+  plan?: ParticipantPlan
   request?: SignedRequest | null
   plan_digest?: string
   verdict?: 'commit' | 'abort'
@@ -136,6 +149,16 @@ export type Control = {
   prepared?: boolean
   applied_generation?: number
   finalize_count?: number
+}
+
+export type ParticipantPlan = {
+  status: 'bound' | 'invalid'
+  target: Origin
+  plan_digest: string
+  signer: PeerId | null
+  diff_ops: number | null
+  effect_count: number | null
+  effects: Effect[]
 }
 
 export type TxOutcome = {
@@ -207,12 +230,13 @@ export const fetchTx = (ns: string, id: string) =>
 
 export const openProofCursor = (
   identity: SignedIdentity,
+  agent: AgentReference,
   ns: string,
-  anchor: string,
+  _anchor: string,
   goal: string,
 ) => signedGoal(
   identity,
-  { mode: 'cursor', namespace: ns, anchor: hex32(anchor), goal },
+  { mode: 'cursor', agent, goal: routedGoal(agent.namespace, ns, goal) },
 ) as Promise<ProveReply>
 
 export const nextProofSolution = (identity: SignedIdentity, cursor: string) =>
@@ -224,7 +248,11 @@ export const acceptProofSolution = (identity: SignedIdentity, cursor: string) =>
 export const stopProofCursor = (identity: SignedIdentity, cursor: string) =>
   signedCursorCommand(identity, cursor, 'stop') as Promise<ProveReply>
 
-function hex32(value: string) {
-  if (!/^[0-9a-fA-F]{64}$/.test(value)) throw new Error('invalid ontology anchor')
-  return Uint8Array.from(value.match(/../g)!, (byte) => Number.parseInt(byte, 16))
+function routedGoal(agentNamespace: string, targetNamespace: string, goal: string) {
+  if (agentNamespace === targetNamespace) return goal
+  return `${quotedAtom(targetNamespace)} :: (${goal})`
+}
+
+function quotedAtom(value: string) {
+  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
 }

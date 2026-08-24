@@ -32,7 +32,9 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
 -behaviour(gen_server).
 
 -export([start_link/0, issue_challenge/3, complete_challenge/2,
-         admit_goal/2, admit_forwarded_goal/2, materialize_goal/3]).
+         admit_goal/2, admit_forwarded_goal/2,
+         materialize_goal/3, materialize_request/4,
+         challenge_bytes/7, verify_challenge/7]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([start_link/1, session/1]).
@@ -54,14 +56,15 @@ ceiling, while restarting the VM naturally resets both atoms and the baseline.
             session_ttl_ms :: pos_integer(),
             max_sessions :: pos_integer(),
             challenge_rate :: none | quod_rate:limiter(),
-            goal_user_rate :: none | quod_rate:limiter(),
+            goal_signing_key_rate :: none | quod_rate:limiter(),
             goal_peer_rate :: none | quod_rate:limiter(),
-            symbol_user_rate :: none | quod_rate:limiter(),
+            symbol_signing_key_rate :: none | quod_rate:limiter(),
             symbol_peer_rate :: none | quod_rate:limiter(),
             atom_baseline :: non_neg_integer(),
             max_materialized_atoms :: non_neg_integer()}).
 
 -define(ATOM_BASELINE_KEY, {?MODULE, atom_baseline}).
+-define(CHALLENGE_DOMAIN, <<"quod.agent.challenge.v1", 0>>).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, #{}, []).
@@ -110,24 +113,38 @@ session(SessionId) ->
     call({session, SessionId}).
 -endif.
 
--doc "Resolve a live session and atomically charge its user and peer goal budgets.".
+-doc "Resolve a live session and atomically charge its signing-key and peer budgets.".
 -spec admit_goal(binary(), term()) -> {ok, map()} | {error, term()}.
 admit_goal(SessionId, Peer) ->
     call({admit_goal, SessionId, Peer}).
 
--doc "Charge one verified user request forwarded by an authenticated node.".
+-doc "Charge one verified signing-key request forwarded by an authenticated node.".
 -spec admit_forwarded_goal(<<_:256>>, <<_:256>>) ->
           ok | {error, term()}.
 admit_forwarded_goal(<<_:256>> = PublicKey, <<_:256>> = ForwarderKey) ->
     call({admit_forwarded_goal, PublicKey, ForwarderKey});
 admit_forwarded_goal(_PublicKey, _ForwarderKey) ->
-    {error, invalid_user_principal}.
+    {error, invalid_signing_key}.
 
--doc "Materialize one already-verified goal under exact user, peer and VM budgets.".
+-doc "Materialize one already-verified goal under exact signing-key, peer and VM budgets.".
 -spec materialize_goal(<<_:256>>, term(), term()) ->
           {ok, term()} | {error, term()}.
 materialize_goal(PublicKey, Peer, Goal) ->
     call({materialize_goal, PublicKey, Peer, Goal}).
+
+-doc "Materialize one verified agent reference and goal under the shared atom budget.".
+-spec materialize_request(<<_:256>>, term(), binary(), term()) ->
+          {ok, term(), term()} | {error, term()}.
+materialize_request(PublicKey, Peer, AgentRefBlob, Goal) ->
+    case quod_agent_ref:decode(AgentRefBlob) of
+        {ok, #{reference := AgentRef}} ->
+            case materialize_goal(PublicKey, Peer, {AgentRef, Goal}) of
+                {ok, {MaterializedAgentRef, MaterializedGoal}} ->
+                    {ok, MaterializedAgentRef, MaterializedGoal};
+                {error, _} = Error -> Error
+            end;
+        {error, _} -> {error, invalid_agent_reference}
+    end.
 
 call(Request) ->
     try gen_server:call(?MODULE, Request, 5000)
@@ -145,12 +162,14 @@ init(Options) ->
             max_sessions = maps:get(max_sessions, Options, ?MAX_SESSIONS),
             challenge_rate = optional_rate(
                                rate_limit(challenge_limit, Options, RateLimits)),
-            goal_user_rate = optional_rate(
-                               rate_limit(goal_user_limit, Options, RateLimits)),
+            goal_signing_key_rate = optional_rate(
+                                      rate_limit(goal_signing_key_limit,
+                                                 Options, RateLimits)),
             goal_peer_rate = optional_rate(
                                rate_limit(goal_peer_limit, Options, RateLimits)),
-            symbol_user_rate = optional_rate(
-                                 rate_limit(symbol_user_limit, Options, RateLimits)),
+            symbol_signing_key_rate = optional_rate(
+                                        rate_limit(symbol_signing_key_limit,
+                                                   Options, RateLimits)),
             symbol_peer_rate = optional_rate(
                                  rate_limit(symbol_peer_limit, Options, RateLimits)),
             atom_baseline = atom_baseline(Options),
@@ -209,18 +228,18 @@ schedule_prune() -> erlang:send_after(?PRUNE_INTERVAL_MS, self(), prune).
 %% ======================================================================
 
 issue(PublicKey, ClientNonce, Peer, S0) ->
-    case {quod_user:identity(PublicKey), valid_nonce(ClientNonce),
+    case {valid_public_key(PublicKey), valid_nonce(ClientNonce),
           network_and_node(S0)} of
-        {{error, invalid_public_key}, _, _} ->
+        {false, _, _} ->
             {{error, invalid_public_key}, S0};
         {_, false, _} ->
             {{error, invalid_client_nonce}, S0};
         {_, _, {error, _} = Error} ->
             {Error, S0};
-        {{ok, _}, true, {ok, NetworkId, NodeKey}} ->
+        {true, true, {ok, NetworkId, NodeKey}} ->
             %% A full challenge table is this node's availability condition,
             %% not a failed attempt by this caller. Check it before charging
-            %% the caller's rate budget so a burst cannot lock out a user.
+            %% the caller's rate budget so a burst cannot lock out an agent.
             case challenges_full(S0) of
                 true -> {{error, client_auth_busy}, S0};
                 false ->
@@ -286,12 +305,11 @@ verify_taken(ChallengeId, Signature,
              #{network_id := NetworkId, node_key := NodeKey,
                public_key := PublicKey, client_nonce := ClientNonce,
                server_nonce := ServerNonce, expires_ms := ExpiresMs}) ->
-    case quod_user:verify_challenge(
+    case verify_challenge(
            NetworkId, NodeKey, ChallengeId, PublicKey, ClientNonce,
            ServerNonce, {ExpiresMs, Signature}) of
         ok ->
-            {ok, Identity} = quod_user:identity(PublicKey),
-            call({bind_session, Identity});
+            call({bind_session, PublicKey});
         {error, _} = Error -> Error
     end.
 
@@ -299,20 +317,20 @@ verify_taken(ChallengeId, Signature,
 %% sessions
 %% ======================================================================
 
-bind_session(Identity, S = #s{sessions = Sessions, session_ttl_ms = Ttl}) ->
+bind_session(<<_:256>> = PublicKey,
+             S = #s{sessions = Sessions, session_ttl_ms = Ttl}) ->
     case sessions_full(S) of
         true ->
             {{error, client_session_busy}, S};
         false ->
             SessionId = crypto:strong_rand_bytes(32),
             ExpiresMs = quod_time:now_ms() + Ttl,
-            %% Stored minimally: the key is the whole binding, and user id,
-            %% namespace and principal are all derivable from it. Keeping one
-            %% copy means they cannot drift apart.
-            Session = #{public_key => maps:get(public_key, Identity),
+            %% A login proves possession of one key only. Agent identity is
+            %% selected and signed in each goal request, never inferred here.
+            Session = #{public_key => PublicKey,
                         expires_ms => ExpiresMs,
                         deadline => quod_time:mono_ms() + Ttl},
-            {{ok, public_session(SessionId, Session, Identity)},
+            {{ok, public_session(SessionId, Session)},
              S#s{sessions = Sessions#{SessionId => Session}}}
     end.
 
@@ -329,19 +347,13 @@ lookup_session(SessionId, S = #s{sessions = Sessions}) ->
         error -> {{error, invalid_session}, S}
     end.
 
-session_binding(SessionId, #{public_key := PublicKey} = Session) ->
-    {ok, Identity} = quod_user:identity(PublicKey),
-    public_session(SessionId, Session, Identity).
+session_binding(SessionId, Session) ->
+    public_session(SessionId, Session).
 
-public_session(SessionId, #{public_key := PublicKey, expires_ms := ExpiresMs},
-               #{user_id := UserId, namespace := Namespace}) ->
-    {ok, Principal} = quod_user:principal(PublicKey),
+public_session(SessionId, #{public_key := PublicKey, expires_ms := ExpiresMs}) ->
     #{session_id => SessionId,
       expires_ms => ExpiresMs,
-      public_key => PublicKey,
-      principal => Principal,
-      user_id => UserId,
-      namespace => Namespace}.
+      public_key => PublicKey}.
 
 sessions_full(#s{sessions = Sessions, max_sessions = Max}) ->
     map_size(Sessions) >= Max.
@@ -375,7 +387,7 @@ admit_goal_request(SessionId, Peer, S0) ->
     case lookup_session(SessionId, S0) of
         {{ok, #{public_key := PublicKey} = Session}, S1} ->
             case charge_pair(
-                   #s.goal_user_rate, PublicKey,
+                   #s.goal_signing_key_rate, PublicKey,
                    #s.goal_peer_rate, Peer, S1) of
                 {ok, S2} -> {{ok, Session}, S2};
                 {{error, _} = Error, S2} -> {Error, S2}
@@ -387,13 +399,13 @@ admit_goal_request(SessionId, Peer, S0) ->
 admit_forwarded_goal_request(
   <<_:256>> = PublicKey, <<_:256>> = ForwarderKey, S0) ->
     case charge_pair(
-           #s.goal_user_rate, PublicKey,
+           #s.goal_signing_key_rate, PublicKey,
            #s.goal_peer_rate, ForwarderKey, S0) of
         {ok, S1} -> {ok, S1};
         {{error, _} = Error, S1} -> {Error, S1}
     end;
 admit_forwarded_goal_request(_PublicKey, _ForwarderKey, S) ->
-    {{error, invalid_user_principal}, S}.
+    {{error, invalid_signing_key}, S}.
 
 materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
     case quod_wire_term:goal_symbol_names(Goal) of
@@ -404,7 +416,7 @@ materialize_verified_goal(<<_:256>> = PublicKey, Peer, Goal, S0) ->
             {{error, invalid_goal}, S0}
     end;
 materialize_verified_goal(_PublicKey, _Peer, _Goal, S) ->
-    {{error, invalid_user_principal}, S}.
+    {{error, invalid_signing_key}, S}.
 
 materialize_new_symbols(_PublicKey, _Peer, Goal, 0, S) ->
     case quod_wire_term:materialize_goal_symbols(Goal) of
@@ -421,7 +433,7 @@ materialize_new_symbols(PublicKey, Peer, Goal, Count,
             {{error, client_symbol_budget_exhausted}, S0};
         true ->
             case charge_pair_many(
-                   #s.symbol_user_rate, PublicKey,
+                   #s.symbol_signing_key_rate, PublicKey,
                    #s.symbol_peer_rate, Peer, Count, S0) of
                 {{error, _} = Error, S1} ->
                     {Error, S1};
@@ -526,3 +538,41 @@ live(#{deadline := Deadline}) -> Deadline > quod_time:mono_ms().
 
 valid_nonce(<<_:256>>) -> true;
 valid_nonce(_) -> false.
+
+valid_public_key(<<_:256>>) -> true;
+valid_public_key(_) -> false.
+
+-doc "Canonical bytes for the unchanged short-lived proof-of-key challenge.".
+-spec challenge_bytes(term(), term(), term(), term(), term(), term(), term()) ->
+          {ok, binary()} | {error, invalid_challenge}.
+challenge_bytes(<<_:256>> = NetworkId, <<_:256>> = NodeKey,
+                <<_:128>> = ChallengeId, <<_:256>> = PublicKey,
+                <<_:256>> = ClientNonce, <<_:256>> = ServerNonce,
+                ExpiresMs)
+  when is_integer(ExpiresMs), ExpiresMs > 0,
+       ExpiresMs =< 16#FFFFFFFFFFFFFFFF ->
+    {ok, <<?CHALLENGE_DOMAIN/binary, NetworkId/binary, NodeKey/binary,
+           ChallengeId/binary, PublicKey/binary, ClientNonce/binary,
+           ServerNonce/binary, ExpiresMs:64/unsigned-big>>};
+challenge_bytes(_NetworkId, _NodeKey, _ChallengeId, _PublicKey,
+                _ClientNonce, _ServerNonce, _ExpiresMs) ->
+    {error, invalid_challenge}.
+
+-doc "Verify an Ed25519 signature over one complete canonical challenge.".
+-spec verify_challenge(term(), term(), term(), term(), term(), term(), term()) ->
+          ok | {error, invalid_challenge | invalid_challenge_signature}.
+verify_challenge(NetworkId, NodeKey, ChallengeId, PublicKey, ClientNonce,
+                 ServerNonce, {ExpiresMs, Signature})
+  when is_binary(Signature), byte_size(Signature) =:= 64 ->
+    case challenge_bytes(NetworkId, NodeKey, ChallengeId, PublicKey,
+                         ClientNonce, ServerNonce, ExpiresMs) of
+        {ok, Bytes} ->
+            case quod_identity:verify(Signature, Bytes, PublicKey) of
+                true -> ok;
+                false -> {error, invalid_challenge_signature}
+            end;
+        {error, _} = Error -> Error
+    end;
+verify_challenge(_NetworkId, _NodeKey, _ChallengeId, _PublicKey,
+                 _ClientNonce, _ServerNonce, _Reply) ->
+    {error, invalid_challenge}.

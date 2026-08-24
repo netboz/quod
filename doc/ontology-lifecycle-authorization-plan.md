@@ -23,9 +23,8 @@ new code or documentation.
 ## Current contract
 
 1. Public creation is an ordinary `execute` goal in `quod:root`; public join
-   is an ordinary `execute` goal in `quod:node`. The transitional
-   `create_user_home` term is only a root Prolog convenience which derives the
-   fixed home arguments and calls generic `create_ontology/2`.
+   is an ordinary `execute` goal in `quod:node`. Agent enrollment uses generic
+   creation and ordinary class/key/ACL facts; `create_user_home` is deleted.
 2. The normal top-level `can_invoke/4` check is the only entry ACL. The
    action's declared Prolog prerequisites express its remaining policy and may
    use normal local or `::` proof calls.

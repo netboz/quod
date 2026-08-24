@@ -10,20 +10,42 @@ apply.
 
 -include("quod_proof_limits.hrl").
 
--export([validate/1, validate_list/1, validate_transaction/4,
+-define(VERSION, 2).
+
+-export([new/6, validate/1, validate_list/1, validate_plan/2,
+         validate_transaction/4,
          operation/1, effect_id/1, executor/1, actor/1, target/1,
          request_digest/1, prepared_digest/1]).
 -export_type([effect/0]).
 
 -type identity() :: {binary(), <<_:256>>}.
--type actor() :: {node, <<_:256>>} | {user, <<_:256>>}.
+-type actor() :: {node, <<_:256>>} | {agent, binary()}.
 -type effect() ::
-        {quod_direct_effect, 1, local_durable, ontology_lifecycle,
+        {quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
          create | join, <<_:256>>, <<_:256>>, actor(), identity(),
          <<_:256>>, <<_:256>>}.
 
+-doc "Construct one closed direct-effect descriptor in the current format.".
+-spec new(create | join, <<_:256>>, actor(), identity(), <<_:256>>, <<_:256>>) ->
+          {ok, effect()} | {error, invalid_direct_effect}.
+new(Operation, <<_:256>> = Executor, Actor,
+    {Ns, <<_:256>> = Anchor}, <<_:256>> = RequestDigest,
+    <<_:256>> = PreparedDigest)
+  when (Operation =:= create orelse Operation =:= join),
+       is_binary(Ns), byte_size(Ns) > 0 ->
+    Effect =
+        {quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
+         Operation, crypto:strong_rand_bytes(32), Executor, Actor,
+         {Ns, Anchor}, RequestDigest, PreparedDigest},
+    case validate(Effect) of
+        true -> {ok, Effect};
+        false -> {error, invalid_direct_effect}
+    end;
+new(_, _, _, _, _, _) ->
+    {error, invalid_direct_effect}.
+
 -spec validate(term()) -> boolean().
-validate({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+validate({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
           Operation, <<_:256>>, <<_:256>>, Actor,
           {Ns, <<_:256>>}, <<_:256>>, <<_:256>>})
   when Operation =:= create; Operation =:= join ->
@@ -52,6 +74,23 @@ validate_list([Effect | Rest], Count, Ids)
 validate_list(_, _Count, _Ids) ->
     false.
 
+-doc "Validate direct effects in their sealed, target-owned plan context.".
+-spec validate_plan(quod_dtx:plan(), map()) -> boolean().
+validate_plan(Plan, #{effects := Effects}) ->
+    case Effects of
+        [] ->
+            true;
+        [Effect] ->
+            validate(Effect) andalso
+                executor(Effect) =:= quod_dtx:signer(Plan) andalso
+                actor(Effect) =:= quod_dtx:principal(Plan) andalso
+                quod_dtx:diff_ops(Plan) =:= 0;
+        _ ->
+            false
+    end;
+validate_plan(_Plan, _Material) ->
+    false.
+
 -doc "Validate effects in their signed transaction context.".
 -spec validate_transaction(binary(), <<_:256>>, none | <<_:256>>, term()) ->
           boolean().
@@ -68,33 +107,33 @@ validate_transaction(_, _, _, _) ->
     false.
 
 -spec operation(effect()) -> create | join.
-operation({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+operation({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
            Operation, _, _, _, _, _, _}) -> Operation.
 
 -spec effect_id(effect()) -> <<_:256>>.
-effect_id({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+effect_id({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
            _, Id, _, _, _, _, _}) -> Id.
 
 -spec executor(effect()) -> <<_:256>>.
-executor({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+executor({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
           _, _, Executor, _, _, _, _}) -> Executor.
 
 -spec actor(effect()) -> actor().
-actor({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+actor({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
        _, _, _, Actor, _, _, _}) -> Actor.
 
 -spec target(effect()) -> identity().
-target({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+target({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
         _, _, _, _, Target, _, _}) -> Target.
 
 -spec request_digest(effect()) -> <<_:256>>.
-request_digest({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+request_digest({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
                 _, _, _, _, _, Digest, _}) -> Digest.
 
 -spec prepared_digest(effect()) -> <<_:256>>.
-prepared_digest({quod_direct_effect, 1, local_durable, ontology_lifecycle,
+prepared_digest({quod_direct_effect, ?VERSION, local_durable, ontology_lifecycle,
                  _, _, _, _, _, _, Digest}) -> Digest.
 
 valid_actor({node, <<_:256>>}) -> true;
-valid_actor({user, <<_:256>>}) -> true;
+valid_actor(Actor = {agent, _}) -> quod_agent_ref:valid_principal(Actor);
 valid_actor(_) -> false.

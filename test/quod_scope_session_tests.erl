@@ -145,7 +145,7 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
     Ns = <<"quod:scope-guard-reply">>,
     Table = 'quod_simplex_genesis_quod:scope-guard-reply',
     Tab = ets:new(Table, [named_table, protected, set]),
-    true = ets:insert(Tab, {proof_gate, true, open, 7, none}),
+    true = ets:insert(Tab, quod_ct:proof_gate_row(true, open, 7, none)),
     ScopeId = id(96),
     ProofId = key(97),
     Anchor = key(98),
@@ -171,7 +171,8 @@ worker_preserves_pending_guard_error_without_dirty_recheck_test() ->
         GroupId = key(102),
         true = ets:insert(
                  Tab,
-                 {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+                 quod_ct:proof_gate_row(
+                   true, {pending, GroupId}, 7, GroupId)),
         {ok, NextRef} = quod_scope_session:invoke_next(
                           Handle, InvocationId, 1),
         ?assertEqual(
@@ -338,6 +339,44 @@ cohosted_materialize_uses_exact_worker_reply_test() ->
         ?assert(false)
     end,
     Worker ! stop.
+
+cohosted_group_effect_batch_preserves_owner_and_starts_together_test() ->
+    Parent = self(),
+    Gate = spawn(fun() -> group_effect_gate(Parent, []) end),
+    Worker1 = spawn(fun() -> fake_group_effect_worker(Gate) end),
+    Worker2 = spawn(fun() -> fake_group_effect_worker(Gate) end),
+    ProofId = key(180),
+    SessionRef1 = make_ref(),
+    SessionRef2 = make_ref(),
+    Handle1 = {quod_scope_session, Worker1, id(181), ProofId, SessionRef1,
+               <<"quod:effect-one">>, key(182)},
+    Handle2 = {quod_scope_session, Worker2, id(183), ProofId, SessionRef2,
+               <<"quod:effect-two">>, key(184)},
+    GroupRef = {group, <<"quod:origin">>, key(185), key(186), key(187),
+                key(188)},
+    try
+        ?assertEqual(
+           ok,
+           quod_scope_session:bind_group_effects(
+             [{Handle1, key(189)}, {Handle2, key(190)}],
+             GroupRef, 1000)),
+        receive
+            {group_effect_commands_started, Commands} ->
+                ?assertEqual(2, length(Commands)),
+                ?assert(
+                   lists:all(
+                     fun({_Worker, Origin, SeenGroupRef, _PlanDigest}) ->
+                             Origin =:= self() andalso
+                                 SeenGroupRef =:= GroupRef
+                     end, Commands))
+        after 1000 ->
+            ?assert(false)
+        end
+    after
+        Worker1 ! stop,
+        Worker2 ! stop,
+        Gate ! stop
+    end.
 
 remote_invocation_facade_encodes_goal_and_uses_budget_test() ->
     {Router, Handle, ScopeId, TargetIdentity} = remote_fixture(no_events),
@@ -625,6 +664,45 @@ fake_batch_worker(Parent) ->
             Origin ! {scope_reply, self(), ProofId, SessionRef, RequestRef,
                       {savepoint, Operation, BatchIds, {ok, false, 4}}},
             fake_batch_worker(Parent);
+        stop ->
+            ok
+    end.
+
+fake_group_effect_worker(Gate) ->
+    receive
+        {scope_bind_group_effects, Origin, ProofId, SessionRef,
+         RequestRef, GroupRef, PlanDigest} ->
+            Gate ! {group_effect_command, self(), Origin, ProofId, SessionRef,
+                    RequestRef, GroupRef, PlanDigest},
+            receive
+                release_group_effect_reply ->
+                    Origin ! {scope_reply, self(), ProofId, SessionRef,
+                              RequestRef, {group_effects_bound, ok}}
+            end,
+            fake_group_effect_worker(Gate);
+        stop ->
+            ok
+    end.
+
+group_effect_gate(Parent, Pending) ->
+    receive
+        {group_effect_command, _Worker, _Origin, _ProofId, _SessionRef,
+         _RequestRef, _GroupRef, _PlanDigest} = Command ->
+            Pending1 = [Command | Pending],
+            case length(Pending1) of
+                2 ->
+                    Parent !
+                        {group_effect_commands_started,
+                         [{Pid, Owner, Ref, Digest}
+                          || {group_effect_command, Pid, Owner, _Proof,
+                              _Session, _Request, Ref, Digest} <- Pending1]},
+                    [Pid ! release_group_effect_reply
+                     || {group_effect_command, Pid, _Owner, _Proof,
+                         _Session, _Request, _Ref, _Digest} <- Pending1],
+                    group_effect_gate(Parent, []);
+                _ ->
+                    group_effect_gate(Parent, Pending1)
+            end;
         stop ->
             ok
     end.

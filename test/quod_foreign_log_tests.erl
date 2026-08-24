@@ -23,49 +23,49 @@ required_references_is_exhaustive_test() ->
        {ok, []},
        quod_foreign_log:required_references(
          control('begin', Target,
-                 {quod_dtx_begin, 2, ignored, none, none, ignored}))),
+                 {quod_dtx_begin, 3, ignored, none, ignored}))),
     ?assertEqual(
        {ok, [{'begin', BeginA}]},
        quod_foreign_log:required_references(
          control(prepare, Target,
-                 {quod_dtx_prepare, 2, key(20), BeginA, ignored,
+                 {quod_dtx_prepare, 3, key(20), BeginA, ignored,
                   key(21), <<>>}))),
     ?assertEqual(
        {ok, [{'begin', BeginA}, {prepare, PrepareA}, {prepare, PrepareB}]},
        quod_foreign_log:required_references(
          control(decision, Target,
-                 {quod_dtx_decision, 2, key(20), BeginA, commit,
+                 {quod_dtx_decision, 3, key(20), BeginA, commit,
                   [{A, PrepareA}, {B, PrepareB}], none}))),
     ?assertEqual(
        {ok, [{decision, Decision}, {prepare, PrepareA}]},
        quod_foreign_log:required_references(
          control(finalize, Target,
-                 {quod_dtx_finalize, 2, key(20), Decision, commit,
+                 {quod_dtx_finalize, 3, key(20), Decision, commit,
                   PrepareA, 2}))),
     ?assertEqual(
        {ok, [{decision, Decision}]},
        quod_foreign_log:required_references(
          control(finalize, Target,
-                 {quod_dtx_finalize, 2, key(20), Decision, abort, none, 1}))),
+                 {quod_dtx_finalize, 3, key(20), Decision, abort, none, 1}))),
     ?assertEqual(
        {ok, [{decision, Decision},
              {finalize, FinalizeA}, {finalize, FinalizeB}]},
        quod_foreign_log:required_references(
          control(complete, Target,
-                 {quod_dtx_complete, 2, key(20), Decision,
+                 {quod_dtx_complete, 3, key(20), Decision,
                   [{A, FinalizeA, 2}, {B, FinalizeB, 3}]}))),
     %% A row cannot smuggle a reference for a different anchored identity.
     ?assertEqual(
        {error, invalid_control},
        quod_foreign_log:required_references(
          control(decision, Target,
-                 {quod_dtx_decision, 2, key(20), BeginA, commit,
+                 {quod_dtx_decision, 3, key(20), BeginA, commit,
                   [{B, PrepareA}], none}))),
     ?assertEqual(
        {error, invalid_control},
        quod_foreign_log:required_references(
          control(complete, Target,
-                 {quod_dtx_complete, 2, key(20), Decision,
+                 {quod_dtx_complete, 3, key(20), Decision,
                   [{A, FinalizeA, 16#10000000000000000}]}))),
     %% Ingress sees the unsigned canonical record before consensus wraps it;
     %% it must use the same exhaustive reference extractor as validators.
@@ -1506,13 +1506,13 @@ prepared_fixture(Ns) ->
              effects => EmptyBlob, live_bridges => EmptyBlob,
              transcript => EmptyBlob},
     PlanBytes = term_to_binary(
-                  {<<"quod.dtx.plan">>, 6, Core}, [deterministic]),
+                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
     Plan = {quod_plan, Core, Pub,
             quod_identity:sign(PlanBytes, Signer)},
     {ok, PlanBlob} = quod_dtx:encode(Plan),
     OtherCore = Core#{target := Other, diff_ops := 0, diff := EmptyBlob},
     OtherPlanBytes = term_to_binary(
-                       {<<"quod.dtx.plan">>, 6, OtherCore}, [deterministic]),
+                       {<<"quod.dtx.plan">>, 7, OtherCore}, [deterministic]),
     OtherPlan = {quod_plan, OtherCore, Pub,
                  quod_identity:sign(OtherPlanBytes, Signer)},
     {ok, OtherPlanBlob} = quod_dtx:encode(OtherPlan),
@@ -1534,7 +1534,7 @@ prepared_fixture(Ns) ->
     {ok, OtherAttestation} = quod_dtx:attest_plan(
                                Other, OtherPlan, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
-                    Manifest, none, none,
+                    Manifest, none,
                     [{Binding, quod_dtx:digest(Plan), PlanBlob, Attestation},
                      {Other, quod_dtx:digest(OtherPlan), OtherPlanBlob,
                       OtherAttestation}]),

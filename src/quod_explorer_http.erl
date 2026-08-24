@@ -462,7 +462,7 @@ effect_json(Effect) ->
                   operation => quod_effect:operation(Effect),
                   executor => id_json(quod_effect:executor(Effect)),
                   actor => actor_json(quod_effect:actor(Effect)),
-                  actor_authority => author_node_claimed,
+                  actor_authority => actor_authority(quod_effect:actor(Effect)),
                   target => origin_json(quod_effect:target(Effect)),
                   request_digest =>
                       digest_json(quod_effect:request_digest(Effect)),
@@ -494,7 +494,19 @@ invalid_effect_json() ->
       local_execution_result => <<"invalid descriptor">>}.
 
 actor_json({node, Key}) -> #{kind => node, identity => id_json(Key)};
-actor_json({user, Key}) -> #{kind => user, identity => id_json(Key)}.
+actor_json({agent, Blob}) ->
+    case quod_agent_ref:decode(Blob) of
+        {ok, #{identity := Identity, reference := Reference}} ->
+            #{kind => agent, identity => origin_json(Identity),
+              reference => prolog_text(Reference),
+              reference_wire => base64:encode(Blob, #{mode => urlsafe,
+                                                       padding => false})};
+        {error, _} -> #{kind => agent, identity => null,
+                        reference => <<"invalid">>, reference_wire => null}
+    end.
+
+actor_authority({agent, _}) -> signed_agent_request;
+actor_authority({node, _}) -> author_node_claimed.
 
 local_effect_status(EffectId, Executor) ->
     case application:get_env(quod, node_pubkey) of
@@ -502,6 +514,7 @@ local_effect_status(EffectId, Executor) ->
             case quod_effect_journal:status(EffectId) of
                 {ok, #{state := State} = Status} ->
                     #{local_execution => local_effect_state(State),
+                      local_custody_state => State,
                       local_execution_height => maps:get(height, Status, 0),
                       local_execution_result =>
                           local_effect_result(maps:get(result, Status, none))};
@@ -510,9 +523,11 @@ local_effect_status(EffectId, Executor) ->
         _ -> #{local_execution => not_this_node}
     end.
 
-local_effect_state(prepared) -> pending;
-local_effect_state(handed_off) -> pending;
-local_effect_state(committed) -> pending;
+local_effect_state(transaction_bound) -> pending;
+local_effect_state(transaction_ready) -> pending;
+local_effect_state(transaction_submitted) -> pending;
+local_effect_state(group_pending) -> pending;
+local_effect_state(released) -> pending;
 local_effect_state(State) -> State.
 
 local_effect_result(none) -> null;
@@ -547,9 +562,10 @@ block_json(Ns, #entry{data = Data} = E) ->
 dtx_block_meta(Phase, Control, E) ->
     (block_meta(Phase, E))#{txs => [], control => control_json(Control)}.
 
-%% The explorer exposes only stable, already-validated control metadata.  It
-%% deliberately omits opaque plans, certificates embedded in references, and
-%% raw signing-journal bytes: those are ledger implementation details, not a
+%% The explorer exposes only stable, already-validated control metadata and a
+%% bounded summary of each signed participant plan.  It deliberately omits the
+%% raw plans, their diffs/effects, certificates embedded in references, and
+%% signing-journal bytes: those remain ledger implementation details, not a
 %% second API or an alternate source of truth.
 control_json(Control) ->
     #{kind := Kind, target := Target, author := Author,
@@ -564,61 +580,103 @@ control_json(Control) ->
         author_admission => digest_json(Admission),
         sequence => Sequence,
         submitted_at => SubmittedAt},
-      control_body_json(Kind, quod_dtx:control_body(Control))).
+      control_body_json(Kind, quod_dtx:control_body(Control), Target)).
 
 control_body_json(
   'begin',
-  {quod_dtx_begin, _, _Manifest, _RequestAuth, _Authorization,
-   Bundles} = Begin) ->
+  {quod_dtx_begin, _, Manifest, _RequestAuth, Bundles} = Begin,
+  _Target) ->
     OutcomeRef = case quod_dtx:begin_group_ref(Begin) of
                      {ok, Ref} -> Ref;
                      error -> none
                  end,
     #{participant_count => length(Bundles),
+      participants => [participant_plan_json(Manifest, Bundle)
+                       || Bundle <- Bundles],
       request => request_json(
                    quod_dtx:request_auth(Begin),
                    quod_dtx:request_claim(Begin), OutcomeRef)};
 control_body_json(
   prepare,
-  {quod_dtx_prepare, _, _, _BeginRef, _Manifest, PlanDigest, _PlanBlob}) ->
-    #{plan_digest => digest_json(PlanDigest)};
+  {quod_dtx_prepare, _, _, _BeginRef, Manifest, PlanDigest, PlanBlob},
+  Target) ->
+    Plan = participant_plan_json(
+             Manifest, {Target, PlanDigest, PlanBlob, none}),
+    #{plan_digest => digest_json(PlanDigest), plan => Plan};
 control_body_json(
   decision,
-  {quod_dtx_decision, _, _, _BeginRef, Verdict, PrepareRefs, _} = Record) ->
+  {quod_dtx_decision, _, _, _BeginRef, Verdict, PrepareRefs, _} = Record,
+  _Target) ->
     #{verdict => Verdict,
       prepare_count => length(PrepareRefs),
       reasons => decision_reasons_json(Record)};
 control_body_json(finalize,
                   {quod_dtx_finalize, _, _, _DecisionRef, Verdict, PrepareRef,
-                   AppliedGeneration}) ->
+                   AppliedGeneration}, _Target) ->
     #{verdict => Verdict, prepared => PrepareRef =/= none,
       applied_generation => AppliedGeneration};
-control_body_json(complete, {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows}) ->
+control_body_json(complete,
+                  {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows},
+                  _Target) ->
     #{finalize_count => length(FinalizeRows)}.
+
+participant_plan_json(
+  Manifest, {Target, PlanDigest, PlanBlob, Attestation}) ->
+    Base = #{target => origin_json(Target),
+             plan_digest => digest_json(PlanDigest)},
+    case quod_dtx:decode(PlanBlob) of
+        {ok, Plan} ->
+            BindingValid =
+                quod_dtx:target(Plan) =:= Target andalso
+                quod_dtx:digest(Plan) =:= PlanDigest andalso
+                (Attestation =:= none orelse
+                 quod_dtx:verify_plan_attestation(
+                   Target, Plan, Manifest, Attestation)),
+            case BindingValid of
+                true ->
+                    Effects = quod_dtx:effects(Plan),
+                    Base#{status => bound,
+                          signer => id_json(quod_dtx:signer(Plan)),
+                          diff_ops => quod_dtx:diff_ops(Plan),
+                          effect_count => quod_dtx:effects_count(Plan),
+                          effects => [effect_json(Effect)
+                                      || Effect <- Effects]};
+                false -> invalid_participant_plan_json(Base)
+            end;
+        {error, _} ->
+            invalid_participant_plan_json(Base)
+    end;
+participant_plan_json(_Manifest, _Malformed) ->
+    invalid_participant_plan_json(
+      #{target => null, plan_digest => <<"invalid">>}).
+
+invalid_participant_plan_json(Base) ->
+    Base#{status => invalid, signer => null,
+          diff_ops => null, effect_count => null, effects => []}.
 
 request_json(none, none, _OutcomeRef) ->
     null;
 request_json(
-  {user_goal_v1, <<_:256>> = Digest, RequestBytes,
-   <<_:512>> = UserSignature},
-  {ok, #{key := {UserKey, OperationId}, digest := Digest,
+  {agent_goal_v1, <<_:256>> = Digest, RequestBytes,
+   <<_:512>> = AgentSignature},
+  {ok, #{key := {AgentRef, OperationId}, digest := Digest,
          target := {TargetNs, <<_:256>> = TargetAnchor},
-         deadline := Deadline, principal := {user, UserKey},
+         deadline := Deadline, principal := {agent, AgentRef},
          operation_ref := OperationRef}},
   OutcomeRef)
   when is_binary(RequestBytes), is_binary(TargetNs) ->
-    case quod_client_goal:verify(RequestBytes, UserSignature) of
+    case quod_client_goal:verify(RequestBytes, AgentSignature) of
         {ok, #{request := #{mode := Mode, parser_version := ParserVersion}}} ->
             #{status => verified,
               request_digest => digest_json(Digest),
-              user => id_json(UserKey),
+              agent => actor_json({agent, AgentRef}),
               operation_id => digest_json(OperationId),
               operation_ref => operation_ref_json(OperationRef),
               target => origin_json({TargetNs, TargetAnchor}),
               mode => Mode,
               parser_version => ParserVersion,
               not_after_ms => Deadline,
-              signature => signature_json(UserSignature),
+              signature => signature_json(AgentSignature),
               first_outcome => anchored_outcome_ref_json(OutcomeRef)};
         {error, _} ->
             invalid_request_json()
@@ -627,17 +685,18 @@ request_json(_RequestAuth, _Claim, _OutcomeRef) ->
     invalid_request_json().
 
 invalid_request_json() ->
-    #{status => invalid, request_digest => null, user => null,
+    #{status => invalid, request_digest => null, agent => null,
       operation_id => null, operation_ref => null, target => null,
       mode => null, parser_version => null, not_after_ms => null,
       signature => null, first_outcome => null}.
 
 operation_ref_json(
-  {operation, Ns, <<_:256>> = Anchor, <<_:256>> = User,
+  {operation, Ns, <<_:256>> = Anchor, AgentRef,
    <<_:256>> = OperationId})
-  when is_binary(Ns) ->
+  when is_binary(Ns), is_binary(AgentRef) ->
     #{kind => operation, ns => Ns, anchor => digest_json(Anchor),
-      user => id_json(User), operation_id => digest_json(OperationId)};
+      agent => actor_json({agent, AgentRef}),
+      operation_id => digest_json(OperationId)};
 operation_ref_json(_) ->
     null.
 

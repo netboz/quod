@@ -6,8 +6,8 @@ authority for actor identity, system-ontology bootstrap, key ownership, and
 hosting. It corrects this document's former Agent Platform record model: every
 durable agent is a classed instance in ontology state and its optional Erlang
 process is a rebuildable projection.
-The current `{user, Key}` signed-goal label is transitional implementation
-terminology, not the target generic actor model.
+The current working tree uses the generic stable agent reference; the former
+`{user, Key}` label survives below only in historical slice descriptions.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.
@@ -676,11 +676,9 @@ creation policy may authorize only a specific existing agent to call
 approval facts satisfy changeable Prolog prerequisites. This is ordinary ACL
 and action policy, not a separate delegation feature.
 
-The current transport authenticates a key under the implementation label
-`{user, Key}`. The actor migration in `ontology-actor-architecture.md` will
-replace that signer label and its request binding in one format change, without
-a second ACL or a legacy signed route. That signer identity does not replace or
-redefine the ACL subject.
+The working-tree transport authenticates a stable agent reference and its
+active signing key in one format, without a second ACL or legacy signed route.
+That identity proof does not replace or redefine the target ACL decision.
 
 The ACL term remains exactly:
 
@@ -1048,9 +1046,9 @@ This is the proof of the architecture and remains trusted-fleet-only.
 
 This slice deliberately has no FIPA ACL encoding, AMS search, DF, agent
 delegation, dynamic handler declaration, or directory federation. Browser
-login and the transitional signed-user principal are supplied by the separate
-signed-client architecture; the actor migration generalises that same path to
-the `agent` class, of which `human_user` is one specialisation.
+login and the generic signed-agent principal are supplied by the separate
+signed-client architecture. `human_user` is one specialisation of the
+`agent` class.
 
 Acceptance:
 

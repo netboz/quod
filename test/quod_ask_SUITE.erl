@@ -12,8 +12,9 @@
          remote_scope_cancel/1, remote_scope_transport_reuse/1,
          remote_signed_gateway_read_execute_cursor/1,
          remote_signed_two_gateway_race/1,
-         remote_signed_gateway_lifecycle_and_group/1,
-         remote_signed_group_uses_exact_user_request/1,
+         remote_signed_gateway_group/1,
+         remote_signed_gateway_group_with_root_effect/1,
+         remote_signed_group_uses_exact_agent_request/1,
          remote_group_recovers_after_origin_crash/1]).
 -export([run_scope_proofs/3]).
 
@@ -35,8 +36,9 @@ all() -> [remote_scope_solutions, remote_scope_symbol_safety,
           remote_scope_cancel, remote_scope_transport_reuse,
           remote_signed_gateway_read_execute_cursor,
           remote_signed_two_gateway_race,
-          remote_signed_gateway_lifecycle_and_group,
-          remote_signed_group_uses_exact_user_request,
+          remote_signed_gateway_group,
+          remote_signed_gateway_group_with_root_effect,
+          remote_signed_group_uses_exact_agent_request,
           remote_group_recovers_after_origin_crash].
 
 init_per_suite(Config) ->
@@ -44,6 +46,7 @@ init_per_suite(Config) ->
     {WrongPub, _} = wrong_key_before(TargetPub),
     {AskerPub, _} = AskerKey = quod_identity:generate(),
     {ThirdPub, _} = ThirdKey = quod_identity:generate(),
+    {AgentPub, _} = AgentKey = quod_identity:generate(),
     TargetAddr = {"127.0.0.1", ?TARGET_PORT},
     AskerAddr = {"127.0.0.1", ?ASKER_PORT},
     ThirdAddr = {"127.0.0.1", ?THIRD_PORT},
@@ -54,7 +57,8 @@ init_per_suite(Config) ->
     TargetGenesis = filename:join(?config(priv_dir, Config), "remote_animals.pl"),
     ok = file:write_file(
            TargetGenesis,
-           ["can_invoke(_Goal, user(_), _Chain, _Ns).\n",
+           ["can_invoke(_Goal, agent_instance_ref(<<\"pets\">>, _, "
+            "human_user(test_agent)), _Chain, _Ns).\n",
             AnimalsBin,
             "\necho(X).\n"
             "blocked(X) :- fail_with_reason(impossible_to_link(X)).\n",
@@ -97,9 +101,17 @@ init_per_suite(Config) ->
                        ?THIRD_NS => [ThirdPub],
                        ?ROOT_NS => [TargetPub]},
     AskerGenesis = filename:join(?config(priv_dir, Config), "remote_pets.pl"),
+    AgentKeySource = prolog_binary_literal(AgentPub),
     ok = file:write_file(
            AskerGenesis,
-           ["can_invoke(_Goal, user(_), _Chain, _Ns).\n",
+           ["agent_key(human_user(test_agent), ", AgentKeySource,
+            ", active).\n",
+            %% Only a goal which also writes A is locally authorized here.
+            %% Exact remote selectors deliberately have no matching A policy;
+            %% the target ontology alone must authorize its predicate.
+            "can_invoke((assertz(signed_pets_mark(_)), _), "
+            "agent_instance_ref(<<\"pets\">>, _, human_user(test_agent)), "
+            "_Chain, _Ns).\n",
             PetsBin,
             "\nrecover_third_failure :- animals::via_third_failure ; "
             "get_fail_reasons([_, _, _, _, third_declined]).\n"]),
@@ -111,9 +123,11 @@ init_per_suite(Config) ->
     ThirdAnchor = peer:call(
                     Third, quod_simplex, genesis_hash, [?THIRD_NS]),
     AskerAnchor = peer:call(
-                    Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
+                     Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
     RootAnchor = peer:call(
                    Target, quod_simplex, genesis_hash, [?ROOT_NS]),
+    AgentRef = {agent_instance_ref, ?ASKER_NS, AskerAnchor,
+                {human_user, test_agent}},
     %% A lower-sorting route points at a valid server with the WRONG certificate:
     %% the pinned dial must reject it and advance to the real route.
     {ok, _} = peer:call(
@@ -161,12 +175,21 @@ init_per_suite(Config) ->
     lists:foreach(
       fun(Peer) -> set_network_identity(Peer, NetworkId) end,
       [Target, Asker, Third]),
-    {UserPub, _} = UserKey = quod_identity:generate(),
+    %% Root's ordinary Prolog policy, not the transport fixture, grants this
+    %% exact durable agent permission to create an ontology.  The signed
+    %% remote-effect case below must still pass Root's normal can_invoke and
+    %% can_create_ontology rules.
+    ?assertMatch(
+       {ok, [_], _},
+       peer:call(
+         Target, quod_prolog, prove,
+         [?ROOT_NS, {assertz, {ontology_creator_agent, AgentRef}}],
+         60000)),
     AuthPid = peer:call(Asker, erlang, whereis, [quod_client_auth]),
     true = is_pid(AuthPid),
     ClientPeer = {127, 0, 0, 1},
     Session = open_client_session(
-                Asker, NetworkId, AskerPub, UserKey, ClientPeer),
+                Asker, NetworkId, AskerPub, AgentKey, ClientPeer),
     wait_ready(Target, ?NS, {diet, dog, kibble}),
     wait_ready(Target, ?PRIVATE_NS, {secret, 42}),
     wait_ready(Third, ?THIRD_NS,
@@ -194,7 +217,9 @@ init_per_suite(Config) ->
      {wrong_pub, WrongPub},
      {target_addr, TargetAddr}, {third_pub, ThirdPub},
      {third_addr, ThirdAddr}, {network_id, NetworkId},
-     {user_key, UserKey}, {user_pub, UserPub},
+     {asker_anchor, AskerAnchor},
+     {agent_ref, AgentRef},
+     {agent_key, AgentKey}, {agent_pub, AgentPub},
      {client_peer, ClientPeer}, {client_session, Session},
      {client_auth, AuthPid} | Config].
 
@@ -323,23 +348,25 @@ remote_scope_transport_reuse(Config) ->
     run_scope_wave(Asker, Goal, second),
     wait_scope_workers(Target, 0, 200).
 
-%% The browser is logged into A, which does not host the signed B target.
-%% Read, ordinary execute and every cursor command must cross the one signed
-%% goal router and still enter B's ordinary proof path.
+%% The browser is logged into A as an agent stored in A. Exact selectors reach
+%% B through the ordinary scope path. A has no ACL clause for these goals, so
+%% success proves that A authenticates identity while B alone authorizes B's
+%% predicate.
 remote_signed_gateway_read_execute_cursor(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
     NetworkId = ?config(network_id, Config),
-    UserKey = ?config(user_key, Config),
-    UserPub = ?config(user_pub, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
     Session = ?config(client_session, Config),
     Peer = ?config(client_peer, Config),
-    Anchor = peer:call(Target, quod_simplex, genesis_hash, [?NS]),
+    AgentAnchor = ?config(asker_anchor, Config),
 
     {ReadBytes, ReadSignature} = signed_goal_request(
-                                   NetworkId, UserPub, UserKey, ?NS, Anchor,
+                                   NetworkId, AgentPub, AgentKey,
+                                   ?ASKER_NS, AgentAnchor,
                                    maps:get(expires_ms, Session), read,
-                                   <<"diet(dog, D).">>),
+                                   <<"\"animals\"::diet(dog, D).">>),
     {ok, ReadEvidence,
      {normalized, {answers, _ReadHeight, ReadBlobs}}} =
         peer:call(
@@ -361,24 +388,28 @@ remote_signed_gateway_read_execute_cursor(Config) ->
     ExecuteText = iolist_to_binary(
                     io_lib:format("assertz(gateway_mark(~B)).", [Tag])),
     {ExecuteBytes, ExecuteSignature} = signed_goal_request(
-                                         NetworkId, UserPub, UserKey,
-                                         ?NS, Anchor,
+                                         NetworkId, AgentPub, AgentKey,
+                                         ?ASKER_NS, AgentAnchor,
                                          maps:get(expires_ms, Session),
-                                         execute, ExecuteText),
+                                         execute,
+                                         <<"\"animals\"::", ExecuteText/binary>>),
     ?assertMatch(
        {ok, _,
         {normalized,
-         {committed, [_], {transaction, ?NS, Anchor, _}}}},
+         {committed, [_], {group_outcome, {group, ?ASKER_NS,
+                                            AgentAnchor, _, _, _},
+                                           _, [_, _]}}}},
        peer:call(
          Asker, quod_client_goal_ingress, submit,
          [execute, maps:get(session_id, Session), ExecuteBytes,
           ExecuteSignature, Peer], 60000)),
     assert_fact_once(Target, ?NS, gateway_mark, Tag),
 
-    CursorText = <<"diet(dog, D), assertz(gateway_choice(D)).">>,
+    CursorText =
+        <<"\"animals\"::(diet(dog, D), assertz(gateway_choice(D))).">>,
     {CursorBytes, CursorSignature} = signed_goal_request(
-                                       NetworkId, UserPub, UserKey,
-                                       ?NS, Anchor,
+                                       NetworkId, AgentPub, AgentKey,
+                                       ?ASKER_NS, AgentAnchor,
                                        maps:get(expires_ms, Session),
                                        cursor, CursorText),
     {ok, CursorEvidence,
@@ -399,16 +430,19 @@ remote_signed_gateway_read_execute_cursor(Config) ->
     ?assertMatch(
        {ok, CursorEvidence,
         {normalized,
-         {committed, [_], {transaction, ?NS, Anchor, _}}}},
+         {committed, [_], {group_outcome, {group, ?ASKER_NS,
+                                            AgentAnchor, _, _, _},
+                                           _, [_, _]}}}},
        peer:call(
          Asker, quod_client_goal_ingress, cursor_command,
          [maps:get(session_id, Session), CursorId, accept, Peer], 60000)),
     assert_fact_once(Target, ?NS, gateway_choice, meat),
 
     {StopBytes, StopSignature} = signed_goal_request(
-                                   NetworkId, UserPub, UserKey, ?NS, Anchor,
+                                   NetworkId, AgentPub, AgentKey,
+                                   ?ASKER_NS, AgentAnchor,
                                    maps:get(expires_ms, Session), cursor,
-                                   <<"diet(dog, D).">>),
+                                   <<"\"animals\"::diet(dog, D).">>),
     {ok, _, {normalized, {solution, StopCursor, _, _}}} =
         peer:call(
           Asker, quod_client_goal_ingress, submit,
@@ -420,30 +454,34 @@ remote_signed_gateway_read_execute_cursor(Config) ->
          Asker, quod_client_goal_ingress, cursor_command,
          [maps:get(session_id, Session), StopCursor, stop, Peer], 60000)).
 
-%% Two independent gateways may race the same signed execute after a typed
-%% pre-custody refusal. The existing operation claim, not the router, must
-%% converge both submissions onto one durable result and one material write.
+%% Two independent gateways race the same signed execute. One may receive a
+%% typed pre-custody availability refusal while the other proof is sealing;
+%% the stable operation claim must still give both gateways one durable result
+%% and one material write.
 remote_signed_two_gateway_race(Config) ->
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
     Target = ?config(target, Config),
     NetworkId = ?config(network_id, Config),
-    {UserPub, _} = UserKey = quod_identity:generate(),
+    AgentPub = ?config(agent_pub, Config),
+    AgentKey = ?config(agent_key, Config),
     ClientPeer = ?config(client_peer, Config),
     AskerSession = open_client_session(
                      Asker, NetworkId, ?config(asker_pub, Config),
-                     UserKey, ClientPeer),
+                     AgentKey, ClientPeer),
     ThirdSession = open_client_session(
                      Third, NetworkId, ?config(third_pub, Config),
-                     UserKey, ClientPeer),
-    Anchor = peer:call(Target, quod_simplex, genesis_hash, [?NS]),
+                     AgentKey, ClientPeer),
+    AgentAnchor = ?config(asker_anchor, Config),
     Tag = erlang:unique_integer([positive]),
     GoalText = iolist_to_binary(
-                 io_lib:format("assertz(gateway_race_mark(~B)).", [Tag])),
+                 io_lib:format(
+                   "\"animals\"::assertz(gateway_race_mark(~B)).", [Tag])),
     Expires = min(maps:get(expires_ms, AskerSession),
                   maps:get(expires_ms, ThirdSession)),
     {RequestBytes, Signature} = signed_goal_request(
-                                  NetworkId, UserPub, UserKey, ?NS, Anchor,
+                                  NetworkId, AgentPub, AgentKey,
+                                  ?ASKER_NS, AgentAnchor,
                                   Expires, execute, GoalText),
     Parent = self(),
     RaceRef = make_ref(),
@@ -466,7 +504,14 @@ remote_signed_two_gateway_race(Config) ->
                     RequestBytes, Signature, ClientPeer], 60000)}
           end),
     Results = collect_gateway_race(RaceRef, 2, []),
-    Evidences = [assert_race_submit(Result) || {_Gateway, Result} <- Results],
+    Classified = [classify_race_submit(Result)
+                  || {_Gateway, Result} <- Results],
+    Evidences = [Ev || {accepted, Ev} <- Classified],
+    %% A simultaneous second proof may be refused before durable custody while
+    %% the first proof is still sealing. That refusal is safe because both
+    %% gateways retain the exact same signed request and operation reference;
+    %% after the first claim commits, either gateway must resolve it.
+    ?assert(Evidences =/= []),
     [Evidence | _] = Evidences,
     OperationRef = maps:get(operation_ref, Evidence),
     lists:foreach(
@@ -475,65 +520,36 @@ remote_signed_two_gateway_race(Config) ->
           ?assertEqual(RequestBytes, maps:get(request_bytes, Ev)),
           ?assertEqual(Signature, maps:get(signature, Ev))
       end, Evidences),
-    {_Claim, _Outcome} = wait_operation_claim(Target, OperationRef, 600),
-    %% Reintroduce the lower-sorting wrong-certificate hint after the write.
-    %% Outcome recovery must bootstrap past it rather than depending on the
-    %% earlier submit route or a reverse resolver hint.
-    WrongPub = ?config(wrong_pub, Config),
-    TargetAddr = ?config(target_addr, Config),
-    set_synthetic_route(
-      Asker, WrongPub, TargetAddr,
-      [{?NS, Anchor, validator}], 2, 1, 200),
-    {ok, OutcomeRoutes} = peer:call(
-                            Asker, quod_directory, validator_routes,
-                            [?NS, Anchor]),
-    ?assert(lists:any(
-              fun(#{node_key := Key}) -> Key =:= WrongPub end,
-              OutcomeRoutes)),
-    try
-        ?assertMatch(
-           {ok, _, {operation_outcome,
-                    #{status := claimed, outcome_ref := _},
-                    #{status := committed}}},
-           wait_remote_operation(
-             Asker, maps:get(session_id, AskerSession), RequestBytes,
-             Signature, ClientPeer, 8))
-    after
-        set_synthetic_route(
-          Asker, WrongPub, TargetAddr, [], 2, 2, 200)
-    end,
+    {_Claim, _Outcome} = wait_operation_claim(Asker, OperationRef, 600),
+    ?assertMatch(
+       {ok, _, {operation_outcome,
+                #{status := claimed, outcome_ref := _},
+                #{status := committed}}},
+       wait_remote_operation(
+         Asker, maps:get(session_id, AskerSession), RequestBytes,
+         Signature, ClientPeer, 8)),
+    ?assertMatch(
+       {ok, _, {operation_outcome,
+                #{status := claimed, outcome_ref := _},
+                #{status := committed}}},
+       wait_remote_operation(
+         Third, maps:get(session_id, ThirdSession), RequestBytes,
+         Signature, ClientPeer, 8)),
     assert_fact_once(Target, ?NS, gateway_race_mark, Tag).
 
-%% Lifecycle and multi-ontology writes use the same forwarded executor; only
-%% their existing Prolog predicates decide what happens after verification.
-remote_signed_gateway_lifecycle_and_group(Config) ->
+%% A signed agent stored in A reaches B and then C through the same nested
+%% scope and group machinery. No specialized client or agent executor exists.
+remote_signed_gateway_group(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
     Third = ?config(third, Config),
     NetworkId = ?config(network_id, Config),
-    UserKey = ?config(user_key, Config),
-    UserPub = ?config(user_pub, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
     Session = ?config(client_session, Config),
     Peer = ?config(client_peer, Config),
 
-    {HomeBytes, HomeSignature} = signed_goal_request(
-                                   NetworkId, UserPub, UserKey,
-                                   ?ROOT_NS, NetworkId,
-                                   maps:get(expires_ms, Session), execute,
-                                   <<"create_user_home.">>),
-    ?assertMatch(
-       {ok, _,
-        {normalized,
-         {committed, [_], {transaction, ?ROOT_NS, NetworkId, _}}}},
-       peer:call(
-         Asker, quod_client_goal_ingress, submit,
-         [execute, maps:get(session_id, Session), HomeBytes,
-          HomeSignature, Peer], 60000)),
-    {ok, UserNs} = quod_user:home_namespace(UserPub),
-    wait_ready(Target, UserNs,
-               {can_invoke, anything, {user, UserPub}, [remote], UserNs}),
-
-    TargetAnchor = peer:call(Target, quod_simplex, genesis_hash, [?NS]),
+    AgentAnchor = ?config(asker_anchor, Config),
     ThirdPub = ?config(third_pub, Config),
     ThirdAddr = ?config(third_addr, Config),
     ThirdAnchor = peer:call(Third, quod_simplex, genesis_hash, [?THIRD_NS]),
@@ -545,47 +561,90 @@ remote_signed_gateway_lifecycle_and_group(Config) ->
     %% Reinstalling sequence 1 here would correctly be rejected as stale.
     Tag = erlang:unique_integer([positive]),
     GroupText = iolist_to_binary(
-                  io_lib:format("dtx_write_chain(~B).", [Tag])),
+                  io_lib:format(
+                    "\"animals\"::dtx_write_chain(~B).", [Tag])),
     {GroupBytes, GroupSignature} = signed_goal_request(
-                                     NetworkId, UserPub, UserKey,
-                                     ?NS, TargetAnchor,
+                                     NetworkId, AgentPub, AgentKey,
+                                     ?ASKER_NS, AgentAnchor,
                                      maps:get(expires_ms, Session), execute,
                                      GroupText),
     {ok, GroupEvidence,
      {normalized,
       {committed, [_],
        {group_outcome,
-        {group, ?NS, TargetAnchor, _, _, _} = GroupRef,
+        {group, ?ASKER_NS, AgentAnchor, _, _, _} = GroupRef,
         _, Slots}}}} =
         peer:call(
           Asker, quod_client_goal_ingress, submit,
           [execute, maps:get(session_id, Session), GroupBytes,
            GroupSignature, Peer], 60000),
-    ?assertEqual(2, length(Slots)),
+    ?assertEqual(3, length(Slots)),
     assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
     assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag),
     ?assertMatch(
        {ok, #{status := claimed, outcome_ref := GroupRef}},
        peer:call(
-         Target, quod_prolog, outcome,
+         Asker, quod_prolog, outcome,
          [maps:get(operation_ref, GroupEvidence)])),
+    ok.
+
+%% One signed proof writes its agent ontology and stages Root's existing
+%% create-ontology effect.  Root is hosted on another peer, so this exercises
+%% the real V5 scope custody command, not only the co-hosted session path.
+remote_signed_gateway_group_with_root_effect(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    NetworkId = ?config(network_id, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
+    Session = ?config(client_session, Config),
+    Peer = ?config(client_peer, Config),
+    AgentAnchor = ?config(asker_anchor, Config),
+    Tag = erlang:unique_integer([positive]),
+    CreatedNs = iolist_to_binary(
+                  ["ct:remote-effect-", integer_to_binary(Tag)]),
+    GoalText = iolist_to_binary(
+                 io_lib:format(
+                   "assertz(signed_pets_mark(~B)), "
+                   "\"quod:root\"::create_ontology(\"~s\", "
+                   "[source(\"can_invoke(_, _, _, _).\\n"
+                   "remote_effect_created(ok).\\n\")]).",
+                   [Tag, CreatedNs])),
+    {RequestBytes, Signature} = signed_goal_request(
+                                  NetworkId, AgentPub, AgentKey,
+                                  ?ASKER_NS, AgentAnchor,
+                                  maps:get(expires_ms, Session), execute,
+                                  GoalText),
+    {ok, _Evidence,
+     {normalized,
+      {committed, [_],
+       {group_outcome,
+        {group, ?ASKER_NS, AgentAnchor, _, _, _} = GroupRef,
+        _, Slots}}}} =
+        peer:call(
+          Asker, quod_client_goal_ingress, submit,
+          [execute, maps:get(session_id, Session), RequestBytes,
+           Signature, Peer], 60000),
+    ?assertEqual(2, length(Slots)),
+    assert_fact_once(Asker, ?ASKER_NS, signed_pets_mark, Tag),
+    wait_ready(Target, CreatedNs, {remote_effect_created, ok}),
+    wait_remote_effect_state(Target, CreatedNs, GroupRef, applied, 300),
     ok.
 
 %% One browser-equivalent request crosses two remote scope hops and commits
 %% through the ordinary group protocol.  Earlier cases have already proved
 %% failover past the suite's synthetic wrong-certificate route; retire that
 %% route now so every DTX evidence phase does not pay its full dial timeout.
-remote_signed_group_uses_exact_user_request(Config) ->
+remote_signed_group_uses_exact_agent_request(Config) ->
     Asker = ?config(asker, Config),
     retire_wrong_route(Asker, ?config(wrong_pub, Config),
                        ?config(target_addr, Config), 200),
     NetworkId = ?config(network_id, Config),
-    UserKey = ?config(user_key, Config),
-    UserPub = ?config(user_pub, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
     Session = ?config(client_session, Config),
     Peer = ?config(client_peer, Config),
-    Anchor = peer:call(
-               Asker, quod_simplex, genesis_hash, [?ASKER_NS]),
+    Anchor = ?config(asker_anchor, Config),
     Tag = erlang:unique_integer([positive]),
     GoalText = iolist_to_binary(
                  io_lib:format(
@@ -593,7 +652,7 @@ remote_signed_group_uses_exact_user_request(Config) ->
                    "\"animals\"::dtx_write_chain(~B).",
                    [Tag, Tag])),
     {RequestBytes, Signature} = signed_goal_request(
-                                  NetworkId, UserPub, UserKey,
+                                  NetworkId, AgentPub, AgentKey,
                                   ?ASKER_NS, Anchor,
                                   maps:get(expires_ms, Session), GoalText),
     {ok, Evidence, {normalized, SubmitResult}} = peer:call(
@@ -773,6 +832,22 @@ assert_finalize_absent(Peer, Ns, GroupId) ->
        peer:call(Peer, quod_simplex, dtx_endpoint_local,
                  [Ns, Request, 1000])).
 
+wait_remote_effect_state(_Peer, Ns, GroupRef, Expected, 0) ->
+    ct:fail({effect_state_timeout, Ns, GroupRef, Expected});
+wait_remote_effect_state(Peer, Ns, GroupRef, Expected, Retries) ->
+    Rows = peer:call(Peer, quod_effect_journal, rows, []),
+    case [State || #{target := {RowNs, _}, ref := RowRef,
+                     state := State} <- Rows,
+                   RowNs =:= Ns,
+                   element(1, RowRef) =:= group_effect,
+                   element(3, RowRef) =:= GroupRef] of
+        [Expected] -> ok;
+        _ ->
+            timer:sleep(20),
+            wait_remote_effect_state(
+              Peer, Ns, GroupRef, Expected, Retries - 1)
+    end.
+
 dtx_diagnostics(Config) ->
     Asker = ?config(asker, Config),
     Target = ?config(target, Config),
@@ -917,14 +992,18 @@ collect_gateway_race(Ref, Remaining, Results) ->
         ct:fail({gateway_race_timeout, Remaining})
     end.
 
-assert_race_submit(
+classify_race_submit(
   {ok, Evidence, {normalized, {committed, _Bindings, _Outcome}}}) ->
-    Evidence;
-assert_race_submit(
+    {accepted, Evidence};
+classify_race_submit(
   {ok, Evidence, {normalized, {pending, OperationRef}}}) ->
     ?assertEqual(maps:get(operation_ref, Evidence), OperationRef),
-    Evidence;
-assert_race_submit(Other) ->
+    {accepted, Evidence};
+classify_race_submit({error, signed_target_unavailable}) ->
+    pre_custody_unavailable;
+classify_race_submit({error, busy}) ->
+    pre_custody_unavailable;
+classify_race_submit(Other) ->
     ct:fail({gateway_race_submit_failed, Other}).
 
 wait_operation_claim(_Target, OperationRef, 0) ->
@@ -1032,7 +1111,7 @@ open_client_session(Peer, NetworkId, NodeKey,
                         Peer, quod_client_auth, issue_challenge,
                         [PublicKey, ClientNonce, ClientPeer]),
     ChallengeId = maps:get(challenge_id, Challenge),
-    {ok, ChallengeBytes} = quod_user:challenge_bytes(
+    {ok, ChallengeBytes} = quod_client_auth:challenge_bytes(
                              NetworkId, NodeKey, ChallengeId, PublicKey,
                              ClientNonce, maps:get(server_nonce, Challenge),
                              maps:get(expires_ms, Challenge)),
@@ -1043,18 +1122,21 @@ open_client_session(Peer, NetworkId, NodeKey,
                       [ChallengeId, Signature]),
     Session.
 
-signed_goal_request(NetworkId, PublicKey, KeyPair, Namespace, Anchor,
+signed_goal_request(NetworkId, PublicKey, KeyPair, AgentNamespace, AgentAnchor,
                     SessionExpires, GoalText) ->
-    signed_goal_request(NetworkId, PublicKey, KeyPair, Namespace, Anchor,
+    signed_goal_request(NetworkId, PublicKey, KeyPair,
+                        AgentNamespace, AgentAnchor,
                         SessionExpires, execute, GoalText).
 
-signed_goal_request(NetworkId, PublicKey, KeyPair, Namespace, Anchor,
+signed_goal_request(NetworkId, PublicKey, KeyPair,
+                    AgentNamespace, AgentAnchor,
                     SessionExpires, Mode, GoalText) ->
     Request = #{network_identity => NetworkId,
-                user_public_key => PublicKey,
+                signing_public_key => PublicKey,
                 operation_id => crypto:strong_rand_bytes(32),
-                target_namespace => Namespace,
-                target_genesis_anchor => Anchor,
+                agent_namespace => AgentNamespace,
+                agent_genesis_anchor => AgentAnchor,
+                agent_instance_text => <<"human_user(test_agent).">>,
                 mode => Mode, parser_version => 1,
                 not_after_ms => min(
                                   SessionExpires,
@@ -1063,6 +1145,13 @@ signed_goal_request(NetworkId, PublicKey, KeyPair, Namespace, Anchor,
     {ok, Bytes} = quod_client_goal:encode(Request),
     {Bytes,
      quod_identity:sign(Bytes, quod_identity:key_term(KeyPair))}.
+
+prolog_binary_literal(Bytes) ->
+    iolist_to_binary(
+      ["<<\"",
+       [["\\x", io_lib:format("~2.16.0B", [Byte]), "\\"]
+        || <<Byte>> <= Bytes],
+       "\">>"]).
 
 start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
            DirectoryAllowlist, Config) ->

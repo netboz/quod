@@ -8,11 +8,11 @@
 > compatibility requirements.
 
 **Status:** the base protocol was implemented in Quod 0.7.71 and the later
-single-path refactor is implemented in the current repository. The refactor is
-not a rolling format upgrade: activating it on a fleet with older persistence
-requires the coordinated clean re-found and private-journal cleanup specified
-in `ontology-lifecycle-single-path-plan.md` §2.6. No compatibility decoder is
-retained.
+single-path and DTX-effect refactors are implemented in the current working
+tree. These are not rolling format upgrades: activating them on a fleet with
+older persistence requires the coordinated clean re-found and private-journal
+cleanup specified in `ontology-lifecycle-single-path-plan.md` §2.6 and
+`dtx-durable-effects-plan.md`. No compatibility decoder is retained.
 
 ## 1. Goal
 
@@ -78,14 +78,16 @@ catalogue table, or compatibility path.
 The exact descriptor is the closed tuple:
 
 ```erlang
-{quod_direct_effect, 1, local_durable, ontology_lifecycle,
+{quod_direct_effect, 2, local_durable, ontology_lifecycle,
  Operation, EffectId, Executor, Actor,
  {Namespace, ExpectedGenesisAnchor}, RequestDigest, PreparedDigest}
 ```
 
 `Operation` is currently `create | join`; `Actor` is
-`{node, PublicKey} | {user, PublicKey}`; every identity/digest is exactly 32
-bytes. It is data, not an arbitrary callback, MFA, module name, or Prolog goal.
+`{node, PublicKey} | {agent, AgentReferenceBlob}`. Fixed keys and digests are
+exactly 32 bytes; the agent blob is the bounded canonical
+`agent_instance_ref/3`. The descriptor is data, not an arbitrary callback,
+MFA, module name, or Prolog goal.
 
 The descriptor is deliberately small. Creation source, compiled genesis diff,
 filesystem paths, seed details, and private manager configuration do not get
@@ -186,25 +188,20 @@ local start is closed by the prepared-action journal and the serialized
 recorded as the local execution outcome; it is never converted into an OCC
 token or compared with another validator's local state.
 
-### 4.2 Direct effects are excluded from DTX groups
+### 4.2 Direct effects use the ordinary or DTX commit path
 
-The first slice permits a direct effect only when its plan is the sole material
-participant and therefore uses the ordinary transaction path.
+A direct effect in the sole material plan uses the ordinary transaction path.
+If two or more scopes are material, the same sealed effect-bearing plan is a
+normal DTX participant. Its target stores the private prepared payload before
+Begin activation, validates the public descriptor through the shared plan
+validator, and releases the effect only after its ordered
+`Finalize(commit)` reaches the existing P-before-E runtime barrier.
 
-If two or more scopes participate, the origin rejects the submission before it
-constructs a DTX Begin. Independently, manifest construction, plan
-attestation, `plan_matches_manifest`, Prepare validation, replay, and catch-up
-reject an effect-bearing participant. This is a hard protocol rule, not merely
-an origin-side convenience.
-
-The public bounded failure is `effect_requires_single_participant`. A
-lifecycle action whose `::` work makes another ontology material returns that
-reason before Begin; it must not surface as an internal DTX codec or reducer
-error.
-
-Atomic effects spanning several ontologies are undefined in this slice. They
-must receive a separate design covering preparation ownership, abort, and
-post-Complete execution before this exclusion can ever be removed.
+The one-plan rule remains: a direct effect cannot share its own plan with a D
+diff, and that failure is `effect_requires_empty_diff`. Other group
+participants may carry normal D/OCC changes or their own effect-only plans.
+The complete custody, abort, recovery, and replay contract is defined in
+`dtx-durable-effects-plan.md`.
 
 ## 5. Authorization remains Prolog policy
 
@@ -260,8 +257,8 @@ It is nevertheless a real product boundary:
 
 - Explorer labels `actor` as **claimed by the author node**, not
   committee-verified;
-- a node-authored action remains an author-node claim, while a signed client
-  action carries its exact `{user, PublicKey}` principal and request evidence
+- a node-authored action remains an author-node claim, while a signed agent
+  action carries its exact `{agent, AgentReferenceBlob}` principal and request evidence
   in the transaction for independent validation by every committee member;
 - quotas, payment, or network-wide creation rights must not treat the effect
   descriptor as proof of compliance;
@@ -337,9 +334,13 @@ The row contains:
 EffectId
 PublicDescriptor
 PrivatePrepared
-TransactionRef
+TransactionRef or exact GroupEffectRef
 SealedPlan and exact durable goal/result
-state = bound | prepared | handed_off | committed | applied | retired
+transaction state = transaction_bound | transaction_ready |
+                    transaction_submitted | released | applied |
+                    retired | operator_error
+group state       = group_pending | released | applied |
+                    retired | operator_error
 ```
 
 The journal is local execution custody, not ontology D and not a second
@@ -355,13 +356,12 @@ The exact `TransactionRef` is checkpointed before submission. From then on an
 engine crash or timeout returns `{outcome_unknown, TransactionRef}`; it never
 prepares a new effect or re-proves the request automatically.
 
-### 6.3 Signed-submission custody
+### 6.3 Signed-submission and DTX custody
 
-The local effect journal owns preparation, but Simplex must durably own every
-signed byte it exposes. Extend the existing signing journal with a
-pending-effect-transaction table keyed by `TxId`. Its population is already
-governed by the one node-wide custody reservation; the signing journal does not
-apply a duplicate effect-specific count. One row contains:
+The local effect journal owns preparation. On the ordinary one-participant
+path, Simplex must durably own every signed byte it exposes. The existing
+signing journal therefore holds the pending effect transaction keyed by
+`TxId`; it applies no duplicate effect-specific count. One row contains:
 
 ```text
 continuous AuthorAdmission
@@ -378,7 +378,8 @@ Hand-off is one correlated idempotent operation:
    author sequence;
 3. Simplex appends and datasyncs the exact signed envelope in its signing
 journal before acknowledging the proof worker or exposing the bytes;
-4. the action journal records `handed_off` after that acknowledgement.
+4. the effect journal records `transaction_submitted` after that
+   acknowledgement.
 
 If Simplex persists the row and crashes before acknowledging, retrying the
 hand-off returns the same custody row. If the proof worker crashes before it
@@ -398,9 +399,18 @@ first checks deterministic ledger history for the `TxId`; if it did not commit,
 the old-admission row retires visibly and is never re-signed under the new
 admission or re-authorized automatically.
 
+On the multi-ontology path, the same effect journal binds the prepared payload
+directly to `{GroupRef, TargetIdentity, PlanDigest}` while the origin Begin is
+still dormant. The row becomes `group_pending`; it has no independent
+transaction envelope and is never handed to a second signing path. Only after
+every effect participant has durable custody does the origin activate its
+existing DTX Begin. The complete group protocol and recovery rules are defined
+in `dtx-durable-effects-plan.md`.
+
 ### 6.4 Commit and execution
 
-Only a committed transaction releases its effect. A rejected transaction
+Only a committed ordinary transaction or a certified participant
+Finalize(commit) releases its effect. A rejected transaction or group abort
 retires the prepared journal row without external IO.
 
 Ordered controlling-ontology apply publishes an `applied_live` envelope even when `diff = []`
@@ -425,19 +435,21 @@ Lifecycle handlers must be idempotent and state-verifying. A crash may repeat a
 local call, but must not create a second logical ontology or erase a different
 incarnation.
 
-Recovery follows the exact transaction reference:
+Recovery follows the row's exact transaction or group-effect reference:
 
-- **prepared but not handed off:** repeat only the idempotent Simplex custody
-  hand-off using the exact sealed semantic bytes;
-- **handed off and pending:** Simplex redrives the exact journaled envelope;
+- **`transaction_ready`:** repeat only the idempotent Simplex custody hand-off
+  using the exact sealed semantic bytes;
+- **`transaction_submitted`:** Simplex redrives the exact journaled envelope;
   the ordered custody lane prevents a later local sequence overtaking it, and
   the proof owner never resubmits a newly built transaction;
+- **`group_pending`:** resolve only through the exact DTX group projection;
+  no raw-history scan, re-proof, or second submission path is allowed;
 - **not found while durable Simplex custody exists:** keep custody and retry;
 - **not found with neither valid custody nor the original continuous
   admission:** retire visibly; never re-prove;
 - **rejected:** retire it and perform no effect;
 - **committed, ordered P projection not yet through that height:** keep the
-  handed-off row and wait; the outcome alone does not bypass P-before-E;
+  pending row and wait; the outcome alone does not bypass P-before-E;
 - **committed, ordered P projection complete, local state absent:** run the
   exact prepared effect;
 - **committed, exact desired state already present:** mark applied;
@@ -452,11 +464,12 @@ outcome reads while rebuilding; before it becomes ready, replay from slot 1
 has recreated every ordinary terminal outcome in a reset or missing index.
 The effect journal therefore retries through rebuild and reads the complete
 projection afterward; it does not depend on an old DETS row surviving.
-For a handed-off row, a committed outcome becomes an executable journal row
-only after `quod_runtime`'s existing `e_frontier` covers the transaction
-height. Live apply and restart recovery therefore cross the same P-before-E
-barrier. A row already persisted as `committed` is itself the durable record
-that this release happened before the crash.
+For a submitted ordinary row or pending group row, a committed outcome becomes
+an executable journal row only after `quod_runtime`'s existing `e_frontier`
+covers the ordinary transaction height or participant-Finalize height. Live
+apply and restart recovery therefore cross the same P-before-E barrier. A row
+persisted as `released` is itself the durable record that this release happened
+before the crash.
 
 Historical ledger replay never blindly re-executes all effects. The local
 journal and an incremental applied-effect frontier identify unfinished local
@@ -483,19 +496,18 @@ rather than silently resolving it.
 
 The system must handle the conflict explicitly:
 
-- clients persist the exact anchor of the home/ontology they created;
+- clients persist the exact anchor of the ontology they created;
 - a later host uses `join_ontology(Name, Anchor, Seeds)`, not another create;
 - directory resolution for one name with competing anchors fails closed and
   never chooses or merges one implicitly;
 - Explorer shows the full namespace-plus-anchor identity and warns about the
   name conflict.
 
-For a user home, simultaneous first registration on two nodes can therefore
-create two incarnations bearing the same deterministic `user:<key>` name. This
-slice accepts that consequence rather than adding the forbidden global
-per-user root catalogue. If a product later requires globally unique names, it
-needs a separately reviewed allocation policy or registry and must account for
-its state growth honestly.
+Simultaneous creation on two nodes can therefore produce two incarnations of
+the same chosen namespace. This slice accepts that consequence rather than
+adding a forbidden global agent or namespace registry. If a product later
+requires globally unique names, it needs a separately reviewed allocation
+policy and must account for its state growth honestly.
 
 ## 8. Future deletion and other predicates
 
@@ -571,7 +583,7 @@ schema changes. Land compatible schema changes in the same release, then:
    `signed-client-goals-plan.md` (implemented in the working tree);
 2. run the coordinated protocol and release gates;
 3. found the network once from the current root source, including root's
-   generic creation policy and its signed `create_user_home` convenience rule;
+   generic creation policy and reviewed `ontology_creator_agent/1` grants;
 4. never apply a separate temporary live root-policy migration immediately
    before that planned re-found.
 
@@ -675,9 +687,9 @@ The implementation review must account for at least these concrete seams:
    excessive count, and oversized descriptors are rejected before consensus
    support.
 4. Genesis and ordinary transactions retain empty effects.
-5. An effect-bearing plan is rejected both when the origin attempts to build a
-   DTX group and when a target validator receives a forged effect-bearing DTX
-   participant/manifest.
+5. A valid effect-bearing plan is admitted as a DTX participant, while a
+   forged descriptor, actor/executor mismatch, target/manifest substitution,
+   or same-plan diff-plus-effect is rejected by origin and target validation.
 6. An effect-only plan that consulted a local bridge seals with only committed
    policy/declaration reads in `read_check`, with the bridge list separately
    signed; the same bridge plus a D diff is rejected.
@@ -699,7 +711,7 @@ The implementation review must account for at least these concrete seams:
 ### Durability and recovery
 
 12. Crash before journal binding performs no submission or effect.
-13. Crash after the `bound` row datasync but before checkpoint activation
+13. Crash after the `transaction_bound` row datasync but before checkpoint activation
     retires that row as `not_activated`; losing its monitored Prolog owner can
     never leave it occupying custody or make it executable.
 14. Crash after activation but before Simplex hand-off retries the exact sealed

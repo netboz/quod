@@ -551,7 +551,7 @@ prepare_system_join(Ns, Anchor, SeedPeers)
 
 -doc "Build the closed public descriptor for one exact private preparation.".
 -spec prepared_effect(term(), prepared_descriptor(), <<_:256>>,
-                      {node, <<_:256>>} | {user, <<_:256>>}) ->
+                      {node, <<_:256>>} | {agent, binary()}) ->
           {ok, quod_effect:effect()} | {error, term()}.
 prepared_effect(Action,
                 #prepared_lifecycle{kind = Kind, namespace = Ns,
@@ -559,15 +559,10 @@ prepared_effect(Action,
                 <<_:256>> = Executor, Actor) ->
     case {quod_durable_term:encode_goal(Action), prepared_bytes(Prepared)} of
         {{ok, ActionBytes}, {ok, PreparedBytes}} ->
-            Effect =
-                {quod_direct_effect, 1, local_durable, ontology_lifecycle,
-                 Kind, crypto:strong_rand_bytes(32), Executor, Actor,
-                 {Ns, Anchor}, crypto:hash(sha256, ActionBytes),
-                 crypto:hash(sha256, PreparedBytes)},
-            case quod_effect:validate(Effect) of
-                true -> {ok, Effect};
-                false -> {error, invalid_direct_effect}
-            end;
+            quod_effect:new(
+              Kind, Executor, Actor, {Ns, Anchor},
+              crypto:hash(sha256, ActionBytes),
+              crypto:hash(sha256, PreparedBytes));
         {{error, _} = Error, _} -> Error;
         {_, {error, _} = Error} -> Error
     end;

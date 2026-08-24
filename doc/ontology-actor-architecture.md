@@ -1,11 +1,12 @@
 # Ontology actors and system bootstrap
 
 **Status:** architectural principles, identity shape, and initial key-custody
-model confirmed by Yan (2026-08-21). This document is the
+model confirmed by Yan (2026-08-21). The generic agent request and identity
+certificate are implemented in the current working tree but are not committed
+or deployed. This document is the
 authority for actor identity, system-ontology startup, agent hosting, and the
-boundary between Prolog and Erlang. It changes no wire format or code by
-itself. Existing `{user, Key}` signed-goal code is an as-built transitional
-name, not the target identity model.
+boundary between Prolog and Erlang. `generic-agent-identity-plan.md` owns the
+exact working-tree wire and recovery contracts.
 
 ## 1. One durable model
 
@@ -452,11 +453,10 @@ agent, immutable delegation chain, and receiver-derived current capabilities.
 Wielding/delegation constructs that triplet. An agent key alone does not
 create, shorten, or replace it.
 
-The current signed request calls this principal `{user, Key}`. That is an
-implemented protocol label, not permission to silently treat every signer as a
-human.  The actor migration must replace it everywhere at once with a single
-agent-bound representation; it must not retain a compatibility alias or a
-second signed-goal route.
+The working-tree signed request uses the stable `{agent, AgentReferenceBlob}`
+principal. The former `{user, Key}` label is deleted rather than retained as a
+compatibility alias or second signed-goal route. The signing key proves current
+control of that agent reference; it is not the ACL subject's durable identity.
 
 ## 5. Hosting, restart, and migration
 
@@ -527,11 +527,10 @@ The codebase now has the engine-local predicate registry and root-driven system
 ontology bootstrap described above. It creates no ontology from a catalogue
 row: an ontology is founded normally, its exact anchor is committed in root,
 and every node then joins or resumes that exact history through the existing
-namespace manager and directory. It does **not** yet have the anchored
-agent-instance identity, generic agent signing principal, or agent
-key-migration custody described here. Root currently carries node admission facts
-and the signed protocol still uses `{user, Key}`. These are transitional
-implementation facts, not a second architectural model.
+namespace manager and directory. The anchored agent-instance identity, generic
+agent signing principal, and stable operation custody are implemented in the
+working tree. Root still carries node admission facts; moving internal node
+principals to node-instance references remains later work.
 
 ## 8. Required acceptance tests
 
@@ -586,11 +585,11 @@ Before implementation is declared complete, tests must show:
    source, and the application-global catalogue is deleted. The three shipped
    system sources are founding inputs; deployment must create them normally and
    then commit their exact anchors in root.
-2. **Agent identity and signing.** Define the stable agent identity/key binding,
-   remove the special user-home creation path in favour of ordinary facts and
-   generic ontology genesis, and replace `{user, Key}`/`user_goal_v1`
-   everywhere in one reviewed format break. Browser and machine actors keep
-   using the same signed-goal endpoint.
+2. **Agent identity and signing.** Implemented in the working tree, pending
+   gates: `generic-agent-identity-plan.md` defines the stable identity/key
+   binding, removes special user-home creation in favour of ordinary facts and
+   generic ontology genesis, and replaces `{user, Key}`/`user_goal_v1` in one
+   format break. Browser and machine actors use the same signed-goal endpoint.
 3. **Node vault.** Add the one supervised local vault, narrow authority-query
    bridge, encrypted local store, internal mutually authenticated HTTPS
    provider boundary, canonical request binding, and negative security tests.
@@ -628,15 +627,19 @@ agent-format break; it is not retained as a compatibility route. This makes
 the containing ontology the one proof controller and the one place that checks
 the active `agent_key/3` fact.
 
-That local check alone is not enough authority for another ontology. A remote
-target must not trust one origin node's claim that the key is active. Before
-implementation, the existing scope authentication/plan evidence must be
-refactored to carry one independently verifiable origin authorization from the
-containing ontology, usable by local, remote, cursor, read, transaction, and
-DTX paths. It must reuse the same origin proof/certificate evidence and must
-not make every target invent a separate key lookup or continuously follow
-every possible agent ontology. This transferable proof is the one remaining
-security design obligation for the format break.
+That local check alone is not enough identity evidence for another ontology. A
+remote target must not trust one origin node's claim that the key is active.
+The existing scope authentication therefore carries the certificate specified
+by `generic-agent-identity-plan.md`: a quorum of the agent ontology's current
+validators independently runs the same local active-key proof and signs one
+request-scoped identity statement. That certificate is collected once and
+forwarded unchanged through the real nested scope tree. Each target uses the
+existing foreign-log owner to certify the origin committee and then applies
+its own ordinary ACL. It never rebuilds the agent ontology's Prolog facts
+merely to establish identity. Local, remote, cursor, read, transaction, and DTX
+paths still consume the one request evidence and target authorization path; no
+target invents a key lookup, trusts one origin node, or continuously follows
+every possible agent ontology.
 
 ### 10.2 Creator provenance is an immutable generated genesis fact
 
@@ -678,15 +681,13 @@ action selector, and duplicate checks have been removed together. The
 implemented refactor and deletion map are in
 `ontology-lifecycle-single-path-plan.md`.
 
-An ordinary prerequisite may use `::`, but the current transaction protocol
-still forbids direct effects in a multi-participant DTX group. Therefore a live
-foreign read plus creation currently ends as
-`effect_requires_single_participant`; removing the local verdict must not be
-misrepresented as removing that protocol rule. The simple first workflow is
-for a FIPA or other external approval process to commit an approval fact in
-`quod:root`, then let the later creation action read it locally. Atomic foreign
-approval plus a local effect would require a separately reviewed DTX-effect
-design.
+An ordinary prerequisite may use `::`. If that proof reads or writes another
+material ontology while its target plan contains a direct effect, the existing
+DTX protocol commits the plans atomically. Every effect-bearing target stores
+its private prepared payload before Begin is activated, and only that target's
+ordered `Finalize(commit)` releases the effect through the normal P-before-E
+runtime path. The target's ordinary `can_invoke/4` and action prerequisites
+remain the only policy checks.
 
 The common target-first action rule also defines idempotence: an already-hosted
 same-name create is a no-op without comparing its unused options, while join's

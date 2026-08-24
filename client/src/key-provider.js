@@ -1,4 +1,4 @@
-const STORAGE_KEY = 'quod.user-key.v1'
+const STORAGE_KEY = 'quod.agent-signing-key.v1'
 const IDENTITY_DATABASE = 'quod.identity.v1'
 const IDENTITY_STORE = 'identity'
 const IDENTITY_VERSION = 1
@@ -99,7 +99,7 @@ export async function downloadEncryptedKeyProvider(provider, passphrase, filenam
 }
 
 // The active identity of this browser. It is held as a live key pair so every
-// page of this origin signs as the same user without asking for a passphrase
+// page of this origin uses the same signing key without asking for a passphrase
 // again; an encrypted export remains the way to carry the identity elsewhere.
 // The trade is deliberate: a passphrase on every page load is what makes people
 // reuse one weak phrase, and this origin serves no third-party code.

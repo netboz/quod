@@ -548,7 +548,8 @@ re-found; no intermediate event-only network is founded.
 - Refactor existing lifecycle effects and namespace desired-state persistence
   onto that owner; delete obsolete stores, callbacks, comments, and tests.
 - Do not change root creation, consensus, directory routing, or signed goals.
-- Treat `node-instance-identity-plan.md` as the gate for the exact identity,
+- Treat `generic-agent-identity-plan.md` and then
+  `node-instance-identity-plan.md` as the gates for the exact identity,
   ownership, and hosting fact shapes.
 
 ### Slice 5 — load and recovery acceptance

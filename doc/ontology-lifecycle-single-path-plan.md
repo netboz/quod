@@ -68,10 +68,9 @@ Delete:
 - tests and comments which describe the visible prerequisite plus hidden
   mandatory recheck as defence in depth.
 
-The deletion also removes one future identity migration site: the isolated
-helper currently accepts only the transitional `{node, Key}` and `{user, Key}`
-principal shapes, while the ordinary proof context is already the authority
-the stable agent format will replace.
+The deletion also removed an identity migration site: the isolated helper
+accepted only the old `{node, Key}` and `{user, Key}` shapes. The ordinary
+proof context now carries the stable agent principal.
 
 `can_invoke/4` remains the one entry ACL. Domain conditions such as
 `can_create_ontology/3` and `can_join_ontology/4` remain ordinary declared
@@ -231,9 +230,10 @@ The public create/join call therefore continues to return only after the
 post-apply effect reaches a definite result, or with its exact uncertain
 outcome reference.
 
-The current protocol still admits at most one `local_durable` direct effect in
-one single-participant transaction. That is a format rule already enforced by
-the normal sealer and validators, not a reason for a special proof path.
+The current protocol admits at most one `local_durable` direct effect per
+sealed plan. A sole material plan uses an ordinary transaction; multiple
+material plans use DTX. That is a format rule enforced by the normal sealer and
+shared validators, not a reason for a special proof path.
 
 The effect journal now derives the controlling ontology identity from the
 stored transaction reference for validation, admission lookup, handoff, and
@@ -311,11 +311,8 @@ prerequisites. `ontology_join_state/2` remains a local observation; the
 namespace manager remains the final collision check. No durable hosting row or
 endpoint is added to root.
 
-`create_user_home` and the `quod_user` terminology are transitional, not a
-third lifecycle case. The current root rule derives fixed arguments from the
-authenticated principal and invokes generic `create_ontology/2`; there is no
-special Erlang staging registration, descriptor, or effect. The stable-agent
-format later removes that convenience rather than renaming it. An agent
+`create_user_home` and `quod_user` are deleted, not a third lifecycle case.
+There is no special Erlang staging registration, descriptor, or effect. An agent
 ontology—including one containing a `human_user` instance—is created with the
 same generic goal and ordinary genesis facts.
 
@@ -336,32 +333,23 @@ the initial ACL may derive permissions from the creator fact.
 
 The new ontology's certified genesis is the authority for this fact. Do not ask
 foreign validators to trust or reconstruct a private effect-journal row. The
-public effect continues to bind the exact resulting genesis anchor. This must
-be implemented only once the stable agent reference is carried by the normal
-proof evidence; do not commit a temporary `{user, Key}` creator format.
+public effect continues to bind the exact resulting genesis anchor. The stable
+agent reference is now carried by the normal proof evidence; no temporary
+key-as-creator format is accepted.
 
-## 5. Cross-ontology policy: an explicit current limitation
+## 5. Cross-ontology policy uses the ordinary DTX path
 
-Removing the local-only verdict lets an action prerequisite execute `::`
-through the ordinary scope machinery. It does **not** by itself make a
-cross-ontology lifecycle effect committable.
+An action prerequisite executes `::` through the ordinary scope machinery. If
+that makes another ontology material, the action's effect-only plan and every
+other material plan enter the existing DTX protocol. Each effect-bearing
+target stores its private preparation before Begin activation; abort retires
+it, while ordered `Finalize(commit)` releases it through the same P-before-E
+runtime and effect journal used by ordinary transactions.
 
-Today a foreign committed read creates another material plan, while direct
-effects are deliberately excluded from DTX groups. A creation or join proof
-which combines a local direct effect with a foreign material scope therefore
-ends at the existing bounded `effect_requires_single_participant` result.
-
-The recommended first implementation does not change consensus:
-
-1. an external/FIPA approval workflow commits the approval as an ordinary fact
-   in `quod:node`;
-2. the later create/join goal reads that local fact in its normal prerequisites;
-3. the effect remains a one-participant transaction.
-
-If atomic dependence on a live foreign read is required, that is a separate
-DTX direct-effect design covering custody, abort, Complete, and executor
-failure. It must not be hidden inside this refactor or described as already
-supported.
+This adds no lifecycle policy or coordinator. The target's `can_invoke/4`, the
+action's ordinary Prolog prerequisites, the sealed-plan validator, and the DTX
+reducer remain the authorities. The exact custody and recovery rules are in
+`dtx-durable-effects-plan.md`.
 
 The no-op granularity is exact: join's desired state includes the expected
 genesis anchor, so a different-anchor join is not already satisfied. Create's
@@ -448,9 +436,10 @@ may retain a deleted predicate class, action role, or corridor label.
 The final caller sweep must also remove unused exports and dead lifecycle-only
 error atoms such as `action_declaration_failed`, `lifecycle_staged_write`, and
 `lifecycle_effect_not_staged` if the ordinary path can no longer produce them.
-Keep `invalid_user_principal` while the transitional signed-user format still
-uses it, and keep bounded public creation/join failures that remain meaningful;
-do not preserve compatibility aliases.
+The transitional `invalid_user_principal` error is replaced by
+`invalid_agent_principal` with the agent format; keep bounded public
+creation/join failures that remain meaningful and preserve no compatibility
+aliases.
 
 ## 8. Required tests
 
@@ -476,11 +465,11 @@ do not preserve compatibility aliases.
 8. `run_action/2`, `public_action`, the `action` worker kind, the private
    lifecycle overlay fields, and the lifecycle action relations have no code or
    test caller after deletion.
-9. An ordinary `::` prerequisite follows the normal scope protocol and reaches
-   the documented `effect_requires_single_participant` boundary; no hidden
-   local-only denial remains.
-10. A prior committed local approval fact permits the same action without any
-    DTX or alternate authorization path.
+9. An ordinary `::` prerequisite follows the normal scope protocol and, when
+   material, commits atomically with the effect-bearing plan through DTX; no
+   hidden local-only denial remains.
+10. A prior committed local approval fact still permits the same action as a
+    one-participant transaction, without an alternate authorization path.
 11. The generated creator fact is exact and certified by the new genesis once
     stable agent references land; caller-supplied duplicates or reserved heads
     are rejected.
@@ -505,8 +494,9 @@ do not preserve compatibility aliases.
    from the final code, then run stale-symbol and dead-export sweeps.
 4. **In progress.** Run compile, focused tests, full EUnit, CT, xref, Dialyzer,
    and diff check.
-5. Only after the separate stable-agent evidence slice, add generated creator
-   provenance and enable agent-origin remote lifecycle calls.
+5. The stable-agent identity slice is implemented in the working tree. After
+   its gates, add generated creator provenance and enable signed-agent remote
+   lifecycle calls through the same target ACL and action/effect path.
 
 No deployment, ledger reset, format change, or consensus change belongs to
 this planning step.

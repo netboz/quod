@@ -26,15 +26,16 @@ requires a clean persistence reset and re-found.
    signature rule. A commit certificate proves finality; it does not prove that
    its signers ran the current transaction-validation rules.
 8. Only the explicitly anchored slot-1 genesis transaction may be unsigned.
-9. A signature authenticates an author; it does not authorize that author.
-   Until user/agent capability policy lands, transaction ingress and relay
-   remain restricted to currently admitted validator authors.
+9. A transaction signature authenticates its validator author; it does not
+   authorize the signed agent request carried by that transaction. Agent
+   identity and the target ontology's `can_invoke/4` decision are validated
+   separately through the one signed-goal path.
 10. Every author has a signed, monotonically increasing `author_seq`.
     Validators reject a sequence at or below that author's approved history,
     including an uncommitted approved parent. Gaps are legal; reuse is not.
 11. Every non-genesis `tx_id` is the target-bound SHA-256 digest of the complete
 semantic write: origin, proof and plan identities, durable goal/result,
-diff, read check, typed direct effects, exact signed-user request evidence,
+diff, read check, typed direct effects, exact signed-agent request evidence,
 and its top-level authorization transcript. Validators recompute it at live
 ingress and replay.
 
@@ -66,7 +67,7 @@ committee author.
 
 `EffectsWire` is the separate bounded canonical encoding of the closed typed
 direct-effect list. `RequestAuth` is either `none` or the exact canonical
-signed-user request evidence; `AuthorizationTranscript` is either `none` or
+signed-agent request evidence; `AuthorizationTranscript` is either `none` or
 the one canonical top-level `can_invoke/4` decision recorded during the proof.
 Both are signed and included in the semantic transaction id. Validators verify
 the request and re-prove the recorded ACL decision against the proposal parent;

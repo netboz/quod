@@ -21,7 +21,7 @@ by the fixed `quod_scope_wire` decoder.
 -include("quod_proof_limits.hrl").
 
 -export([start_link/0,
-         identify/3, ensure_scope/4,
+         identify/3, ensure_scope/4, identity/3,
          command/3, cancel/2, close/2, finalize/2]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
@@ -33,6 +33,7 @@ by the fixed `quod_scope_wire` decoder.
 
 -define(KEY, {ask_router, node}).
 -define(ID_BYTES, (?QUOD_SCOPE_WIRE_OPAQUE_ID_BITS div 8)).
+-define(AGENT_IDENTITY_CHANNEL, <<"quod.agent.identity">>).
 
 -type binding() :: quod_scope_wire:binding().
 -type remote_handle() ::
@@ -71,7 +72,10 @@ by the fixed `quod_scope_wire` decoder.
     poison = healthy :: healthy | {poisoned, term()},
     finalization = open :: open | {sealed, ok | {error, term()}},
     scopes = #{} :: map(),
-    probes = #{} :: map()
+    probes = #{} :: map(),
+    identity = none :: none |
+        {collecting, reference(), pid(), reference()} |
+        {ready, quod_agent_identity:certificate()}
 }).
 
 -record(probe, {
@@ -92,6 +96,13 @@ by the fixed `quod_scope_wire` decoder.
     scopes = #{} :: map()
 }).
 
+-record(inbound_identity, {
+    link :: pid(),
+    request_id :: <<_:128>>,
+    timer :: reference(),
+    token :: reference()
+}).
+
 -record(s, {
     generation :: binary(),
     origin_key :: binary(),
@@ -110,7 +121,8 @@ by the fixed `quod_scope_wire` decoder.
     return_links = #{} :: map(),
     probes = #{} :: map(),
     probe_requests = #{} :: map(),
-    probe_refs = #{} :: map()
+    probe_refs = #{} :: map(),
+    identity_inbound = #{} :: map()
 }).
 
 %% ------------------------------------------------------------------
@@ -204,6 +216,21 @@ finalize(Router, <<_:256>> = ProofId) ->
 finalize(_Router, _ProofId) ->
     {error, bad_proof_id}.
 
+-doc "Acquire or reuse this proof's one origin-agent identity certificate.".
+-spec identity(quod_client_goal:evidence(), <<_:256>>, non_neg_integer()) ->
+          {ok, quod_agent_identity:certificate()} |
+          {pending, pid(), binary(), reference()} | {error, term()}.
+identity(Evidence, <<_:256>> = ProofId, RemainingMs)
+  when is_map(Evidence), is_integer(RemainingMs), RemainingMs >= 0 ->
+    with_router(
+      fun(Router) ->
+          guarded_call(
+            Router,
+            {identity, self(), Evidence, ProofId, RemainingMs})
+      end);
+identity(_Evidence, _ProofId, _RemainingMs) ->
+    {error, invalid_request}.
+
 with_router(Fun) ->
     case quod_reg:where(?KEY) of
         Router when is_pid(Router) -> Fun(Router);
@@ -239,6 +266,7 @@ init([]) ->
     OriginKey = required_origin_key(),
     ReturnChannel = quod_scope_wire:return_channel(OriginKey),
     true = quod_reg:subscribe({channel, ReturnChannel}),
+    true = quod_reg:subscribe({channel, ?AGENT_IDENTITY_CHANNEL}),
     {ok, new_state(OriginKey, ReturnChannel, true,
                    fun quod_quic:open_link_pinned/3,
                    fun quod_quic:open_link_identified/2)};
@@ -289,6 +317,18 @@ handle_call(
             end;
         {error, _} = Error ->
             {reply, Error, S0}
+    end;
+handle_call(
+  {identity, Owner, Evidence, ProofId, RemainingMs}, _From, S0)
+  when is_pid(Owner) ->
+    case ensure_identity(
+           Owner, Evidence, ProofId, RemainingMs, S0) of
+        {{ok, Certificate}, S1} ->
+            {reply, {ok, Certificate}, S1};
+        {{pending, Ref}, S1} ->
+            {reply, {pending, self(), S1#s.generation, Ref}, S1};
+        {{error, _} = Error, S1} ->
+            {reply, Error, S1}
     end;
 handle_call({finalize, Owner, ProofId}, _From, S0) ->
     {Result, S1} = finalize_owner(Owner, ProofId, S0),
@@ -353,6 +393,9 @@ handle_cast(
         {ok, Scope} -> {noreply, drop_scope(Scope#scope.key, S0)};
         {error, _} -> {noreply, S0}
     end;
+handle_cast(
+  {identity_result, Owner, ProofId, Ref, Result}, S0) ->
+    {noreply, finish_identity(Owner, ProofId, Ref, Result, S0)};
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -373,8 +416,18 @@ handle_info(
              {ok, Event = {scope_event, _, _, _, _, _, _, _}} ->
                  handle_event(PeerIdentity, ReturnLink, Event, S0);
              {error, _} -> S0
-         end,
+    end,
     {noreply, S1};
+handle_info(
+  {quod_message, {PeerIdentity, Link}, Channel, Payload}, S0)
+  when Channel =:= ?AGENT_IDENTITY_CHANNEL, is_pid(Link) ->
+    {noreply, handle_identity_request(PeerIdentity, Link, Payload, S0)};
+handle_info(
+  {quod_agent_attestation,
+   {inbound_agent_identity, Key}, Result}, S0) ->
+    {noreply, finish_inbound_identity(Key, Result, S0)};
+handle_info({inbound_agent_identity_timeout, Key, Token}, S0) ->
+    {noreply, expire_inbound_identity(Key, Token, S0)};
 handle_info({probe_timeout, OpenRef}, S0) when is_reference(OpenRef) ->
     {noreply, fail_probe(OpenRef, timeout, S0)};
 handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
@@ -389,9 +442,20 @@ terminate(_Reason, S) ->
     maps:foreach(
       fun(_OpenRef, Probe) -> cancel_probe_timer(Probe#probe.timer) end,
       S#s.probes),
+    maps:foreach(
+      fun(_Owner, #owner{identity = Identity}) ->
+          cleanup_identity_collection(Identity)
+      end, S#s.owners),
+    maps:foreach(
+      fun(_Key, #inbound_identity{timer = Timer}) ->
+          _ = erlang:cancel_timer(Timer, [{async, true}, {info, false}])
+      end, S#s.identity_inbound),
     case S#s.subscribed of
         true ->
             _ = try quod_reg:unsubscribe({channel, S#s.return_channel})
+                catch _:_ -> ok
+                end,
+            _ = try quod_reg:unsubscribe({channel, ?AGENT_IDENTITY_CHANNEL})
                 catch _:_ -> ok
                 end;
         false -> ok
@@ -459,6 +523,355 @@ probe_owner_admission(#owner{finalization = {sealed, _}}) ->
 probe_owner_admission(#owner{poison = {poisoned, Reason}}) ->
     {error, {proof_poisoned, Reason}};
 probe_owner_admission(#owner{}) -> ok.
+
+ensure_identity(Owner, Evidence, ProofId, RemainingMs,
+                     S = #s{owners = Owners}) ->
+    case maps:get(Owner, Owners, undefined) of
+        #owner{proof_id = ProofId,
+               identity = {ready, Certificate}} ->
+            {{ok, Certificate}, S};
+        #owner{proof_id = ProofId,
+               identity = {collecting, Ref, _Pid, _MRef}} ->
+            {{pending, Ref}, S};
+        #owner{} = Existing ->
+            case owner_admission(Existing, ProofId) of
+                ok -> start_identity_collection(
+                        Owner, Evidence, ProofId, RemainingMs, S);
+                {error, _} = Error -> {Error, S}
+            end;
+        undefined ->
+            start_identity_collection(
+              Owner, Evidence, ProofId, RemainingMs, S)
+    end.
+
+start_identity_collection(
+  Owner, Evidence, ProofId, RemainingMs,
+  S = #s{owners = Owners, owner_refs = OwnerRefs})
+  when RemainingMs > 0 ->
+    case agent_identity_collection_input(Evidence, ProofId, RemainingMs) of
+        {ok, Input} ->
+            Router = self(),
+            Ref = make_ref(),
+            {Pid, MRef} = spawn_monitor(
+                            fun() ->
+                                Result = collect_agent_identity(
+                                           Router, Ref, Input),
+                                gen_server:cast(
+                                  Router,
+                                  {identity_result, Owner, ProofId,
+                                   Ref, Result})
+                            end),
+            case maps:get(Owner, Owners, undefined) of
+                undefined ->
+                    OwnerMRef = monitor(process, Owner),
+                    OwnerState = #owner{
+                                   mref = OwnerMRef, proof_id = ProofId,
+                                   identity =
+                                       {collecting, Ref, Pid, MRef}},
+                    S1 = put_owner(Owner, OwnerState, S),
+                    {{pending, Ref},
+                     S1#s{owner_refs = OwnerRefs#{OwnerMRef => Owner}}};
+                Existing = #owner{} ->
+                    S1 = put_owner(
+                           Owner,
+                           Existing#owner{
+                             proof_id = ProofId,
+                             identity = {collecting, Ref, Pid, MRef}}, S),
+                    {{pending, Ref}, S1}
+            end;
+        {error, _} = Error -> {Error, S}
+    end;
+start_identity_collection(
+  _Owner, _Evidence, _ProofId, _RemainingMs, S) ->
+    {{error, timeout}, S}.
+
+agent_identity_collection_input(
+  Evidence = #{request := #{agent_namespace := Ns,
+                            agent_genesis_anchor := Anchor,
+                            not_after_ms := RequestNotAfter}},
+  ProofId, RemainingMs) ->
+    case quod_simplex:identity_view(Ns) of
+        {ok, View = #{identity := {Ns, Anchor},
+                      committee := [_ | _], committee_id := CommitteeId}} ->
+            Now = quod_time:now_ms(),
+            NotAfter = min(RequestNotAfter, Now + RemainingMs),
+            case NotAfter > Now andalso
+                 quod_agent_identity:statement(
+                   Evidence, ProofId, CommitteeId, NotAfter) =/=
+                     {error, invalid_request} of
+                true ->
+                    {ok, #{evidence => Evidence, proof_id => ProofId,
+                           remaining_ms => RemainingMs,
+                           not_after => NotAfter, view => View}};
+                false -> {error, invalid_request}
+            end;
+        _ -> {error, unavailable}
+    end;
+agent_identity_collection_input(_Evidence, _ProofId, _RemainingMs) ->
+    {error, invalid_request}.
+
+finish_identity(Owner, ProofId, Ref, Result,
+                     S = #s{owners = Owners}) ->
+    case maps:get(Owner, Owners, undefined) of
+        Existing = #owner{
+                     proof_id = ProofId,
+                     identity = {collecting, Ref, _Pid, MRef}} ->
+            demonitor(MRef, [flush]),
+            case Result of
+                {ok, Certificate} ->
+                    Owner ! {quod_agent_identity, Ref,
+                             {ok, Certificate}},
+                    put_owner(
+                      Owner,
+                      Existing#owner{identity = {ready, Certificate}}, S);
+                {error, Reason} ->
+                    Owner ! {quod_agent_identity, Ref, {error, Reason}},
+                    put_owner(
+                      Owner, Existing#owner{identity = none}, S)
+            end;
+        _ -> S
+    end.
+
+handle_identity_request(PeerIdentity, Link, Payload,
+                             S = #s{identity_inbound = Inbound}) ->
+    PeerKey = quod_link:peer_key(PeerIdentity),
+    case {PeerKey, quod_agent_identity:decode_request(Payload),
+          map_size(Inbound) < ?QUOD_MAX_ROUTER_SCOPES} of
+        {<<_:256>>, {ok, Request =
+                           {agent_identity_request, RequestId,
+                            _ProofId, RequestBytes, Signature, _NotAfter}},
+         true} ->
+            Key = {PeerKey, RequestId},
+            case {maps:is_key(Key, Inbound),
+                  quod_client_goal:verify(RequestBytes, Signature)} of
+                {false, {ok, #{request := #{agent_namespace := Ns}}}} ->
+                    case quod_reg:where({quod_prolog, Ns}) of
+                        Pid when is_pid(Pid) ->
+                            Token = make_ref(),
+                            Timer = erlang:send_after(
+                                      ?QUOD_SCOPE_COMMAND_TIMEOUT_MS,
+                                      self(),
+                                      {inbound_agent_identity_timeout,
+                                       Key, Token}),
+                            quod_prolog:request_agent_attestation(
+                              Ns, Request, self(),
+                              {inbound_agent_identity, Key}),
+                            S#s{identity_inbound = Inbound#{
+                                  Key => #inbound_identity{
+                                    link = Link,
+                                    request_id = RequestId,
+                                    timer = Timer,
+                                    token = Token}}};
+                        undefined -> S
+                    end;
+                _ -> S
+            end;
+        _ -> S
+    end.
+
+finish_inbound_identity(Key, Result,
+                             S = #s{identity_inbound = Inbound}) ->
+    case maps:take(Key, Inbound) of
+        {#inbound_identity{link = Link,
+                                request_id = RequestId,
+                                timer = Timer}, Rest} ->
+            _ = erlang:cancel_timer(
+                  Timer, [{async, true}, {info, false}]),
+            case Result of
+                {ok, Signer,
+                 {agent_identity_v1, _Network, _Identity, _ProofId,
+                  _RequestDigest, _AgentRef, _SigningKey,
+                  CommitteeId, NotAfter, active}, Signature} ->
+                    {_PeerKey, RequestId} = Key,
+                    case quod_agent_identity:encode_response(
+                           {agent_identity_response, RequestId,
+                            Signer, CommitteeId, NotAfter, Signature}) of
+                        {ok, Frame} -> quod_link:send_ordered(Link, Frame);
+                        {error, _} -> ok
+                    end;
+                _ -> ok
+            end,
+            S#s{identity_inbound = Rest};
+        error -> S
+    end.
+
+expire_inbound_identity(Key, Token,
+                             S = #s{identity_inbound = Inbound}) ->
+    case maps:get(Key, Inbound, undefined) of
+        #inbound_identity{token = Token} ->
+            S#s{identity_inbound = maps:remove(Key, Inbound)};
+        _ -> S
+    end.
+
+collect_agent_identity(
+  _Router, Ref,
+  #{evidence := Evidence,
+    proof_id := ProofId,
+    remaining_ms := RemainingMs,
+    not_after := NotAfter,
+    view := #{identity := Identity,
+                     self := Self,
+                     committee := Committee,
+                     committee_id := CommitteeId,
+                     route_candidates := InitialRoutes}}) ->
+    true = quod_reg:subscribe({channel, ?AGENT_IDENTITY_CHANNEL}),
+    try
+        Routes = case quod_foreign_log:route_hints(Identity, InitialRoutes) of
+                     {ok, Hints} -> Hints;
+                     {error, _} -> InitialRoutes
+                 end,
+        {ok, Statement} = quod_agent_identity:statement(
+                            Evidence, ProofId, CommitteeId, NotAfter),
+        {ok, StatementBytes} =
+            quod_agent_identity:statement_bytes(Statement),
+        RequestId = new_id(),
+        Request = {agent_identity_request, RequestId, ProofId,
+                   maps:get(request_bytes, Evidence),
+                   maps:get(signature, Evidence), NotAfter},
+        {ok, Frame} = quod_agent_identity:encode_request(Request),
+        quod_prolog:request_agent_attestation(
+          element(1, Identity), Request, self(),
+          {agent_identity_collection, Ref, Self}),
+        {Opens, Waiting} = open_identity_routes(
+                             Committee -- [Self], Routes, #{}),
+        Deadline = quod_time:mono_ms() + RemainingMs,
+        collect_agent_identity_loop(
+          Ref, RequestId, Statement, StatementBytes, Committee,
+          Routes, Frame, Deadline, Opens, Waiting, #{})
+    after
+        _ = try quod_reg:unsubscribe({channel, ?AGENT_IDENTITY_CHANNEL})
+            catch _:_ -> ok
+            end
+    end.
+
+open_identity_routes([], _Routes, Opens) -> {Opens, #{}};
+open_identity_routes([Peer | Rest], Routes, Opens0) ->
+    Candidates = proplists:get_value(Peer, Routes, []),
+    {Opens1, Waiting1} = open_identity_candidate(
+                           Peer, Candidates, Opens0),
+    {Opens2, Waiting2} = open_identity_routes(Rest, Routes, Opens1),
+    {Opens2, maps:merge(Waiting1, Waiting2)}.
+
+open_identity_candidate(Peer, [Endpoint | Rest], Opens) ->
+    OpenRef = quod_quic:open_link_pinned(
+                Peer, Endpoint, ?AGENT_IDENTITY_CHANNEL),
+    {Opens#{OpenRef => {Peer, Rest}}, #{Peer => true}};
+open_identity_candidate(Peer, [], Opens) ->
+    {Opens, #{Peer => true}}.
+
+collect_agent_identity_loop(
+  Ref, RequestId, Statement, StatementBytes, Committee, Routes,
+  Frame, Deadline, Opens, Waiting, Signatures) ->
+    case map_size(Signatures) >= quod_quorum:threshold(length(Committee)) of
+        true ->
+            SignatureRows = lists:sort(maps:to_list(Signatures)),
+            case quod_agent_identity:certificate(
+                   Statement, SignatureRows, Routes) of
+                {ok, Certificate} -> {ok, Certificate};
+                {error, _} -> {error, invalid_request}
+            end;
+        false ->
+            Remaining = max(0, Deadline - quod_time:mono_ms()),
+            case Remaining of
+                0 -> {error, unavailable};
+                _ ->
+                    receive
+                        {quod_agent_attestation,
+                         {agent_identity_collection, Ref, Signer},
+                         {ok, Signer, Statement, Signature}} ->
+                            collect_agent_identity_loop(
+                              Ref, RequestId, Statement, StatementBytes,
+                              Committee, Routes, Frame, Deadline, Opens,
+                              maps:remove(Signer, Waiting),
+                              add_identity_signature(
+                                Signer, Signature, StatementBytes,
+                                Committee, Signatures));
+                        {quod_agent_attestation,
+                         {agent_identity_collection, Ref, Signer}, _Error} ->
+                            collect_agent_identity_loop(
+                              Ref, RequestId, Statement, StatementBytes,
+                              Committee, Routes, Frame, Deadline, Opens,
+                              maps:remove(Signer, Waiting), Signatures);
+                        {link_up, OpenRef, Peer, ?AGENT_IDENTITY_CHANNEL, Link}
+                          when is_pid(Link) ->
+                            case maps:take(OpenRef, Opens) of
+                                {{Peer, _Rest}, Opens1} ->
+                                    quod_link:send_ordered(Link, Frame),
+                                    collect_agent_identity_loop(
+                                      Ref, RequestId, Statement,
+                                      StatementBytes, Committee, Routes,
+                                      Frame, Deadline, Opens1, Waiting,
+                                      Signatures);
+                                _ ->
+                                    collect_agent_identity_loop(
+                                      Ref, RequestId, Statement,
+                                      StatementBytes, Committee, Routes,
+                                      Frame, Deadline, Opens, Waiting,
+                                      Signatures)
+                            end;
+                        {link_error, OpenRef, Peer, ?AGENT_IDENTITY_CHANNEL} ->
+                            {Opens1, Waiting1} =
+                                retry_identity_route(
+                                  OpenRef, Peer, Opens, Waiting),
+                            collect_agent_identity_loop(
+                              Ref, RequestId, Statement, StatementBytes,
+                              Committee, Routes, Frame, Deadline, Opens1,
+                              Waiting1, Signatures);
+                        {quod_message, {PeerIdentity, _Link},
+                         ?AGENT_IDENTITY_CHANNEL, Payload} ->
+                            Signatures1 =
+                                accept_identity_response(
+                                  quod_link:peer_key(PeerIdentity), Payload,
+                                  RequestId, Statement, StatementBytes,
+                                  Committee, Signatures),
+                            collect_agent_identity_loop(
+                              Ref, RequestId, Statement, StatementBytes,
+                              Committee, Routes, Frame, Deadline, Opens,
+                              Waiting, Signatures1)
+                    after Remaining ->
+                        {error, unavailable}
+                    end
+            end
+    end.
+
+retry_identity_route(OpenRef, Peer, Opens, Waiting) ->
+    case maps:take(OpenRef, Opens) of
+        {{Peer, Rest}, Opens1} ->
+            case open_identity_candidate(Peer, Rest, Opens1) of
+                {Opens2, _} -> {Opens2, Waiting}
+            end;
+        _ -> {Opens, Waiting}
+    end.
+
+accept_identity_response(
+  <<_:256>> = Peer, Payload, RequestId,
+  {agent_identity_v1, _Network, _Identity, _ProofId,
+   _RequestDigest, _AgentRef, _SigningKey,
+   CommitteeId, NotAfter, active},
+  StatementBytes, Committee, Signatures) ->
+    case quod_agent_identity:decode_response(Payload) of
+        {ok, {agent_identity_response, RequestId, Peer,
+              CommitteeId, NotAfter, Signature}} ->
+            add_identity_signature(
+              Peer, Signature, StatementBytes, Committee, Signatures);
+        _ -> Signatures
+    end;
+accept_identity_response(
+  _Peer, _Payload, _RequestId, _Statement, _StatementBytes,
+  _Committee, Signatures) -> Signatures.
+
+add_identity_signature(
+  <<_:256>> = Signer, <<_:512>> = Signature,
+  StatementBytes, Committee, Signatures) ->
+    case lists:member(Signer, Committee) andalso
+         not maps:is_key(Signer, Signatures) andalso
+         quod_identity:verify(Signature, StatementBytes, Signer) of
+        true -> Signatures#{Signer => Signature};
+        false -> Signatures
+    end;
+add_identity_signature(
+  _Signer, _Signature, _StatementBytes, _Committee, Signatures) ->
+    Signatures.
 
 validate_open(Owner, Endpoint, Binding, Authentication, RemainingMs,
               #s{origin_key = OriginKey, reuse = Reuse, scopes = Scopes})
@@ -531,10 +944,11 @@ open_fields(_Binding, _Authentication, _OriginKey) ->
 scope_authentication_matches({node, OriginKey}, node, Digest, OriginKey) ->
     quod_scope_wire:authentication_digest(node) =:= {ok, Digest};
 scope_authentication_matches(
-  {user, <<_:256>>},
-  {signed_goal, _RequestBytes, <<_:512>>} = Authentication,
+  Principal = {agent, _},
+  {signed_goal, _RequestBytes, <<_:512>>, _Certificate} = Authentication,
   Digest, _OriginKey) ->
-    quod_scope_wire:authentication_digest(Authentication) =:= {ok, Digest};
+    quod_agent_ref:valid_principal(Principal) andalso
+        quod_scope_wire:authentication_digest(Authentication) =:= {ok, Digest};
 scope_authentication_matches(_Principal, _Authentication, _Digest, _OriginKey) ->
     false.
 
@@ -711,6 +1125,7 @@ build_bounded_command(
 command_expects_event(scope_close) -> false;
 command_expects_event(scope_seal) -> true;
 command_expects_event({scope_attest, _}) -> true;
+command_expects_event({bind_group_effects, _, _}) -> true;
 command_expects_event({submit_plan, _, _, _, _}) -> true;
 command_expects_event({invoke_open, _, _, _, _}) -> true;
 command_expects_event({invoke_next, _, _}) -> true;
@@ -1024,15 +1439,31 @@ handle_down(MRef, Pid, Reason,
                 OpenRef when is_reference(OpenRef) ->
                     fail_probe(OpenRef, {request_link_down, Reason}, S);
                 undefined ->
-                    case link_down_kind(MRef, Pid, RequestLinks, ReturnLinks) of
-                        {request, ScopeKeys} ->
-                            poison_scope_owners(ScopeKeys, S);
-                        {return, ScopeKeys} ->
-                            poison_scope_owners(ScopeKeys, S);
-                        none -> S
+                    case identity_collector_owner(MRef, S#s.owners) of
+                        {ok, Owner, ProofId, Ref} ->
+                            finish_identity(
+                              Owner, ProofId, Ref, {error, unavailable}, S);
+                        error ->
+                            case link_down_kind(
+                                   MRef, Pid, RequestLinks, ReturnLinks) of
+                                {request, ScopeKeys} ->
+                                    poison_scope_owners(ScopeKeys, S);
+                                {return, ScopeKeys} ->
+                                    poison_scope_owners(ScopeKeys, S);
+                                none -> S
+                            end
                     end
             end
     end.
+
+identity_collector_owner(MRef, Owners) ->
+    maps:fold(
+      fun(Owner,
+          #owner{proof_id = ProofId,
+                 identity = {collecting, Ref, _Pid, MRef0}}, error)
+            when MRef0 =:= MRef -> {ok, Owner, ProofId, Ref};
+         (_Owner, _State, Acc) -> Acc
+      end, error, Owners).
 
 link_down_kind(MRef, Pid, RequestLinks, ReturnLinks) ->
     case maps:get(Pid, RequestLinks, undefined) of
@@ -1148,7 +1579,9 @@ drop_owner(Owner, S0) ->
 
 clear_owner_resources(Owner, S0 = #s{owners = Owners}) ->
     case maps:get(Owner, Owners, undefined) of
-        #owner{scopes = ScopeKeys, probes = OpenRefs} ->
+        OwnerState = #owner{scopes = ScopeKeys, probes = OpenRefs,
+                            identity = Identity} ->
+            cleanup_identity_collection(Identity),
             maps:foreach(
               fun(ScopeKey, _True) ->
                   case maps:get(ScopeKey, S0#s.scopes, undefined) of
@@ -1159,11 +1592,24 @@ clear_owner_resources(Owner, S0 = #s{owners = Owners}) ->
             S1 = maps:fold(
                    fun(ScopeKey, _True, Acc) -> drop_scope(ScopeKey, Acc) end,
                    S0, ScopeKeys),
-            maps:fold(
+            S2 = maps:fold(
               fun(OpenRef, _True, Acc) -> drop_probe(OpenRef, Acc) end,
-              S1, OpenRefs);
+              S1, OpenRefs),
+            case maps:get(Owner, S2#s.owners, undefined) of
+                Current = #owner{} ->
+                    put_owner(Owner, Current#owner{identity = none}, S2);
+                undefined ->
+                    _ = OwnerState,
+                    S2
+            end;
         undefined -> S0
     end.
+
+cleanup_identity_collection({collecting, _Ref, Pid, MRef}) ->
+    demonitor(MRef, [flush]),
+    exit(Pid, kill),
+    ok;
+cleanup_identity_collection(_Identity) -> ok.
 
 remove_owner_entry(
   Owner,
@@ -1199,11 +1645,13 @@ drop_scope(ScopeKey, S0 = #s{scopes = Scopes}) ->
 remove_owner_scope(OwnerPid, ScopeKey,
                    S = #s{owners = Owners}) ->
     case maps:get(OwnerPid, Owners, undefined) of
-        Owner = #owner{scopes = ScopeKeys, probes = Probes} ->
+        Owner = #owner{scopes = ScopeKeys, probes = Probes,
+                       identity = Identity} ->
             ScopeKeys1 = maps:remove(ScopeKey, ScopeKeys),
             case map_size(ScopeKeys1) + map_size(Probes) of
                 0 when Owner#owner.poison =:= healthy,
-                       Owner#owner.finalization =:= open ->
+                       Owner#owner.finalization =:= open,
+                       Identity =:= none ->
                     remove_owner_entry(OwnerPid, S);
                 _ ->
                     put_owner(
@@ -1215,11 +1663,13 @@ remove_owner_scope(OwnerPid, ScopeKey,
 remove_owner_probe(OwnerPid, OpenRef,
                    S = #s{owners = Owners}) ->
     case maps:get(OwnerPid, Owners, undefined) of
-        Owner = #owner{scopes = Scopes, probes = Probes} ->
+        Owner = #owner{scopes = Scopes, probes = Probes,
+                       identity = Identity} ->
             Probes1 = maps:remove(OpenRef, Probes),
             case map_size(Scopes) + map_size(Probes1) of
                 0 when Owner#owner.poison =:= healthy,
-                       Owner#owner.finalization =:= open ->
+                       Owner#owner.finalization =:= open,
+                       Identity =:= none ->
                     remove_owner_entry(OwnerPid, S);
                 _ ->
                     put_owner(

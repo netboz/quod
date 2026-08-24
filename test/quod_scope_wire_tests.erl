@@ -10,12 +10,14 @@ all_command_shapes_roundtrip_deterministically_test() ->
     Reasons = payload(failure_reasons, [{missing, item}]),
     ErlogError = payload(erlog_error, {permission_error, write}),
     Manifest = payload(manifest, manifest()),
+    GroupRef = group_ref(),
     Operations =
         [{scope_open, node},
-         {scope_open, {signed_goal, <<"request">>, <<7:512>>}},
+         {scope_open, signed_auth(<<"request">>, <<7:512>>)},
          scope_close,
          scope_seal,
          {scope_attest, Manifest},
+         {bind_group_effects, GroupRef, key(130)},
          {invoke_open, id(1), selection(none, []), chain(2), Goal},
          {invoke_next, id(1), 1},
          {invoke_cancel, id(1)},
@@ -42,35 +44,35 @@ all_command_shapes_roundtrip_deterministically_test() ->
           ?assertEqual(Encoded, EncodedAgain)
       end, lists:enumerate(Operations)).
 
-scope_v4_authentication_digest_is_exact_and_bounded_test() ->
+scope_v5_authentication_digest_is_exact_and_bounded_test() ->
     {ok, NodeDigest} = quod_scope_wire:authentication_digest(node),
-    Auth = {signed_goal, <<"request">>, <<7:512>>},
+    Auth = signed_auth(<<"request">>, <<7:512>>),
     {ok, SignedDigest} = quod_scope_wire:authentication_digest(Auth),
     ?assertNotEqual(NodeDigest, SignedDigest),
     ?assertNotEqual(
        SignedDigest,
        element(2, quod_scope_wire:authentication_digest(
-                    {signed_goal, <<"request!">>, <<7:512>>}))),
+                    signed_auth(<<"request!">>, <<7:512>>)))),
     ?assertNotEqual(
        SignedDigest,
        element(2, quod_scope_wire:authentication_digest(
-                    {signed_goal, <<"request">>, <<8:512>>}))),
+                    signed_auth(<<"request">>, <<8:512>>)))),
     ?assertEqual(
        {error, {protocol_error, bad_authentication}},
        quod_scope_wire:authentication_digest(
-         {signed_goal, <<"request">>, <<7:504>>})),
+         signed_auth(<<"request">>, <<7:504>>))),
     ?assertEqual(
        {error, {protocol_error, bad_authentication}},
        quod_scope_wire:authentication_digest(missing)).
 
-scope_v4_binding_rejects_principal_and_authentication_substitution_test() ->
+scope_v5_binding_rejects_principal_and_authentication_substitution_test() ->
     Command = command({scope_open, node}),
     {scope_command, Binding, Seq, RequestId, Budget, Operation} = Command,
     ?assertMatch({ok, _}, quod_scope_wire:encode_command(Command)),
     ?assertEqual(
        {error, {protocol_error, bad_principal}},
        quod_scope_wire:encode_command(
-         {scope_command, setelement(9, Binding, {user, <<1:248>>}),
+         {scope_command, setelement(9, Binding, {agent, <<1:248>>}),
           Seq, RequestId, Budget, Operation})),
     ?assertEqual(
        {error, {protocol_error, bad_authentication}},
@@ -95,6 +97,7 @@ all_events_carry_exact_state_and_roundtrip_test() ->
          plan_not_material,
          {plan_sealed, <<"opaque plan">>},
          {plan_attested, Attestation},
+         group_effects_bound,
          {invocation_opened, id(1)},
          {solution, id(1), 1, Answer},
          {complete, id(1), 2, Reasons},
@@ -222,6 +225,24 @@ manifest_attestation_payloads_are_canonical_and_bounded_test() ->
          event(
            {plan_attested,
             <<0:(?QUOD_MAX_DTX_BODY_BYTES + 1)/unit:8>>}))).
+
+group_effect_binding_is_exact_and_bounded_test() ->
+    GroupRef = group_ref(),
+    Command = command({bind_group_effects, GroupRef, key(131)}),
+    {ok, Encoded} = quod_scope_wire:encode_command(Command),
+    ?assertEqual({ok, Command}, quod_scope_wire:decode_request(Encoded)),
+    ?assertEqual(
+       {error, {protocol_error, bad_shape}},
+       quod_scope_wire:encode_command(
+         command({bind_group_effects, GroupRef, <<1:248>>}))),
+    ?assertEqual(
+       {error, {protocol_error, bad_shape}},
+       quod_scope_wire:encode_command(
+         command({bind_group_effects,
+                  setelement(2, GroupRef, <<>>), key(131)}))),
+    Ack = event(group_effects_bound),
+    {ok, AckEncoded} = quod_scope_wire:encode_event(Ack),
+    ?assertEqual({ok, Ack}, quod_scope_wire:decode_response(AckEncoded)).
 
 submit_operations_round_trip_and_stay_bounded_test() ->
     {ok, GoalBlob} = quod_durable_term:encode_goal({goal, ok}),
@@ -416,7 +437,7 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
        quod_scope_wire:decode_request(Compressed)),
     {Domain, _Version, Frame} = Outer,
     %% Every superseded scope wire is an identifiable rejection: an old peer
-    %% is refused at the version boundary, never misparsed as V4.
+    %% is refused at the version boundary, never misparsed as V5.
     lists:foreach(
       fun(OldVersion) ->
           WrongVersion =
@@ -424,8 +445,8 @@ outer_safe_etf_and_version_are_fail_closed_test() ->
           ?assertEqual(
              {error, {protocol_error, wrong_version}},
              quod_scope_wire:decode_request(WrongVersion))
-      end, [1, 2, 3]),
-    WrongDomain = term_to_binary({<<"other.scope">>, 4, Frame}, [deterministic]),
+      end, [1, 2, 3, 4]),
+    WrongDomain = term_to_binary({<<"other.scope">>, 5, Frame}, [deterministic]),
     ?assertEqual(
        {error, {protocol_error, bad_domain}},
        quod_scope_wire:decode_request(WrongDomain)),
@@ -736,6 +757,11 @@ attestation() ->
     {quod_dtx_attestation, 2, {<<"quod:b">>, key(6)},
      key(126), key(127), key(128), <<129:512>>}.
 
+group_ref() ->
+    Manifest = manifest(),
+    {ok, GroupRef} = quod_dtx:manifest_group_ref(Manifest, key(129)),
+    GroupRef.
+
 command(Operation) ->
     {scope_command, binding(), 1, id(90), 30000, Operation}.
 
@@ -743,7 +769,18 @@ event(Operation) ->
     {scope_event, binding(), 1, id(91), 1, 0, false, Operation}.
 
 raw_frame(Frame) ->
-    term_to_binary({<<"quod.scope">>, 4, Frame}, [deterministic]).
+    term_to_binary({<<"quod.scope">>, 5, Frame}, [deterministic]).
+
+signed_auth(RequestBytes, Signature) ->
+    {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
+                                  <<"quod:a">>, key(5),
+                                  <<"human_user(alice).">>, 2),
+    Statement = {agent_identity_v1, key(7),
+                 {<<"quod:a">>, key(5)}, key(3), key(8),
+                 AgentRef, key(9), key(10), 9999999999999, active},
+    {ok, Certificate} = quod_agent_identity:certificate(
+                          Statement, [], []),
+    {signed_goal, RequestBytes, Signature, Certificate}.
 
 selection(Lineage, BatchIds) ->
     {tx_selection, Lineage, BatchIds}.

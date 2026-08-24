@@ -46,7 +46,7 @@ Two collection paths:
 | `quod_runtime_reaction_seconds{namespace,result}` | histogram | | local and subscribed reaction matching, owner resolution, and handler time by bounded result |
 | `quod_runtime_heavy_pending/heavy_running/heavy_superseded/heavy_rejected/heavy_failures{namespace}` | gauge | | bounded heavy background work: queued, running, coalesced, rejected by limits, and failed |
 | `quod_foreign_follow_*` / `quod_foreign_projection_*` | gauge | | node-wide certified-follow targets, consumers, work, memory, health, traffic and rebuild totals; no target namespace label is exposed |
-| `quod_effect_custody_*` | gauge | | node-wide direct-effect rows, reservations, and the committed capacity policy projected from root |
+| `quod_effect_custody_*` | gauge | | node-wide direct-effect rows (including the group-active subset), reservations, and the committed capacity policy projected from root |
 | `quod_prolog_applied/applies/rejects/proves/conflicts{namespace}` | gauge | | this node's stored-data activity (written / rejected / queried) |
 | `quod_prolog_parked{namespace}` | gauge | | writes waiting here for their change to be made final |
 | `quod_prolog_park_timeouts{namespace}` | gauge | | running total of writes whose final outcome was still unknown when their caller deadline elapsed |
@@ -288,6 +288,7 @@ declare(NodeId) ->
     %% root policy; the two flags distinguish a real zero capacity from
     %% unlimited or a node that has not received its projection yet.
     _ = N(quod_effect_custody_active, "Direct effects in crash-durable custody that have not reached a terminal result."),
+    _ = N(quod_effect_custody_group_active, "Direct effects in active DTX group custody. This is a subset of active custody, not an additional row count."),
     _ = N(quod_effect_custody_reservations, "Direct-effect custody places reserved by proofs that have not yet bound their transaction."),
     _ = N(quod_effect_custody_terminal, "Completed direct-effect rows retained for local outcome lookup or later compaction."),
     _ = N(quod_effect_custody_capacity, "Committed bounded direct-effect custody capacity. Zero is also used when the separate unlimited or configured flag explains that no numeric bound applies yet."),
@@ -560,9 +561,11 @@ refresh_foreign_log() ->
 
 refresh_effect_custody() ->
     case quod_effect_journal:stats() of
-        #{capacity := Capacity, active := Active,
+        #{capacity := Capacity, active := Active, group_active := GroupActive,
           reservations := Reservations, terminal := Terminal} ->
             _ = prometheus_gauge:set(quod_effect_custody_active, Active),
+            _ = prometheus_gauge:set(
+                  quod_effect_custody_group_active, GroupActive),
             _ = prometheus_gauge:set(
                   quod_effect_custody_reservations, Reservations),
             _ = prometheus_gauge:set(quod_effect_custody_terminal, Terminal),
@@ -576,6 +579,7 @@ refresh_effect_custody() ->
             ok;
         _ ->
             _ = prometheus_gauge:set(quod_effect_custody_active, 0),
+            _ = prometheus_gauge:set(quod_effect_custody_group_active, 0),
             _ = prometheus_gauge:set(
                   quod_effect_custody_reservations, 0),
             _ = prometheus_gauge:set(quod_effect_custody_terminal, 0),

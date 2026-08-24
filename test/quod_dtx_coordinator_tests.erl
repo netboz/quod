@@ -320,12 +320,12 @@ committed_begin_bootstrap_starts_with_prepare_not_begin_test() ->
                 routes => #{}},
           {ok, Commands} = quod_dtx_coordinator:test_initial_commands(
                              Ns, Begin, Ref, Evidence),
-          ?assertMatch([{submit, _, {quod_dtx_prepare, 2, _, _, _, _, _}},
-                        {submit, _, {quod_dtx_prepare, 2, _, _, _, _, _}}],
+          ?assertMatch([{submit, _, {quod_dtx_prepare, 3, _, _, _, _, _}},
+                        {submit, _, {quod_dtx_prepare, 3, _, _, _, _, _}}],
                        Commands),
           ?assertNot(
              lists:any(
-               fun({submit, _, {quod_dtx_begin, 2, _, _, _, _}}) -> true;
+               fun({submit, _, {quod_dtx_begin, 3, _, _, _}}) -> true;
                   (_) -> false
                end, Commands))
       end).
@@ -437,7 +437,7 @@ fixture(#{pubkey := Pub} = Signer) ->
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest, none, none,
+          Manifest, none,
           [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
            {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     #{signer => Signer, admission => Admission,

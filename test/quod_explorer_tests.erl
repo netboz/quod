@@ -385,9 +385,12 @@ effect_tx_json_is_explicit_and_does_not_claim_root_diff_test() ->
                    {ok, Executor0} -> <<78:256>>;
                    _ -> Executor0
                end,
-    Effect = {quod_direct_effect, 1, local_durable,
+    {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
+                                  <<"agent:test">>, <<2:256>>,
+                                  <<"human_user(test).">>, 1),
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create, <<1:256>>, Executor,
-              {user, <<2:256>>}, {<<"ont:new">>, <<3:256>>},
+              {agent, AgentRef}, {<<"ont:new">>, <<3:256>>},
               <<4:256>>, <<5:256>>},
     T = (tx(9))#transaction{diff = [], effects = [Effect]},
     J = quod_explorer_http:tx_json_full(
@@ -397,8 +400,8 @@ effect_tx_json_is_explicit_and_does_not_claim_root_diff_test() ->
     ?assertEqual([create], maps:get(effect_operations, J)),
     [Rendered] = maps:get(effects, J),
     ?assertMatch(#{operation := create,
-                   actor := #{kind := user},
-                   actor_authority := author_node_claimed,
+                   actor := #{kind := agent, reference := _},
+                   actor_authority := signed_agent_request,
                    local_execution := not_this_node}, Rendered),
     ?assertEqual(
        #{ns => <<"ont:new">>,
@@ -420,7 +423,7 @@ signed_tx_json_test() ->
                           quod_explorer_http:tx_json_full(
                             <<"ont:test">>, tx(1), entry(1, [tx(1)])))).
 
-signed_user_intent_is_rendered_from_the_transaction_test() ->
+signed_agent_intent_is_rendered_from_the_transaction_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     {Ns, Anchor} = maps:get(target, Fixture),
     Transaction = maps:get(transaction, Fixture),
@@ -428,8 +431,9 @@ signed_user_intent_is_rendered_from_the_transaction_test() ->
              Ns, Transaction, entry(2, [Transaction])),
     Request = maps:get(request, Json),
     ?assertEqual(verified, maps:get(status, Request)),
-    ?assertEqual(quod_identity:short(maps:get(user, Fixture)),
-                 maps:get(id, maps:get(user, Request))),
+    ?assertMatch(
+       #{kind := agent, identity := #{ns := Ns}, reference := _},
+       maps:get(agent, Request)),
     ?assertEqual(
        binary:encode_hex(maps:get(request_digest, Fixture), lowercase),
        maps:get(request_digest, Request)),
@@ -438,7 +442,7 @@ signed_user_intent_is_rendered_from_the_transaction_test() ->
        maps:get(operation_id, Request)),
     ?assertMatch(
        #{kind := operation, ns := Ns,
-         anchor := _AnchorHex, user := #{id := _},
+         anchor := _AnchorHex, agent := #{kind := agent},
          operation_id := _},
        maps:get(operation_ref, Request)),
     ?assertEqual(
@@ -450,7 +454,7 @@ signed_user_intent_is_rendered_from_the_transaction_test() ->
     ?assertEqual(128, byte_size(maps:get(signature, Request))),
     ?assert(is_binary(quod_explorer_http:encode(Json))).
 
-signed_user_intent_is_rendered_once_from_the_origin_begin_test() ->
+signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     Control = maps:get(begin_control, Fixture),
     {ok, Blob} = quod_dtx:encode_control(Control),
@@ -461,12 +465,81 @@ signed_user_intent_is_rendered_once_from_the_origin_begin_test() ->
     Request = maps:get(request, RenderedControl),
     ?assertEqual('begin', maps:get(kind, RenderedControl)),
     ?assertEqual(1, maps:get(participant_count, RenderedControl)),
+    [Participant] = maps:get(participants, RenderedControl),
+    ?assertMatch(
+       #{status := bound, diff_ops := 1, effect_count := 0,
+         signer := #{pubkey := _}}, Participant),
+    ?assertEqual(
+       binary:encode_hex(quod_dtx:digest(maps:get(plan, Fixture)), lowercase),
+       maps:get(plan_digest, Participant)),
     ?assertEqual(verified, maps:get(status, Request)),
     ?assertEqual(
        binary:encode_hex(maps:get(request_digest, Fixture), lowercase),
        maps:get(request_digest, Request)),
     ?assertMatch(#{kind := group, group_id := _},
                  maps:get(first_outcome, Request)),
+    ?assert(is_binary(quod_explorer_http:encode(Json))).
+
+effect_bearing_dtx_plan_is_visible_as_bound_metadata_test() ->
+    {Pub, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Pub,
+               key => quod_identity:key_term({Pub, Seed})},
+    Target = {<<"ont:effect-participant">>, <<111:256>>},
+    Principal = {node, Pub},
+    {ok, Effect} = quod_effect:new(
+                     create, Pub, Principal,
+                     {<<"ont:created">>, <<112:256>>},
+                     <<113:256>>, <<114:256>>),
+    Core = #{target => Target, base_height => 1,
+             proof_id => <<115:256>>, origin => Target,
+             principal => Principal, request_binding => none,
+             overlay_generation => 0, diff_ops => 0,
+             read_functors => 0, effects_count => 1,
+             diff => explorer_wire_blob([]),
+             read_check => explorer_wire_blob([]),
+             effects => explorer_wire_blob([Effect]),
+             live_bridges => explorer_wire_blob([]),
+             transcript => explorer_wire_blob([])},
+    PlanBytes = term_to_binary(
+                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
+    Plan = {quod_plan, Core, Pub, quod_identity:sign(PlanBytes, Signer)},
+    PlanDigest = quod_dtx:digest(Plan),
+    {ok, PlanBlob} = quod_dtx:encode(Plan),
+    {ok, GoalBlob} = quod_durable_term:encode_goal({create, visible}),
+    {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
+    {ok, Manifest} = quod_dtx:new_manifest(
+                       #{proof_id => <<115:256>>,
+                         coordinator =>
+                             {element(1, Target), element(2, Target),
+                              Pub, <<116:256>>},
+                         nonce => <<117:256>>, principal => Principal,
+                         goal => GoalBlob, result => ResultBlob,
+                         request_binding => none,
+                         participants => [{Target, PlanDigest}]}),
+    {ok, Attestation} = quod_dtx:attest_plan(
+                          Target, Plan, Manifest, Signer),
+    {ok, Begin} = quod_dtx:new_begin(
+                    Manifest, none,
+                    [{Target, PlanDigest, PlanBlob, Attestation}]),
+    {ok, Control} = quod_dtx:sign_control(
+                      Target, Begin, <<116:256>>, 1, 1, Signer),
+    {ok, ControlBlob} = quod_dtx:encode_control(Control),
+    Json = quod_explorer_http:block_json(
+             element(1, Target),
+             #entry{index = 1, timestamp = 1,
+                    data = {dtx, ControlBlob}}),
+    [Participant] = maps:get(participants, maps:get(control, Json)),
+    ?assertMatch(
+       #{status := bound, diff_ops := 0, effect_count := 1,
+         target := #{ns := <<"ont:effect-participant">>}},
+       Participant),
+    ?assertMatch(
+       [#{operation := create, effect_id := _,
+          target := #{ns := <<"ont:created">>},
+          executor := #{pubkey := _},
+          actor := #{kind := node},
+          local_execution := _}],
+       maps:get(effects, Participant)),
     ?assert(is_binary(quod_explorer_http:encode(Json))).
 
 compiled_clause_test() ->
@@ -491,3 +564,7 @@ printable_tx_id_test() ->
        <<"group:", (binary:encode_hex(PrintableHash, lowercase))/binary>>,
        quod_explorer_http:tx_id_text({group, PrintableHash})),
     ?assertEqual(<<"00000000000000ff">>, quod_explorer_http:tx_id_text(<<255:64>>)).
+
+explorer_wire_blob(Term) ->
+    {ok, Blob} = quod_wire_term:encode_canonical(Term),
+    Blob.

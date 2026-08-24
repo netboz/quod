@@ -140,6 +140,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          dtx_outcome_lookup/2,
          status/1, committee/1, genesis_hash/1,
          acquire_proof_access/1, check_proof_access/1,
+         identity_view/1,
          stats/1, namespaces/0]).
 -export([init/1, callback_mode/0, running/3, terminate/3]).
 
@@ -226,6 +227,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_retain_dtx_record/3,
          test_dtx_retain_admissible/2,
          test_dtx_submission_waiters/1,
+         test_register_dtx_intent/5, test_activate_dtx_intent/3,
          test_reconcile_signing_state/1,
          test_finish_pending_begin_reconciliation/2,
          test_retire_invalid_dtx/3,
@@ -265,7 +267,7 @@ on ≥1 honest validator — the intersection property the whole safety argument
 """.
 -spec quorum(pos_integer()) -> pos_integer().
 quorum(N) when is_integer(N), N >= 1 ->
-    N - (N - 1) div 3.
+    quod_quorum:threshold(N).
 
 %%%===================================================================
 %%% block hashing + the bytes a share signs
@@ -394,10 +396,8 @@ verify_cert(Domain, #cert{} = Cert, Validators) ->
 
 %% A certificate can carry at most one signature per validator. This bounded recursive check both
 %% rejects improper tails before any list BIF can raise and caps hostile crypto work before verification.
-bounded_signatures([], _Remaining) -> true;
-bounded_signatures([{Signer, Sig} | Rest], Remaining) when Remaining > 0 ->
-    valid_signer_signature(Signer, Sig) andalso bounded_signatures(Rest, Remaining - 1);
-bounded_signatures(_MalformedOrTooLong, _Remaining) -> false.
+bounded_signatures(Signatures, Remaining) ->
+    quod_quorum:valid_signature_list(Signatures, Remaining).
 
 valid_signer_signature(Signer, Sig) ->
     is_binary(Signer) andalso byte_size(Signer) =:= 32
@@ -405,11 +405,10 @@ valid_signer_signature(Signer, Sig) ->
 
 %% Keep one signature per signer, from validators in the set, whose signature verifies over `Msg`.
 distinct_valid(Sigs, Msg, Validators) ->
-    VSet = ordsets:from_list(Validators),
-    lists:ukeysort(1, [{Signer, Sig}
-                       || {Signer, Sig} <- Sigs,
-                          ordsets:is_element(Signer, VSet),
-                          quod_identity:verify(Sig, Msg, Signer)]).
+    case quod_quorum:sanitize(Validators, Msg, Sigs) of
+        {ok, Valid} -> Valid;
+        error -> []
+    end.
 
 %%%===================================================================
 %%% the commit guard (the load-bearing safety rule)
@@ -729,12 +728,7 @@ sanitize_cert_bounded(Domain, C, K, Sl, BH, Sigs, Validators, N) ->
 %% replay/catch-up boundaries. Count only through the shared limit so an
 %% oversized or improper list is rejected before signer traversal or crypto.
 bounded_validator_count(Validators) ->
-    bounded_validator_count(Validators, 0).
-
-bounded_validator_count([], Count) -> {ok, Count};
-bounded_validator_count([_ | Rest], Count) when Count < ?MAX_VALIDATORS ->
-    bounded_validator_count(Rest, Count + 1);
-bounded_validator_count(_MalformedOrTooLarge, _Count) -> error.
+    quod_quorum:committee_size(Validators).
 
 cert_key(#cert{kind = K, slot = Sl, block_hash = BH}) -> {K, Sl, BH}.
 
@@ -1328,6 +1322,10 @@ test_retire_changed_admissions(OldAdmissions, Admissions, S) ->
     retire_changed_admissions(OldAdmissions, Admissions, S).
 test_install_projection(Projection, S) ->
     install_projection(Projection, S).
+test_register_dtx_intent(EnginePid, IntentId, Begin, GroupRef, S) ->
+    register_dtx_intent(EnginePid, IntentId, Begin, GroupRef, S).
+test_activate_dtx_intent(EnginePid, IntentId, S) ->
+    activate_dtx_intent(EnginePid, IntentId, S).
 test_state_set(ns, V, S)         -> S#s{ns = V};
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
@@ -2224,7 +2222,8 @@ check_proof_access(_Token) ->
 proof_gate_row(Ns) ->
     try ets:lookup(
           binary_to_existing_atom(genesis_table_name(Ns), utf8), proof_gate) of
-        [{proof_gate, Ready, Fence, Generation, LastGroup}]
+        [{proof_gate, Ready, Fence, Generation, LastGroup,
+          _Self, _Committee, _CommitteeId, _Routes}]
           when is_boolean(Ready), is_integer(Generation), Generation >= 0 ->
             case valid_proof_gate(Fence, LastGroup) of
                 true -> {ok, Ready, Fence, Generation, LastGroup};
@@ -2246,39 +2245,76 @@ valid_proof_gate(_, _) -> false.
 
 proof_gate_tuple(
   Ready,
-  #s{dtx_projection = #{proof_fence := Fence,
+  #s{self = Self, validators = Validators,
+     committee_id = CommitteeId, validator_routes = Routes,
+     dtx_projection = #{proof_fence := Fence,
                         generation := Generation},
      dtx_last_group = LastGroup})
   when is_boolean(Ready) ->
     true = valid_proof_gate(Fence, LastGroup),
-    {proof_gate, Ready, Fence, Generation, LastGroup}.
+    {proof_gate, Ready, Fence, Generation, LastGroup,
+     Self, lists:sort(Validators), CommitteeId, Routes}.
 
 %% The Simplex owner is the sole writer of this protected row.  Compare the
 %% projected value first so ordinary content commits pay no ETS-write cost.
 %% During pre-table startup the existing-atom lookup fails; init/1 publishes
 %% the initial closed row atomically with the anchor immediately afterwards.
 refresh_proof_gate(
-  #s{prolog_ready = Ready,
-     dtx_projection = #{proof_fence := Fence, generation := Generation},
-     dtx_last_group = LastGroup},
-  #s{prolog_ready = Ready,
-     dtx_projection = #{proof_fence := Fence, generation := Generation},
-     dtx_last_group = LastGroup} = S) ->
-    S;
-refresh_proof_gate(
-  _Before,
+  Before,
   #s{ns = Ns,
-     dtx_projection = #{proof_fence := _Fence, generation := _Generation}} = S) ->
-    try
-        true = ets:insert(
-                 binary_to_existing_atom(genesis_table_name(Ns), utf8),
-                 proof_gate_tuple(S#s.prolog_ready, S))
-    catch
-        error:badarg -> ok
+     dtx_projection = #{proof_fence := _Fence, generation := _Generation}} = S)
+  when is_record(Before, s) ->
+    CurrentRow = proof_gate_tuple(S#s.prolog_ready, S),
+    %% Before storage initialization there is deliberately no DTX projection
+    %% and therefore no publishable gate row.  Compare only complete rows; the
+    %% first complete state must always be installed.
+    case proof_gate_row_for_state(Before) =:= CurrentRow of
+        true -> ok;
+        false ->
+            try
+                true = ets:insert(
+                         binary_to_existing_atom(genesis_table_name(Ns), utf8),
+                         CurrentRow)
+            catch
+                error:badarg -> ok
+            end
     end,
     S;
 refresh_proof_gate(_Before, S) ->
     S.
+
+proof_gate_row_for_state(
+  #s{dtx_projection = #{proof_fence := _Fence, generation := _Generation}} = S) ->
+    proof_gate_tuple(S#s.prolog_ready, S);
+proof_gate_row_for_state(#s{}) ->
+    undefined.
+
+-doc "Read the current local validator view without entering the consensus mailbox.".
+-spec identity_view(binary()) ->
+          {ok, map()} | {error, unavailable | not_validator}.
+identity_view(Ns) when is_binary(Ns) ->
+    try ets:lookup(
+          binary_to_existing_atom(genesis_table_name(Ns), utf8), proof_gate) of
+        [{proof_gate, true, open, _Generation, _LastGroup,
+          <<_:256>> = Self, Committee, <<_:256>> = CommitteeId, Routes}]
+          when is_list(Committee), is_map(Routes) ->
+            case lists:member(Self, Committee) of
+                true ->
+                    {ok, #{identity => {Ns, genesis_hash(Ns)}, self => Self,
+                           committee => Committee,
+                           committee_id => CommitteeId,
+                           route_candidates =>
+                               [{Key, [Endpoint]}
+                                || {Key, Endpoint} <- lists:sort(
+                                                       maps:to_list(Routes))]}};
+                false -> {error, not_validator}
+            end;
+        _ -> {error, unavailable}
+    catch
+        error:badarg -> {error, unavailable}
+    end;
+identity_view(_Ns) ->
+    {error, unavailable}.
 
 namespaces() -> gproc:select([{{{n, l, {quod_simplex, '$1'}}, '_', '_'}, [], ['$1']}]).
 
@@ -3343,7 +3379,7 @@ dtx_begin_registration_open(
     pending_begin_projection(Journal) =:= none andalso
         not maps:fold(
               fun(_Digest,
-                  #dtx_submission{record = {quod_dtx_begin, 2, _, _, _, _}},
+                  #dtx_submission{record = {quod_dtx_begin, 3, _, _, _}},
                   _Found) -> true;
                  (_Digest, _Submission, Found) -> Found
               end, false, Submissions);
@@ -3437,7 +3473,7 @@ pending_origin_begin(#s{dtx_submissions = Submissions}, Binding) ->
     Candidates =
         [{InsertedAt, GroupId, Begin, GroupRef}
          || #dtx_submission{
-              record = {quod_dtx_begin, 2, _, _, _, _} = Begin,
+              record = {quod_dtx_begin, 3, _, _, _} = Begin,
               group_id = GroupId, inserted_at = InsertedAt}
                 <- maps:values(Submissions),
             {ok, GroupRef} <- [quod_dtx:begin_group_ref(Begin)],
@@ -4234,7 +4270,7 @@ dtx_endpoint_result_response(Request, _Result, _S) ->
 
 submitted_prepare_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
-        {ok, {quod_dtx_prepare, 2, _, _, _, _, _} = Prepare} ->
+        {ok, {quod_dtx_prepare, 3, _, _, _, _, _} = Prepare} ->
             quod_dtx:record_digest(Prepare);
         _ ->
             error

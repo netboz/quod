@@ -25,8 +25,9 @@ recovery and compaction to one format and one authority path.
 
 -export([start_link/0, configure_capacity/1, capacity/0, stats/0,
          reserve/1, release_reservation/1,
-         stage/5, bind_transaction/3, release_applied/2,
+         stage/5, bind_transaction/3, bind_group/5, release_applied/2,
          activate/1, handoff/1, retire/2, retire_transaction/2,
+         retire_group/4,
          await/2, reconcile/0,
          status/1, status_ref/1, rows/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2,
@@ -47,11 +48,12 @@ recovery and compaction to one format and one authority path.
     action :: binary(),
     desired :: binary(),
     prepared :: binary(),
-    transaction :: binary(),
+    commit :: binary(),
     ref :: term(),
     admission :: <<_:256>>,
-    state = bound :: bound | prepared | handed_off | committed | applied |
-                          retired | operator_error,
+    state = transaction_bound ::
+        transaction_bound | transaction_ready | transaction_submitted |
+        group_pending | released | applied | retired | operator_error,
     height = 0 :: non_neg_integer(),
     result = none :: term()
 }).
@@ -113,7 +115,8 @@ capacity() ->
 -doc "Return the node-wide custody policy and current pressure in one snapshot.".
 -spec stats() ->
           #{capacity := unconfigured | capacity(),
-            active := non_neg_integer(), reservations := non_neg_integer(),
+            active := non_neg_integer(), group_active := non_neg_integer(),
+            reservations := non_neg_integer(),
             terminal := non_neg_integer()} |
           {error, unavailable}.
 stats() ->
@@ -140,6 +143,13 @@ stage(Token, Action, Desired, Effect, Prepared) ->
 bind_transaction(Effect, Transaction, Ref) ->
     call({bind_transaction, Effect, Transaction, Ref}).
 
+-doc "Persist one prepared effect under an already-registered dormant group intent.".
+-spec bind_group(quod_dtx:plan(), term(), {binary(), <<_:256>>}, <<_:256>>,
+                 {term(), term(), quod_effect:effect(), term()}) ->
+          ok | {error, term()}.
+bind_group(Plan, GroupRef, Target, PlanDigest, PreparedEffect) ->
+    call({bind_group, Plan, GroupRef, Target, PlanDigest, PreparedEffect}).
+
 -doc "Idempotently transfer one prepared row into Simplex's durable signed custody.".
 -spec handoff(binary()) -> ok | {error, term()}.
 handoff(EffectId) -> call({handoff, EffectId}).
@@ -162,6 +172,12 @@ retire(Effects, Reason) ->
 retire_transaction(TxId, Reason) ->
     gen_server:cast(quod_reg:via({quod_effect_journal, node}),
                     {retire_transaction, TxId, Reason}).
+
+-spec retire_group(term(), {binary(), <<_:256>>}, <<_:256>>, term()) -> ok.
+retire_group(GroupRef, Target, PlanDigest, Reason) ->
+    gen_server:cast(
+      quod_reg:via({quod_effect_journal, node}),
+      {retire_group, GroupRef, Target, PlanDigest, Reason}).
 
 -spec await(binary(), timeout()) -> ok | {error, term()}.
 await(EffectId, Timeout) when is_binary(EffectId), byte_size(EffectId) =:= 32 ->
@@ -229,6 +245,7 @@ handle_call(stats, _From,
     {reply,
      #{capacity => Capacity,
        active => Active,
+       group_active => active_group_row_count(Rows),
        reservations => map_size(Reservations),
        terminal => map_size(Rows) - Active},
      S};
@@ -268,7 +285,7 @@ handle_call({stage, Token, Action, Desired, Effect, Prepared},
             {reply, {error, invalid_reservation}, S}
     end;
 handle_call({bind_transaction, Effect, Transaction, Ref}, {Owner, _}, S0) ->
-    case bind_row(Effect, Transaction, Ref, S0) of
+    case bind_transaction_row(Effect, Transaction, Ref, S0) of
         {ok, S1} ->
             EffectId = quod_effect:effect_id(Effect),
             case track_bound_owner(EffectId, Owner, S1) of
@@ -277,17 +294,28 @@ handle_call({bind_transaction, Effect, Transaction, Ref}, {Owner, _}, S0) ->
             end;
         {error, Reason} -> {reply, {error, Reason}, S0}
     end;
+handle_call(
+  {bind_group, Plan, GroupRef, Target, PlanDigest, PreparedEffect},
+  _From, S0) ->
+    case bind_group_row(
+           Plan, GroupRef, Target, PlanDigest, PreparedEffect, S0) of
+        {ok, S1} -> {reply, ok, schedule_reconcile(S1)};
+        {error, Reason} -> {reply, {error, Reason}, S0}
+    end;
 handle_call({activate, EffectId}, _From, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
-        #row{state = bound} = Row ->
+        #row{state = transaction_bound} = Row ->
             S1 = persist(S#s{rows = Rows#{EffectId =>
-                                             Row#row{state = prepared}}}),
+                                  Row#row{state = transaction_ready}}}),
             {reply, ok,
              schedule_reconcile(drop_bound_owner(EffectId, S1))};
         #row{state = State}
-          when State =:= prepared; State =:= handed_off;
-               State =:= committed; State =:= applied ->
+          when State =:= transaction_ready;
+               State =:= transaction_submitted;
+               State =:= released; State =:= applied ->
             {reply, ok, S};
+        #row{state = group_pending} ->
+            {reply, {error, invalid_group_effect_state}, S};
         #row{state = retired, result = Reason} ->
             {reply, {error, Reason}, S};
         #row{state = operator_error, result = Reason} ->
@@ -297,16 +325,18 @@ handle_call({activate, EffectId}, _From, S = #s{rows = Rows}) ->
     end;
 handle_call({handoff, EffectId}, _From, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
-        #row{state = prepared} = Row ->
+        #row{state = transaction_ready} = Row ->
             case handoff_row(Row) of
-                ok -> {reply, ok, mark_handed_off(EffectId, S)};
+                ok -> {reply, ok, mark_transaction_submitted(EffectId, S)};
                 {error, _} = Error ->
                     {reply, Error, schedule_reconcile(S)}
             end;
-        #row{state = bound} ->
+        #row{state = transaction_bound} ->
             {reply, {error, not_activated}, S};
+        #row{state = group_pending} ->
+            {reply, {error, invalid_group_effect_state}, S};
         #row{state = State}
-          when State =:= handed_off; State =:= committed;
+          when State =:= transaction_submitted; State =:= released;
                State =:= applied ->
             %% Commit/apply can overtake the acknowledgement message.  Those
             %% stronger states remain authoritative.
@@ -361,11 +391,14 @@ handle_call(_Request, _From, S) ->
     {reply, {error, bad_request}, S}.
 
 handle_cast({release_applied, Height, Effects}, S0) ->
-    {noreply, maybe_start(mark_committed(Height, Effects, S0))};
+    {noreply, maybe_start(release_applied_rows(Height, Effects, S0))};
 handle_cast({retire, Effects, Reason}, S0) ->
     {noreply, retire_rows(Effects, Reason, S0)};
 handle_cast({retire_transaction, TxId, Reason}, S0) ->
     {noreply, retire_transaction_row(TxId, Reason, S0)};
+handle_cast({retire_group, GroupRef, Target, PlanDigest, Reason}, S0) ->
+    {noreply, retire_group_row(
+                GroupRef, Target, PlanDigest, Reason, S0)};
 handle_cast(reconcile, S = #s{reconciling = none, rows = Rows}) ->
     Parent = self(),
     {Pid, MRef} = spawn_monitor(
@@ -444,12 +477,12 @@ encode_staged(Action, Desired, Effect, Prepared) ->
             {error, invalid_direct_effect}
     end.
 
-bind_row(Effect, Transaction, Ref,
-         S = #s{capacity = Capacity, rows = Rows,
-                reservations = Reservations}) ->
+bind_transaction_row(Effect, Transaction, Ref,
+                     S = #s{capacity = Capacity, rows = Rows,
+                            reservations = Reservations}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
-        #row{effect = Effect, transaction = Existing, ref = Ref} ->
+        #row{effect = Effect, commit = Existing, ref = Ref} ->
             case Existing =:= encode_transaction(Transaction) of
                 true -> {ok, S};
                 false -> {error, effect_journal_conflict}
@@ -468,10 +501,11 @@ bind_row(Effect, Transaction, Ref,
                                     Row = #row{effect = Effect, action = Action,
                                                desired = Desired,
                                                prepared = Prepared,
-                                               transaction =
+                                               commit =
                                                    encode_transaction(Transaction),
                                                ref = Ref,
-                                               admission = Admission},
+                                               admission = Admission,
+                                               state = transaction_bound},
                                     S1 = drop_reservation(
                                            Token,
                                            S#s{rows = Rows1#{EffectId => Row}}),
@@ -485,6 +519,55 @@ bind_row(Effect, Transaction, Ref,
                     {error, missing_effect_preparation}
             end
     end.
+
+bind_group_row(
+  Plan, GroupRef, Target, PlanDigest,
+  {Action, Desired, Effect, Prepared},
+  S = #s{capacity = Capacity, rows = Rows}) ->
+    EffectId = safe_effect_id(Effect),
+    Ref = {group_effect, 1, GroupRef, Target, PlanDigest},
+    case maps:get(EffectId, Rows, undefined) of
+        #row{effect = Effect, commit = Existing, ref = Ref,
+             state = State}
+          when State =:= group_pending; State =:= released;
+               State =:= applied; State =:= retired;
+               State =:= operator_error ->
+            case encode_group_plan(Plan) of
+                {ok, Existing} -> {ok, S};
+                _ -> {error, effect_journal_conflict}
+            end;
+        #row{} ->
+            {error, effect_journal_conflict};
+        undefined ->
+            case {capacity_allows(Capacity, active_row_count(Rows)),
+                  encode_staged(Action, Desired, Effect, Prepared),
+                  valid_bound_group(Effect, Plan, GroupRef, Target, PlanDigest),
+                  effect_admission(Effect, Target)} of
+                {unavailable, _, _, _} ->
+                    {error, unavailable};
+                {false, _, _, _} ->
+                    {error, busy};
+                {true, {ok, {Effect, ActionBytes, DesiredBytes,
+                             PreparedBytes}}, true, {ok, Admission}} ->
+                    {ok, PlanBlob} = encode_group_plan(Plan),
+                    Rows1 = make_room_for_active_row(Rows, Capacity),
+                    Row = #row{effect = Effect, action = ActionBytes,
+                               desired = DesiredBytes,
+                               prepared = PreparedBytes,
+                               commit = PlanBlob, ref = Ref,
+                               admission = Admission, state = group_pending},
+                    {ok, persist(S#s{rows = Rows1#{EffectId => Row}})};
+                {true, {error, _}, _, _} ->
+                    {error, invalid_direct_effect};
+                {true, _, false, _} ->
+                    {error, invalid_group_effect};
+                {true, _, _, {error, _} = Error} ->
+                    Error
+            end
+    end;
+bind_group_row(_Plan, _GroupRef, _Target, _PlanDigest,
+               _PreparedEffect, _S) ->
+    {error, invalid_direct_effect}.
 
 find_staged(EffectId, Effect, Reservations) ->
     Matches =
@@ -511,25 +594,47 @@ encode_transaction(#transaction{} = Transaction) ->
     term_to_binary(Transaction, [deterministic]);
 encode_transaction(_) -> <<>>.
 
+encode_group_plan(Plan) ->
+    quod_dtx:encode(Plan).
+
+valid_bound_group(
+  Effect, Plan,
+  {group, OriginNs, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
+  {TargetNs, <<_:256>>} = Target, <<_:256>> = PlanDigest)
+  when is_binary(OriginNs), byte_size(OriginNs) > 0,
+       is_binary(TargetNs), byte_size(TargetNs) > 0 ->
+    case quod_dtx:material(Plan) of
+        {ok, #{effects := [Effect]} = Material} ->
+            quod_dtx:target(Plan) =:= Target andalso
+                quod_dtx:digest(Plan) =:= PlanDigest andalso
+                quod_effect:validate_plan(Plan, Material);
+        _ ->
+            false
+    end;
+valid_bound_group(_Effect, _Plan, _GroupRef, _Target, _PlanDigest) ->
+    false.
+
 %%%===================================================================
 %%% ordered release + execution
 %%%===================================================================
 
-mark_committed(Height, Effects, S0) when is_integer(Height), Height > 0,
-                                         is_list(Effects) ->
+release_applied_rows(Height, Effects, S0)
+  when is_integer(Height), Height > 0, is_list(Effects) ->
     lists:foldl(
-      fun(Effect, S) -> mark_one_committed(Height, Effect, S) end,
+      fun(Effect, S) -> release_applied_row(Height, Effect, S) end,
       S0, Effects);
-mark_committed(_Height, _Effects, S) -> S.
+release_applied_rows(_Height, _Effects, S) -> S.
 
-mark_one_committed(Height, Effect, S = #s{rows = Rows}) ->
+release_applied_row(Height, Effect, S = #s{rows = Rows}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
         #row{effect = Effect, state = State} = Row
-          when State =:= bound; State =:= prepared; State =:= handed_off;
-               State =:= committed ->
+          when State =:= transaction_bound;
+               State =:= transaction_ready;
+               State =:= transaction_submitted;
+               State =:= group_pending; State =:= released ->
             persist(S#s{rows = Rows#{EffectId =>
-                              Row#row{state = committed, height = Height}}});
+                              Row#row{state = released, height = Height}}});
         #row{effect = Effect, state = applied} -> S;
         #row{effect = Effect, state = operator_error} -> S;
         #row{} ->
@@ -550,7 +655,7 @@ mark_one_committed(Height, Effect, S = #s{rows = Rows}) ->
 maybe_start(S = #s{running = none, rows = Rows}) ->
     Pending = lists:sort(
                 [{Row#row.height, EffectId, Row}
-                 || {EffectId, #row{state = committed} = Row}
+                 || {EffectId, #row{state = released} = Row}
                         <- maps:to_list(Rows)]),
     case Pending of
         [{_Height, EffectId, Row} | _] ->
@@ -567,7 +672,8 @@ maybe_start(S) -> S.
 
 execute_row(#row{effect = Effect, action = ActionBytes,
                  desired = DesiredBytes, prepared = PreparedBytes,
-                 ref = {transaction, ControlNs, _, _}}) ->
+                 ref = Ref}) ->
+    ControlNs = control_namespace(Ref),
     case {quod_ontology:decode_prepared(PreparedBytes),
           quod_durable_term:decode_goal(ActionBytes),
           quod_durable_term:decode_goal(DesiredBytes)} of
@@ -586,6 +692,10 @@ execute_row(#row{effect = Effect, action = ActionBytes,
         _ ->
             {error, corrupt_prepared_effect}
     end.
+
+control_namespace({transaction, Ns, _, _}) -> Ns;
+control_namespace(
+  {group_effect, 1, _GroupRef, {Ns, _Anchor}, _PlanDigest}) -> Ns.
 
 execute_and_verify(ControlNs, Effect, Prepared, Desired) ->
     case quod_ontology:execute_prepared(Prepared) of
@@ -691,8 +801,10 @@ retire_one(Effect, Reason, S = #s{rows = Rows}) ->
     EffectId = safe_effect_id(Effect),
     case maps:get(EffectId, Rows, undefined) of
         #row{effect = Effect, state = State} = Row
-          when State =:= prepared; State =:= handed_off;
-               State =:= committed ->
+          when State =:= transaction_bound;
+               State =:= transaction_ready;
+               State =:= transaction_submitted;
+               State =:= group_pending; State =:= released ->
             Reason1 = bounded_reason(Reason),
             Terminal = compact_terminal_row(
                          Row#row{state = retired, result = Reason1}),
@@ -715,6 +827,20 @@ retire_transaction_row(TxId, Reason, S = #s{rows = Rows}) ->
             S
     end.
 
+retire_group_row(GroupRef, Target, PlanDigest, Reason,
+                 S = #s{rows = Rows}) ->
+    Ref = {group_effect, 1, GroupRef, Target, PlanDigest},
+    case [EffectId || {EffectId, #row{ref = RowRef}}
+                          <- maps:to_list(Rows), RowRef =:= Ref] of
+        [EffectId] -> retire_id(EffectId, Reason, S);
+        [] -> S;
+        _ ->
+            logger:error(
+              "quod effect journal: duplicate group effect reference ~p",
+              [Ref]),
+            S
+    end.
+
 %%%===================================================================
 %%% recovery + waiters
 %%%===================================================================
@@ -722,13 +848,14 @@ retire_transaction_row(TxId, Reason, S = #s{rows = Rows}) ->
 reconcile_rows(Rows) ->
     [{EffectId, Row#row.state, reconcile_row(Row)}
      || {EffectId, Row} <- maps:to_list(Rows),
-        Row#row.state =:= prepared orelse
-        Row#row.state =:= handed_off orelse
-        Row#row.state =:= committed].
+        Row#row.state =:= transaction_ready orelse
+        Row#row.state =:= transaction_submitted orelse
+        Row#row.state =:= group_pending orelse
+        Row#row.state =:= released].
 
-reconcile_row(#row{state = prepared} = Row) ->
+reconcile_row(#row{state = transaction_ready} = Row) ->
     {handoff, handoff_row(Row)};
-reconcile_row(#row{state = handed_off,
+reconcile_row(#row{state = transaction_submitted,
                    ref = {transaction, ControlNs, _, _} = Ref}) ->
     case quod_prolog:outcome(Ref) of
         {ok, #{status := committed, height := Height}} = Outcome ->
@@ -738,51 +865,66 @@ reconcile_row(#row{state = handed_off,
             end;
         Outcome -> {outcome, Outcome}
     end;
-reconcile_row(#row{state = committed}) ->
+reconcile_row(
+  #row{state = group_pending,
+       ref = {group_effect, 1, GroupRef, Target, PlanDigest}}) ->
+    {group, quod_prolog:effect_resolution(Target, GroupRef, PlanDigest)};
+reconcile_row(#row{state = released}) ->
     released.
 
 apply_reconciliation(Outcomes, S0) ->
     lists:foldl(
-      fun({EffectId, prepared, {handoff, ok}}, S) ->
-              mark_handed_off(EffectId, S);
-         ({EffectId, prepared, {handoff, {error, not_in_charge}}}, S) ->
+      fun({EffectId, transaction_ready, {handoff, ok}}, S) ->
+              mark_transaction_submitted(EffectId, S);
+         ({EffectId, transaction_ready,
+           {handoff, {error, not_in_charge}}}, S) ->
               retire_id(EffectId, not_in_charge, S);
-         ({EffectId, prepared, {handoff, {error, Reason}}}, S)
+         ({EffectId, transaction_ready, {handoff, {error, Reason}}}, S)
            when Reason =:= bad_change;
                 Reason =:= corrupt_prepared_effect ->
               retire_id(EffectId, Reason, S);
          ({EffectId, _State,
            {outcome, {ok, #{status := committed, height := Height}}}}, S) ->
-              mark_reconciled_committed(EffectId, Height, S);
+              mark_reconciled_release(EffectId, Height, S);
          ({EffectId, _State,
            {outcome, {ok, #{status := rejected, reason := Reason}}}}, S) ->
+              retire_id(EffectId, Reason, S);
+         ({EffectId, group_pending,
+           {group, {ok, {released, Height}}}}, S) ->
+              mark_reconciled_release(EffectId, Height, S);
+         ({EffectId, group_pending,
+           {group, {ok, {retired, Reason}}}}, S) ->
               retire_id(EffectId, Reason, S);
          (_PendingOrUnavailable, S) -> S
       end, S0, Outcomes).
 
-mark_handed_off(EffectId, S = #s{rows = Rows}) ->
+mark_transaction_submitted(EffectId, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
-        #row{state = prepared} = Row ->
+        #row{state = transaction_ready} = Row ->
             persist(S#s{rows = Rows#{EffectId =>
-                              Row#row{state = handed_off}}});
+                              Row#row{state = transaction_submitted}}});
         _ -> S
     end.
 
-mark_reconciled_committed(EffectId, Height, S = #s{rows = Rows}) ->
+mark_reconciled_release(EffectId, Height, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
         #row{state = State} = Row
-          when State =:= bound; State =:= prepared;
-               State =:= handed_off; State =:= committed ->
+          when State =:= transaction_bound;
+               State =:= transaction_ready;
+               State =:= transaction_submitted;
+               State =:= group_pending; State =:= released ->
             persist(S#s{rows = Rows#{EffectId =>
-                              Row#row{state = committed, height = Height}}});
+                              Row#row{state = released, height = Height}}});
         _ -> S
     end.
 
 retire_id(EffectId, Reason, S = #s{rows = Rows}) ->
     case maps:get(EffectId, Rows, undefined) of
         #row{state = State} = Row
-          when State =:= bound; State =:= prepared; State =:= handed_off;
-               State =:= committed ->
+          when State =:= transaction_bound;
+               State =:= transaction_ready;
+               State =:= transaction_submitted;
+               State =:= group_pending; State =:= released ->
             Reason1 = bounded_reason(Reason),
             Terminal = compact_terminal_row(
                          Row#row{state = retired, result = Reason1}),
@@ -838,12 +980,12 @@ track_bound_owner(EffectId, Owner,
                   S = #s{rows = Rows, bound_owners = Owners}) ->
     case {maps:get(EffectId, Rows, undefined),
           maps:get(EffectId, Owners, undefined)} of
-        {#row{state = bound}, undefined} ->
+        {#row{state = transaction_bound}, undefined} ->
             MRef = monitor(process, Owner),
             {ok, S#s{bound_owners = Owners#{EffectId => {Owner, MRef}}}};
-        {#row{state = bound}, {Owner, _MRef}} ->
+        {#row{state = transaction_bound}, {Owner, _MRef}} ->
             {ok, S};
-        {#row{state = bound}, {_OtherOwner, _MRef}} ->
+        {#row{state = transaction_bound}, {_OtherOwner, _MRef}} ->
             {error, effect_journal_conflict};
         {#row{}, _} ->
             {ok, S};
@@ -872,7 +1014,7 @@ retire_bound_owner_monitor(MRef, S = #s{bound_owners = Owners}) ->
 
 persist(S = #s{path = Path, capacity = Capacity, rows = Rows}) ->
     Payload = term_to_binary(
-                {quod_effect_journal, 3, Capacity,
+                {quod_effect_journal, 4, Capacity,
                  [encode_row(EffectId, Row)
                   || {EffectId, Row} <- lists:sort(maps:to_list(Rows))]},
                 [deterministic]),
@@ -903,7 +1045,7 @@ load(Path) ->
         {error, Reason} -> error({effect_journal_io, Reason})
     end.
 
-decode_snapshot({quod_effect_journal, 3, Capacity, Encoded})
+decode_snapshot({quod_effect_journal, 4, Capacity, Encoded})
   when ((is_integer(Capacity) andalso Capacity >= 0) orelse
         Capacity =:= unlimited),
        is_list(Encoded) ->
@@ -922,16 +1064,16 @@ decode_snapshot(_) -> error(effect_journal_corrupt).
 
 encode_row(EffectId, #row{effect = Effect, action = Action,
                           desired = Desired, prepared = Prepared,
-                          transaction = Transaction, ref = Ref,
+                          commit = Commit, ref = Ref,
                           admission = Admission, state = State,
                           height = Height, result = Result}) ->
-    {quod_effect_row, 2, EffectId, Effect, Action, Desired, Prepared,
-     Transaction, Ref, Admission, State, Height, Result}.
+    {quod_effect_row, 3, EffectId, Effect, Action, Desired, Prepared,
+     Commit, Ref, Admission, State, Height, Result}.
 
-decode_row({quod_effect_row, 2, EffectId, Effect, Action, Desired, Prepared,
-            Transaction, Ref, Admission, State, Height, Result}) ->
+decode_row({quod_effect_row, 3, EffectId, Effect, Action, Desired, Prepared,
+            Commit, Ref, Admission, State, Height, Result}) ->
     Row = #row{effect = Effect, action = Action, desired = Desired,
-               prepared = Prepared, transaction = Transaction, ref = Ref,
+               prepared = Prepared, commit = Commit, ref = Ref,
                admission = Admission, state = State,
                height = Height, result = Result},
     case valid_loaded_row(EffectId, Row) of
@@ -940,40 +1082,78 @@ decode_row({quod_effect_row, 2, EffectId, Effect, Action, Desired, Prepared,
     end;
 decode_row(_) -> error(effect_journal_corrupt).
 
-valid_loaded_row(EffectId,
-                 #row{effect = Effect, action = Action, desired = Desired,
-                      prepared = Prepared, transaction = Transaction,
-                      ref = {transaction, Ns, Anchor, TxId},
-                      admission = Admission, state = State,
-                      height = Height, result = Result}) ->
+valid_loaded_row(
+  EffectId,
+  #row{effect = Effect, action = Action, desired = Desired,
+       prepared = Prepared, commit = Commit, ref = Ref,
+       admission = Admission, state = State,
+       height = Height, result = Result} = Row) ->
     safe_effect_id(Effect) =:= EffectId andalso
         quod_effect:validate(Effect) andalso
         is_binary(Action) andalso is_binary(Desired) andalso
-        is_binary(Prepared) andalso is_binary(Transaction) andalso
-        valid_row_payload(State, Effect, Action, Desired,
-                          Prepared, Transaction) andalso
-        is_binary(Ns) andalso byte_size(Ns) > 0 andalso
-        is_binary(Anchor) andalso byte_size(Anchor) =:= 32 andalso
-        is_binary(TxId) andalso byte_size(TxId) =:= 32 andalso
+        is_binary(Prepared) andalso is_binary(Commit) andalso
         is_binary(Admission) andalso byte_size(Admission) =:= 32 andalso
-        lists:member(State, [bound, prepared, handed_off, committed, applied,
-                             retired, operator_error]) andalso
+        valid_row_ref_state(Ref, State) andalso valid_row_payload(Row) andalso
         is_integer(Height) andalso Height >= 0 andalso
-        byte_size(term_to_binary(Result, [deterministic])) =< 4096;
-valid_loaded_row(_, _) -> false.
+        byte_size(term_to_binary(Result, [deterministic])) =< 4096.
 
-valid_row_payload(State, _Effect, <<>>, <<>>, <<>>, <<>>)
+valid_row_ref_state(
+  {transaction, Ns, <<_:256>>, <<_:256>>}, State)
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    lists:member(
+      State, [transaction_bound, transaction_ready,
+              transaction_submitted, released, applied,
+              retired, operator_error]);
+valid_row_ref_state(
+  {group_effect, 1,
+   {group, OriginNs, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
+   {TargetNs, <<_:256>>}, <<_:256>>}, State)
+  when is_binary(OriginNs), byte_size(OriginNs) > 0,
+       is_binary(TargetNs), byte_size(TargetNs) > 0 ->
+    lists:member(
+      State, [group_pending, released, applied, retired, operator_error]);
+valid_row_ref_state(_, _) -> false.
+
+valid_row_payload(
+  #row{state = State, action = <<>>, desired = <<>>,
+       prepared = <<>>, commit = <<>>})
   when State =:= applied; State =:= retired; State =:= operator_error ->
     true;
-valid_row_payload(State, Effect, Action, _Desired, Prepared, Transaction)
-  when State =:= bound; State =:= prepared;
-       State =:= handed_off; State =:= committed ->
+valid_row_payload(
+  #row{state = State, effect = Effect, action = Action,
+       prepared = Prepared, commit = Commit,
+       ref = {transaction, _, _, _}})
+  when State =:= transaction_bound; State =:= transaction_ready;
+       State =:= transaction_submitted; State =:= released ->
     crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
         crypto:hash(sha256, Prepared) =:=
             quod_effect:prepared_digest(Effect) andalso
         byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
-        decode_transaction(Transaction) =/= error;
-valid_row_payload(_, _, _, _, _, _) -> false.
+        decode_transaction(Commit) =/= error;
+valid_row_payload(
+  #row{state = State, effect = Effect, action = Action,
+       prepared = Prepared, commit = Commit,
+       ref = {group_effect, 1, _GroupRef, Target, PlanDigest}})
+  when State =:= group_pending; State =:= released ->
+    crypto:hash(sha256, Action) =:= quod_effect:request_digest(Effect) andalso
+        crypto:hash(sha256, Prepared) =:=
+            quod_effect:prepared_digest(Effect) andalso
+        byte_size(Prepared) =< ?QUOD_MAX_PREPARED_EFFECT_BYTES andalso
+        valid_group_commit(Commit, Effect, Target, PlanDigest);
+valid_row_payload(_) -> false.
+
+valid_group_commit(Commit, Effect, Target, PlanDigest) ->
+    case quod_dtx:decode(Commit) of
+        {ok, Plan} ->
+            case quod_dtx:material(Plan) of
+                {ok, #{effects := [Effect]} = Material} ->
+                    quod_dtx:target(Plan) =:= Target andalso
+                        quod_dtx:digest(Plan) =:= PlanDigest andalso
+                        quod_effect:validate_plan(Plan, Material);
+                _ -> false
+            end;
+        {error, _} -> false
+    end.
 
 decode_transaction(Bytes) when is_binary(Bytes) ->
     try binary_to_term(Bytes, [safe]) of
@@ -983,6 +1163,8 @@ decode_transaction(Bytes) when is_binary(Bytes) ->
     end.
 
 effect_admission(Effect, {transaction, Ns, Anchor, _TxId}) ->
+    effect_admission(Effect, {Ns, Anchor});
+effect_admission(Effect, {Ns, Anchor}) ->
     case quod_simplex:dtx_binding(Ns) of
         {ok, {Ns, Anchor, Executor, <<_:256>> = Admission}} ->
             case Executor =:= quod_effect:executor(Effect) of
@@ -990,9 +1172,11 @@ effect_admission(Effect, {transaction, Ns, Anchor, _TxId}) ->
                 false -> {error, not_in_charge}
             end;
         _ -> {error, not_in_charge}
-    end.
+    end;
+effect_admission(_Effect, _Binding) ->
+    {error, not_in_charge}.
 
-handoff_row(#row{transaction = Bytes, admission = Admission,
+handoff_row(#row{commit = Bytes, admission = Admission,
                  ref = {transaction, Ns, _, _}}) ->
     handoff_row_bytes(Ns, Bytes, Admission).
 
@@ -1006,8 +1190,18 @@ handoff_row_bytes(Ns, Bytes, <<_:256>> = Admission) ->
 active_row_count(Rows) ->
     maps:fold(
       fun(_Id, #row{state = State}, Count)
-            when State =:= bound; State =:= prepared; State =:= handed_off;
-                 State =:= committed -> Count + 1;
+            when State =:= transaction_bound;
+                 State =:= transaction_ready;
+                 State =:= transaction_submitted;
+                 State =:= group_pending; State =:= released -> Count + 1;
+         (_Id, _Row, Count) -> Count
+      end, 0, Rows).
+
+active_group_row_count(Rows) ->
+    maps:fold(
+      fun(_Id, #row{state = State,
+                    ref = {group_effect, 1, _, _, _}}, Count)
+            when State =:= group_pending; State =:= released -> Count + 1;
          (_Id, _Row, Count) -> Count
       end, 0, Rows).
 
@@ -1061,11 +1255,11 @@ make_room_for_active_row(Rows, Capacity) ->
 
 compact_terminal_row(Row) ->
     Row#row{action = <<>>, desired = <<>>, prepared = <<>>,
-            transaction = <<>>}.
+            commit = <<>>}.
 
 retire_unactivated_rows(Rows) ->
     maps:map(
-      fun(_EffectId, #row{state = bound} = Row) ->
+      fun(_EffectId, #row{state = transaction_bound} = Row) ->
               compact_terminal_row(
                 Row#row{state = retired, result = not_activated});
          (_EffectId, Row) -> Row
@@ -1074,8 +1268,9 @@ retire_unactivated_rows(Rows) ->
 unfinished_rows(Rows) ->
     maps:fold(
       fun(_Id, #row{state = State}, Found) ->
-              Found orelse State =:= prepared orelse
-                  State =:= handed_off orelse State =:= committed
+              Found orelse State =:= transaction_ready orelse
+                  State =:= transaction_submitted orelse
+                  State =:= group_pending orelse State =:= released
       end, false, Rows).
 
 schedule_reconcile(S = #s{retry_timer = undefined, rows = Rows,

@@ -47,9 +47,7 @@ signed_authentication_is_carried_unchanged_on_remote_open_test() ->
     with_router(
       fun(Router, TestPid, OriginKey, TargetKey) ->
           Fixture = quod_ct:signed_goal_fixture(#{}),
-          Authentication =
-              {signed_goal, maps:get(request_bytes, Fixture),
-               maps:get(signature, Fixture)},
+          Authentication = signed_auth(Fixture),
           Binding = signed_binding(OriginKey, TargetKey, Fixture),
           OpenRef = pending_ref(
                       quod_ask_router:ensure_scope(
@@ -63,9 +61,10 @@ signed_authentication_is_carried_unchanged_on_remote_open_test() ->
 
           %% The router binds the exact opaque authentication bytes.  Their
           %% signature and principal are verified independently by the target.
-          {signed_goal, RequestBytes, Signature} = Authentication,
+          {signed_goal, RequestBytes, Signature, Certificate} = Authentication,
           <<First, Rest/binary>> = RequestBytes,
-          Altered = {signed_goal, <<(First bxor 1), Rest/binary>>, Signature},
+          Altered = {signed_goal, <<(First bxor 1), Rest/binary>>,
+                     Signature, Certificate},
           ?assertEqual(
              {error, invalid_binding},
              quod_ask_router:ensure_scope(
@@ -1129,14 +1128,21 @@ binding(OriginKey, TargetKey, N, TargetNs, AnchorN) ->
      {node, OriginKey}, AuthenticationDigest}.
 
 signed_binding(OriginKey, TargetKey, Fixture) ->
-    Authentication =
-        {signed_goal, maps:get(request_bytes, Fixture),
-         maps:get(signature, Fixture)},
+    Authentication = signed_auth(Fixture),
     {ok, AuthenticationDigest} =
         quod_scope_wire:authentication_digest(Authentication),
     {scope_binding, OriginKey, TargetKey, proof_id(1), id(1),
      maps:get(target, Fixture), {<<"quod:signed-target">>, key(77)},
-     read_write, {user, maps:get(user, Fixture)}, AuthenticationDigest}.
+     read_write, maps:get(principal, Fixture), AuthenticationDigest}.
+
+signed_auth(Fixture) ->
+    {ok, Statement} = quod_agent_identity:statement(
+                        maps:get(evidence, Fixture), proof_id(1), key(78),
+                        maps:get(deadline, Fixture)),
+    {ok, Certificate} = quod_agent_identity:certificate(
+                          Statement, [], []),
+    {signed_goal, maps:get(request_bytes, Fixture),
+     maps:get(signature, Fixture), Certificate}.
 
 origin_key({scope_binding, OriginKey, _, _, _, _, _, _, _, _}) -> OriginKey.
 target_identity({scope_binding, _, _, _, _, _, TargetIdentity, _, _, _}) ->

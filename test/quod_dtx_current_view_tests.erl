@@ -682,7 +682,8 @@ outcome_group_ref(F, Coordinator) ->
 
 outcome_operation_ref(F) ->
     {TargetNs, Anchor} = maps:get(identity, maps:get(view, F)),
-    {operation, TargetNs, Anchor, digest(223), digest(13)}.
+    {operation, TargetNs, Anchor,
+     agent_ref(<<"quod:agent">>, digest(223), 223), digest(13)}.
 
 group_committed(Ref) ->
     #{status => committed, height => 9, ref => Ref,
@@ -741,3 +742,11 @@ collect_many_children(Left, Acc) ->
 
 digest(N) ->
     crypto:hash(sha256, <<N:64/unsigned-big>>).
+
+agent_ref(Ns, Anchor, N) ->
+    {ok, #{blob := Blob}} = quod_agent_ref:from_text(
+                              Ns, Anchor,
+                              <<"human_user(", (integer_to_binary(N))/binary,
+                                ").">>,
+                              2),
+    Blob.

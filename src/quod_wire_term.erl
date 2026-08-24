@@ -28,7 +28,7 @@ payload; one aggregate payload gets one bounded allocation budget.
 -export([encode/1, decode/1,
          encode_canonical/1, decode_canonical/2,
          materialize_symbols/1, materialize_goal_symbols/1,
-         goal_symbol_names/1,
+         goal_symbol_names/1, symbol_names/1,
          is_ground/1,
          encode_failure_reasons/1, decode_failure_reasons/1,
          valid_failure_reason_stack/1]).
@@ -141,6 +141,46 @@ goal_symbol_names(Goal) ->
     case collect_goal_symbols(Goal, #{}) of
         {ok, Symbols} -> {ok, lists:sort(maps:keys(Symbols))};
         error -> {error, malformed_material}
+    end.
+
+-doc "Return every distinct symbol in one bounded wire term without allocating atoms.".
+-spec symbol_names(term()) -> {ok, [binary()]} | {error, malformed_material}.
+symbol_names(Term) ->
+    case collect_symbol_names(Term, #{}) of
+        {ok, Symbols} -> {ok, lists:sort(maps:keys(Symbols))};
+        error -> {error, malformed_material}
+    end.
+
+collect_symbol_names({'$quod_symbol', Binary}, Symbols)
+  when is_binary(Binary), byte_size(Binary) =< ?MAX_SYMBOL_BYTES ->
+    {ok, Symbols#{Binary => true}};
+collect_symbol_names(Atom, Symbols) when is_atom(Atom) ->
+    Binary = atom_to_binary(Atom, utf8),
+    case byte_size(Binary) =< ?MAX_SYMBOL_BYTES of
+        true -> {ok, Symbols#{Binary => true}};
+        false -> error
+    end;
+collect_symbol_names(Tuple, Symbols) when is_tuple(Tuple) ->
+    collect_symbol_names_list(tuple_to_list(Tuple), Symbols);
+collect_symbol_names([Head | Tail], Symbols0) ->
+    case collect_symbol_names(Head, Symbols0) of
+        {ok, Symbols1} -> collect_symbol_names(Tail, Symbols1);
+        error -> error
+    end;
+collect_symbol_names([], Symbols) ->
+    {ok, Symbols};
+collect_symbol_names(Value, Symbols)
+  when is_binary(Value); is_integer(Value); is_float(Value) ->
+    {ok, Symbols};
+collect_symbol_names(_Malformed, _Symbols) ->
+    error.
+
+collect_symbol_names_list([], Symbols) ->
+    {ok, Symbols};
+collect_symbol_names_list([Value | Rest], Symbols0) ->
+    case collect_symbol_names(Value, Symbols0) of
+        {ok, Symbols1} -> collect_symbol_names_list(Rest, Symbols1);
+        error -> error
     end.
 
 materialize_symbol_names(Names) ->

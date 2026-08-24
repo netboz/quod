@@ -22,9 +22,20 @@ slightly-different `eventually`/`match_ok`/`datadir` variants.
 -export([rp/2, rp/3, diff_for/1, change/2, change/3, batch/1,
          dtx_decision_payload/0, dtx_prepare_blob/0, dtx_prepare_fixture/0,
          signed_goal_fixture/1, signed_dtx_begin_fixture/1,
+         signed_agent_facts/1,
          with_network_identity/2,
          wait_until/1, wait_until/2]).
 -export([commit_kb/1, commit_kb/3, set_ref/2, committed_kb/1, assert_facts/2]).
+-export([proof_gate_row/4]).
+
+%% Test-only constructor for the protected Simplex proof-gate row. Production
+%% deliberately accepts only the current layout; fixtures must not become a
+%% compatibility specification for retired ETS rows.
+proof_gate_row(Ready, Fence, Generation, LastGroup)
+  when is_boolean(Ready), is_integer(Generation), Generation >= 0 ->
+    Self = <<250:256>>,
+    {proof_gate, Ready, Fence, Generation, LastGroup,
+     Self, [Self], <<251:256>>, #{}}.
 
 %% Smallest self-contained valid DTX fixture for consumers that only need to
 %% distinguish a control barrier from content. Foreign-reference semantics are
@@ -84,7 +95,7 @@ dtx_prepare_fixture() ->
         quod_dtx:attest_plan(Target, TargetPlan, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest, none, none,
+          Manifest, none,
           [{Origin, quod_dtx:digest(OriginPlan), OriginBlob,
             OriginAttestation},
            {Target, quod_dtx:digest(TargetPlan), TargetBlob,
@@ -116,15 +127,19 @@ signed_goal_fixture(Overrides) when is_map(Overrides) ->
     Deadline = maps:get(deadline, Overrides, 1_800_000_000_000),
     OperationId = maps:get(operation_id, Overrides, <<203:256>>),
     GoalText = maps:get(goal_text, Overrides, <<"assertz(saved(ok)).">>),
+    AgentInstanceText = maps:get(
+                          agent_instance_text, Overrides,
+                          <<"human_user(test_agent).">>),
     {PublicKey, Seed} = maps:get(key_pair, Overrides, quod_identity:generate()),
     Identity = #{pubkey => PublicKey,
                  key => quod_identity:key_term({PublicKey, Seed})},
     Request =
         #{network_identity => Network,
-          user_public_key => PublicKey,
+          signing_public_key => PublicKey,
           operation_id => OperationId,
-          target_namespace => TargetNs,
-          target_genesis_anchor => TargetAnchor,
+          agent_namespace => TargetNs,
+          agent_genesis_anchor => TargetAnchor,
+          agent_instance_text => AgentInstanceText,
           mode => Mode,
           parser_version => 1,
           not_after_ms => Deadline,
@@ -132,9 +147,15 @@ signed_goal_fixture(Overrides) when is_map(Overrides) ->
     {ok, RequestBytes} = quod_client_goal:encode(Request),
     Signature = quod_identity:sign(RequestBytes, maps:get(key, Identity)),
     {ok, Evidence} = quod_client_goal:verify(RequestBytes, Signature),
+    {ok, AgentReference = {agent_instance_ref, _, _, AgentInstance}} =
+        quod_agent_ref:materialize(maps:get(agent_ref_blob, Evidence)),
     #{target => Target, network => Network, mode => Mode,
       deadline => Deadline, operation_id => OperationId,
-      user => PublicKey, key_pair => {PublicKey, Seed},
+      signing_key => PublicKey,
+      agent_ref => maps:get(agent_ref_blob, Evidence),
+      agent_reference => AgentReference, agent_instance => AgentInstance,
+      principal => {agent, maps:get(agent_ref_blob, Evidence)},
+      key_pair => {PublicKey, Seed},
       identity => Identity, request => Request,
       request_bytes => RequestBytes, signature => Signature,
       request_digest => maps:get(request_digest, Evidence),
@@ -142,6 +163,13 @@ signed_goal_fixture(Overrides) when is_map(Overrides) ->
       operation_ref => maps:get(operation_ref, Evidence),
       evidence => Evidence, auth => quod_client_goal:request_auth(Evidence),
       binding => quod_client_goal:request_binding(Evidence)}.
+
+%% The minimum identity fact that makes a signed fixture authoritative in its
+%% exact containing ontology. ACL facts remain explicit in each test because
+%% those tests intentionally exercise different policy.
+signed_agent_facts(#{agent_instance := Instance,
+                     signing_key := SigningKey}) ->
+    [{agent_key, Instance, SigningKey, active}].
 
 with_network_identity(<<_:256>> = Network, Fun) when is_function(Fun, 0) ->
     SavedDesired = application:get_env(quod, namespace_desired),
@@ -182,9 +210,12 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
             signer => NodeIdentity}),
     try
         InvocationId = <<206:128>>,
+        %% The transcript records the selected target first. A foreign plan
+        %% then carries the origin as its caller; the origin plan itself has
+        %% only its ordinary top-level identity.
         Chain = case Target =:= Origin of
                     true -> [Origin];
-                    false -> [Origin, Target]
+                    false -> [Target, Origin]
                 end,
         Context = quod_predicates:proof_context(
                     element(1, Target), 1, undefined, Chain),
@@ -196,7 +227,7 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
             quod_dtx:seal_session(
               Session,
               #{target => Target, base_height => 1, proof_id => ProofId,
-                origin => Origin, principal => {user, maps:get(user, Request)},
+                origin => Origin, principal => maps:get(principal, Request),
                 request_binding => maps:get(binding, Request)}),
         {ok, PlanBlob} = quod_dtx:encode(Plan),
         {ok, ResultBlob} = quod_durable_term:encode_result(#{}),
@@ -205,21 +236,16 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
               #{proof_id => ProofId,
                 coordinator => {Ns, Anchor, NodeKey, Admission},
                 nonce => <<207:256>>,
-                principal => {user, maps:get(user, Request)},
+                principal => maps:get(principal, Request),
                 goal => maps:get(goal_blob, Request),
                 result => ResultBlob,
                 request_binding => maps:get(binding, Request),
                 participants => [{Target, quod_dtx:digest(Plan)}]}),
         {ok, Attestation} =
             quod_dtx:attest_plan(Target, Plan, Manifest, NodeIdentity),
-        {ok, Authorization} =
-            quod_client_goal:authorization_transcript(
-              [{<<208:128>>, [Origin], maps:get(goal_blob, Request), allowed,
-                1, <<209:256>>, complete}],
-              Origin, maps:get(goal_blob, Request)),
         {ok, Begin} =
             quod_dtx:new_begin(
-              Manifest, maps:get(auth, Request), Authorization,
+              Manifest, maps:get(auth, Request),
               [{Target, quod_dtx:digest(Plan), PlanBlob, Attestation}]),
         {ok, Control} =
             quod_dtx:sign_control(
@@ -229,7 +255,7 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
             Request#{node_identity => NodeIdentity, admission => Admission,
                      participant_target => Target, proof_id => ProofId,
                      plan => Plan, plan_blob => PlanBlob,
-                     manifest => Manifest, authorization => Authorization,
+                     manifest => Manifest,
                      'begin' => Begin,
                      begin_control => Control},
         case Target =:= Origin of

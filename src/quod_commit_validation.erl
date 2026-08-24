@@ -105,7 +105,11 @@ prepared_material(Manifest, PlanDigest, PlanBlob, Context) ->
     case decode_prepared_plan(Manifest, PlanDigest, PlanBlob, Context) of
         {ok, Plan, EventContext} ->
             case quod_dtx:material(Plan) of
-                {ok, Material} -> {ok, EventContext, Material};
+                {ok, Material} ->
+                    case quod_effect:validate_plan(Plan, Material) of
+                        true -> {ok, EventContext, Material};
+                        false -> {error, invalid_direct_effect}
+                    end;
                 {error, Reason} -> {error, Reason}
             end;
         {error, _} = Error ->
@@ -190,16 +194,37 @@ continue_ordinary_content_validation(
     end.
 
 validate_signed_request(
-  #{principal := Principal, transcript := Transcript, claim := Claim},
+  #{evidence := #{request := #{signing_public_key := SigningKey}},
+    principal := Principal, transcript := Transcript, claim := Claim},
   OutcomeRef, Mode, Seen,
   Context0 = #context{target = Target, applied = Parent, est = Est}) ->
-    case quod_ask:validate_authorization_transcript(
-           Target, Target, Principal, Parent, Transcript, Est) of
+    case quod_ask:validate_agent_key(
+           Target, Principal, SigningKey, Parent, Est) of
+        ok ->
+            case quod_ask:validate_authorization_transcript(
+                   Target, Target, Principal, Parent, Transcript, Est) of
+                ok ->
+                    validate_operation_claim(
+                      Claim, OutcomeRef, Mode, Seen, Context0);
+                {error, _} ->
+                    {invalid, invalid_authorization_transcript, Context0}
+            end;
+        {error, _} ->
+            {invalid, invalid_agent_key, Context0}
+    end.
+
+validate_signed_begin_request(
+  #{evidence := #{request := #{signing_public_key := SigningKey}},
+    principal := Principal, claim := Claim},
+  OutcomeRef, Mode, Seen,
+  Context0 = #context{target = Target, applied = Parent, est = Est}) ->
+    case quod_ask:validate_agent_key(
+           Target, Principal, SigningKey, Parent, Est) of
         ok ->
             validate_operation_claim(
               Claim, OutcomeRef, Mode, Seen, Context0);
         {error, _} ->
-            {invalid, invalid_authorization_transcript, Context0}
+            {invalid, invalid_agent_key, Context0}
     end.
 
 validate_operation_claim(
@@ -263,7 +288,7 @@ validate_dtx_begin_request(Control, BlockTimestamp, Mode,
                     case quod_dtx:begin_group_ref(
                            quod_dtx:control_body(Control)) of
                         {ok, GroupRef} ->
-                            case validate_signed_request(
+                            case validate_signed_begin_request(
                                    RequestEvidence, GroupRef,
                                    Mode, #{}, Context0) of
                                 {ok, _Seen, Context1} ->
@@ -358,9 +383,14 @@ validate_prepared_plan_header(Plan, Parent, Est, Context) ->
 validate_prepared_plan_material(Plan, Est, Context) ->
     case quod_dtx:material(Plan) of
         {ok, #{diff := Diff, read_check := ReadCheck,
-               transcript := Transcript}} ->
-            validate_prepared_material(
-              Plan, Diff, ReadCheck, Transcript, Est, Context);
+               transcript := Transcript} = Material} ->
+            case quod_effect:validate_plan(Plan, Material) of
+                true ->
+                    validate_prepared_material(
+                      Plan, Diff, ReadCheck, Transcript, Est, Context);
+                false ->
+                    {error, invalid_direct_effect}
+            end;
         {error, Reason} ->
             {error, Reason}
     end.

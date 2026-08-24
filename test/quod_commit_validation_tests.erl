@@ -143,11 +143,14 @@ prepare_validation_and_materialization_are_owned_here_test() ->
       _Digest, _Tag}] = quod_dtx:transcript(Plan),
     {ok, Goal} = quod_durable_term:decode_goal(GoalBlob),
     CallerNamespaces = [Ns || {Ns, _Anchor} <- tl(FullChain)],
-    Policy = {can_invoke, Goal, quod_dtx:principal(Plan),
+    {ok, PolicyPrincipal} = quod_agent_ref:materialize_principal(
+                              quod_dtx:principal(Plan)),
+    Policy = {can_invoke, Goal, PolicyPrincipal,
               CallerNamespaces, TargetNs},
     Member = {peer_admitted, Signer, "validator", 14567, Signer},
     with_context(
-      TargetNs, TargetAnchor, [Policy, Member],
+      TargetNs, TargetAnchor,
+      quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
       fun(Context) ->
           ?assertMatch(
              {ok, {valid, _History}, _},
@@ -187,11 +190,13 @@ dtx_prepare_cannot_change_external_predicate_manifest_test() ->
     Control = maps:get(prepare_control, Fixture),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
-    Principal = {user, maps:get(user, Fixture)},
+    {ok, Principal} = quod_agent_ref:materialize_principal(
+                        maps:get(principal, Fixture)),
     Policy = {can_invoke, Goal, Principal, [], TargetNs},
     Member = {peer_admitted, Signer, "validator", 14567, Signer},
     with_context(
-      TargetNs, TargetAnchor, [Policy, Member],
+      TargetNs, TargetAnchor,
+      quod_ct:signed_agent_facts(Fixture) ++ [Policy, Member],
       fun(Context) ->
           ?assertMatch(
              {ok, {invalid,
@@ -218,8 +223,10 @@ signed_fixture() ->
                   submitted_at => 1}),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
-    Principal = {user, maps:get(user, Fixture)},
+    {ok, Principal} = quod_agent_ref:materialize_principal(
+                        maps:get(principal, Fixture)),
     ParentEst = quod_ct:committed_kb(
+                  quod_ct:signed_agent_facts(Fixture) ++
                   [{can_invoke, Goal, Principal, [], Ns}]),
     {ok, Outcomes} = quod_outcome:open(
                        Ns, Anchor, #{outcome_backend => memory}),

@@ -1,6 +1,9 @@
 # Root-owned ontology creation refactor
 
-**Status:** implemented in this working tree; release gates are listed below.
+**Status:** root-owned creation is implemented. The later generic-agent hard
+break removes the transitional user-home convenience described in the delivery
+history below; the current policy is the node-or-`ontology_creator_agent/1`
+policy stated here and in `generic-agent-identity-plan.md`.
 
 ## 1. Decision
 
@@ -66,33 +69,16 @@ action('$quod_stage_ontology'(Handle,
        ontology_hosted(Name)).
 ```
 
-The initial root policy keeps the two currently supported authorities, but in
-one generic predicate:
+The root policy supports two authorities in one generic predicate:
 
 - an admitted node may create an ontology;
-- the transitional authenticated human-user principal may create only its
-  deterministic home ontology and fixed genesis.
+- an exact stable agent reference named by `ontology_creator_agent/1` may
+  create an ontology.
 
-The second rule continues to use the existing pure `user_home_genesis/3`
-query. It is policy data and argument derivation, not another lifecycle
-operation.
-
-`create_user_home/0` remains temporarily as a Prolog convenience for the
-current browser:
-
-```prolog
-create_user_home :-
-    current_principal(user(PublicKey)),
-    user_home_genesis(PublicKey, Name, Options),
-    create_ontology(Name, Options).
-```
-
-It reaches the exact same public `create_ontology/2` staging predicate and
-root action as every other creation. It has no action declaration, prepared
-descriptor kind, effect operation, or Erlang dispatch of its own. The later
-agent-format slice may delete this convenience when the client constructs the
-generic agent-ontology genesis directly; this ownership refactor must not
-invent `create_agent`, `create_human_user`, or another creation API.
+The agent rule is ordinary changeable Prolog policy, not another lifecycle
+operation. `create_user_home/0`, `user_home_genesis/3`, `quod_user`, and their
+browser workflow are deleted; initial agent facts use generic ontology genesis
+and no `create_agent` or `create_human_user` API is introduced.
 
 `quod_node.pl` retains only node-hosting policy such as
 `join_ontology/3` and a future non-destructive leave operation. Its creation
@@ -141,9 +127,7 @@ from the anchored transaction reference. None of those rules is specific to
 - the one `quod_effect_journal` owner;
 - `quod_namespace_manager` creation, joining, restart intent, and collision
   handling;
-- `quod_user`'s authentication identity and deterministic home-data helpers
-  while the transitional browser principal still exists;
-- browser registration's signed `create_user_home.` goal for this refactor.
+- the generic signed-agent request and root `ontology_creator_agent/1` policy;
 
 ### Refactor in place
 
@@ -151,10 +135,8 @@ from the anchored transaction reference. None of those rules is specific to
   `quod_root.pl`;
 - change the bridge ownership matrix from node/create + node/join +
   root/create-user-home to root/create + node/join;
-- make the Prolog `create_user_home/0` convenience derive arguments and invoke
-  generic `create_ontology/2`;
-- make `user_home_genesis/3` derive `Namespace` and `Options` directly from
-  the pure `quod_user` helpers instead of constructing a special action;
+- replace the temporary key-derived creator rule with the stable exact
+  `ontology_creator_agent/1` grant;
 - update tests so creation commits in the root ledger while the resulting
   ontology is hosted only on the executor node;
 - update current architecture and operator documentation to distinguish root
@@ -168,8 +150,7 @@ from the anchored transaction reference. None of those rules is specific to
 - `quod_ontology` validation and preparation clauses for the bare
   `create_user_home` action;
 - special error/failure mapping clauses for that action;
-- `quod_user:home_action/1` and `valid_home/2`; direct namespace/options
-  derivation leaves no production owner for either helper;
+- the entire `quod_user` module and key-derived home helpers;
 - the create action and `can_create_ontology/3` policy in `quod_node.pl`;
 - tests, comments, and current documentation which describe generic creation
   as owned by `quod:node` or describe user-home creation as a separate
@@ -252,11 +233,10 @@ ownership. No runtime source fallback or compatibility policy is added.
 5. Root `can_create_ontology/3` denial prevents source reading, transaction
    submission, journal reservation, and namespace creation.
 6. A node principal admitted by root may create; a non-admitted node may not.
-7. `create_user_home/0` invokes the generic root create action, produces the
-   exact existing deterministic home genesis, and emits no special action or
-   effect shape.
-8. A user cannot use generic creation to choose another namespace, key, ACL,
-   source, or genesis options under the initial root policy.
+7. An exact `ontology_creator_agent/1` grant admits the stable agent reference
+   through the generic root action and no special agent action/effect shape.
+8. An ungranted agent cannot create; Root's normal ACL also protects mutation
+   of creator-policy facts.
 9. Repeating an already-satisfied creation remains the common action no-op and
    commits no second transaction.
 10. Backtracking and a failed alternative leave no prepared descriptor,
@@ -267,10 +247,10 @@ ownership. No runtime source fallback or compatibility policy is added.
     exact executor node; another root validator does not execute it.
 13. Root catch-up/replay validates the creation transaction without a
     node-specific exception.
-14. The client registration test proves its signed convenience goal reaches
-    generic root creation.
-15. A source/client/test grep finds no special `create_user_home` lifecycle
-    operation and no current claim that `quod:node` owns generic creation.
+14. A signed agent uses the generic `quod:root::create_ontology/2` goal and the
+    same root action/effect path as a node-authored creation.
+15. A source/client/test grep finds no `create_user_home`, `quod_user`, special
+    registration path, or current claim that `quod:node` owns creation.
 16. A durable journal fixture staged by the old action name
     `create_user_home` but carrying a generic prepared-create descriptor
     recovers and executes once under the new binary without redispatching that

@@ -18,6 +18,10 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_foreign_follow_resnapshots ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_effect_custody_group_active ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 

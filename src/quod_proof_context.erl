@@ -12,7 +12,8 @@ the scope wire as Erlang references.
 -include("quod_proof_limits.hrl").
 
 -export([start/6, stop/2, proof_id/0, origin_identity/0, principal/0,
-         request_auth/0, request_binding/0, scope_authentication/0,
+         request_evidence/0, request_auth/0, request_binding/0,
+         scope_authentication/0, ensure_scope_authentication/0,
          durable_bindings/1,
          read_only/0, deadline_ms/0, remaining_ms/0,
          finalize/1, seal_plans/0, scope_handle/1,
@@ -59,6 +60,8 @@ the scope wire as Erlang references.
               principal :: quod_dtx:principal(),
               request_evidence = none :: none | quod_client_goal:evidence(),
               request_binding = none :: quod_client_goal:request_binding(),
+              agent_identity = none ::
+                  none | quod_agent_identity:certificate(),
               deadline_ms :: integer(),
               read_only = false :: boolean(),
               finalization = open :: open | ok | {error, term()},
@@ -140,6 +143,9 @@ origin_identity() -> (context())#ctx.origin_identity.
 -spec principal() -> quod_dtx:principal().
 principal() -> (context())#ctx.principal.
 
+-spec request_evidence() -> none | quod_client_goal:evidence().
+request_evidence() -> (context())#ctx.request_evidence.
+
 -spec request_auth() -> none | quod_client_goal:request_auth().
 request_auth() ->
     case (context())#ctx.request_evidence of
@@ -153,10 +159,58 @@ request_binding() -> (context())#ctx.request_binding.
 -doc "Return the one scope-wire authentication object for this proof.".
 -spec scope_authentication() -> quod_scope_wire:authentication().
 scope_authentication() ->
-    case (context())#ctx.request_evidence of
-        none -> node;
-        #{request_bytes := Bytes, signature := Signature} ->
-            {signed_goal, Bytes, Signature}
+    case {(context())#ctx.request_evidence,
+          (context())#ctx.agent_identity} of
+        {none, none} -> node;
+        {#{request_bytes := Bytes, signature := Signature}, Certificate}
+          when Certificate =/= none ->
+            {signed_goal, Bytes, Signature, Certificate}
+    end.
+
+-doc "Acquire the proof-scoped certificate before its first remote scope.".
+-spec ensure_scope_authentication() ->
+          {ok, quod_scope_wire:authentication()} | {error, term()}.
+ensure_scope_authentication() ->
+    Ctx0 = context(),
+    case {Ctx0#ctx.request_evidence, Ctx0#ctx.agent_identity} of
+        {none, none} -> {ok, node};
+        {#{}, Certificate} when Certificate =/= none ->
+            {ok, scope_authentication()};
+        {Evidence = #{}, none} ->
+            case quod_ask_router:identity(
+                   Evidence, Ctx0#ctx.proof_id, remaining_ms()) of
+                {ok, Certificate} ->
+                    install_agent_identity(Certificate);
+                {pending, Router, Generation, Ref} ->
+                    await_agent_identity(
+                      Router, Generation, Ref,
+                      element(1, Ctx0#ctx.origin_identity));
+                {error, _} = Error -> Error
+            end
+    end.
+
+await_agent_identity(Router, Generation, Ref, OriginNs) ->
+    case bind_router(Router, Generation, OriginNs) of
+        {ok, MRef} ->
+            receive
+                {quod_agent_identity, Ref, {ok, Certificate}} ->
+                    install_agent_identity(Certificate);
+                {quod_agent_identity, Ref, {error, Reason}} ->
+                    {error, Reason};
+                {'DOWN', MRef, process, Router, _Reason} ->
+                    {error, unavailable}
+            after remaining_ms() ->
+                {error, timeout}
+            end;
+        {error, _} = Error -> Error
+    end.
+
+install_agent_identity(Certificate) ->
+    case quod_agent_identity:validate_certificate(Certificate) of
+        true ->
+            put_context((context())#ctx{agent_identity = Certificate}),
+            {ok, scope_authentication()};
+        false -> {error, {protocol_error, request_binding}}
     end.
 
 -doc "Give a committed result the stable variable names verified at ingress.".
@@ -273,7 +327,7 @@ seal_material_scopes(#ctx{scopes = Scopes, dirty = Dirty,
 %% Plans exist to carry writes: only a proof that staged at least one write
 %% anywhere seals, and then every scope it read from participates — an
 %% empty-diff scope's read set is exactly what the eventual commit depends on.
-proof_material(_Scopes, _Dirty, {user_goal_v1, <<_:256>>}) ->
+proof_material(_Scopes, _Dirty, {agent_goal_v1, <<_:256>>}) ->
     %% Execute/Accept requests are durable operations even if their goal's
     %% database mutation is already present. The origin plan carries that one
     %% claim; untouched foreign scopes still seal to `not_material`.

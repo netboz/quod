@@ -244,10 +244,13 @@ Ontology create/join operations use the same `execute` proof and `action/3`
 relation as every other durable goal. Their staging bridge prepares one typed
 effect in the proof overlay; it never performs IO during the proof. The
 root transaction controls creation and the node transaction controls join.
-That transaction commits the effect request, and the one node-wide journal
-invokes the typed helper once after commit, then verifies the real desired
-state. This is the D/P/E boundary made explicit, not a second executor or a
-claim that external IO is rollback-capable.
+The effect request is committed through the normal one-participant transaction
+or, when the same proof has another material ontology, through the same
+Begin/Prepare/Decision/Finalize/Complete group as the other plans. The one
+node-wide journal owns custody in both cases, invokes the typed helper only
+after the local commit is applied, then verifies the real desired state. This
+is the D/P/E boundary made explicit, not a second executor or a claim that
+external IO is rollback-capable.
 
 ## 4. One proof context, one scope per ontology
 
@@ -955,8 +958,10 @@ As built:
   requested mutation is already present, so the existing transaction/DTX
   record can carry its durable operation claim with an empty diff. For a
   writing proof, single-participant routing counts every plan whose signed
-  diff is non-empty, whose signed read set is non-empty, or which carries that
-  origin operation claim. It submits the
+  diff is non-empty, whose signed read set is non-empty, which carries one
+  direct effect, or which carries that origin operation claim. A direct effect
+  and a diff may not coexist in the same plan; separate participant plans may
+  contain either. It submits the
   sole participant's plan engine-direct
   (local/co-hosted) or over the scope's
   `submit_plan` frame (remote — outcome only crosses back:

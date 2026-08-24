@@ -142,7 +142,7 @@ stages, not carried forward:
   - **(a) per-node re-validation — DONE.** Every validator re-judges a committee-changing proposal against
     its OWN kb before support-signing (`quod_prolog:request_content_verdict/6`, the one async content
     validator pinned to the proposal's parent height `Slot-1` so honest nodes reach the same verdict):
-    signed-user evidence and its recorded ACL decision are checked there too; for membership, an assert re-proves
+    signed-agent evidence and its recorded ACL decision are checked there too; for membership, an assert re-proves
     `can_join` (rejecting a `can_join` that stages writes, or a pubkey already admitted); a retract requires
     the exact `peer_admitted` clause present (`quod_diff:has_clause/4`) — which closes the fabricated-address
     **validator-ejection** (a wrong-`Host`/`Port` retract that would drop a member from `#s.validators` while
@@ -299,9 +299,8 @@ stages, not carried forward:
   identity model. Governed external-predicate ownership and root-driven
   synchronisation of `quod:node`, `quod:agent`, and `quod:human_user` are
   implemented.
-  Remaining work is: one agent-bound signed-request format replacing
-  `{user, Key}`; anchored
-  classed instances and their containing ontologies; committed host fencing
+  The agent-bound signed-request format and anchored classed identity are
+  implemented in the working tree. Remaining work is committed host fencing
   and projection-driven process restart; a node-local encrypted vault; and
   migration by destination key rotation rather than secret transport. This
   work reuses normal

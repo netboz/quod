@@ -15,7 +15,7 @@ import { shortNamespace } from './namespace'
 const EXAMPLES = ['isa(X, Y)', 'assertz(capital(france, paris))', 'capital(france, X)']
 
 export function Console({ ns, anchor }: { ns: string; anchor: string }) {
-  const { identity, error: sessionError } = useSignedSession()
+  const { identity, agent, error: sessionError } = useSignedSession()
   const [goal, setGoal] = useState('')
   const [busy, setBusy] = useState(false)
   const [reply, setReply] = useState<ProveReply | null>(null)
@@ -70,12 +70,12 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
   }
 
   const run = async () => {
-    if (!identity || !goal.trim() || busy || cursor) return
+    if (!identity || !agent || !goal.trim() || busy || cursor) return
     setBusy(true)
     setReply(null)
     const requestNs = ns
     try {
-      const next = await openProofCursor(identity, requestNs, anchor, goal)
+      const next = await openProofCursor(identity, agent, requestNs, anchor, goal)
       if (nsRef.current !== requestNs) {
         if ('result' in next && next.result === 'solution') {
           void stopProofCursor(identity, next.cursor)
@@ -122,7 +122,7 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
         <span className="text-[11px] text-cream/70">reads answer · writes commit</span>
       </header>
       <div className="p-4">
-        {identity ? (
+        {identity && agent ? (
           <>
             <div className="flex items-start gap-2">
               <span className="pt-2 font-mono text-sm text-gray select-none">?-</span>
@@ -159,9 +159,11 @@ export function Console({ ns, anchor }: { ns: string; anchor: string }) {
           </>
         ) : (
           <div className="rounded-lg border border-gold/45 bg-gold-soft/15 px-3 py-2 text-sm text-teal">
-            Create an identity above to run a goal. This browser then stays signed in here and
-            on the client. The console signs the exact Prolog text; the ontology's normal ACL
-            still decides whether it is allowed.
+            {identity
+              ? 'Add or select an agent above before running a goal.'
+              : 'Create a signing key above, then add an agent reference.'}
+            {' '}The console signs the exact Prolog text; every ontology's normal ACL still
+            decides whether it is allowed.
             {sessionError && <span className="ml-2 text-rose">{sessionError}</span>}
           </div>
         )}

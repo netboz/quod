@@ -10,13 +10,14 @@
 signed_local_read_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Ctx) ->
-         [?_test(local_read_uses_user_acl_and_returns_named_bindings(Ctx)),
+         [?_test(local_read_uses_agent_acl_and_returns_named_bindings(Ctx)),
           ?_test(forged_request_never_materializes_its_functor(Ctx)),
           ?_test(read_mode_cannot_write_or_open_a_foreign_scope(Ctx)),
-          ?_test(same_ontology_scope_keeps_the_user_principal(Ctx)),
+          ?_test(same_ontology_scope_keeps_the_agent_principal(Ctx)),
           ?_test(opaque_data_binding_renders_as_the_original_symbol(Ctx)),
           ?_test(anchor_is_checked_at_ingress_and_inside_the_worker(Ctx)),
           ?_test(session_and_signed_deadline_are_both_bound(Ctx)),
+          ?_test(cursor_commands_reuse_the_session_signing_key(Ctx)),
           ?_test(wrong_network_and_expired_request_stop_at_ingress(Ctx)),
           ?_test(route_eligible_refusals_advance_to_the_next_validator(Ctx)),
           ?_test(directory_anchor_conflict_is_not_flattened(Ctx)),
@@ -24,7 +25,7 @@ signed_local_read_test_() ->
           ?_test(operation_resolution_follows_the_existing_claim(Ctx))]
      end}.
 
-local_read_uses_user_acl_and_returns_named_bindings(
+local_read_uses_agent_acl_and_returns_named_bindings(
   #{namespace := Ns, key_pair := KeyPair,
     session := Session}) ->
     {Bytes, Signature} = signed_read(
@@ -63,7 +64,7 @@ read_mode_cannot_write_or_open_a_foreign_scope(
                                        Ns, ?ANCHOR, KeyPair, Session,
                                        <<"should_not_exist.">>),
     ?assertMatch(
-       {ok, _, {normalized, {failed, _}}},
+       {ok, _, {normalized, fail}},
        quod_client_goal_ingress:submit(read,
          SessionId, AbsentBytes, AbsentSignature, ?PEER)),
     {ScopeBytes, ScopeSignature} = signed_read(
@@ -74,7 +75,7 @@ read_mode_cannot_write_or_open_a_foreign_scope(
        quod_client_goal_ingress:submit(read,
          SessionId, ScopeBytes, ScopeSignature, ?PEER)).
 
-same_ontology_scope_keeps_the_user_principal(
+same_ontology_scope_keeps_the_agent_principal(
   #{namespace := Ns, key_pair := KeyPair,
     session := Session}) ->
     Text = <<$", Ns/binary, "\"::lookup(X).">>,
@@ -161,6 +162,22 @@ session_and_signed_deadline_are_both_bound(
        {error, invalid_session},
        quod_client_goal_ingress:submit(read,
          <<0:256>>, Bytes, Signature, ?PEER)).
+
+cursor_commands_reuse_the_session_signing_key(
+  #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
+    Request = (request(Ns, ?ANCHOR, KeyPair, Session, <<"lookup(X).">>))#{
+                mode => cursor},
+    {ok, Bytes} = quod_client_goal:encode(Request),
+    Signature = quod_identity:sign(
+                  Bytes, quod_identity:key_term(KeyPair)),
+    SessionId = maps:get(session_id, Session),
+    {ok, _, {normalized, {solution, CursorId, _, _}}} =
+        quod_client_goal_ingress:submit(
+          cursor, SessionId, Bytes, Signature, ?PEER),
+    ?assertMatch(
+       {ok, _, {normalized, stopped}},
+       quod_client_goal_ingress:cursor_command(
+         SessionId, CursorId, stop, ?PEER)).
 
 wrong_network_and_expired_request_stop_at_ingress(
   #{namespace := Ns, key_pair := KeyPair, session := Session}) ->
@@ -299,6 +316,7 @@ operation_resolution_follows_the_existing_claim(
 setup() ->
     {ok, _} = application:ensure_all_started(gproc),
     stop_auth(),
+    stop_cursor(),
     PreviousDesired = application:get_env(quod, namespace_desired),
     application:set_env(
       quod, namespace_desired,
@@ -317,11 +335,14 @@ setup() ->
                         outcome_backend => memory}),
     KeyPair = quod_identity:generate(),
     {PublicKey, _} = KeyPair,
-    User = {user, PublicKey},
-    Policy = {can_invoke, {'Goal'}, User, {'Chain'}, Ns},
+    Instance = {human_user, test_agent},
+    AgentRef = {agent_instance_ref, Ns, ?ANCHOR, Instance},
+    Policy = {can_invoke, {'Goal'}, AgentRef, {'Chain'}, Ns},
     GenesisAuthor = <<16#76:256>>,
     GenesisDiff =
-        quod_ct:diff_for({lookup, bob}) ++ quod_ct:diff_for(Policy),
+        quod_ct:diff_for({lookup, bob}) ++
+        quod_ct:diff_for({agent_key, Instance, PublicKey, active}) ++
+        quod_ct:diff_for(Policy),
     Genesis = quod_simplex:test_genesis_tx(
                 #{mode => create, node_id => GenesisAuthor,
                   committee => [], genesis_diff => GenesisDiff},
@@ -333,13 +354,15 @@ setup() ->
     {ok, AuthPid} = quod_client_auth:start_link(
                       #{network_id => ?NETWORK, node_key => <<16#73:256>>,
                         session_ttl_ms => 60000}),
+    {ok, CursorPid} = quod_client_cursor:start_link(),
     Session = open_session(KeyPair),
-    #{namespace => Ns, engine => Pid, auth => AuthPid,
+    #{namespace => Ns, engine => Pid, auth => AuthPid, cursor => CursorPid,
       table => Table, key_pair => KeyPair, session => Session,
       previous_desired => PreviousDesired}.
 
-cleanup(#{engine := Engine, auth := Auth, table := Table,
+cleanup(#{engine := Engine, auth := Auth, cursor := Cursor, table := Table,
           previous_desired := PreviousDesired}) ->
+    stop_process(Cursor),
     stop_process(Auth),
     case is_process_alive(Engine) of
         true -> gen_server:stop(Engine);
@@ -354,7 +377,7 @@ open_session(KeyPair) ->
     {ok, Challenge} = quod_client_auth:issue_challenge(
                         PublicKey, ClientNonce, ?PEER),
     ChallengeId = maps:get(challenge_id, Challenge),
-    {ok, ChallengeBytes} = quod_user:challenge_bytes(
+    {ok, ChallengeBytes} = quod_client_auth:challenge_bytes(
                              ?NETWORK, <<16#73:256>>, ChallengeId,
                              PublicKey, ClientNonce,
                              maps:get(server_nonce, Challenge),
@@ -373,10 +396,11 @@ signed_read(Ns, Anchor, KeyPair, Session, Text) ->
 
 request(Ns, Anchor, {PublicKey, _}, Session, Text) ->
     #{network_identity => ?NETWORK,
-      user_public_key => PublicKey,
+      signing_public_key => PublicKey,
       operation_id => crypto:strong_rand_bytes(32),
-      target_namespace => Ns,
-      target_genesis_anchor => Anchor,
+      agent_namespace => Ns,
+      agent_genesis_anchor => Anchor,
+      agent_instance_text => <<"human_user(test_agent).">>,
       mode => read,
       parser_version => 1,
       not_after_ms => min(maps:get(expires_ms, Session),
@@ -400,7 +424,7 @@ await_anchored_public_cast(Engine, Remaining) ->
 
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
-                 {proof_request, _TraceCtx, {user, <<_:256>>},
+                 {proof_request, _TraceCtx, {agent, _AgentRef},
                   ?ANCHOR, _RequestAuth}}}) ->
     true;
 is_anchored_public_cast(_) ->
@@ -408,6 +432,12 @@ is_anchored_public_cast(_) ->
 
 stop_auth() ->
     case whereis(quod_client_auth) of
+        undefined -> ok;
+        Pid -> stop_process(Pid)
+    end.
+
+stop_cursor() ->
+    case whereis(quod_client_cursor) of
         undefined -> ok;
         Pid -> stop_process(Pid)
     end.

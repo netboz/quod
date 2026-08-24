@@ -57,7 +57,7 @@
                  effects = [] :: [quod_effect:effect()], %% bounded typed direct effects; never callbacks/goals
                  request_auth = none :: none | quod_client_goal:request_auth(),
                                                         %% exact signed user intent; none for node/genesis work
-                 auth_transcript = none :: none | {user_goal_v1, binary()},
+                 auth_transcript = none :: none | {agent_goal_v1, binary()},
                                                         %% one canonical top-level can_invoke transcript
                  author = none :: node_id() | none,    %% set to the submitting node's pubkey before ingress
                  author_seq = 0 :: non_neg_integer(), %% signed, strictly increasing per author; 0 only before ingress/genesis

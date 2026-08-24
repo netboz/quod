@@ -204,7 +204,7 @@ proof_gate_requires_exact_ready_ack_test() ->
     Anchor = <<0:256>>,
     Projection = quod_dtx:initial_projection({Ns, Anchor}, 7),
     with_simplex_gate(
-      Ns, {proof_gate, false, open, 7, none},
+      Ns, quod_ct:proof_gate_row(false, open, 7, none),
       fun(_Tab) ->
           Owner = registered_prolog_owner(Ns),
           try
@@ -272,8 +272,9 @@ finalize_applied_opens_only_the_exact_pending_fence_test() ->
                     generation := Generation},
     with_simplex_gate(
       Ns,
-      {proof_gate, true,
-       {pending_apply, GroupId, Slot, Generation}, Generation, GroupId},
+      quod_ct:proof_gate_row(
+        true, {pending_apply, GroupId, Slot, Generation},
+        Generation, GroupId),
       fun(_Tab) ->
           S0 = st(#{ns => Ns,
                     consensus_domain =>
@@ -612,6 +613,54 @@ dtx_submission_keeps_one_exact_waiter_test() ->
        {error, busy},
        quod_simplex:test_retain_dtx_record(Record, Second, S0)),
     ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)).
+
+%% Custody keeps the first origin's unsigned Begin intent dormant while all
+%% effect participants bind. A second group is refused with the existing
+%% retryable `busy` result; it cannot replace the first intent, and activating
+%% the first still creates exactly one retained Begin submission.
+dormant_dtx_intent_contention_is_busy_and_first_activates_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    Begin = maps:get('begin', Fixture),
+    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
+    #{pubkey := Author} = Identity = maps:get(node_identity, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Intent1 = make_ref(),
+    Intent2 = make_ref(),
+    Dir = relay_store_dir("dormant_dtx_intent_contention"),
+    true = quod_reg:reg({quod_prolog, Ns}),
+    try
+        {ok, Journal0} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Author, id => Identity,
+                  validators => [Author],
+                  author_admissions => #{Author => Admission},
+                  sync => ready, signing_journal => Journal0}),
+        {ok, S1} = quod_simplex:test_register_dtx_intent(
+                     self(), Intent1, Begin, GroupRef, S0),
+        ?assertEqual(
+           {error, busy},
+           quod_simplex:test_register_dtx_intent(
+             self(), Intent2, Begin, GroupRef, S1)),
+        S2 = quod_simplex:test_activate_dtx_intent(self(), Intent1, S1),
+        ?assertEqual(
+           1,
+           maps:get(submissions,
+                    quod_simplex:test_dtx_endpoint_counts(S2))),
+        receive
+            {'$gen_cast',
+             {project_pending_begin, #{group_id := SeenGroupId}}} ->
+                ?assertEqual(element(6, GroupRef), SeenGroupId)
+        after 1000 ->
+            error(missing_pending_begin_projection)
+        end,
+        ok = quod_signing_journal:close(
+               quod_simplex:test_signing_journal(S2))
+    after
+        true = gproc:unreg(quod_reg:name({quod_prolog, Ns})),
+        _ = file:del_dir_r(Dir)
+    end.
 
 dtx_prepare_contact_is_bound_to_its_certified_origin_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
@@ -2619,7 +2668,7 @@ restart_restores_exact_effect_custody_test() ->
     {ok, Goal} = quod_durable_term:encode_goal(
                    {create_ontology, <<"restart:created">>, []}),
     {ok, Result} = quod_durable_term:encode_result(#{}),
-    Effect = {quod_direct_effect, 1, local_durable,
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create, EffectId, Author,
               {node, Author}, {<<"restart:created">>, TargetAnchor},
               RequestDigest, PreparedDigest},
@@ -2780,7 +2829,7 @@ effect_custody_does_not_saturate_after_live_commits_test() ->
 
 effect_submission_fixture(Ns, Anchor, Admission, Sequence,
                           Author, Identity) ->
-    Effect = {quod_direct_effect, 1, local_durable,
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create,
               crypto:hash(sha256, <<"effect-id", Sequence:64>>), Author,
               {node, Author},
@@ -3259,23 +3308,23 @@ batch_operation_claims_coalesce_aliases_and_reject_conflicts_test() ->
     Ns = <<"t">>,
     Anchor = <<0:256>>,
     OperationId = <<77:256>>,
-    UserKey = quod_identity:generate(),
+    AgentKey = quod_identity:generate(),
     Base = quod_ct:signed_dtx_begin_fixture(
              #{target => {Ns, Anchor}, operation_id => OperationId,
-               key_pair => UserKey}),
+               key_pair => AgentKey}),
     First0 = maps:get(transaction, Base),
     #{pubkey := Author} = NodeIdentity = maps:get(node_identity, Base),
     Admission = maps:get(admission, Base),
     First = First0#transaction{author = Author, author_seq = 0, sig = none},
     AliasFixture = quod_ct:signed_dtx_begin_fixture(
                      #{target => {Ns, Anchor},
-                       operation_id => OperationId, key_pair => UserKey,
+                       operation_id => OperationId, key_pair => AgentKey,
                        proof_id => <<210:256>>}),
     Alias = (maps:get(transaction, AliasFixture))#transaction{
               author = Author, author_seq = 0, sig = none},
     ConflictFixture = quod_ct:signed_dtx_begin_fixture(
                         #{target => {Ns, Anchor},
-                          operation_id => OperationId, key_pair => UserKey,
+                          operation_id => OperationId, key_pair => AgentKey,
                           proof_id => <<211:256>>,
                           goal_text => <<"assertz(saved(conflict)).">>}),
     Conflict = (maps:get(transaction, ConflictFixture))#transaction{

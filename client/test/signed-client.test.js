@@ -11,22 +11,24 @@ import { memoryOperationJournal } from '../src/operation-journal.js'
 test('signed goal bytes match the Erlang browser fixture', () => {
   const bytes = encodeGoalRequest({
     networkIdentity: u256(0x10),
-    userPublicKey: hex('03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8'),
+    signingPublicKey: hex('03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8'),
     operationId: u256(0x30),
-    namespace: 'quod:goal-test',
-    anchor: u256(0x20),
+    agentNamespace: 'quod:goal-test',
+    agentAnchor: u256(0x20),
+    agentInstanceText: 'human_user(alice).',
     mode: 'execute',
     notAfterMs: 1_800_000_000_000,
     goal: 'assertz(saved(ok)).',
   })
   assert.equal(
     Buffer.from(bytes).toString('hex'),
-    '71756f642e757365722e676f616c2e763100' +
+    '71756f642e6167656e742e676f616c2e763100' +
       '0000000000000000000000000000000000000000000000000000000000000010' +
       '03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8' +
       '0000000000000000000000000000000000000000000000000000000000000030' +
       '000e71756f643a676f616c2d74657374' +
       '0000000000000000000000000000000000000000000000000000000000000020' +
+      '0000001268756d616e5f7573657228616c696365292e' +
       '0102000001a3185c5000000000136173736572747a287361766564286f6b29292e',
   )
 })
@@ -51,17 +53,21 @@ test('a lost signed-goal response is marked outcome-unknown', async () => {
         },
         {
           mode: 'execute',
-          namespace: 'quod:root',
-          anchor: u256(0x10),
-          goal: 'create_user_home.',
+          agent: agentReference(),
+          goal: 'assertz(saved(ok)).',
         },
         { journal },
       ),
       (error) => error.outcomeUnknown === true && /do not resubmit/.test(error.message),
     )
     const [pending] = await journal.list()
-    assert.equal(pending.version, 1)
-    assert.equal(pending.user.length, 43)
+    assert.equal(pending.version, 2)
+    assert.equal(pending.signing_key.length, 43)
+    assert.deepEqual(pending.agent, {
+      namespace: 'quod:agent-test',
+      anchor: b64urlForTest(u256(0x10)),
+      instance_text: 'human_user(alice).',
+    })
     assert.equal(pending.signature.length, 86)
   } finally {
     globalThis.fetch = previousFetch
@@ -143,7 +149,7 @@ test('cursor Accept persists the original request before an uncertain reply', as
       error => error.outcomeUnknown === true,
     )
     const [pending] = await journal.list()
-    assert.equal(pending.user, b64urlForTest(identity.provider.publicKey))
+    assert.equal(pending.signing_key, b64urlForTest(identity.provider.publicKey))
     assert.equal(typeof pending.request, 'string')
     assert.equal(typeof pending.signature, 'string')
 
@@ -234,27 +240,29 @@ test('missing durable storage permits reads but sends no possible write', async 
   }
 })
 
-test('the browser journal refuses a new row rather than dropping uncertainty', async () => {
+test('the browser journal has no fixed unresolved-operation population limit', async () => {
   const journal = memoryOperationJournal()
   const row = {
-    version: 1,
+    version: 2,
     id: 'a'.repeat(43),
-    user: 'u'.repeat(43),
+    signing_key: 'k'.repeat(43),
     network: 'n'.repeat(43),
+    agent: {
+      namespace: 'quod:agent-test',
+      anchor: 'a'.repeat(43),
+      instance_text: 'human_user(alice).',
+    },
     request: 'request',
     signature: 's'.repeat(86),
     created_at_ms: Date.now(),
   }
-  for (let index = 0; index < 64; index += 1) {
+  for (let index = 0; index < 96; index += 1) {
     await journal.put({ ...row, id: index.toString(36).padStart(43, '0') })
   }
-  await assert.rejects(
-    journal.put({ ...row, id: 'z'.repeat(43) }),
-    /too many unresolved signed operations/,
-  )
-  assert.equal((await journal.list()).length, 64)
+  await journal.put({ ...row, id: 'z'.repeat(43) })
+  assert.equal((await journal.list()).length, 97)
   await journal.put({ ...row, id: '0'.repeat(43), request: 'replacement' })
-  assert.equal((await journal.list()).length, 64)
+  assert.equal((await journal.list()).length, 97)
 })
 
 function u256(lastByte) {
@@ -284,9 +292,16 @@ function signedIdentity() {
 function signedWrite() {
   return {
     mode: 'execute',
-    namespace: 'quod:root',
+    agent: agentReference(),
+    goal: 'assertz(saved(ok)).',
+  }
+}
+
+function agentReference() {
+  return {
+    namespace: 'quod:agent-test',
     anchor: u256(0x10),
-    goal: 'create_user_home.',
+    instanceText: 'human_user(alice).',
   }
 }
 

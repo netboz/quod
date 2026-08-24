@@ -31,10 +31,11 @@ test('builder text and direct text produce byte-identical signed requests', () =
   assert.equal(built, direct)
   const fields = {
     networkIdentity: u256(1),
-    userPublicKey: u256(2),
+    signingPublicKey: u256(2),
     operationId: u256(3),
-    namespace: 'quod:builder-test',
-    anchor: u256(4),
+    agentNamespace: 'quod:builder-test',
+    agentAnchor: u256(4),
+    agentInstanceText: 'human_user(alice).',
     mode: 'execute',
     notAfterMs: 1_800_000_000_000,
   }

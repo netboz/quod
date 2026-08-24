@@ -21,7 +21,6 @@ the complete policy path. `ontology_join_state/2` and
          lifecycle_request_predicate/3,
          lifecycle_continuation_predicate/3,
          current_principal_predicate/3,
-         user_home_genesis_predicate/3,
          ontology_join_state_predicate/3,
          ontology_genesis_anchor_predicate/3,
          effect_custody_capacity_projection_predicate/3]).
@@ -42,7 +41,6 @@ load(Est0) ->
          {{join_ontology, 3}, staging, lifecycle_request_predicate},
          {{?CONTINUATION, 3}, staging, lifecycle_continuation_predicate},
          {{current_principal, 1}, query, current_principal_predicate},
-         {{user_home_genesis, 3}, query, user_home_genesis_predicate},
          {{ontology_join_state, 2}, query, ontology_join_state_predicate},
          {{ontology_genesis_anchor, 2}, query,
           ontology_genesis_anchor_predicate},
@@ -98,7 +96,7 @@ lifecycle_continuation_predicate(_Goal, _Next, St) ->
     fail_reason({ontology_lifecycle_failed, invalid_action}, St).
 
 stage_prepared_action(Action, Desired, Structural, Next, St) ->
-    Principal = quod_proof_context:principal(),
+    Principal = authenticated_principal(),
     case quod_ontology:prepare_action(Structural, Principal) of
         {ok, Prepared} ->
             case quod_proof_session:signer_from_state(St) of
@@ -122,26 +120,30 @@ stage_prepared_action(Action, Desired, Structural, Next, St) ->
 -doc "Bind the authenticated principal owned by the current proof.".
 -spec current_principal_predicate(term(), term(), tuple()) -> term().
 current_principal_predicate({current_principal, Principal}, Next, St) ->
-    erlog_int:unify_prove_body(
-      Principal, quod_proof_context:principal(), Next, St);
+    case policy_principal(authenticated_principal()) of
+        {ok, PolicyPrincipal} ->
+            erlog_int:unify_prove_body(Principal, PolicyPrincipal, Next, St);
+        error ->
+            erlog_int:fail(St)
+    end;
 current_principal_predicate(_Goal, _Next, St) ->
     erlog_int:fail(St).
 
--doc "Derive the one legal transitional user-home genesis shape.".
--spec user_home_genesis_predicate(term(), term(), tuple()) -> term().
-user_home_genesis_predicate(
-  {user_home_genesis, PublicKey0, Namespace, Options}, Next,
-  #est{bs = Bs} = St) ->
-    PublicKey = erlog_int:dderef(PublicKey0, Bs),
-    case {quod_user:home_namespace(PublicKey),
-          quod_user:home_options(PublicKey)} of
-        {{ok, HomeNamespace}, {ok, HomeOptions}} ->
-            erlog_int:unify_prove_body(
-              [Namespace, Options], [HomeNamespace, HomeOptions], Next, St);
-        _ -> erlog_int:fail(St)
+authenticated_principal() ->
+    case quod_scope_session:principal() of
+        {ok, Principal} -> Principal;
+        error -> quod_proof_context:principal()
+    end.
+
+%% Keep lifecycle prerequisites and can_invoke/4 on the same Prolog-visible
+%% identity.  The canonical blob is only the wire/storage representation.
+policy_principal({agent, _Blob} = Principal) ->
+    case quod_agent_ref:materialize_principal(Principal) of
+        {ok, AgentRef} -> {ok, AgentRef};
+        {error, _} -> error
     end;
-user_home_genesis_predicate(_Goal, _Next, St) ->
-    erlog_int:fail(St).
+policy_principal(Principal) ->
+    {ok, Principal}.
 
 -doc "Map a typed lifecycle API error to its bounded public Prolog reason.".
 -spec lifecycle_error(term(), term()) -> term().

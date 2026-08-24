@@ -207,10 +207,10 @@ signed_user_request_is_bound_and_revalidated_at_admission_test() ->
     Network = maps:get(network, Fixture),
     Target = maps:get(target, Fixture),
     Deadline = maps:get(deadline, Fixture),
-    {ok, #{principal := {user, User}, claim := Claim}} =
+    {ok, #{principal := Principal, claim := Claim}} =
         quod_transaction:validate_request(
           Network, Target, Deadline, Transaction),
-    ?assertEqual(maps:get(user, Fixture), User),
+    ?assertEqual(maps:get(principal, Fixture), Principal),
     ?assertEqual(maps:get(operation_ref, Fixture),
                  maps:get(operation_ref, Claim)),
     ?assertEqual(
@@ -226,9 +226,9 @@ signed_user_request_and_authorization_transcript_are_not_interchangeable_test() 
     Network = maps:get(network, Fixture),
     Target = maps:get(target, Fixture),
     Deadline = maps:get(deadline, Fixture),
-    {user_goal_v1, Digest, Bytes, Signature} =
+    {agent_goal_v1, Digest, Bytes, Signature} =
         Transaction#transaction.request_auth,
-    ForgedAuth = {user_goal_v1, Digest, flip_first(Bytes), Signature},
+    ForgedAuth = {agent_goal_v1, Digest, flip_first(Bytes), Signature},
     ?assertMatch(
        {error, _},
        quod_transaction:validate_request(
@@ -240,7 +240,7 @@ signed_user_request_and_authorization_transcript_are_not_interchangeable_test() 
           [{<<1:128>>, [Target], OtherGoal, allowed, 1, <<2:256>>, complete}]),
     WrongAuthorization =
         Transaction#transaction{
-          auth_transcript = {user_goal_v1, WrongTranscript}},
+          auth_transcript = {agent_goal_v1, WrongTranscript}},
     ?assertEqual(
        {error, invalid_authorization_transcript},
        quod_transaction:validate_request(
@@ -268,7 +268,7 @@ signed_request_replay_uses_the_certified_block_time_test() ->
                        Deadline + 1, Projection))
       end).
 
-same_user_request_has_one_semantic_transaction_across_validator_authors_test() ->
+same_agent_request_has_one_semantic_transaction_across_validator_authors_test() ->
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     First = maps:get(transaction, Fixture),
     {OtherAuthor, OtherIdentity} = identity(),
@@ -297,7 +297,7 @@ network_identity_requirement_is_total_and_fail_closed_test() ->
     Unsigned = Signed#transaction{request_auth = none,
                                   auth_transcript = none},
     Mismatched = Unsigned#transaction{
-                   auth_transcript = {user_goal_v1, <<>>}},
+                   auth_transcript = {agent_goal_v1, <<>>}},
     ?assertNot(quod_transaction:requires_network_identity([])),
     ?assertNot(quod_transaction:requires_network_identity([Unsigned])),
     ?assert(quod_transaction:requires_network_identity([Mismatched])),
@@ -322,28 +322,29 @@ relay_submission_roundtrip_test() ->
                  quod_transaction:decode_verified_submission(
                    {<<"other">>, ?ANCHOR, ?ADMISSION}, Submission)).
 
-superseded_v8_transaction_is_explicitly_rejected_test() ->
+superseded_v9_transaction_is_explicitly_rejected_test() ->
     {Tx, Identity} = signed(),
-    {ok, V9Bytes} = quod_transaction:bytes(?BINDING, Tx),
-    {quod_transaction, 9, Ns, Anchor, Admission,
+    {ok, V10Bytes} = quod_transaction:bytes(?BINDING, Tx),
+    {quod_transaction, 10, Ns, Anchor, Admission,
      TxId, Origin, ProofId, PlanDigest, Goal, Result,
-     MaterialWire, EffectsWire, _RequestAuth, _AuthorizationTranscript,
-     Author, AuthorSeq, SubmittedAt} = binary_to_term(V9Bytes),
-    V8Bytes = term_to_binary(
-                {quod_transaction, 8, Ns, Anchor, Admission,
+     MaterialWire, EffectsWire, RequestAuth, AuthorizationTranscript,
+     Author, AuthorSeq, SubmittedAt} = binary_to_term(V10Bytes),
+    V9Bytes = term_to_binary(
+                {quod_transaction, 9, Ns, Anchor, Admission,
                  TxId, Origin, ProofId, PlanDigest, Goal, Result,
-                 MaterialWire, EffectsWire, none, none,
+                 MaterialWire, EffectsWire, RequestAuth,
+                 AuthorizationTranscript,
                  Author, AuthorSeq, SubmittedAt},
                 [deterministic]),
-    V8Signature = quod_identity:sign(V8Bytes, Identity),
-    V8Submission = {submit, Author, V8Signature, V8Bytes},
-    ?assert(quod_transaction:verify_submission(V8Submission)),
+    V9Signature = quod_identity:sign(V9Bytes, Identity),
+    V9Submission = {submit, Author, V9Signature, V9Bytes},
+    ?assert(quod_transaction:verify_submission(V9Submission)),
     ?assertEqual(
        {error, malformed_submission},
-       quod_transaction:decode_submission_metadata(V8Bytes)),
+       quod_transaction:decode_submission_metadata(V9Bytes)),
     ?assertEqual(
        {error, unsupported_version},
-       quod_transaction:decode_verified_submission(?BINDING, V8Submission)).
+       quod_transaction:decode_verified_submission(?BINDING, V9Submission)).
 
 different_canonical_submissions_have_different_ids_test() ->
     {Tx, Identity} = signed(),
@@ -444,7 +445,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     [?assertException(
         error, badarg, binary_to_existing_atom(Name, utf8))
      || Name <- AtomNames],
-    %% The signed envelope itself contains only fixed atoms. User vocabulary is
+    %% The signed envelope itself contains only fixed atoms. Agent vocabulary is
     %% represented by bounded wire symbols; exceeding the explicit allocation
     %% cap rejects the complete material before any symbol is interned.
     DiffWire = wire_list([{0, Name} || Name <- AtomNames]),
@@ -454,7 +455,7 @@ authenticated_relay_etf_cannot_allocate_atoms_test() ->
     {Author, Identity} = identity(),
     Canonical =
         term_to_binary(
-          {quod_transaction, 9, ?NS, ?ANCHOR, ?ADMISSION,
+          {quod_transaction, 10, ?NS, ?ANCHOR, ?ADMISSION,
            <<1:256>>, {?NS, <<0:256>>}, <<2:256>>, <<3:256>>,
            <<>>, <<>>, MaterialWire, CanonicalEffects,
            none, none, Author, 1, 0},

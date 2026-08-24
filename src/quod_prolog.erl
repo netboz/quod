@@ -53,10 +53,12 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          open_cursor/5, cancel_cursor/3,
          submit_plan/4, outcome/1,
          local_outcome/2, outcome_snapshot/2, dtx_group_state/2,
+         effect_resolution/3,
          project_pending_begin/2,
          dtx_group_resolved/2,
          applied/1, apply_entry/3, mark_ready/1, sync/1,
          attach_runtime/1, runtime_floor/2, runtime_detach/1,
+         request_agent_attestation/4,
          request_content_verdict/6, request_dtx_verdict/6,
          stats/1, namespaces/0]).
 -export([genesis_diff/1, read_terms/1, terms_to_diff/1]).
@@ -75,7 +77,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_target_scope_lifetime_ms/2,
          test_remote_timeout_correlation/3,
          test_scope_worker_failure/2,
-         test_scope_authentication_reason/5,
+         test_scope_authentication_reason/7,
          test_proof_down_reply/3, test_proof_down_reply/4,
          test_finalize_pinned_result/1,
          test_terminal_result/1,
@@ -120,11 +122,12 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 %% second hand-off is refused rather than queued.
 -record(dtx_handoff, {
           intent_id  :: reference(),
-          request_id :: term(),
+          request_id = none :: none | term(),
           worker_ref :: reference(),
           worker_pid :: pid(),
-          from       :: gen_server:from(),
-          group_ref  :: term()
+          from = none :: none | gen_server:from(),
+          group_ref  :: term(),
+          state = registering :: registering | dormant
          }).
 
 %% After activation the proof worker may close every scope.  Only this compact
@@ -218,6 +221,13 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           active_commands = [] :: [{<<_:128>>, pos_integer()}]
          }).
 
+-record(agent_attester, {
+          pid :: pid(),
+          timer :: reference(),
+          reply_to :: pid(),
+          tag :: term()
+         }).
+
 -record(s, {ns        :: binary(),
             self      :: node_id(),
             signer = none :: quod_identity:signer() | none,
@@ -267,6 +277,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             park_timeouts = 0 :: non_neg_integer(),     %% writes still unresolved at their caller deadline
             %% Ref => #proof_worker{}
             workers   = #{} :: map(),
+            agent_attesters = #{} :: #{reference() => #agent_attester{}},
             %% A sealed writer no longer reads its frozen proof snapshot while
             %% consensus resolves the submission. Keep its caller/monitor
             %% ownership here without charging a derivation slot or pinning
@@ -297,6 +308,14 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -spec start_link(binary(), map()) -> {ok, pid()} | {error, term()}.
 start_link(Ns, Config) ->
     gen_server:start_link(quod_reg:via({quod_prolog, Ns}), ?MODULE, {Ns, Config}, []).
+
+-doc "Request one bounded local agent-identity attestation.".
+-spec request_agent_attestation(binary(), term(), pid(), term()) -> ok.
+request_agent_attestation(Ns, Request, ReplyTo, Tag)
+  when is_binary(Ns), is_pid(ReplyTo) ->
+    gen_server:cast(
+      quod_reg:via({quod_prolog, Ns}),
+      {agent_attestation, Request, ReplyTo, Tag}).
 
 -ifdef(TEST).
 -doc """
@@ -329,15 +348,15 @@ open_cursor(_TargetNs, _Goal, _Owner, _CursorId) ->
 
 -doc "Open the existing cursor proof under one already-verified signed request.".
 -spec open_cursor(quod_client_goal:evidence(), term(),
-                  {user, <<_:256>>}, pid(), <<_:256>>) ->
+                  {agent, binary()}, pid(), <<_:256>>) ->
           {ok, pid(), reference()} | {error, term()}.
 open_cursor(
-  #{request := #{user_public_key := UserKey,
-                 target_namespace := TargetNs,
-                 target_genesis_anchor := Anchor,
+  #{request := #{agent_namespace := TargetNs,
+                 agent_genesis_anchor := Anchor,
                  mode := cursor}} = Evidence,
-  Goal, {user, UserKey} = Principal, Owner, <<_:256>> = CursorId)
+  Goal, {agent, AgentRef} = Principal, Owner, <<_:256>> = CursorId)
   when is_binary(TargetNs), is_pid(Owner) ->
+    true = is_binary(AgentRef),
     case signed_engine(TargetNs, Anchor) of
         {ok, Engine} ->
             CallRef = make_ref(),
@@ -408,17 +427,17 @@ execute(TargetNs, Goal) ->
     end.
 
 -doc "Execute one already-verified signed request through the ordinary proof boundary.".
--spec execute_signed(quod_client_goal:evidence(), term(), {user, <<_:256>>}) ->
+-spec execute_signed(quod_client_goal:evidence(), term(), {agent, binary()}) ->
           {ok, [map()], log_index() |
                {transaction, binary(), binary(), binary()} | map()} |
           {error, term()} | fail | {fail, [term()]}.
 execute_signed(
-  #{request := #{user_public_key := UserKey,
-                 target_namespace := TargetNs,
-                 target_genesis_anchor := Anchor,
+  #{request := #{agent_namespace := TargetNs,
+                 agent_genesis_anchor := Anchor,
                  mode := Mode}} = Evidence,
-  Goal, {user, UserKey} = Principal)
+  Goal, {agent, AgentRef} = Principal)
   when is_binary(TargetNs),
+       is_binary(AgentRef),
        (Mode =:= read orelse Mode =:= execute) ->
     case signed_engine(TargetNs, Anchor) of
         {ok, Engine} ->
@@ -544,9 +563,12 @@ outcome({transaction, Ns, <<_:256>>, <<_:256>>} = Ref)
 outcome({group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>} = Ref)
   when is_binary(Ns), byte_size(Ns) > 0 ->
     public_outcome(Ns, Ref);
-outcome({operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>} = Ref)
+outcome({operation, Ns, <<_:256>>, AgentRef, <<_:256>>} = Ref)
   when is_binary(Ns), byte_size(Ns) > 0 ->
-    public_outcome(Ns, Ref);
+    case quod_agent_ref:valid_principal({agent, AgentRef}) of
+        true -> public_outcome(Ns, Ref);
+        false -> {error, bad_outcome_ref}
+    end;
 outcome(_Ref) ->
     {error, bad_outcome_ref}.
 
@@ -634,6 +656,78 @@ dtx_group_state(Ns, <<_:256>> = GroupId) when is_binary(Ns) ->
     end;
 dtx_group_state(_Ns, _GroupId) ->
     {error, invalid_group_id}.
+
+-doc "Resolve one target-local group-effect binding from applied projections.".
+-spec effect_resolution(
+        {binary(), <<_:256>>},
+        {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
+        <<_:256>>) ->
+          {ok, pending | {released, pos_integer()} | {retired, term()}} |
+          {error, term()}.
+effect_resolution(
+  {TargetNs, <<_:256>> = TargetAnchor},
+  {group, OriginNs, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>> = GroupId}
+    = GroupRef,
+  <<_:256>> = PlanDigest)
+  when is_binary(TargetNs), byte_size(TargetNs) > 0,
+       is_binary(OriginNs), byte_size(OriginNs) > 0 ->
+    case quod_ontology:genesis_anchor(TargetNs) of
+        {ok, TargetAnchor} ->
+            effect_resolution_state(
+              TargetNs, GroupRef, PlanDigest,
+              dtx_group_state(TargetNs, GroupId));
+        {ok, _WrongAnchor} ->
+            {ok, {retired, wrong_genesis_anchor}};
+        {error, Reason} ->
+            {error, Reason}
+    end;
+effect_resolution(_Target, _GroupRef, _PlanDigest) ->
+    {error, invalid_group_effect_ref}.
+
+effect_resolution_state(
+  TargetNs, GroupRef, PlanDigest,
+  {ok, #{applied :=
+           #{verdict := commit, slot := Slot,
+             group_ref := GroupRef, plan_digest := PlanDigest}}}) ->
+    case quod_runtime:effect_frontier(TargetNs) of
+        {ok, Frontier} when Frontier >= Slot -> {ok, {released, Slot}};
+        _ -> {ok, pending}
+    end;
+effect_resolution_state(
+  _TargetNs, GroupRef, PlanDigest,
+  {ok, #{applied :=
+           #{verdict := abort,
+             group_ref := GroupRef, plan_digest := PlanDigest}}}) ->
+    {ok, {retired, aborted}};
+effect_resolution_state(
+  _TargetNs, _GroupRef, _PlanDigest,
+  {ok, #{applied := Applied}})
+  when Applied =/= none ->
+    {ok, {retired, effect_journal_conflict}};
+effect_resolution_state(
+  _TargetNs, GroupRef, _PlanDigest,
+  {ok, #{history := none, applied := none}}) ->
+    effect_origin_resolution(GroupRef);
+effect_resolution_state(
+  _TargetNs, _GroupRef, _PlanDigest,
+  {ok, #{history := History, applied := none}})
+  when is_map(History) ->
+    {ok, pending};
+effect_resolution_state(_TargetNs, _GroupRef, _PlanDigest, {error, Reason}) ->
+    {error, Reason};
+effect_resolution_state(_TargetNs, _GroupRef, _PlanDigest, _Malformed) ->
+    {error, outcome_index_unavailable}.
+
+effect_origin_resolution(GroupRef) ->
+    case outcome(GroupRef) of
+        {ok, #{status := pending}} -> {ok, pending};
+        {ok, #{status := committed}} -> {ok, pending};
+        {ok, #{status := aborted}} -> {ok, {retired, aborted}};
+        {ok, #{status := rejected, reason := Reason}} ->
+            {ok, {retired, Reason}};
+        {error, not_found} -> {ok, {retired, not_found}};
+        {error, Reason} -> {error, Reason}
+    end.
 
 -doc "Project the signing journal's exact pending Begin before the engine becomes ready.".
 -spec project_pending_begin(binary(), none | map()) -> ok.
@@ -1010,9 +1104,13 @@ handle_call({dtx_group_state, GroupId}, _From,
 %% The worker has already sealed every participant and built one immutable
 %% semantic Begin.  Registration is asynchronous to Simplex; this engine owns
 %% the sole in-flight correlation and does not block its mailbox.
-handle_call({register_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
+handle_call({reserve_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
             S) ->
     register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S);
+handle_call({activate_dtx_begin, Ref, GroupRef}, From = {Pid, _Tag}, S) ->
+    activate_dtx_handoff(Ref, Pid, From, GroupRef, S);
+handle_call({cancel_dtx_begin, Ref, GroupRef}, _From = {Pid, _Tag}, S) ->
+    cancel_registered_dtx_handoff(Ref, Pid, GroupRef, S);
 handle_call(get_stats, _From, S) ->
     #est{db = #db{ref = StoreRef}} = S#s.est,
     {reply, #{applied   => S#s.applied,  applies => S#s.applies,
@@ -1054,11 +1152,12 @@ handle_call(
                 {ok, AuthenticationDigest} ->
                     case scope_authentication_reason(
                            Authentication, OriginKey, OriginIdentity,
-                           Principal, AuthenticationDigest, S) of
-                        {ok, RequestAuthorization} ->
+                           Principal, AuthenticationDigest, ProofId,
+                           max(0, DeadlineMs - quod_time:mono_ms()), S) of
+                        {ok, RequestContext} ->
                             open_scope_session(
                               Origin, ScopeId, ProofId, Anchor, ReadOnly,
-                              DeadlineMs, Principal, RequestAuthorization, S);
+                              DeadlineMs, Principal, RequestContext, S);
                         {error, Reason} ->
                             {reply, {error, Reason}, S}
                     end;
@@ -1083,6 +1182,43 @@ handle_call({attach_runtime, Pid}, _From,
     {reply, {ok, Est, A}, S1#s{runtime_pin = {Pid, MRef, A}}};
 handle_call({attach_runtime, _Pid}, _From, S) ->
     {reply, {error, not_ready}, S};
+handle_call(
+  {agent_attester_complete, MRef, Result}, {Worker, _Tag},
+  S = #s{agent_attesters = Attesters})
+  when is_reference(MRef), is_pid(Worker) ->
+    case maps:get(MRef, Attesters, undefined) of
+        #agent_attester{pid = Worker} ->
+            {handled, S1} = finish_agent_attester_result(MRef, Result, S),
+            {reply, ok, S1};
+        _ ->
+            {reply, {error, stale}, S}
+    end;
+handle_call(
+  {sign_agent_identity, Applied, Evidence, ProofId,
+   CommitteeId, NotAfter},
+  {Worker, _Tag},
+  S = #s{applied = Applied,
+         signer = Signer = #{pubkey := <<_:256>> = Self}, ns = Ns})
+  when is_pid(Worker) ->
+    Reply = case quod_simplex:identity_view(Ns) of
+                {ok, #{committee_id := CommitteeId, self := Self}} ->
+                    case quod_agent_identity:statement(
+                           Evidence, ProofId, CommitteeId, NotAfter) of
+                        {ok, Statement} ->
+                            case quod_agent_identity:sign(Statement, Signer) of
+                                {ok, {_Self, Signature}} ->
+                                    {ok, Self, Statement, Signature};
+                                {error, _} -> {error, retry}
+                            end;
+                        {error, _} -> {error, invalid_request}
+                    end;
+                _ -> {error, retry}
+            end,
+    {reply, Reply, S};
+handle_call(
+  {sign_agent_identity, _Applied, _Evidence, _ProofId,
+   _CommitteeId, _NotAfter}, _From, S) ->
+    {reply, {error, retry}, S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
 %% Public proofs use an explicit call reference and monitor the exact engine.
@@ -1123,7 +1259,7 @@ handle_cast({public_proof, Caller, CallRef, Kind, Goal,
             admit_public_request(
               Kind, Goal, {async, Caller, CallRef}, Request, S);
         false ->
-            reply_client({async, Caller, CallRef}, {error, invalid_user_principal}),
+            reply_client({async, Caller, CallRef}, {error, invalid_agent_principal}),
             {noreply, S}
     end;
 handle_cast({project_pending_begin, Pending}, S = #s{outcomes = Outcomes0}) ->
@@ -1198,6 +1334,16 @@ handle_cast(
     {noreply,
      request_validation(
        {dtx, Control, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
+handle_cast(
+  {agent_attestation, Request, ReplyTo, Tag},
+  S = #s{ready = true, workers = Workers, agent_attesters = Attesters,
+         max_proof_workers = Max})
+  when is_pid(ReplyTo), map_size(Workers) + map_size(Attesters) < Max ->
+    {noreply, spawn_agent_attester(Request, ReplyTo, Tag, S)};
+handle_cast({agent_attestation, _Request, ReplyTo, Tag}, S)
+  when is_pid(ReplyTo) ->
+    ReplyTo ! {quod_agent_attestation, Tag, {error, retry}},
+    {noreply, S};
 handle_cast(_Msg, S)       -> {noreply, S}.
 
 %% Emit readiness from the handled edge, not from the caller that queued it.
@@ -1210,10 +1356,20 @@ acknowledge_ready(S = #s{ns = Ns, applied = Height}) ->
 %% (abnormal: the caller still waits — reply the distinct error here). MUST come
 %% before the check_response fallback clause.
 handle_info(Info = {'DOWN', MRef, process, _Pid, Reason}, S) ->
-    case handle_worker_down(MRef, Reason, S) of
-        unhandled -> handle_response_info(Info, S);
-        Reply     -> Reply
+    case finish_agent_attester(MRef, Reason, S) of
+        {handled, S1} -> {noreply, S1};
+        unhandled ->
+            case handle_worker_down(MRef, Reason, S) of
+                unhandled -> handle_response_info(Info, S);
+                Reply     -> Reply
+            end
     end;
+handle_info({agent_attester_timeout, MRef}, S) ->
+    case maps:get(MRef, S#s.agent_attesters, undefined) of
+        #agent_attester{pid = Pid} -> exit(Pid, kill);
+        undefined -> ok
+    end,
+    {noreply, S};
 %% A proof outlived its kill budget: end it. The DOWN above returns the
 %% proof-kind-specific timeout result.
 handle_info({proof_kill, Ref, Token}, S) ->
@@ -1358,7 +1514,7 @@ handle_info(Info, S) ->
     handle_response_info(Info, S).
 
 open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
-                   Principal, RequestAuthorization,
+                   Principal, RequestContext,
                    S = #s{scope_sessions = Sessions}) ->
     Key = {Origin, ProofId, ScopeId},
     case maps:find(Key, Sessions) of
@@ -1373,18 +1529,133 @@ open_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
                         true -> {reply, {ok, Handle}, S};
                         false -> open_new_scope_session(
                                    Origin, ScopeId, ProofId, Anchor, ReadOnly,
-                                   DeadlineMs, Principal, RequestAuthorization,
+                                   DeadlineMs, Principal, RequestContext,
                                    drop_scope_worker(WorkerMRef, S))
                     end
             end;
         error ->
             open_new_scope_session(
               Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
-              Principal, RequestAuthorization, S)
+              Principal, RequestContext, S)
+    end.
+
+spawn_agent_attester(Request, ReplyTo, Tag,
+                     S = #s{ns = Ns, est = Est, applied = Applied,
+                            proof_timeout_ms = Timeout,
+                            agent_attesters = Attesters}) ->
+    case quod_simplex:acquire_proof_access(Ns) of
+        {ok, Access} ->
+            Engine = self(),
+            Deadline = quod_time:mono_ms() + Timeout,
+            {Pid, MRef} = spawn_monitor(
+                            fun() ->
+                                receive
+                                    {agent_attester_start, WorkerRef} ->
+                                        Result = run_agent_attester(
+                                                   Engine, Ns, Est, Applied,
+                                                   Access, Request, Timeout),
+                                        _ = gen_server:call(
+                                              Engine,
+                                              {agent_attester_complete,
+                                               WorkerRef, Result},
+                                              infinity)
+                                end
+                            end),
+            Timer = erlang:send_after(
+                      max(1, Deadline - quod_time:mono_ms()), self(),
+                      {agent_attester_timeout, MRef}),
+            Pid ! {agent_attester_start, MRef},
+            S#s{agent_attesters = Attesters#{
+                  MRef => #agent_attester{pid = Pid, timer = Timer,
+                                          reply_to = ReplyTo, tag = Tag}}};
+        {error, _} ->
+            ReplyTo ! {quod_agent_attestation, Tag, {error, retry}},
+            S
+    end.
+
+run_agent_attester(
+  Engine, Ns, Est, Applied, Access,
+  {agent_identity_request, _RequestId, <<_:256>> = ProofId,
+   RequestBytes, <<_:512>> = Signature, ProposedNotAfter},
+  ProofTimeout)
+  when is_binary(RequestBytes), is_integer(ProposedNotAfter),
+       ProposedNotAfter >= 0 ->
+    Now = quod_time:now_ms(),
+    case {quod_ontology:network_identity(), quod_simplex:genesis_hash(Ns)} of
+        {{ok, Network}, <<_:256>> = Anchor} ->
+            case quod_client_goal:verify_for(
+                   RequestBytes, Signature, Network, {Ns, Anchor}, Now) of
+                {ok, Evidence = #{agent_ref_blob := AgentRef,
+                                  request := #{signing_public_key := SigningKey,
+                                               not_after_ms := RequestNotAfter}}}
+                  when ProposedNotAfter > Now,
+                       ProposedNotAfter =< RequestNotAfter,
+                       ProposedNotAfter =< Now + ProofTimeout ->
+                    attest_authenticated_agent(
+                      Engine, Ns, Est, Applied, Access,
+                      Evidence, ProofId, ProposedNotAfter,
+                      AgentRef, SigningKey);
+                {error, expired} -> {error, retry};
+                _ -> {error, invalid_request}
+            end;
+        _ -> {error, retry}
+    end;
+run_agent_attester(_Engine, _Ns, _Est, _Applied, _Access,
+                   _Request, _ProofTimeout) ->
+    {error, invalid_request}.
+
+attest_authenticated_agent(
+  Engine, Ns, Est, Applied, Access,
+  Evidence, ProofId, NotAfter, AgentRef, SigningKey) ->
+    Session = quod_proof_session:start(
+                Est, #{read_set => false, read_only => true,
+                       access_guard => Access,
+                       scope_id => crypto:strong_rand_bytes(16)}),
+    Principal = {agent, AgentRef},
+    Result = try quod_ask:authenticate_agent(
+                   Principal, SigningKey,
+                   {Ns, quod_simplex:genesis_hash(Ns)}, Applied, Session) of
+                 true ->
+                     case {quod_proof_session:check_access(Session),
+                           quod_simplex:identity_view(Ns)} of
+                         {ok, {ok, #{committee_id := CommitteeId}}} ->
+                             try gen_server:call(
+                                   Engine,
+                                   {sign_agent_identity, Applied,
+                                    Evidence, ProofId, CommitteeId, NotAfter})
+                             catch exit:_ -> {error, retry}
+                             end;
+                         _ -> {error, retry}
+                     end;
+                 false -> {error, denied}
+             after
+                 quod_proof_session:stop(Session)
+             end,
+    Result.
+
+finish_agent_attester(MRef, _Reason,
+                      S = #s{agent_attesters = Attesters}) ->
+    case maps:take(MRef, Attesters) of
+        {#agent_attester{timer = Timer, reply_to = ReplyTo, tag = Tag}, Rest} ->
+            _ = erlang:cancel_timer(Timer, [{async, true}, {info, false}]),
+            ReplyTo ! {quod_agent_attestation, Tag, {error, retry}},
+            {handled, S#s{agent_attesters = Rest}};
+        error -> unhandled
+    end.
+
+finish_agent_attester_result(
+  MRef, Result, S = #s{agent_attesters = Attesters}) ->
+    case maps:take(MRef, Attesters) of
+        {#agent_attester{timer = Timer, reply_to = ReplyTo, tag = Tag}, Rest} ->
+            _ = erlang:cancel_timer(Timer, [{async, true}, {info, false}]),
+            demonitor(MRef, [flush]),
+            ReplyTo ! {quod_agent_attestation, Tag, Result},
+            {handled, S#s{agent_attesters = Rest}};
+        error -> unhandled
     end.
 
 open_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
-                       Principal, RequestAuthorization,
+                       Principal, RequestContext,
                        S = #s{ns = Ns}) ->
     case scope_capacity_available(S) of
         false ->
@@ -1392,7 +1663,7 @@ open_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
         true ->
             start_new_scope_session(
               Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
-              Principal, RequestAuthorization, S)
+              Principal, RequestContext, S)
     end.
 
 start_new_scope_session(Origin, ScopeId, ProofId, Anchor, ReadOnly, DeadlineMs,
@@ -1506,7 +1777,7 @@ handle_scope_command(
 
 handle_remote_scope_open(
   PeerKey, Endpoint, RequestLink,
-  Binding = {scope_binding, OriginKey, TargetKey, _ProofId, _ScopeId,
+  Binding = {scope_binding, OriginKey, TargetKey, ProofId, _ScopeId,
              OriginIdentity, {Ns, Anchor}, Mode,
              Principal, AuthenticationDigest},
   Authentication,
@@ -1520,13 +1791,13 @@ handle_remote_scope_open(
         true ->
             case scope_authentication_reason(
                    Authentication, OriginKey, OriginIdentity, Principal,
-                   AuthenticationDigest, S) of
-                {ok, RequestAuthorization} ->
+                   AuthenticationDigest, ProofId, RemainingMs, S) of
+                {ok, RequestContext} ->
                     observe_scope_origin_candidate(
                       OriginIdentity, {Ns, Anchor}, {PeerKey, Endpoint}),
                     open_authenticated_remote_scope(
                       PeerKey, Endpoint, RequestLink, Binding,
-                      RequestAuthorization, RequestId, RemainingMs,
+                      RequestContext, RequestId, RemainingMs,
                       Mode, Anchor, S);
                 {error, Reason} ->
                     reject_scope_open(
@@ -1545,7 +1816,7 @@ observe_scope_origin_candidate(_OriginIdentity, _TargetIdentity, _Contact) ->
     ok.
 
 open_authenticated_remote_scope(
-  PeerKey, Endpoint, RequestLink, Binding, RequestAuthorization,
+  PeerKey, Endpoint, RequestLink, Binding, RequestContext,
   RequestId, RemainingMs, Mode, Anchor, S = #s{ns = Ns}) ->
     case remote_open_reason(Mode, Anchor, PeerKey, S) of
         ok ->
@@ -1553,7 +1824,7 @@ open_authenticated_remote_scope(
                         {ok, S1} ->
                             begin_remote_scope_open(
                               PeerKey, Endpoint, RequestLink, Binding,
-                              RequestAuthorization,
+                              RequestContext,
                               RequestId, RemainingMs, S1);
                         {error, S1} ->
                             reject_scope_open(
@@ -1567,41 +1838,60 @@ open_authenticated_remote_scope(
 
 scope_authentication_reason(
   node, OriginKey, _OriginIdentity, {node, OriginKey},
-  AuthenticationDigest, _S) ->
+  AuthenticationDigest, _ProofId, _RemainingMs, _S) ->
     case quod_scope_wire:authentication_digest(node) of
         {ok, AuthenticationDigest} ->
             {ok, #{request_binding => none, request_auth => none}};
         _ -> {error, {protocol_error, request_binding}}
     end;
 scope_authentication_reason(
-  {signed_goal, RequestBytes, Signature} = Authentication,
-  _OriginKey, OriginIdentity, {user, UserKey}, AuthenticationDigest,
-  S) ->
+  {signed_goal, _RequestBytes, _Signature, _Certificate} = Authentication,
+  _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
+  ProofId, RemainingMs, S) ->
+    scope_authentication_reason(
+      Authentication, _OriginKey, OriginIdentity, Principal,
+      AuthenticationDigest, ProofId, RemainingMs, S,
+      fun local_or_foreign_agent_view/4);
+scope_authentication_reason(
+  _Authentication, _OriginKey, _OriginIdentity, _Principal,
+  _AuthenticationDigest, _ProofId, _RemainingMs, _S) ->
+    {error, {protocol_error, request_binding}}.
+
+scope_authentication_reason(
+  {signed_goal, RequestBytes, Signature, Certificate} = Authentication,
+  _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
+  ProofId, RemainingMs, S, ViewFun) ->
     case quod_scope_wire:authentication_digest(Authentication) of
         {ok, AuthenticationDigest} ->
             verify_scope_authentication(
-              RequestBytes, Signature, OriginIdentity, UserKey, S);
+              RequestBytes, Signature, Certificate,
+              OriginIdentity, Principal, ProofId, RemainingMs, S, ViewFun);
         _ ->
             {error, {protocol_error, request_binding}}
-    end;
-scope_authentication_reason(
-  _Authentication, _OriginKey, _OriginIdentity, _Principal,
-  _AuthenticationDigest, _S) ->
-    {error, {protocol_error, request_binding}}.
+    end.
 
 verify_scope_authentication(
-  RequestBytes, Signature, OriginIdentity, UserKey, S = #s{ns = Ns}) ->
+  RequestBytes, Signature, Certificate,
+  OriginIdentity, Principal, ProofId, RemainingMs, S = #s{ns = Ns},
+  ViewFun) ->
     case quod_ontology:network_identity() of
         {ok, Network} ->
             case quod_client_goal:verify_for(
                    RequestBytes, Signature, Network, OriginIdentity,
                    quod_time:now_ms()) of
-                {ok, Evidence =
-                       #{request := #{user_public_key := UserKey}}} ->
-                    {ok, #{request_binding =>
-                               quod_client_goal:request_binding(Evidence),
-                           request_auth =>
-                               quod_client_goal:request_auth(Evidence)}};
+                {ok, Evidence = #{agent_ref_blob := AgentRef}}
+                  when Principal =:= {agent, AgentRef} ->
+                    case verify_scope_agent_identity(
+                           Certificate, Evidence, ProofId,
+                           OriginIdentity, RemainingMs, ViewFun) of
+                        ok ->
+                            {ok, #{request_binding =>
+                                       quod_client_goal:request_binding(Evidence),
+                                   request_auth =>
+                                       quod_client_goal:request_auth(Evidence)}};
+                        {error, _} ->
+                            {error, signed_scope_unavailable}
+                    end;
                 {error, expired} ->
                     {error, {scope_expired, Ns}};
                 _ ->
@@ -1611,16 +1901,44 @@ verify_scope_authentication(
             {error, scope_network_identity_unavailable(S)}
     end.
 
+verify_scope_agent_identity(
+  Certificate, Evidence, ProofId, OriginIdentity = {OriginNs, _Anchor},
+  RemainingMs, ViewFun)
+  when is_integer(RemainingMs), RemainingMs > 0 ->
+    case ViewFun(OriginNs, OriginIdentity, Certificate, RemainingMs) of
+        {ok, View} ->
+            quod_agent_identity:verify(
+              Certificate, Evidence, ProofId, View, quod_time:now_ms());
+        {error, _} -> {error, retry}
+    end;
+verify_scope_agent_identity(
+  _Certificate, _Evidence, _ProofId, _OriginIdentity, _RemainingMs,
+  _ViewFun) ->
+    {error, retry}.
+
+local_or_foreign_agent_view(OriginNs, OriginIdentity, Certificate, RemainingMs) ->
+    case quod_simplex:identity_view(OriginNs) of
+        {ok, #{identity := OriginIdentity} = View} -> {ok, View};
+        _ ->
+            quod_foreign_log:current(
+              quod_agent_identity:route_hints(Certificate),
+              OriginIdentity, RemainingMs)
+    end.
+
 scope_network_identity_unavailable(#s{ns = Ns}) ->
     {network_identity_unavailable, Ns}.
 
 -ifdef(TEST).
 test_scope_authentication_reason(
   Authentication, OriginKey, OriginIdentity, Principal,
-  AuthenticationDigest) ->
+  AuthenticationDigest, ProofId, ViewResult) ->
     scope_authentication_reason(
       Authentication, OriginKey, OriginIdentity, Principal,
-      AuthenticationDigest, #s{ns = <<"quod:test-target">>}).
+      AuthenticationDigest, ProofId, 1000,
+      #s{ns = <<"quod:test-target">>},
+      fun(_OriginNs, _Identity, _Certificate, _RemainingMs) ->
+          ViewResult
+      end).
 -endif.
 
 remote_open_reason(Mode, Anchor, PeerKey,
@@ -1878,10 +2196,12 @@ execute_routed_scope_command(
       {protocol_error, unexpected_scope_command}, S).
 
 scope_command_route(active, {scope_attest, _ManifestBlob}) -> error;
+scope_command_route(active, {bind_group_effects, _, _}) -> error;
 scope_command_route(active, {submit_plan, _, _, _, _}) -> error;
 scope_command_route(active, _Operation) -> active;
 scope_command_route(sealed, scope_close) -> sealed;
 scope_command_route(sealed, {scope_attest, _ManifestBlob}) -> sealed;
+scope_command_route(sealed, {bind_group_effects, _, _}) -> sealed;
 scope_command_route(sealed, {submit_plan, _, _, _, _}) -> sealed;
 scope_command_route(submitting, scope_close) -> sealed;
 scope_command_route(submitted, scope_close) -> sealed;
@@ -1914,6 +2234,26 @@ execute_sealed_scope_command(
                     poison_remote_scope(
                       Binding, RequestId, CommandSeq, Reason, S)
             end
+    end;
+execute_sealed_scope_command(
+  {bind_group_effects, GroupRef, PlanDigest},
+  RequestId, CommandSeq, Binding,
+  #remote_scope{
+     handle = {quod_scope_session, Pid, _SessionScopeId,
+               SessionProofId, SessionRef, _Ns, _Anchor},
+     pending = Pending}, S) ->
+    case map_size(Pending) < ?QUOD_MAX_ROUTER_PENDING_PER_SCOPE of
+        false ->
+            poison_remote_scope(
+              Binding, RequestId, CommandSeq,
+              {proof_limit_exceeded, target_namespace(Binding)}, S);
+        true ->
+            InternalRef = make_ref(),
+            Pid ! {scope_bind_group_effects, self(), SessionProofId,
+                   SessionRef, InternalRef, GroupRef, PlanDigest},
+            add_remote_pending(
+              Binding, InternalRef,
+              {bind_group_effects, RequestId, CommandSeq}, S)
     end;
 execute_sealed_scope_command(
   {submit_plan, _, _, _, _} = Operation,
@@ -2440,6 +2780,19 @@ handle_bound_scope_reply(
     poison_remote_scope(Binding, RequestId, CommandSeq, Reason, S);
 handle_bound_scope_reply(
   Binding, _Scope,
+  {bind_group_effects, RequestId, CommandSeq},
+  {group_effects_bound, ok}, S) ->
+    emit_scope_event(
+      Binding, RequestId, CommandSeq, group_effects_bound, S);
+handle_bound_scope_reply(
+  Binding, _Scope,
+  {bind_group_effects, RequestId, CommandSeq},
+  {group_effects_bound, {error, Reason}}, S) ->
+    poison_remote_scope(
+      Binding, RequestId, CommandSeq,
+      public_scope_reason(Reason, target_namespace(Binding)), S);
+handle_bound_scope_reply(
+  Binding, _Scope,
   {scope_control, Purpose, Operation, BatchIds},
   {savepoint, Operation, BatchIds, {ok, Dirty, Generation}}, S) ->
     S1 = update_remote_state(Binding, Dirty, Generation, S),
@@ -2592,6 +2945,8 @@ public_scope_candidate(invocation_active, _Ns) ->
     {protocol_error, unexpected_scope_command};
 public_scope_candidate(already_open, _Ns) ->
     {protocol_error, unexpected_scope_command};
+public_scope_candidate(busy, Ns) -> {ontology_busy, Ns};
+public_scope_candidate(unavailable, Ns) -> {ontology_unreachable, Ns};
 public_scope_candidate(not_allowed, Ns) -> {not_allowed, Ns};
 public_scope_candidate(too_many_answers, Ns) -> {too_many_answers, Ns};
 public_scope_candidate(Reason, _Ns)
@@ -3104,9 +3459,13 @@ register_dtx_handoff(_Ref, _Pid, _From, _Begin, _GroupRef, S) ->
 handle_dtx_handoff_response(_Info, #s{dtx_handoff = none}) ->
     no_reply;
 handle_dtx_handoff_response(
+  _Info, #s{dtx_handoff = #dtx_handoff{state = dormant}}) ->
+    no_reply;
+handle_dtx_handoff_response(
   Info,
   S = #s{dtx_handoff =
-           #dtx_handoff{request_id = RequestId} = Handoff}) ->
+           #dtx_handoff{state = registering,
+                        request_id = RequestId} = Handoff}) ->
     case gen_statem:check_response(Info, RequestId) of
         {reply, {accepted, IntentId}} ->
             accepted_dtx_handoff(IntentId, Handoff, S);
@@ -3126,26 +3485,16 @@ accepted_dtx_handoff(
   IntentId,
   #dtx_handoff{intent_id = IntentId, worker_ref = Ref,
                worker_pid = Pid, from = From,
-               group_ref = GroupRef},
-  S = #s{ns = Ns, workers = Workers, waiting_workers = Waiting,
-         group_waiters = GroupWaiters, max_proof_workers = Max}) ->
+               group_ref = _GroupRef} = Handoff,
+  S = #s{ns = Ns, workers = Workers}) ->
     case maps:get(Ref, Workers, undefined) of
-        #proof_worker{pid = Pid, timer = KillRef} = Worker
-          when map_size(Waiting) < Max,
-               map_size(GroupWaiters) < Max ->
-            _ = erlang:cancel_timer(KillRef),
-            Worker1 = Worker#proof_worker{checkpoint = GroupRef},
-            S1 = S#s{
-                   workers = maps:remove(Ref, Workers),
-                   waiting_workers = Waiting#{Ref => Worker1},
-                   dtx_handoff = none},
-            %% Register was acknowledged.  Checkpoint and activation are sent
-            %% by this exact engine in that order before the worker may close
-            %% the participant scopes.
-            checkpoint_client(Worker#proof_worker.from, GroupRef),
-            ok = quod_simplex:activate_dtx_begin(Ns, self(), IntentId),
+        #proof_worker{pid = Pid} ->
             gen_server:reply(From, ok),
-            {noreply, S1};
+            {noreply,
+             S#s{dtx_handoff = Handoff#dtx_handoff{
+                                      request_id = none,
+                                      from = none,
+                                      state = dormant}}};
         _ ->
             ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
             gen_server:reply(From, {error, cancelled}),
@@ -3163,6 +3512,45 @@ rejected_dtx_handoff(
     gen_server:reply(From, Error),
     {noreply, S#s{dtx_handoff = none}}.
 
+activate_dtx_handoff(
+  Ref, Pid, _From, GroupRef,
+  S = #s{ns = Ns, workers = Workers, waiting_workers = Waiting,
+         group_waiters = GroupWaiters, max_proof_workers = Max,
+         dtx_handoff =
+           #dtx_handoff{state = dormant, worker_ref = Ref,
+                        worker_pid = Pid, group_ref = GroupRef,
+                        intent_id = IntentId}}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{pid = Pid, timer = KillRef} = Worker
+          when map_size(Waiting) < Max,
+               map_size(GroupWaiters) < Max ->
+            _ = erlang:cancel_timer(KillRef),
+            Worker1 = Worker#proof_worker{checkpoint = GroupRef},
+            checkpoint_client(Worker#proof_worker.from, GroupRef),
+            ok = quod_simplex:activate_dtx_begin(Ns, self(), IntentId),
+            {reply, ok,
+             S#s{workers = maps:remove(Ref, Workers),
+                 waiting_workers = Waiting#{Ref => Worker1},
+                 dtx_handoff = none}};
+        _ ->
+            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            {reply, {error, cancelled}, S#s{dtx_handoff = none}}
+    end;
+activate_dtx_handoff(_Ref, _Pid, _From, _GroupRef, S) ->
+    {reply, {error, cancelled}, S}.
+
+cancel_registered_dtx_handoff(
+  Ref, Pid, GroupRef,
+  S = #s{ns = Ns,
+         dtx_handoff =
+           #dtx_handoff{state = dormant, worker_ref = Ref,
+                        worker_pid = Pid, group_ref = GroupRef,
+                        intent_id = IntentId}}) ->
+    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+    {reply, ok, S#s{dtx_handoff = none}};
+cancel_registered_dtx_handoff(_Ref, _Pid, _GroupRef, S) ->
+    {reply, {error, cancelled}, S}.
+
 cancel_dtx_handoff(
   Ref,
   S = #s{ns = Ns,
@@ -3170,19 +3558,26 @@ cancel_dtx_handoff(
                            worker_ref = Ref, intent_id = IntentId,
                            from = From}}) ->
     ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-    gen_server:reply(From, {error, cancelled}),
+    case From of
+        none -> ok;
+        _ -> gen_server:reply(From, {error, cancelled})
+    end,
     S#s{dtx_handoff = none};
 cancel_dtx_handoff(_Ref, S) ->
     S.
 
 terminate(_Reason, #s{ns = Ns, workers = W,
                       waiting_workers = Waiting,
+                      agent_attesters = AgentAttesters,
                       scope_workers = ScopeWorkers,
                       outcomes = Outcomes}) ->
     maps:foreach(fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end, W),
     maps:foreach(
       fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end,
       Waiting),
+    maps:foreach(
+      fun(_Ref, #agent_attester{pid = Pid}) -> kill_worker(Pid) end,
+      AgentAttesters),
     maps:foreach(
       fun(_WM, #scope_worker{pid = Pid}) -> kill_worker(Pid) end,
       ScopeWorkers),
@@ -3218,7 +3613,7 @@ admit_public_cursor(
                {async, Owner, CallRef}, Request, S)};
         false ->
             reply_client(
-              {async, Owner, CallRef}, {error, invalid_user_principal}),
+              {async, Owner, CallRef}, {error, invalid_agent_principal}),
             {noreply, S}
     end.
 
@@ -3262,14 +3657,14 @@ proof_request_operation(
   #proof_request{
      request_evidence =
        #{request := #{mode := execute,
-                      user_public_key := User,
                       operation_id := OperationId},
+         agent_ref_blob := AgentRef,
          request_digest := Digest,
          operation_ref := OperationRef}})
-  when is_binary(User), byte_size(User) =:= 32,
+  when is_binary(AgentRef),
        is_binary(OperationId), byte_size(OperationId) =:= 32,
        is_binary(Digest), byte_size(Digest) =:= 32 ->
-    {{User, OperationId}, Digest, OperationRef};
+    {{AgentRef, OperationId}, Digest, OperationRef};
 proof_request_operation(_Request) ->
     none.
 
@@ -3499,14 +3894,10 @@ finalization_mode(_Result) -> abort.
 test_finalize_pinned_result(Result) -> finalize_pinned_result(Result).
 -endif.
 
-%% `::` is only a selector, so an ontology's own policy must gate a TOP-LEVEL
-%% entry exactly as it gates a co-hosted or remote one — otherwise a restrictive
-%% policy would be bypassed simply by proving the goal locally. A node's own
-%% top-level proof uses the empty chain admitted by the founding host-entry
-%% clause. A browser user is not that host: give it a non-empty, engine-owned
-%% chain so its user-specific `can_invoke/4` policy is actually consulted.
-%% This does not override an ontology that explicitly grants users access —
-%% notably the shipped root ontology is deliberately open by its own policy.
+%% A signed request first authenticates its active key. Policy is then checked
+%% only by the ontology whose predicate actually runs: a direct `A -> B::Goal`
+%% does not ask A to authorize B's predicate, while B still executes its normal
+%% `can_invoke/4` path. Local goals (including `A::Goal`) are authorized by A.
 run_pinned_goal(#pinned_origin{kind = Kind} = Origin, Goal) ->
     Verdict = authorization_verdict(Origin, Goal),
     run_authorized_pinned_goal(Kind, Origin, Goal, Verdict).
@@ -3517,9 +3908,21 @@ authorization_verdict(
   #pinned_origin{namespace = Ns, anchor = Anchor,
                  height = Height, session = Session}, Goal) ->
     Principal = quod_proof_context:principal(),
-    case quod_ask:authorize_scope(
-           Principal, Goal, authorization_chain(Principal, {Ns, Anchor}), {Ns, Anchor},
-           Height, Session) of
+    Identity = {Ns, Anchor},
+    Authorized =
+        case quod_proof_context:request_evidence() of
+            #{request := #{signing_public_key := SigningKey},
+              agent_ref_blob := AgentRef}
+              when Principal =:= {agent, AgentRef} ->
+                signed_origin_authorized(
+                  Principal, SigningKey, Goal, Identity, Height, Session);
+            none ->
+                quod_ask:authorize_scope(
+                  Principal, Goal, authorization_chain(Principal, Identity),
+                  Identity, Height, Session);
+            _ -> false
+        end,
+    case Authorized of
         true -> allowed;
         false ->
             logger:warning(
@@ -3528,7 +3931,30 @@ authorization_verdict(
             denied
     end.
 
-authorization_chain({user, <<_:256>>}, Identity) -> [Identity];
+signed_origin_authorized(
+  Principal, SigningKey, Goal, {Ns, _Anchor} = Identity, Height, Session) ->
+    case quod_ask:authenticate_agent(
+           Principal, SigningKey, Identity, Height, Session) of
+        true ->
+            case signed_origin_policy_goal(Ns, Goal) of
+                remote_selector -> true;
+                {local, PolicyGoal} ->
+                    quod_ask:authorize_scope(
+                      Principal, PolicyGoal, [Identity], Identity,
+                      Height, Session)
+            end;
+        false -> false
+    end.
+
+signed_origin_policy_goal(Ns, {'::', TargetTerm, Inner} = Goal) ->
+    case quod_ontology_name:flatten(TargetTerm) of
+        Ns -> {local, Inner};
+        Target when is_binary(Target) -> remote_selector;
+        error -> {local, Goal}
+    end;
+signed_origin_policy_goal(_Ns, Goal) ->
+    {local, Goal}.
+
 authorization_chain(_Principal, _Identity) -> [].
 
 proof_principal(#{pubkey := <<_:256>> = Pubkey}) -> {node, Pubkey};
@@ -3538,8 +3964,8 @@ valid_proof_auth(undefined, none) -> true;
 valid_proof_auth(anonymous, none) -> true;
 valid_proof_auth({node, <<_:256>>}, none) -> true;
 valid_proof_auth(
-  {user, <<_:256>> = UserKey},
-  #{request := #{user_public_key := UserKey},
+  {agent, AgentRef},
+  #{agent_ref_blob := AgentRef,
     request_bytes := Bytes, request_digest := <<_:256>>,
     signature := <<_:512>>, variables := Variables}) ->
     is_binary(Bytes) andalso is_list(Variables);
@@ -3585,9 +4011,7 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
         {[Target], [_], false} ->
             submit_single_plan(
               Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {_Many, [_ | _], _} ->
-            {error, effect_requires_single_participant};
-        {Participants, [], _} ->
+        {Participants, _, _} ->
             submit_group(
               Origin, Goal, Bindings, Plans, Participants)
     end.
@@ -3837,7 +4261,7 @@ submit_group(
                     build_and_register_group(
                       Engine, WorkerRef, ManifestInput,
                       Plans, ParticipantRows, Bindings,
-                      RequestAuth, GoalBlob, {Ns, Anchor});
+                      RequestAuth);
                 {ok, _WrongBinding} ->
                     {error, {protocol_error, coordinator_binding}};
                 {error, _} = Error ->
@@ -3858,26 +4282,24 @@ encode_proof_submission(Goal, Bindings) ->
 
 build_and_register_group(
   Engine, WorkerRef, ManifestInput, Plans, ParticipantRows, Bindings,
-  RequestAuth, GoalBlob, OriginIdentity) ->
+  RequestAuth) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
             case attest_group_plans(
                    ParticipantRows, Plans, Manifest, []) of
                 {ok, Bundles} ->
-                    Authorization = group_request_authorization(
-                                      RequestAuth, OriginIdentity,
-                                      Plans, GoalBlob),
-                    case quod_dtx:new_begin(
-                           Manifest, RequestAuth, Authorization, Bundles) of
+                    case quod_dtx:new_begin(Manifest, RequestAuth, Bundles) of
                         {ok, Begin} ->
                             case quod_dtx:begin_group_ref(Begin) of
                                 {ok, GroupRef} ->
                                     case gen_server:call(
                                            Engine,
-                                           {register_dtx_begin, WorkerRef,
+                                           {reserve_dtx_begin, WorkerRef,
                                             Begin, GroupRef}, infinity) of
                                         ok ->
-                                            {group_pending, Bindings, GroupRef};
+                                            finish_reserved_group(
+                                              Engine, WorkerRef, GroupRef,
+                                              Plans, Bindings);
                                         {error, _} = Error -> Error
                                     end;
                                 error ->
@@ -3891,18 +4313,51 @@ build_and_register_group(
             Error
     end.
 
-group_request_authorization(none, _OriginIdentity, _Plans, _GoalBlob) ->
-    none;
-group_request_authorization(
-  {user_goal_v1, _, _, _}, OriginIdentity, Plans, GoalBlob) ->
-    case quod_dtx:material(maps:get(OriginIdentity, Plans)) of
-        {ok, #{transcript := Transcript}} ->
-            case quod_client_goal:authorization_transcript(
-                   Transcript, OriginIdentity, GoalBlob) of
-                {ok, Authorization} -> Authorization;
-                error -> error(bad_request_binding)
+finish_reserved_group(Engine, WorkerRef, GroupRef, Plans, Bindings) ->
+    case bind_group_effect_plans(Plans, GroupRef) of
+        ok ->
+            case gen_server:call(
+                   Engine,
+                   {activate_dtx_begin, WorkerRef, GroupRef}, infinity) of
+                ok -> {group_pending, Bindings, GroupRef};
+                {error, _} = Error -> Error
             end;
-        _ -> error(bad_request_binding)
+        {error, _} = Error ->
+            _ = gen_server:call(
+                  Engine,
+                  {cancel_dtx_begin, WorkerRef, GroupRef}, infinity),
+            Error
+    end.
+
+bind_group_effect_plans(Plans, GroupRef) ->
+    Rows =
+        [{Identity, quod_dtx:digest(Plan), Handle}
+         || {Identity, Plan} <- maps:to_list(Plans),
+            quod_dtx:effects_count(Plan) > 0,
+            {ok, Handle} <- [quod_proof_context:scope_handle(Identity)]],
+    Expected = length(
+                 [ok || {_Identity, Plan} <- maps:to_list(Plans),
+                        quod_dtx:effects_count(Plan) > 0]),
+    case length(Rows) =:= Expected of
+        false ->
+            {error, {protocol_error, session_binding}};
+        true ->
+            bind_group_effect_rows(Rows, GroupRef)
+    end.
+
+bind_group_effect_rows([], _GroupRef) ->
+    ok;
+bind_group_effect_rows(Rows, GroupRef) ->
+    RemainingMs = quod_proof_context:remaining_ms(),
+    case RemainingMs > 0 of
+        false ->
+            {error, {proof_limit_exceeded,
+                     element(1, quod_proof_context:origin_identity())}};
+        true ->
+            BindRows = [{Handle, PlanDigest}
+                        || {_Identity, PlanDigest, Handle} <- Rows],
+            quod_scope_session:bind_group_effects(
+              BindRows, GroupRef, RemainingMs)
     end.
 
 attest_group_plans([], _Plans, _Manifest, RevBundles) ->
@@ -4670,7 +5125,7 @@ valid_plan_submission(Plan, GoalBlob, ResultBlob, S = #s{ns = Ns}) ->
             orelse throw(bad_plan),
         quod_dtx:base_height(Plan) =< S#s.applied orelse throw(bad_plan),
         {ok, Material} = quod_dtx:material(Plan),
-        valid_direct_plan_effects(Plan, Material) orelse
+        quod_effect:validate_plan(Plan, Material) orelse
             throw(invalid_direct_effect),
         {ok, _Goal} = quod_durable_term:decode_goal(GoalBlob),
         {ok, _DurableResult} = quod_durable_term:decode_result(ResultBlob),
@@ -4679,17 +5134,6 @@ valid_plan_submission(Plan, GoalBlob, ResultBlob, S = #s{ns = Ns}) ->
         error:{badmatch, {error, Reason}} -> {error, Reason};
         throw:Reason -> {error, Reason};
         _:_ -> {error, bad_plan}
-    end.
-
-valid_direct_plan_effects(Plan, #{effects := Effects}) ->
-    case Effects of
-        [] -> true;
-        [Effect] ->
-            quod_effect:validate(Effect) andalso
-                quod_effect:executor(Effect) =:= quod_dtx:signer(Plan) andalso
-                quod_effect:actor(Effect) =:= quod_dtx:principal(Plan) andalso
-                quod_dtx:diff_ops(Plan) =:= 0;
-        _ -> false
     end.
 
 self_witnessed(none, Self) ->
@@ -4967,7 +5411,12 @@ finish_projection_result(
     S1 = add_projection_stats(Stats, S0),
     S2 = publish_dtx_outcome(Publication, AppliedOps, Index, Origin, S1),
     S3 = finish_dtx_apply(DeferredAck, Control, Origin, S2),
-    maybe_release_completed_group(Control, GroupId, S3);
+    S4 = maybe_release_completed_group(Control, GroupId, S3),
+    %% The journal remains the single custody owner. A DTX transition only
+    %% wakes its exact outcome reconciliation; commit still waits for the
+    %% runtime P-before-E frontier, while abort retires without decoding a plan.
+    quod_effect_journal:reconcile(),
+    S4;
 finish_projection_result(#{kind := noop}, _Index, _Origin, S) ->
     S;
 finish_projection_result(
@@ -5288,22 +5737,22 @@ publish_outcome({rejected, Env}, S = #s{ns = Ns}) ->
 publish_dtx_outcome(none, _AppliedOps, _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
-  {group_applied, _GroupId, _Context, []}, _AppliedOps,
+  {group_applied, _GroupId, _Context, [], []}, _AppliedOps,
   _Index, _Origin, S) ->
     S;
 publish_dtx_outcome(
   {group_applied, GroupId,
    #{proof_id := ProofId, origin := ProofOrigin,
      principal := Principal, goal := Goal, result := Result,
-     plan_digest := PlanDigest}, Diff},
+     plan_digest := PlanDigest}, Diff, DirectEffects},
   AppliedOps, Index, live, S = #s{ns = Ns}) ->
     Env = #{ns => Ns, height => Index, tx_id => {group, GroupId},
             proof_id => ProofId, origin => ProofOrigin,
             subject => Principal, goal => Goal, result => Result,
             plan_digest => PlanDigest, diff => Diff,
-            applied_ops => AppliedOps},
+            applied_ops => AppliedOps, effects => DirectEffects},
     publish_outcome({applied, Env}, S);
-publish_dtx_outcome({group_applied, _, _, _}, _AppliedOps,
+publish_dtx_outcome({group_applied, _, _, _, _}, _AppliedOps,
                     _Index, replay, S) ->
     S.
 

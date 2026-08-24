@@ -30,8 +30,8 @@ accepted.
 
 -define(DOMAIN, quod_transaction).
 -define(ID_DOMAIN, quod_semantic_transaction).
--define(ID_VERSION, 5).
-%% V9 binds an author's continuous admission generation, signed-user request,
+-define(ID_VERSION, 6).
+%% V9 binds an author's continuous admission generation, signed-agent request,
 %% authorization transcript, and the atom-bearing diff/read set through the
 %% bounded Prolog wire alphabet, including explicit event occurrences. The
 %% fixed envelope can therefore be decoded
@@ -42,7 +42,7 @@ accepted.
 %% unverifiable. DTX controls use their own admission-scoped sequence lane, and
 %% each committed control's certified reference binds the exact committee that
 %% finalized its ledger position.
--define(VERSION, 9).
+-define(VERSION, 10).
 -define(RELAY_ATTEMPT_DOMAIN, quod_relay_attempt).
 -define(RELAY_ATTEMPT_VERSION, 1).
 -define(PUBKEY_BYTES, 32).
@@ -152,9 +152,9 @@ request_fields(Plan, _Material, _GoalBlob, none) ->
         _ -> error(bad_request_binding)
     end;
 request_fields(Plan, #{transcript := Transcript}, GoalBlob,
-               {user_goal_v1, <<_:256>> = Digest, _Bytes, _Signature} = Auth) ->
+               {agent_goal_v1, <<_:256>> = Digest, _Bytes, _Signature} = Auth) ->
     case quod_dtx:request_binding(Plan) of
-        {user_goal_v1, Digest} ->
+        {agent_goal_v1, Digest} ->
             Target = quod_dtx:target(Plan),
             case quod_client_goal:authorization_transcript(
                    Transcript, Target, GoalBlob) of
@@ -172,7 +172,7 @@ request_fields(Plan, #{transcript := Transcript}, GoalBlob,
 request_fields(_Plan, _Material, _GoalBlob, _RequestAuth) ->
     error(bad_request_binding).
 
--doc "Validate and expose one transaction's durable signed-user claim.".
+-doc "Validate and expose one transaction's durable signed-agent claim.".
 -spec validate_request(binary(), {binary(), <<_:256>>}, non_neg_integer(),
                        #transaction{}) ->
           {ok, none | map()} | {error, term()}.
@@ -183,11 +183,11 @@ validate_request(_Network, _Target, _AdmissionMs,
 validate_request(
   <<_:256>> = Network, {Ns, <<_:256>>} = Target, AdmissionMs,
   #transaction{origin = Target, goal = GoalBlob, request_auth = Auth,
-               auth_transcript = {user_goal_v1, TranscriptBlob}})
+               auth_transcript = {agent_goal_v1, TranscriptBlob}})
   when is_binary(Ns), is_integer(AdmissionMs), AdmissionMs >= 0,
        is_binary(GoalBlob), is_binary(TranscriptBlob) ->
     request_evidence(
-      Target, GoalBlob, Auth, {user_goal_v1, TranscriptBlob},
+      Target, GoalBlob, Auth, {agent_goal_v1, TranscriptBlob},
       {admission, Network, AdmissionMs});
 validate_request(_Network, _Target, _AdmissionMs, #transaction{}) ->
     {error, invalid_request_binding}.
@@ -197,10 +197,10 @@ validate_request(_Network, _Target, _AdmissionMs, #transaction{}) ->
 request_claim(#transaction{request_auth = none, auth_transcript = none}) ->
     none;
 request_claim(#transaction{origin = Target, goal = GoalBlob, request_auth = Auth,
-                           auth_transcript = {user_goal_v1, TranscriptBlob}})
+                           auth_transcript = {agent_goal_v1, TranscriptBlob}})
   when is_binary(GoalBlob), is_binary(TranscriptBlob) ->
     case request_evidence(
-           Target, GoalBlob, Auth, {user_goal_v1, TranscriptBlob}, verify) of
+           Target, GoalBlob, Auth, {agent_goal_v1, TranscriptBlob}, verify) of
         {ok, #{claim := Claim}} -> {ok, Claim};
         {error, _} -> error
     end;
@@ -244,8 +244,8 @@ request_evidence(Target, GoalBlob, Auth, Authorization,
 checked_request_target(
   {Ns, Anchor},
   {ok, #{evidence :=
-             #{request := #{target_namespace := Ns,
-                            target_genesis_anchor := Anchor}}}} = Result)
+             #{request := #{agent_namespace := Ns,
+                            agent_genesis_anchor := Anchor}}}} = Result)
   when is_binary(Ns), is_binary(Anchor) ->
     Result;
 checked_request_target(_Target, {ok, _OtherEvidence}) ->
@@ -572,7 +572,7 @@ decode_verified_submission(
 decode_verified_submission(_Binding, _Submission) ->
     {error, malformed_submission}.
 
--doc "Decode bounded metadata from the one current V9 transaction envelope.".
+-doc "Decode bounded metadata from the one current V10 transaction envelope.".
 -spec decode_submission_metadata(term()) ->
           {ok, #{target := {binary(), binary()},
                  admission := binary(), tx_id := binary(),

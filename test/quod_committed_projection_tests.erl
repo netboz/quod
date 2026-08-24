@@ -29,7 +29,7 @@ mixed_content_duplicate_rejection_and_noop_projection_test() ->
                    Ns, diff_for({must_not_land, true}),
                    #{{projection_fact, 1} => never_present}),
     Author = crypto:hash(sha256, <<"projection-effect-author">>),
-    Effect = {quod_direct_effect, 1, local_durable,
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create,
               crypto:hash(sha256, <<"projection-effect-id">>), Author,
               {node, Author},

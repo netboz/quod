@@ -4,8 +4,8 @@ Dedicated browser client endpoint.
 
 The listener is disabled by default. It provides static client assets, fixed
 Ed25519 authentication messages, and the single signed-goal API used for
-reads, writes and retained backtracking cursors. User-home creation is an
-ordinary signed root goal; this boundary has no predicate-specific command.
+reads, writes and retained backtracking cursors. Agent enrollment uses
+ordinary signed goals; this boundary has no predicate-specific command.
 
 **It is served over TLS.** Not for confidentiality alone: a browser withholds
 Web Crypto entirely outside a secure context, so over plain HTTP the client

@@ -380,7 +380,8 @@ transaction_ref() ->
     {transaction, <<"quod:origin">>, digest(1), digest(4)}.
 
 operation_ref() ->
-    {operation, <<"quod:origin">>, digest(1), digest(12), digest(13)}.
+    {operation, <<"quod:origin">>, digest(1),
+     agent_ref(<<"quod:agent">>, digest(12), 12), digest(13)}.
 
 target() -> {<<"quod:target">>, digest(5)}.
 
@@ -403,3 +404,11 @@ reason_identity({Ns, Anchor}) -> {ontology, Ns, Anchor}.
 
 id(N) -> <<N:128>>.
 digest(N) -> <<N:256>>.
+
+agent_ref(Ns, Anchor, N) ->
+    {ok, #{blob := Blob}} = quod_agent_ref:from_text(
+                              Ns, Anchor,
+                              <<"human_user(", (integer_to_binary(N))/binary,
+                                ").">>,
+                              2),
+    Blob.

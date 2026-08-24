@@ -1,6 +1,6 @@
 -module(quod_client_goal_ingress).
 -moduledoc """
-Authenticated gateway ingress for every user-signed goal mode.
+Authenticated gateway ingress for every agent-signed goal mode.
 
 This module performs one shared session and signature admission, then invokes
 the exact target locally or forwards the unchanged signed request through the
@@ -10,7 +10,7 @@ does not classify predicates or authorize them: the ontology's normal
 `can_invoke/4` proof remains the only ACL.  Read, execute and cursor differ
 only at the final proof-mode selection.
 
-Foreign scopes carry the same verified request evidence and user principal;
+Foreign scopes carry the same verified request evidence and agent principal;
 each target applies its ordinary `can_invoke/4` policy to that principal.
 """.
 
@@ -57,8 +57,8 @@ resolve_operation(SessionId, RequestBytes, Signature, Peer) ->
 cursor_command(SessionId, CursorId, Command, Peer)
   when Command =:= next; Command =:= accept; Command =:= stop ->
     case quod_client_auth:admit_goal(SessionId, Peer) of
-        {ok, #{principal := Principal}} ->
-            Owner = local_owner(SessionId, Principal),
+        {ok, #{public_key := SigningKey}} ->
+            Owner = local_owner(SessionId, SigningKey),
             cursor_owner_command(Owner, CursorId, Command);
         {error, _} = Error ->
             Error
@@ -67,7 +67,7 @@ cursor_command(_SessionId, _CursorId, _Command, _Peer) ->
     {error, bad_request}.
 
 admitted(ExpectedMode, SessionId,
-         #{public_key := PublicKey, principal := Principal,
+         #{public_key := PublicKey,
            expires_ms := SessionExpires},
          RequestBytes, Signature, Peer) ->
     case quod_client_goal:decode(RequestBytes) of
@@ -77,7 +77,7 @@ admitted(ExpectedMode, SessionId,
                 ok ->
                     verified_gateway(
                       SessionId, RequestBytes, Signature,
-                      Principal, PublicKey, Peer);
+                      PublicKey, Peer);
                 {error, _} = Error -> Error
             end;
         {error, _} = Error ->
@@ -85,15 +85,15 @@ admitted(ExpectedMode, SessionId,
     end.
 
 request_session_binding(
-  #{user_public_key := PublicKey, mode := ExpectedMode,
+  #{signing_public_key := PublicKey, mode := ExpectedMode,
     not_after_ms := NotAfter}, ExpectedMode, PublicKey, SessionExpires)
   when NotAfter =< SessionExpires ->
     ok;
 request_session_binding(
-  #{user_public_key := PublicKey, mode := ExpectedMode},
+  #{signing_public_key := PublicKey, mode := ExpectedMode},
   ExpectedMode, PublicKey, _SessionExpires) ->
     {error, deadline_exceeds_session};
-request_session_binding(#{user_public_key := PublicKey},
+request_session_binding(#{signing_public_key := PublicKey},
                         _ExpectedMode, PublicKey, _SessionExpires) ->
     {error, unsupported_goal_mode};
 request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
@@ -101,7 +101,7 @@ request_session_binding(_Request, _ExpectedMode, _PublicKey, _SessionExpires) ->
 
 resolve_verified_operation(PublicKey, RequestBytes, Signature) ->
     case quod_client_goal:verify(RequestBytes, Signature) of
-        {ok, #{request := #{user_public_key := PublicKey,
+        {ok, #{request := #{signing_public_key := PublicKey,
                             network_identity := RequestNetwork},
                request_digest := Digest,
                operation_ref := OperationRef} = Evidence} ->
@@ -143,23 +143,24 @@ resolved_operation(
 resolved_operation(_Evidence, _Digest, _OperationRef, {ok, _BadClaim}) ->
     {error, outcome_index_corrupt}.
 
-verified_gateway(SessionId, RequestBytes, Signature,
-                 Principal, PublicKey, Peer) ->
+verified_gateway(SessionId, RequestBytes, Signature, PublicKey, Peer) ->
     case quod_client_goal_target:verify_request(RequestBytes, Signature) of
-        {ok, #{request := #{user_public_key := PublicKey}} = Evidence} ->
-            Owner = local_owner(SessionId, Principal),
+        {ok, #{request := #{signing_public_key := PublicKey},
+               agent_ref_blob := AgentRef} = Evidence} ->
+            Principal = {agent, AgentRef},
+            Owner = local_owner(SessionId, PublicKey),
             execute_gateway(
               Evidence, RequestBytes, Signature, Principal, PublicKey, Peer,
               Owner);
-        {ok, _OtherUser} ->
+        {ok, _OtherAgent} ->
             {error, session_principal_mismatch};
         {error, _} = Error ->
             Error
     end.
 
 execute_gateway(
-  #{request := #{mode := Mode, target_namespace := Ns,
-                 target_genesis_anchor := Anchor}} = Evidence,
+  #{request := #{mode := Mode, agent_namespace := Ns,
+                 agent_genesis_anchor := Anchor}} = Evidence,
   RequestBytes, Signature, Principal, _PublicKey, Peer, Owner) ->
     CursorBinding = cursor_binding(Mode),
     case quod_client_goal_target:available({Ns, Anchor}) of
@@ -183,8 +184,8 @@ cursor_binding(read) -> none;
 cursor_binding(execute) -> none.
 
 forward_gateway(
-  #{request := #{target_namespace := Ns,
-                 target_genesis_anchor := Anchor}} = Evidence,
+  #{request := #{agent_namespace := Ns,
+                 agent_genesis_anchor := Anchor}} = Evidence,
   RequestBytes, Signature, Owner, CursorBinding) ->
     case quod_directory:validator_routes(Ns, Anchor) of
         {ok, Routes} when Routes =/= [] ->
@@ -238,13 +239,13 @@ forward_routes([Route | Rest], Evidence, RequestBytes, Signature, Owner,
 
 -ifdef(TEST).
 test_forward_routes(Routes,
-                    #{request := #{user_public_key := User,
+                    #{request := #{signing_public_key := SigningKey,
                                    mode := Mode,
                                    not_after_ms := ExpiresMs},
                       request_bytes := RequestBytes,
                       signature := Signature} = Evidence,
                     Submit) when is_function(Submit, 9) ->
-    Owner = {session, <<0:256>>, User},
+    Owner = {session, <<0:256>>, SigningKey},
     forward_routes(Routes, Evidence, RequestBytes, Signature, Owner,
                    cursor_binding(Mode), [], ExpiresMs, Submit).
 -endif.
@@ -286,8 +287,8 @@ forwarded_cursor_command(Owner, CursorId, Command) ->
         {error, Reason} -> {error, Reason}
     end.
 
-local_owner(SessionId, {user, <<_:256>> = User}) ->
-    {session, SessionId, User}.
+local_owner(SessionId, <<_:256>> = SigningKey) ->
+    {session, SessionId, SigningKey}.
 
 network_identity() ->
     case quod_ontology:network_identity() of

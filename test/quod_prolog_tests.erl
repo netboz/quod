@@ -648,7 +648,7 @@ membership_test_() ->
       fun t_signed_operation_uses_the_same_content_verdict_path/1,
       fun t_signed_operation_rechecks_the_parent_policy/1,
       fun t_committed_signed_operation_waits_for_network_identity/1,
-      fun t_signed_begin_uses_the_same_operation_verdict_path/1,
+      fun t_signed_begin_checks_identity_not_origin_acl/1,
       fun t_lockstep/1]}.
 
 %% Slice 1 increment 2: the post-apply event layer (doc/agent-fipa-plan.md §7) — apply origin drives
@@ -1039,7 +1039,10 @@ t_signed_operation_uses_the_same_content_verdict_path({Ns, _}) ->
                        Ns,
                        diff_for(
                          {can_invoke, {'Goal'}, {'Principal'},
-                          {'Chain'}, {'Namespace'}}),
+                          {'Chain'}, {'Namespace'}}) ++
+                       lists:append(
+                         [diff_for(Fact) || Fact <-
+                              quod_ct:signed_agent_facts(First)]),
                        #{}),
             ok = ab(Ns, 1, batch(Policy)),
             ?assertEqual(
@@ -1081,8 +1084,12 @@ t_signed_operation_rechecks_the_parent_policy({Ns, _}) ->
                   {can_invoke, different_goal, {'Principal'},
                    {'Chain'}, {'Namespace'}},
               [PolicyAssert = {assert, PolicyClause}] = diff_for(Policy),
+              KeyAsserts = lists:append(
+                             [diff_for(Fact) || Fact <-
+                                  quod_ct:signed_agent_facts(Fixture)]),
               [RestrictiveAssert] = diff_for(RestrictivePolicy),
-              ok = ab(Ns, 1, batch(change(Ns, [PolicyAssert], #{}))),
+              ok = ab(Ns, 1,
+                      batch(change(Ns, [PolicyAssert | KeyAsserts], #{}))),
               ?assertEqual(
                  valid,
                  content_verdict(
@@ -1111,7 +1118,10 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
                    Ns,
                    diff_for(
                      {can_invoke, {'Goal'}, {'Principal'},
-                      {'Chain'}, {'Namespace'}}),
+                      {'Chain'}, {'Namespace'}}) ++
+                   lists:append(
+                     [diff_for(Fact) || Fact <-
+                          quod_ct:signed_agent_facts(Fixture)]),
                    #{}),
         ok = ab(Ns, 1, batch(Policy)),
         ?assertEqual(1, quod_prolog:applied(Ns)),
@@ -1162,7 +1172,7 @@ t_committed_signed_operation_waits_for_network_identity({Ns, Pid}) ->
         end
     end.
 
-t_signed_begin_uses_the_same_operation_verdict_path({Ns, _}) ->
+t_signed_begin_checks_identity_not_origin_acl({Ns, _}) ->
     fun() ->
         Network = <<82:256>>,
         quod_ct:with_network_identity(
@@ -1178,8 +1188,13 @@ t_signed_begin_uses_the_same_operation_verdict_path({Ns, _}) ->
                   {can_invoke, different_goal, {'Principal'},
                    {'Chain'}, {'Namespace'}},
               [PolicyAssert = {assert, PolicyClause}] = diff_for(Policy),
+              [KeyAssert = {assert, KeyClause}] = lists:append(
+                                                   [diff_for(Fact) || Fact <-
+                                                        quod_ct:signed_agent_facts(
+                                                          Fixture)]),
               [RestrictiveAssert] = diff_for(RestrictivePolicy),
-              ok = ab(Ns, 1, batch(change(Ns, [PolicyAssert], #{}))),
+              ok = ab(Ns, 1,
+                      batch(change(Ns, [PolicyAssert, KeyAssert], #{}))),
               ?assertMatch(
                  {1, {valid, _}},
                  dtx_verdict(
@@ -1192,14 +1207,21 @@ t_signed_begin_uses_the_same_operation_verdict_path({Ns, _}) ->
                              [RestrictiveAssert,
                               {retract, PolicyClause}], #{}))),
               ?assertMatch(
-                 {2, {invalid, invalid_authorization_transcript}},
+                 {2, {valid, _}},
                  dtx_verdict(
                    Ns, Control, maps:get(deadline, Fixture), 3,
-                   revoked_signed_begin)),
+                   changed_origin_policy)),
+              ok = ab(Ns, 3, batch(change(
+                                      Ns, [{retract, KeyClause}], #{}))),
               ?assertMatch(
-                 {2, {invalid, invalid_request_auth}},
+                 {3, {invalid, invalid_agent_key}},
                  dtx_verdict(
-                   Ns, Control, maps:get(deadline, Fixture) + 1, 3,
+                   Ns, Control, maps:get(deadline, Fixture), 4,
+                   revoked_signing_key)),
+              ?assertMatch(
+                 {3, {invalid, invalid_request_auth}},
+                 dtx_verdict(
+                   Ns, Control, maps:get(deadline, Fixture) + 1, 4,
                    expired_signed_begin))
           end)
     end.

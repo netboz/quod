@@ -4,8 +4,8 @@
 -include_lib("eunit/include/eunit.hrl").
 
 -define(SESSION, <<16#21:256>>).
--define(PRINCIPAL, {user, <<16#22:256>>}).
--define(OWNER, {session, ?SESSION, <<16#22:256>>}).
+-define(PRINCIPAL, {agent, agent_ref()}).
+-define(OWNER, {session, ?SESSION, agent_ref()}).
 
 cursor_command_busy_and_solution_correlation_test() ->
     {CursorId, Engine, Worker, CallRef, State0} = cursor_state(none, none),
@@ -32,7 +32,8 @@ cursor_command_busy_and_solution_correlation_test() ->
                {solution, CursorId, #{'X' := second}, 7}}} -> ok
     after 1000 -> error(cursor_solution_reply_missing)
     end,
-    #{{?OWNER, CursorId} := #{pending := none}} = maps:get(cursors, State2),
+    Owner = ?OWNER,
+    #{{Owner, CursorId} := #{pending := none}} = maps:get(cursors, State2),
     {noreply, State3} = quod_client_cursor:handle_info(
                           {quod_proof_reply, Engine, CallRef, cursor_stopped},
                           State2),
@@ -115,7 +116,8 @@ cursor_caller_down_cancels_next_but_detaches_accept_test() ->
     end,
     {noreply, AcceptState2} =
         quod_client_cursor:handle_info(AcceptDown, AcceptState1),
-    #{{?OWNER, AcceptId} := #{pending := detached_accept}} =
+    AcceptOwner = ?OWNER,
+    #{{AcceptOwner, AcceptId} := #{pending := detached_accept}} =
         maps:get(cursors, AcceptState2),
     ?assert(is_process_alive(AcceptWorker)),
     {noreply, AcceptState3} = quod_client_cursor:handle_info(
@@ -163,7 +165,7 @@ cursor_terminate_preserves_detached_accept_worker_test() ->
 forwarded_cursor_requires_the_exact_gateway_and_link_test() ->
     Link = spawn(fun cursor_fixture_loop/0),
     Gateway = <<16#31:256>>,
-    Owner = {forwarder, Gateway, Link, <<16#22:256>>},
+    Owner = {forwarder, Gateway, Link, agent_ref()},
     {CursorId, Engine, Worker, CallRef, State0} =
         cursor_state(none, none, Owner),
     Tag = make_ref(),
@@ -201,8 +203,8 @@ forwarded_cursor_requires_the_exact_gateway_and_link_test() ->
 second_gateway_cannot_open_an_existing_cursor_id_test() ->
     Link1 = spawn(fun cursor_fixture_loop/0),
     Link2 = spawn(fun cursor_fixture_loop/0),
-    Owner1 = {forwarder, <<16#33:256>>, Link1, <<16#22:256>>},
-    Owner2 = {forwarder, <<16#34:256>>, Link2, <<16#22:256>>},
+    Owner1 = {forwarder, <<16#33:256>>, Link1, agent_ref()},
+    Owner2 = {forwarder, <<16#34:256>>, Link2, agent_ref()},
     {CursorId, Engine, Worker, _CallRef, State0} =
         cursor_state(none, none, Owner1),
     #{{Owner1, CursorId} := #{evidence := Evidence}} =
@@ -220,7 +222,7 @@ forwarded_link_down_cancels_next_but_detaches_accept_test() ->
       fun({PendingKind, Detached}) ->
           Link = spawn(fun cursor_fixture_loop/0),
           Gateway = <<16#32:256>>,
-          Owner = {forwarder, Gateway, Link, <<16#22:256>>},
+          Owner = {forwarder, Gateway, Link, agent_ref()},
           {CursorId, Engine, Worker, _CallRef, State0} =
               cursor_state(none, none, Owner),
           Tag = make_ref(),
@@ -280,7 +282,7 @@ cursor_state(Pending, Checkpoint, Owner) ->
     Evidence = #{request_digest => <<16#23:256>>,
                  operation_ref =>
                      {operation, <<"test">>, <<16#25:256>>,
-                      <<16#22:256>>, <<16#24:256>>},
+                      agent_ref(), <<16#24:256>>},
                  request => #{operation_id => <<16#24:256>>},
                  variables => []},
     Cursor = #{engine => Engine, engine_mref => EngineMRef,
@@ -304,12 +306,14 @@ cursor_fixture_loop() ->
     receive stop -> ok end.
 
 pending_caller_mref(CursorId, State) ->
-    #{{?OWNER, CursorId} := #{pending := {_From, MRef, _Command}}} =
+    Owner = ?OWNER,
+    #{{Owner, CursorId} := #{pending := {_From, MRef, _Command}}} =
         maps:get(cursors, State),
     MRef.
 
 cursor_engine_mref(CursorId, State) ->
-    #{{?OWNER, CursorId} := #{engine_mref := MRef}} = maps:get(cursors, State),
+    Owner = ?OWNER,
+    #{{Owner, CursorId} := #{engine_mref := MRef}} = maps:get(cursors, State),
     MRef.
 
 cursor_owner_mref(Owner, CursorId, State) ->
@@ -325,3 +329,9 @@ stop_cursor_fixture(Engine, Worker) ->
               end;
          (_) -> ok
       end, [Engine, Worker]).
+
+agent_ref() ->
+    {ok, #{blob := Blob}} = quod_agent_ref:from_text(
+                              <<"test">>, <<16#25:256>>,
+                              <<"test_agent.">>, 1),
+    Blob.

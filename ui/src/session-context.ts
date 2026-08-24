@@ -1,8 +1,10 @@
 import { createContext, useContext } from 'react'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
+import type { AgentReference } from '../../client/src/signed-client.js'
 
 export type SessionState = {
   identity: SignedIdentity | null
+  agent: AgentReference | null
   busy: boolean
   saved: boolean
   unresolved: number
@@ -12,6 +14,9 @@ export type SessionState = {
   save: () => Promise<void>
   exportKey: () => Promise<void>
   signOut: () => Promise<void>
+  addAgent: () => void
+  selectAgent: (id: string) => void
+  agents: (AgentReference & { id: string })[]
 }
 
 export const SessionContext = createContext<SessionState | null>(null)

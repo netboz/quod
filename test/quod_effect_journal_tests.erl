@@ -45,18 +45,18 @@ capacity_is_projected_and_restart_durable_test() ->
 
 lowering_capacity_keeps_active_custody_test() ->
     with_snapshot(
-      prepared,
+      transaction_ready,
       fun(Dir, Effect, _Admission, _Transaction, _Ref) ->
           {ok, Pid} = quod_effect_journal:start_link(#{data_dir => Dir}),
           unlink(Pid),
           EffectId = quod_effect:effect_id(Effect),
-          ?assertMatch({ok, #{state := prepared}},
+          ?assertMatch({ok, #{state := transaction_ready}},
                        quod_effect_journal:status(EffectId)),
           ok = quod_effect_journal:configure_capacity(0),
           ?assertMatch(
              #{capacity := 0, active := 1, reservations := 0},
              quod_effect_journal:stats()),
-          ?assertMatch({ok, #{state := prepared}},
+          ?assertMatch({ok, #{state := transaction_ready}},
                        quod_effect_journal:status(EffectId)),
           ?assertEqual({error, busy}, quod_effect_journal:reserve(self())),
           stop(Pid)
@@ -110,7 +110,7 @@ prepared_recovery_may_restore_genesis_atoms_test() ->
 
 unactivated_binding_is_rejected_on_restart_test() ->
     with_snapshot(
-      bound,
+      transaction_bound,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           {ok, Pid} = quod_effect_journal:start_link(#{data_dir => Dir}),
           unlink(Pid),
@@ -138,7 +138,7 @@ unactivated_binding_is_rejected_on_restart_test() ->
 
 activated_binding_redrives_the_exact_transaction_test() ->
     with_snapshot(
-      prepared,
+      transaction_ready,
       fun(Dir, Effect, Admission, Transaction, _Ref) ->
           Parent = self(),
           Fake = spawn(fun() -> fake_simplex(Parent) end),
@@ -154,7 +154,7 @@ activated_binding_redrives_the_exact_transaction_test() ->
                   error(handoff_timeout)
               end,
               ?assertMatch(
-                 {ok, #{state := handed_off}},
+                 {ok, #{state := transaction_submitted}},
                  quod_effect_journal:status(EffectId)),
               stop(Pid)
           after
@@ -164,7 +164,7 @@ activated_binding_redrives_the_exact_transaction_test() ->
 
 permanent_handoff_error_retires_instead_of_retrying_test() ->
     with_snapshot(
-      prepared,
+      transaction_ready,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           Parent = self(),
           Fake = spawn(fun() -> fake_simplex(Parent, {error, bad_change}) end),
@@ -194,7 +194,7 @@ permanent_handoff_error_retires_instead_of_retrying_test() ->
 
 prepared_binding_survives_namespace_restart_gap_test() ->
     with_snapshot(
-      prepared,
+      transaction_ready,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           %% The node-wide journal starts before dynamically hosted ontologies
           %% are restored. A missing Simplex is temporary unavailability, not
@@ -219,7 +219,8 @@ prepared_binding_survives_namespace_restart_gap_test() ->
               ?assertEqual({error, unavailable},
                            quod_effect_journal:handoff(EffectId)),
               ?assertMatch(
-                 {ok, #{state := prepared, result := none, ref := Ref}},
+                 {ok, #{state := transaction_ready, result := none,
+                        ref := Ref}},
                  quod_effect_journal:status(EffectId))
           after
               _ = erlang:trace(Pid, false, [procs]),
@@ -234,8 +235,10 @@ duplicate_reference_returns_conflict_without_killing_journal_test() ->
             "quod_effect_journal_duplicate_" ++
                 integer_to_list(erlang:unique_integer([positive]))),
     try
-        {Effect1, _Admission1, _Transaction1, Ref, Row1} = fixture(bound),
-        {Effect20, _Admission2, _Transaction2, _Ref2, Row20} = fixture(bound),
+        {Effect1, _Admission1, _Transaction1, Ref, Row1} =
+            fixture(transaction_bound),
+        {Effect20, _Admission2, _Transaction2, _Ref2, Row20} =
+            fixture(transaction_bound),
         Effect2 = setelement(6, Effect20, hash(3003)),
         Row21 = setelement(3, Row20, quod_effect:effect_id(Effect2)),
         Row22 = setelement(4, Row21, Effect2),
@@ -256,7 +259,7 @@ duplicate_reference_returns_conflict_without_killing_journal_test() ->
 
 committed_descriptor_conflict_retires_row_without_killing_journal_test() ->
     with_snapshot(
-      prepared,
+      transaction_ready,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           {ok, Pid} = quod_effect_journal:start_link(#{data_dir => Dir}),
           unlink(Pid),
@@ -276,7 +279,7 @@ committed_descriptor_conflict_retires_row_without_killing_journal_test() ->
 
 committed_outcome_waits_for_ordered_projection_test() ->
     with_snapshot(
-      handed_off,
+      transaction_submitted,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           Parent = self(),
           Prolog = spawn(fun() -> fake_prolog(Parent, Ref, 2) end),
@@ -300,7 +303,8 @@ committed_outcome_waits_for_ordered_projection_test() ->
                   after 1000 -> error(frontier_query_timeout)
                   end,
                   ok = wait_reconcile_idle(Pid, 1000),
-                  ?assertMatch({ok, #{state := handed_off, height := 0}},
+                  ?assertMatch({ok, #{state := transaction_submitted,
+                                      height := 0}},
                                quod_effect_journal:status(EffectId)),
 
                   Runtime ! {set_frontier, self(), 2},
@@ -334,7 +338,7 @@ committed_outcome_waits_for_ordered_projection_test() ->
 
 stale_reconcile_cannot_demote_terminal_row_test() ->
     with_snapshot(
-      handed_off,
+      transaction_submitted,
       fun(Dir, Effect, _Admission, _Transaction, Ref) ->
           Parent = self(),
           Prolog = spawn(fun() -> fake_paused_prolog(Parent, Ref, 2) end),
@@ -472,7 +476,7 @@ bound_owner_death_retires_live_unactivated_row_test() ->
             after 1000 -> error(bind_timeout)
             end,
             EffectId = quod_effect:effect_id(Effect),
-            ?assertMatch({ok, #{state := bound}},
+            ?assertMatch({ok, #{state := transaction_bound}},
                          quod_effect_journal:status(EffectId)),
             exit(Owner, kill),
             ok = wait_effect_state(EffectId, retired, 100),
@@ -485,6 +489,101 @@ bound_owner_death_retires_live_unactivated_row_test() ->
             exit(Fake, kill)
         end
     after
+        restore_env(namespace_desired, SavedDesired),
+        restore_env(node_pubkey, SavedKey),
+        _ = file:del_dir_r(Dir)
+    end.
+
+group_binding_survives_owner_death_and_restart_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Dir = filename:join(
+            "/tmp",
+            "quod_group_effect_journal_" ++
+                integer_to_list(erlang:unique_integer([positive]))),
+    SavedDesired = application:get_env(quod, namespace_desired),
+    SavedKey = application:get_env(quod, node_pubkey),
+    {Pub, Seed} = quod_identity:generate(),
+    RootAnchor = hash(8201),
+    Admission = hash(8202),
+    RootConfig = #{data_dir => Dir,
+                   ledger_dir => filename:join(Dir, "ledger"),
+                   genesis_hash => RootAnchor},
+    application:set_env(
+      quod, namespace_desired,
+      #{content => #{?ROOT_NS => RootConfig}, brahms => #{}}),
+    application:set_env(quod, node_pubkey, Pub),
+    Parent = self(),
+    Simplex = spawn(
+                fun() ->
+                    fake_binding_simplex(
+                      Parent, {?ROOT_NS, RootAnchor, Pub, Admission})
+                end),
+    Prolog = spawn(fun() -> fake_group_prolog(Parent) end),
+    receive {fake_simplex_ready, Simplex} -> ok
+    after 1000 -> error(fake_simplex_timeout)
+    end,
+    receive {fake_group_prolog_ready, Prolog} -> ok
+    after 1000 -> error(fake_prolog_timeout)
+    end,
+    try
+        {Plan, GroupRef, Target, PlanDigest, PreparedEffect, Effect} =
+            group_fixture(Pub, Seed, RootAnchor),
+        {ok, Journal} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(Journal),
+        ok = quod_effect_journal:configure_capacity(64),
+        Owner = spawn(
+                  fun() ->
+                      Parent !
+                          {group_bind_result, self(),
+                           quod_effect_journal:bind_group(
+                             Plan, GroupRef, Target, PlanDigest,
+                             PreparedEffect)}
+                  end),
+        OwnerMRef = monitor(process, Owner),
+        receive {group_bind_result, Owner, ok} -> ok
+        after 1000 -> error(group_bind_timeout)
+        end,
+        receive {'DOWN', OwnerMRef, process, Owner, normal} -> ok
+        after 1000 -> error(group_owner_down_timeout)
+        end,
+        EffectId = quod_effect:effect_id(Effect),
+        ExactRef = {group_effect, 1, GroupRef, Target, PlanDigest},
+        ?assertMatch(
+           {ok, #{state := group_pending, ref := ExactRef}},
+           quod_effect_journal:status(EffectId)),
+        ?assertMatch(
+           #{active := 1, group_active := 1},
+           quod_effect_journal:stats()),
+        ?assertEqual(
+           {error, invalid_group_effect_state},
+           quod_effect_journal:handoff(EffectId)),
+        ?assertMatch(
+           {ok, #{state := group_pending, ref := ExactRef}},
+           quod_effect_journal:status(EffectId)),
+        %% Exact retries are idempotent; changing the group binding is not.
+        ?assertEqual(
+           ok,
+           quod_effect_journal:bind_group(
+             Plan, GroupRef, Target, PlanDigest, PreparedEffect)),
+        OtherGroupRef = setelement(6, GroupRef, hash(8203)),
+        ?assertEqual(
+           {error, effect_journal_conflict},
+           quod_effect_journal:bind_group(
+             Plan, OtherGroupRef, Target, PlanDigest, PreparedEffect)),
+        receive {unexpected_group_effect_handoff, Simplex} -> ?assert(false)
+        after 20 -> ok
+        end,
+        stop(Journal),
+        {ok, Restarted} = quod_effect_journal:start_link(#{data_dir => Dir}),
+        unlink(Restarted),
+        ok = wait_reconcile_idle(Restarted, 1000),
+        ?assertMatch(
+           {ok, #{state := group_pending, ref := ExactRef}},
+           quod_effect_journal:status(EffectId)),
+        stop(Restarted)
+    after
+        exit(Simplex, kill),
+        exit(Prolog, kill),
         restore_env(namespace_desired, SavedDesired),
         restore_env(node_pubkey, SavedKey),
         _ = file:del_dir_r(Dir)
@@ -517,7 +616,7 @@ fixture(State) ->
     {ok, DesiredBytes} = quod_durable_term:encode_goal(
                            {ontology_hosted, <<"effect:test">>}),
     PreparedBytes = term_to_binary({test_prepared, 1}, [deterministic]),
-    Effect = {quod_direct_effect, 1, local_durable,
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create, hash(3), Pub,
               {node, Pub}, {<<"effect:test">>, hash(4)},
               crypto:hash(sha256, ActionBytes),
@@ -537,11 +636,54 @@ fixture(State) ->
                                  sig = none}),
     TxId = Transaction#transaction.tx_id,
     Ref = {transaction, ?ROOT_NS, Anchor, TxId},
-    Row = {quod_effect_row, 2, quod_effect:effect_id(Effect), Effect,
+    Row = {quod_effect_row, 3, quod_effect:effect_id(Effect), Effect,
            ActionBytes, DesiredBytes, PreparedBytes,
            term_to_binary(Transaction, [deterministic]), Ref, Admission,
            State, 0, none},
     {Effect, Admission, Transaction, Ref, Row}.
+
+group_fixture(Pub, Seed, RootAnchor) ->
+    Ns = <<"effect:group-test">>,
+    Action = {create_ontology, Ns, []},
+    Desired = {ontology_hosted, Ns},
+    {ok, Structural} = quod_ontology:validate_action(Action),
+    {ok, Prepared} = quod_ontology:prepare_action(Structural),
+    {ok, Effect} = quod_ontology:prepared_effect(
+                     Action, Prepared, Pub, {node, Pub}),
+    Target = {?ROOT_NS, RootAnchor},
+    Origin = {<<"effect:group-origin">>, hash(8210)},
+    Core = #{target => Target,
+             base_height => 1,
+             proof_id => hash(8211),
+             origin => Origin,
+             principal => {node, Pub},
+             request_binding => none,
+             overlay_generation => 0,
+             diff_ops => 0,
+             read_functors => 0,
+             effects_count => 1,
+             diff => journal_wire_blob([]),
+             read_check => journal_wire_blob([]),
+             effects => journal_wire_blob([Effect]),
+             live_bridges => journal_wire_blob([]),
+             transcript => journal_wire_blob([])},
+    Signer = #{pubkey => Pub,
+               key => quod_identity:key_term({Pub, Seed})},
+    PlanBytes = term_to_binary(
+                  {<<"quod.dtx.plan">>, 7, Core}, [deterministic]),
+    Plan = {quod_plan, Core, Pub, quod_identity:sign(PlanBytes, Signer)},
+    true = quod_dtx:verify(Plan),
+    {ok, Material} = quod_dtx:material(Plan),
+    true = quod_effect:validate_plan(Plan, Material),
+    PlanDigest = quod_dtx:digest(Plan),
+    GroupRef = {group, element(1, Origin), element(2, Origin),
+                Pub, hash(8212), hash(8213)},
+    {Plan, GroupRef, Target, PlanDigest,
+     {Action, Desired, Effect, Prepared}, Effect}.
+
+journal_wire_blob(Term) ->
+    {ok, Blob} = quod_wire_term:encode_canonical(Term),
+    Blob.
 
 write_snapshot(Dir, Row) ->
     Rows = case Row of
@@ -551,7 +693,7 @@ write_snapshot(Dir, Row) ->
     Path = filename:join(Dir, "direct_effects.qej"),
     ok = filelib:ensure_dir(Path),
     Payload = term_to_binary(
-                {quod_effect_journal, 3, 64, Rows}, [deterministic]),
+                {quod_effect_journal, 4, 64, Rows}, [deterministic]),
     Digest = crypto:hash(sha256, Payload),
     Bytes = <<?MAGIC:32/unsigned-big,
               (byte_size(Payload)):32/unsigned-big,
@@ -579,13 +721,17 @@ fake_simplex_loop(Parent, Reply) ->
 fake_binding_simplex(Parent, Binding) ->
     true = quod_reg:reg({quod_simplex, ?ROOT_NS}),
     Parent ! {fake_simplex_ready, self()},
-    fake_binding_simplex_loop(Binding).
+    fake_binding_simplex_loop(Parent, Binding).
 
-fake_binding_simplex_loop(Binding) ->
+fake_binding_simplex_loop(Parent, Binding) ->
     receive
         {'$gen_call', From, get_dtx_binding} ->
             gen:reply(From, {ok, Binding}),
-            fake_binding_simplex_loop(Binding)
+            fake_binding_simplex_loop(Parent, Binding);
+        {'$gen_call', From, {handoff_effect, _Admission, _Transaction}} ->
+            Parent ! {unexpected_group_effect_handoff, self()},
+            gen:reply(From, {error, bad_change}),
+            fake_binding_simplex_loop(Parent, Binding)
     end.
 
 fake_prolog(Parent, Ref, Height) ->
@@ -618,6 +764,20 @@ fake_prolog_loop(Parent, Ref, Height) ->
             fake_prolog_loop(Parent, Ref, Height);
         _Other ->
             fake_prolog_loop(Parent, Ref, Height)
+    end.
+
+fake_group_prolog(Parent) ->
+    true = quod_reg:reg({quod_prolog, ?ROOT_NS}),
+    Parent ! {fake_group_prolog_ready, self()},
+    fake_group_prolog_loop().
+
+fake_group_prolog_loop() ->
+    receive
+        {'$gen_call', From, {dtx_group_state, _GroupId}} ->
+            gen:reply(From, {error, rebuilding}),
+            fake_group_prolog_loop();
+        _Other ->
+            fake_group_prolog_loop()
     end.
 
 fake_runtime(Parent, Frontier) ->

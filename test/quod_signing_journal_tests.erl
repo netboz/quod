@@ -703,7 +703,7 @@ begin_control(Ctx, Variant, Sequence) ->
     Bundle1 = bundle(Target1, Plan1, Manifest, Signer1),
     Bundle2 = bundle(Target2, Plan2, Manifest, Signer2),
     {ok, Record} = quod_dtx:new_begin(
-                     Manifest, none, none, [Bundle1, Bundle2]),
+                     Manifest, none, [Bundle1, Bundle2]),
     Control = sign_begin(Ctx, Record, Sequence),
     #{control => Control, record => Record,
       coordinator_signer => CoordinatorSigner}.
@@ -764,9 +764,12 @@ effect_transaction(Ns, Anchor, Author) ->
     {ok, Goal} = quod_durable_term:encode_goal(
                    {create_ontology, <<"journal:created">>, []}),
     {ok, Result} = quod_durable_term:encode_result(#{}),
-    Effect = {quod_direct_effect, 1, local_durable,
+    {ok, #{blob := AgentRef}} = quod_agent_ref:from_text(
+                                  <<"journal:agent">>, hash(8202),
+                                  <<"journal_agent.">>, 1),
+    Effect = {quod_direct_effect, 2, local_durable,
               ontology_lifecycle, create, hash(8201), Author,
-              {user, hash(8202)}, {<<"journal:created">>, hash(8203)},
+              {agent, AgentRef}, {<<"journal:created">>, hash(8203)},
               hash(8204), hash(8205)},
     quod_transaction:bind_id(
       {Ns, Anchor},

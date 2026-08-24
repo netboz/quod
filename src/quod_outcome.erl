@@ -76,7 +76,7 @@ terminal history would incorrectly turn that replay into effect-free duplicates.
           ref := {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
           status := term()} |
         #{type := operation,
-          ref := {operation, binary(), <<_:256>>, <<_:256>>, <<_:256>>},
+          ref := {operation, binary(), <<_:256>>, binary(), <<_:256>>},
           request_digest := <<_:256>>,
           outcome_ref := term(), first_slot := pos_integer()}.
 -type pending_begin() ::
@@ -101,9 +101,12 @@ ref_identity(
   when is_binary(Ns), byte_size(Ns) > 0 ->
     {ok, {Ns, Anchor}};
 ref_identity(
-  {operation, Ns, <<_:256>> = Anchor, <<_:256>>, <<_:256>>})
+  {operation, Ns, <<_:256>> = Anchor, AgentRef, <<_:256>>})
   when is_binary(Ns), byte_size(Ns) > 0 ->
-    {ok, {Ns, Anchor}};
+    case quod_agent_ref:valid_principal({agent, AgentRef}) of
+        true -> {ok, {Ns, Anchor}};
+        false -> error
+    end;
 ref_identity(_) ->
     error.
 
@@ -499,13 +502,13 @@ current_record_matches(Kind, Digest, Slot, Records, Existing) ->
 
 capture_control(Control, 'begin', GroupId, _History, Row) ->
     case quod_dtx:control_body(Control) of
-        {quod_dtx_begin, 2,
-         {quod_dtx_manifest, 2, _ProofId,
+        {quod_dtx_begin, 3,
+         {quod_dtx_manifest, 3, _ProofId,
           {OriginNs, OriginAnchor, <<_:256>> = Coordinator,
            <<_:256>> = Admission},
           _Nonce, _Principal, _Goal, _GoalDigest,
           Result, _ResultDigest, _RequestBinding, _Participants},
-         _RequestAuth, _Authorization, _Bundles}
+         _RequestAuth, _Bundles}
           when is_binary(OriginNs), OriginNs =/= <<>>,
                is_binary(OriginAnchor), byte_size(OriginAnchor) =:= 32,
                is_binary(Result) ->
@@ -524,7 +527,7 @@ capture_control(Control, decision, _GroupId, History, Row) ->
 capture_control(Control, complete, _GroupId, History, Row) ->
     CompleteRef = history_ref(complete, History),
     case quod_dtx:control_body(Control) of
-        {quod_dtx_complete, 2, _, DecisionRef, FinalizeRows} ->
+        {quod_dtx_complete, 3, _, DecisionRef, FinalizeRows} ->
             capture_terminal(
               CompleteRef, DecisionRef, FinalizeRows, History, Row);
         _ ->
@@ -556,13 +559,13 @@ capture_terminal(CompleteRef, DecisionRef, FinalizeRows, History, Row) ->
     case {history_record(decision, History),
           DecisionRef =:= history_ref(decision, History),
           participant_slots(FinalizeRows), maps:get(result, Row)} of
-        {{quod_dtx_decision, 2, _, _, commit, _, none}, true,
+        {{quod_dtx_decision, 3, _, _, commit, _, none}, true,
          {ok, Slots}, Result} when is_binary(Result) ->
             Terminal = #{verdict => commit, complete_ref => CompleteRef,
                          slot => ref_slot(CompleteRef),
                          participant_slots => Slots},
             set_once(terminal, Terminal, Row);
-        {{quod_dtx_decision, 2, _, _, abort, _, _} = Decision, true,
+        {{quod_dtx_decision, 3, _, _, abort, _, _} = Decision, true,
          {ok, Slots}, _Result} ->
             case quod_dtx:decision_failure_reasons(Decision) of
                 {ok, [_ | _]} ->
@@ -655,7 +658,7 @@ apply_group_effect({direct_applied_abort, GroupId, Ref, Generation},
                    _Projection, _OldProjection) ->
     case exact_history_ref(finalize, Ref, History) of
         true ->
-            set_applied(abort, Ref, Generation, Row, none, GroupId);
+            set_applied(abort, Ref, Generation, #{}, Row, none, GroupId);
         false -> error
     end;
 apply_group_effect({completed, GroupId, commit, Ref}, complete, GroupId,
@@ -682,9 +685,9 @@ exact_effect_ref(Kind, Ref, History, Row) ->
     end.
 
 decision_matches_effect(
-  commit, _Ref, {quod_dtx_decision, 2, _, _, commit, _, none}) -> true;
+  commit, _Ref, {quod_dtx_decision, 3, _, _, commit, _, none}) -> true;
 decision_matches_effect(
-  abort, _Ref, {quod_dtx_decision, 2, _, _, abort, _, _}) -> true;
+  abort, _Ref, {quod_dtx_decision, 3, _, _, abort, _, _}) -> true;
 decision_matches_effect(_, _, _) -> false.
 
 applied_prepared(Verdict, Manifest, PlanDigest, PlanBlob, Ref, Generation,
@@ -697,9 +700,16 @@ applied_prepared(Verdict, Manifest, PlanDigest, PlanBlob, Ref, Generation,
             case quod_dtx:acknowledge_finalize(
                    GroupId, Slot, Generation, Projection) of
                 {ok, Projection1} ->
-                    set_applied(
-                      Verdict, Ref, Generation,
-                      Row, Projection1, GroupId);
+                    case quod_dtx:manifest_group_ref(Manifest, GroupId) of
+                        {ok, GroupRef} ->
+                            set_applied(
+                              Verdict, Ref, Generation,
+                              #{group_ref => GroupRef,
+                                plan_digest => PlanDigest},
+                              Row, Projection1, GroupId);
+                        error ->
+                            error
+                    end;
                 {error, _} -> error
             end;
         false -> error
@@ -723,9 +733,11 @@ old_projection_holds_plan(
   GroupId, Manifest, PlanDigest, PlanBlob) -> true;
 old_projection_holds_plan(_, _, _, _, _) -> false.
 
-set_applied(Verdict, Ref, Generation, Row, Projection, GroupId) ->
-    Applied = #{verdict => Verdict, finalize_ref => Ref,
-                slot => ref_slot(Ref), generation => Generation},
+set_applied(Verdict, Ref, Generation, Binding, Row, Projection, GroupId) ->
+    Applied = maps:merge(
+                #{verdict => Verdict, finalize_ref => Ref,
+                  slot => ref_slot(Ref), generation => Generation},
+                Binding),
     case set_once(applied, Applied, Row) of
         {ok, Row1} ->
             case Projection of
@@ -910,15 +922,16 @@ claim_operation(_Index, _Slot, _Claim, _OutcomeRef) ->
 
 operation_candidate(
   #index{ns = Ns, anchor = Anchor} = Index,
-  #{key := {<<_:256>> = User, <<_:256>> = OperationId},
+  #{key := {AgentRef, <<_:256>> = OperationId},
     digest := <<_:256>> = Digest,
     target := {Ns, Anchor},
     operation_ref :=
-      {operation, Ns, Anchor, User, OperationId} = OperationRef},
+      {operation, Ns, Anchor, AgentRef, OperationId} = OperationRef},
   OutcomeRef, Slot) ->
-    case operation_outcome_ref(OutcomeRef, {Ns, Anchor}) of
+    case quod_agent_ref:valid_principal({agent, AgentRef}) andalso
+         operation_outcome_ref(OutcomeRef, {Ns, Anchor}) of
         true ->
-            Key = operation_key(Index, User, OperationId),
+            Key = operation_key(Index, AgentRef, OperationId),
             {ok, Key,
              #{type => operation, ref => OperationRef,
                request_digest => Digest, outcome_ref => OutcomeRef,
@@ -959,9 +972,13 @@ lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
             <<_:256>> = Admission, <<_:256>> = GroupId} = Ref) ->
     lookup_group_ref(Index, Ref, Coordinator, Admission, GroupId);
 lookup_ref(Index = #index{ns = Ns, anchor = Anchor},
-           {operation, Ns, Anchor, <<_:256>> = User,
+           {operation, Ns, Anchor, AgentRef,
             <<_:256>> = OperationId}) ->
-    lookup_operation(Index, operation_key(Index, User, OperationId));
+    case quod_agent_ref:valid_principal({agent, AgentRef}) of
+        true -> lookup_operation(
+                  Index, operation_key(Index, AgentRef, OperationId));
+        false -> {not_found, Index}
+    end;
 lookup_ref(Index = #index{ns = Ns},
            {transaction, Ns, <<_:256>>, <<_:256>>}) ->
     {wrong_anchor, Index};
@@ -969,7 +986,7 @@ lookup_ref(Index = #index{ns = Ns},
            {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}) ->
     {wrong_anchor, Index};
 lookup_ref(Index = #index{ns = Ns},
-           {operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>}) ->
+           {operation, Ns, <<_:256>>, _AgentRef, <<_:256>>}) ->
     {wrong_anchor, Index};
 lookup_ref(Index, _Ref) ->
     {not_found, Index}.
@@ -1008,9 +1025,9 @@ group_outcome(
       status => terminal_group_status(Terminal, Result, History)};
 group_outcome(Ref, #{history := History}, _Floor) ->
     Phase = case maps:find(decision, maps:get(records, History)) of
-                {ok, #{record := {quod_dtx_decision, 2, _, _, commit, _, none}}} ->
+                {ok, #{record := {quod_dtx_decision, 3, _, _, commit, _, none}}} ->
                     finalizing_commit;
-                {ok, #{record := {quod_dtx_decision, 2, _, _, abort, _, _}}} ->
+                {ok, #{record := {quod_dtx_decision, 3, _, _, abort, _, _}}} ->
                     finalizing_abort;
                 error -> begun
             end,
@@ -1106,10 +1123,10 @@ public(#{type := group,
   when is_binary(Ns), byte_size(Ns) > 0 ->
     public_group_status(Status, Ref);
 public(#{type := operation,
-         ref := {operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>} = Ref,
+         ref := {operation, Ns, <<_:256>>, AgentRef, <<_:256>>} = Ref,
          request_digest := <<_:256>> = RequestDigest,
          outcome_ref := OutcomeRef, first_slot := Slot})
-  when is_binary(Ns), byte_size(Ns) > 0,
+  when is_binary(Ns), byte_size(Ns) > 0, is_binary(AgentRef),
        is_integer(Slot), Slot > 0 ->
     {ok, #{status => claimed, ref => Ref,
            request_digest => RequestDigest,
@@ -1142,7 +1159,7 @@ public_group_status({committed, Slot, Result, Slots}, Ref)
     end;
 public_group_status(
   {aborted, Slot,
-   {quod_dtx_decision, 2, _, _, abort, _, _} = Decision, Slots}, Ref)
+   {quod_dtx_decision, 3, _, _, abort, _, _} = Decision, Slots}, Ref)
   when is_integer(Slot), Slot > 0 ->
     case {quod_dtx:decision_failure_reasons(Decision),
           valid_participant_slots(Slots)} of
@@ -1157,8 +1174,8 @@ public_group_status(_, _) ->
 
 tx_key(#index{anchor = Anchor}, TxId) -> {tx, Anchor, TxId}.
 group_key(#index{anchor = Anchor}, GroupId) -> {group, Anchor, GroupId}.
-operation_key(#index{anchor = Anchor}, User, OperationId) ->
-    {operation, Anchor, User, OperationId}.
+operation_key(#index{anchor = Anchor}, AgentRef, OperationId) ->
+    {operation, Anchor, AgentRef, OperationId}.
 state_key(Anchor) -> {dtx_state, Anchor}.
 
 backend_lookup(#index{staged = Staged}, Key) when is_map_key(Key, Staged) ->
@@ -1201,18 +1218,19 @@ valid_stored({group, Anchor, GroupId}, Row)
        is_binary(GroupId), byte_size(GroupId) =:= 32 ->
     valid_group_row(Row, GroupId, Anchor);
 valid_stored(
-  {operation, Anchor, User, OperationId},
+  {operation, Anchor, AgentRef, OperationId},
   #{type := operation,
-    ref := {operation, Ns, Anchor, User, OperationId},
+    ref := {operation, Ns, Anchor, AgentRef, OperationId},
     request_digest := <<_:256>>,
     outcome_ref := OutcomeRef, first_slot := Slot} = Row)
   when map_size(Row) =:= 5,
        is_binary(Ns), byte_size(Ns) > 0,
        is_binary(Anchor), byte_size(Anchor) =:= 32,
-       is_binary(User), byte_size(User) =:= 32,
+       is_binary(AgentRef),
        is_binary(OperationId), byte_size(OperationId) =:= 32,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64 ->
-    operation_outcome_ref(OutcomeRef, {Ns, Anchor});
+    quod_agent_ref:valid_principal({agent, AgentRef}) andalso
+        operation_outcome_ref(OutcomeRef, {Ns, Anchor});
 valid_stored(_Key, _Value) ->
     false.
 
@@ -1266,6 +1284,18 @@ valid_applied(#{verdict := Verdict, finalize_ref := Ref,
                 slot := Slot, generation := Generation} = Applied)
   when map_size(Applied) =:= 4,
        (Verdict =:= commit orelse Verdict =:= abort),
+       is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
+       is_integer(Generation), Generation >= 0,
+       Generation =< ?MAX_UINT64 ->
+    quod_dtx:validate_certified_ref(Ref) andalso ref_slot(Ref) =:= Slot;
+valid_applied(
+  #{verdict := Verdict, finalize_ref := Ref,
+    slot := Slot, generation := Generation,
+    group_ref := {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>},
+    plan_digest := <<_:256>>} = Applied)
+  when map_size(Applied) =:= 6,
+       (Verdict =:= commit orelse Verdict =:= abort),
+       is_binary(Ns), byte_size(Ns) > 0,
        is_integer(Slot), Slot > 0, Slot =< ?MAX_UINT64,
        is_integer(Generation), Generation >= 0,
        Generation =< ?MAX_UINT64 ->
@@ -1337,7 +1367,7 @@ valid_history_records(
   [{decision,
     #{group_id := GroupId, digest := <<_:256>> = Digest,
       ref := Ref,
-      record := {quod_dtx_decision, 2, GroupId, _, _, _, _} = Record} = Entry}
+      record := {quod_dtx_decision, 3, GroupId, _, _, _, _} = Record} = Entry}
    | Rest])
   when map_size(Entry) =:= 4 ->
     quod_dtx:validate_certified_ref(Ref) andalso
@@ -1355,10 +1385,10 @@ valid_history_records(
         valid_history_records(GroupId, Rest);
 valid_history_records(_, _) -> false.
 
-valid_decision_record({quod_dtx_decision, 2, _, _, commit, _Rows, none}) ->
+valid_decision_record({quod_dtx_decision, 3, _, _, commit, _Rows, none}) ->
     true;
 valid_decision_record(
-  {quod_dtx_decision, 2, _, _, abort, _Rows, _} = Decision) ->
+  {quod_dtx_decision, 3, _, _, abort, _Rows, _} = Decision) ->
     case quod_dtx:decision_failure_reasons(Decision) of
         {ok, [_ | _]} -> true;
         _ -> false

@@ -402,7 +402,8 @@ pending_generation_rejects_open_and_discards_old_invocation_test() ->
               GroupId = <<101:256>>,
               true = ets:insert(
                        Tab,
-                       {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+                       quod_ct:proof_gate_row(
+                         true, {pending, GroupId}, 7, GroupId)),
               ?assertEqual(
                  {error, {transaction_pending, GroupId}},
                  quod_proof_session:next(Session, Invocation)),
@@ -463,14 +464,16 @@ close_proof_gate_2(Goal, Next, #est{bs = Bs} = St) ->
     {close_proof_gate, <<_:256>> = GroupId} = erlog_int:dderef(Goal, Bs),
     true = ets:insert(
              'quod_simplex_genesis_quod:session-guard-test',
-             {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+             quod_ct:proof_gate_row(
+               true, {pending, GroupId}, 7, GroupId)),
     erlog_int:prove_body(Next, St).
 
 close_policy_gate_4(_Goal, Next, St) ->
     GroupId = <<103:256>>,
     true = ets:insert(
              'quod_simplex_genesis_quod:session-guard-test',
-             {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+             quod_ct:proof_gate_row(
+               true, {pending, GroupId}, 7, GroupId)),
     erlog_int:prove_body(Next, St).
 
 context() ->
@@ -529,7 +532,7 @@ with_proof_gate(Fun) ->
     Namespace = <<"quod:session-guard-test">>,
     Table = 'quod_simplex_genesis_quod:session-guard-test',
     Tab = ets:new(Table, [named_table, protected, set]),
-    true = ets:insert(Tab, {proof_gate, true, open, 7, none}),
+    true = ets:insert(Tab, quod_ct:proof_gate_row(true, open, 7, none)),
     try Fun(Tab, {quod_proof_access, Namespace, 7})
     after
         ets:delete(Tab)

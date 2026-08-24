@@ -12,8 +12,7 @@ challenge_is_single_use_test() ->
          {PublicKey, _} = KeyPair = quod_identity:generate(),
          ClientNonce = <<16#12:256>>,
          {ChallengeId, Signature} = signed_challenge(KeyPair, ClientNonce),
-         {ok, #{public_key := PublicKey, session_id := SessionId,
-                principal := {user, PublicKey}}} =
+         {ok, #{public_key := PublicKey, session_id := SessionId}} =
              quod_client_auth:complete_challenge(ChallengeId, Signature),
          ?assertMatch({ok, #{session_id := SessionId}},
                       quod_client_auth:session(SessionId)),
@@ -70,7 +69,7 @@ application_rate_policy_is_applied_and_explicit_options_override_test() ->
     try
         ok = application:set_env(
                quod, client_rate_limits,
-               #{goal_user_limit => Limit,
+               #{goal_signing_key_limit => Limit,
                  goal_peer_limit => Limit#{max_per_key => 2}}),
         with_auth(
           fun() ->
@@ -83,7 +82,7 @@ application_rate_policy_is_applied_and_explicit_options_override_test() ->
                 quod_client_auth:admit_goal(SessionId, {127, 0, 0, 2}))
           end),
         with_auth(
-          #{goal_user_limit => none, goal_peer_limit => none},
+          #{goal_signing_key_limit => none, goal_peer_limit => none},
           fun() ->
              {ok, #{session_id := SessionId}} =
                  open_session(quod_identity:generate(), <<16#7B:256>>),
@@ -150,7 +149,7 @@ challenge_budget_is_bounded_per_peer_test() ->
 
 %% A full node-wide challenge table is not a failed login by this peer. It must
 %% refuse without consuming the peer's small rate budget, or another caller can
-%% turn a temporary capacity burst into a minute-long per-user lockout.
+%% turn a temporary capacity burst into a minute-long per-agent lockout.
 full_challenge_table_does_not_charge_the_peer_test() ->
     with_auth(
       #{max_challenges => 1,
@@ -174,11 +173,11 @@ full_challenge_table_does_not_charge_the_peer_test() ->
             quod_client_auth:issue_challenge(PublicKey, <<16#43:256>>, ?PEER))
       end).
 
-signed_goal_admission_is_bounded_by_user_and_peer_test() ->
+signed_goal_admission_is_bounded_by_signing_key_and_peer_test() ->
     Limit = #{window_ms => 60000, max_total => 8,
               max_per_key => 1, max_keys => 8},
     with_auth(
-      #{goal_user_limit => Limit,
+      #{goal_signing_key_limit => Limit,
         goal_peer_limit => Limit#{max_per_key => 2}},
       fun() ->
          KeyPair = quod_identity:generate(),
@@ -196,7 +195,7 @@ paired_goal_budgets_commit_only_when_both_admit_test() ->
     Limit = #{window_ms => 60000, max_total => 8,
               max_per_key => 1, max_keys => 8},
     with_auth(
-      #{goal_user_limit => Limit,
+      #{goal_signing_key_limit => Limit,
         goal_peer_limit => Limit},
       fun() ->
          {ok, #{session_id := SessionA}} =
@@ -204,8 +203,8 @@ paired_goal_budgets_commit_only_when_both_admit_test() ->
          {ok, #{session_id := SessionB}} =
              open_session(quod_identity:generate(), <<53:256>>),
          ?assertMatch({ok, _}, quod_client_auth:admit_goal(SessionA, ?PEER)),
-         %% B's user budget provisionally admits, but the shared peer budget
-         %% refuses. That failed pair must not spend B's user allowance.
+         %% B's signing-key budget provisionally admits, but the shared peer
+         %% budget refuses. That failed pair must not spend B's allowance.
          ?assertEqual(
             {error, client_goal_rate_limited},
             quod_client_auth:admit_goal(SessionB, ?PEER)),
@@ -217,28 +216,28 @@ paired_goal_budgets_commit_only_when_both_admit_test() ->
 paired_symbol_budgets_commit_only_when_both_admit_test() ->
     Limit = #{window_ms => 60000, max_total => 8,
               max_per_key => 1, max_keys => 8},
-    {UserA, _} = quod_identity:generate(),
-    {UserB, _} = quod_identity:generate(),
+    {SigningKeyA, _} = quod_identity:generate(),
+    {SigningKeyB, _} = quod_identity:generate(),
     First = unique_symbol(<<"paired_symbol_functor_">>),
     Second = unique_symbol(<<"paired_symbol_functor_">>),
     with_auth(
       #{max_materialized_atoms => 1024,
-        symbol_user_limit => Limit,
+        symbol_signing_key_limit => Limit,
         symbol_peer_limit => Limit},
       fun() ->
          ?assertMatch(
             {ok, _},
             quod_client_auth:materialize_goal(
-              UserA, ?PEER, {{'$quod_symbol', First}, ok})),
+              SigningKeyA, ?PEER, {{'$quod_symbol', First}, ok})),
          ?assertEqual(
             {error, client_goal_rate_limited},
             quod_client_auth:materialize_goal(
-              UserB, ?PEER, {{'$quod_symbol', Second}, ok})),
+              SigningKeyB, ?PEER, {{'$quod_symbol', Second}, ok})),
          ?assertError(badarg, binary_to_existing_atom(Second, utf8)),
          ?assertMatch(
             {ok, _},
             quod_client_auth:materialize_goal(
-              UserB, {127, 0, 0, 2},
+              SigningKeyB, {127, 0, 0, 2},
               {{'$quod_symbol', Second}, ok}))
       end).
 
@@ -250,8 +249,8 @@ signed_goal_materialization_leaves_data_opaque_test() ->
     with_auth(
       #{atom_baseline => Baseline,
         max_materialized_atoms => 1024,
-        symbol_user_limit => #{window_ms => 60000, max_total => 8,
-                               max_per_key => 8, max_keys => 8},
+        symbol_signing_key_limit => #{window_ms => 60000, max_total => 8,
+                                      max_per_key => 8, max_keys => 8},
         symbol_peer_limit => #{window_ms => 60000, max_total => 8,
                                max_per_key => 8, max_keys => 8}},
       fun() ->
@@ -315,7 +314,7 @@ signed_challenge(KeyPair, ClientNonce) ->
     {ok, Challenge} =
         quod_client_auth:issue_challenge(PublicKey, ClientNonce, ?PEER),
     ChallengeId = maps:get(challenge_id, Challenge),
-    {ok, Bytes} = quod_user:challenge_bytes(
+    {ok, Bytes} = quod_client_auth:challenge_bytes(
                     ?NETWORK, ?NODE, ChallengeId, PublicKey, ClientNonce,
                     maps:get(server_nonce, Challenge),
                     maps:get(expires_ms, Challenge)),

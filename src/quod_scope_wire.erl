@@ -34,11 +34,11 @@ renew the scope lifetime.
               payload_kind/0]).
 
 -define(DOMAIN, <<"quod.scope">>).
--define(VERSION, 4).
+-define(VERSION, 5).
 -define(REQUEST_CHANNEL_TAG, quod_scope).
 -define(RETURN_CHANNEL_TAG, quod_scope_return).
 -define(IDENTITY_DOMAIN, <<"quod.scope.identity">>).
--define(AUTH_DOMAIN, <<"quod.scope.auth.v4", 0>>).
+-define(AUTH_DOMAIN, <<"quod.scope.auth.v5", 0>>).
 
 -if(?QUOD_SCOPE_WIRE_MAX_ENVELOPE_BYTES >= ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
 -error("scope envelope must stay below the transport frame bound").
@@ -49,7 +49,10 @@ renew the scope lifetime.
 -type lineage() :: none | opaque_id().
 -type selection() :: {tx_selection, lineage(), [opaque_id()]}.
 -type identity() :: {binary(), key()}.
--type authentication() :: node | {signed_goal, binary(), <<_:512>>}.
+-type authentication() ::
+        node |
+        {signed_goal, binary(), <<_:512>>,
+         quod_agent_identity:certificate()}.
 -type binding() ::
         {scope_binding, key(), key(),
          <<_:?QUOD_SCOPE_WIRE_PROOF_ID_BITS>>, opaque_id(),
@@ -58,6 +61,7 @@ renew the scope lifetime.
 -type command_operation() ::
         {scope_open, authentication()} | scope_close | scope_seal |
         {scope_attest, binary()} |
+        {bind_group_effects, term(), <<_:256>>} |
         {submit_plan, binary(), binary(), binary(), [{binary(), binary()}]} |
         {invoke_open, opaque_id(), selection(), [identity()], binary()} |
         {invoke_next, opaque_id(), pos_integer()} |
@@ -78,6 +82,7 @@ renew the scope lifetime.
         {scope_opened, non_neg_integer()} | scope_closed |
         {plan_sealed, binary()} | plan_not_material |
         {plan_attested, binary()} |
+        group_effects_bound |
         {plan_submitted, {committed, pos_integer(), binary()} |
                          {rejected, atom()} |
                          {outcome_unknown,
@@ -135,14 +140,21 @@ return_channel(<<_:?QUOD_SCOPE_WIRE_KEY_BITS>> = OriginKey) ->
 authentication_digest(node) ->
     {ok, crypto:hash(sha256, <<?AUTH_DOMAIN/binary, 0:8>>)};
 authentication_digest(
-  {signed_goal, RequestBytes, <<_:512>> = Signature})
+  {signed_goal, RequestBytes, <<_:512>> = Signature, Certificate})
   when is_binary(RequestBytes),
        byte_size(RequestBytes) =< ?QUOD_CLIENT_GOAL_REQUEST_BYTES ->
-    {ok, crypto:hash(
-           sha256,
-           <<?AUTH_DOMAIN/binary, 1:8,
-             (byte_size(RequestBytes)):32/unsigned-big,
-             RequestBytes/binary, Signature/binary>>)};
+    case quod_agent_identity:validate_certificate(Certificate) of
+        true ->
+            CertificateBytes = term_to_binary(Certificate, [deterministic]),
+            {ok, crypto:hash(
+                   sha256,
+                   <<?AUTH_DOMAIN/binary, 1:8,
+                     (byte_size(RequestBytes)):32/unsigned-big,
+                     RequestBytes/binary, Signature/binary,
+                     (byte_size(CertificateBytes)):32/unsigned-big,
+                     CertificateBytes/binary>>)};
+        false -> protocol_error(bad_authentication)
+    end;
 authentication_digest(_Authentication) ->
     protocol_error(bad_authentication).
 
@@ -417,6 +429,9 @@ validate_command_operation(scope_seal) -> ok;
 validate_command_operation({scope_attest, ManifestBlob}) ->
     validate_blob(manifest, ManifestBlob);
 validate_command_operation(
+  {bind_group_effects, GroupRef, <<_:256>>}) ->
+    validate_group_ref(GroupRef);
+validate_command_operation(
   {submit_plan, PlanBlob, GoalBlob, ResultBlob, TraceCarrier}) ->
     %% These three payloads remain opaque until the authenticated command has
     %% passed its exact scope binding, sequence, deadline, readiness and quota
@@ -496,6 +511,7 @@ validate_event_operation({plan_sealed, Blob}) ->
 validate_event_operation(plan_not_material) -> ok;
 validate_event_operation({plan_attested, Blob}) ->
     validate_blob(attestation, Blob);
+validate_event_operation(group_effects_bound) -> ok;
 validate_event_operation({plan_submitted, {committed, Slot, TxId}}) ->
     case valid_sequence(Slot) andalso is_binary(TxId)
          andalso byte_size(TxId) =:= 32 of
@@ -605,6 +621,13 @@ validate_binding(
         {_, _, _, _, _, _, _, _, false} -> protocol_error(bad_authentication)
     end;
 validate_binding(_) -> protocol_error(bad_binding).
+
+validate_group_ref(
+  {group, Ns, <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>})
+  when is_binary(Ns), byte_size(Ns) > 0 ->
+    ok;
+validate_group_ref(_) ->
+    protocol_error(bad_shape).
 
 validate_authentication(Authentication) ->
     case authentication_digest(Authentication) of
@@ -847,6 +870,7 @@ valid_uint64(Integer) ->
 %% Typed failures are a closed vocabulary.  Prolog failures and Erlog errors
 %% remain opaque bounded quod_wire_term blobs in their dedicated operations.
 validate_public_error(read_only) -> ok;
+validate_public_error(signed_scope_unavailable) -> ok;
 validate_public_error({Tag, Value} = Reason) ->
     case namespaced_error_tag(Tag) of
         true ->

@@ -1,19 +1,21 @@
 # Signed client goals
 
-**Status:** Slices 1 through 6 are implemented and committed. Slice 1 contains
+**Status:** Slices 1 through 6 were the committed key-as-user generation. The
+generic agent hard break is implemented in the current working tree, not yet
+committed or deployed; `generic-agent-identity-plan.md` is now authoritative
+for its request, principal, certificate, and durable-operation shapes. The
+paragraphs below summarize the earlier delivery slices; current shapes are
+stated in the dedicated sections and agent plan. Slice 1 contained
 the pure request codec, signature verifier, and atom-safe parser. Slice 2 adds
-authenticated `read`: it enters the ordinary read-only proof path as the
-signed user and applies the ontology's normal ACL. Slice 3 adds the coordinated durable
+authenticated `read`: it entered the ordinary read-only proof path and applied
+the ontology's normal ACL. Slice 3 added the coordinated durable
 format break, validator-side request/ACL revalidation, one shared operation
 projection for ordinary transactions and DTX Begins, and Explorer rendering.
-Slice 4 adds local signed execution and cursors, moves the Explorer console to
-that same authenticated path, and replaces specialized home registration with
-the ordinary signed `create_user_home` goal. That goal is now only a root
-Prolog convenience over generic `create_ontology/2`; it has no special Erlang
-lifecycle operation. Slice 5 carries the same signed
-user and request through remote and nested scopes, activates signed
+Slice 4 added local signed execution and cursors and moved the Explorer console
+to that authenticated path. Its temporary `create_user_home` convenience is
+now deleted. Slice 5 carried the same signed request through remote and nested scopes and activated signed
 multi-ontology commit, makes missing root identity retryable during history
-validation, and persists unresolved browser writes. Slice 6 lets any client
+validation, and persisted unresolved browser writes. Slice 6 let any client
 node route the unchanged signed request to one exact target validator, while
 the target still uses the same proof, ACL, transaction, DTX, lifecycle, cursor,
 and outcome paths. It also adds predicate-neutral client term builders. The
@@ -22,37 +24,41 @@ an older generation must activate it through the documented clean re-found
 procedure.
 
 > **Architecture correction.** This document records the implemented signed
-> request whose principal is labelled `{user, Key}`.  That label is temporary:
-> `ontology-actor-architecture.md` defines the target model in which every
+> request whose principal was labelled `{user, Key}`. That retired label is
+> retained below only where the earlier delivery history is being described.
+> `ontology-actor-architecture.md` defines the working-tree model in which every
 > durable actor state is ontology content and `agent` is the generic signer
 > class. A concrete signer is a local agent instance identified externally by
 > `agent_instance_ref/3`; the containing ontology, its creator, that instance,
-> its key, and its ACL permissions remain distinct. The future
+> its key, and its ACL permissions remain distinct. The working-tree
 > agent-bound request is one hard format migration of this same path, not a
 > second client endpoint, executor, or ACL.
 
-> The target model also removes the transitional `create_user_home` helper. It
+> The working-tree model removes the transitional `create_user_home` helper. It
 > is not renamed to `create_agent`: Quod has no core agent-construction
 > predicate. Existing `create_ontology/2` may place local `instance_of/2`,
 > `agent_key/3`, and ACL facts in genesis, and ordinary transactions may add
 > instances later. `instance_of/2` creates only logical class membership; a
 > separate committed hosting fact controls an optional Erlang runtime.
 
+> `generic-agent-identity-plan.md` owns the exact replacement request,
+> certified identity validation, format audit, deletion map, and closure
+> tests. Historical slice descriptions below are not compatibility contracts.
+
 ### Agent-format routing decision
 
-The implemented v1 request enters the selected target ontology directly. The
-agent-format break changes this once: a signed request enters the exact
+The retired user-key request entered the selected target ontology directly.
+The agent-format break changes this once: a signed request enters the exact
 ontology containing its claimed agent instance, and another target is reached
 through the existing `Target::Goal` mechanism. The old direct-target form is
 deleted rather than retained beside it.
 
 The containing ontology validates the active `agent_key/3` binding. Remote
-targets must additionally receive one independently verifiable authorization
-from that origin; trusting the single node which opened a scope is not enough.
-The implementation plan must refactor the existing scope/plan authentication
-evidence to transfer that result for reads, cursors, transactions, and DTX.
-It must not add per-target key-verification variants or require every target to
-continuously follow every signer ontology.
+targets additionally receive one independently verifiable **identity**
+certificate from that origin; trusting the single node which opened a scope is
+not enough. The certificate proves the active key only. Each target still
+applies its own existing `can_invoke/4`; the origin never authorizes another
+ontology's predicate.
 
 ## Purpose
 
@@ -145,15 +151,16 @@ The wire format must be a small, versioned, cross-language binary layout. It
 must not use JavaScript object iteration order or Erlang external-term encoding
 as the signing contract.
 
-Conceptually, version 1 binds:
+The current agent request binds:
 
 ```text
-domain                 = "quod.user.goal.v1"
+domain                 = "quod.agent.goal.v1"
 network_identity       = pinned root/network identity
-user_public_key        = 32-byte Ed25519 public key
+signing_public_key     = 32-byte Ed25519 public key
 operation_id           = 32 random bytes generated once by the client
-target_namespace       = bounded UTF-8 bytes
-target_genesis_anchor  = 32 bytes
+agent_namespace        = bounded UTF-8 bytes
+agent_genesis_anchor   = 32 bytes
+agent_instance_text    = one ground dot-terminated Prolog term
 mode                   = read | execute | cursor
 parser_version         = 1 | 2
 not_after_ms            = signed admission deadline
@@ -253,7 +260,7 @@ predicate allowlist.
 New callable-symbol materialization is charged only after authentication. It
 has a per-request maximum and one global node headroom/cumulative safety ceiling
 so creating free user keys cannot exhaust the BEAM atom table slowly. Operators
-may additionally enable per-user and per-peer rate budgets, but Quod ships with
+may additionally enable per-signing-key and per-peer rate budgets, but Quod ships with
 no request-rate policy by default. Existing symbols do not consume allocation
 budget. Exceeding a safety or explicitly configured policy limit fails before
 proof execution and does not grow the atom table. The cumulative ceiling uses
@@ -279,8 +286,8 @@ The gateway may add transport correlation and tracing outside the signed
 payload. It may not rewrite the principal, target, mode, operation ID, parser
 version, or goal. The target cannot inspect the gateway's node-local browser
 session and does not need to: it independently verifies the user signature,
-operation ID, and deadline, and rate-limits both the authenticated forwarding
-node and the user key.
+operation ID, and deadline, and may apply operator-configured rate policy to
+the authenticated forwarding node and signing key.
 
 Routing failure returns a typed availability result. It never causes the
 gateway to execute the goal in another namespace or to substitute a local
@@ -291,9 +298,9 @@ ontology with the same name and a different genesis anchor.
 After validation, the engine receives:
 
 ```text
-exact target identity
+exact agent-ontology identity
 parsed goal
-{user, PublicKey}
+{agent, AgentReferenceBlob}
 signed request evidence
 execution mode
 ```
@@ -320,24 +327,25 @@ Stopping and re-founding a namespace between HTTP admission and worker startup
 therefore refuses the old signed request instead of rebinding it to the new
 incarnation.
 
-## Remote scopes and the user principal
+## Remote scopes and the agent principal
 
-The current remote scope binding carries the origin node key, and the remote
-runtime reconstructs `{node, OriginKey}`. That is insufficient for signed user
-goals.
+The earlier remote scope binding carried only the origin node key. That was
+insufficient for signed agent goals.
 
-Scope-open v4 must add a bounded authentication context:
+Scope-open V5 carries one bounded authentication context:
 
 ```text
 node proof: auth = node
-user proof: auth = {signed_goal, RequestBytes, UserSignature}
+agent proof: auth =
+  {signed_goal, RequestBytes, AgentSignature, AgentIdentityCertificate}
 ```
 
 The binding includes the authentication-context digest. A remote target
-verifies the user signature, exact origin request, and `{user, PublicKey}`
-principal before opening the scope. The scope latches that full principal and
-request digest for its entire lifetime. Nested scopes forward the same evidence
-unchanged.
+verifies the request signature, exact origin request, stable agent principal,
+and quorum identity certificate before opening the scope. The certificate
+proves the origin agent's active key, not permission. The scope latches the
+principal and request digest for its lifetime; nested scopes forward the same
+evidence unchanged and each target applies its own ordinary ACL.
 
 The nested invocation goal need not equal the signed top-level goal: it is a
 derivation of the signed proof. Existing call-chain and authorization
@@ -347,37 +355,35 @@ rejected before Begin.
 
 ## Plan, transaction, and DTX binding
 
-A durable write requires the user evidence to survive beyond the entry node.
+A durable write requires the agent evidence to survive beyond the entry node.
 The three record roles are deliberately different:
 
 ```text
 sealed plan:
-    request_binding = none | {user_goal_v1, RequestDigest}
+    request_binding = none | {agent_goal_v1, RequestDigest}
 
 ordinary transaction:
     request_auth = none |
-      {user_goal_v1, RequestDigest, RequestBytes, UserSignature}
+      {agent_goal_v1, RequestDigest, RequestBytes, AgentSignature}
     auth_transcript = none |
-      {user_goal_v1, TopLevelAuthorizationTranscriptBlob}
+      {agent_goal_v1, TargetAuthorizationTranscriptBlob}
 
 DTX Begin:
     request_auth = none |
-      {user_goal_v1, RequestDigest, RequestBytes, UserSignature}
-    auth_transcript = none |
-      {user_goal_v1, TopLevelAuthorizationTranscriptBlob}
+      {agent_goal_v1, RequestDigest, RequestBytes, AgentSignature}
 ```
 
 An ordinary transaction must carry the complete `request_auth`, not only its
 digest: validators receive the transaction but never receive its sealed plan.
 The node-author signature and semantic transaction ID cover that complete
 field, allowing proposal validation, replay, catch-up, and Explorer inspection
-to re-verify the user signature and re-parse the text independently.
+to re-verify the agent signature and re-parse the text independently.
 
-An ordinary user transaction also carries the one top-level authorization
+An ordinary agent transaction also carries the one target authorization
 entry already recorded by the proof. It is encoded with the existing bounded
 authorization-transcript codec; it is not a new ACL or a second authorization
 format. The entry must name the exact transaction goal and the canonical
-single-target user chain `[TargetIdentity]`. At proposal validation, ordered
+single-target agent chain `[TargetIdentity]`. At proposal validation, ordered
 apply, replay, and catch-up, validators decode that one entry and call the same
 `quod_ask:validate_authorization_transcript/6` checker used for DTX Prepare.
 They re-prove `can_invoke/4` against the committed parent state and require the
@@ -386,38 +392,29 @@ handled by the same deterministic authorization and OCC rules as the original
 proof. Node-authored transactions and genesis carry `none` and retain their
 current behavior.
 
-For DTX, the origin Begin carries the complete request and the one top-level
-authorization entry once. Origin validators re-prove that entry through the
-same `quod_ask:validate_authorization_transcript/6` path used for an ordinary
-transaction. The Manifest and every participant plan bind only the request
-digest. A participant validator follows the certified Begin reference it
-already must verify, checks the full evidence there, and requires the
-Manifest/plan digest binding to match. It then re-proves its target plan's
-existing authorization transcript. Prepare must not copy the full request or
-the origin authorization entry into every participant ledger merely for
-convenience.
+For DTX, the origin Begin carries the complete request and stable operation
+claim, but no origin ACL transcript. Origin validators verify the request and
+the agent ontology's active-key fact. A direct `A -> B::Goal` is authorized by
+B, not A. The Manifest and every participant plan bind the request digest. A
+participant validator follows the certified Begin reference, verifies that
+binding, and re-proves its own target plan's existing authorization transcript.
+Prepare does not copy the complete request into every participant ledger.
 
-The currently deployed fixed home-registration request is not added to the new
-ledger format. There is no `user_registration_v1` transaction variant. Slices
-3 through 5 are one undeployed protocol generation, so Slice 4 replaces the
-current specialized registration endpoint with a normal `user_goal_v1` root
-goal before the generation can be activated. That goal's predicate derives the
-fixed home from the authenticated principal and enters the ordinary
-lifecycle-effect path. The current specialized HTTP route, request signature
-domain, and dedicated registration executor are deleted in the same change.
-The two registration paths are never enabled together in an activated
-signed-write release.
+The former home-registration request, `create_user_home`, specialized route,
+and `quod_user` helper are deleted. Enrollment is ordinary ontology creation
+and ordinary `instance_of/2`, `agent_key/3`, and ACL facts. There is no
+`user_registration_v1` or replacement registration executor.
 
-For every user write, validators require:
+For every agent write, validators require:
 
 - the signature verifies under the public key inside `RequestBytes`;
 - the request target is the proof origin's exact identity;
 - the request principal equals the plan and record principal;
 - parsing the request produces the exact top-level durable goal blob;
-- an ordinary user transaction or origin DTX Begin contains exactly one
-  top-level authorization entry for that same goal and target, and re-proving
-  it against the committed origin parent through
-  `validate_authorization_transcript/6` yields the recorded verdict;
+- an ordinary local transaction contains exactly one target authorization
+  entry and re-proves it at the committed parent;
+- a DTX Begin contains the active-key proof and operation claim but no
+  caller-ontology permission verdict for a remote predicate;
 - every participant plan binds the same request digest;
 - the operation identity has not been used with another request digest.
 
@@ -463,8 +460,8 @@ and signing-journal frames.
 
 ### One authoritative origin ledger
 
-The signed request's exact target identity is the proof origin and the sole
-authority for `{UserPublicKey, OperationId}`. Operation identity cannot be kept
+The signed request's exact agent-ontology identity is the proof origin and the
+sole authority for `{AgentReferenceBlob, OperationId}`. Operation identity cannot be kept
 independently in whatever foreign ontology happened to receive a diff: two
 proofs may legitimately discover different material participant sets.
 
@@ -481,7 +478,7 @@ material can become visible:
   writes, because it would leave no authoritative origin claim.
 
 That foreign-only case deliberately adds the origin Begin round trip. It is the
-cost of recording the user's operation before a foreign diff can become
+cost of recording the agent's operation before a foreign diff can become
 visible, and must not later be removed as a performance optimization.
 
 This is not an ontology fact and does not accumulate user data in the origin
@@ -494,7 +491,7 @@ Ordinary origin transactions and origin DTX Begins feed the same deterministic,
 disk-backed projection keyed by:
 
 ```text
-{UserPublicKey, OperationId}
+{AgentReferenceBlob, OperationId}
 ```
 
 Each row is bounded and stores the unique request digest plus its ordinary or
@@ -512,7 +509,8 @@ an in-memory lookup table happens to be empty.
 
 The current ledger is unpruned, so the disk projection is fully reconstructible
 from history, like the outcome index and author-sequence floors. Every admitted
-operation keeps its key, request digest, and first outcome reference
+operation keeps its stable agent reference, operation id, request digest, and
+first outcome reference
 indefinitely on disk. Disk compaction may rewrite those rows but must not remove
 their tombstones; only the RAM cache is size-bounded. Any future ledger-pruning
 design must preserve equivalent durable tombstones and requires a separate
@@ -523,7 +521,7 @@ accepted the connection:
 
 ```text
 {operation, OriginNamespace, OriginGenesisAnchor,
-            UserPublicKey, OperationId}
+            AgentReferenceBlob, OperationId}
 ```
 
 Current origin validators answer operation lookup from the same applied
@@ -697,12 +695,13 @@ No execution endpoint lands before this slice is independently reviewed.
 ### Slice 2: local signed reads
 
 - Add authenticated `read` ingress on the client listener.
-- Thread request evidence and `{user, Key}` into `prove_ro`.
+- Thread request evidence and the then-current `{user, Key}` into `prove_ro`
+  (historical Slice-2 shape, replaced atomically by the agent format).
 - Use the normal top-level ACL and return normal bindings/failure reasons.
 - Reuse the bounded ingress and worker admission. An operator may opt into
-  per-user or per-peer rate policy; it is disabled by default.
+  per-signing-key or per-peer rate policy; it is disabled by default.
 - During this intermediate slice, reject a foreign scope rather than
-  substituting the forwarding node principal for the signed user. Slice 5
+  substituting the forwarding node principal for the signed principal. Slice 5
   removes that temporary gate by carrying the exact signed authentication.
 
 This proves origin-local predicates without changing a ledger format.
@@ -724,7 +723,7 @@ correlation; reads create no ledger operation row. Named variables are returned
 under the exact UTF-8 names from the frozen parser, not VM-created atoms.
 
 Admission uses the shared bounded ingress and worker pools. An operator may
-opt into per-user or per-peer request and symbol rate policies, but neither is
+opt into per-signing-key or per-peer request and symbol rate policies, but neither is
 enabled by default. New callable vocabulary remains subject to the
 VM-lifetime cumulative safety ceiling that survives auth-owner restarts.
 Existing symbols are free, ordinary data atoms are not allocated merely because
@@ -800,11 +799,13 @@ it never fell through to the old node-principal behavior.
 
 ### Slice 5: activate scopes and multi-ontology goals
 
-- Complete the Slice-3 scope V4 implementation that carries the full principal
-  and request digest; do not introduce another wire version or re-found.
+- Complete the then-current scope V4 implementation carrying the full
+  principal and request digest. The later agent hard break replaces it once
+  with scope V5.
 - Verify evidence at every remote target and preserve it through nested scopes.
 - Bind the identical request digest into every participant plan and Manifest;
-  keep the complete request and origin authorization entry once in Begin.
+  keep the complete request and operation claim once in Begin. The current
+  Begin has no caller-ontology ACL verdict for a remote target predicate.
 - Test two- and three-ontology user writes, restrictive target ACLs, principal
   substitution, altered request bytes, stripped evidence, route failover,
   coordinator crash, abort, and Complete recovery.
@@ -813,23 +814,23 @@ it never fell through to the old node-principal behavior.
   Carry that result through the shared replay and catch-up validator instead
   of adding a special catch-up exception.
 - Persist the signed request and operation ID until its anchored outcome is
-  definite. The current deterministic `create_user_home` helper can
-  reconstruct its exact request; arbitrary goals cannot, so a lost response
-  must not depend on browser memory.
+  definite; a lost response must not depend on browser memory.
 
-Implemented closure uses the existing scope V4 path for local, co-hosted, and
-remote targets. The scope-open authentication contains the exact signed request
-and user principal; each target verifies those bytes and then runs its ordinary
-`can_invoke/4` proof. Every sealed plan binds the same request digest, while the
-origin Begin carries the complete request once. A foreign-only material write
-uses the same origin-Begin protocol even when it has one participant.
+Current closure uses the one scope V5 path for local, co-hosted, and remote
+targets. Scope-open authentication contains the exact signed request, stable
+agent principal, and proof-scoped identity certificate. Each target verifies
+identity and then runs its own ordinary `can_invoke/4` proof. Every sealed plan
+binds the same request digest, while the origin Begin carries the complete
+request and operation claim once. A foreign-only material write uses the same
+origin-Begin protocol even when it has one participant.
 
 Root-network identity unavailability is one typed retry result shared by live
 preview, replay, catch-up, and foreign-history verification. It is not a
 catch-up exception and never converts a committed signed record into invalid
 history merely because the local root projection is temporarily unavailable.
 
-The browser journals at most 64 unresolved durable operations in IndexedDB.
+The browser journals unresolved durable operations in IndexedDB without a
+fixed population limit; available browser storage is the only capacity bound.
 It writes the exact request and signature before Execute or cursor Accept,
 never evicts an unresolved row, and removes it only after a definite outcome.
 Reload recovery sends those bytes only to `POST /api/goals/outcomes`; it never
@@ -848,7 +849,7 @@ test, which proves recovery from certified records without re-proving.
 **Working-tree implementation:** one bounded node-level router now carries
 the exact request bytes and signature between a gateway and an
 identity-pinned target. Browser sessions and addresses remain local to the
-gateway; the target derives the user from the signature, derives the
+gateway; the target derives the agent from the signature, derives the
 forwarder from the authenticated link, independently verifies the request,
 and enters the same target executor used by local ingress. Authentication,
 cursor, and router owners run on every node, while `client_enabled` still
@@ -893,10 +894,10 @@ Refactor the current local-only ingress into these two boundaries:
    effect, and outcome machinery remain the only implementations.
 
 The gateway never sends its browser session id or browser IP to the target.
-They are local transport facts, not user authority. The target derives the
-user solely from the verified request and derives the forwarding peer solely
+They are local transport facts, not agent authority. The target derives the
+agent solely from the verified request and derives the forwarding peer solely
 from the authenticated node link. A forwarding node need not be a validator:
-it routes a user-signed request but gains no permission from doing so.
+it routes an agent-signed request but gains no permission from doing so.
 
 The gateway and target verification intentionally repeat the bounded signature
 and atom-safe parse: each protects a different trust boundary. Profile this
@@ -1104,13 +1105,12 @@ left as an implicit follow-up:
   `network_identity_unavailable` retry result through the scope wire, Ask
   mapping, docs, and tests; retain `ontology_rebuilding` only for an ontology
   that is actually not ready.
-- Audit and remove or TEST-fence the production-dead legacy exports
+- The production-dead legacy exports were removed or TEST-fenced:
   `quod_ontology:network_identity/1`, `prepare_action/1`, `create/2`, `join/3`,
   `quod_proof_context:start/5`, `quod_prolog:open_cursor/4`,
-  `quod_dtx:request_authorization/1`, and `quod_client_auth:session/1`.
-  Update their tests to exercise the surviving production boundary instead of
-  preserving an obsolete API for fixtures. Keep an export only if a fresh
-  complete caller audit proves that it remains a deliberate supported API.
+  `quod_client_auth:session/1` remains TEST-only; the other obsolete APIs,
+  including the old DTX request-authorization accessor, are absent. Tests use
+  the surviving production boundaries except for that direct session fixture.
 - Add the missing real-path negatives for wrong network at admission, expired
   signed request, and a restrictive foreign target refusing a nested sub-goal
   through its ordinary `can_invoke/4` policy.
@@ -1183,7 +1183,7 @@ The Slice-6 review must answer explicitly:
 1. Is the new node owner transport-only, with all goal execution still
    converging on one target function and the existing Prolog path?
 2. Are browser-session authority, authenticated forwarding-peer identity, and
-   signed actor identity (currently labelled as a user identity) separated
+   the stable agent identity separated
    without trusting a forwarded field?
 3. Do typed refusals permit route changes only before durable handoff, while
    every ambiguous post-send write returns the stable operation reference
@@ -1268,13 +1268,13 @@ The review must answer these before implementation:
 - A participant that cannot fetch and verify the certified origin Begin treats
   Prepare as retryable and never approves it from the Manifest digest alone.
 - Compaction and restart retain enough operation tombstone information that a
-  different digest cannot reuse an old `{UserKey, OperationId}`.
+  different digest cannot reuse an old `{AgentReferenceBlob, OperationId}`.
 - A crash after the operation claim is applied but before its outcome row is
   published rebuilds both projections from ledger order and converges on the
   same first outcome.
 - Cross-node resolution of `outcome_unknown` requires the existing certified
   current-view threshold and ignores one Byzantine conflicting response.
-- A remote or nested scope rejects altered request bytes, a substituted user,
+- A remote or nested scope rejects altered request bytes, a substituted agent,
   a mismatched authentication digest, and missing evidence; the valid exact
   request reaches the normal target ACL and transaction path.
 

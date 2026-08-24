@@ -149,7 +149,8 @@ generation_guard_blocks_every_overlay_surface_test() ->
                          Ov, {parent, 2})),
           GroupId = <<91:256>>,
           true = ets:insert(
-                   Tab, {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+                   Tab, quod_ct:proof_gate_row(
+                          true, {pending, GroupId}, 7, GroupId)),
           Expected = {quod_ask_error, {transaction_pending, GroupId}},
           ?assertThrow(
              Expected,
@@ -208,7 +209,8 @@ guard_is_preserved_by_overlay_revisions_test() ->
                        quod_erlog_db_local_prove:access_guard(W2)),
           GroupId = <<92:256>>,
           true = ets:insert(
-                   Tab, {proof_gate, true, {pending, GroupId}, 7, GroupId}),
+                   Tab, quod_ct:proof_gate_row(
+                          true, {pending, GroupId}, 7, GroupId)),
           ?assertEqual(
              {error, {transaction_pending, GroupId}},
              quod_erlog_db_local_prove:check_access(W2))
@@ -425,7 +427,7 @@ with_proof_gate(Fun) ->
     Namespace = <<"quod:overlay-guard-test">>,
     Table = 'quod_simplex_genesis_quod:overlay-guard-test',
     Tab = ets:new(Table, [named_table, protected, set]),
-    true = ets:insert(Tab, {proof_gate, true, open, 7, none}),
+    true = ets:insert(Tab, quod_ct:proof_gate_row(true, open, 7, none)),
     try Fun(Tab, {quod_proof_access, Namespace, 7})
     after
         ets:delete(Tab)

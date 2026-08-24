@@ -55,21 +55,24 @@ signed_scope_authentication_is_verified_and_bound_test() ->
     Network = <<91:256>>,
     Origin = {<<"quod:signed-origin">>, <<92:256>>},
     Fixture = quod_ct:signed_goal_fixture(
-                #{network => Network, target => Origin}),
+                #{network => Network, target => Origin,
+                  deadline => quod_time:now_ms() + 60000}),
+    ProofId = <<90:256>>,
+    {Certificate, View} = identity_certificate(Fixture, ProofId),
     Authentication =
         {signed_goal, maps:get(request_bytes, Fixture),
-         maps:get(signature, Fixture)},
+         maps:get(signature, Fixture), Certificate},
     {ok, AuthenticationDigest} =
         quod_scope_wire:authentication_digest(Authentication),
-    User = maps:get(user, Fixture),
+    Principal = maps:get(principal, Fixture),
     OriginKey = <<93:256>>,
     quod_ct:with_network_identity(
       Network,
       fun() ->
           {ok, Authorization} =
               quod_prolog:test_scope_authentication_reason(
-                Authentication, OriginKey, Origin, {user, User},
-                AuthenticationDigest),
+                Authentication, OriginKey, Origin, Principal,
+                AuthenticationDigest, ProofId, {ok, View}),
           ?assertEqual(
              quod_client_goal:request_binding(Fixture),
              maps:get(request_binding, Authorization)),
@@ -77,28 +80,33 @@ signed_scope_authentication_is_verified_and_bound_test() ->
              quod_client_goal:request_auth(Fixture),
              maps:get(request_auth, Authorization)),
           lists:foreach(
-            fun({Auth, Identity, Principal, Digest}) ->
+            fun({Auth, Identity, TestPrincipal, Digest}) ->
                 ?assertEqual(
                    {error, {protocol_error, request_binding}},
                    quod_prolog:test_scope_authentication_reason(
-                     Auth, OriginKey, Identity, Principal, Digest))
+                     Auth, OriginKey, Identity, TestPrincipal, Digest,
+                     ProofId, {ok, View}))
             end,
-            [{Authentication, Origin, {user, <<94:256>>},
+            [{Authentication, Origin, {agent, <<94:256>>},
               AuthenticationDigest},
              {Authentication, {<<"quod:other">>, element(2, Origin)},
-              {user, User}, AuthenticationDigest},
-             {Authentication, Origin, {user, User}, <<95:256>>},
+              Principal, AuthenticationDigest},
+             {Authentication, Origin, Principal, <<95:256>>},
              {{signed_goal, <<(maps:get(request_bytes, Fixture))/binary, 0>>,
-               maps:get(signature, Fixture)},
-              Origin, {user, User}, AuthenticationDigest}])
+               maps:get(signature, Fixture), Certificate},
+              Origin, Principal, AuthenticationDigest}])
       end).
 
 signed_scope_waits_when_network_identity_is_temporarily_unavailable_test() ->
     Origin = {<<"quod:signed-origin">>, <<96:256>>},
-    Fixture = quod_ct:signed_goal_fixture(#{target => Origin}),
+    Fixture = quod_ct:signed_goal_fixture(
+                #{target => Origin,
+                  deadline => quod_time:now_ms() + 60000}),
+    ProofId = <<95:256>>,
+    {Certificate, _View} = identity_certificate(Fixture, ProofId),
     Authentication =
         {signed_goal, maps:get(request_bytes, Fixture),
-         maps:get(signature, Fixture)},
+         maps:get(signature, Fixture), Certificate},
     {ok, AuthenticationDigest} =
         quod_scope_wire:authentication_digest(Authentication),
     SavedDesired = application:get_env(quod, namespace_desired),
@@ -108,7 +116,8 @@ signed_scope_waits_when_network_identity_is_temporarily_unavailable_test() ->
            {error, {network_identity_unavailable, _}},
            quod_prolog:test_scope_authentication_reason(
              Authentication, <<97:256>>, Origin,
-             {user, maps:get(user, Fixture)}, AuthenticationDigest))
+             maps:get(principal, Fixture), AuthenticationDigest,
+             ProofId, {error, unavailable}))
     after
         case SavedDesired of
             {ok, Desired} ->
@@ -124,9 +133,11 @@ expired_signed_scope_is_refused_before_execution_test() ->
     Fixture = quod_ct:signed_goal_fixture(
                 #{network => Network, target => Origin,
                   deadline => quod_time:now_ms() - 1}),
+    ProofId = <<97:256>>,
+    {Certificate, View} = identity_certificate(Fixture, ProofId),
     Authentication =
         {signed_goal, maps:get(request_bytes, Fixture),
-         maps:get(signature, Fixture)},
+         maps:get(signature, Fixture), Certificate},
     {ok, AuthenticationDigest} =
         quod_scope_wire:authentication_digest(Authentication),
     quod_ct:with_network_identity(
@@ -136,7 +147,8 @@ expired_signed_scope_is_refused_before_execution_test() ->
              {error, {scope_expired, <<"quod:test-target">>}},
              quod_prolog:test_scope_authentication_reason(
                Authentication, <<100:256>>, Origin,
-               {user, maps:get(user, Fixture)}, AuthenticationDigest))
+               maps:get(principal, Fixture), AuthenticationDigest,
+               ProofId, {ok, View}))
       end).
 
 target_owns_scope_timeout_classification_test() ->
@@ -313,3 +325,22 @@ test_binding(Ns) ->
     {scope_binding, <<1:256>>, <<2:256>>, <<3:256>>, <<4:128>>,
      {<<"quod:origin">>, <<5:256>>}, {Ns, <<6:256>>}, read_write,
      {node, <<1:256>>}, AuthenticationDigest}.
+
+identity_certificate(Fixture, ProofId) ->
+    Evidence = maps:get(evidence, Fixture),
+    NotAfter = maps:get(deadline, Fixture),
+    CommitteeId = <<101:256>>,
+    KeyPair = quod_identity:generate(),
+    {Validator, Seed} = KeyPair,
+    {ok, Statement} = quod_agent_identity:statement(
+                        Evidence, ProofId, CommitteeId, NotAfter),
+    {ok, SignatureRow} = quod_agent_identity:sign(
+                           Statement,
+                           #{pubkey => Validator,
+                             key => quod_identity:key_term(
+                                      {Validator, Seed})}),
+    {ok, Certificate} = quod_agent_identity:certificate(
+                          Statement, [SignatureRow], []),
+    View = #{identity => maps:get(target, Fixture),
+             committee => [Validator], committee_id => CommitteeId},
+    {Certificate, View}.

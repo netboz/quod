@@ -17,9 +17,9 @@ a synchronous call to itself.
 -include("quod_proof_limits.hrl").
 
 -export([start/9, invoke_open/5, invoke_next/3, invoke_cancel/2, close/1,
-         seal/4, attest_plan/3, submit_plan/4,
+         seal/4, attest_plan/3, bind_group_effects/3, submit_plan/4,
          materialize/4, restore_many/2, release_many/2,
-         dispatch/1, remaining_ms/0,
+         dispatch/1, remaining_ms/0, principal/0,
          pid/1, scope_id/1, identity/1, failure_reason/2]).
 
 -ifdef(TEST).
@@ -347,6 +347,178 @@ checked_attestation_result(Handle, Plan, Manifest, {ok, Attestation}) ->
 checked_attestation_result(_Handle, _Plan, _Manifest, {error, _} = Error) ->
     Error.
 
+-doc "Persist every prepared direct effect under one dormant DTX group.".
+-spec bind_group_effects([{handle(), <<_:256>>}], term(), non_neg_integer()) ->
+          ok | {error, term()}.
+bind_group_effects(Rows, GroupRef, TimeoutMs)
+  when is_list(Rows), is_integer(TimeoutMs), TimeoutMs >= 0 ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
+    %% Start every remote/co-hosted command from this proof process before
+    %% waiting for any reply.  Scope ownership remains exact while all targets
+    %% prepare concurrently under one deadline.
+    {LocalRows, AsyncRows} =
+        lists:partition(fun is_local_group_effect_row/1, Rows),
+    case start_group_effect_binds(AsyncRows, GroupRef, Deadline, []) of
+        {ok, Pending} ->
+            case bind_local_group_effects(LocalRows, GroupRef) of
+                ok -> await_group_effect_binds(Pending, Deadline);
+                {error, _} = Error ->
+                    cleanup_group_effect_binds(Pending),
+                    Error
+            end;
+        {error, Error, Pending} ->
+            cleanup_group_effect_binds(Pending),
+            Error
+    end;
+bind_group_effects(_Rows, _GroupRef, _TimeoutMs) ->
+    {error, {protocol_error, session_binding}}.
+
+is_local_group_effect_row(
+  {{local_scope, _ScopeId, _Ns, _Anchor, _Height, _Session},
+   <<_:256>>}) -> true;
+is_local_group_effect_row(_Row) -> false.
+
+bind_local_group_effects([], _GroupRef) ->
+    ok;
+bind_local_group_effects(
+  [{{local_scope, _ScopeId, Ns, Anchor, _Height, Session}, PlanDigest} | Rest],
+  GroupRef) ->
+    case bind_session_group_effect(
+           Session, {Ns, Anchor}, GroupRef, PlanDigest) of
+        ok -> bind_local_group_effects(Rest, GroupRef);
+        {error, _} = Error -> Error
+    end.
+
+start_group_effect_binds([], _GroupRef, _Deadline, RevPending) ->
+    {ok, lists:reverse(RevPending)};
+start_group_effect_binds(
+  [{Handle, PlanDigest} | Rest], GroupRef, Deadline, RevPending) ->
+    RemainingMs = max(0, Deadline - quod_time:mono_ms()),
+    case start_group_effect_bind(Handle, GroupRef, PlanDigest, RemainingMs) of
+        {ok, Pending} ->
+            start_group_effect_binds(
+              Rest, GroupRef, Deadline, [Pending | RevPending]);
+        {error, _} = Error ->
+            {error, Error, lists:reverse(RevPending)}
+    end.
+
+start_group_effect_bind(
+  {quod_scope_session, Pid, _ScopeId, ProofId, SessionRef,
+   _Ns, _Anchor} = Handle,
+  GroupRef, PlanDigest, _RemainingMs) ->
+    RequestRef = make_ref(),
+    Pid ! {scope_bind_group_effects, self(), ProofId, SessionRef,
+           RequestRef, GroupRef, PlanDigest},
+    MRef = monitor(process, Pid),
+    {ok, {cohosted, Handle, Pid, ProofId, SessionRef, RequestRef, MRef}};
+start_group_effect_bind(
+  {remote_scope, _, _, _, _} = Handle,
+  GroupRef, PlanDigest, RemainingMs) ->
+    case bind_remote_router(Handle) of
+        {ok, Router, MRef} ->
+            case quod_ask_router:command(
+                   Handle, RemainingMs,
+                   {bind_group_effects, GroupRef, PlanDigest}) of
+                {ok, RequestId} ->
+                    {ok, {remote, Handle, RequestId, Router, MRef}};
+                {sent, _RequestId} ->
+                    {error, {protocol_error, request_binding}};
+                {error, _} = Error -> Error
+            end;
+        {error, _} = Error -> Error
+    end;
+start_group_effect_bind(_Handle, _GroupRef, _PlanDigest, _RemainingMs) ->
+    {error, {protocol_error, session_binding}}.
+
+await_group_effect_binds([], _Deadline) ->
+    ok;
+await_group_effect_binds([Pending | Rest], Deadline) ->
+    RemainingMs = max(0, Deadline - quod_time:mono_ms()),
+    case await_group_effect_bind(Pending, RemainingMs) of
+        ok -> await_group_effect_binds(Rest, Deadline);
+        {error, _} = Error ->
+            cleanup_group_effect_binds(Rest),
+            Error
+    end.
+
+await_group_effect_bind(
+  {cohosted, Handle, Pid, ProofId, SessionRef, RequestRef, MRef}, TimeoutMs) ->
+    try
+        receive
+            {scope_reply, Pid, ProofId, SessionRef, RequestRef,
+             {group_effects_bound, Result}} ->
+                Result;
+            {'DOWN', MRef, process, Pid, Reason} ->
+                {error, failure_reason(Handle, Reason)}
+        after TimeoutMs ->
+            {Ns, _Anchor} = identity(Handle),
+            {error, {proof_limit_exceeded, Ns}}
+        end
+    after
+        demonitor(MRef, [flush])
+    end;
+await_group_effect_bind(
+  {remote, Handle, RequestId, Router, MRef}, TimeoutMs) ->
+    receive
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         group_effects_bound} ->
+            ok;
+        {quod_scope_event, Handle, RequestId, _Generation, _Dirty,
+         {scope_error, Reason}} ->
+            {error, Reason};
+        {quod_scope_down, Handle, Reason} ->
+            {error, failure_reason(Handle, Reason)};
+        {'DOWN', MRef, process, Router, _Reason} ->
+            {error, failure_reason(Handle, unavailable)}
+    after TimeoutMs ->
+        {Ns, _Anchor} = identity(Handle),
+        remote_timeout(
+          Handle, RequestId,
+          {error, {proof_limit_exceeded, Ns}})
+    end.
+
+cleanup_group_effect_binds(Pending) ->
+    lists:foreach(fun cleanup_group_effect_bind/1, Pending).
+
+cleanup_group_effect_bind(
+  {cohosted, _Handle, Pid, ProofId, SessionRef, RequestRef, MRef}) ->
+    demonitor(MRef, [flush]),
+    receive
+        {scope_reply, Pid, ProofId, SessionRef, RequestRef, _Reply} -> ok
+    after 0 -> ok
+    end;
+cleanup_group_effect_bind(
+  {remote, Handle, RequestId, _Router, _MRef}) ->
+    _ = quod_ask_router:cancel(Handle, RequestId),
+    drain_remote_event(Handle, RequestId).
+
+bind_session_group_effect(Session, Target, GroupRef, PlanDigest) ->
+    case quod_proof_session:sealed_plan(Session) of
+        {ok, Plan} ->
+            bind_sealed_group_effect(
+              Session, Target, Plan, GroupRef, PlanDigest);
+        {error, _} = Error -> Error
+    end.
+
+bind_sealed_group_effect(Session, Target, Plan, GroupRef, PlanDigest) ->
+    case {quod_dtx:digest(Plan) =:= PlanDigest,
+          quod_dtx:target(Plan) =:= Target,
+          quod_dtx:material(Plan)} of
+        {true, true, {ok, #{effects := [Effect]} = Material}} ->
+            case {quod_effect:validate_plan(Plan, Material),
+                  quod_proof_session:prepared_effect(Session, Effect)} of
+                {true, {ok, PreparedEffect}} ->
+                    quod_effect_journal:bind_group(
+                      Plan, GroupRef, Target, PlanDigest, PreparedEffect);
+                {true, error} ->
+                    {error, missing_effect_preparation};
+                {false, _} ->
+                    {error, invalid_group_effect}
+            end;
+        _ ->
+            {error, invalid_group_effect}
+    end.
+
 -doc """
 Submit a sealed plan to a REMOTE target validator through its open scope.
 
@@ -560,6 +732,14 @@ remaining_ms() ->
             error
     end.
 
+-doc "Return the authenticated principal of the scope running in this process.".
+-spec principal() -> {ok, quod_dtx:principal()} | error.
+principal() ->
+    case get(?RUNTIME) of
+        #runtime{principal = Principal} -> {ok, Principal};
+        undefined -> error
+    end.
+
 init(ScopeId, ProofId, Origin, Ns, Anchor, Height,
      Est, Engine, Ref, Opts) ->
     _ = quod_process:kill_when_owner_dies(Engine, self()),
@@ -660,6 +840,19 @@ dispatch_message({scope_attest, Origin, ProofId, Ref,
             send_reply(
               RequestRef,
               {attested, quod_proof_session:attest(Session, Manifest)}),
+            handled;
+        false ->
+            handled
+    end;
+dispatch_message({scope_bind_group_effects, Origin, ProofId, Ref,
+                  RequestRef, GroupRef, PlanDigest}) ->
+    case valid_command(Origin, ProofId, Ref) of
+        true ->
+            #runtime{namespace = Ns, anchor = Anchor,
+                     session = Session} = runtime(),
+            Result = bind_session_group_effect(
+                       Session, {Ns, Anchor}, GroupRef, PlanDigest),
+            send_reply(RequestRef, {group_effects_bound, Result}),
             handled;
         false ->
             handled

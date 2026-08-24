@@ -27,7 +27,8 @@ all_public_outcome_references_share_one_identity_parser_test() ->
     ?assertEqual(
        {ok, Identity},
        quod_outcome:ref_identity(
-         {operation, Ns, Anchor, <<6:256>>, <<7:256>>})),
+         {operation, Ns, Anchor,
+          agent_ref(<<"quod:agent">>, <<6:256>>, 6), <<7:256>>})),
     ?assertEqual(error, quod_outcome:ref_identity({transaction, Ns, Anchor})),
     ?assertEqual(error, quod_outcome:ref_identity(not_a_reference)).
 
@@ -521,8 +522,12 @@ prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
           %% common MVCC publication have both succeeded.
           ?assertEqual({finalize_applied, GroupId, 2, 2}, DeferredAck),
           {{ok, AppliedRow}, I5} = quod_outcome:lookup_group(I4, GroupId),
-          ?assertMatch(#{verdict := commit, slot := 2, generation := 2},
-                       maps:get(applied, AppliedRow)),
+          ?assertEqual(
+             #{verdict => commit, finalize_ref => FinalizeRef,
+               slot => 2, generation => 2,
+               group_ref => maps:get(group_ref, F),
+               plan_digest => maps:get(plan_a_digest, F)},
+             maps:get(applied, AppliedRow)),
           StoredProjection = maps:get(
                                projection, quod_outcome:dtx_state(I5)),
           ?assertEqual(open, maps:get(proof_fence, StoredProjection)),
@@ -637,8 +642,12 @@ restart_preserves_transactions_and_reemits_prepared_finalize_effect_test() ->
                  {finalize_applied, GroupId, 3, 2}, ReplayDeferredAck),
               {{ok, RebuiltGroup}, R8} =
                   quod_outcome:lookup_group(R7, GroupId),
-              ?assertMatch(#{verdict := commit, slot := 3, generation := 2},
-                           maps:get(applied, RebuiltGroup)),
+              ?assertEqual(
+                 #{verdict => commit, finalize_ref => FinalizeRef,
+                   slot => 3, generation => 2,
+                   group_ref => maps:get(group_ref, F),
+                   plan_digest => PlanDigest},
+                 maps:get(applied, RebuiltGroup)),
               ok = quod_outcome:close(R8)
           after
               _ = file:del_dir_r(Dir)
@@ -816,7 +825,7 @@ group_fixture(Ns, Anchor, Pub, Signer, Verdict) ->
     {ok, AttA} = quod_dtx:attest_plan(Origin, PlanA, Manifest, Signer),
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} = quod_dtx:new_begin(
-                    Manifest, none, none,
+                    Manifest, none,
                     [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
                      {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     GroupId = quod_dtx:group_id(Begin),
@@ -920,3 +929,11 @@ apply_group_control_with_deferred_ack(Index, Slot, Control, Ref,
     {Index1, History1, Projection1, DeferredAck}.
 
 ref_slot({quod_dtx_ref, 2, _, _, Slot, _, _, _}) -> Slot.
+
+agent_ref(Ns, Anchor, N) ->
+    {ok, #{blob := Blob}} = quod_agent_ref:from_text(
+                              Ns, Anchor,
+                              <<"human_user(", (integer_to_binary(N))/binary,
+                                ").">>,
+                              2),
+    Blob.

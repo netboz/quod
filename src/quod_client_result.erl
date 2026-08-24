@@ -23,7 +23,7 @@ where the proof ran.
 -type group_ref() ::
         {group, binary(), <<_:256>>, <<_:256>>, <<_:256>>, <<_:256>>}.
 -type operation_ref() ::
-        {operation, binary(), <<_:256>>, <<_:256>>, <<_:256>>}.
+        {operation, binary(), <<_:256>>, binary(), <<_:256>>}.
 -type participant_slot() ::
         {{binary(), <<_:256>>}, pos_integer(), non_neg_integer()}.
 -type outcome() :: transaction_ref() |
@@ -252,8 +252,9 @@ valid_group_ref(
 valid_group_ref(_) -> false.
 
 valid_operation_ref(
-  {operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>}) ->
-    is_binary(Ns) andalso byte_size(Ns) > 0;
+  {operation, Ns, <<_:256>>, AgentRef, <<_:256>>}) ->
+    is_binary(Ns) andalso byte_size(Ns) > 0 andalso
+        quod_agent_ref:valid_principal({agent, AgentRef});
 valid_operation_ref(_) -> false.
 
 valid_participant_slots(Slots) ->
@@ -358,9 +359,17 @@ outcome_ref_json(
     #{ns => Ns, anchor => hex(Anchor), coordinator => hex(Coordinator),
       coordinator_admission => hex(Admission), group_id => hex(GroupId)};
 outcome_ref_json(
-  {operation, Ns, Anchor, User, OperationId}) ->
-    #{ns => Ns, anchor => hex(Anchor), user => b64url(User),
+  {operation, Ns, Anchor, AgentRef, OperationId}) ->
+    #{ns => Ns, anchor => hex(Anchor), agent => agent_json(AgentRef),
       operation_id => b64url(OperationId)}.
+
+agent_json(AgentRef) ->
+    {ok, #{identity := {AgentNs, AgentAnchor}, reference := Reference}} =
+        quod_agent_ref:decode(AgentRef),
+    #{kind => agent,
+      identity => #{ns => AgentNs, anchor => hex(AgentAnchor)},
+      reference => quod_explorer_http:prolog_text(Reference),
+      reference_wire => b64url(AgentRef)}.
 
 participant_slot_json({{Ns, Anchor}, Slot, Generation}) ->
     #{ns => Ns, anchor => hex(Anchor), height => Slot,

@@ -237,7 +237,7 @@ signed_goal_result({error, Reason})
        Reason =:= deadline_exceeds_session;
        Reason =:= unsupported_goal_mode;
        Reason =:= malformed_material;
-       Reason =:= invalid_user_principal ->
+       Reason =:= invalid_agent_principal ->
     {400, #{error => Reason}};
 signed_goal_result({error, not_found}) ->
     {404, #{error => cursor_not_found}};
@@ -286,12 +286,10 @@ auth_reply({ok, #{challenge_id := ChallengeId, server_nonce := ServerNonce,
             node_key => b64url(NodeKey),
             network_id => b64url(NetworkId)}};
 auth_reply({ok, #{session_id := SessionId, expires_ms := ExpiresMs,
-                  public_key := PublicKey, user_id := UserId, namespace := Namespace}}) ->
+                  public_key := PublicKey}}) ->
     {200, #{session_id => b64url(SessionId),
             expires_ms => ExpiresMs,
-            public_key => b64url(PublicKey),
-            user_id => UserId,
-            namespace => Namespace}};
+            public_key => b64url(PublicKey)}};
 auth_reply({error, client_auth_unavailable}) ->
     {503, #{error => client_auth_unavailable}};
 auth_reply({error, client_auth_busy}) ->

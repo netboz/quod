@@ -1,7 +1,6 @@
-const DATABASE = 'quod.signed-operations.v1'
+const DATABASE = 'quod.signed-operations.v2'
 const STORE = 'operations'
-const VERSION = 1
-const MAX_OPERATIONS = 64
+const DATABASE_VERSION = 1
 
 let browserJournal
 
@@ -22,9 +21,6 @@ export function memoryOperationJournal() {
   return {
     async put(row) {
       validateRow(row)
-      if (!rows.has(row.id) && rows.size >= MAX_OPERATIONS) {
-        throw new Error('too many unresolved signed operations')
-      }
       rows.set(row.id, structuredClone(row))
     },
     async delete(id) { rows.delete(id) },
@@ -37,7 +33,7 @@ function indexedDbJournal() {
   return {
     async put(row) {
       validateRow(row)
-      await boundedPut(database, row)
+      await request(database, 'readwrite', store => store.put(row))
     },
     async delete(id) {
       await request(database, 'readwrite', store => store.delete(id))
@@ -49,38 +45,9 @@ function indexedDbJournal() {
   }
 }
 
-async function boundedPut(databasePromise, row) {
-  const database = await databasePromise
-  return new Promise((resolve, reject) => {
-    const transaction = database.transaction(STORE, 'readwrite')
-    const store = transaction.objectStore(STORE)
-    let admissionError
-    const keys = store.getAllKeys()
-    keys.onsuccess = () => {
-      const existing = keys.result.includes(row.id)
-      if (!existing && keys.result.length >= MAX_OPERATIONS) {
-        admissionError = new Error('too many unresolved signed operations')
-        transaction.abort()
-        return
-      }
-      store.put(row)
-    }
-    keys.onerror = () => {
-      admissionError = keys.error || new Error('could not inspect operation journal')
-      transaction.abort()
-    }
-    transaction.oncomplete = () => resolve()
-    transaction.onerror = () => reject(
-      admissionError || transaction.error ||
-        new Error('operation journal transaction failed'),
-    )
-    transaction.onabort = transaction.onerror
-  })
-}
-
 function openDatabase() {
   return new Promise((resolve, reject) => {
-    const open = indexedDB.open(DATABASE, VERSION)
+    const open = indexedDB.open(DATABASE, DATABASE_VERSION)
     open.onupgradeneeded = () => {
       if (!open.result.objectStoreNames.contains(STORE)) {
         open.result.createObjectStore(STORE, { keyPath: 'id' })
@@ -110,10 +77,17 @@ function validateRow(row) {
 }
 
 function validRow(row) {
-  return row?.version === VERSION && typeof row.id === 'string' && row.id.length === 43 &&
-    typeof row.user === 'string' && row.user.length === 43 &&
+  return row?.version === 2 && typeof row.id === 'string' && row.id.length === 43 &&
+    typeof row.signing_key === 'string' && row.signing_key.length === 43 &&
     typeof row.network === 'string' && row.network.length === 43 &&
+    validAgent(row.agent) &&
     typeof row.request === 'string' && row.request.length <= 12_000 &&
     typeof row.signature === 'string' && row.signature.length === 86 &&
     Number.isSafeInteger(row.created_at_ms) && row.created_at_ms > 0
+}
+
+function validAgent(agent) {
+  return agent && typeof agent.namespace === 'string' && agent.namespace.length > 0 &&
+    typeof agent.anchor === 'string' && agent.anchor.length === 43 &&
+    typeof agent.instance_text === 'string' && agent.instance_text.length > 0
 }

@@ -39,10 +39,10 @@ the next subject milestone must include the minimum real wielding,
 `accepts_wielding/2`, and capability derivation needed to make its subject
 truthful. It must not enable a subject first and repair it one slice later.
 
-The signed-client work currently introduces a signature-bound `{user, Key}`
-base principal. That is as-built terminology, not the generic actor model:
-`ontology-actor-architecture.md` requires a single agent-bound replacement in
-one format change. This milestone still introduces no empty agent chain or
+The earlier signed-client generation introduced a signature-bound `{user, Key}`
+base principal. The current working tree replaces it atomically with the stable
+agent reference defined by `generic-agent-identity-plan.md`. This milestone
+still introduces no empty agent chain or
 caller-supplied capabilities. Nodes, agents, human users, and services have
 classed instances in exact containing ontologies; endpoints and private keys
 are not ontology facts.

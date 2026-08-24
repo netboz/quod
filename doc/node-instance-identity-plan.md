@@ -174,7 +174,7 @@ of current reachability.
 
 Replacing the first argument with a node reference, or removing the host and
 port, would change membership validation and cold-recovery assumptions. That
-work is excluded until the generic agent-origin evidence and an address-free
+work is excluded until the generic agent-identity evidence and an address-free
 cold-recovery proof exist. It must be reviewed as one membership-format change,
 not smuggled into node-ontology creation.
 
@@ -243,16 +243,16 @@ reissues a write whose outcome is uncertain.
 `node` is an `agent` subclass. It must consume the generic agent-identity and
 signed-goal work; it must not create a node-specific request format.
 
-The current `{node, NodeKey}` and `{user, PublicKey}` principals are
-transitional code. The generic format break will make signed actor requests
-carry one stable `agent_instance_ref/3` plus independently verifiable evidence
+The internal `{node, NodeKey}` principal remains transitional bootstrap code.
+Signed actor requests now carry one stable `agent_instance_ref/3` plus independently verifiable evidence
 that the signing key is active in that exact containing ontology. A node actor
 uses that same format. Its `node` class may affect Prolog policy, but it does
 not affect signature verification, proof routing, transaction construction, or
 consensus.
 
-The node-instance slice may create and verify its ontology before that format
-break, but it must not expose a parallel node-reference principal. Activation
+The node-instance slice may create and verify its ontology before replacing
+the internal bootstrap principal, but it must not expose a parallel
+node-reference principal. Activation
 of node-instance authority waits for the common agent path.
 
 ## 8. D/P/E ownership
@@ -278,7 +278,8 @@ ontology history remains authoritative.
 
 ### Slice 1 — generic actor identity prerequisite
 
-- Complete the reviewed `agent_instance_ref/3` request/evidence design.
+- Review and implement the request/evidence design in
+  `generic-agent-identity-plan.md`.
 - Replace transitional user-only identity through one signed-format break.
 - Reuse one active-key verifier for browser, autonomous, FIPA, and node agents.
 - Add no node-specific signer, ACL, proof entrypoint, or transaction verifier.

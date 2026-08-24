@@ -12,7 +12,8 @@ all_normalized_results_roundtrip_test() ->
     TxRef = {transaction, <<"quod:a">>, <<1:256>>, <<2:256>>},
     GroupRef = {group, <<"quod:a">>, <<1:256>>, <<3:256>>, <<4:256>>,
                 <<5:256>>},
-    OperationRef = {operation, <<"quod:a">>, <<1:256>>, <<8:256>>,
+    OperationRef = {operation, <<"quod:a">>, <<1:256>>,
+                    agent_ref(<<"quod:agent">>, <<8:256>>, 8),
                     <<9:256>>},
     Slots = [{{<<"quod:a">>, <<1:256>>}, 7, 1},
              {{<<"quod:b">>, <<6:256>>}, 8, 2}],
@@ -72,3 +73,11 @@ fixture() ->
       #{mode => read, goal_text => <<"lookup(X).">>}).
 
 b64url(Bytes) -> base64:encode(Bytes, #{mode => urlsafe, padding => false}).
+
+agent_ref(Ns, Anchor, N) ->
+    {ok, #{blob := Blob}} = quod_agent_ref:from_text(
+                              Ns, Anchor,
+                              <<"human_user(", (integer_to_binary(N))/binary,
+                                ").">>,
+                              2),
+    Blob.

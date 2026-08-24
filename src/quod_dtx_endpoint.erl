@@ -47,7 +47,7 @@ applies target identity, history, policy, signing, and consensus semantics.
 -type transaction_ref() ::
         {transaction, binary(), <<_:256>>, <<_:256>>}.
 -type operation_ref() ::
-        {operation, binary(), <<_:256>>, <<_:256>>, <<_:256>>}.
+        {operation, binary(), <<_:256>>, binary(), <<_:256>>}.
 -type outcome_ref() :: transaction_ref() | group_ref() | operation_ref().
 -type phase_kind() :: 'begin' | prepare | decision | finalize | complete.
 -type verdict() :: commit | abort.
@@ -497,7 +497,7 @@ record_blob_digest(RecordBlob) ->
 
 prepare_blob_digest(RecordBlob) ->
     case quod_dtx:decode_record(RecordBlob) of
-        {ok, {quod_dtx_prepare, 2, _, _, _, _, _} = Record} ->
+        {ok, {quod_dtx_prepare, 3, _, _, _, _, _} = Record} ->
             quod_dtx:record_digest(Record);
         _ ->
             error
@@ -534,8 +534,9 @@ valid_transaction_ref(
 valid_transaction_ref(_) -> false.
 
 valid_operation_ref(
-  {operation, Ns, <<_:256>>, <<_:256>>, <<_:256>>}) ->
-    valid_namespace(Ns);
+  {operation, Ns, <<_:256>>, AgentRef, <<_:256>>}) ->
+    valid_namespace(Ns) andalso
+        quod_agent_ref:valid_principal({agent, AgentRef});
 valid_operation_ref(_) -> false.
 
 valid_outcome_ref(Ref) ->

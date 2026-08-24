@@ -358,12 +358,19 @@ t_signed_nested_scope_uses_target_policy(#{pets := Pets}) ->
                   goal_text => <<"private::hidden(x).">>}),
     #{goal := FrozenGoal} = maps:get(evidence, Fixture),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
+    [KeyFact] = quod_ct:signed_agent_facts(Fixture),
+    PolicyFact = {can_invoke, Goal, maps:get(agent_reference, Fixture),
+                  [Pets], Pets},
+    ?assertMatch(
+       {ok, [_], _},
+       quod_prolog:execute(
+         Pets, {',', {assertz, KeyFact}, {assertz, PolicyFact}})),
     quod_ct:with_network_identity(
       Network,
       fun() ->
           {fail, Reasons} = quod_prolog:execute_signed(
                               maps:get(evidence, Fixture), Goal,
-                              {user, maps:get(user, Fixture)}),
+                              maps:get(principal, Fixture)),
           ?assert(lists:member({not_allowed, <<"private">>}, Reasons))
       end).
 

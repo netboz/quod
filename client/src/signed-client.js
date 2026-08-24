@@ -2,8 +2,8 @@ import { b64url, fromB64url } from './key-provider.js'
 import { signedOperationJournal } from './operation-journal.js'
 
 const encoder = new TextEncoder()
-const GOAL_DOMAIN = encoder.encode('quod.user.goal.v1\0')
-const CHALLENGE_DOMAIN = encoder.encode('quod_user_challenge_v1\0')
+const GOAL_DOMAIN = encoder.encode('quod.agent.goal.v1\0')
+const CHALLENGE_DOMAIN = encoder.encode('quod.agent.challenge.v1\0')
 const REQUEST_TTL_MS = 30_000
 const PARSER_VERSION = 2
 const MODE_TAG = { read: 0, execute: 1, cursor: 2 }
@@ -31,9 +31,9 @@ export async function authenticateKey(provider, options = {}) {
 
 // Sign and submit one ordinary Prolog goal. Modes select proof behaviour only;
 // they do not classify predicates or create a second authorization path.
-export async function signedGoal(identity, { mode, namespace, anchor, goal }, options = {}) {
+export async function signedGoal(identity, { mode, agent, goal }, options = {}) {
   const post = options.post || postJson
-  const request = goalRequestBytes(identity, { mode, namespace, anchor, goal })
+  const request = goalRequestBytes(identity, { mode, agent, goal })
   const signature = new Uint8Array(await identity.provider.sign(request))
   const body = signedBody(identity, request, signature)
   if (mode === 'read') return post('/api/goals/read', body)
@@ -88,10 +88,10 @@ export async function signedCursorCommand(identity, cursor, command) {
 // proof endpoint again.
 export async function resolveSignedOperations(identity, options = {}) {
   const journal = options.journal || signedOperationJournal()
-  const user = b64url(identity.provider.publicKey)
+  const signingKey = b64url(identity.provider.publicKey)
   const network = b64url(identity.networkId)
   const rows = (await journal.list()).filter(
-    row => row.user === user && row.network === network,
+    row => row.signing_key === signingKey && row.network === network,
   )
   const results = []
   for (const row of rows) {
@@ -110,14 +110,15 @@ export async function resolveSignedOperations(identity, options = {}) {
   return results
 }
 
-export function goalRequestBytes(identity, { mode, namespace, anchor, goal }) {
+export function goalRequestBytes(identity, { mode, agent, goal }) {
   assertCrypto()
   return encodeGoalRequest({
     networkIdentity: identity.networkId,
-    userPublicKey: identity.provider.publicKey,
+    signingPublicKey: identity.provider.publicKey,
     operationId: crypto.getRandomValues(new Uint8Array(32)),
-    namespace,
-    anchor: typeof anchor === 'string' ? fromB64url(anchor) : anchor,
+    agentNamespace: agent.namespace,
+    agentAnchor: typeof agent.anchor === 'string' ? fromB64url(agent.anchor) : agent.anchor,
+    agentInstanceText: agent.instanceText,
     mode,
     notAfterMs: Math.min(identity.session.expires_ms, Date.now() + REQUEST_TTL_MS),
     goal,
@@ -138,15 +139,35 @@ async function submitDurable(journal, operation, url, body, post) {
 
 async function operationRow(identity, request, signature) {
   const digest = new Uint8Array(await crypto.subtle.digest('SHA-256', request))
+  const decoded = decodeRequestIdentity(request)
   return {
-    version: 1,
+    version: 2,
     id: b64url(digest),
-    user: b64url(identity.provider.publicKey),
+    signing_key: b64url(identity.provider.publicKey),
     network: b64url(identity.networkId),
+    agent: decoded,
     request: b64url(request),
     signature: b64url(signature),
     created_at_ms: Date.now(),
   }
+}
+
+function decodeRequestIdentity(request) {
+  let offset = GOAL_DOMAIN.length + 32 + 32 + 32
+  const namespaceLength = new DataView(
+    request.buffer, request.byteOffset + offset, 2,
+  ).getUint16(0, false)
+  offset += 2
+  const namespace = new TextDecoder().decode(request.slice(offset, offset + namespaceLength))
+  offset += namespaceLength
+  const anchor = b64url(request.slice(offset, offset + 32))
+  offset += 32
+  const instanceLength = new DataView(
+    request.buffer, request.byteOffset + offset, 4,
+  ).getUint32(0, false)
+  offset += 4
+  const instance_text = new TextDecoder().decode(request.slice(offset, offset + instanceLength))
+  return { namespace, anchor, instance_text }
 }
 
 function signedBody(identity, request, signature) {
@@ -161,35 +182,41 @@ function signedBody(identity, request, signature) {
 // goalRequestBytes leaves this exact protocol function fixture-testable.
 export function encodeGoalRequest({
   networkIdentity,
-  userPublicKey,
+  signingPublicKey,
   operationId,
-  namespace,
-  anchor,
+  agentNamespace,
+  agentAnchor,
+  agentInstanceText,
   mode,
   notAfterMs,
   goal,
 }) {
   const modeTag = MODE_TAG[mode]
-  const namespaceBytes = encoder.encode(namespace)
+  const namespaceBytes = encoder.encode(agentNamespace)
+  const instanceBytes = encoder.encode(agentInstanceText)
   const goalBytes = encoder.encode(goal)
   const deadline = BigInt(notAfterMs)
   if (modeTag === undefined || namespaceBytes.length < 1 || namespaceBytes.length > 128 ||
-      goalBytes.length < 1 || goalBytes.length > 8_192 || anchor?.length !== 32 ||
-      networkIdentity?.length !== 32 || userPublicKey?.length !== 32 ||
+      instanceBytes.length < 1 || instanceBytes.length > 8_192 ||
+      goalBytes.length < 1 || goalBytes.length > 8_192 || agentAnchor?.length !== 32 ||
+      networkIdentity?.length !== 32 || signingPublicKey?.length !== 32 ||
       operationId?.length !== 32 || deadline < 1n || deadline > 0xffffffffffffffffn) {
     throw new Error('invalid signed goal')
   }
   const namespaceLength = uint16(namespaceBytes.length)
+  const instanceLength = uint32(instanceBytes.length)
   const goalLength = uint32(goalBytes.length)
   const expiry = uint64(deadline)
   return joinBytes(
     GOAL_DOMAIN,
     networkIdentity,
-    userPublicKey,
+    signingPublicKey,
     operationId,
     namespaceLength,
     namespaceBytes,
-    anchor,
+    agentAnchor,
+    instanceLength,
+    instanceBytes,
     new Uint8Array([modeTag, PARSER_VERSION]),
     expiry,
     goalLength,

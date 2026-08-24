@@ -2136,7 +2136,7 @@
       "id": 231,
       "type": "timeseries",
       "title": "Effect custody pressure",
-      "description": "Node-wide crash-durable effects waiting for completion, reservations held by active proofs, retained terminal rows, and the numeric capacity committed in quod:node. When unlimited is enabled the capacity line is zero and the adjacent policy panel says unlimited.",
+      "description": "Node-wide crash-durable effects waiting for completion, the DTX-group subset of those active rows, reservations held by active proofs, retained terminal rows, and the numeric capacity committed in quod:root. When unlimited is enabled the capacity line is zero and the adjacent policy panel says unlimited.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"
@@ -2175,6 +2175,11 @@
           "refId": "A"
         },
         {
+          "expr": "quod_effect_custody_group_active{node_id=~\"$node\"}",
+          "legendFormat": "{{node_id}} group active",
+          "refId": "E"
+        },
+        {
           "expr": "quod_effect_custody_reservations{node_id=~\"$node\"}",
           "legendFormat": "{{node_id}} reservations",
           "refId": "B"
@@ -2195,7 +2200,7 @@
       "id": 232,
       "type": "stat",
       "title": "Effect custody policy",
-      "description": "Configured is 1 after the committed quod:node policy has reached the journal. Unlimited is 1 only when that policy explicitly removes the numeric capacity.",
+      "description": "Configured is 1 after the committed quod:root policy has reached the journal. Unlimited is 1 only when that policy explicitly removes the numeric capacity.",
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource}"

@@ -177,10 +177,9 @@ animals. The complete contract is
 
 A fact belongs to the ontology that holds it, and **only that ontology may change
 it.** Each ontology is the one that decides its own permissions and runs its own
-rules when something is added or changed. Signed node/user principals in the
-current protocol—and generic signed agent principals after the planned format
-change—reach the
-target ontology's ordinary `can_invoke/4` policy; identity proves who asked, while
+rules when something is added or changed. Signed node and agent principals
+reach the target ontology's ordinary `can_invoke/4` policy; identity proves
+who asked, while
 the ontology's own content decides whether that goal is allowed.
 
 That has a clean consequence: to change something in another ontology, you can't

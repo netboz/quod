@@ -18,14 +18,17 @@ import {
   downloadEncryptedKeyProvider,
   saveVerifiedLocalKeyProvider,
   storeActiveKeyProvider,
+  b64url,
 } from './key-provider.js'
 import {
   assertCrypto,
   authenticateKey,
   resolveSignedOperations,
-  signedGoal,
 } from './signed-client.js'
-import { atom, goalText } from './prolog-term.js'
+import {
+  activeAgentReference,
+  saveAgentReference,
+} from './agent-references.js'
 import './style.css'
 
 const canvas = document.querySelector('#world')
@@ -37,7 +40,7 @@ const saveButton = document.querySelector('#save')
 const exportButton = document.querySelector('#export')
 const importButton = document.querySelector('#import')
 const importFile = document.querySelector('#import-file')
-const registerButton = document.querySelector('#register')
+const agentButton = document.querySelector('#agent')
 const signOutButton = document.querySelector('#sign-out')
 
 let identity = null
@@ -49,7 +52,7 @@ const greyBlue = Color3.FromHexString(PALETTE.greyBlue)
 
 // The world preview is decoration; signing goals is the product. A browser
 // with WebGL disabled or blocklisted must still create keys, log in, and act
-// as its user, so nothing below the preview may depend on the scene existing.
+// as its agent, so nothing below the preview may depend on the scene existing.
 let scene = null
 let ground = null
 
@@ -152,7 +155,7 @@ identityButton.addEventListener('click', async () => {
 })
 
 // Leaving is explicit and complete: the browser keeps no identity afterwards,
-// so an exported file is the only way back to this user.
+// so an exported file is the only way back to this agent.
 signOutButton.addEventListener('click', async () => {
   if (identity && !localKeyMatches(identity.provider) && !window.confirm(
     'This identity has no encrypted backup saved in this browser.\n\n'
@@ -189,7 +192,7 @@ saveButton.addEventListener('click', async () => {
   try {
     await saveVerifiedLocalKeyProvider(identity.provider, passphrase)
     saveButton.textContent = 'Encrypted key saved'
-    status.textContent = `Signed in as ${identity.session.user_id.slice(0, 17)}… Your encrypted key is saved on this browser.`
+    status.textContent = `Signing key ${keyFingerprint(identity)} is saved on this browser.`
   } catch (error) {
     status.textContent = `Could not save the key: ${error.message || 'unknown error'}`
     saveButton.disabled = false
@@ -205,7 +208,7 @@ exportButton.addEventListener('click', async () => {
     await downloadEncryptedKeyProvider(
       identity.provider,
       passphrase,
-      `${identity.session.user_id}.quodkey`,
+      `quod-key-${keyFingerprint(identity)}.quodkey`,
     )
     status.textContent = 'Encrypted key file exported. You may store it on a USB stick.'
   } catch (error) {
@@ -238,36 +241,19 @@ importFile.addEventListener('change', async () => {
   }
 })
 
-registerButton.addEventListener('click', async () => {
+agentButton.addEventListener('click', () => {
   if (!identity) return
-  registerButton.disabled = true
   try {
-    status.textContent = 'Creating your user home on this node…'
-    const reply = await signedGoal(identity, {
-      mode: 'execute',
-      namespace: 'quod:root',
-      anchor: identity.networkId,
-      goal: goalText(atom('create_user_home')),
-    })
-    if (reply.result === 'ok') {
-      registerButton.textContent = 'User home ready'
-      status.textContent = `Your user home is ready on this node: ${identity.session.namespace}`
-    } else if (reply.result === 'pending') {
-      registerButton.textContent = 'Home outcome pending'
-      status.textContent = 'The home request may still commit. Do not submit it again; resolve the displayed anchored outcome first.'
-    } else if (reply.result === 'fail') {
-      throw new Error(reply.reasons?.join('; ') || 'the root ontology refused home creation')
-    } else {
-      throw new Error(reply.error || 'home creation did not complete')
-    }
+    const namespace = window.prompt('Agent ontology namespace')
+    if (namespace === null) return
+    const anchor = window.prompt('Agent ontology genesis anchor (base64url)')
+    if (anchor === null) return
+    const instanceText = window.prompt('Ground agent instance term', 'human_user(me).')
+    if (instanceText === null) return
+    const agent = saveAgentReference({ namespace, anchor, instanceText })
+    status.textContent = `Active agent: ${agent.instanceText} in ${agent.namespace}. Open Explorer to send goals.`
   } catch (error) {
-    if (error.outcomeUnknown) {
-      registerButton.textContent = 'Home outcome unknown'
-      status.textContent = 'The request may have reached the node. Do not submit it again; resolve its outcome before taking another action.'
-    } else {
-      status.textContent = `Could not create your user home: ${error.message || 'unknown error'}`
-      registerButton.disabled = false
-    }
+    status.textContent = `Could not save the agent reference: ${error.message || 'unknown error'}`
   }
 })
 
@@ -302,7 +288,7 @@ async function confirmedPassphrase(promptText) {
 
 async function authenticate(providerPromise) {
   identity = await authenticateKey(await providerPromise)
-  const { provider, session } = identity
+  const { provider } = identity
   // Keep the identity for the next page and the next visit. Every entry point
   // funnels through here, so creating, unlocking and importing all persist.
   let identityStorageNote = ''
@@ -331,19 +317,19 @@ async function authenticate(providerPromise) {
   exportButton.disabled = false
   signOutButton.hidden = false
   signOutButton.disabled = false
-  registerButton.hidden = false
-  registerButton.disabled = journalWarning !== ''
+  agentButton.hidden = false
   status.textContent =
-    `Signed in as ${session.user_id.slice(0, 17)}…`
+    `Signing key ${keyFingerprint(identity)} is active.`
     + ` This browser stays signed in, including in the Explorer.`
     + `${unresolved ? ` ${unresolved} earlier write ${unresolved === 1 ? 'is' : 'are'} still unresolved.` : ''}`
-    + `${journalWarning || ' You can create its user home here.'}`
+    + `${journalWarning}`
+    + `${activeAgentReference() ? ` Active agent: ${activeAgentReference().instanceText}.` : ' Add an agent reference before sending goals.'}`
     + identityStorageNote
     + worldPreviewNote
 }
 
 // Sign in before anything is clicked when this browser already holds the
-// identity. Nobody should retype a passphrase to keep being the same user.
+// identity. Nobody should retype a passphrase to keep being the same agent.
 async function resumeIdentity() {
   const provider = await loadActiveKeyProvider()
   if (!provider) {
@@ -366,3 +352,7 @@ async function resumeIdentity() {
 
 void updateHealth()
 void resumeIdentity()
+
+function keyFingerprint(current) {
+  return b64url(current.provider.publicKey).slice(0, 12)
+}

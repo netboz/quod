@@ -20,16 +20,16 @@ forwarded_request_uses_the_existing_target_executor(
   #{namespace := Ns, key_pair := KeyPair, link := Link}) ->
     Fixture = signed_fixture(Ns, KeyPair, quod_time:now_ms() + 30000),
     {ok, {Evidence, Goal, Principal,
-          {forwarder, ?FORWARDER, Link, User}}} =
+          {forwarder, ?FORWARDER, Link, SigningKey}}} =
         quod_client_goal_target:prepare_forwarded(
           maps:get(request_bytes, Fixture), maps:get(signature, Fixture),
           ?FORWARDER, Link, none),
-    ?assertEqual({user, User}, Principal),
+    ?assertMatch({agent, _}, Principal),
     ?assertMatch(
        {ok, Evidence, {normalized, {answers, 1, [_]}}},
        quod_client_goal_target:execute(
          Evidence, Goal, Principal,
-         {forwarder, ?FORWARDER, Link, User}, none)).
+         {forwarder, ?FORWARDER, Link, SigningKey}, none)).
 
 engine_capacity_is_preserved_as_a_preexecution_refusal(
   #{namespace := Ns, key_pair := KeyPair, link := Link}) ->
@@ -130,10 +130,14 @@ setup() ->
                            max_proof_workers => 1,
                            outcome_backend => memory}),
     KeyPair = quod_identity:generate(),
-    {User, _} = KeyPair,
-    Policy = {can_invoke, {'Goal'}, {user, User}, {'Chain'}, Ns},
+    {SigningKey, _} = KeyPair,
+    Instance = {human_user, test_agent},
+    AgentRef = {agent_instance_ref, Ns, ?ANCHOR, Instance},
+    Policy = {can_invoke, {'Goal'}, AgentRef, {'Chain'}, Ns},
     GenesisAuthor = <<16#55:256>>,
-    Diff = quod_ct:diff_for({lookup, bob}) ++ quod_ct:diff_for(Policy) ++
+    Diff = quod_ct:diff_for({lookup, bob}) ++
+        quod_ct:diff_for({agent_key, Instance, SigningKey, active}) ++
+        quod_ct:diff_for(Policy) ++
         quod_ct:diff_for({':-', loop, loop}),
     Genesis = quod_simplex:test_genesis_tx(
                 #{mode => create, node_id => GenesisAuthor,

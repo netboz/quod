@@ -516,12 +516,12 @@ required_references('begin', _Begin) ->
     {ok, []};
 required_references(
   prepare,
-  {quod_dtx_prepare, 2, _GroupId, BeginRef, _Manifest,
+  {quod_dtx_prepare, 3, _GroupId, BeginRef, _Manifest,
    _PlanDigest, _PlanBlob}) ->
     checked_references([{'begin', BeginRef}]);
 required_references(
   decision,
-  {quod_dtx_decision, 2, _GroupId, BeginRef, _Verdict, Rows, _Reasons}) ->
+  {quod_dtx_decision, 3, _GroupId, BeginRef, _Verdict, Rows, _Reasons}) ->
     case reference_rows(Rows, prepare, 0, []) of
         {ok, References} ->
             checked_references([{'begin', BeginRef} | References]);
@@ -530,13 +530,13 @@ required_references(
     end;
 required_references(
   finalize,
-  {quod_dtx_finalize, 2, _GroupId, DecisionRef, _Verdict,
+  {quod_dtx_finalize, 3, _GroupId, DecisionRef, _Verdict,
    PrepareRef, _Generation}) ->
     Tail = case PrepareRef of none -> []; _ -> [{prepare, PrepareRef}] end,
     checked_references([{decision, DecisionRef} | Tail]);
 required_references(
   complete,
-  {quod_dtx_complete, 2, _GroupId, DecisionRef, Rows}) ->
+  {quod_dtx_complete, 3, _GroupId, DecisionRef, Rows}) ->
     case finalize_rows(Rows, 0, []) of
         {ok, References} ->
             checked_references([{decision, DecisionRef} | References]);

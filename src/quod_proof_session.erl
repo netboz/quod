@@ -23,7 +23,7 @@ carried in `quod_erlog_db_local_prove`, outside Prolog-visible flags.
          publish/1, refresh/1, context/1,
          access_guard/1, check_access/1, check_mutable/1,
          committed_state/1, local_changes/1, effects/1,
-         prepared_effect/2, signer_from_state/1,
+         prepared_effect/2, sealed_plan/1, signer_from_state/1,
          read_set/1, absorb_read_set/2, absorb_live_bridges/2,
          live_bridges/1, transcript/1, signer/1,
          seal/2, attest/2,
@@ -342,6 +342,16 @@ prepared_effect(Handle, Effect) ->
     State = get_session(Handle),
     quod_erlog_db_local_prove:prepared_effect(
       State#session_state.current, Effect).
+
+-doc "Return the exact immutable material plan already sealed by this session.".
+-spec sealed_plan(session()) -> {ok, quod_dtx:plan()} | {error, term()}.
+sealed_plan(Handle) ->
+    State = get_session(Handle),
+    case State#session_state.lifecycle of
+        {sealed, _Bindings, {ok, Plan}} -> {ok, Plan};
+        {sealed, _Bindings, not_material} -> {error, not_material};
+        open -> {error, {protocol_error, unexpected_scope_command}}
+    end.
 
 -doc "Return the session signer bound to the exact wrapped proof state.".
 -spec signer_from_state(tuple()) -> map() | none.

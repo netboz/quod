@@ -25,7 +25,8 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3,
-         authorize_scope/6, validate_authorization_transcript/6,
+         authorize_scope/6, authenticate_agent/5,
+         validate_authorization_transcript/6, validate_agent_key/5,
          close_stream/1]).
 -ifdef(TEST).
 -export([test_serve_nested/1, test_await_scope_reply/2,
@@ -266,21 +267,29 @@ open_cohosted_scope(Target, Anchor, ScopeId) ->
             case execution_remaining_ms() of
                 0 -> {error, current_proof_limit()};
                 RemainingMs ->
-                    ProofId = quod_proof_context:proof_id(),
-                    ReadOnly = quod_proof_context:read_only(),
-                    try gen_server:call(
-                          Engine,
-                          {scope_open, ScopeId, ProofId, Anchor, ReadOnly,
-                           quod_proof_context:deadline_ms(),
-                           quod_proof_context:origin_identity(),
-                           quod_proof_context:principal(),
-                           quod_proof_context:scope_authentication()},
-                          RemainingMs) of
-                        {ok, Handle} ->
-                            {ok, quod_scope_session:pid(Handle), Handle};
-                        {error, TargetReason} -> {error, TargetReason}
-                    catch exit:_ ->
-                        {error, {ontology_unreachable, Target}}
+                    case quod_proof_context:ensure_scope_authentication() of
+                        {ok, Authentication} ->
+                            ProofId = quod_proof_context:proof_id(),
+                            ReadOnly = quod_proof_context:read_only(),
+                            try gen_server:call(
+                                  Engine,
+                                  {scope_open, ScopeId, ProofId, Anchor,
+                                   ReadOnly,
+                                   quod_proof_context:deadline_ms(),
+                                   quod_proof_context:origin_identity(),
+                                   quod_proof_context:principal(),
+                                   Authentication},
+                                  RemainingMs) of
+                                {ok, Handle} ->
+                                    {ok, quod_scope_session:pid(Handle),
+                                     Handle};
+                                {error, TargetReason} ->
+                                    {error, TargetReason}
+                            catch exit:_ ->
+                                {error, {ontology_unreachable, Target}}
+                            end;
+                        {error, _} ->
+                            {error, signed_scope_unavailable}
                     end
             end
     end.
@@ -417,14 +426,15 @@ open_remote_routes(Target, Anchor, ScopeId,
                true -> read_only;
                false -> read_write
            end,
-    Authentication = quod_proof_context:scope_authentication(),
-    {ok, AuthenticationDigest} =
-        quod_scope_wire:authentication_digest(Authentication),
-    Binding = {scope_binding, OriginKey, TargetKey,
-               quod_proof_context:proof_id(), ScopeId,
-               quod_proof_context:origin_identity(), {Target, Anchor}, Mode,
-               quod_proof_context:principal(), AuthenticationDigest},
-    case ensure_remote_scope(Endpoint, Binding, Authentication) of
+    case quod_proof_context:ensure_scope_authentication() of
+      {ok, Authentication} ->
+        {ok, AuthenticationDigest} =
+            quod_scope_wire:authentication_digest(Authentication),
+        Binding = {scope_binding, OriginKey, TargetKey,
+                   quod_proof_context:proof_id(), ScopeId,
+                   quod_proof_context:origin_identity(), {Target, Anchor}, Mode,
+                   quod_proof_context:principal(), AuthenticationDigest},
+        case ensure_remote_scope(Endpoint, Binding, Authentication) of
         {ok, Handle} ->
             {ok, quod_scope_session:pid(Handle), Handle};
         {error, Reason} ->
@@ -439,6 +449,9 @@ open_remote_routes(Target, Anchor, ScopeId,
                 {fatal, PublicReason} ->
                     {error, PublicReason}
             end
+        end;
+      {error, _} ->
+        {error, signed_scope_unavailable}
     end;
 open_remote_routes(Target, Anchor, ScopeId, [_Invalid | Rest], BestError) ->
     open_remote_routes(Target, Anchor, ScopeId, Rest, BestError).
@@ -518,6 +531,8 @@ router_admission_error(_Target, owner_scope_limit) ->
      {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER}};
 router_admission_error(_Target, router_full) ->
     {fatal, {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES}};
+router_admission_error(_Target, signed_scope_unavailable) ->
+    {retry, signed_scope_unavailable};
 router_admission_error(Target, {proof_poisoned, Reason}) ->
     {fatal, normalize_router_failure(Target, Reason)};
 router_admission_error(_Target, {protocol_error, _} = Reason) ->
@@ -1324,7 +1339,8 @@ The rule receives the canonical call chain **once**, as one list, rather than
 being re-proved per chain member: a restrictive policy inspects or quantifies
 the members itself, so it can express relations between them that a per-member
 conjunction could not. `Principal` is the engine-owned `node(NodeKey)`,
-`user(PublicKey)`, or `anonymous` term; it is never a value Prolog supplied.
+`agent_instance_ref/3`, or `anonymous` term; it is never a value Prolog
+supplied.
 
 The decision is proved on a strict read-only frame over the scope's pinned
 **committed base**, so a proof cannot stage an authorization grant and consume
@@ -1332,7 +1348,7 @@ it in the same transaction. Its committed reads are absorbed into the scope's
 own dependency set, making the policy a real OCC dependency of the plan this
 scope seals.
 """.
--spec authorize_scope({node | user, <<_:256>>} | anonymous,
+-spec authorize_scope({node, <<_:256>>} | {agent, binary()} | anonymous,
                       term(), [quod_proof_context:identity()],
                       quod_proof_context:identity(), non_neg_integer(),
                       quod_proof_session:session()) -> boolean().
@@ -1340,9 +1356,40 @@ authorize_scope(Principal, Goal, Chain,
                 {Ns, <<_:256>> = Anchor}, Height, Session)
   when is_list(Chain), is_binary(Ns), is_integer(Height), Height >= 0 ->
     case valid_authorization_principal(Principal) of
-        true -> authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session);
+        true -> authorize_scope_valid(
+                  Principal, Goal, Chain, Ns, Anchor, Height, Session);
         false -> false
     end.
+
+-doc "Prove only that the signing key is active in its exact agent ontology.".
+-spec authenticate_agent({agent, binary()}, <<_:256>>,
+                         quod_proof_context:identity(), non_neg_integer(),
+                         quod_proof_session:session()) -> boolean().
+authenticate_agent(Principal = {agent, _}, SigningKey,
+                   {Ns, <<_:256>>} = Identity, Height, Session)
+  when is_binary(SigningKey), byte_size(SigningKey) =:= 32,
+       is_binary(Ns), is_integer(Height), Height >= 0 ->
+    case valid_authorization_principal(Principal) of
+        true ->
+            Ctx = quod_predicates:policy_verdict_context(Ns, Height),
+            Committed = quod_predicates:set_context(
+                          quod_proof_session:committed_state(Session), Ctx),
+            Wrapped = quod_erlog_db_local_prove:wrap_state(
+                        Committed,
+                        #{read_set => false, read_only => true,
+                          access_guard =>
+                              quod_proof_session:access_guard(Session)}),
+            try case agent_key_goal(Identity, Principal, SigningKey) of
+                    {ok, KeyGoal} -> prove_bool(KeyGoal, Wrapped);
+                    error -> false
+                end
+            after
+                quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
+            end;
+        false -> false
+    end;
+authenticate_agent(_Principal, _SigningKey, _Identity, _Height, _Session) ->
+    false.
 
 authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
     Ctx = quod_predicates:proof_context(
@@ -1358,7 +1405,8 @@ authorize_scope_valid(Principal, Goal, Chain, Ns, Anchor, Height, Session) ->
                   access_guard =>
                       quod_proof_session:access_guard(Session)}),
     #est{db = #db{ref = PolicyOverlay}} = Wrapped,
-    try case authorization_goal(Ns, Goal, Principal, Chain) of
+        try case authorization_goal(
+               {Ns, Anchor}, Goal, Principal, Chain) of
             {ok, PolicyGoal} -> prove_bool(PolicyGoal, Wrapped);
             error -> false
         end
@@ -1403,6 +1451,39 @@ validate_authorization_transcript(
   _Target, _Origin, _Principal, _ParentHeight, _Transcript, _ParentEst) ->
     invalid_authorization_transcript().
 
+-doc "Re-prove an agent's active signing key at one exact committed parent.".
+-spec validate_agent_key(quod_proof_context:identity(), {agent, binary()},
+                         <<_:256>>, non_neg_integer(), tuple()) ->
+          ok | {error, invalid_agent_key}.
+validate_agent_key(
+  {Ns, <<_:256>>} = Target, Principal = {agent, _},
+  <<_:256>> = SigningKey, ParentHeight, #est{} = ParentEst)
+  when is_binary(Ns), byte_size(Ns) > 0,
+       is_integer(ParentHeight), ParentHeight >= 0 ->
+    case valid_authorization_principal(Principal) of
+        true ->
+            Context = quod_predicates:policy_verdict_context(
+                        Ns, ParentHeight),
+            Committed = quod_predicates:set_context(ParentEst, Context),
+            Wrapped = quod_erlog_db_local_prove:wrap_state(
+                        Committed, #{read_only => true}),
+            try case agent_key_goal(Target, Principal, SigningKey) of
+                    {ok, KeyGoal} ->
+                        case strict_authorization_result(KeyGoal, Wrapped) of
+                            allowed -> ok;
+                            _ -> {error, invalid_agent_key}
+                        end;
+                    error -> {error, invalid_agent_key}
+                end
+            after
+                quod_erlog_db_local_prove:cleanup_read_set(Wrapped)
+            end;
+        false -> {error, invalid_agent_key}
+    end;
+validate_agent_key(_Target, _Principal, _SigningKey, _ParentHeight,
+                   _ParentEst) ->
+    {error, invalid_agent_key}.
+
 validate_authorization_entries(
   [], _Target, _Origin, _Principal, _ParentHeight, _ParentEst) ->
     ok;
@@ -1436,7 +1517,7 @@ validate_authorization_entry(
                 true ->
                     reprove_authorization(
                       Ns, Goal, Principal, FullChain, CallerChain,
-                      ParentHeight, Verdict, ParentEst);
+                      ParentHeight, Verdict, ParentEst, Target);
                 false ->
                     invalid_authorization_transcript()
             end;
@@ -1449,14 +1530,14 @@ validate_authorization_entry(
 
 reprove_authorization(
   Ns, Goal, Principal, FullChain, CallerChain, ParentHeight, Verdict,
-  ParentEst) ->
+  ParentEst, Target) ->
     Context = quod_predicates:with_chain(
                 quod_predicates:policy_verdict_context(
                   Ns, ParentHeight), FullChain),
     Committed = quod_predicates:set_context(ParentEst, Context),
     Wrapped = quod_erlog_db_local_prove:wrap_state(
                 Committed, #{read_only => true}),
-    try case authorization_goal(Ns, Goal, Principal, CallerChain) of
+    try case authorization_goal(Target, Goal, Principal, CallerChain) of
             {ok, PolicyGoal} ->
                 case strict_authorization_result(PolicyGoal, Wrapped) of
                     Verdict -> ok;
@@ -1489,16 +1570,36 @@ chain_identities([{Ns, <<_:256>>} = Identity | Rest], Depth,
 chain_identities(_ImproperOrTooDeep, _Depth, _NamespacesRev, _Last) ->
     error.
 
-authorization_goal(Ns, Goal, Principal, Chain) ->
+authorization_goal({Ns, _Anchor}, Goal, Principal, Chain) ->
     case chain_identities(Chain, 0, [], undefined) of
         {ok, CallChain, _Last} ->
-            {ok, {can_invoke, Goal, Principal, CallChain, Ns}};
+            case policy_principal(Principal) of
+                {ok, PolicyPrincipal} ->
+                    {ok, {can_invoke, Goal, PolicyPrincipal, CallChain, Ns}};
+                error -> error
+            end;
         error ->
             error
     end.
+agent_key_goal({Ns, Anchor}, Principal, SigningKey) ->
+    case quod_agent_ref:materialize_principal(Principal) of
+        {ok, {agent_instance_ref, Ns, Anchor, Instance}} ->
+            {ok, {agent_key, Instance, SigningKey, active}};
+        _ -> error
+    end.
+
+policy_principal(Principal = {agent, _}) ->
+    case quod_agent_ref:materialize_principal(Principal) of
+        {ok, Materialized} -> {ok, Materialized};
+        {error, _} -> error
+    end;
+policy_principal({node, <<_:256>>} = Principal) -> {ok, Principal};
+policy_principal(anonymous) -> {ok, anonymous};
+policy_principal(_Principal) -> error.
 
 valid_authorization_principal({node, <<_:256>>}) -> true;
-valid_authorization_principal({user, <<_:256>>}) -> true;
+valid_authorization_principal(Principal = {agent, _}) ->
+    quod_agent_ref:valid_principal(Principal);
 valid_authorization_principal(anonymous) -> true;
 valid_authorization_principal(_) -> false.
 

@@ -425,7 +425,7 @@ fixture(#{pubkey := Pub} = Signer) ->
     {ok, AttB} = quod_dtx:attest_plan(Other, PlanB, Manifest, Signer),
     {ok, Begin} =
         quod_dtx:new_begin(
-          Manifest, none, none,
+          Manifest, none,
           [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
            {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
     #{signer => Signer, admission => Admission,

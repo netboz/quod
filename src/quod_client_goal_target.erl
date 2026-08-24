@@ -16,15 +16,15 @@ does not classify predicates or authorize goals.
         {session, <<_:256>>, <<_:256>>} |
         {forwarder, <<_:256>>, pid(), <<_:256>>}.
 -type prepared() ::
-        {quod_client_goal:evidence(), term(), {user, <<_:256>>}, owner()}.
+        {quod_client_goal:evidence(), term(), {agent, binary()}, owner()}.
 
 -doc "Verify signature, network, signed target and deadline without routing.".
 -spec verify_request(binary(), binary()) ->
           {ok, quod_client_goal:evidence()} | {error, term()}.
 verify_request(RequestBytes, Signature) ->
     case quod_client_goal:decode(RequestBytes) of
-        {ok, #{target_namespace := Ns,
-               target_genesis_anchor := Anchor}} ->
+        {ok, #{agent_namespace := Ns,
+               agent_genesis_anchor := Anchor}} ->
             case network_identity() of
                 {ok, Network} ->
                     quod_client_goal:verify_for(
@@ -78,12 +78,12 @@ prepare_local(Evidence, BrowserPeer, Owner, CursorBinding) ->
 prepare_forwarded(RequestBytes, Signature, <<_:256>> = ForwarderKey,
                   RequestLink, CursorBinding) when is_pid(RequestLink) ->
     case verify_request(RequestBytes, Signature) of
-        {ok, #{request := #{user_public_key := User}} = Evidence} ->
-            Owner = {forwarder, ForwarderKey, RequestLink, User},
+        {ok, #{request := #{signing_public_key := SigningKey}} = Evidence} ->
+            Owner = {forwarder, ForwarderKey, RequestLink, SigningKey},
             case request_available(Evidence) of
                 ok ->
                     case quod_client_auth:admit_forwarded_goal(
-                           User, ForwarderKey) of
+                           SigningKey, ForwarderKey) of
                         ok ->
                             prepare_materialized(
                               Evidence, ForwarderKey, Owner, CursorBinding);
@@ -103,24 +103,25 @@ prepare(Evidence, Peer, Owner, CursorBinding, local) ->
         {error, _} = Error -> Error
     end.
 
-request_available(#{request := #{target_namespace := Ns,
-                                 target_genesis_anchor := Anchor}}) ->
+request_available(#{request := #{agent_namespace := Ns,
+                                 agent_genesis_anchor := Anchor}}) ->
     available({Ns, Anchor});
 request_available(_Evidence) -> {error, invalid_request}.
 
 prepare_materialized(
   #{goal_blob := GoalBlob,
-    request := #{mode := Mode, user_public_key := User}} = Evidence,
+    agent_ref_blob := AgentRef,
+    request := #{mode := Mode, signing_public_key := SigningKey}} = Evidence,
   Peer, Owner, CursorBinding) ->
     case valid_mode_binding(Mode, CursorBinding) of
         false -> {error, invalid_request};
         true ->
             case quod_durable_term:decode_goal(GoalBlob) of
                 {ok, OwnerGoal} ->
-                    case quod_client_auth:materialize_goal(
-                           User, Peer, OwnerGoal) of
-                        {ok, Goal} ->
-                            {ok, {Evidence, Goal, {user, User}, Owner}};
+                    case quod_client_auth:materialize_request(
+                           SigningKey, Peer, AgentRef, OwnerGoal) of
+                        {ok, _MaterializedAgentRef, Goal} ->
+                            {ok, {Evidence, Goal, {agent, AgentRef}, Owner}};
                         {error, _} = Error -> Error
                     end;
                 {error, _} -> {error, invalid_goal}
@@ -135,7 +136,7 @@ valid_mode_binding(execute, none) -> true;
 valid_mode_binding(_, _) -> false.
 
 -doc "Enter the one existing proof/cursor path and normalize its result once.".
--spec execute(quod_client_goal:evidence(), term(), {user, <<_:256>>}, owner(),
+-spec execute(quod_client_goal:evidence(), term(), {agent, binary()}, owner(),
               none | <<_:256>>) ->
           {ok, quod_client_goal:evidence(),
            {normalized, quod_client_result:result()}} |

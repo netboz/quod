@@ -407,10 +407,11 @@ apply_dtx_effects(
   Projection = #projection{est = Est}) ->
     case quod_commit_validation:prepared_material(
            Manifest, PlanDigest, PlanBlob, validation_context(Projection)) of
-        {ok, EventContext, #{diff := Diff}} ->
+        {ok, EventContext, #{diff := Diff, effects := DirectEffects}} ->
             {ok, Est1, AppliedOps} = quod_diff:apply_ops_report(Est, Diff),
             {ok, Projection#projection{est = Est1},
-             {group_applied, GroupId, EventContext, Diff}, AppliedOps,
+             {group_applied, GroupId, EventContext, Diff, DirectEffects},
+             AppliedOps,
              #{applies => 1, rejects => 0, conflicts => 0}};
         {error, Reason} ->
             {error, {invalid_committed_dtx_finalize, Index, Reason}}

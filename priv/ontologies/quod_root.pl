@@ -11,8 +11,8 @@ acl_sovereign(quod:root).
 
 %% Default-open invocation. The rule sees the whole call chain at once — a
 %% restrictive policy relates its members itself rather than judging them one at
-%% a time. `Principal` is engine-owned (`{node, NodeKey}`, `{user, PublicKey}`
-%% or `anonymous`);
+%% a time. `Principal` is engine-owned (`{node, NodeKey}`, a stable
+%% `agent_instance_ref/3`, or `anonymous`);
 %% a refusal is ordinary failure carrying not_allowed(Ns).
 %%
 %% NOTE: this is not the whole effective policy. Founding injects a generated
@@ -70,22 +70,13 @@ action('$quod_stage_ontology'(Handle, create_ontology(Name, Options),
         ontology_join_state(Name, not_hosted)],
        ontology_hosted(Name)).
 
-%% The current browser convenience is ordinary Prolog over generic creation.
-%% It has no lifecycle action, effect kind, or Erlang dispatcher of its own.
-create_user_home :-
-    current_principal(user(PublicKey)),
-    user_home_genesis(PublicKey, Name, Options),
-    create_ontology(Name, Options).
-
-%% First-slice creation policy. An admitted root validator may found a general
-%% ontology. Transitional browser registration remains narrow:
-%% `user_home_genesis/3` accepts only the deterministic namespace and fixed
-%% genesis derived from the authenticated Ed25519 key.
+%% An admitted root validator may found a general ontology. Signed agents use
+%% the same action only when root contains their exact durable grant.
 can_create_ontology(node(NodeKey), _Name, _Options) :-
     peer_admitted(NodeKey, _, _, NodeKey).
 
-can_create_ontology(user(PublicKey), Name, Options) :-
-    user_home_genesis(PublicKey, Name, Options).
+can_create_ontology(AgentRef, _Name, _Options) :-
+    ontology_creator_agent(AgentRef).
 
 %% Admission rule proved when a node asks to join this namespace's committee. Proved TWICE: once by
 %% the submitting node (via the `admit` predicate), then re-proved by EVERY validator against its own

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import type { ReactNode } from 'react'
 import {
   clearActiveKeyProvider,
+  b64url,
   createKeyProvider,
   downloadEncryptedKeyProvider,
   hasLocalKeyProvider,
@@ -17,10 +18,18 @@ import {
   resolveSignedOperations,
 } from '../../client/src/signed-client.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
+import {
+  activeAgentReference,
+  agentReferences,
+  saveAgentReference,
+  selectAgentReference,
+} from '../../client/src/agent-references.js'
 import { SessionContext, useSignedSession } from './session-context'
 
 export function SignedSessionProvider({ children }: { children: ReactNode }) {
   const [identity, setIdentity] = useState<SignedIdentity | null>(null)
+  const [agents, setAgents] = useState(agentReferences)
+  const [agent, setAgent] = useState(activeAgentReference)
   const [busy, setBusy] = useState(false)
   const [saved, setSaved] = useState(false)
   const [unresolved, setUnresolved] = useState(0)
@@ -132,7 +141,7 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
       await downloadEncryptedKeyProvider(
         identity.provider,
         passphrase,
-        `${identity.session.user_id}.quodkey`,
+        `quod-key-${fingerprint(identity)}.quodkey`,
       )
     } catch (reason) {
       setError(message(reason))
@@ -141,9 +150,37 @@ export function SignedSessionProvider({ children }: { children: ReactNode }) {
     }
   }
 
+  const addAgent = () => {
+    const namespace = window.prompt('Agent ontology namespace')
+    if (namespace === null) return
+    const anchor = window.prompt('Agent ontology genesis anchor (base64url)')
+    if (anchor === null) return
+    const instanceText = window.prompt('Ground agent instance term', 'human_user(me).')
+    if (instanceText === null) return
+    try {
+      const next = saveAgentReference({ namespace, anchor, instanceText })
+      setAgents(agentReferences())
+      setAgent(next)
+      setError(null)
+    } catch (reason) {
+      setError(message(reason))
+    }
+  }
+
+  const selectAgent = (id: string) => {
+    try {
+      selectAgentReference(id)
+      setAgent(activeAgentReference())
+      setError(null)
+    } catch (reason) {
+      setError(message(reason))
+    }
+  }
+
   return (
     <SessionContext.Provider
-      value={{ identity, busy, saved, unresolved, error, create, unlock, save, exportKey, signOut }}>
+      value={{ identity, agent, agents, busy, saved, unresolved, error,
+        create, unlock, save, exportKey, signOut, addAgent, selectAgent }}>
       {children}
     </SessionContext.Provider>
   )
@@ -155,8 +192,26 @@ export function SessionControls() {
     return (
       <div className="flex flex-wrap items-center gap-2 text-xs">
         <span className="font-mono text-cream/80">
-          {session.identity.session.user_id.slice(0, 17)}…
+          key {fingerprint(session.identity)}
         </span>
+        {session.agents.length > 0 && (
+          <select
+            value={session.agent?.id || ''}
+            onChange={(event) => session.selectAgent(event.target.value)}
+            className="rounded-md border border-cream/40 bg-teal px-2 py-1 text-cream"
+          >
+            {session.agents.map((agent) => (
+              <option key={agent.id} value={agent.id}>{agent.namespace} · {agent.instanceText}</option>
+            ))}
+          </select>
+        )}
+        <button
+          type="button"
+          onClick={session.addAgent}
+          className="rounded-md border border-gold/60 px-2 py-1 text-gold hover:bg-teal-light"
+        >
+          Add agent
+        </button>
         {!session.saved && (
           <button
             type="button"
@@ -219,4 +274,8 @@ export function SessionControls() {
 
 function message(reason: unknown) {
   return reason instanceof Error ? reason.message : String(reason)
+}
+
+function fingerprint(identity: SignedIdentity) {
+  return b64url(identity.provider.publicKey).slice(0, 12)
 }

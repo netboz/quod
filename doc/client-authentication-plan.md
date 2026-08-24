@@ -4,29 +4,32 @@
 challenge-response, short-lived node-local sessions, signed goals and cursors,
 signed multi-ontology scopes, unresolved-operation persistence, the
 constrained user-home foundation, and any-node signed-goal forwarding are
-implemented in the working tree. The combined hard protocol break is not yet
+implemented. The generic agent hard break is implemented in the working tree
+but is not yet
 committed or deployed; its review and release gates remain as specified in
 `doc/signed-client-goals-plan.md`.
 
-> **Terminology correction.** The implemented request format calls its signer
-> `{user, Key}`.  That word is a temporary protocol label, not a claim that a
-> signer is human.  `ontology-actor-architecture.md` is the authority for the
-> replacement: every durable actor is represented by an ontology instance;
+> **Terminology correction.** The working-tree request uses the stable
+> `{agent, AgentReferenceBlob}` principal. The former `{user, Key}` label is
+> retained below only where the historical generation is described.
+> `ontology-actor-architecture.md` is the authority: every durable actor is represented by an ontology instance;
 > `agent` is the general acting class;
 > `human_user` is the human-specific subclass. The format change must be one
 > hard break, with no second authentication or ACL path.
+> `generic-agent-identity-plan.md` owns the exact replacement; this document
+> owns the still-current key-possession session and private-key custody rules.
 
 ## Goal
 
 A key-holding client uses an Ed25519 key to authenticate to a Quod node and
-receives a session bound to that current implementation identity. The client may submit an ordinary
+receives a session bound to that signing key. The client may submit an ordinary
 bounded Prolog goal; its signature, rather than a server-owned request
 catalogue, binds the exact intent. A later agent milestone may extend that base
 user into an immutable delegated subject after wielding is implemented; the
 current client does not fabricate an agent chain or capabilities.
 
-The current home-creation flow is a narrow transitional convenience. In the
-target actor model `human_user` is simply a subclass of `agent`. A concrete
+The specialized home-creation flow is deleted. In the actor model
+`human_user` is simply a subclass of `agent`. A concrete
 local instance and its active public keys are ordinary facts in an ontology;
 independently managed instances will normally use a dedicated ontology, but
 the protocol does not impose one instance per ontology. World, agent, and
@@ -35,8 +38,8 @@ ontology or asserting class membership grants no authority by itself.
 
 ## Key custody
 
-In the implemented browser protocol, the authentication credential is a
-32-byte Ed25519 public key. In the target actor model, the stable identity is
+In the browser protocol, the authentication credential is a 32-byte Ed25519
+public key. The stable identity is
 an `agent_instance_ref/3`; one or more active public keys are facts beside its
 local instance in the containing ontology. A private key is never sent to Quod
 or stored in an ontology.
@@ -81,34 +84,12 @@ browser support matrix are security-sensitive versioned work. The initial
 implementation must use a reviewed password KDF and authenticated encryption;
 it must not silently fall back to plaintext browser storage.
 
-## User-home creation (as built)
+## Agent enrollment
 
-The client creates its key locally, authenticates it, and signs the ordinary
-argument-free Prolog goal `create_user_home.` against the exact `quod:root`
-identity. The goal uses the same canonical signed request, operation ID, proof,
-ACL, lifecycle effect, and durable outcome path as every other local signed
-write. It is a Prolog convenience over generic root-owned
-`create_ontology/2`, not a registration-only protocol or executor.
-
-There is no global ontology containing every user. In the current format, a key
-deterministically names one home namespace:
-
-```text
-user:<sha256("quod-user-id-v1:" || Ed25519PublicKey) as lower-case hex>
-```
-
-The initial home contains only the exact, fixed facts derived from that key:
-
-```prolog
-user(UserId).
-user_key(UserId, PublicKey, active).
-user_home(UserId, Namespace).
-user_home_version(1).
-```
-
-These `user/1` and `user_key/3` terms document the deployed transitional
-format. The actor migration replaces them with the shared class convention and
-generic key vocabulary in an ordinary ontology:
+There is no global ontology containing every human or machine agent, no
+key-derived home namespace, and no special registration executor. An
+authorized application uses ordinary `create_ontology/2` genesis input or an
+ordinary transaction to establish facts such as:
 
 ```prolog
 instance_of(human_user, local_human_1).
@@ -123,8 +104,7 @@ agent_instance_ref(Namespace, GenesisAnchor, local_human_1)
 ```
 
 `quod:human_user` defines that subclass and related profile vocabulary; it does
-not hold every instance or provide a special creation executor. The target
-model removes `create_user_home` rather than renaming it: initial class, key,
+not hold every instance or provide a special creation executor. Initial class, key,
 and ACL facts use the existing generic `create_ontology/2` genesis input, while
 later facts use ordinary transactions. Class membership has no hidden runtime
 effect.
@@ -135,32 +115,10 @@ FIPA agent—and action prerequisites may require committed approvals, counts,
 or any other domain rule. No hard-coded open-registration rule and no special
 delegation protocol is part of the target identity model.
 
-The lifecycle predicate derives the namespace and these facts from the
-engine-owned signed user principal; it never accepts client-selected namespace
-text or Prolog source. Reusing a key therefore resolves the same home. Display
-names remain optional profile data inside that home and do not participate in
-identity or routing.
-
-The home also contains one fixed ACL rule, supplied by Quod rather than the
-browser. It grants `can_invoke/4` only to that home's active `user_key`:
-
-```prolog
-can_invoke(_, user(Key), _, _) :- user_key(_, Key, active).
-```
-
-This is source because Prolog variables must remain variables. Genesis data
-facts deliberately do not preserve variables; they materialize an unbound
-slot as the literal value `unbound`.
-
-Open home creation is deliberately narrow: it proves possession of the key,
-not trust, citizenship, ownership of an avatar, or any privileged capability.
-The shared signed-goal rate limits and anti-abuse controls are ingress policy,
-not durable identity facts. They are deliberately operational and replaceable;
-they do not become user data or a network-wide identity registry.
-
-User homes are sparse: dormant homes are durable data, not permanently running
-committees. Their placement and replication policy is separate from identity
-and is introduced only when the user-home runtime is needed.
+The ontology's normal ACL grants the exact resulting agent reference whatever
+authority its policy chooses. Containment and class membership grant nothing
+implicitly. Dormant agent ontologies are durable data, not permanently running
+committees; placement and replication remain separate from identity.
 
 ## Authentication and session
 
@@ -171,7 +129,7 @@ key:
 1. client -> auth_challenge_v1(PublicKey, ClientNonce)
 2. node   -> ChallengeId, ServerNonce, Expiry, NodeKey, NetworkIdentity
 3. client -> auth_complete_v1(ChallengeId, Signature)
-4. node   -> opaque session handle bound to UserId and exact key
+4. node   -> opaque session handle bound to the exact signing key
 ```
 
 The signed canonical challenge is a fixed binary layout—not an Erlang-only
@@ -198,21 +156,6 @@ the human origin, delegation chain, and receiver-derived capabilities.
 Changing wielded agent creates a new immutable session subject rather than
 mutating a subject beneath an in-flight request.
 
-## Implemented user-home request
-
-After login, the dedicated client listener accepts the same request as any
-other signed local execution:
-
-```text
-POST /api/goals/execute
-{ session_id, request, signature }
-```
-
-The signed request contains `create_user_home.`, targets the exact root anchor,
-and is bound to the session key. The proof engine derives every other
-value—user namespace, fixed facts, fixed ACL source, and lifecycle effect. The
-client cannot choose the home name or genesis.
-
 ## Transport
 
 The client endpoint is served over TLS, and this is a functional requirement
@@ -224,7 +167,7 @@ Without a configured certificate a node serves a self-signed P-256 certificate
 kept beside its identity key and renewed automatically. The node's own Ed25519
 identity certificate cannot be reused: browsers do not support Ed25519 in the
 certificate path. That certificate authenticates nothing and is not asked to —
-user authentication is the Ed25519 challenge-response below, which is unaffected
+agent-key authentication is the Ed25519 challenge-response below, which is unaffected
 by who signed the transport. It exists to unlock the secure-context APIs and to
 keep the session handle off the wire in the clear.
 
@@ -233,26 +176,24 @@ keep the session handle off the wire in the clear.
 These boundaries are explicit so downstream work does not invent a second
 identity or routing path.
 
-**Top-level user authorization has a canonical chain shape.** A user goal
-enters its target directly rather than through another ontology. Its policy
-therefore sees a one-element chain containing that target's anchored identity;
-the durable authorization transcript records the target twice: once as the
-target and once as this non-host entry. This is intentional: it prevents the
-invisible empty-chain host permission from matching, and lets every validator
-re-prove the identical policy decision. ACL authors should treat this as a
-direct browser entry, not as the target calling itself.
+**Top-level agent authorization has one target-owned chain shape.** A local
+goal is admitted by the agent ontology's normal `can_invoke/4`. A direct
+`A -> B::Goal` does not ask A to authorize B's predicate; B sees the
+engine-built caller chain and makes the one permission decision for B.
 
-**A user principal survives every scope boundary unchanged.** Local, co-hosted,
-remote, and nested scopes carry the exact signed request and `{user, Key}`
-principal. Each target verifies the evidence before running its existing
-`can_invoke/4` policy, and every participant plan binds the same request digest.
-No target substitutes the hosting node identity and no second ACL exists.
+**An agent principal survives every scope boundary unchanged.** Local,
+co-hosted, remote, and nested scopes carry the exact signed request,
+`{agent, AgentReferenceBlob}` principal, and one proof-scoped identity
+certificate. Each target verifies identity before running its own existing
+`can_invoke/4` policy, and every participant plan binds the same request
+digest. No target substitutes the hosting node identity and no second ACL
+exists.
 
 **Ingress may enter through any client node.** The HTTP node verifies the
-browser session and signed request, then either invokes a co-hosted exact
-target or forwards the unchanged request bytes and signature to one pinned
-validator for that namespace and genesis anchor. The target independently
-verifies the signature, network, target identity, deadline, and authenticated
+browser session and signed request, then either invokes the co-hosted agent
+ontology or forwards the unchanged request bytes and signature to one pinned
+validator for that exact agent namespace and genesis anchor. The target independently
+verifies the signature, network, agent identity, deadline, and authenticated
 forwarding node before entering the same proof and `can_invoke/4` path as a
 local request. Browser session identifiers and addresses are never forwarded.
 Scope transport inside an admitted proof continues to carry the same signed

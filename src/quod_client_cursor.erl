@@ -6,7 +6,7 @@ This is the existing proof-cursor coordinator, independent of any UI.  It
 owns only volatile cursor/capability correlation.  The ontology engine still
 owns proof execution, authorization, staging, sealing and durable handoff.
 Every cursor retains the original verified request evidence; `accept` resumes
-that exact proof and cannot replace its goal, user, target or operation id.
+that exact proof and cannot replace its goal, agent, target or operation id.
 """.
 
 -behaviour(gen_server).
@@ -22,11 +22,11 @@ start_link() ->
         {forwarder, <<_:256>>, pid(), <<_:256>>}.
 
 -spec open(owner(), <<_:256>>, quod_client_goal:evidence(), term(),
-           {user, <<_:256>>}) ->
+           {agent, binary()}) ->
           {ok, quod_client_goal:evidence(), term()} | {error, term()}.
 open(Owner, <<_:256>> = CursorId, Evidence, Goal,
-     {user, <<_:256>> = User} = Principal) ->
-    case valid_owner(Owner, User) of
+     {agent, AgentRef} = Principal) when is_binary(AgentRef) ->
+    case valid_owner_shape(Owner) of
         true -> call({open, Owner, CursorId, Evidence, Goal, Principal});
         false -> {error, invalid_signed_goal}
     end;
@@ -287,11 +287,6 @@ stop_unknown_cursor(#{worker := Worker}) when is_pid(Worker) ->
 stop_unknown_cursor(#{engine := Engine, call_ref := CallRef}) ->
     quod_prolog:cancel_cursor(Engine, self(), CallRef).
 
-valid_owner({session, <<_:256>>, <<_:256>> = User}, User) -> true;
-valid_owner({forwarder, <<_:256>>, Link, <<_:256>> = User}, User)
-  when is_pid(Link) -> true;
-valid_owner(_Owner, _User) -> false.
-
 valid_owner_shape({session, <<_:256>>, <<_:256>>}) -> true;
 valid_owner_shape({forwarder, <<_:256>>, Link, <<_:256>>})
   when is_pid(Link) -> true;
@@ -316,7 +311,7 @@ cursor_open_admission(Key, CursorId, Cursors) ->
 
 find_forwarded_owner(GatewayKey, Link, CursorId, Cursors) ->
     Matches =
-        [Owner || {{Owner = {forwarder, Key, Link0, _User}, Id}, _Cursor}
+        [Owner || {{Owner = {forwarder, Key, Link0, _SigningKey}, Id}, _Cursor}
                       <- maps:to_list(Cursors),
                   Key =:= GatewayKey, Link0 =:= Link, Id =:= CursorId],
     case Matches of [Owner] -> {ok, Owner}; _ -> error end.
@@ -339,11 +334,7 @@ owner_down(Key, Cursor, State) ->
     end.
 
 operation_ref(#{operation_ref := Ref}) -> Ref;
-operation_ref(#{request := #{target_namespace := Ns,
-                             target_genesis_anchor := Anchor,
-                             user_public_key := User,
-                             operation_id := OperationId}}) ->
-    {operation, Ns, Anchor, User, OperationId}.
+operation_ref(Evidence) -> quod_client_goal:operation_ref(Evidence).
 
 demonitor_optional(undefined) -> ok;
 demonitor_optional(MRef) -> demonitor(MRef, [flush]), ok.

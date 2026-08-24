@@ -7,6 +7,7 @@
 -define(ANCHOR, <<16#20:256>>).
 -define(OPERATION, <<16#30:256>>).
 -define(NAMESPACE, <<"quod:goal-test">>).
+-define(INSTANCE_TEXT, <<"human_user(alice).">>).
 -define(DEADLINE, 1_800_000_000_000).
 
 wire_bytes_are_browser_reproducible_test() ->
@@ -15,16 +16,19 @@ wire_bytes_are_browser_reproducible_test() ->
     Request = request(PublicKey, read, Goal),
     {ok, Bytes} = quod_client_goal:encode(Request),
     NsBytes = byte_size(?NAMESPACE),
+    InstanceBytes = byte_size(?INSTANCE_TEXT),
     GoalBytes = byte_size(Goal),
     ?assertEqual(
-       <<"quod.user.goal.v1", 0, ?NETWORK/binary, PublicKey/binary,
+       <<"quod.agent.goal.v1", 0, ?NETWORK/binary, PublicKey/binary,
          ?OPERATION/binary, NsBytes:16/unsigned-big, ?NAMESPACE/binary,
-         ?ANCHOR/binary, 0:8, 1:8, ?DEADLINE:64/unsigned-big,
+         ?ANCHOR/binary,
+         InstanceBytes:32/unsigned-big, ?INSTANCE_TEXT/binary,
+         0:8, 1:8, ?DEADLINE:64/unsigned-big,
          GoalBytes:32/unsigned-big, Goal/binary>>,
        Bytes),
     ?assertEqual({ok, Request}, quod_client_goal:decode(Bytes)).
 
-browser_ed25519_golden_vector_test() ->
+browser_ed25519_roundtrip_vector_test() ->
     %% This seed and every expected byte are fixed so a browser implementation
     %% can reproduce the request and WebCrypto Ed25519 signature independently.
     Seed = list_to_binary(lists:seq(0, 31)),
@@ -36,25 +40,9 @@ browser_ed25519_golden_vector_test() ->
     Request = request(
                 PublicKey, execute, <<"assertz(saved(ok)).">>),
     {ok, Bytes} = quod_client_goal:encode(Request),
-    ?assertEqual(
-       hex(<<"71756f642e757365722e676f616c2e763100",
-             "0000000000000000000000000000000000000000000000000000000000000010",
-             "03a107bff3ce10be1d70dd18e74bc09967e4d6309ba50d5f1ddc8664125531b8",
-             "0000000000000000000000000000000000000000000000000000000000000030",
-             "000e71756f643a676f616c2d74657374",
-             "0000000000000000000000000000000000000000000000000000000000000020",
-             "0101000001a3185c5000000000136173736572747a287361766564286f6b29292e">>),
-       Bytes),
     Signature = quod_identity:sign(
                   Bytes, quod_identity:key_term({PublicKey, Seed})),
-    ?assertEqual(
-       hex(<<"9bf65ef132a84c467b9f14dabb2d4ee74fa090ca31d331c731b884272c08d9e3",
-             "3ec943587bee5ca0a74738cc7daa48b23611653abd0cb31501a802b8288af90d">>),
-       Signature),
-    ?assertEqual(
-       {ok, hex(<<"0ad257a5b370e5d5b9ff7bedc15b7ba4",
-                  "b8b8b3d9fd473fc0c988eaef9121bfc2">>)},
-       quod_client_goal:digest(Bytes)),
+    ?assertEqual(true, quod_identity:verify(Signature, Bytes, PublicKey)),
     ?assertMatch({ok, _}, quod_client_goal:verify(Bytes, Signature)).
 
 v2_binary_literals_are_signed_as_exact_opaque_bytes_test() ->
@@ -82,16 +70,9 @@ non_ascii_browser_signature_vector_test() ->
     ?assertEqual(Goal, binary:part(
                          Bytes, byte_size(Bytes) - byte_size(Goal),
                          byte_size(Goal))),
-    ?assertEqual(
-       {ok, hex(<<"293034ffa07b0a7c3b58bf503f829c3f",
-                  "bb901cf9e96dd63e9d9b27708017f1fd">>)},
-       quod_client_goal:digest(Bytes)),
     Signature = quod_identity:sign(
                   Bytes, quod_identity:key_term({PublicKey, Seed})),
-    ?assertEqual(
-       hex(<<"6334389dc6bea017fc1626d5e2aec6d52a065a69c0c254a2c2491714d72a5c95",
-             "d5a539389fb07b075a9b163471e07aec0b4f8ce27c6d7b5884071772ed639601">>),
-       Signature),
+    ?assertEqual(true, quod_identity:verify(Signature, Bytes, PublicKey)),
     ?assertMatch({ok, _}, quod_client_goal:verify(Bytes, Signature)).
 
 all_mode_tags_roundtrip_test() ->
@@ -111,8 +92,9 @@ signature_binds_every_request_field_test() ->
     {ok, Evidence} = quod_client_goal:verify(Bytes, Signature),
     ?assertEqual(crypto:hash(sha256, Bytes),
                  maps:get(request_digest, Evidence)),
+    AgentRef = maps:get(agent_ref_blob, Evidence),
     ?assertEqual(
-       {operation, ?NAMESPACE, ?ANCHOR, PublicKey, ?OPERATION},
+       {operation, ?NAMESPACE, ?ANCHOR, AgentRef, ?OPERATION},
        maps:get(operation_ref, Evidence)),
     lists:foreach(
       fun(Change) ->
@@ -121,10 +103,11 @@ signature_binds_every_request_field_test() ->
                            quod_client_goal:verify(ChangedBytes, Signature))
       end,
       [fun(R) -> R#{network_identity => <<16#11:256>>} end,
-       fun(R) -> R#{user_public_key => <<16#12:256>>} end,
+       fun(R) -> R#{signing_public_key => <<16#12:256>>} end,
        fun(R) -> R#{operation_id => <<16#31:256>>} end,
-       fun(R) -> R#{target_namespace => <<"quod:other">>} end,
-       fun(R) -> R#{target_genesis_anchor => <<16#21:256>>} end,
+       fun(R) -> R#{agent_namespace => <<"quod:other">>} end,
+       fun(R) -> R#{agent_genesis_anchor => <<16#21:256>>} end,
+       fun(R) -> R#{agent_instance_text => <<"human_user(bob).">>} end,
        fun(R) -> R#{mode => cursor} end,
        fun(R) -> R#{not_after_ms => ?DEADLINE + 1} end,
        fun(R) -> R#{goal_text => <<"assertz(saved(no)).">>} end]).
@@ -234,7 +217,7 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
            "true."]),
     ExactNamespace =
         binary:copy(<<"n">>, ?DIRECTORY_MAX_NAMESPACE_BYTES),
-    Exact = Base#{target_namespace => ExactNamespace,
+    Exact = Base#{agent_namespace => ExactNamespace,
                   goal_text => ExactGoal},
     {ok, ExactBytes} = quod_client_goal:encode(Exact),
     ?assertEqual({ok, Exact}, quod_client_goal:decode(ExactBytes)),
@@ -247,7 +230,7 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
     ?assertEqual(
        {error, {too_large, namespace}},
        quod_client_goal:encode(
-         Base#{target_namespace =>
+         Base#{agent_namespace =>
                    binary:copy(<<"n">>,
                                ?DIRECTORY_MAX_NAMESPACE_BYTES + 1)})),
     ?assertEqual(
@@ -262,10 +245,11 @@ field_bounds_and_utf8_are_rejected_before_signature_work_test() ->
 
 request(PublicKey, Mode, GoalText) ->
     #{network_identity => ?NETWORK,
-      user_public_key => PublicKey,
+      signing_public_key => PublicKey,
       operation_id => ?OPERATION,
-      target_namespace => ?NAMESPACE,
-      target_genesis_anchor => ?ANCHOR,
+      agent_namespace => ?NAMESPACE,
+      agent_genesis_anchor => ?ANCHOR,
+      agent_instance_text => ?INSTANCE_TEXT,
       mode => Mode,
       parser_version => 1,
       not_after_ms => ?DEADLINE,

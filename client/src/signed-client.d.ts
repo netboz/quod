@@ -11,8 +11,6 @@ export type SignedIdentity = {
     session_id: string
     expires_ms: number
     public_key: string
-    user_id: string
-    namespace: string
   }
 }
 
@@ -22,6 +20,12 @@ export type SignedClientError = Error & {
 }
 
 export type SignedGoalMode = 'read' | 'execute' | 'cursor'
+export type AgentReference = {
+  id?: string
+  namespace: string
+  anchor: string | Uint8Array
+  instanceText: string
+}
 export type SignedOperationJournal = {
   put(row: Record<string, unknown>): Promise<void>
   delete(id: string): Promise<void>
@@ -31,7 +35,7 @@ export type SignedOperationJournal = {
 export function authenticateKey(provider: KeyProvider): Promise<SignedIdentity>
 export function signedGoal(
   identity: SignedIdentity,
-  request: { mode: SignedGoalMode; namespace: string; anchor: string | Uint8Array; goal: string },
+  request: { mode: SignedGoalMode; agent: AgentReference; goal: string },
   options?: { journal?: SignedOperationJournal },
 ): Promise<Record<string, unknown>>
 export function signedCursorCommand(
@@ -45,14 +49,15 @@ export function resolveSignedOperations(
 ): Promise<Array<{ id: string; reply?: Record<string, unknown>; error?: Error }>>
 export function goalRequestBytes(
   identity: SignedIdentity,
-  request: { mode: SignedGoalMode; namespace: string; anchor: string | Uint8Array; goal: string },
+  request: { mode: SignedGoalMode; agent: AgentReference; goal: string },
 ): Uint8Array
 export function encodeGoalRequest(request: {
   networkIdentity: Uint8Array
-  userPublicKey: Uint8Array
+  signingPublicKey: Uint8Array
   operationId: Uint8Array
-  namespace: string
-  anchor: Uint8Array
+  agentNamespace: string
+  agentAnchor: Uint8Array
+  agentInstanceText: string
   mode: SignedGoalMode
   notAfterMs: number | bigint
   goal: string

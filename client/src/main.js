@@ -77,8 +77,12 @@ function startWorldPreview() {
   const light = new HemisphericLight('sky', new Vector3(0.2, 1, -0.3), scene)
   light.intensity = 0.9
 
-  ground = MeshBuilder.CreateDisc('ground', { radius: 4, tessellation: 80 }, scene)
-  ground.rotation.x = Math.PI / 2
+  // This is the one floor for both rendering and XR locomotion.  A small,
+  // zero-thickness disc made it too easy to step beyond the navigable surface.
+  // Keep the preview simple, but use a wide horizontal ground mesh that XR can
+  // pick reliably.
+  ground = MeshBuilder.CreateGround('ground', { width: 40, height: 40, subdivisions: 2 }, scene)
+  ground.isPickable = true
   const groundMaterial = new StandardMaterial('ground-material', scene)
   groundMaterial.diffuseColor = greyBlue.scale(0.30)
   groundMaterial.emissiveColor = navy.scale(0.22)

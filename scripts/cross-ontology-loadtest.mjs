@@ -5,6 +5,7 @@
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { importEncryptedKeyProvider } from '../client/src/key-provider.js'
+import { atom, renderTerm } from '../client/src/prolog-term.js'
 import { authenticateKey, postJson, signedGoal } from '../client/src/signed-client.js'
 
 const defaults = {
@@ -139,7 +140,7 @@ try {
   die(`could not open the configured agent key: ${String(error?.message || error)}`)
 }
 function remoteGoal(inner) {
-  return `${opt.targetNs}::(${inner}).`
+  return `${renderTerm(atom(opt.targetNs))} :: (${inner}).`
 }
 function goalFor(id) {
   return remoteGoal(opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id))
@@ -234,23 +235,41 @@ async function worker() {
       const ok = reply?.result === 'ok'
       const detail = boundedDetail(reply)
       const category = ok ? (opt.mode === 'execute' ? 'committed' : 'read_ok') : failureClass(detail)
-      rows[number] = [source.endpoint, 0, category, detail, Number((process.hrtime.bigint() - began) / 1000000n), ok ? 1 : 0]
+      rows[number] = {
+        endpoint: source.endpoint,
+        status: 0,
+        category,
+        detail,
+        latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
+        succeeded: ok,
+      }
     } catch (error) {
       const detail = outcomeText(error)
-      rows[number] = [source.endpoint, error?.status ?? 0, failureClass(detail, error), detail, Number((process.hrtime.bigint() - began) / 1000000n), 0]
+      rows[number] = {
+        endpoint: source.endpoint,
+        status: error?.status ?? 0,
+        category: failureClass(detail, error),
+        detail,
+        latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
+        succeeded: false,
+      }
     }
   }
 }
 await Promise.all(Array.from({ length: concurrency }, worker))
 const elapsed = Number((process.hrtime.bigint() - started) / 1000000n)
-await writeFile(`${resultDir}/results.tsv`, rows.map(row => row.join('\t')).join('\n') + '\n')
-const okRows = rows.filter(row => row[4] === 1)
-const sorted = okRows.map(row => row[4]).sort((a, b) => a - b)
+await writeFile(
+  `${resultDir}/results.tsv`,
+  rows.map(row => [row.endpoint, row.status, row.category, row.detail,
+                   row.latencyMs, row.succeeded ? 1 : 0].join('\t')).join('\n') + '\n',
+)
+const okRows = rows.filter(row => row.succeeded)
+const sorted = okRows.map(row => row.latencyMs).sort((a, b) => a - b)
 const percentile = p => sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] : 'nan'
 const failures = rows.length - okRows.length
 const rate = elapsed ? (okRows.length * 1000 / elapsed).toFixed(2) : 'nan'
 const categories = new Map()
-for (const row of rows) categories.set(row[2], (categories.get(row[2]) || 0) + 1)
+for (const row of rows) categories.set(row.category, (categories.get(row.category) || 0) + 1)
 console.log('\nresult')
 console.log(`  operations: ${rows.length}`)
 console.log(`  succeeded:  ${okRows.length}`)

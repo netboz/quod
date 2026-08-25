@@ -7,6 +7,7 @@ import {
   goalText,
   list,
   number,
+  renderTerm,
   string,
   variable,
 } from '../src/prolog-term.js'
@@ -23,6 +24,10 @@ test('generic terms render ordinary inspectable Prolog text', () => {
     ])),
     "inspect('owner\\'s value',\"line\\n\\\"quoted\\\"\",42,Result,[one,two|Tail]).",
   )
+})
+
+test('namespace atoms use the same quoting rule as every other atom', () => {
+  assert.equal(renderTerm(atom('quod:benchmark_target')), "'quod:benchmark_target'")
 })
 
 test('builder text and direct text produce byte-identical signed requests', () => {

@@ -1,6 +1,7 @@
 // Types mirroring quod_explorer_http's JSON, plus thin fetch helpers.
 
 import { signedCursorCommand, signedGoal } from '../../client/src/signed-client.js'
+import { atom, renderTerm } from '../../client/src/prolog-term.js'
 import type { SignedIdentity } from '../../client/src/signed-client.js'
 import type { AgentReference } from '../../client/src/signed-client.js'
 
@@ -250,9 +251,5 @@ export const stopProofCursor = (identity: SignedIdentity, cursor: string) =>
 
 function routedGoal(agentNamespace: string, targetNamespace: string, goal: string) {
   if (agentNamespace === targetNamespace) return goal
-  return `${quotedAtom(targetNamespace)} :: (${goal})`
-}
-
-function quotedAtom(value: string) {
-  return `'${value.replaceAll('\\', '\\\\').replaceAll("'", "\\'")}'`
+  return `${renderTerm(atom(targetNamespace))} :: (${goal})`
 }

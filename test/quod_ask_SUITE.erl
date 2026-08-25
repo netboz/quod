@@ -853,6 +853,10 @@ remote_group_recovers_after_origin_crash(Config) ->
     Target = ?config(target, Config),
     Asker = ?config(asker, Config),
     Third = ?config(third, Config),
+    %% This case must not rely on an earlier case having retired the suite's
+    %% synthetic wrong-certificate route.
+    retire_wrong_route(Asker, ?config(wrong_pub, Config),
+                       ?config(target_addr, Config), 200),
     Tag = erlang:unique_integer([positive]),
     Goal = {',', {assertz, {dtx_pets_mark, Tag}},
                  {'::', ?NS, {dtx_write_chain, Tag}}},

@@ -2982,7 +2982,10 @@ running_impl(
   {call, From}, {dtx_endpoint_local, Request, TimeoutMs}, S0) ->
     case start_local_dtx_endpoint_request(Request, TimeoutMs, From, S0) of
         {ok, S1} ->
-            {keep_state, S1};
+            %% A local submit retains the same semantic DTX record as remote
+            %% endpoint ingress. Drive it in this callback instead of leaving
+            %% it parked until the periodic consensus re-drive tick.
+            keep_progress(S0, S1, []);
         {error, Reason} ->
             {keep_state, S0, [{reply, From, {error, Reason}}]}
     end;

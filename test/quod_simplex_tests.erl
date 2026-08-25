@@ -965,6 +965,47 @@ dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test() ->
         RetryOwner ! stop
     end.
 
+%% A co-hosted endpoint submit is already in the namespace owner's custody
+%% when its call returns to the statem. It must enter the ordinary DTX proposal
+%% path in that same callback; otherwise every local phase waits for the 300 ms
+%% maintenance tick even though no prerequisite changed.
+dtx_endpoint_local_submit_drives_retained_phase_immediately_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    #{pubkey := Self} = Signer = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Record = maps:get(prepare, Fixture),
+    {ok, RecordBlob} = quod_dtx:encode_record(Record),
+    Request = {submit, <<212:128>>, RecordBlob},
+    From = {self(), make_ref()},
+    Dir = relay_store_dir("dtx_local_immediate"),
+    {ok, Journal} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Self, id => Signer,
+                  validators => [Self],
+                  author_admissions => #{Self => Admission},
+                  sync => ready, prolog_ready => true,
+                  slot => 0, approved => 0,
+                  history_head => {0, <<0:256>>},
+                  eng => quod_simplex:eng_new(?DOMAIN, [Self], 0),
+                  store => memory, signing_journal => Journal}),
+        {keep_state, Proposed, _Actions} =
+            quod_simplex:running(
+              {call, From}, {dtx_endpoint_local, Request, 1000}, S0),
+        try
+            ?assertEqual(
+               1, maps:get(proposals, quod_simplex:stats_map(Proposed))),
+            {_, _, {_, #block{slot = 1}}, _, _} =
+                quod_simplex:test_dtx_round(1, Proposed)
+        after
+            ok = quod_simplex:terminate(test, running, Proposed)
+        end
+    after
+        _ = catch quod_signing_journal:close(Journal),
+        _ = file:del_dir_r(Dir)
+    end.
+
 dtx_semantic_commit_retires_an_equivalent_retained_envelope_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
     Begin = maps:get('begin', Fixture),

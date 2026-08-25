@@ -239,14 +239,13 @@ signed_goal_result({error, Reason})
        Reason =:= malformed_material;
        Reason =:= invalid_agent_principal ->
     {400, #{error => Reason}};
-signed_goal_result({error, not_found}) ->
-    {404, #{error => cursor_not_found}};
-signed_goal_result({error, not_ready}) ->
-    {409, #{error => cursor_not_ready}};
-signed_goal_result({error, busy}) ->
-    {409, #{error => cursor_busy}};
-signed_goal_result({error, _}) ->
-    {503, #{error => signed_goal_unavailable}}.
+signed_goal_result({error, Reason}) ->
+    case quod_client_result:normalize_error(Reason) of
+        {error, proof_unavailable} ->
+            {503, #{error => signed_goal_unavailable}};
+        Normalized ->
+            quod_client_result:http_error(Normalized)
+    end.
 
 signed_operation_outcome(
   Evidence, #{height := ClaimHeight}, #{status := Status} = Outcome)

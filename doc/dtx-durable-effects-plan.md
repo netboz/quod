@@ -476,13 +476,14 @@ The normal commit path adds no ledger replay and no new quorum round:
   messages; and
 - Finalize release reuses the existing runtime queue and journal worker.
 
-The dormant intent occupies the existing single DTX-intent slot for its origin
-namespace while those bindings are in flight. A concurrent group proof from
-the same origin therefore receives the existing typed retryable `busy`; it
-must retry the same signed operation and OperationId, never create a new
-operation after an uncertain result. This is bounded by one concurrent custody
-round and the proof's existing absolute deadline. It is an explicit
-per-namespace contention contract, not a new queue or hidden capacity limit.
+Only one dormant intent may bind effects for an origin namespace at a time.
+Concurrent sealed group proofs wait FIFO before that boundary under their
+existing proof-worker capacity and absolute deadlines; they are not rejected
+merely because another dormant intent exists. Waiting creates no ledger record
+and does not re-prove or retry anything. Once promoted, an operation may claim
+its id and then abort normally at Prepare if its sealed OCC reads became stale;
+that terminal abort consumes the id, so a deliberate application retry uses a
+new signed operation id.
 
 Recovery reads the local target outcome projection. It consults the remote
 origin barrier only for an orphaned or not-yet-prepared group row. It must not
@@ -636,9 +637,9 @@ At minimum, review must independently prove:
 9. the state machine has no row-activation window: a crash immediately after
    Begin activation finds every effect row already `group_pending` and later
    releases it;
-10. while one origin's dormant intent is waiting on custody, a second signed
-    group operation from that origin receives typed retryable `busy`, and the
-    first operation still completes;
+10. while one origin's dormant intent is waiting on custody, later signed
+    group operations wait FIFO without signing or writing a Begin; after the
+    first resolves, the next live request promotes without polling;
 11. Simplex death before Begin activation makes custodied group rows resolve to
     `not_found`, while death after activation rebuilds pending authority from
     the signing journal;

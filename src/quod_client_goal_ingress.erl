@@ -266,6 +266,10 @@ cursor_owner_command(Owner, CursorId, Command) ->
              {normalized, quod_client_result:normalize(Evidence, Raw)}};
         {error, not_found} ->
             forwarded_cursor_command(Owner, CursorId, Command);
+        {error, not_ready} ->
+            {error, cursor_not_ready};
+        {error, busy} ->
+            {error, cursor_busy};
         {error, _} = Error -> Error
     end.
 
@@ -284,6 +288,10 @@ forwarded_cursor_command(Owner, CursorId, Command) ->
             {error, client_cursor_unavailable};
         {error, unavailable} ->
             {error, client_cursor_unavailable};
+        {error, not_found} ->
+            {error, cursor_not_found};
+        {error, busy} ->
+            {error, cursor_busy};
         {error, Reason} -> {error, Reason}
     end.
 

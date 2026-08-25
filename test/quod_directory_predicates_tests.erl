@@ -148,8 +148,7 @@ with_directory(Opts, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     {ok, Pid} = quod_directory:start_link(
                   maps:merge(
-                    #{expire_tick_ms => 60000, ttl_ms => 10000,
-                      renew_min_ms => 1},
+                    #{expire_tick_ms => 60000, ttl_ms => 10000},
                     Opts)),
     try
         Fun(Pid)

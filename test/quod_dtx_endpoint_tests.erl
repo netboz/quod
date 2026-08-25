@@ -13,10 +13,6 @@ channel_and_limits_are_fixed_test() ->
        #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
          max_correlations => ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
          max_workers => 8,
-         rate_per_second => 16,
-         rate_burst => 32,
-         max_rate_buckets => 1024,
-         rate_bucket_idle_ms => 60000,
          worker_timeout_ms => 30000},
        quod_dtx_endpoint:limits()),
     ?assert(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES <

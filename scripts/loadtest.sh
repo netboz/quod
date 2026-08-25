@@ -69,8 +69,13 @@ set -uo pipefail
 # an uncertain write outcome.
 : "${INTER_ONTOLOGY:=0}"
 : "${INTER_SOURCE_ENDPOINTS:=}"
+: "${INTER_SOURCE_EXPLORER_ENDPOINTS:=}"
 : "${INTER_SOURCE_NS:=}"
 : "${INTER_TARGET_NS:=}"
+: "${INTER_AGENT_ANCHOR:=}"
+: "${INTER_AGENT_INSTANCE:=}"
+: "${INTER_KEY_BUNDLE:=}"
+: "${INTER_KEY_PASSPHRASE_ENV:=}"
 : "${INTER_GOAL:=true}"
 : "${INTER_MODE:=read}"
 : "${INTER_REQUESTS:=0}"
@@ -152,8 +157,17 @@ Load and chaos:
   --inter-ontology 0|1     run an explicitly configured remote-proof workload (INTER_ONTOLOGY)
   --inter-source-endpoints URL[,URL...]
                             source HTTPS client endpoint(s) (INTER_SOURCE_ENDPOINTS)
+  --inter-source-explorer-endpoints URL[,URL...]
+                            matching source Explorer endpoint(s), used only for
+                            preflight (INTER_SOURCE_EXPLORER_ENDPOINTS)
   --inter-source-ns NAME    source ontology namespace (INTER_SOURCE_NS)
   --inter-target-ns NAME    remote target ontology namespace (INTER_TARGET_NS)
+  --inter-agent-anchor HEX  source agent genesis anchor (INTER_AGENT_ANCHOR)
+  --inter-agent-instance TERM
+                            source agent instance term (INTER_AGENT_INSTANCE)
+  --inter-key-bundle PATH   encrypted browser-key export (INTER_KEY_BUNDLE)
+  --inter-key-passphrase-env NAME
+                            environment variable holding its passphrase (INTER_KEY_PASSPHRASE_ENV)
   --inter-goal TEXT         target-local goal; __QUOD_REQUEST_ID__ makes each operation unique (INTER_GOAL)
   --inter-mode read|execute signed proof mode (INTER_MODE, default: read)
   --inter-requests N        exact number of remote proofs (INTER_REQUESTS)
@@ -228,8 +242,13 @@ parse_args() {
       --writer-http-timeout|--writer-http-timeout=*) take_value "$@"; WRITER_HTTP_TIMEOUT_S=$ARG_VALUE ;;
       --inter-ontology|--inter-ontology=*) take_value "$@"; INTER_ONTOLOGY=$ARG_VALUE ;;
       --inter-source-endpoints|--inter-source-endpoints=*) take_value "$@"; INTER_SOURCE_ENDPOINTS=$ARG_VALUE ;;
+      --inter-source-explorer-endpoints|--inter-source-explorer-endpoints=*) take_value "$@"; INTER_SOURCE_EXPLORER_ENDPOINTS=$ARG_VALUE ;;
       --inter-source-ns|--inter-source-ns=*) take_value "$@"; INTER_SOURCE_NS=$ARG_VALUE ;;
       --inter-target-ns|--inter-target-ns=*) take_value "$@"; INTER_TARGET_NS=$ARG_VALUE ;;
+      --inter-agent-anchor|--inter-agent-anchor=*) take_value "$@"; INTER_AGENT_ANCHOR=$ARG_VALUE ;;
+      --inter-agent-instance|--inter-agent-instance=*) take_value "$@"; INTER_AGENT_INSTANCE=$ARG_VALUE ;;
+      --inter-key-bundle|--inter-key-bundle=*) take_value "$@"; INTER_KEY_BUNDLE=$ARG_VALUE ;;
+      --inter-key-passphrase-env|--inter-key-passphrase-env=*) take_value "$@"; INTER_KEY_PASSPHRASE_ENV=$ARG_VALUE ;;
       --inter-goal|--inter-goal=*) take_value "$@"; INTER_GOAL=$ARG_VALUE ;;
       --inter-mode|--inter-mode=*) take_value "$@"; INTER_MODE=$ARG_VALUE ;;
       --inter-requests|--inter-requests=*) take_value "$@"; INTER_REQUESTS=$ARG_VALUE ;;
@@ -295,8 +314,13 @@ validate_config() {
     die "inter-ontology must be 0 or 1, got '$INTER_ONTOLOGY'"
   if [ "$INTER_ONTOLOGY" = 1 ]; then
     [ -n "$INTER_SOURCE_ENDPOINTS" ] || die "inter-ontology=1 requires inter-source-endpoints"
+    [ -n "$INTER_SOURCE_EXPLORER_ENDPOINTS" ] || die "inter-ontology=1 requires inter-source-explorer-endpoints"
     [ -n "$INTER_SOURCE_NS" ] || die "inter-ontology=1 requires inter-source-ns"
     [ -n "$INTER_TARGET_NS" ] || die "inter-ontology=1 requires inter-target-ns"
+    [ -n "$INTER_AGENT_ANCHOR" ] || die "inter-ontology=1 requires inter-agent-anchor"
+    [ -n "$INTER_AGENT_INSTANCE" ] || die "inter-ontology=1 requires inter-agent-instance"
+    [ -n "$INTER_KEY_BUNDLE" ] || die "inter-ontology=1 requires inter-key-bundle"
+    [ -n "$INTER_KEY_PASSPHRASE_ENV" ] || die "inter-ontology=1 requires inter-key-passphrase-env"
     [ "$INTER_SOURCE_NS" != "$INTER_TARGET_NS" ] || die "inter source and target namespaces must differ"
     [ -n "$INTER_GOAL" ] || die "inter-ontology=1 requires a non-empty inter-goal"
     [ "$INTER_MODE" = read ] || [ "$INTER_MODE" = execute ] || die "inter-mode must be read or execute"
@@ -543,8 +567,13 @@ start_inter_ontology_workload() {
   INTER_LOG="$PERFDIR/inter-ontology.log"
   LOG "INTER: starting $INTER_REQUESTS remote proof(s), source=$INTER_SOURCE_NS target=$INTER_TARGET_NS concurrency=$INTER_CONCURRENCY"
   args=(--source-endpoints "$INTER_SOURCE_ENDPOINTS"
+        --source-explorer-endpoints "$INTER_SOURCE_EXPLORER_ENDPOINTS"
         --source-ns "$INTER_SOURCE_NS"
         --target-ns "$INTER_TARGET_NS"
+        --agent-anchor "$INTER_AGENT_ANCHOR"
+        --agent-instance "$INTER_AGENT_INSTANCE"
+        --key-bundle "$INTER_KEY_BUNDLE"
+        --key-passphrase-env "$INTER_KEY_PASSPHRASE_ENV"
         --goal "$INTER_GOAL"
         --mode "$INTER_MODE"
         --requests "$INTER_REQUESTS"

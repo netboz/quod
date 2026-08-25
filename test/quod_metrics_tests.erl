@@ -22,6 +22,10 @@ renders_without_non_ascii_help_test() ->
        nomatch,
        binary:match(
          Bin, <<"# HELP quod_effect_custody_group_active ">>)),
+    ?assertNotEqual(
+       nomatch,
+       binary:match(
+         Bin, <<"# HELP quod_dtx_admission_wait_ms ">>)),
     NonAscii = [B || <<B>> <= Bin, B > 127],
     ?assertEqual([], NonAscii).
 
@@ -43,6 +47,23 @@ observe_tx_latency_test() ->
         ok = quod_metrics:observe_tx_latency(Ns, 42),
         ok = quod_metrics:observe_tx_latency(Ns, -1),   %% dropped by the guard
         {_Buckets, Sum} = prometheus_histogram:value(quod_tx_commit_latency_ms, [Ns]),
+        ?assertEqual(42, Sum)
+    after
+        Placeholder ! stop
+    end.
+
+dtx_admission_wait_uses_only_the_hosted_namespace_label_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"dtx:admission:metrics">>,
+    ok = quod_metrics:observe_dtx_admission_wait(Ns, 7),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_dtx_admission_wait(Ns, 42),
+        ok = quod_metrics:observe_dtx_admission_wait(Ns, -1),
+        {_, Sum} = prometheus_histogram:value(
+                     quod_dtx_admission_wait_ms, [Ns]),
         ?assertEqual(42, Sum)
     after
         Placeholder ! stop
@@ -359,7 +380,8 @@ ingress_custody_metrics_test() ->
         ?assertEqual(2, lists:sum(BucketCounts)),
         ?assertEqual(2, HopSum),
         RequiredStats = [custody_depth, custody_ready, custody_bytes,
-                         ingress_retargets],
+                         ingress_retargets, dtx_admission_waiting,
+                         dtx_admission_dormant],
         ?assertEqual(
            [], RequiredStats -- quod_metrics:consensus_stat_keys())
     after

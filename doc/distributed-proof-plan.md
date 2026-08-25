@@ -581,17 +581,11 @@ budgets before retaining it. The implementation uses the existing transport
 frame ceiling as the hard outer bound and defines smaller protocol-specific
 constants in one shared limits header.
 
-The router also keeps a per-authenticated-peer/per-ontology scope-open token
-bucket and the engine keeps the existing bounded rejection-emission bucket.
 The hard-break open frame carries the nested goal as a separately length-bounded
 encoded binary, so fixed outer-frame/session/peer validation can extract only
-metadata and `byte_size(GoalBlob)` without decoding the Prolog term. Rate and
-admission checks then run before `quod_wire_term` decodes that blob, worker
-spawn, monitor creation, or session-map insertion. The token-bucket table is
-itself capped globally, retains only fixed-size
-`{PeerKey, OntologyIdentity}` keys, expires idle entries, and fails closed when
-full. An over-limit request receives the fixed `ontology_rate_limited` result
-while reply budget remains; excess replies are dropped without spawning work.
+metadata and `byte_size(GoalBlob)` without decoding the Prolog term. Admission
+checks then run before `quod_wire_term` decodes that blob, worker spawn,
+monitor creation, or session-map insertion.
 
 Starting limits are concrete and schema-validated:
 
@@ -602,9 +596,6 @@ Starting limits are concrete and schema-validated:
 | commit participants | 8 |
 | active proof scopes per ontology | existing configurable 64 |
 | active scopes from one authenticated peer | 16 |
-| scope-open attempts per authenticated peer/ontology | 32/s, burst 32 |
-| scope rejection replies per ontology | existing 32/s |
-| scope-open rate buckets / idle expiry | 1,024 global / 60 s |
 | one proof-scope worker heap | 64 MiB, converted once to VM heap words |
 | origin-router entries global / per proof owner / per peer | 512 / 8 / 16 |
 | inactive invocation continuations per scope | 64 |
@@ -625,7 +616,8 @@ Starting limits are concrete and schema-validated:
 | one Begin/Prepare/Decision/Finalize/Complete record and singleton block | existing 256 KiB |
 | diff operations or read-set functors in one local plan | 1,024 each, also subject to the 24 KiB plan cap |
 | ledger-active distributed groups per ontology | 1 (namespace-exclusive first slice) |
-| pending pre-Begin handoffs per local ontology/validator | 1 |
+| volatile pre-Begin registrations waiting per local ontology/validator | existing configurable proof-worker capacity and deadline; no separate handoff quota |
+| accepted dormant Begin intent per local ontology/validator | 1 |
 | terminal group entries retained in memory | 4,096 |
 | concurrent foreign-history pulls / entries per page / response bytes | existing 32 / 256 / 900 KiB |
 | pending foreign verifications global / per authenticated peer | 32 / 4 |
@@ -638,8 +630,9 @@ The same constants are used by schema, producer, decoder, validator, replay,
 and tests; there are no duplicated magic values. A potentially writable goal is
 charged to its transcript/plan budget before it runs, so a valid invocation
 cannot succeed and only then discover that its own goal was intrinsically
-unsealable. The pending pre-Begin bound covers one lifecycle across its inactive
-intent, activated intent, and journaled-envelope states; those are never counted
+unsealable. Several proof-owned registrations may wait before signing, but only
+one may become the accepted dormant intent. That accepted intent, its activated
+successor, and its journaled envelope are one lifecycle and are never counted
 as three entries. The maximum eight-row canonical Complete body plus its generic
 DTX author envelope must encode at or below the 256 KiB singleton-block ceiling;
 the 224 KiB body cap leaves the fixed envelope margin, and boundary/boundary+1
@@ -710,13 +703,10 @@ durable proof was a logical negative.
 Authorization denial is deliberately **not** in that infrastructure class: it is
 ordinary logical failure with a bounded reason, and `(DeniedGoal ; AllowedGoal)`
 runs `AllowedGoal`. Making it fatal would not be a security boundary — the
-denied goal runs either way, so nothing is disclosed or mutated — and would only
-raise the cost of enumerating a policy from one invocation to one proof, which
-the existing per-peer/per-ontology scope-open rate limit already bounds. Paying
-for that constant with the loss of every cross-ontology fallback, and with a
-denial semantics inconsistent with the engine's own failure-reason model, is a
-bad trade. An author who wants a denial to be terminal writes an ordinary cut or
-lets the failure propagate.
+denied goal runs either way, so nothing is disclosed or mutated. Making it fatal
+would also make denial semantics inconsistent with the engine's own
+failure-reason model. An author who wants a denial to be terminal writes an
+ordinary cut or lets the failure propagate.
 
 The target engine observes when its shared proof-scope worker starts and
 finishes a derivation. It uses that signal to distinguish an execution-budget
@@ -741,7 +731,6 @@ and `foreign_write_unsupported` results disappear:
 | `{error, {anchor_conflict, Ns}}` | routes disagree on genesis identity |
 | `{error, {ontology_unreachable, Ns}}` | no pinned current-validator route succeeds |
 | `{error, {ontology_busy, Ns}}` | target admission quota is full |
-| `{error, {ontology_rate_limited, Ns}}` | authenticated scope-open rate exceeded before execution |
 | `{error, {ontology_rebuilding, Ns}}` | target is not ready to open a scope |
 | `{error, {network_identity_unavailable, Ns}}` | target is ready, but cannot yet obtain the root identity needed to verify a signed scope request |
 | `{error, {ontology_unavailable, Ns}}` | the selected local engine died before any durable-submission checkpoint |
@@ -1691,7 +1680,8 @@ Keep the change factored rather than adding phase exceptions throughout
   entry-data kinds that every per-variant consumer dispatches on;
 - `quod_foreign_log`: lazy anchored foreign-history verification and cache;
 - `quod_simplex`: accept the explicit record union, singleton control barriers,
-  asynchronous validation hooks, the one bounded register/activate Begin intent
+  asynchronous validation hooks, the one FIFO register/activate admission owner
+  with exactly one accepted dormant Begin intent
   and local status barrier, mutually exclusive bounded `genesis_diff` input for
   prepared runtime creation, linear generated/source diff assembly, and the V4
   assertion-only/policy-present genesis invariant, with no other protocol policy
@@ -1917,7 +1907,7 @@ replaces the old QUIC ask protocol outright:
    releases continuations, read-set ETS tables, workers, MVCC pins, monitors,
    timers, router entries, and pending replies. The limits in section 4.2 are
    enforced before goal decode, worker spawn, monitor creation, or map
-   insertion, including the worker heap limit and bounded rate-bucket table.
+   insertion, including the worker heap limit.
 8. **Delete the superseded network path in this delta.** Remove the old
    `quod_ask_open`/`quod_ask_next`/`quod_ask_cancel` frames and decoders,
    per-invocation remote streams, target `start_answer*`/`answer_*` proof loop,
@@ -2832,11 +2822,9 @@ At minimum:
     traversal or cryptography. A worst-case valid implicit catch-up entry with
     two maximum payloads and two 64-validator certificates is proven below the
     page byte cap. The keep-first rule still advances catch-up and its response
-    remains below the transport frame cap. Scope-open flooding is capped per
-    authenticated peer/ontology before goal decode or worker allocation, and
-    rejection replies remain globally bounded. Rotating more than 1,024 valid
-    peer/ontology keys cannot grow the token-bucket table; full admission fails
-    closed and idle expiry reclaims entries. At most two exact group-phase
+    remains below the transport frame cap. Scope admission follows the normal
+    worker lifecycle; it has no separate traffic-rate gate or token-bucket
+    state. At most two exact group-phase
     lookups exist for one ontology, attached to the two live pipeline latches;
     competing exact redrives coalesce and verdict, parent retirement, timeout,
     and Prolog death each reclaim the entry. For a 64-validator target, Complete

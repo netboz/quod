@@ -3,14 +3,15 @@
 // It deliberately imports the shared request encoder/authentication client: this
 // harness owns endpoint selection and measurements, not a second goal protocol.
 
-import { mkdir, writeFile } from 'node:fs/promises'
-import { createKeyProvider } from '../client/src/key-provider.js'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { importEncryptedKeyProvider } from '../client/src/key-provider.js'
 import { authenticateKey, postJson, signedGoal } from '../client/src/signed-client.js'
 
 const defaults = {
-  sourceEndpoints: '', sourceNs: '', targetNs: '', goal: 'true', mode: 'read',
+  sourceEndpoints: '', sourceExplorerEndpoints: '', sourceNs: '', targetNs: '', goal: 'true', mode: 'read',
   requests: '1000', concurrency: '32', httpTimeout: '35', preflightTimeout: '60',
-  maxFailures: '0', resultDir: '', insecureTls: false,
+  maxFailures: '0', resultDir: '', agentAnchor: '', agentInstance: '',
+  keyBundle: '', keyPassphraseEnv: '', insecureTls: false,
 }
 
 function die(message) { console.error(`cross-ontology-loadtest: ${message}`); process.exit(2) }
@@ -24,8 +25,14 @@ therefore necessarily crosses the authenticated directory/QUIC scope path.
 
 Required:
   --source-endpoints URL[,URL...]  HTTPS client endpoint(s) hosting the source
+  --source-explorer-endpoints URL[,URL...]
+                                  matching Explorer endpoint(s) for preflight
   --source-ns NAME                 source ontology namespace
   --target-ns NAME                 remote target ontology namespace
+  --agent-anchor HEX               source agent ontology genesis anchor
+  --agent-instance TEXT            ground agent instance term
+  --key-bundle PATH                encrypted browser-key export for that agent
+  --key-passphrase-env NAME        environment variable holding its passphrase
 
 Options:
   --goal TEXT                      target-local goal; __QUOD_REQUEST_ID__ is
@@ -41,16 +48,21 @@ Options:
   --help                           show this help
 
 An execute goal is submitted once. An uncertain result is recorded as failed;
-the driver never re-proves or resubmits it.`)
+the driver never re-proves or resubmits it. The benchmark never invents a
+signing key: the configured key must already be active for the configured
+agent instance in SOURCE_NS.`)
 }
 
 const opt = { ...defaults }
 const names = new Map([
-  ['--source-endpoints', 'sourceEndpoints'], ['--source-ns', 'sourceNs'],
+  ['--source-endpoints', 'sourceEndpoints'], ['--source-explorer-endpoints', 'sourceExplorerEndpoints'],
+  ['--source-ns', 'sourceNs'],
   ['--target-ns', 'targetNs'], ['--goal', 'goal'], ['--mode', 'mode'],
   ['--requests', 'requests'], ['--concurrency', 'concurrency'],
   ['--http-timeout', 'httpTimeout'], ['--preflight-timeout', 'preflightTimeout'],
   ['--max-failures', 'maxFailures'], ['--result-dir', 'resultDir'],
+  ['--agent-anchor', 'agentAnchor'], ['--agent-instance', 'agentInstance'],
+  ['--key-bundle', 'keyBundle'], ['--key-passphrase-env', 'keyPassphraseEnv'],
 ])
 for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i]
@@ -73,7 +85,10 @@ const concurrency = uint('concurrency', opt.concurrency, true)
 const httpTimeout = uint('http-timeout', opt.httpTimeout, true)
 const preflightTimeout = uint('preflight-timeout', opt.preflightTimeout)
 const maxFailures = uint('max-failures', opt.maxFailures)
-if (!opt.sourceEndpoints || !opt.sourceNs || !opt.targetNs) die('source-endpoints, source-ns and target-ns are required')
+if (!opt.sourceEndpoints || !opt.sourceExplorerEndpoints || !opt.sourceNs || !opt.targetNs || !opt.agentAnchor ||
+    !opt.agentInstance || !opt.keyBundle || !opt.keyPassphraseEnv) {
+  die('source-endpoints, source-explorer-endpoints, source-ns, target-ns, agent-anchor, agent-instance, key-bundle, and key-passphrase-env are required')
+}
 if (opt.sourceNs === opt.targetNs) die('source-ns and target-ns must differ')
 if (!opt.goal) die('goal must not be empty')
 if (!['read', 'execute'].includes(opt.mode)) die('mode must be read or execute')
@@ -90,26 +105,72 @@ for (const raw of opt.sourceEndpoints.split(',')) {
 }
 const endpoints = [...endpointSet]
 if (!endpoints.length) die('source-endpoints contained no endpoint')
+const explorerEndpointSet = new Set()
+for (const raw of opt.sourceExplorerEndpoints.split(',')) {
+  const endpoint = raw.replace(/\/$/, '')
+  try {
+    const parsed = new URL(endpoint)
+    if (!['http:', 'https:'].includes(parsed.protocol) || parsed.pathname !== '/') throw new Error()
+  } catch { die(`bad source Explorer endpoint '${raw}'`) }
+  explorerEndpointSet.add(endpoint)
+}
+const explorerEndpoints = [...explorerEndpointSet]
+if (explorerEndpoints.length !== endpoints.length) {
+  die('source-endpoints and source-explorer-endpoints must have the same number of endpoints')
+}
 
 function hexBytes(hex) {
   if (!/^[0-9a-f]{64}$/i.test(hex)) throw new Error('invalid genesis anchor')
   return Uint8Array.from(Buffer.from(hex, 'hex'))
 }
+const agent = {
+  namespace: opt.sourceNs,
+  anchor: hexBytes(opt.agentAnchor),
+  instanceText: opt.agentInstance,
+}
+const passphrase = process.env[opt.keyPassphraseEnv]
+if (!passphrase) die(`environment variable ${opt.keyPassphraseEnv} is not set`)
+let provider
+try {
+  provider = await importEncryptedKeyProvider(
+    await readFile(opt.keyBundle, 'utf8'), passphrase,
+  )
+} catch (error) {
+  die(`could not open the configured agent key: ${String(error?.message || error)}`)
+}
+function remoteGoal(inner) {
+  return `${opt.targetNs}::(${inner}).`
+}
 function goalFor(id) {
-  const inner = opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id)
-  return `${opt.targetNs}::(${inner})`
+  return remoteGoal(opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id))
 }
 function endpointPost(base) {
   return (path, body, method = 'POST') => postJson(new URL(path, `${base}/`).href, body, method)
 }
 async function summary(base) {
-  const response = await fetch(new URL('/explorer/api/summary', `${base}/`), { signal: AbortSignal.timeout(httpTimeout * 1000) })
+  const response = await fetch(new URL('/api/summary', `${base}/`), { signal: AbortSignal.timeout(httpTimeout * 1000) })
   if (!response.ok) throw new Error(`summary_http_${response.status}`)
   return response.json()
 }
 function outcomeText(error) {
   const message = String(error?.message || error).replaceAll('\t', ' ').replaceAll('\n', ' ')
   return error?.outcomeUnknown ? `outcome_unknown:${message}` : message
+}
+function boundedDetail(value) {
+  let text
+  try { text = typeof value === 'string' ? value : JSON.stringify(value) }
+  catch { text = String(value) }
+  return text.replaceAll('\t', ' ').replaceAll('\n', ' ').slice(0, 1024)
+}
+function failureClass(detail, error = null) {
+  const text = detail.toLowerCase()
+  if (error?.outcomeUnknown || text.includes('outcome_unknown') || text.includes('pending')) return 'uncertain'
+  if (text.includes('cursor_busy')) return 'cursor_busy'
+  if (text.includes('ontology_busy')) return 'ontology_busy'
+  if (text.includes('not_allowed') || text.includes('policy')) return 'policy_failed'
+  if (text.includes('conflict') || text.includes('occ')) return 'occ_failed'
+  if (error?.status === undefined || error?.status === 0) return 'transport_failed'
+  return 'goal_failed'
 }
 const noJournal = { async put() {}, async delete() {} }
 
@@ -118,23 +179,23 @@ let sources = []
 let preflightError = ''
 while (Date.now() <= deadline && !sources.length) {
   try {
-    const provider = await createKeyProvider()
     const rows = []
-    for (const endpoint of endpoints) {
-      const state = await summary(endpoint)
+    for (const [index, endpoint] of endpoints.entries()) {
+      const state = await summary(explorerEndpoints[index])
       const source = state.namespaces?.filter(row => row.ns === opt.sourceNs) ?? []
       const target = state.namespaces?.filter(row => row.ns === opt.targetNs) ?? []
       if (source.length !== 1 || target.length !== 0 || source[0].syncing !== false) throw new Error('source missing, co-hosted target, or syncing source')
+      if (source[0].genesis.toLowerCase() !== opt.agentAnchor.toLowerCase()) throw new Error('agent_anchor_does_not_match_source')
       const post = endpointPost(endpoint)
       const identity = await authenticateKey(provider, { post })
       // A signed remote read proves the actual source->target route and ACL
       // before the measured workload begins, without consuming a write goal.
       const warmup = await signedGoal(identity, {
-        mode: 'read', namespace: opt.sourceNs, anchor: hexBytes(source[0].genesis),
-        goal: `${opt.targetNs}::(true)`,
+        mode: 'read', agent,
+        goal: remoteGoal('true'),
       }, { post })
       if (warmup.result !== 'ok') throw new Error(`warmup_${warmup.result || 'invalid'}`)
-      rows.push({ endpoint, post, identity, anchor: hexBytes(source[0].genesis), height: source[0].height })
+      rows.push({ endpoint, post, identity, height: source[0].height })
     }
     sources = rows
   } catch (error) {
@@ -167,13 +228,16 @@ async function worker() {
     const began = process.hrtime.bigint()
     try {
       const reply = await signedGoal(source.identity, {
-        mode: opt.mode, namespace: opt.sourceNs, anchor: source.anchor,
+        mode: opt.mode, agent,
         goal: goalFor(`${prefix}_${number + 1}`),
       }, { post: source.post, journal: noJournal })
       const ok = reply?.result === 'ok'
-      rows[number] = [source.endpoint, 0, ok ? 'ok' : `result:${reply?.result ?? 'invalid'}`, Number((process.hrtime.bigint() - began) / 1000000n), ok ? 1 : 0]
+      const detail = boundedDetail(reply)
+      const category = ok ? (opt.mode === 'execute' ? 'committed' : 'read_ok') : failureClass(detail)
+      rows[number] = [source.endpoint, 0, category, detail, Number((process.hrtime.bigint() - began) / 1000000n), ok ? 1 : 0]
     } catch (error) {
-      rows[number] = [source.endpoint, error?.status ?? 0, outcomeText(error), Number((process.hrtime.bigint() - began) / 1000000n), 0]
+      const detail = outcomeText(error)
+      rows[number] = [source.endpoint, error?.status ?? 0, failureClass(detail, error), detail, Number((process.hrtime.bigint() - began) / 1000000n), 0]
     }
   }
 }
@@ -181,17 +245,23 @@ await Promise.all(Array.from({ length: concurrency }, worker))
 const elapsed = Number((process.hrtime.bigint() - started) / 1000000n)
 await writeFile(`${resultDir}/results.tsv`, rows.map(row => row.join('\t')).join('\n') + '\n')
 const okRows = rows.filter(row => row[4] === 1)
-const sorted = okRows.map(row => row[3]).sort((a, b) => a - b)
+const sorted = okRows.map(row => row[4]).sort((a, b) => a - b)
 const percentile = p => sorted.length ? sorted[Math.max(0, Math.ceil(sorted.length * p) - 1)] : 'nan'
 const failures = rows.length - okRows.length
 const rate = elapsed ? (okRows.length * 1000 / elapsed).toFixed(2) : 'nan'
+const categories = new Map()
+for (const row of rows) categories.set(row[2], (categories.get(row[2]) || 0) + 1)
 console.log('\nresult')
 console.log(`  operations: ${rows.length}`)
 console.log(`  succeeded:  ${okRows.length}`)
 console.log(`  failures:   ${failures}`)
+console.log(`  outcomes:   ${[...categories].sort().map(([name, count]) => `${name}=${count}`).join(' ')}`)
 console.log(`  latency:    p50=${percentile(.50)}ms p90=${percentile(.90)}ms p99=${percentile(.99)}ms`)
 console.log(`  makespan:   ${elapsed}ms (${rate} successful remote proofs/s)`)
+console.log('  queue wait: scrape quod_dtx_admission_wait_ms for the source namespace (dashboard row: Distributed transaction admission)')
 console.log(`  raw data:   ${resultDir}/results.tsv`)
-if (failures <= maxFailures) { console.log('PASS'); process.exit(0) }
-console.error(`FAIL: failures=${failures} exceeds max-failures=${maxFailures}`)
+const cursorBusy = categories.get('cursor_busy') || 0
+if (failures <= maxFailures && cursorBusy === 0) { console.log('PASS'); process.exit(0) }
+if (cursorBusy > 0) console.error(`FAIL: cursor_busy=${cursorBusy}; distributed-write contention must queue before Begin`)
+if (failures > maxFailures) console.error(`FAIL: failures=${failures} exceeds max-failures=${maxFailures}`)
 process.exit(1)

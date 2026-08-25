@@ -397,9 +397,8 @@ system routes; being able to read a record does not allow that node to publish
 one or feed a captured snapshot back into another reader. A receiver ingests a
 snapshot page only when its source key, link process and monitor identify the
 exact current outbound control link tracked for that peer; a stale or unrelated
-link is rejected. Per-key rate limits, a 2,048-session cap, 30-second
-idle-session pruning, bounded pages and bounded records constrain the public
-read path. Private direct seeds never enter a snapshot.
+link is rejected. Idle-session pruning, bounded pages and bounded records
+constrain the public read path. Private direct seeds never enter a snapshot.
 
 The initial implementation is simple bounded fanout plus periodic
 renewal/resync, not a new consensus or general gossip subsystem. The

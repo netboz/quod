@@ -7,6 +7,31 @@
 -define(ENDPOINT, {{127, 0, 0, 1}, 4567}).
 -define(OWNER, {session, <<16#42:256>>, <<16#43:256>>}).
 
+cursor_target_states_are_named_before_the_shared_renderer_test() ->
+    ?assertEqual(
+       {error, cursor_not_found},
+       quod_client_goal_router:test_cursor_target_result({error, not_found})),
+    ?assertEqual(
+       {error, cursor_not_ready},
+       quod_client_goal_router:test_cursor_target_result({error, not_ready})),
+    ?assertEqual(
+       {error, cursor_busy},
+       quod_client_goal_router:test_cursor_target_result({error, busy})),
+    ?assertEqual(
+       {error, proof_unavailable},
+       quod_client_goal_router:test_cursor_target_result({error, bad_state})).
+
+submit_target_documented_outcomes_select_one_reply_test() ->
+    Request = {submit, <<0:128>>, <<>>, <<0:512>>, none, []},
+    ?assertEqual(
+       {response, {refused, <<0:128>>, busy}},
+       quod_client_goal_router:test_submit_target_result(
+         Request, {error, busy})),
+    ?assertEqual(
+       {response, {error, <<0:128>>, operation_conflict}},
+       quod_client_goal_router:test_submit_target_result(
+         Request, {error, operation_conflict})).
+
 result_is_correlated_and_fully_cleaned_test() ->
     with_router(
       fun(Router, Link, Fixture) ->

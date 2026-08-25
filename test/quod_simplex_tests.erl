@@ -521,9 +521,9 @@ dtx_outbound_response_normalizes_transport_identity_test() ->
        0, maps:get(correlations,
                    quod_simplex:test_dtx_endpoint_counts(SameDone))).
 
-%% Endpoint admission charges the authenticated peer before readiness checks.
-%% The configured burst is exact and a refused request allocates no worker.
-dtx_endpoint_peer_rate_is_bounded_before_worker_test() ->
+%% Repeated authenticated requests remain on the one readiness path; no hidden
+%% rate counter changes their result or allocates a worker.
+dtx_endpoint_requests_have_no_rate_gate_test() ->
     Ns = <<"quod:dtx-rate">>,
     {Peer, _} = id(),
     PeerIdentity = {Peer, {"127.0.0.1", 15971}},
@@ -547,13 +547,12 @@ dtx_endpoint_peer_rate_is_bounded_before_worker_test() ->
                   {SNext, [Reply | Acc]}
           end, {S0, []}, lists:seq(1, 33)),
     [Last | Earlier] = Replies,
-    ?assertMatch({error, <<33:128>>, busy}, Last),
+    ?assertMatch({error, <<33:128>>, not_ready}, Last),
     ?assert(lists:all(
               fun({error, _Id, not_ready}) -> true;
                  (_) -> false
               end, Earlier)),
     Counts = quod_simplex:test_dtx_endpoint_counts(S1),
-    ?assertEqual(1, maps:get(rate_buckets, Counts)),
     ?assertEqual(0, maps:get(workers, Counts)).
 
 %% A deterministic Prepare refusal is returned byte-for-byte and closes the
@@ -591,7 +590,7 @@ dtx_endpoint_prepare_refusal_replies_and_cleans_test() ->
         ?assertEqual([{reply, From, {ok, Expected}}], Actions),
         ?assertEqual(
            #{correlations => 0, channels => 0, workers => 0,
-             rate_buckets => 0, submissions => 0},
+             submissions => 0},
            quod_simplex:test_dtx_endpoint_counts(Done))
     after
         Worker ! stop
@@ -614,11 +613,9 @@ dtx_submission_keeps_one_exact_waiter_test() ->
        quod_simplex:test_retain_dtx_record(Record, Second, S0)),
     ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)).
 
-%% Custody keeps the first origin's unsigned Begin intent dormant while all
-%% effect participants bind. A second group is refused with the existing
-%% retryable `busy` result; it cannot replace the first intent, and activating
-%% the first still creates exactly one retained Begin submission.
-dormant_dtx_intent_contention_is_busy_and_first_activates_test() ->
+%% Several sealed proofs share one FIFO, but only its head becomes the dormant
+%% Begin and only activation creates a retained signing-journal submission.
+dtx_admission_fifo_keeps_one_dormant_and_one_retained_begin_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
     {Ns, Anchor} = maps:get(target, Fixture),
@@ -628,7 +625,10 @@ dormant_dtx_intent_contention_is_busy_and_first_activates_test() ->
     Admission = maps:get(admission, Fixture),
     Intent1 = make_ref(),
     Intent2 = make_ref(),
-    Dir = relay_store_dir("dormant_dtx_intent_contention"),
+    From1 = {self(), make_ref()},
+    From2 = {self(), make_ref()},
+    Deadline = quod_time:mono_ms() + 5000,
+    Dir = relay_store_dir("dtx_admission_fifo"),
     true = quod_reg:reg({quod_prolog, Ns}),
     try
         {ok, Journal0} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
@@ -637,17 +637,35 @@ dormant_dtx_intent_contention_is_busy_and_first_activates_test() ->
                   validators => [Author],
                   author_admissions => #{Author => Admission},
                   sync => ready, signing_journal => Journal0}),
-        {ok, S1} = quod_simplex:test_register_dtx_intent(
-                     self(), Intent1, Begin, GroupRef, S0),
+        {ok, Queued1} = quod_simplex:test_enqueue_dtx_intent(
+                          From1, self(), Intent1, Begin, GroupRef,
+                          Deadline, S0),
+        {Dormant1, [{reply, From1, {accepted, Intent1}}]} =
+            quod_simplex:test_progress_dtx_admission(Queued1),
         ?assertEqual(
-           {error, busy},
-           quod_simplex:test_register_dtx_intent(
-             self(), Intent2, Begin, GroupRef, S1)),
-        S2 = quod_simplex:test_activate_dtx_intent(self(), Intent1, S1),
+           #{engine => self(), dormant => Intent1, waiting => []},
+           quod_simplex:test_dtx_admission_state(Dormant1)),
+        {ok, Queued2} = quod_simplex:test_enqueue_dtx_intent(
+                          From2, self(), Intent2, Begin, GroupRef,
+                          Deadline, Dormant1),
+        {StillDormant, []} =
+            quod_simplex:test_progress_dtx_admission(Queued2),
+        ?assertEqual(
+           #{engine => self(), dormant => Intent1,
+             waiting => [Intent2]},
+           quod_simplex:test_dtx_admission_state(StillDormant)),
+        S2 = quod_simplex:test_activate_dtx_intent(
+               self(), Intent1, StillDormant),
+        {HeldByRetainedBegin, []} =
+            quod_simplex:test_progress_dtx_admission(S2),
+        ?assertEqual(
+           #{engine => self(), dormant => none, waiting => [Intent2]},
+           quod_simplex:test_dtx_admission_state(HeldByRetainedBegin)),
         ?assertEqual(
            1,
            maps:get(submissions,
-                    quod_simplex:test_dtx_endpoint_counts(S2))),
+                    quod_simplex:test_dtx_endpoint_counts(
+                      HeldByRetainedBegin))),
         receive
             {'$gen_cast',
              {project_pending_begin, #{group_id := SeenGroupId}}} ->
@@ -656,11 +674,202 @@ dormant_dtx_intent_contention_is_busy_and_first_activates_test() ->
             error(missing_pending_begin_projection)
         end,
         ok = quod_signing_journal:close(
-               quod_simplex:test_signing_journal(S2))
+               quod_simplex:test_signing_journal(HeldByRetainedBegin))
     after
         true = gproc:unreg(quod_reg:name({quod_prolog, Ns})),
         _ = file:del_dir_r(Dir)
     end.
+
+dtx_admission_cancellation_removes_only_the_exact_fifo_entry_test() ->
+    with_dtx_admission_fixture(
+      fun(_Fixture, Begin, GroupRef, S0) ->
+          [Intent1, Intent2, Intent3, Intent4] =
+              [make_ref() || _ <- lists:seq(1, 4)],
+          [From1, From2, From3, From4] =
+              [{self(), make_ref()} || _ <- lists:seq(1, 4)],
+          Deadline = quod_time:mono_ms() + 5000,
+          {ok, Q1} = quod_simplex:test_enqueue_dtx_intent(
+                       From1, self(), Intent1, Begin, GroupRef,
+                       Deadline, S0),
+          {D1, [{reply, From1, {accepted, Intent1}}]} =
+              quod_simplex:test_progress_dtx_admission(Q1),
+          {ok, Q2} = quod_simplex:test_enqueue_dtx_intent(
+                       From2, self(), Intent2, Begin, GroupRef,
+                       Deadline, D1),
+          {ok, Q3} = quod_simplex:test_enqueue_dtx_intent(
+                       From3, self(), Intent3, Begin, GroupRef,
+                       Deadline, Q2),
+          {ok, Q4} = quod_simplex:test_enqueue_dtx_intent(
+                       From4, self(), Intent4, Begin, GroupRef,
+                       Deadline, Q3),
+          {keep_state, WithoutMiddle, MiddleActions} =
+              quod_simplex:running(
+                cast, {cancel_dtx_begin, self(), Intent3}, Q4),
+          ?assertEqual([], reply_actions(MiddleActions)),
+          {keep_state, WithoutLast, LastActions} =
+              quod_simplex:running(
+                cast, {cancel_dtx_begin, self(), Intent4}, WithoutMiddle),
+          ?assertEqual([], reply_actions(LastActions)),
+          ?assertEqual(
+             #{engine => self(), dormant => Intent1, waiting => [Intent2]},
+             quod_simplex:test_dtx_admission_state(WithoutLast)),
+          {keep_state, Promoted, HeadActions} =
+              quod_simplex:running(
+                cast, {cancel_dtx_begin, self(), Intent1}, WithoutLast),
+          ?assertEqual(
+             [{reply, From2, {accepted, Intent2}}],
+             reply_actions(HeadActions)),
+          ?assertEqual(
+             #{engine => self(), dormant => Intent2, waiting => []},
+             quod_simplex:test_dtx_admission_state(Promoted)),
+          _ = quod_simplex:test_cancel_dtx_intent(
+                self(), Intent2, Promoted),
+          ok
+      end).
+
+dtx_expired_non_head_is_cancelled_without_a_simplex_reply_test() ->
+    with_dtx_admission_fixture(
+      fun(_Fixture, Begin, GroupRef, S0) ->
+          [Head, Expired, Tail] = [make_ref() || _ <- lists:seq(1, 3)],
+          [HeadFrom, ExpiredFrom, TailFrom] =
+              [{self(), make_ref()} || _ <- lists:seq(1, 3)],
+          Deadline = quod_time:mono_ms() + 5000,
+          {ok, Q1} = quod_simplex:test_enqueue_dtx_intent(
+                       HeadFrom, self(), Head, Begin, GroupRef,
+                       Deadline, S0),
+          {D1, [{reply, HeadFrom, {accepted, Head}}]} =
+              quod_simplex:test_progress_dtx_admission(Q1),
+          {ok, Q2} = quod_simplex:test_enqueue_dtx_intent(
+                       ExpiredFrom, self(), Expired, Begin, GroupRef,
+                       Deadline, D1),
+          {ok, Q3} = quod_simplex:test_enqueue_dtx_intent(
+                       TailFrom, self(), Tail, Begin, GroupRef,
+                       Deadline, Q2),
+          ExpiredQueue = quod_simplex:test_set_dtx_intent_deadline(
+                           Expired, quod_time:mono_ms() - 1, Q3),
+          %% The proof worker owns non-head expiry. Its cancellation removes
+          %% the exact alias first, then this cast removes the queue entry and
+          %% Simplex emits no reply for the already-dead caller.
+          {keep_state, Cancelled, Actions} =
+              quod_simplex:running(
+                cast, {cancel_dtx_begin, self(), Expired}, ExpiredQueue),
+          ?assertEqual([], reply_actions(Actions)),
+          ?assertEqual(
+             #{engine => self(), dormant => Head, waiting => [Tail]},
+             quod_simplex:test_dtx_admission_state(Cancelled)),
+          _ = quod_simplex:test_cancel_dtx_intent(self(), Head, Cancelled),
+          ok
+      end).
+
+dtx_admission_engine_down_drops_all_volatile_intents_test() ->
+    with_dtx_admission_fixture(
+      fun(_Fixture, Begin, GroupRef, S0) ->
+          Intent1 = make_ref(),
+          Intent2 = make_ref(),
+          Deadline = quod_time:mono_ms() + 5000,
+          From1 = {self(), make_ref()},
+          From2 = {self(), make_ref()},
+          {ok, Q1} = quod_simplex:test_enqueue_dtx_intent(
+                       From1, self(), Intent1, Begin, GroupRef,
+                       Deadline, S0),
+          {D1, _} = quod_simplex:test_progress_dtx_admission(Q1),
+          {ok, Q2} = quod_simplex:test_enqueue_dtx_intent(
+                       From2, self(), Intent2, Begin, GroupRef,
+                       Deadline, D1),
+          {true, Cleared} =
+              quod_simplex:test_drop_dtx_admission_owner(Q2),
+          ?assertEqual(
+             #{engine => none, dormant => none, waiting => []},
+             quod_simplex:test_dtx_admission_state(Cleared))
+      end).
+
+dtx_admission_rechecks_binding_before_promotion_test() ->
+    with_dtx_admission_fixture(
+      fun(Fixture, Begin, GroupRef, S0) ->
+          #{pubkey := Author} = maps:get(node_identity, Fixture),
+          OldAdmission = maps:get(admission, Fixture),
+          Intent = make_ref(),
+          From = {self(), make_ref()},
+          Deadline = quod_time:mono_ms() + 5000,
+          {ok, Queued} = quod_simplex:test_enqueue_dtx_intent(
+                           From, self(), Intent, Begin, GroupRef,
+                           Deadline, S0),
+          ChangedAdmissions = #{Author => <<91:256>>},
+          Changed0 = quod_simplex:test_set_author_admissions(
+                       ChangedAdmissions, Queued),
+          Changed = quod_simplex:test_retire_changed_admissions(
+                      #{Author => OldAdmission}, ChangedAdmissions, Changed0),
+          {Rejected,
+           [{reply, From, {error, invalid_dtx_intent}}]} =
+              quod_simplex:test_progress_dtx_admission(Changed),
+          ?assertEqual(
+             #{engine => none, dormant => none, waiting => []},
+             quod_simplex:test_dtx_admission_state(Rejected))
+      end).
+
+dtx_retained_begin_removal_opens_the_independent_fifo_gate_test() ->
+    with_dtx_admission_fixture(
+      fun(Fixture, Begin, GroupRef, S0) ->
+          Control = maps:get(begin_control, Fixture),
+          Retained = quod_simplex:test_seed_dtx_submission(
+                       Control, [], S0),
+          Intent = make_ref(),
+          From = {self(), make_ref()},
+          Deadline = quod_time:mono_ms() + 5000,
+          {ok, Queued} = quod_simplex:test_enqueue_dtx_intent(
+                           From, self(), Intent, Begin, GroupRef,
+                           Deadline, Retained),
+          {StillBlocked, []} =
+              quod_simplex:test_progress_dtx_admission(Queued),
+          {Entry, Payload} = committed_dtx_test_entry(Control, 1),
+          Cleared = quod_simplex:test_resolve_committed_dtx(
+                      Entry, Payload, StillBlocked),
+          {Promoted, [{reply, From, {accepted, Intent}}]} =
+              quod_simplex:test_progress_dtx_admission(Cleared),
+          ?assertEqual(
+             #{engine => self(), dormant => Intent, waiting => []},
+             quod_simplex:test_dtx_admission_state(Promoted)),
+          _ = quod_simplex:test_cancel_dtx_intent(self(), Intent, Promoted),
+          ok
+      end).
+
+dtx_expired_head_replies_once_and_advances_fifo_test() ->
+    with_dtx_admission_fixture(
+      fun(Fixture, Begin, GroupRef, S0) ->
+          Control = maps:get(begin_control, Fixture),
+          Retained = quod_simplex:test_seed_dtx_submission(
+                       Control, [], S0),
+          ExpiredIntent = make_ref(),
+          LiveIntent = make_ref(),
+          ExpiredFrom = {self(), make_ref()},
+          LiveFrom = {self(), make_ref()},
+          Soon = quod_time:mono_ms() + 5000,
+          Later = Soon + 5000,
+          {ok, Q1} = quod_simplex:test_enqueue_dtx_intent(
+                       ExpiredFrom, self(), ExpiredIntent, Begin, GroupRef,
+                       Soon, Retained),
+          {ok, Q2} = quod_simplex:test_enqueue_dtx_intent(
+                       LiveFrom, self(), LiveIntent, Begin, GroupRef,
+                       Later, Q1),
+          ExpiredQueue = quod_simplex:test_set_dtx_intent_deadline(
+                           ExpiredIntent, quod_time:mono_ms() - 1, Q2),
+          {AfterExpiry,
+           [{reply, ExpiredFrom,
+             {error, {proof_limit_exceeded, _}}}]} =
+              quod_simplex:test_progress_dtx_admission(ExpiredQueue),
+          ?assertEqual(
+             #{engine => self(), dormant => none, waiting => [LiveIntent]},
+             quod_simplex:test_dtx_admission_state(AfterExpiry)),
+          {Entry, Payload} = committed_dtx_test_entry(Control, 1),
+          Cleared = quod_simplex:test_resolve_committed_dtx(
+                      Entry, Payload, AfterExpiry),
+          {Promoted, [{reply, LiveFrom, {accepted, LiveIntent}}]} =
+              quod_simplex:test_progress_dtx_admission(Cleared),
+          {_Same, []} = quod_simplex:test_progress_dtx_admission(Promoted),
+          _ = quod_simplex:test_cancel_dtx_intent(
+                self(), LiveIntent, Promoted),
+          ok
+      end).
 
 dtx_prepare_contact_is_bound_to_its_certified_origin_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
@@ -824,6 +1033,110 @@ dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
         {1, DurableStore} = quod_simplex:test_committed_store(Recovered),
         ?assertEqual({ok, Entry}, quod_ledger_store:read_at(DurableStore, 1))
     after
+        quod_ledger_store:close(Store0),
+        file:del_dir_r(Dir)
+    end.
+
+%% The catch-up callback itself must release the next sealed write. There is no
+%% later tick in this test: a certified Complete clears the active group and
+%% `sink_catchup` must pass that state through the common progress tail before
+%% replying to its caller.
+dtx_catchup_complete_promotes_fifo_on_a_quiet_namespace_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    Origin = {Ns, Anchor} = maps:get(target, Fixture),
+    Signer = maps:get(node_identity, Fixture),
+    Coordinator = maps:get(pubkey, Signer),
+    Admission = maps:get(admission, Fixture),
+    Begin = maps:get('begin', Fixture),
+    BeginControl = maps:get(begin_control, Fixture),
+    GroupId = quod_dtx:group_id(Begin),
+    {BeginEntry, _BeginPayload, BeginRef} =
+        certified_dtx_test_entry(Origin, BeginControl, 1),
+    {ok, Decision} = quod_dtx:new_decision(
+                       GroupId, BeginRef,
+                       {abort, [{test_abort, catchup_release}]}, []),
+    {ok, DecisionControl} = quod_dtx:sign_control(
+                              Origin, Decision, Admission, 2, 2, Signer),
+    {DecisionEntry, _DecisionPayload, DecisionRef} =
+        certified_dtx_test_entry(Origin, DecisionControl, 2),
+    {ok, Finalize} = quod_dtx:new_finalize(
+                       GroupId, DecisionRef, abort, none, 0),
+    {ok, FinalizeControl} = quod_dtx:sign_control(
+                              Origin, Finalize, Admission, 3, 3, Signer),
+    {FinalizeEntry, _FinalizePayload, FinalizeRef} =
+        certified_dtx_test_entry(Origin, FinalizeControl, 3),
+    {ok, Complete} = quod_dtx:new_complete(
+                       GroupId, DecisionRef, [{Origin, FinalizeRef, 0}]),
+    {ok, CompleteControl} = quod_dtx:sign_control(
+                              Origin, Complete, Admission, 4, 4, Signer),
+    {CompleteEntry, _CompletePayload, CompleteRef} =
+        certified_dtx_test_entry(Origin, CompleteControl, 4),
+    {ok, H1, P1, _} = quod_dtx:reduce(
+                         BeginControl, BeginRef,
+                         quod_dtx:initial_group_history(),
+                         quod_dtx:initial_projection(Origin, 0)),
+    {ok, H2, P2, _} = quod_dtx:reduce(
+                         DecisionControl, DecisionRef, H1, P1),
+    {ok, H3, P3, _} = quod_dtx:reduce(
+                         FinalizeControl, FinalizeRef, H2, P2),
+    {ok, _H4, P4, _} = quod_dtx:reduce(
+                          CompleteControl, CompleteRef, H3, P3),
+    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
+    Dir = relay_store_dir("catchup_dtx_admission_release"),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
+    {ok, Store3} = quod_ledger_store:append(
+                     Store0, [BeginEntry, DecisionEntry, FinalizeEntry]),
+    PrologPid = start_registered_prolog_sink(Ns),
+    try
+        Base = st(#{ns => Ns, genesis_hash => Anchor, store => Store3,
+                    slot => 3, self => Coordinator,
+                    validators => [Coordinator],
+                    author_admissions => #{Coordinator => Admission},
+                    dtx_projection => P3, sync => ready,
+                    eng => quod_simplex:eng_with_certs(3, [])}),
+        Intent = make_ref(),
+        IntentFrom = {self(), make_ref()},
+        {ok, Queued0} = quod_simplex:test_enqueue_dtx_intent(
+                          IntentFrom, PrologPid, Intent, Begin, GroupRef,
+                          quod_time:mono_ms() + 5000, Base),
+        {Queued, []} = quod_simplex:test_progress_dtx_admission(Queued0),
+        Projection =
+            (quod_simplex:history_projection(
+               [Coordinator], <<212:256>>,
+               #{Coordinator => Admission}, #{Coordinator => 4}, 4))#{
+              dtx := P4,
+              dtx_lanes := #{{Admission, Coordinator} => 4},
+              dtx_last_group := GroupId,
+              history_head := {4, element(6, CompleteRef)}},
+        Pulling = quod_simplex:test_state_set(
+                    sync, {pulling, self()}, Queued),
+        SinkFrom = {self(), make_ref()},
+        {keep_state, Recovered, Actions} =
+            quod_simplex:running(
+              {call, SinkFrom},
+              {sink_catchup, {recovery, self()}, [CompleteEntry], Projection},
+              Pulling),
+        ?assert(lists:member({reply, SinkFrom, ok}, Actions)),
+        ?assertNot(lists:member(
+                     {reply, IntentFrom, {accepted, Intent}}, Actions)),
+        ?assertEqual(
+           #{engine => PrologPid, dormant => none, waiting => [Intent]},
+           quod_simplex:test_dtx_admission_state(Recovered)),
+        %% The recovery owner always follows its final verified sink call with
+        %% this readiness result. It is the first point where signing is safe,
+        %% and its existing keep_progress tail must promote without a timer or
+        %% unrelated mailbox event.
+        {keep_state, Ready, ReadyActions} =
+            quod_simplex:running(
+              cast, {sync_done, self(), {ready, 4}}, Recovered),
+        ?assert(lists:member(
+                  {reply, IntentFrom, {accepted, Intent}}, ReadyActions)),
+        ?assertEqual(
+           #{engine => PrologPid, dormant => Intent, waiting => []},
+           quod_simplex:test_dtx_admission_state(Ready))
+    after
+        stop_registered_prolog_sink(PrologPid),
         quod_ledger_store:close(Store0),
         file:del_dir_r(Dir)
     end.
@@ -7444,6 +7757,75 @@ relay_store_dir(Suffix) ->
       "/tmp",
       "quod_relay_restart_" ++ Suffix ++ "_"
       ++ integer_to_list(erlang:unique_integer([positive]))).
+
+with_dtx_admission_fixture(Fun) when is_function(Fun, 4) ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Fixture = quod_ct:signed_dtx_begin_fixture(#{}),
+    {Ns, Anchor} = maps:get(target, Fixture),
+    Begin = maps:get('begin', Fixture),
+    {ok, GroupRef} = quod_dtx:begin_group_ref(Begin),
+    #{pubkey := Author} = Identity = maps:get(node_identity, Fixture),
+    Admission = maps:get(admission, Fixture),
+    true = quod_reg:reg({quod_prolog, Ns}),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Author, id => Identity,
+                  validators => [Author],
+                  author_admissions => #{Author => Admission},
+                  sync => ready, prolog_ready => true,
+                  eng => quod_simplex:eng_with_certs(0, [])}),
+        Fun(Fixture, Begin, GroupRef, S0)
+    after
+        true = gproc:unreg(quod_reg:name({quod_prolog, Ns}))
+    end.
+
+committed_dtx_test_entry(Control, Slot) ->
+    {ok, Envelope} = quod_dtx:encode_control(Control),
+    Payload = {dtx, Envelope},
+    Block = #block{slot = Slot, parent = Slot - 1,
+                   payload = Payload, timestamp = 0},
+    BlockHash = quod_simplex:block_hash(Block),
+    {#entry{index = Slot, data = Payload,
+            cert = #cert{kind = commit, slot = Slot,
+                         block_hash = BlockHash, sigs = []}},
+     Payload}.
+
+certified_dtx_test_entry(Identity, Control, Slot) ->
+    {Entry, Payload} = committed_dtx_test_entry(Control, Slot),
+    {ok, Ref} = quod_dtx:certified_entry_ref(Identity, Entry, Control),
+    {Entry, Payload, Ref}.
+
+start_registered_prolog_sink(Ns) ->
+    Parent = self(),
+    Pid = spawn(
+            fun() ->
+                true = quod_reg:reg({quod_prolog, Ns}),
+                Parent ! {registered_prolog_sink, self()},
+                registered_prolog_sink_loop()
+            end),
+    receive
+        {registered_prolog_sink, Pid} -> Pid
+    after 1000 ->
+        error(prolog_sink_registration_timeout)
+    end.
+
+registered_prolog_sink_loop() ->
+    receive
+        stop -> ok;
+        _Message -> registered_prolog_sink_loop()
+    end.
+
+stop_registered_prolog_sink(Pid) ->
+    MRef = monitor(process, Pid),
+    Pid ! stop,
+    receive
+        {'DOWN', MRef, process, Pid, _Reason} -> ok
+    after 1000 ->
+        error(prolog_sink_stop_timeout)
+    end.
+
+reply_actions(Actions) ->
+    [Action || {reply, _From, _Reply} = Action <- Actions].
 
 assert_no_reply({_Pid, Tag}) ->
     receive

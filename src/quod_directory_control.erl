@@ -988,10 +988,6 @@ publish_hosted(S) ->
     case advertise_current(S) of
         {ok, S1} ->
             S1;
-        {error, rate_limited, S1} ->
-            %% `hosted` is already the desired complete set. The single
-            %% periodic renewal retries it after the admission window.
-            S1;
         {error, Reason, S1} ->
             logger:warning(
               "quod: local directory hosted-set update rejected: ~p",

@@ -242,7 +242,9 @@ scope.
 >   `{'$quod_symbol', <<"name">>}`; it can unify and round-trip but cannot exhaust the origin's
 >   atom table. Goal bytes remain opaque through every relay. After identity, anchor, rate, and
 >   quota checks, only the authenticated target materializes its bounded callable symbol set immediately
->   before authorization and execution.
+>   before authorization and execution. Erlog accepts that opaque-headed term only as data nested
+>   in a governed external call such as `Target::Goal`; it remains invalid as an executable Prolog
+>   goal until the selected target has materialized it.
 > - A duplicate, stale, skipped, cross-proof, or cross-node command is a typed protocol error.
 >   It poisons the scope; there is no accepted-command redrive or compatibility decoder.
 > - Co-hosted selections skip QUIC and the node router, but call the same scope-session command
@@ -330,7 +332,6 @@ looks complete. The final distributed-proof catalog is normative in
 | `{error, {anchor_conflict, Ns}}` | eligible routes disagree on genesis identity |
 | `{error, {ontology_unreachable, Ns}}` | no exact pinned route can open the scope |
 | `{error, {ontology_busy, Ns}}` | the target's bounded scope-worker capacity is full |
-| `{error, {ontology_rate_limited, Ns}}` | the authenticated peer exceeded the scope-open rate |
 | `{error, {ontology_rebuilding, Ns}}` | the target is not ready to freeze a scope |
 | `{error, {network_identity_unavailable, Ns}}` | the target is ready, but cannot yet obtain the root identity needed to verify a signed scope request |
 | `{error, {ontology_unavailable, Ns}}` | a local engine died before any durable-submission checkpoint |
@@ -371,8 +372,6 @@ automatic retry after the target may have executed.
 | concurrent scope workers per ontology | 64 by default, configurable | `{ontology_busy, Ns}` |
 | active remote scopes per authenticated peer | 16 | `{scope_limit_exceeded, 16}` |
 | origin router scopes global / per owner / per peer | 512 / 8 / 16 | bounded refusal before registration |
-| scope-open rate per peer/ontology | 32/s, burst 32 | `{ontology_rate_limited, Ns}` |
-| rejected remote opens sent per ontology | 32/s | excess rejection replies are dropped |
 
 `include/quod_proof_limits.hrl` is the one source for shared producer/decoder/test constants;
 schema owns the three configurable worker/deadline values. The larger aggregate transcript,
@@ -453,16 +452,33 @@ answers rather than the local fast path. It needs an already-configured
 two-ontology fleet:
 
 ```sh
-SOURCE_ENDPOINTS=https://source-host:14569 \
-SOURCE_NS=quod:bench_source TARGET_NS=quod:bench_target \
-GOAL='benchmark_echo(ok)' REQUESTS=2000 CONCURRENCY=64 \
-scripts/cross-ontology-loadtest.sh
+scripts/cross-ontology-loadtest.sh \
+  --source-endpoints https://source-host:14569 \
+  --source-explorer-endpoints http://source-host:14568 \
+  --source-ns quod:bench_source --target-ns quod:bench_target \
+  --agent-anchor <64-hex-character-source-anchor> \
+  --agent-instance 'human_user(benchmark).' \
+  --key-bundle /secure/path/benchmark-agent-key.json \
+  --key-passphrase-env QUOD_BENCHMARK_KEY_PASSPHRASE \
+  --goal 'benchmark_echo(ok)' --requests 2000 --concurrency 64
 ```
+
+The source ontology must already contain the named agent instance, its active
+public key, and the applicable `can_invoke/4` rules. The driver imports that
+agent's encrypted browser-key export using the named environment variable; it
+never creates a random identity or bypasses the normal signed-goal path.
 
 Read goals are the simplest benchmark. Durable-write goals are also valid when
 the target fixture supplies one. Put `__QUOD_REQUEST_ID__` in such a goal to
 give every attempt a distinct operation id; the driver never retries an
 uncertain write.
+
+Concurrent durable requests use that exact same signed path. Sealed group
+proofs wait FIFO before Begin signing when another group owns the source
+ontology; they are not sent through a benchmark-only executor and are not
+re-proved. The source still admits only one active DTX group. A promoted plan
+whose OCC reads became stale aborts normally and consumes its operation id; an
+intentional application retry must use a newly signed id.
 
 `scripts/loadtest.sh` can run this remote workload alongside its normal local
 writers and churn. It is opt-in because the main driver cannot guess a safe
@@ -472,8 +488,13 @@ the main PASS/FAIL verdict:
 ```sh
 scripts/loadtest.sh --duration 300 --inter-ontology 1 \
   --inter-source-endpoints https://source-host:14569 \
+  --inter-source-explorer-endpoints http://source-host:14568 \
   --inter-source-ns quod:bench_source \
   --inter-target-ns quod:bench_target \
+  --inter-agent-anchor <64-hex-character-source-anchor> \
+  --inter-agent-instance 'human_user(benchmark).' \
+  --inter-key-bundle /secure/path/benchmark-agent-key.json \
+  --inter-key-passphrase-env QUOD_BENCHMARK_KEY_PASSPHRASE \
   --inter-goal 'benchmark_echo(ok)' \
   --inter-requests 2000 --inter-concurrency 64
 ```

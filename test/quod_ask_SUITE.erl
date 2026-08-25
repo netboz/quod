@@ -13,6 +13,8 @@
          remote_signed_gateway_read_execute_cursor/1,
          remote_signed_two_gateway_race/1,
          remote_signed_gateway_group/1,
+         remote_signed_concurrent_gateway_groups/1,
+         remote_signed_queued_occ_abort/1,
          remote_signed_gateway_group_with_root_effect/1,
          remote_signed_group_uses_exact_agent_request/1,
          remote_group_recovers_after_origin_crash/1]).
@@ -37,6 +39,8 @@ all() -> [remote_scope_solutions, remote_scope_symbol_safety,
           remote_signed_gateway_read_execute_cursor,
           remote_signed_two_gateway_race,
           remote_signed_gateway_group,
+          remote_signed_concurrent_gateway_groups,
+          remote_signed_queued_occ_abort,
           remote_signed_gateway_group_with_root_effect,
           remote_signed_group_uses_exact_agent_request,
           remote_group_recovers_after_origin_crash].
@@ -65,6 +69,10 @@ init_per_suite(Config) ->
             "via_third_failure :- third::third_blocked.\n",
             "dtx_write_chain(X) :- assertz(dtx_animals_mark(X)), "
             "third::dtx_write(X).\n",
+            "conflict_version(0).\n"
+            "dtx_conflicting_write(X) :- conflict_version(_), "
+            "retract(conflict_version(0)), assertz(conflict_version(X)), "
+            "assertz(dtx_conflict_mark(X)), third::dtx_write(X).\n",
             deep_failure_rules(),
             "loop :- loop.\n"]),
     TargetAllow = #{?ASKER_NS => [AskerPub],
@@ -466,6 +474,12 @@ remote_signed_two_gateway_race(Config) ->
     AgentPub = ?config(agent_pub, Config),
     AgentKey = ?config(agent_key, Config),
     ClientPeer = ?config(client_peer, Config),
+    %% This case is independently runnable.  The suite starts with one
+    %% synthetic wrong-certificate route to exercise failover elsewhere, but
+    %% this concurrency assertion must not inherit its removal from a prior
+    %% test case.
+    retire_wrong_route(Asker, ?config(wrong_pub, Config),
+                       ?config(target_addr, Config), 200),
     AskerSession = open_client_session(
                      Asker, NetworkId, ?config(asker_pub, Config),
                      AgentKey, ClientPeer),
@@ -586,6 +600,149 @@ remote_signed_gateway_group(Config) ->
        peer:call(
          Asker, quod_prolog, outcome,
          [maps:get(operation_ref, GroupEvidence)])),
+    ok.
+
+%% Eight independently signed A -> B -> C writes enter together.  The old
+%% single handoff slot rejected this shape as busy; the one Simplex admission
+%% owner must now serialize every sealed proof into the unchanged DTX path.
+remote_signed_concurrent_gateway_groups(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    Third = ?config(third, Config),
+    NetworkId = ?config(network_id, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
+    Session = ?config(client_session, Config),
+    ClientPeer = ?config(client_peer, Config),
+    AgentAnchor = ?config(asker_anchor, Config),
+    retire_wrong_route(Asker, ?config(wrong_pub, Config),
+                       ?config(target_addr, Config), 200),
+
+    Requests =
+        [begin
+             Tag = erlang:unique_integer([positive]),
+             GoalText = iolist_to_binary(
+                          io_lib:format(
+                            "\"animals\"::dtx_write_chain(~B).", [Tag])),
+             {RequestBytes, Signature} = signed_goal_request(
+                                           NetworkId, AgentPub, AgentKey,
+                                           ?ASKER_NS, AgentAnchor,
+                                           maps:get(expires_ms, Session),
+                                           execute, GoalText),
+             {Index, Tag, RequestBytes, Signature}
+         end || Index <- lists:seq(1, 8)],
+    Parent = self(),
+    ConcurrentRef = make_ref(),
+    Writers =
+        [spawn(
+           fun() ->
+               receive {ConcurrentRef, go} -> ok end,
+               Result = peer:call(
+                          Asker, quod_client_goal_ingress, submit,
+                          [execute, maps:get(session_id, Session),
+                           RequestBytes, Signature, ClientPeer], 60000),
+               Parent ! {ConcurrentRef, Index, Result}
+           end)
+         || {Index, _Tag, RequestBytes, Signature} <- Requests],
+    lists:foreach(fun(Pid) -> Pid ! {ConcurrentRef, go} end, Writers),
+    Results = collect_gateway_race(ConcurrentRef, length(Requests), []),
+    EvidenceByIndex =
+        maps:from_list(
+          [{Index, concurrent_submit_evidence(Index, Result)}
+           || {Index, Result} <- Results]),
+    OperationRefs =
+        [maps:get(operation_ref, maps:get(Index, EvidenceByIndex))
+         || {Index, _Tag, _RequestBytes, _Signature} <- Requests],
+    ?assertEqual(length(Requests), length(lists:usort(OperationRefs))),
+    lists:foreach(
+      fun({Index, Tag, _RequestBytes, _Signature}) ->
+          OperationRef = maps:get(
+                           operation_ref, maps:get(Index, EvidenceByIndex)),
+          {#{status := claimed, outcome_ref := GroupRef},
+           #{status := committed, participant_slots := Slots}} =
+              wait_operation_claim(Asker, OperationRef, 600),
+          ?assertMatch(
+             {group, ?ASKER_NS, AgentAnchor, _, _, _}, GroupRef),
+          ?assertEqual(3, length(Slots)),
+          assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
+          assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag)
+      end, Requests),
+    Stats = peer:call(Asker, quod_simplex, stats, [?ASKER_NS]),
+    ?assertEqual(0, maps:get(dtx_admission_waiting, Stats)),
+    ?assertEqual(0, maps:get(dtx_admission_dormant, Stats)),
+    ok.
+
+%% Both proofs read conflict_version/1 while it is zero, then wait at the
+%% pre-Begin FIFO seam. One group changes that fact; the other must retain its
+%% claimed operation id and terminate with the ordinary stale-read abort.
+remote_signed_queued_occ_abort(Config) ->
+    Asker = ?config(asker, Config),
+    Target = ?config(target, Config),
+    Third = ?config(third, Config),
+    NetworkId = ?config(network_id, Config),
+    AgentKey = ?config(agent_key, Config),
+    AgentPub = ?config(agent_pub, Config),
+    ClientPeer = ?config(client_peer, Config),
+    AgentAnchor = ?config(asker_anchor, Config),
+    retire_wrong_route(Asker, ?config(wrong_pub, Config),
+                       ?config(target_addr, Config), 200),
+    Session = open_client_session(
+                Asker, NetworkId, ?config(asker_pub, Config),
+                AgentKey, ClientPeer),
+    Requests =
+        [begin
+             Tag = erlang:unique_integer([positive]),
+             GoalText = iolist_to_binary(
+                          io_lib:format(
+                            "\"animals\"::dtx_conflicting_write(~B).",
+                            [Tag])),
+             {RequestBytes, Signature} = signed_goal_request(
+                                           NetworkId, AgentPub, AgentKey,
+                                           ?ASKER_NS, AgentAnchor,
+                                           maps:get(expires_ms, Session),
+                                           execute, GoalText),
+             {Index, Tag, RequestBytes, Signature}
+         end || Index <- [1, 2]],
+    Parent = self(),
+    RaceRef = make_ref(),
+    Writers =
+        [spawn(
+           fun() ->
+               receive {RaceRef, go} -> ok end,
+               Result = peer:call(
+                          Asker, quod_client_goal_ingress, submit,
+                          [execute, maps:get(session_id, Session),
+                           RequestBytes, Signature, ClientPeer], 60000),
+               Parent ! {RaceRef, Index, Result}
+           end)
+         || {Index, _Tag, RequestBytes, Signature} <- Requests],
+    lists:foreach(fun(Pid) -> Pid ! {RaceRef, go} end, Writers),
+    Evidences = maps:from_list(
+                  [{Index, concurrent_conflict_evidence(Index, Result)}
+                   || {Index, Result} <-
+                          collect_gateway_race(RaceRef, 2, [])]),
+    Outcomes =
+        [{Index, Tag, RequestBytes, Signature,
+          wait_operation_terminal(
+            Asker, maps:get(operation_ref, maps:get(Index, Evidences)), 600)}
+         || {Index, Tag, RequestBytes, Signature} <- Requests],
+    [{CommittedIndex, CommittedTag, _CommittedBytes, _CommittedSignature,
+      {_, #{status := committed}}}] =
+        [Row || Row = {_, _, _, _, {_, #{status := committed}}} <- Outcomes],
+    [{AbortedIndex, AbortedTag, AbortedBytes, AbortedSignature,
+      {#{status := claimed}, #{status := aborted}}}] =
+        [Row || Row = {_, _, _, _,
+                       {#{status := claimed}, #{status := aborted}}} <- Outcomes],
+    ?assertNotEqual(CommittedIndex, AbortedIndex),
+    assert_fact_once(Target, ?NS, dtx_conflict_mark, CommittedTag),
+    assert_fact_absent(Target, ?NS, dtx_conflict_mark, AbortedTag),
+    assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, CommittedTag),
+    ?assertMatch(
+       {ok, _, {operation_outcome,
+                #{status := claimed}, #{status := aborted}}},
+       wait_remote_operation(
+         Asker, maps:get(session_id, Session), AbortedBytes,
+         AbortedSignature, ClientPeer, 8)),
     ok.
 
 %% One signed proof writes its agent ontology and stages Root's existing
@@ -982,6 +1139,12 @@ assert_fact_once(Peer, Ns, Predicate, Tag) ->
        {ok, [#{'Hits' := [ok]}], _},
        peer:call(Peer, quod_prolog, prove, [Ns, Goal], 10000)).
 
+assert_fact_absent(Peer, Ns, Predicate, Tag) ->
+    Goal = {findall, ok, {Predicate, Tag}, {'Hits'}},
+    ?assertMatch(
+       {ok, [#{'Hits' := []}], _},
+       peer:call(Peer, quod_prolog, prove, [Ns, Goal], 10000)).
+
 collect_gateway_race(_Ref, 0, Results) -> lists:reverse(Results);
 collect_gateway_race(Ref, Remaining, Results) ->
     receive
@@ -996,8 +1159,10 @@ classify_race_submit(
   {ok, Evidence, {normalized, {committed, _Bindings, _Outcome}}}) ->
     {accepted, Evidence};
 classify_race_submit(
-  {ok, Evidence, {normalized, {pending, OperationRef}}}) ->
-    ?assertEqual(maps:get(operation_ref, Evidence), OperationRef),
+  {ok, Evidence, {normalized, {pending, _PendingRef}}}) ->
+    %% A multi-ontology proof may already be durably represented by its group
+    %% reference.  The signed operation remains the stable public lookup key
+    %% in either case, and is resolved below without resubmitting.
     {accepted, Evidence};
 classify_race_submit({error, signed_target_unavailable}) ->
     pre_custody_unavailable;
@@ -1005,6 +1170,35 @@ classify_race_submit({error, busy}) ->
     pre_custody_unavailable;
 classify_race_submit(Other) ->
     ct:fail({gateway_race_submit_failed, Other}).
+
+concurrent_submit_evidence(
+  _Index,
+  {ok, Evidence, {normalized, {committed, _Bindings, _Outcome}}}) ->
+    Evidence;
+concurrent_submit_evidence(
+  _Index,
+  {ok, Evidence, {normalized, {pending, _PendingRef}}}) ->
+    Evidence;
+concurrent_submit_evidence(Index, Other) ->
+    ct:fail({concurrent_signed_dtx_submit_failed, Index, Other}).
+
+%% The losing group can be reported either while still pending or directly as
+%% its definitive Prepare refusal. In both cases the signed evidence carries
+%% the same operation reference whose final durable outcome is asserted below.
+concurrent_conflict_evidence(
+  _Index,
+  {ok, Evidence, {normalized, {committed, _Bindings, _Outcome}}}) ->
+    Evidence;
+concurrent_conflict_evidence(
+  _Index,
+  {ok, Evidence, {normalized, {pending, _PendingRef}}}) ->
+    Evidence;
+concurrent_conflict_evidence(
+  _Index,
+  {ok, Evidence, {normalized, {failed, _Reasons}}}) ->
+    Evidence;
+concurrent_conflict_evidence(Index, Other) ->
+    ct:fail({concurrent_signed_conflict_submit_failed, Index, Other}).
 
 wait_operation_claim(_Target, OperationRef, 0) ->
     ct:fail({operation_outcome_timeout, OperationRef});
@@ -1027,6 +1221,24 @@ wait_operation_claim(Target, OperationRef, Remaining) ->
             wait_operation_claim(Target, OperationRef, Remaining - 1);
         Other ->
             ct:fail({unexpected_operation_claim, Other})
+    end.
+
+wait_operation_terminal(_Target, OperationRef, 0) ->
+    ct:fail({operation_outcome_timeout, OperationRef});
+wait_operation_terminal(Target, OperationRef, Remaining) ->
+    case peer:call(Target, quod_prolog, outcome, [OperationRef]) of
+        {ok, #{status := claimed, outcome_ref := OutcomeRef} = Claim} ->
+            case peer:call(Target, quod_prolog, outcome, [OutcomeRef]) of
+                {ok, #{status := Status} = Outcome}
+                  when Status =:= committed; Status =:= aborted ->
+                    {Claim, Outcome};
+                _ ->
+                    timer:sleep(50),
+                    wait_operation_terminal(Target, OperationRef, Remaining - 1)
+            end;
+        _ ->
+            timer:sleep(50),
+            wait_operation_terminal(Target, OperationRef, Remaining - 1)
     end.
 
 wait_remote_operation(_Gateway, _SessionId, _RequestBytes, _Signature,
@@ -1066,9 +1278,12 @@ assert_dtx_released(Peer, Ns) ->
     ?assertEqual(open, maps:get(proof_fence, Dtx)).
 
 run_scope_wave(Asker, Goal, Wave) ->
+    %% `run_scope_proofs/3` owns a 10-second completion window. The peer call
+    %% must outlive it; its default five seconds can otherwise time out before
+    %% the helper can report the actual wave result.
     Results = peer:call(
                 Asker, ?MODULE, run_scope_proofs,
-                [?ASKER_NS, Goal, ?SCOPE_WAVE_SIZE]),
+                [?ASKER_NS, Goal, ?SCOPE_WAVE_SIZE], 15000),
     case Results of
         List when is_list(List), length(List) =:= ?SCOPE_WAVE_SIZE ->
             lists:foreach(
@@ -1163,8 +1378,13 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
     {ok, Peer, _Node} = peer:start(
                           #{name => Name, connection => standard_io,
                             args => ["-pa" | PeerPaths]}),
-    {module, quod_simplex} = peer:call(
-                                Peer, code, ensure_loaded, [quod_simplex]),
+    lists:foreach(
+      fun(Module) ->
+          {module, Module} = peer:call(
+                               Peer, code, ensure_loaded, [Module]),
+          QuodEbin = filename:dirname(
+                       peer:call(Peer, code, which, [Module]))
+      end, [quod_simplex, quod_scope_session, quod_ask]),
     true = peer:call(
              Peer, erlang, function_exported,
              [quod_simplex, start_link, 2]),

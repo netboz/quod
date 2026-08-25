@@ -61,6 +61,17 @@ signed_operation_resolution_has_one_pending_and_terminal_shape_test() ->
        {409, #{error => operation_conflict}},
        quod_client_http:signed_goal_result({error, operation_conflict})).
 
+signed_goal_busy_is_not_misreported_as_cursor_contention_test() ->
+    ?assertEqual(
+       {503, #{error => ontology_busy}},
+       quod_client_http:signed_goal_result({error, busy})),
+    ?assertEqual(
+       {409, #{error => cursor_busy}},
+       quod_client_http:signed_goal_result({error, cursor_busy})),
+    ?assertEqual(
+       {404, #{error => cursor_not_found}},
+       quod_client_http:signed_goal_result({error, cursor_not_found})).
+
 client_http_test_() ->
     {setup, fun setup/0, fun cleanup/1,
      fun(Port) ->

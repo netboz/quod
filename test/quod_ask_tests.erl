@@ -44,7 +44,7 @@ remote_route_errors_retry_only_before_execution_test() ->
        {fatal, {anchor_conflict, Target}},
        quod_ask:test_remote_open_error(
          Target, {anchor_conflict, Target})),
-    First = {ontology_rate_limited, Target},
+    First = {ontology_rebuilding, Target},
     ?assertEqual(
        First, quod_ask:test_remember_route_error(none, First)),
     ?assertEqual(

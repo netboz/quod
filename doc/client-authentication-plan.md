@@ -199,11 +199,12 @@ local request. Browser session identifiers and addresses are never forwarded.
 Scope transport inside an admitted proof continues to carry the same signed
 user and request evidence.
 
-**User-home creation is rate-limited but not capped.** A node bounds signed
-goals per user and peer, not homes in total, and each new key may found a durable
-ontology. Any market-specific bound belongs in the root policy rather than in a
-special ingress limiter, consistent with treating business restrictions as
-predicates rather than hard-coded runtime rules.
+**User-home creation has no default traffic quota or total cap.** Each new key
+may found a durable ontology. An operator may explicitly configure ingress
+traffic limits for an exposed deployment; any market-specific creation rule
+belongs in the root policy rather than a special ingress limiter, consistent
+with treating business restrictions as predicates rather than hard-coded
+runtime rules.
 
 ## Signed goal ingress
 
@@ -213,6 +214,10 @@ execution mode, target namespace and genesis anchor, user key, and network
 identity. The receiving node verifies it, rechecks session validity, derives
 the engine-owned subject, and enters the existing proof path with the exact
 goal. It does not map the request through a hard-coded predicate catalogue.
+Several signed distributed writes from one agent ontology may prove
+concurrently. Their sealed Begins then wait FIFO at the existing pre-signing
+boundary, while consensus still runs one active group per source ontology.
+This waiting is neither a retry nor a second executor.
 
 The sealed plan binds that subject and signed request digest. An ordinary
 transaction carries the complete signed request; a distributed transaction
@@ -221,6 +226,11 @@ its digest. The existing node signature continues to attest consensus
 authorship; it does not replace the user's signature. `outcome_unknown` is
 resolved by its exact anchored operation or transaction outcome reference,
 never by submitting the goal request again.
+If a waiting operation later claims its id and then aborts because its sealed
+reads are stale, that abort is terminal for the id. A deliberate application
+retry signs a new operation id. Ordinary proof-capacity pressure is reported
+as `ontology_busy`; `cursor_busy` is reserved for an already-open cursor whose
+command is still running.
 
 Before Execute or cursor Accept, the browser stores the exact signed request in
 a bounded 64-row IndexedDB journal. A reload queries only

@@ -62,6 +62,8 @@ Two collection paths:
 | `quod_dtx_committed_total{namespace}` | counter | `phase` | committed distributed-control barriers, by protocol phase |
 | `quod_dtx_validation_events_total{namespace}` | counter | `event` | temporary DTX validation abstentions and normal-path redrives |
 | `quod_dtx_submit_fanout_total{namespace}` | counter | `result` | bounded target-validator DTX delivery attempts and outcomes |
+| `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | sealed distributed writes waiting before Begin, and whether one Begin currently owns the dormant registration slot |
+| `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited before becoming the sole dormant Begin |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
@@ -83,6 +85,7 @@ Two collection paths:
          observe_consensus_event/4, observe_share_lag/3, observe_consensus_step/3,
          observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2,
          count_dtx_validation/2, count_dtx_submit_fanout/3,
+         observe_dtx_admission_wait/2,
          observe_runtime_reaction/3]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -105,6 +108,9 @@ Two collection paths:
 -define(BATCH_SIZE_BUCKETS, [1, 2, 4, 8, 16, 32, 64, 128, 256]).
 -define(BATCH_WAIT_BUCKETS, [0, 1, 2, 5, 10, 15, 25, 40, 75, 100, 250, 500, 1000]).
 -define(RETARGET_HOPS_BUCKETS, [0, 1, 2, 3, 5, 8, 13, 21, 34]).
+-define(DTX_ADMISSION_WAIT_BUCKETS,
+        [0, 1, 2, 5, 10, 25, 50, 100, 250, 500, 1000, 2500, 5000,
+         10000, 30000, 60000]).
 -define(SIG_BUCKETS,  [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                        0.0025, 0.005, 0.01, 0.025, 0.05]).                            %% seconds per verify
 -define(VOTE_SYNC_BUCKETS, [0.0001, 0.00025, 0.0005, 0.001, 0.0025,
@@ -232,6 +238,8 @@ declare(NodeId) ->
     _ = G(quod_consensus_syncing,         "1 while this node is still catching up or confirming it is on the latest block; 0 once it is up to date. A voting node cannot vote until this is 0."),
     _ = G(quod_consensus_weak_cert_waits, "Total times this node held off finishing a block because it did not yet have enough valid votes from the current voting set, and waited for them. Climbing means this node fell behind around a change to the voting set (only ever goes up)."),
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
+    _ = G(quod_dtx_admission_waiting, "Sealed distributed writes waiting before the existing Begin signing admission opens."),
+    _ = G(quod_dtx_admission_dormant, "Whether one sealed distributed write currently owns the sole dormant Begin registration slot (0 or 1)."),
     %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
     _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Missing means the runtime process is absent. A persistent 0 means it cannot currently release effects; check runtime logs and the failure metrics."),
     _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
@@ -330,6 +338,9 @@ declare(NodeId) ->
     _ = H(quod_consensus_ingress_retarget_hops,
           "How many internal retargets each completed origin-owned submission needed. Zero means its first placement resolved; values above zero expose slot-boundary churn without turning it into a client retry.",
           ?RETARGET_HOPS_BUCKETS),
+    _ = H(quod_dtx_admission_wait_ms,
+          "How long a sealed distributed write waited, in milliseconds, before it became the sole dormant Begin intent.",
+          ?DTX_ADMISSION_WAIT_BUCKETS),
     _ = H(quod_tx_signature_validation_seconds,
           "How long this node spent checking one transaction author's Ed25519 signature before accepting it. Higher values mean transaction authentication is consuming more consensus time.",
           ?SIG_BUCKETS),
@@ -613,6 +624,7 @@ refresh_log_ns(Ns) ->
           ingress_queued := IQ, ingress_overflow := IO,
           ingress_expired := IE, ingress_forwarded := IF,
           custody_depth := CD, custody_ready := CR, custody_bytes := CB,
+          dtx_admission_waiting := DAW, dtx_admission_dormant := DAD,
           ingress_retargets := IRT,
           relay_accepted := RA, relay_redrives := RRD,
           relay_duplicates := RDU,
@@ -646,6 +658,8 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_custody_depth, CD),
             _ = S(quod_consensus_custody_ready, CR),
             _ = S(quod_consensus_custody_bytes, CB),
+            _ = S(quod_dtx_admission_waiting, DAW),
+            _ = S(quod_dtx_admission_dormant, DAD),
             _ = S(quod_consensus_ingress_retargets, IRT),
             _ = S(quod_consensus_relay_accepted, RA),
             _ = S(quod_consensus_relay_redrives, RRD),
@@ -1088,6 +1102,24 @@ count_dtx_submit_fanout(Ns, Result, Count)
 count_dtx_submit_fanout(_Ns, _Result, _Count) ->
     ok.
 
+-doc "Record one sealed distributed write's volatile wait before Begin admission.".
+-spec observe_dtx_admission_wait(binary(), non_neg_integer()) -> ok.
+observe_dtx_admission_wait(Ns, WaitMs)
+  when is_binary(Ns), is_integer(WaitMs), WaitMs >= 0 ->
+    case whereis(?MODULE) of
+        undefined ->
+            ok;
+        _Pid ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_dtx_admission_wait_ms, [label(Ns)], WaitMs),
+                ok
+            catch _:_ -> ok
+            end
+    end;
+observe_dtx_admission_wait(_Ns, _WaitMs) ->
+    ok.
+
 count_fixed_event(_Name, _Ns, _Event, 0) ->
     ok;
 count_fixed_event(Name, Ns, Event, Count) ->
@@ -1136,6 +1168,7 @@ consensus_stat_keys() ->
      r_busy, r_redirect, r_bad, r_stale, membership_rejects,
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
      custody_depth, custody_ready, custody_bytes, ingress_retargets,
+     dtx_admission_waiting, dtx_admission_dormant,
      relay_accepted, relay_redrives, relay_duplicates,
      redrives, progress_slot, progress_phase_code, progress_quorum_ready,
      progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,

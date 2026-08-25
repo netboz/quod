@@ -85,6 +85,15 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
          test_submit_outcome/1,
          test_release_absent_group_waiter/3,
          test_resolve_validation/4,
+         test_signed_origin_policy_goal/2,
+         test_dtx_handoff_state/3,
+         test_handle_response_info/2,
+         test_cancel_dtx_handoff/2,
+         test_activate_dtx_handoff/4,
+         test_fill_dtx_activation_capacity/1,
+         test_dtx_handoff_summary/1,
+         test_active_operation/3,
+         test_inflight_public_reply/1,
          test_await_public_proof/5]).
 %% Pure verdict and scope-correlation seams driven directly by EUnit.
 -endif.
@@ -101,9 +110,15 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
 -define(ROOT_NS, <<"quod:root">>).
 -define(APPLY_DEPENDENCY_RETRY_MS, 250).
 
-%% Busy/rebuilding replies are deliberately rate-limited: an authenticated peer can
-%% still flood valid open frames, and rejecting them must not create unbounded work.
--define(MAX_SCOPE_REJECTS_PER_SECOND, 32).
+%% One proof-owned, pre-signing Begin transfer. The original client caller
+%% remains in #proof_worker.from; registration_from is the proof worker parked
+%% while Simplex serializes this exact immutable intent.
+-record(dtx_handoff, {
+          intent_id  :: reference(),
+          registration_from = none :: none | gen_server:from(),
+          group_ref  :: term(),
+          state = registering :: registering | dormant
+         }).
 
 -record(proof_worker, {pid         :: pid(),
                        kind        :: prove | prove_ro | cursor,
@@ -113,22 +128,15 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                                       {async, pid(), reference()},
                        timer       :: reference(),
                        token       :: reference(),
+                       deadline_ms :: integer(),
+                       %% A signed operation is guarded by this worker until
+                       %% its durable outcome takes over.  This is deliberately
+                       %% part of the existing worker owner, not another
+                       %% in-flight operation registry.
+                       operation = none :: none | {term(), binary(), term()},
+                       handoff = none :: none | #dtx_handoff{},
                        checkpoint = none :: none | term(),
                        height = 0  :: non_neg_integer()}).
-
-%% One engine-owned, pre-signing Begin transfer.  The origin worker waits on
-%% `from`, but the engine keeps serving its mailbox while Simplex validates the
-%% immutable intent.  There is only one origin-active group per ontology, so a
-%% second hand-off is refused rather than queued.
--record(dtx_handoff, {
-          intent_id  :: reference(),
-          request_id = none :: none | term(),
-          worker_ref :: reference(),
-          worker_pid :: pid(),
-          from = none :: none | gen_server:from(),
-          group_ref  :: term(),
-          state = registering :: registering | dormant
-         }).
 
 %% After activation the proof worker may close every scope.  Only this compact
 %% public waiter remains; recovery and consensus are owned by Simplex.
@@ -283,7 +291,6 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             %% ownership here without charging a derivation slot or pinning
             %% MVCC history.
             waiting_workers = #{} :: map(),
-            dtx_handoff = none :: none | #dtx_handoff{},
             group_waiters = #{} :: map(),
             %% WorkerMon => #scope_worker{}.  Co-hosted and remote scopes share
             %% the same worker/session ownership and MVCC pin accounting.
@@ -296,10 +303,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             remote_request_mrefs = #{} :: map(),
             remote_return_mrefs = #{} :: map(),
             remote_internal_refs = #{} :: map(),
-            remote_peer_counts = #{} :: map(),
-            scope_open_rates = #{} :: map(),
-            reject_window = 0 :: integer(),
-            reject_count = 0 :: non_neg_integer()}).
+            remote_peer_counts = #{} :: map()}).
 
 %%%===================================================================
 %%% API
@@ -1102,8 +1106,8 @@ handle_call({dtx_group_state, GroupId}, _From,
     {Reply, Outcomes1} = local_dtx_group_state(GroupId, Outcomes0),
     {reply, Reply, S#s{outcomes = Outcomes1}};
 %% The worker has already sealed every participant and built one immutable
-%% semantic Begin.  Registration is asynchronous to Simplex; this engine owns
-%% the sole in-flight correlation and does not block its mailbox.
+%% semantic Begin. Registration is asynchronous to Simplex and correlated by
+%% this exact proof worker, so other proofs and the engine mailbox keep moving.
 handle_call({reserve_dtx_begin, Ref, Begin, GroupRef}, From = {Pid, _Tag},
             S) ->
     register_dtx_handoff(Ref, Pid, From, Begin, GroupRef, S);
@@ -1120,7 +1124,6 @@ handle_call(get_stats, _From, S) ->
               park_timeouts => S#s.park_timeouts,       %% final outcome unknown when caller deadline elapsed
               proof_workers => map_size(S#s.workers),
               proof_waiters => map_size(S#s.waiting_workers),
-              dtx_handoff => S#s.dtx_handoff =/= none,
               group_waiters => map_size(S#s.group_waiters),
               scope_workers => map_size(S#s.scope_workers),
               remote_scopes => map_size(S#s.remote_scopes),
@@ -1817,20 +1820,12 @@ observe_scope_origin_candidate(_OriginIdentity, _TargetIdentity, _Contact) ->
 
 open_authenticated_remote_scope(
   PeerKey, Endpoint, RequestLink, Binding, RequestContext,
-  RequestId, RemainingMs, Mode, Anchor, S = #s{ns = Ns}) ->
+  RequestId, RemainingMs, Mode, Anchor, S) ->
     case remote_open_reason(Mode, Anchor, PeerKey, S) of
         ok ->
-                    case charge_scope_open(PeerKey, {Ns, Anchor}, S) of
-                        {ok, S1} ->
-                            begin_remote_scope_open(
-                              PeerKey, Endpoint, RequestLink, Binding,
-                              RequestContext,
-                              RequestId, RemainingMs, S1);
-                        {error, S1} ->
-                            reject_scope_open(
-                              PeerKey, Endpoint, Binding, RequestId,
-                              {ontology_rate_limited, Ns}, S1)
-                    end;
+            begin_remote_scope_open(
+              PeerKey, Endpoint, RequestLink, Binding, RequestContext,
+              RequestId, RemainingMs, S);
         {error, Reason} ->
             reject_scope_open(
               PeerKey, Endpoint, Binding, RequestId, Reason, S)
@@ -2004,18 +1999,6 @@ scope_admission_reason(Mode, Anchor,
         undefined -> {error, {ontology_rebuilding, Ns}}
     end.
 
-charge_scope_open(PeerKey, Identity,
-                  S = #s{scope_open_rates = Rates0}) ->
-    Now = quod_time:mono_ms(),
-    Key = {PeerKey, Identity},
-    case quod_token_bucket:charge(
-           Key, Now, ?QUOD_SCOPE_OPEN_RATE_PER_SECOND,
-           ?QUOD_SCOPE_OPEN_RATE_BURST, ?QUOD_TOKEN_BUCKET_MAX_BUCKETS,
-           ?QUOD_TOKEN_BUCKET_IDLE_MS, Rates0) of
-        {ok, Rates} -> {ok, S#s{scope_open_rates = Rates}};
-        {error, Rates} -> {error, S#s{scope_open_rates = Rates}}
-    end.
-
 begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
                         #{request_binding := RequestBinding,
                           request_auth := RequestAuth},
@@ -2064,21 +2047,9 @@ reject_unknown_scope(_PeerKey, _Endpoint, _Binding, _CommandSeq,
                      _RequestId, S) ->
     S.
 
-reject_scope_open(PeerKey, Endpoint, Binding, RequestId, Reason,
-                  S = #s{reject_window = Window, reject_count = Count}) ->
-    Now = quod_time:mono_ms(),
-    case Window =:= 0 orelse Now - Window >= 1000 of
-        true ->
-            send_scope_rejection(
-              PeerKey, Endpoint, Binding, RequestId, Reason),
-            S#s{reject_window = Now, reject_count = 1};
-        false when Count < ?MAX_SCOPE_REJECTS_PER_SECOND ->
-            send_scope_rejection(
-              PeerKey, Endpoint, Binding, RequestId, Reason),
-            S#s{reject_count = Count + 1};
-        false ->
-            S
-    end.
+reject_scope_open(PeerKey, Endpoint, Binding, RequestId, Reason, S) ->
+    send_scope_rejection(PeerKey, Endpoint, Binding, RequestId, Reason),
+    S.
 
 send_scope_rejection(PeerKey, Endpoint, Binding, RequestId, Reason) ->
     Event = {scope_event, Binding, 1, RequestId, 1, 0, false,
@@ -2288,7 +2259,7 @@ execute_active_scope_command(
               Binding, RequestId, CommandSeq, InvocationId, 1,
               {proof_limit_exceeded, target_namespace(Binding)}, S);
         true ->
-            case decode_target_scope_goal(GoalBlob) of
+            case decode_scope_goal(GoalBlob) of
                 {ok, Goal} ->
                     {ok, InternalRef} = quod_scope_session:invoke_open(
                                           Handle, InvocationId,
@@ -2451,18 +2422,11 @@ execute_remote_plan_submission(
             finish_remote_submit(From, {error, bad_plan}, S)
     end.
 
-%% Scope-goal symbols remain opaque through intermediate origin relays. The
-%% target owns execution and makes the single bounded, authenticated
-%% atom-allocation decision before its scope worker receives the goal.
-decode_target_scope_goal(GoalBlob) ->
-    case quod_scope_wire:decode_payload(goal, GoalBlob) of
-        {ok, Goal0} ->
-            case quod_wire_term:materialize_goal_symbols(Goal0) of
-                {ok, Goal} -> {ok, Goal};
-                {error, _} -> {error, {protocol_error, bad_payload}}
-            end;
-        {error, _} = Error -> Error
-    end.
+%% Intermediate relays keep scope-goal symbols opaque.  The selected ontology's
+%% shared admission helper materializes only that invocation's callable
+%% positions before its ordinary Prolog authorization and execution.
+decode_scope_goal(GoalBlob) ->
+    quod_scope_wire:decode_payload(goal, GoalBlob).
 
 queue_scope_state_probe(Binding, Purpose,
                         Scope = #remote_scope{pending = Pending}, S) ->
@@ -3405,20 +3369,21 @@ drop_remote_record(
         error -> S
     end.
 
-handle_response_info(Info, S) ->
-    case handle_dtx_handoff_response(Info, S) of
-        no_reply -> handle_append_response_info(Info, S);
-        Reply -> Reply
-    end.
-
-handle_append_response_info(Info, S = #s{requests = Requests}) ->
+handle_response_info(Info, S = #s{requests = Requests}) ->
     case gen_statem:check_response(Info, Requests, true) of
-        {{reply, Result}, Tx, Requests1} ->
+        {{reply, Result}, {append, Tx}, Requests1} ->
             {noreply, append_result(Tx, Result, S#s{requests = Requests1})};
-        {{error, _Reason}, Tx, Requests1} ->
+        {{error, _Reason}, {append, Tx}, Requests1} ->
             %% The server may have committed immediately before exiting. Keep the caller
             %% parked so replay/apply can still provide the unambiguous result.
             {noreply, request_completed(Tx, S#s{requests = Requests1})};
+        {{reply, Result}, {dtx_handoff, Ref}, Requests1} ->
+            handle_dtx_handoff_reply(
+              Ref, Result, S#s{requests = Requests1});
+        {{error, _Reason}, {dtx_handoff, Ref}, Requests1} ->
+            reject_dtx_handoff(
+              Ref, {error, {ontology_unavailable, S#s.ns}}, false,
+              S#s{requests = Requests1});
         no_reply ->
             {noreply, S};
         no_request ->
@@ -3427,144 +3392,158 @@ handle_append_response_info(Info, S = #s{requests = Requests}) ->
 
 register_dtx_handoff(
   Ref, Pid, From, Begin, GroupRef,
-  S = #s{ns = Ns, workers = Workers, dtx_handoff = none}) ->
+  S = #s{ns = Ns, workers = Workers, requests = Requests}) ->
     Checks =
         {maps:get(Ref, Workers, undefined),
          quod_dtx:begin_group_ref(Begin)},
     case Checks of
-        {#proof_worker{pid = Pid}, {ok, GroupRef}} ->
+        {#proof_worker{pid = Pid, handoff = none,
+                       deadline_ms = DeadlineMs} = Worker,
+         {ok, GroupRef}} ->
             IntentId = make_ref(),
             case quod_simplex:register_dtx_begin(
-                   Ns, self(), IntentId, Begin, GroupRef) of
+                   Ns, self(), IntentId, Begin, GroupRef, DeadlineMs) of
                 {ok, RequestId} ->
                     Handoff = #dtx_handoff{
                                  intent_id = IntentId,
-                                 request_id = RequestId,
-                                 worker_ref = Ref,
-                                 worker_pid = Pid,
-                                 from = From,
+                                 registration_from = From,
                                  group_ref = GroupRef},
-                    {noreply, S#s{dtx_handoff = Handoff}};
+                    Requests1 = gen_statem:reqids_add(
+                                  RequestId, {dtx_handoff, Ref}, Requests),
+                    {noreply,
+                     S#s{workers = Workers#{
+                           Ref => Worker#proof_worker{handoff = Handoff}},
+                         requests = Requests1}};
                 {error, _} = Error ->
                     {reply, Error, S}
             end;
-        {#proof_worker{pid = Pid}, error} ->
+        {#proof_worker{pid = Pid, handoff = none}, error} ->
             {reply, {error, invalid_begin}, S};
         _ ->
             {reply, {error, cancelled}, S}
-    end;
-register_dtx_handoff(_Ref, _Pid, _From, _Begin, _GroupRef, S) ->
-    {reply, {error, busy}, S}.
-
-handle_dtx_handoff_response(_Info, #s{dtx_handoff = none}) ->
-    no_reply;
-handle_dtx_handoff_response(
-  _Info, #s{dtx_handoff = #dtx_handoff{state = dormant}}) ->
-    no_reply;
-handle_dtx_handoff_response(
-  Info,
-  S = #s{dtx_handoff =
-           #dtx_handoff{state = registering,
-                        request_id = RequestId} = Handoff}) ->
-    case gen_statem:check_response(Info, RequestId) of
-        {reply, {accepted, IntentId}} ->
-            accepted_dtx_handoff(IntentId, Handoff, S);
-        {reply, {error, Reason}} ->
-            rejected_dtx_handoff({error, Reason}, Handoff, S);
-        {reply, _Other} ->
-            rejected_dtx_handoff(
-              {error, {protocol_error, dtx_handoff}}, Handoff, S);
-        {error, _Reason} ->
-            rejected_dtx_handoff(
-              {error, {ontology_unavailable, S#s.ns}}, Handoff, S);
-        no_reply ->
-            no_reply
     end.
 
-accepted_dtx_handoff(
-  IntentId,
-  #dtx_handoff{intent_id = IntentId, worker_ref = Ref,
-               worker_pid = Pid, from = From,
-               group_ref = _GroupRef} = Handoff,
-  S = #s{ns = Ns, workers = Workers}) ->
+handle_dtx_handoff_reply(Ref, {accepted, IntentId},
+                         S = #s{ns = Ns, workers = Workers}) ->
     case maps:get(Ref, Workers, undefined) of
-        #proof_worker{pid = Pid} ->
+        #proof_worker{
+           handoff = #dtx_handoff{
+                        intent_id = IntentId, registration_from = From,
+                        state = registering} = Handoff} = Worker ->
             gen_server:reply(From, ok),
             {noreply,
-             S#s{dtx_handoff = Handoff#dtx_handoff{
-                                      request_id = none,
-                                      from = none,
-                                      state = dormant}}};
+             S#s{workers = Workers#{
+                   Ref => Worker#proof_worker{
+                            handoff = Handoff#dtx_handoff{
+                                        registration_from = none,
+                                        state = dormant}}}}};
+        #proof_worker{handoff = #dtx_handoff{}} ->
+            reject_dtx_handoff(
+              Ref, {error, {protocol_error, dtx_handoff}}, true, S);
         _ ->
             ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-            gen_server:reply(From, {error, cancelled}),
-            {noreply, S#s{dtx_handoff = none}}
+            {noreply, S}
     end;
-accepted_dtx_handoff(_WrongIntentId, Handoff, S) ->
-    rejected_dtx_handoff(
-      {error, {protocol_error, dtx_handoff}}, Handoff, S).
+handle_dtx_handoff_reply(Ref, {error, Reason}, S) ->
+    reject_dtx_handoff(Ref, {error, Reason}, false, S);
+handle_dtx_handoff_reply(Ref, _Other, S) ->
+    reject_dtx_handoff(
+      Ref, {error, {protocol_error, dtx_handoff}}, true, S).
 
-rejected_dtx_handoff(
-  Error,
-  #dtx_handoff{intent_id = IntentId, from = From},
-  S = #s{ns = Ns}) ->
-    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-    gen_server:reply(From, Error),
-    {noreply, S#s{dtx_handoff = none}}.
+reject_dtx_handoff(Ref, Error, CancelSimplex,
+                   S = #s{ns = Ns, workers = Workers}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{
+           handoff = #dtx_handoff{
+                        intent_id = IntentId,
+                        registration_from = RegistrationFrom}} = Worker ->
+            _ = case CancelSimplex of
+                    true -> quod_simplex:cancel_dtx_begin(
+                              Ns, self(), IntentId);
+                    false -> ok
+                end,
+            _ = case RegistrationFrom of
+                    none -> ok;
+                    _ -> gen_server:reply(RegistrationFrom, Error)
+                end,
+            {noreply,
+             S#s{workers = Workers#{
+                   Ref => Worker#proof_worker{handoff = none}}}};
+        _ ->
+            {noreply, S}
+    end.
 
 activate_dtx_handoff(
   Ref, Pid, _From, GroupRef,
   S = #s{ns = Ns, workers = Workers, waiting_workers = Waiting,
-         group_waiters = GroupWaiters, max_proof_workers = Max,
-         dtx_handoff =
-           #dtx_handoff{state = dormant, worker_ref = Ref,
-                        worker_pid = Pid, group_ref = GroupRef,
-                        intent_id = IntentId}}) ->
+         group_waiters = GroupWaiters, max_proof_workers = Max}) ->
     case maps:get(Ref, Workers, undefined) of
-        #proof_worker{pid = Pid, timer = KillRef} = Worker
+        #proof_worker{
+           pid = Pid, timer = KillRef,
+           handoff = #dtx_handoff{
+                        state = dormant, group_ref = GroupRef,
+                        intent_id = IntentId}} = Worker
           when map_size(Waiting) < Max,
                map_size(GroupWaiters) < Max ->
             _ = erlang:cancel_timer(KillRef),
-            Worker1 = Worker#proof_worker{checkpoint = GroupRef},
+            Worker1 = Worker#proof_worker{
+                        checkpoint = GroupRef, handoff = none},
             checkpoint_client(Worker#proof_worker.from, GroupRef),
             ok = quod_simplex:activate_dtx_begin(Ns, self(), IntentId),
             {reply, ok,
              S#s{workers = maps:remove(Ref, Workers),
-                 waiting_workers = Waiting#{Ref => Worker1},
-                 dtx_handoff = none}};
-        _ ->
+                 waiting_workers = Waiting#{Ref => Worker1}}};
+        #proof_worker{
+           pid = Pid,
+           handoff = #dtx_handoff{
+                        state = dormant, group_ref = GroupRef,
+                        intent_id = IntentId}} = Worker ->
             ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-            {reply, {error, cancelled}, S#s{dtx_handoff = none}}
-    end;
-activate_dtx_handoff(_Ref, _Pid, _From, _GroupRef, S) ->
-    {reply, {error, cancelled}, S}.
+            {reply, {error, cancelled},
+             S#s{workers = Workers#{
+                   Ref => Worker#proof_worker{handoff = none}}}};
+        _ ->
+            {reply, {error, cancelled}, S}
+    end.
 
 cancel_registered_dtx_handoff(
   Ref, Pid, GroupRef,
-  S = #s{ns = Ns,
-         dtx_handoff =
-           #dtx_handoff{state = dormant, worker_ref = Ref,
-                        worker_pid = Pid, group_ref = GroupRef,
-                        intent_id = IntentId}}) ->
-    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-    {reply, ok, S#s{dtx_handoff = none}};
-cancel_registered_dtx_handoff(_Ref, _Pid, _GroupRef, S) ->
-    {reply, {error, cancelled}, S}.
+  S = #s{ns = Ns, workers = Workers}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{
+           pid = Pid,
+           handoff = #dtx_handoff{
+                        state = dormant, group_ref = GroupRef,
+                        intent_id = IntentId}} = Worker ->
+            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            {reply, ok,
+             S#s{workers = Workers#{
+                   Ref => Worker#proof_worker{handoff = none}}}};
+        _ ->
+            {reply, {error, cancelled}, S}
+    end.
 
-cancel_dtx_handoff(
-  Ref,
-  S = #s{ns = Ns,
-         dtx_handoff = #dtx_handoff{
-                           worker_ref = Ref, intent_id = IntentId,
-                           from = From}}) ->
-    ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
-    case From of
-        none -> ok;
-        _ -> gen_server:reply(From, {error, cancelled})
-    end,
-    S#s{dtx_handoff = none};
-cancel_dtx_handoff(_Ref, S) ->
-    S.
+cancel_dtx_handoff(Ref,
+                   S = #s{ns = Ns, workers = Workers,
+                          requests = Requests}) ->
+    case maps:get(Ref, Workers, undefined) of
+        #proof_worker{
+           handoff = #dtx_handoff{
+                        intent_id = IntentId,
+                        registration_from = RegistrationFrom}} = Worker ->
+            Requests1 = abandon_request_label(
+                          {dtx_handoff, Ref}, Requests),
+            ok = quod_simplex:cancel_dtx_begin(Ns, self(), IntentId),
+            _ = case RegistrationFrom of
+                    none -> ok;
+                    _ -> gen_server:reply(
+                           RegistrationFrom, {error, cancelled})
+                end,
+            S#s{workers = Workers#{
+                  Ref => Worker#proof_worker{handoff = none}},
+                requests = Requests1};
+        _ -> S
+    end.
 
 terminate(_Reason, #s{ns = Ns, workers = W,
                       waiting_workers = Waiting,
@@ -3623,10 +3602,12 @@ admit_public_request(Kind, Goal, From, Request, S)
   when Kind =:= prove; Kind =:= prove_ro ->
     admit_public_proof(Kind, Goal, From, Request, S).
 
-%% Capacity and the already-applied operation index are checked by the one
-%% engine owner before a proof starts. An in-flight proof is deliberately not
-%% treated as an operation claim: it may still fail authorization or proof.
-%% Concurrent valid proofs converge only at the existing consensus claim.
+%% Capacity and operation identity are checked by the one engine owner before
+%% a proof starts.  A matching live worker is not a durable claim, but starting
+%% the same signed operation twice would create two independent proofs for one
+%% request. The duplicate therefore gets the existing pre-custody `busy`
+%% refusal; only work that reached durable custody may be outcome-unknown.
+%% Distinct operations still proceed independently to Simplex admission.
 admit_public_proof(Kind, Goal, From, Request,
                    S = #s{workers = Workers,
                           max_proof_workers = Max}) ->
@@ -3634,6 +3615,9 @@ admit_public_proof(Kind, Goal, From, Request,
         {new, S1} when map_size(Workers) < Max ->
             {noreply, spawn_proof(Kind, Goal, From, Request, S1)};
         {new, S1} ->
+            reply_client(From, {error, busy}),
+            {noreply, S1};
+        {in_flight, S1} ->
             reply_client(From, {error, busy}),
             {noreply, S1};
         {{alias, OperationRef}, S1} ->
@@ -3650,8 +3634,40 @@ admit_public_proof(Kind, Goal, From, Request,
 proof_operation_gate(Request, S) ->
     case proof_request_operation(Request) of
         none -> {new, S};
-        Operation -> applied_operation(Operation, S)
+        Operation ->
+            case active_operation(Operation, S) of
+                none -> applied_operation(Operation, S);
+                active -> {in_flight, S};
+                conflict -> {conflict, S}
+            end
     end.
+
+%% The worker maps are the complete ownership record while a proof is live or
+%% waiting for a durable group outcome.  Once the worker leaves them, the
+%% normal durable outcome index below is again the sole authority.
+active_operation({Key, Digest, OperationRef},
+                 #s{workers = Workers, waiting_workers = Waiting}) ->
+    case find_active_operation(Key, Digest, OperationRef, Workers) of
+        none -> find_active_operation(Key, Digest, OperationRef, Waiting);
+        Found -> Found
+    end.
+
+find_active_operation(Key, Digest, OperationRef, Workers) ->
+    maps:fold(
+      fun(_Ref, #proof_worker{operation = {Key0, Digest0, OperationRef0}},
+          Found)
+            when Key0 =:= Key ->
+              case Found of
+                  conflict -> conflict;
+                  active -> Found;
+                  none when Digest0 =:= Digest,
+                            OperationRef0 =:= OperationRef ->
+                      active;
+                  none -> conflict
+              end;
+         (_Ref, _Worker, Found) ->
+              Found
+      end, none, Workers).
 
 proof_request_operation(
   #proof_request{
@@ -3705,6 +3721,8 @@ spawn_proof(Kind, Goal, From, #proof_request{} = Request,
     Worker = #proof_worker{pid = Pid, kind = Kind,
                            worker_mref = MRef, caller_mref = CallerMRef,
                            from = From, timer = KillRef, token = Token,
+                           deadline_ms = Deadline,
+                           operation = proof_request_operation(Request),
                            height = Applied},
     S#s{workers = (S#s.workers)#{Ref =>
           Worker},
@@ -3941,19 +3959,32 @@ signed_origin_authorized(
                 {local, PolicyGoal} ->
                     quod_ask:authorize_scope(
                       Principal, PolicyGoal, [Identity], Identity,
-                      Height, Session)
+                      Height, Session);
+                invalid -> false
             end;
         false -> false
     end.
 
-signed_origin_policy_goal(Ns, {'::', TargetTerm, Inner} = Goal) ->
-    case quod_ontology_name:flatten(TargetTerm) of
-        Ns -> {local, Inner};
-        Target when is_binary(Target) -> remote_selector;
-        error -> {local, Goal}
+signed_origin_policy_goal(Ns, {'::', TargetTerm, Inner}) ->
+    %% The signed parser preserves unknown atoms as opaque symbols until the
+    %% authenticated owning ontology needs them.  Only materialize the route
+    %% selector here: a foreign inner goal remains target-owned and is never
+    %% materialized by the origin merely to decide whose ACL applies.
+    case quod_wire_term:materialize_symbols(TargetTerm) of
+        {ok, Selector} ->
+            case quod_ontology_name:flatten(Selector) of
+                Ns -> {local, Inner};
+                Target when is_binary(Target) -> remote_selector;
+                error -> invalid
+            end;
+        {error, _} -> invalid
     end;
 signed_origin_policy_goal(_Ns, Goal) ->
     {local, Goal}.
+
+-ifdef(TEST).
+test_signed_origin_policy_goal(Ns, Goal) -> signed_origin_policy_goal(Ns, Goal).
+-endif.
 
 authorization_chain(_Principal, _Identity) -> [].
 
@@ -5199,6 +5230,98 @@ terminal_result(_Stored) ->
 
 -ifdef(TEST).
 test_terminal_result(Stored) -> terminal_result(Stored).
+
+test_dtx_handoff_state(Ns, WorkerSpecs, RequestSpecs) ->
+    Workers = maps:from_list(
+                [begin
+                     Worker = #proof_worker{
+                                 pid = WorkerPid, kind = prove,
+                                 from = {self(), make_ref()},
+                                 worker_mref = make_ref(),
+                                 caller_mref = make_ref(),
+                                 timer = make_ref(), token = make_ref(),
+                                 deadline_ms = quod_time:mono_ms() + 5000,
+                                 handoff = #dtx_handoff{
+                                              intent_id = IntentId,
+                                              registration_from =
+                                                  RegistrationFrom,
+                                              group_ref = GroupRef,
+                                              state = HandoffState}},
+                     {Ref, Worker}
+                 end
+                 || {Ref, WorkerPid, IntentId, RegistrationFrom,
+                     GroupRef, HandoffState} <- WorkerSpecs]),
+    Requests = lists:foldl(
+                 fun({RequestId, Ref}, Acc) ->
+                         gen_statem:reqids_add(
+                           RequestId, {dtx_handoff, Ref}, Acc)
+                 end, gen_statem:reqids_new(), RequestSpecs),
+    #s{ns = Ns, workers = Workers, requests = Requests}.
+
+test_handle_response_info(Info, S) ->
+    handle_response_info(Info, S).
+
+test_cancel_dtx_handoff(Ref, S) ->
+    cancel_dtx_handoff(Ref, S).
+
+test_activate_dtx_handoff(Ref, Pid, GroupRef, S) ->
+    activate_dtx_handoff(Ref, Pid, none, GroupRef, S).
+
+test_fill_dtx_activation_capacity(S) ->
+    S#s{max_proof_workers = 1, waiting_workers = #{full => occupied}}.
+
+test_dtx_handoff_summary(#s{workers = Workers, requests = Requests}) ->
+    Handoffs = maps:fold(
+                 fun(Ref,
+                     #proof_worker{
+                        handoff = #dtx_handoff{
+                                     intent_id = IntentId,
+                                     registration_from = RegistrationFrom,
+                                     state = State}}, Acc) ->
+                         Acc#{Ref =>
+                                  #{intent_id => IntentId,
+                                    registration_pending =>
+                                        RegistrationFrom =/= none,
+                                    state => State}};
+                    (_Ref, #proof_worker{handoff = none}, Acc) -> Acc
+                 end, #{}, Workers),
+    #{handoffs => Handoffs,
+      request_labels =>
+          lists:sort(
+            [Label || {_RequestId, Label} <-
+                          gen_statem:reqids_to_list(Requests)])}.
+
+test_active_operation(Operation, WorkerOperations, WaitingOperations) ->
+    Workers = worker_operations(WorkerOperations),
+    Waiting = worker_operations(WaitingOperations),
+    active_operation(Operation, #s{workers = Workers,
+                                   waiting_workers = Waiting}).
+
+test_inflight_public_reply(
+  {{AgentRef, OperationId} = Key, Digest, OperationRef})
+  when is_binary(AgentRef), is_binary(OperationId), is_binary(Digest) ->
+    Evidence = #{request => #{mode => execute, operation_id => OperationId},
+                 agent_ref_blob => AgentRef,
+                 request_digest => Digest,
+                 operation_ref => OperationRef},
+    Request = #proof_request{request_evidence = Evidence},
+    Worker = #proof_worker{
+               pid = self(), operation = {Key, Digest, OperationRef}},
+    CallRef = make_ref(),
+    {noreply, _} = admit_public_proof(
+                     prove, true, {async, self(), CallRef}, Request,
+                     #s{workers = #{make_ref() => Worker},
+                        max_proof_workers = 1}),
+    receive
+        {quod_proof_reply, _Engine, CallRef, Reply} -> Reply
+    after 0 ->
+        error(no_inflight_reply)
+    end.
+
+worker_operations(Operations) ->
+    maps:from_list(
+      [{make_ref(), #proof_worker{pid = self(), operation = Operation}}
+       || Operation <- Operations]).
 -endif.
 
 submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
@@ -5214,7 +5337,8 @@ submit_new_plan(From, Change, ReplyBindings, Diff, TraceCtx,
     try gen_statem:send_request(
           quod_reg:via({quod_simplex, Ns}), {append, Change, TransactionCtx}) of
         ReqId ->
-            Requests1 = gen_statem:reqids_add(ReqId, Tx, S#s.requests),
+            Requests1 = gen_statem:reqids_add(
+                          ReqId, {append, Tx}, S#s.requests),
             TRef = erlang:send_after(S#s.ttl, self(), {park_timeout, Tx}),
             %% T0 anchors the tx-latency histogram: same node, same monotonic clock
             %% as the observation in release/4 — never a cross-node wall-clock delta.
@@ -5820,6 +5944,18 @@ abandon_request(ReqId, Requests) ->
     %% a future reply cannot become an unmatched mailbox message.
     _ = catch gen_statem:receive_response(ReqId, 0),
     drop_request(ReqId, Requests).
+
+abandon_request_label(Label, Requests) ->
+    lists:foldl(
+      fun({ReqId, Label0}, Acc) when Label0 =:= Label ->
+              %% Cancellation owns this alias before Simplex is told to drop
+              %% the intent. Consume an already-arrived reply or deactivate a
+              %% future one, exactly as ordinary parked-request cleanup does.
+              _ = catch gen_statem:receive_response(ReqId, 0),
+              Acc;
+         ({ReqId, Label0}, Acc) ->
+              gen_statem:reqids_add(ReqId, Label0, Acc)
+      end, gen_statem:reqids_new(), gen_statem:reqids_to_list(Requests)).
 
 drop_request(ReqId, Requests) ->
     lists:foldl(

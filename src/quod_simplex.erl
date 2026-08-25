@@ -133,7 +133,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, rebuild/1, prolog_ready/3, finalize_applied/4,
          handoff_effect/3,
-         dtx_binding/1, register_dtx_begin/5, activate_dtx_begin/3,
+         dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
          cancel_dtx_begin/3, submit_dtx/3, dtx_group_barrier/3,
          dtx_endpoint_request/6, dtx_endpoint_local/3,
          history_source/1, dtx_local_evidence/3, dtx_applied_source/2,
@@ -206,6 +206,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          committee_view_id/4, test_committee_id/1,
          test_author_admissions/1,
          test_author_admission/1,
+         test_set_author_admissions/2,
          test_retire_changed_admissions/3,
          test_install_projection/2,
          test_dtx_slot_route/2,
@@ -227,7 +228,10 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_retain_dtx_record/3,
          test_dtx_retain_admissible/2,
          test_dtx_submission_waiters/1,
-         test_register_dtx_intent/5, test_activate_dtx_intent/3,
+         test_enqueue_dtx_intent/7, test_progress_dtx_admission/1,
+         test_activate_dtx_intent/3, test_cancel_dtx_intent/3,
+         test_set_dtx_intent_deadline/3,
+         test_dtx_admission_state/1, test_drop_dtx_admission_owner/1,
          test_reconcile_signing_state/1,
          test_finish_pending_begin_reconciliation/2,
          test_retire_invalid_dtx/3,
@@ -1008,15 +1012,26 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
                          waiters = [] :: [term()],
                          trace_ctxs = [] :: [quod_trace:context()]}).
 
-%% A semantic Begin is accepted before it can be signed.  The intent is tied
-%% to the exact Prolog-engine incarnation until that engine activates it; only
-%% the journal-backed submission survives that hand-off.
+%% One sealed semantic Begin waiting at the existing pre-signing custody seam.
+%% Its caller is parked only until this entry becomes the sole dormant intent.
 -record(dtx_intent, {
     id :: reference(),
+    from = none :: none | gen_statem:from(),
+    record :: quod_dtx:control_record(),
+    group_ref :: term(),
+    deadline_ms :: integer(),
+    enqueued_at :: integer()
+}).
+
+%% One volatile owner for all pre-Begin admission belonging to the current
+%% Prolog-engine incarnation.  Consensus still admits at most one dormant
+%% intent and one journal-backed Begin; the FIFO only parks callers before that
+%% durable boundary.
+-record(dtx_admission, {
     engine :: pid(),
     monitor :: reference(),
-    record :: quod_dtx:control_record(),
-    group_ref :: term()
+    dormant = none :: none | #dtx_intent{},
+    waiting :: queue:queue(#dtx_intent{})
 }).
 
 %% Retained signed controls are tiny in count (one active group plus the one
@@ -1202,7 +1217,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             dtx_last_group = none :: none | <<_:256>>,
             dtx_pending = none
               :: none | {<<_:256>>, {<<_:256>>, <<_:256>>}},
-            dtx_intent = none :: none | #dtx_intent{},
+            dtx_admission = none :: none | #dtx_admission{},
             dtx_submissions = #{} ::
               #{<<_:256>> => #dtx_submission{}},
             dtx_correlations = #{} ::
@@ -1210,7 +1225,6 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             dtx_out_channels = #{} ::
               #{binary() => {binary(), pos_integer()}},
             dtx_workers = #{} :: #{pid() => #dtx_server_worker{}},
-            dtx_rate_buckets = #{} :: map(),
             dtx_coordinator = none
               :: none | #dtx_coordinator_owner{},
             history_head = none :: none | {slot(), <<_:256>>},
@@ -1318,14 +1332,53 @@ test_author_admission(Pubkey) ->
     crypto:hash(
       sha256,
       term_to_binary({quod_test_admission, Pubkey}, [deterministic])).
+test_set_author_admissions(Admissions, S) ->
+    S#s{author_admissions = Admissions}.
 test_retire_changed_admissions(OldAdmissions, Admissions, S) ->
     retire_changed_admissions(OldAdmissions, Admissions, S).
 test_install_projection(Projection, S) ->
     install_projection(Projection, S).
-test_register_dtx_intent(EnginePid, IntentId, Begin, GroupRef, S) ->
-    register_dtx_intent(EnginePid, IntentId, Begin, GroupRef, S).
+test_enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef,
+                        DeadlineMs, S) ->
+    enqueue_dtx_intent(
+      From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs, S).
+test_progress_dtx_admission(S) ->
+    {S1, ActionsRev} = progress_dtx_admission(S, []),
+    {S1, lists:reverse(ActionsRev)}.
 test_activate_dtx_intent(EnginePid, IntentId, S) ->
     activate_dtx_intent(EnginePid, IntentId, S).
+test_cancel_dtx_intent(EnginePid, IntentId, S) ->
+    cancel_dtx_intent(EnginePid, IntentId, S).
+test_set_dtx_intent_deadline(
+  IntentId, DeadlineMs,
+  S = #s{dtx_admission =
+           #dtx_admission{dormant = Dormant0, waiting = Waiting0} = Admission}) ->
+    SetDeadline =
+        fun(#dtx_intent{id = Id} = Intent) when Id =:= IntentId ->
+                Intent#dtx_intent{deadline_ms = DeadlineMs};
+           (Intent) -> Intent
+        end,
+    Dormant = case Dormant0 of
+                  none -> none;
+                  Intent -> SetDeadline(Intent)
+              end,
+    Waiting = queue:from_list(
+                [SetDeadline(Intent) || Intent <- queue:to_list(Waiting0)]),
+    S#s{dtx_admission =
+          Admission#dtx_admission{dormant = Dormant, waiting = Waiting}}.
+test_drop_dtx_admission_owner(
+  S = #s{dtx_admission =
+           #dtx_admission{engine = Engine, monitor = Monitor}}) ->
+    drop_dtx_admission_monitor(Monitor, Engine, S).
+test_dtx_admission_state(#s{dtx_admission = none}) ->
+    #{engine => none, dormant => none, waiting => []};
+test_dtx_admission_state(
+  #s{dtx_admission =
+       #dtx_admission{engine = Engine, dormant = Dormant,
+                      waiting = Waiting}}) ->
+    #{engine => Engine,
+      dormant => dtx_intent_id(Dormant),
+      waiting => [Intent#dtx_intent.id || Intent <- queue:to_list(Waiting)]}.
 test_state_set(ns, V, S)         -> S#s{ns = V};
 test_state_set(self, V, S)       -> S#s{self = V};
 test_state_set(id, V, S)         -> S#s{id = V};
@@ -1553,11 +1606,11 @@ test_retire_invalid_dtx(Payload, Reasons, S) ->
     retire_invalid_dtx_submission(Payload, Reasons, S).
 test_dtx_endpoint_counts(
   #s{dtx_correlations = Correlations, dtx_out_channels = Channels,
-     dtx_workers = Workers, dtx_rate_buckets = Buckets,
+     dtx_workers = Workers,
      dtx_submissions = Submissions}) ->
     #{correlations => map_size(Correlations),
       channels => map_size(Channels), workers => map_size(Workers),
-      rate_buckets => map_size(Buckets), submissions => map_size(Submissions)}.
+      submissions => map_size(Submissions)}.
 test_requested(#s{requested_slot = V}) -> V.
 test_progress_counts(#s{progress_timeouts = T, quorum_pauses = P}) -> {T, P}.
 test_committed_store(#s{slot = Slot, store = Store}) -> {Slot, Store}.
@@ -1947,21 +2000,23 @@ finalize_applied(Ns, GroupId, Slot, Generation)
 dtx_binding(Ns) when is_binary(Ns) ->
     call(Ns, get_dtx_binding, {error, {ontology_unavailable, Ns}}).
 
--doc "Register one bounded unsigned Begin intent without allocating a signing sequence.".
+-doc "Park one proof-owned Begin until the existing signing admission opens.".
 -spec register_dtx_begin(binary(), pid(), reference(),
-                         quod_dtx:control_record(), term()) ->
+                         quod_dtx:control_record(), term(), integer()) ->
           {ok, reference()} | {error, term()}.
-register_dtx_begin(Ns, EnginePid, IntentId, Begin, GroupRef)
-  when is_binary(Ns), is_pid(EnginePid), is_reference(IntentId) ->
+register_dtx_begin(Ns, EnginePid, IntentId, Begin, GroupRef, DeadlineMs)
+  when is_binary(Ns), is_pid(EnginePid), is_reference(IntentId),
+       is_integer(DeadlineMs) ->
     case quod_reg:where({quod_simplex, Ns}) of
         undefined -> {error, {ontology_unavailable, Ns}};
         SimplexPid ->
             {ok, gen_statem:send_request(
                    SimplexPid,
                    {register_dtx_begin, EnginePid, IntentId,
-                    Begin, GroupRef})}
+                    Begin, GroupRef, DeadlineMs})}
     end;
-register_dtx_begin(_Ns, _EnginePid, _IntentId, _Begin, _GroupRef) ->
+register_dtx_begin(_Ns, _EnginePid, _IntentId, _Begin, _GroupRef,
+                   _DeadlineMs) ->
     {error, invalid_dtx_intent}.
 
 -doc "Transfer an accepted Begin intent from the engine to the signing journal.".
@@ -2946,11 +3001,11 @@ running_impl({call, From}, get_dtx_binding, S) ->
     {keep_state, S, [{reply, From, Reply}]};
 running_impl(
   {call, From},
-  {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef}, S0) ->
-    case register_dtx_intent(
-           EnginePid, IntentId, Begin, GroupRef, S0) of
+  {register_dtx_begin, EnginePid, IntentId, Begin, GroupRef, DeadlineMs}, S0) ->
+    case enqueue_dtx_intent(
+           From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs, S0) of
         {ok, S1} ->
-            {keep_state, S1, [{reply, From, {accepted, IntentId}}]};
+            keep_progress(S0, S1, []);
         {error, Reason} ->
             {keep_state, S0, [{reply, From, {error, Reason}}]}
     end;
@@ -2960,7 +3015,7 @@ running_impl(
     keep_progress(S0, S1, []);
 running_impl(
   cast, {cancel_dtx_begin, EnginePid, IntentId}, S0) ->
-    {keep_state, cancel_dtx_intent(EnginePid, IntentId, S0)};
+    keep_progress(S0, cancel_dtx_intent(EnginePid, IntentId, S0), []);
 running_impl({call, From}, {submit_dtx, Record}, S0) ->
     case retain_dtx_record(Record, From, S0) of
         {ok, S1} ->
@@ -3191,7 +3246,7 @@ running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
                 {true, S1, Actions} ->
                     keep_progress(S0, S1, Actions);
                 false ->
-                    case drop_dtx_intent_monitor(Ref, Pid, S0) of
+                    case drop_dtx_admission_monitor(Ref, Pid, S0) of
                         {true, S1} -> keep_progress(S0, S1, []);
                         false ->
                             case drop_dtx_validation_monitor(Ref, Pid, S0) of
@@ -3348,29 +3403,59 @@ current_dtx_binding(
 current_dtx_binding(#s{ns = Ns}) ->
     {error, {ontology_unavailable, Ns}}.
 
-register_dtx_intent(EnginePid, IntentId, Begin, GroupRef,
-                    S = #s{ns = Ns, dtx_intent = Existing}) ->
+enqueue_dtx_intent(From, EnginePid, IntentId, Begin, GroupRef, DeadlineMs,
+                   S = #s{ns = Ns, dtx_admission = Admission0}) ->
     CurrentEngine = quod_reg:where({quod_prolog, Ns}),
     case {CurrentEngine =:= EnginePid,
-          begin_matches_binding(Begin, GroupRef, S), Existing,
-          dtx_begin_registration_open(S)} of
-        {true, true, none, true} ->
-            Monitor = erlang:monitor(process, EnginePid),
-            {ok, S#s{dtx_intent =
-                         #dtx_intent{id = IntentId, engine = EnginePid,
-                                     monitor = Monitor, record = Begin,
-                                     group_ref = GroupRef}}};
-        {true, true,
-         #dtx_intent{id = IntentId, engine = EnginePid,
-                     record = Begin, group_ref = GroupRef}, _} ->
-            {ok, S};
-        {true, true, _, _} ->
-            {error, busy};
-        {false, _, _, _} ->
+          begin_matches_binding(Begin, GroupRef, S),
+          DeadlineMs > quod_time:mono_ms()} of
+        {true, true, true} ->
+            Admission = dtx_admission_owner(EnginePid, Admission0),
+            case dtx_intent_exists(IntentId, Admission) of
+                false ->
+                    Intent = #dtx_intent{
+                                id = IntentId, from = From, record = Begin,
+                                group_ref = GroupRef,
+                                deadline_ms = DeadlineMs,
+                                enqueued_at = quod_time:mono_ms()},
+                    Waiting = queue:in(Intent, Admission#dtx_admission.waiting),
+                    {ok, S#s{dtx_admission =
+                                 Admission#dtx_admission{waiting = Waiting}}};
+                true ->
+                    {error, invalid_dtx_intent}
+            end;
+        {false, _, _} ->
             {error, stale_engine};
+        {_, _, false} ->
+            {error, {proof_limit_exceeded, Ns}};
         _ ->
             {error, invalid_dtx_intent}
     end.
+
+dtx_admission_owner(EnginePid, none) ->
+    #dtx_admission{engine = EnginePid,
+                   monitor = erlang:monitor(process, EnginePid),
+                   waiting = queue:new()};
+dtx_admission_owner(
+  EnginePid, #dtx_admission{engine = EnginePid} = Admission) ->
+    Admission;
+dtx_admission_owner(EnginePid, #dtx_admission{monitor = OldMonitor}) ->
+    %% The registry already names this new incarnation.  A delayed DOWN for the
+    %% former owner must not make the first new request fail or inherit its
+    %% volatile callers.
+    _ = erlang:demonitor(OldMonitor, [flush]),
+    #dtx_admission{engine = EnginePid,
+                   monitor = erlang:monitor(process, EnginePid),
+                   waiting = queue:new()}.
+
+dtx_intent_exists(IntentId,
+                  #dtx_admission{dormant = Dormant, waiting = Waiting}) ->
+    dtx_intent_id(Dormant) =:= IntentId orelse
+        lists:any(fun(#dtx_intent{id = Id}) -> Id =:= IntentId end,
+                  queue:to_list(Waiting)).
+
+dtx_intent_id(none) -> none;
+dtx_intent_id(#dtx_intent{id = IntentId}) -> IntentId.
 
 dtx_begin_registration_open(
   #s{signing_journal = Journal,
@@ -3386,13 +3471,96 @@ dtx_begin_registration_open(
 dtx_begin_registration_open(_S) ->
     false.
 
-begin_matches_binding(Begin, GroupRef, S) ->
+progress_dtx_admission(S = #s{dtx_admission = none}, ActionsRev) ->
+    {S, ActionsRev};
+progress_dtx_admission(
+  S = #s{ns = Ns,
+         dtx_admission =
+           #dtx_admission{engine = Engine, monitor = Monitor,
+                          dormant = none, waiting = Waiting0} = Admission},
+  ActionsRev) ->
+    case quod_reg:where({quod_prolog, Ns}) =:= Engine of
+        false ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            {S#s{dtx_admission = none}, ActionsRev};
+        true ->
+            case queue:out(Waiting0) of
+                {empty, _} ->
+                    {compact_dtx_admission(S), ActionsRev};
+                {{value,
+                  #dtx_intent{id = IntentId, from = From,
+                              deadline_ms = DeadlineMs,
+                              enqueued_at = EnqueuedAt} = Intent}, Waiting} ->
+                    Now = quod_time:mono_ms(),
+                    case DeadlineMs > Now of
+                        false ->
+                            S1 = S#s{dtx_admission =
+                                       Admission#dtx_admission{
+                                         waiting = Waiting}},
+                            progress_dtx_admission(
+                              compact_dtx_admission(S1),
+                              [{reply, From,
+                                {error, {proof_limit_exceeded, Ns}}}
+                               | ActionsRev]);
+                        true ->
+                            progress_live_dtx_intent(
+                              IntentId, From, Intent, Waiting,
+                              EnqueuedAt, Now, S, Admission, ActionsRev)
+                    end
+            end
+    end;
+progress_dtx_admission(S, ActionsRev) ->
+    {S, ActionsRev}.
+
+progress_live_dtx_intent(
+  IntentId, From,
+  #dtx_intent{record = Begin, group_ref = GroupRef} = Intent,
+  Waiting, EnqueuedAt, Now, S = #s{ns = Ns}, Admission, ActionsRev) ->
+    case dtx_begin_registration_open(S) of
+        false ->
+            {S, ActionsRev};
+        true ->
+            case dtx_intent_binding_status(Begin, GroupRef, S) of
+                valid ->
+                    quod_metrics:observe_dtx_admission_wait(
+                      Ns, max(0, Now - EnqueuedAt)),
+                    Dormant = Intent#dtx_intent{from = none},
+                    {S#s{dtx_admission =
+                           Admission#dtx_admission{
+                             dormant = Dormant, waiting = Waiting}},
+                     [{reply, From, {accepted, IntentId}} | ActionsRev]};
+                wait ->
+                    %% Recovery has installed the verified prefix but has not
+                    %% yet corroborated its tip.  The existing sync_done event
+                    %% will re-enter this same progress tail once signing is
+                    %% safe; temporary unavailability must not consume the
+                    %% sealed request as a stale admission.
+                    {S, ActionsRev};
+                invalid ->
+                    S1 = S#s{dtx_admission =
+                               Admission#dtx_admission{waiting = Waiting}},
+                    progress_dtx_admission(
+                      compact_dtx_admission(S1),
+                      [{reply, From, {error, invalid_dtx_intent}}
+                       | ActionsRev])
+            end
+    end.
+
+dtx_intent_binding_status(Begin, GroupRef, S = #s{sync = Sync}) ->
     case {current_dtx_binding(S), quod_dtx:begin_group_ref(Begin)} of
         {{ok, Binding}, {ok, GroupRef}} ->
-            Binding =:= group_ref_binding(GroupRef);
+            case Binding =:= group_ref_binding(GroupRef) of
+                true -> valid;
+                false -> invalid
+            end;
+        {{error, _}, _} when Sync =/= ready ->
+            wait;
         _ ->
-            false
+            invalid
     end.
+
+begin_matches_binding(Begin, GroupRef, S) ->
+    dtx_intent_binding_status(Begin, GroupRef, S) =:= valid.
 
 group_ref_binding(
   {group, Ns, <<_:256>> = Anchor, <<_:256>> = Coordinator,
@@ -3403,12 +3571,14 @@ group_ref_binding(_) ->
 
 activate_dtx_intent(
   EnginePid, IntentId,
-  S0 = #s{dtx_intent =
-            #dtx_intent{id = IntentId, engine = EnginePid,
-                        monitor = Monitor, record = Begin,
-                        group_ref = GroupRef}}) ->
-    _ = erlang:demonitor(Monitor, [flush]),
-    S = S0#s{dtx_intent = none},
+  S0 = #s{dtx_admission =
+            #dtx_admission{engine = EnginePid,
+                           dormant =
+                             #dtx_intent{id = IntentId, record = Begin,
+                                         group_ref = GroupRef}} = Admission}) ->
+    S = compact_dtx_admission(
+          S0#s{dtx_admission =
+                   Admission#dtx_admission{dormant = none}}),
     case begin_matches_binding(Begin, GroupRef, S) of
         true ->
             case retain_dtx_record(Begin, none, S) of
@@ -3431,20 +3601,45 @@ activate_dtx_intent(_EnginePid, _IntentId, S) ->
 
 cancel_dtx_intent(
   EnginePid, IntentId,
-  S = #s{dtx_intent =
-           #dtx_intent{id = IntentId, engine = EnginePid,
-                       monitor = Monitor}}) ->
-    _ = erlang:demonitor(Monitor, [flush]),
-    S#s{dtx_intent = none};
+  S = #s{dtx_admission =
+           #dtx_admission{engine = EnginePid,
+                          dormant = #dtx_intent{id = IntentId}} = Admission}) ->
+    compact_dtx_admission(
+      S#s{dtx_admission = Admission#dtx_admission{dormant = none}});
+cancel_dtx_intent(
+  EnginePid, IntentId,
+  S = #s{dtx_admission =
+           #dtx_admission{engine = EnginePid, waiting = Waiting0} = Admission}) ->
+    Waiting = remove_waiting_dtx_intent(IntentId, Waiting0),
+    compact_dtx_admission(
+      S#s{dtx_admission = Admission#dtx_admission{waiting = Waiting}});
 cancel_dtx_intent(_EnginePid, _IntentId, S) ->
     S.
 
-drop_dtx_intent_monitor(
+remove_waiting_dtx_intent(IntentId, Waiting) ->
+    queue:from_list(
+      [Intent || #dtx_intent{id = Id} = Intent <- queue:to_list(Waiting),
+                 Id =/= IntentId]).
+
+compact_dtx_admission(
+  S = #s{dtx_admission =
+           #dtx_admission{monitor = Monitor, dormant = none,
+                          waiting = Waiting}}) ->
+    case queue:is_empty(Waiting) of
+        true ->
+            _ = erlang:demonitor(Monitor, [flush]),
+            S#s{dtx_admission = none};
+        false -> S
+    end;
+compact_dtx_admission(S) ->
+    S.
+
+drop_dtx_admission_monitor(
   Ref, Pid,
-  S = #s{dtx_intent =
-           #dtx_intent{engine = Pid, monitor = Ref}}) ->
-    {true, S#s{dtx_intent = none}};
-drop_dtx_intent_monitor(_Ref, _Pid, _S) ->
+  S = #s{dtx_admission =
+           #dtx_admission{engine = Pid, monitor = Ref}}) ->
+    {true, S#s{dtx_admission = none}};
+drop_dtx_admission_monitor(_Ref, _Pid, _S) ->
     false.
 
 %% Recovery coordination is volatile but its source is not: before Begin
@@ -3731,7 +3926,8 @@ classify_dtx_group_barrier(GroupRef, _AppliedFloor, _S) ->
 
 local_group_pending(
   GroupId, GroupRef,
-  #s{dtx_intent = Intent, dtx_submissions = Submissions}) ->
+  #s{dtx_admission = Admission, dtx_submissions = Submissions}) ->
+    Intent = dormant_dtx_intent(Admission),
     intent_matches_group(Intent, GroupRef) orelse
         maps:fold(
           fun(_Digest, #dtx_submission{group_id = PendingGroup}, Found) ->
@@ -3741,6 +3937,9 @@ local_group_pending(
 intent_matches_group(
   #dtx_intent{group_ref = GroupRef}, GroupRef) -> true;
 intent_matches_group(_Intent, _GroupRef) -> false.
+
+dormant_dtx_intent(#dtx_admission{dormant = Intent}) -> Intent;
+dormant_dtx_intent(none) -> none.
 
 %%%===================================================================
 %%% bounded DTX recovery endpoint
@@ -3914,28 +4113,8 @@ timeout_dtx_correlation(
             {S, []}
     end.
 
-admit_dtx_endpoint_request(PeerIdentity, InLink, Request,
-                           S0 = #s{dtx_rate_buckets = Buckets0}) ->
-    Peer = endpoint_peer(PeerIdentity),
-    Now = quod_time:mono_ms(),
-    case quod_token_bucket:charge(
-           Peer, Now,
-           ?QUOD_DTX_ENDPOINT_RATE_PER_SECOND,
-           ?QUOD_DTX_ENDPOINT_RATE_BURST,
-           ?QUOD_TOKEN_BUCKET_MAX_BUCKETS,
-           ?QUOD_TOKEN_BUCKET_IDLE_MS,
-           Buckets0) of
-        {error, Buckets1} ->
-            S1 = S0#s{dtx_rate_buckets = Buckets1},
-            send_dtx_endpoint_response(
-              InLink, {error, quod_dtx_endpoint:request_id(Request), busy},
-              S1),
-            {S1, []};
-        {ok, Buckets1} ->
-            S1 = S0#s{dtx_rate_buckets = Buckets1},
-            admit_dtx_endpoint_worker(
-              PeerIdentity, InLink, Request, S1)
-    end.
+admit_dtx_endpoint_request(PeerIdentity, InLink, Request, S) ->
+    admit_dtx_endpoint_worker(PeerIdentity, InLink, Request, S).
 
 admit_dtx_endpoint_worker(
   PeerIdentity, InLink, Request, S = #s{dtx_workers = Workers}) ->
@@ -4370,7 +4549,8 @@ pending_or_absent_dtx_phase(GroupId, Kind, S) ->
 
 local_dtx_phase_pending(
   GroupId, 'begin',
-  #s{dtx_intent = #dtx_intent{record = Record}} = S) ->
+  #s{dtx_admission =
+       #dtx_admission{dormant = #dtx_intent{record = Record}}} = S) ->
     quod_dtx:group_id(Record) =:= GroupId orelse
         retained_dtx_phase_pending(GroupId, 'begin', S);
 local_dtx_phase_pending(GroupId, Kind, S) ->
@@ -8210,10 +8390,14 @@ keep_progress(S0, S1, Actions, TimerMode) ->
                      fun() -> reconcile_dtx_coordinator(SRecovered) end),
     SDtx = timed_step(SCoordinated, dtx_drive,
                       fun() -> drive_retained_dtx(SCoordinated) end),
+    {SAdmitted, ActionsRevAdmission} =
+        timed_step(
+          SDtx, dtx_admission,
+          fun() -> progress_dtx_admission(SDtx, ActionsRev0) end),
     SCustodyReady =
         timed_step(
-          SDtx, custody_reconcile,
-          fun() -> reconcile_custody_lane(SDtx) end),
+          SAdmitted, custody_reconcile,
+          fun() -> reconcile_custody_lane(SAdmitted) end),
     SCustodyView = refresh_ingress_view(SCustodyReady),
     %% Durable exclusion becomes a new placement only here: the complete
     %% contiguous commit prefix, committee adoption, author floor, and recovery
@@ -8228,9 +8412,9 @@ keep_progress(S0, S1, Actions, TimerMode) ->
                          SCustodyView#s.custody_ready) of
                       {drain, _Fingerprint} ->
                           drain_custody_rev(
-                            SCustodyView, ActionsRev0, 0);
+                            SCustodyView, ActionsRevAdmission, 0);
                       none ->
-                          {SCustodyView, ActionsRev0}
+                          {SCustodyView, ActionsRevAdmission}
                   end
           end),
     %% Drain BEFORE head reconciliation and the timer diff: a drain-created
@@ -12186,6 +12370,7 @@ recovery_phase(Phase) -> Phase.
 stats_map(S) ->
     {ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
     IngressQueued = quod_ingress_state:count(S#s.ingress),
+    {DtxWaiting, DtxDormant} = dtx_admission_counts(S#s.dtx_admission),
     #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
       pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
@@ -12203,6 +12388,8 @@ stats_map(S) ->
       custody_depth => map_size(S#s.custody),
       custody_ready => gb_sets:size(S#s.custody_ready),
       custody_bytes => S#s.custody_bytes,
+      dtx_admission_waiting => DtxWaiting,
+      dtx_admission_dormant => DtxDormant,
       ingress_retargets => S#s.ingress_retargets,
       relay_accepted => S#s.relay_accepted,
       relay_redrives => S#s.relay_redrives,
@@ -12221,6 +12408,11 @@ stats_map(S) ->
       ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
       syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
+
+dtx_admission_counts(none) -> {0, 0};
+dtx_admission_counts(
+  #dtx_admission{dormant = Dormant, waiting = Waiting}) ->
+    {queue:len(Waiting), case Dormant of none -> 0; #dtx_intent{} -> 1 end}.
 
 head_complaint_signed(#s{slot = Committed} = S) ->
     case round_complained(round_state(Committed + 1, S)) of

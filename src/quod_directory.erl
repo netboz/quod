@@ -36,7 +36,6 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
 -define(HIGHWATER, quod_directory_highwater).
 -define(KNOWN, quod_directory_known).
 
--define(DEFAULT_RENEW_MIN_MS, 5000).
 -define(DEFAULT_EXPIRE_TICK_MS, 1000).
 -record(s, {
     routes,
@@ -45,12 +44,10 @@ system routes, and never appear through the Prolog-facing `directory_hosts/1`.
     allowlist = #{},
     allowed_keys = #{},
     ttl_ms = ?DIRECTORY_ROUTE_TTL_MS,
-    renew_min_ms = ?DEFAULT_RENEW_MIN_MS,
     expire_tick_ms = ?DEFAULT_EXPIRE_TICK_MS,
     max_namespaces = ?DIRECTORY_MAX_NAMESPACES,
     max_routes_per_ns = ?DIRECTORY_MAX_ROUTES_PER_NS,
-    max_routes = ?DIRECTORY_MAX_ROUTES,
-    last_accept = #{}
+    max_routes = ?DIRECTORY_MAX_ROUTES
 }).
 
 %%%===================================================================
@@ -238,7 +235,6 @@ init(Opts) ->
                     allowlist = maps:get(allowlist, Cfg),
                     allowed_keys = maps:get(allowed_keys, Cfg),
                     ttl_ms = maps:get(ttl_ms, Cfg),
-                    renew_min_ms = maps:get(renew_min_ms, Cfg),
                     expire_tick_ms = Tick,
                     max_namespaces = maps:get(max_namespaces, Cfg),
                     max_routes_per_ns = maps:get(max_routes_per_ns, Cfg),
@@ -416,10 +412,9 @@ record_shape(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now,
 record_shape(_NodeKey, _Endpoint, _Hosted, _Epoch, _Sequence, _Now, _S) ->
     {error, bad_record}.
 
-preflight_record(NodeKey, Hosted, Epoch, Sequence, Now,
+preflight_record(NodeKey, Hosted, Epoch, Sequence, _Now,
                  S = #s{allowlist = Allowlist, highwater = Highwater,
                         allowed_keys = AllowedKeys,
-                        last_accept = LastAccept, renew_min_ms = MinRenew,
                         max_routes = MaxRoutes, known = Known}) ->
     Authorized =
         case Hosted of
@@ -438,31 +433,26 @@ preflight_record(NodeKey, Hosted, Epoch, Sequence, Now,
                 false ->
                     {error, stale_record};
                 true ->
-                    case maps:get(NodeKey, LastAccept, undefined) of
-                        Last when is_integer(Last), Now - Last < MinRenew ->
-                            {error, rate_limited};
-                        _ ->
-                            OldRows = system_rows_for_node(NodeKey, S#s.routes),
-                            RouteCount = ets:info(S#s.routes, size) - length(OldRows)
-                                         + length(Hosted),
-                            NewKnown =
-                                length([Ns || {Ns, _Anchor, _Role} <- Hosted,
-                                             not ets:member(Known, Ns)]),
-                            case {RouteCount =< MaxRoutes,
-                                  ets:info(Known, size) + NewKnown =< MaxRoutes,
-                                  highwater_capacity(NodeKey, Highwater, MaxRoutes),
-                                  hosted_have_capacity(Hosted, NodeKey, S)} of
-                                {true, true, true, true} -> {ok, OldRows};
-                                {_, _, _, false} -> {error, namespace_full};
-                                _ -> {error, directory_full}
-                            end
+                    OldRows = system_rows_for_node(NodeKey, S#s.routes),
+                    RouteCount = ets:info(S#s.routes, size) - length(OldRows)
+                                 + length(Hosted),
+                    NewKnown =
+                        length([Ns || {Ns, _Anchor, _Role} <- Hosted,
+                                     not ets:member(Known, Ns)]),
+                    case {RouteCount =< MaxRoutes,
+                          ets:info(Known, size) + NewKnown =< MaxRoutes,
+                          highwater_capacity(NodeKey, Highwater, MaxRoutes),
+                          hosted_have_capacity(Hosted, NodeKey, S)} of
+                        {true, true, true, true} -> {ok, OldRows};
+                        {_, _, _, false} -> {error, namespace_full};
+                        _ -> {error, directory_full}
                     end
             end
     end.
 
 install_record_now(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, OldRows,
                    S = #s{routes = Routes, highwater = Highwater, known = Known,
-                          ttl_ms = Ttl, last_accept = LastAccept}) ->
+                          ttl_ms = Ttl}) ->
     Expiry = Now + Ttl,
     %% Readers access ETS without crossing this process. Publish the complete
     %% replacement first, then remove the exact old generation, so a concurrent
@@ -476,7 +466,7 @@ install_record_now(NodeKey, Endpoint, Hosted, Epoch, Sequence, Now, OldRows,
                   OldRows),
     true = ets:insert(Known, [{Ns} || {Ns, _Anchor, _Role} <- Hosted]),
     true = ets:insert(Highwater, {NodeKey, Epoch, Sequence}),
-    {S#s{last_accept = LastAccept#{NodeKey => Now}}, Expiry}.
+    {S, Expiry}.
 
 highwater_newer(NodeKey, Epoch, Sequence, Highwater) ->
     case ets:lookup(Highwater, NodeKey) of
@@ -564,8 +554,6 @@ config(Opts) ->
                     direct_seeds => DirectSeeds,
                     ttl_ms =>
                         maps:get(ttl_ms, Opts, ?DIRECTORY_ROUTE_TTL_MS),
-                    renew_min_ms =>
-                        maps:get(renew_min_ms, Opts, ?DEFAULT_RENEW_MIN_MS),
                     expire_tick_ms =>
                         maps:get(expire_tick_ms, Opts, ?DEFAULT_EXPIRE_TICK_MS),
                     max_namespaces =>
@@ -588,11 +576,11 @@ config(Opts) ->
 
 valid_config(#{allowlist := Allowlist, allowed_keys := AllowedKeys,
                direct_seeds := DirectSeeds,
-               ttl_ms := Ttl, renew_min_ms := MinRenew,
+               ttl_ms := Ttl,
                expire_tick_ms := Tick, max_namespaces := MaxNs,
                max_routes_per_ns := PerNs, max_routes := Max}) ->
     lists:all(fun(N) -> is_integer(N) andalso N > 0 end,
-              [Ttl, MinRenew, Tick, MaxNs, PerNs, Max]) andalso
+              [Ttl, Tick, MaxNs, PerNs, Max]) andalso
         MaxNs =< ?DIRECTORY_MAX_NAMESPACES andalso
         PerNs =< ?DIRECTORY_MAX_ROUTES_PER_NS andalso
         Max =< ?DIRECTORY_MAX_ROUTES andalso

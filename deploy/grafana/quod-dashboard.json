@@ -2332,6 +2332,101 @@
           "refId": "B"
         }
       ]
+    },
+    {
+      "id": 240,
+      "type": "row",
+      "title": "Distributed transaction admission",
+      "description": "Sealed distributed writes waiting before the existing single-Begin consensus path.",
+      "gridPos": {
+        "x": 0,
+        "y": 214,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 241,
+      "type": "timeseries",
+      "title": "Pre-Begin admission state",
+      "description": "Waiting is the number of sealed writes parked in FIFO order. Dormant is 1 only while the head owns the sole inactive Begin slot; it must never exceed 1.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 215,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "quod_dtx_admission_waiting{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "waiting · {{namespace}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_dtx_admission_dormant{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "dormant · {{namespace}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 242,
+      "type": "timeseries",
+      "title": "Pre-Begin admission wait",
+      "description": "Time between sealing a distributed write and granting it the inactive Begin slot. This is queueing time, separate from proof and commit latency.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 215,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.99, sum by (le, namespace) (rate(quod_dtx_admission_wait_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p99 · {{namespace}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.90, sum by (le, namespace) (rate(quod_dtx_admission_wait_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p90 · {{namespace}}",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.50, sum by (le, namespace) (rate(quod_dtx_admission_wait_ms_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "p50 · {{namespace}}",
+          "refId": "C"
+        }
+      ]
     }
   ]
 }

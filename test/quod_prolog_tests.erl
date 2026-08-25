@@ -108,6 +108,54 @@ terminal_result_accepts_any_typed_rejection_reason_test() ->
          #{status => {rejected, <<"not-an-atom">>, 7},
            tx_id => <<47:256>>})).
 
+live_signed_operation_is_busy_not_outcome_unknown_test() ->
+    Key = {<<1:256>>, <<2:256>>},
+    Digest = <<3:256>>,
+    OperationRef = {operation, Key, <<4:256>>},
+    Operation = {Key, Digest, OperationRef},
+    %% `active` is the sole pre-custody result. `admit_public_proof/5` maps it
+    %% to busy; only the durable outcome index can produce outcome_unknown.
+    ?assertEqual(
+       active,
+       quod_prolog:test_active_operation(Operation, [Operation], [])),
+    ?assertEqual(
+       active,
+       quod_prolog:test_active_operation(Operation, [], [Operation])),
+    ?assertEqual(
+       conflict,
+       quod_prolog:test_active_operation(
+         Operation, [{Key, <<5:256>>, OperationRef}], [])),
+    ?assertEqual(
+       {error, busy},
+       quod_prolog:test_inflight_public_reply(Operation)).
+
+signed_remote_selector_materializes_only_its_authenticated_target_test() ->
+    Source = <<"quod:signed-source">>,
+    Remote = <<"quod:signed-remote">>,
+    Goal = {'::',
+            {'$quod_symbol', Remote},
+            {{'$quod_symbol', <<"benchmark_echo">>},
+             {'$quod_symbol', <<"ok">>}}},
+    ?assertEqual(
+       remote_selector,
+       quod_prolog:test_signed_origin_policy_goal(Source, Goal)),
+    %% The route selector is the only origin-owned syntax.  Even a self route
+    %% leaves its inner goal intact for the normal target stage.
+    SelfGoal = {'::',
+                {'$quod_symbol', Source},
+                {{'$quod_symbol', <<"benchmark_echo">>},
+                 {'$quod_symbol', <<"ok">>}}},
+    ?assertEqual(
+       {local,
+        {{'$quod_symbol', <<"benchmark_echo">>},
+         {'$quod_symbol', <<"ok">>}}},
+       quod_prolog:test_signed_origin_policy_goal(Source, SelfGoal)),
+    ?assertEqual(
+       invalid,
+       quod_prolog:test_signed_origin_policy_goal(
+         Source,
+         {'::', 42, true})).
+
 keyed_engine_threads_its_signer_into_scope_plans_test() ->
     {ok, _} = application:ensure_all_started(gproc),
     Ns = <<"keyed-scope:",
@@ -627,6 +675,157 @@ unavailable_append_reply_waits_for_outcome_unknown_test_() ->
          end
      end}.
 
+crossed_dtx_handoff_replies_keep_their_exact_worker_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"handoff-crossed:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    {ok, Simplex} =
+        gen_statem:start_link(
+          quod_reg:via({quod_simplex, Ns}), ?MODULE,
+          {fake_handoff_simplex, self()}, []),
+    try
+        RequestA = gen_statem:send_request(
+                     Simplex, {park_handoff, a}),
+        RequestB = gen_statem:send_request(
+                     Simplex, {park_handoff, b}),
+        receive {fake_handoff_parked, Simplex, a} -> ok
+        after 1000 -> error(missing_handoff_a) end,
+        receive {fake_handoff_parked, Simplex, b} -> ok
+        after 1000 -> error(missing_handoff_b) end,
+        RefA = make_ref(),
+        RefB = make_ref(),
+        IntentA = make_ref(),
+        IntentB = make_ref(),
+        ReplyA = make_ref(),
+        ReplyB = make_ref(),
+        GroupA = {transaction, Ns, <<1:256>>, <<2:256>>},
+        GroupB = {transaction, Ns, <<3:256>>, <<4:256>>},
+        S0 = quod_prolog:test_dtx_handoff_state(
+               Ns,
+               [{RefA, self(), IntentA, {self(), ReplyA}, GroupA,
+                 registering},
+                {RefB, self(), IntentB, {self(), ReplyB}, GroupB,
+                 registering}],
+               [{RequestA, RefA}, {RequestB, RefB}]),
+
+        %% The later request may complete first. Its opaque OTP response must
+        %% wake only its own proof worker and leave the earlier label parked.
+        gen_statem:cast(
+          Simplex, {reply_handoff, b, {accepted, IntentB}}),
+        InfoB = receive
+                    {[alias | RequestB], _} = ResponseB -> ResponseB;
+                    {'DOWN', RequestB, _, _, _} = ResponseB -> ResponseB
+                after 1000 -> error(missing_handoff_response_b) end,
+        {noreply, S1} = quod_prolog:test_handle_response_info(InfoB, S0),
+        receive {ReplyB, ok} -> ok
+        after 1000 -> error(missing_registration_reply_b) end,
+        receive {fake_handoff_replied, Simplex, b} -> ok
+        after 1000 -> error(missing_handoff_reply_barrier_b) end,
+        receive {ReplyA, UnexpectedA} ->
+                    error({crossed_registration_reply, UnexpectedA})
+        after 0 -> ok end,
+        #{handoffs := Handoffs1,
+          request_labels := [{dtx_handoff, RefA}]} =
+            quod_prolog:test_dtx_handoff_summary(S1),
+        ?assertMatch(#{state := registering}, maps:get(RefA, Handoffs1)),
+        ?assertMatch(#{state := dormant}, maps:get(RefB, Handoffs1)),
+
+        gen_statem:cast(
+          Simplex, {reply_handoff, a, {accepted, IntentA}}),
+        InfoA = receive
+                    {[alias | RequestA], _} = ResponseA -> ResponseA;
+                    {'DOWN', RequestA, _, _, _} = ResponseA -> ResponseA
+                after 1000 -> error(missing_handoff_response_a) end,
+        {noreply, S2} = quod_prolog:test_handle_response_info(InfoA, S1),
+        receive {ReplyA, ok} -> ok
+        after 1000 -> error(missing_registration_reply_a) end,
+        receive {fake_handoff_replied, Simplex, a} -> ok
+        after 1000 -> error(missing_handoff_reply_barrier_a) end,
+        #{handoffs := Handoffs2, request_labels := []} =
+            quod_prolog:test_dtx_handoff_summary(S2),
+        ?assertMatch(#{state := dormant}, maps:get(RefA, Handoffs2)),
+        ?assertMatch(#{state := dormant}, maps:get(RefB, Handoffs2))
+    after
+        gen_statem:stop(Simplex)
+    end.
+
+cancelled_dtx_handoff_abandons_its_exact_request_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"handoff-cancel:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    {ok, Simplex} =
+        gen_statem:start_link(
+          quod_reg:via({quod_simplex, Ns}), ?MODULE,
+          {fake_handoff_simplex, self()}, []),
+    try
+        Request = gen_statem:send_request(
+                    Simplex, {park_handoff, cancelled}),
+        receive {fake_handoff_parked, Simplex, cancelled} -> ok
+        after 1000 -> error(missing_cancelled_handoff) end,
+        Ref = make_ref(),
+        Intent = make_ref(),
+        ReplyTag = make_ref(),
+        GroupRef = {transaction, Ns, <<5:256>>, <<6:256>>},
+        S0 = quod_prolog:test_dtx_handoff_state(
+               Ns,
+               [{Ref, self(), Intent, {self(), ReplyTag}, GroupRef,
+                 registering}],
+               [{Request, Ref}]),
+        S1 = quod_prolog:test_cancel_dtx_handoff(Ref, S0),
+        receive {ReplyTag, {error, cancelled}} -> ok
+        after 1000 -> error(missing_cancel_reply) end,
+        receive {fake_handoff_cancelled, Simplex, Intent} -> ok
+        after 1000 -> error(missing_simplex_cancel) end,
+        ?assertEqual(
+           #{handoffs => #{}, request_labels => []},
+           quod_prolog:test_dtx_handoff_summary(S1)),
+
+        %% A server reply already in flight after cancellation targets an OTP
+        %% alias that abandon_request_label/2 deactivated. It must disappear,
+        %% not wake another handoff or leak into the engine mailbox.
+        gen_statem:cast(
+          Simplex,
+          {reply_handoff, cancelled, {accepted, Intent}}),
+        receive {fake_handoff_replied, Simplex, cancelled} -> ok
+        after 1000 -> error(missing_late_reply_barrier) end,
+        receive
+            {[alias | Request], _} = LateResponse ->
+                error({late_handoff_response, LateResponse});
+            {'DOWN', Request, _, _, _} = LateResponse ->
+                error({late_handoff_response, LateResponse})
+        after 20 -> ok end
+    after
+        gen_statem:stop(Simplex)
+    end.
+
+dtx_handoff_activation_capacity_cancels_before_durable_handoff_test() ->
+    {ok, _} = application:ensure_all_started(gproc),
+    Ns = <<"handoff-capacity:",
+           (integer_to_binary(erlang:unique_integer([positive])))/binary>>,
+    {ok, Simplex} =
+        gen_statem:start_link(
+          quod_reg:via({quod_simplex, Ns}), ?MODULE,
+          {fake_handoff_simplex, self()}, []),
+    try
+        Ref = make_ref(),
+        Intent = make_ref(),
+        GroupRef = {transaction, Ns, <<7:256>>, <<8:256>>},
+        S0 = quod_prolog:test_dtx_handoff_state(
+               Ns,
+               [{Ref, self(), Intent, none, GroupRef, dormant}], []),
+        Full = quod_prolog:test_fill_dtx_activation_capacity(S0),
+        {reply, {error, cancelled}, S1} =
+            quod_prolog:test_activate_dtx_handoff(
+              Ref, self(), GroupRef, Full),
+        receive {fake_handoff_cancelled, Simplex, Intent} -> ok
+        after 1000 -> error(missing_capacity_cancel) end,
+        ?assertEqual(
+           #{handoffs => #{}, request_labels => []},
+           quod_prolog:test_dtx_handoff_summary(S1))
+    after
+        gen_statem:stop(Simplex)
+    end.
+
 %% Slice B: the Prolog-side membership verdict + projection lockstep. Small validation TTL so the
 %% reap-to-abstain case runs fast.
 setup_mem() ->
@@ -670,7 +869,9 @@ runtime_event_test_() ->
 %% mailbox barrier: the notification observed by the test proves append_result/3
 %% already consumed the exact consensus response.
 init({fake_unavailable_simplex, Owner, Ns}) ->
-    {ok, running, #{owner => Owner, ns => Ns, appends => 0}}.
+    {ok, running, #{owner => Owner, ns => Ns, appends => 0}};
+init({fake_handoff_simplex, Owner}) ->
+    {ok, running, #{owner => Owner, pending => #{}}}.
 
 callback_mode() ->
     handle_event_function.
@@ -686,6 +887,27 @@ handle_event(
         {fake_unavailable_append, self(), Count1,
          Change, Reply, Stats},
     {keep_state, Data#{appends => Count1}};
+handle_event(
+  {call, From}, {park_handoff, Key}, running,
+  Data = #{owner := Owner, pending := Pending}) ->
+    Owner ! {fake_handoff_parked, self(), Key},
+    {keep_state, Data#{pending => Pending#{Key => From}}};
+handle_event(
+  cast, {reply_handoff, Key, Reply}, running,
+  Data = #{owner := Owner, pending := Pending}) ->
+    case maps:take(Key, Pending) of
+        {From, Pending1} ->
+            gen_statem:reply(From, Reply),
+            Owner ! {fake_handoff_replied, self(), Key},
+            {keep_state, Data#{pending => Pending1}};
+        error ->
+            {keep_state, Data}
+    end;
+handle_event(
+  cast, {cancel_dtx_begin, _Engine, IntentId}, running,
+  Data = #{owner := Owner}) ->
+    Owner ! {fake_handoff_cancelled, self(), IntentId},
+    {keep_state, Data};
 handle_event(_EventType, _EventContent, _State, _Data) ->
     keep_state_and_data.
 

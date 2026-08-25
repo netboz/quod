@@ -25,7 +25,7 @@ Transport or protocol failure never masquerades as ordinary Prolog failure.
 -include("quod_proof_limits.hrl").
 
 -export([load/1, ask_2/3, follow_unique_2/3,
-         authorize_scope/6, authenticate_agent/5,
+         authorize_scope/6, open_authorized_scope/8, authenticate_agent/5,
          validate_authorization_transcript/6, validate_agent_key/5,
          close_stream/1]).
 -ifdef(TEST).
@@ -553,8 +553,6 @@ router_admission_error(_Target, _Reason) ->
 
 target_open_error(Target, {not_allowed, Target} = Reason) -> {retry, Reason};
 target_open_error(Target, {ontology_busy, Target} = Reason) -> {retry, Reason};
-target_open_error(Target, {ontology_rate_limited, Target} = Reason) ->
-    {retry, Reason};
 target_open_error(Target, {ontology_rebuilding, Target} = Reason) ->
     {retry, Reason};
 target_open_error(Target, {network_identity_unavailable, Target} = Reason) ->
@@ -620,20 +618,10 @@ execution_remaining_ms() ->
 open_scope_invocation(
   {local_scope, ScopeId, Ns, Anchor, Height, Session},
   Goal, Chain, Selection) ->
-    %% Record the requested goal and authorization verdict separately. The
-    %% session substitutes the bounded failure goal only for execution, so a
-    %% validator can later re-check the exact request that policy denied.
-    Verdict =
-        case authorize_scope(quod_proof_context:principal(), Goal, Chain,
-                             {Ns, Anchor}, Height, Session) of
-            true  -> allowed;
-            false -> denied
-        end,
     InvocationId = crypto:strong_rand_bytes(16),
-    Context = quod_predicates:proof_context(
-                Ns, Height, undefined, [{Ns, Anchor} | Chain]),
-    case quod_proof_session:open(
-           Session, InvocationId, Goal, Verdict, Context, Selection) of
+    case open_authorized_scope(
+           quod_proof_context:principal(), Goal, Chain, {Ns, Anchor}, Height,
+           Session, InvocationId, Selection) of
         ok -> finish_scope_open(
                 {local_scope_invocation, ScopeId, Session,
                  InvocationId, Selection, 1});
@@ -1359,6 +1347,37 @@ authorize_scope(Principal, Goal, Chain,
         true -> authorize_scope_valid(
                   Principal, Goal, Chain, Ns, Anchor, Height, Session);
         false -> false
+    end.
+
+-doc "Materialize, authorize, and open one target-owned scope goal.".
+-spec open_authorized_scope(
+        {node, <<_:256>>} | {agent, binary()} | anonymous,
+        term(), [quod_proof_context:identity()],
+        quod_proof_context:identity(), non_neg_integer(),
+        quod_proof_session:session(), <<_:128>>,
+        quod_transaction_scope:selection()) -> ok | {error, term()}.
+open_authorized_scope(Principal, RequestedGoal, Chain,
+                      {Ns, <<_:256>>} = Identity, Height,
+                      Session, InvocationId, Selection)
+  when is_binary(Ns), is_integer(Height), Height >= 0 ->
+    %% The selected ontology owns its callable vocabulary.  Both co-hosted and
+    %% network invocations enter here before policy and execution, so relays
+    %% never materialize another ontology's goal and the two transports cannot
+    %% drift into different admission paths.
+    case quod_wire_term:materialize_goal_symbols(RequestedGoal) of
+        {ok, Goal} ->
+            Verdict =
+                case authorize_scope(
+                       Principal, Goal, Chain, Identity, Height, Session) of
+                    true -> allowed;
+                    false -> denied
+                end,
+            Context = quod_predicates:proof_context(
+                        Ns, Height, undefined, [Identity | Chain]),
+            quod_proof_session:open(
+              Session, InvocationId, Goal, Verdict, Context, Selection);
+        {error, _} ->
+            {error, {protocol_error, bad_payload}}
     end.
 
 -doc "Prove only that the signing key is active in its exact agent ontology.".

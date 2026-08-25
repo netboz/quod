@@ -245,8 +245,7 @@ directory_anchor_conflict_is_not_flattened(
     stop_directory(),
     {ok, Directory} = quod_directory:start_link(
                         #{allowlist => #{Ns => [K1, K2]},
-                          expire_tick_ms => 60000, ttl_ms => 10000,
-                          renew_min_ms => 1}),
+                          expire_tick_ms => 60000, ttl_ms => 10000}),
     try
         {ok, _} = quod_directory:install_record(
                     K1, {"127.0.0.1", 5001},

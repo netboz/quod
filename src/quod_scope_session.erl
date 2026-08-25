@@ -911,28 +911,9 @@ authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
                                     principal = Principal,
                                     height = Height,
                                     session = Session} = Runtime) ->
-    Authorized = quod_ask:authorize_scope(
-                   Principal, Goal, Chain, {Ns, Anchor}, Height,
-                   Session),
-    %% The session records the original request and verdict, then derives the
-    %% denied execution goal itself. This keeps the authorization transcript
-    %% re-provable without ever running a refused goal.
-    Verdict = authorization_verdict(Authorized),
-    case Authorized of
-        false ->
-            %% Attributable: distinct from a failed validator-admission recheck
-            %% (same peer-visible outcome), with the pinned height — an absent
-            %% or not-yet-applied policy reads as a refusal under `unknown=fail`.
-            logger:warning(
-              "quod_scope_session[~s]: can_invoke refused an invocation at "
-              "pinned height ~p (chain depth ~p)",
-              [Ns, Height, length(Chain)]);
-        true -> ok
-    end,
-    Context = quod_predicates:proof_context(
-                Ns, Height, undefined, [{Ns, Anchor} | Chain]),
-    case quod_proof_session:open(
-           Session, InvocationId, Goal, Verdict, Context, Selection) of
+    case quod_ask:open_authorized_scope(
+           Principal, Goal, Chain, {Ns, Anchor}, Height, Session,
+           InvocationId, Selection) of
         ok ->
             Invocations = (runtime())#runtime.invocations,
             put_runtime(Runtime#runtime{
@@ -940,9 +921,6 @@ authorize_and_open_checked(InvocationId, Goal, Chain, Selection,
             {opened, InvocationId};
         {error, Reason} -> {error, Reason}
     end.
-
-authorization_verdict(true) -> allowed;
-authorization_verdict(false) -> denied.
 
 handle_next(RequestRef, InvocationId, ExpectedSeq)
   when is_integer(ExpectedSeq), ExpectedSeq > 0 ->

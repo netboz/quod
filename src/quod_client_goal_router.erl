@@ -15,7 +15,8 @@ cursor continuation lives only in `quod_client_cursor`.
 -export([start_link/0, submit/9, cursor/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
--export([test_start_link/1, test_submit/10, test_cursor/5, test_stats/1]).
+-export([test_start_link/1, test_submit/10, test_cursor/5, test_stats/1,
+         test_cursor_target_result/1, test_submit_target_result/2]).
 -endif.
 
 -type owner() :: {session, <<_:256>>, <<_:256>>}.
@@ -60,6 +61,12 @@ test_stats(Router) ->
     #{correlations => map_size(S#s.correlations),
       inbound => map_size(S#s.inbound),
       routes => map_size(S#s.routes)}.
+
+test_cursor_target_result(Result) ->
+    cursor_target_result(Result).
+
+test_submit_target_result(Request, Result) ->
+    submit_target_result(Request, Result).
 -endif.
 
 -doc "Forward one exact signed request to one exact pinned route.".
@@ -478,36 +485,58 @@ target_request(
           case quod_client_goal_target:prepare_forwarded(
                  RequestBytes, Signature, Peer, Link, CursorBinding) of
               {ok, {Evidence, Goal, Principal, Owner}} ->
-                  case quod_client_goal_target:execute(
-                         Evidence, Goal, Principal, Owner, CursorBinding) of
-                      {ok, Evidence, {normalized, Result}} ->
-                          send_result(Link, Request, Result);
-                      {error, busy} ->
-                          send_response(Link, {refused, RequestId, busy});
-                      {error, rebuilding} ->
-                          send_response(Link, {refused, RequestId, not_ready});
-                      {error, client_cursor_unavailable} ->
-                          send_response(Link, {refused, RequestId, not_ready});
-                      {error, operation_conflict} ->
-                          send_response(
-                            Link, {error, RequestId, operation_conflict})
-                  end;
+                  send_submit_target_result(
+                    Link, Request,
+                    quod_client_goal_target:execute(
+                      Evidence, Goal, Principal, Owner, CursorBinding));
               {error, Reason} ->
                   send_response(Link, preexecution_reply(RequestId, Reason))
           end
       end);
 target_request(Peer, Link,
                Request = {cursor, _RequestId, CursorId, Command}) ->
-    Result = case quod_client_cursor:command_forwarded(
-                    Peer, Link, CursorId, Command) of
-                 {ok, Evidence, Raw} ->
-                     quod_client_result:normalize(Evidence, Raw);
-                 {error, not_found} -> {error, cursor_not_found};
-                 {error, not_ready} -> {error, cursor_not_ready};
-                 {error, busy} -> {error, ontology_busy};
-                 {error, _} -> {error, proof_unavailable}
-             end,
+    Result = cursor_target_result(
+               quod_client_cursor:command_forwarded(
+                 Peer, Link, CursorId, Command)),
     send_result(Link, Request, Result).
+
+cursor_target_result({ok, Evidence, Raw}) ->
+    quod_client_result:normalize(Evidence, Raw);
+cursor_target_result({error, not_found}) -> {error, cursor_not_found};
+cursor_target_result({error, not_ready}) -> {error, cursor_not_ready};
+cursor_target_result({error, busy}) -> {error, cursor_busy};
+cursor_target_result({error, _}) -> {error, proof_unavailable}.
+
+send_submit_target_result(Link, Request, Result) ->
+    case submit_target_result(Request, Result) of
+        {result, PublicResult} -> send_result(Link, Request, PublicResult);
+        {response, Response} -> send_response(Link, Response)
+    end.
+
+%% Every documented target-execution outcome selects one reply. The three
+%% availability outcomes remain retryable route refusals; an outcome conflict
+%% remains its wire-level terminal error; all other proof results were already
+%% normalized by the target executor.
+submit_target_result(
+  _Request,
+  {ok, _Evidence, {normalized, Result}}) ->
+    {result, Result};
+submit_target_result(
+  {submit, RequestId, _, _, _, _},
+  {error, busy}) ->
+    {response, {refused, RequestId, busy}};
+submit_target_result(
+  {submit, RequestId, _, _, _, _},
+  {error, rebuilding}) ->
+    {response, {refused, RequestId, not_ready}};
+submit_target_result(
+  {submit, RequestId, _, _, _, _},
+  {error, client_cursor_unavailable}) ->
+    {response, {refused, RequestId, not_ready}};
+submit_target_result(
+  {submit, RequestId, _, _, _, _},
+  {error, operation_conflict}) ->
+    {response, {error, RequestId, operation_conflict}}.
 
 send_result(Link, {submit, RequestId, _, _, none, _}, Result) ->
     send_result_response(Link, {result, RequestId, Result});

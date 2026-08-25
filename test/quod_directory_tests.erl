@@ -166,11 +166,11 @@ highwater_survives_expiry_and_blocks_replay_test() ->
               quod_directory:stats()
       end).
 
-strict_freshness_and_rate_limit_test() ->
+strict_freshness_accepts_immediate_newer_records_test() ->
     Ns = <<"quod:agent">>,
     Key = key(5),
     with_directory(
-      #{allowlist => #{Ns => [Key]}, renew_min_ms => 1000},
+      #{allowlist => #{Ns => [Key]}},
       fun(_Pid) ->
           {ok, _} = quod_directory:install_record(
                  Key, {<<"node">>, 1005}, hosted(Ns), 2, 1),
@@ -178,8 +178,8 @@ strict_freshness_and_rate_limit_test() ->
              {error, stale_record},
              quod_directory:install_record(
                Key, {<<"node">>, 1005}, hosted(Ns), 1, 999)),
-          ?assertEqual(
-             {error, rate_limited},
+          ?assertMatch(
+             {ok, _},
              quod_directory:install_record(
                Key, {<<"node">>, 1005}, hosted(Ns), 2, 2))
       end).
@@ -188,8 +188,7 @@ renewal_extends_receiver_local_expiry_test() ->
     Ns = <<"quod:agent">>,
     Key = key(51),
     with_directory(
-      #{allowlist => #{Ns => [Key]}, ttl_ms => 100,
-        renew_min_ms => 1},
+      #{allowlist => #{Ns => [Key]}, ttl_ms => 100},
       fun(_Pid) ->
           {ok, FirstExpiry} = quod_directory:install_record(
                                 Key, {<<"node">>, 1051}, hosted(Ns), 1, 1),
@@ -212,8 +211,7 @@ route_and_announce_bounds_are_atomic_test() ->
     K2 = key(7),
     with_directory(
       #{allowlist => #{A => [K1, K2], B => [K1]},
-        max_namespaces => 1, max_routes_per_ns => 1,
-        renew_min_ms => 1},
+        max_namespaces => 1, max_routes_per_ns => 1},
       fun(_Pid) ->
           ?assertEqual(
              {error, bad_record},
@@ -281,7 +279,7 @@ signed_empty_set_withdraws_but_unknown_key_cannot_fill_highwater_test() ->
     Key = key(9),
     Stranger = key(10),
     with_directory(
-      #{allowlist => #{Ns => [Key]}, renew_min_ms => 1},
+      #{allowlist => #{Ns => [Key]}},
       fun(_Pid) ->
           ?assertEqual(
              {error, not_allowed},
@@ -325,8 +323,7 @@ with_directory(Opts, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
     {ok, Pid} = quod_directory:start_link(
                   maps:merge(
-                    #{expire_tick_ms => 60000, ttl_ms => 10000,
-                      renew_min_ms => 1},
+                    #{expire_tick_ms => 60000, ttl_ms => 10000},
                     Opts)),
     try
         Fun(Pid)

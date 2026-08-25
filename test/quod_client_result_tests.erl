@@ -28,6 +28,7 @@ all_normalized_results_roundtrip_test() ->
          {error, read_only}, {error, target_unavailable},
          {error, ontology_rebuilding}, {error, ontology_busy},
          {error, cursor_not_found}, {error, cursor_not_ready},
+         {error, cursor_busy},
          {error, invalid_action}, {error, non_backtrackable_action},
          {error, proof_unavailable}, {error, result_too_large}],
     lists:foreach(
@@ -37,6 +38,19 @@ all_normalized_results_roundtrip_test() ->
           ?assert(is_tuple(quod_client_result:http_normalized(
                             Evidence, Result)))
       end, Results).
+
+bare_engine_states_and_tagged_cursor_states_have_distinct_names_test() ->
+    ?assertEqual({error, ontology_busy},
+                 quod_client_result:normalize(#{}, {error, busy})),
+    ?assertEqual({error, proof_unavailable},
+                 quod_client_result:normalize(#{}, {error, not_ready})),
+    ?assertEqual({error, proof_unavailable},
+                 quod_client_result:normalize(#{}, {error, not_found})),
+    ?assertEqual({error, cursor_busy},
+                 quod_client_result:normalize(#{}, {error, cursor_busy})),
+    ?assertEqual({error, cursor_not_ready},
+                 quod_client_result:normalize(#{},
+                                              {error, cursor_not_ready})).
 
 local_http_uses_the_normalized_binary_name_result_test() ->
     Evidence = maps:get(evidence, fixture()),

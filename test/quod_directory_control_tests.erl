@@ -569,8 +569,7 @@ directory_owner_restart_requires_fresh_peer_lease_test() ->
     {Pub, Signer} = signer(),
     Ns = <<"quod:root">>,
     Opts = #{allowlist => #{Ns => [Pub]},
-             expire_tick_ms => 60000, ttl_ms => 10000,
-             renew_min_ms => 1},
+             expire_tick_ms => 60000, ttl_ms => 10000},
     {ok, _} = application:ensure_all_started(gproc),
     {ok, Directory0} = quod_directory:start_link(Opts),
     {ok, Control} = quod_directory_control:start_link(Opts),
@@ -662,8 +661,7 @@ running_namespace_changes_replace_the_advertised_set_test() ->
         application:set_env(quod, directory_tracking, false),
         Opts = #{allowlist => #{A => [Pub], B => [Pub]},
                  identity_dir => IdentityDir,
-                 expire_tick_ms => 60000, ttl_ms => 10000,
-                 renew_min_ms => 1},
+                 expire_tick_ms => 60000, ttl_ms => 10000},
         {ok, _} = application:ensure_all_started(gproc),
         {ok, Directory0} = quod_directory:start_link(Opts),
         {ok, NsSup} = quod_ns_sup:start_link(),
@@ -767,10 +765,7 @@ running_namespace_changes_replace_the_advertised_set_test() ->
 
 with_control(Opts, Fun) ->
     {ok, _} = application:ensure_all_started(gproc),
-    Common = maps:merge(
-               #{expire_tick_ms => 60000, ttl_ms => 10000,
-                 renew_min_ms => 1},
-               Opts),
+    Common = maps:merge(#{expire_tick_ms => 60000, ttl_ms => 10000}, Opts),
     {ok, Directory} = quod_directory:start_link(Common),
     {ok, Control} = quod_directory_control:start_link(Common),
     try

@@ -13,7 +13,8 @@ where the proof ran.
 -include("quod_client_goal_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([normalize/2, encode/1, decode/1, http_normalized/2]).
+-export([normalize/2, normalize_error/1, encode/1, decode/1,
+         http_normalized/2, http_error/1]).
 -export_type([result/0]).
 
 -define(MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
@@ -30,7 +31,7 @@ where the proof ran.
         {group_outcome, group_ref(), pos_integer(), [participant_slot()]}.
 -type public_error() ::
         read_only | target_unavailable | ontology_rebuilding | ontology_busy |
-        cursor_not_found | cursor_not_ready | invalid_action |
+        cursor_not_found | cursor_not_ready | cursor_busy | invalid_action |
         non_backtrackable_action | proof_unavailable | result_too_large.
 -type result() ::
         {answers, non_neg_integer(), [binary()]} |
@@ -47,6 +48,11 @@ normalize(Evidence, Raw) ->
         {ok, Result} -> bounded(Result);
         error -> {error, proof_unavailable}
     end.
+
+-doc "Normalize one engine or transport error through the shared public vocabulary.".
+-spec normalize_error(term()) -> {error, public_error()}.
+normalize_error(Reason) ->
+    {error, public_error(Reason)}.
 
 normalize_unbounded(Evidence, {ok, Bindings, Height})
   when is_list(Bindings), is_integer(Height), Height >= 0,
@@ -86,7 +92,7 @@ normalize_unbounded(_Evidence, {error, {outcome_unknown, Ref}}) ->
         false -> error
     end;
 normalize_unbounded(_Evidence, {error, Reason}) ->
-    {ok, {error, public_error(Reason)}};
+    {ok, normalize_error(Reason)};
 normalize_unbounded(_Evidence, _Raw) ->
     error.
 
@@ -152,8 +158,9 @@ public_error(no_such_namespace) -> target_unavailable;
 public_error(wrong_genesis_anchor) -> target_unavailable;
 public_error(rebuilding) -> ontology_rebuilding;
 public_error(busy) -> ontology_busy;
-public_error(not_found) -> cursor_not_found;
-public_error(not_ready) -> cursor_not_ready;
+public_error(cursor_not_found) -> cursor_not_found;
+public_error(cursor_not_ready) -> cursor_not_ready;
+public_error(cursor_busy) -> cursor_busy;
 public_error(invalid_action) -> invalid_action;
 public_error(non_backtrackable_action) -> non_backtrackable_action;
 public_error(result_too_large) -> result_too_large;
@@ -280,6 +287,7 @@ valid_public_error(Reason) ->
     Reason =:= read_only orelse Reason =:= target_unavailable orelse
         Reason =:= ontology_rebuilding orelse Reason =:= ontology_busy orelse
         Reason =:= cursor_not_found orelse Reason =:= cursor_not_ready orelse
+        Reason =:= cursor_busy orelse
         Reason =:= invalid_action orelse
         Reason =:= non_backtrackable_action orelse
         Reason =:= proof_unavailable orelse Reason =:= result_too_large.
@@ -315,25 +323,32 @@ http_normalized(Evidence, {committed, Blobs, Outcome}) ->
 http_normalized(Evidence, {pending, Ref}) ->
     {202, evidence_json(Evidence,
                         (outcome_ref_json(Ref))#{result => pending})};
-http_normalized(_Evidence, {error, read_only}) ->
+http_normalized(_Evidence, {error, _Reason} = Error) ->
+    http_error(Error).
+
+-doc "Render one already-normalized public error without fabricated request evidence.".
+-spec http_error({error, public_error()}) -> {pos_integer(), map()}.
+http_error({error, read_only}) ->
     {409, #{error => read_only}};
-http_normalized(_Evidence, {error, target_unavailable}) ->
+http_error({error, target_unavailable}) ->
     {503, #{error => signed_target_unavailable}};
-http_normalized(_Evidence, {error, ontology_rebuilding}) ->
+http_error({error, ontology_rebuilding}) ->
     {503, #{error => ontology_rebuilding}};
-http_normalized(_Evidence, {error, ontology_busy}) ->
+http_error({error, ontology_busy}) ->
     {503, #{error => ontology_busy}};
-http_normalized(_Evidence, {error, cursor_not_found}) ->
+http_error({error, cursor_not_found}) ->
     {404, #{error => cursor_not_found}};
-http_normalized(_Evidence, {error, cursor_not_ready}) ->
+http_error({error, cursor_not_ready}) ->
     {409, #{error => cursor_not_ready}};
-http_normalized(_Evidence, {error, invalid_action}) ->
+http_error({error, cursor_busy}) ->
+    {409, #{error => cursor_busy}};
+http_error({error, invalid_action}) ->
     {400, #{error => invalid_action}};
-http_normalized(_Evidence, {error, non_backtrackable_action}) ->
+http_error({error, non_backtrackable_action}) ->
     {400, #{error => non_backtrackable_action}};
-http_normalized(_Evidence, {error, result_too_large}) ->
+http_error({error, result_too_large}) ->
     {413, #{error => result_too_large}};
-http_normalized(_Evidence, {error, proof_unavailable}) ->
+http_error({error, proof_unavailable}) ->
     {503, #{error => proof_unavailable}}.
 
 render_bindings(Blobs) ->

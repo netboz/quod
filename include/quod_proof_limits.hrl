@@ -54,16 +54,8 @@
 -define(QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
         (?QUOD_MAX_DTX_PARTICIPANTS * ?MAX_VALIDATORS)).
 -define(QUOD_DTX_ENDPOINT_MAX_WORKERS, 8).
--define(QUOD_DTX_ENDPOINT_RATE_PER_SECOND, 16).
--define(QUOD_DTX_ENDPOINT_RATE_BURST, 32).
 -define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
 -define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
-
-%% Shared bound for authenticated per-peer token-bucket tables. Individual
-%% entrances choose their own rate and burst, but retain and prune peer rows
-%% under one bounded policy.
--define(QUOD_TOKEN_BUCKET_MAX_BUCKETS, 1024).
--define(QUOD_TOKEN_BUCKET_IDLE_MS, 60000).
 
 %% One node-wide foreign-history owner (distributed-proof-plan §8).
 %% Pending work is bounded independently; retained foreign histories and
@@ -100,10 +92,5 @@
 -define(QUOD_MAX_ROUTER_SCOPES_PER_PEER, 16).
 -define(QUOD_MAX_ROUTER_PENDING_PER_SCOPE,
         ?QUOD_MAX_INVOCATIONS_PER_SCOPE).
-
-%% Target-side authenticated scope-open token buckets. The table and every
-%% bucket are bounded before goal decoding, worker spawn, or monitor creation.
--define(QUOD_SCOPE_OPEN_RATE_PER_SECOND, 32).
--define(QUOD_SCOPE_OPEN_RATE_BURST, 32).
 
 -endif.

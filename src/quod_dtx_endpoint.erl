@@ -94,10 +94,6 @@ limits() ->
     #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
       max_correlations => ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
       max_workers => ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
-      rate_per_second => ?QUOD_DTX_ENDPOINT_RATE_PER_SECOND,
-      rate_burst => ?QUOD_DTX_ENDPOINT_RATE_BURST,
-      max_rate_buckets => ?QUOD_TOKEN_BUCKET_MAX_BUCKETS,
-      rate_bucket_idle_ms => ?QUOD_TOKEN_BUCKET_IDLE_MS,
       worker_timeout_ms => ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS}.
 
 %% ------------------------------------------------------------------

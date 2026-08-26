@@ -294,10 +294,51 @@ malformed_effect_renders_as_invalid_without_crashing_test() ->
     ?assert(is_binary(quod_explorer_http:encode(Json))).
 
 with_temp_store(Fun) ->
+    with_temp_store(<<"ont:test">>, Fun).
+
+with_temp_store(Ns, Fun) ->
     Dir = filename:join("/tmp", "quod_explorer_eunit_" ++
                         integer_to_list(erlang:unique_integer([positive]))),
-    {ok, Store0} = quod_ledger_store:open(<<"ont:test">>, Dir),
+    {ok, Store0} = quod_ledger_store:open(Ns, Dir),
     try Fun(Store0) after file:del_dir_r(Dir) end.
+
+finalize_row_reuses_its_certified_prepare_plan_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    {Ns, Anchor} = Target = maps:get(target, Fixture),
+    PrepareControl = maps:get(prepare_control, Fixture),
+    {ok, PrepareRef} = quod_dtx:certified_ref(
+                         Ns, Anchor, 1, <<120:256>>,
+                         quod_dtx:record_digest(PrepareControl), <<"qc">>),
+    {ok, DecisionRef} = quod_dtx:certified_ref(
+                          <<"ont:decision">>, <<121:256>>, 1, <<122:256>>,
+                          <<123:256>>, <<"qc">>),
+    {ok, Finalize} = quod_dtx:new_finalize(
+                         quod_dtx:group_id(maps:get('begin', Fixture)),
+                         DecisionRef, commit, PrepareRef, 2),
+    {ok, FinalizeControl} = quod_dtx:sign_control(
+                              Target, Finalize, maps:get(admission, Fixture),
+                              2, 2, maps:get(signer, Fixture)),
+    {ok, PrepareBlob} = quod_dtx:encode_control(PrepareControl),
+    {ok, FinalizeBlob} = quod_dtx:encode_control(FinalizeControl),
+    with_temp_store(
+      Ns,
+      fun(Store0) ->
+          {ok, Store} = quod_ledger_store:append(
+                          Store0,
+                          [#entry{index = 1, timestamp = 1,
+                                  data = {dtx, PrepareBlob}, cert = none},
+                           #entry{index = 2, timestamp = 2,
+                                  data = {dtx, FinalizeBlob}, cert = none}]),
+          #{txs := [FinalizeRow, _PrepareRow]} =
+              quod_explorer_http:txs_page(Store, undefined, 10),
+          FinalControl = maps:get(control, FinalizeRow),
+          ?assertEqual(commit, maps:get(verdict, FinalControl)),
+          AppliedPlan = maps:get(applied_plan, FinalControl),
+          ?assertEqual(
+             [#{op => assert, clause => <<"dtx_fixture(target)">>}],
+             maps:get(diff, AppliedPlan)),
+          ok
+      end).
 
 indexed_transaction_lookup_reads_exact_terminal_entry_test() ->
     Ns = <<"ont:indexed">>,

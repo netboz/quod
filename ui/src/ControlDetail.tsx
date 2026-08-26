@@ -52,6 +52,22 @@ export function ControlDetail({ ns, block, onClose }: { ns: string; block: Block
           <ParticipantPlan plan={control.plan} />
         </section>
       )}
+      {control.kind === 'finalize' && control.verdict === 'commit' && control.applied_plan && (
+        <section className="border-t border-gray/20 px-4 py-3">
+          <h3 className="mb-2 text-[11px] font-semibold tracking-wider text-gray uppercase">Finalized changes</h3>
+          <ParticipantPlan plan={control.applied_plan} />
+        </section>
+      )}
+      {control.kind === 'finalize' && control.verdict === 'commit' && !control.applied_plan && (
+        <section className="border-t border-gray/20 px-4 py-3 text-sm text-gray">
+          The referenced prepared record is not available on this node.
+        </section>
+      )}
+      {control.kind === 'finalize' && control.verdict === 'abort' && (
+        <section className="border-t border-gray/20 px-4 py-3 text-sm text-gray">
+          No prepared changes were applied.
+        </section>
+      )}
     </aside>
   )
 }

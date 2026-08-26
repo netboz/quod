@@ -88,7 +88,7 @@ handle(block, Req) ->
         Slot ->
             R = with_store(Ns, fun(Store) ->
                     case quod_ledger_store:read_at(Store, Slot) of
-                        {ok, E}   -> block_json(Ns, E);
+                        {ok, E}   -> block_json(Store, Ns, E);
                         not_found -> not_found
                     end
                 end, not_found),
@@ -260,6 +260,17 @@ with_store(Ns, DataDir, Fun, Empty) ->
             Empty
     end.
 
+%% Some renderers have a meaningful no-store form.  Keep its construction
+%% lazy: rendering an ordinary live block must not decode it twice merely to
+%% prepare an unavailable-ledger fallback.
+with_store_or(Ns, Fun, Fallback) ->
+    case quod_ledger_store:open_ro(Ns, content_ledger_dir(Ns)) of
+        {ok, Store} ->
+            try Fun(Store) after quod_ledger_store:close(Store) end;
+        {error, _} ->
+            Fallback()
+    end.
+
 content_storage(Ns) ->
     Default = quod_ledger_store:default_data_dir(),
     Storage = application:get_env(quod, content_storage_dirs, #{}),
@@ -284,7 +295,7 @@ collect_txs(Store, Slot, Need, Scan, Acc) ->
     case quod_ledger_store:read_at(Store, Slot) of
         {ok, E} ->
             Ns = quod_ledger_store:namespace(Store),
-            Rows = entry_rows(Ns, E),
+            Rows = entry_rows(Store, Ns, E),
             collect_txs(
               Store, Slot - 1, Need - length(Rows), Scan - 1,
               lists:reverse(Rows, Acc));
@@ -396,13 +407,16 @@ entry_txs(#entry{data = Data}) ->
 %% DTX control.  Keeping this projection beside block_json/2 makes the paged
 %% history and the live WebSocket describe the same committed ledger; controls
 %% must not disappear merely because they do not have a #transaction{} body.
-entry_rows(Ns, #entry{data = Data} = E) ->
+entry_rows(Ns, #entry{} = E) ->
+    entry_rows(none, Ns, E).
+
+entry_rows(Store, Ns, #entry{data = Data} = E) ->
     case quod_ledger:classify(Data) of
         {content, Txs} -> [tx_json(Ns, T, E) || T <- Txs];
         {Phase, Control}
           when Phase =:= 'begin'; Phase =:= prepare; Phase =:= decision;
                Phase =:= finalize; Phase =:= complete ->
-            [control_row(Ns, Phase, Control, E)];
+            [control_row(Store, Ns, Phase, Control, E)];
         noop -> [];
         invalid -> []
     end.
@@ -562,25 +576,35 @@ signature_status(#transaction{sig = Sig}, _Entry)
 signature_status(_Transaction, _Entry) ->
     invalid.
 
-block_json(Ns, #entry{data = Data} = E) ->
+block_json(Ns, #entry{} = E) ->
+    %% The live stream has no store handle.  Open the same read-only ledger
+    %% view used by history so a just-committed Finalize can show the exact
+    %% referenced Prepare plan too; a stopped/unavailable ontology simply
+    %% leaves that optional display field absent.
+    with_store_or(Ns, fun(Store) -> block_json(Store, Ns, E) end,
+                  fun() -> block_json(none, Ns, E) end).
+
+block_json(Store, Ns, #entry{data = Data} = E) ->
     case quod_ledger:classify(Data) of
         {content, Txs} ->
             (block_meta(content, E))#{
               txs => [tx_json_full(Ns, T, E) || T <- Txs]};
-        {'begin', Control} -> dtx_block_meta('begin', Control, E);
-        {prepare, Control} -> dtx_block_meta(prepare, Control, E);
-        {decision, Control} -> dtx_block_meta(decision, Control, E);
-        {finalize, Control} -> dtx_block_meta(finalize, Control, E);
-        {complete, Control} -> dtx_block_meta(complete, Control, E);
+        {'begin', Control} -> dtx_block_meta(Store, 'begin', Control, E);
+        {prepare, Control} -> dtx_block_meta(Store, prepare, Control, E);
+        {decision, Control} -> dtx_block_meta(Store, decision, Control, E);
+        {finalize, Control} -> dtx_block_meta(Store, finalize, Control, E);
+        {complete, Control} -> dtx_block_meta(Store, complete, Control, E);
         noop -> (block_meta(noop, E))#{txs => []};
         invalid -> (block_meta(invalid, E))#{txs => []}
     end.
 
-dtx_block_meta(Phase, Control, E) ->
-    (block_meta(Phase, E))#{txs => [], control => control_json(Control)}.
+dtx_block_meta(Store, Phase, Control, E) ->
+    (block_meta(Phase, E))#{txs => [],
+                             control => control_json(Store, Control)}.
 
-control_row(Ns, Phase, Control, #entry{index = Slot, timestamp = Timestamp}) ->
-    ControlJson = control_json(Control),
+control_row(Store, Ns, Phase, Control,
+            #entry{index = Slot, timestamp = Timestamp}) ->
+    ControlJson = control_json(Store, Control),
     Digest = maps:get(record_digest, ControlJson),
     #{row_type => control,
       row_id => <<"dtx:", Digest/binary>>,
@@ -595,7 +619,7 @@ control_row(Ns, Phase, Control, #entry{index = Slot, timestamp = Timestamp}) ->
 %% omits the raw plan bytes, certificates embedded in references, and
 %% signing-journal bytes: those remain ledger implementation details, not a
 %% second API or an alternate source of truth.
-control_json(Control) ->
+control_json(Store, Control) ->
     #{kind := Kind, target := Target, author := Author,
       author_admission := Admission, sequence := Sequence,
       submitted_at := SubmittedAt} = quod_dtx:control_metadata(Control),
@@ -608,12 +632,12 @@ control_json(Control) ->
         author_admission => digest_json(Admission),
         sequence => Sequence,
         submitted_at => SubmittedAt},
-      control_body_json(Kind, quod_dtx:control_body(Control), Target)).
+      control_body_json(Kind, quod_dtx:control_body(Control), Target, Store)).
 
 control_body_json(
   'begin',
   {quod_dtx_begin, _, Manifest, _RequestAuth, Bundles} = Begin,
-  _Target) ->
+  _Target, _Store) ->
     OutcomeRef = case quod_dtx:begin_group_ref(Begin) of
                      {ok, Ref} -> Ref;
                      error -> none
@@ -627,26 +651,66 @@ control_body_json(
 control_body_json(
   prepare,
   {quod_dtx_prepare, _, _, _BeginRef, Manifest, PlanDigest, PlanBlob},
-  Target) ->
+  Target, _Store) ->
     Plan = participant_plan_json(
              Manifest, {Target, PlanDigest, PlanBlob, none}),
     #{plan_digest => digest_json(PlanDigest), plan => Plan};
 control_body_json(
   decision,
   {quod_dtx_decision, _, _, _BeginRef, Verdict, PrepareRefs, _} = Record,
-  _Target) ->
+  _Target, _Store) ->
     #{verdict => Verdict,
       prepare_count => length(PrepareRefs),
       reasons => decision_reasons_json(Record)};
 control_body_json(finalize,
                   {quod_dtx_finalize, _, _, _DecisionRef, Verdict, PrepareRef,
-                   AppliedGeneration}, _Target) ->
-    #{verdict => Verdict, prepared => PrepareRef =/= none,
-      applied_generation => AppliedGeneration};
+                   AppliedGeneration}, Target, Store) ->
+    Base = #{verdict => Verdict, prepared => PrepareRef =/= none,
+             applied_generation => AppliedGeneration},
+    case {Verdict, finalized_prepare_plan(Store, Target, PrepareRef)} of
+        {commit, {ok, Plan}} -> Base#{applied_plan => Plan};
+        _ -> Base
+    end;
 control_body_json(complete,
                   {quod_dtx_complete, _, _, _DecisionRef, FinalizeRows},
-                  _Target) ->
+                  _Target, _Store) ->
     #{finalize_count => length(FinalizeRows)}.
+
+%% A Finalize deliberately stores only a certified reference to its Prepare;
+%% the referenced plan remains the one ledger record that owns the exact diff.
+%% Explorer follows that reference in the current read-only ledger view and
+%% verifies target, slot, phase, and record digest before rendering it.
+finalized_prepare_plan(none, _Target, _PrepareRef) ->
+    error;
+finalized_prepare_plan(_Store, _Target, none) ->
+    error;
+finalized_prepare_plan(Store, Target, PrepareRef) ->
+    case quod_dtx:certified_ref_binding(PrepareRef) of
+        {ok, Target, Slot, Digest} ->
+            case quod_ledger_store:read_at(Store, Slot) of
+                {ok, #entry{data = Data}} ->
+                    case quod_ledger:classify(Data) of
+                        {prepare, PrepareControl} ->
+                            case quod_dtx:record_digest(PrepareControl) =:= Digest of
+                                true -> prepare_plan_json(PrepareControl, Target);
+                                false -> error
+                            end;
+                        _ -> error
+                    end;
+                not_found -> error
+            end;
+        _ ->
+            error
+    end.
+
+prepare_plan_json(PrepareControl, Target) ->
+    case quod_dtx:control_body(PrepareControl) of
+        {quod_dtx_prepare, _, _, _BeginRef, Manifest, PlanDigest, PlanBlob} ->
+            {ok, participant_plan_json(
+                   Manifest, {Target, PlanDigest, PlanBlob, none})};
+        _ ->
+            error
+    end.
 
 participant_plan_json(
   Manifest, {Target, PlanDigest, PlanBlob, Attestation}) ->

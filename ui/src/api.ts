@@ -165,6 +165,7 @@ export type Control = {
   reasons?: string[] | null
   prepared?: boolean
   applied_generation?: number
+  applied_plan?: ParticipantPlan
   finalize_count?: number
 }
 

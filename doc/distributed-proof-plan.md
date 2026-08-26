@@ -2287,7 +2287,7 @@ Step 6 decides release activation, not whether a second semantic mode is kept.
    lookup; cache absence is never interpreted as group absence. Its reply is
    usable only from the exact engine pid after its index's applied floor reaches
    the candidate parent. Simplex blocks every ordinary ingress/proposal route
-   while locked. Its one `quod_dtx:proposal_allowed/2` rule admits the same
+   while locked. Its one `quod_dtx:proposal_readiness/2` rule admits the same
    group's Decision when the ontology also owns the origin role and admits the
    prepared participant's matching Finalize; Complete is admitted only after
    Finalize has reopened the lock. The reducer classifies a

@@ -1392,6 +1392,15 @@ start_node(Name, Port, {Pub, Seed}, Ns, Genesis, Seeds,
     true = peer:call(
              Peer, erlang, function_exported,
              [quod_simplex, start_link, 2]),
+    %% Runtime lifecycle preparation may legitimately use the application's
+    %% default data root. Keep that root private to this peer and CT run: the
+    %% VM-local unique_integer/1 sequence restarts in later runs, so sharing
+    %% the developer cache could reopen an old genesis under a dead test key.
+    CacheDir = filename:join(
+                 ?config(priv_dir, Config),
+                 atom_to_list(Name) ++ "_cache"),
+    true = peer:call(
+             Peer, os, putenv, ["XDG_CACHE_HOME", CacheDir]),
     _ = peer:call(Peer, logger, set_primary_config, [level, warning]),
     _ = peer:call(Peer, application, load, [quod]),
     Key = quod_identity:key_term({Pub, Seed}),
@@ -1453,8 +1462,23 @@ start_brahms(Peer, Ns, SelfAddr, Seeds) ->
     ok.
 
 wait_ready(Peer, Ns, Goal) ->
+    wait_ready(Peer, Ns, Goal, 750).
+
+wait_ready(Peer, Ns, _Goal, 0) ->
+    ct:fail(
+      {ontology_never_ready, Ns,
+       #{children => peer:call(Peer, quod_ns_sup, children, []),
+         desired => peer:call(
+                      Peer, application, get_env,
+                      [quod, namespace_desired, undefined]),
+         genesis => peer:call(Peer, quod_simplex, genesis_hash, [Ns]),
+         status => peer:call(Peer, quod_simplex, status, [Ns]),
+         prolog => peer:call(Peer, quod_prolog, stats, [Ns])}});
+wait_ready(Peer, Ns, Goal, Retries) ->
     case peer:call(Peer, quod_prolog, prove, [Ns, Goal], 5000) of
-        {error, rebuilding} -> timer:sleep(20), wait_ready(Peer, Ns, Goal);
+        {error, rebuilding} ->
+            timer:sleep(20),
+            wait_ready(Peer, Ns, Goal, Retries - 1);
         {ok, _, _} -> ok;
         Other -> ct:fail({not_ready, Ns, Other})
     end.

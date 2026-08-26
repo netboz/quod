@@ -1442,6 +1442,8 @@ owner_result(shutdown) -> {ok, <<"shutdown">>};
 owner_result(_) -> error.
 
 owner_state(dtx_control, retained) -> {ok, <<"retained">>};
+owner_state(dtx_control, ready) -> {ok, <<"ready">>};
+owner_state(dtx_control, blocked) -> {ok, <<"blocked">>};
 owner_state(dtx_control, waiters) -> {ok, <<"waiters">>};
 owner_state(dtx_endpoint, outbound) -> {ok, <<"outbound">>};
 owner_state(dtx_endpoint, inbound) -> {ok, <<"inbound">>};

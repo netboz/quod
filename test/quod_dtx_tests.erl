@@ -1544,38 +1544,191 @@ proposal_admission_follows_the_active_group_phase_test() ->
     Decision = maps:get(decision_record, F),
     Finalize = maps:get(finalize_a_record, F),
     Complete = maps:get(complete_record, F),
-    ?assert(quod_dtx:proposal_allowed(Begin, P0)),
-    ?assertNot(quod_dtx:proposal_allowed(Decision, P0)),
+    ?assertEqual(ready, quod_dtx:proposal_readiness(Begin, P0)),
+    ?assertEqual(stale, quod_dtx:proposal_readiness(Decision, P0)),
+    ApplyWindow0 = P0#{proof_fence :=
+                           {pending_apply, <<99:256>>, 1, 0}},
+    ?assertEqual(
+       {blocked, apply},
+       quod_dtx:proposal_readiness(Begin, ApplyWindow0)),
+    ?assertMatch(
+       {ok, _, _, _},
+       quod_dtx:reduce(
+         maps:get(begin_control, F), maps:get(begin_ref, F),
+         H0, ApplyWindow0)),
     {ok, H1, P1, _} =
         quod_dtx:reduce(
           maps:get(begin_control, F), maps:get(begin_ref, F), H0, P0),
-    ?assert(quod_dtx:proposal_allowed(Prepare, P1)),
-    ?assertNot(
-       quod_dtx:proposal_allowed(maps:get(decision_record, Other), P1)),
+    ?assertEqual(ready, quod_dtx:proposal_readiness(Prepare, P1)),
+    PrepareApplyWindow = P1#{proof_fence :=
+                                  {pending_apply, <<97:256>>, 1, 0}},
+    ?assertEqual(
+       {blocked, apply},
+       quod_dtx:proposal_readiness(Prepare, PrepareApplyWindow)),
+    {ok, PrepareWindowOpen} = quod_dtx:acknowledge_finalize(
+                                <<97:256>>, 1, 0,
+                                PrepareApplyWindow),
+    ?assertEqual(
+       ready, quod_dtx:proposal_readiness(Prepare, PrepareWindowOpen)),
+    ?assertMatch(
+       {ok, _, _, _},
+       quod_dtx:reduce(
+         maps:get(prepare_a_control, F), maps:get(prepare_a_ref, F),
+         H1, PrepareWindowOpen)),
+    ?assertEqual(
+       stale,
+       quod_dtx:proposal_readiness(maps:get(decision_record, Other), P1)),
+    DecisionApplyWindow = P1#{proof_fence :=
+                                  {pending_apply, <<98:256>>, 1, 0}},
+    ?assertEqual(
+       ready,
+       quod_dtx:proposal_readiness(Decision, DecisionApplyWindow)),
+    ?assertMatch(
+       {ok, _, _, _},
+       quod_dtx:reduce(
+         maps:get(decision_control, F), maps:get(decision_ref, F),
+         H1, DecisionApplyWindow)),
     {ok, H2, P2, _} =
         quod_dtx:reduce(
           maps:get(prepare_a_control, F), maps:get(prepare_a_ref, F), H1, P1),
-    ?assert(quod_dtx:proposal_allowed(Decision, P2)),
+    %% Prepare leaves the proof fence pending. Decision admission belongs to
+    %% the reducer's origin phase and deliberately does not depend on it.
+    ?assertMatch({pending, _}, maps:get(proof_fence, P2)),
+    ?assertEqual(ready, quod_dtx:proposal_readiness(Decision, P2)),
     {ok, H3, P3, _} =
         quod_dtx:reduce(
           maps:get(decision_control, F), maps:get(decision_ref, F), H2, P2),
-    ?assert(quod_dtx:proposal_allowed(Finalize, P3)),
-    {ok, _H4, P4, _} =
+    ?assertEqual(ready, quod_dtx:proposal_readiness(Finalize, P3)),
+    {ok, H4, P4, _} =
         quod_dtx:reduce(
           maps:get(finalize_a_control, F), maps:get(finalize_a_ref, F), H3, P3),
     {ok, P5} = quod_dtx:acknowledge_finalize(
                  maps:get(group_id, F),
                  ref_slot_test(maps:get(finalize_a_ref, F)), 2, P4),
-    ?assert(quod_dtx:proposal_allowed(Complete, P5)),
-    ?assertNot(quod_dtx:proposal_allowed(maps:get(complete_record, Other), P5)),
+    ?assertEqual(
+       {blocked, apply}, quod_dtx:proposal_readiness(Complete, P4)),
+    ?assertMatch(
+       {ok, _, _, _},
+       quod_dtx:reduce(
+         maps:get(complete_control, F), maps:get(complete_ref, F), H4, P4)),
+    ?assertEqual(ready, quod_dtx:proposal_readiness(Complete, P5)),
+    ?assertEqual(
+       stale,
+       quod_dtx:proposal_readiness(maps:get(complete_record, Other), P5)),
     %% Direct aborts are admitted through an unrelated lock because they are
     %% metadata-only.  The reducer, not this scheduling hint, still owns all
     %% Decision/reference/generation validation (covered below).
     {DirectControl, _DirectRef} =
         unrelated_direct_abort(F, Target, maps:get(generation, P3)),
     ?assert(
-       quod_dtx:proposal_allowed(
-         quod_dtx:control_body(DirectControl), P3)).
+       quod_dtx:proposal_readiness(
+         quod_dtx:control_body(DirectControl), P3) =:= ready).
+
+%% The valid local gate shapes are a closed set. Cross every phase with every
+%% reachable local protocol/gate shape, and use the reducer before/after the
+%% exact local apply acknowledgement as the oracle.
+%% This prevents a newly added readiness clause from silently forgetting one
+%% pending-apply cell while still keeping the reducer as final authority.
+proposal_readiness_covers_the_reducer_gate_matrix_test() ->
+    F = protocol_fixture(),
+    Target = maps:get(target_a, F),
+    GroupId = maps:get(group_id, F),
+    PreviousGroup = <<96:256>>,
+    H0 = quod_dtx:initial_group_history(),
+    P0 = quod_dtx:initial_projection(Target, 0),
+    {ok, H1, P1, _} = quod_dtx:reduce(
+                         maps:get(begin_control, F),
+                         maps:get(begin_ref, F), H0, P0),
+    {ok, H2, P2, _} = quod_dtx:reduce(
+                         maps:get(prepare_a_control, F),
+                         maps:get(prepare_a_ref, F), H1, P1),
+    {ok, H3, P3, _} = quod_dtx:reduce(
+                         maps:get(decision_control, F),
+                         maps:get(decision_ref, F), H2, P2),
+    {ok, H4, P4, _} = quod_dtx:reduce(
+                         maps:get(finalize_a_control, F),
+                         maps:get(finalize_a_ref, F), H3, P3),
+    {ok, P5} = quod_dtx:acknowledge_finalize(
+                 GroupId, ref_slot_test(maps:get(finalize_a_ref, F)),
+                 maps:get(generation, P4), P4),
+    ProjectionMatrix =
+        prefix_gate_names(idle, gate_windows(P0, GroupId, PreviousGroup))
+        ++ prefix_gate_names(
+             begun, gate_windows(P1, GroupId, PreviousGroup))
+        ++ [{prepared_begun_pending, P2},
+            {prepared_decided_pending, P3}]
+        ++ prefix_gate_names(
+             decided, gate_windows(P5, GroupId, PreviousGroup)),
+    PhaseMatrix =
+        [{'begin', maps:get(begin_control, F), maps:get(begin_ref, F), H0},
+         {prepare, maps:get(prepare_a_control, F),
+          maps:get(prepare_a_ref, F), H1},
+         {decision, maps:get(decision_control, F),
+          maps:get(decision_ref, F), H1},
+         {finalize, maps:get(finalize_a_control, F),
+          maps:get(finalize_a_ref, F), H3},
+         {complete, maps:get(complete_control, F),
+          maps:get(complete_ref, F), H4}],
+    lists:foreach(
+      fun({Phase, Control, Ref, History}) ->
+              lists:foreach(
+                fun({Name, Projection}) ->
+                        assert_readiness_matches_reducer(
+                          Phase, Name, Control, Ref, History, Projection)
+                end, ProjectionMatrix)
+      end, PhaseMatrix).
+
+gate_windows(OpenProjection, GroupId, PreviousGroup) ->
+    Generation = maps:get(generation, OpenProjection),
+    [{open, OpenProjection},
+     {pending_apply_same,
+      OpenProjection#{proof_fence :=
+                        {pending_apply, GroupId, 91, Generation}}},
+     {pending_apply_previous,
+      OpenProjection#{proof_fence :=
+                        {pending_apply, PreviousGroup, 92, Generation}}}].
+
+prefix_gate_names(Prefix, Windows) ->
+    [{{Prefix, Name}, Projection} || {Name, Projection} <- Windows].
+
+assert_readiness_matches_reducer(
+  Phase, Name, Control, Ref, History, Projection) ->
+    Record = quod_dtx:control_body(Control),
+    Ready = quod_dtx:proposal_readiness(Record, Projection),
+    AdmissibleNow = reducer_admissible(Control, Ref, History, Projection),
+    AdmissibleAfterAck = reducer_admissible_after_ack(
+                           Control, Ref, History, Projection),
+    Expected =
+        case {AdmissibleNow, AdmissibleAfterAck,
+              deliberate_apply_hold(Phase, Projection)} of
+            {true, _, true} -> {blocked, apply};
+            {true, _, false} -> ready;
+            {false, true, _} -> {blocked, apply};
+            {false, false, _} -> stale
+        end,
+    ?assertEqual({Phase, Name, Expected}, {Phase, Name, Ready}).
+
+reducer_admissible(Control, Ref, History, Projection) ->
+    case quod_dtx:reduce(Control, Ref, History, Projection) of
+        {ok, _, _, _} -> true;
+        {error, _} -> false
+    end.
+
+reducer_admissible_after_ack(Control, Ref, History,
+                             #{proof_fence :=
+                                 {pending_apply, GroupId, Slot, Generation}}
+                               = Projection) ->
+    {ok, Open} = quod_dtx:acknowledge_finalize(
+                   GroupId, Slot, Generation, Projection),
+    reducer_admissible(Control, Ref, History, Open);
+reducer_admissible_after_ack(_Control, _Ref, _History, _Projection) ->
+    false.
+
+deliberate_apply_hold(Phase,
+                      #{proof_fence := {pending_apply, _, _, _}}) ->
+    Phase =:= 'begin' orelse Phase =:= complete;
+deliberate_apply_hold(_Phase, _Projection) ->
+    false.
 
 abort_reducer_retains_exact_reasons_until_complete_live_and_replay_test() ->
     with_identity(fun abort_reducer_retains_exact_reasons/1).

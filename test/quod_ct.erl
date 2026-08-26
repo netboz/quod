@@ -198,9 +198,15 @@ signed_dtx_begin_fixture(Overrides) when is_map(Overrides) ->
     Target = maps:get(participant_target, Overrides, Origin),
     #{goal := FrozenGoal} = maps:get(evidence, Request),
     {ok, Goal} = quod_wire_term:materialize_symbols(FrozenGoal),
-    {NodeKey, NodeSeed} = quod_identity:generate(),
-    NodeIdentity = #{pubkey => NodeKey,
-                     key => quod_identity:key_term({NodeKey, NodeSeed})},
+    NodeIdentity =
+        case maps:get(node_identity, Overrides, undefined) of
+            #{pubkey := <<_:256>>, key := _} = Identity -> Identity;
+            undefined ->
+                {NodeKey0, NodeSeed} = quod_identity:generate(),
+                #{pubkey => NodeKey0,
+                  key => quod_identity:key_term({NodeKey0, NodeSeed})}
+        end,
+    #{pubkey := NodeKey} = NodeIdentity,
     ProofId = maps:get(proof_id, Overrides, <<204:256>>),
     Admission = maps:get(admission, Overrides, <<205:256>>),
     Session =

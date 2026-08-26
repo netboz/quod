@@ -134,7 +134,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 -export([start_link/2, rebuild/1, prolog_ready/3, finalize_applied/4,
          handoff_effect/3,
          dtx_binding/1, register_dtx_begin/6, activate_dtx_begin/3,
-         cancel_dtx_begin/3, submit_dtx/3, dtx_group_barrier/3,
+         cancel_dtx_begin/3, dtx_group_barrier/3,
          dtx_endpoint_request/6, dtx_endpoint_local/3,
          history_source/1, dtx_local_evidence/3, dtx_applied_source/2,
          dtx_outcome_lookup/2,
@@ -228,6 +228,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_retain_dtx_record/3,
          test_dtx_retain_admissible/2,
          test_dtx_submission_waiters/1,
+         test_retained_dtx_state/1, test_refresh_retained_readiness/1,
+         test_refresh_retained_dtx_signatures/1,
          test_enqueue_dtx_intent/7, test_progress_dtx_admission/1,
          test_activate_dtx_intent/3, test_cancel_dtx_intent/3,
          test_set_dtx_intent_deadline/3,
@@ -1037,10 +1039,9 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     waiting :: queue:queue(#dtx_intent{})
 }).
 
-%% Retained signed controls are tiny in count (one active group plus the one
-%% locally pending Begin) but may be large in bytes.  Keep the exact signed
-%% envelope once and re-drive it; never copy it into the ordinary transaction
-%% custody queues.
+%% Keep each retained semantic control and its exact signed envelope once and
+%% re-drive it; never copy it into the ordinary transaction custody queues.
+%% Logical readiness, not a compiled population cap, controls scheduling.
 -record(dtx_submission, {
     record :: quod_dtx:control_record(),
     control :: quod_dtx:control(),
@@ -1050,7 +1051,20 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     inserted_at :: integer(),
     observation_started_at :: integer(),
     next_send = 0 :: integer(),
-    waiters = [] :: [term()]
+    placement :: ready | blocked,
+    bytes :: non_neg_integer(),
+    waiters = #{} :: #{pid() => true}
+}).
+
+%% One bundled invariant for retained signed controls. All fields are mutated
+%% together by this Simplex process; this is not another runtime owner.
+-record(retained_dtx, {
+    rows = #{} :: #{<<_:256>> => #dtx_submission{}},
+    ready = gb_sets:empty() :: gb_sets:set({integer(), <<_:256>>}),
+    blocked = gb_sets:empty() :: gb_sets:set({integer(), <<_:256>>}),
+    waiter_index = #{} :: #{pid() => <<_:256>>},
+    bytes = 0 :: non_neg_integer(),
+    fingerprint = undefined :: undefined | term()
 }).
 
 %% Volatile request ownership for the process-free DTX endpoint.  The exact
@@ -1224,8 +1238,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             dtx_pending = none
               :: none | {<<_:256>>, {<<_:256>>, <<_:256>>}},
             dtx_admission = none :: none | #dtx_admission{},
-            dtx_submissions = #{} ::
-              #{<<_:256>> => #dtx_submission{}},
+            retained_dtx = #retained_dtx{} :: #retained_dtx{},
             dtx_correlations = #{} ::
               #{binary() => #dtx_correlation{}},
             dtx_out_channels = #{} ::
@@ -1441,7 +1454,8 @@ test_state_set(relay_inflight, V, S) -> S#s{relay_inflight = V};
 test_state_set(batch_window_ms, V, S) -> S#s{batch_window_ms = V};
 test_state_set(committee_id, V, S) -> S#s{committee_id = V};
 test_state_set(dtx_chan, V, S) -> S#s{dtx_chan = V};
-test_state_set(dtx_submissions, V, S) -> S#s{dtx_submissions = V};
+test_state_set(retained_dtx, empty, S) ->
+    S#s{retained_dtx = #retained_dtx{}};
 test_state_set(dtx_coordinator, V, S) -> S#s{dtx_coordinator = V};
 test_state_set(local_proposal, {Slot, Hash}, S) ->   %% plant an in-flight sealed proposal
     S#s{local_proposals =
@@ -1566,23 +1580,31 @@ test_finish_dtx_worker(Pid, Result, S) ->
     finish_dtx_server_worker(Pid, Result, S).
 test_drop_dtx_endpoint_owner(Ref, Pid, S) ->
     drop_dtx_endpoint_owner(Ref, Pid, worker_down, S).
-test_seed_dtx_submission(
-  Control, Waiters, S = #s{dtx_submissions = Submissions}) ->
+test_seed_dtx_submission(Control, Waiters, S) ->
     test_seed_dtx_submission_at(
-      Control, Waiters, quod_time:mono_ms(), S#s{dtx_submissions = Submissions}).
+      Control, Waiters, quod_time:mono_ms(), S).
 test_seed_dtx_submission_at(
-  Control, Waiters, InsertedAt,
-  S = #s{dtx_submissions = Submissions}) ->
+  Control, Waiters, InsertedAt, S = #s{retained_dtx = Registry}) ->
     Digest = quod_dtx:record_digest(Control),
     {ok, Envelope} = quod_dtx:encode_control(Control),
+    Placement = test_retained_placement(
+                  retention_disposition(
+                    quod_dtx:control_body(Control),
+                    S#s.dtx_projection, S#s.dtx_last_group)),
     Submission =
         #dtx_submission{
           record = quod_dtx:control_body(Control), control = Control,
           envelope = Envelope, group_id = quod_dtx:group_id(Control),
           digest = Digest, inserted_at = InsertedAt,
           observation_started_at = InsertedAt,
-          waiters = Waiters},
-    S#s{dtx_submissions = Submissions#{Digest => Submission}}.
+          placement = Placement, bytes = byte_size(Envelope),
+          waiters = test_dtx_waiter_set(Waiters)},
+    S#s{retained_dtx = retained_put_new(Submission, Registry)}.
+test_retained_placement(ready) -> ready;
+test_retained_placement({blocked, _}) -> blocked;
+test_retained_placement(stale) -> error(stale_test_dtx_submission).
+test_dtx_waiter_set(Waiters) ->
+    maps:from_list([{Pid, true} || {dtx_endpoint, Pid} <- Waiters]).
 test_oldest_eligible_dtx_submission(S) ->
     case oldest_eligible_dtx_submission(S) of
         {Digest, #dtx_submission{record = Record}} -> {Digest, Record};
@@ -1592,12 +1614,35 @@ test_resolve_committed_dtx(Entry, Payload, S) ->
     resolve_committed_dtx(Entry, Payload, S).
 test_retain_dtx_record(Record, Waiter, S) ->
     retain_dtx_record(Record, Waiter, S).
-test_dtx_retain_admissible(Record, S) ->
-    dtx_retain_admissible(Record, S).
-test_dtx_submission_waiters(#s{dtx_submissions = Submissions}) ->
-    lists:sum(
-      [length(Waiters)
-       || #dtx_submission{waiters = Waiters} <- maps:values(Submissions)]).
+test_dtx_retain_admissible(
+  Record, #s{dtx_projection = Projection, dtx_last_group = LastGroup}) ->
+    retention_disposition(Record, Projection, LastGroup) =/= stale.
+test_dtx_submission_waiters(#s{retained_dtx = Registry}) ->
+    retained_waiter_count(Registry).
+test_retained_dtx_state(#s{retained_dtx = Registry}) ->
+    #{retained => retained_count(Registry),
+      ready => retained_ready_count(Registry),
+      blocked => retained_blocked_count(Registry),
+      waiters => retained_waiter_count(Registry),
+      bytes => Registry#retained_dtx.bytes,
+      ready_order => gb_sets:to_list(Registry#retained_dtx.ready),
+      blocked_order => gb_sets:to_list(Registry#retained_dtx.blocked),
+      waiter_index => Registry#retained_dtx.waiter_index,
+      rows => maps:map(
+                fun(_Digest,
+                    #dtx_submission{inserted_at = InsertedAt,
+                                    observation_started_at = ObservedAt,
+                                    bytes = Bytes, envelope = Envelope,
+                                    placement = Placement}) ->
+                        #{inserted_at => InsertedAt,
+                          observation_started_at => ObservedAt,
+                          bytes => Bytes, envelope => Envelope,
+                          placement => Placement}
+                end, retained_rows(Registry)),
+      fingerprint => Registry#retained_dtx.fingerprint}.
+test_refresh_retained_readiness(S) -> refresh_retained_readiness(S).
+test_refresh_retained_dtx_signatures(S) ->
+    refresh_retained_dtx_signatures(S).
 test_reconcile_signing_state(S) -> reconcile_signing_state(S).
 test_finish_pending_begin_reconciliation(Transition, S) ->
     finish_pending_begin_reconciliation(Transition, S).
@@ -1617,11 +1662,10 @@ test_retire_invalid_dtx(Payload, Reasons, S) ->
     retire_invalid_dtx_submission(Payload, Reasons, S).
 test_dtx_endpoint_counts(
   #s{dtx_correlations = Correlations, dtx_out_channels = Channels,
-     dtx_workers = Workers,
-     dtx_submissions = Submissions}) ->
+     dtx_workers = Workers, retained_dtx = Registry}) ->
     #{correlations => map_size(Correlations),
       channels => map_size(Channels), workers => map_size(Workers),
-      submissions => map_size(Submissions)}.
+      submissions => retained_count(Registry)}.
 test_owner_stats(S) ->
     {Current, CurrentBytes} = simplex_owner_current(S),
     #{owner_current => Current,
@@ -2054,22 +2098,6 @@ cancel_dtx_begin(Ns, EnginePid, IntentId) ->
       quod_reg:via({quod_simplex, Ns}),
       {cancel_dtx_begin, EnginePid, IntentId}).
 
--doc "Submit one already-built semantic DTX phase and wait for its certified local reference.".
--spec submit_dtx(binary(), quod_dtx:control_record(), timeout()) ->
-          {ok, quod_dtx:certified_ref()} | {error, term()}.
-submit_dtx(Ns, Record, Timeout)
-  when is_binary(Ns), (is_integer(Timeout) andalso Timeout > 0) orelse
-                           Timeout =:= infinity ->
-    try gen_statem:call(
-          quod_reg:via({quod_simplex, Ns}), {submit_dtx, Record}, Timeout)
-    catch
-        exit:{noproc, _} -> {error, {ontology_unavailable, Ns}};
-        exit:{timeout, _} -> {error, {outcome_unknown, dtx_record_ref(Record)}};
-        exit:_ -> {error, {outcome_unknown, dtx_record_ref(Record)}}
-    end;
-submit_dtx(_Ns, _Record, _Timeout) ->
-    {error, invalid_dtx_submission}.
-
 -doc "Serialize a pre-Begin group lookup behind the current committed state.".
 -spec dtx_group_barrier(binary(), term(), non_neg_integer()) ->
           {ok, pending | not_found | {rejected, coordinator_retired}} |
@@ -2224,11 +2252,6 @@ dtx_applied_source(Ns, FinalizeRef)
     end;
 dtx_applied_source(_Ns, _FinalizeRef) ->
     {error, invalid_request}.
-
-dtx_record_ref(Record) ->
-    try {dtx_record, quod_dtx:group_id(Record), quod_dtx:record_digest(Record)}
-    catch _:_ -> invalid_dtx_submission
-    end.
 
 status(Ns)    -> call(Ns, get_status, #{}).
 committee(Ns) -> call(Ns, get_committee, []).
@@ -2565,8 +2588,16 @@ restore_pending_dtx_journal(S, Journal) ->
                                   envelope = Envelope, group_id = GroupId,
                                   digest = Digest,
                                   inserted_at = InsertedAt,
-                                  observation_started_at = InsertedAt},
-                            S#s{dtx_submissions = #{Digest => Submission}};
+                                  observation_started_at = InsertedAt,
+                                  placement = retained_placement(
+                                                retention_disposition(
+                                                  Record,
+                                                  S#s.dtx_projection,
+                                                  S#s.dtx_last_group)),
+                                  bytes = byte_size(Envelope)},
+                            S#s{retained_dtx = retained_put_new(
+                                                  Submission,
+                                                  S#s.retained_dtx)};
                         false ->
                             error({signing_journal_bad_pending, GroupId})
                     end;
@@ -3042,14 +3073,6 @@ running_impl(
 running_impl(
   cast, {cancel_dtx_begin, EnginePid, IntentId}, S0) ->
     keep_progress(S0, cancel_dtx_intent(EnginePid, IntentId, S0), []);
-running_impl({call, From}, {submit_dtx, Record}, S0) ->
-    case retain_dtx_record(Record, From, S0) of
-        {ok, S1} ->
-            %% The caller is released only by the certified committed record.
-            keep_progress(S0, S1, []);
-        {error, Reason} ->
-            {keep_state, S0, [{reply, From, {error, Reason}}]}
-    end;
 running_impl(
   {call, From}, {dtx_group_barrier, GroupRef, AppliedFloor}, S) ->
     {keep_state, S,
@@ -3486,7 +3509,8 @@ dtx_intent_id(#dtx_intent{id = IntentId}) -> IntentId.
 dtx_begin_registration_open(
   #s{signing_journal = Journal,
      dtx_projection = #{active := none},
-     dtx_submissions = Submissions}) ->
+     retained_dtx = Registry}) ->
+    Submissions = retained_rows(Registry),
     pending_begin_projection(Journal) =:= none andalso
         not maps:fold(
               fun(_Digest,
@@ -3690,7 +3714,8 @@ dtx_coordinator_desired(S) ->
             none
     end.
 
-pending_origin_begin(#s{dtx_submissions = Submissions}, Binding) ->
+pending_origin_begin(#s{retained_dtx = Registry}, Binding) ->
+    Submissions = retained_rows(Registry),
     Candidates =
         [{InsertedAt, GroupId, Begin, GroupRef}
          || #dtx_submission{
@@ -3952,7 +3977,8 @@ classify_dtx_group_barrier(GroupRef, _AppliedFloor, _S) ->
 
 local_group_pending(
   GroupId, GroupRef,
-  #s{dtx_admission = Admission, dtx_submissions = Submissions}) ->
+  #s{dtx_admission = Admission, retained_dtx = Registry}) ->
+    Submissions = retained_rows(Registry),
     Intent = dormant_dtx_intent(Admission),
     intent_matches_group(Intent, GroupRef) orelse
         maps:fold(
@@ -4267,7 +4293,6 @@ remove_new_dtx_submit_owner(
     exit(Pid, shutdown),
     ok.
 
-endpoint_submit_error(busy) -> busy;
 endpoint_submit_error(invalid_dtx_submission) -> invalid_request;
 endpoint_submit_error(_) -> not_ready.
 
@@ -4598,7 +4623,8 @@ local_dtx_phase_pending(GroupId, Kind, S) ->
     retained_dtx_phase_pending(GroupId, Kind, S).
 
 retained_dtx_phase_pending(
-  GroupId, Kind, #s{dtx_submissions = Submissions}) ->
+  GroupId, Kind, #s{retained_dtx = Registry}) ->
+    Submissions = retained_rows(Registry),
     maps:fold(
       fun(_Digest,
           #dtx_submission{group_id = PendingGroup, control = Control}, Found) ->
@@ -4729,14 +4755,9 @@ drop_dtx_worker_caller(
     end.
 
 detach_dtx_endpoint_waiter(
-  Pid, S = #s{dtx_submissions = Submissions}) ->
-    Tag = {dtx_endpoint, Pid},
-    S#s{dtx_submissions =
-          maps:map(
-            fun(_Digest, Submission = #dtx_submission{waiters = Waiters}) ->
-                    Submission#dtx_submission{
-                      waiters = lists:delete(Tag, Waiters)}
-            end, Submissions)}.
+  Pid, S = #s{retained_dtx = Registry}) ->
+    {_Found, Registry1} = retained_detach_waiter(Pid, Registry),
+    S#s{retained_dtx = Registry1}.
 
 drop_dtx_correlation_owner(
   Ref, Pid, S = #s{dtx_correlations = Correlations}) ->
@@ -4791,29 +4812,26 @@ close_dtx_endpoint(Correlations, Workers) ->
     ok.
 
 retain_dtx_record(Record, Waiter,
-                  S = #s{dtx_submissions = Submissions}) ->
+                  S = #s{retained_dtx = Registry}) ->
     case validated_dtx_record(Record) of
         {ok, Kind, Digest} ->
-            case dtx_retain_admissible(Record, S) of
-                false ->
+            case retention_disposition(
+                   Record, S#s.dtx_projection, S#s.dtx_last_group) of
+                stale ->
                     {error, stale_dtx_submission};
-                true ->
-                    case maps:get(Digest, Submissions, undefined) of
-                        #dtx_submission{} = Existing ->
-                            case add_dtx_waiter(Waiter, Existing) of
-                                {ok, Updated} ->
-                                    {ok, S#s{dtx_submissions =
-                                                 Submissions#{Digest => Updated}}};
-                                busy ->
-                                    {error, busy}
+                _Retained ->
+                    case maps:get(Digest, retained_rows(Registry), undefined) of
+                        #dtx_submission{} ->
+                            case retained_attach_waiter(
+                                   Digest, Waiter, Registry) of
+                                {ok, Registry1} ->
+                                    {ok, S#s{retained_dtx = Registry1}};
+                                {error, Reason} ->
+                                    {error, Reason}
                             end;
-                        undefined when
-                          map_size(Submissions) <
-                            ?QUOD_MAX_DTX_PARTICIPANTS + 1 ->
-                            sign_and_retain_dtx(
-                              Kind, Record, Digest, Waiter, S);
                         undefined ->
-                            {error, busy}
+                            sign_and_retain_dtx(
+                              Kind, Record, Digest, Waiter, S)
                     end
             end;
         {error, _} ->
@@ -4823,34 +4841,26 @@ retain_dtx_record(Record, Waiter,
 %% The projection is the sole phase owner.  Controls for the active group must
 %% be its exact permitted next phase; a completed group can never be signed
 %% again.  A different future group may remain retained behind the current
-%% lock, preserving bounded pipelining without weakening the active group.
-dtx_retain_admissible(
-  Record,
-  #s{dtx_projection = Projection, dtx_last_group = LastGroup}) ->
+%% lock, preserving phase-ordered pipelining without weakening the active
+%% group.
+retention_disposition(Record, Projection, LastGroup) when is_map(Projection) ->
     GroupId = quod_dtx:group_id(Record),
     case maps:get(active, Projection, none) of
-        none when GroupId =:= LastGroup ->
-            false;
-        none ->
-            quod_dtx:proposal_allowed(Record, Projection);
         #{group_id := GroupId} ->
-            %% `dtx_last_group` records the most recently entered participant
-            %% role and can therefore equal a group that is still active.
-            %% The projection, not that replay marker, owns its next phase.
-            quod_dtx:proposal_allowed(Record, Projection);
-        #{group_id := _OtherGroup} ->
-            %% Only role-acquisition records may wait behind another group.
-            %% A cross-group Decision/Complete (or prepared Finalize) can
-            %% never become eligible without an active role and would occupy
-            %% bounded retained state forever.  Direct-abort Finalize remains
-            %% admissible only when the canonical projection permits it.
-            quod_dtx:proposal_allowed(Record, Projection) orelse
-                dtx_role_acquisition_record(Record)
-    end.
+            %% The replay marker may name the group that is still active. Its
+            %% committed projection, not the marker, owns the next phase.
+            quod_dtx:proposal_readiness(Record, Projection);
+        _ when GroupId =:= LastGroup ->
+            stale;
+        _ ->
+            quod_dtx:proposal_readiness(Record, Projection)
+    end;
+retention_disposition(_Record, _Projection, _LastGroup) ->
+    stale.
 
-dtx_role_acquisition_record(Record) ->
-    Kind = quod_dtx:record_kind(Record),
-    Kind =:= 'begin' orelse Kind =:= prepare.
+retained_placement(ready) -> ready;
+retained_placement({blocked, _}) -> blocked;
+retained_placement(stale) -> error(stale_retained_dtx).
 
 validated_dtx_record(Record) ->
     case {quod_dtx:record_kind(Record), quod_dtx:encode_record(Record)} of
@@ -4866,7 +4876,7 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter,
                     S = #s{id = Signer, self = Self,
                            signing_journal = Journal,
                            dtx_lanes = CommittedFloors,
-                           dtx_submissions = Submissions}) ->
+                           retained_dtx = Registry}) ->
     case current_dtx_binding(S) of
         {ok, {_Ns, _Anchor, Self, Admission}} ->
             Lane = {Admission, Self},
@@ -4895,10 +4905,16 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter,
                                   digest = Digest,
                                   inserted_at = InsertedAt,
                                   observation_started_at = InsertedAt,
-                                  waiters = dtx_waiters(Waiter)},
+                                  placement = retained_placement(
+                                                retention_disposition(
+                                                  Record,
+                                                  S#s.dtx_projection,
+                                                  S#s.dtx_last_group)),
+                                  bytes = byte_size(Envelope),
+                                  waiters = dtx_waiter_set(Waiter)},
                             {ok, S#s{signing_journal = Journal1,
-                                     dtx_submissions =
-                                       Submissions#{Digest => Submission}}};
+                                     retained_dtx = retained_put_new(
+                                                      Submission, Registry)}};
                         {error, Reason} ->
                             {error, Reason}
                     end;
@@ -4924,18 +4940,171 @@ maybe_project_pending_begin('begin', Ns, Journal) ->
 maybe_project_pending_begin(_Kind, _Ns, _Journal) ->
     ok.
 
-dtx_waiters(none) -> [];
-dtx_waiters(Waiter) -> [Waiter].
+dtx_waiter_set(none) -> #{};
+dtx_waiter_set({dtx_endpoint, Pid}) when is_pid(Pid) -> #{Pid => true}.
 
-add_dtx_waiter(none, Submission) ->
-    {ok, Submission};
-add_dtx_waiter(Waiter, Submission = #dtx_submission{waiters = []}) ->
-    {ok, Submission#dtx_submission{waiters = [Waiter]}};
-add_dtx_waiter(_Waiter, #dtx_submission{waiters = [_]}) ->
-    %% A timed-out endpoint caller cannot retract its gen_statem From tuple.
-    %% Keep one exact semantic waiter at most; recovery observes the pending
-    %% phase instead of growing this list on every retry.
-    busy.
+retained_rows(#retained_dtx{rows = Rows}) -> Rows.
+
+retained_count(#retained_dtx{rows = Rows}) -> map_size(Rows).
+
+retained_waiter_count(#retained_dtx{waiter_index = Waiters}) ->
+    map_size(Waiters).
+
+retained_ready_count(#retained_dtx{ready = Ready}) -> gb_sets:size(Ready).
+
+retained_blocked_count(#retained_dtx{blocked = Blocked}) ->
+    gb_sets:size(Blocked).
+
+retained_order_key(#dtx_submission{inserted_at = InsertedAt,
+                                   digest = Digest}) ->
+    {InsertedAt, Digest}.
+
+retained_put_new(Row = #dtx_submission{digest = Digest,
+                                       bytes = Bytes,
+                                       waiters = Waiters,
+                                       placement = Placement},
+                 Registry = #retained_dtx{rows = Rows,
+                                          waiter_index = WaiterIndex,
+                                          bytes = Total}) ->
+    false = maps:is_key(Digest, Rows),
+    true = is_integer(Bytes) andalso Bytes >= 0,
+    true = maps:fold(
+             fun(Pid, true, Unique) ->
+                     Unique andalso not maps:is_key(Pid, WaiterIndex)
+             end, true, Waiters),
+    Registry1 = retained_add_order_key(Row, Placement, Registry),
+    Registry1#retained_dtx{
+      rows = Rows#{Digest => Row},
+      waiter_index = maps:fold(
+                       fun(Pid, true, Acc) -> Acc#{Pid => Digest} end,
+                       WaiterIndex, Waiters),
+      bytes = Total + Bytes}.
+
+retained_add_order_key(Row, ready,
+                       Registry = #retained_dtx{ready = Ready}) ->
+    Registry#retained_dtx{ready = gb_sets:add(
+                                    retained_order_key(Row), Ready)};
+retained_add_order_key(Row, blocked,
+                       Registry = #retained_dtx{blocked = Blocked}) ->
+    Registry#retained_dtx{blocked = gb_sets:add(
+                                      retained_order_key(Row), Blocked)}.
+
+retained_delete_order_key(Row, ready,
+                          Registry = #retained_dtx{ready = Ready}) ->
+    Registry#retained_dtx{ready = gb_sets:delete_any(
+                                    retained_order_key(Row), Ready)};
+retained_delete_order_key(Row, blocked,
+                          Registry = #retained_dtx{blocked = Blocked}) ->
+    Registry#retained_dtx{blocked = gb_sets:delete_any(
+                                      retained_order_key(Row), Blocked)}.
+
+retained_take(Digest,
+              Registry = #retained_dtx{rows = Rows,
+                                       waiter_index = WaiterIndex,
+                                       bytes = Total}) ->
+    case maps:take(Digest, Rows) of
+        {Row = #dtx_submission{bytes = Bytes, waiters = Waiters,
+                               placement = Placement}, Rest} ->
+            Registry1 = retained_delete_order_key(Row, Placement, Registry),
+            {Row,
+             Registry1#retained_dtx{
+               rows = Rest,
+               waiter_index = maps:fold(
+                                fun(Pid, true, Acc) -> maps:remove(Pid, Acc) end,
+                                WaiterIndex, Waiters),
+               bytes = Total - Bytes}};
+        error ->
+            error
+    end.
+
+retained_replace(Row = #dtx_submission{digest = Digest}, Registry) ->
+    case retained_take(Digest, Registry) of
+        {_Old, Registry1} -> retained_put_new(Row, Registry1);
+        error -> error({missing_retained_dtx, Digest})
+    end.
+
+retained_attach_waiter(_Digest, none, Registry) ->
+    {ok, Registry};
+retained_attach_waiter(
+  Digest, {dtx_endpoint, Pid},
+  Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex})
+  when is_pid(Pid) ->
+    case {maps:get(Digest, Rows, undefined),
+          maps:get(Pid, WaiterIndex, undefined)} of
+        {#dtx_submission{}, Digest} ->
+            {ok, Registry};
+        {#dtx_submission{waiters = Waiters} = Row, undefined} ->
+            Row1 = Row#dtx_submission{waiters = Waiters#{Pid => true}},
+            {ok, Registry#retained_dtx{
+                   rows = Rows#{Digest => Row1},
+                   waiter_index = WaiterIndex#{Pid => Digest}}};
+        {#dtx_submission{}, _OtherDigest} ->
+            {error, waiter_already_owned};
+        {undefined, _} ->
+            {error, missing_retained_dtx}
+    end.
+
+retained_detach_waiter(
+  Pid, Registry = #retained_dtx{rows = Rows, waiter_index = WaiterIndex}) ->
+    case maps:take(Pid, WaiterIndex) of
+        {Digest, RestIndex} ->
+            Row = #dtx_submission{waiters = Waiters} = maps:get(Digest, Rows),
+            Row1 = Row#dtx_submission{waiters = maps:remove(Pid, Waiters)},
+            {true, Registry#retained_dtx{
+                     rows = Rows#{Digest => Row1},
+                     waiter_index = RestIndex}};
+        error ->
+            {false, Registry}
+    end.
+
+retained_waiter_tags(#dtx_submission{waiters = Waiters}) ->
+    [{dtx_endpoint, Pid} || Pid <- maps:keys(Waiters)].
+
+retained_readiness_fingerprint(
+  #s{dtx_projection = Projection, dtx_last_group = LastGroup}) ->
+    {Projection, LastGroup}.
+
+refresh_retained_readiness(
+  S = #s{retained_dtx = #retained_dtx{fingerprint = Fingerprint}}) ->
+    Current = retained_readiness_fingerprint(S),
+    case Fingerprint =:= Current of
+        true -> S;
+        false -> reclassify_retained_rows(Current, S)
+    end.
+
+reclassify_retained_rows(
+  Fingerprint,
+  S0 = #s{retained_dtx = #retained_dtx{rows = Rows}}) ->
+    S1 = lists:foldl(
+           fun(Digest, S) -> reclassify_retained_row(Digest, S) end,
+           S0, maps:keys(Rows)),
+    Registry = S1#s.retained_dtx,
+    S1#s{retained_dtx = Registry#retained_dtx{
+                               fingerprint = Fingerprint}}.
+
+reclassify_retained_row(
+  Digest, S = #s{retained_dtx = Registry,
+                 dtx_projection = Projection,
+                 dtx_last_group = LastGroup}) ->
+    case maps:get(Digest, retained_rows(Registry), undefined) of
+        undefined ->
+            S;
+        Row = #dtx_submission{record = Record, placement = OldPlacement} ->
+            case retention_disposition(Record, Projection, LastGroup) of
+                stale ->
+                    retire_dtx_submission(
+                      Digest, stale_dtx_submission, S);
+                Disposition ->
+                    NewPlacement = retained_placement(Disposition),
+                    case NewPlacement =:= OldPlacement of
+                        true -> S;
+                        false ->
+                            S#s{retained_dtx = retained_replace(
+                                  Row#dtx_submission{
+                                    placement = NewPlacement}, Registry)}
+                    end
+            end
+    end.
 
 %%%===================================================================
 %%% append (propose) → engine → commit → apply
@@ -6326,14 +6495,17 @@ propose_batch(Slot, Parent, Items, Transactions, Count, WaitMs, S) ->
         undefined -> S3
     end.
 
-drive_retained_dtx(S = #s{dtx_submissions = Submissions})
-  when map_size(Submissions) =:= 0 ->
-    S;
-drive_retained_dtx(S = #s{collecting = #batch{slot = Slot}}) ->
+drive_retained_dtx(S = #s{retained_dtx = Registry}) ->
+    case retained_count(Registry) of
+        0 -> S;
+        _ -> drive_retained_dtx_nonempty(S)
+    end.
+
+drive_retained_dtx_nonempty(S = #s{collecting = #batch{slot = Slot}}) ->
     %% A DTX barrier never discards already-accepted content. Seal that batch;
     %% the retained control takes the next legal slot.
     flush_batch(Slot, S);
-drive_retained_dtx(S) ->
+drive_retained_dtx_nonempty(S) ->
     case may_vote(S) of
         false ->
             S;
@@ -6350,18 +6522,12 @@ drive_retained_dtx(S) ->
     end.
 
 oldest_eligible_dtx_submission(
-  #s{dtx_projection = Projection, dtx_submissions = Submissions}) ->
-    case lists:sort(
-           fun({DigestA, #dtx_submission{inserted_at = A}},
-               {DigestB, #dtx_submission{inserted_at = B}}) ->
-                   {A, DigestA} < {B, DigestB}
-           end,
-           [{Digest, Submission}
-            || {Digest, #dtx_submission{record = Record} = Submission}
-                   <- maps:to_list(Submissions),
-               quod_dtx:proposal_allowed(Record, Projection)]) of
-        [Oldest | _] -> Oldest;
-        [] -> none
+  #s{retained_dtx = #retained_dtx{rows = Rows, ready = Ready}}) ->
+    case gb_sets:is_empty(Ready) of
+        true -> none;
+        false ->
+            {_InsertedAt, Digest} = gb_sets:smallest(Ready),
+            {Digest, maps:get(Digest, Rows)}
     end.
 
 drive_dtx_at_slot(
@@ -6370,7 +6536,7 @@ drive_dtx_at_slot(
   S) ->
     case dtx_slot_route(Slot, S) of
         local ->
-            propose_dtx(Slot, Submission, S);
+            propose_dtx(Slot, Envelope, S);
         {relay, Peer} ->
             Now = quod_time:mono_ms(),
             case Now >= NextSend of
@@ -6395,9 +6561,7 @@ dtx_slot_route(Slot, S = #s{self = Self}) ->
         none -> blocked
     end.
 
-propose_dtx(Slot,
-            #dtx_submission{envelope = Envelope},
-            S = #s{approved = Parent}) ->
+propose_dtx(Slot, Envelope, S = #s{approved = Parent}) ->
     Payload = {dtx, Envelope},
     case acceptable_payload(Payload, S) of
         false -> S;
@@ -6437,16 +6601,7 @@ handle_dtx_submit(_Peer, Envelope, S) ->
                 {{ok, Slot}, none} ->
                     case dtx_slot_route(Slot, S) of
                         local ->
-                            InsertedAt = quod_time:mono_ms(),
-                            Submission =
-                              #dtx_submission{
-                                record = Record,
-                                control = Control, envelope = Envelope,
-                                group_id = quod_dtx:group_id(Control),
-                                digest = quod_dtx:record_digest(Control),
-                                inserted_at = InsertedAt,
-                                observation_started_at = InsertedAt},
-                            propose_dtx(Slot, Submission, S);
+                            propose_dtx(Slot, Envelope, S);
                         _ -> S
                     end;
                 _ ->
@@ -6455,8 +6610,9 @@ handle_dtx_submit(_Peer, Envelope, S) ->
     end.
 
 update_dtx_submission(Digest, Submission,
-                      S = #s{dtx_submissions = Submissions}) ->
-    S#s{dtx_submissions = Submissions#{Digest => Submission}}.
+                      S = #s{retained_dtx = Registry}) ->
+    Digest = Submission#dtx_submission.digest,
+    S#s{retained_dtx = retained_replace(Submission, Registry)}.
 
 reject_collected_batch(Items, Count, S) ->
     S1 = reply_waiters([From || {From, _Change} <- Items],
@@ -6477,7 +6633,7 @@ dtx_consensus_barrier(Record, S) ->
 
 consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
                      rounds = Rounds, dtx_projection = Dtx,
-                     dtx_submissions = Submissions}, RetainedMode, LockMode) ->
+                     retained_dtx = Registry}, RetainedMode, LockMode) ->
     DurableLock = dtx_durable_lock(Dtx, LockMode),
     VolatileBlock =
         lists:any(fun({Sl, #block{payload = Payload}}) ->
@@ -6490,13 +6646,13 @@ consensus_barrier(#s{slot = Committed, eng = #eng{tree = Tree},
                   Sl > Committed andalso dtx_validation_active(Round)
           end, maps:to_list(Rounds)),
     RetainedDtx = RetainedMode =:= include_retained_dtx
-                  andalso map_size(Submissions) > 0,
+                  andalso retained_ready_count(Registry) > 0,
     DurableLock orelse VolatileBlock orelse PendingDtx orelse RetainedDtx.
 
 dtx_durable_lock(#{consensus_lock := open}, strict_lock) -> false;
 dtx_durable_lock(#{consensus_lock := {locked, <<_:256>>}}, strict_lock) -> true;
 dtx_durable_lock(Projection, {dtx_record, Record}) ->
-    not quod_dtx:proposal_allowed(Record, Projection);
+    quod_dtx:proposal_readiness(Record, Projection) =/= ready;
 dtx_durable_lock(_Projection, _Mode) -> true.
 
 parent_timestamp(Parent, #s{slot = Parent, last_ts = Last}) -> Last;
@@ -6741,29 +6897,24 @@ payload_submission_ids(Data) ->
 resolve_committed_dtx(
   Entry, Payload,
   S = #s{ns = Ns, genesis_hash = Anchor,
-         dtx_submissions = Submissions}) ->
+         retained_dtx = Registry}) ->
     case quod_ledger:classify(Payload) of
         {Kind, Control}
           when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
                Kind =:= finalize; Kind =:= complete ->
             Digest = quod_dtx:record_digest(Control),
-            case maps:take(Digest, Submissions) of
-                {#dtx_submission{waiters = Waiters,
-                                 observation_started_at = StartedAt}, Rest} ->
+            case maps:is_key(Digest, retained_rows(Registry)) of
+                true ->
                     case quod_dtx:certified_entry_ref(
                            {Ns, Anchor}, Entry, Control) of
                         {ok, Ref} ->
-                            observe_simplex_owner_terminal(
-                              S, dtx_control, Kind, completed, StartedAt),
-                            lists:foldl(
-                              fun(Waiter, Acc) ->
-                                      reply_waiter(Waiter, {ok, Ref}, Acc)
-                              end, S#s{dtx_submissions = Rest}, Waiters);
+                            finish_retained_dtx(
+                              Digest, completed, {ok, Ref}, S);
                         {error, Reason} ->
                             error({invalid_committed_dtx_reference,
                                    Entry#entry.index, Reason})
                     end;
-                error ->
+                false ->
                     S
             end;
         {content, _} -> S;
@@ -7166,7 +7317,7 @@ reconcile_signing_state_journal(
     %% quod_prolog's publication floor can make the absence classification
     %% definitive rather than outcome-unknown.
     ok = project_reconciled_pending_begin(Ns, Transition),
-    {refresh_stale_dtx_submissions(
+    {refresh_retained_dtx_signatures(
        reconcile_effect_signing_custody(
          S#s{signing_journal = Journal1})), Transition}.
 
@@ -7225,11 +7376,15 @@ finish_pending_begin_reconciliation(
 finish_pending_begin_reconciliation(none, S) ->
     S.
 
-refresh_stale_dtx_submissions(
-  S = #s{dtx_submissions = Submissions})
-  when map_size(Submissions) =:= 0 ->
-    S;
-refresh_stale_dtx_submissions(S0) ->
+refresh_retained_dtx_signatures(
+  S = #s{retained_dtx = Registry}) ->
+    case retained_count(Registry) of
+        0 -> S;
+        _ -> refresh_retained_dtx_signatures_nonempty(S)
+    end.
+
+refresh_retained_dtx_signatures_nonempty(S0) ->
+    Rows = retained_rows(S0#s.retained_dtx),
     case current_dtx_binding(S0) of
         {ok, {_Ns, _Anchor, Self, Admission}} ->
             CurrentLane = {Admission, Self},
@@ -7237,15 +7392,14 @@ refresh_stale_dtx_submissions(S0) ->
               fun(Digest, Submission, Acc) ->
                       refresh_dtx_submission(
                         Digest, Submission, CurrentLane, Acc)
-              end, S0, S0#s.dtx_submissions);
+              end, S0, Rows);
         {error, _} ->
-            abandon_dtx_submissions(not_in_charge, S0)
+            abandon_retained_dtx(not_in_charge, S0)
     end.
 
 refresh_dtx_submission(
   Digest,
   #dtx_submission{control = Control, record = Record,
-                  waiters = Waiters,
                   observation_started_at = ObservationStartedAt},
   CurrentLane,
   S = #s{dtx_lanes = CommittedFloors}) ->
@@ -7256,67 +7410,60 @@ refresh_dtx_submission(
           Sequence =< maps:get(Lane, CommittedFloors, 0)} of
         {false, _} ->
             retire_dtx_submission(
-              Digest, Waiters, not_in_charge, S);
+              Digest, not_in_charge, S);
         {true, false} ->
             S;
         {true, true} ->
-            SWithout = S#s{dtx_submissions =
-                              maps:remove(Digest, S#s.dtx_submissions)},
+            {Old, RegistryWithout} = retained_take(
+                                       Digest, S#s.retained_dtx),
+            SWithout = S#s{retained_dtx = RegistryWithout},
             case sign_and_retain_dtx(
                    quod_dtx:control_kind(Control), Record, Digest,
                    none, SWithout) of
-                {ok, S1 = #s{dtx_submissions = Renewed}} ->
-                    New = maps:get(Digest, Renewed),
+                {ok, S1 = #s{retained_dtx = Renewed}} ->
+                    New = maps:get(Digest, retained_rows(Renewed)),
                     update_dtx_submission(
                       Digest,
-                      New#dtx_submission{waiters = Waiters,
+                      New#dtx_submission{waiters = Old#dtx_submission.waiters,
                                          observation_started_at =
                                            ObservationStartedAt}, S1);
                 {error, Reason} ->
-                    observe_simplex_owner_terminal(
-                      S, dtx_control, quod_dtx:control_kind(Control),
-                      dtx_retirement_result(Reason),
-                      ObservationStartedAt),
                     logger:error(
                       "quod[~s]: unable to re-envelope retained DTX control: ~p",
                       [S#s.ns, Reason]),
-                    lists:foldl(
-                      fun(Waiter, Acc) ->
-                              reply_waiter(Waiter, {error, Reason}, Acc)
-                      end, SWithout, Waiters)
+                    finish_detached_retained_dtx(
+                      Old, dtx_retirement_result(Reason),
+                      {error, Reason}, SWithout)
             end
     end.
 
-retire_dtx_submission(Digest, Waiters, Reason,
-                      S = #s{dtx_submissions = Submissions}) ->
-    case maps:get(Digest, Submissions, undefined) of
-        #dtx_submission{control = Control,
-                        observation_started_at = StartedAt} ->
-            observe_simplex_owner_terminal(
-              S, dtx_control, quod_dtx:control_kind(Control),
-              dtx_retirement_result(Reason), StartedAt);
-        undefined ->
-            ok
-    end,
-    reply_waiters(
-      Waiters, {error, Reason},
-      S#s{dtx_submissions = maps:remove(Digest, Submissions)}).
+retire_dtx_submission(Digest, Reason, S) ->
+    finish_retained_dtx(
+      Digest, dtx_retirement_result(Reason), {error, Reason}, S).
 
-abandon_dtx_submissions(Reason,
-                        S = #s{dtx_submissions = Submissions}) ->
-    S0 = S#s{dtx_submissions = #{}},
-    maps:fold(
-      fun(_Digest, #dtx_submission{
-                     waiters = Waiters, control = Control,
-                     observation_started_at = StartedAt}, Acc0) ->
-              observe_simplex_owner_terminal(
-                S, dtx_control, quod_dtx:control_kind(Control),
-                dtx_retirement_result(Reason), StartedAt),
-              lists:foldl(
-                fun(Waiter, Acc) ->
-                        reply_waiter(Waiter, {error, Reason}, Acc)
-                end, Acc0, Waiters)
-      end, S0, Submissions).
+finish_retained_dtx(Digest, Result, Reply,
+                    S = #s{retained_dtx = Registry}) ->
+    case retained_take(Digest, Registry) of
+        {Row, Registry1} ->
+            finish_detached_retained_dtx(
+              Row, Result, Reply, S#s{retained_dtx = Registry1});
+        error ->
+            S
+    end.
+
+finish_detached_retained_dtx(
+  Row = #dtx_submission{control = Control,
+                        observation_started_at = StartedAt},
+  Result, Reply, S) ->
+    observe_simplex_owner_terminal(
+      S, dtx_control, quod_dtx:control_kind(Control), Result, StartedAt),
+    reply_waiters(retained_waiter_tags(Row), Reply, S).
+
+abandon_retained_dtx(Reason,
+                     S = #s{retained_dtx = Registry}) ->
+    lists:foldl(
+      fun(Digest, Acc) -> retire_dtx_submission(Digest, Reason, Acc) end,
+      S, maps:keys(retained_rows(Registry))).
 
 prune_block_requests(Committed, Requests) ->
     maps:filter(fun({Slot, _BH}, _Retry) -> Slot > Committed end, Requests).
@@ -8168,23 +8315,19 @@ reject_dtx_candidate(Sl, BH, Reason, S) ->
 
 retire_invalid_dtx_submission(
   Payload, Reasons,
-  S = #s{dtx_submissions = Submissions,
+  S = #s{retained_dtx = Registry,
          dtx_projection = Projection}) ->
     case quod_ledger:classify(Payload) of
         {Kind, Control}
           when Kind =:= 'begin'; Kind =:= prepare; Kind =:= decision;
                Kind =:= finalize; Kind =:= complete ->
             Digest = quod_dtx:record_digest(Control),
-            case maps:take(Digest, Submissions) of
-                {#dtx_submission{waiters = Waiters,
-                                 observation_started_at = StartedAt}, Rest} ->
-                    observe_simplex_owner_terminal(
-                      S, dtx_control, Kind, rejected, StartedAt),
+            case maps:is_key(Digest, retained_rows(Registry)) of
+                true ->
                     Reply = invalid_dtx_submission_reply(
                               Kind, Digest, Reasons, Projection, S),
-                    reply_waiters(
-                      Waiters, Reply, S#s{dtx_submissions = Rest});
-                error ->
+                    finish_retained_dtx(Digest, rejected, Reply, S);
+                false ->
                     S
             end;
         _ ->
@@ -8470,8 +8613,11 @@ keep_progress(S0, S1, Actions, TimerMode) ->
     SCoordinated = timed_step(
                      SRecovered, dtx_coordinator,
                      fun() -> reconcile_dtx_coordinator(SRecovered) end),
-    SDtx = timed_step(SCoordinated, dtx_drive,
-                      fun() -> drive_retained_dtx(SCoordinated) end),
+    SClassified = timed_step(
+                    SCoordinated, dtx_reclassify,
+                    fun() -> refresh_retained_readiness(SCoordinated) end),
+    SDtx = timed_step(SClassified, dtx_drive,
+                      fun() -> drive_retained_dtx(SClassified) end),
     {SAdmitted, ActionsRevAdmission} =
         timed_step(
           SDtx, dtx_admission,
@@ -12498,21 +12644,15 @@ stats_map(S) ->
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
 
 simplex_owner_current(
-  #s{dtx_submissions = Submissions, dtx_correlations = Correlations,
+  #s{retained_dtx = Registry, dtx_correlations = Correlations,
      dtx_workers = Workers}) ->
-    Waiters = maps:fold(
-                fun(_Digest, #dtx_submission{waiters = Ws}, Total) ->
-                        Total + length(Ws)
-                end, 0, Submissions),
-    Bytes = maps:fold(
-              fun(_Digest, #dtx_submission{envelope = Envelope}, Total) ->
-                      Total + byte_size(Envelope)
-              end, 0, Submissions),
-    {#{dtx_control => #{retained => map_size(Submissions),
-                        waiters => Waiters},
+    {#{dtx_control => #{retained => retained_count(Registry),
+                        ready => retained_ready_count(Registry),
+                        blocked => retained_blocked_count(Registry),
+                        waiters => retained_waiter_count(Registry)},
        dtx_endpoint => #{outbound => map_size(Correlations),
                          inbound => map_size(Workers)}},
-     #{dtx_control => Bytes}}.
+     #{dtx_control => Registry#retained_dtx.bytes}}.
 
 track_owner_peaks(S = #s{owner_row_peaks = RowPeaks0,
                          owner_byte_peaks = BytePeaks0}) ->

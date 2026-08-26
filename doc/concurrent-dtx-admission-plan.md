@@ -189,7 +189,7 @@ The admission predicate has exactly three independently changing inputs:
 
 1. the DTX projection has `active := none`;
 2. `pending_begin_projection(SigningJournal) =:= none`; and
-3. `dtx_submissions` contains no retained Begin.
+3. the retained-DTX registry contains no Begin.
 
 Put one admission-progress function at the end of the existing Simplex
 settling flow, after projection adoption, signing-journal reconciliation, and

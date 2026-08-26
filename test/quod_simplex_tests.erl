@@ -641,22 +641,42 @@ dtx_endpoint_prepare_refusal_replies_and_cleans_test() ->
         Worker ! stop
     end.
 
-%% Endpoint retries for one semantic record cannot accumulate dead gen_statem
-%% From tuples after their callers time out. The existing pending phase is the
-%% recovery signal; a second waiter is backpressured.
-dtx_submission_keeps_one_exact_waiter_test() ->
+%% Duplicate endpoint requests share one signed envelope while retaining their
+%% distinct monitored workers. One certified commit releases both exactly once.
+dtx_submission_shares_one_envelope_between_waiters_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),
     Control = maps:get(prepare_control, Fixture),
     Record = maps:get(prepare, Fixture),
-    First = {self(), make_ref()},
-    Second = {self(), make_ref()},
+    Parent = self(),
+    First = spawn(fun() -> dtx_waiter_probe(Parent, first) end),
+    Second = spawn(fun() -> dtx_waiter_probe(Parent, second) end),
     S0 = quod_simplex:test_seed_dtx_submission(
-           Control, [First], st(#{})),
-    ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)),
-    ?assertEqual(
-       {error, busy},
-       quod_simplex:test_retain_dtx_record(Record, Second, S0)),
-    ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)).
+           Control, [{dtx_endpoint, First}], st(#{})),
+    try
+        ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(S0)),
+        {ok, Shared} = quod_simplex:test_retain_dtx_record(
+                         Record, {dtx_endpoint, Second}, S0),
+        ?assertEqual(2, quod_simplex:test_dtx_submission_waiters(Shared)),
+        {Entry, Payload} = committed_dtx_test_entry(Control, 1),
+        Done = quod_simplex:test_resolve_committed_dtx(
+                 Entry, Payload, Shared),
+        receive {dtx_waiter_probe, first, {ok, _}} -> ok after 1000 ->
+            error(missing_first_dtx_waiter_reply)
+        end,
+        receive {dtx_waiter_probe, second, {ok, _}} -> ok after 1000 ->
+            error(missing_second_dtx_waiter_reply)
+        end,
+        ?assertEqual(0, quod_simplex:test_dtx_submission_waiters(Done))
+    after
+        exit(First, kill),
+        exit(Second, kill)
+    end.
+
+dtx_waiter_probe(Parent, Label) ->
+    receive
+        {dtx_submit_result, Reply} ->
+            Parent ! {dtx_waiter_probe, Label, Reply}
+    end.
 
 %% Several sealed proofs share one FIFO, but only its head becomes the dormant
 %% Begin and only activation creates a retained signing-journal submission.
@@ -989,6 +1009,7 @@ dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test() ->
                               Worker, local, Request, {caller, From}, st(#{})),
     Retained = quod_simplex:test_seed_dtx_submission(
                  Control, [{dtx_endpoint, Worker}], WithWorker),
+    RetainedState = quod_simplex:test_retained_dtx_state(Retained),
     exit(Worker, kill),
     receive
         {'DOWN', Monitor, process, Worker, killed} -> ok
@@ -998,6 +1019,13 @@ dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test() ->
     {true, Detached, _Actions} = quod_simplex:test_drop_dtx_endpoint_owner(
                                    Monitor, Worker, Retained),
     ?assertEqual(0, quod_simplex:test_dtx_submission_waiters(Detached)),
+    DetachedState = quod_simplex:test_retained_dtx_state(Detached),
+    ?assertEqual(maps:get(bytes, RetainedState),
+                 maps:get(bytes, DetachedState)),
+    ?assertEqual(#{}, maps:get(waiter_index, DetachedState)),
+    ?assertEqual(
+       maps:get(retained, DetachedState),
+       maps:get(ready, DetachedState) + maps:get(blocked, DetachedState)),
     ?assertEqual(
        1, maps:get(submissions,
                    quod_simplex:test_dtx_endpoint_counts(Detached))),
@@ -1005,7 +1033,11 @@ dtx_endpoint_owner_down_detaches_waiter_but_retains_submission_test() ->
     try
         {ok, Retried} = quod_simplex:test_retain_dtx_record(
                           Record, {dtx_endpoint, RetryOwner}, Detached),
-        ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(Retried))
+        ?assertEqual(1, quod_simplex:test_dtx_submission_waiters(Retried)),
+        ?assertEqual(
+           #{RetryOwner => quod_dtx:record_digest(Record)},
+           maps:get(waiter_index,
+                    quod_simplex:test_retained_dtx_state(Retried)))
     after
         RetryOwner ! stop
     end.
@@ -1087,7 +1119,7 @@ dtx_owner_stats_keep_peak_after_committed_cleanup_test() ->
                st(#{eng => quod_simplex:eng_with_certs(0, [])})),
     SeededStats = quod_simplex:stats_map(Seeded),
     ?assertEqual(
-       #{retained => 1, waiters => 0},
+       #{retained => 1, ready => 1, blocked => 0, waiters => 0},
        maps:get(dtx_control, maps:get(owner_current, SeededStats))),
     RetainedBytes = maps:get(
                       dtx_control,
@@ -1098,7 +1130,7 @@ dtx_owner_stats_keep_peak_after_committed_cleanup_test() ->
         quod_simplex:test_keep_progress_transition(Seeded, Seeded),
     TrackedStats = quod_simplex:stats_map(Tracked),
     ?assertEqual(
-       #{retained => 1, waiters => 0},
+       #{retained => 1, ready => 1, blocked => 0, waiters => 0},
        maps:get(dtx_control, maps:get(owner_peak, TrackedStats))),
     ?assertEqual(
        RetainedBytes,
@@ -1109,10 +1141,10 @@ dtx_owner_stats_keep_peak_after_committed_cleanup_test() ->
                 Entry, Payload, Tracked),
     ClearedStats = quod_simplex:stats_map(Cleared),
     ?assertEqual(
-       #{retained => 0, waiters => 0},
+       #{retained => 0, ready => 0, blocked => 0, waiters => 0},
        maps:get(dtx_control, maps:get(owner_current, ClearedStats))),
     ?assertEqual(
-       #{retained => 1, waiters => 0},
+       #{retained => 1, ready => 1, blocked => 0, waiters => 0},
        maps:get(dtx_control, maps:get(owner_peak, ClearedStats))),
     ?assertEqual(
        0, maps:get(dtx_control,
@@ -1446,6 +1478,38 @@ dtx_retained_selection_skips_an_older_ineligible_group_test() ->
        quod_simplex:test_dtx_retain_admissible(Decision, Completed)),
     WithOlder = quod_simplex:test_seed_dtx_submission_at(
                   maps:get(begin_control, Older), [], 10, ActiveMarked),
+    ?assertMatch(
+       #{retained := 1, ready := 0, blocked := 1},
+       quod_simplex:test_retained_dtx_state(WithOlder)),
+    %% A row held only for local apply does not stop unrelated ordinary
+    %% content. The durable active-group lock below remains independent.
+    OlderOrigin = {OlderNs, OlderAnchor} = maps:get(origin, Older),
+    ApplyBlockedProjection =
+        (quod_dtx:initial_projection(OlderOrigin, 0))#{
+          proof_fence := {pending_apply, <<201:256>>, 1, 0}},
+    ApplyBlocked = quod_simplex:test_seed_dtx_submission(
+                     maps:get(begin_control, Older), [],
+                     st(#{ns => OlderNs, genesis_hash => OlderAnchor,
+                          dtx_projection => ApplyBlockedProjection,
+                          eng => quod_simplex:eng_with_certs(0, [])})),
+    ?assertMatch(
+       #{retained := 1, ready := 0, blocked := 1},
+       quod_simplex:test_retained_dtx_state(ApplyBlocked)),
+    ?assertNot(quod_simplex:test_consensus_barrier(ApplyBlocked)),
+    IndexedBlocked = quod_simplex:test_refresh_retained_readiness(
+                       ApplyBlocked),
+    BlockedState = quod_simplex:test_retained_dtx_state(IndexedBlocked),
+    Opened = quod_simplex:test_refresh_retained_readiness(
+               quod_simplex:test_state_set(
+                 dtx_projection,
+                 quod_dtx:initial_projection(OlderOrigin, 0),
+                 IndexedBlocked)),
+    OpenedState = quod_simplex:test_retained_dtx_state(Opened),
+    ?assertMatch(#{retained := 1, ready := 1, blocked := 0}, OpenedState),
+    ?assertEqual(maps:get(bytes, BlockedState), maps:get(bytes, OpenedState)),
+    [{InsertedAt, _}] = maps:get(blocked_order, BlockedState),
+    [{InsertedAt, _}] = maps:get(ready_order, OpenedState),
+    ?assert(quod_simplex:test_consensus_barrier(Opened)),
     WithBoth = quod_simplex:test_seed_dtx_submission_at(
                  DecisionControl, [], 20, WithOlder),
     ?assert(quod_simplex:test_consensus_barrier(WithBoth)),
@@ -1457,6 +1521,164 @@ dtx_retained_selection_skips_an_older_ineligible_group_test() ->
     ?assertEqual(
        2, maps:get(submissions,
                    quod_simplex:test_dtx_endpoint_counts(WithBoth))).
+
+%% Retention is governed by phase readiness, not by a compiled row count. The
+%% old nine-row guard would reject this exact tenth insertion with `busy`.
+dtx_retained_registry_has_no_population_cap_test() ->
+    {Self, Seed} = quod_identity:generate(),
+    Signer = #{pubkey => Self,
+               key => quod_identity:key_term({Self, Seed})},
+    Origin = {Ns, Anchor} = {<<"quod:dtx-unlimited">>, <<151:256>>},
+    Admission = <<152:256>>,
+    Active = quod_ct:signed_dtx_begin_fixture(
+               #{target => Origin, node_identity => Signer,
+                 admission => Admission, proof_id => <<153:256>>}),
+    Begin = maps:get('begin', Active),
+    BeginRef = dtx_test_ref(Origin, 1, quod_dtx:record_digest(Begin)),
+    H0 = quod_dtx:initial_group_history(),
+    P0 = quod_dtx:initial_projection(Origin, 0),
+    {ok, H1, P1, _} = quod_dtx:reduce(
+                         maps:get(begin_control, Active), BeginRef, H0, P0),
+    {ok, OwnPrepare} = quod_dtx:new_prepare(Begin, BeginRef, Origin),
+    {ok, OwnPrepareControl} = quod_dtx:sign_control(
+                                Origin, OwnPrepare, Admission, 2, 2, Signer),
+    OwnPrepareRef = dtx_test_ref(
+                      Origin, 2, quod_dtx:record_digest(OwnPrepare)),
+    {ok, _H2, Locked, _} = quod_dtx:reduce(
+                             OwnPrepareControl, OwnPrepareRef, H1, P1),
+    FutureRows =
+        [begin
+             Future = quod_ct:signed_dtx_begin_fixture(
+                        #{target => Origin, node_identity => Signer,
+                          admission => Admission,
+                          proof_id => <<I:256>>}),
+             FutureBegin = maps:get('begin', Future),
+             FutureBeginRef = dtx_test_ref(
+                                Origin, I + 10,
+                                quod_dtx:record_digest(FutureBegin)),
+             {ok, FuturePrepare} = quod_dtx:new_prepare(
+                                     FutureBegin, FutureBeginRef, Origin),
+             {I, maps:get(begin_control, Future), FutureBegin,
+              FutureBeginRef, FuturePrepare}
+         end || I <- lists:seq(1, 12)],
+    Dir = relay_store_dir("dtx_unlimited_retention"),
+    {ok, Journal0} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Self, id => Signer, validators => [Self],
+                  sync => ready,
+                  author_admissions => #{Self => Admission},
+                  signing_journal => Journal0,
+                  dtx_projection => Locked}),
+        Retained = lists:foldl(
+                     fun({I, _BeginControl, _Begin, _BeginRef, Prepare}, S) ->
+                             case quod_simplex:test_retain_dtx_record(
+                                    Prepare, none, S) of
+                                 {ok, S1} -> S1;
+                                 {error, Reason} -> error({retain_failed, I, Reason})
+                             end
+                     end, S0, FutureRows),
+        ?assertMatch(
+           #{retained := 12, ready := 0, blocked := 12,
+             waiters := 0, bytes := Bytes} when Bytes > 0,
+           quod_simplex:test_retained_dtx_state(Retained)),
+        %% Use explicit insertion ordinals to pin deterministic FIFO behavior
+        %% independently of millisecond clock ties. Once the unrelated group
+        %% clears, every future Begin is ready; selecting one makes all later
+        %% rows blocked behind it, and clearing it restores the original order.
+        SeededBegins = lists:foldl(
+                         fun({I, BeginControl, _Begin, _BeginRef, _Prepare}, S) ->
+                                 quod_simplex:test_seed_dtx_submission_at(
+                                   BeginControl, [], I, S)
+                         end,
+                         quod_simplex:test_state_set(
+                           retained_dtx, empty, S0),
+                         FutureRows),
+        Open = quod_simplex:test_refresh_retained_readiness(
+                 quod_simplex:test_state_set(
+                   dtx_projection, P0, SeededBegins)),
+        assert_future_begin_progress(FutureRows, Open, P0)
+    after
+        _ = catch quod_signing_journal:close(Journal0),
+        _ = file:del_dir_r(Dir)
+    end.
+
+assert_future_begin_progress([], S, _OpenProjection) ->
+    ?assertMatch(
+       #{retained := 0, ready := 0, blocked := 0},
+       quod_simplex:test_retained_dtx_state(S));
+assert_future_begin_progress(
+  [{_I, BeginControl, Begin, BeginRef, _Prepare} | Rest],
+  S0, OpenProjection) ->
+    Digest = quod_dtx:record_digest(Begin),
+    ?assertEqual(
+       {Digest, Begin},
+       quod_simplex:test_oldest_eligible_dtx_submission(S0)),
+    {ok, _History, ActiveProjection, _Effects} =
+        quod_dtx:reduce(
+          BeginControl, BeginRef, quod_dtx:initial_group_history(),
+          OpenProjection),
+    Active = quod_simplex:test_refresh_retained_readiness(
+               quod_simplex:test_state_set(
+                 dtx_projection, ActiveProjection, S0)),
+    Remaining = length(Rest),
+    ?assertMatch(
+       #{retained := Remaining, ready := 0, blocked := Remaining},
+       quod_simplex:test_retained_dtx_state(Active)),
+    Reopened0 = quod_simplex:test_state_set(
+                  dtx_last_group, quod_dtx:group_id(Begin), Active),
+    Reopened = quod_simplex:test_refresh_retained_readiness(
+                 quod_simplex:test_state_set(
+                   dtx_projection, OpenProjection, Reopened0)),
+    ?assertMatch(
+       #{retained := Remaining, ready := Remaining, blocked := 0},
+       quod_simplex:test_retained_dtx_state(Reopened)),
+    assert_future_begin_progress(Rest, Reopened, OpenProjection).
+
+%% Re-signing replaces one row through the same registry mutation path: its
+%% scheduling age and exact envelope bytes change, while its observation age
+%% and semantic digest remain stable.
+dtx_retained_resign_updates_exact_bytes_and_preserves_observation_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Target = {Ns, Anchor} = maps:get(target, Fixture),
+    Signer = #{pubkey := Self} = maps:get(signer, Fixture),
+    Admission = maps:get(admission, Fixture),
+    Record = maps:get(prepare, Fixture),
+    Control = maps:get(prepare_control, Fixture),
+    Digest = quod_dtx:record_digest(Record),
+    Meta = quod_dtx:control_metadata(Control),
+    Lane = {maps:get(author_admission, Meta), maps:get(author, Meta)},
+    Dir = relay_store_dir("dtx_resign_accounting"),
+    {ok, Journal0} = quod_signing_journal:initialize(Ns, ?DOMAIN, Dir),
+    try
+        S0 = st(#{ns => Ns, genesis_hash => Anchor,
+                  self => Self, id => Signer, validators => [Self],
+                  sync => ready,
+                  author_admissions => #{Self => Admission},
+                  signing_journal => Journal0,
+                  dtx_projection => quod_dtx:initial_projection(Target, 0),
+                  dtx_lanes => #{Lane => maps:get(sequence, Meta)}}),
+        Seeded = quod_simplex:test_seed_dtx_submission_at(
+                   Control, [], 10, S0),
+        Before = quod_simplex:test_retained_dtx_state(Seeded),
+        BeforeRow = maps:get(Digest, maps:get(rows, Before)),
+        Renewed = quod_simplex:test_refresh_retained_dtx_signatures(Seeded),
+        After = quod_simplex:test_retained_dtx_state(Renewed),
+        AfterRow = maps:get(Digest, maps:get(rows, After)),
+        ?assertEqual(10, maps:get(observation_started_at, AfterRow)),
+        ?assertNotEqual(10, maps:get(inserted_at, AfterRow)),
+        ?assertNotEqual(maps:get(envelope, BeforeRow),
+                        maps:get(envelope, AfterRow)),
+        ?assertEqual(
+           maps:get(bytes, Before) - maps:get(bytes, BeforeRow)
+             + maps:get(bytes, AfterRow),
+           maps:get(bytes, After)),
+        ?assertEqual(1, maps:get(ready, After)),
+        ?assertEqual(0, maps:get(blocked, After))
+    after
+        _ = catch quod_signing_journal:close(Journal0),
+        _ = file:del_dir_r(Dir)
+    end.
 
 %% The owner starts recovery from the journal-retained Begin immediately and
 %% replaces a crashed volatile worker from the same durable source after a
@@ -1534,7 +1756,7 @@ dtx_committed_begin_replaces_pre_begin_coordinator_test() ->
                                       quod_dtx:initial_group_history(),
                                       quod_dtx:initial_projection(Origin, 0)),
     Committed = quod_simplex:test_state_set(
-                  dtx_submissions, #{},
+                  retained_dtx, empty,
                   quod_simplex:test_state_set(
                     dtx_projection, Projection, PreBegin)),
     Recovering = quod_simplex:test_reconcile_dtx_coordinator(Committed),
@@ -1983,17 +2205,15 @@ dtx_invalid_finalize_is_released_for_phase_replan_test() ->
     {ok, Control} = quod_dtx:sign_control(
                       Target, DirectAbort, <<46:256>>, 1, 1, AuthorId),
     {ok, ControlBlob} = quod_dtx:encode_control(Control),
-    Tag = make_ref(),
-    From = {self(), Tag},
     S0 = st(#{ns => Ns, genesis_hash => Anchor, self => Author,
               validators => [Author], sync => ready,
               dtx_projection => quod_dtx:initial_projection(Target, 1)}),
     Retained = quod_simplex:test_seed_dtx_submission(
-                 Control, [From], S0),
+                 Control, [{dtx_endpoint, self()}], S0),
     Done = quod_simplex:test_retire_invalid_dtx(
              {dtx, ControlBlob}, [generation_changed], Retained),
     receive
-        {Tag, {error, retry}} -> ok
+        {dtx_submit_result, {error, retry}} -> ok
     after 1000 ->
         error(missing_finalize_replan_reply)
     end,

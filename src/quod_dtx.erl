@@ -91,7 +91,7 @@ its proof fence but never change consensus-derived generation state.
          begin_group_ref/1, begin_recovery_rows/1,
          certified_ref_binding/1, recovery_phase/1, history_phase/2,
          initial_projection/2, valid_projection/1, origin_recovery/1,
-         proposal_allowed/2,
+         proposal_readiness/2,
          initial_group_history/0, preview/6, reduce/4,
          acknowledge_finalize/4]).
 -export_type([plan/0, principal/0, transcript_entry/0,
@@ -2440,49 +2440,107 @@ origin_recovery(Projection) ->
             none
     end.
 
--doc "Whether one already-validated retained control is the next phase this projection may propose.".
--spec proposal_allowed(control_record(), projection()) -> boolean().
-proposal_allowed(
+-doc "Classify one already-validated retained control against the current projection.".
+-spec proposal_readiness(control_record(), projection()) ->
+          ready | {blocked, active_group | apply} | stale.
+proposal_readiness(Record, Projection) ->
+    case valid_projection(Projection) of
+        true -> proposal_readiness_valid(Record, Projection);
+        false -> stale
+    end.
+
+proposal_readiness_valid(
+  {quod_dtx_finalize, ?RECORD_VERSION, <<_:256>>, _, abort, none, _},
+  _Projection) ->
+    %% A direct abort is a metadata-only tombstone. The reducer proves its
+    %% Decision binding and deliberately leaves any unrelated lock untouched.
+    ready;
+proposal_readiness_valid(
   {quod_dtx_begin, ?RECORD_VERSION, _, _, _},
-  #{active := none, consensus_lock := open}) ->
-    true;
-proposal_allowed(
+  #{active := none, consensus_lock := open, proof_fence := open}) ->
+    ready;
+proposal_readiness_valid(
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _},
+  #{active := none, consensus_lock := open,
+    proof_fence := {pending_apply, _, _, _}}) ->
+    {blocked, apply};
+proposal_readiness_valid(
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _} = Begin,
+  #{active := #{group_id := ActiveGroup}}) ->
+    case group_id(Begin) of
+        ActiveGroup -> stale;
+        _FutureGroup -> {blocked, active_group}
+    end;
+proposal_readiness_valid(
+  {quod_dtx_begin, ?RECORD_VERSION, _, _, _}, _Projection) ->
+    stale;
+proposal_readiness_valid(
   {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>>, _, _, _, _},
-  #{active := none, consensus_lock := open}) ->
-    true;
-proposal_allowed(
+  #{active := none, consensus_lock := open, proof_fence := open}) ->
+    ready;
+proposal_readiness_valid(
+  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>>, _, _, _, _},
+  #{active := none, consensus_lock := open,
+    proof_fence := {pending_apply, _, _, _}}) ->
+    {blocked, apply};
+proposal_readiness_valid(
   {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
   #{active := #{group_id := GroupId, origin := Origin, participant := none},
-    consensus_lock := open}) ->
-    Origin =/= none;
-proposal_allowed(
+    consensus_lock := open, proof_fence := open})
+  when Origin =/= none ->
+    ready;
+proposal_readiness_valid(
+  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
+  #{active := #{group_id := GroupId, origin := Origin, participant := none},
+    consensus_lock := open,
+    proof_fence := {pending_apply, _, _, _}})
+  when Origin =/= none ->
+    {blocked, apply};
+proposal_readiness_valid(
+  {quod_dtx_prepare, ?RECORD_VERSION, <<_:256>> = GroupId, _, _, _, _},
+  #{active := #{group_id := ActiveGroup}})
+  when GroupId =/= ActiveGroup ->
+    {blocked, active_group};
+proposal_readiness_valid(
   {quod_dtx_decision, ?RECORD_VERSION, <<_:256>> = GroupId,
    _, _, _, _},
   #{active := #{group_id := GroupId,
                 origin := #{phase := begun}},
-    consensus_lock := Lock}) ->
-    Lock =:= open orelse Lock =:= {locked, GroupId};
-proposal_allowed(
-  {quod_dtx_finalize, ?RECORD_VERSION, <<_:256>>, _, abort, none, _},
-  _Projection) ->
-    %% A direct abort is a metadata-only tombstone.  The reducer proves its
-    %% Decision binding and deliberately leaves any unrelated lock untouched.
-    true;
-proposal_allowed(
+    consensus_lock := Lock})
+  when Lock =:= open; Lock =:= {locked, GroupId} ->
+    ready;
+proposal_readiness_valid(
   {quod_dtx_finalize, ?RECORD_VERSION, <<_:256>> = GroupId,
    _, _, _PrepareRef, _},
   #{active := #{group_id := GroupId,
+                origin := Origin,
                 participant := #{phase := prepared}},
-    consensus_lock := {locked, GroupId}}) ->
-    true;
-proposal_allowed(
+    consensus_lock := {locked, GroupId},
+    proof_fence := {pending, GroupId}}) ->
+    case Origin of
+        none -> ready;
+        #{phase := {decided, _}} -> ready;
+        _ ->
+            %% A relayed copy may reach a leader whose committed prefix still
+            %% lacks this certified Decision. Do not propose Finalize early:
+            %% origin custody keeps the relay and retries at a caught-up leader.
+            stale
+    end;
+proposal_readiness_valid(
   {quod_dtx_complete, ?RECORD_VERSION, <<_:256>> = GroupId, _, _},
   #{active := #{group_id := GroupId, participant := none,
                 origin := #{phase := {decided, _}}},
-    consensus_lock := open}) ->
-    true;
-proposal_allowed(_Record, _Projection) ->
-    false.
+    consensus_lock := open, proof_fence := open}) ->
+    ready;
+proposal_readiness_valid(
+  {quod_dtx_complete, ?RECORD_VERSION, <<_:256>> = GroupId, _, _},
+  #{active := #{group_id := GroupId, participant := none,
+                origin := #{phase := {decided, _}}},
+    consensus_lock := open,
+    proof_fence := {pending_apply, _, _, _}}) ->
+    {blocked, apply};
+proposal_readiness_valid(_Record, _Projection) ->
+    stale.
 
 -doc "Empty exact history for one GroupId (at most five records).".
 -spec initial_group_history() -> group_history().

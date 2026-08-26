@@ -2,10 +2,11 @@
 
 Status: Slice 0 is implemented, live-tested, and committed as `7b0d454`. The
 closure review's safety correction is incorporated. Slice 0.5's inventory is
-complete. Slice 0.6 is implemented in the working tree: the browser contracts,
-shipped assets, stale documentation, owner-state metrics, and Grafana panels
-are corrected without changing protocol behavior. No later protocol change is
-implemented yet.
+complete. Slice 0.6 is independently reviewed and committed as `c34f3c2`: the
+browser contracts, shipped assets, stale documentation, owner-state metrics,
+and Grafana panels are corrected without changing protocol behavior. Slice
+0.7 is implemented in the current working tree and its local gates pass; it is
+awaiting independent final review and is not committed or deployed.
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 
@@ -812,7 +813,7 @@ before considering a compact portable committee proof.
 - scheduled every operational-cap removal only after exact ownership and
   cleanup, rather than applying isolated constant changes.
 
-### Slice 0.6 -- contract correction and closed-label observability
+### Slice 0.6 -- contract correction and closed-label observability (complete)
 
 - define one shared JavaScript protocol-limit owner used by agent references,
   request encoding, and the operation journal; fix the namespace and maximum
@@ -856,39 +857,174 @@ limit.
 
 ### Slice 0.7 -- one retained-control owner
 
-- keep semantic DTX custody inside the existing Simplex owner; do not add a
-  second custody process or queue;
-- keep the registry volatile/rebuildable: the existing signing journal remains
-  the subordinate anti-equivocation owner and durably stores only its singleton
-  pending Begin; later phase envelopes remain reconstructed from coordinator
-  and replay state;
-- refactor the existing pure DTX transition predicates into one canonical
-  **proposal readiness** check covering the active group, consensus lock, and
-  local `proof_fence`; both drive selection and the consensus barrier call that
-  function, so no registry-specific transition logic exists;
-- keep the broader role-acquisition rule only for deciding which future
-  Begin/Prepare controls may be retained behind the current group;
-- replace whole-map sorting with one digest-keyed registry and ready/blocked
-  ordered indexes;
-- reclassify rows through that same readiness function after every committed
-  projection change, exact `finalize_applied`, recovery transition, and
-  re-sign;
-- bind every waiter and byte to that row and retire all indexes through one
-  idempotent function;
-- make the consensus barrier depend on proposal-ready retained work rather
-  than any parked row; and
-- only after tests prove ownership and barrier behavior, delete the fixed
-  count of nine, one-waiter ceiling, and both `busy` paths.
+This slice changes local custody and scheduling only. It changes no ledger,
+wire, control, certificate, signing-journal, ACL, reducer, or verifier format,
+needs no genesis re-found, and introduces no process, store, queue service, or
+second authority.
 
-The proof includes a restart with mixed ready and blocked rows: volatile
-indexes rebuild from coordinator/replay state, the barrier reflects only ready
-work, the signing journal still has exactly one pending Begin, and no envelope
-or waiter is duplicated.
+#### State and ownership
 
-Here, “blocked on apply” means the local projection has
-`proof_fence = {pending_apply, ...}`. It does not mean a Complete whose remote
-participant preflight has not passed; that remains the existing verifier path
-in section 6.
+- Keep semantic DTX custody inside the existing Simplex process. Replace its
+  loose `dtx_submissions` map with one private `#retained_dtx{}` sub-state,
+  still owned and mutated only by that process. The sub-state contains the
+  canonical digest-to-row map, ready and blocked `gb_sets`, an endpoint-worker
+  pid-to-digest reverse index, and the current exact envelope-byte total. It is
+  a bundled invariant, not a new runtime owner.
+- Keep one row per canonical semantic record digest. The row retains the
+  current signed control/envelope, GroupId, scheduling `inserted_at`, metrics
+  `observation_started_at`, relay retry time, exact envelope bytes, placement,
+  and a set of live endpoint-worker waiters. A duplicate semantic request
+  attaches its distinct live worker to that row; it never signs or stores a
+  second envelope.
+- Order both placement indexes by `{inserted_at, Digest}`. Ready selection is
+  `gb_sets:smallest/1`, so unrelated map population no longer causes a full
+  sort. A blocked row keeps its original order when it becomes ready. A real
+  re-sign retains `observation_started_at` but deliberately receives the new
+  scheduling `inserted_at`, preserving the behavior pinned in Slice 0.6.
+- Keep the registry volatile and rebuildable. The signing journal remains the
+  subordinate anti-equivocation owner: it durably stores sequence floors and
+  exactly one pending Begin body/envelope, never this registry or later phase
+  rows. Startup inserts that recovered Begin through the same registry helper;
+  coordinator/replay state and authenticated remote retry reconstruct later
+  phases through normal submission. No volatile row is falsely described as
+  crash-durable.
+
+#### One readiness decision
+
+- Replace the boolean `quod_dtx:proposal_allowed/2` scheduler hint with one
+  pure `proposal_readiness/2` result: `ready`, `{blocked, active_group}` or
+  `{blocked, apply}`, or `stale`. Its phase table is derived from the existing
+  reducer transitions and covers the active group, `consensus_lock`, and the
+  phase-specific `proof_fence` rules. The certified reducer remains final
+  authority; readiness only decides retention and proposal scheduling.
+- Preserve the existing certified direct-abort exception through that same
+  phase table. Do not add a Simplex special case for it. A generated test
+  crosses every DTX phase with every reachable local protocol/gate shape and
+  compares the result with the reducer before and after the exact apply
+  acknowledgement: every `ready` row must be reducer-admissible, and the
+  deliberate local `{blocked, apply}` hold is pinned separately so scheduler
+  and apply semantics cannot drift or be mistaken for identical authorities.
+- Compare the same fixtures in the reverse direction too: every transition
+  the reducer can accept must be `ready` or an explicitly enumerated local
+  apply hold, never `stale`. In particular, a same-group Prepare or Complete
+  waiting behind earlier local apply work is `{blocked, apply}`, while a
+  same-group Decision remains ready because its reducer admission does not
+  depend on that fence. A dual-role Finalize becomes ready only after its
+  source Decision is committed.
+- Let one Simplex `retention_disposition/3` add only the replay-owned
+  `dtx_last_group` exclusion to that result. A completed group is stale;
+  otherwise a future role-acquisition Begin/Prepare may be retained as
+  blocked. Decision, ordinary Finalize, and Complete for an unrelated group
+  remain stale rather than occupying custody forever. This is the only broader
+  retention rule and contains no duplicate phase table.
+- Use `proposal_readiness/2` in ready selection, the record-specific DTX
+  consensus barrier, and the already-existing relayed-leader delivery path.
+  Delete every production call to the old boolean helper rather than retain a
+  forwarding wrapper.
+- Reclassify retained rows once when a pure readiness fingerprint changes,
+  before `drive_retained_dtx` in the existing `keep_progress` tail. The
+  fingerprint is the committed DTX projection plus `dtx_last_group`; this one
+  seam covers committed projection changes, exact `finalize_applied`, replay,
+  and recovery. Initial insertion and re-sign use the same placement helper.
+  Do not scatter event-specific reclassification branches through callbacks.
+
+Here, `{blocked, apply}` means the local committed projection has the exact
+`proof_fence = {pending_apply, ...}` that prevents this phase from being driven
+until the existing `finalize_applied` acknowledgement. It does not describe a
+Complete whose *remote* participant preflight has not passed; that remains the
+existing verifier path in section 6.
+
+`stale` is terminal for this Simplex copy: use it when the exact record is not
+proposable now or after the exact local pending-apply acknowledgement. Every
+such local apply condition must be represented by a `{blocked, _}` result so
+custody is preserved rather than refused. Other protocol progress is redriven
+from the origin-owned authenticated relay retry, rather than duplicating
+cross-node custody in this registry.
+
+#### One mutation and finish path
+
+- Route new retention, duplicate attachment, restored pending Begin,
+  re-signing, placement changes, waiter detachment, committed resolution,
+  deterministic refusal, and explicit live-owner admission/binding retirement
+  through registry helpers that update the row, its one placement index,
+  waiter reverse index, and byte total atomically in the Simplex turn. Process
+  shutdown still emits no synthetic terminal result, as Slice 0.6 specifies.
+- Retire by semantic digest through one idempotent take function. It removes
+  the row and its exact placement key, removes every reverse waiter entry,
+  decrements bytes once, emits the existing closed-label terminal metric once,
+  and releases each still-live endpoint worker once. A later worker `DOWN`,
+  timeout, duplicate commit, or stale reply then finds no ownership and is
+  inert.
+- Delete the unused exported `submit_dtx/3` wrapper and its raw
+  `{submit_dtx, Record}` gen_statem call clause if the final pre-edit sweep
+  still finds no production consumer. All real local and remote submissions
+  already use `dtx_endpoint_local/3` or the authenticated DTX endpoint. This
+  leaves one waiter shape—monitored endpoint worker pids—and avoids preserving
+  an unmonitorable compatibility path merely to support the new registry.
+- Detach a dead/timed-out endpoint worker in O(1) through the reverse index.
+  Do not scan every retained row and do not remove the semantic row merely
+  because it temporarily has no observer; durable DTX recovery continues.
+- Derive current/peak retained, ready, blocked, waiter, and envelope-byte
+  values from this same sub-state. Add only `ready` and `blocked` to the
+  existing closed owner-state vocabulary; add no metric family or unbounded
+  label, and preserve `ready + blocked = retained` as a tested invariant.
+
+#### Barrier and deletions
+
+- The ordinary consensus barrier remains the OR of the authoritative durable
+  DTX lock, an in-flight barrier block, active DTX validation, and a non-empty
+  *ready* index. A parked future row alone is not a barrier. Do not weaken the
+  durable lock merely because no local row is currently ready.
+- The record-specific DTX barrier uses the same canonical readiness result, so
+  a same-group ready Decision/Finalize can pass its legitimate durable lock
+  while a stale or locally apply-blocked record cannot.
+- After the tests below pass, delete only the two retained-control refusals:
+  the `?QUOD_MAX_DTX_PARTICIPANTS + 1` registry-population guard and the
+  one-waiter `add_dtx_waiter` `busy` branch. Also delete the whole-map oldest
+  sort, waiter list scan, any-row retained barrier, old direct-map mutations,
+  obsolete test seams, comments, and documentation. Do **not** delete the DTX
+  endpoint worker/correlation `busy` responses in this slice; their distinct
+  ownership refactor and removal belong to Slice 1.
+
+#### Non-vacuous proof
+
+1. More than nine distinct valid future Prepare controls are retained without
+   `busy`; exactly the proposal-ready row advances, and each blocked row becomes
+   ready in deterministic original order as prior groups retire.
+2. Two live requests for one semantic digest share one envelope and both
+   receive the same certified result. One caller death removes only its waiter;
+   the row and other waiter remain. A later duplicate `DOWN` or commit cannot
+   double-reply or corrupt bytes/indexes.
+3. An older blocked row never hides a younger ready row. Opening the exact
+   projection/fence moves it between indexes without re-signing. Re-signing
+   changes scheduling time but preserves the Slice-0.6 observation epoch and
+   adjusts the byte total by the exact new-envelope delta. A Decision observed
+   under both the post-Prepare `pending` fence and a valid `pending_apply`
+   window is never stale. `acknowledge_finalize` changing only the fence must
+   trigger fingerprint reclassification.
+4. A blocked-only registry does not block ordinary content. Ready work, the
+   durable protocol lock, an in-flight barrier block, and active DTX validation
+   each independently still do. The direct-abort exception is exercised under
+   an unrelated lock through the canonical readiness function.
+5. Every row-retirement cause—commit, deterministic refusal,
+   stale/not-in-charge, re-envelope failure, and explicit live-owner
+   abandonment—leaves no stale row, order key, reverse waiter, or byte count
+   and emits at most one terminal observation. Independent caller detachment
+   removes only its reverse waiter and preserves the semantic row and bytes.
+6. Restart recovery rebuilds the journal-pending Begin through the normal
+   insertion helper; coordinator/replay and remote retry then reconstruct a
+   mixture of ready and blocked later rows. The barrier reflects only ready
+   work, the journal still contains exactly one pending Begin, sequence floors
+   do not regress, and no envelope or waiter is duplicated.
+7. Existing DTX endpoint, coordinator, recovery, replay, signed remote
+   lifecycle CT, and chained-write behavior remain green. A hardware run
+   overlaps two DTX groups on one target, restarts that target while one row is
+   ready and another logically blocked, and proves both reach one terminal
+   outcome with no `busy`, warning/error, stale owner row, or ledger fork.
+
+Required gates: focused `quod_dtx` and `quod_simplex` EUnit, full EUnit, the
+signed remote lifecycle and chained-write CT cases, compile, xref, dialyzer,
+`git diff --check`, metric/dashboard validation, and a dead/stale-code sweep.
 
 ### Slice 0.8 -- certified-history ownership
 

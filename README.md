@@ -51,7 +51,7 @@ predicates bridge committed truth to the live node and network.
 Explicit ontology subscriptions and their shared certified projections are
 specified in
 [`doc/ontology-subscription-plan.md`](doc/ontology-subscription-plan.md); the
-single applied-operation-to-`react_on/3` path planned above them is specified
+implemented single applied-operation-to-`react_on/3` path above them is specified
 in
 [`doc/event-reaction-refinement-plan.md`](doc/event-reaction-refinement-plan.md).
 
@@ -69,9 +69,10 @@ queryable `consensus_incarnation/1` nonce in slot 1, so wiping and re-founding
 the same namespace produces a new signature domain. A write sent
 to a non-leader validator is transparently relayed to the proposer of its exact
 earliest usable slot using the signed canonical bytes; signatures authenticate
-authors but never replace target `can_invoke/4` authorization. Signed human
-client goals use that path today; the generic anchored agent principal remains
-the next identity format change.
+authors but never replace target `can_invoke/4` authorization. Signed goals use
+the deployed generic anchored agent principal: the canonical
+`agent_instance_ref/3` identifies the actor, and its containing ontology proves
+the active signing key.
 The canonical consensus signature contract is
 [`doc/consensus-signatures.md`](doc/consensus-signatures.md).
 
@@ -117,12 +118,12 @@ configuration surface.
 Prometheus metrics are served at `GET /metrics` on `metrics_port` (default
 `14568`): `quod_up` and per-namespace `quod_brahms_{view_size,sample_size,links,rounds}`.
 
-The **web explorer** (live transaction list, detail view, backtracking prove
-console) is
-opt-in: `explorer.enabled` in the HOCON config, loopback-bound by default
-(`explorer.ip`/`explorer.port`, default `14569`). Frontend source lives in
-`ui/`; its built bundle is committed under `priv/explorer/` and served by the
-node itself — see `ui/README.md`.
+The **web explorer** has two entry points. `explorer.enabled` exposes the
+optional unauthenticated, read-only ledger viewer, loopback-bound by default
+(`explorer.ip`/`explorer.port`, default `14569`). The TLS client listener serves
+the same UI at `/explorer`; after challenge-response login its backtracking
+console submits ordinary signed goals. Frontend source lives in `ui/`; its
+built bundle is committed under `priv/explorer/` — see `ui/README.md`.
 
 > #### `+Q` is not optional in a container {: .warning }
 >
@@ -148,11 +149,10 @@ NODE_COUNT=8
 docker build -t "$REGISTRY/quod:$TAG" .
 docker push "$REGISTRY/quod:$TAG"
 
-# STEADY-STATE REDEPLOY — use this only after the network has already been
-# founded with this persistence generation. Release 0.7.72 activates signed
-# client writes and deliberately rejects older ledger records, so upgrading
-# to 0.7.72 must use the clean founding procedure below. Later 0.7.72
-# redeploys resume the new anchored volumes with this command.
+# STEADY-STATE REDEPLOY — use this only when the release declares no persisted
+# format break and the network has already been founded with the current
+# generation. If a release declares a break, use the clean founding procedure
+# below exactly once; subsequent deploys resume its anchored volumes.
 nomad job run -var image_tag="$TAG" -var image_registry="$REGISTRY" \
   -var node_count="$NODE_COUNT" -var cloud_node_count=0 \
   -var genesis_hash="$GENESIS_HASH" deploy/quod.nomad
@@ -236,13 +236,12 @@ anchored rolling update.
   implicit predecessor finality, signed transaction relay, inter-ontology asks,
   retained-custody ingress, the signed live ontology directory with private
   direct routes, runtime projection, durable multi-ontology transactions,
-  signed human-client goals, root-owned ontology creation, root-driven system
+  generic agent-signed goals, root-owned ontology creation, root-driven system
   ontologies, engine-local external-predicate ownership, explicit durable
-  ontology subscriptions, shared certified foreign projections, metrics, and
-  durable Docker/Nomad deployment.
-- **Next:** connect canonical applied operations to the existing
-  `react_on/3` catalogue locally and for subscribed projections, as specified
-  by `doc/event-reaction-refinement-plan.md`; then coordinate explicit events
-  with the generic agent-identity format break in
-  `doc/ontology-actor-architecture.md` before continuing hosted agents and the
-  FIPA AMS/DF layers.
+  ontology subscriptions, shared certified foreign projections, local and
+  subscribed `react_on/3` dispatch, explicit `trigger_event/1`, durable effects
+  in ordinary and multi-ontology transactions, metrics, and durable
+  Docker/Nomad deployment.
+- **Next:** continue the reviewed transaction-latency and security-chain work
+  in `doc/dtx-latency-optimization-plan.md`. Physical-node identity Slices 2--4
+  and ontology-backed hosted-agent/FIPA delivery remain planned work.

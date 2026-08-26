@@ -2,14 +2,13 @@
 -moduledoc """
 A fixed-window request budget, counted in total and per key.
 
-Ingress policy for the client boundary: how many logins or registrations a node
-accepts per minute, and how many any one caller may take of them. It is
-deliberately a plain value with no process and no timer — the owner threads it
-through its own state and supplies the clock — so the same shape serves the
-typed-command limits that come next without another hand-rolled counter.
+Optional ingress policy for the client boundary. Its current owner can apply
+configured budgets to challenge issuance, signed goals, and symbol
+materialization. It is deliberately a plain value with no process and no timer
+— the owner threads it through its own state and supplies the clock.
 
-Keys are usually peer addresses. The key table is itself capped, because an
-attacker rotating source addresses would otherwise turn a rate limiter into an
+Keys identify peer addresses or signing keys. The key table is itself capped,
+because rotating keys would otherwise turn an enabled rate limiter into an
 unbounded map; once it is full, an unseen key is refused rather than admitted.
 
 Callers must supply a **monotonic** clock (`quod_time:mono_ms/0`). With a wall

@@ -1,13 +1,13 @@
 # Quod client and world runtime -- architectural direction
 
 **Status:** the browser key, login, signed local and multi-ontology goals,
-cursor, unresolved-operation journal, user-home, and Explorer-console
-foundation is implemented in the working tree. The world, agent, presentation,
+cursor, unresolved-operation journal, retired user-home generation, and
+Explorer-console foundation are implemented and deployed. The world, agent, presentation,
 and simulation sections remain non-normative direction and must be revalidated
 before their implementation.
 
-The implemented client still calls its signer a user. The target actor model is
-now `ontology-actor-architecture.md`: every acting node, agent, service, or
+The generic acting identity is now the deployed actor model in
+`ontology-actor-architecture.md`: every acting node, agent, service, or
 human-facing user is a classed instance in an exact ontology history; `agent`
 is the generic acting class and `human_user` is its explicit human-specific
 subclass. This correction reuses the one signed-goal path described here

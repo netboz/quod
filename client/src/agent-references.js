@@ -1,3 +1,5 @@
+import { SIGNED_GOAL_LIMITS, utf8ByteLength } from './protocol-limits.js'
+
 const STORAGE_KEY = 'quod.agent-references.v1'
 
 export function agentReferences() {
@@ -33,9 +35,10 @@ function normalized(agent) {
   const namespace = agent?.namespace?.trim()
   const anchor = agent?.anchor?.trim()
   const instanceText = agent?.instanceText?.trim()
-  if (!namespace || new TextEncoder().encode(namespace).length > 128 ||
+  if (!namespace || utf8ByteLength(namespace) > SIGNED_GOAL_LIMITS.namespaceBytes ||
       !/^[A-Za-z0-9_-]{43}$/.test(anchor || '') ||
-      !instanceText || new TextEncoder().encode(instanceText).length > 8_192) {
+      !instanceText ||
+      utf8ByteLength(instanceText) > SIGNED_GOAL_LIMITS.agentInstanceTextBytes) {
     throw new Error('invalid agent reference')
   }
   const id = `${namespace}\0${anchor}\0${instanceText}`

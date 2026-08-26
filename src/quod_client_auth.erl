@@ -107,7 +107,7 @@ complete_challenge(ChallengeId, Signature) ->
     end.
 
 -ifdef(TEST).
--doc "Return the still-valid public session binding for a typed ingress command.".
+-doc "Return the still-valid public session binding.".
 -spec session(binary()) -> {ok, map()} | {error, invalid_session | client_auth_unavailable}.
 session(SessionId) ->
     call({session, SessionId}).

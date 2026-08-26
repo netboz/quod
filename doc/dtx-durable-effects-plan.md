@@ -555,7 +555,7 @@ old boundary in at least:
 
 ### Slice 1 — pure protocol admission
 
-**Working-tree status:** implemented.
+**Delivery status:** implemented and deployed in 0.7.86.
 
 - confirm the one coordinated V7/M3/record-V3/scope-V5 allocation rather than
   bumping it twice;
@@ -567,12 +567,12 @@ old boundary in at least:
 - make the committed reducer expose effect lists for apply/discard; and
 - add pure codec, tamper, check/apply, replay, and abort fixtures.
 
-This slice is not enabled alone in a deployed release. It lands with the
-following custody slice before any re-found.
+This slice was not enabled alone; it landed with the following custody slice in
+the coordinated 0.7.86 re-found.
 
 ### Slice 2 — group custody in the existing journal
 
-**Working-tree status:** implemented.
+**Delivery status:** implemented and deployed in 0.7.86.
 
 - generalize journal commit bindings and private snapshot rows;
 - add idempotent group bind/reconcile operations with exact rollback behavior;
@@ -586,7 +586,7 @@ following custody slice before any re-found.
 
 ### Slice 3 — Finalize release and recovery
 
-**Working-tree status:** implemented.
+**Delivery status:** implemented and deployed in 0.7.86.
 
 - carry effects in the existing DTX apply publication;
 - reuse runtime's P-before-E release;
@@ -598,8 +598,8 @@ following custody slice before any re-found.
 
 ### Slice 4 — end-to-end closure
 
-**Working-tree status:** implementation and repository gates complete;
-independent review and deployment remain.
+**Delivery status:** implemented, independently reviewed, and deployed in
+0.7.86.
 
 - make both current failing signed-agent creation tests pass without changing
   their expected group path;

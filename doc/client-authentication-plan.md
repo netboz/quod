@@ -4,12 +4,11 @@
 challenge-response, short-lived node-local sessions, signed goals and cursors,
 signed multi-ontology scopes, unresolved-operation persistence, the
 constrained user-home foundation, and any-node signed-goal forwarding are
-implemented. The generic agent hard break is implemented in the working tree
-but is not yet
-committed or deployed; its review and release gates remain as specified in
+implemented. The generic agent hard break is implemented, committed, and
+deployed; its review and release gates remain recorded in
 `doc/signed-client-goals-plan.md`.
 
-> **Terminology correction.** The working-tree request uses the stable
+> **Terminology correction.** The deployed request uses the stable
 > `{agent, AgentReferenceBlob}` principal. The former `{user, Key}` label is
 > retained below only where the historical generation is described.
 > `ontology-actor-architecture.md` is the authority: every durable actor is represented by an ontology instance;
@@ -233,7 +232,8 @@ as `ontology_busy`; `cursor_busy` is reserved for an already-open cursor whose
 command is still running.
 
 Before Execute or cursor Accept, the browser stores the exact signed request in
-a bounded 64-row IndexedDB journal. A reload queries only
+an IndexedDB journal with no fixed row-count limit; available browser storage
+is its only population bound. A reload queries only
 `POST /api/goals/outcomes` with those original bytes. Definite outcomes remove
 rows; pending or unavailable outcomes retain them. Nothing is evicted to make
 room. Without durable browser storage, login and reads continue to work but

@@ -52,9 +52,10 @@ fields(metrics) ->
     [ {port, hoconsc:mk(integer(), #{default => 14568})}
     ];
 fields(explorer) ->
-    %% The optional web explorer (quod_explorer). OFF by default: it is an unauthenticated web
-    %% surface whose prove endpoint WRITES, so enabling it — and especially widening `ip` past
-    %% loopback — is a deliberate operator choice, not a fleet default.
+    %% The optional standalone Explorer (`quod_explorer`). OFF by default: it is an
+    %% unauthenticated read-only ledger viewer, so widening `ip` past loopback remains a
+    %% deliberate operator choice. Its signed console is served only through the TLS client
+    %% listener, where it uses the ordinary authenticated signed-goal API.
     [ {enabled, hoconsc:mk(boolean(), #{default => false})}
     , {ip,      hoconsc:mk(binary(),  #{default => <<"127.0.0.1">>})}
     , {port,    hoconsc:mk(integer(), #{default => 14569})}

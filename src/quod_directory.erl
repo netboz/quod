@@ -164,7 +164,7 @@ confirm_direct_seed(Ns, Endpoint, NodeKey, GenesisAnchor, Role) ->
 Install one authenticated node's complete current hosted-descriptor set.
 Signature/wire verification is performed by the control-plane decoder before
 this call; this writer independently rechecks shape, exact allowlist,
-freshness, rate and capacity before changing any index. The returned deadline
+freshness and capacity before changing any index. The returned deadline
 is the exact receiver-local lease expiry installed in the route table.
 """.
 -spec install_record(binary(), term(),

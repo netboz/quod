@@ -2,9 +2,9 @@
 
 **Status:** the durable subscription catalogue and shared continuous certified
 follow have been implemented and deployed since release 0.7.80. Local and
-subscribed reactions are complete. Explicit events are implemented in the
-current working tree but not deployed; reliable push and hardware acceptance
-remain planned in `event-reaction-refinement-plan.md`. Explicit events change
+subscribed reactions and explicit events are implemented and deployed;
+reliable push and hardware acceptance remain planned in
+`event-reaction-refinement-plan.md`. Explicit events change
 the transaction and DTX-plan grammar but add no new ledger record kind.
 
 This document is the authority for the subscription relation and certified
@@ -174,7 +174,7 @@ follow consumers, or materialized projections. A dormant identity consumes no
 worker or decoded projection. Per-page byte and term bounds protect individual
 inputs without limiting ontology population.
 
-## 7. Implemented reaction delivery in the working tree
+## 7. Implemented and deployed reaction delivery
 
 Reaction delivery is the four-line pipeline in
 `event-reaction-refinement-plan.md`:
@@ -283,16 +283,16 @@ compatibility paths are deleted together.
    source-qualified `react_on/3` catalogue in `quod_runtime`.
 2. **Implemented:** shared continuous certified follow and canonical foreign
    materialization in `quod_foreign_log`/`quod_foreign_projection`.
-3. **Implemented in the working tree:** local applied-op reactions through the
+3. **Implemented and deployed:** local applied-op reactions through the
    one runtime and Prolog matcher.
-4. **Implemented in the working tree:** subscribed applied-op reactions through
+4. **Implemented and deployed:** subscribed applied-op reactions through
    the same dispatcher;
    first attach/rebuild remains reaction-free.
 5. **Partly implemented:** pull-follow acknowledgement, coalescing, and
    reaction-free resnapshot use the same follow lifecycle. Reliable page push
    remains a later freshness optimization.
-6. **Implemented in the working tree:** `trigger_event/1` and its coordinated
-   format break; activation still requires the planned clean re-found.
+6. **Implemented and deployed:** `trigger_event/1` and its coordinated format
+   break were activated by the clean re-found.
 7. **Planned:** hardware fan-out, churn, recovery, and chained-load acceptance.
 
 Each planned slice receives adversarial review and deletes any path it replaces

@@ -1,5 +1,6 @@
 import { b64url, fromB64url } from './key-provider.js'
 import { signedOperationJournal } from './operation-journal.js'
+import { SIGNED_GOAL_LIMITS } from './protocol-limits.js'
 
 const encoder = new TextEncoder()
 const GOAL_DOMAIN = encoder.encode('quod.agent.goal.v1\0')
@@ -196,9 +197,12 @@ export function encodeGoalRequest({
   const instanceBytes = encoder.encode(agentInstanceText)
   const goalBytes = encoder.encode(goal)
   const deadline = BigInt(notAfterMs)
-  if (modeTag === undefined || namespaceBytes.length < 1 || namespaceBytes.length > 128 ||
-      instanceBytes.length < 1 || instanceBytes.length > 8_192 ||
-      goalBytes.length < 1 || goalBytes.length > 8_192 || agentAnchor?.length !== 32 ||
+  if (modeTag === undefined || namespaceBytes.length < 1 ||
+      namespaceBytes.length > SIGNED_GOAL_LIMITS.namespaceBytes ||
+      instanceBytes.length < 1 ||
+      instanceBytes.length > SIGNED_GOAL_LIMITS.agentInstanceTextBytes ||
+      goalBytes.length < 1 || goalBytes.length > SIGNED_GOAL_LIMITS.goalTextBytes ||
+      agentAnchor?.length !== 32 ||
       networkIdentity?.length !== 32 || signingPublicKey?.length !== 32 ||
       operationId?.length !== 32 || deadline < 1n || deadline > 0xffffffffffffffffn) {
     throw new Error('invalid signed goal')

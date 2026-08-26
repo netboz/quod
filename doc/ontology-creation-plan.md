@@ -186,14 +186,14 @@ ontology_creation_failed(start_failed)
 It does not copy arbitrary Erlang error terms into failure reasons: child-start errors
 may contain PIDs, references, paths, or other non-portable implementation
 details. The low-level preparer retains its detailed `{error, Reason}` for diagnostics;
-the typed executor maps that result to the bounded, always-ground public reason
+the staging predicate maps that result to the bounded, always-ground public reason
 above. Generic engine states such as `busy` or `rebuilding` remain explicit
 errors, and an ambiguous post-commit journal completion is `{error, outcome_unknown}` rather than a
 definite failure reason. The existing Erlog failure-reason stack remains available while proving
 prerequisites; post-proof executor errors are returned explicitly in the same
 bounded term shape. There is no second error stack.
 
-Normal `prove/2`, `prove_ro/2`, selected scopes, the explorer prove endpoint, and
+Normal `prove/2`, `prove_ro/2`, selected scopes, and
 ordinary `goal(create_ontology(...))` proofs cannot execute lifecycle IO. The
 complete action must be ground before the worker starts. Ground facts can be
 supplied with `terms/1`; rules containing variables should use `source/1` or
@@ -205,10 +205,10 @@ than being caller variables.
 - No root `ontology/2` fact and no replicated catalogue.
 - No replicated hosting catalogue or automatic hosting on another node.
 - No directory advertisement: private reachability remains local/direct-seed.
-- This implemented slice contains no agent identity or ownership enforcement,
-  payment, atom-capacity, deletion, transfer, or remote membership design
-  beyond the node-local self-admitted-validator policy. The target actor model
-  above remains later policy work, not an alternate creation API.
+- Generic agent identity and creation authorization now enter through Root's
+  ordinary action and ACL path; the low-level preparer owns none of that policy.
+  Payment, atom-capacity, deletion, transfer, and remote membership design
+  remain outside this slice.
 - No default remote ACL or `can_join/3`: apart from the injected local
   host-entry rule, the supplied initial terms define the ontology's policy. A
   test that needs remote or cross-ontology calls includes the corresponding

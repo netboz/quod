@@ -437,6 +437,23 @@ dtx_outcome_facade_preserves_only_authoritative_results_test() ->
        {error, not_found},
        quod_simplex:test_dtx_outcome_result(GroupRef, {error, not_found})).
 
+owner_terminal_results_follow_the_retired_row_not_the_wrapper_test() ->
+    RequestId = <<4:128>>,
+    ?assertEqual(
+       busy,
+       quod_simplex:test_endpoint_terminal_result(
+         {ok, {error, RequestId, busy}})),
+    ?assertEqual(
+       timeout,
+       quod_simplex:test_dtx_worker_terminal_result(
+         {submit_result, <<5:256>>, {error, timeout}},
+         {error, RequestId, not_ready})),
+    %% Metrics classification must never turn a real re-envelope failure into
+    %% a Simplex crash while the original caller error is being returned.
+    ?assertEqual(
+       error,
+       quod_simplex:test_dtx_retirement_result(unexpected_signing_failure)).
+
 %% Response ownership is the exact authenticated peer plus the exact request;
 %% a valid response on the right namespace from any other peer is inert.
 dtx_endpoint_response_correlation_is_exact_and_released_test() ->
@@ -450,6 +467,13 @@ dtx_endpoint_response_correlation_is_exact_and_released_test() ->
     From = {self(), make_ref()},
     S0 = quod_simplex:test_seed_dtx_correlation(
            Ns, ExpectedPeer, Request, From, st(#{ns => Ns})),
+    SeededStats = quod_simplex:test_owner_stats(S0),
+    ?assertMatch(
+       #{dtx_endpoint := #{outbound := 1, inbound := 0}},
+       maps:get(owner_current, SeededStats)),
+    ?assertMatch(
+       #{dtx_endpoint := #{outbound := 1, inbound := 0}},
+       maps:get(owner_peak, SeededStats)),
     {Wrong, []} = quod_simplex:test_dtx_endpoint_frame(
                     Ns, serve, WrongPeer, self(), Frame, S0),
     ?assertEqual(1, maps:get(correlations,
@@ -458,7 +482,14 @@ dtx_endpoint_response_correlation_is_exact_and_released_test() ->
                         Ns, serve, ExpectedPeer, self(), Frame, Wrong),
     ?assertEqual([{reply, From, {ok, Response}}], Actions),
     ?assertEqual(0, maps:get(correlations,
-                            quod_simplex:test_dtx_endpoint_counts(Done))).
+                            quod_simplex:test_dtx_endpoint_counts(Done))),
+    DoneStats = quod_simplex:test_owner_stats(Done),
+    ?assertMatch(
+       #{dtx_endpoint := #{outbound := 0, inbound := 0}},
+       maps:get(owner_current, DoneStats)),
+    ?assertMatch(
+       #{dtx_endpoint := #{outbound := 1, inbound := 0}},
+       maps:get(owner_peak, DoneStats)).
 
 %% Replies travel back on the request's bidirectional stream.  An outbound
 %% pinned link publishes its peer as the bare TLS-pinned key, whereas an
@@ -579,6 +610,13 @@ dtx_endpoint_prepare_refusal_replies_and_cleans_test() ->
         {_Monitor, Seeded} = quod_simplex:test_seed_dtx_worker(
                                Worker, local, Request, {caller, From},
                                st(#{ns => Ns, genesis_hash => Anchor})),
+        SeededStats = quod_simplex:test_owner_stats(Seeded),
+        ?assertMatch(
+           #{dtx_endpoint := #{outbound := 0, inbound := 1}},
+           maps:get(owner_current, SeededStats)),
+        ?assertMatch(
+           #{dtx_endpoint := #{outbound := 0, inbound := 1}},
+           maps:get(owner_peak, SeededStats)),
         Result =
             {submit_result, Digest,
              {error,
@@ -591,7 +629,14 @@ dtx_endpoint_prepare_refusal_replies_and_cleans_test() ->
         ?assertEqual(
            #{correlations => 0, channels => 0, workers => 0,
              submissions => 0},
-           quod_simplex:test_dtx_endpoint_counts(Done))
+           quod_simplex:test_dtx_endpoint_counts(Done)),
+        DoneStats = quod_simplex:test_owner_stats(Done),
+        ?assertMatch(
+           #{dtx_endpoint := #{outbound := 0, inbound := 0}},
+           maps:get(owner_current, DoneStats)),
+        ?assertMatch(
+           #{dtx_endpoint := #{outbound := 0, inbound := 1}},
+           maps:get(owner_peak, DoneStats))
     after
         Worker ! stop
     end.
@@ -1029,6 +1074,53 @@ dtx_semantic_commit_retires_an_equivalent_retained_envelope_test() ->
     ?assertEqual(
        0, maps:get(submissions,
                    quod_simplex:test_dtx_endpoint_counts(Resolved))).
+
+%% The retained-control gauges expose the exact consensus owner rather than a
+%% second accounting store.  A normal keep_progress pass remembers the peak;
+%% the canonical committed-control reducer then removes the row while that
+%% owner-lifetime peak and its byte high-water mark remain observable.
+dtx_owner_stats_keep_peak_after_committed_cleanup_test() ->
+    Fixture = quod_ct:dtx_prepare_fixture(),
+    Control = maps:get(prepare_control, Fixture),
+    Seeded = quod_simplex:test_seed_dtx_submission(
+               Control, [],
+               st(#{eng => quod_simplex:eng_with_certs(0, [])})),
+    SeededStats = quod_simplex:stats_map(Seeded),
+    ?assertEqual(
+       #{retained => 1, waiters => 0},
+       maps:get(dtx_control, maps:get(owner_current, SeededStats))),
+    RetainedBytes = maps:get(
+                      dtx_control,
+                      maps:get(owner_bytes_current, SeededStats)),
+    ?assert(RetainedBytes > 0),
+
+    {keep_state, Tracked, _Actions} =
+        quod_simplex:test_keep_progress_transition(Seeded, Seeded),
+    TrackedStats = quod_simplex:stats_map(Tracked),
+    ?assertEqual(
+       #{retained => 1, waiters => 0},
+       maps:get(dtx_control, maps:get(owner_peak, TrackedStats))),
+    ?assertEqual(
+       RetainedBytes,
+       maps:get(dtx_control, maps:get(owner_bytes_peak, TrackedStats))),
+
+    {Entry, Payload} = committed_dtx_test_entry(Control, 1),
+    Cleared = quod_simplex:test_resolve_committed_dtx(
+                Entry, Payload, Tracked),
+    ClearedStats = quod_simplex:stats_map(Cleared),
+    ?assertEqual(
+       #{retained => 0, waiters => 0},
+       maps:get(dtx_control, maps:get(owner_current, ClearedStats))),
+    ?assertEqual(
+       #{retained => 1, waiters => 0},
+       maps:get(dtx_control, maps:get(owner_peak, ClearedStats))),
+    ?assertEqual(
+       0, maps:get(dtx_control,
+                   maps:get(owner_bytes_current, ClearedStats))),
+    ?assertEqual(
+       RetainedBytes,
+       maps:get(dtx_control,
+                maps:get(owner_bytes_peak, ClearedStats))).
 
 dtx_catchup_retires_retained_submission_and_replies_exact_ref_test() ->
     Fixture = quod_ct:dtx_prepare_fixture(),

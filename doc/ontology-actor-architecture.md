@@ -2,11 +2,11 @@
 
 **Status:** architectural principles, identity shape, and initial key-custody
 model confirmed by Yan (2026-08-21). The generic agent request and identity
-certificate are implemented in the current working tree but are not committed
-or deployed. This document is the
+certificate are implemented, committed, and deployed. The node vault and agent
+hosting/migration remain planned. This document is the
 authority for actor identity, system-ontology startup, agent hosting, and the
 boundary between Prolog and Erlang. `generic-agent-identity-plan.md` owns the
-exact working-tree wire and recovery contracts.
+exact wire and recovery contracts.
 
 ## 1. One durable model
 
@@ -453,7 +453,7 @@ agent, immutable delegation chain, and receiver-derived current capabilities.
 Wielding/delegation constructs that triplet. An agent key alone does not
 create, shorten, or replace it.
 
-The working-tree signed request uses the stable `{agent, AgentReferenceBlob}`
+The deployed signed request uses the stable `{agent, AgentReferenceBlob}`
 principal. The former `{user, Key}` label is deleted rather than retained as a
 compatibility alias or second signed-goal route. The signing key proves current
 control of that agent reference; it is not the ACL subject's durable identity.
@@ -462,7 +462,9 @@ control of that agent reference; it is not the ACL subject's durable identity.
 
 The code does not yet provide cross-node agent-process failover. That is the
 missing feature—not a consensus problem. The durable assignment will include a
-monotonically advancing host epoch. A runtime projection starts only when its
+monotonically advancing host epoch and the stable `agent_instance_ref/3`
+`NodeRef` from `node-instance-identity-plan.md`; a raw node key is never a
+substitute hosting identity. A runtime projection starts only when its
 local node is the committed current host. On a node failure, an authorised
 `quod:node` action selects another host and commits the newer assignment. The
 new host reconstructs the process from the containing ontology. A returning old
@@ -528,8 +530,8 @@ ontology bootstrap described above. It creates no ontology from a catalogue
 row: an ontology is founded normally, its exact anchor is committed in root,
 and every node then joins or resumes that exact history through the existing
 namespace manager and directory. The anchored agent-instance identity, generic
-agent signing principal, and stable operation custody are implemented in the
-working tree. Root still carries node admission facts; moving internal node
+agent signing principal, and stable operation custody are deployed. Root still
+carries node admission facts; moving internal node
 principals to node-instance references remains later work.
 
 ## 8. Required acceptance tests
@@ -579,14 +581,14 @@ Before implementation is declared complete, tests must show:
 
 ## 9. Reviewable implementation order
 
-1. **External-predicate cleanup and system bootstrap—implemented in the current
-   working tree.** Predicate modules own registration, the exact target engine
+1. **External-predicate cleanup and system bootstrap—implemented and
+   deployed.** Predicate modules own registration, the exact target engine
    owns action classification, root facts are the single post-bootstrap system
    source, and the application-global catalogue is deleted. The three shipped
    system sources are founding inputs; deployment must create them normally and
    then commit their exact anchors in root.
-2. **Agent identity and signing.** Implemented in the working tree, pending
-   gates: `generic-agent-identity-plan.md` defines the stable identity/key
+2. **Agent identity and signing—implemented and deployed.**
+   `generic-agent-identity-plan.md` defines the stable identity/key
    binding, removes special user-home creation in favour of ordinary facts and
    generic ontology genesis, and replaces `{user, Key}`/`user_goal_v1` in one
    format break. Browser and machine actors use the same signed-goal endpoint.

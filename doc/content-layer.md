@@ -448,8 +448,8 @@ section 5.
 
 - **Ontology-subscription reactions** — explicit durable subscriber-owned
   relations and certificate-verified foreign projections are implemented.
-  Local and subscribed `react_on/3` execution is implemented, and explicit
-  `trigger_event/1` occurrences are implemented in the current working tree.
+  Local and subscribed `react_on/3` execution and explicit
+  `trigger_event/1` occurrences are implemented and deployed.
   The design follows certified applied operations and filters at the
   subscriber; it does not install a second target-side pattern registry.
 - **Fast *and* exact** — some game-state changes (who holds the sword, is the door

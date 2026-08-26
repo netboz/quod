@@ -7,8 +7,9 @@ so a change reaches far more nodes than a leader-star ever could. Every block ca
 before it applies or re-pushes** — a tampering/equivocating relay is dropped, never propagated
 (`doc/deferred.md` §4 P2; design `~/.claude/plans/quod-feed-dissemination.md`).
 
-A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, last in the `m:quod_ns`
-`rest_for_one` chain (it holds no state the others need). It has two halves:
+A per-namespace `gen_server` sibling on channel **`{feed, Ns}`**, after catch-up
+and before the rebuildable runtime in the `m:quod_ns` `rest_for_one` chain (it
+holds no state the others need). It has two halves:
 
 - **Producer** (a committee Member): on each *live* commit `m:quod_simplex` publishes
   `{committed, Ns, Slot, Entry}` on the `{committed, Ns}` property; the feed **eager-pushes** the block to a

@@ -1,7 +1,7 @@
 # Concurrent signed DTX admission plan
 
-**Status:** implemented in the working tree; local and live acceptance gates
-remain before deployment.
+**Status:** implemented, committed, deployed, and live-tested. The local and
+live acceptance gates described below passed before activation.
 
 ## 1. Problem confirmed on the deployed fleet
 

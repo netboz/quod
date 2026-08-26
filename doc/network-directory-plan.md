@@ -335,21 +335,24 @@ or write authority. Removing that availability-only replay window would require 
 validity time or durable receiver high-water and is deliberately outside this
 soft-state slice.
 
-Initial validated limits (deployment-configurable only within these safe
-maxima) are:
+Current validated implementation bounds are:
 
-| item | initial limit |
+| item | current bound |
 |---|---:|
 | encoded announce payload | 16 KiB |
 | namespaces in one announcement | 32 |
 | routes retained per namespace | 8 |
 | total route-table entries, including direct seeds | 2,048 |
-| accepted announce/renewal rate per node key | 1 per 5 s |
 | renewal interval / route TTL | 10 s / 30 s |
+| new resync session per authenticated node key | 1 per 5 s |
+| concurrent resync sessions | 2,048 |
 | resync snapshot page | 128 route records |
 
-Oversized bytes are rejected before decoding; decoded cardinality/rate limits
-are validated before any route-table mutation. A full table rejects new
+These values are fixed in the current implementation; the production HOCON
+schema exposes no route-limit overrides. Oversized bytes are rejected before
+decoding; decoded cardinality bounds are validated before any route-table
+mutation, while the 5-second throttle applies only when a reader starts a new
+resync session. A full table rejects new
 lower-preference records rather than silently evicting a live route. A host
 coalesces its current served namespace set into the next permitted renewal
 rather than sending an unbounded stream of changes.

@@ -1,8 +1,8 @@
 # Signed client goals
 
 **Status:** Slices 1 through 6 were the committed key-as-user generation. The
-generic agent hard break is implemented in the current working tree, not yet
-committed or deployed; `generic-agent-identity-plan.md` is now authoritative
+generic agent hard break is implemented, committed, and deployed;
+`generic-agent-identity-plan.md` is now authoritative
 for its request, principal, certificate, and durable-operation shapes. The
 paragraphs below summarize the earlier delivery slices; current shapes are
 stated in the dedicated sections and agent plan. Slice 1 contained
@@ -26,15 +26,15 @@ procedure.
 > **Architecture correction.** This document records the implemented signed
 > request whose principal was labelled `{user, Key}`. That retired label is
 > retained below only where the earlier delivery history is being described.
-> `ontology-actor-architecture.md` defines the working-tree model in which every
+> `ontology-actor-architecture.md` defines the deployed model in which every
 > durable actor state is ontology content and `agent` is the generic signer
 > class. A concrete signer is a local agent instance identified externally by
 > `agent_instance_ref/3`; the containing ontology, its creator, that instance,
-> its key, and its ACL permissions remain distinct. The working-tree
+> its key, and its ACL permissions remain distinct. The deployed
 > agent-bound request is one hard format migration of this same path, not a
 > second client endpoint, executor, or ACL.
 
-> The working-tree model removes the transitional `create_user_home` helper. It
+> The deployed model removes the transitional `create_user_home` helper. It
 > is not renamed to `create_agent`: Quod has no core agent-construction
 > predicate. Existing `create_ontology/2` may place local `instance_of/2`,
 > `agent_key/3`, and ACL facts in genesis, and ordinary transactions may add
@@ -674,9 +674,9 @@ and reviewed before that deployment break is activated.
 Slices 3 through 5 were development stages of this one protocol generation, not
 three deployment generations. Slice 3 lands all affected V8/V4, plan V5, DTX
 V2, and scope V4 data shapes; Slice 5 completes scope propagation. There was no
-deployment or re-found between those slices. The working tree has passed its
-focused replay, crash, and multi-ontology gates. Activation on a network still
-uses one deliberate clean re-found; there is no rolling mixed-version upgrade.
+deployment or re-found between those slices. The final generation passed its
+focused replay, crash, and multi-ontology gates and was activated through one
+deliberate clean re-found; there was no rolling mixed-version upgrade.
 
 ## Implementation slices
 
@@ -846,7 +846,7 @@ test, which proves recovery from certified records without re-proving.
 
 ### Slice 6: any-node ingress and client goal builders
 
-**Working-tree implementation:** one bounded node-level router now carries
+**Delivered implementation:** one bounded node-level router now carries
 the exact request bytes and signature between a gateway and an
 identity-pinned target. Browser sessions and addresses remain local to the
 gateway; the target derives the agent from the signature, derives the

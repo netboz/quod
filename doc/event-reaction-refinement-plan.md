@@ -1,11 +1,10 @@
 # Events, reactions, and restart reconstruction — plan
 
-**Status:** Slice 0 document/comment alignment, Slice 1 local reactions, and
-Slice 2 subscribed reactions are complete and committed. Slice 3
-`trigger_event/1` and its V9/V5/plan-V6 format generation are implemented in
-the current working tree, pass the full local gates, and have completed final
-adversarial review with its findings closed. Slices 4--5 remain planning only.
-None of these working-tree changes is deployed.
+**Status:** Slice 0 document/comment alignment, Slice 1 local reactions, Slice
+2 subscribed reactions, and Slice 3 `trigger_event/1` with its
+V9/V5/plan-V6 format generation are complete, committed, and deployed. Their
+full local gates and final adversarial reviews passed. Slices 4--5 remain
+planning only.
 
 This plan refines the event sections of `agent-fipa-plan.md`,
 `minimal-agent-delivery-plan.md`, and `ontology-subscription-plan.md`.
@@ -391,7 +390,7 @@ become metric labels.
 
 ### Slice 0 — align documents
 
-**Status: complete in the working tree.**
+**Status: complete, committed, and deployed.**
 
 - Make the simple applied-ops -> unify -> handler pipeline identical in the agent,
   subscription, content-layer, and node-hosting documents.
@@ -403,8 +402,8 @@ become metric labels.
 
 ### Slice 1 — local assert/retract reactions
 
-**Status: complete in the working tree; compile, xref, Dialyzer, focused EUnit,
-and full EUnit are green. Not deployed.**
+**Status: complete, committed, and deployed; compile, xref, Dialyzer, focused
+EUnit, and full EUnit were green at delivery.**
 
 - Add the shared `diff_to_events` helper for existing fact operations and feed
   it the `applied_ops` already returned by `quod_committed_projection`.
@@ -422,8 +421,8 @@ and full EUnit are green. Not deployed.**
 
 ### Slice 2 — subscribed reactions
 
-**Status: complete in the working tree; production compile, xref, Dialyzer,
-focused EUnit, and full EUnit are green. Not deployed.**
+**Status: complete, committed, and deployed; production compile, xref,
+Dialyzer, focused EUnit, and full EUnit were green at delivery.**
 
 - Expose the canonical materializer's newly certified contiguous `applied_ops`
   from the existing foreign follower.
@@ -438,7 +437,7 @@ focused EUnit, and full EUnit are green. Not deployed.**
 `ontology-subscription-plan.md` retains the implemented subscription catalogue
 and certified-follow contract and points its remaining reaction work here.
 
-### Slice 3 — `trigger_event/1` (implemented in the working tree)
+### Slice 3 — `trigger_event/1` (implemented and deployed)
 
 #### One staging path
 
@@ -541,6 +540,10 @@ re-found; no intermediate event-only network is founded.
   measurement shows a distinct operational question.
 
 ### Slice 4 — hosting projections
+
+This is the sole hosting-projection implementation. The minimal agent vertical
+in `agent-fipa-plan.md` consumes it, and later node/FIPA lifecycle slices add
+policy above it rather than adding another hosting owner.
 
 - Represent desired ontology/agent hosting as ordinary facts in the owning
   node ontology.

@@ -2427,6 +2427,268 @@
           "refId": "C"
         }
       ]
+    },
+    {
+      "id": 243,
+      "type": "row",
+      "title": "Internal work ownership",
+      "description": "Current work retained by existing ontology and node owners, plus owner-lifetime peaks where the owner already exposes them. Component, state, phase and result are closed label sets; request, peer, agent, target and payload identities never become labels.",
+      "gridPos": {
+        "x": 0,
+        "y": 223,
+        "w": 24,
+        "h": 1
+      },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 244,
+      "type": "timeseries",
+      "title": "Hosted-ontology owner rows",
+      "description": "Current retained rows and the highest simultaneous count seen by each hosted-ontology owner since that owner process started. A process restart resets its peak.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 224,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_ontology_owner_current{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "current · {{component}}/{{state}} · {{namespace}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_ontology_owner_peak{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "peak · {{component}}/{{state}} · {{namespace}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 245,
+      "type": "timeseries",
+      "title": "Node-wide owner rows",
+      "description": "Current retained rows for every instrumented node-wide owner. The client-goal and scope routers also expose their highest simultaneous count since process start; foreign-history peaks arrive with its canonical caller rows in Slice 0.8.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 224,
+        "w": 12,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_node_owner_current{node_id=~\"$node\"}",
+          "legendFormat": "current · {{component}}/{{state}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_node_owner_peak{node_id=~\"$node\"}",
+          "legendFormat": "peak · {{component}}/{{state}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 246,
+      "type": "timeseries",
+      "title": "Owner-retained bytes",
+      "description": "Current encoded bytes retained by existing owners, plus owner-lifetime peaks where the owner already exposes them. Hosted-ontology series follow the namespace filter; node-wide foreign-history bytes are current-only and intentionally have no target identity label.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 232,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 8,
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "quod_ontology_owner_bytes_current{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "ontology current · {{component}} · {{namespace}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "quod_ontology_owner_bytes_peak{node_id=~\"$node\", namespace=~\"$namespace\"}",
+          "legendFormat": "ontology peak · {{component}} · {{namespace}} · {{node_id}}",
+          "refId": "B"
+        },
+        {
+          "expr": "quod_node_owner_bytes_current{node_id=~\"$node\"}",
+          "legendFormat": "node current · {{component}} · {{node_id}}",
+          "refId": "C"
+        }
+      ]
+    },
+    {
+      "id": 247,
+      "type": "timeseries",
+      "title": "Owner row retirements",
+      "description": "Rows explicitly retired per second while their owner process is alive, split only by fixed component, phase and result labels. Process restart resets volatile owner state and does not invent a retirement result. For client_goal_router outbound/inbound rows, completed means the worker replied and returned normally; it does not claim that the remote goal succeeded.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 8,
+        "y": 232,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by (node_id, namespace, component, phase, result) (rate(quod_ontology_owner_terminal_total{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval]))",
+          "legendFormat": "ontology · {{component}}/{{phase}} · {{result}} · {{namespace}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "sum by (node_id, component, phase, result) (rate(quod_node_owner_terminal_total{node_id=~\"$node\"}[$__rate_interval]))",
+          "legendFormat": "node · {{component}}/{{phase}} · {{result}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
+    },
+    {
+      "id": 248,
+      "type": "timeseries",
+      "title": "Owner row lifetime",
+      "description": "p95 lifetime of rows explicitly retired by a live owner, measured at that owner's exact cleanup seam. Process restart resets volatile state without inventing a result; missing series mean no row was retired in the selected interval. For client_goal_router outbound/inbound rows, completed means the worker replied and returned normally, not that the remote goal succeeded.",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource}"
+      },
+      "gridPos": {
+        "x": 16,
+        "y": 232,
+        "w": 8,
+        "h": 8
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "custom": {
+            "drawStyle": "line",
+            "showPoints": "never"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, node_id, namespace, component, phase, result) (rate(quod_ontology_owner_duration_seconds_bucket{node_id=~\"$node\", namespace=~\"$namespace\"}[$__rate_interval])))",
+          "legendFormat": "ontology p95 · {{component}}/{{phase}} · {{result}} · {{namespace}} · {{node_id}}",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum by (le, node_id, component, phase, result) (rate(quod_node_owner_duration_seconds_bucket{node_id=~\"$node\"}[$__rate_interval])))",
+          "legendFormat": "node p95 · {{component}}/{{phase}} · {{result}} · {{node_id}}",
+          "refId": "B"
+        }
+      ]
     }
   ]
 }

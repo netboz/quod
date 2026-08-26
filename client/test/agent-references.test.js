@@ -40,6 +40,26 @@ test('malformed storage input is rejected before signing', () => {
   })
 })
 
+test('agent-reference namespaces use the shared 255-byte protocol limit', () => {
+  withStorage(() => {
+    const namespace255 = `${'é'.repeat(127)}a`
+    assert.equal(new TextEncoder().encode(namespace255).length, 255)
+    assert.equal(saveAgentReference({
+      namespace: namespace255,
+      anchor: 'a'.repeat(43),
+      instanceText: 'human_user(alice).',
+    }).namespace, namespace255)
+    assert.throws(
+      () => saveAgentReference({
+        namespace: `${namespace255}b`,
+        anchor: 'a'.repeat(43),
+        instanceText: 'human_user(alice).',
+      }),
+      /invalid agent reference/,
+    )
+  })
+})
+
 function withStorage(run) {
   const previous = globalThis.localStorage
   const values = new Map()

@@ -526,17 +526,15 @@ execution machinery (and TEST-only convenience wrappers), not a supported
 authorization or content-repair API. Arbitrary host VM control remains outside
 the authorization boundary, but no operator policy override is added.
 
-This does not claim to complete the separate user/agent authorization
-milestone. It preserves the current trusted-administrative-fleet boundary
-documented in `content-layer.md`: the target's current validator owns the scope,
-seals its own plan, and authors its own ledger records. A caller never supplies
-or signs a target ontology's diff. When authenticated
-`subject(Agent, AgentChain, Capabilities)` lands, it replaces the explicit node
-principal at this same policy seam without changing distributed proof
-semantics. `Agent` is the originating actor and it and every chain member use the stable
-`agent_instance_ref(Namespace, GenesisAnchor, Instance)` shape; the request
-signature separately proves the submitting active key. The still-unauthenticated public prove endpoint remains an existing
-deployment boundary and is not falsely presented as fixed here.
+Generic agent authorization now enters this same distributed-proof boundary
+without changing its semantics. The target's current validator still owns the
+scope, seals its own plan, and authors its own ledger records; a caller never
+supplies or signs a target ontology's diff.
+`subject(Agent, AgentChain, Capabilities)` carries stable
+`agent_instance_ref(Namespace, GenesisAnchor, Instance)` values, while the
+request signature separately proves the submitting active key. The former
+unauthenticated public prove endpoint is deleted; the Explorer console uses the
+ordinary authenticated signed-goal path.
 
 The public proof API becomes `quod_prolog:prove(Namespace, Goal)`; origin
 ontology and node principal are derived from the actual origin scope/engine.
@@ -587,7 +585,8 @@ metadata and `byte_size(GoalBlob)` without decoding the Prolog term. Admission
 checks then run before `quod_wire_term` decodes that blob, worker spawn,
 monitor creation, or session-map insertion.
 
-Starting limits are concrete and schema-validated:
+Current bounds are concrete and validated at their owning configuration or
+codec seam:
 
 | resource | limit |
 |---|---:|
@@ -619,8 +618,8 @@ Starting limits are concrete and schema-validated:
 | volatile pre-Begin registrations waiting per local ontology/validator | existing configurable proof-worker capacity and deadline; no separate handoff quota |
 | accepted dormant Begin intent per local ontology/validator | 1 |
 | terminal group entries retained in memory | 4,096 |
-| concurrent foreign-history pulls / entries per page / response bytes | existing 32 / 256 / 900 KiB |
-| pending foreign verifications global / per authenticated peer | 32 / 4 |
+| pending foreign-log verifications global / per authenticated peer | 32 / 4 |
+| catch-up read workers per hosted ontology / entries per page / response bytes | 32 / 256 / 900 KiB |
 | pending exact group-phase lookups per ontology | 2, one per depth-one live pipeline slot |
 | outgoing DTX endpoint correlations / inbound endpoint workers per ontology | 512 (`8 participants * 64 validators`) / 8 |
 | cached foreign ontology histories / total cache bytes | no protocol population ceiling; dormant disk caches reopen lazily and operator storage monitoring remains operational policy |
@@ -2457,12 +2456,15 @@ Step 6 decides release activation, not whether a second semantic mode is kept.
    phase decision. The consuming engine accepts a reply only from the expected
    authenticated peer and additionally matches its exact request fields. One
    envelope is at most the DTX-control bound plus 4 KiB and remains below the
-   transport frame cap. Each namespace admits at most
-   `8 participants * 64 validators = 512` outgoing live correlations, so the
-   concurrent all-participant Complete check cannot throttle itself, and at
-   most 8 inbound server workers. Authenticated admission is limited to 16
-   requests/second with burst 32. These values come from the shared
-   proof-limits header.
+   transport frame cap. The current per-ontology correlation cap is
+   `8 participants * 64 validators = 512`, shared by every overlapping
+   operation; it can therefore refuse a second valid operation even though it
+   accommodates one worst-case request set. The target also admits only eight
+   inbound endpoint workers, so a ninth applied-state/current-view request gets
+   `busy` and Complete validation can prevent its own quorum. There is no
+   authenticated-DTX requests-per-second or burst limiter. These operational
+   caps are scheduled for removal in `dtx-latency-optimization-plan.md`; they
+   are not wire-safety bounds.
    The process-free `quod_dtx_recovery:next/2` planner takes the exact canonical
    Begin plus bounded, target-ordered verified phase evidence, target
    generations, corroborated applied-status bodies, and at most one definite

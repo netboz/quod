@@ -97,12 +97,16 @@ same_link_response_test() ->
                           S0),
         SendResponse =
             receive
-                {'$gen_cast', {send_resp, ReplyLink, _Response} = Cast}
+                {'$gen_cast',
+                 {send_resp, _OwnerRef, ReplyLink, _Response, _Result} = Cast}
                   when ReplyLink =:= self() -> Cast
             after 2000 ->
                 error(catchup_worker_did_not_reply)
             end,
-        {noreply, _S2} = quod_catchup:handle_cast(SendResponse, S1),
+        {noreply, S2} = quod_catchup:handle_cast(SendResponse, S1),
+        {reply, Stats, S2} = quod_catchup:handle_call(stats, self(), S2),
+        ?assertEqual(0, maps:get(server_inflight, Stats)),
+        ?assertEqual(1, maps:get(server_inflight_peak, Stats)),
         receive
             {send, ResponseFrame} ->
                 ?assertMatch(
@@ -147,9 +151,12 @@ identified_endpoint_binds_live_key_before_request_test() ->
         end,
         ErrorFrame = quod_catchup:encode_frame(
                        Ns, {blocks_err, RequestId}),
-        {noreply, _S2} = quod_catchup:handle_info(
-                           {quod_message, {Peer, self()},
-                            quod_catchup:channel(Ns), ErrorFrame}, S1),
+        {noreply, S2} = quod_catchup:handle_info(
+                          {quod_message, {Peer, self()},
+                           quod_catchup:channel(Ns), ErrorFrame}, S1),
+        {reply, Stats, S2} = quod_catchup:handle_call(stats, self(), S2),
+        ?assertEqual(0, maps:get(client_pending, Stats)),
+        ?assertEqual(1, maps:get(client_pending_peak, Stats)),
         receive
             {CallRef, {error, server_error}} -> ok
         after 1000 ->

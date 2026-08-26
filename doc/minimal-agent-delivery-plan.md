@@ -12,6 +12,13 @@ or deployed under the corrected model.
 > idempotence, and failure analysis remain reference material and must be
 > rewritten around anchored agent instances and committed host epochs before the
 > delivery slice resumes.
+>
+> The later per-namespace `quod_outbox` scanner, dirty-bit, and generation-
+> handoff design is also retired. The normative design in
+> `agent-fipa-plan.md` §9 keeps the committed outbox fact as sole custody and
+> uses one founding `state_handler/4` for both live changes and recovery to feed
+> the hosted agent's one rebuildable delivery scheduler. It needs no duplicate
+> `react_on/3` delivery wake. Do not implement section 5 below.
 
 The lifecycle-only authorization and action runner cited in historical
 sections have been retired. Current work follows
@@ -40,7 +47,7 @@ the next subject milestone must include the minimum real wielding,
 truthful. It must not enable a subject first and repair it one slice later.
 
 The earlier signed-client generation introduced a signature-bound `{user, Key}`
-base principal. The current working tree replaces it atomically with the stable
+base principal. The deployed generation replaces it atomically with the stable
 agent reference defined by `generic-agent-identity-plan.md`. This milestone
 still introduces no empty agent chain or
 caller-supplied capabilities. Nodes, agents, human users, and services have
@@ -576,8 +583,9 @@ ownership registry.
 vocabulary required by its former Slice-4 specification. It contains no human
 records, keys, login path, or active authorization. Those arrive together in
 the corrected actor plan.
-Agent IDs are opaque ground binaries qualified by their AP ontology; this slice
-does not freeze the later public FIPA AID encoding.
+Agent identity is the canonical `agent_instance_ref/3` byte representation,
+independent of its current Agent Platform. The FIPA AID text form is fixed by
+`agent-fipa-plan.md` §12; this historical slice defines no competing encoding.
 
 ## 4. Reactions: extend the existing P-to-E boundary
 

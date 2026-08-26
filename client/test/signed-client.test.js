@@ -7,6 +7,7 @@ import {
   signedGoal,
 } from '../src/signed-client.js'
 import { memoryOperationJournal } from '../src/operation-journal.js'
+import { SIGNED_GOAL_LIMITS } from '../src/protocol-limits.js'
 
 test('signed goal bytes match the Erlang browser fixture', () => {
   const bytes = encodeGoalRequest({
@@ -30,6 +31,57 @@ test('signed goal bytes match the Erlang browser fixture', () => {
       '0000000000000000000000000000000000000000000000000000000000000020' +
       '0000001268756d616e5f7573657228616c696365292e' +
       '0102000001a3185c5000000000136173736572747a287361766564286f6b29292e',
+  )
+})
+
+test('request encoding and journaling share the full protocol bounds', async () => {
+  const bytes = encodeGoalRequest({
+    networkIdentity: u256(0x10),
+    signingPublicKey: u256(0x11),
+    operationId: u256(0x12),
+    agentNamespace: 'n'.repeat(SIGNED_GOAL_LIMITS.namespaceBytes),
+    agentAnchor: u256(0x13),
+    agentInstanceText: 'i'.repeat(SIGNED_GOAL_LIMITS.agentInstanceTextBytes),
+    mode: 'execute',
+    notAfterMs: 1_800_000_000_000,
+    goal: 'g'.repeat(SIGNED_GOAL_LIMITS.goalTextBytes),
+  })
+  assert.ok(bytes.length <= SIGNED_GOAL_LIMITS.requestBytes)
+
+  const request = Buffer.from(bytes).toString('base64url')
+  assert.ok(request.length <= SIGNED_GOAL_LIMITS.requestBase64urlChars)
+  const journal = memoryOperationJournal()
+  const row = operationJournalRow(request)
+  await journal.put(row)
+  assert.equal((await journal.list())[0].request, request)
+
+  await journal.put({
+    ...row,
+    id: 'b'.repeat(43),
+    request: 'r'.repeat(SIGNED_GOAL_LIMITS.requestBase64urlChars),
+  })
+  await assert.rejects(
+    journal.put({
+      ...row,
+      id: 'c'.repeat(43),
+      request: 'r'.repeat(SIGNED_GOAL_LIMITS.requestBase64urlChars + 1),
+    }),
+    /invalid operation journal row/,
+  )
+
+  assert.throws(
+    () => encodeGoalRequest({
+      networkIdentity: u256(0x10),
+      signingPublicKey: u256(0x11),
+      operationId: u256(0x12),
+      agentNamespace: 'n'.repeat(SIGNED_GOAL_LIMITS.namespaceBytes + 1),
+      agentAnchor: u256(0x13),
+      agentInstanceText: 'i',
+      mode: 'execute',
+      notAfterMs: 1_800_000_000_000,
+      goal: 'true',
+    }),
+    /invalid signed goal/,
   )
 })
 
@@ -242,20 +294,7 @@ test('missing durable storage permits reads but sends no possible write', async 
 
 test('the browser journal has no fixed unresolved-operation population limit', async () => {
   const journal = memoryOperationJournal()
-  const row = {
-    version: 2,
-    id: 'a'.repeat(43),
-    signing_key: 'k'.repeat(43),
-    network: 'n'.repeat(43),
-    agent: {
-      namespace: 'quod:agent-test',
-      anchor: 'a'.repeat(43),
-      instance_text: 'human_user(alice).',
-    },
-    request: 'request',
-    signature: 's'.repeat(86),
-    created_at_ms: Date.now(),
-  }
+  const row = operationJournalRow('request')
   for (let index = 0; index < 96; index += 1) {
     await journal.put({ ...row, id: index.toString(36).padStart(43, '0') })
   }
@@ -310,6 +349,23 @@ function signedCursor() {
     ...signedWrite(),
     mode: 'cursor',
     goal: 'member(X, [a,b]).',
+  }
+}
+
+function operationJournalRow(request) {
+  return {
+    version: 2,
+    id: 'a'.repeat(43),
+    signing_key: 'k'.repeat(43),
+    network: 'n'.repeat(43),
+    agent: {
+      namespace: 'quod:agent-test',
+      anchor: 'a'.repeat(43),
+      instance_text: 'human_user(alice).',
+    },
+    request,
+    signature: 's'.repeat(86),
+    created_at_ms: Date.now(),
   }
 }
 

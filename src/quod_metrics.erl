@@ -64,6 +64,12 @@ Two collection paths:
 | `quod_dtx_submit_fanout_total{namespace}` | counter | `result` | bounded target-validator DTX delivery attempts and outcomes |
 | `quod_dtx_admission_waiting/dormant{namespace}` | gauge | | sealed distributed writes waiting before Begin, and whether one Begin currently owns the dormant registration slot |
 | `quod_dtx_admission_wait_ms{namespace}` | histogram | | time a sealed distributed write waited before becoming the sole dormant Begin |
+| `quod_ontology_owner_current/peak{namespace,component,state}` | gauge | | current and owner-lifetime peak rows in the existing ontology-local DTX and catch-up owners |
+| `quod_ontology_owner_bytes_current/peak{namespace,component}` | gauge | | current and owner-lifetime peak encoded bytes retained by ontology-local owners that retain encoded data |
+| `quod_node_owner_current/peak{component,state}` | gauge | | current and owner-lifetime peak rows in the existing node-wide foreign-history, signed-goal, and scope routers |
+| `quod_node_owner_bytes_current{component}` | gauge | | current bytes retained by node-wide owners that report byte totals |
+| `quod_ontology_owner_duration_seconds` / `quod_node_owner_duration_seconds` | histogram | `component`, `phase`, `result` | lifetime of rows explicitly retired by a live owner, using only fixed labels |
+| `quod_ontology_owner_terminal_total` / `quod_node_owner_terminal_total` | counter | `component`, `phase`, `result` | rows explicitly retired by a live owner, using only fixed labels |
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
@@ -86,7 +92,9 @@ Two collection paths:
          observe_batch/3, observe_ingress_retarget_hops/2, count_tx_retry/2,
          count_dtx_validation/2, count_dtx_submit_fanout/3,
          observe_dtx_admission_wait/2,
-         observe_runtime_reaction/3]).
+         observe_runtime_reaction/3,
+         observe_ontology_owner_terminal/5,
+         observe_node_owner_terminal/4]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
 -ifdef(TEST).
@@ -118,6 +126,9 @@ Two collection paths:
 -define(REACTION_BUCKETS, [0.00005, 0.0001, 0.00025, 0.0005, 0.001,
                            0.0025, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25,
                            0.5, 1.0]).
+-define(OWNER_DURATION_BUCKETS,
+        [0.001, 0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5,
+         5, 10, 30, 60, 300, 600]).
 
 start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
@@ -142,8 +153,11 @@ handle_cast(_Msg, State)        -> {noreply, State}.
 handle_info(refresh, State) ->
     _ = [refresh_ns(Ns)        || Ns <- quod_brahms:namespaces()],
     _ = [refresh_log_ns(Ns)    || Ns <- quod_simplex:namespaces()],
+    _ = [refresh_catchup_ns(Ns) || Ns <- quod_simplex:namespaces()],
     _ = [refresh_runtime_ns(Ns) || Ns <- quod_prolog:namespaces()],  %% runtime runs beside each kb
     _ = refresh_foreign_log(),                                      %% one shared owner per node
+    _ = refresh_client_goal_router(),
+    _ = refresh_scope_router(),
     _ = refresh_effect_custody(),                                   %% one shared owner per node
     _ = [refresh_prolog_ns(Ns) || Ns <- quod_prolog:namespaces()],
     _ = [refresh_feed_ns(Ns)   || Ns <- quod_simplex:namespaces()],   %% feed runs per-ns alongside consensus
@@ -184,6 +198,28 @@ declare(NodeId) ->
             prometheus_gauge:declare([{name, Name}, {help, Help},
                                       {constant_labels, CL}])
         end,
+    OG = fun(Name, Help) ->
+             prometheus_gauge:declare(
+               [{name, Name}, {help, Help},
+                {labels, [namespace, component, state]},
+                {constant_labels, CL}])
+         end,
+    OBG = fun(Name, Help) ->
+              prometheus_gauge:declare(
+                [{name, Name}, {help, Help},
+                 {labels, [namespace, component]},
+                 {constant_labels, CL}])
+          end,
+    NG = fun(Name, Help) ->
+             prometheus_gauge:declare(
+               [{name, Name}, {help, Help},
+                {labels, [component, state]}, {constant_labels, CL}])
+         end,
+    NBG = fun(Name, Help) ->
+              prometheus_gauge:declare(
+                [{name, Name}, {help, Help},
+                 {labels, [component]}, {constant_labels, CL}])
+          end,
     %% Peer discovery: how this node finds and keeps track of the other nodes.
     _ = G(quod_brahms_view_size,   "How many other nodes this node currently knows about."),
     _ = G(quod_brahms_sample_size, "How many of those known nodes are in the small random set this node shares updates with, so gossip stays even."),
@@ -240,6 +276,20 @@ declare(NodeId) ->
     _ = G(quod_consensus_ahead_gap,       "How many final blocks the rest of the network is ahead of this node (0 means up to date). A value that stays above 0 means this node has fallen behind and is fetching the blocks it is missing."),
     _ = G(quod_dtx_admission_waiting, "Sealed distributed writes waiting before the existing Begin signing admission opens."),
     _ = G(quod_dtx_admission_dormant, "Whether one sealed distributed write currently owns the sole dormant Begin registration slot (0 or 1)."),
+    _ = OG(quod_ontology_owner_current,
+           "Current rows in internal work owners attached to one locally hosted ontology. Component and state are fixed labels; no remote identity or payload is exposed."),
+    _ = OG(quod_ontology_owner_peak,
+           "Highest simultaneous row count observed by that owner process since it started. The value resets when the owning process restarts."),
+    _ = OBG(quod_ontology_owner_bytes_current,
+            "Current encoded bytes retained by an internal owner attached to one locally hosted ontology."),
+    _ = OBG(quod_ontology_owner_bytes_peak,
+            "Highest encoded-byte total observed by that owner process since it started. The value resets when the owning process restarts."),
+    _ = NG(quod_node_owner_current,
+           "Current rows in one node-wide internal work owner. Component and state are fixed labels; peer, agent, target ontology, request, and payload identities are never labels."),
+    _ = NG(quod_node_owner_peak,
+           "Highest simultaneous row count observed by that node-wide owner process since it started. The value resets when the owning process restarts."),
+    _ = NBG(quod_node_owner_bytes_current,
+            "Current encoded bytes retained by one node-wide internal owner."),
     %% Runtime (P tier): this node's derived working state, rebuilt from stored data by handlers.
     _ = G(quod_runtime_healthy,         "1 while the runtime is live and processing; 0 while booting, replaying, reconciling, or unhealthy. Missing means the runtime process is absent. A persistent 0 means it cannot currently release effects; check runtime logs and the failure metrics."),
     _ = G(quod_runtime_handlers_active, "How many founding-declared handlers are active in this namespace."),
@@ -369,6 +419,16 @@ declare(NodeId) ->
     _ = H(quod_consensus_round_commit_ms,
           "When it was this node's turn to build a block: how long, in milliseconds, from the block being accepted until it is made final and saved to disk here. This is the second half of agreeing on a block; add it to the first half for the full time a block takes.",
           ?ROUND_BUCKETS),
+    _ = prometheus_histogram:declare(
+          [{name, quod_ontology_owner_duration_seconds},
+           {help, "Lifetime of one internal owner row explicitly retired while its locally hosted ontology owner is alive. Component, phase, result, and histogram buckets are fixed; identities and failure payloads are never labels."},
+           {labels, [namespace, component, phase, result]},
+           {buckets, ?OWNER_DURATION_BUCKETS}, {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_node_owner_duration_seconds},
+           {help, "Lifetime of one node-wide internal owner row explicitly retired while its owner is alive. Component, phase, result, and histogram buckets are fixed; identities and failure payloads are never labels."},
+           {labels, [component, phase, result]},
+           {buckets, ?OWNER_DURATION_BUCKETS}, {constant_labels, CL}]),
     _ = prometheus_counter:declare([{name, quod_tx_committed_total},
                                     {help, "Total finished changes, grouped by the node that submitted them (only ever goes up)."},
                                     {labels, [namespace, author]}, {constant_labels, CL}]),
@@ -383,6 +443,15 @@ declare(NodeId) ->
           [{name, quod_dtx_submit_fanout_total},
            {help, "Bounded target-validator delivery attempts and their correlated results for distributed controls."},
            {labels, [namespace, result]}, {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_ontology_owner_terminal_total},
+           {help, "Internal owner rows explicitly retired by live locally hosted ontology owners, using only fixed component, phase, and result labels."},
+           {labels, [namespace, component, phase, result]},
+           {constant_labels, CL}]),
+    _ = prometheus_counter:declare(
+          [{name, quod_node_owner_terminal_total},
+           {help, "Node-wide internal owner rows explicitly retired by live owners, using only fixed component, phase, and result labels."},
+           {labels, [component, phase, result]}, {constant_labels, CL}]),
     _ = prometheus_counter:declare(
           [{name, quod_tx_invalid_signatures_total},
            {help, "Total transaction author signatures that failed cryptographic verification. Any increase means malformed, corrupted, or dishonest transaction input was rejected before this node voted for its block."},
@@ -568,7 +637,36 @@ refresh_foreign_log() ->
     _ = Set(quod_foreign_bootstrap_accepted, bootstrap_accepted),
     _ = Set(quod_foreign_bootstrap_rejected, bootstrap_rejected),
     _ = Set(quod_foreign_bootstrap_evicted, bootstrap_evicted),
+    _ = set_node_owner_rows(
+          foreign_history,
+          #{verifying => maps:get(pending, Stats, 0),
+            page_pulls => maps:get(pulls, Stats, 0),
+            cached_histories => maps:get(histories, Stats, 0)},
+          #{}),
+    _ = set_node_owner_bytes(
+          foreign_history, maps:get(cache_bytes, Stats, 0)),
     ok.
+
+refresh_client_goal_router() ->
+    Stats = quod_client_goal_router:stats(),
+    set_node_owner_rows(
+      client_goal_router, maps:get(owner_current, Stats, #{}),
+      maps:get(owner_peak, Stats, #{})).
+
+refresh_scope_router() ->
+    Stats = quod_ask_router:stats(),
+    set_node_owner_rows(
+      scope_router, maps:get(owner_current, Stats, #{}),
+      maps:get(owner_peak, Stats, #{})).
+
+refresh_catchup_ns(Ns) ->
+    Stats = quod_catchup:stats(Ns),
+    set_ontology_owner_rows(
+      Ns, catchup_read,
+      #{client_pending => maps:get(client_pending, Stats, 0),
+        server_inflight => maps:get(server_inflight, Stats, 0)},
+      #{client_pending => maps:get(client_pending_peak, Stats, 0),
+        server_inflight => maps:get(server_inflight_peak, Stats, 0)}).
 
 refresh_effect_custody() ->
     case quod_effect_journal:stats() of
@@ -625,6 +723,9 @@ refresh_log_ns(Ns) ->
           ingress_expired := IE, ingress_forwarded := IF,
           custody_depth := CD, custody_ready := CR, custody_bytes := CB,
           dtx_admission_waiting := DAW, dtx_admission_dormant := DAD,
+          owner_current := OwnerCurrent, owner_peak := OwnerPeak,
+          owner_bytes_current := OwnerBytesCurrent,
+          owner_bytes_peak := OwnerBytesPeak,
           ingress_retargets := IRT,
           relay_accepted := RA, relay_redrives := RRD,
           relay_duplicates := RDU,
@@ -660,6 +761,18 @@ refresh_log_ns(Ns) ->
             _ = S(quod_consensus_custody_bytes, CB),
             _ = S(quod_dtx_admission_waiting, DAW),
             _ = S(quod_dtx_admission_dormant, DAD),
+            _ = maps:foreach(
+                  fun(Component, Current) ->
+                          set_ontology_owner_rows(
+                            Ns, Component, Current,
+                            maps:get(Component, OwnerPeak, #{}))
+                  end, OwnerCurrent),
+            _ = maps:foreach(
+                  fun(Component, CurrentBytes) ->
+                          set_ontology_owner_bytes(
+                            Ns, Component, CurrentBytes,
+                            maps:get(Component, OwnerBytesPeak, undefined))
+                  end, OwnerBytesCurrent),
             _ = S(quod_consensus_ingress_retargets, IRT),
             _ = S(quod_consensus_relay_accepted, RA),
             _ = S(quod_consensus_relay_redrives, RRD),
@@ -847,6 +960,58 @@ observe_runtime_reaction(Ns, Result, ElapsedUs)
             catch _:_ -> ok
             end
     end.
+
+-doc "Record one row explicitly retired by a live hosted-ontology owner.".
+-spec observe_ontology_owner_terminal(binary(), atom(), atom(), atom(),
+                                      non_neg_integer()) -> ok.
+observe_ontology_owner_terminal(Ns, Component, Phase, Result, DurationMs)
+  when is_binary(Ns), is_integer(DurationMs), DurationMs >= 0 ->
+    case {ontology_owner_component(Component), owner_phase(Phase),
+          owner_result(Result), whereis(?MODULE)} of
+        {{ok, ComponentLabel}, {ok, PhaseLabel}, {ok, ResultLabel}, Pid}
+          when is_pid(Pid) ->
+            try
+                Labels = [label(Ns), ComponentLabel, PhaseLabel, ResultLabel],
+                _ = prometheus_histogram:observe(
+                      quod_ontology_owner_duration_seconds, Labels,
+                      erlang:convert_time_unit(
+                        DurationMs, millisecond, native)),
+                _ = prometheus_counter:inc(
+                      quod_ontology_owner_terminal_total, Labels),
+                ok
+            catch _:_ -> ok
+            end;
+        _ ->
+            ok
+    end;
+observe_ontology_owner_terminal(_Ns, _Component, _Phase, _Result,
+                                _DurationMs) ->
+    ok.
+
+-doc "Record one row explicitly retired by a live node-wide owner.".
+-spec observe_node_owner_terminal(atom(), atom(), atom(), non_neg_integer()) -> ok.
+observe_node_owner_terminal(Component, Phase, Result, DurationMs)
+  when is_integer(DurationMs), DurationMs >= 0 ->
+    case {node_owner_component(Component), owner_phase(Phase),
+          owner_result(Result), whereis(?MODULE)} of
+        {{ok, ComponentLabel}, {ok, PhaseLabel}, {ok, ResultLabel}, Pid}
+          when is_pid(Pid) ->
+            try
+                Labels = [ComponentLabel, PhaseLabel, ResultLabel],
+                _ = prometheus_histogram:observe(
+                      quod_node_owner_duration_seconds, Labels,
+                      erlang:convert_time_unit(
+                        DurationMs, millisecond, native)),
+                _ = prometheus_counter:inc(
+                      quod_node_owner_terminal_total, Labels),
+                ok
+            catch _:_ -> ok
+            end;
+        _ ->
+            ok
+    end;
+observe_node_owner_terminal(_Component, _Phase, _Result, _DurationMs) ->
+    ok.
 
 -doc """
 One frame discarded at the QUIC send gate (`m:quod_link` ignores backpressure by design;
@@ -1135,6 +1300,84 @@ count_fixed_event(Name, Ns, Event, Count) ->
             end
     end.
 
+set_ontology_owner_rows(Ns, Component, Current, Peak) ->
+    case ontology_owner_component(Component) of
+        {ok, ComponentLabel} ->
+            maps:foreach(
+              fun(State, Value) ->
+                      case owner_state(Component, State) of
+                          {ok, StateLabel} ->
+                              prometheus_gauge:set(
+                                quod_ontology_owner_current,
+                                [label(Ns), ComponentLabel, StateLabel], Value);
+                          error -> ok
+                      end
+              end, Current),
+            maps:foreach(
+              fun(State, Value) ->
+                      case owner_state(Component, State) of
+                          {ok, StateLabel} ->
+                              prometheus_gauge:set(
+                                quod_ontology_owner_peak,
+                                [label(Ns), ComponentLabel, StateLabel], Value);
+                          error -> ok
+                      end
+              end, Peak),
+            ok;
+        error -> ok
+    end.
+
+set_ontology_owner_bytes(Ns, Component, Current, Peak) ->
+    case ontology_owner_component(Component) of
+        {ok, ComponentLabel} ->
+            _ = prometheus_gauge:set(
+                  quod_ontology_owner_bytes_current,
+                  [label(Ns), ComponentLabel], Current),
+            case Peak of
+                Value when is_number(Value) ->
+                    prometheus_gauge:set(
+                      quod_ontology_owner_bytes_peak,
+                      [label(Ns), ComponentLabel], Value);
+                undefined -> ok
+            end;
+        error -> ok
+    end.
+
+set_node_owner_rows(Component, Current, Peak) ->
+    case node_owner_component(Component) of
+        {ok, ComponentLabel} ->
+            maps:foreach(
+              fun(State, Value) ->
+                      case owner_state(Component, State) of
+                          {ok, StateLabel} ->
+                              prometheus_gauge:set(
+                                quod_node_owner_current,
+                                [ComponentLabel, StateLabel], Value);
+                          error -> ok
+                      end
+              end, Current),
+            maps:foreach(
+              fun(State, Value) ->
+                      case owner_state(Component, State) of
+                          {ok, StateLabel} ->
+                              prometheus_gauge:set(
+                                quod_node_owner_peak,
+                                [ComponentLabel, StateLabel], Value);
+                          error -> ok
+                      end
+              end, Peak),
+            ok;
+        error -> ok
+    end.
+
+set_node_owner_bytes(Component, Current) ->
+    case node_owner_component(Component) of
+        {ok, ComponentLabel} ->
+            prometheus_gauge:set(
+              quod_node_owner_bytes_current, [ComponentLabel], Current);
+        error -> ok
+    end.
+
 %% --- labels --------------------------------------------------------------
 
 %% This node's stable identity for the constant `node_id` label. `node_pubkey` is set by
@@ -1157,6 +1400,70 @@ label(Ns) when is_binary(Ns) ->
         _                   -> base64:encode(Ns)
     end.
 
+%% Every value below is a closed vocabulary.  Never derive these labels from
+%% requests, identities, target namespaces or failure terms.
+ontology_owner_component(dtx_control) -> {ok, <<"dtx_control">>};
+ontology_owner_component(dtx_endpoint) -> {ok, <<"dtx_endpoint">>};
+ontology_owner_component(catchup_read) -> {ok, <<"catchup_read">>};
+ontology_owner_component(_) -> error.
+
+node_owner_component(foreign_history) -> {ok, <<"foreign_history">>};
+node_owner_component(client_goal_router) -> {ok, <<"client_goal_router">>};
+node_owner_component(scope_router) -> {ok, <<"scope_router">>};
+node_owner_component(_) -> error.
+
+owner_phase('begin') -> {ok, <<"begin">>};
+owner_phase(prepare) -> {ok, <<"prepare">>};
+owner_phase(decision) -> {ok, <<"decision">>};
+owner_phase(finalize) -> {ok, <<"finalize">>};
+owner_phase(complete) -> {ok, <<"complete">>};
+owner_phase(outbound) -> {ok, <<"outbound">>};
+owner_phase(inbound) -> {ok, <<"inbound">>};
+owner_phase(client) -> {ok, <<"client">>};
+owner_phase(server) -> {ok, <<"server">>};
+owner_phase(scope) -> {ok, <<"scope">>};
+owner_phase(identity) -> {ok, <<"identity">>};
+owner_phase(probe) -> {ok, <<"probe">>};
+owner_phase(route) -> {ok, <<"route">>};
+owner_phase(_) -> error.
+
+owner_result(completed) -> {ok, <<"completed">>};
+owner_result(timeout) -> {ok, <<"timeout">>};
+owner_result(caller_down) -> {ok, <<"caller_down">>};
+owner_result(link_down) -> {ok, <<"link_down">>};
+owner_result(worker_down) -> {ok, <<"worker_down">>};
+owner_result(expired) -> {ok, <<"expired">>};
+owner_result(rejected) -> {ok, <<"rejected">>};
+owner_result(unavailable) -> {ok, <<"unavailable">>};
+owner_result(not_found) -> {ok, <<"not_found">>};
+owner_result(busy) -> {ok, <<"busy">>};
+owner_result(error) -> {ok, <<"error">>};
+owner_result(shutdown) -> {ok, <<"shutdown">>};
+owner_result(_) -> error.
+
+owner_state(dtx_control, retained) -> {ok, <<"retained">>};
+owner_state(dtx_control, waiters) -> {ok, <<"waiters">>};
+owner_state(dtx_endpoint, outbound) -> {ok, <<"outbound">>};
+owner_state(dtx_endpoint, inbound) -> {ok, <<"inbound">>};
+owner_state(catchup_read, client_pending) -> {ok, <<"client_pending">>};
+owner_state(catchup_read, server_inflight) -> {ok, <<"server_inflight">>};
+owner_state(foreign_history, verifying) -> {ok, <<"verifying">>};
+owner_state(foreign_history, page_pulls) -> {ok, <<"page_pulls">>};
+owner_state(foreign_history, cached_histories) -> {ok, <<"cached_histories">>};
+owner_state(client_goal_router, outbound) -> {ok, <<"outbound">>};
+owner_state(client_goal_router, inbound) -> {ok, <<"inbound">>};
+owner_state(client_goal_router, cursor_routes) -> {ok, <<"cursor_routes">>};
+owner_state(scope_router, scopes) -> {ok, <<"scopes">>};
+owner_state(scope_router, owners) -> {ok, <<"owners">>};
+owner_state(scope_router, retained_owners) -> {ok, <<"retained_owners">>};
+owner_state(scope_router, openings) -> {ok, <<"openings">>};
+owner_state(scope_router, identity_probes) -> {ok, <<"identity_probes">>};
+owner_state(scope_router, identity_collections) ->
+    {ok, <<"identity_collections">>};
+owner_state(scope_router, identity_attestations) ->
+    {ok, <<"identity_attestations">>};
+owner_state(_, _) -> error.
+
 -ifdef(TEST).
 %% EXACTLY the keys refresh_log_ns/1's map pattern requires of quod_simplex:stats_map/1.
 %% The lockstep eunit (quod_simplex_tests) asserts every one exists in stats_map — a key
@@ -1169,6 +1476,7 @@ consensus_stat_keys() ->
      ingress_queued, ingress_overflow, ingress_expired, ingress_forwarded,
      custody_depth, custody_ready, custody_bytes, ingress_retargets,
      dtx_admission_waiting, dtx_admission_dormant,
+     owner_current, owner_peak, owner_bytes_current, owner_bytes_peak,
      relay_accepted, relay_redrives, relay_duplicates,
      redrives, progress_slot, progress_phase_code, progress_quorum_ready,
      progress_timeouts, quorum_pauses, head_support_votes, head_commit_votes,

@@ -103,6 +103,56 @@ reaction_latency_uses_only_bounded_result_labels_test() ->
         Placeholder ! stop
     end.
 
+owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"owner:metrics:",
+           (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    ok = quod_metrics:observe_ontology_owner_terminal(
+           Ns, dtx_control, prepare, completed, 7),
+    ok = quod_metrics:observe_node_owner_terminal(
+           scope_router, scope, timeout, 7),
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        ok = quod_metrics:observe_ontology_owner_terminal(
+               Ns, dtx_control, prepare, completed, 125),
+        ok = quod_metrics:observe_node_owner_terminal(
+               scope_router, scope, timeout, 250),
+        %% None of these request-controlled values may create a label series.
+        ok = quod_metrics:observe_ontology_owner_terminal(
+               Ns, attacker_component, prepare, completed, 1000),
+        ok = quod_metrics:observe_node_owner_terminal(
+               scope_router, attacker_phase, timeout, 1000),
+        ok = quod_metrics:observe_node_owner_terminal(
+               scope_router, scope, attacker_result, 1000),
+        {_, OntologySum} = prometheus_histogram:value(
+                             quod_ontology_owner_duration_seconds,
+                             [Ns, <<"dtx_control">>, <<"prepare">>,
+                              <<"completed">>]),
+        {_, NodeSum} = prometheus_histogram:value(
+                         quod_node_owner_duration_seconds,
+                         [<<"scope_router">>, <<"scope">>, <<"timeout">>]),
+        ?assertEqual(0.125, OntologySum),
+        ?assertEqual(0.25, NodeSum),
+        ?assertEqual(
+           1, prometheus_counter:value(
+                quod_ontology_owner_terminal_total,
+                [Ns, <<"dtx_control">>, <<"prepare">>, <<"completed">>])),
+        ?assertEqual(
+           1, prometheus_counter:value(
+                quod_node_owner_terminal_total,
+                [<<"scope_router">>, <<"scope">>, <<"timeout">>])),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_node_owner_duration_seconds,
+             [<<"scope_router">>, <<"attacker_phase">>, <<"timeout">>]))
+    after
+        Placeholder ! stop
+    end.
+
 foreign_commit_metrics_use_target_namespace_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     ok = quod_metrics:declare(<<"kp_testnode">>),

@@ -12,7 +12,7 @@ cursor continuation lives only in `quod_client_cursor`.
 
 -include("quod_client_goal_limits.hrl").
 
--export([start_link/0, submit/9, cursor/4]).
+-export([start_link/0, submit/9, cursor/4, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -ifdef(TEST).
 -export([test_start_link/1, test_submit/10, test_cursor/5, test_stats/1,
@@ -36,7 +36,8 @@ cursor continuation lives only in `quod_client_cursor`.
     open_fun = fun quod_quic:open_link_pinned/3 :: fun(),
     correlations = #{} :: map(),
     inbound = #{} :: map(),
-    routes = #{} :: map()
+    routes = #{} :: map(),
+    owner_peaks = #{} :: #{atom() => non_neg_integer()}
 }).
 
 -spec start_link() -> gen_server:start_ret().
@@ -57,10 +58,7 @@ test_cursor(Router, Owner, CursorId, Command, TimeoutMs) ->
     call(Router, {cursor, Owner, CursorId, Command, TimeoutMs}).
 
 test_stats(Router) ->
-    S = sys:get_state(Router),
-    #{correlations => map_size(S#s.correlations),
-      inbound => map_size(S#s.inbound),
-      routes => map_size(S#s.routes)}.
+    owner_stats(sys:get_state(Router)).
 
 test_cursor_target_result(Result) ->
     cursor_target_result(Result).
@@ -83,6 +81,16 @@ submit(Route, Owner, Evidence, RequestBytes, Signature, CursorBinding,
           request_result().
 cursor(Owner, CursorId, Command, TimeoutMs) ->
     call({cursor, Owner, CursorId, Command, TimeoutMs}).
+
+-doc "Current and owner-lifetime peak rows for metrics; empty while the router is absent.".
+stats() ->
+    case whereis(?MODULE) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, stats, 1000)
+            catch exit:_ -> empty_owner_stats()
+            end;
+        undefined -> empty_owner_stats()
+    end.
 
 call(Request) ->
     case whereis(?MODULE) of
@@ -147,13 +155,14 @@ handle_call(
                                end),
             Corr = #{worker => Worker, mref => MRef, peer => PeerKey,
                      link => undefined, request => Request,
-                     route_key => RouteKey, kind => submit},
+                     route_key => RouteKey, kind => submit,
+                     started_at => quod_time:mono_ms()},
             Routes1 = reserve_route(
                         RouteKey, Worker, ExpiresMs, Evidence, S0#s.routes),
-            {noreply,
+            {noreply, track_owner_peaks(
              S0#s{correlations =
                        (S0#s.correlations)#{RequestId => Corr},
-                   routes = Routes1}};
+                   routes = Routes1})};
         {error, _} = Error ->
             {reply, Error, S0}
     end;
@@ -175,12 +184,13 @@ handle_call({cursor, Owner, CursorId, Command, TimeoutMs}, From, S0) ->
                                end),
             Corr = #{worker => Worker, mref => MRef, peer => PeerKey,
                      link => Link, request => Request,
-                     route_key => RouteKey, kind => {cursor, Command}},
+                     route_key => RouteKey, kind => {cursor, Command},
+                     started_at => quod_time:mono_ms()},
             Route1 = Route#{busy => Worker},
-            {noreply,
+            {noreply, track_owner_peaks(
              S0#s{correlations =
                        (S0#s.correlations)#{RequestId => Corr},
-                   routes = (S0#s.routes)#{RouteKey => Route1}}};
+                   routes = (S0#s.routes)#{RouteKey => Route1}})};
         {error, _} = Error ->
             {reply, Error, S0}
     end;
@@ -200,6 +210,8 @@ handle_call({route_result, Worker, RouteKey, Result, Peer, Link, ExpiresMs},
     {Reply, S1} = route_result(
                     Worker, RouteKey, Result, Peer, Link, ExpiresMs, S0),
     {reply, Reply, S1};
+handle_call(stats, _From, S) ->
+    {reply, owner_stats(S), S};
 handle_call(_Request, _From, S) ->
     {reply, {error, bad_request}, S}.
 
@@ -214,11 +226,12 @@ handle_info(
         undefined ->
             {noreply, S0}
     end;
-handle_info({'DOWN', MRef, process, Pid, _Reason}, S0) ->
-    {noreply, down(MRef, Pid, S0)};
+handle_info({'DOWN', MRef, process, Pid, Reason}, S0) ->
+    {noreply, down(MRef, Pid, Reason, S0)};
 handle_info({route_expired, RouteKey, Token}, S0) ->
     case maps:get(RouteKey, S0#s.routes, undefined) of
-        #{expiry_token := Token} -> {noreply, drop_route(RouteKey, S0)};
+        #{expiry_token := Token} ->
+            {noreply, drop_route(RouteKey, expired, S0)};
         _ -> {noreply, S0}
     end;
 handle_info(_Message, S) -> {noreply, S}.
@@ -304,7 +317,8 @@ admit_route(Key, #s{routes = Routes}) ->
 reserve_route(none, _Worker, _ExpiresMs, _Evidence, Routes) -> Routes;
 reserve_route(Key, Worker, ExpiresMs, Evidence, Routes) ->
     Routes#{Key => #{state => pending, busy => Worker,
-                     expires_ms => ExpiresMs, evidence => Evidence}}.
+                     expires_ms => ExpiresMs, evidence => Evidence,
+                     started_at => quod_time:mono_ms()}}.
 
 outbound_open_worker(Router, From, Peer, Endpoint, Request, Frame,
                      TimeoutMs, RouteKey, ExpiresMs, Evidence, OpenFun) ->
@@ -447,10 +461,12 @@ route_request(Peer, Link, Payload, S0) ->
                                            inbound_worker(
                                              Peer, Link, Request)
                                        end),
-                    S0#s{inbound =
+                    track_owner_peaks(S0#s{inbound =
                               (S0#s.inbound)#{Worker =>
                                                   #{mref => MRef,
-                                                    peer => Peer}}};
+                                                    peer => Peer,
+                                                    started_at =>
+                                                        quod_time:mono_ms()}}});
                 false ->
                     send_response(
                       Link,
@@ -604,7 +620,7 @@ route_result(Worker, RouteKey, Result, Peer, Link, ExpiresMs, S0) ->
                   when CursorId =:= element(2, RouteKey) ->
                     {ok, install_route(
                            RouteKey, Peer, Link, ExpiresMs, S0)};
-                _ -> {ok, drop_route(RouteKey, S0)}
+                _ -> {ok, drop_route(RouteKey, completed, S0)}
             end;
         #{state := active, busy := Worker} ->
             case Result of
@@ -614,7 +630,7 @@ route_result(Worker, RouteKey, Result, Peer, Link, ExpiresMs, S0) ->
                     {ok, S0#s{routes =
                                    (S0#s.routes)#{RouteKey =>
                                                        Route#{busy => none}}}};
-                _ -> {ok, drop_route(RouteKey, S0)}
+                _ -> {ok, drop_route(RouteKey, completed, S0)}
             end;
         _ -> {{error, unavailable}, S0}
     end.
@@ -629,14 +645,17 @@ install_route(RouteKey, Peer, Link, ExpiresMs, S0) ->
               link => Link, link_mref => LinkMRef,
               expiry_timer => Timer, expiry_token => Token,
               expires_ms => ExpiresMs,
-              evidence => maps:get(evidence, Pending)},
+              evidence => maps:get(evidence, Pending),
+              started_at => maps:get(started_at, Pending)},
     S0#s{routes = (S0#s.routes)#{RouteKey => Route}}.
 
-drop_route(RouteKey, S0) ->
+drop_route(RouteKey, Result, S0) ->
     case maps:take(RouteKey, S0#s.routes) of
         {Route, Routes1} ->
             cancel_route_timer(Route),
             demonitor_optional(maps:get(link_mref, Route, undefined)),
+            observe_router_terminal(
+              route, Result, maps:get(started_at, Route)),
             S0#s{routes = Routes1};
         error -> S0
     end.
@@ -648,14 +667,21 @@ cancel_route_timer(_Route) -> ok.
 demonitor_optional(undefined) -> ok;
 demonitor_optional(MRef) -> demonitor(MRef, [flush]), ok.
 
-down(MRef, Pid, S0) ->
+down(MRef, Pid, Reason, S0) ->
     case take_correlation(MRef, Pid, S0#s.correlations) of
         {ok, Corr, Correlations1} ->
+            Result = worker_result(Reason),
+            observe_router_terminal(
+              outbound, Result, maps:get(started_at, Corr)),
             S1 = S0#s{correlations = Correlations1},
-            cleanup_worker_route(Pid, maps:get(route_key, Corr), S1);
+            cleanup_worker_route(
+              Pid, maps:get(route_key, Corr), Result, S1);
         error ->
             case maps:take(Pid, S0#s.inbound) of
-                {#{mref := MRef}, Inbound1} -> S0#s{inbound = Inbound1};
+                {#{mref := MRef, started_at := StartedAt}, Inbound1} ->
+                    observe_router_terminal(
+                      inbound, worker_result(Reason), StartedAt),
+                    S0#s{inbound = Inbound1};
                 error -> drop_link_route(MRef, S0)
             end
     end.
@@ -670,20 +696,58 @@ take_correlation(MRef, Pid, Correlations) ->
         _ -> error
     end.
 
-cleanup_worker_route(_Worker, none, S) -> S;
-cleanup_worker_route(Worker, RouteKey, S0) ->
+cleanup_worker_route(_Worker, none, _Result, S) -> S;
+cleanup_worker_route(Worker, RouteKey, Result, S0) ->
     case maps:get(RouteKey, S0#s.routes, undefined) of
-        #{state := pending, busy := Worker} -> drop_route(RouteKey, S0);
-        #{state := active, busy := Worker} -> drop_route(RouteKey, S0);
+        #{state := pending, busy := Worker} ->
+            drop_route(RouteKey, Result, S0);
+        #{state := active, busy := Worker} ->
+            drop_route(RouteKey, Result, S0);
         _ -> S0
     end.
 
 drop_link_route(MRef, S0) ->
     case [Key || {Key, #{link_mref := Ref}} <- maps:to_list(S0#s.routes),
                  Ref =:= MRef] of
-        [Key] -> drop_route(Key, S0);
+        [Key] -> drop_route(Key, link_down, S0);
         _ -> S0
     end.
+
+empty_owner_stats() ->
+    #{correlations => 0, inbound => 0, routes => 0,
+      owner_current => #{outbound => 0, inbound => 0, cursor_routes => 0},
+      owner_peak => #{outbound => 0, inbound => 0, cursor_routes => 0}}.
+
+owner_stats(#s{correlations = Correlations, inbound = Inbound,
+               routes = Routes, owner_peaks = Peaks}) ->
+    Current = #{outbound => map_size(Correlations),
+                inbound => map_size(Inbound),
+                cursor_routes => map_size(Routes)},
+    #{correlations => map_size(Correlations),
+      inbound => map_size(Inbound), routes => map_size(Routes),
+      owner_current => Current,
+      owner_peak => maps:map(
+                      fun(State, Value) ->
+                              max(Value, maps:get(State, Peaks, 0))
+                      end, Current)}.
+
+track_owner_peaks(S = #s{owner_peaks = Peaks0}) ->
+    #{owner_current := Current} = owner_stats(S),
+    Peaks = maps:fold(
+              fun(State, Value, Acc) ->
+                      Acc#{State => max(Value, maps:get(State, Acc, 0))}
+              end, Peaks0, Current),
+    S#s{owner_peaks = Peaks}.
+
+observe_router_terminal(Phase, Result, StartedAt) ->
+    quod_metrics:observe_node_owner_terminal(
+      client_goal_router, Phase, Result,
+      max(0, quod_time:mono_ms() - StartedAt)),
+    ok.
+
+worker_result(normal) -> completed;
+worker_result(shutdown) -> shutdown;
+worker_result(_) -> worker_down.
 
 request_id() -> crypto:strong_rand_bytes(
                   ?QUOD_CLIENT_GOAL_REQUEST_ID_BITS div 8).

@@ -28,7 +28,7 @@ the caller, not from trusting this transport.
 -include("quod_transport_limits.hrl").
 -include("quod_proof_limits.hrl").
 
--export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4,
+-export([start_link/2, contact/1, contacts/2, pull/4, serve_blocks/4, stats/1,
          channel/1, encode_frame/2, decode_frame/2, page_stats/1,
          verify_forward/5, verify_forward/6, verify_entry/3,
          catch_up/5, catch_up/7]).
@@ -45,29 +45,49 @@ the caller, not from trusting this transport.
                                          %% frame MUST fit quod_link's 1 MiB cap (it EXITs the link on a
                                          %% larger frame), so we leave headroom for the envelope
 
+-record(client_pull, {
+          from :: gen_server:from(),
+          timer :: reference(),
+          expected_peer :: {bound, node_id()} | {opening, reference()},
+          started_ms :: integer()
+         }).
+
 -record(s, {ns       :: binary(),
             self     :: node_id(),
             chan     :: binary(),                       %% term_to_binary({catchup, Ns}, [deterministic])
             data_dir :: file:filename_all(),
             seeds    = []  :: [endpoint()],             %% static cold-start contacts (sample_contact fallback)
-            pending  = #{} :: #{reference() =>
-                                  {gen_server:from(), reference(),
-                                   {bound, node_id()} | {opening, reference()}}},
-                                      %% client: ReqId=>{From,TRef,ExpectedPeer}
+            pending  = #{} :: #{reference() => #client_pull{}},
+                                      %% client: one exact owned row per pull
+            pending_peak = 0 :: non_neg_integer(),
             openings = #{} :: #{reference() =>
                                   {reference(), endpoint(), binary()}},
                                       %% identified OpenRef=>{ReqId,Endpoint,Frame}
-            inflight = 0   :: non_neg_integer()}).       %% server: live read workers
+            inflight = #{} :: #{reference() => integer()},
+                                      %% server: one exact row per live read worker
+            inflight_peak = 0 :: non_neg_integer()}).
 
 -ifdef(TEST).
 test_state(Ns, LedgerDir) ->
     test_state(Ns, LedgerDir, #{}).
 
 test_state(Ns, LedgerDir, Opts) ->
+    Pending = normalize_test_pending(maps:get(pending, Opts, #{})),
     #s{ns = Ns, self = <<0:256>>, chan = channel(Ns),
        data_dir = LedgerDir,
-       pending = maps:get(pending, Opts, #{}),
+       pending = Pending,
+       pending_peak = map_size(Pending),
        openings = maps:get(openings, Opts, #{})}.
+
+normalize_test_pending(Pending) ->
+    maps:map(
+      fun(_ReqId, {From, Timer, ExpectedPeer}) ->
+              #client_pull{from = From, timer = Timer,
+                           expected_peer = ExpectedPeer,
+                           started_ms = quod_time:mono_ms()};
+         (_ReqId, #client_pull{} = Pull) ->
+              Pull
+      end, Pending).
 -endif.
 
 %%%===================================================================
@@ -111,6 +131,21 @@ pull(Ns, From, To, Contact) ->
         Pid -> try gen_server:call(Pid, {pull, From, To, Contact}, ?REQ_TIMEOUT_MS + 1000)
                catch exit:_ -> {error, timeout} end
     end.
+
+-doc "Current catch-up work and owner-lifetime peaks for one hosted ontology.".
+-spec stats(binary()) -> map().
+stats(Ns) when is_binary(Ns) ->
+    case quod_reg:where({quod_catchup, Ns}) of
+        Pid when is_pid(Pid) ->
+            try gen_server:call(Pid, stats, 5000)
+            catch exit:_ -> empty_stats()
+            end;
+        undefined -> empty_stats()
+    end.
+
+empty_stats() ->
+    #{client_pending => 0, client_pending_peak => 0,
+      server_inflight => 0, server_inflight_peak => 0}.
 
 -doc "The one canonical catch-up channel name for an ontology.".
 -spec channel(binary()) -> binary().
@@ -743,11 +778,25 @@ handle_call({contacts, Limit}, _From, S = #s{ns = Ns, seeds = Seeds}) ->
     {reply, contact_candidates(Ns, Seeds, Limit), S};
 handle_call({pull, From, To, Contact}, ReplyTo, S) ->
     begin_pull(Contact, From, To, ReplyTo, S);
+handle_call(stats, _From, S) ->
+    {reply,
+     #{client_pending => map_size(S#s.pending),
+       client_pending_peak => S#s.pending_peak,
+       server_inflight => map_size(S#s.inflight),
+       server_inflight_peak => S#s.inflight_peak},
+     S};
 handle_call(_Req, _From, S) -> {reply, {error, unknown_call}, S}.
 
-handle_cast({send_resp, ReplyLink, Resp}, S) ->
-    ok = quod_link:send(ReplyLink, encode_frame(S#s.ns, Resp)),
-    {noreply, S#s{inflight = max(0, S#s.inflight - 1)}};
+handle_cast({send_resp, OwnerRef, ReplyLink, Resp, Result}, S0) ->
+    case maps:take(OwnerRef, S0#s.inflight) of
+        {StartedMs, Inflight1} ->
+            ok = quod_link:send(ReplyLink, encode_frame(S0#s.ns, Resp)),
+            S1 = S0#s{inflight = Inflight1},
+            {noreply,
+             record_server_terminal(Result, elapsed_ms(StartedMs), S1)};
+        error ->
+            {noreply, S0}
+    end;
 handle_cast(_Msg, S) -> {noreply, S}.
 
 handle_info(
@@ -768,11 +817,13 @@ handle_info(
 handle_info({quod_message, _, _OtherChan, _}, S) -> {noreply, S};
 handle_info({req_timeout, ReqId}, S) ->
     case maps:take(ReqId, S#s.pending) of
-        {{From, _TRef, ExpectedPeer}, P1} ->
+        {#client_pull{from = From, expected_peer = ExpectedPeer,
+                      started_ms = StartedMs}, P1} ->
             gen_server:reply(From, {error, timeout}),
-            {noreply, S#s{pending = P1,
-                          openings = drop_opening(ExpectedPeer,
-                                                  S#s.openings)}};
+            S1 = S#s{pending = P1,
+                     openings = drop_opening(ExpectedPeer, S#s.openings)},
+            {noreply, record_client_terminal(
+                        timeout, elapsed_ms(StartedMs), S1)};
         error -> {noreply, S}
     end;
 handle_info(_Info, S) -> {noreply, S}.
@@ -807,26 +858,35 @@ route(_Peer, _ReplyLink, _Other, S) -> S.
 %% cap ⇒ drop; the client times out and retries a fresher/other peer.
 handle_req(ReplyLink, ReqId, From, To, S = #s{ns = Ns, data_dir = Dir})
   when is_integer(From), is_integer(To) ->
-    case S#s.inflight < ?MAX_INFLIGHT of
+    case map_size(S#s.inflight) < ?MAX_INFLIGHT of
         false -> S;
         true  ->
             Self = self(),
+            OwnerRef = make_ref(),
+            StartedMs = quod_time:mono_ms(),
             %% The worker ALWAYS casts a response (whole body in try/catch), so `inflight` is decremented
             %% even if serve_blocks throws — otherwise a crashed worker would leak a slot and, after
             %% ?MAX_INFLIGHT such crashes, wedge the endpoint. An error sends a distinct `blocks_err` (never
             %% a misleading empty `{[], 0}` that a joiner would read as "namespace empty").
             _ = spawn(fun() ->
-                          Resp = try case serve_blocks(Ns, Dir, From, To) of
-                                          {ok, Es, H} -> {blocks_resp, ReqId, Es, H};
-                                          {error, _}  -> {blocks_err, ReqId}
-                                      end
-                                 catch _:_ -> {blocks_err, ReqId}
-                                 end,
-                          gen_server:cast(Self, {send_resp, ReplyLink, Resp})
+                          {Resp, Result} =
+                              try case serve_blocks(Ns, Dir, From, To) of
+                                      {ok, Es, H} ->
+                                          {{blocks_resp, ReqId, Es, H}, completed};
+                                      {error, _} ->
+                                          {{blocks_err, ReqId}, error}
+                                  end
+                              catch _:_ -> {{blocks_err, ReqId}, error}
+                              end,
+                          gen_server:cast(
+                            Self, {send_resp, OwnerRef, ReplyLink, Resp, Result})
                       end),
-            S#s{inflight = S#s.inflight + 1}
+            Inflight1 = (S#s.inflight)#{OwnerRef => StartedMs},
+            S#s{inflight = Inflight1,
+                inflight_peak = max(S#s.inflight_peak, map_size(Inflight1))}
     end;
-handle_req(_ReplyLink, _ReqId, _From, _To, S) -> S.   %% malformed range ⇒ drop
+handle_req(_ReplyLink, _ReqId, _From, _To, S) ->
+    S.   %% malformed range ⇒ drop; no owned row was admitted
 
 %% Client: match a response to its parked caller.
 handle_resp(Peer, ReqId, Entries, Height, S) ->
@@ -839,14 +899,18 @@ handle_err(Peer, ReqId, S) ->
 
 reply_pending(Peer, ReqId, Reply, S) ->
     case maps:get(ReqId, S#s.pending, undefined) of
-        {_From, _TRef, ExpectedPeer} ->
+        #client_pull{expected_peer = ExpectedPeer} ->
             case peer_matches(Peer, ExpectedPeer) of
                 false -> S;   %% authenticated response, but not from the node this request targeted
                 true  ->
-                    {{From, TRef, _}, P1} = maps:take(ReqId, S#s.pending),
+                    {#client_pull{from = From, timer = TRef,
+                                  started_ms = StartedMs}, P1} =
+                        maps:take(ReqId, S#s.pending),
                     _ = erlang:cancel_timer(TRef),
                     gen_server:reply(From, Reply),
-                    S#s{pending = P1}
+                    record_client_terminal(
+                      terminal_result(Reply), elapsed_ms(StartedMs),
+                      S#s{pending = P1})
             end;
         undefined -> S   %% unknown / already-timed-out ReqId
     end.
@@ -856,26 +920,28 @@ peer_matches(_Peer, {bound, _ExpectedPeer}) -> false.
 
 begin_pull(Contact, From, To, ReplyTo, S = #s{ns = Ns, chan = Chan}) ->
     ReqId = make_ref(),
+    StartedMs = quod_time:mono_ms(),
     Frame = encode_frame(Ns, {blocks_req, ReqId, From, To}),
     TRef = erlang:send_after(
              ?REQ_TIMEOUT_MS, self(), {req_timeout, ReqId}),
     case Contact of
         <<_:256>> = Peer ->
             ok = quod_quic:send(Peer, Chan, Frame),
-            Pending1 = (S#s.pending)#{
-                         ReqId => {ReplyTo, TRef, {bound, Peer}}},
-            {noreply, S#s{pending = Pending1}};
+            Pull = #client_pull{from = ReplyTo, timer = TRef,
+                                expected_peer = {bound, Peer},
+                                started_ms = StartedMs},
+            {noreply, put_client_pull(ReqId, Pull, S)};
         _ ->
             case quod_quic:valid_endpoint(Contact) of
                 true ->
                     OpenRef = quod_quic:open_link_identified(Contact, Chan),
-                    Pending1 = (S#s.pending)#{
-                                 ReqId =>
-                                     {ReplyTo, TRef, {opening, OpenRef}}},
+                    Pull = #client_pull{from = ReplyTo, timer = TRef,
+                                        expected_peer = {opening, OpenRef},
+                                        started_ms = StartedMs},
                     Openings1 = (S#s.openings)#{
                                   OpenRef => {ReqId, Contact, Frame}},
-                    {noreply, S#s{pending = Pending1,
-                                  openings = Openings1}};
+                    S1 = put_client_pull(ReqId, Pull, S),
+                    {noreply, S1#s{openings = Openings1}};
                 false ->
                     _ = erlang:cancel_timer(TRef),
                     {reply, {error, bad_contact}, S}
@@ -887,11 +953,12 @@ finish_identified_open(OpenRef, Peer, ReplyLink,
     case maps:take(OpenRef, Openings) of
         {{ReqId, Endpoint, Frame}, Openings1} ->
             case maps:get(ReqId, Pending, undefined) of
-                {From, TRef, {opening, OpenRef}} ->
+                #client_pull{expected_peer = {opening, OpenRef}} = Pull ->
                     ok = quod_quic:learn(Peer, Endpoint),
                     ok = quod_link:send(ReplyLink, Frame),
                     Pending1 = Pending#{
-                                 ReqId => {From, TRef, {bound, Peer}}},
+                                 ReqId => Pull#client_pull{
+                                            expected_peer = {bound, Peer}}},
                     S#s{pending = Pending1, openings = Openings1};
                 _ ->
                     S#s{openings = Openings1}
@@ -905,10 +972,14 @@ fail_identified_open(OpenRef,
     case maps:take(OpenRef, Openings) of
         {{ReqId, _Endpoint, _Frame}, Openings1} ->
             case maps:take(ReqId, Pending) of
-                {{From, TRef, {opening, OpenRef}}, Pending1} ->
+                {#client_pull{from = From, timer = TRef,
+                              expected_peer = {opening, OpenRef},
+                              started_ms = StartedMs}, Pending1} ->
                     _ = erlang:cancel_timer(TRef),
                     gen_server:reply(From, {error, timeout}),
-                    S#s{pending = Pending1, openings = Openings1};
+                    record_client_terminal(
+                      link_down, elapsed_ms(StartedMs),
+                      S#s{pending = Pending1, openings = Openings1});
                 _ ->
                     S#s{openings = Openings1}
             end;
@@ -920,6 +991,27 @@ drop_opening({opening, OpenRef}, Openings) ->
     maps:remove(OpenRef, Openings);
 drop_opening({bound, _Peer}, Openings) ->
     Openings.
+
+put_client_pull(ReqId, Pull, S0) ->
+    Pending1 = (S0#s.pending)#{ReqId => Pull},
+    S0#s{pending = Pending1,
+         pending_peak = max(S0#s.pending_peak, map_size(Pending1))}.
+
+terminal_result({ok, _, _}) -> completed;
+terminal_result({error, _}) -> error.
+
+record_client_terminal(Result, DurationMs, S0) ->
+    ok = quod_metrics:observe_ontology_owner_terminal(
+           S0#s.ns, catchup_read, client, Result, DurationMs),
+    S0.
+
+record_server_terminal(Result, DurationMs, S0) ->
+    ok = quod_metrics:observe_ontology_owner_terminal(
+           S0#s.ns, catchup_read, server, Result, DurationMs),
+    S0.
+
+elapsed_ms(StartedMs) ->
+    max(0, quod_time:mono_ms() - StartedMs).
 
 %%%===================================================================
 %%% transport

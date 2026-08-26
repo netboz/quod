@@ -1,9 +1,12 @@
 # Physical node instances and durable node references — plan
 
-**Status:** planning only; no code or format change is implemented by this
-document. `ontology-actor-architecture.md` remains authoritative for the actor
-model, `inter-ontology.md` for `::`, `ontology-subscription-plan.md` for
-subscriptions, and the directory documents for live route discovery.
+**Status:** the generic actor-identity prerequisite in Slice 1 is implemented,
+committed, and deployed. Node-specific Slices 2--4 remain planning only;
+no dedicated node ontology, active `NodeRef`, or node-hosting projection is
+implemented by this document. `ontology-actor-architecture.md` remains
+authoritative for the actor model, `inter-ontology.md` for `::`,
+`ontology-subscription-plan.md` for subscriptions, and the directory documents
+for live route discovery.
 
 ## 1. Problem and decision
 
@@ -278,6 +281,8 @@ ontology history remains authoritative.
 
 ### Slice 1 — generic actor identity prerequisite
 
+**Status: delivered and deployed.**
+
 - Review and implement the request/evidence design in
   `generic-agent-identity-plan.md`.
 - Replace transitional user-only identity through one signed-format break.
@@ -310,7 +315,9 @@ ontology history remains authoritative.
 
 - Express agent hosting, ontology hosting, or explicit private-node relations
   as ordinary Prolog facts only when their concrete use cases require them.
-- Reconcile them through the existing `state_handler` and effect owners.
+- Reconcile them through the sole hosting-projection design in
+  `event-reaction-refinement-plan.md` Slice 4 and the existing effect owners;
+  do not create another hosting manager here.
 - Extend existing directory discovery for any newly discoverable ontology
   class; do not add a node route service.
 - Add metrics only for implemented reconciliation work, failures, and stale

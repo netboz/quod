@@ -22,7 +22,7 @@ by the fixed `quod_scope_wire` decoder.
 
 -export([start_link/0,
          identify/3, ensure_scope/4, identity/3,
-         command/3, cancel/2, close/2, finalize/2]).
+         command/3, cancel/2, close/2, finalize/2, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 -export_type([remote_handle/0]).
 
@@ -63,7 +63,8 @@ by the fixed `quod_scope_wire` decoder.
     next_event_seq = 1 :: pos_integer(),
     generation = undefined :: undefined | non_neg_integer(),
     dirty = undefined :: undefined | boolean(),
-    pending = #{} :: #{binary() => #request{}}
+    pending = #{} :: #{binary() => #request{}},
+    started_at :: integer()
 }).
 
 -record(owner, {
@@ -75,7 +76,8 @@ by the fixed `quod_scope_wire` decoder.
     probes = #{} :: map(),
     identity = none :: none |
         {collecting, reference(), pid(), reference()} |
-        {ready, quod_agent_identity:certificate()}
+        {ready, quod_agent_identity:certificate()},
+    identity_started_at = undefined :: undefined | integer()
 }).
 
 -record(probe, {
@@ -88,7 +90,8 @@ by the fixed `quod_scope_wire` decoder.
     target_key = undefined :: undefined | binary(),
     request_link = undefined :: undefined | pid(),
     link_mref = undefined :: undefined | reference(),
-    timer :: reference()
+    timer :: reference(),
+    started_at :: integer()
 }).
 
 -record(link, {
@@ -100,7 +103,8 @@ by the fixed `quod_scope_wire` decoder.
     link :: pid(),
     request_id :: <<_:128>>,
     timer :: reference(),
-    token :: reference()
+    token :: reference(),
+    started_at :: integer()
 }).
 
 -record(s, {
@@ -122,7 +126,8 @@ by the fixed `quod_scope_wire` decoder.
     probes = #{} :: map(),
     probe_requests = #{} :: map(),
     probe_refs = #{} :: map(),
-    identity_inbound = #{} :: map()
+    identity_inbound = #{} :: map(),
+    owner_peaks = #{} :: #{atom() => non_neg_integer()}
 }).
 
 %% ------------------------------------------------------------------
@@ -231,6 +236,17 @@ identity(Evidence, <<_:256>> = ProofId, RemainingMs)
 identity(_Evidence, _ProofId, _RemainingMs) ->
     {error, invalid_request}.
 
+-doc "Current and owner-lifetime peak rows for the one node-wide scope router.".
+-spec stats() -> map().
+stats() ->
+    case quod_reg:where(?KEY) of
+        Router when is_pid(Router) ->
+            try gen_server:call(Router, stats, 1000)
+            catch exit:_ -> empty_owner_stats()
+            end;
+        undefined -> empty_owner_stats()
+    end.
+
 with_router(Fun) ->
     case quod_reg:where(?KEY) of
         Router when is_pid(Router) -> Fun(Router);
@@ -255,7 +271,7 @@ test_start_link(NodeKey, OpenFun, IdentifyFun)
       ?MODULE, {test, NodeKey, OpenFun, IdentifyFun}, []).
 
 test_stats(Router) ->
-    gen_server:call(Router, test_stats).
+    gen_server:call(Router, stats).
 -endif.
 
 %% ------------------------------------------------------------------
@@ -367,19 +383,8 @@ handle_call(
         {error, _} = Error ->
             {reply, Error, S0}
     end;
-handle_call(test_stats, _From, S) ->
-    {reply,
-     #{generation => S#s.generation,
-       scopes => map_size(S#s.scopes),
-       owners => map_size(S#s.owners),
-       retained_owners => S#s.retained_owners,
-       entries => router_entry_count(S),
-       peers => S#s.peers,
-       opens => map_size(S#s.opens),
-       probes => map_size(S#s.probes),
-       request_links => map_size(S#s.request_links),
-       return_links => map_size(S#s.return_links)},
-     S};
+handle_call(stats, _From, S) ->
+    {reply, owner_stats(S), S};
 handle_call(_Request, _From, S) ->
     {reply, {error, unknown_request}, S}.
 
@@ -390,7 +395,8 @@ handle_cast(
   {unregister, Owner, Handle, RouterGeneration, Binding, RequestLink}, S0) ->
     case find_exact_scope(
            Owner, Handle, RouterGeneration, Binding, RequestLink, S0) of
-        {ok, Scope} -> {noreply, drop_scope(Scope#scope.key, S0)};
+        {ok, Scope} ->
+            {noreply, drop_scope(Scope#scope.key, completed, S0)};
         {error, _} -> {noreply, S0}
     end;
 handle_cast(
@@ -490,12 +496,13 @@ start_probe(Owner, Endpoint, Namespace, RemainingMs, S0)
                         open_ref = OpenRef, owner = Owner,
                         namespace = Namespace, request_id = RequestId,
                         frame = Frame, request_channel = Channel,
-                        timer = Timer},
+                        timer = Timer, started_at = quod_time:mono_ms()},
                     S1 = add_owner_probe(Owner, OpenRef, S0),
                     {ok, OpenRef,
-                     S1#s{probes = (S1#s.probes)#{OpenRef => Probe},
-                           probe_requests = (S1#s.probe_requests)#{
-                               RequestId => OpenRef}}};
+                     track_owner_peaks(
+                       S1#s{probes = (S1#s.probes)#{OpenRef => Probe},
+                            probe_requests = (S1#s.probe_requests)#{
+                                RequestId => OpenRef}})};
                 {error, _} = Error -> Error
             end
     end;
@@ -552,6 +559,7 @@ start_identity_collection(
         {ok, Input} ->
             Router = self(),
             Ref = make_ref(),
+            StartedAt = quod_time:mono_ms(),
             {Pid, MRef} = spawn_monitor(
                             fun() ->
                                 Result = collect_agent_identity(
@@ -567,17 +575,20 @@ start_identity_collection(
                     OwnerState = #owner{
                                    mref = OwnerMRef, proof_id = ProofId,
                                    identity =
-                                       {collecting, Ref, Pid, MRef}},
+                                       {collecting, Ref, Pid, MRef},
+                                   identity_started_at = StartedAt},
                     S1 = put_owner(Owner, OwnerState, S),
                     {{pending, Ref},
-                     S1#s{owner_refs = OwnerRefs#{OwnerMRef => Owner}}};
+                     track_owner_peaks(
+                       S1#s{owner_refs = OwnerRefs#{OwnerMRef => Owner}})};
                 Existing = #owner{} ->
                     S1 = put_owner(
                            Owner,
                            Existing#owner{
                              proof_id = ProofId,
-                             identity = {collecting, Ref, Pid, MRef}}, S),
-                    {{pending, Ref}, S1}
+                             identity = {collecting, Ref, Pid, MRef},
+                             identity_started_at = StartedAt}, S),
+                    {{pending, Ref}, track_owner_peaks(S1)}
             end;
         {error, _} = Error -> {Error, S}
     end;
@@ -615,19 +626,24 @@ finish_identity(Owner, ProofId, Ref, Result,
     case maps:get(Owner, Owners, undefined) of
         Existing = #owner{
                      proof_id = ProofId,
-                     identity = {collecting, Ref, _Pid, MRef}} ->
+                     identity = {collecting, Ref, _Pid, MRef},
+                     identity_started_at = StartedAt} ->
             demonitor(MRef, [flush]),
+            observe_scope_router_terminal(
+              identity, identity_result(Result), StartedAt),
             case Result of
                 {ok, Certificate} ->
                     Owner ! {quod_agent_identity, Ref,
                              {ok, Certificate}},
                     put_owner(
                       Owner,
-                      Existing#owner{identity = {ready, Certificate}}, S);
+                      Existing#owner{identity = {ready, Certificate},
+                                     identity_started_at = undefined}, S);
                 {error, Reason} ->
                     Owner ! {quod_agent_identity, Ref, {error, Reason}},
                     put_owner(
-                      Owner, Existing#owner{identity = none}, S)
+                      Owner, Existing#owner{identity = none,
+                                            identity_started_at = undefined}, S)
             end;
         _ -> S
     end.
@@ -656,12 +672,14 @@ handle_identity_request(PeerIdentity, Link, Payload,
                             quod_prolog:request_agent_attestation(
                               Ns, Request, self(),
                               {inbound_agent_identity, Key}),
-                            S#s{identity_inbound = Inbound#{
-                                  Key => #inbound_identity{
-                                    link = Link,
-                                    request_id = RequestId,
-                                    timer = Timer,
-                                    token = Token}}};
+                            track_owner_peaks(
+                              S#s{identity_inbound = Inbound#{
+                                    Key => #inbound_identity{
+                                      link = Link,
+                                      request_id = RequestId,
+                                      timer = Timer,
+                                      token = Token,
+                                      started_at = quod_time:mono_ms()}}});
                         undefined -> S
                     end;
                 _ -> S
@@ -674,7 +692,8 @@ finish_inbound_identity(Key, Result,
     case maps:take(Key, Inbound) of
         {#inbound_identity{link = Link,
                                 request_id = RequestId,
-                                timer = Timer}, Rest} ->
+                                timer = Timer,
+                                started_at = StartedAt}, Rest} ->
             _ = erlang:cancel_timer(
                   Timer, [{async, true}, {info, false}]),
             case Result of
@@ -691,6 +710,8 @@ finish_inbound_identity(Key, Result,
                     end;
                 _ -> ok
             end,
+            observe_scope_router_terminal(
+              identity, identity_result(Result), StartedAt),
             S#s{identity_inbound = Rest};
         error -> S
     end.
@@ -698,7 +719,8 @@ finish_inbound_identity(Key, Result,
 expire_inbound_identity(Key, Token,
                              S = #s{identity_inbound = Inbound}) ->
     case maps:get(Key, Inbound, undefined) of
-        #inbound_identity{token = Token} ->
+        #inbound_identity{token = Token, started_at = StartedAt} ->
+            observe_scope_router_terminal(identity, timeout, StartedAt),
             S#s{identity_inbound = maps:remove(Key, Inbound)};
         _ -> S
     end.
@@ -1003,14 +1025,16 @@ insert_opening_scope(Owner, Endpoint, Fields, OpenFrame, S0) ->
         open_frame = OpenFrame,
         request_channel = RequestChannel,
         last_request_id = OpenRequestId,
-        pending = #{OpenRequestId => #request{command_seq = 1}}
+        pending = #{OpenRequestId => #request{command_seq = 1}},
+        started_at = quod_time:mono_ms()
     },
     S1 = put_scope(Scope, S0),
     S2 = add_owner_scope(Owner, ScopeKey, S1),
     {OpenRef,
-     S2#s{reuse = (S2#s.reuse)#{Scope#scope.reuse_key => ScopeKey},
-          opens = (S2#s.opens)#{OpenRef => ScopeKey},
-          peers = increment(TargetKey, S2#s.peers)}}.
+     track_owner_peaks(
+       S2#s{reuse = (S2#s.reuse)#{Scope#scope.reuse_key => ScopeKey},
+            opens = (S2#s.opens)#{OpenRef => ScopeKey},
+            peers = increment(TargetKey, S2#s.peers)})}.
 
 router_entry_count(#s{scopes = Scopes, probes = Probes,
                       retained_owners = RetainedOwners}) ->
@@ -1274,9 +1298,9 @@ route_valid_event({scope_error, Reason}, _RequestId, _Deliver,
                   Scope = #scope{status = opening, owner = Owner,
                                  open_ref = OpenRef}, S0) ->
     Owner ! {quod_scope_open, OpenRef, {error, Reason}},
-    drop_scope(Scope#scope.key, S0);
+    drop_scope(Scope#scope.key, scope_result(Reason), S0);
 route_valid_event(scope_closed, _RequestId, _Deliver, Scope, S0) ->
-    drop_scope(Scope#scope.key, S0);
+    drop_scope(Scope#scope.key, completed, S0);
 route_valid_event({scope_error, Reason} = Operation, RequestId, Deliver,
                   Scope = #scope{owner = Owner}, S0) ->
     _ = deliver_event(Deliver, Owner, Scope, RequestId, Operation, S0),
@@ -1331,7 +1355,7 @@ handle_identity_response(
                     Probe#probe.owner !
                         {quod_scope_identity, OpenRef,
                          {ok, ResponseKey, TargetIdentity, Role}},
-                    drop_probe(OpenRef, S0);
+                    drop_probe(OpenRef, completed, S0);
                 false ->
                     fail_probe(OpenRef, identity_binding, S0)
             end
@@ -1341,16 +1365,18 @@ fail_probe(OpenRef, Reason, S0 = #s{probes = Probes}) ->
     case maps:get(OpenRef, Probes, undefined) of
         #probe{owner = Owner} ->
             Owner ! {quod_scope_identity, OpenRef, {error, Reason}},
-            drop_probe(OpenRef, S0);
+            drop_probe(OpenRef, probe_result(Reason), S0);
         undefined -> S0
     end.
 
-drop_probe(OpenRef,
+drop_probe(OpenRef, Result,
            S0 = #s{probes = Probes, probe_requests = Requests,
                    probe_refs = ProbeRefs}) ->
     case maps:take(OpenRef, Probes) of
         {Probe, Probes1} ->
             cancel_probe_timer(Probe#probe.timer),
+            observe_scope_router_terminal(
+              probe, Result, Probe#probe.started_at),
             ProbeRefs1 = case Probe#probe.link_mref of
                              undefined -> ProbeRefs;
                              MRef ->
@@ -1424,7 +1450,7 @@ handle_link_error(OpenRef, PeerKey, Channel,
 
 fail_open(#scope{owner = Owner, open_ref = OpenRef, key = ScopeKey}, Reason, S0) ->
     Owner ! {quod_scope_open, OpenRef, {error, Reason}},
-    drop_scope(ScopeKey, S0).
+    drop_scope(ScopeKey, scope_result(Reason), S0).
 
 handle_down(MRef, Pid, Reason,
             S = #s{owner_refs = OwnerRefs,
@@ -1507,7 +1533,7 @@ poison_owner(Owner, Reason, S0 = #s{owners = Owners}) ->
                       undefined -> ok
                   end
               end, ScopeKeys),
-            clear_owner_resources(Owner, S1);
+            clear_owner_resources(Owner, scope_result(Reason), S1);
         #owner{poison = {poisoned, _}} -> S0;
         undefined -> S0
     end.
@@ -1537,7 +1563,7 @@ seal_owner(Owner, ProofId, S0 = #s{owners = Owners}) ->
             Owner1 = Owner0#owner{proof_id = ProofId,
                                   finalization = {sealed, Result}},
             S1 = put_owner(Owner, Owner1, S0),
-            {Result, clear_owner_resources(Owner, S1)}
+            {Result, clear_owner_resources(Owner, completed, S1)}
     end.
 
 poison_dead_links(Owner, S0 = #s{owners = Owners, scopes = Scopes}) ->
@@ -1575,12 +1601,20 @@ scope_unreachable(
     {ontology_unreachable, TargetNs}.
 
 drop_owner(Owner, S0) ->
-    remove_owner_entry(Owner, clear_owner_resources(Owner, S0)).
+    remove_owner_entry(
+      Owner, clear_owner_resources(Owner, caller_down, S0)).
 
-clear_owner_resources(Owner, S0 = #s{owners = Owners}) ->
+clear_owner_resources(Owner, Result, S0 = #s{owners = Owners}) ->
     case maps:get(Owner, Owners, undefined) of
         OwnerState = #owner{scopes = ScopeKeys, probes = OpenRefs,
-                            identity = Identity} ->
+                            identity = Identity,
+                            identity_started_at = IdentityStartedAt} ->
+            case Identity of
+                {collecting, _, _, _} ->
+                    observe_scope_router_terminal(
+                      identity, Result, IdentityStartedAt);
+                _ -> ok
+            end,
             cleanup_identity_collection(Identity),
             maps:foreach(
               fun(ScopeKey, _True) ->
@@ -1590,14 +1624,22 @@ clear_owner_resources(Owner, S0 = #s{owners = Owners}) ->
                   end
               end, ScopeKeys),
             S1 = maps:fold(
-                   fun(ScopeKey, _True, Acc) -> drop_scope(ScopeKey, Acc) end,
+                   fun(ScopeKey, _True, Acc) ->
+                           drop_scope(ScopeKey, Result, Acc)
+                   end,
                    S0, ScopeKeys),
             S2 = maps:fold(
-              fun(OpenRef, _True, Acc) -> drop_probe(OpenRef, Acc) end,
+              fun(OpenRef, _True, Acc) ->
+                      drop_probe(OpenRef, Result, Acc)
+              end,
               S1, OpenRefs),
             case maps:get(Owner, S2#s.owners, undefined) of
                 Current = #owner{} ->
-                    put_owner(Owner, Current#owner{identity = none}, S2);
+                    track_owner_peaks(
+                      put_owner(
+                        Owner,
+                        Current#owner{identity = none,
+                                      identity_started_at = undefined}, S2));
                 undefined ->
                     _ = OwnerState,
                     S2
@@ -1628,9 +1670,11 @@ remove_owner_entry(
 retained_owner_removed(Owner, Count) ->
     retained_owner_transition(retained_owner(Owner), false, Count).
 
-drop_scope(ScopeKey, S0 = #s{scopes = Scopes}) ->
+drop_scope(ScopeKey, Result, S0 = #s{scopes = Scopes}) ->
     case maps:take(ScopeKey, Scopes) of
         {Scope, Scopes1} ->
+            observe_scope_router_terminal(
+              scope, Result, Scope#scope.started_at),
             S1 = S0#s{
                 scopes = Scopes1,
                 reuse = maps:remove(Scope#scope.reuse_key, S0#s.reuse),
@@ -1779,6 +1823,104 @@ unique_request_id(Pending) ->
     end.
 
 new_id() -> crypto:strong_rand_bytes(?ID_BYTES).
+
+empty_owner_stats() ->
+    Current = empty_owner_rows(),
+    #{generation => undefined,
+      scopes => 0,
+      owners => 0,
+      retained_owners => 0,
+      entries => 0,
+      peers => #{},
+      opens => 0,
+      probes => 0,
+      request_links => 0,
+      return_links => 0,
+      owner_current => Current,
+      owner_peak => Current}.
+
+owner_stats(S = #s{scopes = Scopes, owners = Owners,
+                   retained_owners = RetainedOwners, peers = Peers,
+                   opens = Opens, probes = Probes,
+                   request_links = RequestLinks,
+                   return_links = ReturnLinks, owner_peaks = Peaks}) ->
+    Current = scope_router_current(S),
+    #{generation => S#s.generation,
+      scopes => map_size(Scopes),
+      owners => map_size(Owners),
+      retained_owners => RetainedOwners,
+      entries => router_entry_count(S),
+      peers => Peers,
+      opens => map_size(Opens),
+      probes => map_size(Probes),
+      request_links => map_size(RequestLinks),
+      return_links => map_size(ReturnLinks),
+      owner_current => Current,
+      owner_peak => maps:map(
+                        fun(Key, Value) ->
+                            erlang:max(Value, maps:get(Key, Peaks, 0))
+                        end, Current)}.
+
+empty_owner_rows() ->
+    #{scopes => 0,
+      owners => 0,
+      retained_owners => 0,
+      openings => 0,
+      identity_probes => 0,
+      identity_collections => 0,
+      identity_attestations => 0}.
+
+scope_router_current(#s{scopes = Scopes, owners = Owners,
+                        retained_owners = RetainedOwners, opens = Opens,
+                        probes = Probes, identity_inbound = IdentityInbound}) ->
+    IdentityCollections = maps:fold(
+                            fun(_Owner,
+                                #owner{identity = {collecting, _, _, _}}, N) ->
+                                    N + 1;
+                               (_Owner, #owner{}, N) -> N
+                            end, 0, Owners),
+    #{scopes => map_size(Scopes),
+      owners => map_size(Owners),
+      retained_owners => RetainedOwners,
+      openings => map_size(Opens),
+      identity_probes => map_size(Probes),
+      identity_collections => IdentityCollections,
+      identity_attestations => map_size(IdentityInbound)}.
+
+track_owner_peaks(S = #s{owner_peaks = Peaks0}) ->
+    Current = scope_router_current(S),
+    Peaks = maps:fold(
+              fun(Key, Value, Acc) ->
+                  Acc#{Key => erlang:max(Value, maps:get(Key, Acc, 0))}
+              end, Peaks0, Current),
+    S#s{owner_peaks = Peaks}.
+
+observe_scope_router_terminal(Phase, Result, StartedAt)
+  when is_integer(StartedAt) ->
+    DurationMs = erlang:max(0, quod_time:mono_ms() - StartedAt),
+    quod_metrics:observe_node_owner_terminal(
+      scope_router, Phase, Result, DurationMs);
+observe_scope_router_terminal(_Phase, _Result, _StartedAt) ->
+    ok.
+
+identity_result({ok, _}) -> completed;
+identity_result({ok, _, _, _}) -> completed;
+identity_result({error, Reason}) -> terminal_result(Reason);
+identity_result(_) -> error.
+
+probe_result(Reason) -> terminal_result(Reason).
+
+scope_result(Reason) -> terminal_result(Reason).
+
+terminal_result(completed) -> completed;
+terminal_result(timeout) -> timeout;
+terminal_result(unavailable) -> unavailable;
+terminal_result({ontology_unreachable, _}) -> unavailable;
+terminal_result({request_link_down, _}) -> link_down;
+terminal_result({return_link_down, _}) -> link_down;
+terminal_result({scope_error, Reason}) -> terminal_result(Reason);
+terminal_result({proof_poisoned, Reason}) -> terminal_result(Reason);
+terminal_result(_) -> error.
 
 increment(Key, Counts) -> Counts#{Key => maps:get(Key, Counts, 0) + 1}.
 

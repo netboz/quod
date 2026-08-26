@@ -239,7 +239,10 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_drop_dtx_coordinator/4,
          test_dtx_coordinator_state/1,
          test_stop_dtx_coordinator/1,
-         test_dtx_endpoint_counts/1,
+         test_dtx_endpoint_counts/1, test_owner_stats/1,
+         test_endpoint_terminal_result/1,
+         test_dtx_worker_terminal_result/2,
+         test_dtx_retirement_result/1,
          test_log_projection/3,
          test_apply_catchup_window/3, test_apply_catchup_window/4,
          test_genesis_tx/4, test_valid_genesis_source/1,
@@ -1045,6 +1048,7 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     group_id :: <<_:256>>,
     digest :: <<_:256>>,
     inserted_at :: integer(),
+    observation_started_at :: integer(),
     next_send = 0 :: integer(),
     waiters = [] :: [term()]
 }).
@@ -1059,7 +1063,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     from :: term(),
     caller_mref :: reference(),
     timer :: reference(),
-    timeout_tag :: reference()
+    timeout_tag :: reference(),
+    started_at = undefined :: undefined | integer()
 }).
 
 %% Inbound endpoint work never runs in the consensus statem.  The monitor is
@@ -1070,7 +1075,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     owner_mref = none :: none | reference(),
     peer :: local | node_id(),
     request :: quod_dtx_endpoint:request(),
-    destination :: {link, pid()} | {caller, term()}
+    destination :: {link, pid()} | {caller, term()},
+    started_at = undefined :: undefined | integer()
 }).
 
 %% One bounded owner for the origin's volatile recovery driver.  The semantic
@@ -1225,6 +1231,8 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
             dtx_out_channels = #{} ::
               #{binary() => {binary(), pos_integer()}},
             dtx_workers = #{} :: #{pid() => #dtx_server_worker{}},
+            owner_row_peaks = #{} :: #{{atom(), atom()} => non_neg_integer()},
+            owner_byte_peaks = #{} :: #{atom() => non_neg_integer()},
             dtx_coordinator = none
               :: none | #dtx_coordinator_owner{},
             history_head = none :: none | {slot(), <<_:256>>},
@@ -1529,7 +1537,7 @@ test_dtx_endpoint_frame(TargetNs, Mode, Peer, Link, Frame, S) ->
 test_dtx_outbound_message(PeerIdentity, Channel, Payload, S) ->
     handle_dtx_outbound_message(PeerIdentity, Channel, Payload, S).
 test_seed_dtx_correlation(TargetNs, Peer, Request, From,
-                          S = #s{dtx_correlations = Correlations}) ->
+                          S) ->
     RequestId = quod_dtx_endpoint:request_id(Request),
     CallerMRef = erlang:monitor(process, element(1, From)),
     TimeoutTag = make_ref(),
@@ -1539,23 +1547,25 @@ test_seed_dtx_correlation(TargetNs, Peer, Request, From,
     Correlation = #dtx_correlation{
                     target_ns = TargetNs, peer = Peer, request = Request,
                     from = From, caller_mref = CallerMRef, timer = Timer,
-                    timeout_tag = TimeoutTag},
-    S1 = retain_dtx_target_channel(TargetNs, S),
-    S1#s{dtx_correlations = Correlations#{RequestId => Correlation}}.
+                    timeout_tag = TimeoutTag,
+                    started_at = quod_time:mono_ms()},
+    put_dtx_correlation(RequestId, Correlation, S).
 test_dtx_endpoint_result(Request, Result, S) ->
     dtx_endpoint_result_response(Request, Result, S).
 test_seed_dtx_worker(Pid, Peer, Request, Destination,
                      S = #s{dtx_workers = Workers}) ->
     Monitor = erlang:monitor(process, Pid),
     {Monitor,
-     S#s{dtx_workers = Workers#{
-           Pid => #dtx_server_worker{
-                    pid = Pid, monitor = Monitor, peer = Peer,
-                    request = Request, destination = Destination}}}}.
+     track_owner_peaks(
+       S#s{dtx_workers = Workers#{
+             Pid => #dtx_server_worker{
+                      pid = Pid, monitor = Monitor, peer = Peer,
+                      request = Request, destination = Destination,
+                      started_at = quod_time:mono_ms()}}})}.
 test_finish_dtx_worker(Pid, Result, S) ->
     finish_dtx_server_worker(Pid, Result, S).
 test_drop_dtx_endpoint_owner(Ref, Pid, S) ->
-    drop_dtx_endpoint_owner(Ref, Pid, S).
+    drop_dtx_endpoint_owner(Ref, Pid, worker_down, S).
 test_seed_dtx_submission(
   Control, Waiters, S = #s{dtx_submissions = Submissions}) ->
     test_seed_dtx_submission_at(
@@ -1570,6 +1580,7 @@ test_seed_dtx_submission_at(
           record = quod_dtx:control_body(Control), control = Control,
           envelope = Envelope, group_id = quod_dtx:group_id(Control),
           digest = Digest, inserted_at = InsertedAt,
+          observation_started_at = InsertedAt,
           waiters = Waiters},
     S#s{dtx_submissions = Submissions#{Digest => Submission}}.
 test_oldest_eligible_dtx_submission(S) ->
@@ -1611,6 +1622,16 @@ test_dtx_endpoint_counts(
     #{correlations => map_size(Correlations),
       channels => map_size(Channels), workers => map_size(Workers),
       submissions => map_size(Submissions)}.
+test_owner_stats(S) ->
+    {Current, CurrentBytes} = simplex_owner_current(S),
+    #{owner_current => Current,
+      owner_peak => simplex_owner_peaks(S, Current),
+      owner_bytes_current => CurrentBytes,
+      owner_bytes_peak => simplex_owner_byte_peaks(S, CurrentBytes)}.
+test_endpoint_terminal_result(Result) -> endpoint_terminal_result(Result).
+test_dtx_worker_terminal_result(Result, Response) ->
+    dtx_worker_terminal_result(Result, Response).
+test_dtx_retirement_result(Reason) -> dtx_retirement_result(Reason).
 test_requested(#s{requested_slot = V}) -> V.
 test_progress_counts(#s{progress_timeouts = T, quorum_pauses = P}) -> {T, P}.
 test_committed_store(#s{slot = Slot, store = Store}) -> {Slot, Store}.
@@ -2537,12 +2558,14 @@ restore_pending_dtx_journal(S, Journal) ->
                          term_to_binary(Record, [deterministic]) =:= Body of
                         true ->
                             Digest = quod_dtx:record_digest(Record),
+                            InsertedAt = quod_time:mono_ms(),
                             Submission =
                                 #dtx_submission{
                                   record = Record, control = Control,
                                   envelope = Envelope, group_id = GroupId,
                                   digest = Digest,
-                                  inserted_at = quod_time:mono_ms()},
+                                  inserted_at = InsertedAt,
+                                  observation_started_at = InsertedAt},
                             S#s{dtx_submissions = #{Digest => Submission}};
                         false ->
                             error({signing_journal_bad_pending, GroupId})
@@ -3245,7 +3268,7 @@ running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
         {true, S1} ->
             keep_progress(S0, S1, []);
         false ->
-            case drop_dtx_endpoint_owner(Ref, Pid, S0) of
+            case drop_dtx_endpoint_owner(Ref, Pid, worker_down, S0) of
                 {true, S1, Actions} ->
                     keep_progress(S0, S1, Actions);
                 false ->
@@ -3972,11 +3995,9 @@ start_dtx_endpoint_request(
                 #dtx_correlation{
                   target_ns = TargetNs, peer = PeerKey, request = Request,
                   from = From, caller_mref = CallerMRef, timer = Timer,
-                  timeout_tag = TimeoutTag},
-            S1 = retain_dtx_target_channel(
-                   TargetNs,
-                   S#s{dtx_correlations =
-                           Correlations#{RequestId => Correlation}}),
+                  timeout_tag = TimeoutTag,
+                  started_at = quod_time:mono_ms()},
+            S1 = put_dtx_correlation(RequestId, Correlation, S),
             quod_quic:send_pinned(
               PeerKey, Endpoint, quod_dtx_endpoint:channel(TargetNs), Frame),
             {ok, S1};
@@ -3989,6 +4010,14 @@ start_dtx_endpoint_request(
         {_, _, _, {error, _}} ->
             {error, invalid_request}
     end.
+
+put_dtx_correlation(
+  RequestId, Correlation = #dtx_correlation{target_ns = TargetNs},
+  S = #s{dtx_correlations = Correlations}) ->
+    track_owner_peaks(
+      retain_dtx_target_channel(
+        TargetNs,
+        S#s{dtx_correlations = Correlations#{RequestId => Correlation}})).
 
 retain_dtx_target_channel(TargetNs, S = #s{ns = TargetNs}) ->
     S;
@@ -4096,13 +4125,16 @@ accept_dtx_endpoint_response(
 finish_dtx_correlation(
   RequestId,
   #dtx_correlation{target_ns = TargetNs, from = From,
-                   caller_mref = CallerMRef, timer = Timer}, Reply,
+                   caller_mref = CallerMRef, timer = Timer,
+                   started_at = StartedAt}, Reply,
   S = #s{dtx_correlations = Correlations}) ->
     _ = erlang:cancel_timer(Timer),
     _ = erlang:demonitor(CallerMRef, [flush]),
     S1 = release_dtx_target_channel(
            TargetNs,
            S#s{dtx_correlations = maps:remove(RequestId, Correlations)}),
+    observe_simplex_owner_terminal(
+      S, dtx_endpoint, outbound, endpoint_terminal_result(Reply), StartedAt),
     {S1, [{reply, From, Reply}]}.
 
 timeout_dtx_correlation(
@@ -4204,7 +4236,8 @@ start_dtx_submit_owner(
             Worker = #dtx_server_worker{
                        pid = Pid, monitor = Monitor,
                        owner_mref = OwnerMRef, peer = Peer,
-                       request = Request, destination = Destination},
+                       request = Request, destination = Destination,
+                       started_at = quod_time:mono_ms()},
             S1 = S#s{dtx_workers = Workers#{Pid => Worker}},
             case retain_dtx_record(Record, {dtx_endpoint, Pid}, S1) of
                 {ok, S2} ->
@@ -4253,7 +4286,8 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     Worker = #dtx_server_worker{
                pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
                peer = Peer,
-               request = Request, destination = Destination},
+               request = Request, destination = Destination,
+               started_at = quod_time:mono_ms()},
     S#s{dtx_workers = Workers#{Pid => Worker}}.
 
 dtx_worker_owner_monitor({caller, {Caller, _Tag}}) when is_pid(Caller) ->
@@ -4384,7 +4418,8 @@ finish_dtx_server_worker(
     case maps:take(Pid, Workers) of
         {#dtx_server_worker{monitor = Monitor, request = Request,
                             owner_mref = OwnerMRef,
-                            destination = Destination}, Rest} ->
+                            destination = Destination,
+                            started_at = StartedAt}, Rest} ->
             _ = erlang:demonitor(Monitor, [flush]),
             demonitor_if_set(OwnerMRef),
             S1 = detach_dtx_endpoint_waiter(
@@ -4392,6 +4427,9 @@ finish_dtx_server_worker(
             Response0 = dtx_endpoint_result_response(Request, Result, S1),
             Response = valid_generated_dtx_response(
                          Request, Response0, S1#s.ns),
+            observe_simplex_owner_terminal(
+              S, dtx_endpoint, inbound,
+              dtx_worker_terminal_result(Result, Response), StartedAt),
             deliver_dtx_endpoint_response(Destination, Response, S1);
         error ->
             {S, []}
@@ -4636,11 +4674,13 @@ deliver_dtx_endpoint_response({link, ReplyLink}, Response, S) ->
 deliver_dtx_endpoint_response({caller, From}, Response, S) ->
     {S, [{reply, From, {ok, Response}}]}.
 
-drop_dtx_endpoint_owner(Ref, Pid, S = #s{dtx_workers = Workers}) ->
+drop_dtx_endpoint_owner(Ref, Pid, Result,
+                        S = #s{dtx_workers = Workers}) ->
     case maps:get(Pid, Workers, undefined) of
         #dtx_server_worker{monitor = Ref, request = Request,
                            owner_mref = OwnerMRef,
-                           destination = Destination} ->
+                           destination = Destination,
+                           started_at = StartedAt} ->
             demonitor_if_set(OwnerMRef),
             S1 = detach_dtx_endpoint_waiter(
                    Pid, S#s{dtx_workers = maps:remove(Pid, Workers)}),
@@ -4648,6 +4688,8 @@ drop_dtx_endpoint_owner(Ref, Pid, S = #s{dtx_workers = Workers}) ->
                 {error, quod_dtx_endpoint:request_id(Request), not_ready},
             {S2, Actions} =
                 deliver_dtx_endpoint_response(Destination, Response, S1),
+            observe_simplex_owner_terminal(
+              S, dtx_endpoint, inbound, Result, StartedAt),
             {true, S2, Actions};
         _ ->
             case drop_dtx_worker_caller(Ref, Pid, S) of
@@ -4674,10 +4716,12 @@ drop_dtx_worker_caller(
         none ->
             false;
         WorkerPid ->
-            #dtx_server_worker{monitor = Monitor} =
+            #dtx_server_worker{monitor = Monitor, started_at = StartedAt} =
                 maps:get(WorkerPid, Workers),
             _ = erlang:demonitor(Monitor, [flush]),
             exit(WorkerPid, shutdown),
+            observe_simplex_owner_terminal(
+              S, dtx_endpoint, inbound, caller_down, StartedAt),
             {true,
              detach_dtx_endpoint_waiter(
                WorkerPid,
@@ -4709,17 +4753,20 @@ drop_dtx_correlation_owner(
             false;
         RequestId ->
             Correlation = maps:get(RequestId, Correlations),
-            {S1, _NoReply} = drop_dtx_correlation(RequestId, Correlation, S),
+            {S1, _NoReply} = drop_dtx_correlation(
+                                RequestId, Correlation, caller_down, S),
             {true, S1, []}
     end.
 
 drop_dtx_correlation(
   RequestId,
   #dtx_correlation{target_ns = TargetNs, caller_mref = CallerMRef,
-                   timer = Timer},
+                   timer = Timer, started_at = StartedAt}, Result,
   S = #s{dtx_correlations = Correlations}) ->
     _ = erlang:cancel_timer(Timer),
     _ = erlang:demonitor(CallerMRef, [flush]),
+    observe_simplex_owner_terminal(
+      S, dtx_endpoint, outbound, Result, StartedAt),
     {release_dtx_target_channel(
        TargetNs,
        S#s{dtx_correlations = maps:remove(RequestId, Correlations)}), []}.
@@ -4839,13 +4886,15 @@ sign_and_retain_dtx(Kind, Record, Digest, Waiter,
                                   Journal, Control),
                             ok = maybe_project_pending_begin(
                                    Kind, S#s.ns, Journal1),
+                            InsertedAt = quod_time:mono_ms(),
                             Submission =
                                 #dtx_submission{
                                   record = Record, control = Control,
                                   envelope = Envelope,
                                   group_id = quod_dtx:group_id(Record),
                                   digest = Digest,
-                                  inserted_at = quod_time:mono_ms(),
+                                  inserted_at = InsertedAt,
+                                  observation_started_at = InsertedAt,
                                   waiters = dtx_waiters(Waiter)},
                             {ok, S#s{signing_journal = Journal1,
                                      dtx_submissions =
@@ -6388,13 +6437,15 @@ handle_dtx_submit(_Peer, Envelope, S) ->
                 {{ok, Slot}, none} ->
                     case dtx_slot_route(Slot, S) of
                         local ->
+                            InsertedAt = quod_time:mono_ms(),
                             Submission =
                               #dtx_submission{
                                 record = Record,
                                 control = Control, envelope = Envelope,
                                 group_id = quod_dtx:group_id(Control),
                                 digest = quod_dtx:record_digest(Control),
-                                inserted_at = quod_time:mono_ms()},
+                                inserted_at = InsertedAt,
+                                observation_started_at = InsertedAt},
                             propose_dtx(Slot, Submission, S);
                         _ -> S
                     end;
@@ -6697,10 +6748,13 @@ resolve_committed_dtx(
                Kind =:= finalize; Kind =:= complete ->
             Digest = quod_dtx:record_digest(Control),
             case maps:take(Digest, Submissions) of
-                {#dtx_submission{waiters = Waiters}, Rest} ->
+                {#dtx_submission{waiters = Waiters,
+                                 observation_started_at = StartedAt}, Rest} ->
                     case quod_dtx:certified_entry_ref(
                            {Ns, Anchor}, Entry, Control) of
                         {ok, Ref} ->
+                            observe_simplex_owner_terminal(
+                              S, dtx_control, Kind, completed, StartedAt),
                             lists:foldl(
                               fun(Waiter, Acc) ->
                                       reply_waiter(Waiter, {ok, Ref}, Acc)
@@ -7191,7 +7245,8 @@ refresh_stale_dtx_submissions(S0) ->
 refresh_dtx_submission(
   Digest,
   #dtx_submission{control = Control, record = Record,
-                  waiters = Waiters},
+                  waiters = Waiters,
+                  observation_started_at = ObservationStartedAt},
   CurrentLane,
   S = #s{dtx_lanes = CommittedFloors}) ->
     Meta = quod_dtx:control_metadata(Control),
@@ -7213,8 +7268,15 @@ refresh_dtx_submission(
                 {ok, S1 = #s{dtx_submissions = Renewed}} ->
                     New = maps:get(Digest, Renewed),
                     update_dtx_submission(
-                      Digest, New#dtx_submission{waiters = Waiters}, S1);
+                      Digest,
+                      New#dtx_submission{waiters = Waiters,
+                                         observation_started_at =
+                                           ObservationStartedAt}, S1);
                 {error, Reason} ->
+                    observe_simplex_owner_terminal(
+                      S, dtx_control, quod_dtx:control_kind(Control),
+                      dtx_retirement_result(Reason),
+                      ObservationStartedAt),
                     logger:error(
                       "quod[~s]: unable to re-envelope retained DTX control: ~p",
                       [S#s.ns, Reason]),
@@ -7227,6 +7289,15 @@ refresh_dtx_submission(
 
 retire_dtx_submission(Digest, Waiters, Reason,
                       S = #s{dtx_submissions = Submissions}) ->
+    case maps:get(Digest, Submissions, undefined) of
+        #dtx_submission{control = Control,
+                        observation_started_at = StartedAt} ->
+            observe_simplex_owner_terminal(
+              S, dtx_control, quod_dtx:control_kind(Control),
+              dtx_retirement_result(Reason), StartedAt);
+        undefined ->
+            ok
+    end,
     reply_waiters(
       Waiters, {error, Reason},
       S#s{dtx_submissions = maps:remove(Digest, Submissions)}).
@@ -7235,7 +7306,12 @@ abandon_dtx_submissions(Reason,
                         S = #s{dtx_submissions = Submissions}) ->
     S0 = S#s{dtx_submissions = #{}},
     maps:fold(
-      fun(_Digest, #dtx_submission{waiters = Waiters}, Acc0) ->
+      fun(_Digest, #dtx_submission{
+                     waiters = Waiters, control = Control,
+                     observation_started_at = StartedAt}, Acc0) ->
+              observe_simplex_owner_terminal(
+                S, dtx_control, quod_dtx:control_kind(Control),
+                dtx_retirement_result(Reason), StartedAt),
               lists:foldl(
                 fun(Waiter, Acc) ->
                         reply_waiter(Waiter, {error, Reason}, Acc)
@@ -8100,7 +8176,10 @@ retire_invalid_dtx_submission(
                Kind =:= finalize; Kind =:= complete ->
             Digest = quod_dtx:record_digest(Control),
             case maps:take(Digest, Submissions) of
-                {#dtx_submission{waiters = Waiters}, Rest} ->
+                {#dtx_submission{waiters = Waiters,
+                                 observation_started_at = StartedAt}, Rest} ->
+                    observe_simplex_owner_terminal(
+                      S, dtx_control, Kind, rejected, StartedAt),
                     Reply = invalid_dtx_submission_reply(
                               Kind, Digest, Reasons, Projection, S),
                     reply_waiters(
@@ -8440,8 +8519,9 @@ keep_progress(S0, S1, Actions, TimerMode) ->
           end),
     SAdvertised = timed_step(SDrained, advertise,
                              fun() -> refresh_readiness(SDrained) end),
-    S2 = timed_step(SAdvertised, head_reconcile,
-                    fun() -> reconcile_head_progress(SAdvertised) end),
+    S2 = track_owner_peaks(
+           timed_step(SAdvertised, head_reconcile,
+                      fun() -> reconcile_head_progress(SAdvertised) end)),
     log_progress_transition(S0#s.head_progress, S2#s.head_progress, S2),
     TimerActions = case TimerMode of
                        rearm -> rearm_progress_timer(S2);
@@ -12374,6 +12454,7 @@ stats_map(S) ->
     {ProgressSlot, ProgressPhase, ProgressQuorum} = progress_status(S#s.head_progress),
     IngressQueued = quod_ingress_state:count(S#s.ingress),
     {DtxWaiting, DtxDormant} = dtx_admission_counts(S#s.dtx_admission),
+    {OwnerCurrent, OwnerBytesCurrent} = simplex_owner_current(S),
     #{slot => S#s.slot, committed => S#s.slot, approved => S#s.approved,
       pipeline_gap => max(0, S#s.approved - S#s.slot), last_applied => S#s.last_applied,
       committee_size => length(S#s.validators), appends => S#s.appends,
@@ -12393,6 +12474,10 @@ stats_map(S) ->
       custody_bytes => S#s.custody_bytes,
       dtx_admission_waiting => DtxWaiting,
       dtx_admission_dormant => DtxDormant,
+      owner_current => OwnerCurrent,
+      owner_peak => simplex_owner_peaks(S, OwnerCurrent),
+      owner_bytes_current => OwnerBytesCurrent,
+      owner_bytes_peak => simplex_owner_byte_peaks(S, OwnerBytesCurrent),
       ingress_retargets => S#s.ingress_retargets,
       relay_accepted => S#s.relay_accepted,
       relay_redrives => S#s.relay_redrives,
@@ -12411,6 +12496,96 @@ stats_map(S) ->
       ahead_gap => max(0, ahead_cert_ceiling(S#s.eng) - S#s.slot),
       syncing => case syncing(S) of true -> 1; false -> 0 end,
       is_validator => case is_participant(S) of true -> 1; false -> 0 end}.
+
+simplex_owner_current(
+  #s{dtx_submissions = Submissions, dtx_correlations = Correlations,
+     dtx_workers = Workers}) ->
+    Waiters = maps:fold(
+                fun(_Digest, #dtx_submission{waiters = Ws}, Total) ->
+                        Total + length(Ws)
+                end, 0, Submissions),
+    Bytes = maps:fold(
+              fun(_Digest, #dtx_submission{envelope = Envelope}, Total) ->
+                      Total + byte_size(Envelope)
+              end, 0, Submissions),
+    {#{dtx_control => #{retained => map_size(Submissions),
+                        waiters => Waiters},
+       dtx_endpoint => #{outbound => map_size(Correlations),
+                         inbound => map_size(Workers)}},
+     #{dtx_control => Bytes}}.
+
+track_owner_peaks(S = #s{owner_row_peaks = RowPeaks0,
+                         owner_byte_peaks = BytePeaks0}) ->
+    {Current, CurrentBytes} = simplex_owner_current(S),
+    RowPeaks = maps:fold(
+                 fun(Component, States, Acc0) ->
+                         maps:fold(
+                           fun(State, Value, Acc) ->
+                                   Key = {Component, State},
+                                   Acc#{Key => max(Value,
+                                                   maps:get(Key, Acc, 0))}
+                           end, Acc0, States)
+                 end, RowPeaks0, Current),
+    BytePeaks = maps:fold(
+                  fun(Component, Value, Acc) ->
+                          Acc#{Component => max(Value,
+                                                maps:get(Component, Acc, 0))}
+                  end, BytePeaks0, CurrentBytes),
+    S#s{owner_row_peaks = RowPeaks, owner_byte_peaks = BytePeaks}.
+
+simplex_owner_peaks(#s{owner_row_peaks = Peaks}, Current) ->
+    maps:map(
+      fun(Component, States) ->
+              maps:map(
+                fun(State, Value) ->
+                        max(Value, maps:get({Component, State}, Peaks, 0))
+                end, States)
+      end, Current).
+
+simplex_owner_byte_peaks(#s{owner_byte_peaks = Peaks}, Current) ->
+    maps:map(
+      fun(Component, Value) ->
+              max(Value, maps:get(Component, Peaks, 0))
+      end, Current).
+
+observe_simplex_owner_terminal(
+  #s{ns = Ns}, Component, Phase, Result, StartedAt)
+  when is_integer(StartedAt) ->
+    quod_metrics:observe_ontology_owner_terminal(
+      Ns, Component, Phase, Result,
+      max(0, quod_time:mono_ms() - StartedAt)),
+    ok;
+observe_simplex_owner_terminal(
+  #s{}, _Component, _Phase, _Result, _StartedAt) ->
+    ok.
+
+endpoint_terminal_result({ok, Response}) -> endpoint_terminal_result(Response);
+endpoint_terminal_result({error, timeout}) -> timeout;
+endpoint_terminal_result({error, not_ready}) -> unavailable;
+endpoint_terminal_result({error, not_found}) -> not_found;
+endpoint_terminal_result({error, busy}) -> busy;
+endpoint_terminal_result({error, invalid_request}) -> rejected;
+endpoint_terminal_result({error, {prepare_refused, _, _, _, _}}) -> rejected;
+endpoint_terminal_result({error, _}) -> error;
+endpoint_terminal_result({error, _RequestId, not_ready}) -> unavailable;
+endpoint_terminal_result({error, _RequestId, not_found}) -> not_found;
+endpoint_terminal_result({error, _RequestId, busy}) -> busy;
+endpoint_terminal_result({error, _RequestId, invalid_request}) -> rejected;
+endpoint_terminal_result({refused, _RequestId, _, _, _, _}) -> rejected;
+endpoint_terminal_result(_) -> completed.
+
+dtx_worker_terminal_result({submit_result, _Digest, Result}, Response) ->
+    prefer_terminal_result(endpoint_terminal_result(Result), Response);
+dtx_worker_terminal_result(Result, Response) ->
+    prefer_terminal_result(endpoint_terminal_result(Result), Response).
+
+prefer_terminal_result(completed, Response) ->
+    endpoint_terminal_result(Response);
+prefer_terminal_result(Result, _Response) ->
+    Result.
+
+dtx_retirement_result(not_in_charge) -> unavailable;
+dtx_retirement_result(_) -> error.
 
 dtx_admission_counts(none) -> {0, 0};
 dtx_admission_counts(

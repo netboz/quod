@@ -195,6 +195,51 @@ cursor_target_link_death_drops_the_exact_route_test() ->
           await_stats(Router, #{correlations => 0, routes => 0})
       end).
 
+%% Current rows must follow the live router maps, while the owner-lifetime
+%% peaks survive exact cleanup.  Opening and stopping one real cursor exercises
+%% both the outbound correlation owner and the retained cursor-route owner.
+owner_stats_keep_peaks_after_cursor_cleanup_test() ->
+    with_router(
+      fun(Router, Link, Fixture) ->
+          CursorId = <<16#48:256>>,
+          Caller = submit_async(Router, Fixture, CursorId, 1000),
+          {OpenRequest, _} = sent_request(Link),
+          assert_owner_stats(
+            Router,
+            #{outbound => 1, inbound => 0, cursor_routes => 1},
+            #{outbound => 1, inbound => 0, cursor_routes => 1}),
+
+          OpenId = quod_client_goal_endpoint:request_id(OpenRequest),
+          {ok, BindingBlob} = quod_durable_term:encode_result(#{}),
+          {ok, SolutionBlob} = quod_client_result:encode(
+                                 {solution, CursorId, 7, BindingBlob}),
+          respond(Router, Link,
+                  {cursor_result, OpenId, CursorId, SolutionBlob}),
+          receive
+              {Caller, {ok, _,
+                        {normalized, {solution, CursorId, 7, _}}}} -> ok
+          after 1000 -> error(cursor_owner_open_result_missing)
+          end,
+          assert_owner_stats(
+            Router,
+            #{outbound => 0, inbound => 0, cursor_routes => 1},
+            #{outbound => 1, inbound => 0, cursor_routes => 1}),
+
+          StopCaller = cursor_async(Router, CursorId, stop, 1000),
+          {{cursor, StopId, CursorId, stop}, _} = sent_request(Link),
+          {ok, StoppedBlob} = quod_client_result:encode(stopped),
+          respond(Router, Link,
+                  {cursor_result, StopId, CursorId, StoppedBlob}),
+          receive
+              {StopCaller, {ok, _, {normalized, stopped}}} -> ok
+          after 1000 -> error(cursor_owner_stop_result_missing)
+          end,
+          assert_owner_stats(
+            Router,
+            #{outbound => 0, inbound => 0, cursor_routes => 0},
+            #{outbound => 1, inbound => 0, cursor_routes => 1})
+      end).
+
 router_death_after_send_preserves_request_uncertainty_test() ->
     Parent = self(),
     Link = spawn(fun() -> link_loop(Parent) end),
@@ -292,6 +337,11 @@ await_stats(Router, Expected, Remaining) ->
     end.
 
 await_stats(Router, Expected) -> await_stats(Router, Expected, 1000).
+
+assert_owner_stats(Router, Current, Peak) ->
+    Stats = quod_client_goal_router:test_stats(Router),
+    ?assertEqual(Current, maps:get(owner_current, Stats)),
+    ?assertEqual(Peak, maps:get(owner_peak, Stats)).
 
 stop_router(Router) ->
     case is_process_alive(Router) of

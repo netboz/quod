@@ -1,13 +1,15 @@
 # Quod agents and FIPA -- architecture and implementation plan
 
-**Status:** revised architecture direction. Slices 1 and 2 are delivered;
-later FIPA work remains pending. `ontology-actor-architecture.md` is the
+**Status:** revised architecture direction. The runtime/reaction substrate,
+explicit committed events, generic agent identity, and durable DTX effects are
+delivered; acknowledged delivery, the durable agent outbox, agent hosting, and
+later FIPA work remain pending. `ontology-actor-architecture.md` is the
 authority for actor identity, system-ontology bootstrap, key ownership, and
 hosting. It corrects this document's former Agent Platform record model: every
 durable agent is a classed instance in ontology state and its optional Erlang
 process is a rebuildable projection.
-The current working tree uses the generic stable agent reference; the former
-`{user, Key}` label survives below only in historical slice descriptions.
+The current tree uses the generic stable agent reference; the former
+`{user, Key}` label is not a supported identity or compatibility path.
 
 This plan defines how users, agents, actions, runtime state, events, directories,
 and FIPA communication should fit Quod's ontology-first architecture.
@@ -155,19 +157,22 @@ from replay.
 
 ## 5. External predicate contract
 
-External Erlang predicates are divided into three explicit classes.
+External Erlang predicates are divided into four explicit classes.
 
 | Class | May read runtime | May stage D | May mutate P | May perform E |
 |---|---:|---:|---:|---:|
 | `query` | yes | no | no | no |
 | `staging` | yes | yes | no | no |
 | `projection` | yes | no | yes | no |
+| `reaction` | yes | no | no | yes |
 
-External effects are not a fourth callable-predicate class. A `staging`
-predicate may prepare a bounded effect request as part of the ordinary proof;
-the node-wide effect journal performs that request only after the controlling
-transaction commits and verifies the real result. This keeps authorization,
-proof, sealing, and consensus on one path.
+A `reaction` bridge performs live post-commit E only from a `reaction`
+continuation; it cannot stage D or mutate P. This class does not replace durable
+effect custody. A `staging` predicate may prepare a bounded effect request as
+part of the ordinary proof, and the node-wide effect journal performs that
+request only after the controlling transaction commits and verifies the real
+result. Authorization, proof, sealing, and consensus therefore remain on one
+path.
 
 A `query` may call Erlang and bind its answer into the continuing Prolog goal
 with `unify_prove_body`. If the completed goal stages no durable change or
@@ -185,6 +190,7 @@ Examples:
 - `peer_ready/1` is `query`.
 - `admit/3` and `remove/1` are `staging`.
 - `ensure_agent_started/2` is `projection`.
+- a live notification or delivery-attempt bridge is `reaction`.
 - a future `mts_send/2` action would use a `staging` bridge to prepare its
   post-commit send; the bridge would not send during the proof.
 
@@ -199,23 +205,25 @@ Each predicate declares:
 The former per-proof process-dictionary namespace values have been replaced by
 one explicit execution context carried in Erlog's `#est.fs` flags. These flags
 are created by the engine, survive the MVCC proof boundary, and are not
-caller-supplied. Its four kinds are:
+caller-supplied. Its five kinds are:
 
 ```text
 proof(Namespace, Height, Subject)
 verdict(Namespace, Height)
 policy_verdict(Namespace, Height)
 projection(Namespace, Height, HandlerId)
+reaction(Namespace, Height)
 ```
 
 Registration and invocation fail closed when a predicate is used in the wrong
 context. Staging predicates are callable only from ordinary proofs; projection
-predicates remain confined to projection apply.
+predicates remain confined to projection apply; reaction predicates remain
+confined to live post-commit reaction continuations.
 
 > **As built.** The context is one `#qctx{kind, ns, height, subject,
 > chain}` record (owned by `m:quod_predicates`), stored under a single
 > `none`-valued `#est.fs` flag. `kind` is `proof | verdict |
-> policy_verdict | projection`. The record also carries `chain` (the
+> policy_verdict | projection | reaction`. The record also carries `chain` (the
 > inter-ontology ask chain, which used to be a separate `$quod_ask_chain`
 > value). `verdict` is a strictly local membership re-proof;
 > `policy_verdict` is a strictly local policy re-proof with governed bridges
@@ -225,9 +233,9 @@ predicates remain confined to projection apply.
 > secret). Today's fields are fine to expose (`ns`/`height`/`kind`/`chain` are
 > already visible to `can_read` policies), but the authenticated **subject** (§10)
 > must be carried out-of-band — the `#lp{}` overlay pattern (as for
-> `follow_disabled`), not this readable flag. All four kinds now have concrete
-> constructors: normal proofs, membership verdicts, policy verdicts, and
-> runtime projections. Lifecycle
+> `follow_disabled`), not this readable flag. All five kinds now have concrete
+> constructors: normal proofs, membership verdicts, policy verdicts, runtime
+> projections, and post-commit reactions. Lifecycle
 > is no longer another context: signed and node-authored `execute` use the
 > ordinary proof context, whose private request record already carries the
 > authenticated principal. The
@@ -273,12 +281,12 @@ transitions.
 Example:
 
 ```prolog
-record_agent_name(Agent, Name) :-
-    assertz(agent_name(Agent, Name)).
+record_agent_display_name(Agent, Name) :-
+    assertz(agent_display_name(Agent, Name)).
 
-action(record_agent_name(Agent, Name),
-       [may_manage_agent(Agent), valid_agent_name(Name)],
-       agent_name(Agent, Name)).
+action(record_agent_display_name(Agent, Name),
+       [may_manage_agent(Agent), valid_agent_display_name(Name)],
+       agent_display_name(Agent, Name)).
 ```
 
 The authenticated subject will be read by authorization prerequisites from
@@ -384,7 +392,7 @@ One live-applied material transaction currently produces this compact runtime
 publication:
 
 ```text
-#{ns, height, tx_id, subject, diff, effects}
+#{ns, height, tx_id, subject, diff, applied_ops, effects}
 ```
 
 `diff` is the signed requested operation list. The canonical committed
@@ -394,18 +402,24 @@ occurrence. The runtime publication carries that existing result and converts
 each applied operation to one event; it does not treat requested no-ops as
 changes and does not add a second event envelope. `effects` contains only the already-validated bounded
 descriptors from that transaction; effect-only transactions therefore cross
-the same ordered runtime boundary with `diff = []`. Goal and result remain
-canonical ledger blobs and are decoded only by detail readers.
+the same ordered runtime boundary with `diff = []`. An ordinary transaction
+keeps goal and result in the ledger for detail readers. A DTX group publication
+also carries `proof_id`, `origin`, `goal`, `result`, and `plan_digest`, because
+the group reducer already has that canonical proof context.
 
-> **As built (Slice 1).** The envelope is a map carrying exactly those fields,
-> published as
+> **As built (Slice 1 plus DTX-group extension).** The ordinary envelope is a
+> map carrying exactly the displayed fields, published as
 > `{applied_live, Env}` on `{runtime, Ns}`. A map (rather than a fixed `/7`
 > record) so Slice 5 can add subject-chain fields without reshaping. It is emitted
 > once per material transaction on a **live** commit, including a direct-effect
 > transaction with an empty D diff. An
 > OCC-rejected transaction publishes `{rejected_live, #{ns, height, tx_id,
-> subject, effects}}` with no diff. `subject` is `undefined` until signed subjects land
-> (section 10).
+> subject, effects}}` with no diff. A live DTX group publication adds the
+> proof fields listed above and carries its
+> authenticated principal, including `{agent, CanonicalBytes}` after the agent-
+> identity format break. Ordinary single-ontology applied and rejected
+> publications still carry `subject = undefined`; that is the current
+> observability shape, not a missing agent identity or authorization path.
 
 ### Shared substrate consumers
 
@@ -499,18 +513,23 @@ The planned kinds are `state_handler` and `reaction`. The separate
 `handler_dependency` declaration was retired when dependencies moved into the
 `Needs` field of `state_handler/4`.
 
-Transaction-author signatures now exist, but validator-side authorization does
-not. Until it does, only declarations included in a trusted system ontology's
-pinned genesis may be activated. Dynamic declarations remain rejected, even if
-an authenticated trusted node could technically commit the fact.
+Every ontology uses its own slot-1 block as the declaration-execution lock; the
+ontology need not be a system ontology. A `state_handler/4` activates only when
+its complete ground term occurs in that founding block and remains present in
+current D. A founding handler which is nonground or has been retracted makes
+the runtime distinctly and loudly unhealthy. `react_on/3` intentionally permits
+pattern variables, so its founding and current clauses are alpha-normalized and
+fully validated instead; a missing or invalid founding reaction is likewise a
+distinct loud failure. Later-written declarations remain inert, refused, and
+counted even when their ordinary write passed `can_invoke/4`.
 
-After signing lands, validators authorize a declaration before committing it.
-The runtime also verifies the committed provenance before activation as a
-defense-in-depth check. External predicate functors referenced by a declaration
-must be provided by an audited module named and hash-pinned by that ontology's
-immutable genesis, and that module must be shipped in the release. Root names
-only the ontology identity. Ontology content cannot load
-arbitrary Erlang modules; there is no application-global predicate catalogue.
+Generic transaction-author identity now exists, but a future dynamic
+`can_declare_runtime/3` policy has not replaced this founding lock. External
+predicate functors referenced by an active declaration must be provided by an
+audited module named and hash-pinned by that ontology's immutable genesis, and
+that module must be shipped in the release. Root names only the ontology
+identity. Ontology content cannot load arbitrary Erlang modules; there is no
+application-global predicate catalogue.
 
 The first handlers will own:
 
@@ -583,7 +602,15 @@ this node as the unique current host. No owner or multiple owners is a
 fail-closed runtime-integrity error; it never falls back to execution on every
 replica.
 
-Three delivery classes are required:
+Four delivery choices are required. They differ independently in whether the
+occurrence itself is committed and whether delivery is acknowledged/recovered:
+
+| Choice | Occurrence in D | Delivery acknowledgement/recovery |
+|---|---:|---:|
+| best-effort reaction | no dedicated record | no |
+| acknowledged volatile delivery | no custody record | bounded live retry and dedup only |
+| `trigger_event/1` | one ordered committed occurrence | no |
+| durable outbox | pending until separately committed completion | yes, across crash and host move |
 
 ### Best-effort reactions
 
@@ -599,7 +626,17 @@ and receiver deduplication, but does not create an outbox fact for every frame.
 A sender-process crash may lose an in-flight message; the protocol's durable
 conversation state decides whether and how to reconstruct it.
 
-### Durable effects
+### Committed signal without delivery confirmation
+
+`trigger_event(Term)` stages one signed, ordered, auditable occurrence in the
+ordinary transaction operation list. It costs one consensus commit and changes
+no fact. Local and subscribed ontologies may react to it only when they observe
+that commit live: replay proves that the occurrence existed but never reruns its
+handler. Use it when the signal itself must be committed but missing one live
+notification is acceptable. It is not delivery confirmation and must not be
+described as guaranteed delivery.
+
+### Durable outbox delivery
 
 Reserved for low-rate control-plane or external actions whose loss across a
 sender crash would violate semantics and which cannot be reconstructed safely
@@ -613,10 +650,42 @@ outbox(MessageId, Executor, Destination, Payload, pending).
 `node(NodeId)` or another ontology-defined single-owner identity; there is no
 implicit `all` executor.
 
+The outbox fact is the sole durable custody. One founding `state_handler/4`
+watches pending-outbox and host-assignment facts and projects the complete
+current local obligation set after a live change, restart, replay, or host move.
+It is both the live and recovery path: the assertion's changed head already
+selects it in the same ordered runtime batch, so delivery needs no duplicate
+`react_on/3` wake rule. Applications may independently react to outbox state for
+their own notifications, but that is not the delivery scheduler. The handler
+feeds one rebuildable scheduler keyed by a stable `DeliveryId`; neither side
+owns a second queue of durable truth or independently scans a ledger.
+
+For the first agent vertical, the hosted-agent process (or a small supervised
+child extracted only if the concrete retry loop needs it) owns the volatile
+timers, in-flight sends, acknowledgements, and backoff. There is no separate
+per-namespace `quod_outbox` process. The handler's projection bridge installs
+or withdraws revision-tagged desired local work but performs no IO. The
+scheduler sends only after the existing P-before-E frontier reaches that
+revision. Before every send, it checks the newest local committed view for both
+the exact pending tuple and one current host epoch selecting this node. No
+owner, multiple owners, a remote owner, or a stale epoch sends nothing and
+leaves the fact pending.
+
+The node-wide `quod_effect_journal` is deliberately separate. It owns private
+prepared custody for local ontology-lifecycle effects before and after their
+controlling commit. An agent outbox is replicated application D whose custody
+moves with its executor. Copying an outbox row into that journal would create
+two custody owners and break clean host migration; only low-level utilities may
+be shared.
+
 Every replica stores the outbox fact, but only the node currently hosting the
 logical executor schedules delivery. If ownership moves, the new owner
 reconciles pending entries and continues delivery. Completion is recorded by a
-separate transaction. Receivers deduplicate by `MessageId`.
+separate ordinary signed transaction. Receivers deduplicate by `MessageId`.
+An uncertain completion outcome is resolved by rereading the exact current D
+state, never by blindly resubmitting. Temporary route, link, or authority
+unavailability retains the same pending message and retries without an
+attempt-count drop.
 
 This is a transactional-outbox model: it avoids both BBSvx's duplicate replay
 and an at-most-once window that silently loses essential messages.
@@ -676,7 +745,7 @@ creation policy may authorize only a specific existing agent to call
 approval facts satisfy changeable Prolog prerequisites. This is ordinary ACL
 and action policy, not a separate delegation feature.
 
-The working-tree transport authenticates a stable agent reference and its
+The deployed transport authenticates a stable agent reference and its
 active signing key in one format, without a second ACL or legacy signed route.
 That identity proof does not replace or redefine the target ACL decision.
 
@@ -740,7 +809,7 @@ isa(agent, thing).
 agent_key(LocalInstance, PublicKey, Status).
 agent_platform(AgentRef, PlatformNamespace).
 agent_hosted_on(AgentRef, NodeRef, Epoch).
-agent_name(AgentRef, Name).
+agent_display_name(AgentRef, Name).
 has_capability(AgentRef, Capability).
 accepts_wielding(AgentRef, Subject).
 ```
@@ -784,17 +853,25 @@ attitude calculus.
 aid(Name, Addresses, Resolvers, UserDefined).
 ```
 
-- `Name` is globally stable.
+- `Name` is the existing canonical `agent_instance_ref/3` byte representation,
+  rendered on a FIPA text wire as `quod-agent-` followed by its unpadded
+  base64url encoding. Decoding recovers those exact bytes; there is no AID
+  registry or identity-mapping table.
 - `Addresses` are ordered current transport addresses derived from P-state at
   lookup/send time.
-- `Resolvers` are constructed from stable AMS resolver names plus their current
-  P-state routes.
-- AIDs compare by `Name`.
+- `Resolvers` identify the current Agent Platform/AMS resolvers and their
+  current P-state routes. Agent migration may change `Addresses`, `Resolvers`,
+  and `agent_platform/2`; it never changes `Name`.
+- AIDs compare by the decoded canonical agent-reference bytes. A display name
+  is `agent_display_name/2` application data, never identity.
 
 The complete `aid/4` term is a wire/runtime value, not a committed fact. Only
 stable identity, stable resolver names, and policy-approved user properties may
 be D. Volatile addresses never enter consensus and are refreshed whenever an
-AID is constructed.
+AID is constructed. This identity is globally unique within one Quod network.
+If future FIPA federation crosses distinct root network identities, the same
+deterministic wire name also binds `NetworkIdentity`; that extension must not
+introduce a registry, alias, or second agent identity.
 
 ### ACL envelope
 
@@ -839,41 +916,74 @@ is accepted. Conversation IDs are globally unique and non-empty.
   the ontology relation only when no other local consumer still needs it, all
   through ordinary authorized transactions.
 
-The Erlang MTS routes envelopes and enforces transport bounds. Prolog owns their
-meaning, authorization, and protocol transitions.
+The future Erlang MTS transports addressed FIPA ACL envelopes between agents
+within or across APs and enforces transport bounds. It does not discover
+agents, services, ontologies, or hosts, and it never replaces QUIC,
+`quod_directory`, or `::`. Prolog owns message meaning, authorization, and
+protocol transitions.
 
-## 13. Three directories
+## 13. Three discovery responsibilities
 
 Do not merge these responsibilities.
 
-### Ontology resolver
+### Quod ontology-route resolver
 
-Maps an ontology namespace to stable registration information and live hosting
-routes. Durable data includes namespace owner, genesis anchor, and resolver.
-Reachability and current endpoints are P-state learned from authenticated links,
-Brahms, and signed announcements.
+Maps only an exact ontology identity (namespace plus genesis anchor) to
+currently verified hosts. A separate future Prolog-owned public-discovery
+service may map a public name to that anchored identity and decide
+discoverability; it does not become part of the route store. The target
+ontology's ordinary lifecycle policy alone authorizes hosting. Endpoints,
+contacts, leases, and freshness are P-state projected into the sole
+`quod_directory` owner from signed directory-control records and confirmed
+direct seeds over authenticated links. It is not an AID resolver, and neither
+a registration nor a contact hint makes a route authoritative.
+
+This is a Quod role, not the FIPA Ontology Agent. The
+[obsolete FIPA00006](https://www.fipa.org/specs/fipa00006/OC00006A.html) and
+later [Experimental FIPA00086](https://www.fipa.org/specs/fipa00086/index.html)
+Ontology Service revisions describe an OA for
+ACL-facing public-ontology access, semantic queries/updates, comparison,
+shared-ontology selection, and optional translation; neither standardises
+Quod's namespace-to-current-host routing. A future Quod agent may expose an
+OA-like semantic/discovery service and advertise it through the DF. It remains
+a client/front end of the Quod route resolver and never owns or certifies live
+routes. Calling it `fipa-oa` would require the separate FIPA00086 ACL contract,
+which this plan does not claim.
 
 ### AMS -- white pages
 
-Each Agent Platform is itself an ontology with one logical AMS authority. It
-manages AID registration, discovery, residency coordination, and AP
-description. A managed agent keeps its authoritative class, key, and state in
-the ontology named by its `agent_instance_ref/3`; an AP record is not a
-substitute identity.
+Each Agent Platform is itself an ontology and projects the mandatory AMS role
+from the [FIPA Agent Management Standard](https://www.fipa.org/specs/fipa00023/).
+It supervises AP access, AID registration/search, agent residency and
+lifecycle, and the AP description. AMS AID addresses are not Quod ontology
+routes. A managed agent keeps its authoritative class, key, and state in the
+ontology named by its `agent_instance_ref/3`; an AP record is not a substitute
+identity.
 
 ### DF -- yellow pages
 
-The DF manages service descriptions:
+The optional DF stores agent descriptions and service advertisements. The
+following is Quod's planned durable representation, not FIPA's literal wire
+schema:
 
 ```prolog
 service(AgentId, ServiceId, Type, Ontologies, Protocols, Languages, Lease).
 ```
 
-It supports register, deregister, modify, and bounded search. Federation carries
-a globally unique search ID, maximum depth, maximum results, and visited set.
+It supports register, deregister, modify, and bounded search. Multiple DFs may
+exist and federate; federation carries a globally unique search ID, maximum
+depth, maximum results, and visited set.
+
+The durable `Lease` is an absolute expiry (or a deterministic durable start
+plus duration). The P index filters expired advertisements against current time
+when it is rebuilt or queried. Expiry alone creates no pruning transaction;
+renewal, deregistration, or an application retention policy changes D through
+an ordinary authorized transaction.
 
 DF registration advertises a capability; it does not guarantee that an agent
-will accept a particular request.
+really provides it or will accept a particular request. The DF never becomes an
+ontology route table; finding a discovery service through the DF and resolving
+an ontology through that service remain two separate operations.
 
 ## 14. Performance architecture
 
@@ -884,7 +994,9 @@ will accept a particular request.
    process.
 4. The ordered `quod_runtime` tier performs only bounded index updates and
    enqueue operations. Heavy P runs in independent bounded resource workers.
-5. E workers are supervised and concurrency-limited per namespace and agent.
+5. E workers are supervised; one conflict lane serializes one affected
+   resource while independent lanes run concurrently. Per-attempt timeout/heap
+   safety comes from named physical-node policy, not a hidden worker-count cap.
 6. Each transport pool connection uses channel priority classes. Consensus
    signaling is highest urgency; catch-up/control are bounded separately; feed,
    ACL, and future client state cannot consume consensus's priority under
@@ -907,31 +1019,39 @@ will accept a particular request.
 
 ## 15. Proposed module boundaries
 
-Do not scaffold the end state. Slices 1--4 need only three new modules plus one
-narrowed existing one:
+Do not scaffold the end state. The delivered substrate added two cohesive
+modules and narrowed one existing owner:
 
 - `quod_prolog` (existing, narrowed): D proof and committed projection only.
-- `quod_runtime` (existing): ordered post-apply P orchestration and reconciliation.
-- `quod_outbox` (future): durable effect delivery and deduplication.
-- `quod_predicates` (existing): predicate registration metadata and context
+- `quod_runtime` (added): ordered post-apply P orchestration, reconciliation,
+  and the one reaction dispatcher.
+- `quod_predicates` (added): predicate registration metadata and context
   enforcement.
 
-Reaction matching and scheduling may begin inside `quod_runtime`; split it only
-when measured complexity or contention justifies a separate module.
+The first durable-agent delivery must reuse this substrate: one founding
+`state_handler/4` feeds the hosted agent's volatile delivery scheduler on both
+live changes and reconciliation, while the outbox fact remains sole custody.
+Do not add a duplicate `react_on/3` delivery wake or a
+per-namespace `quod_outbox` scanner/process. Extract a small delivery worker
+module only if the concrete retry/ack loop makes the hosted-agent process
+unclear; it may own volatile attempts, never D, policy, or another queue of
+durable truth.
 
 Later slices introduce responsibilities for hosted-agent supervision, subjects,
 MTS routing, AMS/DF indexes, and ontology resolution. Their ownership boundaries
 remain explicit, but they may share a module while small. A named module is
 created only when its slice lands and the code has a real API to hold.
 
-The per-namespace supervision order becomes:
+The per-namespace supervision order is:
 
 ```text
-simplex -> prolog -> runtime -> prove/catchup/feed endpoints
+simplex -> prolog -> catchup -> feed -> runtime
 ```
 
-`runtime` depends on the committed KB and can be restarted/reconciled without
-restarting consensus or rebuilding the KB.
+`runtime` is last. It depends on the committed KB and endpoints, while no
+earlier child depends on its rebuildable P/E state. Its own crash therefore
+restarts no consensus, KB, catch-up, or feed process; any earlier restart does
+restart and reconcile it against the fresh KB.
 
 ## 16. Rewrite sequence
 
@@ -983,9 +1103,10 @@ Acceptance:
 > per namespace, LAST in `quod_ns`'s rest_for_one chain; one-recipe handlers with the
 > action-pattern Needs (the §8 note above); §8.1's provenance check is a FULL-TERM
 > match against the founding (slot-1) block — the declaration-execution lock,
-> distinct from the ordinary `can_invoke/4` write ACL — with
-> retracted/nonground founding declarations a distinct loud unhealthy and
-> dynamic declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
+> distinct from the ordinary `can_invoke/4` write ACL — with retracted or
+> nonground founding `state_handler/4` declarations a distinct loud unhealthy,
+> founding reactions separately alpha-normalized and validated, and dynamic
+> declarations refused+counted. The whole discovery+plan+converge pipeline runs in a
 > killable budgeted runner (never in the server); execution failures collapse pending work
 > into one reconciliation with exponential backoff (crash to the supervisor after 5); the
 > runtime raises its MVCC floor as the tier completes; at replay it reaps every reader before
@@ -1000,9 +1121,16 @@ Acceptance:
 
 ### Slice 3 -- reactions and outbox
 
-- Implement ordered applied-operation matching through the one dispatcher in
-  `event-reaction-refinement-plan.md`.
-- Add bounded best-effort reactions.
+**Status: PARTIALLY DELIVERED.** Ordered local and certified-subscribed
+`applied_ops` matching, bounded best-effort reactions, and `trigger_event/1`
+are committed and deployed through Slices 1--3 of
+`event-reaction-refinement-plan.md`. Reaction counters, latency histograms, and
+their Grafana rate/latency panels are live. The remaining work is acknowledged
+volatile delivery, the durable agent outbox, and RFC 9218 stream priorities.
+
+- **Delivered:** ordered applied-operation matching through the one dispatcher
+  in `event-reaction-refinement-plan.md`.
+- **Delivered:** bounded best-effort reactions and `trigger_event/1`.
 - Add acknowledged volatile delivery for normal conversation traffic.
 - Add durable outbox delivery, completion, retry, and receiver deduplication.
 - **Transport work item — RFC 9218 stream priority classes.** Connection
@@ -1017,7 +1145,6 @@ Acceptance:
   connections, assign RFC 9218 priorities (`{log}`/`{catchup}` high urgency; feed,
   ACL, and future client state lower) via the pinned fork's `set_stream_priority/4`,
   with a load test proving lower-priority producers cannot starve `{log}`.
-- Add metrics and Grafana panels.
 
 Acceptance:
 
@@ -1034,8 +1161,21 @@ Acceptance:
 
 This is the proof of the architecture and remains trusted-fleet-only.
 
-- Add root-catalogued `quod:node`, `quod:agent`, and `quod:human_user` system
-  ontology vocabulary.
+It starts only after three prerequisites exist: durable outbox delivery from
+Slice 3; stable `NodeRef` creation and activation from Slices 2--3 of
+`node-instance-identity-plan.md`; and the node-vault canonical signing bridge
+from `ontology-actor-architecture.md` §4.1. A hosted autonomous agent needs the
+vault to sign its ordinary completion and consequence transactions. A raw node
+key, embedded test key, or node-authority shortcut is not an acceptable
+temporary host identity or signer.
+
+The hosting projection itself is product work in Slice 4 of
+`event-reaction-refinement-plan.md`: one founding `state_handler/4` consumes
+committed host facts and starts/stops the local process. This vertical consumes
+that owner; it does not add another hosting manager.
+
+- Consume the root-catalogued `quod:node`, `quod:agent`, and
+  `quod:human_user` system-ontology vocabulary.
 - Create two agent ontologies, each with its own committed state and public
   key binding.
 - Reconcile one hosted-agent process only on each agent's committed host epoch.
@@ -1060,9 +1200,11 @@ Acceptance:
 
 ### Slice 5 -- agent subjects and delegation
 
-- Replace the transitional signed base-user label with the generic
-  agent-bound identity defined in `ontology-actor-architecture.md`, then extend
-  it into immutable delegated subjects.
+**Status: PARTIALLY DELIVERED.** The transitional signed base-user label has
+been replaced and deployed as the generic agent-bound identity defined in
+`ontology-actor-architecture.md`; no compatibility principal remains.
+
+- Extend that generic identity into immutable delegated subjects.
 - Add delegation, capabilities, and receiving-side subject validation without
   replacing the existing signed-goal or `can_invoke/4` paths.
 - Test whole-chain authorization and laundering attempts.
@@ -1076,7 +1218,10 @@ Acceptance:
 ### Slice 6 -- complete agent lifecycle and local AMS
 
 - Complete `quod:agent` beyond the Slice 4 minimum.
-- Add `quod:node`-governed host assignment and migration actions.
+- Add `quod:node`-governed host assignment and migration policy above the one
+  hosting projection owned by `event-reaction-refinement-plan.md` Slice 4,
+  using the stable physical-node references from
+  `node-instance-identity-plan.md`. Do not implement another hosting owner.
 - Implement AID construction and AMS operations.
 - Implement wielding.
 
@@ -1103,15 +1248,22 @@ Acceptance:
 - restart resumes durable conversations without replaying completed messages;
 - load tests show that ACL traffic cannot starve consensus.
 
-### Slice 8 -- ontology directory and local DF
+### Slice 8 -- public ontology discovery and independent local DF
 
-- Replace ad hoc namespace contact resolution with the ontology resolver.
-- Implement indexed local DF operations and leases.
+- Implement the approved Prolog-owned public-name-to-exact-identity discovery
+  service above the existing route resolver. Do not put public-name policy in
+  `quod_directory`, and do not add another live-route owner.
+- Feed contact hints into existing identity/host verification; neither a public
+  discovery result nor DF/AMS/MTS/OA output is an authoritative route.
+- Independently implement indexed local DF agent/service operations and leases.
 
 Acceptance:
 
 - an unknown node can resolve an ontology without already hosting it;
+- a public name resolves first to an anchored identity and then independently
+  to a verified current route;
 - stale endpoints do not alter durable identity;
+- DF, AMS, MTS, or OA-like output alone never becomes an ontology route;
 - local service registration and bounded search survive restart.
 
 ### Deferred FIPA extensions
@@ -1124,11 +1276,12 @@ Acceptance:
 
 ## 17. Documentation replaced by this plan
 
-Once approved and implemented:
+The replacement is already in force for delivered reaction work:
 
-- `doc/content-layer-design.md` section 14 becomes historical for agent
-  reactions; explicit ontology following is governed separately by
-  `doc/ontology-subscription-plan.md`;
+- `doc/content-layer-design.md` is a historical architecture record. Its
+  section 14 is an as-built overview only; normative reaction semantics live in
+  `doc/event-reaction-refinement-plan.md`, while explicit ontology following is
+  governed by `doc/ontology-subscription-plan.md`;
 - Onia/BBSvx D/P/E and action references are no longer treated as implementation
   specifications;
 - `doc/client-world-direction.md` remains a non-normative consumer and
@@ -1139,31 +1292,41 @@ Once approved and implemented:
 
 ## 18. Decisions needed before later FIPA slices
 
-These do not block Slices 1--4:
+These do not block the remaining Slice-4 vertical:
+
+AID identity is no longer an open design choice. Its semantic `Name` is the
+canonical agent-reference bytes and its text encoding is fixed in §12; an Agent
+Platform appears only in resolver/residency data.
 
 1. The concrete capability vocabulary carried by `subject/3` for wielding and
    delegation. The ACL shape and `agent_instance_ref/3` identities are already
    fixed.
-2. The canonical globally unique AID name format. The recommended form is a
-   stable agent ID qualified by its home AP, not by its current node.
-3. Whether durable ACL inbox facts are retained indefinitely, retained by
+2. Whether durable ACL inbox facts are retained indefinitely, retained by
    conversation policy, or compacted after an acknowledgement horizon.
 
 ## 19. First implementation checkpoints
 
 Do not begin with FIPA message syntax.
 
-The substrate checkpoint is Slices 1--3: prove that Quod can repeatedly
-transition between live and catch-up apply, rebuild runtime state without KB
-copies, and deliver a durable effect without loss or replay duplication. The
-same checkpoint unlocks deferred reader-cache invalidation and the explicit
-certified ontology projections in `ontology-subscription-plan.md`.
+The core substrate checkpoint has passed: Quod repeatedly separates live from
+catch-up apply, rebuilds runtime state without KB copies, dispatches local and
+certified-subscribed reactions from canonical `applied_ops`, commits explicit
+`trigger_event/1` occurrences, and releases durable DTX group effects through
+one journal. This does not claim that all Slice-3 messaging is complete:
+acknowledged volatile delivery and the agent durable outbox remain open.
 
-The product checkpoint is Slice 4: two statically configured agent ontologies,
-one action, one host-fenced durable message, and recovery under process and
-host failure.
+Exactly three prerequisites remain before the Slice-4 hosted-agent vertical can
+start: durable outbox delivery; node-instance Slices 2--3, which provide the
+stable active `NodeRef`; and the node-vault canonical signing bridge required by
+an autonomous hosted agent. Hosting projection is part of the vertical itself,
+through the sole owner in `event-reaction-refinement-plan.md` Slice 4.
 
-Only after both checkpoints survive restart, repeated catch-up, churn, and load
-testing do signing, complete lifecycle, FIPA syntax, directories, and federation
-begin. Client/world work remains a separate consumer of the same runtime
-architecture and does not gate these slices.
+The product checkpoint remains open. It is Slice 4: two statically configured
+agent ontologies, one action, one host-fenced durable message, and recovery
+under process and host failure.
+
+Generic agent signing is already deployed. Complete lifecycle, FIPA syntax,
+directories, and federation begin only after the product checkpoint survives
+restart, repeated catch-up, churn, and load testing. Client/world work remains
+a separate consumer of the same runtime architecture and does not gate these
+slices.

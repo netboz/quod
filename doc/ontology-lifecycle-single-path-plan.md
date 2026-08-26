@@ -247,10 +247,10 @@ identity rather than a root-specific exception.
 
 ### 2.6 Deployment is a clean re-found, not a rolling upgrade
 
-This working-tree refactor must not be rolled onto an existing network. The
-existing root ledger does not contain the new root-owned custody policy or the
-current system-ontology catalogue, so a mixed or rolling deployment would
-start the node-wide journal unconfigured and lifecycle goals would remain
+This refactor was activated through a clean re-found and was not rolled onto
+the prior network. That root ledger did not contain the new root-owned custody
+policy or current system-ontology catalogue; a mixed deployment would have
+started the node-wide journal unconfigured and left lifecycle goals
 unavailable.
 
 The private journal also moved from the former root-scoped path
@@ -492,11 +492,11 @@ aliases.
    The replacement and the old path must never coexist as compatibility routes.
 3. **Complete.** Update every active architecture document and module comment
    from the final code, then run stale-symbol and dead-export sweeps.
-4. **In progress.** Run compile, focused tests, full EUnit, CT, xref, Dialyzer,
-   and diff check.
-5. The stable-agent identity slice is implemented in the working tree. After
-   its gates, add generated creator provenance and enable signed-agent remote
-   lifecycle calls through the same target ACL and action/effect path.
+4. **Complete.** Compile, focused tests, full EUnit, CT, xref, Dialyzer, and
+   diff check passed before commit and re-found.
+5. **Complete.** The stable-agent identity slice, generated creator provenance,
+   and signed-agent remote lifecycle calls use the same target ACL and
+   action/effect path.
 
 No deployment, ledger reset, format change, or consensus change belongs to
 this planning step.

@@ -233,7 +233,7 @@ external agents.
 
 ## 7. Format break
 
-The working tree uses one incompatible generation:
+The deployed tree uses one incompatible generation:
 
 | owner | active format |
 |---|---|

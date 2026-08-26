@@ -580,7 +580,7 @@ the approved agent-delivery work and any other already-approved plan/transaction
 schema changes. Land compatible schema changes in the same release, then:
 
 1. complete and review the signed client-goal generation described in
-   `signed-client-goals-plan.md` (implemented in the working tree);
+   `signed-client-goals-plan.md` (implemented and deployed);
 2. run the coordinated protocol and release gates;
 3. found the network once from the current root source, including root's
    generic creation policy and reviewed `ontology_creator_agent/1` grants;
@@ -704,9 +704,9 @@ The implementation review must account for at least these concrete seams:
    teardown remove staged effects exactly as they remove staged D changes.
 10. A future test-only second lifecycle operation uses the same ordinary
     action/staging path without a new `quod_prolog` operation branch.
-11. Journal capacity and total-byte exhaustion refuse after sealing but before
-    checkpoint/submission, and recover their reservations after failed
-    hand-off.
+11. Configured active-custody exhaustion refuses after sealing but before
+    checkpoint/submission, and failed hand-off releases its reservation. The
+    journal has no separate total-byte ceiling.
 
 ### Durability and recovery
 

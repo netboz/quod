@@ -1289,9 +1289,9 @@ maybe_send_snapshot(Source, Cursor, S) ->
     {LinkPid, PeerKey} = source_link_and_key(Source),
     Now = quod_time:mono_ms(),
     Sessions = active_resync_sessions(Now, S#s.last_resync),
-    %% System routes are intentionally discoverable. The authenticated
-    %% link identifies and rate-limits the reader; the advertisement
-    %% allowlist is authority to answer, never a read ACL.
+    %% System routes are intentionally discoverable. The authenticated link
+    %% identifies the reader for the new-resync-session throttle; the
+    %% advertisement allowlist is authority to answer, never a read ACL.
     case resync_capacity(PeerKey, Sessions)
              andalso resync_allowed(
                        Cursor, Now,

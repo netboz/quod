@@ -934,9 +934,9 @@ view-change/availability protocol rather than more timeout exceptions.
 
 ## 14. The event system — how a committed change notifies what reacts
 
-**Status: Phase 2 is implemented; explicit events are implemented in the
-current working tree** (Phase 1 handles the narrow durable-effect case at the
-end).
+**Status: Phase 2 and explicit events are implemented and deployed** (Phase 1
+handles the narrow durable-effect case at the end). This section is an as-built
+historical overview; `event-reaction-refinement-plan.md` is normative.
 Drawn from onia §14 (the D/P/E model) and §15 (the live-vs-replay split); bbsvx
 implements a looser version we improve on.
 
@@ -979,7 +979,7 @@ A reaction is declared directly as ordinary content:
 founding-authorized clauses and compiles their source-qualified interests.
 `Executor` is a generic ontology-defined logical owner, not the event source
 and not necessarily an agent; it exists so only one host performs E for a
-replicated ontology. Reaction execution remains planned in
+replicated ontology. Reaction execution is implemented as specified in
 `event-reaction-refinement-plan.md`.
 
 The Handler is ordinary trusted Prolog continued with bindings installed by

@@ -12,7 +12,12 @@ pending_precedes_send_and_scope_is_reused_test() ->
           OpenRef = pending_ref(
                       quod_ask_router:ensure_scope(
                         Router, endpoint(), Binding, node, 30000), Router),
-          ?assertEqual(1, maps:get(scopes, quod_ask_router:test_stats(Router))),
+          OpenStats = quod_ask_router:test_stats(Router),
+          ?assertEqual(1, maps:get(scopes, OpenStats)),
+          ?assertMatch(#{scopes := 1, owners := 1, openings := 1},
+                       maps:get(owner_current, OpenStats)),
+          ?assertMatch(#{scopes := 1, owners := 1, openings := 1},
+                       maps:get(owner_peak, OpenStats)),
           {OpenRef, Channel} = receive_open(TargetKey),
           ?assertEqual(quod_scope_wire:request_channel(<<"quod:target">>), Channel),
           RequestLink = fake_link(TestPid, request),
@@ -39,6 +44,11 @@ pending_precedes_send_and_scope_is_reused_test() ->
           end,
           ok = quod_ask_router:unregister(Handle),
           await_scope_count(Router, 0),
+          ClosedStats = quod_ask_router:test_stats(Router),
+          ?assertMatch(#{scopes := 0, owners := 0, openings := 0},
+                       maps:get(owner_current, ClosedStats)),
+          ?assertMatch(#{scopes := 1, owners := 1, openings := 1},
+                       maps:get(owner_peak, ClosedStats)),
           stop_link(RequestLink),
           stop_link(ReturnLink)
       end).
@@ -380,6 +390,9 @@ scope_error_namespace_is_bound_but_descendant_invocation_error_is_not_test() ->
           Stats = quod_ask_router:test_stats(Router),
           ?assertEqual(0, maps:get(scopes, Stats)),
           ?assertEqual(1, maps:get(retained_owners, Stats)),
+          ?assertEqual(
+             1,
+             maps:get(retained_owners, maps:get(owner_peak, Stats))),
           ?assertEqual(1, maps:get(entries, Stats)),
           stop_link(RequestLink),
           stop_link(ReturnLink)

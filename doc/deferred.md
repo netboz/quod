@@ -300,7 +300,7 @@ stages, not carried forward:
   synchronisation of `quod:node`, `quod:agent`, and `quod:human_user` are
   implemented.
   The agent-bound signed-request format and anchored classed identity are
-  implemented in the working tree. Remaining work is committed host fencing
+  implemented and deployed. Remaining work is committed host fencing
   and projection-driven process restart; a node-local encrypted vault; and
   migration by destination key rotation rather than secret transport. This
   work reuses normal

@@ -65,6 +65,19 @@ function ParticipantPlan({ plan }: { plan: NonNullable<Control['plan']> }) {
       </div>
       <div className="mt-1 font-mono text-[10px] break-all text-gray">{plan.plan_digest}</div>
       <div className="mt-1 text-gray">fact changes: {plan.diff_ops ?? 'invalid'} · effects: {plan.effect_count ?? 'invalid'}</div>
+      {plan.diff && plan.diff.length > 0 && (
+        <div className="mt-2 rounded border border-teal/15 bg-cream p-2">
+          <div className="text-[10px] font-semibold tracking-wider text-gray uppercase">Prepared changes</div>
+          <ol className="mt-1 space-y-1 font-mono text-[11px] break-all text-teal">
+            {plan.diff.map((op, index) => (
+              <li key={`${index}:${op.op}:${op.op === 'event' ? op.term : op.clause}`}>
+                <span className={op.op === 'retract' ? 'text-rose' : 'text-olive'}>{op.op}</span>
+                {' '}{op.op === 'event' ? op.term : op.clause}
+              </li>
+            ))}
+          </ol>
+        </div>
+      )}
       {plan.effects.map((effect) => (
         <div key={effect.effect_id} className="mt-2 rounded border border-teal/15 bg-cream p-2">
           <div className="flex justify-between gap-2">

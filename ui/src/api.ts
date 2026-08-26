@@ -174,6 +174,7 @@ export type ParticipantPlan = {
   plan_digest: string
   signer: PeerId | null
   diff_ops: number | null
+  diff: Op[] | null
   effect_count: number | null
   effects: Effect[]
 }

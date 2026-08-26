@@ -487,6 +487,9 @@ signed_agent_intent_is_rendered_once_from_the_origin_begin_test() ->
        #{status := bound, diff_ops := 1, effect_count := 0,
          signer := #{pubkey := _}}, Participant),
     ?assertEqual(
+       [#{op => assert, clause => <<"saved(ok)">>}],
+       maps:get(diff, Participant)),
+    ?assertEqual(
        binary:encode_hex(quod_dtx:digest(maps:get(plan, Fixture)), lowercase),
        maps:get(plan_digest, Participant)),
     ?assertEqual(verified, maps:get(status, Request)),

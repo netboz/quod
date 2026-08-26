@@ -590,9 +590,9 @@ control_row(Ns, Phase, Control, #entry{index = Slot, timestamp = Timestamp}) ->
       phase => Phase,
       control => ControlJson}.
 
-%% The explorer exposes only stable, already-validated control metadata and a
-%% bounded summary of each signed participant plan.  It deliberately omits the
-%% raw plans, their diffs/effects, certificates embedded in references, and
+%% The explorer exposes stable, already-validated control metadata and the
+%% prepared facts/events from each decoded participant plan.  It deliberately
+%% omits the raw plan bytes, certificates embedded in references, and
 %% signing-journal bytes: those remain ledger implementation details, not a
 %% second API or an alternate source of truth.
 control_json(Control) ->
@@ -663,9 +663,11 @@ participant_plan_json(
             case BindingValid of
                 true ->
                     Effects = quod_dtx:effects(Plan),
+                    Diff = quod_dtx:diff(Plan),
                     Base#{status => bound,
                           signer => id_json(quod_dtx:signer(Plan)),
                           diff_ops => quod_dtx:diff_ops(Plan),
+                          diff => [op_json(Op) || Op <- Diff],
                           effect_count => quod_dtx:effects_count(Plan),
                           effects => [effect_json(Effect)
                                       || Effect <- Effects]};
@@ -680,7 +682,8 @@ participant_plan_json(_Manifest, _Malformed) ->
 
 invalid_participant_plan_json(Base) ->
     Base#{status => invalid, signer => null,
-          diff_ops => null, effect_count => null, effects => []}.
+          diff_ops => null, diff => null,
+          effect_count => null, effects => []}.
 
 request_json(none, none, _OutcomeRef) ->
     null;

@@ -6,7 +6,7 @@ ledger and the running consensus/kb processes.
 | endpoint | answers |
 | -------- | ------- |
 | `GET /api/summary` | node identity + per-namespace consensus status (height, committee, finality head, next proposer…) |
-| `GET /api/txs?ns=&before=&limit=` | transactions newest-first, paged back through the block log |
+| `GET /api/txs?ns=&before=&limit=` | committed ledger records newest-first, paged back through the block log |
 | `GET /api/tx/:ns/:id` | one transaction outcome by its target-anchored durable index |
 | `GET /api/block/:ns/:slot` | one committed block, with its quorum certificate |
 
@@ -20,11 +20,11 @@ terms (pubkeys) are first rewritten to their printable short form. All JSON goes
 through OTP's `m:json`.
 
 This module also exports the shared JSON builders `m:quod_explorer_ws` reuses for
-the live stream, so a transaction renders identically live and from history.
+the live stream, so a committed record renders identically live and from history.
 """.
 -export([init/2]).
 %% shared with quod_explorer_ws — one rendering of a transaction, live or historical
--export([summary/0, block_json/2, tx_id_text/1, encode/1, prolog_text/1,
+-export([summary/0, block_json/2, entry_rows/2, tx_id_text/1, encode/1, prolog_text/1,
          prove_result/1]).
 -ifdef(TEST).
 %% Pure surfaces driven directly by eunit.
@@ -284,7 +284,7 @@ collect_txs(Store, Slot, Need, Scan, Acc) ->
     case quod_ledger_store:read_at(Store, Slot) of
         {ok, E} ->
             Ns = quod_ledger_store:namespace(Store),
-            Rows = [tx_json(Ns, T, E) || T <- entry_txs(E)],
+            Rows = entry_rows(Ns, E),
             collect_txs(
               Store, Slot - 1, Need - length(Rows), Scan - 1,
               lists:reverse(Rows, Acc));
@@ -392,6 +392,21 @@ entry_txs(#entry{data = Data}) ->
         invalid -> []
     end.
 
+%% A ledger slot has either its ordinary committed transactions or one durable
+%% DTX control.  Keeping this projection beside block_json/2 makes the paged
+%% history and the live WebSocket describe the same committed ledger; controls
+%% must not disappear merely because they do not have a #transaction{} body.
+entry_rows(Ns, #entry{data = Data} = E) ->
+    case quod_ledger:classify(Data) of
+        {content, Txs} -> [tx_json(Ns, T, E) || T <- Txs];
+        {Phase, Control}
+          when Phase =:= 'begin'; Phase =:= prepare; Phase =:= decision;
+               Phase =:= finalize; Phase =:= complete ->
+            [control_row(Ns, Phase, Control, E)];
+        noop -> [];
+        invalid -> []
+    end.
+
 %%%===================================================================
 %%% JSON builders (shared with quod_explorer_ws)
 %%%===================================================================
@@ -408,7 +423,9 @@ tx_json(Ns, #transaction{tx_id = Id,
 
 tx_json_decoded(Ns, Id, GoalJson, Author, AuthorSeq, SubmittedAt,
                 Diff, Effects, Slot, Timestamp) ->
-    #{tx_id => tx_id_text(Id), ns => Ns, height => Slot, time => Timestamp,
+    TxId = tx_id_text(Id),
+    #{row_type => transaction, row_id => TxId,
+      tx_id => TxId, ns => Ns, height => Slot, time => Timestamp,
       goal => GoalJson, author => id_json(Author), author_seq => AuthorSeq,
       submitted_at => SubmittedAt,
       ops => length(Diff), fact_ops => fact_op_count(Diff),
@@ -561,6 +578,17 @@ block_json(Ns, #entry{data = Data} = E) ->
 
 dtx_block_meta(Phase, Control, E) ->
     (block_meta(Phase, E))#{txs => [], control => control_json(Control)}.
+
+control_row(Ns, Phase, Control, #entry{index = Slot, timestamp = Timestamp}) ->
+    ControlJson = control_json(Control),
+    Digest = maps:get(record_digest, ControlJson),
+    #{row_type => control,
+      row_id => <<"dtx:", Digest/binary>>,
+      ns => Ns,
+      height => Slot,
+      time => Timestamp,
+      phase => Phase,
+      control => ControlJson}.
 
 %% The explorer exposes only stable, already-validated control metadata and a
 %% bounded summary of each signed participant plan.  It deliberately omits the

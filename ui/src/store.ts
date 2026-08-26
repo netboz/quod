@@ -8,7 +8,7 @@
 // One module-level store, consumed via useSyncExternalStore — no state library needed.
 
 import { useSyncExternalStore } from 'react'
-import type { Cert, TxFull, TxRow } from './api'
+import type { Block, Cert, ControlRow, LedgerRow, TxFull } from './api'
 
 export type TxStatus = 'history' | 'pending' | 'applied' | 'rejected'
 
@@ -18,20 +18,22 @@ export type LiveTx = TxFull & {
   live: boolean // arrived over the socket during this session (has full detail + flash)
 }
 
+export type LiveControl = ControlRow & {
+  cert: Cert
+  live: boolean
+}
+
+export type LiveLedgerRow = LiveTx | LiveControl
+
 export type WsState = 'connecting' | 'live' | 'down'
 
 type State = {
   ws: WsState
-  rows: Record<string, LiveTx[]> // per namespace, newest first, capped
+  rows: Record<string, LiveLedgerRow[]> // per namespace, newest first
   nextBefore: Record<string, number | null | undefined> // history paging cursor
   heights: Record<string, number>
   generation: number // bumped on `hello`/`sync` — consumers refetch the summary
 }
-
-// Bounds rows[ns] so a busy chain can't grow it without limit. Applied on EVERY mutation
-// (history and live) so a new live block can never silently drop rows the user just paged in —
-// it only ever trims the oldest beyond CAP, symmetrically.
-const CAP = 2000
 
 let state: State = { ws: 'connecting', rows: {}, nextBefore: {}, heights: {}, generation: 0 }
 const listeners = new Set<() => void>()
@@ -48,7 +50,9 @@ export function useExplorerStore(): State {
   )
 }
 
-const asHistory = (t: TxRow): LiveTx => ({
+const asHistory = (t: LedgerRow): LiveLedgerRow => {
+  if (t.row_type === 'control') return { ...t, cert: null, live: false }
+  return {
   result: null,
   diff: [],
   root_facts_changed: t.fact_ops > 0,
@@ -63,18 +67,18 @@ const asHistory = (t: TxRow): LiveTx => ({
   status: 'history',
   cert: null,
   live: false,
-})
-
-// Merge already-rendered full transactions (from a block fetch / height search) as rows, keeping any
-// existing live status. Returns the deduped, height-sorted, capped list.
-function mergeRows(existing: LiveTx[], fresh: LiveTx[]): LiveTx[] {
-  const have = new Set(existing.map((t) => t.tx_id))
-  return [...existing, ...fresh.filter((t) => !have.has(t.tx_id))]
-    .sort((a, b) => b.height - a.height)
-    .slice(0, CAP)
+  }
 }
 
-export function addHistory(ns: string, txs: TxRow[], nextBefore: number | null, height: number) {
+// Merge already-rendered ledger records (from a block fetch / height search) as rows, keeping any
+// existing live transaction status. Returns the deduplicated, height-sorted list.
+function mergeRows(existing: LiveLedgerRow[], fresh: LiveLedgerRow[]): LiveLedgerRow[] {
+  const have = new Set(existing.map((t) => t.row_id))
+  return [...existing, ...fresh.filter((t) => !have.has(t.row_id))]
+    .sort((a, b) => b.height - a.height)
+}
+
+export function addHistory(ns: string, txs: LedgerRow[], nextBefore: number | null, height: number) {
   emit({
     rows: { ...state.rows, [ns]: mergeRows(state.rows[ns] ?? [], txs.map(asHistory)) },
     nextBefore: { ...state.nextBefore, [ns]: nextBefore },
@@ -86,10 +90,12 @@ export function addHistory(ns: string, txs: TxRow[], nextBefore: number | null, 
 // durable-ledger window and move the paging cursor behind it, so subsequent paging bridges any gap
 // without discarding history the user already loaded. A pending row within the durable view belonged
 // to the socket session that just ended, so reset it until a new explicit outcome arrives.
-export function replaceHistory(ns: string, txs: TxRow[], nextBefore: number | null, height: number) {
+export function replaceHistory(ns: string, txs: LedgerRow[], nextBefore: number | null, height: number) {
   const existing = state.rows[ns] ?? []
-  const reconciled = existing.map((t): LiveTx =>
-    t.status === 'pending' && t.height <= height ? { ...t, status: 'history', live: false } : t,
+  const reconciled = existing.map((t): LiveLedgerRow =>
+    t.row_type === 'transaction' && t.status === 'pending' && t.height <= height
+      ? { ...t, status: 'history', live: false }
+      : t,
   )
   emit({
     rows: { ...state.rows, [ns]: mergeRows(reconciled, txs.map(asHistory)) },
@@ -104,22 +110,42 @@ export function mergeFull(ns: string, txs: TxFull[], cert: Cert) {
   emit({ rows: { ...state.rows, [ns]: mergeRows(state.rows[ns] ?? [], fresh) } })
 }
 
-function addBlock(ns: string, txs: TxFull[], cert: Cert, slot: number) {
-  const have = new Set((state.rows[ns] ?? []).map((t) => t.tx_id))
-  const fresh = txs
-    .filter((t) => !have.has(t.tx_id))
-    .map((t): LiveTx => ({ ...t, status: 'pending', cert, live: true }))
-  // newest first, then bound — trims only the oldest tail, never the rows just prepended
-  const rows = [...fresh, ...(state.rows[ns] ?? [])].slice(0, CAP)
+function isDtxPhase(kind: Block['kind']): kind is ControlRow['phase'] {
+  return kind === 'begin' || kind === 'prepare' || kind === 'decision' || kind === 'finalize' || kind === 'complete'
+}
+
+function addBlock(ns: string, block: Block) {
+  const existing = state.rows[ns] ?? []
+  const have = new Set(existing.map((t) => t.row_id))
+  const fresh: LiveLedgerRow[] = block.kind === 'content'
+    ? block.txs
+        .filter((t) => !have.has(t.row_id))
+        .map((t): LiveTx => ({ ...t, status: 'pending', cert: block.cert, live: true }))
+    : block.control && isDtxPhase(block.kind)
+      ? [{
+          row_type: 'control',
+          row_id: `dtx:${block.control.record_digest}`,
+          ns,
+          height: block.slot,
+          time: block.time,
+          phase: block.kind,
+          control: block.control,
+          cert: block.cert,
+          live: true,
+        }]
+      : []
+  const rows = mergeRows(existing, fresh)
   emit({
     rows: { ...state.rows, [ns]: rows },
-    heights: { ...state.heights, [ns]: Math.max(slot, state.heights[ns] ?? 0) },
+    heights: { ...state.heights, [ns]: Math.max(block.slot, state.heights[ns] ?? 0) },
   })
 }
 
 // The apply outcome arrives explicitly per tx (applied_live / rejected_live) — no inference.
 function markOutcome(ns: string, txId: string, status: 'applied' | 'rejected') {
-  const rows = (state.rows[ns] ?? []).map((t): LiveTx => (t.tx_id === txId ? { ...t, status } : t))
+  const rows = (state.rows[ns] ?? []).map((t): LiveLedgerRow =>
+    t.row_type === 'transaction' && t.tx_id === txId ? { ...t, status } : t,
+  )
   emit({ rows: { ...state.rows, [ns]: rows } })
 }
 
@@ -127,7 +153,7 @@ function markOutcome(ns: string, txId: string, status: 'applied' | 'rejected') {
 
 type Frame =
   | { type: 'hello' }
-  | { type: 'block'; ns: string; slot: number; time: number; cert: Cert; txs: TxFull[] }
+  | ({ type: 'block'; ns: string } & Block)
   | { type: 'applied'; ns: string; height: number; tx_id: string }
   | { type: 'rejected'; ns: string; height: number; tx_id: string }
   | { type: 'sync' }
@@ -157,7 +183,7 @@ function connect() {
         emit({ generation: state.generation + 1 })
         break
       case 'block':
-        addBlock(f.ns, f.txs, f.cert, f.slot)
+        addBlock(f.ns, f)
         break
       case 'applied':
         markOutcome(f.ns, f.tx_id, 'applied')

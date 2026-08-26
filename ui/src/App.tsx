@@ -9,7 +9,7 @@ import { Console } from './Console'
 import { ControlDetail } from './ControlDetail'
 import { NamespacePicker } from './NamespacePicker'
 import { addHistory, mergeFull, replaceHistory, startWs, useExplorerStore } from './store'
-import type { LiveTx } from './store'
+import type { LiveLedgerRow, LiveTx } from './store'
 import { TxDetail } from './TxDetail'
 import { TxTable } from './TxTable'
 import { SessionControls } from './Session'
@@ -56,8 +56,10 @@ export default function App() {
   // A fetched detail is immutable ledger state. A live selection keeps
   // following the store through its pending → applied/rejected transition.
   const selectedRows = selected ? (store.rows[selected.ns] ?? []) : []
-  const selectedStoreRow = selected ? selectedRows.find((tx) => tx.tx_id === selected.tx_id) : null
-  const selectedCurrent = selected
+  const selectedStoreRow: LiveTx | undefined = selected
+    ? selectedRows.find((row): row is LiveTx => row.row_type === 'transaction' && row.tx_id === selected.tx_id)
+    : undefined
+  const selectedCurrent: LiveTx | null = selected
     ? !selected.live
       ? selected
       : selectedStoreRow ?? selected
@@ -111,8 +113,26 @@ export default function App() {
           )}
           <TxTable
             rows={rows}
-            selected={selectedCurrent?.tx_id ?? null}
-            onSelect={setSelected}
+            selected={selectedCurrent?.row_id ?? null}
+            onSelect={(row: LiveLedgerRow) => {
+              if (row.row_type === 'transaction') {
+                setSelectedControl(null)
+                setSelected(row)
+              } else {
+                setSelected(null)
+                setSelectedControl({
+                  ns: row.ns,
+                  block: {
+                    slot: row.height,
+                    time: row.time,
+                    kind: row.phase,
+                    cert: row.cert,
+                    txs: [],
+                    control: row.control,
+                  },
+                })
+              }
+            }}
             hasMore={nextBefore != null}
             onMore={() => void loadMore()}
             loadingMore={loadingMore}

@@ -9,6 +9,8 @@ export type PeerId = { id: string; pubkey: string | null }
 export type Origin = { ns: string; anchor: string } | null
 
 export type TxRow = {
+  row_type: 'transaction'
+  row_id: string
   tx_id: string
   ns: string
   height: number
@@ -22,6 +24,20 @@ export type TxRow = {
   effect_count: number
   effect_operations: string[]
 }
+
+// A DTX phase is a committed ledger record too. It has no #transaction{} body,
+// so it carries the control metadata rendered by the same block endpoint.
+export type ControlRow = {
+  row_type: 'control'
+  row_id: string
+  ns: string
+  height: number
+  time: number
+  phase: Control['kind']
+  control: Control
+}
+
+export type LedgerRow = TxRow | ControlRow
 
 export type Op =
   | { op: 'assert' | 'retract'; clause: string }
@@ -119,7 +135,7 @@ export type NsSummary = {
 
 export type Summary = { node: PeerId | null; namespaces: NsSummary[] }
 
-export type TxsPage = { txs: TxRow[]; height: number; next_before: number | null }
+export type TxsPage = { txs: LedgerRow[]; height: number; next_before: number | null }
 
 export type Block = {
   slot: number

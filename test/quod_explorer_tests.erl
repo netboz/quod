@@ -216,7 +216,24 @@ block_json_distinguishes_non_transaction_slots_test() ->
     ?assertEqual(abort, maps:get(verdict, Control)),
     ?assertEqual([<<"test_abort(dtx_fixture)">>], maps:get(reasons, Control)),
     ?assert(is_binary(quod_explorer_http:encode(Dtx))),
-    ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)).
+    ?assertEqual([], quod_explorer_http:entry_txs(DtxEntry)),
+    [ControlRow] = quod_explorer_http:entry_rows(<<"ont:test">>, DtxEntry),
+    ?assertMatch(#{row_type := control, row_id := <<"dtx:", _/binary>>,
+                   height := 5, phase := decision,
+                   control := #{kind := decision}}, ControlRow).
+
+dtx_control_is_visible_in_paged_history_test() ->
+    with_temp_store(fun(Store0) ->
+        DtxEntry = #entry{index = 2, data = quod_ct:dtx_decision_payload(),
+                          timestamp = 2002, cert = none},
+        {ok, Store} = quod_ledger_store:append(
+                        Store0, [entry(1, [tx(1)]), DtxEntry]),
+        #{txs := [Row, _Content], height := 2, next_before := null} =
+            quod_explorer_http:txs_page(Store, undefined, 10),
+        ?assertMatch(#{row_type := control, height := 2, phase := decision,
+                       control := #{kind := decision}}, Row),
+        ok
+    end).
 
 websocket_emits_dtx_phase_and_suppresses_non_blocks_test() ->
     Ns = <<"ont:test">>,

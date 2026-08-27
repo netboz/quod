@@ -362,7 +362,7 @@ operation_target_response(
     operation_stop(Owner, OperationRef, invalid_target_response).
 
 operation_target_result(
-  Owner, OwnerMonitor, Request, Response, _Result, EvidenceBlob,
+  Owner, OwnerMonitor, Request, Response, Result, EvidenceBlob,
   Context = #{operation_ref := OperationRef,
               target_ref := TargetRef}) ->
     case {quod_dtx_endpoint:correlates(Request, Response),
@@ -373,6 +373,12 @@ operation_target_result(
                   = TargetTransaction}} ->
             case stable_transaction_ref(TargetCertifiedRef, TargetTxId) of
                 TargetRef ->
+                    %% The durable operation owner is also the sole live
+                    %% submission owner.  Publish its certified target result
+                    %% before asynchronously appending the source receipt so a
+                    %% waiting client never needs a second target submission.
+                    Owner ! {dtx_coordinator, self(), OperationRef,
+                             {target_result, Result, TargetRef}},
                     operation_drive(
                       Owner, OwnerMonitor,
                       Context#{state => source,

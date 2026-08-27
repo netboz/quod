@@ -132,6 +132,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
 
 %% Per-namespace consensus process — API + gen_statem callbacks.
 -export([start_link/2, rebuild/1, prolog_ready/4, operation_projection/3,
+         await_operation_result/3,
          finalize_applied/4,
          handoff_effect/3,
          register_transaction_custody/3,
@@ -250,6 +251,7 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_dtx_coordinator_state/1,
          test_stop_dtx_coordinator/1,
          test_dtx_endpoint_counts/1, test_owner_stats/1,
+         test_operation_target_result/2,
          test_endpoint_terminal_result/1,
          test_dtx_worker_terminal_result/2,
          test_dtx_retirement_result/1,
@@ -1128,7 +1130,10 @@ eng_buffered_commit(Slot, Block, #cert{} = Cert,
     request_digest :: <<_:256>>,
     status = pending :: pending | running | blocked | settling,
     pid = none :: none | pid(),
-    monitor = none :: none | reference()
+    monitor = none :: none | reference(),
+    target_result = pending ::
+      pending | {committed, term()} | {{rejected, atom()}, term()},
+    waiters = #{} :: #{reference() => gen_statem:from()}
 }).
 
 -type progress_phase() :: awaiting_proposal | awaiting_notarization | awaiting_commit.
@@ -1702,6 +1707,32 @@ test_owner_stats(S) ->
       owner_peak => simplex_owner_peaks(S, Current),
       owner_bytes_current => CurrentBytes,
       owner_bytes_peak => simplex_owner_byte_peaks(S, CurrentBytes)}.
+test_operation_target_result(Result, TargetRef) ->
+    OperationRef = {operation, <<"quod:test">>, <<0:256>>},
+    Owner = #operation_recovery_owner{
+               operation_ref = OperationRef,
+               claim_slot = 1,
+               target_ref = TargetRef,
+               request_digest = <<0:256>>,
+               status = running,
+               pid = self()},
+    S0 = #s{operation_recoveries = #{OperationRef => Owner}},
+    Tag = make_ref(),
+    {wait, S1} = await_operation_recovery(
+                   {self(), Tag}, OperationRef, S0),
+    {true, SFinished} = finish_operation_target_result(
+                          self(), OperationRef, Result, TargetRef, S1),
+    Reply = receive
+                {Tag, Value} -> Value
+            after 1000 -> timeout
+            end,
+    Stored = maps:get(OperationRef, SFinished#s.operation_recoveries),
+    Duplicate = finish_operation_target_result(
+                  self(), OperationRef, Result, TargetRef, SFinished),
+    #{reply => Reply,
+      stored => Stored#operation_recovery_owner.target_result,
+      waiters => map_size(Stored#operation_recovery_owner.waiters),
+      duplicate => Duplicate}.
 test_endpoint_terminal_result(Result) -> endpoint_terminal_result(Result).
 test_dtx_worker_terminal_result(Result, Response) ->
     dtx_worker_terminal_result(Result, Response).
@@ -2122,11 +2153,32 @@ prolog_ready(Ns, PrologPid, Height, Unresolved)
 
 -doc "Project one committed singleton claim/completion into recovery custody.".
 -spec operation_projection(binary(), pos_integer(), #transaction{}) -> ok.
-operation_projection(Ns, Slot, #transaction{} = Change)
+operation_projection(
+  Ns, Slot, #transaction{} = Change)
   when is_binary(Ns), is_integer(Slot), Slot > 0 ->
+    %% Projection remains asynchronous for both live apply and replay.  A
+    %% synchronous callback into Simplex would deadlock while Simplex is
+    %% feeding replay entries to Prolog.  On live apply Prolog sends this cast
+    %% before releasing the parked submit_role caller, so the owner message is
+    %% already ahead of that caller's later await request in this mailbox.
     gen_statem:cast(
       quod_reg:via({quod_simplex, Ns}),
       {operation_projection, Slot, Change}).
+
+-doc "Wait for the one durable recovery owner to certify the target result.".
+-spec await_operation_result(binary(), term(), pos_integer()) ->
+          {committed, term()} | {{rejected, atom()}, term()} |
+          {error, {outcome_unknown, term()}}.
+await_operation_result(Ns, OperationRef, TimeoutMs)
+  when is_binary(Ns), is_integer(TimeoutMs), TimeoutMs > 0 ->
+    try gen_statem:call(
+          quod_reg:via({quod_simplex, Ns}),
+          {await_operation_result, OperationRef}, TimeoutMs)
+    catch
+        exit:_ -> {error, {outcome_unknown, OperationRef}}
+    end;
+await_operation_result(_Ns, OperationRef, _TimeoutMs) ->
+    {error, {outcome_unknown, OperationRef}}.
 
 -doc "Open a pending apply fence after the exact finalized plan is durably visible.".
 -spec finalize_applied(binary(), <<_:256>>, pos_integer(), non_neg_integer()) -> ok.
@@ -3356,7 +3408,17 @@ running_impl(
     end;
 running_impl(cast, {prolog_ready, _PrologPid, _Height, _Unresolved}, S) ->
     {keep_state, S};
-running_impl(cast, {operation_projection, Slot, Change}, S0) ->
+running_impl(
+  {call, From}, {await_operation_result, OperationRef}, S0) ->
+    case await_operation_recovery(From, OperationRef, S0) of
+        {reply, Reply, S1} ->
+            {keep_state, S1, [{reply, From, Reply}]};
+        {wait, S1} ->
+            {keep_state, S1}
+    end;
+running_impl(
+  cast,
+  {operation_projection, Slot, #transaction{} = Change}, S0) ->
     S1 = apply_operation_projection(Slot, Change, S0),
     keep_progress(S0, S1, []);
 %% Prolog emits this only after the finalized plan's outcome index has been
@@ -3460,6 +3522,17 @@ running_impl(
     S1 = finish_dtx_coordinator_bootstrap(
            Pid, GroupId, BeginRef, Result, S0),
     keep_progress(S0, S1, []);
+running_impl(
+  info,
+  {dtx_coordinator, Pid,
+   {operation, _, _, _, _} = OperationRef,
+   {target_result, Result, TargetRef}},
+  S0) ->
+    case finish_operation_target_result(
+           Pid, OperationRef, Result, TargetRef, S0) of
+        {true, S1} -> keep_progress(S0, S1, []);
+        false -> {keep_state, S0}
+    end;
 running_impl(
   info,
   {dtx_coordinator, Pid,
@@ -3567,25 +3640,34 @@ running_impl(info, {'DOWN', Ref, process, Pid, Reason}, S0) ->
         {true, S1} ->
             keep_progress(S0, S1, []);
         false ->
-            case drop_dtx_coordinator_owner(Ref, Pid, Reason, S0) of
+            case drop_operation_waiter(Ref, Pid, S0) of
                 {true, S1} ->
                     keep_progress(S0, S1, []);
                 false ->
-                    case drop_dtx_endpoint_owner(
-                           Ref, Pid, worker_down, S0) of
-                        {true, S1, Actions} ->
-                            keep_progress(S0, S1, Actions);
+                    case drop_dtx_coordinator_owner(Ref, Pid, Reason, S0) of
+                        {true, S1} ->
+                            keep_progress(S0, S1, []);
                         false ->
-                            case drop_dtx_admission_monitor(Ref, Pid, S0) of
-                                {true, S1} -> keep_progress(S0, S1, []);
+                            case drop_dtx_endpoint_owner(
+                                   Ref, Pid, worker_down, S0) of
+                                {true, S1, Actions} ->
+                                    keep_progress(S0, S1, Actions);
                                 false ->
-                                    case drop_dtx_validation_monitor(
+                                    case drop_dtx_admission_monitor(
                                            Ref, Pid, S0) of
                                         {true, S1} ->
                                             keep_progress(S0, S1, []);
                                         false ->
-                                            keep_progress(
-                                              S0, drop_link(Pid, S0), [])
+                                            case drop_dtx_validation_monitor(
+                                                   Ref, Pid, S0) of
+                                                {true, S1} ->
+                                                    keep_progress(
+                                                      S0, S1, []);
+                                                false ->
+                                                    keep_progress(
+                                                      S0,
+                                                      drop_link(Pid, S0), [])
+                                            end
                                     end
                             end
                     end
@@ -4021,6 +4103,86 @@ apply_operation_projection(
 apply_operation_projection(_Slot, #transaction{}, S) ->
     S.
 
+await_operation_recovery(
+  From, OperationRef,
+  S = #s{operation_recoveries = Recoveries}) ->
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{target_result = pending,
+                                           waiters = Waiters} ->
+            {Caller, _Tag} = From,
+            Monitor = erlang:monitor(process, Caller),
+            {wait,
+             S#s{operation_recoveries = Recoveries#{
+                   OperationRef => Owner#operation_recovery_owner{
+                     waiters = Waiters#{Monitor => From}}}}};
+        #operation_recovery_owner{target_result = Result} ->
+            {reply, Result, S};
+        undefined ->
+            %% The live claim projection is causally ordered before the
+            %% submit_role reply. Absence here therefore means this process
+            %% cannot own the claimed operation.
+            {reply, {error, {outcome_unknown, OperationRef}}, S}
+    end.
+
+finish_operation_target_result(
+  Pid, OperationRef, Result0, TargetRef,
+  S = #s{operation_recoveries = Recoveries}) ->
+    Result = operation_target_result(Result0, TargetRef),
+    case maps:get(OperationRef, Recoveries, undefined) of
+        Owner = #operation_recovery_owner{
+                  status = running, pid = Pid,
+                  target_ref = TargetRef, target_result = pending,
+                  waiters = Waiters}
+          when Result =/= error ->
+            reply_operation_waiters(Waiters, Result),
+            {true,
+             S#s{operation_recoveries = Recoveries#{
+                   OperationRef => Owner#operation_recovery_owner{
+                     target_result = Result, waiters = #{}}}}};
+        #operation_recovery_owner{
+           status = Status, pid = Pid, target_ref = TargetRef,
+           target_result = Result}
+          when Result =/= error,
+               (Status =:= running orelse Status =:= settling) ->
+            {true, S};
+        _ ->
+            false
+    end.
+
+operation_target_result(committed, TargetRef) ->
+    {committed, TargetRef};
+operation_target_result({rejected, Reason}, TargetRef) when is_atom(Reason) ->
+    {{rejected, Reason}, TargetRef};
+operation_target_result(_Result, _TargetRef) ->
+    error.
+
+reply_operation_waiters(Waiters, Reply) ->
+    maps:foreach(
+      fun(Monitor, From) ->
+          _ = erlang:demonitor(Monitor, [flush]),
+          gen_statem:reply(From, Reply)
+      end, Waiters).
+
+drop_operation_waiter(
+  Monitor, Pid, S = #s{operation_recoveries = Recoveries}) ->
+    {Found, Recoveries1} = maps:fold(
+      fun(OperationRef,
+          Owner = #operation_recovery_owner{waiters = Waiters},
+          {Found0, Acc}) ->
+          case maps:get(Monitor, Waiters, undefined) of
+              {Pid, _Tag} ->
+                  {true,
+                   Acc#{OperationRef => Owner#operation_recovery_owner{
+                          waiters = maps:remove(Monitor, Waiters)}}};
+              _ ->
+                  {Found0, Acc#{OperationRef => Owner}}
+          end
+      end, {false, #{}}, Recoveries),
+    case Found of
+        true -> {true, S#s{operation_recoveries = Recoveries1}};
+        false -> false
+    end.
+
 install_operation_snapshot(Rows, S = #s{ns = Ns}) ->
     Desired = lists:foldl(
                 fun(Row, Acc) ->
@@ -4170,12 +4332,20 @@ wake_operation_recoveries(
     S#s{operation_recoveries = Recoveries1}.
 
 stop_operation_recovery_process(
-  #operation_recovery_owner{pid = Pid, monitor = Monitor})
+  #operation_recovery_owner{operation_ref = OperationRef,
+                            pid = Pid, monitor = Monitor,
+                            waiters = Waiters})
   when is_pid(Pid), is_reference(Monitor) ->
+    reply_operation_waiters(
+      Waiters, {error, {outcome_unknown, OperationRef}}),
     _ = erlang:demonitor(Monitor, [flush]),
     exit(Pid, shutdown),
     ok;
-stop_operation_recovery_process(_Owner) ->
+stop_operation_recovery_process(
+  #operation_recovery_owner{operation_ref = OperationRef,
+                            waiters = Waiters}) ->
+    reply_operation_waiters(
+      Waiters, {error, {outcome_unknown, OperationRef}}),
     ok.
 
 %% Recovery coordination is volatile but its source is not: before Begin

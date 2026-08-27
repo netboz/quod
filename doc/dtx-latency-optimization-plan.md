@@ -34,12 +34,17 @@ consensus computation or disk serving: it is repeated orchestration and
 certified-history/current-view verification around the five durable blocks,
 plus the deliberate one-active-group queue at a source ontology. This is the
 measured input for Slice 4, not a solved latency claim.
-The Slice-4 architecture below passed adversarial plan review and is implemented
-in the current working tree. The transaction roles, shared foreign-reference
-verification, one operation-recovery owner, effect hand-off, Explorer rendering,
-fixed-stage metrics, and singleton-group deletion have landed together. It is
-not a release claim until the full local/distributed gates, coordinated clean
-re-found, and hardware concurrency benchmarks below pass.
+The Slice-4 architecture below passed adversarial plan review and was activated
+by the coordinated clean re-found for 0.7.96. The transaction roles, shared
+foreign-reference verification, one operation-recovery owner, effect hand-off,
+Explorer rendering, fixed-stage metrics, and singleton-group deletion landed
+together. Version 0.7.97 added bounded-page certified-cache replay. The 0.7.98
+closure removes the last duplicate live-proof target submission: live callers
+now wait on the same durable recovery owner used after restart, and identity
+collection reports an impossible quorum immediately instead of waiting for its
+silence deadline. Its local gates pass (EUnit 1,360/0, the ask and join Common
+Test suites 22/22, xref, dialyzer, and diff-check). The hardware concurrency
+benchmarks below remain the final release claim.
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 

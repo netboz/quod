@@ -5,6 +5,28 @@
 
 -define(TIMEOUT, 1000).
 
+identity_collection_stops_as_soon_as_quorum_is_decided_test() ->
+    %% A singleton starts with its asynchronous local signer outstanding.
+    ?assertEqual(
+       waiting,
+       quod_ask_router:test_identity_collection_progress(1, 1, 0)),
+    %% Once that signer refuses, quorum is impossible immediately.  The proof
+    %% deadline is not an ordinary progress-discovery mechanism.
+    ?assertEqual(
+       impossible,
+       quod_ask_router:test_identity_collection_progress(1, 0, 0)),
+    %% A 9-member committee needs 7.  Six signatures plus one outstanding
+    %% signer can still succeed; removing that signer decides failure.
+    ?assertEqual(
+       waiting,
+       quod_ask_router:test_identity_collection_progress(9, 1, 6)),
+    ?assertEqual(
+       impossible,
+       quod_ask_router:test_identity_collection_progress(9, 0, 6)),
+    ?assertEqual(
+       complete,
+       quod_ask_router:test_identity_collection_progress(9, 2, 7)).
+
 pending_precedes_send_and_scope_is_reused_test() ->
     with_router(
       fun(Router, TestPid, OriginKey, TargetKey) ->

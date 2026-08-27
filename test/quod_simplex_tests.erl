@@ -454,6 +454,22 @@ owner_terminal_results_follow_the_retired_row_not_the_wrapper_test() ->
        error,
        quod_simplex:test_dtx_retirement_result(unexpected_signing_failure)).
 
+operation_recovery_owner_replies_once_and_retains_exact_result_test() ->
+    TargetRef = {transaction, <<"quod:target">>, <<1:256>>, <<2:256>>},
+    ?assertMatch(
+       #{reply := {committed, TargetRef},
+         stored := {committed, TargetRef},
+         waiters := 0,
+         duplicate := {true, _}},
+       quod_simplex:test_operation_target_result(committed, TargetRef)),
+    ?assertMatch(
+       #{reply := {{rejected, not_authorized}, TargetRef},
+         stored := {{rejected, not_authorized}, TargetRef},
+         waiters := 0,
+         duplicate := {true, _}},
+       quod_simplex:test_operation_target_result(
+         {rejected, not_authorized}, TargetRef)).
+
 %% Response ownership is the exact authenticated peer plus the exact request;
 %% a valid response on the right namespace from any other peer is inert.
 dtx_endpoint_response_correlation_is_exact_and_released_test() ->

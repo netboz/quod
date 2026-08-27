@@ -28,7 +28,8 @@ by the fixed `quod_scope_wire` decoder.
 
 -ifdef(TEST).
 -export([identify/4, ensure_scope/5, unregister/1,
-         test_start_link/2, test_start_link/3, test_stats/1]).
+         test_start_link/2, test_start_link/3, test_stats/1,
+         test_identity_collection_progress/3]).
 -endif.
 
 -define(KEY, {ask_router, node}).
@@ -747,8 +748,12 @@ collect_agent_identity(
         quod_prolog:request_agent_attestation(
           element(1, Identity), Request, self(),
           {agent_identity_collection, Ref, Self}),
-        {Opens, Waiting} = open_identity_routes(
-                             Committee -- [Self], Routes, #{}),
+        {Opens, RemoteWaiting} = open_identity_routes(
+                                   Committee -- [Self], Routes, #{}),
+        %% The local attestation is asynchronous too.  Count it among the
+        %% replies that can still satisfy quorum, then remove it on either
+        %% success or refusal just like a remote committee member.
+        Waiting = RemoteWaiting#{Self => true},
         Deadline = quod_time:mono_ms() + RemainingMs,
         collect_agent_identity_loop(
           Ref, RequestId, Statement, StatementBytes, Committee,
@@ -771,21 +776,29 @@ open_identity_candidate(Peer, [Endpoint | Rest], Opens) ->
     OpenRef = quod_quic:open_link_pinned(
                 Peer, Endpoint, ?AGENT_IDENTITY_CHANNEL),
     {Opens#{OpenRef => {Peer, Rest}}, #{Peer => true}};
-open_identity_candidate(Peer, [], Opens) ->
-    {Opens, #{Peer => true}}.
+open_identity_candidate(_Peer, [], Opens) ->
+    %% No route means this signer cannot answer this collection.  Do not keep
+    %% it artificially outstanding until the proof deadline.
+    {Opens, #{}}.
 
 collect_agent_identity_loop(
   Ref, RequestId, Statement, StatementBytes, Committee, Routes,
   Frame, Deadline, Opens, Waiting, Signatures) ->
-    case map_size(Signatures) >= quod_quorum:threshold(length(Committee)) of
-        true ->
+    case identity_collection_progress(
+           length(Committee), map_size(Waiting), map_size(Signatures)) of
+        complete ->
             SignatureRows = lists:sort(maps:to_list(Signatures)),
             case quod_agent_identity:certificate(
                    Statement, SignatureRows, Routes) of
                 {ok, Certificate} -> {ok, Certificate};
                 {error, _} -> {error, invalid_request}
             end;
-        false ->
+        impossible ->
+            %% Every remaining signer has answered and quorum is impossible.
+            %% Waiting for the proof deadline here used to turn a prompt
+            %% refusal into a 60-second stall.
+            {error, unavailable};
+        waiting ->
             Remaining = max(0, Deadline - quod_time:mono_ms()),
             case Remaining of
                 0 -> {error, unavailable};
@@ -834,27 +847,49 @@ collect_agent_identity_loop(
                               Waiting1, Signatures);
                         {quod_message, {PeerIdentity, _Link},
                          ?AGENT_IDENTITY_CHANNEL, Payload} ->
-                            Signatures1 =
-                                accept_identity_response(
-                                  quod_link:peer_key(PeerIdentity), Payload,
-                                  RequestId, Statement, StatementBytes,
-                                  Committee, Signatures),
+                            Peer = quod_link:peer_key(PeerIdentity),
+                            {Waiting1, Signatures1} =
+                                case accept_identity_response(
+                                       Peer, Payload, RequestId, Statement,
+                                       StatementBytes, Committee,
+                                       Signatures) of
+                                    {answered, Accepted} ->
+                                        {maps:remove(Peer, Waiting), Accepted};
+                                    ignore ->
+                                        {Waiting, Signatures}
+                                end,
                             collect_agent_identity_loop(
                               Ref, RequestId, Statement, StatementBytes,
                               Committee, Routes, Frame, Deadline, Opens,
-                              Waiting, Signatures1)
+                              Waiting1, Signatures1)
                     after Remaining ->
                         {error, unavailable}
                     end
             end
     end.
 
+identity_collection_progress(CommitteeSize, WaitingCount, SignatureCount) ->
+    Threshold = quod_quorum:threshold(CommitteeSize),
+    case SignatureCount >= Threshold of
+        true -> complete;
+        false when SignatureCount + WaitingCount < Threshold -> impossible;
+        false -> waiting
+    end.
+
+-ifdef(TEST).
+test_identity_collection_progress(
+  CommitteeSize, WaitingCount, SignatureCount) ->
+    identity_collection_progress(
+      CommitteeSize, WaitingCount, SignatureCount).
+-endif.
+
 retry_identity_route(OpenRef, Peer, Opens, Waiting) ->
     case maps:take(OpenRef, Opens) of
+        {{Peer, []}, Opens1} ->
+            {Opens1, maps:remove(Peer, Waiting)};
         {{Peer, Rest}, Opens1} ->
-            case open_identity_candidate(Peer, Rest, Opens1) of
-                {Opens2, _} -> {Opens2, Waiting}
-            end;
+            {Opens2, _} = open_identity_candidate(Peer, Rest, Opens1),
+            {Opens2, Waiting};
         _ -> {Opens, Waiting}
     end.
 
@@ -867,13 +902,14 @@ accept_identity_response(
     case quod_agent_identity:decode_response(Payload) of
         {ok, {agent_identity_response, RequestId, Peer,
               CommitteeId, NotAfter, Signature}} ->
-            add_identity_signature(
-              Peer, Signature, StatementBytes, Committee, Signatures);
-        _ -> Signatures
+            {answered,
+             add_identity_signature(
+               Peer, Signature, StatementBytes, Committee, Signatures)};
+        _ -> ignore
     end;
 accept_identity_response(
   _Peer, _Payload, _RequestId, _Statement, _StatementBytes,
-  _Committee, Signatures) -> Signatures.
+  _Committee, _Signatures) -> ignore.
 
 add_identity_signature(
   <<_:256>> = Signer, <<_:512>> = Signature,

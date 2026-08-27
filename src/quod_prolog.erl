@@ -4354,7 +4354,7 @@ submit_signed_foreign_claim(
 
 submit_unbound_foreign_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  Target, Claim = #transaction{tx_id = ClaimTxId}, Bindings) ->
+  _Target, Claim = #transaction{tx_id = ClaimTxId}, Bindings) ->
     case quod_transaction:request_claim(Claim) of
         {ok, #{operation_ref := OperationRef}} ->
             ok = checkpoint_and_release_origin_snapshot(Origin, OperationRef),
@@ -4367,10 +4367,9 @@ submit_unbound_foreign_claim(
                    remote_submission_metric_result(Submission),
                    erlang:monotonic_time() - Started),
             case Submission of
-                {ok, _Ignored, ClaimSlot, ClaimTxId} ->
-                    submit_certified_foreign_application(
-                      OriginNs, Target, ClaimSlot, ClaimTxId,
-                      OperationRef, Bindings);
+                {ok, _Ignored, _ClaimSlot, ClaimTxId} ->
+                    await_recovered_foreign_application(
+                      OriginNs, ClaimTxId, OperationRef, Bindings);
                 {error, _} = Error -> Error
             end;
         _ ->
@@ -4380,7 +4379,7 @@ submit_unbound_foreign_claim(
 submit_effect_foreign_claim(
   #pinned_origin{namespace = OriginNs,
                  anchor = OriginAnchor} = Origin,
-  Target = {TargetNs, TargetAnchor}, Plan, Handle,
+  {TargetNs, TargetAnchor}, Plan, Handle,
   Claim = #transaction{tx_id = ClaimTxId,
                        role = {remote_claim, _, _, TargetTxId}},
   Bindings) ->
@@ -4398,7 +4397,7 @@ submit_effect_foreign_claim(
                    OriginNs, Admission, CustodyClaim) of
                 {ok, CancelToken} ->
                     bind_and_activate_effect_claim(
-                      Origin, Target, Plan, Handle, CustodyClaim,
+                      Origin, Plan, Handle, CustodyClaim,
                       ClaimRef, TargetRef, CancelToken,
                       OperationRef, Bindings);
                 {error, _} = Error -> Error
@@ -4409,7 +4408,7 @@ submit_effect_foreign_claim(
 
 bind_and_activate_effect_claim(
   #pinned_origin{namespace = OriginNs} = Origin,
-  Target, Plan, Handle, Claim = #transaction{tx_id = ClaimTxId},
+  Plan, Handle, Claim = #transaction{tx_id = ClaimTxId},
   ClaimRef, TargetRef, CancelToken, OperationRef, Bindings) ->
     case quod_scope_session:bind_operation_effect(
            Handle, ClaimRef, Claim, TargetRef, CancelToken,
@@ -4427,12 +4426,13 @@ bind_and_activate_effect_claim(
                            remote_activation_metric_result(Activation),
                            erlang:monotonic_time() - Started),
                     case Activation of
-                        {ok, ClaimSlot} ->
+                        {ok, _ClaimSlot} ->
                             %% The dormant custody registration began before
                             %% target effect binding; activation is the source
-                            %% claim stage for the effect-bearing variant.
-                            submit_certified_foreign_application(
-                              OriginNs, Target, ClaimSlot, ClaimTxId,
+                            %% claim stage for the effect-bearing variant.  Its
+                            %% one recovery owner performs the target submit.
+                            await_recovered_foreign_application(
+                              OriginNs, ClaimTxId,
                               OperationRef, Bindings);
                         {error, Reason} ->
                             logger:warning(
@@ -4463,77 +4463,26 @@ bind_and_activate_effect_claim(
             {error, {outcome_unknown, OperationRef}}
     end.
 
-submit_certified_foreign_application(
-  OriginNs, Target, ClaimSlot, ClaimTxId, OperationRef, Bindings) ->
-    case quod_simplex:transaction_evidence(
-           OriginNs, ClaimSlot, ClaimTxId) of
-        {ok, ClaimRef, Claim} ->
-            case quod_transaction:encode_evidence(ClaimRef, Claim) of
-                {ok, ClaimEvidence} ->
-                    Request = {apply_claim, crypto:strong_rand_bytes(16),
-                               ClaimEvidence},
-                    Started = erlang:monotonic_time(),
-                    Submission = quod_dtx_current_view:submit_claim_application(
-                                   OriginNs, Target, Claim, Request,
-                                   max(1, quod_proof_context:remaining_ms())),
-                    ok = quod_metrics:observe_remote_operation_stage(
-                           element(1, Target), target_application,
-                           remote_application_metric_result(Submission),
-                           erlang:monotonic_time() - Started),
-                    case Submission of
-                        {ok, Response} ->
-                            claimed_application_reply(
-                              Request, Response, OperationRef, Bindings);
-                        {error, _} ->
-                            {error, {outcome_unknown, OperationRef}}
-                    end;
-                {error, Reason} ->
-                    logger:warning(
-                      "quod[~ts]: claim evidence encoding failed: ~p",
-                      [OriginNs, Reason]),
-                    {error, {outcome_unknown, OperationRef}}
-            end;
-        {error, Reason} ->
+await_recovered_foreign_application(
+  OriginNs, ClaimTxId, OperationRef, Bindings) ->
+    case quod_simplex:await_operation_result(
+           OriginNs, OperationRef,
+           max(1, quod_proof_context:remaining_ms())) of
+        {committed,
+         {transaction, _TargetNs, <<_:256>>, <<_:256>>} = TargetRef} ->
+            {committed, Bindings, TargetRef};
+        {{rejected, Reason},
+         {transaction, _TargetNs, <<_:256>>, <<_:256>>}}
+          when is_atom(Reason) ->
+            {error, Reason};
+        {error, {outcome_unknown, OperationRef}} = Error ->
+            Error;
+        Other ->
             logger:warning(
-              "quod[~ts]: committed claim evidence unavailable: ~p",
-              [OriginNs, Reason]),
+              "quod[~ts]: recovery owner returned an invalid result for claim ~p: ~p",
+              [OriginNs, ClaimTxId, Other]),
             {error, {outcome_unknown, OperationRef}}
     end.
-
-claimed_application_reply(
-  Request,
-  {application, _RequestId, Result, TargetEvidence} = Response,
-  OperationRef, Bindings) ->
-    case quod_dtx_endpoint:correlates(Request, Response) of
-        true ->
-            case quod_transaction:decode_evidence(TargetEvidence) of
-                {ok, TargetCertifiedRef,
-                 #transaction{tx_id = TargetTxId,
-                              role = {remote_application, _, _, _}}} ->
-                    TargetRef = certified_transaction_ref(
-                                  TargetCertifiedRef, TargetTxId),
-                    case {TargetRef, Result} of
-                        {{ok, StableRef}, committed} ->
-                            {committed, Bindings, StableRef};
-                        {{ok, _StableRef}, {rejected, Reason}} ->
-                            {error, Reason};
-                        _ ->
-                            logger:warning(
-                              "claimed application returned an invalid target reference or result"),
-                            {error, {outcome_unknown, OperationRef}}
-                    end;
-                _ ->
-                    logger:warning(
-                      "claimed application returned invalid target evidence"),
-                    {error, {outcome_unknown, OperationRef}}
-            end;
-        false ->
-            logger:warning("claimed application response did not correlate"),
-            {error, {outcome_unknown, OperationRef}}
-    end;
-claimed_application_reply(_Request, _Response, OperationRef, _Bindings) ->
-    logger:warning("claimed application returned a malformed response"),
-    {error, {outcome_unknown, OperationRef}}.
 
 remote_submission_metric_result({ok, _, _, _}) -> ok;
 remote_submission_metric_result({error, {outcome_unknown, _}}) -> uncertain;
@@ -4541,20 +4490,6 @@ remote_submission_metric_result({error, _}) -> failed.
 
 remote_activation_metric_result({ok, _}) -> ok;
 remote_activation_metric_result({error, _}) -> uncertain.
-
-remote_application_metric_result(
-  {ok, {application, _, committed, _}}) -> ok;
-remote_application_metric_result(
-  {ok, {application, _, {rejected, _}, _}}) -> rejected;
-remote_application_metric_result({error, _}) -> uncertain;
-remote_application_metric_result(_) -> failed.
-
-certified_transaction_ref(Ref, TxId) ->
-    case quod_transaction:stable_ref(Ref) of
-        {transaction, _Ns, _Anchor, TxId} = StableRef ->
-            {ok, StableRef};
-        _ -> error
-    end.
 
 checkpoint_and_release_origin_snapshot(
   #pinned_origin{engine = Engine, worker_ref = WorkerRef}, OutcomeRef) ->

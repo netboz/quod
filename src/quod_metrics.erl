@@ -73,6 +73,8 @@ Two collection paths:
 | `quod_tx_signature_validation_seconds{namespace}` | histogram | | time spent checking one transaction author's signature |
 | `quod_tx_invalid_signatures_total{namespace}` | counter | | transaction signatures that failed cryptographic verification |
 | `quod_remote_operation_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of a signed one-target foreign operation; values never become labels |
+| `quod_dtx_group_stage_seconds{namespace,stage,result}` | histogram | | fixed stages of one durable multi-ontology transaction; group ids and participant identities never become labels |
+| `quod_foreign_history_stage_seconds{stage,result}` | histogram | | node-wide certified-history queue, verification, cache, replay, and fetch timing; remote identities never become labels |
 | `quod_tx_retries_total{namespace}` | counter | `reason` | operations explicitly told to prove and submit again |
 | `quod_link_send_drops_total` | counter | `peer`, `channel`, `reason` | frames discarded at the QUIC send gate instead of transmitted; channel is the bounded `log`, `ingress`, or `other` class |
 | `quod_consensus_round_approve_ms{namespace}` | histogram | | own proposal: broadcast to support-quorum approval, this node's clock |
@@ -94,6 +96,8 @@ Two collection paths:
          count_dtx_validation/2, count_dtx_submit_fanout/3,
          observe_dtx_admission_wait/2,
          observe_remote_operation_stage/4,
+         observe_dtx_group_stage/4,
+         observe_foreign_history_stage/3,
          observe_runtime_reaction/3,
          observe_ontology_owner_terminal/5,
          observe_node_owner_terminal/4]).
@@ -403,6 +407,18 @@ declare(NodeId) ->
           [{name, quod_remote_operation_stage_seconds},
            {help, "Time spent in one fixed stage of a signed one-target foreign operation. Stage and result use a closed vocabulary; ontology identities, operation ids, goals, and failure payloads are never labels."},
            {labels, [namespace, stage, result]},
+           {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
+           {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_dtx_group_stage_seconds},
+           {help, "Time spent in one fixed stage of a durable multi-ontology transaction. Group ids, participant identities, goals, and failure payloads are never labels."},
+           {labels, [namespace, stage, result]},
+           {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
+           {constant_labels, CL}]),
+    _ = prometheus_histogram:declare(
+          [{name, quod_foreign_history_stage_seconds},
+           {help, "Node-wide time spent queueing, verifying, opening, replaying, or fetching certified foreign history. Remote ontology identities and request values are never labels."},
+           {labels, [stage, result]},
            {buckets, ?REMOTE_OPERATION_STAGE_BUCKETS},
            {constant_labels, CL}]),
     _ = H(quod_consensus_signing_journal_vote_sync_seconds,
@@ -1011,6 +1027,72 @@ remote_operation_result(rejected) -> {ok, <<"rejected">>};
 remote_operation_result(uncertain) -> {ok, <<"uncertain">>};
 remote_operation_result(failed) -> {ok, <<"failed">>};
 remote_operation_result(_) -> error.
+
+-doc "Observe one fixed stage of a durable multi-ontology transaction.".
+-spec observe_dtx_group_stage(
+        binary(), atom(), atom(), non_neg_integer()) -> ok.
+observe_dtx_group_stage(Ns, Stage, Result, DurationNative)
+  when is_binary(Ns), is_integer(DurationNative), DurationNative >= 0 ->
+    case {dtx_group_stage(Stage), remote_operation_result(Result),
+          whereis(?MODULE)} of
+        {{ok, StageLabel}, {ok, ResultLabel}, Pid} when is_pid(Pid) ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_dtx_group_stage_seconds,
+                      [label(Ns), StageLabel, ResultLabel], DurationNative),
+                ok
+            catch _:_ -> ok
+            end;
+        _ -> ok
+    end;
+observe_dtx_group_stage(_Ns, _Stage, _Result, _DurationNative) ->
+    ok.
+
+dtx_group_stage(proof_seal) -> {ok, <<"proof_seal">>};
+dtx_group_stage(admission) -> {ok, <<"admission">>};
+dtx_group_stage(coordinator_total) -> {ok, <<"coordinator_total">>};
+dtx_group_stage('begin') -> {ok, <<"begin">>};
+dtx_group_stage(prepare_wave) -> {ok, <<"prepare_wave">>};
+dtx_group_stage(decision) -> {ok, <<"decision">>};
+dtx_group_stage(finalize_wave) -> {ok, <<"finalize_wave">>};
+dtx_group_stage(applied_wave) -> {ok, <<"applied_wave">>};
+dtx_group_stage(complete) -> {ok, <<"complete">>};
+dtx_group_stage(endpoint_wait) -> {ok, <<"endpoint_wait">>};
+dtx_group_stage(phase_verification) -> {ok, <<"phase_verification">>};
+dtx_group_stage(applied_verification) -> {ok, <<"applied_verification">>};
+dtx_group_stage(coordinator_mailbox) -> {ok, <<"coordinator_mailbox">>};
+dtx_group_stage(retry_wait) -> {ok, <<"retry_wait">>};
+dtx_group_stage(result_handoff) -> {ok, <<"result_handoff">>};
+dtx_group_stage(end_to_end) -> {ok, <<"end_to_end">>};
+dtx_group_stage(_) -> error.
+
+-doc "Observe one fixed node-wide certified foreign-history stage.".
+-spec observe_foreign_history_stage(atom(), atom(), non_neg_integer()) -> ok.
+observe_foreign_history_stage(Stage, Result, DurationNative)
+  when is_integer(DurationNative), DurationNative >= 0 ->
+    case {foreign_history_stage(Stage), remote_operation_result(Result),
+          whereis(?MODULE)} of
+        {{ok, StageLabel}, {ok, ResultLabel}, Pid} when is_pid(Pid) ->
+            try
+                _ = prometheus_histogram:observe(
+                      quod_foreign_history_stage_seconds,
+                      [StageLabel, ResultLabel], DurationNative),
+                ok
+            catch _:_ -> ok
+            end;
+        _ -> ok
+    end;
+observe_foreign_history_stage(_Stage, _Result, _DurationNative) ->
+    ok.
+
+foreign_history_stage(queue_wait) -> {ok, <<"queue_wait">>};
+foreign_history_stage(request_exact) -> {ok, <<"request_exact">>};
+foreign_history_stage(request_current) -> {ok, <<"request_current">>};
+foreign_history_stage(request_follow) -> {ok, <<"request_follow">>};
+foreign_history_stage(cache_open) -> {ok, <<"cache_open">>};
+foreign_history_stage(cache_replay) -> {ok, <<"cache_replay">>};
+foreign_history_stage(page_fetch) -> {ok, <<"page_fetch">>};
+foreign_history_stage(_) -> error.
 
 -doc "Record one row explicitly retired by a live hosted-ontology owner.".
 -spec observe_ontology_owner_terminal(binary(), atom(), atom(), atom(),

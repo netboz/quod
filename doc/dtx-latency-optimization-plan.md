@@ -45,6 +45,18 @@ collection reports an impossible quorum immediately instead of waiting for its
 silence deadline. Its local gates pass (EUnit 1,360/0, the ask and join Common
 Test suites 22/22, xref, dialyzer, and diff-check). The hardware concurrency
 benchmarks below remain the final release claim.
+
+Version 0.7.99 retains each verified remote projection and DTX phase index
+between checks instead of replaying a warm cache from genesis. A live
+four-ontology write then proved the complete A -> B -> C -> D path correct:
+34/34 signed groups committed the same operation in all four ledgers, with no
+warning, error, or node restart. Performance is not yet acceptable. A warm
+sequential run measured p50 3,475 ms and p99 3,635 ms. At concurrency four,
+p50 was 16,113 ms and p99 17,200 ms. The source admission histogram recorded
+72,114 ms of wait: 26 requests had no admission wait, while the concurrent
+requests formed the expected one-active-group staircase. This is the measured
+input for Slice 4.7 below; it is not a release performance claim.
+
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 
@@ -1796,43 +1808,309 @@ closure review finds one active path.
 #### Slice 4.7 -- optimize genuine groups without changing their semantics
 
 The full pipeline review does not assume the singleton cutover solves
-A->B->C->D or any goal with two material/read-dependent ontologies. For those
-real groups, retain the five logical records but remove their measured
-verification/orchestration waste through the same owners:
+A -> B -> C -> D or any goal with two or more material/read-dependent
+ontologies. The live trace found seven distinct costs. They must be removed at
+their owners rather than hidden by shorter timeouts or a movement-specific
+route.
 
-1. Every accepted DTX phase response may carry its exact committed entry beside
-   the existing certified reference. The coordinator offers it to its shared
-   foreign-log/catch-up verifier. This alone does not accelerate the other
-   validators: each still verifies the prerequisite through its own shared
-   per-node foreign cache, coalescing concurrent requests for the same ledger
-   advance. Warm contiguous history verifies locally, while gaps use the
-   ordinary certified follow. Do not claim committee-wide sidecar acceleration
-   unless a later reviewed Simplex proposal-evidence transport distributes the
-   untrusted bytes to voters without changing the block's semantic hash or
-   adding another verifier.
-2. After exact Finalize apply, the existing endpoint worker collects the
-   reviewed current-committee post-apply evidence once. Complete stores that
-   evidence, and source validators verify it locally instead of each starting a
-   fresh target current-view fan-out. The proof must bind network, exact target,
-   Finalize-era committee, group, Finalize reference, generation, verdict, and
-   applied floor, and remain valid across a later ordered committee change.
-3. Accepted/apply/cache progress wakes exact owners by message. Delete the
-   accepted-then-refetch path, applied polling requests, retry ladders, and any
-   timer whose normal expiry means "try again". Retain only silent-peer/link
-   failure deadlines.
-4. Measure a warm A->B->C->D read/write at concurrency 1, 2, and 4, including
-   each ledger phase and source admission wait. The initial target is p99 below
-   500 ms at concurrency one; concurrent results must be reported rather than
-   hidden.
+##### 4.7.1 Measured bottleneck map
 
-If the remaining group latency is source/target lock waiting rather than
-verification, stop before changing concurrency. The only acceptable next
-design is a reviewed batch of independently identified DTX controls whose pure
-projection proves their lock/read-write sets can advance in deterministic
-order. Do not bolt parallel active groups onto the existing singleton `active`
-field, and do not infer independence from predicate names. A conservative
-conflict is slower but correct; an exception that lets overlapping groups run
-is not.
+| Rank | Current cause | Evidence | Required owner-side correction |
+|---|---|---|---|
+| 1 | One source group remains active through Complete; later groups wait in one FIFO | concurrency-four p50 16.113 s, p99 17.200 s; 72.114 s aggregate admission wait | batch non-conflicting groups through the existing ledger/consensus owner; do not run uncoordinated parallel groups |
+| 2 | `quod_dtx_coordinator` executes the planner's participant commands one at a time | the planner returns every missing Prepare/Finalize/applied command, but `drive/1` runs only the head; after one progress result it discards the tail and replans | execute one same-phase participant wave concurrently and merge verified results in canonical target order |
+| 3 | an accepted phase returns a reference, then the caller separately reads certified history to recover the entry it just caused | source/target consensus averages tens of milliseconds while end-to-end sequential latency is seconds and grows with followed history | carry the exact committed entry as untrusted acceleration material into the one `quod_foreign_log` verifier |
+| 4 | applied verification is repeated per target and each check freezes a current view and probes a quorum | `verify_applied_many/3` already exists, but the group coordinator calls singular `verify_applied/4` once per target | collect one target post-apply certificate per Finalize wave, verify the certificate locally, and use the existing many-target helper during transition |
+| 5 | temporary `busy`, `not_ready`, absent evidence, or unavailable route enters 100--5,000 ms retry ladders | `schedule_retry/1` remains in the common group coordinator and the foreign follower has refresh backoff | park the exact correlated request at its existing owner and wake it from admission, apply, cache, directory, or link messages; timers only end silent/dead operations |
+| 6 | a new target may know only the source ontology's historical endpoint, and a cold long-history check is tied to one caller deadline | reproduced with a long-lived source after a dynamic port change; a warm target succeeded while a new target returned `signed_scope_unavailable` | use the already authenticated incoming node contact as a reachability hint and make certified catch-up an owner-lived resumable job |
+| 7 | when the source ontology is also a participant, its own committee commits separate Prepare and Finalize blocks in addition to Begin and Decision | the live source ledger contains Begin, Prepare, Decision, Finalize, Complete for every chain | validate/lock the source plan in Begin and apply/discard it in Decision through the same pure reducers |
+
+Identity attestation, signature verification, catch-up serving, and consensus
+computation are not selected for speculative rewrites. In the same run,
+identity work was negligible, catch-up serving was a few milliseconds, source
+consensus averaged about 85 ms per round, and commit application about 4 ms.
+Those measurements remain regression baselines.
+
+The concurrency-one target has no hidden phase overlap: Begin, the parallel
+Prepare wave, Decision, and the parallel Finalize wave remain four sequential
+consensus stages. The provisional warm p99 budget is therefore explicit:
+
+| Critical-path stage | p99 budget |
+|---|---:|
+| proof, remote scopes, seal | 45 ms |
+| fused Begin consensus and apply | 90 ms |
+| slowest target Prepare consensus and carried-evidence verification | 90 ms |
+| fused Decision consensus and source apply | 90 ms |
+| slowest target Finalize consensus, apply, and applied certificate | 110 ms |
+| result handoff | 10 ms |
+| unallocated tail margin | 65 ms |
+| **total** | **500 ms** |
+
+Evidence ingestion may overlap proposal validation, and applied-certificate
+collection may overlap Finalize apply; no other pipelining is assumed. Slice
+4.7.8's first measurement must replace these provisional numbers with observed
+p99 values. If any row or their sum misses the budget, the 500 ms claim is
+false and that exact owner must be optimized before batching can receive
+credit.
+
+##### 4.7.2 One correlated participant wave
+
+Keep `quod_dtx_recovery:next/2` as the only phase planner. Refactor its consumer
+so all independent commands returned for the same phase start before any is
+awaited:
+
+1. submit every missing Prepare concurrently;
+2. verify every returned Prepare through `quod_foreign_log` concurrently;
+3. sort the verified results by exact target identity and apply them to the
+   coordinator snapshot through the existing `put_*` functions;
+4. submit the one Decision only after the complete Prepare wave resolves;
+5. repeat the same shape for Finalize and post-apply evidence; and
+6. re-plan once after a wave, not after every target.
+
+This changes orchestration, not transaction semantics. Every target still
+runs its ordinary ACL/OCC check and its own consensus. A refusal still aborts
+the whole group. Crossed, duplicate, late, or wrong-target replies remain
+correlated to one command and cannot enter the canonical merge. Use monitored
+Erlang workers or asynchronous QUIC requests owned by this coordinator; do not
+create a second durable coordinator or a polling process.
+
+##### 4.7.3 Deliver evidence once; verify it once per node
+
+An accepted endpoint response may include the exact committed entry and its
+existing finality material beside the certified reference. The bytes are only
+a speed hint. `quod_foreign_log` remains the sole verifier and either advances
+its exact anchored projection with them or falls back to ordinary certified
+follow. No endpoint response becomes authority by itself.
+
+The coordinator's source proposal must make the same acceleration material
+available to source validators. Add one ephemeral proposal-evidence attachment
+that is outside the semantic block hash, bound to the exact referenced entry,
+and discarded after validation. Every validator imports it through
+`quod_foreign_log`; every validator still verifies signatures, history
+continuity, committee state, namespace anchor, record digest, and phase
+binding independently. There is no second verifier and no committee member
+trusts the coordinator's verdict.
+
+The target side uses the same chain; it is not allowed to fall back to a hidden
+per-validator fan-out. The coordinator's endpoint request carries the exact
+Begin or Decision entry. The existing retained-control relay forwards that
+attachment with the control. The target leader keeps it when building the
+Prepare or Finalize proposal, and the proposal transport presents the same
+ephemeral attachment to every target validator. Each validator independently
+imports it through `quod_foreign_log`. A validator that receives no attachment,
+or receives well-formed but wrong bytes, ignores the hint and uses ordinary
+certified follow; the block is rejected only if the authoritative verification
+fails, never merely because the optional hint is bad.
+
+After a target applies Finalize, its existing endpoint/application owner
+collects the current committee's signed applied replies once. The resulting
+certificate binds network, target identity, committee view, group, Finalize
+reference, generation, verdict, and applied floor. Complete carries this
+bounded certificate. Source validators verify its signatures and binding
+locally instead of starting their own target fan-outs. A later committee change
+does not invalidate evidence signed by the exact Finalize-era committee.
+
+##### 4.7.4 Remove polling from normal progress
+
+Classify every current `retry` edge before changing it:
+
+- target admission or apply pending: retain the exact request in the target
+  Simplex and reply when its existing commit/apply message arrives;
+- certified history behind: attach the coordinator as a consumer of the
+  existing foreign follow and wake it on the exact advance;
+- directory or authenticated link unavailable: subscribe through
+  `quod_reg:subscribe({directory_route, Identity})`; the existing
+  `quod_directory` owner publishes an identity-scoped route-available event on
+  that property after its ordinary projection changes, while the existing
+  transport-name/link monitors cover link replacement;
+- owner or peer silent: retain one final deadline that returns uncertainty or
+  unavailability without resubmitting an uncertain write; and
+- malformed or contradictory evidence: fail immediately and permanently.
+
+Delete `retry_initial_ms`, `retry_max_ms`, the coordinator retry timer, normal
+follow refresh backoff, and every comment/test that describes timer expiry as
+progress discovery. The directory property is a notification seam on the one
+existing directory owner, not a second directory or retained route registry.
+Subscribe/unsubscribe follows the coordinator monitor lifecycle. Do not replace
+the removed timers with shorter intervals or move polling behind the property.
+
+##### 4.7.5 Make first contact and cold history converge
+
+Transport authentication already proves the current hosting node key before
+agent authorization. At that seam, record the observed peer endpoint against
+the claimed source ontology in `quod_foreign_log` as a volatile bootstrap hint.
+The hint grants no ACL right and certifies no history: it only tells the
+existing verifier where to ask. The anchored genesis, signed history, current
+committee, agent instance, and active key must still verify normally. A forged
+or stale hint can only fail to fetch.
+
+Separate a caller's wait from the certified catch-up job. One foreign-history
+owner per ontology continues page-by-page after an individual scope request
+times out or disconnects. Each verified page and its phase-index delta are
+checkpointed before the next page. A later caller joins the same job or resumes
+from that prefix; it never replays a growing prefix from genesis merely because
+the previous caller left. Page/link deadlines remain failure safeguards, not
+the scheduler for the next page.
+
+##### 4.7.6 Fuse a real source participant
+
+Implement the already-deferred section 4.3 refactor:
+
+- Begin validates the source plan through the exact current Prepare policy/OCC
+  reducer and installs its lock;
+- Decision applies or discards that source plan through the exact current
+  Finalize reducer; and
+- remote participants retain ordinary Prepare and Finalize records.
+
+Delete source-local Prepare/Finalize construction, decoding, recovery, and
+tests that exist only for this redundant shape. Do not copy their checks into
+Begin/Decision. Extract and call the same pure reducer so proposal validation,
+apply, replay, and catch-up cannot diverge. The logical atomic protocol remains
+Begin -> Prepare -> Decision -> Finalize -> Complete, but a source that is also
+a participant no longer pays two extra source blocks.
+
+This changes the scheduler/reducer phase table deliberately. Update
+`proposal_readiness/2` so the source Begin row owns Prepare's lock/readiness
+requirements and the source Decision row owns Finalize's apply requirements.
+Extend the existing reducer-gate matrix tests in the same change and delete the
+source-only Prepare/Finalize rows and fixtures. Proposal readiness, preview,
+apply, replay, and catch-up must all accept and reject the same fused
+transitions.
+
+Once all participant Finalizes are certified applied, the client-visible
+outcome is safe: every material ontology exposes the chosen result. Complete
+remains mandatory durable recovery bookkeeping, but its append may finish
+asynchronously through the existing owner, like the singleton
+`remote_complete`. A disconnect cannot cause a retry or a second group.
+
+##### 4.7.7 Batch safe groups instead of adding parallel groups
+
+The concurrency-four staircase cannot be removed by making one group faster.
+It also must not be fixed by allowing several independent coordinators to
+mutate the old singleton `active` field.
+
+Replace the DTX singleton block payload with the canonical ordered ledger-item
+batch used by the same Simplex consensus lane, and delete the old singleton
+decoder at the coordinated format break. The existing proposer may place
+several controls of the same phase in one block when the pure projection proves
+their sealed plans do not conflict. Conflict is derived only from exact OCC
+read tokens, mutation heads, lifecycle ownership, and effect custody; never
+from predicate names. An opaque effect or unprovable relation conflicts
+conservatively.
+
+The DTX projection becomes an ordered map of active groups plus a derived lock
+index. Validation folds the batch in canonical order through the same DTX
+transition reducer used by apply and replay. A later group that conflicts stays
+in the existing FIFO; non-conflicting groups share Begin, Prepare, Decision,
+Finalize, and Complete blocks while retaining distinct group references,
+outcomes, recovery, and Explorer rows. There is no compiled group-count limit:
+the existing canonical block-byte bound ends a batch naturally.
+
+This is one generalized consensus input path, not a second group protocol.
+Crash recovery remains per durable group and reconstructs the active map and
+lock index from the ledger. If the projection cannot prove deterministic
+conflict behavior for effects or lifecycle operations, those groups remain
+serialized; no exception is added.
+
+Extend the existing retained-control registry rather than creating a batch
+queue beside it. Its ready `gb_set` currently selects
+`gb_sets:smallest/1`; replace that selection with a canonical fold that chooses
+the maximal non-conflicting ready prefix that fits the existing block-byte
+bound. Selected controls leave the same registry through the same completion,
+relay, DOWN, and recovery functions as a singleton does today.
+
+The format-break map must include every singular projection consumer, not just
+the wire decoder: `quod_dtx:valid_projection/1`, `origin_recovery/1`,
+`proposal_readiness/2`, the transition reducer, the history projection and
+checkpoint version in `quod_foreign_log`, `dtx_durable_lock/2`,
+`consensus_barrier/3`, `classify_dtx_group_barrier/3`, `local_group_pending/3`,
+retained-control readiness/selection, restart restoration, catch-up preview,
+stats, fixtures, Explorer classification, and the fixed-shape assertions in
+tests and documentation. Change them together and delete the singular field,
+decoder, branches, and comments; do not translate the new map back into a fake
+single active group for old consumers.
+
+##### 4.7.8 Implementation slices and stop gates
+
+Implementation status (working tree, not deployed): step 1 now instruments the
+existing path without changing its protocol. `quod_dtx_group_stage_seconds`
+measures proof/seal, dormant admission, coordinator phases, endpoint waits,
+phase/applied verification, retry waits, result handoff, and end-to-end time.
+`quod_foreign_history_stage_seconds` measures the node-wide certified-history
+queue, exact/current/follow work, cache open/replay, and page fetch. Both use
+closed stage/result vocabularies; the existing GroupId and ProofId correlate
+traces but never become Prometheus labels. Existing consensus round and named
+apply-step histograms remain the consensus timing owner rather than being
+duplicated. The dashboard exposes the two new histograms. The hardware fixture
+and 95% accounting gate remain outstanding until this measurement-only tree is
+reviewed and deployed. `proof_seal`, `admission`, the coordinator phase waves,
+and `result_handoff` are non-overlapping group segments. `coordinator_total`
+and `end_to_end` are enclosing totals and must not be summed with those
+segments. Endpoint, verification, mailbox, retry, foreign-history, and
+consensus measurements are nested diagnostics. The segments need not yet tile
+the end-to-end total: activation-cast scheduling before coordinator start and
+the locally applied Complete waking the durable-outcome waiter after the
+coordinator finishes remain explicit residuals for the 95% hardware gate.
+`result_handoff` begins when that waiter-resolution turn reaches the engine and
+includes outcome lookup, result shaping, and reply delivery; it is not merely
+the final message-send cost.
+Local verification on the exact tree is green: EUnit 1,363/0,
+`quod_ask_SUITE` 17/17, compile, xref, dialyzer, dashboard JSON, and diff-check.
+
+1. **Observability only.** Add one correlation id across proof/seal, dormant
+   admission, every group wave, evidence verification, applied certification,
+   and client result. Export bounded phase/result metrics; never label by
+   arbitrary target, agent, group, or goal. Include coordinator mailbox wait,
+   foreign-cache queue/replay/fetch time, endpoint wait, and consensus proposal,
+   finality, and apply time. Re-run the exact hardware fixture before behavior
+   changes. Do not begin the protocol refactor until the measured stages account
+   for at least 95% of end-to-end wall time; any unexplained remainder is a
+   bottleneck to trace, not an acceptable `other` bucket.
+2. **Liveness correctness.** Move authenticated current-contact observation to
+   the pre-authorization transport seam and make cold catch-up owner-lived and
+   resumable. Prove a stale-port, cold 1,000+ entry source eventually verifies
+   without manual route injection.
+3. **Wave execution and evidence reuse.** Parallelize participant commands,
+   carry accepted-entry hints through both source proposals and retained-control
+   target relays, use `verify_applied_many/3`, install the one post-apply
+   certificate, and delete accepted-then-refetch duplication.
+4. **Message-driven progress.** Replace every normal retry timer with exact
+   owner notifications, add the identity-scoped `quod_directory` property on
+   the existing owner, then delete the retry configuration and stale tests.
+5. **Source fusion and asynchronous Complete.** Reuse the existing reducers,
+   update the proposal-readiness/reducer matrix, remove source-local
+   Prepare/Finalize, and move Complete outside the visible result's critical
+   path.
+6. **Conflict-safe DTX batching.** Generalize the one ledger batch/projection,
+   extend the retained-control registry's ready selection, replace every
+   singular projection consumer, delete the singleton control format, and
+   activate only after adversarial review plus a coordinated clean re-found.
+7. **Hardware acceptance.** Test fresh and warm A -> B -> C -> D at concurrency
+   1, 2, 4, 8, and 32; repeat after history growth, restart, endpoint change,
+   and committee change while monitoring logs and all process/mailbox counts.
+
+After slices 3--5, warm concurrency-one A -> B -> C -> D must reach p99 below
+500 ms before batching is credited with any result. After slice 6, same-source
+concurrency-four must remain below 500 ms p99 for non-conflicting chains rather
+than forming a queue staircase. Concurrency 8 and 32 are reported honestly and
+must show bounded admission wait, stable throughput, no lost/duplicate outcome,
+and no residual worker/mailbox growth. One-target p99 must not regress above
+500 ms.
+
+Correctness gates include conflicting read/write groups, target refusal,
+uncertain replies, duplicate and crossed responses, crash after every phase,
+replay/catch-up, stale endpoint, key rotation, committee change between
+Finalize and Complete, malformed evidence attachments, and a slow or Byzantine
+participant. Exact same operation ids must appear in every participant ledger,
+and every accepted group must reach one terminal outcome.
+
+The non-vacuous additions are: a Byzantine proposer attaches well-formed but
+wrong evidence and validators fall back to certified follow; two groups with
+overlapping OCC read/write tokens serialize while a disjoint pair batches; a
+second caller joins a resumable catch-up between two pages and both observe the
+same advancing prefix; and every fused Begin/Decision transition is exercised
+in the existing proposal-readiness/reducer matrix, including apply-blocked,
+stale, replay, and crash cases.
 
 #### Rejected architectures and shortcuts
 
@@ -1842,8 +2120,10 @@ is not.
 - **Keep five phases and only carry evidence faster:** removes repeated fetches
   but cannot remove the one-active-group queue; it cannot meet concurrent
   same-source latency unless each complete group becomes unrealistically tiny.
-- **Allow parallel active groups:** breaks the namespace lock/OCC invariant and
-  creates overlapping recovery state.
+- **Allow uncoordinated parallel active groups:** mutating the old singleton
+  `active` field from several coordinators breaks the namespace lock/OCC
+  invariant and creates overlapping recovery state. Only the canonical,
+  conflict-checked batch projection in section 4.7.7 may admit overlap.
 - **Create a special movement/write endpoint:** duplicates the executor and ACL
   and is forbidden.
 - **Have the client submit directly after proof:** a lost gateway response still
@@ -2057,7 +2337,9 @@ is not.
   after an approved cap is removed.
 - A Byzantine responder cannot make Complete valid, and an unready Complete
   cannot starve ordinary origin traffic.
-- Multi-target Finalizes overlap in time while Prepares remain ordered.
+- Multi-target Prepares, Finalizes, and applied checks each overlap within one
+  correlated wave; their verified results enter the coordinator snapshot in
+  canonical target order.
 - After Slice 4's hard break, every active DTX validation seam rejects a
   one-participant group; the same signed foreign operation succeeds only
   through the batchable claim/ordinary-target/receipt path. Genuine groups
@@ -2116,11 +2398,15 @@ load spread across different source ontologies.
 
 For genuine groups, the protocol remains atomic. Each node coalesces phase
 verification through its one foreign-history owner; the coordinator reuses the
-exact entry it received, without pretending that this sidecar reached every
-validator. Complete verifies one reviewed post-apply certificate rather than
-launching a fresh fan-out per source validator. Its independent warm
-A->B->C->D gate is p99 below 500 ms at concurrency one before any concurrency
-redesign is considered.
+exact entry it received, and source proposal evidence gives every validator
+the same independently verified acceleration opportunity. Complete verifies
+one reviewed post-apply certificate rather than launching a fresh fan-out per
+source validator. A source participant reuses Begin/Decision instead of adding
+local Prepare/Finalize blocks. Non-conflicting groups share the same canonical
+consensus batches; conflicting groups remain ordered. The independent warm
+A -> B -> C -> D gates are p99 below 500 ms at concurrency one before batching
+is credited, then p99 below 500 ms at same-source concurrency four after the
+conflict-safe batch projection lands.
 
 Most importantly, the faster path restores the architecture rather than adding
 a fast lane: one Prolog proof, one target ACL, one plan/check-and-apply family,

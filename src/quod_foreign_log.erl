@@ -101,7 +101,8 @@ that projection can be reused in memory.
           work :: term(),
           fetch_fun :: undefined | function(),
           deadline :: integer(),
-          timer :: reference()
+          timer :: reference(),
+          enqueued_native :: integer()
          }).
 
 -record(history, {
@@ -953,7 +954,8 @@ start_distinct_worker(
                         ref = RequestRef, from = From, peer = Peer,
                         identity = Identity, work = Work,
                         fetch_fun = FetchFun, deadline = Deadline,
-                        timer = Timer},
+                        timer = Timer,
+                        enqueued_native = erlang:monotonic_time()},
             H1 = H0#history{waiting = queue:in(Queued, H0#history.waiting)},
             {ok, put_history(Identity, H1, S1)}
     end.
@@ -1551,6 +1553,9 @@ start_next_request(Identity, S0) ->
                                     quod_time:mono_ms(),
                     case Remaining > 0 of
                         true ->
+                            observe_foreign_stage(
+                              queue_wait, ok,
+                              Queued#queued_request.enqueued_native),
                             launch_request(
                               Queued#queued_request.ref,
                               Queued#queued_request.peer, Identity,
@@ -1560,6 +1565,9 @@ start_next_request(Identity, S0) ->
                               Queued#queued_request.from,
                               Queued#queued_request.waiters, S1);
                         false ->
+                            observe_foreign_stage(
+                              queue_wait, uncertain,
+                              Queued#queued_request.enqueued_native),
                             finish_queued_reply(Queued, {error, retry}, S1)
                     end;
                 {empty, _} ->
@@ -1581,6 +1589,9 @@ finish_queued_reply(
 expire_queued_request(RequestRef, S0) ->
     case take_queued_request(RequestRef, maps:to_list(S0#s.histories)) of
         {ok, Queued, Identity, Waiting1} ->
+            observe_foreign_stage(
+              queue_wait, uncertain,
+              Queued#queued_request.enqueued_native),
             H0 = maps:get(Identity, S0#s.histories),
             S1 = put_history(Identity, H0#history{waiting = Waiting1}, S0),
             finish_queued_reply(Queued, {error, retry}, S1);
@@ -2320,11 +2331,32 @@ verification_worker(
     %% kills every in-flight route fetch. Expected transport exits are
     %% normalized where the dependency is called; an internal fault takes
     %% down this monitored worker and remains visible to the runtime.
+    StartedNative = erlang:monotonic_time(),
     Result0 = verification_work(
                 Work, Owner, RequestRef, Root, FetchFun, PageTimeout,
                 RequestTimeout, Resident),
     {Result, Meta} = normalize_worker_result(Result0),
+    observe_foreign_stage(
+      verification_stage(Work), foreign_result(Result), StartedNative),
     Owner ! {foreign_worker_done, RequestRef, Result, Meta}.
+
+verification_stage({exact, _, _, _, _}) -> request_exact;
+verification_stage({exact_routes, _, _, _}) -> request_exact;
+verification_stage({current, _, _}) -> request_current;
+verification_stage({local_current, _, _}) -> request_current;
+verification_stage({current_identity, _, _}) -> request_current;
+verification_stage({local_current_identity, _, _}) -> request_current;
+verification_stage({follow, _, _}) -> request_follow.
+
+foreign_result({ok, _}) -> ok;
+foreign_result({error, retry}) -> uncertain;
+foreign_result({error, {unreachable, _}}) -> uncertain;
+foreign_result({error, _}) -> failed.
+
+observe_foreign_stage(Stage, Result, StartedNative)
+  when is_integer(StartedNative) ->
+    quod_metrics:observe_foreign_history_stage(
+      Stage, Result, erlang:monotonic_time() - StartedNative).
 
 verification_work(
   {exact, Peer, Endpoint, Ref, Phase}, Owner, RequestRef,
@@ -2788,8 +2820,15 @@ verify_current_basis(Store, {Phase, Ref}, CurrentProjection) ->
 open_cache(Owner, RequestRef, Identity, Root, TargetSlot) ->
     open_cache(Owner, RequestRef, Identity, Root, TargetSlot, none).
 
-open_cache(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
-           Resident) ->
+open_cache(Owner, RequestRef, Identity, Root, TargetSlot, Resident) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = open_cache_raw(
+               Owner, RequestRef, Identity, Root, TargetSlot, Resident),
+    observe_foreign_stage(cache_open, cache_result(Result), StartedNative),
+    Result.
+
+open_cache_raw(Owner, RequestRef, Identity = {Ns, Anchor}, Root, TargetSlot,
+               Resident) ->
     CacheNs = cache_namespace(Identity),
     Dir = cache_dir(Root, CacheNs),
     ok = cleanup_cache_temps(Dir),
@@ -2854,9 +2893,13 @@ open_replayed_cache(Root, CacheNs, Ns, Anchor, Store, Height,
     case fresh_phase_index(Root, CacheNs) of
         {ok, PhaseIndex} ->
             Projection0 = quod_simplex:history_projection({Ns, Anchor}),
-            case replay_cache(
-                   Root, CacheNs, Ns, Anchor, Height,
-                   Projection0, PhaseIndex, TargetSlot) of
+            StartedNative = erlang:monotonic_time(),
+            ReplayResult = replay_cache(
+                             Root, CacheNs, Ns, Anchor, Height,
+                             Projection0, PhaseIndex, TargetSlot),
+            observe_foreign_stage(
+              cache_replay, cache_result(ReplayResult), StartedNative),
+            case ReplayResult of
                 {ok, Projection, TargetProjection}
                   when Projection =:= CheckpointProjection ->
                     {ok, Store, Height, Projection,
@@ -3511,18 +3554,34 @@ current_view_evidence(Identity, Height, Projection, Routes) ->
       committee_id => maps:get(committee_id, Projection),
       route_candidates => Routes}.
 
-fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, undefined,
+fetch_page(Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
            PageTimeout) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = fetch_page_raw(
+               Owner, RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
+               PageTimeout),
+    observe_foreign_stage(page_fetch, cache_result(Result), StartedNative),
+    Result.
+
+fetch_page_raw(Owner, RequestRef, Peer, Endpoint, Ns, From, To, undefined,
+               PageTimeout) ->
     try gen_server:call(
           Owner, {pull_page, RequestRef, Peer, Endpoint, Ns, From, To},
           PageTimeout + 1000)
     catch exit:_ -> {error, retry}
     end;
-fetch_page(_Owner, _RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
-           _PageTimeout) ->
+fetch_page_raw(_Owner, _RequestRef, Peer, Endpoint, Ns, From, To, FetchFun,
+               _PageTimeout) ->
     try FetchFun(Peer, Endpoint, Ns, From, To)
     catch exit:_ -> {error, retry}
     end.
+
+cache_result({ok, _}) -> ok;
+cache_result({ok, _, _}) -> ok;
+cache_result({ok, _, _, _, _, _}) -> ok;
+cache_result({error, retry}) -> uncertain;
+cache_result({error, _}) -> failed;
+cache_result(_) -> failed.
 
 validate_page(Entries, From, To, RemoteHeight) ->
     case quod_catchup:page_stats(Entries) of

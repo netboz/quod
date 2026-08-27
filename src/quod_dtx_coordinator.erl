@@ -82,7 +82,11 @@ owner death terminates the worker.
     follows = #{} :: #{{binary(), <<_:256>>} => reference()},
     commands = [] :: [quod_dtx_recovery:command()],
     retry_ms :: pos_integer(),
-    retry_timer = none :: none | {reference(), reference()},
+    retry_timer = none ::
+      none | {reference(), reference(), integer()},
+    total_started_native = undefined :: undefined | integer(),
+    stage = none :: none | atom(),
+    stage_started_native = undefined :: undefined | integer(),
     config :: #config{}
 }).
 
@@ -590,21 +594,30 @@ options(Options) when map_size(Options) =< 3 ->
 options(_) ->
     {error, invalid_coordinator_options}.
 
-init(S0 = #state{owner = Owner}) ->
+init(S0 = #state{owner = Owner, owner_ns = OwnerNs,
+                 group_id = GroupId}) ->
     OwnerMonitor = erlang:monitor(process, Owner),
-    self() ! drive,
-    loop(S0#state{owner_monitor = OwnerMonitor}).
+    queue_drive(),
+    S = S0#state{owner_monitor = OwnerMonitor,
+                 total_started_native = erlang:monotonic_time()},
+    quod_trace:with_span(
+      quod_trace:context(), <<"quod.dtx.coordinate">>, internal,
+      #{'quod.namespace' => OwnerNs,
+        'quod.dtx.group_id' => quod_trace:tx_id(GroupId)},
+      fun(_SpanCtx) -> loop(S) end).
 
 loop(S) ->
     receive
         Message -> handle_loop_message(Message, S)
     end.
 
-handle_loop_message(drive, S) ->
+handle_loop_message({drive, EnqueuedNative}, S) ->
+    observe_stage(S, coordinator_mailbox, ok, EnqueuedNative),
     continue(drive(S));
 handle_loop_message({retry, Tag}, S) ->
     case S#state.retry_timer of
-        {Tag, _Timer} ->
+        {Tag, _Timer, StartedNative} ->
+            observe_stage(S, retry_wait, ok, StartedNative),
             continue(drive(S#state{retry_timer = none}));
         _Stale ->
             loop(S)
@@ -616,8 +629,8 @@ handle_loop_message(
         FollowRef ->
             ok = quod_foreign_log:ack(FollowRef, NoticeRef),
             case Notice of
-                {advanced, _, _, _, _, _, _} -> self() ! drive;
-                {resnapshot, _, _, _} -> self() ! drive;
+                {advanced, _, _, _, _, _, _} -> queue_drive();
+                {resnapshot, _, _, _} -> queue_drive();
                 _ -> ok
             end,
             loop(S);
@@ -626,7 +639,8 @@ handle_loop_message(
     end;
 handle_loop_message(
   {'DOWN', Monitor, process, Owner, _Reason},
-  #state{owner_monitor = Monitor, owner = Owner}) ->
+  S = #state{owner_monitor = Monitor, owner = Owner}) ->
+    close_coordinator(uncertain, S),
     ok;
 handle_loop_message(_Message, S) ->
     ?TEST_HANDLE_LOOP_MESSAGE(_Message, S).
@@ -640,7 +654,7 @@ drive(S = #state{pending_phase =
            Target, GroupId, Kind, Ref, Preferred, S) of
         {progress, S1, Phase} ->
             notify(S1, {progress, Phase}),
-            self() ! drive,
+            queue_drive(),
             {next,
              reset_backoff(
                S1#state{pending_phase = none, commands = []})};
@@ -654,7 +668,7 @@ drive(S = #state{pending_phase =
     case observe_uncertain_phase(Target, GroupId, Kind, S) of
         {progress, S1, Phase} ->
             notify(S1, {progress, Phase}),
-            self() ! drive,
+            queue_drive(),
             {next,
              reset_backoff(
                S1#state{pending_phase = none, commands = []})};
@@ -665,7 +679,7 @@ drive(S = #state{pending_phase =
             %% Simplex. A fresh absence after the retained submission has
             %% disappeared therefore proves this process can no longer commit
             %% it; the planner may safely mint the next envelope.
-            self() ! drive,
+            queue_drive(),
             {next,
              reset_backoff(
                S1#state{pending_phase = none, commands = []})};
@@ -676,10 +690,11 @@ drive(S = #state{commands = []}) ->
     case quod_dtx_recovery:next(S#state.begin_record, S#state.snapshot) of
         {done, CompleteRef} ->
             notify(S, {done, CompleteRef}),
+            close_coordinator(ok, S),
             stop;
         {ok, [_ | _] = Commands}
           when length(Commands) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
-            self() ! drive,
+            queue_drive(),
             {next, S#state{commands = Commands}};
         {ok, _MalformedCommands} ->
             terminate_expected(invalid_recovery_commands, S);
@@ -692,10 +707,10 @@ drive(S0 = #state{commands = [Command | Rest]}) ->
             notify(S1, {progress, Phase}),
             %% Newly certified evidence can invalidate the remainder of the
             %% planner's previous batch. Re-plan from the exact new snapshot.
-            self() ! drive,
+            queue_drive(),
             {next, reset_backoff(S1#state{commands = []})};
         {retry, S1} when Rest =/= [] ->
-            self() ! drive,
+            queue_drive(),
             {next, S1#state{commands = Rest}};
         {retry, S1} ->
             {next, schedule_retry(S1#state{commands = []})};
@@ -707,6 +722,7 @@ drive(S0 = #state{commands = [Command | Rest]}) ->
 
 terminate_expected(Reason, S) ->
     notify(S, {error, Reason}),
+    close_coordinator(failed, S),
     stop.
 
 notify(#state{owner = Owner, group_id = GroupId}, Event) ->
@@ -787,13 +803,52 @@ schedule_retry(S = #state{retry_timer = none, retry_ms = Delay,
     Tag = make_ref(),
     Timer = erlang:send_after(Delay, self(), {retry, Tag}),
     Next = min(Config#config.retry_max_ms, Delay * 2),
-    S#state{retry_ms = Next, retry_timer = {Tag, Timer}};
+    S#state{retry_ms = Next,
+            retry_timer = {Tag, Timer, erlang:monotonic_time()}};
 schedule_retry(S) ->
     S.
 
 cancel_retry(none) -> ok;
-cancel_retry({_Tag, Timer}) ->
+cancel_retry({_Tag, Timer, _StartedNative}) ->
     _ = erlang:cancel_timer(Timer),
+    ok.
+
+queue_drive() ->
+    self() ! {drive, erlang:monotonic_time()},
+    ok.
+
+enter_stage(Stage, S = #state{stage = Stage}) ->
+    S;
+enter_stage(Stage, S) ->
+    close_active_stage(ok, S),
+    _ = quod_trace:add_event(
+          quod_trace:context(), <<"dtx.stage">>,
+          #{'quod.dtx.group_id' => quod_trace:tx_id(S#state.group_id),
+            'quod.dtx.stage' => atom_to_binary(Stage, utf8)}),
+    S#state{stage = Stage,
+            stage_started_native = erlang:monotonic_time()}.
+
+close_active_stage(_Result, #state{stage = none}) ->
+    ok;
+close_active_stage(Result,
+                   S = #state{stage = Stage,
+                              stage_started_native = StartedNative}) ->
+    observe_stage(S, Stage, Result, StartedNative).
+
+close_coordinator(Result,
+                  S = #state{total_started_native = StartedNative}) ->
+    close_active_stage(Result, S),
+    observe_stage(S, coordinator_total, Result, StartedNative),
+    _ = quod_trace:add_event(
+          quod_trace:context(), <<"dtx.completed">>,
+          #{'quod.dtx.result' => atom_to_binary(Result, utf8)}),
+    ok.
+
+observe_stage(#state{owner_ns = Ns}, Stage, Result, StartedNative)
+  when is_integer(StartedNative) ->
+    quod_metrics:observe_dtx_group_stage(
+      Ns, Stage, Result, erlang:monotonic_time() - StartedNative);
+observe_stage(_S, _Stage, _Result, _StartedNative) ->
     ok.
 
 %% ------------------------------------------------------------------
@@ -802,28 +857,37 @@ cancel_retry({_Tag, Timer}) ->
 
 run_command({submit, Target, Record}, S) ->
     submit_record(Target, Record, S);
-run_command({phase, Target, GroupId, Kind}, S) ->
-    phase_request(Target, GroupId, Kind, S);
+run_command({phase, Target, GroupId, prepare}, S) ->
+    phase_request(
+      Target, GroupId, prepare, enter_stage(prepare_wave, S));
 run_command({applied, Target, GroupId, FinalizeRef, Generation, Verdict}, S) ->
     applied_request(
-      Target, GroupId, FinalizeRef, Generation, Verdict, S).
+      Target, GroupId, FinalizeRef, Generation, Verdict,
+      enter_stage(applied_wave, S)).
 
 submit_record(Target, Record, S) ->
     try
         Kind = quod_dtx:record_kind(Record),
+        S1 = enter_stage(record_stage(Kind), S),
         GroupId = quod_dtx:group_id(Record),
         case quod_dtx:encode_record(Record) of
             {ok, RecordBlob} ->
                 Request = {submit, request_id(), RecordBlob},
                 handle_submit_response(
                   Target, GroupId, Kind, Request,
-                  submit_endpoint_request(Target, Request, S), S);
+                  submit_endpoint_request(Target, Request, S1), S1);
             {error, Reason} ->
-                {fatal, {invalid_recovery_record, Reason}, S}
+                {fatal, {invalid_recovery_record, Reason}, S1}
         end
     catch
         _:_ -> {fatal, invalid_recovery_record, S}
     end.
+
+record_stage('begin') -> 'begin';
+record_stage(prepare) -> prepare_wave;
+record_stage(decision) -> decision;
+record_stage(finalize) -> finalize_wave;
+record_stage(complete) -> complete.
 
 handle_submit_response(
   Target, GroupId, Kind, Request,
@@ -1088,14 +1152,21 @@ handle_phase_response(_Target, _GroupId, _Kind, _Request,
 handle_phase_response(_Target, _GroupId, _Kind, _Request, _Malformed, S) ->
     {fatal, invalid_endpoint_response, S}.
 
-verify_phase(Target = {Ns, _Anchor}, GroupId, Kind, Ref, local, S) ->
+verify_phase(Target, GroupId, Kind, Ref, Source, S) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = verify_phase_raw(Target, GroupId, Kind, Ref, Source, S),
+    observe_stage(S, phase_verification, coordinator_result(Result),
+                  StartedNative),
+    Result.
+
+verify_phase_raw(Target = {Ns, _Anchor}, GroupId, Kind, Ref, local, S) ->
     case quod_simplex:dtx_local_evidence(Ns, Ref, Kind) of
         {ok, Evidence} -> install_phase_evidence(
                             Target, GroupId, Kind, Ref, Evidence, S);
         {error, _} -> {retry, S}
     end;
-verify_phase(Target, GroupId, Kind, Ref,
-             {remote, _PeerKey}, S = #state{config = Config}) ->
+verify_phase_raw(Target, GroupId, Kind, Ref,
+                 {remote, _PeerKey}, S = #state{config = Config}) ->
     case quod_foreign_log:verify_reference(
            Ref, Kind, Config#config.request_timeout_ms) of
         {ok, Evidence} -> install_phase_evidence(
@@ -1208,8 +1279,14 @@ applied_request(Target, GroupId, FinalizeRef, Generation, Verdict,
                               finalize_ref => FinalizeRef,
                               generation => Generation, verdict => Verdict},
                     Timeout = (S#state.config)#config.request_timeout_ms,
-                    case quod_dtx_current_view:verify_applied(
-                           S#state.owner_ns, Source, Claim, Timeout) of
+                    StartedNative = erlang:monotonic_time(),
+                    AppliedResult = quod_dtx_current_view:verify_applied(
+                                      S#state.owner_ns, Source, Claim,
+                                      Timeout),
+                    observe_stage(
+                      S, applied_verification,
+                      simple_result(AppliedResult), StartedNative),
+                    case AppliedResult of
                         {ok, #{committee_id := CommitteeId}} ->
                             put_applied(
                               {Target, CommitteeId, GroupId, FinalizeRef,
@@ -1270,14 +1347,20 @@ test_local_submit_result(Request, Result) ->
     local_submit_result(Request, Result).
 -endif.
 
-endpoint_request(local, {Ns, _Anchor}, Request,
-                 #state{config = Config}) ->
+endpoint_request(Source, Target, Request, S) ->
+    StartedNative = erlang:monotonic_time(),
+    Result = endpoint_request_raw(Source, Target, Request, S),
+    observe_stage(S, endpoint_wait, endpoint_result(Result), StartedNative),
+    Result.
+
+endpoint_request_raw(local, {Ns, _Anchor}, Request,
+                     #state{config = Config}) ->
     case quod_simplex:dtx_endpoint_local(
            Ns, Request, Config#config.request_timeout_ms) of
         {ok, Response} -> {ok, Response, local};
         {error, _} = Error -> Error
     end;
-endpoint_request({remote, PeerKey, Endpoints}, Target, Request, S) ->
+endpoint_request_raw({remote, PeerKey, Endpoints}, Target, Request, S) ->
     {TargetNs, _Anchor} = Target,
     #state{owner_ns = OwnerNs, config = Config} = S,
     Deadline = quod_time:mono_ms() + Config#config.request_timeout_ms,
@@ -1288,6 +1371,17 @@ endpoint_request({remote, PeerKey, Endpoints}, Target, Request, S) ->
         end,
     endpoint_request_candidates(
       Endpoints, PeerKey, Request, Deadline, undefined, RequestFun).
+
+coordinator_result({progress, _S, _Phase}) -> ok;
+coordinator_result({retry, _S}) -> uncertain;
+coordinator_result({fatal, _Reason, _S}) -> failed.
+
+simple_result({ok, _}) -> ok;
+simple_result({error, retry}) -> uncertain;
+simple_result({error, _}) -> failed.
+
+endpoint_result({ok, _Response, _Source}) -> ok;
+endpoint_result({error, _}) -> uncertain.
 
 endpoint_request_candidates([], _PeerKey, _Request, _Deadline,
                             undefined, _RequestFun) ->

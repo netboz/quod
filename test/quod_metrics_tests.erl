@@ -134,6 +134,41 @@ remote_operation_latency_uses_only_fixed_stage_and_result_labels_test() ->
         Placeholder ! stop
     end.
 
+dtx_and_foreign_history_latency_use_only_fixed_labels_test() ->
+    {ok, _} = application:ensure_all_started(prometheus),
+    Ns = <<"dtx:stage:metrics:",
+           (integer_to_binary(
+              erlang:unique_integer([positive])))/binary>>,
+    Placeholder = spawn(fun() -> receive stop -> ok end end),
+    true = register(quod_metrics, Placeholder),
+    try
+        ok = quod_metrics:declare(<<"kp_testnode">>),
+        OneSecond = erlang:convert_time_unit(1, second, native),
+        ok = quod_metrics:observe_dtx_group_stage(
+               Ns, prepare_wave, ok, OneSecond),
+        ok = quod_metrics:observe_foreign_history_stage(
+               cache_replay, uncertain, OneSecond),
+        ok = quod_metrics:observe_dtx_group_stage(
+               Ns, attacker_stage, ok, OneSecond),
+        ok = quod_metrics:observe_foreign_history_stage(
+               page_fetch, attacker_result, OneSecond),
+        {_, DtxSum} = prometheus_histogram:value(
+                        quod_dtx_group_stage_seconds,
+                        [Ns, <<"prepare_wave">>, <<"ok">>]),
+        {_, ForeignSum} = prometheus_histogram:value(
+                            quod_foreign_history_stage_seconds,
+                            [<<"cache_replay">>, <<"uncertain">>]),
+        ?assertEqual(1.0, DtxSum),
+        ?assertEqual(1.0, ForeignSum),
+        ?assertEqual(
+           undefined,
+           prometheus_histogram:value(
+             quod_dtx_group_stage_seconds,
+             [Ns, <<"attacker_stage">>, <<"ok">>]))
+    after
+        Placeholder ! stop
+    end.
+
 owner_lifetimes_use_only_fixed_component_phase_and_result_labels_test() ->
     {ok, _} = application:ensure_all_started(prometheus),
     Ns = <<"owner:metrics:",

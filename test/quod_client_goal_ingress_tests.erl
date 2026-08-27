@@ -424,7 +424,7 @@ await_anchored_public_cast(Engine, Remaining) ->
 is_anchored_public_cast(
   {'$gen_cast', {public_proof, _Caller, _CallRef, prove_ro, _Goal,
                  {proof_request, _TraceCtx, {agent, _AgentRef},
-                  ?ANCHOR, _RequestAuth}}}) ->
+                  ?ANCHOR, _RequestAuth, _StartedNative}}}) ->
     true;
 is_anchored_public_cast(_) ->
     false.

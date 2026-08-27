@@ -129,6 +129,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
                        timer       :: reference(),
                        token       :: reference(),
                        deadline_ms :: integer(),
+                       started_native :: integer(),
                        %% A signed operation is guarded by this worker until
                        %% its durable outcome takes over.  This is deliberately
                        %% part of the existing worker owner, not another
@@ -145,6 +146,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           caller_mref :: reference(),
           timer       :: reference(),
           group_ref   :: term(),
+          started_native :: integer(),
           %% The live caller's exact solution map. The durable outcome keeps
           %% canonical binary-name pairs for replay/public resolution, but a
           %% live completion must preserve the same result shape as ordinary
@@ -159,7 +161,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           trace_ctx       :: term(),
           principal = undefined :: term(),
           expected_anchor = any :: any | <<_:256>>,
-          request_evidence = none :: none | quod_client_goal:evidence()
+          request_evidence = none :: none | quod_client_goal:evidence(),
+          started_native = undefined :: undefined | integer()
          }).
 
 %% One engine-owned top-level run. The engine chooses the proof id, frozen
@@ -169,6 +172,7 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           engine      :: pid(),
           worker_ref  :: reference(),
           proof_id    :: <<_:256>>,
+          started_native :: integer(),
           scope_id    :: <<_:128>>,
           deadline_ms :: integer(),
           kind        :: prove | prove_ro | cursor,
@@ -1562,11 +1566,19 @@ handle_info({park_timeout, Tx}, S = #s{ns = Ns, parked = P}) ->
         error -> {noreply, S}
     end;
 handle_info({group_wait_timeout, GroupId}, S = #s{group_waiters = Waiters}) ->
+    HandoffStarted = erlang:monotonic_time(),
     case maps:take(GroupId, Waiters) of
         {#group_waiter{from = From, caller_mref = CallerMRef,
-                       group_ref = GroupRef}, Waiters1} ->
+                       group_ref = GroupRef,
+                       started_native = StartedNative}, Waiters1} ->
             demonitor(CallerMRef, [flush]),
+            quod_metrics:observe_dtx_group_stage(
+              S#s.ns, end_to_end, uncertain,
+              erlang:monotonic_time() - StartedNative),
             reply_client(From, {error, {outcome_unknown, GroupRef}}),
+            quod_metrics:observe_dtx_group_stage(
+              S#s.ns, result_handoff, uncertain,
+              erlang:monotonic_time() - HandoffStarted),
             {noreply,
              S#s{group_waiters = Waiters1,
                  park_timeouts = S#s.park_timeouts + 1}};
@@ -3912,10 +3924,12 @@ spawn_proof(Kind, Goal, From, #proof_request{} = Request,
     Engine = self(),
     Ref = make_ref(),
     ProofId = crypto:strong_rand_bytes(32),
+    StartedNative = erlang:monotonic_time(),
+    Request1 = Request#proof_request{started_native = StartedNative},
     Deadline = quod_time:mono_ms() + ProofTimeout,
     {Pid, MRef} = spawn_opt(fun() ->
         proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal,
-                     Ns, Est, Applied, Request, Signer)
+                     Ns, Est, Applied, Request1, Signer)
     end, [monitor]),
     CallerMRef = monitor(process, proof_client_pid(From)),
     Token = make_ref(),
@@ -3925,7 +3939,8 @@ spawn_proof(Kind, Goal, From, #proof_request{} = Request,
                            worker_mref = MRef, caller_mref = CallerMRef,
                            from = From, timer = KillRef, token = Token,
                            deadline_ms = Deadline,
-                           operation = proof_request_operation(Request),
+                           started_native = StartedNative,
+                           operation = proof_request_operation(Request1),
                            height = Applied},
     S#s{workers = (S#s.workers)#{Ref =>
           Worker},
@@ -3945,7 +3960,8 @@ proof_worker(Engine, Ref, ProofId, Deadline, Kind, Goal, Ns, Est,
     Result = quod_trace:with_span(
                TraceCtx, <<"quod.prolog.prove">>, internal,
                #{'quod.namespace' => Ns, 'quod.kb.height' => Applied,
-                 'quod.proof.mode' => atom_to_binary(Kind, utf8)},
+                 'quod.proof.mode' => atom_to_binary(Kind, utf8),
+                 'quod.proof.id' => quod_trace:tx_id(ProofId)},
                fun(SpanCtx) ->
                    R = run_worker(
                          Engine, Ref, Kind, ProofId, Deadline, Goal, Request,
@@ -4046,7 +4062,8 @@ target_anchor(Ns) ->
 run_pinned_origin(
   Engine, Ref, Kind, ProofId, Deadline, Ns, Applied, Anchor,
   #proof_request{principal = Principal,
-                 request_evidence = RequestEvidence}, Est, Signer, RunFun) ->
+                 request_evidence = RequestEvidence,
+                 started_native = StartedNative}, Est, Signer, RunFun) ->
     ReadOnly = Kind =:= prove_ro,
     OriginIdentity = {Ns, Anchor},
     AuthPrincipal = case Principal of
@@ -4076,7 +4093,8 @@ run_pinned_origin(
               end),
         Origin = #pinned_origin{
                     engine = Engine, worker_ref = Ref,
-                    proof_id = ProofId, scope_id = ScopeId,
+                    proof_id = ProofId, started_native = StartedNative,
+                    scope_id = ScopeId,
                     deadline_ms = Deadline, kind = Kind,
                     namespace = Ns, anchor = Anchor, height = Applied,
                     context = Context, session = Session},
@@ -4704,7 +4722,7 @@ submit_plan_encoded(
 submit_group(
   #pinned_origin{engine = Engine, worker_ref = WorkerRef,
                  proof_id = ProofId, namespace = Ns,
-                 anchor = Anchor},
+                 anchor = Anchor, started_native = StartedNative},
   Goal, Bindings, Plans, Participants) ->
     RequestAuth = quod_proof_context:request_auth(),
     RequestBinding = quod_proof_context:request_binding(),
@@ -4730,7 +4748,7 @@ submit_group(
                     build_and_register_group(
                       Engine, WorkerRef, ManifestInput,
                       Plans, ParticipantRows, Bindings,
-                      RequestAuth);
+                      RequestAuth, Ns, StartedNative);
                 {ok, _WrongBinding} ->
                     {error, {protocol_error, coordinator_binding}};
                 {error, _} = Error ->
@@ -4751,7 +4769,7 @@ encode_proof_submission(Goal, Bindings) ->
 
 build_and_register_group(
   Engine, WorkerRef, ManifestInput, Plans, ParticipantRows, Bindings,
-  RequestAuth) ->
+  RequestAuth, Ns, StartedNative) ->
     case quod_dtx:new_manifest(ManifestInput) of
         {ok, Manifest} ->
             case attest_group_plans(
@@ -4761,16 +4779,18 @@ build_and_register_group(
                         {ok, Begin} ->
                             case quod_dtx:begin_group_ref(Begin) of
                                 {ok, GroupRef} ->
-                                    case gen_server:call(
-                                           Engine,
-                                           {reserve_dtx_begin, WorkerRef,
-                                            Begin, GroupRef}, infinity) of
-                                        ok ->
-                                            finish_reserved_group(
-                                              Engine, WorkerRef, GroupRef,
-                                              Plans, Bindings);
-                                        {error, _} = Error -> Error
-                                    end;
+                                    trace_dtx_group(GroupRef),
+                                    %% Everything through the immutable Begin
+                                    %% is now sealed. Admission starts inside
+                                    %% the following call, so these two timing
+                                    %% owners neither leave a gap nor overlap.
+                                    quod_metrics:observe_dtx_group_stage(
+                                      Ns, proof_seal, ok,
+                                      erlang:monotonic_time() -
+                                        StartedNative),
+                                    admit_group(
+                                      Engine, WorkerRef, Begin, GroupRef,
+                                      Plans, Bindings, Ns);
                                 error ->
                                     {error, invalid_begin}
                             end;
@@ -4781,6 +4801,32 @@ build_and_register_group(
         {error, _} = Error ->
             Error
     end.
+
+admit_group(Engine, WorkerRef, Begin, GroupRef, Plans, Bindings, Ns) ->
+    StartedNative = erlang:monotonic_time(),
+    Result =
+        case gen_server:call(
+               Engine,
+               {reserve_dtx_begin, WorkerRef, Begin, GroupRef}, infinity) of
+            ok ->
+                finish_reserved_group(
+                  Engine, WorkerRef, GroupRef, Plans, Bindings);
+            {error, _} = Error -> Error
+        end,
+    quod_metrics:observe_dtx_group_stage(
+      Ns, admission, admission_result(Result),
+      erlang:monotonic_time() - StartedNative),
+    Result.
+
+admission_result({group_pending, _Bindings, _GroupRef}) -> ok;
+admission_result({error, _}) -> failed.
+
+trace_dtx_group(
+  {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}) ->
+    _ = quod_trace:add_event(
+          quod_trace:context(), <<"dtx.group_reserved">>,
+          #{'quod.dtx.group_id' => quod_trace:tx_id(GroupId)}),
+    ok.
 
 finish_reserved_group(Engine, WorkerRef, GroupRef, Plans, Bindings) ->
     case bind_group_effect_plans(Plans, GroupRef) of
@@ -5007,7 +5053,8 @@ retain_group_waiter(
         {{#proof_worker{checkpoint = GroupRef,
                         worker_mref = WorkerMRef,
                         caller_mref = CallerMRef,
-                        from = From, timer = ProofTimer}, Waiting1}, false}
+                        from = From, timer = ProofTimer} = Worker,
+          Waiting1}, false}
           when map_size(GroupWaiters) < Max ->
             _ = erlang:cancel_timer(ProofTimer),
             demonitor(WorkerMRef, [flush]),
@@ -5016,6 +5063,7 @@ retain_group_waiter(
             Waiter = #group_waiter{
                 from = From, caller_mref = CallerMRef,
                 timer = Timer, group_ref = GroupRef,
+                started_native = Worker#proof_worker.started_native,
                 bindings = Bindings},
             S1 = S#s{waiting_workers = Waiting1,
                      group_waiters = GroupWaiters#{GroupId => Waiter}},
@@ -5024,9 +5072,17 @@ retain_group_waiter(
             %% cannot strand a waiter until its deadline.
             release_group_waiter(GroupRef, S1);
         {{Worker, Waiting1}, _} ->
+            HandoffStarted = erlang:monotonic_time(),
             {_Reply, _Height} = proof_worker_reply(Worker),
+            quod_metrics:observe_dtx_group_stage(
+              S#s.ns, end_to_end, uncertain,
+              erlang:monotonic_time() -
+                Worker#proof_worker.started_native),
             reply_client(Worker#proof_worker.from,
                          {error, {outcome_unknown, GroupRef}}),
+            quod_metrics:observe_dtx_group_stage(
+              S#s.ns, result_handoff, uncertain,
+              erlang:monotonic_time() - HandoffStarted),
             S#s{waiting_workers = Waiting1};
         {error, _} ->
             S
@@ -6131,8 +6187,13 @@ release_group_waiter_by_id(GroupId, S = #s{group_waiters = Waiters}) ->
     end.
 
 release_group_waiter(
+  GroupRef, S) ->
+    release_group_waiter(GroupRef, erlang:monotonic_time(), S).
+
+release_group_waiter(
   {group, _Ns, _Anchor, _Coordinator, _Admission, <<_:256>> = GroupId}
     = GroupRef,
+  HandoffStarted,
   S = #s{group_waiters = Waiters, outcomes = Outcomes0}) ->
     case maps:get(GroupId, Waiters, undefined) of
         #group_waiter{group_ref = GroupRef,
@@ -6149,10 +6210,12 @@ release_group_waiter(
                               {ok, [LiveBindings],
                                #{ref => GroupRef, height => Height,
                                  participant_slots => Slots}},
+                              HandoffStarted,
                               S#s{outcomes = Outcomes1});
                         {ok, #{status := aborted, reasons := Reasons}} ->
                             finish_group_waiter(
                               GroupId, Waiter, {fail, Reasons},
+                              HandoffStarted,
                               S#s{outcomes = Outcomes1});
                         {ok, #{status := pending}} ->
                             S#s{outcomes = Outcomes1};
@@ -6162,6 +6225,7 @@ release_group_waiter(
                 {not_found, Outcomes1} ->
                     resolve_absent_group_waiter(
                       GroupId, GroupRef, Waiter,
+                      HandoffStarted,
                       S#s{outcomes = Outcomes1});
                 {wrong_anchor, _Outcomes1} ->
                     error({outcome_index_unavailable, wrong_anchor});
@@ -6171,33 +6235,46 @@ release_group_waiter(
         _ ->
             S
     end;
-release_group_waiter(_BadRef, S) ->
+release_group_waiter(_BadRef, _HandoffStarted, S) ->
     S.
 
 resolve_absent_group_waiter(
-  GroupId, GroupRef, Waiter,
+  GroupId, GroupRef, Waiter, HandoffStarted,
   S = #s{ns = Ns, applied = AppliedFloor}) ->
     case quod_simplex:dtx_group_barrier(Ns, GroupRef, AppliedFloor) of
         {ok, pending} ->
             S;
         {ok, not_found} ->
             finish_group_waiter(
-              GroupId, Waiter, {error, not_found}, S);
+              GroupId, Waiter, {error, not_found}, HandoffStarted, S);
         {ok, {rejected, coordinator_retired}} ->
             finish_group_waiter(
-              GroupId, Waiter, {error, coordinator_retired}, S);
+              GroupId, Waiter, {error, coordinator_retired},
+              HandoffStarted, S);
         {error, _UnavailableOrUnknown} ->
             S
     end.
 
 finish_group_waiter(
   GroupId,
-  #group_waiter{from = From, caller_mref = CallerMRef, timer = Timer},
-  Result, S = #s{group_waiters = Waiters}) ->
+  #group_waiter{from = From, caller_mref = CallerMRef, timer = Timer,
+                started_native = StartedNative},
+  Result, HandoffStarted, S = #s{group_waiters = Waiters}) ->
     _ = erlang:cancel_timer(Timer),
     demonitor(CallerMRef, [flush]),
+    ResultLabel = dtx_waiter_result(Result),
+    quod_metrics:observe_dtx_group_stage(
+      S#s.ns, end_to_end, ResultLabel,
+      erlang:monotonic_time() - StartedNative),
     reply_client(From, Result),
+    quod_metrics:observe_dtx_group_stage(
+      S#s.ns, result_handoff, ResultLabel,
+      erlang:monotonic_time() - HandoffStarted),
     S#s{group_waiters = maps:remove(GroupId, Waiters)}.
+
+dtx_waiter_result({ok, _Solutions, _Handle}) -> ok;
+dtx_waiter_result({error, _}) -> failed;
+dtx_waiter_result({fail, _}) -> rejected.
 
 -ifdef(TEST).
 test_release_absent_group_waiter(
@@ -6212,7 +6289,8 @@ test_release_absent_group_waiter(
     Waiter = #group_waiter{
                 from = {async, self(), CallRef},
                 caller_mref = CallerMRef, timer = Timer,
-                group_ref = GroupRef, bindings = #{}},
+                group_ref = GroupRef,
+                started_native = erlang:monotonic_time(), bindings = #{}},
     S0 = #s{ns = Ns, outcomes = Outcomes,
             applied = quod_outcome:applied_floor(Outcomes),
             group_waiters = #{GroupId => Waiter}},

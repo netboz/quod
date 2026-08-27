@@ -3,11 +3,6 @@
 -include_lib("eunit/include/eunit.hrl").
 -include("quod_proof_limits.hrl").
 
-aggregate_applied_probe_bound_matches_endpoint_capacity_test() ->
-    ?assertEqual(
-       ?QUOD_MAX_DTX_PARTICIPANTS * ?MAX_VALIDATORS,
-       ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS).
-
 thresholds_are_f_plus_one_at_every_committee_boundary_test() ->
     ?assertEqual(
        [{1, 1}, {4, 2}, {7, 3}, {64, 22}],

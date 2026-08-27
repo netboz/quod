@@ -92,8 +92,6 @@ channel(Namespace) when is_binary(Namespace), byte_size(Namespace) > 0 ->
 -spec limits() -> map().
 limits() ->
     #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
-      max_correlations => ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
-      max_workers => ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
       worker_timeout_ms => ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS}.
 
 %% ------------------------------------------------------------------
@@ -397,7 +395,7 @@ valid_binding_names(_, _) -> false.
 valid_participant_slots(Slots) ->
     valid_participant_slots(Slots, none, 0).
 
-valid_participant_slots([], _Previous, Count) -> Count >= 2;
+valid_participant_slots([], _Previous, Count) -> Count >= 1;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Identity),

@@ -339,7 +339,7 @@ looks complete. The final distributed-proof catalog is normative in
 | `{error, {proof_limit_exceeded, Ns}}` | the selected worker exceeded a generated-state or heap bound |
 | `{error, {scope_expired, Ns}}` | the bounded target scope expired while idle |
 | `{error, {proof_depth_exceeded, Max}}` | active nested selection depth is exhausted |
-| `{error, {scope_limit_exceeded, Max}}` | the proof or peer has exhausted its distinct-scope bound |
+| `{error, {scope_limit_exceeded, Max}}` | one proof has exhausted its distinct-scope shape bound |
 | `{error, {savepoint_limit_exceeded, Max}}` | distributed transaction generations are exhausted before mutation |
 | `{error, {too_many_answers, Ns}}` | one invocation exceeded its answer cap |
 | `{error, {too_large, Kind}}` | a named goal, answer, reason, error, or envelope size cap failed |
@@ -370,8 +370,12 @@ automatic retry after the target may have executed.
 | one scope worker heap | 64 MiB | `{proof_limit_exceeded, Ns}` |
 | scope lifetime / active command | 60 s / 30 s by default, configurable | typed timeout and scope cleanup |
 | concurrent scope workers per ontology | 64 by default, configurable | `{ontology_busy, Ns}` |
-| active remote scopes per authenticated peer | 16 | `{scope_limit_exceeded, 16}` |
-| origin router scopes global / per owner / per peer | 512 / 8 / 16 | bounded refusal before registration |
+| origin router scopes per proof owner | 8 | proof-shape refusal before registration |
+
+Remote scopes have exact link, request, proof-owner, monitor, and deadline
+ownership. There is no separate node-wide or authenticated-peer population
+quota; the ontology's configured derivation-worker policy remains the explicit
+aggregate memory admission owner.
 
 `include/quod_proof_limits.hrl` is the one source for shared producer/decoder/test constants;
 schema owns the three configurable worker/deadline values. The larger aggregate transcript,
@@ -444,15 +448,16 @@ The implementation contract, bounds, failure semantics and acceptance tests are 
 
 ### Remote-proof load test
 
-`scripts/cross-ontology-loadtest.sh` measures the remote `::` path. It submits
-a configured target-local goal through a source ontology and requires that the
-target namespace is *not* co-hosted by that source endpoint. A successful result
-therefore exercises directory resolution, the key-pinned dial, and streamed
-answers rather than the local fast path. It needs an already-configured
-two-ontology fleet:
+`scripts/signed-goal-loadtest.sh` is the one signed benchmark driver. Without
+`--target-ns` it measures a goal in its signed source ontology; with
+`--target-ns` it measures the remote `::` path. A remote run requires that the
+target namespace is *not* co-hosted by its source endpoint, so a success
+exercises directory resolution, the key-pinned dial, and streamed answers
+rather than the local fast path. It needs an already-configured two-ontology
+fleet:
 
 ```sh
-scripts/cross-ontology-loadtest.sh \
+scripts/signed-goal-loadtest.sh \
   --source-endpoints https://source-host:14569 \
   --source-explorer-endpoints http://source-host:14568 \
   --source-ns quod:bench_source --target-ns quod:bench_target \
@@ -501,26 +506,32 @@ scripts/loadtest.sh --duration 300 --inter-ontology 1 \
 
 For a remote durable-write fixture, use for example
 `--inter-mode execute --inter-goal 'dtx_chain(__QUOD_REQUEST_ID__)'`. The
-driver creates an ephemeral Ed25519 user key and uses the same challenge and
-signed-goal request code as the browser. A development self-signed certificate
-requires the explicit `--insecure-tls` / `--inter-insecure-tls 1` flag. The
-configured number of operations must fit inside the selected chaos window; an
-unfinished remote workload fails the run rather than continuing after the
-local workload ends.
+driver uses the supplied agent's encrypted browser-key export and the same
+challenge and signed-goal request code as the browser. A development
+self-signed certificate requires the explicit `--insecure-tls` /
+`--inter-insecure-tls 1` flag. The configured number of operations must fit
+inside the selected chaos window; an unfinished remote workload fails the run
+rather than continuing after the local workload ends.
 
 The Nomad job exposes an opt-in two-host demo topology. It is disabled by
 default and leaves quod:root unchanged. Before enabling it, obtain the
 selected existing allocations' persistent keys from their `/api/summary`
 (`.node.pubkey`). Set `directory_node_keys` and the exact
-`cross_ontology_source_node_keys` / `cross_ontology_target_node_keys`
-allowlists, then enable `cross_ontology_enabled` with distinct source and
-target allocation indexes. The existing root ledger supplies the control peer
-keys through `directory_control_peer/1`; the root content seeds recover their
-current endpoints after a port rollover, and pinned control links disseminate the two
-new routes. There is no `directory_bootstraps` option or compatibility
-fallback. After the rolling deployment, pass the source allocation explorer
-endpoint to the script above. The two single-host demo ontologies are a
-directory/ask benchmark, not a second consensus benchmark.
+`directory_public_namespaces` entries for the source and target, then enable
+`cross_ontology_enabled` with distinct source and target allocation indexes.
+The existing root ledger supplies the control peer keys through
+`directory_control_peer/1`; pinned control links disseminate the hosts' current
+endpoints after a port rollover. There is no `directory_bootstraps` option or
+compatibility fallback. After the rolling deployment, pass the source
+allocation explorer endpoint to the script above. The two single-host demo
+ontologies are a directory/ask benchmark, not a second consensus benchmark.
+
+For any existing ontology, add one exact `directory_public_namespaces` entry:
+its namespace and the public keys of hosts allowed to advertise it. The target
+host publishes its own current endpoint through the existing directory-control
+links, so dynamic p2p-port changes do not leave a configured stale address.
+This writes neither ledger facts nor ACLs. Removing that entry and redeploying
+removes the directory route.
 
 ## 11. Non-goals — deliberately NOT in this milestone
 

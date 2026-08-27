@@ -36,11 +36,9 @@
 -define(QUOD_CLIENT_GOAL_MAX_ENVELOPE_BYTES,
         (?QUOD_CLIENT_GOAL_MAX_REPLY_BYTES + (16 * 1024))).
 
-%% Node-wide signed-goal routing owns only volatile correlations/workers.  The
-%% target proof engine and cursor owner retain their existing independent caps.
--define(QUOD_CLIENT_GOAL_MAX_CORRELATIONS, 256).
--define(QUOD_CLIENT_GOAL_MAX_INBOUND_WORKERS, 64).
--define(QUOD_CLIENT_GOAL_MAX_INBOUND_PER_FORWARDER, 8).
+%% Node-wide signed-goal routing owns only volatile, exactly monitored
+%% correlations/workers. Population is not an admission policy; byte, term,
+%% deadline and VM-safety bounds remain at the untrusted boundary.
 -define(QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS, 60000).
 -define(QUOD_CLIENT_GOAL_REQUEST_ID_BITS, 128).
 

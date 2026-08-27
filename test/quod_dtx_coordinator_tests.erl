@@ -403,6 +403,31 @@ invalid_begin_allocates_no_worker_test() ->
        quod_dtx_coordinator:start_monitor(
          self(), <<"quod:a">>, malformed, none, #{})).
 
+one_participant_begin_allocates_the_ordinary_coordinator_test() ->
+    with_fixture(
+      fun(F) ->
+          {ok, Pid, Monitor} = quod_dtx_coordinator:start_monitor(
+                                 self(), element(1, maps:get(origin, F)),
+                                 maps:get(single_begin, F), none,
+                                 #{retry_initial_ms => 1,
+                                   retry_max_ms => 2}),
+          exit(Pid, kill),
+          receive
+              {'DOWN', Monitor, process, Pid, killed} -> ok
+          after 1000 -> error(single_participant_coordinator_leaked)
+          end,
+          {quod_dtx_begin, Version, Manifest, RequestAuth, _Bundles} =
+              maps:get(single_begin, F),
+          EmptyBegin =
+              {quod_dtx_begin, Version, setelement(12, Manifest, []),
+               RequestAuth, []},
+          ?assertEqual(
+             {error, invalid_begin},
+             quod_dtx_coordinator:start_monitor(
+               self(), element(1, maps:get(origin, F)), EmptyBegin,
+               none, #{}))
+      end).
+
 %% ------------------------------------------------------------------
 %% Exact two-participant Begin fixture
 %% ------------------------------------------------------------------
@@ -440,8 +465,25 @@ fixture(#{pubkey := Pub} = Signer) ->
           Manifest, none,
           [{Origin, quod_dtx:digest(PlanA), PlanABlob, AttA},
            {Other, quod_dtx:digest(PlanB), PlanBBlob, AttB}]),
+    {ok, SingleManifest} =
+        quod_dtx:new_manifest(
+          #{proof_id => ProofId,
+            coordinator =>
+                {element(1, Origin), element(2, Origin), Pub, Admission},
+            nonce => digest(16), principal => anonymous,
+            goal => GoalBlob, result => ResultBlob,
+            request_binding => none,
+            participants => [{Other, quod_dtx:digest(PlanB)}]}),
+    {ok, SingleAttestation} =
+        quod_dtx:attest_plan(Other, PlanB, SingleManifest, Signer),
+    {ok, SingleBegin} =
+        quod_dtx:new_begin(
+          SingleManifest, none,
+          [{Other, quod_dtx:digest(PlanB), PlanBBlob,
+            SingleAttestation}]),
     #{signer => Signer, admission => Admission,
-      origin => Origin, targets => Targets, 'begin' => Begin}.
+      origin => Origin, targets => Targets, 'begin' => Begin,
+      single_begin => SingleBegin}.
 
 plan(Target = {Ns, _Anchor}, ProofId, Origin, Signer, Value) ->
     Session = quod_proof_session:start(

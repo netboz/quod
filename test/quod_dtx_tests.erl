@@ -161,7 +161,8 @@ signed_origin_scope_seals_operation_claim_without_database_diff_test() ->
         ?assertEqual(Binding, quod_dtx:request_binding(Plan)),
         ?assertEqual([], quod_dtx:diff(Plan)),
         ?assertEqual(#{}, quod_dtx:read_check(Plan)),
-        ?assert(quod_dtx:participates(Plan))
+        ?assert(quod_dtx:participates(Plan)),
+        ?assertNot(quod_dtx:material_participant(Plan))
     after
         quod_proof_session:stop(Session)
     end.

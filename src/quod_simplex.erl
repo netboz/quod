@@ -218,6 +218,8 @@ residual simultaneous final-vote split above, is tracked in `doc/deferred.md`.
          test_dtx_outbound_message/4,
          test_seed_dtx_correlation/5,
          test_dtx_endpoint_result/3,
+         test_waiting_applied_key/2,
+         test_wake_dtx_applied_workers/2,
          test_seed_dtx_worker/5,
          test_finish_dtx_worker/3,
          test_drop_dtx_endpoint_owner/3,
@@ -1566,6 +1568,10 @@ test_seed_dtx_correlation(TargetNs, Peer, Request, From,
     put_dtx_correlation(RequestId, Correlation, S).
 test_dtx_endpoint_result(Request, Result, S) ->
     dtx_endpoint_result_response(Request, Result, S).
+test_waiting_applied_key(Request, Result) ->
+    waiting_applied_key(Request, Result).
+test_wake_dtx_applied_workers(Event, #s{dtx_workers = Workers}) ->
+    wake_dtx_applied_workers(Event, Workers).
 test_seed_dtx_worker(Pid, Peer, Request, Destination,
                      S = #s{dtx_workers = Workers}) ->
     Monitor = erlang:monitor(process, Pid),
@@ -3119,6 +3125,8 @@ running_impl(
         {ok, Projection1} ->
             S1 = refresh_proof_gate(
                    S0, S0#s{dtx_projection = Projection1}),
+            wake_dtx_applied_workers(
+              {GroupId, Slot, Generation}, S1#s.dtx_workers),
             keep_progress(S0, S1, []);
         {error, stale_finalize_ack} ->
             {keep_state, S0}
@@ -4007,11 +4015,9 @@ start_dtx_endpoint_request(
         quod_quic:valid_endpoint(Endpoint) andalso
         is_integer(TimeoutMs) andalso TimeoutMs > 0 andalso
         RequestId =/= error,
-    case {Checks, map_size(Correlations) <
-                  ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
-          maps:is_key(RequestId, Correlations),
+    case {Checks, maps:is_key(RequestId, Correlations),
           quod_dtx_endpoint:encode_request(TargetNs, Request)} of
-        {true, true, false, {ok, Frame}} ->
+        {true, false, {ok, Frame}} ->
             CallerMRef = erlang:monitor(process, element(1, From)),
             TimeoutTag = make_ref(),
             Timer = erlang:send_after(
@@ -4027,13 +4033,11 @@ start_dtx_endpoint_request(
             quod_quic:send_pinned(
               PeerKey, Endpoint, quod_dtx_endpoint:channel(TargetNs), Frame),
             {ok, S1};
-        {false, _, _, _} ->
+        {false, _, _} ->
             {error, invalid_request};
-        {_, false, _, _} ->
+        {_, true, _} ->
             {error, busy};
-        {_, _, true, _} ->
-            {error, busy};
-        {_, _, _, {error, _}} ->
+        {_, _, {error, _}} ->
             {error, invalid_request}
     end.
 
@@ -4182,21 +4186,16 @@ admit_dtx_endpoint_worker(
     Peer = endpoint_peer(PeerIdentity),
     RequestId = quod_dtx_endpoint:request_id(Request),
     case {dtx_endpoint_operation_ready(Request, S),
-          map_size(Workers) < ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
           dtx_worker_pending(Peer, RequestId, Workers)} of
-        {false, _, _} ->
+        {false, _} ->
             send_dtx_endpoint_response(
               InLink, {error, RequestId, not_ready}, S),
             {S, []};
-        {true, false, _} ->
+        {true, true} ->
             send_dtx_endpoint_response(
               InLink, {error, RequestId, busy}, S),
             {S, []};
-        {true, true, true} ->
-            send_dtx_endpoint_response(
-              InLink, {error, RequestId, busy}, S),
-            {S, []};
-        {true, true, false} ->
+        {true, false} ->
             case start_dtx_endpoint_operation(
                    PeerIdentity, {link, InLink}, Request,
                    ?QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, S) of
@@ -4212,19 +4211,16 @@ admit_dtx_endpoint_worker(
 start_local_dtx_endpoint_request(
   Request, TimeoutMs, From, S = #s{ns = Ns, dtx_workers = Workers}) ->
     case {dtx_endpoint_operation_ready(Request, S),
-          map_size(Workers) < ?QUOD_DTX_ENDPOINT_MAX_WORKERS,
           quod_dtx_endpoint:encode_request(Ns, Request),
           dtx_worker_pending(
             local, quod_dtx_endpoint:request_id(Request), Workers)} of
-        {false, _, _, _} ->
+        {false, _, _} ->
             {error, not_ready};
-        {true, false, _, _} ->
-            {error, busy};
-        {true, true, {error, _}, _} ->
+        {true, {error, _}, _} ->
             {error, invalid_request};
-        {true, true, {ok, _CanonicalFrame}, true} ->
+        {true, {ok, _CanonicalFrame}, true} ->
             {error, busy};
-        {true, true, {ok, _CanonicalFrame}, false} ->
+        {true, {ok, _CanonicalFrame}, false} ->
             start_dtx_endpoint_operation(
               local, {caller, From}, Request, TimeoutMs, S)
     end.
@@ -4238,8 +4234,8 @@ start_dtx_endpoint_operation(Peer, Destination, Request, TimeoutMs, S) ->
     {ok, start_dtx_server_worker(
            Peer, Destination, Request, TimeoutMs, S)}.
 
-%% Decode and retain a submit in the owning statem turn.  The bounded helper
-%% process owns only the caller deadline; it never calls back into Simplex.
+%% Decode and retain a submit in the owning statem turn.  The helper process
+%% owns only the caller deadline; it never calls back into Simplex.
 %% Consequently a later phase query cannot overtake submit admission and see
 %% a false absence while the semantic record is already in flight.
 start_dtx_submit_owner(
@@ -4303,10 +4299,9 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
     OwnerMRef = dtx_worker_owner_monitor(Destination),
     {Pid, Monitor} = spawn_monitor(
                        fun() ->
-                           Result = execute_dtx_endpoint_request(
-                                      Ns, Request, TimeoutMs),
-                           Parent ! {dtx_endpoint_worker_result,
-                                     self(), Result}
+                           run_dtx_endpoint_worker(
+                             Parent, Ns, Request,
+                             quod_time:mono_ms() + TimeoutMs)
                        end),
     Worker = #dtx_server_worker{
                pid = Pid, monitor = Monitor, owner_mref = OwnerMRef,
@@ -4314,6 +4309,70 @@ start_dtx_server_worker(PeerIdentity, Destination, Request, TimeoutMs,
                request = Request, destination = Destination,
                started_at = quod_time:mono_ms()},
     S#s{dtx_workers = Workers#{Pid => Worker}}.
+
+run_dtx_endpoint_worker(Parent, Ns, Request, Deadline) ->
+    Remaining = max(1, Deadline - quod_time:mono_ms()),
+    Result = execute_dtx_endpoint_request(Ns, Request, Remaining),
+    case waiting_applied_key(Request, Result) of
+        {wait, Key} ->
+            Remaining1 = max(0, Deadline - quod_time:mono_ms()),
+            receive
+                {dtx_finalize_applied, Key} ->
+                    run_dtx_endpoint_worker(Parent, Ns, Request, Deadline)
+            after Remaining1 ->
+                Parent ! {dtx_endpoint_worker_result,
+                          self(), {error, timeout}}
+            end;
+        ready ->
+            Parent ! {dtx_endpoint_worker_result, self(), Result}
+    end.
+
+waiting_applied_key(
+  {applied, _RequestId, GroupId, FinalizeRef, Generation, Verdict},
+  {applied_state,
+   #{identity := TargetIdentity, phase := finalize, control := Control},
+   #{applied := Applied}}) ->
+    case Applied of
+        #{finalize_ref := FinalizeRef, generation := Generation,
+          verdict := Verdict} ->
+            ready;
+        _ ->
+            case {quod_dtx:certified_ref_binding(FinalizeRef),
+                  quod_dtx:record_digest(Control),
+                  quod_dtx:control_kind(Control),
+                  quod_dtx:group_id(Control),
+                  quod_dtx:recovery_phase(quod_dtx:control_body(Control))} of
+                {{ok, TargetIdentity, _Slot, Digest}, Digest,
+                 finalize, GroupId,
+                 {ok, #{kind := finalize, verdict := Verdict,
+                        generation := Generation}}} ->
+                    {wait, {GroupId, FinalizeRef, Generation, Verdict}};
+                _ ->
+                    ready
+            end
+    end;
+waiting_applied_key(_Request, _Result) ->
+    ready.
+
+wake_dtx_applied_workers(
+  {ExpectedGroupId, Slot, ExpectedGeneration}, Workers) ->
+    maps:foreach(
+      fun(Pid,
+          #dtx_server_worker{
+            request = {applied, _RequestId, GroupId, FinalizeRef,
+                       Generation, Verdict}})
+            when GroupId =:= ExpectedGroupId,
+                 Generation =:= ExpectedGeneration ->
+              case quod_dtx:certified_ref_binding(FinalizeRef) of
+                  {ok, _Target, Slot, _Digest} ->
+                      Pid ! {dtx_finalize_applied,
+                             {GroupId, FinalizeRef, Generation, Verdict}};
+                  _ ->
+                      ok
+              end;
+         (_Pid, _Worker) ->
+              ok
+      end, Workers).
 
 dtx_worker_owner_monitor({caller, {Caller, _Tag}}) when is_pid(Caller) ->
     erlang:monitor(process, Caller);

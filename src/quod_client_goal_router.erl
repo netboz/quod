@@ -1,6 +1,6 @@
 -module(quod_client_goal_router).
 -moduledoc """
-Bounded node-to-node transport owner for signed client goals.
+Node-to-node transport owner for signed client goals.
 
 This process owns only the fixed channel, exact peer/link/request
 correlations, short-lived workers, and volatile remote cursor routes.  Signed
@@ -261,32 +261,30 @@ validate_submit(Route, Owner, CursorBinding, ExpiresMs, TimeoutMs,
     case {valid_route(Route), valid_owner(Owner),
           valid_deadline(ExpiresMs), valid_timeout(TimeoutMs),
           quod_client_goal_endpoint:encode_request(Request),
-          admit_correlation(S), admit_route(RouteKey, S)} of
-        {true, true, true, true, {ok, Frame}, ok, ok} ->
+          admit_route(RouteKey, S)} of
+        {true, true, true, true, {ok, Frame}, ok} ->
             {ok, maps:get(node_key, Route), maps:get(endpoint, Route),
              RouteKey, Frame};
-        {_, _, _, _, {error, _}, _, _} -> {error, invalid_request};
-        {false, _, _, _, _, _, _} -> {error, invalid_request};
-        {_, false, _, _, _, _, _} -> {error, invalid_request};
-        {_, _, false, _, _, _, _} -> {error, invalid_request};
-        {_, _, _, false, _, _, _} -> {error, invalid_request};
-        {_, _, _, _, _, {error, _} = Error, _} -> Error;
-        {_, _, _, _, _, _, {error, _} = Error} -> Error
+        {_, _, _, _, {error, _}, _} -> {error, invalid_request};
+        {false, _, _, _, _, _} -> {error, invalid_request};
+        {_, false, _, _, _, _} -> {error, invalid_request};
+        {_, _, false, _, _, _} -> {error, invalid_request};
+        {_, _, _, false, _, _} -> {error, invalid_request};
+        {_, _, _, _, _, {error, _} = Error} -> Error
     end.
 
 validate_cursor_request(RouteKey, Command, TimeoutMs, S) ->
     Request = {cursor, request_id(), element(2, RouteKey), Command},
     case {valid_timeout(TimeoutMs),
           quod_client_goal_endpoint:encode_request(Request),
-          admit_correlation(S), maps:get(RouteKey, S#s.routes, undefined)} of
-        {true, {ok, Frame}, ok,
+          maps:get(RouteKey, S#s.routes, undefined)} of
+        {true, {ok, Frame},
          #{state := active, busy := none, link := Link} = Route}
           when is_pid(Link) -> {ok, Route, Request, Frame};
-        {true, {ok, _}, ok, #{state := active}} -> {error, busy};
-        {true, {ok, _}, ok, _} -> {error, not_found};
-        {_, {error, _}, _, _} -> {error, invalid_request};
-        {false, _, _, _} -> {error, invalid_request};
-        {_, _, {error, _} = Error, _} -> Error
+        {true, {ok, _}, #{state := active}} -> {error, busy};
+        {true, {ok, _}, _} -> {error, not_found};
+        {_, {error, _}, _} -> {error, invalid_request};
+        {false, _, _} -> {error, invalid_request}
     end.
 
 valid_route(#{node_key := <<_:256>>, endpoint := Endpoint}) ->
@@ -301,17 +299,11 @@ valid_timeout(Value) ->
     is_integer(Value) andalso Value > 0 andalso
         Value =< ?QUOD_CLIENT_GOAL_ROUTER_TIMEOUT_MS.
 
-admit_correlation(#s{correlations = Correlations})
-  when map_size(Correlations) < ?QUOD_CLIENT_GOAL_MAX_CORRELATIONS -> ok;
-admit_correlation(_S) -> {error, busy}.
-
 admit_route(none, _S) -> ok;
 admit_route(Key, #s{routes = Routes}) ->
-    case {maps:is_key(Key, Routes),
-          map_size(Routes) < ?QUOD_CLIENT_GOAL_MAX_CORRELATIONS} of
-        {false, true} -> ok;
-        {true, _} -> {error, busy};
-        {_, false} -> {error, busy}
+    case maps:is_key(Key, Routes) of
+        false -> ok;
+        true -> {error, busy}
     end.
 
 reserve_route(none, _Worker, _ExpiresMs, _Evidence, Routes) -> Routes;
@@ -454,34 +446,18 @@ route_response(Peer, Link, Payload, Response, S) ->
 route_request(Peer, Link, Payload, S0) ->
     case quod_client_goal_endpoint:route_request(Payload) of
         {ok, Request} ->
-            case admit_inbound(Peer, S0#s.inbound) of
-                true ->
-                    {Worker, MRef} = spawn_monitor(
-                                       fun() ->
-                                           inbound_worker(
-                                             Peer, Link, Request)
-                                       end),
-                    track_owner_peaks(S0#s{inbound =
-                              (S0#s.inbound)#{Worker =>
-                                                  #{mref => MRef,
-                                                    peer => Peer,
-                                                    started_at =>
-                                                        quod_time:mono_ms()}}});
-                false ->
-                    send_response(
-                      Link,
-                      {refused,
-                       quod_client_goal_endpoint:request_id(Request), busy}),
-                    S0
-            end;
+            {Worker, MRef} = spawn_monitor(
+                               fun() ->
+                                   inbound_worker(Peer, Link, Request)
+                               end),
+            track_owner_peaks(S0#s{inbound =
+                      (S0#s.inbound)#{Worker =>
+                                          #{mref => MRef,
+                                            peer => Peer,
+                                            started_at =>
+                                                quod_time:mono_ms()}}});
         {error, _} -> S0
     end.
-
-admit_inbound(Peer, Inbound) ->
-    map_size(Inbound) < ?QUOD_CLIENT_GOAL_MAX_INBOUND_WORKERS andalso
-        length([ok || #{peer := Existing} <- maps:values(Inbound),
-                      Existing =:= Peer]) <
-            ?QUOD_CLIENT_GOAL_MAX_INBOUND_PER_FORWARDER.
 
 inbound_worker(Peer, Link, Request) ->
     %% The router already canonical-decoded and bounded the envelope.  The

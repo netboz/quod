@@ -77,6 +77,7 @@ owner death terminates the worker.
        quod_dtx:certified_ref(), term()} |
       {submission, {binary(), <<_:256>>}, <<_:256>>,
        'begin' | prepare | decision | finalize | complete},
+    follows = #{} :: #{{binary(), <<_:256>>} => reference()},
     commands = [] :: [quod_dtx_recovery:command()],
     retry_ms :: pos_integer(),
     retry_timer = none :: none | {reference(), reference()},
@@ -114,7 +115,7 @@ initial_state(Owner, OwnerNs, Begin, BeginEvidence, Options) ->
         {{ok, Config},
          {ok, {OwnerNs, <<_:256>>} = Origin, <<_:256>> = GroupId, Rows},
          {ok, {group, OwnerNs, _Anchor, _Coordinator, _Admission, GroupId}}}
-          when length(Rows) >= 2,
+          when length(Rows) >= 1,
                length(Rows) =< ?QUOD_MAX_DTX_PARTICIPANTS ->
             seed_begin_evidence(
               BeginEvidence,
@@ -191,6 +192,21 @@ handle_loop_message({retry, Tag}, S) ->
             loop(S)
     end;
 handle_loop_message(
+  {quod_foreign_follow, FollowRef, NoticeRef, Identity, Notice},
+  S = #state{follows = Follows}) ->
+    case maps:get(Identity, Follows, undefined) of
+        FollowRef ->
+            ok = quod_foreign_log:ack(FollowRef, NoticeRef),
+            case Notice of
+                {advanced, _, _, _, _, _, _} -> self() ! drive;
+                {resnapshot, _, _, _} -> self() ! drive;
+                _ -> ok
+            end,
+            loop(S);
+        _ ->
+            loop(S)
+    end;
+handle_loop_message(
   {'DOWN', Monitor, process, Owner, _Reason},
   #state{owner_monitor = Monitor, owner = Owner}) ->
     ok;
@@ -211,7 +227,7 @@ drive(S = #state{pending_phase =
              reset_backoff(
                S1#state{pending_phase = none, commands = []})};
         {retry, S1} ->
-            {next, schedule_retry(S1#state{commands = []})};
+            {next, wait_for_progress(Target, S1#state{commands = []})};
         {fatal, Reason, S1} ->
             terminate_expected(Reason, S1)
     end;
@@ -265,6 +281,8 @@ drive(S0 = #state{commands = [Command | Rest]}) ->
             {next, S1#state{commands = Rest}};
         {retry, S1} ->
             {next, schedule_retry(S1#state{commands = []})};
+        {wait, S1} ->
+            {next, S1#state{commands = []}};
         {fatal, Reason, S1} ->
             terminate_expected(Reason, S1)
     end.
@@ -448,12 +466,29 @@ accepted_phase_result(_Target, _GroupId, _Kind, _Ref, _Source,
     Progress;
 accepted_phase_result(Target, GroupId, Kind, Ref, Source,
                       {retry, S}) ->
-    {retry,
-     S#state{pending_phase =
-               {reference, Target, GroupId, Kind, Ref, Source}}};
+    {wait,
+     wait_for_progress(
+       Target,
+       S#state{pending_phase =
+                 {reference, Target, GroupId, Kind, Ref, Source}})};
 accepted_phase_result(_Target, _GroupId, _Kind, _Ref, _Source,
                       {fatal, _Reason, _S1} = Fatal) ->
     Fatal.
+
+wait_for_progress(Target, S = #state{follows = Follows}) ->
+    case maps:get(Target, Follows, undefined) of
+        FollowRef when is_reference(FollowRef) ->
+            ok = quod_foreign_log:refresh(FollowRef),
+            S;
+        undefined ->
+            case quod_foreign_log:follow(Target) of
+                {ok, FollowRef} ->
+                    ok = quod_foreign_log:refresh(FollowRef),
+                    S#state{follows = Follows#{Target => FollowRef}};
+                {error, _} ->
+                    schedule_retry(S)
+            end
+    end.
 
 verify_accepted_phase(Target, GroupId, Kind, Ref, Preferred, S) ->
     verify_accepted_phase_sources(

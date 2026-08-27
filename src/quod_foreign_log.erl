@@ -49,7 +49,7 @@ only for an active proof or follow.
          verify_current/3, verify_local_current/3,
          current/3, local_current/3,
          observe_candidate/2, route_hints/2, valid_route_candidates/1,
-         follow/1, ack/2, unfollow/1,
+         follow/1, refresh/1, ack/2, unfollow/1,
          required_references/1, stats/0]).
 -export([init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2]).
 
@@ -112,8 +112,11 @@ only for an active proof or follow.
 
 -record(request, {
           from :: gen_server:from() | {follow, {binary(), <<_:256>>}, reference()},
+          waiters = [] :: [gen_server:from()],
           peer :: term(),
           identity :: {binary(), <<_:256>>},
+          work :: term(),
+          deadline :: integer(),
           worker :: pid(),
           mref :: reference(),
           timer :: reference(),
@@ -132,7 +135,6 @@ only for an active proof or follow.
           fetch_fun = undefined :: undefined | function(),
           page_timeout_ms = ?DEFAULT_PAGE_TIMEOUT_MS :: pos_integer(),
           pending = #{} :: #{reference() => #request{}},
-          peer_counts = #{} :: #{term() => pos_integer()},
           pulls = #{} :: #{reference() => #pull{}},
           histories = #{} :: #{{binary(), binary()} => #history{}},
           follows = #{} :: #{reference() => {binary(), <<_:256>>}},
@@ -461,6 +463,18 @@ follow(Identity) ->
             {error, invalid_identity}
     end.
 
+-doc "Request an immediate certified refresh for one follow owned by this process.".
+-spec refresh(reference()) -> ok.
+refresh(FollowRef) when is_reference(FollowRef) ->
+    case quod_reg:where(?KEY) of
+        Pid when is_pid(Pid) ->
+            gen_server:cast(Pid, {refresh, FollowRef, self()});
+        undefined ->
+            ok
+    end;
+refresh(_FollowRef) ->
+    ok.
+
 -doc "Acknowledge completion of one exact local follow notice.".
 -spec ack(reference(), reference()) -> ok.
 ack(FollowRef, NoticeRef)
@@ -588,7 +602,7 @@ stats() ->
 
 empty_stats() ->
     #{pending => 0, pulls => 0, histories => 0, cache_bytes => 0,
-      peers => 0, follow_consumers => 0, followed_histories => 0,
+      follow_consumers => 0, followed_histories => 0,
       projection_workers => 0, projection_bytes => 0,
       follow_building => 0, follow_unreachable => 0,
       follow_polls => 0, follow_pages => 0,
@@ -654,7 +668,6 @@ handle_call(stats, _From, S) ->
               pulls => map_size(S#s.pulls),
               histories => map_size(S#s.histories),
               cache_bytes => S#s.total_bytes,
-              peers => map_size(S#s.peer_counts),
               follow_consumers => map_size(S#s.follows),
               followed_histories => length(Followed),
               projection_workers => length(
@@ -884,6 +897,17 @@ begin_current_worker(Identity, Supplied, TimeoutMs, WorkFun, From, S0) ->
     end.
 
 start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
+    Deadline = quod_time:mono_ms() + TimeoutMs,
+    case join_identical_request(Identity, Work, From, Deadline, S0) of
+        {joined, S1} ->
+            {ok, S1};
+        no ->
+            start_distinct_worker(
+              Peer, Identity, TimeoutMs, Deadline, Work, FetchFun, From, S0)
+    end.
+
+start_distinct_worker(
+  Peer, Identity, TimeoutMs, Deadline, Work, FetchFun, From, S0) ->
     case admit_request(Peer, Identity, S0) of
         {ok, RequestRef, S1} ->
             Owner = self(),
@@ -904,12 +928,54 @@ start_worker(Peer, Identity, TimeoutMs, Work, FetchFun, From, S0) ->
                       {verification_timeout, RequestRef}),
             Request = #request{from = From, peer = Peer,
                                identity = Identity, worker = Worker,
+                               work = Work, deadline = Deadline,
                                mref = MRef, timer = Timer},
             Pending1 = (S1#s.pending)#{RequestRef => Request},
             {ok, S1#s{pending = Pending1}};
         {error, Reason, S1} ->
             {error, Reason, S1}
     end.
+
+%% The certified-history cache has one writer per identity. Concurrent scope
+%% opens commonly ask for the same current identity view; their route lists
+%% are transport hints, not part of that view. Rejecting a later call as
+%% history_busy only repeats identical work (or makes its caller poll), so
+%% share the one certified result. Each caller still enforces its own call
+%% deadline; the shared worker retains the primary request's final deadline.
+%% Exact phase work and follows remain isolated.
+join_identical_request(Identity, Work, From, _Deadline,
+                       S = #s{histories = Histories, pending = Pending}) ->
+    case {normal_caller(From), maps:get(Identity, Histories, undefined)} of
+        {true, #history{active = RequestRef}} when is_reference(RequestRef) ->
+            case maps:get(RequestRef, Pending, undefined) of
+                Request = #request{from = Primary, waiters = Waiters,
+                                   work = ActiveWork,
+                                   timed_out = false} ->
+                    case normal_caller(Primary) andalso
+                         shareable_work(Work, ActiveWork, Identity) of
+                        true ->
+                            Pending1 = Pending#{
+                              RequestRef => Request#request{
+                                waiters = [From | Waiters]}},
+                            {joined, S#s{pending = Pending1}};
+                        false ->
+                            no
+                    end;
+                _ ->
+                    no
+            end;
+        _ ->
+            no
+    end.
+
+normal_caller({Pid, _Tag}) when is_pid(Pid) -> true;
+normal_caller(_) -> false.
+
+shareable_work(
+  {current_identity, _Routes1, Identity},
+  {current_identity, _Routes2, Identity}, Identity) -> true;
+shareable_work(Work, Work, _Identity) -> true;
+shareable_work(_Work1, _Work2, _Identity) -> false.
 
 handle_cast({observe_candidate, Identity, PeerKey, Endpoint}, S0) ->
     {noreply, remember_bootstrap_candidate(
@@ -918,6 +984,14 @@ handle_cast({ack, FollowRef, NoticeRef, ConsumerPid}, S0)
   when is_reference(FollowRef), is_reference(NoticeRef), is_pid(ConsumerPid) ->
     {noreply, acknowledge_follow(
                 FollowRef, NoticeRef, ConsumerPid, S0)};
+handle_cast({refresh, FollowRef, ConsumerPid}, S0)
+  when is_reference(FollowRef), is_pid(ConsumerPid) ->
+    case follow_consumer(FollowRef, S0) of
+        {ok, Identity, #consumer{pid = ConsumerPid}, _History} ->
+            {noreply, schedule_follow(Identity, 0, S0)};
+        _ ->
+            {noreply, S0}
+    end;
 handle_cast(_Message, S) ->
     {noreply, S}.
 
@@ -1282,28 +1356,19 @@ valid_phase(finalize) -> true;
 valid_phase(complete) -> true;
 valid_phase(_) -> false.
 
-admit_request(Peer, Identity, S0) ->
-    PeerCount = maps:get(Peer, S0#s.peer_counts, 0),
-    case map_size(S0#s.pending) < ?QUOD_MAX_FOREIGN_PENDING andalso
-         PeerCount < ?QUOD_MAX_FOREIGN_PENDING_PER_PEER of
-        false ->
-            {error, busy, S0};
-        true ->
-            S1 = ensure_history(Identity, S0),
-            History = maps:get(Identity, S1#s.histories),
-            case History#history.active of
-                none ->
-                    Ref = make_ref(),
-                    H1 = History#history{active = Ref,
-                                         last_used = quod_time:mono_ms()},
-                    Counts1 = (S1#s.peer_counts)#{Peer => PeerCount + 1},
-                    {ok, Ref,
-                     S1#s{histories =
-                              (S1#s.histories)#{Identity => H1},
-                           peer_counts = Counts1}};
-                _ ->
-                    {error, history_busy, S1}
-            end
+admit_request(_Peer, Identity, S0) ->
+    S1 = ensure_history(Identity, S0),
+    History = maps:get(Identity, S1#s.histories),
+    case History#history.active of
+        none ->
+            Ref = make_ref(),
+            H1 = History#history{active = Ref,
+                                 last_used = quod_time:mono_ms()},
+            {ok, Ref,
+             S1#s{histories =
+                      (S1#s.histories)#{Identity => H1}}};
+        _ ->
+            {error, history_busy, S1}
     end.
 
 ensure_history(Identity, S = #s{histories = Histories})
@@ -1380,15 +1445,11 @@ request_by_monitor(MRef, Pending) ->
 
 finish_request(RequestRef, Reply, S0) ->
     case maps:take(RequestRef, S0#s.pending) of
-        {#request{from = From, peer = Peer, identity = Identity,
+        {#request{from = From, waiters = Waiters,
+                  identity = Identity,
                   mref = MRef, timer = Timer}, Pending1} ->
             _ = erlang:cancel_timer(Timer),
             _ = erlang:demonitor(MRef, [flush]),
-            Count = maps:get(Peer, S0#s.peer_counts, 1),
-            Counts1 = case Count of
-                          1 -> maps:remove(Peer, S0#s.peer_counts);
-                          _ -> (S0#s.peer_counts)#{Peer => Count - 1}
-                      end,
             Histories1 =
                 case maps:get(Identity, S0#s.histories, undefined) of
                     #history{} = H ->
@@ -1398,19 +1459,21 @@ finish_request(RequestRef, Reply, S0) ->
                                                            quod_time:mono_ms()}};
                     undefined -> S0#s.histories
                 end,
-            S1 = S0#s{pending = Pending1, peer_counts = Counts1,
-                      histories = Histories1},
+            S1 = S0#s{pending = Pending1, histories = Histories1},
             S2 = cancel_request_pulls(RequestRef, S1),
             case From of
                 {follow, Identity, Token} ->
                     finish_follow_refresh(Identity, Token, Reply, S2);
                 _ ->
-                    gen_server:reply(From, Reply),
+                    reply_request_callers([From | Waiters], Reply),
                     hibernate_history(Identity, S2)
             end;
         error ->
             S0
     end.
+
+reply_request_callers(Callers, Reply) ->
+    lists:foreach(fun(Caller) -> gen_server:reply(Caller, Reply) end, Callers).
 
 %%%===================================================================
 %%% Continuous certified follow lifecycle
@@ -1608,14 +1671,19 @@ schedule_follow(Identity, Delay, S0) ->
         #history{consumers = Consumers} = H0 when map_size(Consumers) > 0 ->
             cancel_follow_timer(H0#history.follow_timer),
             Token = make_ref(),
-            Timer = erlang:send_after(
-                      max(0, Delay), self(), {follow_refresh, Identity, Token}),
+            Timer = schedule_follow_message(Identity, Delay, Token),
             put_history(
               Identity,
               H0#history{follow_timer = Timer, follow_token = Token}, S0);
         _ ->
             S0
     end.
+
+schedule_follow_message(Identity, Delay, Token) when Delay =< 0 ->
+    self() ! {follow_refresh, Identity, Token},
+    none;
+schedule_follow_message(Identity, Delay, Token) ->
+    erlang:send_after(Delay, self(), {follow_refresh, Identity, Token}).
 
 cancel_follow_timer(none) -> ok;
 cancel_follow_timer(Timer) ->

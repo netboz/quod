@@ -922,8 +922,8 @@ Add one node-level signed-goal router outside `quod_simplex` and
 `quod_prolog`. It owns only:
 
 - a single fixed signed-goal transport channel;
-- bounded outbound request correlations and exact pinned peer/link identity;
-- bounded inbound workers and per-forwarder admission;
+- exactly monitored outbound request correlations and pinned peer/link identity;
+- exactly monitored inbound workers, with no fixed population refusal;
 - same-link replies, timers, monitors, and cleanup; and
 - volatile cursor routes from a gateway cursor id to its exact target peer.
 

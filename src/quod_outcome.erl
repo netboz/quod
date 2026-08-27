@@ -583,7 +583,7 @@ capture_terminal(CompleteRef, DecisionRef, FinalizeRows, History, Row) ->
 participant_slots(Rows) ->
     participant_slots(Rows, none, 0, []).
 
-participant_slots([], _Previous, Count, Acc) when Count >= 2 ->
+participant_slots([], _Previous, Count, Acc) when Count >= 1 ->
     {ok, lists:reverse(Acc)};
 participant_slots([{Identity, Ref, Generation} | Rest], Previous, Count, Acc)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
@@ -1344,7 +1344,7 @@ row_relations(_) -> false.
 valid_participant_slots(Slots) ->
     valid_participant_slots(Slots, none, 0).
 
-valid_participant_slots([], _Previous, Count) -> Count >= 2;
+valid_participant_slots([], _Previous, Count) -> Count >= 1;
 valid_participant_slots([{Identity, Slot, Generation} | Rest], Previous, Count)
   when Count < ?QUOD_MAX_DTX_PARTICIPANTS,
        (Previous =:= none orelse Previous < Identity),

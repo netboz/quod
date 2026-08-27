@@ -477,6 +477,24 @@ commit_result_and_participant_slots_are_published_from_complete_test() ->
           ok = quod_outcome:close(I7)
       end).
 
+one_participant_terminal_outcome_is_public_test() ->
+    Ref = {group, <<"quod:one-target">>, <<1:256>>, <<2:256>>,
+           <<3:256>>, <<4:256>>},
+    {ok, Result} = quod_durable_term:encode_result(#{<<"X">> => linked}),
+    Slot = {{<<"quod:target">>, <<5:256>>}, 7, 1},
+    ?assertEqual(
+       {ok, #{status => committed, height => 8, ref => Ref,
+              bindings => [{<<"X">>, linked}],
+              participant_slots => [Slot]}},
+       quod_outcome:public(
+         #{type => group, ref => Ref,
+           status => {committed, 8, Result, [Slot]}})),
+    ?assertEqual(
+       {error, outcome_index_corrupt},
+       quod_outcome:public(
+         #{type => group, ref => Ref,
+           status => {committed, 8, Result, []}})).
+
 prepared_plan_is_hidden_then_replaced_by_exact_applied_state_test() ->
     with_group_identity(
       fun(Pub, Signer) ->

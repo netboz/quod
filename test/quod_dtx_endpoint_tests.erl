@@ -11,17 +11,10 @@ channel_and_limits_are_fixed_test() ->
        quod_dtx_endpoint:channel(Ns)),
     ?assertEqual(
        #{max_envelope_bytes => ?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
-         max_correlations => ?QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
-         max_workers => 8,
          worker_timeout_ms => 30000},
        quod_dtx_endpoint:limits()),
     ?assert(?QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES <
             ?QUOD_TRANSPORT_MAX_FRAME_BYTES).
-
-complete_validation_fits_the_shared_correlation_budget_test() ->
-    ?assertEqual(
-       ?QUOD_MAX_DTX_PARTICIPANTS * ?MAX_VALIDATORS,
-       maps:get(max_correlations, quod_dtx_endpoint:limits())).
 
 all_request_shapes_roundtrip_deterministically_test() ->
     Ns = <<"quod:endpoint">>,
@@ -126,6 +119,17 @@ all_response_shapes_roundtrip_and_correlate_test() ->
                        quod_dtx_endpoint:decode_response(Ns, Frame)),
           ?assert(quod_dtx_endpoint:correlates(Request, Response))
       end, [busy, not_ready, not_found, invalid_request]).
+
+one_participant_terminal_response_roundtrips_test() ->
+    Ns = <<"quod:endpoint">>,
+    Request = {outcome, id(70), group_ref(), digest(7), 11},
+    Response =
+        {outcome, id(70), outcome_target(), digest(7), 12,
+         #{status => committed, height => 12, ref => group_ref(),
+           bindings => [], participant_slots => [hd(participant_slots())]}},
+    {ok, Frame} = quod_dtx_endpoint:encode_response(Ns, Response),
+    ?assertEqual({ok, Response}, quod_dtx_endpoint:decode_response(Ns, Frame)),
+    ?assert(quod_dtx_endpoint:correlates(Request, Response)).
 
 direction_namespace_and_exact_correlation_are_enforced_test() ->
     Ns = <<"quod:endpoint">>,

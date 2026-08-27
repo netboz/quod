@@ -236,6 +236,25 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
           tag :: term()
          }).
 
+%% Authentication may need a certified view of the origin ontology.  That is
+%% network/disk work and must never run in this ontology owner's mailbox.
+%% Keep only correlation here; the worker runs the same authentication
+%% function used by co-hosted scopes and the owner rechecks admission after it
+%% completes.
+-record(scope_authenticator, {
+          pid :: pid(),
+          timer :: reference(),
+          peer_key :: <<_:256>>,
+          endpoint :: term(),
+          request_link :: pid(),
+          binding :: quod_scope_wire:binding(),
+          request_id :: <<_:128>>,
+          deadline_ms :: integer(),
+          mode :: read_only | read_write,
+          anchor :: <<_:256>>,
+          origin_identity :: {binary(), <<_:256>>}
+         }).
+
 -record(s, {ns        :: binary(),
             self      :: node_id(),
             signer = none :: quod_identity:signer() | none,
@@ -303,7 +322,8 @@ erlog flag `unknown = fail`. The runtime projection contract is specified in
             remote_request_mrefs = #{} :: map(),
             remote_return_mrefs = #{} :: map(),
             remote_internal_refs = #{} :: map(),
-            remote_peer_counts = #{} :: map()}).
+            remote_authenticators = #{} :: #{reference() => #scope_authenticator{}},
+            remote_auth_bindings = #{} :: #{quod_scope_wire:binding() => reference()}}).
 
 %%%===================================================================
 %%% API
@@ -1156,7 +1176,8 @@ handle_call(
                     case scope_authentication_reason(
                            Authentication, OriginKey, OriginIdentity,
                            Principal, AuthenticationDigest, ProofId,
-                           max(0, DeadlineMs - quod_time:mono_ms()), S) of
+                           max(0, DeadlineMs - quod_time:mono_ms()),
+                           S#s.ns) of
                         {ok, RequestContext} ->
                             open_scope_session(
                               Origin, ScopeId, ProofId, Anchor, ReadOnly,
@@ -1193,6 +1214,17 @@ handle_call(
         #agent_attester{pid = Worker} ->
             {handled, S1} = finish_agent_attester_result(MRef, Result, S),
             {reply, ok, S1};
+        _ ->
+            {reply, {error, stale}, S}
+    end;
+handle_call(
+  {scope_authenticator_complete, MRef, Result}, {Worker, _Tag},
+  S = #s{remote_authenticators = Authenticators})
+  when is_reference(MRef), is_pid(Worker) ->
+    case maps:get(MRef, Authenticators, undefined) of
+        #scope_authenticator{pid = Worker} = Authenticator ->
+            {reply, ok,
+             finish_scope_authenticator(MRef, Result, Authenticator, S)};
         _ ->
             {reply, {error, stale}, S}
     end;
@@ -1339,9 +1371,8 @@ handle_cast(
        {dtx, Control, BlockTimestamp}, Slot, ReplyTo, Tag, S)};
 handle_cast(
   {agent_attestation, Request, ReplyTo, Tag},
-  S = #s{ready = true, workers = Workers, agent_attesters = Attesters,
-         max_proof_workers = Max})
-  when is_pid(ReplyTo), map_size(Workers) + map_size(Attesters) < Max ->
+  S = #s{ready = true})
+  when is_pid(ReplyTo) ->
     {noreply, spawn_agent_attester(Request, ReplyTo, Tag, S)};
 handle_cast({agent_attestation, _Request, ReplyTo, Tag}, S)
   when is_pid(ReplyTo) ->
@@ -1359,14 +1390,25 @@ acknowledge_ready(S = #s{ns = Ns, applied = Height}) ->
 %% (abnormal: the caller still waits — reply the distinct error here). MUST come
 %% before the check_response fallback clause.
 handle_info(Info = {'DOWN', MRef, process, _Pid, Reason}, S) ->
-    case finish_agent_attester(MRef, Reason, S) of
+    case finish_scope_authenticator_down(MRef, S) of
         {handled, S1} -> {noreply, S1};
         unhandled ->
-            case handle_worker_down(MRef, Reason, S) of
-                unhandled -> handle_response_info(Info, S);
-                Reply     -> Reply
+            case finish_agent_attester(MRef, Reason, S) of
+                {handled, S1} -> {noreply, S1};
+                unhandled ->
+                    case handle_worker_down(MRef, Reason, S) of
+                        unhandled -> handle_response_info(Info, S);
+                        Reply     -> Reply
+                    end
             end
     end;
+handle_info({scope_authenticator_timeout, MRef},
+            S = #s{remote_authenticators = Authenticators}) ->
+    case maps:get(MRef, Authenticators, undefined) of
+        #scope_authenticator{pid = Pid} -> exit(Pid, kill);
+        undefined -> ok
+    end,
+    {noreply, S};
 handle_info({agent_attester_timeout, MRef}, S) ->
     case maps:get(MRef, S#s.agent_attesters, undefined) of
         #agent_attester{pid = Pid} -> exit(Pid, kill);
@@ -1792,25 +1834,117 @@ handle_remote_scope_open(
         false ->
             S;
         true ->
-            case scope_authentication_reason(
-                   Authentication, OriginKey, OriginIdentity, Principal,
-                   AuthenticationDigest, ProofId, RemainingMs, S) of
-                {ok, RequestContext} ->
-                    observe_scope_origin_candidate(
-                      OriginIdentity, {Ns, Anchor}, {PeerKey, Endpoint}),
-                    open_authenticated_remote_scope(
-                      PeerKey, Endpoint, RequestLink, Binding,
-                      RequestContext, RequestId, RemainingMs,
-                      Mode, Anchor, S);
-                {error, Reason} ->
-                    reject_scope_open(
-                      PeerKey, Endpoint, Binding, RequestId, Reason, S)
-            end
+            begin_remote_scope_authentication(
+              PeerKey, Endpoint, RequestLink, Binding, Authentication,
+              OriginKey, OriginIdentity, Principal, AuthenticationDigest,
+              ProofId, RequestId, RemainingMs, Mode, Anchor, S)
     end;
 handle_remote_scope_open(
   _PeerKey, _Endpoint, _RequestLink, _Binding, _Authentication,
   _CommandSeq, _RequestId, _RemainingMs, S) ->
     S.
+
+begin_remote_scope_authentication(
+  PeerKey, Endpoint, RequestLink, Binding, Authentication,
+  OriginKey, OriginIdentity, Principal, AuthenticationDigest,
+  ProofId, RequestId, RemainingMs, Mode, Anchor,
+  S = #s{ns = Ns, remote_authenticators = Authenticators,
+         remote_auth_bindings = Bindings}) ->
+    case maps:is_key(Binding, Bindings) of
+        true ->
+            %% The authenticated command stream may retransmit its open while
+            %% the certified origin view is being fetched.  The first request
+            %% already owns the eventual exactly-correlated reply.
+            S;
+        false ->
+            Engine = self(),
+            Deadline = quod_time:mono_ms() + RemainingMs,
+            {Pid, MRef} = spawn_monitor(
+                            fun() ->
+                                receive
+                                    {scope_authenticator_start, WorkerRef} ->
+                                        Result = scope_authentication_reason(
+                                                   Authentication, OriginKey,
+                                                   OriginIdentity, Principal,
+                                                   AuthenticationDigest,
+                                                   ProofId, RemainingMs, Ns),
+                                        _ = gen_server:call(
+                                              Engine,
+                                              {scope_authenticator_complete,
+                                               WorkerRef, Result},
+                                              infinity)
+                                end
+                            end),
+            Timer = erlang:send_after(
+                      RemainingMs, self(),
+                      {scope_authenticator_timeout, MRef}),
+            Authenticator = #scope_authenticator{
+                              pid = Pid, timer = Timer,
+                              peer_key = PeerKey, endpoint = Endpoint,
+                              request_link = RequestLink,
+                              binding = Binding, request_id = RequestId,
+                              deadline_ms = Deadline, mode = Mode,
+                              anchor = Anchor,
+                              origin_identity = OriginIdentity},
+            Pid ! {scope_authenticator_start, MRef},
+            S#s{remote_authenticators =
+                    Authenticators#{MRef => Authenticator},
+                remote_auth_bindings = Bindings#{Binding => MRef}}
+    end.
+
+finish_scope_authenticator(
+  MRef, Result,
+  #scope_authenticator{
+     timer = Timer, peer_key = PeerKey, endpoint = Endpoint,
+     request_link = RequestLink, binding = Binding,
+     request_id = RequestId, deadline_ms = Deadline,
+     mode = Mode, anchor = Anchor,
+     origin_identity = OriginIdentity}, S0) ->
+    _ = erlang:cancel_timer(Timer, [{async, true}, {info, false}]),
+    demonitor(MRef, [flush]),
+    S1 = drop_scope_authenticator(MRef, Binding, S0),
+    RemainingMs = Deadline - quod_time:mono_ms(),
+    case {Result, RemainingMs > 0} of
+        {{ok, RequestContext}, true} ->
+            observe_scope_origin_candidate(
+              OriginIdentity, {target_namespace(Binding), Anchor},
+              {PeerKey, Endpoint}),
+            open_authenticated_remote_scope(
+              PeerKey, Endpoint, RequestLink, Binding,
+              RequestContext, RequestId, RemainingMs,
+              Mode, Anchor, S1);
+        {{error, Reason}, _} ->
+            reject_scope_open(
+              PeerKey, Endpoint, Binding, RequestId, Reason, S1);
+        {_, false} ->
+            reject_scope_open(
+              PeerKey, Endpoint, Binding, RequestId,
+              {scope_expired, target_namespace(Binding)}, S1)
+    end.
+
+finish_scope_authenticator_down(
+  MRef, S = #s{remote_authenticators = Authenticators}) ->
+    case maps:get(MRef, Authenticators, undefined) of
+        #scope_authenticator{
+           timer = Timer, binding = Binding, peer_key = PeerKey,
+           endpoint = Endpoint, request_id = RequestId} ->
+            _ = erlang:cancel_timer(
+                  Timer, [{async, true}, {info, false}]),
+            S1 = drop_scope_authenticator(MRef, Binding, S),
+            {handled,
+             reject_scope_open(
+               PeerKey, Endpoint, Binding, RequestId,
+               signed_scope_unavailable, S1)};
+        undefined ->
+            unhandled
+    end.
+
+drop_scope_authenticator(
+  MRef, Binding,
+  S = #s{remote_authenticators = Authenticators,
+         remote_auth_bindings = Bindings}) ->
+    S#s{remote_authenticators = maps:remove(MRef, Authenticators),
+        remote_auth_bindings = maps:remove(Binding, Bindings)}.
 
 observe_scope_origin_candidate(OriginIdentity, TargetIdentity, Contact)
   when OriginIdentity =/= TargetIdentity ->
@@ -1842,32 +1976,32 @@ scope_authentication_reason(
 scope_authentication_reason(
   {signed_goal, _RequestBytes, _Signature, _Certificate} = Authentication,
   _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
-  ProofId, RemainingMs, S) ->
+  ProofId, RemainingMs, Ns) ->
     scope_authentication_reason(
       Authentication, _OriginKey, OriginIdentity, Principal,
-      AuthenticationDigest, ProofId, RemainingMs, S,
+      AuthenticationDigest, ProofId, RemainingMs, Ns,
       fun local_or_foreign_agent_view/4);
 scope_authentication_reason(
   _Authentication, _OriginKey, _OriginIdentity, _Principal,
-  _AuthenticationDigest, _ProofId, _RemainingMs, _S) ->
+  _AuthenticationDigest, _ProofId, _RemainingMs, _Ns) ->
     {error, {protocol_error, request_binding}}.
 
 scope_authentication_reason(
   {signed_goal, RequestBytes, Signature, Certificate} = Authentication,
   _OriginKey, OriginIdentity, Principal = {agent, _}, AuthenticationDigest,
-  ProofId, RemainingMs, S, ViewFun) ->
+  ProofId, RemainingMs, Ns, ViewFun) ->
     case quod_scope_wire:authentication_digest(Authentication) of
         {ok, AuthenticationDigest} ->
             verify_scope_authentication(
               RequestBytes, Signature, Certificate,
-              OriginIdentity, Principal, ProofId, RemainingMs, S, ViewFun);
+              OriginIdentity, Principal, ProofId, RemainingMs, Ns, ViewFun);
         _ ->
             {error, {protocol_error, request_binding}}
     end.
 
 verify_scope_authentication(
   RequestBytes, Signature, Certificate,
-  OriginIdentity, Principal, ProofId, RemainingMs, S = #s{ns = Ns},
+  OriginIdentity, Principal, ProofId, RemainingMs, Ns,
   ViewFun) ->
     case quod_ontology:network_identity() of
         {ok, Network} ->
@@ -1893,7 +2027,7 @@ verify_scope_authentication(
                     {error, {protocol_error, request_binding}}
             end;
         _ ->
-            {error, scope_network_identity_unavailable(S)}
+            {error, scope_network_identity_unavailable(Ns)}
     end.
 
 verify_scope_agent_identity(
@@ -1920,7 +2054,7 @@ local_or_foreign_agent_view(OriginNs, OriginIdentity, Certificate, RemainingMs) 
               OriginIdentity, RemainingMs)
     end.
 
-scope_network_identity_unavailable(#s{ns = Ns}) ->
+scope_network_identity_unavailable(Ns) when is_binary(Ns) ->
     {network_identity_unavailable, Ns}.
 
 -ifdef(TEST).
@@ -1930,26 +2064,18 @@ test_scope_authentication_reason(
     scope_authentication_reason(
       Authentication, OriginKey, OriginIdentity, Principal,
       AuthenticationDigest, ProofId, 1000,
-      #s{ns = <<"quod:test-target">>},
+      <<"quod:test-target">>,
       fun(_OriginNs, _Identity, _Certificate, _RemainingMs) ->
           ViewResult
       end).
 -endif.
 
-remote_open_reason(Mode, Anchor, PeerKey,
-                   S = #s{ns = Ns,
-                          remote_peer_counts = PeerCounts}) ->
+remote_open_reason(Mode, Anchor, _PeerKey, S = #s{ns = Ns}) ->
     case scope_admission_reason(Mode, Anchor, S) of
         ok ->
-            case {scope_capacity_available(S),
-                  maps:get(PeerKey, PeerCounts, 0) <
-                      ?QUOD_MAX_ROUTER_SCOPES_PER_PEER} of
-                {false, _} -> {error, {ontology_busy, Ns}};
-                {_, false} ->
-                    {error,
-                     {scope_limit_exceeded,
-                      ?QUOD_MAX_ROUTER_SCOPES_PER_PEER}};
-                {true, true} -> ok
+            case scope_capacity_available(S) of
+                false -> {error, {ontology_busy, Ns}};
+                true -> ok
             end;
         {error, _} = Error -> Error
     end.
@@ -2006,8 +2132,7 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
                         S = #s{scope_timeout_ms = ScopeTimeout,
                                remote_scopes = Remote,
                                remote_open_refs = OpenRefs,
-                               remote_request_mrefs = RequestRefs,
-                               remote_peer_counts = PeerCounts}) ->
+                               remote_request_mrefs = RequestRefs}) ->
     ReturnChannel = quod_scope_wire:return_channel(PeerKey),
     OpenRef = quod_quic:open_link_pinned(
                 PeerKey, Endpoint, ReturnChannel),
@@ -2029,9 +2154,7 @@ begin_remote_scope_open(PeerKey, Endpoint, RequestLink, Binding,
                deadline_ms = Deadline},
     S#s{remote_scopes = Remote#{Binding => Scope},
         remote_open_refs = OpenRefs#{OpenRef => Binding},
-        remote_request_mrefs = RequestRefs#{RequestMRef => Binding},
-        remote_peer_counts = PeerCounts#{
-          PeerKey => maps:get(PeerKey, PeerCounts, 0) + 1}}.
+        remote_request_mrefs = RequestRefs#{RequestMRef => Binding}}.
 
 reject_unknown_scope(
   PeerKey, Endpoint,
@@ -3333,11 +3456,9 @@ drop_remote_record(
          remote_open_refs = OpenRefs,
          remote_request_mrefs = RequestRefs,
          remote_return_mrefs = ReturnRefs,
-         remote_internal_refs = InternalRefs,
-         remote_peer_counts = PeerCounts}) ->
+         remote_internal_refs = InternalRefs}) ->
     case maps:take(Binding, Remote) of
-        {#remote_scope{peer_key = PeerKey,
-                       request_mref = RequestMRef,
+        {#remote_scope{request_mref = RequestMRef,
                        return_mref = ReturnMRef,
                        open_ref = OpenRef,
                        lifetime_timer = LifetimeTimer,
@@ -3351,11 +3472,6 @@ drop_remote_record(
             InternalRefs1 = lists:foldl(
                               fun maps:remove/2, InternalRefs,
                               maps:keys(Pending)),
-            Count = maps:get(PeerKey, PeerCounts, 1),
-            PeerCounts1 = case Count =< 1 of
-                              true -> maps:remove(PeerKey, PeerCounts);
-                              false -> PeerCounts#{PeerKey => Count - 1}
-                          end,
             S#s{remote_scopes = Remote1,
                 remote_open_refs = maps:remove(OpenRef, OpenRefs),
                 remote_request_mrefs = maps:remove(
@@ -3364,8 +3480,7 @@ drop_remote_record(
                     undefined -> ReturnRefs;
                     _ -> maps:remove(ReturnMRef, ReturnRefs)
                 end,
-                remote_internal_refs = InternalRefs1,
-                remote_peer_counts = PeerCounts1};
+                remote_internal_refs = InternalRefs1};
         error -> S
     end.
 
@@ -3548,6 +3663,7 @@ cancel_dtx_handoff(Ref,
 terminate(_Reason, #s{ns = Ns, workers = W,
                       waiting_workers = Waiting,
                       agent_attesters = AgentAttesters,
+                      remote_authenticators = ScopeAuthenticators,
                       scope_workers = ScopeWorkers,
                       outcomes = Outcomes}) ->
     maps:foreach(fun(_Ref, #proof_worker{pid = Pid}) -> kill_worker(Pid) end, W),
@@ -3557,6 +3673,9 @@ terminate(_Reason, #s{ns = Ns, workers = W,
     maps:foreach(
       fun(_Ref, #agent_attester{pid = Pid}) -> kill_worker(Pid) end,
       AgentAttesters),
+    maps:foreach(
+      fun(_Ref, #scope_authenticator{pid = Pid}) -> kill_worker(Pid) end,
+      ScopeAuthenticators),
     maps:foreach(
       fun(_WM, #scope_worker{pid = Pid}) -> kill_worker(Pid) end,
       ScopeWorkers),
@@ -4027,6 +4146,10 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
     Participants = lists:sort(
                      [Identity || {Identity, Plan} <- maps:to_list(Plans),
                                   quod_dtx:participates(Plan)]),
+    MaterialParticipants = lists:sort(
+                             [Identity
+                              || {Identity, Plan} <- maps:to_list(Plans),
+                                 quod_dtx:material_participant(Plan)]),
     EffectParticipants =
         [Identity || {Identity, Plan} <- maps:to_list(Plans),
                      quod_dtx:effects_count(Plan) > 0],
@@ -4042,9 +4165,9 @@ submit_sealed_plans(Origin, Goal, Bindings, ReadSet, Plans) ->
         {[Target], [_], false} ->
             submit_single_plan(
               Origin, Target, maps:get(Target, Plans), Goal, Bindings);
-        {Participants, _, _} ->
+        {_Participants, _, _} ->
             submit_group(
-              Origin, Goal, Bindings, Plans, Participants)
+              Origin, Goal, Bindings, Plans, MaterialParticipants)
     end.
 
 signed_foreign_singleton([Target]) ->

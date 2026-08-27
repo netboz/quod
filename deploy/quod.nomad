@@ -76,6 +76,15 @@ variable "directory_node_keys" {
   description = "Exact Ed25519 node-key allowlist for the discoverable quod:root directory. Supply the persistent fleet keys as 64-character hex strings; empty disables shared publication without weakening validation."
 }
 
+variable "directory_public_namespaces" {
+  type = list(object({
+    namespace = string
+    node_keys = list(string)
+  }))
+  default     = []
+  description = "Exact namespace/node-key allowlists for ontologies advertised through the existing directory control path. Hosts publish their current endpoints; no endpoint is configured or stored durably."
+}
+
 variable "cross_ontology_enabled" {
   type        = bool
   default     = false
@@ -104,18 +113,6 @@ variable "cross_ontology_target_alloc_index" {
   type        = number
   default     = 1
   description = "quod-node allocation index that hosts the benchmark target ontology. It must differ from the source index."
-}
-
-variable "cross_ontology_source_node_keys" {
-  type        = list(string)
-  default     = []
-  description = "Exact persistent Ed25519 public key(s) allowed to advertise the benchmark source namespace. Supply the key of the selected source allocation."
-}
-
-variable "cross_ontology_target_node_keys" {
-  type        = list(string)
-  default     = []
-  description = "Exact persistent Ed25519 public key(s) allowed to advertise the benchmark target namespace. Supply the key of the selected target allocation."
 }
 
 variable "otel_exporter_otlp_endpoint" {
@@ -320,24 +317,16 @@ directory {
 %{endfor~}
       ]
     },
-%{if var.cross_ontology_enabled~}
+%{for directory_entry in var.directory_public_namespaces~}
     {
-      namespace = "${var.cross_ontology_source_namespace}"
+      namespace = "${directory_entry.namespace}"
       node_keys = [
-%{for node_key in var.cross_ontology_source_node_keys~}
+%{for node_key in directory_entry.node_keys~}
         "${node_key}",
 %{endfor~}
       ]
     },
-    {
-      namespace = "${var.cross_ontology_target_namespace}"
-      node_keys = [
-%{for node_key in var.cross_ontology_target_node_keys~}
-        "${node_key}",
 %{endfor~}
-      ]
-    },
-%{endif~}
   ]
 }
 # `content` is a LIST: further ontologies are added as extra entries, each with its own
@@ -620,24 +609,16 @@ directory {
 %{endfor~}
       ]
     },
-%{if var.cross_ontology_enabled~}
+%{for directory_entry in var.directory_public_namespaces~}
     {
-      namespace = "${var.cross_ontology_source_namespace}"
+      namespace = "${directory_entry.namespace}"
       node_keys = [
-%{for node_key in var.cross_ontology_source_node_keys~}
+%{for node_key in directory_entry.node_keys~}
         "${node_key}",
 %{endfor~}
       ]
     },
-    {
-      namespace = "${var.cross_ontology_target_namespace}"
-      node_keys = [
-%{for node_key in var.cross_ontology_target_node_keys~}
-        "${node_key}",
 %{endfor~}
-      ]
-    },
-%{endif~}
   ]
 }
 # `content` is a LIST — extra ontologies join here too (see the quod-node group's note).

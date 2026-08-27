@@ -1073,6 +1073,57 @@ current_view_timeout_releases_verified_cache_and_remains_reusable_test() ->
         _ = file:del_dir_r(Dir)
     end.
 
+identical_current_identity_requests_share_one_verification_test() ->
+    Fixture = foreign_fixture(unique_ns()),
+    Ns = maps:get(ns, Fixture),
+    Identity = {Ns, maps:get(anchor, Fixture)},
+    Peer = maps:get(pub, Fixture),
+    Endpoint = {"127.0.0.1", 19098},
+    Routes = route_candidates([{Peer, Endpoint}]),
+    RoutesWithAnotherHint = route_candidates(
+                             [{Peer, Endpoint},
+                              {key(199), {"127.0.0.1", 19199}}]),
+    TestPid = self(),
+    First = atomics:new(1, []),
+    BaseFetch = peer_chain_fetch(Ns, maps:get(chain, Fixture), [Peer]),
+    Fetch = fun(P, E, RequestedNs, From, To) ->
+                    case atomics:add_get(First, 1, 1) of
+                        1 ->
+                            TestPid ! {shared_current_fetch, self()},
+                            receive release_shared_current -> ok end;
+                        _ ->
+                            ok
+                    end,
+                    BaseFetch(P, E, RequestedNs, From, To)
+            end,
+    Dir = temp_dir("shared-current-identity"),
+    Pid = start_owner(Dir, Fetch),
+    try
+        FirstRequest = gen_server:send_request(
+                         Pid, {current, Routes, Identity, 2000}),
+        Worker = receive
+                     {shared_current_fetch, FetchWorker} -> FetchWorker
+                 after 2000 ->
+                     error(shared_current_fetch_not_started)
+                 end,
+        SecondRequest = gen_server:send_request(
+                          Pid, {current, RoutesWithAnotherHint,
+                                Identity, 100}),
+        %% This stats call is sent after the second request by the same
+        %% process, so it is a deterministic mailbox barrier, not a sleep.
+        ?assertEqual(1, maps:get(pending, quod_foreign_log:stats())),
+        Worker ! release_shared_current,
+        {reply, {ok, FirstView}} =
+            gen_server:wait_response(FirstRequest, 3000),
+        {reply, {ok, SecondView}} =
+            gen_server:wait_response(SecondRequest, 3000),
+        ?assertEqual(FirstView, SecondView),
+        ?assertEqual(0, maps:get(pending, quod_foreign_log:stats()))
+    after
+        stop_owner(Pid),
+        _ = file:del_dir_r(Dir)
+    end.
+
 corrupt_cache_is_discarded_and_refetched_from_genesis_test() ->
     Fixture = foreign_fixture(unique_ns()),
     Dir = temp_dir("corrupt-restart"),
@@ -1319,54 +1370,6 @@ assert_fetch_failure_reason(
     ok;
 assert_fetch_failure_reason(Expected, Actual) ->
     error({unexpected_fetch_failure_reason, Expected, Actual}).
-
-selected_sources_keep_the_per_peer_pending_bound_test() ->
-    Dir = temp_dir("peer-bound"),
-    TestPid = self(),
-    Blocking =
-        fun(_Peer, _Endpoint, Ns, _From, _To) ->
-            TestPid ! {fetch_started, Ns, self()},
-            receive release -> {error, retry} end
-        end,
-    Pid = start_owner(Dir, Blocking),
-    Peer = key(94),
-    Endpoint = {"127.0.0.1", 19094},
-    IdentityRefs =
-        [begin
-             Identity = {<<"peer-bound:", I>>, key(210 + I)},
-             {Identity, ref(Identity, 1, 220 + I)}
-         end || I <- lists:seq(
-                         1, ?QUOD_MAX_FOREIGN_PENDING_PER_PEER + 1)],
-    lists:foreach(
-      fun({Identity, _Ref}) ->
-          quod_foreign_log:observe_candidate(
-            Identity, {Peer, Endpoint})
-      end, IdentityRefs),
-    Callers =
-        [spawn(fun() ->
-                   TestPid ! {verify_result, self(),
-                              quod_foreign_log:verify_reference(
-                                Ref, finalize, 10000)}
-               end)
-         || {_Identity, Ref} <- lists:sublist(
-                                  IdentityRefs,
-                                  ?QUOD_MAX_FOREIGN_PENDING_PER_PEER)],
-    try
-        Workers = receive_fetches(?QUOD_MAX_FOREIGN_PENDING_PER_PEER, []),
-        ?assertEqual(
-           {error, busy},
-           quod_foreign_log:verify_reference(
-             element(2, lists:last(IdentityRefs)), finalize, 1000)),
-        ?assertEqual(?QUOD_MAX_FOREIGN_PENDING_PER_PEER,
-                     maps:get(pending, quod_foreign_log:stats())),
-        _ = [W ! release || W <- Workers],
-        _ = [receive {verify_result, Caller, {error, retry}} -> ok
-             after 3000 -> error({missing_result, Caller}) end
-             || Caller <- Callers]
-    after
-        stop_owner(Pid),
-        _ = file:del_dir_r(Dir)
-    end.
 
 decoded_page_bounds_test() ->
     Tiny = #entry{index = 1, data = noop},
@@ -1730,15 +1733,6 @@ wait_follow_count(Expected, Left) ->
 stop_owner(Pid) when is_pid(Pid) ->
     unlink(Pid),
     try gen_server:stop(Pid) catch exit:_ -> ok end.
-
-receive_fetches(0, Acc) -> Acc;
-receive_fetches(N, Acc) ->
-    receive
-        {fetch_started, _Ns, Worker} ->
-            receive_fetches(N - 1, [Worker | Acc])
-    after 3000 ->
-        error({missing_fetches, N})
-    end.
 
 control(Kind, Target, Record) ->
     {quod_dtx_control, 2, Kind, Target, Record,

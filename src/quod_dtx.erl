@@ -66,7 +66,7 @@ its proof fence but never change consensus-derived generation state.
          core/1, target/1, base_height/1, proof_id/1, origin/1,
          principal/1, request_binding/1, overlay_generation/1, signer/1,
          valid_principal/1,
-         participates/1, diff_ops/1, effects_count/1,
+         participates/1, material_participant/1, diff_ops/1, effects_count/1,
          diff_bytes/1, read_check_bytes/1, effects_bytes/1,
          live_bridges_bytes/1,
          material/1, diff/1, read_check/1, effects/1, live_bridges/1,
@@ -459,13 +459,18 @@ digest(Plan) -> crypto:hash(sha256, plan_bytes(core(Plan))).
 -spec diff_ops(plan()) -> non_neg_integer().
 diff_ops(Plan) -> maps:get(diff_ops, core(Plan)).
 
--doc "Whether this signed plan contributes data/OCC material or the origin operation claim.".
+-doc "Whether a plan is valid participant material, including legacy origin claims.".
 -spec participates(plan()) -> boolean().
 participates(Plan) ->
-    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0 orelse
-        effects_count(Plan) > 0 orelse
+    material_participant(Plan) orelse
         operation_claim_plan(
           target(Plan), origin(Plan), request_binding(Plan)).
+
+-doc "Whether a plan contributes actual diff, OCC-read, or effect material.".
+-spec material_participant(plan()) -> boolean().
+material_participant(Plan) ->
+    diff_ops(Plan) > 0 orelse maps:get(read_functors, core(Plan)) > 0 orelse
+        effects_count(Plan) > 0.
 
 operation_claim_plan(
   Identity, Identity, {agent_goal_v1, <<_:256>>}) -> true;

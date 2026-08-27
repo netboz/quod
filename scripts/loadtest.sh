@@ -558,10 +558,10 @@ INTER_RESULT="disabled"
 
 start_inter_ontology_workload() {
   [ "$INTER_ONTOLOGY" = 1 ] || return 0
-  local cross_script result_dir
+  local signed_goal_script result_dir
   local -a args
-  cross_script="$(pwd)/scripts/cross-ontology-loadtest.sh"
-  [ -x "$cross_script" ] || { LOG "INTER: FAIL — missing executable $cross_script"; INTER_RESULT="start_failed"; return 1; }
+  signed_goal_script="$(pwd)/scripts/signed-goal-loadtest.sh"
+  [ -x "$signed_goal_script" ] || { LOG "INTER: FAIL — missing executable $signed_goal_script"; INTER_RESULT="start_failed"; return 1; }
   result_dir=$INTER_RESULT_DIR
   [ -n "$result_dir" ] || result_dir="$PERFDIR/inter-ontology"
   INTER_LOG="$PERFDIR/inter-ontology.log"
@@ -583,7 +583,7 @@ start_inter_ontology_workload() {
         --result-dir "$result_dir")
   [ -n "$INTER_HTTP_TIMEOUT_S" ] && args+=(--http-timeout "$INTER_HTTP_TIMEOUT_S")
   [ "$INTER_INSECURE_TLS" = 1 ] && args+=(--insecure-tls)
-  "$cross_script" "${args[@]}" >"$INTER_LOG" 2>&1 &
+  "$signed_goal_script" "${args[@]}" >"$INTER_LOG" 2>&1 &
   INTER_PID=$!
   INTER_RESULT="running"
 }

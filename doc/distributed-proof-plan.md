@@ -304,10 +304,11 @@ The map does **not** travel as a transferable bearer capability. When B reaches
 `C::Goal`, B sends a correlated nested-selection request to the origin worker.
 The origin looks up or opens C, proxies C's answers back only to the suspended B
 invocation, and records the updated C state in its one map. Evolve
-`quod_ask_router` into the one bounded correlation and cleanup router for scope
+`quod_ask_router` into the one correlation and cleanup router for scope
 frames and nested-selection proxying; it does not interpret Prolog or own an
-overlay. It gains explicit global/per-owner/per-peer admission caps and an
-owner-monitor-to-`ProofId`/scope set. Delete the separate `watch_owner` /
+overlay. Every entry belongs to an owner-monitor-to-`ProofId`/scope set, and
+the per-owner count follows the signed proof shape rather than an unrelated
+node or peer quota. Delete the separate `watch_owner` /
 `stop_owner` cancellation owner rather than retaining two cleanup registries.
 All target sessions are opened from and bound to the authenticated origin node,
 so B never receives a C credential it could replay or use with a shortened call
@@ -552,13 +553,13 @@ call-chain data remain visible to ontology clauses.
 The origin-owned context records every opened scope monotonically for semantic
 reuse even when a transaction savepoint restores an older overlay revision. In
 addition, every scope open registers its handle immediately with
-the origin node's bounded scope router under `ProofId`, before executing the
-first goal. That router is only a bounded ownership/cleanup registry; it holds
+the origin node's scope router under `ProofId`, before executing the first
+goal. That router is only an ownership/cleanup registry; it holds
 no Prolog or overlay state. Therefore a B crash after opening C but before
 returning C's handle cannot orphan C or hide it from root-proof cleanup.
-The router maps have explicit global/per-owner/per-peer admission caps and
-reject before monitor/map insertion; monitoring alone is not treated as a
-bound.
+Every entry has an exact monitored owner. The per-proof scope count is the
+signed proof-shape bound; there is no separate node-wide or peer-wide
+population quota.
 Normal completion, failure, cancellation, owner death, or deadline closes all
 touched scopes.
 Monitors perform immediate cleanup; the bounded scope lifetime is the crash
@@ -568,7 +569,7 @@ The transport-frame and command-envelope byte ceilings are enforced before the
 bounded outer frame is decoded. That decoder extracts fixed session/origin
 metadata, the bounded call chain, and the still-opaque goal binary. Chain depth,
 scopes per proof, active scopes per validator/peer, session identity, origin
-context, and rate/admission limits are then checked before the Prolog goal is
+context, and proof-shape limits are then checked before the Prolog goal is
 decoded, a worker is spawned, or a monitor/map entry is created. Answers per
 call, result/read-set/diff sizes, and proof lifetime are enforced as the scope
 runs. Generated Prolog terms necessarily exist before their encoded size is
@@ -594,9 +595,8 @@ codec seam:
 | distinct ontology scopes per proof | 8 |
 | commit participants | 8 |
 | active proof scopes per ontology | existing configurable 64 |
-| active scopes from one authenticated peer | 16 |
 | one proof-scope worker heap | 64 MiB, converted once to VM heap words |
-| origin-router entries global / per proof owner / per peer | 512 / 8 / 16 |
+| origin-router scopes per proof owner | 8, the proof-shape bound |
 | inactive invocation continuations per scope | 64 |
 | retained activated distributed savepoint generations per proof | 1,024 |
 | materialized foreign-scope checkpoints | at most 1,024 per scope / 8,192 per proof, derived from the generation and scope limits |

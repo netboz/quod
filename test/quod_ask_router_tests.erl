@@ -574,7 +574,7 @@ identity_probe_budget_is_a_cleanup_deadline_test() ->
           ?assertEqual(0, maps:get(probes, quod_ask_router:test_stats(Router)))
       end).
 
-owner_and_peer_bounds_reject_before_open_test() ->
+owner_proof_shape_bound_rejects_before_open_test() ->
     with_router(
       fun(Router, _TestPid, OriginKey, TargetKey) ->
           Results = [quod_ask_router:ensure_scope(
@@ -599,64 +599,30 @@ owner_and_peer_bounds_reject_before_open_test() ->
                node, 1000)),
           ?assertEqual(?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
                        maps:get(scopes, quod_ask_router:test_stats(Router)))
-      end),
-
-    with_router(
-      fun(Router, _TestPid, OriginKey, TargetKey) ->
-          Owners = [owner_process(Router, self()) || _ <- lists:seq(1, 3)],
-          [O1, O2, O3] = Owners,
-          lists:foreach(
-            fun({Owner, Offset}) ->
-                lists:foreach(
-                  fun(N) ->
-                      Owner ! {ensure, endpoint(),
-                               setelement(
-                                 4,
-                                 binding(OriginKey, TargetKey, Offset + N,
-                                         namespace(Offset + N), Offset + N),
-                                 proof_id(Offset))},
-                      receive
-                          {owner_result, Owner, Pending} ->
-                              ?assert(is_pending(Pending, Router))
-                      after ?TIMEOUT -> error(peer_fill_timeout)
-                      end
-                  end,
-                  lists:seq(1, 8))
-            end, [{O1, 100}, {O2, 200}]),
-          O3 ! {ensure, endpoint(),
-                binding(OriginKey, TargetKey, 301,
-                        <<"quod:peer-overflow">>, 301)},
-          receive
-              {owner_result, O3, {error, peer_scope_limit}} -> ok
-          after ?TIMEOUT -> error(peer_limit_timeout)
-          end,
-          ?assertEqual(?QUOD_MAX_ROUTER_SCOPES_PER_PEER,
-                       maps:get(TargetKey,
-                                maps:get(peers,
-                                         quod_ask_router:test_stats(Router)))),
-          lists:foreach(fun(Pid) -> Pid ! stop end, Owners)
       end).
 
-global_router_bound_rejects_before_extra_open_test_() ->
-    {timeout, 10, fun global_router_bound_rejects_before_extra_open/0}.
+router_population_has_no_peer_or_node_quota_test_() ->
+    {timeout, 10, fun router_population_has_no_peer_or_node_quota/0}.
 
-global_router_bound_rejects_before_extra_open() ->
+router_population_has_no_peer_or_node_quota() ->
     drain_test_messages(),
     OriginKey = key(1),
+    TargetKey = key(2),
     SilentOpen = fun(_NodeKey, _Endpoint, _Channel) -> make_ref() end,
     {ok, Router} = quod_ask_router:test_start_link(OriginKey, SilentOpen),
     unlink(Router),
-    OwnerCount = ?QUOD_MAX_ROUTER_SCOPES div
-                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
+    %% Sixty-five owners with eight scopes each exceed both deleted defaults:
+    %% sixteen scopes per peer and 512 scopes per router. Every scope still
+    %% belongs to an exact monitored proof owner and obeys that proof's shape.
+    OwnerCount = 65,
     Owners =
         [begin
-             PeerKey = key(1000 + ((OwnerN - 1) div 2)),
              Bindings =
                  [begin
                       N = OwnerN * 1000 + Slot,
                       setelement(
                         4,
-                        binding(OriginKey, PeerKey, N, namespace(N), N),
+                        binding(OriginKey, TargetKey, N, namespace(N), N),
                         proof_id(OwnerN))
                   end || Slot <- lists:seq(
                                    1, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER)],
@@ -673,81 +639,12 @@ global_router_bound_rejects_before_extra_open() ->
               after 5000 -> error(global_fill_timeout)
               end
           end, Owners),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES,
+        Expected = OwnerCount * ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
+        ?assertEqual(Expected,
                      maps:get(scopes, quod_ask_router:test_stats(Router))),
         FilledStats = quod_ask_router:test_stats(Router),
         ?assertEqual(0, maps:get(retained_owners, FilledStats)),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES,
-                     maps:get(entries, FilledStats)),
-
-        %% Replace one owner's eight live scopes by its one sealed owner
-        %% tombstone, then refill the seven released entries. The mixed state
-        %% must hit the same global ceiling without scanning the owner map.
-        TombstoneOwner = hd(Owners),
-        TombstoneOwner ! {finalize, proof_id(1)},
-        receive
-            {batch_owner_finalized, TombstoneOwner,
-             {error, {protocol_error, unfinished_scope}}} -> ok
-        after ?TIMEOUT -> error(tombstone_finalize_timeout)
-        end,
-        TombstoneStats = quod_ask_router:test_stats(Router),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES - 8,
-                     maps:get(scopes, TombstoneStats)),
-        ?assertEqual(1, maps:get(retained_owners, TombstoneStats)),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES - 7,
-                     maps:get(entries, TombstoneStats)),
-
-        Overflow = owner_process(Router, self()),
-        lists:foreach(
-          fun(N) ->
-              Overflow !
-                  {ensure, endpoint(),
-                   setelement(
-                     4,
-                     binding(OriginKey, key(8888), 800000 + N,
-                             namespace(800000 + N), 800000 + N),
-                     proof_id(8000))},
-              receive
-                  {owner_result, Overflow, Pending} ->
-                      ?assert(is_pending(Pending, Router))
-              after ?TIMEOUT -> error(tombstone_refill_timeout)
-              end
-          end, lists:seq(1, 7)),
-        RefilledStats = quod_ask_router:test_stats(Router),
-        ?assertEqual(1, maps:get(retained_owners, RefilledStats)),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES,
-                     maps:get(entries, RefilledStats)),
-
-        Overflow ! {ensure, endpoint(),
-                    setelement(
-                      4,
-                      binding(OriginKey, key(8888), 999999,
-                              <<"quod:global-overflow">>, 999999),
-                      proof_id(8000))},
-        receive
-            {owner_result, Overflow, {error, router_full}} -> ok
-        after ?TIMEOUT -> error(global_limit_timeout)
-        end,
-
-        %% Reaping the exact sealed owner frees one entry, which a new live
-        %% scope can reuse immediately without disturbing the other 511.
-        TombstoneOwner ! stop,
-        await_retained_owner_count(Router, 0),
-        Overflow ! {ensure, endpoint(),
-                    setelement(
-                      4,
-                      binding(OriginKey, key(8888), 999999,
-                              <<"quod:global-overflow">>, 999999),
-                      proof_id(8000))},
-        receive
-            {owner_result, Overflow, Pending} ->
-                ?assert(is_pending(Pending, Router))
-        after ?TIMEOUT -> error(reaped_tombstone_not_reused)
-        end,
-        ReusedStats = quod_ask_router:test_stats(Router),
-        ?assertEqual(?QUOD_MAX_ROUTER_SCOPES,
-                     maps:get(entries, ReusedStats)),
-        Overflow ! stop
+        ?assertEqual(Expected, maps:get(entries, FilledStats))
     after
         lists:foreach(fun(Pid) -> Pid ! stop end, Owners),
         exit(Router, kill),
@@ -1086,18 +983,6 @@ await_probe_count(Router, Expected, Left) ->
     case maps:get(probes, quod_ask_router:test_stats(Router)) of
         Expected -> ok;
         _ -> timer:sleep(5), await_probe_count(Router, Expected, Left - 1)
-    end.
-
-await_retained_owner_count(Router, Expected) ->
-    await_retained_owner_count(Router, Expected, 50).
-
-await_retained_owner_count(_Router, _Expected, 0) ->
-    error(retained_owner_count_timeout);
-await_retained_owner_count(Router, Expected, Left) ->
-    case maps:get(retained_owners, quod_ask_router:test_stats(Router)) of
-        Expected -> ok;
-        _ -> timer:sleep(5),
-             await_retained_owner_count(Router, Expected, Left - 1)
     end.
 
 flush_link_frames(TestPid) ->

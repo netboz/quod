@@ -48,21 +48,13 @@
 %% request/reply wrapper and public outcome-status metadata.
 -define(QUOD_DTX_ENDPOINT_MAX_ENVELOPE_BYTES,
         (?QUOD_MAX_DTX_CONTROL_BYTES + (4 * 1024))).
-%% Complete validation probes every current validator for every participant
-%% concurrently under one shared deadline.  The endpoint owner must therefore
-%% be able to retain the exact worst-case request set without self-backpressure.
--define(QUOD_DTX_ENDPOINT_MAX_CORRELATIONS,
-        (?QUOD_MAX_DTX_PARTICIPANTS * ?MAX_VALIDATORS)).
--define(QUOD_DTX_ENDPOINT_MAX_WORKERS, 8).
 -define(QUOD_DTX_ENDPOINT_WORKER_TIMEOUT_MS, 30000).
 -define(QUOD_DTX_ENDPOINT_REQUEST_ID_BITS, 128).
 
-%% One node-wide foreign-history owner (distributed-proof-plan §8).
-%% Pending work is bounded independently; retained foreign histories and
-%% follows are not. Dormant histories stay as verified disk caches and are
-%% opened only when a proof or a follow needs them.
--define(QUOD_MAX_FOREIGN_PENDING, 32).
--define(QUOD_MAX_FOREIGN_PENDING_PER_PEER, 4).
+%% One node-wide foreign-history owner (distributed-proof-plan §8). Dormant
+%% histories stay as verified disk caches and are opened only when a proof or
+%% follow needs them. Exact monitors, deadlines and byte bounds own live work;
+%% there is no fixed population refusal.
 -define(QUOD_MAX_FOREIGN_PAGE_ENTRIES, 256).
 -define(QUOD_MAX_FOREIGN_PAGE_BYTES, (900 * 1024)).
 %% Defined in bytes for operator-facing clarity; the sole worker spawn seam
@@ -84,12 +76,11 @@
 -define(QUOD_SCOPE_WIRE_OPAQUE_ID_BITS, 128).
 -define(QUOD_SCOPE_WIRE_MAX_UINT64, 16#FFFFFFFFFFFFFFFF).
 
-%% One node-local origin router is the bounded correlation registry for remote
-%% scopes.  Pending command entries are nested under those scopes and inherit
-%% the invocation bound, so no independent unbounded request table exists.
--define(QUOD_MAX_ROUTER_SCOPES, 512).
+%% Router ownership follows the proof-shape bounds.  There is deliberately no
+%% node-wide or peer-wide population quota: those rejected otherwise valid
+%% concurrent proofs based on arrival timing.  Pending command entries are
+%% nested under a scope and inherit the invocation bound.
 -define(QUOD_MAX_ROUTER_SCOPES_PER_OWNER, ?QUOD_MAX_SCOPES_PER_PROOF).
--define(QUOD_MAX_ROUTER_SCOPES_PER_PEER, 16).
 -define(QUOD_MAX_ROUTER_PENDING_PER_SCOPE,
         ?QUOD_MAX_INVOCATIONS_PER_SCOPE).
 

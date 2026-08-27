@@ -5,8 +5,31 @@ closure review's safety correction is incorporated. Slice 0.5's inventory is
 complete. Slice 0.6 is independently reviewed and committed as `c34f3c2`: the
 browser contracts, shipped assets, stale documentation, owner-state metrics,
 and Grafana panels are corrected without changing protocol behavior. Slice
-0.7 is implemented in the current working tree and its local gates pass; it is
-awaiting independent final review and is not committed or deployed.
+0.7 is independently reviewed and committed as `b1045e0`. Slices 1 and 2 are
+implemented and live on the nine-node hardware fleet in image
+`0.7.95-no-scope-quotas`. The deployment was non-destructive: root and both
+benchmark ledgers retained their anchors and heights. The endpoint caps,
+normal apply polling, shared proof/attestation admission, claim-only origin
+participant, blocking target-engine identity lookup, foreign-verification
+population quotas, and router node/peer quotas are removed. Identical current
+views coalesce at the one foreign-history owner even when caller deadline order
+or route hints differ.
+
+The final gates pass: full EUnit 1,352/0, `quod_ask_SUITE` 17/17, compile,
+xref, dialyzer, and diff-check. Live signed remote reads complete 1,000/1,000
+at concurrency 64: 117.33 proofs/s, p50 522 ms, p90 663 ms, p99 752 ms. At
+concurrency 32 they complete 500/500 at 71.24/s, where the previous peer quota
+completed only 48/500. A real target predicate completes 200/200 at concurrency
+16, 31.58/s, p50 488 ms. All nine allocations have zero restarts and no live
+warning/error/critical log entry after the tests.
+
+Durable writes are still too slow for interactive use: 10/10 sequential remote
+writes measured p50 2,643 ms and 0.38/s; 12/12 at concurrency four serialize at
+0.37/s and p50 10,820 ms. The exact ledger timestamps show consensus commit is
+only a few milliseconds. The remaining common-path cost is the five durable
+blocks plus repeated independent verification of the target's newly committed
+Prepare and Finalize. This is the measured input for Slice 4, not a solved
+latency claim.
 The node-local policy work is deliberately gated on the existing physical-node
 identity plan rather than inventing a temporary configuration authority.
 
@@ -90,11 +113,11 @@ Finalize and source Complete submission.
 
 ### 2.1 The `8` and `22` values
 
-`8` is the current value of `QUOD_DTX_ENDPOINT_MAX_WORKERS`. It is an
-arbitrary local admission ceiling: the ninth valid endpoint request receives
-`busy`. It is neither a quorum rule nor a wire-format requirement. It must be
-deleted, together with the public `max_workers` limit field and both admission
-checks that consume it. It must not be replaced by another fixed default.
+`8` was the value of `QUOD_DTX_ENDPOINT_MAX_WORKERS`. It was an arbitrary local
+admission ceiling: the ninth valid endpoint request received `busy`. It was
+neither a quorum rule nor a wire-format requirement. Slice 1 deletes it,
+together with the public `max_workers` limit field and both population
+admission checks. No replacement fixed default is introduced.
 
 `22` is not a configured ceiling. It is calculated from the already-supported
 64-validator committee: at most `floor((64 - 1) / 3) = 21` validators may be
@@ -105,8 +128,8 @@ from an honest validator.
 That verifier does **not** ask one target node for 22 replies. The failure is
 cross-committee contention: while source validators validate Complete, up to
 64 of them independently probe the target committee, so one target validator
-may receive up to 64 valid concurrent probes. Its cap of eight rejects most of
-them. Yet the source needs 43 validators to finish their own 22-reply checks
+may receive up to 64 valid concurrent probes. The former cap of eight rejected
+most of them. Yet the source needs 43 validators to finish their own 22-reply checks
 and support Complete. A local arbitrary cap can therefore prevent a valid
 protocol quorum from forming.
 
@@ -246,39 +269,28 @@ The safe change is:
 No push event becomes evidence. The existing response verifier remains the
 only verifier.
 
-The current hard-coded inbound worker cap of eight is incompatible with the
-cross-committee verification described in section 2.1. It cannot safely be
-deleted as a two-line patch, however. The current worker map is keyed only by
-pid, duplicate detection scans it, and a remote reply link is not presently an
-owner whose death reclaims the worker immediately.
-
-First refactor the existing Simplex endpoint ownership into one registry:
-
-- key every request by authenticated `{Peer, RequestId}` for O(1) duplicate
-  admission;
-- keep an optional worker/reference, destination, and one absolute deadline in
-  that row;
-- represent `waiting_for_apply` as a process-free state of that same row,
-  never a parked worker, second waiter map, or second owner; the initial check
-  exits and exact `finalize_applied` starts the next current-state check;
-- maintain only a secondary index from the exact
-  `{GroupId, FinalizeRef, Generation, Verdict}` to waiting rows;
-- route normal result, timeout, local caller death, remote link death,
-  namespace stop, and exact `finalize_applied` through one idempotent finish
-  function that removes the row and every index exactly once; and
-- keep the current endpoint response and verifier unchanged.
+The former hard-coded inbound worker cap of eight was incompatible with the
+cross-committee verification described in section 2.1. The implementation
+keeps the existing endpoint worker as the single request owner instead of
+adding a registry or waiter service. When the exact Finalize is committed but
+not projected, that worker waits in `receive` for the existing
+`finalize_applied` message. Simplex sends the message only to workers whose
+request binds the exact group, certified reference slot, generation, and
+verdict. The same worker, monitor, destination, and absolute request deadline
+therefore own normal completion, caller death, link death, timeout, and
+namespace termination. It then reruns the same current-state read and produces
+the same response through the same verifier.
 
 Finishing an endpoint request removes that endpoint row and detaches its
 waiter only. It never removes a DTX control already signed and retained by
 Simplex; that semantic custody continues recovery after caller or reply-link
 death.
 
-Only after that ownership is exact, delete the fixed cap, public
-`max_workers` field, `busy` branches, tests, comments, and documentation. Do
-not replace it with a configured *admission/refusal* default or another hidden
-constant. If the measured aggregate probe memory requires active-work
-scheduling, exact rows wait inside this same registry under an approved
-node-instance scheduler and are never refused merely because others exist.
+With that ownership exact, delete the fixed cap, public `max_workers` field,
+population `busy` branches, tests, comments, and documentation. Do not replace
+it with a configured *admission/refusal* default or another hidden constant.
+Duplicate `{Peer, RequestId}` requests still correlate to their existing live
+request; this is identity, not a population gate.
 
 The outbound endpoint also has a per-hosted-ontology correlation ceiling derived
 as `maximum participants * maximum validators`. That formula is the largest
@@ -319,10 +331,10 @@ byte, term, depth, committee, and VM-safety bounds remain.
 
 | Source/control | Value | Behavior today | Decision |
 |---|---:|---|---|
-| `QUOD_DTX_ENDPOINT_MAX_WORKERS` | 8 per hosted ontology | the ninth applied-state/current-view request gets `busy`; Complete validation can prevent its own quorum | build the single `{Peer, RequestId}` owner described above, then delete the cap and every `busy` branch/public field |
-| `QUOD_DTX_ENDPOINT_MAX_CORRELATIONS` | 8 participants x 64 validators = 512 per hosted ontology | a second valid operation in that ontology can get `busy` after one worst-case operation occupies the map | keep the exact correlation map and caller deadline; delete only the cross-operation population gate |
+| removed `QUOD_DTX_ENDPOINT_MAX_WORKERS` | was 8 per hosted ontology | the ninth applied-state/current-view request got `busy`; Complete validation could prevent its own quorum | Slice 1 keeps the existing per-request worker owner and deletes the population cap, every population `busy` branch, and the public field |
+| removed `QUOD_DTX_ENDPOINT_MAX_CORRELATIONS` | was 8 participants x 64 validators = 512 per hosted ontology | a second valid operation in that ontology could get `busy` after one worst-case operation occupied the map | Slice 1 keeps the exact correlation map and caller deadline and deletes only the cross-operation population gate |
 | retained semantic DTX controls / waiters in Simplex | 8 participants + 1 = 9 controls and 1 waiter per semantic digest, per hosted ontology | an unrelated valid control or second live waiter gets `busy`; any parked control also activates the consensus barrier, even when it is not proposal-ready | keep the existing Simplex custody owner; refactor one canonical DTX readiness predicate, digest registry, ready/blocked indexes, monitorable waiter ownership, byte accounting, and retire path; only then remove both population counts |
-| `QUOD_MAX_FOREIGN_PENDING` / `_PER_PEER` | 32 per node / 4 per peer | certified-history work gets `busy`; one already-active identity separately returns `history_busy` | keep one active cache writer per identity; queue separately owned caller claims and schedule distinct identities inside the existing foreign-log; use the approved named active-work default 32, make it node-policy controlled, and let excess claims wait rather than reject; delete the separate per-peer quota |
+| removed `QUOD_MAX_FOREIGN_PENDING` / `_PER_PEER` | was 32 per node / 4 per peer | certified-history work could get `busy`; one already-active identity separately returned `history_busy` | retain the one cache writer per identity; share concurrent current-view requests for that identity even when their route hints differ, and retain exact monitored ownership/deadlines instead of a population refusal |
 | `quod_catchup:MAX_INFLIGHT` | 32 read workers per hosted ontology | excess certified-history pulls are silently dropped, so a valid caller waits the full 8-second pull timeout | keep the wire unchanged; replace the counter with owned request rows and the same approved named active-work default 32; excess reads wait and start on worker completion, while expired/dead-link rows finish once and never disappear into the client timeout |
 | outer Simplex coordinator-owner failure state | saturates at 16; retry 100 ms to 3.2 seconds | bounds only restart-backoff bookkeeping and never abandons durable recovery | keep recovery unbounded; represent only the actual backoff state and delete its unreachable 5-second constant |
 | coordinator process retry | 100 ms to the configured 5 seconds | replans/retries one durable group; this 5-second maximum is reachable | keep as the coordinator's distinct recovery scheduler; do not conflate it with the outer Simplex owner |
@@ -370,10 +382,10 @@ it.
 | client router correlations / cursor routes | two independent maps, each capped at 256 per node | a valid signed request or cursor route can get `busy` | add reverse monitor/worker indexes only where current cleanup scans, then delete both population checks; do not replace the removed per-forwarder check with an unused counter |
 | client inbound workers / per forwarder | 64 per node / 8 per authenticated forwarder | valid signed traffic is refused | existing worker-pid/DOWN ownership is already O(1); delete both admission checks and the O(n) per-forwarder count, retaining no counter unless a separately approved metric/policy consumes it |
 | proof workers / scope workers / agent attesters | configurable; current compiled/deploy default 64 / 64 per hosted ontology; attesters consume proof capacity | proof/cursor returns `busy`, scope returns `ontology_busy`, and attestation returns `retry` | retain the present 64 while measuring it; moving it into node-instance policy is proposed but the default is not yet approved by Yan. It is not a memory reservation or acceptable per-goal usage. Instrument aggregate and per-goal memory; ordinary work approaching a 64 MiB emergency worker kill is a defect to fix. `unlimited` requires a separately reviewed aggregate-memory and MVCC-history owner |
-| origin scope router total / per owner / per peer | 512 / 8 / 16 | valid scope or identity-probe admission can fail | retain 8 per proof because it is the proof-shape bound; remove the node-wide and peer-wide population defaults only after the existing indexes/counters provide exact ownership |
-| target remote scopes per peer | 16 | a valid authenticated remote scope is rejected | total memory still remains protected by the current configurable scope-worker policy pending explicit approval of its default; delete the extra peer quota with its counters and error path |
+| origin scope router total / per owner / per peer | node-wide and peer-wide quotas deleted; 8 per owner remains | valid concurrent proofs no longer compete for arbitrary router slots | implemented: exact monitored ownership already existed; retain 8 only because it is the signed proof-shape bound |
+| target remote scopes per peer | deleted | valid authenticated scopes are no longer rejected by source concentration | implemented: the configured derivation-worker policy remains the explicit aggregate memory admission owner; the redundant peer counter and error path are gone |
 | pending commands per scope | 64 | a 65th command in one scope is rejected | retain: it is derived from the per-proof invocation shape, not node-wide concurrency |
-| inbound identity attestations | a separate map independently capped at 512 by the same macro | excess valid requests are silently ignored | give them explicit request/link/attester ownership and cleanup; add the missing O(1) identity-collector monitor index; then remove this separate population check without adding another pool |
+| inbound identity attestations | no population quota | every request has explicit request/link/attester ownership and final-deadline cleanup | implemented without adding another pool or counter |
 | unsigned ingress queue | 512 rows / 64 per author / 2 blocks (512 KiB) / 7-second lifetime per hosted ontology | valid unsigned work is parked in FIFO order, then gets `busy` at a count/byte threshold or when the independent ingress timer expires | keep this existing pre-sign owner rather than add a queue, but delete arbitrary row/per-author counts with the custody slice; one reviewed byte owner and the signed pre-Begin deadline must govern admission/waiting, so moving pressure here cannot merely move the hard rejection |
 | Simplex ordinary signed custody | 2,048 rows / 8 blocks = 2 MiB per hosted ontology process | a node-signed submission whose certified outcome is still unknown gets `busy` at either threshold | once signed, retain the exact row in the existing Simplex custody owner until certified inclusion/exclusion during that owner lifetime and never drop it because of a count. Reserve through the node-wide `quod_ingress_budget` before retention. Ordinary restart semantics remain `outcome_unknown`; 2 MiB is temporary code, not approved architecture |
 | Simplex relay pending | 2,048 rows per hosted ontology process | forwarded pre-Begin submission gets `busy` or waits | remove the separate count; retain one exact relay row only while its custody row needs placement, wake it on link/view/progress events, and use the same pre-sign byte owner rather than a second queue or policy |
@@ -1070,7 +1082,8 @@ catch-up owners.
   per-forwarder counter or a replacement queue owner merely to delete a cap;
 - remove the client router's two independent 256 gates, inbound 64/8 gates,
   scope router node-wide 512 and peer 16 gates, separate inbound-attestation
-  512 gate, and target remote-peer 16 gate after exact cleanup tests;
+  512 gate, and target remote-peer 16 gate after exact cleanup tests
+  (**implemented in the current working tree**);
 - retain the per-proof owner count 8 and per-scope pending count 64 because
   they are protocol-shape bounds, deleting peer counters when peer policy is
   removed;
@@ -1369,11 +1382,18 @@ explicit blockers only for their own sub-slice.
 
 ### Slice 1 -- event-driven apply readiness
 
-- refactor one indexed endpoint-request registry and one finish path;
-- retain exact applied requests until their committed Finalize is projected;
-- wake them from `finalize_applied`;
+- retain each exact applied request in its existing endpoint worker until its
+  committed Finalize is projected;
+- wake only that matching worker from `finalize_applied`;
 - remove the fixed endpoint worker and global-correlation admission gates,
   their public limit fields, tests, comments, and dead `busy` branches;
+- separate small identity attesters from the proof-worker admission count;
+- after an accepted remote phase, request an immediate refresh from the
+  existing certified foreign-log follow and resume on its ordinary
+  acknowledged progress notice instead of polling with 100/200/400 ms waits;
+- coalesce identical concurrent current-identity checks at the existing
+  certified-history owner, so simultaneous remote scopes share one verified
+  result instead of receiving `history_busy` and retrying;
 - preserve timeout/disconnect cleanup and the existing verifier; and
 - use one concurrent coordinator preflight.
 
@@ -1594,8 +1614,8 @@ Documentation closure includes every file listed in section 5.1, especially
 `doc/distributed-proof-plan.md`: remove its stale `512/8 cannot
 self-throttle` claim and its nonexistent authenticated-DTX `16 requests/s,
 burst 32` claim, and split its conflated “foreign-history 32” row into
-foreign-log pending verification (node-wide 32/peer 4 today) and catch-up
-server workers (32 per hosted ontology today). Sweep code, tests, metrics,
+foreign-log exact monitored verification work (no population quota) and
+catch-up server workers (32 per hosted ontology today). Sweep code, tests, metrics,
 configuration, comments, generated client assets, and all architecture
 documents for removed fields and semantics.
 

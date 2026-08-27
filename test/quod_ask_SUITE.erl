@@ -406,7 +406,7 @@ remote_signed_gateway_read_execute_cursor(Config) ->
         {normalized,
          {committed, [_], {group_outcome, {group, ?ASKER_NS,
                                             AgentAnchor, _, _, _},
-                                           _, [_, _]}}}},
+                                           _, [_]}}}},
        peer:call(
          Asker, quod_client_goal_ingress, submit,
          [execute, maps:get(session_id, Session), ExecuteBytes,
@@ -440,7 +440,7 @@ remote_signed_gateway_read_execute_cursor(Config) ->
         {normalized,
          {committed, [_], {group_outcome, {group, ?ASKER_NS,
                                             AgentAnchor, _, _, _},
-                                           _, [_, _]}}}},
+                                           _, [_]}}}},
        peer:call(
          Asker, quod_client_goal_ingress, cursor_command,
          [maps:get(session_id, Session), CursorId, accept, Peer], 60000)),
@@ -534,7 +534,9 @@ remote_signed_two_gateway_race(Config) ->
           ?assertEqual(RequestBytes, maps:get(request_bytes, Ev)),
           ?assertEqual(Signature, maps:get(signature, Ev))
       end, Evidences),
-    {_Claim, _Outcome} = wait_operation_claim(Asker, OperationRef, 600),
+    {_Claim, #{status := committed, participant_slots := [OnlySlot]}} =
+        wait_operation_claim(Asker, OperationRef, 600),
+    ?assertMatch({{?NS, _}, _, _}, OnlySlot),
     ?assertMatch(
        {ok, _, {operation_outcome,
                 #{status := claimed, outcome_ref := _},
@@ -592,7 +594,7 @@ remote_signed_gateway_group(Config) ->
           Asker, quod_client_goal_ingress, submit,
           [execute, maps:get(session_id, Session), GroupBytes,
            GroupSignature, Peer], 60000),
-    ?assertEqual(3, length(Slots)),
+    ?assertEqual(2, length(Slots)),
     assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
     assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag),
     ?assertMatch(
@@ -663,7 +665,7 @@ remote_signed_concurrent_gateway_groups(Config) ->
               wait_operation_claim(Asker, OperationRef, 600),
           ?assertMatch(
              {group, ?ASKER_NS, AgentAnchor, _, _, _}, GroupRef),
-          ?assertEqual(3, length(Slots)),
+          ?assertEqual(2, length(Slots)),
           assert_fact_once(Target, ?NS, dtx_animals_mark, Tag),
           assert_fact_once(Third, ?THIRD_NS, dtx_third_mark, Tag)
       end, Requests),

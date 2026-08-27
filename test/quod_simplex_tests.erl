@@ -1985,6 +1985,71 @@ dtx_endpoint_applied_uses_current_committee_test() ->
        quod_simplex:test_dtx_endpoint_result(
          Request, {applied_state, Evidence, Snapshot}, S)).
 
+dtx_endpoint_applied_waits_for_exact_projection_message_test() ->
+    {Author, AuthorId} = id(),
+    Ns = <<"quod:dtx-applied-wake">>,
+    Anchor = <<47:256>>,
+    Target = {Ns, Anchor},
+    GroupId = <<48:256>>,
+    Generation = 5,
+    DecisionRef = dtx_test_ref(Target, 2, <<49:256>>),
+    PrepareRef = dtx_test_ref(Target, 3, <<50:256>>),
+    {ok, Finalize} = quod_dtx:new_finalize(
+                       GroupId, DecisionRef, commit,
+                       PrepareRef, Generation),
+    {ok, Control} = quod_dtx:sign_control(
+                      Target, Finalize, <<51:256>>, 1, 1, AuthorId),
+    Slot = 4,
+    FinalizeRef = dtx_test_ref(
+                    Target, Slot, quod_dtx:record_digest(Control)),
+    Evidence = #{identity => Target, phase => finalize, control => Control},
+    RequestId = <<52:128>>,
+    Request = {applied, RequestId, GroupId, FinalizeRef,
+               Generation, commit},
+    WaitingSnapshot = #{applied => none},
+    Key = {GroupId, FinalizeRef, Generation, commit},
+    ?assertEqual(
+       {wait, Key},
+       quod_simplex:test_waiting_applied_key(
+         Request, {applied_state, Evidence, WaitingSnapshot})),
+    AppliedSnapshot =
+        #{applied => #{finalize_ref => FinalizeRef,
+                       generation => Generation, verdict => commit}},
+    ?assertEqual(
+       ready,
+       quod_simplex:test_waiting_applied_key(
+         Request, {applied_state, Evidence, AppliedSnapshot})),
+
+    Parent = self(),
+    Matching = spawn(fun() -> Parent ! {matching, receive M -> M end} end),
+    Other = spawn(fun() -> Parent ! {other, receive M -> M end} end),
+    S0 = st(#{ns => Ns, genesis_hash => Anchor, self => Author,
+              validators => [Author], slot => Slot, sync => ready,
+              prolog_ready => true, store => memory}),
+    {_MatchingMonitor, S1} =
+        quod_simplex:test_seed_dtx_worker(
+          Matching, local, Request, {link, self()}, S0),
+    OtherRequest =
+        {applied, <<53:128>>, <<54:256>>, FinalizeRef,
+         Generation, commit},
+    {_OtherMonitor, S2} =
+        quod_simplex:test_seed_dtx_worker(
+          Other, local, OtherRequest, {link, self()}, S1),
+    ok = quod_simplex:test_wake_dtx_applied_workers(
+           {GroupId, Slot, Generation}, S2),
+    receive
+        {matching, {dtx_finalize_applied, Key}} -> ok
+    after 1000 ->
+        error(exact_applied_worker_was_not_woken)
+    end,
+    receive
+        {other, _Unexpected} ->
+            error(unrelated_applied_worker_was_woken)
+    after 0 ->
+        ok
+    end,
+    exit(Other, kill).
+
 %% Public outcomes are authoritative only when the responder is a member of
 %% the requested frozen committee and its Prolog publication floor exactly
 %% matches its current Simplex slot. A stale view, lagging projection, or

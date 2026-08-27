@@ -523,14 +523,9 @@ router_admission_error(_Target, {scope_limit_exceeded, _Max} = Reason) ->
     %% This is a per-peer target admission bound. Another eligible host can
     %% still admit the same immutable scope request before any execution.
     {retry, Reason};
-router_admission_error(_Target, peer_scope_limit) ->
-    {retry,
-     {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES_PER_PEER}};
 router_admission_error(_Target, owner_scope_limit) ->
     {fatal,
      {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER}};
-router_admission_error(_Target, router_full) ->
-    {fatal, {scope_limit_exceeded, ?QUOD_MAX_ROUTER_SCOPES}};
 router_admission_error(_Target, signed_scope_unavailable) ->
     {retry, signed_scope_unavailable};
 router_admission_error(Target, {proof_poisoned, Reason}) ->

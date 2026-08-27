@@ -24,6 +24,8 @@ all_normalized_results_roundtrip_test() ->
          {committed, [BindingBlob], TxRef},
          {committed, [BindingBlob],
           {group_outcome, GroupRef, 9, Slots}},
+         {committed, [BindingBlob],
+          {group_outcome, GroupRef, 9, [hd(Slots)]}},
          {pending, TxRef}, {pending, GroupRef}, {pending, OperationRef},
          {error, read_only}, {error, target_unavailable},
          {error, ontology_rebuilding}, {error, ontology_busy},
@@ -80,7 +82,13 @@ malformed_and_noncanonical_results_are_rejected_test() ->
     ?assertEqual({error, result_too_large},
                  quod_client_result:decode(Oversized)),
     ?assertEqual({error, invalid_result},
-                 quod_client_result:encode({answers, -1, []})).
+                 quod_client_result:encode({answers, -1, []})),
+    GroupRef = {group, <<"quod:a">>, <<1:256>>, <<2:256>>, <<3:256>>,
+                <<4:256>>},
+    ?assertEqual(
+       {error, invalid_result},
+       quod_client_result:encode(
+         {committed, [], {group_outcome, GroupRef, 1, []}})).
 
 fixture() ->
     quod_ct:signed_goal_fixture(

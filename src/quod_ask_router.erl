@@ -120,7 +120,6 @@ by the fixed `quod_scope_wire` decoder.
     owners = #{} :: map(),
     retained_owners = 0 :: non_neg_integer(),
     owner_refs = #{} :: map(),
-    peers = #{} :: map(),
     request_links = #{} :: map(),
     return_links = #{} :: map(),
     probes = #{} :: map(),
@@ -513,14 +512,10 @@ admit_probe(Owner, S) ->
     case probe_owner_admission(maps:get(Owner, S#s.owners, undefined)) of
         {error, _} = Error -> Error;
         ok ->
-            case router_entry_count(S) >= ?QUOD_MAX_ROUTER_SCOPES of
-                true -> {error, router_full};
-                false ->
-                    case owner_entry_count(Owner, S) >=
-                         ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
-                        true -> {error, owner_scope_limit};
-                        false -> ok
-                    end
+            case owner_entry_count(Owner, S) >=
+                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
+                true -> {error, owner_scope_limit};
+                false -> ok
             end
     end.
 
@@ -651,12 +646,10 @@ finish_identity(Owner, ProofId, Ref, Result,
 handle_identity_request(PeerIdentity, Link, Payload,
                              S = #s{identity_inbound = Inbound}) ->
     PeerKey = quod_link:peer_key(PeerIdentity),
-    case {PeerKey, quod_agent_identity:decode_request(Payload),
-          map_size(Inbound) < ?QUOD_MAX_ROUTER_SCOPES} of
+    case {PeerKey, quod_agent_identity:decode_request(Payload)} of
         {<<_:256>>, {ok, Request =
                            {agent_identity_request, RequestId,
-                            _ProofId, RequestBytes, Signature, _NotAfter}},
-         true} ->
+                            _ProofId, RequestBytes, Signature, _NotAfter}}} ->
             Key = {PeerKey, RequestId},
             case {maps:is_key(Key, Inbound),
                   quod_client_goal:verify(RequestBytes, Signature)} of
@@ -981,22 +974,15 @@ reusable_binding(
    OriginIdentity, TargetIdentity, Mode, Principal, AuthenticationDigest}) -> true;
 reusable_binding(_, _) -> false.
 
-admit_scope(Owner, ProofId, TargetKey, S) ->
+admit_scope(Owner, ProofId, _TargetKey, S) ->
     OwnerState = maps:get(Owner, S#s.owners, undefined),
     case owner_admission(OwnerState, ProofId) of
         {error, _} = Error -> Error;
         ok ->
-            case router_entry_count(S) >= ?QUOD_MAX_ROUTER_SCOPES of
-                true -> {error, router_full};
-                false ->
-                    OwnerCount = owner_entry_count(Owner, S),
-                    PeerCount = maps:get(TargetKey, S#s.peers, 0),
-                    case {OwnerCount >= ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER,
-                          PeerCount >= ?QUOD_MAX_ROUTER_SCOPES_PER_PEER} of
-                        {true, _} -> {error, owner_scope_limit};
-                        {_, true} -> {error, peer_scope_limit};
-                        _ -> ok
-                    end
+            case owner_entry_count(Owner, S) >=
+                 ?QUOD_MAX_ROUTER_SCOPES_PER_OWNER of
+                true -> {error, owner_scope_limit};
+                false -> ok
             end
     end.
 
@@ -1033,8 +1019,7 @@ insert_opening_scope(Owner, Endpoint, Fields, OpenFrame, S0) ->
     {OpenRef,
      track_owner_peaks(
        S2#s{reuse = (S2#s.reuse)#{Scope#scope.reuse_key => ScopeKey},
-            opens = (S2#s.opens)#{OpenRef => ScopeKey},
-            peers = increment(TargetKey, S2#s.peers)})}.
+            opens = (S2#s.opens)#{OpenRef => ScopeKey}})}.
 
 router_entry_count(#s{scopes = Scopes, probes = Probes,
                       retained_owners = RetainedOwners}) ->
@@ -1678,8 +1663,7 @@ drop_scope(ScopeKey, Result, S0 = #s{scopes = Scopes}) ->
             S1 = S0#s{
                 scopes = Scopes1,
                 reuse = maps:remove(Scope#scope.reuse_key, S0#s.reuse),
-                opens = maps:remove(Scope#scope.open_ref, S0#s.opens),
-                peers = decrement(Scope#scope.target_key, S0#s.peers)},
+                opens = maps:remove(Scope#scope.open_ref, S0#s.opens)},
             S2 = remove_owner_scope(Scope#scope.owner, ScopeKey, S1),
             S3 = remove_link_scope(request, Scope#scope.request_link, ScopeKey, S2),
             remove_link_scope(return, Scope#scope.return_link, ScopeKey, S3);
@@ -1831,7 +1815,6 @@ empty_owner_stats() ->
       owners => 0,
       retained_owners => 0,
       entries => 0,
-      peers => #{},
       opens => 0,
       probes => 0,
       request_links => 0,
@@ -1840,7 +1823,7 @@ empty_owner_stats() ->
       owner_peak => Current}.
 
 owner_stats(S = #s{scopes = Scopes, owners = Owners,
-                   retained_owners = RetainedOwners, peers = Peers,
+                   retained_owners = RetainedOwners,
                    opens = Opens, probes = Probes,
                    request_links = RequestLinks,
                    return_links = ReturnLinks, owner_peaks = Peaks}) ->
@@ -1850,7 +1833,6 @@ owner_stats(S = #s{scopes = Scopes, owners = Owners,
       owners => map_size(Owners),
       retained_owners => RetainedOwners,
       entries => router_entry_count(S),
-      peers => Peers,
       opens => map_size(Opens),
       probes => map_size(Probes),
       request_links => map_size(RequestLinks),
@@ -1921,11 +1903,3 @@ terminal_result({return_link_down, _}) -> link_down;
 terminal_result({scope_error, Reason}) -> terminal_result(Reason);
 terminal_result({proof_poisoned, Reason}) -> terminal_result(Reason);
 terminal_result(_) -> error.
-
-increment(Key, Counts) -> Counts#{Key => maps:get(Key, Counts, 0) + 1}.
-
-decrement(Key, Counts) ->
-    case maps:get(Key, Counts, 0) of
-        N when N > 1 -> Counts#{Key => N - 1};
-        _ -> maps:remove(Key, Counts)
-    end.

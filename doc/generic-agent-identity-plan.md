@@ -149,6 +149,17 @@ Targets certify the issuer's current committee through the existing
 signature set. Route hints in the certificate are connection candidates only;
 TLS keys and certified membership establish authority. No endpoint enters a
 durable fact, and no second committee verifier or foreign-state cache exists.
+Concurrent scopes asking for the same current issuer view share the one
+in-flight certified-history verification and its result. They do not receive
+`history_busy`, poll, or repeat the same fetch independently; distinct views
+remain isolated under the history owner's existing one-writer rule. Each
+caller retains its own deadline; deadline ordering does not split requests for
+the same view into competing cache writers.
+Remote scope authentication runs outside the target ontology owner's mailbox.
+The worker calls this same verifier, while the owner remains free to admit
+other scope opens; completion returns through one monitored correlation and
+the owner rechecks ordinary scope admission before opening the session. The
+proof deadline is the final failure safeguard, not a progress-discovery timer.
 
 A committee change, unavailable quorum, stale view, expired certificate, or
 unavailable origin history returns retryable `signed_scope_unavailable`. A bad

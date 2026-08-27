@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// Fixed-work remote-proof benchmark using Quod's actual signed browser client.
-// It deliberately imports the shared request encoder/authentication client: this
-// harness owns endpoint selection and measurements, not a second goal protocol.
+// Signed-goal benchmark using Quod's actual browser client.  It deliberately
+// imports the shared request encoder/authentication client: this harness owns
+// endpoint selection and measurements, not a second goal protocol.  Supplying
+// a target namespace measures the remote `::` path; omitting it measures a
+// target-local signed goal through exactly the same client request path.
 
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { importEncryptedKeyProvider } from '../client/src/key-provider.js'
@@ -11,25 +13,27 @@ import { authenticateKey, postJson, signedGoal } from '../client/src/signed-clie
 const defaults = {
   sourceEndpoints: '', sourceExplorerEndpoints: '', sourceNs: '', targetNs: '', goal: 'true', mode: 'read',
   requests: '1000', concurrency: '32', httpTimeout: '35', preflightTimeout: '60',
+  duration: '0',
   maxFailures: '0', resultDir: '', agentAnchor: '', agentInstance: '',
   keyBundle: '', keyPassphraseEnv: '', insecureTls: false,
 }
 
-function die(message) { console.error(`cross-ontology-loadtest: ${message}`); process.exit(2) }
+function die(message) { console.error(`signed-goal-loadtest: ${message}`); process.exit(2) }
 function usage() {
-  console.log(`Usage: scripts/cross-ontology-loadtest.sh --source-endpoints URL[,URL...] \\
-       --source-ns NAME --target-ns NAME [options]
+  console.log(`Usage: scripts/signed-goal-loadtest.sh --source-endpoints URL[,URL...] \\
+       --source-ns NAME [--target-ns NAME] [options]
 
-Runs signed Target::Goal proofs through the browser client protocol. Every source
-endpoint must host SOURCE_NS and must not co-host TARGET_NS; successful work
-therefore necessarily crosses the authenticated directory/QUIC scope path.
+Runs signed goals through the browser client protocol. With --target-ns, every
+source endpoint must host SOURCE_NS and must not co-host TARGET_NS; successful
+work then necessarily crosses the authenticated directory/QUIC scope path.
+Without --target-ns, the goal runs in SOURCE_NS.
 
 Required:
   --source-endpoints URL[,URL...]  HTTPS client endpoint(s) hosting the source
   --source-explorer-endpoints URL[,URL...]
                                   matching Explorer endpoint(s) for preflight
   --source-ns NAME                 source ontology namespace
-  --target-ns NAME                 remote target ontology namespace
+  --target-ns NAME                 optional remote target ontology namespace
   --agent-anchor HEX               source agent ontology genesis anchor
   --agent-instance TEXT            ground agent instance term
   --key-bundle PATH                encrypted browser-key export for that agent
@@ -39,7 +43,8 @@ Options:
   --goal TEXT                      target-local goal; __QUOD_REQUEST_ID__ is
                                    replaced with a unique atom for each request
   --mode read|execute              signed proof mode (default: read)
-  --requests N                     exact number of remote proofs (default: 1000)
+  --requests N                     exact number of proofs (default: 1000; ignored with --duration)
+  --duration SEC                   run until this deadline instead of a fixed count
   --concurrency N                  maximum simultaneous remote proofs (default: 32)
   --http-timeout SEC               request deadline (default: 35)
   --preflight-timeout SEC          route/auth readiness wait (default: 60)
@@ -60,6 +65,7 @@ const names = new Map([
   ['--source-ns', 'sourceNs'],
   ['--target-ns', 'targetNs'], ['--goal', 'goal'], ['--mode', 'mode'],
   ['--requests', 'requests'], ['--concurrency', 'concurrency'],
+  ['--duration', 'duration'],
   ['--http-timeout', 'httpTimeout'], ['--preflight-timeout', 'preflightTimeout'],
   ['--max-failures', 'maxFailures'], ['--result-dir', 'resultDir'],
   ['--agent-anchor', 'agentAnchor'], ['--agent-instance', 'agentInstance'],
@@ -81,18 +87,21 @@ function uint(name, value, positive = false) {
   if (!/^\d+$/.test(value) || (positive && Number(value) < 1)) die(`${name} must be ${positive ? 'positive' : 'a non-negative'} integer`)
   return Number(value)
 }
-const requests = uint('requests', opt.requests, true)
+const requests = uint('requests', opt.requests)
 const concurrency = uint('concurrency', opt.concurrency, true)
 const httpTimeout = uint('http-timeout', opt.httpTimeout, true)
 const preflightTimeout = uint('preflight-timeout', opt.preflightTimeout)
+const duration = uint('duration', opt.duration)
 const maxFailures = uint('max-failures', opt.maxFailures)
-if (!opt.sourceEndpoints || !opt.sourceExplorerEndpoints || !opt.sourceNs || !opt.targetNs || !opt.agentAnchor ||
+if (!opt.sourceEndpoints || !opt.sourceExplorerEndpoints || !opt.sourceNs || !opt.agentAnchor ||
     !opt.agentInstance || !opt.keyBundle || !opt.keyPassphraseEnv) {
-  die('source-endpoints, source-explorer-endpoints, source-ns, target-ns, agent-anchor, agent-instance, key-bundle, and key-passphrase-env are required')
+  die('source-endpoints, source-explorer-endpoints, source-ns, agent-anchor, agent-instance, key-bundle, and key-passphrase-env are required')
 }
-if (opt.sourceNs === opt.targetNs) die('source-ns and target-ns must differ')
+const remote = opt.targetNs !== ''
+if (remote && opt.sourceNs === opt.targetNs) die('source-ns and target-ns must differ')
 if (!opt.goal) die('goal must not be empty')
 if (!['read', 'execute'].includes(opt.mode)) die('mode must be read or execute')
+if (requests === 0 && duration === 0) die('requests or duration must be positive')
 if (opt.insecureTls) process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0'
 
 const endpointSet = new Set()
@@ -142,8 +151,12 @@ try {
 function remoteGoal(inner) {
   return `${renderTerm(atom(opt.targetNs))} :: (${inner}).`
 }
+function directGoal(inner) {
+  return `${inner.replace(/\.$/, '')}.`
+}
 function goalFor(id) {
-  return remoteGoal(opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id))
+  const inner = opt.goal.replace(/\.$/, '').replaceAll('__QUOD_REQUEST_ID__', id)
+  return remote ? remoteGoal(inner) : directGoal(inner)
 }
 function endpointPost(base) {
   return (path, body, method = 'POST') => postJson(new URL(path, `${base}/`).href, body, method)
@@ -156,6 +169,14 @@ async function summary(base) {
 function outcomeText(error) {
   const message = String(error?.message || error).replaceAll('\t', ' ').replaceAll('\n', ' ')
   return error?.outcomeUnknown ? `outcome_unknown:${message}` : message
+}
+function retryablePreflightError(error) {
+  // Readiness and transport failures may clear while a rolling deployment or
+  // route recovery completes. A rejected request is deterministic input or
+  // policy, so repeating it only hides the real error for the full timeout.
+  if (error?.status === 429) return true
+  if (typeof error?.status === 'number') return error.status >= 500
+  return !['agent_anchor_does_not_match_source'].includes(error?.message)
 }
 function boundedDetail(value) {
   let text
@@ -170,7 +191,7 @@ function failureClass(detail, error = null) {
   if (text.includes('ontology_busy')) return 'ontology_busy'
   if (text.includes('not_allowed') || text.includes('policy')) return 'policy_failed'
   if (text.includes('conflict') || text.includes('occ')) return 'occ_failed'
-  if (error?.status === undefined || error?.status === 0) return 'transport_failed'
+  if (error !== null && (error.status === undefined || error.status === 0)) return 'transport_failed'
   return 'goal_failed'
 }
 const noJournal = { async put() {}, async delete() {} }
@@ -184,16 +205,18 @@ while (Date.now() <= deadline && !sources.length) {
     for (const [index, endpoint] of endpoints.entries()) {
       const state = await summary(explorerEndpoints[index])
       const source = state.namespaces?.filter(row => row.ns === opt.sourceNs) ?? []
-      const target = state.namespaces?.filter(row => row.ns === opt.targetNs) ?? []
-      if (source.length !== 1 || target.length !== 0 || source[0].syncing !== false) throw new Error('source missing, co-hosted target, or syncing source')
+      const target = remote ? (state.namespaces?.filter(row => row.ns === opt.targetNs) ?? []) : []
+      if (source.length !== 1 || (remote && target.length !== 0) || source[0].syncing !== false) {
+        throw new Error(remote ? 'source missing, co-hosted target, or syncing source' : 'source missing or syncing')
+      }
       if (source[0].genesis.toLowerCase() !== opt.agentAnchor.toLowerCase()) throw new Error('agent_anchor_does_not_match_source')
       const post = endpointPost(endpoint)
       const identity = await authenticateKey(provider, { post })
-      // A signed remote read proves the actual source->target route and ACL
-      // before the measured workload begins, without consuming a write goal.
+      // A signed read proves the exact signed path (and, when remote, the
+      // source-to-target route and ACL) before the measured workload begins.
       const warmup = await signedGoal(identity, {
         mode: 'read', agent,
-        goal: remoteGoal('true'),
+        goal: remote ? remoteGoal('true') : directGoal('true'),
       }, { post })
       if (warmup.result !== 'ok') throw new Error(`warmup_${warmup.result || 'invalid'}`)
       rows.push({ endpoint, post, identity, height: source[0].height })
@@ -201,30 +224,34 @@ while (Date.now() <= deadline && !sources.length) {
     sources = rows
   } catch (error) {
     preflightError = outcomeText(error)
+    if (!retryablePreflightError(error)) {
+      die(`preflight rejected the signed goal: ${preflightError}`)
+    }
     await new Promise(resolve => setTimeout(resolve, 1000))
   }
 }
-if (!sources.length) die(`preflight did not establish signed remote proof: ${preflightError || 'unknown'}`)
+if (!sources.length) die(`preflight did not establish signed ${remote ? 'remote' : 'local'} proof: ${preflightError || 'unknown'}`)
 
-const resultDir = opt.resultDir || `/tmp/quod-cross-ontology-${Date.now()}`
+const resultDir = opt.resultDir || `/tmp/quod-signed-goal-${Date.now()}`
 await mkdir(resultDir, { recursive: true })
 await writeFile(`${resultDir}/preflight.tsv`, sources.map(row => `${row.endpoint}\t${opt.sourceNs}\t${opt.targetNs}\t${row.height}`).join('\n') + '\n')
-console.log('cross-ontology signed fixed-work benchmark')
+console.log(`signed ${remote ? 'remote' : 'local'}-goal benchmark`)
 console.log(`  source:      ${opt.sourceNs} (${sources.length} endpoint(s))`)
-console.log(`  target:      ${opt.targetNs}`)
-console.log(`  remote goal: ${goalFor('<request-id>')}`)
+console.log(`  target:      ${remote ? opt.targetNs : opt.sourceNs}`)
+console.log(`  goal:        ${goalFor('<request-id>')}`)
 console.log(`  mode:        ${opt.mode}`)
-console.log(`  work:        ${requests} proofs at concurrency ${concurrency}`)
+console.log(`  work:        ${duration ? `${duration}s` : `${requests} proofs`} at concurrency ${concurrency}`)
 
 const started = process.hrtime.bigint()
-const rows = new Array(requests)
+const rows = []
 let next = 0
 const prefix = `q${Date.now()}_${process.pid}`
+const workloadDeadline = duration === 0 ? 0 : Date.now() + duration * 1000
 async function worker() {
   for (;;) {
     const number = next
     next += 1
-    if (number >= requests) return
+    if (duration === 0 ? number >= requests : Date.now() >= workloadDeadline) return
     const source = sources[number % sources.length]
     const began = process.hrtime.bigint()
     try {
@@ -235,24 +262,24 @@ async function worker() {
       const ok = reply?.result === 'ok'
       const detail = boundedDetail(reply)
       const category = ok ? (opt.mode === 'execute' ? 'committed' : 'read_ok') : failureClass(detail)
-      rows[number] = {
+      rows.push({
         endpoint: source.endpoint,
         status: 0,
         category,
         detail,
         latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
         succeeded: ok,
-      }
+      })
     } catch (error) {
       const detail = outcomeText(error)
-      rows[number] = {
+      rows.push({
         endpoint: source.endpoint,
         status: error?.status ?? 0,
         category: failureClass(detail, error),
         detail,
         latencyMs: Number((process.hrtime.bigint() - began) / 1000000n),
         succeeded: false,
-      }
+      })
     }
   }
 }
@@ -276,8 +303,10 @@ console.log(`  succeeded:  ${okRows.length}`)
 console.log(`  failures:   ${failures}`)
 console.log(`  outcomes:   ${[...categories].sort().map(([name, count]) => `${name}=${count}`).join(' ')}`)
 console.log(`  latency:    p50=${percentile(.50)}ms p90=${percentile(.90)}ms p99=${percentile(.99)}ms`)
-console.log(`  makespan:   ${elapsed}ms (${rate} successful remote proofs/s)`)
-console.log('  queue wait: scrape quod_dtx_admission_wait_ms for the source namespace (dashboard row: Distributed transaction admission)')
+console.log(`  makespan:   ${elapsed}ms (${rate} successful goals/s)`)
+if (opt.mode === 'execute') {
+  console.log('  queue wait: scrape quod_dtx_admission_wait_ms for the source namespace (dashboard row: Distributed transaction admission)')
+}
 console.log(`  raw data:   ${resultDir}/results.tsv`)
 const cursorBusy = categories.get('cursor_busy') || 0
 if (failures <= maxFailures && cursorBusy === 0) { console.log('PASS'); process.exit(0) }

@@ -81,8 +81,11 @@ proof controller, or transaction executor:
 
 Multiple subscriber ontologies on one node share the same target history and
 projection. Each keeps its own monitored consumer reference. The final
-`unfollow` removes active decoded state and the projection worker; disposable
-certified cache may remain on disk and can be reopened later.
+`unfollow` removes the projection worker and closes the history's ledger,
+phase-index handle, and channel. The disposable certified cache and closed
+derived phase session may remain on disk. The running owner may retain its
+bounded verified current projection; after owner restart the first use replays
+and verifies the disk cache before reuse.
 
 ## 4. Authorization remains the ordinary ACL
 

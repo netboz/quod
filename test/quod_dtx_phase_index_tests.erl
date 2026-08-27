@@ -212,6 +212,31 @@ session_paths_are_unique_and_close_removes_only_its_file_test() ->
           ?assertNot(filelib:is_file(SecondPath))
       end).
 
+suspended_session_reopens_with_exact_history_test() ->
+    with_tmp(
+      fun(DataDir, Ns) ->
+          {ok, Index0} = quod_dtx_phase_index:open(DataDir, Ns),
+          Signer = signer(),
+          Target = {<<"quod:phase-target">>, key(80)},
+          Projection = quod_dtx:initial_projection(Target, 0),
+          {Control, Ref} = direct_abort(
+                             Target, key(81), key(82), 1, Signer),
+          {ok, Projection, [_]} = quod_dtx_phase_index:apply(
+                                      Index0, Control, Ref, Projection),
+          Path = quod_dtx_phase_index:test_path(Index0),
+          {ok, Suspended0} = quod_dtx_phase_index:suspend(Index0),
+          ?assert(filelib:is_file(Path)),
+          {ok, Index1} = quod_dtx_phase_index:resume(Suspended0),
+          {ok, Projection, []} = quod_dtx_phase_index:apply(
+                                     Index1, Control, Ref, Projection),
+          {ok, Suspended1} = quod_dtx_phase_index:suspend(Index1),
+          ok = quod_dtx_phase_index:close(Suspended1),
+          ?assertNot(filelib:is_file(Path)),
+          ?assertMatch(
+             {error, {phase_index_io, enoent}},
+             quod_dtx_phase_index:resume(Suspended1))
+      end).
+
 killed_owner_does_not_collide_and_startup_cleanup_is_exact_test() ->
     with_tmp(
       fun(DataDir, Ns) ->

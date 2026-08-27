@@ -13,14 +13,15 @@ the durable scratch rows plus an opaque, bounded window delta but does not
 mutate DETS.  Only after the ledger sink succeeds does `commit_delta/2` install
 all changed rows with one DETS insert.  Startup replay may keep using `apply/4`,
 which factors through the same preview/commit path for one record.  The scratch
-file is never reopened or repaired, never datasyncs, and is deleted by
-`close/1`.  A namespace owner may call `cleanup/2` during startup to remove
-files abandoned by killed replay/catch-up workers.
+file is never repaired or datasync'd. Its single owner may suspend and resume
+it between ordered verification workers; `close/1` deletes it. A namespace
+owner may call `cleanup/2` during startup to remove files abandoned by killed
+replay/catch-up workers.
 """.
 
 -include("quod_proof_limits.hrl").
 
--export([open/2, close/1, cleanup/2,
+-export([open/2, suspend/1, resume/1, close/1, cleanup/2,
          new_delta/0, preview/5, commit_delta/2, apply/4]).
 -export_type([index/0, delta/0]).
 
@@ -47,7 +48,8 @@ files abandoned by killed replay/catch-up workers.
 
 -record(index, {
           table :: term(),
-          path :: file:filename_all()
+          path :: file:filename_all(),
+          state = open :: open | suspended
          }).
 
 -record(delta, {
@@ -92,9 +94,7 @@ open_unique(Dir, Attempts) ->
     end.
 
 open_table(Path, Dir, Attempts) ->
-    Options = [{file, Path}, {type, set}, {keypos, 1}, {repair, false},
-               {auto_save, infinity}],
-    case dets:open_file(Path, Options) of
+    case dets:open_file(Path, table_options(Path)) of
         {ok, Path} ->
             {ok, #index{table = Path, path = Path}};
         {error, {already_started, _}} ->
@@ -106,12 +106,43 @@ open_table(Path, Dir, Attempts) ->
             {error, {phase_index_io, Reason}}
     end.
 
+table_options(Path) ->
+    [{file, Path}, {type, set}, {keypos, 1}, {repair, false},
+     {auto_save, infinity}].
+
+-doc "Close the table while retaining its session-owned derived rows.".
+-spec suspend(index()) -> {ok, index()} | {error, index_error()}.
+suspend(Index = #index{table = Table, state = open}) ->
+    case close_table(Table) of
+        ok -> {ok, Index#index{state = suspended}};
+        {error, Reason} -> {error, {phase_index_io, Reason}}
+    end;
+suspend(_Index) ->
+    {error, bad_phase_index_argument}.
+
+-doc "Reopen this owner's suspended scratch index without repair.".
+-spec resume(index()) -> {ok, index()} | {error, index_error()}.
+resume(Index = #index{path = Path, state = suspended}) ->
+    case filelib:is_file(Path) of
+        true ->
+            case dets:open_file(Path, table_options(Path)) of
+                {ok, Path} -> {ok, Index#index{state = open}};
+                {error, Reason} -> {error, {phase_index_io, Reason}}
+            end;
+        false ->
+            {error, {phase_index_io, enoent}}
+    end;
+resume(_Index) ->
+    {error, bad_phase_index_argument}.
+
 -doc "Close this session's DETS table and remove only its own scratch file.".
 -spec close(index()) -> ok | {error, index_error()}.
-close(#index{table = Table, path = Path}) ->
+close(#index{table = Table, path = Path, state = open}) ->
     CloseResult = close_table(Table),
     DeleteResult = delete_file(Path),
-    close_result(CloseResult, DeleteResult).
+    close_result(CloseResult, DeleteResult);
+close(#index{path = Path, state = suspended}) ->
+    delete_file(Path).
 
 close_table(Table) ->
     try dets:close(Table) of

@@ -80,6 +80,35 @@ invalid_public_timeout_is_rejected_without_owner_test() ->
        quod_foreign_log:verify_reference(
          ref({<<"timeout">>, key(9)}, 1, 10), finalize, invalid)).
 
+resident_projection_requires_verified_clean_frontier_test() ->
+    Identity = {<<"resident">>, key(8)},
+    Projection = quod_simplex:history_projection(Identity),
+    Resident = {verified, 7, Projection, phase_session},
+    ?assertEqual(
+       {ok, Projection},
+       quod_foreign_log:test_resident_projection(
+         Resident, 7, Projection, none, Identity)),
+    %% A restart-loaded row, changed durable height, historical lookup, or
+    %% unfinished DTX group must rebuild the phase session by replay.
+    ?assertEqual(
+       replay,
+       quod_foreign_log:test_resident_projection(
+         none, 7, Projection, none, Identity)),
+    ?assertEqual(
+       replay,
+       quod_foreign_log:test_resident_projection(
+         Resident, 8, Projection, none, Identity)),
+    ?assertEqual(
+       replay,
+       quod_foreign_log:test_resident_projection(
+         Resident, 7, Projection, 3, Identity)),
+    Pending = Projection#{dtx_pending => {pending, key(99)}},
+    ?assertEqual(
+       replay,
+       quod_foreign_log:test_resident_projection(
+         {verified, 7, Pending, phase_session},
+         7, Pending, none, Identity)).
+
 authenticated_bootstrap_candidates_are_bounded_and_peer_unique_test() ->
     Dir = temp_dir("bootstrap-bounds"),
     Pid = start_owner(
@@ -148,12 +177,15 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
     Dir = temp_dir("lazy-history"),
     Pid1 = start_owner(Dir, Fetch),
     try
-        %% Exact verification writes a certified cache, then releases all
-        %% owner memory because no proof or follow still owns this history.
+        %% Exact verification writes a certified cache and retains only its
+        %% bounded owner-verified projection for later calls in this VM.
         ?assertMatch(
            {ok, #{identity := Identity, phase := finalize}},
            quod_foreign_log:verify(Peer, Endpoint, Ref, finalize, 5000)),
-        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(1, maps:get(resident_verified,
+                                quod_foreign_log:stats())),
+        ?assertEqual(0, maps:get(channels, quod_foreign_log:stats())),
         stop_owner(Pid1),
 
         %% Restart does not scan or materialize dormant caches. The next
@@ -165,7 +197,10 @@ inactive_history_is_hibernated_and_reopened_from_verified_cache_test() ->
             ?assertMatch(
                {ok, #{identity := Identity, phase := finalize}},
                quod_foreign_log:verify_reference(Ref, finalize, 5000)),
-            ?assertEqual(0, maps:get(histories, quod_foreign_log:stats()))
+            ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
+            ?assertEqual(1, maps:get(resident_verified,
+                                    quod_foreign_log:stats())),
+            ?assertEqual(0, maps:get(channels, quod_foreign_log:stats()))
         after
             stop_owner(Pid2)
         end
@@ -206,7 +241,7 @@ byte_large_verified_cache_reopens_through_canonical_pages_test() ->
            {ok, #{identity := Identity}},
            quod_foreign_log:current(
              [{Peer, [Endpoint]}], Identity, 5000)),
-        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats()))
+        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats()))
     after
         stop_owner(Pid1)
     end,
@@ -596,7 +631,7 @@ verify_exact_reference_and_persisted_cache_test() ->
            #{maps:get(pub, Fixture) => {"127.0.0.1", 19000}},
            maps:get(routes, Evidence)),
         ?assert(is_binary(maps:get(committee_id, Evidence))),
-        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
         ?assertEqual(
            {error, retry},
            quod_foreign_log:verify(
@@ -1117,7 +1152,7 @@ current_view_timeout_releases_verified_cache_and_remains_reusable_test() ->
            quod_foreign_log:verify_current(Routes, Ref, 100)),
         ?assert(erlang:monotonic_time(millisecond) - Started < 1000),
         ?assertEqual(0, maps:get(pending, quod_foreign_log:stats())),
-        ?assertEqual(0, maps:get(histories, quod_foreign_log:stats())),
+        ?assertEqual(1, maps:get(histories, quod_foreign_log:stats())),
         ok = atomics:put(Mode, 1, 0),
         ?assertMatch(
            {ok, #{slot := 2}},

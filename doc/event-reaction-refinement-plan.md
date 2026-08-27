@@ -374,8 +374,11 @@ subscription, or lifecycle handlers.
 - A configurable bounded live queue may drop best-effort reactions and
   resnapshot P under overload. It cannot lose effect-journal or outbox custody.
 - There is no hard-coded limit on the number of ontologies or subscriptions.
-  Inactive identities keep only disposable certified cache; decoded state and
-  workers exist only while used.
+  Inactive identities keep disposable certified cache on disk and may retain
+  one bounded current projection already verified by the running owner.
+  Ledger and phase-index handles, channels, and workers exist only while used;
+  the closed derived phase session may remain beside the disk cache. Restart
+  requires one full verification before in-memory reuse.
 - Per-message validation and operator-configured resource budgets protect a
   node without changing ontology semantics.
 
